@@ -1,0 +1,344 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Shopify session storage (required by template) ─────────────────────────
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// ─── Module 1: Advanced Supplier Master ─────────────────────────────────────
+
+model Supplier {
+  id            String   @id @default(cuid())
+  shop          String
+  name          String
+  accountNumber String?
+  contactName   String?
+  contactEmail  String?
+  contactPhone  String?
+  currency      String   @default("USD")
+  vendorNotes   String?
+  leadTimeDays  Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  skuMappings    SupplierSkuMapping[]
+  volumeTiers    VolumePriceTier[]
+  purchaseOrders PurchaseOrder[]
+  leadTimeSnapshots LeadTimeSnapshot[]
+
+  @@index([shop])
+}
+
+model SupplierSkuMapping {
+  id               String @id @default(cuid())
+  supplierId       String
+  shopifyVariantId String
+  vendorSku        String
+  moq              Int    @default(1)
+  packSize         Int    @default(1)
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@unique([supplierId, shopifyVariantId])
+  @@index([shopifyVariantId])
+}
+
+model VolumePriceTier {
+  id         String  @id @default(cuid())
+  supplierId String
+  variantId  String
+  minQty     Int
+  maxQty     Int?
+  unitCost   Decimal @db.Decimal(10, 4)
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId, variantId])
+}
+
+model LeadTimeSnapshot {
+  id           String   @id @default(cuid())
+  supplierId   String
+  purchaseOrderId String @unique
+  leadTimeDays Float
+  recordedAt   DateTime @default(now())
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+}
+
+// ─── Module 2: Purchase Order Engine ────────────────────────────────────────
+
+enum POStatus {
+  DRAFT
+  ORDERED
+  PARTIAL
+  RECEIVED
+  CANCELLED
+}
+
+enum LandedCostMethod {
+  WEIGHT
+  VOLUME
+  COST
+}
+
+model PurchaseOrder {
+  id               String           @id @default(cuid())
+  shop             String
+  supplierId       String
+  locationId       String
+  poNumber         String?
+  status           POStatus         @default(DRAFT)
+  currency         String           @default("USD")
+  exchangeRate     Decimal?         @db.Decimal(10, 6)
+  freightCost      Decimal?         @db.Decimal(10, 2)
+  customsCost      Decimal?         @db.Decimal(10, 2)
+  landedCostMethod LandedCostMethod @default(COST)
+  notes            String?
+  draftedAt        DateTime?
+  orderedAt        DateTime?
+  fullyReceivedAt  DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  supplier  Supplier     @relation(fields: [supplierId], references: [id])
+  lineItems POLineItem[]
+
+  @@index([shop, status])
+  @@index([supplierId])
+}
+
+model POLineItem {
+  id                  String   @id @default(cuid())
+  purchaseOrderId     String
+  shopifyVariantId    String
+  vendorSku           String?
+  orderedQty          Int
+  receivedQty         Int      @default(0)
+  unitCost            Decimal  @db.Decimal(10, 4)
+  manualCostOverride  Boolean  @default(false)
+  weight              Decimal? @db.Decimal(10, 4)
+  volume              Decimal? @db.Decimal(10, 4)
+  allocatedLandedCost Decimal? @db.Decimal(10, 4)
+  retailPrice         Decimal? @db.Decimal(10, 2)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseOrderId])
+  @@index([shopifyVariantId])
+}
+
+// ─── Shopify data cache ─────────────────────────────────────────────────────
+
+model ShopifyVariantCache {
+  id               String   @id @default(cuid())
+  shop             String
+  shopifyVariantId String
+  shopifyProductId String?
+  title            String
+  sku              String?
+  barcode          String?
+  imageUrl         String?
+  inventoryItemId  String?
+  weight           Decimal? @db.Decimal(10, 4)
+  weightUnit       String?
+  updatedAt        DateTime @updatedAt
+
+  @@unique([shop, shopifyVariantId])
+  @@index([shop, barcode])
+}
+
+model InventorySnapshot {
+  id                String   @id @default(cuid())
+  shop              String
+  shopifyVariantId  String
+  locationId        String
+  quantityAvailable Int
+  snapshotDate      DateTime @db.Date
+
+  @@unique([shop, shopifyVariantId, locationId, snapshotDate])
+  @@index([shop, snapshotDate])
+}
+
+// ─── Module 3: Forecasting & ABC ────────────────────────────────────────────
+
+enum AbcClass {
+  A
+  B
+  C
+}
+
+enum AbcMetric {
+  REVENUE
+  VOLUME
+}
+
+model VariantAbcClass {
+  id               String    @id @default(cuid())
+  shop             String
+  shopifyVariantId String
+  locationId       String    @default("all")
+  abcClass         AbcClass
+  metric           AbcMetric @default(REVENUE)
+  revenue          Decimal   @db.Decimal(12, 2) @default(0)
+  unitsSold        Int       @default(0)
+  calculatedAt     DateTime  @default(now())
+
+  @@unique([shop, shopifyVariantId, locationId, metric])
+}
+
+model ForecastOverride {
+  id            String   @id @default(cuid())
+  shop          String
+  variantId     String
+  locationId    String
+  lookbackStart DateTime
+  lookbackEnd   DateTime
+
+  @@unique([shop, variantId, locationId])
+}
+
+model SalesDailyAggregate {
+  id               String   @id @default(cuid())
+  shop             String
+  shopifyVariantId String
+  locationId       String
+  date             DateTime @db.Date
+  unitsSold        Int      @default(0)
+  revenue          Decimal  @db.Decimal(12, 2) @default(0)
+
+  @@unique([shop, shopifyVariantId, locationId, date])
+  @@index([shop, date])
+}
+
+model ShopSettings {
+  id                  String @id @default(cuid())
+  shop                String @unique
+  defaultLookbackDays Int    @default(30)
+  targetDaysOfStock   Int    @default(14)
+  defaultSafetyStock  Int    @default(0)
+  abcMetric           AbcMetric @default(REVENUE)
+  subscriptionActive  Boolean   @default(false)
+  subscriptionPlan    String?
+}
+
+// ─── Module 5: Transfer Orders ────────────────────────────────────────────────
+
+enum TransferStatus {
+  DRAFT
+  IN_TRANSIT
+  RECEIVED
+  CANCELLED
+}
+
+model TransferOrder {
+  id                     String         @id @default(cuid())
+  shop                   String
+  sourceLocationId       String
+  destinationLocationId  String
+  status                 TransferStatus @default(DRAFT)
+  shopifyTransferId      String?
+  notes                  String?
+  shippedAt              DateTime?
+  receivedAt             DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+
+  lineItems TransferLineItem[]
+
+  @@index([shop, status])
+}
+
+model TransferLineItem {
+  id               String @id @default(cuid())
+  transferOrderId  String
+  shopifyVariantId String
+  quantity         Int
+  pickedQty        Int    @default(0)
+  receivedQty      Int    @default(0)
+
+  transferOrder TransferOrder @relation(fields: [transferOrderId], references: [id], onDelete: Cascade)
+}
+
+// ─── Module 4: Stocktakes ─────────────────────────────────────────────────────
+
+enum StocktakeStatus {
+  DRAFT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model Stocktake {
+  id         String          @id @default(cuid())
+  shop       String
+  locationId String
+  status     StocktakeStatus @default(DRAFT)
+  name       String
+  startedAt  DateTime?
+  completedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  lineItems StocktakeLineItem[]
+}
+
+model StocktakeLineItem {
+  id               String @id @default(cuid())
+  stocktakeId      String
+  shopifyVariantId String
+  expectedQty      Int
+  countedQty       Int?
+
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+}
+
+// ─── Module 9: Bill of Materials ──────────────────────────────────────────────
+
+model BomComponent {
+  id                 String @id @default(cuid())
+  shop               String
+  bundleVariantId    String
+  componentVariantId String
+  quantity           Decimal @db.Decimal(10, 4)
+
+  @@unique([shop, bundleVariantId, componentVariantId])
+}
+
+// ─── Module 6: Alerts ─────────────────────────────────────────────────────────
+
+model LowStockAlert {
+  id               String   @id @default(cuid())
+  shop             String
+  shopifyVariantId String
+  locationId       String
+  reorderPoint     Int
+  currentStock     Int
+  acknowledged     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@index([shop, acknowledged])
+}
