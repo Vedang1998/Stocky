@@ -6,6 +6,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { enqueueCatalogSync } from "./jobs/queue.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -18,6 +19,22 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,
+  },
+  hooks: {
+    afterAuth: async ({ session }) => {
+      // Ensure shop settings exist and kick off the initial catalog bulk sync.
+      await prisma.shopSettings.upsert({
+        where: { shop: session.shop },
+        create: { shop: session.shop },
+        update: {},
+      });
+      try {
+        await enqueueCatalogSync(session.shop);
+      } catch (err) {
+        // Redis may be down during first local boot — dashboard sync still works.
+        console.warn("Catalog sync enqueue skipped:", err);
+      }
+    },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

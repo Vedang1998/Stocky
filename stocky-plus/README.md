@@ -5,9 +5,21 @@ app built as a full replacement for Shopify Stocky, with fixes for Stocky's
 historical gaps: landed costs, the receive-and-print loop, vendor lead-time
 tracking, and bundle (BOM) forecasting.
 
-Built on the official Shopify React Router template: React Router v7,
-Polaris web components, App Bridge session tokens, GraphQL Admin API only,
-PostgreSQL via Prisma, and BullMQ/Redis for background jobs.
+The app is initially built for a high-volume liquor store but is architected
+for commercial release on the Shopify App Store.
+
+## Setup
+
+See **[SETUP.md](./SETUP.md)** for environment, database, Shopify Partner
+linking, and GitHub push steps. Short version once Docker is installed:
+
+```bash
+docker compose up -d
+npx prisma migrate deploy
+shopify app config link
+npm run dev       # terminal 1
+npm run worker    # terminal 2
+```
 
 ## Modules
 
