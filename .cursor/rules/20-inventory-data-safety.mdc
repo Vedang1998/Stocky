@@ -1,0 +1,78 @@
+---
+description: Inventory writes, tenancy, ledgers, synchronization, and recovery requirements
+alwaysApply: true
+---
+
+# Inventory and Data Safety
+
+Apply these rules to catalog sync, suppliers, purchase orders, receiving, adjustments, stocktakes, transfers, costs, reports, webhooks, workers, exports, and billing data.
+
+## Tenant isolation
+
+- Derive the authenticated shop server-side from Shopify sessions.
+- Never trust a client-supplied shop identifier.
+- Tenant-scope every read, mutation, relation lookup, unique constraint, background job, export, cache entry, and audit event.
+- Validate that referenced IDs belong to the authenticated shop before use.
+- Enforce permissions server-side; hiding a control is not authorization.
+- Add cross-shop isolation tests for every high-risk action.
+
+## Data authority
+
+- Shopify is authoritative for products, variants, orders, refunds, locations, and sellable inventory.
+- App-owned supplier, PO, receipt, cost, operational analytics, and audit records require explicit authority rules.
+- Do not claim custom POs automatically create Shopify-native incoming inventory without verified API support.
+- Preserve source identifiers, timestamps, snapshots, and reconciliation status.
+- Recreated Shopify variants are new identities unless an explicit audited lineage decision says otherwise.
+
+## Inventory-write contract
+
+Every receiving, adjustment, stocktake, cost-sync, and transfer write requires:
+
+- stable operation and idempotency ID;
+- authenticated shop and actor;
+- permission and location checks;
+- intended before/after quantity or cost;
+- line-level result;
+- bounded retry behavior;
+- partial-failure handling;
+- immutable audit event;
+- reconciliation against Shopify;
+- recovery or reversal policy;
+- feature or global kill switch;
+- tests.
+
+A workflow must not be marked completed when any required Shopify write failed or remains unresolved.
+
+## Operational ledgers
+
+Use immutable events for:
+
+- receipt lines and corrections;
+- rejected, extra, cancelled, backordered, and unreceived quantities;
+- stock adjustments;
+- count submissions and approvals;
+- transfer lifecycle changes;
+- average and landed-cost changes;
+- billing and entitlement changes;
+- AI usage and provider cost.
+
+Derived state must be reproducible from source facts or reconciled snapshots.
+
+## Reliability
+
+- Webhook processing must be idempotent and observable.
+- Queue retries must be bounded and dead-letter failures visible.
+- Use correlation IDs across request, job, Shopify mutation, audit, and reconciliation records.
+- Do not hide stale data. Show watermarks and sync-health state.
+- Do not use hidden row caps or unpaginated nested GraphQL assumptions.
+- Avoid N+1 database and Shopify requests.
+- Store timestamps in UTC; apply merchant timezone at reporting and scheduling boundaries.
+- Use decimal-safe money and explicit currency handling.
+
+## Migrations and destructive changes
+
+- Prefer additive migrations.
+- Describe backfill, rollback, recovery, and tenant impact.
+- Do not delete or reinterpret operational history silently.
+- Require reconciliation before enabling production writes.
+- Protect destructive workflows behind flags and kill switches.
