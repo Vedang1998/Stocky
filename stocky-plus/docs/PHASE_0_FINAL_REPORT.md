@@ -6,7 +6,7 @@
 |---|---|
 | Branch | `phase-0-product-alignment-v2` |
 | Base main SHA | `f1923acef0c44b1e80d0b5aae44a517aedf56aef` |
-| Final commit SHA | _(filled after commit)_ |
+| Final commit SHA | `51f890d866d66347a9fdb6ff15b7be9e9a2cc929` |
 | Repository | `Vedang1998/Stocky` |
 | Application | `stocky-plus/` |
 | Node / npm | `v22.19.0` / `11.5.2` |
