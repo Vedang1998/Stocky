@@ -1,0 +1,141 @@
+# Full Feature Traceability Matrix
+
+This matrix separates documented Stocky parity, deliberate improvements, and new AI/commercial capabilities.
+The spreadsheet version is the operational source for sorting and backlog management.
+
+Total mapped features: **132**
+
+| ID | Module | Feature | Priority | Phase | Repo status | Sources |
+|---|---|---|---|---|---|---|
+| F-001 | App shell | Embedded Shopify Admin app | P0 | 0-1 | Foundation present | S19 |
+| F-002 | Distribution | Public App Store distribution | P0 | 0 | Needs verification | S19 |
+| F-003 | Onboarding | Guided setup | P0 | 1 | Missing | S18, S19, S29 |
+| F-004 | Home dashboard | Operational command center | P0 | 2 | Partial | S19, S23, S26 |
+| F-005 | Data sync | Initial catalog sync | P0 | 1 | Partial and insufficient | S17, S23 |
+| F-006 | Data sync | Prospective sales ledger | P0 | 1 | Missing; only daily aggregates | S13, S28 |
+| F-007 | Data health | Sync health and reconciliation | P0 | 1 | Partial | S17, S19, S23 |
+| F-008 | Audit | Immutable audit trail | P0 | 1-2 | Missing | S10, S14, S30 |
+| F-009 | Mobile | Responsive Admin UI | P0 | 2 | Weak | S19, S23 |
+| F-010 | Performance | Commercial-scale query architecture | P0 | 1-6 | Current repo has N+1 and hard caps | S19, S23 |
+| F-011 | Support | In-app support and diagnostics | P1 | 5 | Missing | S23, S24 |
+| F-012 | Catalog | Variant-level canonical inventory entity | P0 | 1 | Partial | S10, S11 |
+| F-013 | Catalog | Historical identity snapshots | P0 | 1 | Missing | S27, S28 |
+| F-014 | Catalog | Product location metadata | P1 | 2 | Missing | S3 |
+| F-015 | Catalog | Custom product fields | P1 | 4 | Missing | S15, S17 |
+| F-016 | Vendors | Use Shopify product vendor | P0 | 2 | Catalog sync omits vendor | S4 |
+| F-017 | Suppliers | App-owned supplier profiles | P0 | 2 | Foundation present | S4, S5 |
+| F-018 | Suppliers | Multiple suppliers per variant | P0 | 2 | Foundation present | S4, S5 |
+| F-019 | Suppliers | Supplier SKU | P0 | 2 | Present | S5 |
+| F-020 | Suppliers | Cost price lists | P0 | 2 | Partial volume tiers invented | S5 |
+| F-021 | Suppliers | Supplier currency | P1 | 3 | Partial | S4, S5 |
+| F-022 | Suppliers | Pack sizes and pack quantities | P1 | 3 | Present but forcibly enforced | S6 |
+| F-023 | Suppliers | Minimum order and min/max stock rules | P1 | 3 | Partial and conflated | S3 |
+| F-024 | Suppliers | Lead and restock times | P1 | 3 | Present but defaulted into all forecasts | S8 |
+| F-025 | Suppliers | Supplier documents and notes | P2 | 5 | Missing | S4, S5 |
+| F-026 | Forecasting | Last X days parity mode | P0 | 2 | Wrong formula | S2 |
+| F-027 | Forecasting | Custom date range | P0 | 2 | Partial row date override | S2 |
+| F-028 | Forecasting | Same period last year | P0 | 3 | Missing | S2, S11 |
+| F-029 | Forecasting | Fill shelves | P0 | 3 | Missing | S2 |
+| F-030 | Forecasting | Fill shelves if below minimum | P0 | 3 | Missing | S2 |
+| F-031 | Forecasting | Target stock level | P0 | 3 | Missing | S2 |
+| F-032 | Forecasting | Forecast base location | P0 | 2 | Partial | S2 |
+| F-033 | Forecasting | Global and row lookback override | P0 | 2 | Partial | S2 |
+| F-034 | Forecasting | Available and incoming subtraction | P0 | 2 | Incoming limited to custom POs | S3, S26 |
+| F-035 | Forecasting | Stockout-day adjustment | P2 | 5 | Currently forced into baseline | S2 |
+| F-036 | Forecasting | Seasonality and trend | P1 | 5 | Missing | S11, S23 |
+| F-037 | Forecasting | Intermittent-demand model | P2 | 6 | Missing |  |
+| F-038 | Forecasting | Forecast confidence and backtesting | P1 | 5 | Missing | S19 |
+| F-039 | Forecasting | Manual quantity workflow | P0 | 2 | Partial | S3 |
+| F-040 | ABC | Stocky ABC parity | P0 | 2 | Wrong 90-day logic and boundary bug | S11 |
+| F-041 | ABC | Enhanced ABC/XYZ | P2 | 6 | Volume option partial | S11 |
+| F-042 | Low stock | Variant low-stock report | P0 | 3 | Partial analytics only | S8 |
+| F-043 | Low stock | Product low-stock report | P0 | 3 | Missing | S8 |
+| F-044 | Low stock | Vendor low-stock report | P0 | 3 | Missing | S8 |
+| F-045 | Alerts | Low-stock notifications | P1 | 4 | LowStockAlert table only | S8 |
+| F-046 | Purchase orders | PO list and statuses | P0 | 3 | Foundation present but simplistic | S3 |
+| F-047 | Purchase orders | Create blank or forecast PO | P0 | 3 | Present | S3, S30 |
+| F-048 | Purchase orders | Dense editable PO grid | P0 | 3 | Current UI too simple | S3, S19, S23 |
+| F-049 | Purchase orders | PO metadata | P0 | 3 | Partial | S3 |
+| F-050 | Purchase orders | Discount and other charge lines | P0 | 3 | Partial freight/customs | S3, S12 |
+| F-051 | Purchase orders | Tax rates | P1 | 4 | Missing | S15 |
+| F-052 | Purchase orders | PO email and documents | P0 | 4 | Receiver PDF only | S3, S30 |
+| F-053 | Purchase orders | PO approvals | P1 | 5 | Missing | S30 |
+| F-054 | Purchase orders | Multi-invoice and payment tracking | P1 | 5 | Single invoice fields only | S23, S30 |
+| F-055 | Purchase orders | PO import/export | P0 | 4 | Missing | S3, S10 |
+| F-056 | Purchase orders | PO due and exception reports | P0 | 4 | Missing | S10, S23 |
+| F-057 | Receiving | Receive selected | P0 | 3 | Partial | S3, S14 |
+| F-058 | Receiving | Partial receipt and backorder | P0 | 3 | Partial simplistic | S3, S23 |
+| F-059 | Receiving | Received, rejected and extra statuses | P0 | 3 | Missing | S3 |
+| F-060 | Receiving | Unreceive/correct receipt | P1 | 4 | Missing | S25 |
+| F-061 | Receiving | POS smart-grid extension | P0 | 4 | Missing | S14, S20, S21, S23 |
+| F-062 | Receiving | Camera and hardware scanning | P0 | 4 | Warehouse web scanner partial | S7, S21, S23 |
+| F-063 | Receiving | Receiving labels | P0 | 4 | ZPL route partial | S3, S23, S25 |
+| F-064 | Receiving | Inventory write safety | P0 | 3 | Unsafe/incomplete | S3, S19 |
+| F-065 | Costing | Average unit cost ledger | P0 | 4 | Landed cost foundation but no robust ledger | S12 |
+| F-066 | Costing | Landed cost allocation | P0 | 4 | Present but not validated | S12 |
+| F-067 | Costing | Shopify cost sync | P0 | 4 | Write scopes present without safe workflow | S12, S17 |
+| F-068 | Costing | Initial cost import | P0 | 4 | Missing | S12, S18 |
+| F-069 | Costing | Backdate approximate costs | P2 | 6 | Missing | S12 |
+| F-070 | Costing | Profit and margin reporting | P1 | 5 | Analytics simplistic | S13 |
+| F-071 | Adjustments | Positive/negative stock adjustments | P0 | 3 | Partial via stocktake only | S10 |
+| F-072 | Adjustments | Adjustment reason library | P1 | 4 | Missing | S10 |
+| F-073 | Adjustments | Adjustment report | P0 | 4 | Missing | S10 |
+| F-074 | Stocktakes | Manual stocktake | P0 | 4 | Partial and unsafe | S7 |
+| F-075 | Stocktakes | Barcode stocktake | P0 | 4 | Missing for stocktakes | S7, S21, S23 |
+| F-076 | Stocktakes | Full and partial stocktakes | P0 | 4 | Missing | S7 |
+| F-077 | Stocktakes | Missed-items workflow | P0 | 4 | Missing | S7 |
+| F-078 | Stocktakes | Committed inventory handling | P0 | 4 | Current uses available snapshot | S7 |
+| F-079 | Stocktakes | Concurrent movement handling | P1 | 5 | Missing | S7 |
+| F-080 | Stocktakes | Count history and CSV | P0 | 4 | Schema stores history but UX limited | S7 |
+| F-081 | Transfers | Inter-location transfer lifecycle | P0 | 4 | Custom transfer foundation | S1, S29 |
+| F-082 | Transfers | Transfer receiving and scanning | P0 | 4 | Partial custom route | S14 |
+| F-083 | Transfers | Transfer replenishment suggestions | P1 | 5 | Missing | S29 |
+| F-084 | Labels | Barcode label templates | P0 | 4 | ZPL only | S3, S19, S23 |
+| F-085 | Labels | Print from PO/receipt/product/stocktake | P0 | 4 | Partial receipt labels | S3, S25 |
+| F-086 | Reports | ABC analysis | P0 | 4-5 | Partial | S9, S10, S13 |
+| F-087 | Reports | Best sellers | P1 | 4-5 | Missing | S9, S10, S13 |
+| F-088 | Reports | Low stock—vendors | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-089 | Reports | Low stock—products | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-090 | Reports | Low stock—variants | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-091 | Reports | Orders | P1 | 4-5 | Missing | S9, S10, S13 |
+| F-092 | Reports | Products | P1 | 4-5 | Missing | S9, S10, S13 |
+| F-093 | Reports | Purchase orders | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-094 | Reports | Sale items | P1 | 4-5 | Missing | S9, S10, S13 |
+| F-095 | Reports | SKU/Variant | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-096 | Reports | Statistics | P1 | 4-5 | Missing | S9, S10, S13 |
+| F-097 | Reports | Current stock on hand | P0 | 4-5 | Partial | S9, S10, S13 |
+| F-098 | Reports | Historical stock on hand | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-099 | Reports | Adjustments | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-100 | Reports | Transfers | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-101 | Reports | Profit | P0 | 4-5 | Partial | S9, S10, S13 |
+| F-102 | Reports | Supplier report builder | P0 | 4-5 | Missing | S9, S10, S13 |
+| F-103 | Reports | Forecast accuracy | P1 | 5 | Missing | S9, S10, S13 |
+| F-104 | Settings | Forecast defaults | P0 | 2 | Wrong defaults | S2, S8 |
+| F-105 | Settings | PO column configuration | P0 | 3 | Missing | S15, S23 |
+| F-106 | Settings | COGS policy | P0 | 4 | Missing | S12 |
+| F-107 | Users and roles | Shopify-native user identity | P0 | 2 | Missing | S16, S19 |
+| F-108 | Users and roles | Granular permissions | P0 | 3 | Missing | S16 |
+| F-109 | Imports | Catalog/supplier/price/cost imports | P0 | 4 | Seed/import limited | S12 |
+| F-110 | Exports | CSV/PDF/plain-text exports | P0 | 4 | Partial | S3, S10 |
+| F-111 | Shopify Flow | App triggers and actions | P1 | 5 | Missing | S8 |
+| F-112 | POS | POS location and staff context | P0 | 4 | Missing | S14, S19 |
+| F-113 | Accounting | Accounting export/integrations | P2 | 6 | Missing | S23 |
+| F-114 | API | Merchant API and webhooks | P2 | 6 | Missing | S16 |
+| F-115 | AI | Forecast model selection | P1 | 5-6 | Missing | S19 |
+| F-116 | AI | Forecast explanation | P1 | 5-6 | Missing | S19 |
+| F-117 | AI | Demand anomaly detection | P1 | 5-6 | Missing | S19 |
+| F-118 | AI | Supplier lead-time prediction | P2 | 5-6 | Missing | S19 |
+| F-119 | AI | PO optimization | P2 | 5-6 | Missing | S19 |
+| F-120 | AI | Cost variance detection | P2 | 5-6 | Missing | S19 |
+| F-121 | AI | Receipt discrepancy assistant | P2 | 5-6 | Missing | S19 |
+| F-122 | AI | Stocktake discrepancy triage | P2 | 5-6 | Missing | S19 |
+| F-123 | AI | Dead-stock actions | P2 | 5-6 | Missing | S19 |
+| F-124 | AI | Natural-language analytics | P2 | 5-6 | Missing | S19 |
+| F-125 | AI | Data quality assistant | P1 | 5-6 | Missing | S19 |
+| F-126 | AI | Support diagnostics | P2 | 5-6 | Missing | S19 |
+| F-127 | Billing | Shopify App Pricing | P1 | 6 | Premature custom gate | S19, S24 |
+| F-128 | Migration | Stocky migration toolkit | P0 | 3-5 | Missing | S18, S29 |
+| F-129 | App review | Privacy and compliance | P0 | 1-6 | Incomplete webhooks | S19 |
+| F-130 | BFS | Built for Shopify readiness | P0 | All | Not planned | S19 |
+| F-131 | Brand | Original product identity | P0 | 0 | Current name Stocky++ risky | S19 |
+| F-132 | Release | Pilot and staged rollout | P0 | 5-7 | Missing | S19 |
