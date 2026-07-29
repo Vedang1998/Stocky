@@ -3,7 +3,7 @@
 **Status:** DRAFT PR OPEN — GitHub Actions green; awaiting Claude re-review (gate not closed)  
 **Branch:** `phase-0/correction-gate-followup`  
 **Base main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
-**Final head SHA:** `32df7bca89f46e50f6470f098a55620926bea07f`  
+**Final head SHA:** `9fab0986b0b3a9f9e6f84fcc77853259d08b86fc`  
 **Draft PR:** https://github.com/Vedang1998/Stocky/pull/7  
 **Node version:** `v22.19.0`  
 **npm version:** `11.5.2` (also declared in `package.json` `packageManager` / `engines.npm`)  
@@ -112,7 +112,18 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 
 ## GitHub Actions
 
-### Authoritative green run (final tip `32df7bc` — CI evidence docs)
+### Authoritative green run (final tip `9fab098`)
+
+| Field | Value |
+|---|---|
+| Workflow run ID | `30484632509` |
+| Job ID | `90687110614` |
+| Head SHA | `9fab0986b0b3a9f9e6f84fcc77853259d08b86fc` |
+| Trigger | `pull_request` |
+| Conclusion | **success** |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30484632509 |
+
+### Prior green run (tip `32df7bc` — CI evidence docs)
 
 | Field | Value |
 |---|---|
@@ -144,7 +155,7 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 | Conclusion | **success** |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30483462941 |
 
-### Step conclusions (run `30484287113` / job `90685944889`)
+### Step conclusions (run `30484632509` / job `90687110614`)
 
 All required steps **success**: Set up job → Initialize containers → Checkout → Setup Node.js → Pin npm → Verify Node and npm versions → Install dependencies (`npm ci`) → Generate Prisma client → Validate Prisma schema → Apply migrations to ephemeral PostgreSQL → Lint → Typecheck → Unit tests → Build → GraphQL codegen / schema validation → Complete job.
 
