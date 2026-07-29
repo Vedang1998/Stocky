@@ -6,7 +6,8 @@
 |---|---|
 | Branch | `phase-0-product-alignment-v2` |
 | Base main SHA | `f1923acef0c44b1e80d0b5aae44a517aedf56aef` |
-| Final commit SHA | `7858dbc2e9b2ab25746b5fc2a0e94625a5fb0356` |
+| Final branch SHA | `b1ed539eec8787d18f9a6de113e49be18a28abee` |
+| Merge commit SHA | `36b34c20d6a82fcc226948abd5ff709d9e2fcca6` |
 | Repository | `Vedang1998/Stocky` |
 | Application | `stocky-plus/` |
 | Node / npm | `v22.19.0` / `11.5.2` |
@@ -16,13 +17,13 @@
 - Distribution code path: `AppDistribution.AppStore` with `expiringOfflineAccessTokens: true`.
 - API version: Admin GraphQL **2025-10** (`shopify.app.toml` + `ApiVersion.October25`) — intentionally not bumped to old branch’s 2026-10.
 - Scopes after Phase 0: `read_products,write_products,read_inventory,write_inventory,read_orders,read_locations` (MMFO removed).
-- Compliance topics declared: `customers/data_request`, `customers/redact`, `shop/redact` → `/webhooks/compliance` stub.
+- Compliance topics declared: `customers/data_request`, `customers/redact`, `shop/redact` → `/webhooks/compliance` acknowledge-only stub.
 - Partner linkage via `shopify app info`: **FAILED** (CLI stack overflow) — distribution not confirmed in Partner Dashboard this pass.
 - Approved product documents under `docs/product/` and agent prompts under `docs/agents/` **were not overwritten**.
 
 ## 2. Distribution status / risk
 
-Code targets App Store distribution. Physical Partner app record, public listing readiness, and separate prod/dev apps are **unverified** (CLI failure). Treat as open P0 process risk (Q-002).
+Code targets App Store distribution. Physical Partner app record, public listing readiness, and separate prod/dev apps are **unverified** (CLI failure). Treat as an open release-process risk (Q-002).
 
 ## 3. Commands run and exact status
 
@@ -42,11 +43,13 @@ See `CURRENT_COMMAND_BASELINE.md`.
 | `npm run graphql-codegen` | FAIL (document validation: inventoryLevel args + inventoryTransferComplete) |
 | Integration / E2E | NOT EXECUTED (no script) |
 
+The passing command results above are Cursor's recorded local evidence. Claude independently reproduced lint and build but could not reproduce every check because its sandbox blocked Prisma engine and Shopify schema downloads. CI is required to make the baseline reproducible.
+
 ## 4. Scope / API / webhook findings
 
 - Removed unjustified merchant-managed fulfillment scopes.
-- Compliance webhook subscription added; handler authenticates and acknowledges only.
-- GraphQL validation proves current inventory level query and transfer-complete mutation are **schema-invalid** on 2025-10 — transfer writes remain kill-switched.
+- Compliance webhook subscription added; handler authenticates and acknowledges only. It does not yet export or redact data.
+- GraphQL validation shows current inventory-level and transfer-complete documents are invalid or unsupported on 2025-10 — transfer writes remain kill-switched.
 
 ## 5. Old branch classification (`origin/phase-0-product-alignment`)
 
@@ -104,48 +107,66 @@ Docs (operating records only):
 
 ## 8. Unsafe workflows disabled or protected
 
+Implemented Shopify-write paths currently guarded and default OFF:
+
 | Capability | Flag | Default |
 |---|---|---|
-| Stocktake Shopify adjusts | `FEATURE_STOCKTAKE_INVENTORY_WRITES` | OFF |
-| Adjustments | `FEATURE_ADJUSTMENT_WRITES` | OFF |
+| Stocktake Shopify adjustments | `FEATURE_STOCKTAKE_INVENTORY_WRITES` | OFF |
 | Receipt path (PO receive + warehouse scan) | `FEATURE_RECEIPT_WRITES` | OFF |
-| Cost sync | `FEATURE_COST_SYNC` | OFF |
 | Transfer Shopify mutations | `FEATURE_TRANSFER_WRITES` | OFF |
 
-Additional: stocktake no longer marks `COMPLETED` when writes fail; `devActivate` requires env allowlist + non-production.
+Reserved placeholder flags with no implemented write path in the current repository:
+
+| Placeholder capability | Flag | Current reality |
+|---|---|---|
+| Manual adjustments | `FEATURE_ADJUSTMENT_WRITES` | Module/write path not implemented |
+| Shopify cost sync | `FEATURE_COST_SYNC` | Cost-write path not implemented |
+
+Additional: stocktake no longer marks `COMPLETED` when writes fail; `devActivate` requires an explicit environment allowlist and a non-production environment.
+
+The kill switches are the current protection. Idempotency, per-line results, immutable audit, reconciliation, and reversal are not yet complete; no flag may be enabled for real merchant inventory.
 
 ## 9. P0 / P1 / P2 / P3 findings
 
-See `RISK_REGISTER.md` and `CODE_TO_REQUIREMENT_GAP_MAP.md`. Highest:
+See `RISK_REGISTER.md`, `CODE_TO_REQUIREMENT_GAP_MAP.md`, and `phases/phase-0/REVIEW_REPORT.md`.
 
-- P0 tenant residual risk in shop-blind services (landed-cost internals).
-- P0 forecast/ABC non-parity.
-- P0 missing sales/receipt/audit facts.
-- P0 GraphQL invalid ops.
-- P0 branding leftovers in README/SETUP.
-- P0 compliance processing incomplete.
-- P1 Boolean entitlements / no AI cost controls.
-- P1 hard caps / N+1.
-- P1 uninstall job hygiene.
+Claude found no confirmed active P0 security issue or cross-shop access in the merged tree. Major release blockers remain:
+
+- tenant isolation is route-safe in reviewed paths but not structurally enforced in every service;
+- forecast/ABC non-parity;
+- missing sales, receipt, inventory-event, and audit facts;
+- invalid GraphQL operations;
+- incomplete compliance processing;
+- Boolean subscription state without complete entitlements;
+- N+1 and hard-cap performance risks;
+- incomplete uninstall and queue hygiene.
 
 ## 10. Unresolved blockers
 
+- Reproducible lockfile and CI.
 - Partner distribution confirmation.
 - Public product name.
 - GraphQL operation repairs before any write enablement.
-- Full entitlement + AI ledger (design only).
+- Complete entitlement and AI usage-ledger foundation.
+- Actual compliance export/redaction processing.
 
 ## 11. Decisions requiring product-owner approval
 
 D-005 public name; Q-002 distribution; Q-003 API pin after fixes; Q-004 incoming strategy; Q-006/Q-007 trial and prices; Q-008 redact retention.
 
-## 12. Exact Phase-1 next step
+## 12. Exact next step
 
-After review acceptance: branch from updated main → additive Shop/facts/sync/audit migrations + fix `inventoryLevel` GraphQL → keep all inventory write flags **OFF** (`PHASE_1_TECHNICAL_PLAN.md`).
+Close `phases/phase-0/CORRECTION_BACKLOG.md` through a focused Cursor correction PR and Claude verification. After that gate is accepted, create and approve the Phase 1 brief before beginning additive Shop/facts/sync/audit migrations.
+
+All inventory-write flags remain **OFF**.
 
 ## 13. Explicit statements
 
 - **Phase 1 was not started.**
 - **No secrets, `.env`, customer data, or production data were committed.**
 - **Approved product documents were not overwritten.**
-- **Old branch `phase-0-product-alignment` was not deleted and was not merged.**
+- **Old branch `phase-0-product-alignment` was not merged.**
+
+## 14. Independent review outcome
+
+Claude's verdict was **READY FOR PHASE 1 FOUNDATION — with mandatory corrections**. Phase 0 is accepted, but Phase 1 must not begin until the correction gate is resolved. Production inventory writes remain unapproved.
