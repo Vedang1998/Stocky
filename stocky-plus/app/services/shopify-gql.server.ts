@@ -103,21 +103,29 @@ export async function fetchInventoryLevels(
   inventoryItemId: string,
   locationId: string,
 ): Promise<number> {
+  // Admin API 2025-10: QueryRoot.inventoryLevel requires InventoryLevel `id`.
+  // Look up by inventory item + location via InventoryItem.inventoryLevel.
   const result = await shopifyGraphQL<{
-    inventoryLevel: { quantities: Array<{ quantity: number }> } | null;
+    inventoryItem: {
+      inventoryLevel: { quantities: Array<{ quantity: number }> } | null;
+    } | null;
   }>(
     admin,
     `#graphql
       query StockyInventoryLevel($inventoryItemId: ID!, $locationId: ID!) {
-        inventoryLevel(inventoryItemId: $inventoryItemId, locationId: $locationId) {
-          quantities(names: ["available"]) {
-            quantity
+        inventoryItem(id: $inventoryItemId) {
+          inventoryLevel(locationId: $locationId) {
+            quantities(names: ["available"]) {
+              quantity
+            }
           }
         }
       }`,
     { inventoryItemId, locationId },
   );
-  return result.data?.inventoryLevel?.quantities[0]?.quantity ?? 0;
+  return (
+    result.data?.inventoryItem?.inventoryLevel?.quantities[0]?.quantity ?? 0
+  );
 }
 
 export async function runBulkProductSync(admin: AdminGraphQLClient) {
