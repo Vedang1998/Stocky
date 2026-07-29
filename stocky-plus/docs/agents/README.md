@@ -20,6 +20,8 @@ into the Stocky Migration ChatGPT Project instructions.
 
 ChatGPT remains the product owner, product researcher, architecture and commercial decision authority, and coordinator.
 
+Use one main ChatGPT chat per phase. That chat owns the phase brief, decisions, review of Cursor/Claude output, and the final phase decision.
+
 ## Claude Project
 
 Copy the complete contents of:
@@ -32,7 +34,7 @@ Claude Code should also automatically read the root `CLAUDE.md`. For each formal
 
 `stocky-plus/docs/agents/08_CLAUDE_CODE_MASTER_REVIEW_PROMPT.md`
 
-Claude Code is the independent engineering and release reviewer, not the primary product owner.
+Claude Code is the independent engineering and release reviewer, not the primary product owner. Use a fresh Claude chat for each important pull request review.
 
 ## Cursor
 
@@ -48,11 +50,27 @@ The rules are intentionally split:
 - `30-forecasting-cost-reporting.mdc` — deterministic formulas, ABC/U, costs, and reports;
 - `40-pricing-ai-entitlements.mdc` — plans, billing, entitlements, AI authorization, and cost controls.
 
-For Phase 0, give Cursor:
+For Phase 0, Cursor used:
 
 `stocky-plus/docs/agents/07_CURSOR_MASTER_PROMPT.md`
 
+For future phases, Cursor must read the approved phase brief under `stocky-plus/docs/phases/phase-N/` and receive a focused task prompt. Use a fresh Cursor chat for each focused task or pull request.
+
 Cursor is the implementation engineer and must not redefine product logic independently.
+
+## Phase workflow
+
+Phase-specific work lives under:
+
+`stocky-plus/docs/phases/`
+
+Each phase contains:
+
+- `PHASE_BRIEF.md` — ChatGPT-approved scope before work;
+- `IMPLEMENTATION_REPORT.md` — Cursor evidence and handoff;
+- `REVIEW_REPORT.md` — Claude findings and verdict.
+
+Reusable templates and the exact lifecycle are documented in `stocky-plus/docs/phases/README.md`.
 
 ## Reading order for all agents
 
@@ -60,8 +78,10 @@ Cursor is the implementation engineer and must not redefine product logic indepe
 2. Agent-specific repository memory or rules
 3. `stocky-plus/docs/product/00_READ_ME_FIRST.md`
 4. Product documents in the listed order
-5. Active task or review prompt
-6. Relevant repository code, configuration, migrations, tests, and Git history
+5. `stocky-plus/docs/PROJECT_STATUS.md`
+6. Approved brief for the active phase
+7. Active task or review prompt
+8. Relevant repository code, configuration, migrations, tests, and Git history
 
 ## Rule priority
 
@@ -71,8 +91,9 @@ When instructions conflict, use this priority:
 2. Approved product documents
 3. Root `AGENTS.md`
 4. Agent-specific persistent instructions
-5. Active task prompt
-6. Existing unfinished code and documentation
+5. Approved phase brief
+6. Active task prompt
+7. Existing unfinished code and documentation
 
 No agent may silently change an approved product rule. Use a decision record containing current rule, proposed rule, reason, merchant impact, technical impact, migration impact, risks, and final decision.
 
