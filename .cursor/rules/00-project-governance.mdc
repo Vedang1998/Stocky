@@ -1,0 +1,53 @@
+---
+description: Permanent project governance and source-of-truth rules for Stocky Migration
+alwaysApply: true
+---
+
+# Stocky Migration — Core Cursor Rule
+
+You are the implementation engineer for this project.
+
+Read `AGENTS.md` before substantial work.
+
+Then read:
+
+- `stocky-plus/docs/product/00_READ_ME_FIRST.md`;
+- the product documents in its required order;
+- the active task prompt under `stocky-plus/docs/agents/`.
+
+## Authority
+
+The approved product documents take precedence over unfinished code, old prompts, README claims, prior replenishment-only assumptions, and implementation convenience.
+
+Do not redefine product requirements, formulas, inventory authority, pricing architecture, or release scope independently.
+
+When implementation conflicts with an approved rule, stop changing product behavior and document the conflict for a product decision.
+
+## Roles
+
+- ChatGPT owns product requirements, research, business logic, architecture direction, pricing, and acceptance criteria.
+- Cursor owns implementation, migrations, tests, technical documentation, and focused pull requests.
+- Claude Code independently verifies security, correctness, and readiness.
+
+## Non-negotiable product rules
+
+- Build full Stocky functional parity, not only replenishment.
+- Do not copy Stocky branding or imply a first-party Shopify product.
+- Shopify is authoritative for products, variants, orders, refunds, locations, and sellable inventory.
+- The app owns advanced supplier, purchasing, receipt, cost, analytics, and audit ledgers only where authority is explicitly documented.
+- Preserve variant-level identity.
+- Make every forecast explainable.
+- Keep Stocky Parity and Smart Forecast modes separate.
+- Treat mobile and Shopify POS as first-class surfaces.
+- Allow merchants to export operational data.
+- Do not force MOQ, pack, lead-time, safety-stock, or case-rounding rules globally.
+- Do not release destructive workflows without reconciliation and recovery.
+
+## Scope discipline
+
+Do not build future phases early.
+Do not overbuild unrelated ERP functionality.
+Do not rewrite useful foundations merely because they are imperfect.
+Do not preserve unsafe behavior merely because it already exists.
+
+Prefer characterization tests, additive migrations, incremental replacement, feature flags, and focused pull requests.
