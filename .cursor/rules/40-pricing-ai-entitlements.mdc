@@ -1,0 +1,123 @@
+---
+description: Pricing, plan entitlements, billing, AI authorization, and cost-control requirements
+alwaysApply: true
+---
+
+# Pricing, Entitlements, and AI Economics
+
+Read `stocky-plus/docs/product/11_PRICING_AND_PACKAGING_STRATEGY.md` before changing billing, plan limits, feature gates, or AI functionality.
+
+## Packaging rules
+
+- Every paid plan includes the essential Stocky operating workflow.
+- Plans expand by scale and operational sophistication.
+- Do not price primarily by merchant revenue.
+- Dollar prices and numerical limits are hypotheses until pilot validation.
+- Do not hardcode public prices throughout application business logic.
+
+## Entitlement architecture
+
+Use one centralized server-side entitlement service with:
+
+- stable capability keys;
+- versioned plan definitions;
+- numeric limits;
+- current usage;
+- trial state;
+- billing state;
+- AI allowance;
+- support and retention metadata;
+- upgrade and downgrade transitions.
+
+Do not rely on a single Boolean subscription flag.
+Do not scatter raw plan-name comparisons through routes, services, or workers.
+Hiding UI is not authorization.
+
+Server-side checks are required for:
+
+- routes and actions;
+- background jobs;
+- exports;
+- POS extensions;
+- automation;
+- API access;
+- AI provider calls.
+
+Define safe behavior for trial, upgrade, downgrade, freeze, cancellation, over-limit locations/variants, scheduled jobs, read-only access, retention, and export.
+
+## AI boundaries
+
+Do not implement or advertise unlimited AI.
+
+Use deterministic code or approved statistical models before considering an LLM.
+
+LLMs may assist with explanations, natural-language analytics, anomaly summaries, supplier-risk narratives, and support diagnostics. They must not perform deterministic inventory or financial arithmetic.
+
+## Required pre-call authorization
+
+Before every AI provider call, verify:
+
+1. authenticated shop;
+2. capability entitlement;
+3. remaining merchant AI credits;
+4. shop-level provider-cost budget;
+5. per-action maximum cost;
+6. global spending ceiling;
+7. model and feature kill switches;
+8. input-size and output-size limits.
+
+If authorization fails, no provider request may occur.
+
+## AI usage ledger
+
+Record for every attempted action:
+
+- shop;
+- plan and entitlement version;
+- feature and action;
+- provider and model;
+- prompt version;
+- input tokens;
+- cached input tokens;
+- output and reasoning tokens where reported;
+- provider cost;
+- internal credit cost;
+- latency;
+- success, denial, failure, or fallback;
+- correlation ID;
+- user feedback where available.
+
+## Cost controls
+
+Implement:
+
+- least-expensive-qualified-model routing;
+- compact structured facts instead of raw operational datasets;
+- prompt and safe response caching;
+- request deduplication;
+- bounded retries;
+- daily and monthly shop limits;
+- global cost alarms and hard stops;
+- feature/model kill switches;
+- no calls from render loops or polling;
+- no unbounded background AI jobs;
+- deterministic fallback.
+
+Do not launch automatic AI overage billing initially.
+
+## Required tests
+
+Cover:
+
+- entitlement enforcement in routes, actions, workers, and POS surfaces;
+- trial, upgrade, downgrade, freeze, and cancellation;
+- cross-shop isolation;
+- AI credit exhaustion;
+- shop-cost-budget exhaustion;
+- global budget exhaustion;
+- kill switches;
+- no provider call after denial;
+- bounded retries;
+- deterministic fallback;
+- prices absent from core business logic;
+- no LLM use inside deterministic calculations.
