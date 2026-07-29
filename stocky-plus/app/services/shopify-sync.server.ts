@@ -224,37 +224,34 @@ export async function markShopifyTransferReadyToShip(
   return payload?.inventoryTransfer;
 }
 
+/**
+ * Native Shopify transfer receive/complete is not available as
+ * `inventoryTransferComplete` on Admin API 2025-10.
+ *
+ * Documented 2025-10 transfer mutations cover create, edit, set/remove items,
+ * mark ready to ship, cancel, and duplicate — not a complete/receive mutation.
+ * Do not invent a mutation name. Keep FEATURE_TRANSFER_WRITES OFF until a
+ * supported receive workflow is approved (Phase 5).
+ */
+export class UnsupportedShopifyOperationError extends Error {
+  readonly code = "UNSUPPORTED_SHOPIFY_OPERATION" as const;
+
+  constructor(operation: string, detail: string) {
+    super(`${operation} is unsupported: ${detail}`);
+    this.name = "UnsupportedShopifyOperationError";
+  }
+}
+
 export async function completeShopifyTransfer(
   admin: AdminGraphQLClient,
   transferId: string,
-) {
-  const result = await shopifyGraphQL<{
-    inventoryTransferComplete: {
-      inventoryTransfer: { id: string; status: string } | null;
-      userErrors: Array<{ message: string }>;
-    };
-  }>(
-    admin,
-    `#graphql
-      mutation StockyCompleteTransfer($id: ID!) {
-        inventoryTransferComplete(id: $id) {
-          inventoryTransfer {
-            id
-            status
-          }
-          userErrors {
-            message
-          }
-        }
-      }`,
-    { id: transferId },
+): Promise<never> {
+  void admin;
+  void transferId;
+  throw new UnsupportedShopifyOperationError(
+    "completeShopifyTransfer",
+    "Admin GraphQL 2025-10 has no inventoryTransferComplete (or equivalent receive) mutation. Transfer receive remains disabled.",
   );
-
-  const payload = result.data?.inventoryTransferComplete;
-  if (payload?.userErrors?.length) {
-    throw new Error(payload.userErrors.map((e) => e.message).join("; "));
-  }
-  return payload?.inventoryTransfer;
 }
 
 export async function processBomSale(

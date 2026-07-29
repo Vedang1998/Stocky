@@ -172,6 +172,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     try {
       if (transfer.shopifyTransferId) {
+        // Throws UnsupportedShopifyOperationError on Admin API 2025-10 —
+        // do not invent a receive mutation or mark local transfer received.
         await completeShopifyTransfer(admin, transfer.shopifyTransferId);
       }
       await prisma.$transaction([
@@ -190,7 +192,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       ]);
       return { ok: true };
     } catch (err) {
-      return { error: err instanceof Error ? err.message : "Receive failed" };
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Receive failed",
+      };
     }
   }
 

@@ -114,17 +114,24 @@ export default function Billing() {
       {settings.subscriptionActive ? (
         <s-banner tone="success" heading="Subscription active">
           <s-paragraph>
-            You are on {settings.subscriptionPlan ?? "an active plan"}. All
-            premium features are unlocked.
+            Your Shopify app subscription is active. You are on{" "}
+            {settings.subscriptionPlan ?? "an active plan"}.
           </s-paragraph>
         </s-banner>
       ) : (
         <s-banner tone="info" heading="No active subscription">
           <s-paragraph>
-            The Buying Table and forecasting features require a plan.
+            No active Shopify app subscription was found.
           </s-paragraph>
         </s-banner>
       )}
+
+      <s-banner tone="info" heading="Temporary plan hypotheses">
+        <s-paragraph>
+          Plan names and dollar prices below are working hypotheses pending
+          pilot validation. They are not a complete entitlement system.
+        </s-paragraph>
+      </s-banner>
 
       {plans.map((plan) => (
         <s-section key={plan.name} heading={`${plan.name} — $${plan.price}/month`}>
