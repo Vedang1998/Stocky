@@ -1,9 +1,10 @@
 # Phase 0 Correction Follow-Up Implementation Report
 
-**Status:** IN PROGRESS — draft PR / awaiting green CI + Claude re-review  
+**Status:** DRAFT PR OPEN — GitHub Actions green; awaiting Claude re-review (gate not closed)  
 **Branch:** `phase-0/correction-gate-followup`  
 **Base main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
-**Final head SHA:** _(filled after push)_  
+**Final head SHA:** `bff1c9f031c2bb57be463098c1eee9668eb0efe5`  
+**Draft PR:** https://github.com/Vedang1998/Stocky/pull/7  
 **Node version:** `v22.19.0`  
 **npm version:** `11.5.2` (also declared in `package.json` `packageManager` / `engines.npm`)  
 **Operating system (local evidence):** Darwin 25.4.0 (arm64)  
@@ -29,6 +30,7 @@
 - `stocky-plus/docs/phases/phase-0/CORRECTION_BACKLOG.md`
 - `stocky-plus/docs/phases/phase-0/CORRECTION_IMPLEMENTATION_REPORT.md` — supersession notice
 - `stocky-plus/docs/phases/phase-0/CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md` — this file
+- `stocky-plus/docs/RISK_REGISTER.md` — npm audit, branch-protection owner action, GraphQL network dependency
 - `stocky-plus/docs/PROJECT_STATUS.md`
 
 ## F-001 — Exact lockfile diff summary
@@ -83,12 +85,14 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 5. Shop B Buying Table `createPO` (supplier not found)
 6. Client-smuggled Shop A id on PO cancel (session shop authoritative)
 7. Shop B stocktake **parent** `complete` (new)
-8. Shop B transfer **parent** `cancel` (new)
+8. Shop B transfer **parent** `ship` (new)
 9. Shop B Buying Table mapping denial when supplier resolves but mapping is Shop A (new)
 
 **Other safety tests in the same file (not counted as record-level denial):** 1 flag default-OFF assertion.
 
-**Full suite:** 45 tests / 5 files (local).
+**Client-smuggled shop field case (#6)** proves session authority; counted as record-scoped PO cancel denial, not a feature-flag test.
+
+**Full suite:** 45 tests / 5 files (local re-validation after parent-ship denial update).
 
 ## Exact local commands and exit statuses
 
@@ -110,20 +114,34 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 
 | Field | Value |
 |---|---|
-| Workflow run ID | _(filled after green run)_ |
-| Job ID | _(filled after green run)_ |
-| Head SHA | _(filled after push)_ |
-| Conclusion | _(pending)_ |
-| Warnings | _(pending)_ |
+| Workflow run ID | `30483462941` |
+| Job ID | `90683173537` |
+| Head SHA | `bff1c9f031c2bb57be463098c1eee9668eb0efe5` |
+| Conclusion | **success** |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30483462941 |
+| Warnings | React Router future-flag notices during build (non-failing); npm `shamefully-hoist` project-config warning; pre-existing audit advisories not remediated |
+
+All required steps succeeded: Pin npm → Verify versions → `npm ci` → Prisma generate/validate/migrate → lint → typecheck → unit tests → build → graphql-codegen.
+
+## Process note — main branch protection
+
+**OWNER ACTION REQUIRED (do not treat as verified by Cursor unless settings evidence exists):**
+
+GitHub `main` should require:
+
+- Pull requests before merging
+- Status check `Lint, typecheck, test, build, Prisma, GraphQL` to pass (`strict`)
+- No merging while a PR is draft
+
+If an owner later configures these settings, record direct evidence (screenshot or API response) in a follow-up note. This does not replace Claude review or ChatGPT approval.
 
 ## Remaining blockers
 
 - Claude must re-review the follow-up PR and return `READY FOR PHASE 1 FOUNDATION`.
 - ChatGPT must authorize merge (and Phase 1 brief separately).
-- `main` branch protection must require PR + CI + no draft merge before merge.
 - Inventory-write release gates still required before enabling any write flag.
 - Compliance webhooks still acknowledge-only; entitlements incomplete; npm audit advisories deferred.
 
 ## Next step
 
-Push draft PR, obtain green CI, update this report with run evidence, stop for Claude re-review. Do not merge. Do not start Phase 1.
+Stop for Claude re-review. Do not merge. Do not start Phase 1. Do not mark the correction gate closed.

@@ -376,30 +376,42 @@ describe("cross-shop denial", () => {
     }
   });
 
-  it("denies Shop B cancelling Shop A transfer parent (session shop; no parent/child/Shopify writes)", async () => {
-    const { action } = await import("../routes/app.transfers");
-    prismaMock.transferOrder.updateMany.mockResolvedValue({ count: 0 });
+  it("denies Shop B shipping Shop A transfer parent (session shop; no parent/child/Shopify writes)", async () => {
+    const previous = process.env.FEATURE_TRANSFER_WRITES;
+    process.env.FEATURE_TRANSFER_WRITES = "true";
+    featureFlags.transferWrites.mockReturnValue(true);
+    try {
+      const { action } = await import("../routes/app.transfers");
+      prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
-    const result = await action(
-      actionArgs(
-        formRequest({
-          intent: "cancel",
-          transferId: "tr-shop-a",
-        }),
-      ),
-    );
+      const result = await action(
+        actionArgs(
+          formRequest({
+            intent: "ship",
+            transferId: "tr-shop-a",
+          }),
+        ),
+      );
 
-    expect(authenticateAdmin).toHaveBeenCalled();
-    expect(prismaMock.transferOrder.updateMany).toHaveBeenCalledWith({
-      where: { id: "tr-shop-a", shop: SHOP_B, status: "DRAFT" },
-      data: { status: "CANCELLED" },
-    });
-    expect(result).toEqual({ ok: true });
-    expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
-    expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
-    expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
-    expect(createShopifyTransfer).not.toHaveBeenCalled();
-    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+      expect(authenticateAdmin).toHaveBeenCalled();
+      expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
+        where: { id: "tr-shop-a", shop: SHOP_B },
+        include: { lineItems: true },
+      });
+      expect(result).toEqual({ error: "Transfer has no line items" });
+      expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
+      expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
+      expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
+      expect(createShopifyTransfer).not.toHaveBeenCalled();
+      expect(completeShopifyTransfer).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.FEATURE_TRANSFER_WRITES;
+      } else {
+        process.env.FEATURE_TRANSFER_WRITES = previous;
+      }
+      featureFlags.transferWrites.mockReturnValue(false);
+    }
   });
 
   it("denies Buying Table createPO when Shop B supplier resolves but SKU mapping is Shop A", async () => {

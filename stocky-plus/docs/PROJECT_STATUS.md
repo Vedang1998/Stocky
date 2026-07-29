@@ -4,6 +4,7 @@
 **Current stage:** Phase 0 correction gate follow-up in progress  
 **Current main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
 **Follow-up branch:** `phase-0/correction-gate-followup`  
+**Follow-up draft PR:** https://github.com/Vedang1998/Stocky/pull/7 (CI green — run `30483462941`)  
 **Phase 1:** Not started
 
 ## Current truth
@@ -13,7 +14,8 @@
 - Correction gate PR #6 was merged into `main` **with failed CI** before independent review completed.
 - Claude’s independent review of PR #6 returned **`BLOCKED`** — see `phases/phase-0/CORRECTION_REVIEW_REPORT.md`.
 - The Phase 0 correction gate is **not closed**.
-- Follow-up PR is in progress on `phase-0/correction-gate-followup`, awaiting green CI and Claude re-review.
+- Follow-up draft PR #7 is open on `phase-0/correction-gate-followup` with reported green CI evidence; Claude re-review is still required before the gate may close.
+- The Phase 0 correction gate remains **BLOCKED / not closed** until Claude returns READY and ChatGPT authorizes merge.
 - Phase 1 has **not** started and must not start.
 - No production inventory writes are approved.
 - All implemented inventory-write paths remain disabled (flags default OFF).
