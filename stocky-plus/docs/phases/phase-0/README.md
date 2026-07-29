@@ -1,6 +1,6 @@
 # Phase 0 Record
 
-Phase 0 is closed and accepted with a mandatory correction gate before Phase 1.
+Phase 0 was accepted with a mandatory correction gate. PR #6 merged with failed CI; Claude returned **`BLOCKED`**. The gate is **not closed**. Follow-up is in progress on `phase-0/correction-gate-followup`. Phase 1 has not started.
 
 Read in this order:
 
@@ -8,6 +8,9 @@ Read in this order:
 2. `IMPLEMENTATION_REPORT.md`
 3. `REVIEW_REPORT.md`
 4. `CORRECTION_BACKLOG.md`
+5. `CORRECTION_REVIEW_REPORT.md` (Claude BLOCKED on PR #6)
+6. `CORRECTION_IMPLEMENTATION_REPORT.md` (historical; superseded)
+7. `CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md`
 
 Detailed legacy evidence remains at:
 

@@ -337,4 +337,105 @@ describe("cross-shop denial", () => {
     expect(result).toEqual({ error: "Purchase order not found" });
     expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
   });
+
+  it("denies Shop B completing Shop A stocktake parent (session shop; no parent/child/Shopify writes)", async () => {
+    // Enable write flag only to reach parent-record scoping — not counted as a
+    // feature-flag assertion for record-level denial coverage.
+    const previous = process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES;
+    process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES = "true";
+    featureFlags.stocktakeInventoryWrites.mockReturnValue(true);
+    try {
+      const { action } = await import("../routes/app.stocktakes");
+      prismaMock.stocktake.findFirst.mockResolvedValue(null);
+
+      const result = await action(
+        actionArgs(
+          formRequest({
+            intent: "complete",
+            stocktakeId: "st-shop-a",
+          }),
+        ),
+      );
+
+      expect(authenticateAdmin).toHaveBeenCalled();
+      expect(prismaMock.stocktake.findFirst).toHaveBeenCalledWith({
+        where: { id: "st-shop-a", shop: SHOP_B },
+        include: { lineItems: true },
+      });
+      expect(result).toEqual({ error: "Stocktake not found" });
+      expect(prismaMock.stocktake.update).not.toHaveBeenCalled();
+      expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
+      expect(adjustShopifyInventory).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) {
+        delete process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES;
+      } else {
+        process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES = previous;
+      }
+      featureFlags.stocktakeInventoryWrites.mockReturnValue(false);
+    }
+  });
+
+  it("denies Shop B cancelling Shop A transfer parent (session shop; no parent/child/Shopify writes)", async () => {
+    const { action } = await import("../routes/app.transfers");
+    prismaMock.transferOrder.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await action(
+      actionArgs(
+        formRequest({
+          intent: "cancel",
+          transferId: "tr-shop-a",
+        }),
+      ),
+    );
+
+    expect(authenticateAdmin).toHaveBeenCalled();
+    expect(prismaMock.transferOrder.updateMany).toHaveBeenCalledWith({
+      where: { id: "tr-shop-a", shop: SHOP_B, status: "DRAFT" },
+      data: { status: "CANCELLED" },
+    });
+    expect(result).toEqual({ ok: true });
+    expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
+    expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
+    expect(createShopifyTransfer).not.toHaveBeenCalled();
+    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+  });
+
+  it("denies Buying Table createPO when Shop B supplier resolves but SKU mapping is Shop A", async () => {
+    const { action } = await import("../routes/app.buying-table");
+    prismaMock.supplier.findFirst.mockResolvedValue({
+      id: "supplier-shop-b",
+      shop: SHOP_B,
+      name: "Shared-looking supplier name",
+    });
+    // Mapping id belongs to Shop A (or otherwise not under Shop B's supplier).
+    prismaMock.supplierSkuMapping.findFirst.mockResolvedValue(null);
+
+    const result = await action(
+      actionArgs(
+        formRequest({
+          intent: "createPO",
+          supplierId: "supplier-shop-b",
+          locationId: "gid://shopify/Location/1",
+          "qty-map-shop-a": "10",
+        }),
+      ),
+    );
+
+    expect(authenticateAdmin).toHaveBeenCalled();
+    expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
+      where: { id: "supplier-shop-b", shop: SHOP_B },
+    });
+    expect(prismaMock.supplierSkuMapping.findFirst).toHaveBeenCalledWith({
+      where: { id: "map-shop-a", supplierId: "supplier-shop-b" },
+    });
+    expect(result).toEqual({ ok: false });
+    expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
+    expect(resolveTieredUnitCost).not.toHaveBeenCalled();
+    expect(createShopifyTransfer).not.toHaveBeenCalled();
+    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+    expect(adjustShopifyInventory).not.toHaveBeenCalled();
+  });
 });

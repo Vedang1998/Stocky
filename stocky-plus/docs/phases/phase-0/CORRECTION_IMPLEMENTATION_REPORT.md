@@ -1,6 +1,17 @@
 # Phase 0 Correction Implementation Report
 
-**Status:** COMPLETE (pending Claude verification)  
+> ## Correction notice (2026-07-29) — SUPERSEDED
+>
+> This report’s original completion claim is **superseded**.
+>
+> - The original local macOS `npm ci` result did **not** reproduce in Linux GitHub Actions.
+> - PR #6 CI failed at `npm ci` (workflow run `30470541851`, job `90639313793`) with missing `@emnapi/*` lockfile entries.
+> - Claude’s independent review of PR #6 returned **`BLOCKED`**. The Phase 0 correction gate is **not closed**.
+> - Follow-up work lives on `phase-0/correction-gate-followup` and is documented in `CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md` and `CORRECTION_REVIEW_REPORT.md`.
+>
+> Do not treat the status below as current gate closure evidence.
+
+**Status:** SUPERSEDED (original claim: COMPLETE pending Claude verification)  
 **Branch:** `phase-0/correction-gate`  
 **Base main SHA:** `39b6a50f7d90eefb7f04f0479cc21722f9053129`  
 **Final commit SHA:** `e25c4aa4387e68d49ab2a0bb5dda54f4f74a6089`  
@@ -36,7 +47,7 @@
 - Removed only `package-lock.json` from `.gitignore`.
 - Continues ignoring `yarn.lock` and `pnpm-lock.yaml`.
 - Committed existing `package-lock.json` without broad upgrades or `npm audit fix`.
-- Evidence: `npm ci` **PASS** (exit 0).
+- Evidence: local `npm ci` **PASS** (exit 0) — **later shown insufficient for Linux CI; see supersession notice**.
 
 ### C-005 / Correction 2 — GraphQL Admin API 2025-10
 
@@ -74,6 +85,7 @@ inventoryItem(id: $inventoryItemId) {
 - GraphQL step documents outbound HTTPS dependency on `shopify.dev`.
 - `npm audit` intentionally not a blocking gate.
 - Local YAML lint via `yaml-lint`: **PASS**.
+- **PR #6 Actions run failed at `npm ci` (see supersession notice).**
 
 ### C-008 / Correction 5 — Cross-shop denial tests
 
@@ -88,13 +100,13 @@ Added `cross-shop-denial.test.ts` covering:
 | Buying Table createPO | Shop B supplier not-found; no PO create / mapping resolve |
 | Flags | inventory-write flags remain false |
 
-Evidence: `npm test` **PASS** — 38 tests / 4 files.
+Evidence: `npm test` **PASS** — 38 tests / 4 files. Claude later required additional parent/mapping cases (F-005).
 
 ## Exact local command results
 
 | Command | Exit | Status |
 |---|---|---|
-| `npm ci` | 0 | PASS |
+| `npm ci` | 0 | PASS (local only; Linux CI later FAIL) |
 | `npm run lint` | 0 | PASS |
 | `npm run typecheck` | 0 | PASS |
 | `npm test` | 0 | PASS (38) |
@@ -107,7 +119,7 @@ Evidence: `npm test` **PASS** — 38 tests / 4 files.
 
 ## Remaining blockers (outside this gate)
 
-- Claude must independently verify this correction PR.
+- Claude must independently verify this correction PR. **Done: BLOCKED.**
 - Inventory-write release gates (idempotency, audit, reconciliation, reversal) still required before enabling any write flag.
 - Compliance webhooks still acknowledge-only.
 - Entitlement system still not implemented.
@@ -116,4 +128,4 @@ Evidence: `npm test` **PASS** — 38 tests / 4 files.
 
 ## Next step
 
-Claude verifies this PR. Only after acceptance should ChatGPT authorize the Phase 1 brief.
+See `CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md`. Gate remains open until follow-up is green and Claude re-reviews.

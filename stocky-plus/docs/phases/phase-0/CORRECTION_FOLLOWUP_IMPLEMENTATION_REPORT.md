@@ -1,0 +1,129 @@
+# Phase 0 Correction Follow-Up Implementation Report
+
+**Status:** IN PROGRESS — draft PR / awaiting green CI + Claude re-review  
+**Branch:** `phase-0/correction-gate-followup`  
+**Base main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
+**Final head SHA:** _(filled after push)_  
+**Node version:** `v22.19.0`  
+**npm version:** `11.5.2` (also declared in `package.json` `packageManager` / `engines.npm`)  
+**Operating system (local evidence):** Darwin 25.4.0 (arm64)  
+**Date:** 2026-07-29
+
+## Explicit confirmations
+
+- **Phase 1 was not started.**
+- **All inventory-write feature flags remain default OFF.**
+- **No secrets, `.env`, merchant data, or production credentials were committed.**
+- **Approved product documents under `docs/product/` were not changed.**
+- **Gate is not marked closed** pending Claude re-review after green CI.
+
+## Files changed
+
+- `stocky-plus/package-lock.json` — F-001: add three missing optional `@emnapi/*` entries
+- `stocky-plus/package.json` — F-006: `packageManager` + `engines.npm` = `11.5.2`
+- `.github/workflows/ci.yml` — F-006: install/verify npm `11.5.2` before `npm ci`
+- `stocky-plus/app/routes/app.transfers.tsx` — F-004: always require Shopify complete path before local receipt mutation
+- `stocky-plus/app/services/transfer-receive-guard.test.ts` — F-004 tests
+- `stocky-plus/app/services/cross-shop-denial.test.ts` — F-005 parent + mapping denial tests
+- `stocky-plus/docs/phases/phase-0/CORRECTION_REVIEW_REPORT.md` — stored Claude BLOCKED review
+- `stocky-plus/docs/phases/phase-0/CORRECTION_BACKLOG.md`
+- `stocky-plus/docs/phases/phase-0/CORRECTION_IMPLEMENTATION_REPORT.md` — supersession notice
+- `stocky-plus/docs/phases/phase-0/CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md` — this file
+- `stocky-plus/docs/PROJECT_STATUS.md`
+
+## F-001 — Exact lockfile diff summary
+
+Regenerated with Node `v22.19.0` / npm `11.5.2` via:
+
+```bash
+npm install --package-lock-only --ignore-scripts --no-save \
+  @emnapi/core@2.0.0-alpha.3 \
+  @emnapi/runtime@2.0.0-alpha.3 \
+  @emnapi/wasi-threads@2.0.1
+```
+
+| Metric | Result |
+|---|---|
+| Added package entries | **3** — `node_modules/@emnapi/core`, `node_modules/@emnapi/runtime`, `node_modules/@emnapi/wasi-threads` |
+| Removed entries | **0** |
+| Unrelated version changes | **0** |
+| `package.json` dependency declaration churn | **None** (only `packageManager` / `engines.npm` for F-006) |
+| Diff size | `+37` lines on `package-lock.json` |
+
+## F-006 — Pinned toolchain
+
+| Tool | Version |
+|---|---|
+| Node | `22.19.0` (CI `actions/setup-node`; local `v22.19.0`) |
+| npm | `11.5.2` (`packageManager`, `engines.npm`, CI `npm install -g npm@11.5.2`) |
+
+Chosen because it is the version that produced the minimal three-entry lockfile repair and matches the prior Phase 0 correction evidence environment — not because it is newest.
+
+## F-004 — Transfer receive guard
+
+`receive` always calls `completeShopifyTransfer` (including when `shopifyTransferId` is null, using a sentinel id). On Admin API 2025-10 this throws `UnsupportedShopifyOperationError` before any `$transaction` that would set `receivedQty`, `status: RECEIVED`, or `receivedAt`. `FEATURE_TRANSFER_WRITES` remains default OFF. No Shopify mutation was invented.
+
+## F-005 — Tests added / counts
+
+### Transfer receive guard (`transfer-receive-guard.test.ts`)
+
+- With Shopify transfer id present → unsupported; no local mutation
+- Without Shopify transfer id → unsupported; no local mutation
+- Clear unsupported-operation merchant error
+- Documents env-gated default OFF
+
+### Cross-shop record-level denial cases
+
+**Record-level denial cases: 9** (feature-flag-only assertion counted separately)
+
+1. Shop B PO / line `addLine`
+2. Shop B stocktake line `count`
+3. Shop B transfer `addLine`
+4. Shop B supplier mapping delete
+5. Shop B Buying Table `createPO` (supplier not found)
+6. Client-smuggled Shop A id on PO cancel (session shop authoritative)
+7. Shop B stocktake **parent** `complete` (new)
+8. Shop B transfer **parent** `cancel` (new)
+9. Shop B Buying Table mapping denial when supplier resolves but mapping is Shop A (new)
+
+**Other safety tests in the same file (not counted as record-level denial):** 1 flag default-OFF assertion.
+
+**Full suite:** 45 tests / 5 files (local).
+
+## Exact local commands and exit statuses
+
+| Command | Exit | Status |
+|---|---|---|
+| `node --version` | 0 | `v22.19.0` |
+| `npm --version` | 0 | `11.5.2` |
+| `rm -rf node_modules && npm ci` | 0 | PASS |
+| `npx prisma generate` | 0 | PASS |
+| `npx prisma validate` | 0 | PASS |
+| `npx prisma migrate status` | 0 | PASS |
+| `npm run lint` | 0 | PASS |
+| `npm run typecheck` | 0 | PASS |
+| `npm test` | 0 | PASS (45) |
+| `npm run build` | 0 | PASS (React Router future-flag warnings only) |
+| `npm run graphql-codegen` | 0 | PASS |
+
+## GitHub Actions
+
+| Field | Value |
+|---|---|
+| Workflow run ID | _(filled after green run)_ |
+| Job ID | _(filled after green run)_ |
+| Head SHA | _(filled after push)_ |
+| Conclusion | _(pending)_ |
+| Warnings | _(pending)_ |
+
+## Remaining blockers
+
+- Claude must re-review the follow-up PR and return `READY FOR PHASE 1 FOUNDATION`.
+- ChatGPT must authorize merge (and Phase 1 brief separately).
+- `main` branch protection must require PR + CI + no draft merge before merge.
+- Inventory-write release gates still required before enabling any write flag.
+- Compliance webhooks still acknowledge-only; entitlements incomplete; npm audit advisories deferred.
+
+## Next step
+
+Push draft PR, obtain green CI, update this report with run evidence, stop for Claude re-review. Do not merge. Do not start Phase 1.
