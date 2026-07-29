@@ -1,45 +1,62 @@
-# Project Status — Phase 0
+# Project Status
 
 **Updated:** 2026-07-29  
-**Branch:** `phase-0-product-alignment-v2`  
-**Base:** `origin/main` @ `f1923acef0c44b1e80d0b5aae44a517aedf56aef`  
-**Phase:** 0 — Product and repository alignment (**in PR; Phase 1 not started**)
+**Current stage:** Phase 0 accepted; mandatory correction gate open  
+**Current main SHA:** `36b34c20d6a82fcc226948abd5ff709d9e2fcca6`  
+**Phase 1:** Not started
 
-## Done this phase
+## Current truth
 
-- Read governance + approved product documents; did not overwrite them.
-- Created clean branch from latest `origin/main` (not historical branches).
-- Classified `origin/phase-0-product-alignment` candidate changes; selectively ported.
-- Inventory-write kill switches + route gates.
-- Stocktake complete-on-failure fix.
-- Tenant scoping fixes on PO / stocktake / transfer / supplier child / buying-table createPO.
-- Removed unjustified MMFO scopes.
-- Added compliance webhook route + toml `compliance_topics`.
-- Guarded `devActivate`.
-- Softened merchant-facing Stocky++ labels in Admin/billing.
-- Characterization tests for forecast/ABC/flags/MOQ/stocktake safety.
-- Operating docs under `stocky-plus/docs/` (not under `docs/product/`).
-- Command baseline executed (see `CURRENT_COMMAND_BASELINE.md`).
+- Phase 0 implementation was merged through GitHub PR #4.
+- Claude completed an independent review.
+- Verdict: **READY FOR PHASE 1 FOUNDATION**, but not until the correction gate is closed.
+- No production inventory writes are approved.
+- All implemented inventory-write paths must remain disabled.
 
-## Not done / deferred
+## Phase 0 completed
 
-- Phase 1 fact schema and migrations (planned only).
-- Forecast/ABC parity rewrite.
-- Full entitlement service / AI ledger.
-- Full GDPR redaction pipeline.
-- GraphQL operation repairs.
-- README/SETUP full rebrand.
-- Partner distribution confirmation (`shopify app info` failed).
+- Approved product and agent source-of-truth files were preserved.
+- Unsafe stocktake, receipt, and transfer writes remain behind default-off flags.
+- Stocktake no longer reports `COMPLETED` after failed Shopify adjustments.
+- Confirmed route-level tenant-scoping holes were corrected.
+- MMFO scopes were removed.
+- The development subscription activation bypass was restricted.
+- Characterization tests and Phase 0 operating records were added.
+- Claude found no confirmed cross-shop read or write in the merged tree.
 
-## Exit criteria toward Phase 1
+## Mandatory correction gate before Phase 1
 
-Claude Code independent review of this PR should confirm:
+See `phases/phase-0/CORRECTION_BACKLOG.md`.
 
-1. Approved product docs untouched.
-2. Unsafe writes default OFF.
-3. Command evidence honest.
-4. Phase 1 plan is additive and non-destructive.
+Open engineering work:
 
-## Explicit statement
+1. Commit a reproducible npm lockfile and stop ignoring it.
+2. Fix and validate GraphQL documents for Admin API `2025-10`.
+3. Correct the billing banner so it does not claim unenforced premium access.
+4. Add CI for the required command baseline.
+5. Add initial cross-shop denial tests.
 
-**Phase 1 feature development was not started in this pass.**
+## Important deferred work
+
+- Compliance webhooks currently authenticate and acknowledge only; they do not yet perform data export or redaction.
+- `subscriptionActive` is not a complete entitlement system.
+- Adjustment and cost-sync flags are placeholders; no implemented write paths currently use them.
+- Forecast and ABC parity remain future work.
+- Inventory-write idempotency, audit, reconciliation, and reversal are not complete.
+- Partner distribution remains unconfirmed because `shopify app info` failed.
+
+## Next action
+
+1. Merge the documentation/phase-tracking PR after review.
+2. Give Cursor a narrowly scoped Phase 0 correction task for C-004 through C-008.
+3. Have Claude verify that correction PR.
+4. Only then approve and create the Phase 1 brief.
+
+## Where to look
+
+- Phase workflow: `phases/README.md`
+- Phase 0 record: `phases/phase-0/`
+- Permanent product rules: `product/`
+- Permanent agent instructions: `agents/`
+- Risks: `RISK_REGISTER.md`
+- Decisions: `DECISIONS.md`

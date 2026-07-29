@@ -1,7 +1,11 @@
 # Phase 1 Technical Plan — Additive Foundation
 
 **Status:** Plan only — **not implemented** in Phase 0.  
-**Prerequisite:** Claude Code accepts Phase 0 PR.
+**Prerequisites:**
+
+1. Claude accepts Phase 0.
+2. `phases/phase-0/CORRECTION_BACKLOG.md` is closed.
+3. ChatGPT approves a Phase 1 `PHASE_BRIEF.md`.
 
 ## Goals
 
@@ -65,6 +69,8 @@ Wire checks into high-risk actions progressively; do not rely on UI hiding.
 - Smart forecasting / LLM features.
 - Broad ERP modules unrelated to facts/sync/audit.
 
-## Exact next step after Phase 0 merge
+## Exact next step
 
-Open `phase-1-shop-facts-foundation` from updated `main`, land migration 1–6 + GraphQL inventoryLevel fix behind feature flags, with cross-shop tests — still leaving inventory write flags **OFF**.
+First close the Phase 0 correction backlog through a focused Cursor PR and Claude verification. Then create `stocky-plus/docs/phases/phase-1/PHASE_BRIEF.md` from the approved template.
+
+Only after that brief is approved should Cursor open `phase-1/shop-facts-foundation` from updated `main` and begin the approved subset of migrations and sync work. All inventory-write flags remain **OFF**.

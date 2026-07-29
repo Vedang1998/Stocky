@@ -31,6 +31,10 @@ Absent: dedicated `integration`, `e2e`, `shopify app validate` npm scripts.
 
 ## Package manager consistency
 
-- Lockfile: `package-lock.json` present and used by `npm install`.
+- Cursor's local environment used a generated `package-lock.json`, but the repository currently ignores `package-lock.json`, `yarn.lock`, and `pnpm-lock.yaml`; no lockfile is tracked. The install result above is local evidence and is not fully reproducible from a fresh clone until one package manager and lockfile are committed.
 - Engines: `node >=20.19 <22 || >=22.12` — satisfied by Node 22.19.0.
-- Nested `stocky-plus/.git` exists (hooks only); repository authority is the parent `Vedang1998/Stocky` git root.
+- No nested `stocky-plus/.git` directory is present in the repository. The parent `Vedang1998/Stocky` repository is the only Git authority.
+
+## Independent Claude review note
+
+Claude independently passed lint and build. Prisma engine downloads and Shopify schema access were blocked in Claude's sandbox, so Prisma validation, tests, typecheck, and GraphQL validation were not independently reproduced there. This does not erase Cursor's recorded results, but it means those results remain environment-specific until CI reproduces them from a clean checkout.
