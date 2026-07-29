@@ -4,7 +4,7 @@
 **Current stage:** Phase 0 correction gate follow-up in progress  
 **Current main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
 **Follow-up branch:** `phase-0/correction-gate-followup`  
-**Follow-up draft PR:** https://github.com/Vedang1998/Stocky/pull/7 (CI green — run `30483462941`)  
+**Follow-up draft PR:** https://github.com/Vedang1998/Stocky/pull/7 (CI green — tip `1d36169`, run `30484058720`, job `90685181760`)  
 **Phase 1:** Not started
 
 ## Current truth
@@ -37,7 +37,7 @@
 | PR #6 (`phase-0/correction-gate`) | Merged to main; GitHub Actions `npm ci` **FAILED** (run `30470541851`) |
 | Claude review of PR #6 | **`BLOCKED`** — F-001 lockfile, F-006 npm pin, F-004 transfer receive, F-005 cross-shop coverage |
 | Original local completion claim | **Superseded** — macOS `npm ci` did not reproduce on Linux CI |
-| Follow-up branch | `phase-0/correction-gate-followup` — in progress |
+| Follow-up branch | `phase-0/correction-gate-followup` — draft PR #7; green CI run `30484058720` |
 
 See:
 

@@ -3,7 +3,7 @@
 **Status:** DRAFT PR OPEN — GitHub Actions green; awaiting Claude re-review (gate not closed)  
 **Branch:** `phase-0/correction-gate-followup`  
 **Base main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
-**Final head SHA:** `bff1c9f031c2bb57be463098c1eee9668eb0efe5`  
+**Final head SHA (code tip with green CI):** `1d36169c674420f9aab1b3cd1504051f7beed9e1`  
 **Draft PR:** https://github.com/Vedang1998/Stocky/pull/7  
 **Node version:** `v22.19.0`  
 **npm version:** `11.5.2` (also declared in `package.json` `packageManager` / `engines.npm`)  
@@ -112,6 +112,19 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 
 ## GitHub Actions
 
+### Authoritative green run (tip `1d36169` — includes parent-ship denial + risk/docs corrections)
+
+| Field | Value |
+|---|---|
+| Workflow run ID | `30484058720` |
+| Job ID | `90685181760` |
+| Head SHA | `1d36169c674420f9aab1b3cd1504051f7beed9e1` |
+| Trigger | `pull_request` |
+| Conclusion | **success** |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30484058720 |
+
+### Prior green run (tip `bff1c9f` — lockfile/npm/transfer/tests baseline)
+
 | Field | Value |
 |---|---|
 | Workflow run ID | `30483462941` |
@@ -119,9 +132,12 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 | Head SHA | `bff1c9f031c2bb57be463098c1eee9668eb0efe5` |
 | Conclusion | **success** |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30483462941 |
-| Warnings | React Router future-flag notices during build (non-failing); npm `shamefully-hoist` project-config warning; pre-existing audit advisories not remediated |
 
-All required steps succeeded: Pin npm → Verify versions → `npm ci` → Prisma generate/validate/migrate → lint → typecheck → unit tests → build → graphql-codegen.
+### Step conclusions (run `30484058720` / job `90685181760`)
+
+All required steps **success**: Set up job → Initialize containers → Checkout → Setup Node.js → Pin npm → Verify Node and npm versions → Install dependencies (`npm ci`) → Generate Prisma client → Validate Prisma schema → Apply migrations to ephemeral PostgreSQL → Lint → Typecheck → Unit tests → Build → GraphQL codegen / schema validation → Complete job.
+
+Warnings (non-failing): React Router future-flag notices during build; npm `shamefully-hoist` project-config warning; pre-existing audit advisories not remediated.
 
 ## Process note — main branch protection
 
