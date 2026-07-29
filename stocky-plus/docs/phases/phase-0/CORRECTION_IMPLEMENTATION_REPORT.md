@@ -3,7 +3,7 @@
 **Status:** COMPLETE (pending Claude verification)  
 **Branch:** `phase-0/correction-gate`  
 **Base main SHA:** `39b6a50f7d90eefb7f04f0479cc21722f9053129`  
-**Final commit SHA:** _(filled after push)_  
+**Final commit SHA:** `e25c4aa4387e68d49ab2a0bb5dda54f4f74a6089`  
 **Environment:** Node `v22.19.0` · npm `11.5.2`  
 **Date:** 2026-07-29
 
