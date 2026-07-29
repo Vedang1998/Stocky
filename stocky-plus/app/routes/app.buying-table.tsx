@@ -143,6 +143,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     metric,
     rows,
     gated: !settings.subscriptionActive,
+    allowDevActivate:
+      process.env.NODE_ENV !== "production" &&
+      process.env.ALLOW_DEV_SUBSCRIPTION_ACTIVATE === "true",
   };
 };
 
@@ -153,6 +156,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "devActivate") {
+    // Premature Boolean gate + unprotected bypass is not a commercial entitlement
+    // system (see docs/product/11_PRICING_AND_PACKAGING_STRATEGY.md).
+    const allow =
+      process.env.ALLOW_DEV_SUBSCRIPTION_ACTIVATE === "true" &&
+      process.env.NODE_ENV !== "production";
+    if (!allow) {
+      return {
+        error:
+          "Development subscription activation is disabled. Set ALLOW_DEV_SUBSCRIPTION_ACTIVATE=true only in non-production environments.",
+      };
+    }
     await prisma.shopSettings.upsert({
       where: { shop },
       create: { shop, subscriptionActive: true, subscriptionPlan: "dev" },
@@ -196,6 +210,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const supplierId = form.get("supplierId") as string;
     const locationId = form.get("locationId") as string;
 
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, shop },
+    });
+    if (!supplier) return { error: "Supplier not found" };
+
     const lines: Array<{
       variantId: string;
       vendorSku: string | null;
@@ -209,17 +228,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       let qty = parseInt(value as string, 10);
       if (!qty || qty <= 0) continue;
 
-      const mapping = await prisma.supplierSkuMapping.findUnique({
-        where: { id: mappingId },
+      const mapping = await prisma.supplierSkuMapping.findFirst({
+        where: { id: mappingId, supplierId: supplier.id },
       });
       if (!mapping) continue;
 
-      // Enforce MOQ and inner-carton pack sizes from the Supplier Master.
+      // CURRENT behavior (KNOWN-WRONG vs product rules): forced MOQ/pack rounding.
+      // Characterization tests document this; Phase 2 must make rules optional.
       qty = Math.max(qty, mapping.moq);
       qty = Math.ceil(qty / mapping.packSize) * mapping.packSize;
 
       const tierCost = await resolveTieredUnitCost(
-        supplierId,
+        supplier.id,
         mapping.shopifyVariantId,
         qty,
       );
@@ -236,7 +256,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       await prisma.purchaseOrder.create({
         data: {
           shop,
-          supplierId,
+          supplierId: supplier.id,
           locationId,
           status: "DRAFT",
           draftedAt: new Date(),
@@ -273,6 +293,7 @@ export default function BuyingTable() {
     metric,
     rows,
     gated,
+    allowDevActivate,
   } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const [lookbackFor, setLookbackFor] = useState<BuyingRow | null>(null);
@@ -283,20 +304,23 @@ export default function BuyingTable() {
         <s-section heading="Premium feature">
           <s-banner tone="info" heading="The Buying Table requires a subscription">
             <s-paragraph>
-              AI-driven demand planning, ABC analysis, and one-click PO
-              generation are part of the paid plan.
+              Demand planning, ABC analysis, and one-click PO generation are
+              part of the paid plan. Marketing must not claim unlimited or
+              AI-driven forecasting until Smart mode and AI gates exist.
             </s-paragraph>
           </s-banner>
           <s-stack direction="inline" gap="base">
             <s-button href="/app/billing" variant="primary">
               View plans
             </s-button>
-            <Form method="post">
-              <input type="hidden" name="intent" value="devActivate" />
-              <s-button type="submit" variant="tertiary">
-                Activate (development mode)
-              </s-button>
-            </Form>
+            {allowDevActivate && (
+              <Form method="post">
+                <input type="hidden" name="intent" value="devActivate" />
+                <s-button type="submit" variant="tertiary">
+                  Activate (dev only)
+                </s-button>
+              </Form>
+            )}
           </s-stack>
         </s-section>
       </s-page>

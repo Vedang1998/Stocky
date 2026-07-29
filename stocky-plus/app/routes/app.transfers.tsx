@@ -8,6 +8,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { fetchLocations } from "../services/shopify-gql.server";
+import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import {
   completeShopifyTransfer,
   createShopifyTransfer,
@@ -58,9 +59,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "addLine") {
+    const transferId = form.get("transferId") as string;
+    const transfer = await prisma.transferOrder.findFirst({
+      where: { id: transferId, shop },
+    });
+    if (!transfer) return { error: "Transfer not found" };
+
     await prisma.transferLineItem.create({
       data: {
-        transferOrderId: form.get("transferId") as string,
+        transferOrderId: transfer.id,
         shopifyVariantId: form.get("variantId") as string,
         quantity: parseInt(form.get("quantity") as string, 10),
       },
@@ -71,14 +78,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "pick") {
     const lineId = form.get("lineId") as string;
     const qty = parseInt(form.get("pickedQty") as string, 10);
+    const line = await prisma.transferLineItem.findFirst({
+      where: { id: lineId, transferOrder: { shop } },
+    });
+    if (!line) return { error: "Transfer line not found" };
+
     await prisma.transferLineItem.update({
-      where: { id: lineId },
+      where: { id: line.id },
       data: { pickedQty: qty },
     });
     return { ok: true };
   }
 
   if (intent === "ship") {
+    try {
+      assertInventoryWriteEnabled("transferWrites");
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Transfer writes disabled",
+      };
+    }
+
     const transferId = form.get("transferId") as string;
     const transfer = await prisma.transferOrder.findFirst({
       where: { id: transferId, shop },
@@ -135,6 +155,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "receive") {
+    try {
+      assertInventoryWriteEnabled("transferWrites");
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Transfer writes disabled",
+      };
+    }
+
     const transferId = form.get("transferId") as string;
     const transfer = await prisma.transferOrder.findFirst({
       where: { id: transferId, shop },

@@ -8,6 +8,7 @@ import { useFetcher, useLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { receivePartialPO, recordLeadTimeSnapshot } from "../services/landed-cost.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -37,6 +38,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "scan") {
+    try {
+      assertInventoryWriteEnabled("receiptWrites");
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error
+            ? `${err.message} Warehouse receiving is gated until the receipt ledger and Shopify write path exist.`
+            : "Receipt writes disabled",
+      };
+    }
+
     const poId = form.get("poId") as string;
     const barcode = (form.get("barcode") as string).trim();
     if (!barcode) return { error: "Empty scan" };
@@ -65,13 +77,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     }
 
-    await receivePartialPO(poId, [{ lineItemId: line.id, receivedQty: 1 }]);
+    await receivePartialPO(po.id, [{ lineItemId: line.id, receivedQty: 1 }]);
 
-    const updated = await prisma.purchaseOrder.findUnique({
-      where: { id: poId },
+    const updated = await prisma.purchaseOrder.findFirst({
+      where: { id: po.id, shop },
     });
     if (updated?.status === "RECEIVED") {
-      await recordLeadTimeSnapshot(updated.supplierId, poId);
+      await recordLeadTimeSnapshot(updated.supplierId, po.id);
     }
 
     return {

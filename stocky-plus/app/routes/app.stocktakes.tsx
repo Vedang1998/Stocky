@@ -7,6 +7,7 @@ import { Form, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { fetchLocations } from "../services/shopify-gql.server";
 import { adjustShopifyInventory } from "../services/shopify-sync.server";
 
@@ -66,8 +67,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "addItem") {
     const stocktakeId = form.get("stocktakeId") as string;
     const variantId = form.get("variantId") as string;
+    const stocktake = await prisma.stocktake.findFirst({
+      where: { id: stocktakeId, shop },
+    });
+    if (!stocktake) return { error: "Stocktake not found" };
+
     const existing = await prisma.stocktakeLineItem.findFirst({
-      where: { stocktakeId, shopifyVariantId: variantId },
+      where: { stocktakeId: stocktake.id, shopifyVariantId: variantId },
     });
     if (!existing) {
       const snapshot = await prisma.inventorySnapshot.findFirst({
@@ -76,7 +82,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
       await prisma.stocktakeLineItem.create({
         data: {
-          stocktakeId,
+          stocktakeId: stocktake.id,
           shopifyVariantId: variantId,
           expectedQty: snapshot?.quantityAvailable ?? 0,
         },
@@ -86,14 +92,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "count") {
+    const lineId = form.get("lineId") as string;
+    const line = await prisma.stocktakeLineItem.findFirst({
+      where: { id: lineId, stocktake: { shop } },
+    });
+    if (!line) return { error: "Stocktake line not found" };
+
     await prisma.stocktakeLineItem.update({
-      where: { id: form.get("lineId") as string },
+      where: { id: line.id },
       data: { countedQty: parseInt(form.get("countedQty") as string, 10) },
     });
     return { ok: true };
   }
 
   if (intent === "complete") {
+    try {
+      assertInventoryWriteEnabled("stocktakeInventoryWrites");
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Stocktake inventory writes disabled",
+      };
+    }
+
     const stocktakeId = form.get("stocktakeId") as string;
     const stocktake = await prisma.stocktake.findFirst({
       where: { id: stocktakeId, shop },
@@ -134,14 +157,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
     }
 
+    // Inventory-write contract: never mark complete when Shopify writes failed.
+    if (failures.length > 0) {
+      return {
+        error: `Stocktake left IN_PROGRESS — Shopify adjust failed for: ${failures.join(", ")}`,
+      };
+    }
+
     await prisma.stocktake.update({
       where: { id: stocktakeId },
       data: { status: "COMPLETED", completedAt: new Date() },
     });
-
-    if (failures.length > 0) {
-      return { error: `Adjusted with failures: ${failures.join(", ")}` };
-    }
     return { ok: true };
   }
 

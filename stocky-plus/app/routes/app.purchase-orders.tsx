@@ -7,6 +7,7 @@ import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
+import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { fetchLocations } from "../services/shopify-gql.server";
 import {
   applyLandedCostsToPO,
@@ -41,14 +42,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
+  const shop = session.shop;
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
   if (intent === "create") {
+    const supplierId = form.get("supplierId") as string;
+    const supplier = await prisma.supplier.findFirst({
+      where: { id: supplierId, shop },
+    });
+    if (!supplier) return { error: "Supplier not found" };
+
     await prisma.purchaseOrder.create({
       data: {
-        shop: session.shop,
-        supplierId: form.get("supplierId") as string,
+        shop,
+        supplierId: supplier.id,
         locationId: form.get("locationId") as string,
         currency: (form.get("currency") as string) || "USD",
         exchangeRate: form.get("exchangeRate")
@@ -76,8 +84,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const variantId = form.get("variantId") as string;
     const manualCost = form.get("unitCost") as string;
 
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: poId } });
-    if (!po) return { ok: false };
+    const po = await prisma.purchaseOrder.findFirst({
+      where: { id: poId, shop },
+    });
+    if (!po) return { error: "Purchase order not found" };
 
     // Tiered pricing from Module 1 is the default; a manual entry overrides it.
     const tierCost = await resolveTieredUnitCost(po.supplierId, variantId, qty);
@@ -96,7 +106,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const cache = await prisma.shopifyVariantCache.findUnique({
       where: {
         shop_shopifyVariantId: {
-          shop: session.shop,
+          shop,
           shopifyVariantId: variantId,
         },
       },
@@ -104,7 +114,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     await prisma.pOLineItem.create({
       data: {
-        purchaseOrderId: poId,
+        purchaseOrderId: po.id,
         shopifyVariantId: variantId,
         vendorSku: mapping?.vendorSku,
         orderedQty: qty,
@@ -119,15 +129,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "updateQty") {
     const lineItemId = form.get("lineItemId") as string;
     const qty = parseInt(form.get("quantity") as string, 10);
-    await recalculatePOLineCost(lineItemId, qty);
+    const line = await prisma.pOLineItem.findFirst({
+      where: { id: lineItemId, purchaseOrder: { shop } },
+    });
+    if (!line) return { error: "PO line not found" };
+    await recalculatePOLineCost(line.id, qty);
     return { ok: true };
   }
 
   if (intent === "order") {
     const poId = form.get("poId") as string;
-    await applyLandedCostsToPO(poId);
+    const po = await prisma.purchaseOrder.findFirst({
+      where: { id: poId, shop },
+    });
+    if (!po) return { error: "Purchase order not found" };
+    await applyLandedCostsToPO(po.id);
     await prisma.purchaseOrder.update({
-      where: { id: poId },
+      where: { id: po.id },
       data: { status: "ORDERED", orderedAt: new Date() },
     });
     return { ok: true };
@@ -135,22 +153,47 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "cancel") {
     const poId = form.get("poId") as string;
-    await prisma.purchaseOrder.update({
-      where: { id: poId },
+    const result = await prisma.purchaseOrder.updateMany({
+      where: { id: poId, shop },
       data: { status: "CANCELLED" },
     });
+    if (result.count === 0) return { error: "Purchase order not found" };
     return { ok: true };
   }
 
   if (intent === "receive") {
+    // Current receivePartialPO updates app DB only — it does not call Shopify.
+    // Keep the receipt-write kill switch so Shopify inventory sync cannot be
+    // enabled later without an explicit Phase 4 release-gate decision.
+    try {
+      assertInventoryWriteEnabled("receiptWrites");
+    } catch (err) {
+      return {
+        error:
+          err instanceof Error
+            ? `${err.message} App-DB receiving is also gated until the receipt ledger and Shopify write path exist.`
+            : "Receipt writes disabled",
+      };
+    }
+
     const poId = form.get("poId") as string;
     const lineItemId = form.get("lineItemId") as string;
     const qty = parseInt(form.get("receivedQty") as string, 10);
-    await receivePartialPO(poId, [{ lineItemId, receivedQty: qty }]);
+    const po = await prisma.purchaseOrder.findFirst({
+      where: { id: poId, shop },
+      include: { lineItems: { where: { id: lineItemId } } },
+    });
+    if (!po || po.lineItems.length === 0) {
+      return { error: "Purchase order or line not found" };
+    }
 
-    const po = await prisma.purchaseOrder.findUnique({ where: { id: poId } });
-    if (po?.status === "RECEIVED") {
-      await recordLeadTimeSnapshot(po.supplierId, poId);
+    await receivePartialPO(po.id, [{ lineItemId, receivedQty: qty }]);
+
+    const refreshed = await prisma.purchaseOrder.findFirst({
+      where: { id: po.id, shop },
+    });
+    if (refreshed?.status === "RECEIVED") {
+      await recordLeadTimeSnapshot(refreshed.supplierId, po.id);
     }
     return { ok: true };
   }

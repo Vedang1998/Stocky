@@ -14,23 +14,25 @@ import { shopifyGraphQL } from "../services/shopify-gql.server";
 
 const PLANS = [
   {
-    name: "Stocky++ Growth",
+    // Temporary handles — public name and prices pending product approval.
+    // Do not treat these strings as the commercial entitlement architecture.
+    name: "Essentials",
     price: 29,
     features: [
-      "Buying Table with AI forecasting",
-      "ABC analysis",
-      "Unlimited purchase orders",
-      "Landed cost engine",
+      "Buying Table with parity forecasting (planned)",
+      "ABC/U analysis (planned)",
+      "Purchase orders",
+      "Landed cost foundation",
     ],
   },
   {
-    name: "Stocky++ Scale",
+    name: "Growth",
     price: 79,
     features: [
-      "Everything in Growth",
+      "Everything in Essentials",
       "Multi-location transfers",
       "Stocktakes & cycle counts",
-      "Priority support",
+      "Priority support (planned)",
     ],
   },
 ];
