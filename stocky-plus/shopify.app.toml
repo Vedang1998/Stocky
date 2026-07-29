@@ -1,9 +1,11 @@
-# Stocky++ — Inventory Management, Forecasting & Purchasing
+# Working title — public product name pending product-owner decision (F-131).
+# Do not use Stocky / Stocky++ or first-party Shopify impersonation in merchant-facing copy.
 
 client_id = ""
 
 [access_scopes]
-scopes = "read_products,write_products,read_inventory,write_inventory,read_orders,read_locations,write_merchant_managed_fulfillment_orders,read_merchant_managed_fulfillment_orders"
+# Merchant-managed fulfillment scopes removed in Phase 0 — no approved fulfillment workflow.
+scopes = "read_products,write_products,read_inventory,write_inventory,read_orders,read_locations"
 
 [webhooks]
 api_version = "2025-10"
@@ -31,6 +33,11 @@ api_version = "2025-10"
   [[webhooks.subscriptions]]
   topics = ["inventory_levels/update"]
   uri = "/webhooks/inventory_levels/update"
+
+  # Mandatory App Store compliance webhooks (https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance)
+  [[webhooks.subscriptions]]
+  compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+  uri = "/webhooks/compliance"
 
 [build]
 automatically_update_urls_on_dev = true

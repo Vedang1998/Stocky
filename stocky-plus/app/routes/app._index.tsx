@@ -65,7 +65,7 @@ export default function Dashboard() {
   const navigation = useNavigation();
 
   return (
-    <s-page heading="Stocky++">
+    <s-page heading="Inventory platform">
       {cachedVariants === 0 && (
         <s-banner tone="warning" heading="Catalog not synced yet">
           <s-paragraph>

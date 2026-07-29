@@ -79,8 +79,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "deleteMapping") {
-    await prisma.supplierSkuMapping.delete({
-      where: { id: form.get("mappingId") as string },
+    await prisma.supplierSkuMapping.deleteMany({
+      where: {
+        id: form.get("mappingId") as string,
+        supplierId: supplier.id,
+      },
     });
   }
 
@@ -98,8 +101,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "deleteTier") {
-    await prisma.volumePriceTier.delete({
-      where: { id: form.get("tierId") as string },
+    await prisma.volumePriceTier.deleteMany({
+      where: {
+        id: form.get("tierId") as string,
+        supplierId: supplier.id,
+      },
     });
   }
 
