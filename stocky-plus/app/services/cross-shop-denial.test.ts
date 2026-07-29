@@ -315,7 +315,37 @@ describe("cross-shop denial", () => {
     expect(resolveTieredUnitCost).not.toHaveBeenCalled();
   });
 
-  it("documents shop A id is never accepted as authority from the client", async () => {
+  it("denies Shop B cancelling Shop A purchase order", async () => {
+    const { action } = await import("../routes/app.purchase-orders");
+    prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
+
+    const result = await action(
+      actionArgs(
+        formRequest({
+          intent: "cancel",
+          poId: "po-shop-a",
+        }),
+      ),
+    );
+
+    expect(authenticateAdmin).toHaveBeenCalled();
+    expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
+      where: { id: "po-shop-a", shop: SHOP_B },
+      data: { status: "CANCELLED" },
+    });
+    expect(result).toEqual({ error: "Purchase order not found" });
+    expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
+    expect(prismaMock.pOLineItem.update).not.toHaveBeenCalled();
+    expect(applyLandedCostsToPO).not.toHaveBeenCalled();
+    expect(receivePartialPO).not.toHaveBeenCalled();
+    expect(adjustShopifyInventory).not.toHaveBeenCalled();
+    expect(createShopifyTransfer).not.toHaveBeenCalled();
+    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+  });
+
+  it("rejects client-supplied Shop A as authority on PO cancel (session shop wins)", async () => {
+    // Control test — not counted as a standalone record-level denial case.
     // Session shop is Shop B even if a form field tries to smuggle Shop A.
     const { action } = await import("../routes/app.purchase-orders");
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
@@ -330,12 +360,15 @@ describe("cross-shop denial", () => {
       ),
     );
 
+    expect(authenticateAdmin).toHaveBeenCalled();
     expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
       where: { id: "po-shop-a", shop: SHOP_B },
       data: { status: "CANCELLED" },
     });
     expect(result).toEqual({ error: "Purchase order not found" });
     expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
+    expect(prismaMock.pOLineItem.update).not.toHaveBeenCalled();
   });
 
   it("denies Shop B completing Shop A stocktake parent (session shop; no parent/child/Shopify writes)", async () => {

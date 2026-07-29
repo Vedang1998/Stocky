@@ -1,98 +1,119 @@
 # Phase 0 Correction Follow-Up Implementation Report
 
-**Status:** DRAFT PR OPEN — GitHub Actions green; awaiting Claude re-review (gate not closed)  
+**Status:** DRAFT PR OPEN — F-010 / F-011 final corrections; gate not closed  
 **Branch:** `phase-0/correction-gate-followup`  
 **Base main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
-**Final head SHA:** `9fab0986b0b3a9f9e6f84fcc77853259d08b86fc`  
 **Draft PR:** https://github.com/Vedang1998/Stocky/pull/7  
 **Node version:** `v22.19.0`  
 **npm version:** `11.5.2` (also declared in `package.json` `packageManager` / `engines.npm`)  
 **Operating system (local evidence):** Darwin 25.4.0 (arm64)  
 **Date:** 2026-07-29
 
+## Head / CI referencing policy (F-010)
+
+Exact live PR tip SHA and live CI run IDs are **not** hardcoded as “current” in `PROJECT_STATUS.md`.
+
+- **Last independently reviewed head** (Claude second review): `33aaac32303b6757e1f9b4a3efd5a4f48874c95e`
+- **Last independently reviewed green run / job:** `30485002939` / `90688346067`
+- Those values are immutable historical review evidence only.
+- **Authoritative current head and CI:** verify on [GitHub PR #7](https://github.com/Vedang1998/Stocky/pull/7).
+- Post-push CI evidence for this correction tip is recorded in the **PR description** (external verification) — no follow-up commit solely to chase the tip SHA.
+
 ## Explicit confirmations
 
 - **Phase 1 was not started.**
 - **All inventory-write feature flags remain default OFF.**
+- **Production inventory writes remain unapproved.**
 - **No secrets, `.env`, merchant data, or production credentials were committed.**
 - **Approved product documents under `docs/product/` were not changed.**
-- **Gate is not marked closed** pending Claude re-review after green CI.
+- **Gate is not marked closed.**
 
-## Files changed
+## Files changed (cumulative follow-up + final F-010/F-011)
 
-- `stocky-plus/package-lock.json` — F-001: add three missing optional `@emnapi/*` entries
-- `stocky-plus/package.json` — F-006: `packageManager` + `engines.npm` = `11.5.2`
-- `.github/workflows/ci.yml` — F-006: install/verify npm `11.5.2` before `npm ci`
-- `stocky-plus/app/routes/app.transfers.tsx` — F-004: always require Shopify complete path before local receipt mutation
-- `stocky-plus/app/services/transfer-receive-guard.test.ts` — F-004 tests
-- `stocky-plus/app/services/cross-shop-denial.test.ts` — F-005 parent + mapping denial tests
-- `stocky-plus/docs/phases/phase-0/CORRECTION_REVIEW_REPORT.md` — stored Claude BLOCKED review
+- `stocky-plus/package-lock.json` — F-001: three missing optional `@emnapi/*` entries
+- `stocky-plus/package.json` — F-006: `packageManager` / `engines.npm` = `11.5.2`
+- `.github/workflows/ci.yml` — F-006: pin npm before `npm ci`
+- `stocky-plus/app/routes/app.transfers.tsx` — F-004: unsupported Shopify complete before local receipt mutation
+- `stocky-plus/app/services/transfer-receive-guard.test.ts` — F-004
+- `stocky-plus/app/services/cross-shop-denial.test.ts` — F-005 + **F-011** standalone PO parent cancel
+- `stocky-plus/docs/phases/phase-0/CORRECTION_REVIEW_REPORT.md` — PR #6 BLOCKED (historical; not overwritten)
+- `stocky-plus/docs/phases/phase-0/CORRECTION_FOLLOWUP_REVIEW_REPORT.md` — PR #7 **NOT READY** (F-010–F-016)
 - `stocky-plus/docs/phases/phase-0/CORRECTION_BACKLOG.md`
 - `stocky-plus/docs/phases/phase-0/CORRECTION_IMPLEMENTATION_REPORT.md` — supersession notice
 - `stocky-plus/docs/phases/phase-0/CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md` — this file
-- `stocky-plus/docs/RISK_REGISTER.md` — npm audit, branch-protection owner action, GraphQL network dependency
-- `stocky-plus/docs/PROJECT_STATUS.md`
+- `stocky-plus/docs/RISK_REGISTER.md` — R-013–R-022 including F-016 / branch protection
+- `stocky-plus/docs/OPEN_QUESTIONS.md` — Q-011 Phase 1 DB tenancy (F-016)
+- `stocky-plus/docs/PROJECT_STATUS.md` — **F-010** stable wording
 
-## F-001 — Exact lockfile diff summary
-
-Regenerated with Node `v22.19.0` / npm `11.5.2` via:
-
-```bash
-npm install --package-lock-only --ignore-scripts --no-save \
-  @emnapi/core@2.0.0-alpha.3 \
-  @emnapi/runtime@2.0.0-alpha.3 \
-  @emnapi/wasi-threads@2.0.1
-```
+## F-001 — Lockfile diff summary (resolved)
 
 | Metric | Result |
 |---|---|
-| Added package entries | **3** — `node_modules/@emnapi/core`, `node_modules/@emnapi/runtime`, `node_modules/@emnapi/wasi-threads` |
+| Added package entries | **3** — `@emnapi/core`, `@emnapi/runtime`, `@emnapi/wasi-threads` |
 | Removed entries | **0** |
 | Unrelated version changes | **0** |
-| `package.json` dependency declaration churn | **None** (only `packageManager` / `engines.npm` for F-006) |
-| Diff size | `+37` lines on `package-lock.json` |
 
-## F-006 — Pinned toolchain
+## F-006 — Pinned toolchain (resolved)
 
 | Tool | Version |
 |---|---|
-| Node | `22.19.0` (CI `actions/setup-node`; local `v22.19.0`) |
-| npm | `11.5.2` (`packageManager`, `engines.npm`, CI `npm install -g npm@11.5.2`) |
+| Node | `22.19.0` |
+| npm | `11.5.2` |
 
-Chosen because it is the version that produced the minimal three-entry lockfile repair and matches the prior Phase 0 correction evidence environment — not because it is newest.
+## F-004 — Transfer receive guard (resolved)
 
-## F-004 — Transfer receive guard
+`receive` always calls `completeShopifyTransfer` before any local receipt-completion mutation. Unsupported on Admin API 2025-10. `FEATURE_TRANSFER_WRITES` remains default OFF.
 
-`receive` always calls `completeShopifyTransfer` (including when `shopifyTransferId` is null, using a sentinel id). On Admin API 2025-10 this throws `UnsupportedShopifyOperationError` before any `$transaction` that would set `receivedQty`, `status: RECEIVED`, or `receivedAt`. `FEATURE_TRANSFER_WRITES` remains default OFF. No Shopify mutation was invented.
+## F-010 — Status wording correction
 
-## F-005 — Tests added / counts
+`PROJECT_STATUS.md` now distinguishes:
 
-### Transfer receive guard (`transfer-receive-guard.test.ts`)
+1. immutable last independently reviewed head / run / job;
+2. live current head / CI verified on GitHub PR #7;
+3. gate still open until READY + ChatGPT + explicit merge authorization + merge + post-merge update.
 
-- With Shopify transfer id present → unsupported; no local mutation
-- Without Shopify transfer id → unsupported; no local mutation
-- Clear unsupported-operation merchant error
-- Documents env-gated default OFF
+This avoids the self-invalidating “document tip → new tip → document again” loop.
 
-### Cross-shop record-level denial cases
+## F-011 — Standalone PO parent denial + accurate classification
 
-**Record-level denial cases: 9** (feature-flag-only assertion counted separately)
+Added:
+
+`denies Shop B cancelling Shop A purchase order`
+
+Invokes the real `app.purchase-orders` action with Shop B session and Shop A `poId`. Asserts scoped `updateMany` with `shop: SHOP_B`, not-found result, no unscoped update, no PO-line child mutations, no Shopify mutations.
+
+Kept separate:
+
+`rejects client-supplied Shop A as authority on PO cancel (session shop wins)`
+
+### Cross-shop file classification
+
+| Class | Count |
+|---|---|
+| Standalone record-level cross-shop denial tests | **9** |
+| Separate client-authority / control test | **1** |
+| Separate feature-flag assertion | **1** |
+
+#### The 9 standalone record-level denials
 
 1. Shop B PO / line `addLine`
 2. Shop B stocktake line `count`
 3. Shop B transfer `addLine`
 4. Shop B supplier mapping delete
 5. Shop B Buying Table `createPO` (supplier not found)
-6. Client-smuggled Shop A id on PO cancel (session shop authoritative)
-7. Shop B stocktake **parent** `complete` (new)
-8. Shop B transfer **parent** `ship` (new)
-9. Shop B Buying Table mapping denial when supplier resolves but mapping is Shop A (new)
+6. Shop B PO parent `cancel` (**F-011 standalone**)
+7. Shop B stocktake parent `complete`
+8. Shop B transfer parent `ship`
+9. Shop B Buying Table mapping denial when supplier resolves but mapping is Shop A
 
-**Other safety tests in the same file (not counted as record-level denial):** 1 flag default-OFF assertion.
+Do **not** count the client-authority or feature-flag tests as record-level denials.
 
-**Client-smuggled shop field case (#6)** proves session authority; counted as record-scoped PO cancel denial, not a feature-flag test.
+**Full suite:** **46** tests / 5 files (local validation after F-011).
 
-**Full suite:** 45 tests / 5 files (local re-validation after parent-ship denial update).
+## Non-blocking (not implemented)
+
+- F-012–F-015: recorded in `RISK_REGISTER.md` (R-018–R-021)
+- F-016: `OPEN_QUESTIONS.md` Q-011 + `RISK_REGISTER.md` R-022 — Phase 1 brief requirement only
 
 ## Exact local commands and exit statuses
 
@@ -106,64 +127,21 @@ Chosen because it is the version that produced the minimal three-entry lockfile 
 | `npx prisma migrate status` | 0 | PASS |
 | `npm run lint` | 0 | PASS |
 | `npm run typecheck` | 0 | PASS |
-| `npm test` | 0 | PASS (45) |
+| `npm test` | 0 | PASS (**46** tests / 5 files) |
 | `npm run build` | 0 | PASS (React Router future-flag warnings only) |
 | `npm run graphql-codegen` | 0 | PASS |
 
+**Full suite after F-011:** 46 tests (prior 45 + 1 standalone PO parent denial).
+
 ## GitHub Actions
 
-### Authoritative green run (final tip `9fab098`)
+Live run ID / job ID for the post-correction tip: verify on PR #7 and record in the PR description. Do not create a docs-only commit solely to embed those IDs here as “current tip.”
 
-| Field | Value |
-|---|---|
-| Workflow run ID | `30484632509` |
-| Job ID | `90687110614` |
-| Head SHA | `9fab0986b0b3a9f9e6f84fcc77853259d08b86fc` |
-| Trigger | `pull_request` |
-| Conclusion | **success** |
-| URL | https://github.com/Vedang1998/Stocky/actions/runs/30484632509 |
-
-### Prior green run (tip `32df7bc` — CI evidence docs)
-
-| Field | Value |
-|---|---|
-| Workflow run ID | `30484287113` |
-| Job ID | `90685944889` |
-| Head SHA | `32df7bca89f46e50f6470f098a55620926bea07f` |
-| Trigger | `pull_request` |
-| Conclusion | **success** |
-| URL | https://github.com/Vedang1998/Stocky/actions/runs/30484287113 |
-
-### Prior green run (tip `1d36169` — parent-ship denial + risk/docs corrections)
-
-| Field | Value |
-|---|---|
-| Workflow run ID | `30484058720` |
-| Job ID | `90685181760` |
-| Head SHA | `1d36169c674420f9aab1b3cd1504051f7beed9e1` |
-| Trigger | `pull_request` |
-| Conclusion | **success** |
-| URL | https://github.com/Vedang1998/Stocky/actions/runs/30484058720 |
-
-### Prior green run (tip `bff1c9f` — lockfile/npm/transfer/tests baseline)
-
-| Field | Value |
-|---|---|
-| Workflow run ID | `30483462941` |
-| Job ID | `90683173537` |
-| Head SHA | `bff1c9f031c2bb57be463098c1eee9668eb0efe5` |
-| Conclusion | **success** |
-| URL | https://github.com/Vedang1998/Stocky/actions/runs/30483462941 |
-
-### Step conclusions (run `30484632509` / job `90687110614`)
-
-All required steps **success**: Set up job → Initialize containers → Checkout → Setup Node.js → Pin npm → Verify Node and npm versions → Install dependencies (`npm ci`) → Generate Prisma client → Validate Prisma schema → Apply migrations to ephemeral PostgreSQL → Lint → Typecheck → Unit tests → Build → GraphQL codegen / schema validation → Complete job.
-
-Warnings (non-failing): React Router future-flag notices during build; npm `shamefully-hoist` project-config warning; pre-existing audit advisories not remediated.
+Historical Claude-reviewed green evidence remains run `30485002939` / job `90688346067` at head `33aaac3…`.
 
 ## Process note — main branch protection
 
-**OWNER ACTION REQUIRED (do not treat as verified by Cursor unless settings evidence exists):**
+**OWNER ACTION REQUIRED:**
 
 GitHub `main` should require:
 
@@ -171,15 +149,16 @@ GitHub `main` should require:
 - Status check `Lint, typecheck, test, build, Prisma, GraphQL` to pass (`strict`)
 - No merging while a PR is draft
 
-If an owner later configures these settings, record direct evidence (screenshot or API response) in a follow-up note. This does not replace Claude review or ChatGPT approval.
+Cursor has not claimed this setting was changed without settings evidence.
 
 ## Remaining blockers
 
-- Claude must re-review the follow-up PR and return `READY FOR PHASE 1 FOUNDATION`.
-- ChatGPT must authorize merge (and Phase 1 brief separately).
+- Claude narrow final re-check of F-010 and F-011.
+- ChatGPT approval of the final verdict.
+- Explicit user merge authorization.
+- Branch-protection owner confirmation.
 - Inventory-write release gates still required before enabling any write flag.
-- Compliance webhooks still acknowledge-only; entitlements incomplete; npm audit advisories deferred.
 
 ## Next step
 
-Stop for Claude re-review. Do not merge. Do not start Phase 1. Do not mark the correction gate closed.
+Stop after green CI on the exact final head and PR description update. Do not merge. Do not start Phase 1. Do not mark the correction gate closed.
