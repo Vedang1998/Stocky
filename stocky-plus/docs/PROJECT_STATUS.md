@@ -1,17 +1,18 @@
 # Project Status
 
 **Updated:** 2026-07-29  
-**Current stage:** Phase 0 accepted; mandatory correction gate open  
-**Current main SHA:** `36b34c20d6a82fcc226948abd5ff709d9e2fcca6`  
+**Current stage:** Phase 0 correction gate implemented; awaiting Claude verification  
+**Current main SHA (gate base):** `39b6a50f7d90eefb7f04f0479cc21722f9053129`  
+**Correction branch:** `phase-0/correction-gate`  
 **Phase 1:** Not started
 
 ## Current truth
 
 - Phase 0 implementation was merged through GitHub PR #4.
-- Claude completed an independent review.
-- Verdict: **READY FOR PHASE 1 FOUNDATION**, but not until the correction gate is closed.
+- Claude completed an independent review (accepted with mandatory corrections).
+- Cursor implemented C-004 through C-008 on `phase-0/correction-gate`.
 - No production inventory writes are approved.
-- All implemented inventory-write paths must remain disabled.
+- All implemented inventory-write paths remain disabled (flags default OFF).
 
 ## Phase 0 completed
 
@@ -22,19 +23,18 @@
 - MMFO scopes were removed.
 - The development subscription activation bypass was restricted.
 - Characterization tests and Phase 0 operating records were added.
-- Claude found no confirmed cross-shop read or write in the merged tree.
 
-## Mandatory correction gate before Phase 1
+## Correction gate (C-004–C-008)
 
-See `phases/phase-0/CORRECTION_BACKLOG.md`.
+See `phases/phase-0/CORRECTION_BACKLOG.md` and `phases/phase-0/CORRECTION_IMPLEMENTATION_REPORT.md`.
 
-Open engineering work:
-
-1. Commit a reproducible npm lockfile and stop ignoring it.
-2. Fix and validate GraphQL documents for Admin API `2025-10`.
-3. Correct the billing banner so it does not claim unenforced premium access.
-4. Add CI for the required command baseline.
-5. Add initial cross-shop denial tests.
+| ID | Status |
+|---|---|
+| C-004 lockfile | Implemented — `npm ci` PASS |
+| C-005 GraphQL 2025-10 | Implemented — codegen PASS; transfer complete unsupported safely |
+| C-006 billing copy | Implemented — factual subscription messaging |
+| C-007 CI | Implemented — `.github/workflows/ci.yml` |
+| C-008 cross-shop tests | Implemented — 7 denial cases; 38 tests PASS |
 
 ## Important deferred work
 
@@ -44,13 +44,13 @@ Open engineering work:
 - Forecast and ABC parity remain future work.
 - Inventory-write idempotency, audit, reconciliation, and reversal are not complete.
 - Partner distribution remains unconfirmed because `shopify app info` failed.
+- npm audit advisories remain for a separate remediation decision.
 
 ## Next action
 
-1. Merge the documentation/phase-tracking PR after review.
-2. Give Cursor a narrowly scoped Phase 0 correction task for C-004 through C-008.
-3. Have Claude verify that correction PR.
-4. Only then approve and create the Phase 1 brief.
+1. Claude verifies the correction PR.
+2. Only then approve and create the Phase 1 brief.
+3. Do not enable any inventory-write flag.
 
 ## Where to look
 
