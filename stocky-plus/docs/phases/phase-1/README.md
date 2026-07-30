@@ -2,14 +2,16 @@
 
 This folder is the Phase 1 planning and permanent phase record.
 
-**Phase 1 status:** PLANNING APPROVED — IMPLEMENTATION NOT STARTED
-**Brief status:** `APPROVED BY CHATGPT — AWAITING PLANNING PR MERGE; IMPLEMENTATION NOT AUTHORIZED`
+**Phase 1 planning:** APPROVED AND MERGED
+**Brief status:** `APPROVED AND MERGED — PHASE 1 IMPLEMENTATION AUTHORITY EFFECTIVE`
 **Initial planning review:** `NOT READY`
 **Planning correction-review:** `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL`
 **ChatGPT planning approval:** APPROVED 2026-07-30
-**Active PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) — OPEN, DRAFT, UNMERGED
-**Merge authorization:** NOT YET GRANTED
+**Planning PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) — **MERGED** (squash `9fc1025b73be9bbe774a948b4a2302f5664670f3`)
+**Implementation authority:** EFFECTIVE
 **Phase 1 implementation:** NOT STARTED
+**Phase 1 implementation branches:** NONE
+**Next phase record / work unit:** PR 1 — tenant expansion and backfill (`phase-1/tenant-expand`)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -43,17 +45,10 @@ Do not treat future reserved report locations as existing files until those repo
 
 ## Implementation authorization
 
-Phase 1 runtime implementation has **not** started.
+Phase 1 planning is complete and merged. Implementation authority is **EFFECTIVE**.
 
-ChatGPT approved the reviewed planning scope on 2026-07-30. Implementation authority becomes effective only after PR #9 is explicitly authorized by the user and merged into `main`.
+Phase 1 runtime implementation has **not** started. No implementation branch exists yet.
 
-Implementation may begin only after:
-
-1. ChatGPT’s planning approval is recorded (done);
-2. Claude’s correction review is preserved (done);
-3. PR #9 receives exact-head CI for the final planning-record tip and ChatGPT verification;
-4. the user explicitly authorizes merge;
-5. PR #9 is merged into `main`;
-6. Cursor starts the first separately approved implementation PR from the updated `main`.
+Next authorized work is **PR 1 — tenant expansion and backfill** on `phase-1/tenant-expand` from updated `main`, after the post-merge status sync is complete.
 
 Merging the planning PR does not enable inventory writes and does not authorize work outside the approved brief.

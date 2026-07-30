@@ -55,7 +55,7 @@ Do **not** treat this as final production policy until legal counsel validates r
 
 ## Q-011 — mandatory Phase 1 implementation gate
 
-Proposed layered isolation decision (draft brief / D-012–D-018), expanded by planning corrections:
+Proposed layered isolation decision (approved brief / D-012–D-018), expanded by planning corrections:
 
 * canonical `Shop`;
 * `shopId` on every merchant-owned row;
@@ -69,4 +69,4 @@ Proposed layered isolation decision (draft brief / D-012–D-018), expanded by p
 * lock-conscious constraint rollout;
 * ownership-quarantine resolution before enforcement.
 
-Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022. Do **not** close Q-011 as implemented. ChatGPT’s 2026-07-30 planning approval approves the layered direction only; it does not close the implementation gate.
+Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022. Do **not** close Q-011 as implemented. ChatGPT’s 2026-07-30 planning approval and PR #9 merge approve the layered direction and make Phase 1 implementation authority effective; they do not close the implementation gate.
