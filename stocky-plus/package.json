@@ -22,7 +22,11 @@
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:migrations": "vitest run --config vitest.migrations.config.ts",
+    "tenant:diagnose": "tsx scripts/tenant-backfill/diagnose.ts",
+    "tenant:backfill": "tsx scripts/tenant-backfill/cli.ts",
+    "tenant:backfill:status": "tsx scripts/tenant-backfill/status.ts"
   },
   "type": "module",
   "packageManager": "npm@11.5.2",

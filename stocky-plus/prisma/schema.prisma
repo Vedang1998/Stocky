@@ -8,6 +8,9 @@ datasource db {
 }
 
 // ─── Shopify session storage (required by template) ─────────────────────────
+// Session remains a restricted bootstrap/session-storage exception in Phase 1
+// PR 1. Schema must stay compatible with Shopify's Prisma session-storage
+// adapter. Do not add shopId here.
 
 model Session {
   id                  String    @id
@@ -29,11 +32,125 @@ model Session {
   refreshTokenExpires DateTime?
 }
 
+// ─── Canonical Shop (Phase 1 PR 1) ───────────────────────────────────────────
+// Minimal tenant identity only. Billing/plan/entitlement/privacy fields are
+// deferred. shopId foreign-key enforcement is deferred to PR 3.
+
+model Shop {
+  id              String   @id @default(cuid())
+  myshopifyDomain String   @unique
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// ─── Tenant backfill control (Phase 1 PR 1) ──────────────────────────────────
+// Migration/diagnostic infrastructure — not merchant-facing runtime tables.
+
+enum TenantBackfillMode {
+  DRY_RUN
+  APPLY
+}
+
+enum TenantBackfillRunStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum TenantBackfillCheckpointStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum TenantOwnershipIssueStatus {
+  OPEN
+  RESOLVED
+}
+
+model TenantBackfillRun {
+  id                    String                 @id @default(cuid())
+  normalizationVersion  String
+  mode                  TenantBackfillMode
+  status                TenantBackfillRunStatus @default(PENDING)
+  batchSize             Int
+  startedAt             DateTime?
+  completedAt           DateTime?
+  failedAt              DateTime?
+  sourceMainSha         String?
+  schemaVersion         String?
+  beforeCounts          Json?
+  examinedCounts        Json?
+  updatedCounts         Json?
+  unchangedCounts       Json?
+  unresolvedCounts      Json?
+  checksums             Json?
+  failureSummary        String?
+  resumeMetadata        Json?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  checkpoints TenantBackfillCheckpoint[]
+  issuesFirst TenantOwnershipIssue[]     @relation("IssueFirstDetectedRun")
+  issuesLast  TenantOwnershipIssue[]     @relation("IssueLastDetectedRun")
+
+  @@index([status, createdAt])
+}
+
+model TenantBackfillCheckpoint {
+  id              String                        @id @default(cuid())
+  runId           String
+  tableName       String
+  lastProcessedId String?
+  examinedCount   Int                           @default(0)
+  updatedCount    Int                           @default(0)
+  unchangedCount  Int                           @default(0)
+  unresolvedCount Int                           @default(0)
+  checksum        String?
+  status          TenantBackfillCheckpointStatus @default(PENDING)
+  updatedAt       DateTime                      @updatedAt
+  createdAt       DateTime                      @default(now())
+
+  run TenantBackfillRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, tableName])
+  @@index([tableName, status])
+}
+
+model TenantOwnershipIssue {
+  id                         String                     @id @default(cuid())
+  fingerprint                String                     @unique
+  firstDetectedRunId         String
+  lastDetectedRunId          String
+  tableName                  String
+  rowId                      String
+  reasonCode                 String
+  currentOwnershipEvidence   Json?
+  conflictingOwnershipEvidence Json?
+  parentLineage              Json?
+  sourceShopValues           Json?
+  proposedCanonicalShop      String?
+  status                     TenantOwnershipIssueStatus @default(OPEN)
+  resolutionEvidence         Json?
+  firstDetectedAt            DateTime                   @default(now())
+  lastDetectedAt             DateTime                   @default(now())
+
+  firstDetectedRun TenantBackfillRun @relation("IssueFirstDetectedRun", fields: [firstDetectedRunId], references: [id])
+  lastDetectedRun  TenantBackfillRun @relation("IssueLastDetectedRun", fields: [lastDetectedRunId], references: [id])
+
+  @@index([tableName, status])
+  @@index([reasonCode, status])
+  @@index([rowId, tableName])
+}
+
 // ─── Module 1: Advanced Supplier Master ─────────────────────────────────────
 
 model Supplier {
   id            String   @id @default(cuid())
   shop          String
+  shopId        String?
   name          String
   accountNumber String?
   contactName   String?
@@ -45,30 +162,36 @@ model Supplier {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  skuMappings    SupplierSkuMapping[]
-  volumeTiers    VolumePriceTier[]
-  purchaseOrders PurchaseOrder[]
+  skuMappings       SupplierSkuMapping[]
+  volumeTiers       VolumePriceTier[]
+  purchaseOrders    PurchaseOrder[]
   leadTimeSnapshots LeadTimeSnapshot[]
 
   @@index([shop])
+  @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model SupplierSkuMapping {
-  id               String @id @default(cuid())
+  id               String  @id @default(cuid())
+  shopId           String?
   supplierId       String
   shopifyVariantId String
   vendorSku        String
-  moq              Int    @default(1)
-  packSize         Int    @default(1)
+  moq              Int     @default(1)
+  packSize         Int     @default(1)
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@unique([supplierId, shopifyVariantId])
   @@index([shopifyVariantId])
+  @@index([shopId])
+  @@index([shopId, supplierId])
 }
 
 model VolumePriceTier {
   id         String  @id @default(cuid())
+  shopId     String?
   supplierId String
   variantId  String
   minQty     Int
@@ -78,16 +201,22 @@ model VolumePriceTier {
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@index([supplierId, variantId])
+  @@index([shopId])
+  @@index([shopId, supplierId])
 }
 
 model LeadTimeSnapshot {
-  id           String   @id @default(cuid())
-  supplierId   String
-  purchaseOrderId String @unique
-  leadTimeDays Float
-  recordedAt   DateTime @default(now())
+  id              String   @id @default(cuid())
+  shopId          String?
+  supplierId      String
+  purchaseOrderId String   @unique
+  leadTimeDays    Float
+  recordedAt      DateTime @default(now())
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([shopId, supplierId])
 }
 
 // ─── Module 2: Purchase Order Engine ────────────────────────────────────────
@@ -109,6 +238,7 @@ enum LandedCostMethod {
 model PurchaseOrder {
   id               String           @id @default(cuid())
   shop             String
+  shopId           String?
   supplierId       String
   locationId       String
   poNumber         String?
@@ -130,10 +260,13 @@ model PurchaseOrder {
 
   @@index([shop, status])
   @@index([supplierId])
+  @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model POLineItem {
   id                  String   @id @default(cuid())
+  shopId              String?
   purchaseOrderId     String
   shopifyVariantId    String
   vendorSku           String?
@@ -150,6 +283,8 @@ model POLineItem {
 
   @@index([purchaseOrderId])
   @@index([shopifyVariantId])
+  @@index([shopId])
+  @@index([shopId, purchaseOrderId])
 }
 
 // ─── Shopify data cache ─────────────────────────────────────────────────────
@@ -157,6 +292,7 @@ model POLineItem {
 model ShopifyVariantCache {
   id               String   @id @default(cuid())
   shop             String
+  shopId           String?
   shopifyVariantId String
   shopifyProductId String?
   title            String
@@ -170,11 +306,13 @@ model ShopifyVariantCache {
 
   @@unique([shop, shopifyVariantId])
   @@index([shop, barcode])
+  @@index([shopId])
 }
 
 model InventorySnapshot {
   id                String   @id @default(cuid())
   shop              String
+  shopId            String?
   shopifyVariantId  String
   locationId        String
   quantityAvailable Int
@@ -182,6 +320,7 @@ model InventorySnapshot {
 
   @@unique([shop, shopifyVariantId, locationId, snapshotDate])
   @@index([shop, snapshotDate])
+  @@index([shopId])
 }
 
 // ─── Module 3: Forecasting & ABC ────────────────────────────────────────────
@@ -200,6 +339,7 @@ enum AbcMetric {
 model VariantAbcClass {
   id               String    @id @default(cuid())
   shop             String
+  shopId           String?
   shopifyVariantId String
   locationId       String    @default("all")
   abcClass         AbcClass
@@ -209,22 +349,26 @@ model VariantAbcClass {
   calculatedAt     DateTime  @default(now())
 
   @@unique([shop, shopifyVariantId, locationId, metric])
+  @@index([shopId])
 }
 
 model ForecastOverride {
   id            String   @id @default(cuid())
   shop          String
+  shopId        String?
   variantId     String
   locationId    String
   lookbackStart DateTime
   lookbackEnd   DateTime
 
   @@unique([shop, variantId, locationId])
+  @@index([shopId])
 }
 
 model SalesDailyAggregate {
   id               String   @id @default(cuid())
   shop             String
+  shopId           String?
   shopifyVariantId String
   locationId       String
   date             DateTime @db.Date
@@ -233,17 +377,21 @@ model SalesDailyAggregate {
 
   @@unique([shop, shopifyVariantId, locationId, date])
   @@index([shop, date])
+  @@index([shopId])
 }
 
 model ShopSettings {
-  id                  String @id @default(cuid())
-  shop                String @unique
-  defaultLookbackDays Int    @default(30)
-  targetDaysOfStock   Int    @default(14)
-  defaultSafetyStock  Int    @default(0)
+  id                  String    @id @default(cuid())
+  shop                String    @unique
+  shopId              String?
+  defaultLookbackDays Int       @default(30)
+  targetDaysOfStock   Int       @default(14)
+  defaultSafetyStock  Int       @default(0)
   abcMetric           AbcMetric @default(REVENUE)
   subscriptionActive  Boolean   @default(false)
   subscriptionPlan    String?
+
+  @@index([shopId])
 }
 
 // ─── Module 5: Transfer Orders ────────────────────────────────────────────────
@@ -256,32 +404,39 @@ enum TransferStatus {
 }
 
 model TransferOrder {
-  id                     String         @id @default(cuid())
-  shop                   String
-  sourceLocationId       String
-  destinationLocationId  String
-  status                 TransferStatus @default(DRAFT)
-  shopifyTransferId      String?
-  notes                  String?
-  shippedAt              DateTime?
-  receivedAt             DateTime?
-  createdAt              DateTime       @default(now())
-  updatedAt              DateTime       @updatedAt
+  id                    String         @id @default(cuid())
+  shop                  String
+  shopId                String?
+  sourceLocationId      String
+  destinationLocationId String
+  status                TransferStatus @default(DRAFT)
+  shopifyTransferId     String?
+  notes                 String?
+  shippedAt             DateTime?
+  receivedAt            DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
 
   lineItems TransferLineItem[]
 
   @@index([shop, status])
+  @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model TransferLineItem {
-  id               String @id @default(cuid())
+  id               String  @id @default(cuid())
+  shopId           String?
   transferOrderId  String
   shopifyVariantId String
   quantity         Int
-  pickedQty        Int    @default(0)
-  receivedQty      Int    @default(0)
+  pickedQty        Int     @default(0)
+  receivedQty      Int     @default(0)
 
   transferOrder TransferOrder @relation(fields: [transferOrderId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([shopId, transferOrderId])
 }
 
 // ─── Module 4: Stocktakes ─────────────────────────────────────────────────────
@@ -294,38 +449,48 @@ enum StocktakeStatus {
 }
 
 model Stocktake {
-  id         String          @id @default(cuid())
-  shop       String
-  locationId String
-  status     StocktakeStatus @default(DRAFT)
-  name       String
-  startedAt  DateTime?
+  id          String          @id @default(cuid())
+  shop        String
+  shopId      String?
+  locationId  String
+  status      StocktakeStatus @default(DRAFT)
+  name        String
+  startedAt   DateTime?
   completedAt DateTime?
-  createdAt  DateTime        @default(now())
+  createdAt   DateTime        @default(now())
 
   lineItems StocktakeLineItem[]
+
+  @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model StocktakeLineItem {
-  id               String @id @default(cuid())
+  id               String  @id @default(cuid())
+  shopId           String?
   stocktakeId      String
   shopifyVariantId String
   expectedQty      Int
   countedQty       Int?
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+  @@index([shopId, stocktakeId])
 }
 
 // ─── Module 9: Bill of Materials ──────────────────────────────────────────────
 
 model BomComponent {
-  id                 String @id @default(cuid())
+  id                 String  @id @default(cuid())
   shop               String
+  shopId             String?
   bundleVariantId    String
   componentVariantId String
   quantity           Decimal @db.Decimal(10, 4)
 
   @@unique([shop, bundleVariantId, componentVariantId])
+  @@index([shopId])
 }
 
 // ─── Module 6: Alerts ─────────────────────────────────────────────────────────
@@ -333,6 +498,7 @@ model BomComponent {
 model LowStockAlert {
   id               String   @id @default(cuid())
   shop             String
+  shopId           String?
   shopifyVariantId String
   locationId       String
   reorderPoint     Int
@@ -341,4 +507,5 @@ model LowStockAlert {
   createdAt        DateTime @default(now())
 
   @@index([shop, acknowledged])
+  @@index([shopId])
 }
