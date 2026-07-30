@@ -64,6 +64,19 @@ jobs:
           cache: npm
           cache-dependency-path: stocky-plus/package-lock.json
 
+      # Match package.json "packageManager" / engines.npm — same version used
+      # to repair the lockfile and for local validation evidence.
+      - name: Pin npm
+        working-directory: .
+        run: npm install -g npm@11.5.2
+
+      - name: Verify Node and npm versions
+        working-directory: .
+        run: |
+          node --version
+          npm --version
+          test "$(npm --version)" = "11.5.2"
+
       - name: Install dependencies
         run: npm ci
 

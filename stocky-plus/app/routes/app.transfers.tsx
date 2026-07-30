@@ -171,11 +171,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!transfer) return { error: "Transfer not found" };
 
     try {
-      if (transfer.shopifyTransferId) {
-        // Throws UnsupportedShopifyOperationError on Admin API 2025-10 —
-        // do not invent a receive mutation or mark local transfer received.
-        await completeShopifyTransfer(admin, transfer.shopifyTransferId);
-      }
+      // Shopify-authoritative completion is required before any local receipt
+      // mutation (receivedQty / RECEIVED / receivedAt). Admin API 2025-10 has
+      // no supported complete/receive mutation — completeShopifyTransfer always
+      // throws UnsupportedShopifyOperationError. Call it whether or not
+      // shopifyTransferId is present so missing IDs cannot skip the guard and
+      // mark the transfer received locally. Do not invent a Shopify mutation.
+      await completeShopifyTransfer(
+        admin,
+        transfer.shopifyTransferId ?? "missing-shopify-transfer-id",
+      );
+
       await prisma.$transaction([
         ...transfer.lineItems.map((line) =>
           prisma.transferLineItem.update({
