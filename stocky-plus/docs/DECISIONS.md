@@ -155,12 +155,12 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 ## D-014 — Forced PostgreSQL Row-Level Security
 
 1. **Current:** No RLS; omitted application filters can expose or mutate another shop’s row.
-2. **Proposed:** Enable and force RLS on every approved merchant-domain table; missing tenant context is default-deny. Composite tenant FKs without RLS do **not** satisfy F-016 / R-022.
-3. **Reason:** Defense in depth beyond application filters.
-4. **Merchant impact:** None direct; fail-closed on missing context.
-5. **Technical impact:** SQL policies; runtime must set transaction-local tenant context.
+2. **Proposed:** Enable and force RLS on every approved merchant-domain table; missing tenant context is default-deny. Policies must include appropriate `USING` and `WITH CHECK` behavior. An INSERT may set `shopId` only to the current transaction tenant. An UPDATE may not change `shopId`. Database-level enforcement must reject tenant-key mutation even if application validation is missing or bypassed. Application code must not expose `shopId` as an ordinary mutable update field. The final design must use a database-enforced immutability mechanism in addition to ordinary application validation; the implementation report must identify the exact mechanism. RLS `WITH CHECK` alone is not a substitute for proving tenant-key immutability under every relevant operation. Composite tenant FKs without RLS do **not** satisfy F-016 / R-022.
+3. **Reason:** Defense in depth beyond application filters; prevent in-session tenant reassignment.
+4. **Merchant impact:** None direct; fail-closed on missing context or tenant-key mutation.
+5. **Technical impact:** SQL policies; runtime must set transaction-local tenant context; immutability tests required.
 6. **Migration:** Convert all runtime access before activating RLS.
-7. **Risks:** Rollback to pre-tenant-aware app after RLS is unsafe.
+7. **Risks:** Rollback to pre-tenant-aware app after RLS is unsafe; incomplete WITH CHECK / immutability.
 8. **Final:** **PROPOSED**.
 
 ## D-015 — Restricted runtime database role
@@ -188,12 +188,12 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 ## D-017 — Transaction-local tenant context
 
 1. **Current:** Tenant scoping is per-query application filters.
-2. **Proposed:** Tenant context is transaction-local and established before any merchant-domain query; direct unrestricted Prisma/raw SQL to merchant-domain tables is prohibited.
-3. **Reason:** RLS and pooled connections require explicit, non-leaking context.
+2. **Proposed:** Tenant context is transaction-local and established before any merchant-domain query; direct unrestricted Prisma/raw SQL to merchant-domain tables is prohibited. For authenticated web requests, tenant authority derives only from server-side verified Shopify authentication and the canonical Shop resolved from that identity. Query parameters, form values, route parameters, request JSON, browser storage, client headers, and other client-supplied shop identifiers must never establish tenant authority; they may be untrusted lookup input only after authorization and remain constrained by database tenant enforcement. For background work, tenant authority derives only from a server-created, persisted, validated, versioned job or event envelope that includes canonical `shopId`, source, correlation or causation identity, schema version, and sufficient integrity validation. Workers must resolve and validate the Shop before establishing transaction-local tenant context. A raw queue payload, Shopify domain string, external ID, or client-created job message is insufficient authority. Invalid, missing, disabled, uninstalled, redacted, or mismatched envelopes fail closed. Queue replay must preserve validated tenant authority and audit lineage.
+3. **Reason:** RLS and pooled connections require explicit, non-leaking context; client-supplied or unvalidated job values must not become tenancy authority.
 4. **Merchant impact:** None direct.
-5. **Technical impact:** Tenant-bound data-access contract for routes, workers, jobs, exports, privacy, reconciliation.
+5. **Technical impact:** Tenant-bound data-access contract for routes, workers, jobs, exports, privacy, reconciliation; validated job envelopes.
 6. **Migration:** Convert all current domain access before RLS activation.
-7. **Risks:** Connection-pool context leakage between shops.
+7. **Risks:** Connection-pool context leakage; client-controlled tenant context; unvalidated job envelopes.
 8. **Final:** **PROPOSED**.
 
 ## D-018 — Restricted Session and Shop bootstrap exception

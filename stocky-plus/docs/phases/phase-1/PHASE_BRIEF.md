@@ -78,6 +78,18 @@ Approved product documents take precedence over legacy runtime behavior and the 
 * Historical identity snapshots and deletion/tombstone state.
 * Shopify source timestamps, watermarks, lineage, and freshness.
 
+#### Decimal-safe Phase 1 money facts
+
+* Every Shopify monetary amount entering a Phase 1 order, order-line, adjustment, cancellation, or refund fact must be consumed from its exact source representation.
+* Monetary values must be stored and computed using an exact decimal representation suitable for Shopify money values.
+* Currency code must be recorded with every monetary value or monetary fact where currency is not unambiguously inherited.
+* JavaScript `Number`, floating-point arithmetic, `parseFloat`, and equivalent lossy conversions must not be used for money.
+* Database persistence must use an exact decimal/numeric type or an explicitly approved exact representation.
+* Values must not be silently rounded to two decimal places because currencies and Shopify source values may require different precision.
+* Normalization and rounding rules must be explicit, deterministic, tested, and traceable to the source currency and Shopify value.
+* Duplicate, edit, cancellation, partial-refund, and full-refund processing must remain exactly reconcilable to Shopify-reported amounts.
+* Phase 1 must preserve enough source lineage to reverify the original Shopify amount.
+
 #### Synchronization control plane
 
 * Persistent webhook inbox or delivery record.
@@ -150,6 +162,30 @@ Phase 1 must implement both relational tenant integrity and row-level access enf
 * Missing tenant context is default-deny.
 * Tenant context is transaction-local and established before any merchant-domain query.
 * Direct unrestricted Prisma or raw SQL access to merchant-domain tables is prohibited.
+* RLS policies must include appropriate `USING` and `WITH CHECK` behavior.
+* An INSERT may set `shopId` only to the current transaction tenant.
+* An UPDATE may not change `shopId`.
+* Database-level enforcement must reject an attempted tenant-key mutation even if application validation is missing or bypassed.
+* Application code must not expose `shopId` as an ordinary mutable update field.
+* The final implementation design must use a database-enforced immutability mechanism in addition to ordinary application validation. The implementation report must identify the exact mechanism used.
+* RLS `WITH CHECK` alone is not a substitute for proving tenant-key immutability under every relevant operation.
+
+### Tenant immutability
+
+* `shopId` is assigned when a merchant-owned row is created and is immutable afterward.
+* No application route, worker, job, export, privacy process, reconciliation process, raw SQL path, or database role may reassign an existing row to another tenant.
+
+### Tenant authority derivation
+
+* Tenant authority for an authenticated web request derives only from server-side verified Shopify authentication and the canonical Shop resolved from that authenticated identity.
+* Query parameters, form values, route parameters, request JSON, browser storage, client headers, and other client-supplied shop identifiers must never establish tenant authority.
+* Client-supplied identifiers may be treated only as untrusted lookup input after authorization and must still be constrained by database tenant enforcement.
+* Tenant authority for background work derives only from a server-created, persisted, validated, versioned job or event envelope.
+* A job envelope must include canonical `shopId`, source, correlation or causation identity, schema version, and sufficient integrity validation.
+* Workers must resolve and validate the Shop before establishing transaction-local tenant context.
+* A raw queue payload, Shopify domain string, external ID, or client-created job message is insufficient authority by itself.
+* Invalid, missing, disabled, uninstalled, redacted, or mismatched tenant envelopes fail closed.
+* Queue replay must preserve validated tenant authority and audit lineage.
 
 ### Bootstrap exception
 
@@ -201,6 +237,34 @@ Every discrepancy must be repaired or surfaced. It may not be silently ignored.
 * Convert all runtime data access before activating RLS.
 * Test on an empty database, a current-schema fixture, and a production-like restored database.
 * No migration may delete operational history.
+
+### Lock-conscious constraint rollout
+
+* Large-table constraints must use low-lock expansion and validation patterns.
+* Supporting indexes must be created using `CREATE INDEX CONCURRENTLY` where PostgreSQL permits it.
+* Concurrent index creation must not be placed inside a transaction that PostgreSQL does not permit.
+* Foreign keys and applicable check constraints must initially be added as `NOT VALID`, then validated separately after data verification.
+* Non-null enforcement on populated tables must use a validated check-constraint approach or an equivalently proven low-lock method before final `SET NOT NULL`.
+* Every migration affecting populated tables must set explicit `lock_timeout` and `statement_timeout` values appropriate to the operation.
+* Lock timeout must cause a safe abort and retry; it must not be bypassed by raising the timeout indefinitely.
+* The migration runbook must state the expected lock level and maximum expected lock-hold duration for every table-altering step.
+* Constraint validation and index construction must be separated into reviewable and recoverable steps where needed.
+* Production rollout must include monitoring for blocked queries, waiting locks, deadlocks, replication lag, transaction age, and error rates.
+* A failed low-lock rollout must leave existing data and application behavior intact and fail closed.
+* No constraint-enforcement step may proceed while unresolved ownership quarantine is non-zero.
+
+### Ownership quarantine resolution
+
+* Every quarantined row must include table, row identity, current ownership evidence, conflicting ownership evidence, parent lineage, source shop values, reason code, detection run, and status.
+* A non-empty quarantine blocks non-null enforcement, composite tenant constraints, and RLS activation for the affected domain.
+* Cursor and implementation agents must not guess ownership to meet a schedule.
+* Automated repair is permitted only where a deterministic rule is approved in the Phase 1 brief or a later explicit ChatGPT decision and is supported by auditable evidence.
+* Ambiguous rows require a written repair proposal and product-owner escalation.
+* Manual repair requires documented evidence, reviewer identity, before-and-after values, and an audit record.
+* Irrecoverable or intentionally excluded rows require an explicit product-owner disposition; silent deletion is prohibited.
+* After repair, all ownership checks, counts, checksums, and cross-domain validations must be rerun.
+* PR 3 cannot begin enforcement for an affected domain until unresolved count is zero and the resolution report is reviewed.
+* Schedule pressure is not authority to infer, share, delete, or fabricate tenant ownership.
 
 ## Rollback and recovery requirements
 
@@ -266,6 +330,7 @@ Proposed branch:
 * Add migration and backfill journal.
 * Add compatibility indexes.
 * Add consistency diagnostics.
+* Produce an ownership-quarantine report for every inconsistent row and domain.
 * Preserve legacy `shop` fields.
 * No RLS activation.
 
@@ -276,9 +341,14 @@ Proposed branch:
 `phase-1/tenant-access`
 
 * Add tenant-bound database transaction and access contract.
+* Derive authenticated web-request tenant authority only from server-side verified Shopify authentication and the canonical Shop.
+* Explicitly deny client-supplied shop identifiers as tenant authority.
 * Convert all current routes, services, workers, jobs, exports, and reconciliation code that accesses merchant-owned data.
 * Add restricted bootstrap access.
 * Do not change product behavior.
+* The implementation report must contain a mechanically generated or otherwise complete inventory of all direct Prisma-client access; every route, service, worker, job, export, privacy processor, reconciliation path, script, and raw SQL path that accesses merchant-owned data; old access method; new tenant-bound access method; conversion status; test evidence; and any approved exception with justification.
+* An automated check or equivalent enforceable verification must prove: no unapproved direct global Prisma access to merchant-domain tables remains; no raw SQL merchant-domain access occurs outside approved tenant-bound modules; bootstrap modules access only explicitly approved bootstrap tables; and new violations fail CI.
+* PR 2 must not be accepted based only on a narrative claim that access was converted.
 
 ### PR 3 — Database enforcement
 
@@ -286,10 +356,16 @@ Proposed branch:
 
 `phase-1/tenant-enforcement`
 
+Entry gate: an accepted zero-unresolved ownership-quarantine report for each domain being enforced.
+
 * Enforce non-null tenant ownership after verified backfill.
 * Add composite tenant foreign keys.
 * Add runtime and migration roles.
-* Enable and force RLS.
+* Enable and force RLS, including `USING` and `WITH CHECK` behavior and database-enforced tenant-key immutability.
+* Perform low-lock constraint and index rollout.
+* Set explicit `lock_timeout` and `statement_timeout` values with safe abort-and-retry behavior.
+* Add production-like lock testing and evidence of maximum observed lock duration.
+* Validate that concurrent representative reads and writes are not blocked beyond the approved threshold.
 * Add real PostgreSQL isolation tests.
 * Verify pooled connections do not leak tenant context.
 
@@ -304,6 +380,7 @@ Proposed branch:
 * Persistent webhook inbox.
 * Sync runs and cursors.
 * Job attempts, dead letters, replay, and correlation.
+* Validated job-envelope creation, persistence, replay, and rejection.
 * Data issues and reconciliation records.
 * Uninstall job shutdown.
 * Sync-health states.
@@ -330,7 +407,11 @@ Proposed branch:
 * Order facts.
 * Order-line facts.
 * Edits, cancellations, and refunds.
-* Net quantity and amount handling.
+* Decimal-safe order and refund facts.
+* Exact net amount handling.
+* Currency preservation.
+* No floating-point monetary arithmetic.
+* Exact reconciliation to Shopify-reported values.
 * No unnecessary customer PII.
 * Backfill and reconciliation.
 
@@ -380,6 +461,32 @@ Each PR:
 * Runtime-role privilege verification.
 * Concurrent-shop and pooled-connection leakage tests.
 * Bootstrap-module boundary tests.
+* Shop A attempting to change its own row’s `shopId` to Shop B.
+* Shop A attempting to change its own row’s `shopId` to any other value.
+* Insertion with a foreign `shopId`.
+* Raw SQL tenant reassignment.
+* Reassignment through a worker or job.
+* Reassignment through a generic update helper.
+* Valid non-tenant field updates remaining allowed.
+* Distinct isolation coverage for web requests.
+* Distinct isolation coverage for asynchronous workers.
+* Distinct isolation coverage for queued jobs.
+* Distinct isolation coverage for exports.
+* Distinct isolation coverage for privacy jobs.
+* Distinct isolation coverage for reconciliation jobs.
+* Distinct isolation coverage for replay and repair jobs.
+* Distinct isolation coverage for scheduled synchronization.
+* Concurrent jobs for different shops.
+* For each non-request path: validated tenant context established before merchant-domain access; missing context denied; foreign context denied; pooled connections do not retain a previous tenant; raw SQL cannot bypass the same policy.
+* Client-supplied shop query parameter cannot establish tenant authority.
+* Client-supplied shop header cannot establish tenant authority.
+* Client-supplied JSON shop field cannot establish tenant authority.
+* Mismatch between authenticated shop and supplied shop is denied.
+* Missing job tenant is denied.
+* Disabled or uninstalled shop is denied.
+* Tampered or mismatched job envelope is denied.
+* Replay preserves validated tenant authority.
+* Worker denial before tenant validation.
 
 ### Migration
 
@@ -392,10 +499,20 @@ Each PR:
 * Failed constraint validation.
 * Backup restoration.
 * Compatible rollback and forward recovery.
+* A dataset at the approved engineering envelope.
+* Concurrent representative reads and writes during index and constraint rollout.
+* Measurement of lock acquisition and lock-hold duration.
+* Failure on exceeding the documented lock-duration threshold.
+* Safe timeout, retry, and resume.
+* No prolonged `ACCESS EXCLUSIVE` blocking caused by naive full-table validation.
 
 ### Synchronization
 
 * Duplicate and delayed webhooks.
+* A duplicate webhook arriving after the temporary queue deduplication or retention window has expired, proving persistent database-backed idempotency prevents duplicate application.
+* Durable idempotency-record retention is long enough for the approved replay and reconciliation policy.
+* A legitimate distinct event is not incorrectly rejected.
+* Replay remains auditable.
 * Out-of-order webhooks.
 * Missed-webhook reconciliation.
 * Initial sync overlap with webhook processing.
@@ -406,6 +523,20 @@ Each PR:
 * More than 50 locations and 250 variants.
 * Order edit, cancellation, partial refund, and duplicate refund.
 * Uninstall while work is queued.
+
+### Money precision
+
+* Decimal values that cannot be represented exactly as binary floating point.
+* Order totals.
+* Multiple line amounts.
+* Order edits.
+* Partial refunds.
+* Multiple partial refunds.
+* Duplicate refunds.
+* Cancellations.
+* Currencies with differing decimal conventions.
+* Exact equality with Shopify-reported source amounts.
+* No conversion through JavaScript `Number`.
 
 ### Privacy
 
@@ -523,6 +654,21 @@ CI must test with:
 * [ ] User explicitly authorizes final merge and Phase 1 closure.
 
 Phase 1 completion authorizes Phase 2 planning only.
+
+### Exit verdict definition — `READY FOR PHASE 2 PLANNING`
+
+`READY FOR PHASE 2 PLANNING` may be used only by the final independent Phase 1 exit review when:
+
+* every Phase 1 exit criterion is satisfied;
+* all required implementation PRs and corrections are merged;
+* exact reviewed heads and CI are verified;
+* no P0 or P1 finding remains open;
+* Shopify reconciliation and tenant isolation have passed;
+* production inventory writes remain separately unapproved unless a later explicit decision changes that status;
+* the verdict authorizes Phase 2 planning only;
+* it does not authorize Phase 2 implementation.
+
+Reusable permanent-agent wording may be evaluated before the Phase 1 exit-review prompt is approved, but it is not required to approve the present Phase 1 planning brief. This planning correction does not modify `stocky-plus/docs/agents/`.
 
 ## Open evidence and dependencies
 

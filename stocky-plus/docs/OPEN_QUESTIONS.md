@@ -55,16 +55,18 @@ Do **not** treat this as final production policy until legal counsel validates r
 
 ## Q-011 — mandatory Phase 1 implementation gate
 
-Proposed layered isolation decision (draft brief / D-012–D-018):
+Proposed layered isolation decision (draft brief / D-012–D-018), expanded by planning corrections:
 
 * canonical `Shop`;
 * `shopId` on every merchant-owned row;
 * composite tenant constraints;
-* forced PostgreSQL RLS;
+* forced PostgreSQL RLS with `USING` / `WITH CHECK` and database-enforced tenant-key immutability;
 * restricted runtime role;
 * separate migration role;
-* transaction-local tenant context;
-* restricted Session/Shop bootstrap exception;
-* real PostgreSQL and connection-pool isolation tests.
+* transaction-local tenant context derived only from server-side Shopify authentication or a validated job envelope;
+* bootstrap exception;
+* real PostgreSQL and connection-pool isolation tests;
+* lock-conscious constraint rollout;
+* ownership-quarantine resolution before enforcement.
 
-Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022.
+Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022. Do **not** close Q-011 as implemented.
