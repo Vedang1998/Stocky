@@ -63,7 +63,7 @@
 | Field | Value |
 |---|---|
 | Previous reviewed head | `eae8cfdf215e78226f35ba9a2046bddd93590c2c` |
-| Correction commit / new PR head | _filled after commit; verify live on GitHub PR #9_ |
+| Correction commit / new PR head | `cec0a10f65e96f5d29b34ec41e59ada5bec0528f` — verify live on GitHub PR #9; not immutable closure evidence |
 | New CI run ID | _recorded in PR #9 description after CI completes_ |
 | New CI job ID | _recorded in PR #9 description after CI completes_ |
 | Workflow run actual `head_sha` | _recorded in PR #9 description after CI completes_ |
