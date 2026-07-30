@@ -60,6 +60,7 @@ See:
 - `phases/phase-0/CORRECTION_REVIEW_REPORT.md` (PR #6 **BLOCKED**)
 - `phases/phase-0/CORRECTION_FOLLOWUP_REVIEW_REPORT.md` (PR #7 **NOT READY**)
 - `phases/phase-0/CORRECTION_FINAL_REVIEW_REPORT.md` (PR #7 final **READY**)
+- `phases/phase-0/CLOSURE_REVIEW_REPORT.md` (PR #8 original **NOT READY** on evidence availability; post-review resolution attributed to ChatGPT)
 - `phases/phase-0/CORRECTION_BACKLOG.md`
 - `phases/phase-0/CORRECTION_IMPLEMENTATION_REPORT.md` (historical; superseded notice)
 - `phases/phase-0/CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md`
@@ -77,22 +78,24 @@ See:
 
 ## Branch protection
 
-**OWNER-ATTESTED** (ruleset id `20012314`, name `Protect main`, enforcement `active`, targets main / default branch):
+**API-VERIFIED** — GitHub ruleset `Protect main` (id `20012314`) was verified by ChatGPT/Codex on July 30, 2026. An authenticated Claude Code read under GitHub user `Vedang1998` separately verified that `bypass_actors` is present and empty (`[]`).
 
-OWNER-ATTESTED; Cursor reported an authenticated API read, but the independent Claude and ChatGPT review environments could not retrieve the ruleset JSON. These settings are therefore not described as independently reviewed or independently API-verified.
+Verified controls:
 
-Configured protection (owner-attested facts):
+- enforcement active;
+- targets the repository default branch (`main` / `~DEFAULT_BRANCH`);
+- pull requests required;
+- review conversations must be resolved;
+- squash-only merges;
+- required check `Lint, typecheck, test, build, Prisma, GraphQL`;
+- strict/up-to-date status-check enforcement;
+- force pushes blocked;
+- branch deletion blocked;
+- no bypass actors (`bypass_actors: []`).
 
-- Pull requests required
-- Required status check: `Lint, typecheck, test, build, Prisma, GraphQL`
-- Branch required to be up to date
-- Allowed merge method: squash
-- Force pushes blocked
-- Branch deletion restricted
-- No routine bypass
-- Draft PRs cannot merge under normal GitHub draft-PR workflow (must be marked ready before merge)
+**Historical evidence note:** Claude’s original PR #8 review environment was rate-limited and did not independently verify the live API response. That limitation remains accurately preserved in `phases/phase-0/CLOSURE_REVIEW_REPORT.md`.
 
-Residual: future repository-settings changes could weaken protection; periodically re-verify the ruleset remains active.
+Residual: future repository-settings changes could weaken protection; periodically re-verify that the ruleset remains active and unchanged.
 
 ## Important deferred work
 

@@ -20,6 +20,7 @@ Read in this order:
 7. `CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md`
 8. `CORRECTION_FOLLOWUP_REVIEW_REPORT.md` — Claude **NOT READY** review of PR #7
 9. `CORRECTION_FINAL_REVIEW_REPORT.md` — Claude final **READY FOR PHASE 1 FOUNDATION** review of PR #7
+10. `CLOSURE_REVIEW_REPORT.md` — PR #8 closure-record review — original **NOT READY** on external evidence availability; blockers subsequently resolved by the attributed post-review evidence section
 
 Detailed legacy evidence remains at:
 
