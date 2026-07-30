@@ -7,7 +7,7 @@
 **Phase 0 closure merge:** `8e4f757c4717baba0ece74135b062324ff429ee6` (`Close Phase 0 correction gate and record final review (#8)`)
 **Phase 1 status:** PLANNING ONLY — IMPLEMENTATION NOT STARTED
 **Active branch:** `docs/phase-1-planning`
-**Active PR:** pending creation of the documentation-only planning draft PR — verify live head and CI on GitHub; do not treat a branch-tip SHA in this file as immutable evidence
+**Active PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) (draft) — verify live head and CI on GitHub; do not treat a branch-tip SHA in this file as immutable evidence
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
