@@ -11,9 +11,9 @@
 | Base main SHA | `8ccc8d29a78e05615b31324b38df17f4f1d1296e` |
 | Branch | `phase-1/tenant-expand` |
 | Starting SHA | `8ccc8d29a78e05615b31324b38df17f4f1d1296e` |
-| Final commit SHA | *(filled after commit)* |
-| Pull request | *(filled after open)* |
-| Environment | Local disposable PostgreSQL 16 (`postgres:16-alpine` via docker compose); Node 22; npm 11.5.2 |
+| Final commit SHA | `854a3d5e12d7d61d420241f992fe08369bd0223b` *(implementation; status-sync follow-up may append)* |
+| Pull request | [#11](https://github.com/Vedang1998/Stocky/pull/11) (draft) |
+| Environment | Local disposable PostgreSQL 16 (`postgres:16-alpine` via docker compose); Node 22; npm 11.5.2; GitHub Actions PostgreSQL 16 |
 
 ## Summary
 
@@ -119,7 +119,8 @@ INVALID_SHOP_DOMAIN, CONFLICTING_NORMALIZED_DOMAIN, EXISTING_SHOP_ID_MISMATCH, M
 | `npx prisma migrate deploy` | 0 | passed | empty DB → all 3 migrations |
 | `npm run test:migrations` | 0 | passed | 4 tests |
 | `CREATE INDEX CONCURRENTLY` via migrate deploy | 1 | **failed (expected)** | P3018 / SQLSTATE 25001 — recorded deviation |
-| Final validation suite | *(pending final run)* | | |
+| Final validation suite | 0 | passed | `git diff --check`, `npm ci`, prisma generate/validate/migrate deploy, `test:migrations`, lint, typecheck, test (53), build, graphql-codegen |
+| Exact-head CI (implementation commit `854a3d5…`) | 0 | passed | Run `30578113974` / job `90991338324`; `head_sha` matched; required check success |
 
 ## Tests added
 

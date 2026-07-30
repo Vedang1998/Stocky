@@ -12,7 +12,7 @@ This folder is the Phase 1 planning and permanent phase record.
 **Phase 1 implementation:** IN PROGRESS
 **Active work unit:** PR 1 — tenant expansion and backfill
 **Active branch:** `phase-1/tenant-expand`
-**Active PR:** *(filled after draft PR opens — then record as IN REVIEW)*
+**Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — draft — **IN REVIEW**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 

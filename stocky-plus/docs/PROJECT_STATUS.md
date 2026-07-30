@@ -10,8 +10,8 @@
 **Phase 1 implementation:** IN PROGRESS
 **Phase 1 active work:** PR 1 — tenant expansion and backfill
 **Active branch:** `phase-1/tenant-expand`
-**Active PR:** *(filled after draft PR opens)*
-**Implementation status:** PR 1 IN REVIEW *(after draft PR opens)*
+**Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) (draft)
+**Implementation status:** PR 1 IN REVIEW
 **Initial planning review:** `NOT READY` at `eae8cfdf215e78226f35ba9a2046bddd93590c2c`
 **Correction review:** `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL` at `835088d3c0294222b14d67a5875709f299062439`
 **ChatGPT approval:** APPROVED 2026-07-30
