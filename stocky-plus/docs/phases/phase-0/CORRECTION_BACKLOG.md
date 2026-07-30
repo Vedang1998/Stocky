@@ -1,7 +1,20 @@
 # Phase 0 Correction Backlog
 
-**Status:** FOLLOW-UP FINAL CORRECTIONS (F-010 / F-011) on `phase-0/correction-gate-followup` — gate not closed  
+**Status:** CLOSED  
 **Purpose:** Required corrections after Claude's independent reviews and before Phase 1 foundation begins.
+
+## Gate closure summary
+
+| Field | Value |
+|---|---|
+| Final Claude verdict | **`READY FOR PHASE 1 FOUNDATION`** |
+| PR #7 | **Merged** (squash) |
+| PR #7 merge SHA | `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb` |
+| Reviewed PR #7 head | `f9b12dac0c5e5b4844d6aaa8a79a638eb84f47cb` |
+| PR #7 CI | run `30489949665` / job `90705038375` / **success** |
+| F-010 | **RESOLVED** and independently verified |
+| F-011 | **RESOLVED** and independently verified |
+| Phase 0 correction gate | **CLOSED** after the documentation-only closure PR merges |
 
 ## Documentation corrections in the original tracking PR
 
@@ -21,30 +34,39 @@
 | C-007 | P2 | Add CI for install, lint, typecheck, tests, Prisma validate, build, and GraphQL validation | `.github/workflows/ci.yml` added | Resolved on follow-up (green Actions) |
 | C-008 | P2 | Add initial cross-shop denial tests for high-risk actions | `cross-shop-denial.test.ts` | Substantively resolved; F-011 adds standalone PO parent |
 
-## Claude BLOCKED findings (PR #6) — follow-up resolved on PR #7
+## Claude BLOCKED findings (PR #6) — resolved on PR #7
 
 Stored in `CORRECTION_REVIEW_REPORT.md`. Implementation evidence: `CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md`.
 
 | ID | Priority | Correction | Exit evidence | Status |
 |---|---|---|---|---|
-| F-001 | P0 | Repair lockfile: add missing `@emnapi/*` entries (minimal diff) | Linux-compatible `npm ci` exit 0; exactly 3 added lock entries | **RESOLVED** (Claude second review) |
+| F-001 | P0 | Repair lockfile: add missing `@emnapi/*` entries (minimal diff) | Linux-compatible `npm ci` exit 0; exactly 3 added lock entries | **RESOLVED** |
 | F-006 | P1 | Pin npm via `packageManager` + CI install of the same version | CI and local use identical Node/npm | **RESOLVED** |
 | F-004 | P0 | Transfer receive must reject before local receipt mutation | Tests prove no local RECEIVED / receivedQty / receivedAt | **RESOLVED** |
-| F-005 | P1 | Add stocktake parent, transfer parent, and Buying Table mapping denial tests | Record-level denial cases counted separately from flag checks | **SUBSTANTIVELY RESOLVED**; F-011 refines PO parent |
+| F-005 | P1 | Add stocktake parent, transfer parent, and Buying Table mapping denial tests | Record-level denial cases counted separately from flag checks | **RESOLVED** (with F-011 refinement) |
 
-## Claude NOT READY findings (PR #7 second review)
+## Claude NOT READY findings (PR #7) — resolved and independently verified
 
-Stored in `CORRECTION_FOLLOWUP_REVIEW_REPORT.md`. Reviewed head: `33aaac32303b6757e1f9b4a3efd5a4f48874c95e`.
+Stored in `CORRECTION_FOLLOWUP_REVIEW_REPORT.md`. Final verification: `CORRECTION_FINAL_REVIEW_REPORT.md`.
 
 | ID | Priority | Correction | Exit evidence | Status |
 |---|---|---|---|---|
-| F-010 | P2 | Stop hardcoding live PR tip / CI into docs (self-invalidating SHA chase) | Stable historical vs verify-on-GitHub wording in `PROJECT_STATUS.md` | **DONE** (this correction) |
-| F-011 | P2 | Standalone PO-parent denial test + accurate classification | 9 record-level + 1 client-authority + 1 flag; suite **46** | **DONE** (this correction) |
-| F-012 | P3 | Exact npm engine pin usability | Future maintenance | Deferred |
-| F-013 | P3 | GitHub Action major-version maintenance | Future maintenance | Deferred |
-| F-014 | P3 | `shamefully-hoist` cleanup | Future maintenance | Deferred |
-| F-015 | P3 | Transfer sentinel TODO | Future maintenance | Deferred |
-| F-016 | P2 | Database-enforced tenancy | Phase 1 brief requirement | Deferred to Phase 1 — see `OPEN_QUESTIONS.md` Q-011 / `RISK_REGISTER.md` R-022 |
+| F-010 | P2 | Stop hardcoding live PR tip / CI into docs (self-invalidating SHA chase) | Stable historical vs verify-on-GitHub wording | **RESOLVED** and independently verified |
+| F-011 | P2 | Standalone PO-parent denial test + accurate classification | 9 record-level + 1 client-authority + 1 flag; suite **46** | **RESOLVED** and independently verified |
+
+## Deferred / non-blocking (not Phase 0 closure blockers)
+
+| ID | Priority | Correction | Disposition |
+|---|---|---|---|
+| F-012 | P3 | Exact npm engine pin usability | Future maintenance |
+| F-013 | P3 | GitHub Action major-version maintenance | Future maintenance |
+| F-014 | P3 | `shamefully-hoist` cleanup | Future maintenance |
+| F-015 | P3 | Transfer sentinel TODO | Future maintenance |
+| F-016 | **P1** | Database-enforced tenancy | Deferred to Phase 1 — **mandatory Phase 1 foundation gate**; see `OPEN_QUESTIONS.md` Q-011 / `RISK_REGISTER.md` R-022. Not implemented. |
+| F-017 | P3 | Stale PO child-test title | Deferred test-hygiene cleanup |
+| F-018 | P3 | F-016 severity inconsistency (backlog P2 vs risk P1) | **Resolved in this closure PR** by consistently recording F-016 / R-022 as **P1** |
+
+F-016 priority is **P1** because the live risk register already treats the absence of database-enforced tenant isolation as P1, and ChatGPT’s product-owner decision is that F-016 is a mandatory Phase 1 foundation gate.
 
 ## Required before any inventory-write flag is enabled
 
@@ -61,6 +83,15 @@ These are not required merely to start schema/foundation work, but they are mand
 
 ## Completion rule
 
-Phase 1 may begin only after the correction gate is closed: follow-up PR green in GitHub Actions, Claude returns READY, review stored, and ChatGPT authorizes merge and the Phase 1 brief — unless ChatGPT records an explicit product-owner decision changing that gate.
+Phase 0 correction gate requirements were satisfied:
 
-**Current:** Gate **open**. Claude second review **`NOT READY`** (F-010 / F-011). Do not mark closed before final Claude re-check and ChatGPT approval.
+- PR #7 was green in GitHub Actions;
+- Claude independently reviewed and returned **`READY FOR PHASE 1 FOUNDATION`**;
+- ChatGPT accepted the verdict;
+- the user explicitly authorized squash merge;
+- PR #7 was merged;
+- this documentation-only closure PR records formal closure.
+
+Phase 1 still requires a separate ChatGPT-approved `PHASE_BRIEF.md` before implementation may start.
+
+Inventory-write enablement has separate unresolved gates (see section above). Production inventory writes remain unapproved. All inventory-write flags remain default OFF.

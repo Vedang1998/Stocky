@@ -1,13 +1,24 @@
 # Phase 0 Correction Follow-Up Implementation Report
 
-**Status:** DRAFT PR OPEN — F-010 / F-011 final corrections; gate not closed  
-**Branch:** `phase-0/correction-gate-followup`  
+**Status:** PR #7 MERGED — historical follow-up implementation record  
+**Branch:** `phase-0/correction-gate-followup` (historical)  
 **Base main SHA:** `9844aec437cc4cdae5c678dc4a8c6c1aeec6befb`  
-**Draft PR:** https://github.com/Vedang1998/Stocky/pull/7  
+**PR:** https://github.com/Vedang1998/Stocky/pull/7  
 **Node version:** `v22.19.0`  
 **npm version:** `11.5.2` (also declared in `package.json` `packageManager` / `engines.npm`)  
 **Operating system (local evidence):** Darwin 25.4.0 (arm64)  
 **Date:** 2026-07-29
+
+## Post-merge note (2026-07-30)
+
+- PR #7 was **squash-merged** into `main` as `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb`.
+- Claude final verdict: **`READY FOR PHASE 1 FOUNDATION`** — stored in `CORRECTION_FINAL_REVIEW_REPORT.md`.
+- ChatGPT accepted the final verdict.
+- The user explicitly authorized the squash merge.
+- Phase 0 formal closure is recorded by the documentation-only closure PR on branch `docs/phase-0-closure` (this documentation PR is the permanent closure record once merged).
+- Phase 1 remains **not started**. Production inventory writes remain **unapproved**. Inventory-write flags remain default **OFF**.
+
+Historical evidence below is preserved and not silently rewritten.
 
 ## Head / CI referencing policy (F-010)
 
@@ -162,3 +173,14 @@ Cursor has not claimed this setting was changed without settings evidence.
 ## Next step
 
 Stop after green CI on the exact final head and PR description update. Do not merge. Do not start Phase 1. Do not mark the correction gate closed.
+
+## Post-merge note (added by Phase 0 closure documentation PR)
+
+Historical evidence above is preserved. After the events recorded here:
+
+- Claude’s final independent review returned **`READY FOR PHASE 1 FOUNDATION`** (see `CORRECTION_FINAL_REVIEW_REPORT.md`).
+- ChatGPT accepted that verdict.
+- The user explicitly authorized squash merge of PR #7.
+- PR #7 was squash-merged into `main` as `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb`.
+- Formal Phase 0 correction-gate closure is recorded by the documentation-only closure PR on branch `docs/phase-0-closure` (permanent closure record once that PR merges).
+- Phase 1 remains **not started**. Production inventory writes remain **unapproved**. Inventory-write flags remain default **OFF**.

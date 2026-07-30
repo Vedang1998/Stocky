@@ -93,3 +93,22 @@ Format: current rule → proposed → reason → merchant impact → technical i
 3. **Reason:** Prevent silent expansion of unsafe receiving; align with freeze list.
 4. **Merchant impact:** Receiving UI blocked by default.
 5. **Final:** **Accepted** for Phase 0; Phase 4 rebuild replaces path.
+
+## D-010 — Phase 0 correction gate closure
+
+1. **Current:** PR #7 was green, independently reviewed, accepted, explicitly authorized, and squash-merged (`6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb`).
+2. **Proposed:** Formally close the Phase 0 correction gate via a documentation-only closure PR.
+3. **Reason:** Mandatory corrections were resolved and Claude returned **`READY FOR PHASE 1 FOUNDATION`**.
+4. **Merchant impact:** None directly; unsafe inventory writes remain disabled.
+5. **Technical impact:** Phase 1 foundation planning may begin only after a separately approved `PHASE_BRIEF.md`.
+6. **Migration:** None.
+7. **Risks:** Deferred risks remain, particularly **F-016 / R-022 (P1)** database-enforced tenancy and inventory-write release gates.
+8. **Final:** **ACCEPTED** — Phase 0 closes when the documentation-only closure PR merges.
+
+### Product-owner severity decision (recorded with D-010)
+
+- **F-016 / R-022 is P1.**
+- Database-enforced tenant isolation is mandatory in the Phase 1 foundation brief.
+- Application-layer shop filters alone are insufficient.
+- Production inventory writes remain **unapproved**.
+- All inventory-write flags remain default **OFF**.
