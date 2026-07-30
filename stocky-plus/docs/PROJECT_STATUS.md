@@ -1,128 +1,130 @@
 # Project Status
 
-**Updated:** 2026-07-30  
-**Current stage:** Phase 0 correction gate closed  
-**Current main SHA (includes PR #7 squash merge):** `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb`  
-**Phase 0 status:** CLOSED (formal closure record is this documentation PR once merged)  
-**Phase 1:** NOT STARTED  
-**Production inventory writes:** UNAPPROVED  
+**Updated:** 2026-07-30
+**Current stage:** Phase 1 planning approved — awaiting PR #9 merge authorization
+**Current main SHA:** `8e4f757c4717baba0ece74135b062324ff429ee6`
+**Phase 0 status:** CLOSED
+**Phase 0 closure merge:** `8e4f757c4717baba0ece74135b062324ff429ee6` (`Close Phase 0 correction gate and record final review (#8)`)
+**Phase 1 status:** PLANNING APPROVED — IMPLEMENTATION NOT STARTED
+**Phase 1 brief:** APPROVED BY CHATGPT; EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES
+**Initial planning review:** `NOT READY` at `eae8cfdf215e78226f35ba9a2046bddd93590c2c`
+**Correction review:** `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL` at `835088d3c0294222b14d67a5875709f299062439`
+**ChatGPT approval:** APPROVED 2026-07-30
+**Active branch:** `docs/phase-1-planning`
+**Active PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) — OPEN and DRAFT; UNMERGED; verify live head and CI on GitHub; do not treat a live branch-tip SHA in this file as immutable closure evidence
+**Merge authorization:** NOT YET GRANTED
+**Implementation:** NOT STARTED
+**Phase 1 implementation branches:** NONE
+**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE
+**R-014 (Phase 1 monetary facts):** OPEN P1 IMPLEMENTATION GATE
+**Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
 ## Current truth
 
-- Phase 0 implementation was merged through GitHub PR #4.
-- Claude accepted Phase 0 with mandatory corrections (C-004–C-008).
-- Correction gate PR #6 was merged into `main` **with failed CI** before independent review completed.
-- Claude’s independent review of PR #6 returned **`BLOCKED`** — see `phases/phase-0/CORRECTION_REVIEW_REPORT.md`.
-- Follow-up PR #7 repaired the correction gate and was **squash-merged** into `main` as `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb`.
-- Claude’s final independent review of PR #7 returned **`READY FOR PHASE 1 FOUNDATION`** — see `phases/phase-0/CORRECTION_FINAL_REVIEW_REPORT.md`.
-- ChatGPT accepted Claude’s final technical verdict.
-- The user explicitly authorized the squash merge of PR #7.
-- The Phase 0 correction gate is **CLOSED** when this documentation-only closure PR merges into `main`. This documentation PR is the permanent closure record once merged.
-- Phase 1 has **not** started and must not start until a separate ChatGPT-approved `PHASE_BRIEF.md` exists.
-- No production inventory writes are approved.
-- All implemented inventory-write paths remain disabled (flags default OFF).
+- Phase 0 remains **CLOSED** on `main` at `8e4f757c4717baba0ece74135b062324ff429ee6`.
+- Claude’s initial planning review returned **`NOT READY`** at `eae8cfdf215e78226f35ba9a2046bddd93590c2c`.
+- Claude’s correction review returned **`READY FOR CHATGPT PHASE 1 BRIEF APPROVAL`** at `835088d3c0294222b14d67a5875709f299062439`.
+- ChatGPT approved the reviewed Phase 1 planning scope on **2026-07-30**.
+- Approval is **not** merge authorization and **not** implementation authorization until PR #9 is explicitly authorized by the user and merged into `main`.
+- Phase 1 implementation has **not** started. No `phase-1/*` implementation branch exists.
+- **F-016 / R-022** and **R-014** (Phase 1 monetary facts) remain open P1 implementation gates.
+- Production inventory writes remain **UNAPPROVED**.
+- All inventory-write flags remain default **OFF**.
+- Branch protection / no-bypass evidence is preserved in `RISK_REGISTER.md` → **R-015** (API-verified ruleset `Protect main` id `20012314`, including empty `bypass_actors`).
 
-## PR #7 evidence (immutable)
+## Phase 0 closure evidence (immutable)
 
 | Field | Value |
 |---|---|
-| PR | [#7](https://github.com/Vedang1998/Stocky/pull/7) — **merged** |
-| Reviewed head | `f9b12dac0c5e5b4844d6aaa8a79a638eb84f47cb` |
-| CI run | `30489949665` |
-| CI job | `90705038375` |
-| CI conclusion | **success** |
-| Full suite | 46 tests / 5 files |
-| Standalone record-level denials | 9 |
-| Other control tests | 2 (1 client-authority + 1 feature-flag) |
-| Squash merge SHA | `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb` |
-| Claude final verdict | **`READY FOR PHASE 1 FOUNDATION`** |
-| ChatGPT decision | Accepted final verdict; authorized merge |
-| User authorization | Explicit squash-merge authorization given |
+| Closure merge | `8e4f757c4717baba0ece74135b062324ff429ee6` |
+| PR | [#8](https://github.com/Vedang1998/Stocky/pull/8) — merged |
+| Prior correction-gate squash merge | `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb` (PR [#7](https://github.com/Vedang1998/Stocky/pull/7)) |
+| Claude final Phase 0 correction verdict | **`READY FOR PHASE 1 FOUNDATION`** |
+| ChatGPT decision | Accepted final verdict; authorized Phase 0 closure |
+| User authorization | Explicit merge authorization given |
 
-## Correction gate timeline (historical)
+## C-4 historical CI association (authenticated verification — old head)
 
-| Event | Result |
+Verified by Cursor via authenticated GitHub API during the planning-correction task (not by Claude’s rate-limited review environment):
+
+| Field | Value |
 |---|---|
-| PR #6 (`phase-0/correction-gate`) | Merged to main; GitHub Actions `npm ci` **FAILED** (run `30470541851`) |
-| Claude review of PR #6 | **`BLOCKED`** |
-| Original local completion claim | **Superseded** — macOS `npm ci` did not reproduce on Linux CI |
-| Follow-up PR #7 | Repaired lockfile, npm pin, transfer receive, tenant tests, CI |
-| Claude second review of PR #7 | **`NOT READY`** at head `33aaac3…` (F-010, F-011) |
-| Cursor F-010 / F-011 correction | Applied; head `f9b12da…`; CI green |
-| Claude final review of PR #7 | **`READY FOR PHASE 1 FOUNDATION`** |
-| ChatGPT + user | Verdict accepted; squash merge authorized |
-| PR #7 squash-merged | `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb` |
-| Documentation closure PR | Records formal Phase 0 gate closure (this PR) |
+| Open PRs from `docs/phase-1-planning` | Exactly one: [#9](https://github.com/Vedang1998/Stocky/pull/9) |
+| Title | Plan Phase 1 tenant-safe Shopify fact foundation |
+| Draft / state at verification | draft, OPEN |
+| Historical run | `30557753268` |
+| Job | `90922508937` |
+| Actual `head_sha` | `eae8cfdf215e78226f35ba9a2046bddd93590c2c` |
+| Conclusion | success |
+| Skipped required steps | none observed |
 
-See:
+## Claude-reviewed corrected-head CI evidence (closes P2-12 / P2-13 for head `835088d3…`)
 
-- `phases/phase-0/CORRECTION_REVIEW_REPORT.md` (PR #6 **BLOCKED**)
-- `phases/phase-0/CORRECTION_FOLLOWUP_REVIEW_REPORT.md` (PR #7 **NOT READY**)
-- `phases/phase-0/CORRECTION_FINAL_REVIEW_REPORT.md` (PR #7 final **READY**)
-- `phases/phase-0/CLOSURE_REVIEW_REPORT.md` (PR #8 original **NOT READY** on evidence availability; post-review resolution attributed to ChatGPT)
-- `phases/phase-0/CORRECTION_BACKLOG.md`
-- `phases/phase-0/CORRECTION_IMPLEMENTATION_REPORT.md` (historical; superseded notice)
-- `phases/phase-0/CORRECTION_FOLLOWUP_IMPLEMENTATION_REPORT.md`
+| Field | Value |
+|---|---|
+| Verified by | ChatGPT through the authenticated GitHub connector |
+| Verification date | 2026-07-30 |
+| Repository | `Vedang1998/Stocky` |
+| PR | [#9](https://github.com/Vedang1998/Stocky/pull/9) — Plan Phase 1 tenant-safe Shopify fact foundation |
+| PR state at verification | OPEN |
+| Draft state | DRAFT |
+| Merge state | UNMERGED |
+| Base branch | `main` |
+| Base SHA | `8e4f757c4717baba0ece74135b062324ff429ee6` |
+| Head branch | `docs/phase-1-planning` |
+| Claude-reviewed head | `835088d3c0294222b14d67a5875709f299062439` |
+| Exactly one open PR from that branch | YES |
+| Workflow | CI |
+| Run ID | `30564344329` |
+| Job ID | `90944976704` |
+| Workflow run actual `head_sha` | `835088d3c0294222b14d67a5875709f299062439` |
+| Workflow status | completed |
+| Workflow conclusion | success |
+| Workflow run number | `16` |
 
-## Phase 0 completed (historical)
+Notes:
 
-- Approved product and agent source-of-truth files were preserved.
-- Unsafe stocktake, receipt, and transfer writes remain behind default-off flags.
-- Stocktake no longer reports `COMPLETED` after failed Shopify adjustments.
-- Confirmed route-level tenant-scoping holes were corrected.
-- MMFO scopes were removed.
-- The development subscription activation bypass was restricted.
-- Characterization tests and Phase 0 operating records were added.
-- Lockfile / npm / CI / transfer-receive / tenant-denial correction gate was completed via PR #7.
-
-## Branch protection
-
-**API-VERIFIED** — GitHub ruleset `Protect main` (id `20012314`) was verified by ChatGPT/Codex on July 30, 2026. An authenticated Claude Code read under GitHub user `Vedang1998` separately verified that `bypass_actors` is present and empty (`[]`).
-
-Verified controls:
-
-- enforcement active;
-- targets the repository default branch (`main` / `~DEFAULT_BRANCH`);
-- pull requests required;
-- review conversations must be resolved;
-- squash-only merges;
-- required check `Lint, typecheck, test, build, Prisma, GraphQL`;
-- strict/up-to-date status-check enforcement;
-- force pushes blocked;
-- branch deletion blocked;
-- no bypass actors (`bypass_actors: []`).
-
-**Historical evidence note:** Claude’s original PR #8 review environment was rate-limited and did not independently verify the live API response. That limitation remains accurately preserved in `phases/phase-0/CLOSURE_REVIEW_REPORT.md`.
-
-Residual: future repository-settings changes could weaken protection; periodically re-verify that the ruleset remains active and unchanged.
+- This verification closes Claude’s **P2-12** evidence gap for the Claude-reviewed head.
+- The evidence is attributed to **ChatGPT**, not Claude.
+- Claude accurately disclosed that its environment was rate-limited.
+- The CI evidence applies specifically to head `835088d3c0294222b14d67a5875709f299062439`.
+- Writing this evidence into the permanent record addresses **P2-13** for that reviewed head.
+- The documentation commit created by the final planning-record task will produce a later head that must receive its own exact-head CI verification before merge.
+- Do not represent the new live branch head as immutable closure evidence.
 
 ## Important deferred work
 
-- Compliance webhooks currently authenticate and acknowledge only; they do not yet perform data export or redaction.
-- `subscriptionActive` is not a complete entitlement system.
+- Compliance webhooks currently authenticate and acknowledge only; they do not yet perform data export or redaction (Phase 1 brief scope after merge).
+- `subscriptionActive` is not a complete entitlement system (billing/entitlements remain out of Phase 1 implementation scope).
 - Adjustment and cost-sync flags are placeholders; no implemented write paths currently use them.
-- Forecast and ABC parity remain future work.
+- Forecast and ABC parity remain future work (not Phase 1).
 - Inventory-write idempotency, audit, reconciliation, and reversal are not complete.
-- Partner distribution remains unconfirmed because `shopify app info` failed.
+- Partner distribution remains unconfirmed (**Q-002** evidence still required).
 - npm audit advisories remain for a separate remediation decision.
 - F-012–F-015, F-017: future maintenance / risk (not Phase 0 blockers).
-- **F-016 / R-022 (P1):** Phase 1 foundation must add database-enforced tenant isolation (brief requirement; not implemented).
+- **F-016 / R-022 (P1):** open Phase 1 database-enforced tenant isolation implementation gate.
+- **R-014 (P1):** open Phase 1 monetary-fact exact-money implementation gate.
 
 ## Next action
 
-1. Obtain Claude’s narrow review of this documentation-only closure PR.
-2. Obtain ChatGPT approval and explicit user merge authorization.
-3. After this closure PR merges, Phase 0 is formally closed on main.
-4. ChatGPT may then create the Phase 1 `PHASE_BRIEF.md`.
-5. Phase 1 implementation may not start until that brief is approved.
+1. Commit and push this final planning-record update.
+2. Run CI on the exact new head.
+3. Return evidence to ChatGPT for final exact-head verification.
+4. Obtain explicit user merge authorization for PR #9.
+5. After merge into `main`, Cursor may start the first separately authorized Phase 1 implementation PR from updated `main`.
 6. Production inventory writes remain unapproved.
+7. All inventory-write flags remain default OFF.
 
 ## Where to look
 
 - Phase workflow: `phases/README.md`
 - Phase 0 record: `phases/phase-0/`
+- Phase 1 record: `phases/phase-1/`
 - Permanent product rules: `product/`
 - Permanent agent instructions: `agents/`
+- Historical Phase 1 planning proposal: `PHASE_1_TECHNICAL_PLAN.md` (not implementation authority)
+- Branch protection evidence: `RISK_REGISTER.md` → R-015
 - Risks: `RISK_REGISTER.md`
 - Decisions: `DECISIONS.md`
+- Open questions: `OPEN_QUESTIONS.md`
