@@ -77,14 +77,19 @@ See:
 
 ## Branch protection
 
-**API-VERIFIED** (ruleset id `20012314`, name `Protect main`, enforcement `active`, target `~DEFAULT_BRANCH`):
+**OWNER-ATTESTED** (ruleset id `20012314`, name `Protect main`, enforcement `active`, targets main / default branch):
+
+OWNER-ATTESTED; Cursor reported an authenticated API read, but the independent Claude and ChatGPT review environments could not retrieve the ruleset JSON. These settings are therefore not described as independently reviewed or independently API-verified.
+
+Configured protection (owner-attested facts):
 
 - Pull requests required
-- Required status check: `Lint, typecheck, test, build, Prisma, GraphQL` (`strict_required_status_checks_policy: true`)
+- Required status check: `Lint, typecheck, test, build, Prisma, GraphQL`
+- Branch required to be up to date
 - Allowed merge method: squash
-- Force pushes blocked (`non_fast_forward`)
+- Force pushes blocked
 - Branch deletion restricted
-- Bypass actors: none
+- No routine bypass
 - Draft PRs cannot merge under normal GitHub draft-PR workflow (must be marked ready before merge)
 
 Residual: future repository-settings changes could weaken protection; periodically re-verify the ruleset remains active.
