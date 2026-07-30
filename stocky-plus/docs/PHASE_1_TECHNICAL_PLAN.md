@@ -1,6 +1,16 @@
 # Phase 1 Technical Plan — Additive Foundation
 
-**Status:** Plan only — **not implemented** in Phase 0.  
+> ## Historical notice — not implementation authority
+>
+> This document was a **Phase 0 planning proposal**. It was **never** implementation authority.
+>
+> Its receipt, cost, entitlement, billing-adjacent, and AI ledger items are **not** approved Phase 1 scope.
+>
+> The approved Phase 1 brief at `phases/phase-1/PHASE_BRIEF.md` will supersede this document after the documentation-only Phase 1 planning pull request is independently reviewed, approved by ChatGPT, and merged into `main`.
+>
+> The historical body below is preserved for traceability. Do not treat it as the Phase 1 work authorization.
+
+**Status:** Plan only — **not implemented** in Phase 0.
 **Prerequisites:**
 
 1. Claude accepts Phase 0.

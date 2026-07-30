@@ -112,3 +112,152 @@ Format: current rule → proposed → reason → merchant impact → technical i
 - Application-layer shop filters alone are insufficient.
 - Production inventory writes remain **unapproved**.
 - All inventory-write flags remain default **OFF**.
+
+---
+
+# Decisions — Phase 1 (proposed)
+
+These decisions are recorded from the documentation-only Phase 1 planning draft. They are **PROPOSED** until ChatGPT explicitly approves the final Phase 1 brief and the planning PR merges. This Cursor documentation task is **not** product-owner approval.
+
+## D-011 — Phase 1 scope and boundaries
+
+1. **Current:** Phase 0 closed; no Phase 1 implementation started.
+2. **Proposed:** Phase 1 establishes a tenant-safe Shopify fact foundation only — Shop/`shopId`, composite tenant FKs, forced RLS, sync control plane, catalog/location/inventory/order/refund facts, audit/roles scaffold, privacy processors, reconciliation and performance exit. Out of scope: forecasting, ABC/U, Buying Table redesign, supplier/PO/receiving/stocktake/transfer/cost expansion, billing, entitlements, AI, POS, labels, reports, production inventory writes, enabling write flags, destructive schema drops, broad UI redesign.
+3. **Reason:** Product roadmap Phase 1; F-016 / R-022; unsafe to build operational features on incomplete multi-tenant facts.
+4. **Merchant impact:** None immediate; foundation for later parity.
+5. **Technical impact:** Focused additive foundation work after brief approval.
+6. **Migration:** Additive only; preserve legacy `shop` columns through Phase 1.
+7. **Risks:** Scope creep into later phases; premature write enablement.
+8. **Final:** **PROPOSED** — awaiting ChatGPT brief approval.
+
+## D-012 — Canonical Shop and direct shopId ownership
+
+1. **Current:** Merchant ownership is primarily application-level string `shop` filters; many child rows lack direct tenant ownership.
+2. **Proposed:** Canonical `Shop` entity with stable internal ID and normalized unique Shopify shop domain; non-null `shopId` on every merchant-owned row after verified backfill.
+3. **Reason:** F-016 / R-022; database-enforced tenancy.
+4. **Merchant impact:** None direct; safer multi-merchant isolation.
+5. **Technical impact:** Additive schema + backfill + access conversion.
+6. **Migration:** Nullable ownership first; quarantine inconsistent rows; never guess.
+7. **Risks:** Incomplete backfill; inconsistent parent/child ownership.
+8. **Final:** **PROPOSED**.
+
+## D-013 — Composite tenant foreign keys
+
+1. **Current:** Child FKs reference parent IDs without tenant co-ownership.
+2. **Proposed:** Parent tables expose composite unique keys containing `shopId` and record ID; every child FK includes `shopId`; cross-domain relations include tenant ownership; tenant indexes begin with `shopId`.
+3. **Reason:** Prevent cross-shop attachment of valid parent IDs.
+4. **Merchant impact:** None direct.
+5. **Technical impact:** Constraint and relation redesign with additive migrations.
+6. **Migration:** Enforce only after unresolved ownership count is zero.
+7. **Risks:** Existing inconsistent rows block enforcement.
+8. **Final:** **PROPOSED**.
+
+## D-014 — Forced PostgreSQL Row-Level Security
+
+1. **Current:** No RLS; omitted application filters can expose or mutate another shop’s row.
+2. **Proposed:** Enable and force RLS on every approved merchant-domain table; missing tenant context is default-deny. Composite tenant FKs without RLS do **not** satisfy F-016 / R-022.
+3. **Reason:** Defense in depth beyond application filters.
+4. **Merchant impact:** None direct; fail-closed on missing context.
+5. **Technical impact:** SQL policies; runtime must set transaction-local tenant context.
+6. **Migration:** Convert all runtime access before activating RLS.
+7. **Risks:** Rollback to pre-tenant-aware app after RLS is unsafe.
+8. **Final:** **PROPOSED**.
+
+## D-015 — Restricted runtime database role
+
+1. **Current:** Application likely uses a privileged database role that owns schema objects.
+2. **Proposed:** Runtime role does not own tables, has no `BYPASSRLS`, cannot change policies or run migrations.
+3. **Reason:** Prevent accidental or malicious RLS bypass.
+4. **Merchant impact:** None direct.
+5. **Technical impact:** Separate DB credentials for web/workers.
+6. **Migration:** Role provisioning and privilege verification tests.
+7. **Risks:** Misconfigured role ownership or `BYPASSRLS`.
+8. **Final:** **PROPOSED**.
+
+## D-016 — Separate migration database role
+
+1. **Current:** Same privileged access may perform migrations and runtime queries.
+2. **Proposed:** Migration role is separate and unavailable to web and worker processes.
+3. **Reason:** Least privilege; migration ownership must not leak to runtime.
+4. **Merchant impact:** None.
+5. **Technical impact:** CI and deploy use migration-owner vs runtime roles.
+6. **Migration:** Documented role setup in runbooks.
+7. **Risks:** Accidental runtime use of migration credentials.
+8. **Final:** **PROPOSED**.
+
+## D-017 — Transaction-local tenant context
+
+1. **Current:** Tenant scoping is per-query application filters.
+2. **Proposed:** Tenant context is transaction-local and established before any merchant-domain query; direct unrestricted Prisma/raw SQL to merchant-domain tables is prohibited.
+3. **Reason:** RLS and pooled connections require explicit, non-leaking context.
+4. **Merchant impact:** None direct.
+5. **Technical impact:** Tenant-bound data-access contract for routes, workers, jobs, exports, privacy, reconciliation.
+6. **Migration:** Convert all current domain access before RLS activation.
+7. **Risks:** Connection-pool context leakage between shops.
+8. **Final:** **PROPOSED**.
+
+## D-018 — Restricted Session and Shop bootstrap exception
+
+1. **Current:** Session storage and shop resolution may need access before tenant context exists.
+2. **Proposed:** Isolate Shopify session storage and minimal Shop lookup in a small bootstrap module that cannot query merchant-domain tables; sessions must not become a general tenancy bypass.
+3. **Reason:** Auth bootstrap is required; unrestricted bypass is not.
+4. **Merchant impact:** None direct.
+5. **Technical impact:** Narrow bootstrap API; boundary tests.
+6. **Migration:** None destructive.
+7. **Risks:** Bootstrap expands into a general bypass.
+8. **Final:** **PROPOSED**.
+
+## D-019 — Public App Store distribution and environment separation
+
+1. **Current:** Partner distribution unverified (`shopify app info` historically failed); Q-002 open.
+2. **Proposed:** Intended production uses public Shopify App Store distribution; development, staging/pilot, and production use separate app registrations or explicitly isolated linked configs, credentials, databases, Redis, storage, callbacks, and webhooks. Partner Dashboard app IDs and distribution selections must be verified before deployment work.
+3. **Reason:** Prevent cross-environment credential and webhook contamination.
+4. **Merchant impact:** Correct install and webhook targeting.
+5. **Technical impact:** Separate Linked apps / env configs.
+6. **Migration:** None until verified.
+7. **Risks:** Deploying without Q-002 evidence.
+8. **Final:** **PROPOSED** — pending Partner Dashboard evidence (Q-002).
+
+## D-020 — Trial and private development-plan hypothesis
+
+1. **Current:** Trial/dev-plan commercial terms unresolved (Q-006); billing not implemented.
+2. **Proposed:** Working hypothesis remains 14-day Growth-equivalent trial and private $0 development test plan. Phase 1 does **not** implement billing, plans, entitlements, or commercial usage limits. A future development test plan must be non-production-only, limited to approved development/test stores, unavailable to ordinary merchants, and incapable of bypassing tenancy, permissions, or inventory-write gates.
+3. **Reason:** Pricing strategy; keep commercial scaffolding out of Phase 1 foundation.
+4. **Merchant impact:** None in Phase 1.
+5. **Technical impact:** Defer entitlement schema/enforcement.
+6. **Migration:** None.
+7. **Risks:** Premature billing/entitlement implementation.
+8. **Final:** **PROPOSED** — billing implementation deferred.
+
+## D-021 — Uninstall and privacy webhook behavior
+
+1. **Current:** Uninstall deletes sessions; compliance webhooks authenticate/acknowledge only (R-005, R-011, Q-008).
+2. **Proposed:** Uninstall disables shop and jobs immediately and deletes sessions/tokens. `shop/redact` erases tenant operational data, caches, exports, queue payloads, and storage objects; preserve only non-reversible deletion receipt and counsel-confirmed retained records (minimized, segregated, inaccessible to normal workflows). Do not store unnecessary customer PII in order/line facts. Processes are idempotent, auditable, retryable, deletion-manifest backed. Legal review required before production.
+3. **Reason:** App Store privacy compliance; merchant trust.
+4. **Merchant impact:** Correct erasure and data-request handling.
+5. **Technical impact:** Real privacy processors in Phase 1 after brief approval.
+6. **Migration:** Deletion manifests and retention exceptions.
+7. **Risks:** Incomplete deletion; jobs continuing after uninstall.
+8. **Final:** **PROPOSED** — legal review still required (Q-008).
+
+## D-022 — Dependency-ordered Phase 1 implementation PR sequence
+
+1. **Current:** No Phase 1 implementation PRs.
+2. **Proposed:** Eight dependency-ordered PRs: (1) tenant expand/backfill, (2) tenant-bound access conversion, (3) database enforcement/RLS — hard gate before later PRs, (4) sync control plane, (5) catalog/location/inventory facts, (6) order/refund facts, (7) audit/roles/privacy, (8) reconciliation/performance/exit. Each starts from updated `main`, requires CI, Claude review, ChatGPT acceptance, and explicit user merge authorization.
+3. **Reason:** Enforce F-016 before sync/facts expansion; prevent mixed unsafe merges.
+4. **Merchant impact:** None direct.
+5. **Technical impact:** No later Phase 1 PR begins until PR 3 is reviewed, accepted, and merged.
+6. **Migration:** Additive throughout.
+7. **Risks:** Skipping enforcement gate; mixed scopes.
+8. **Final:** **PROPOSED**.
+
+## D-023 — Shopify API-version validation before sync implementation
+
+1. **Current:** API pin remains `2025-10` / `October25` (D-007); planning PR does not change version.
+2. **Proposed:** Before the first Phase 1 sync implementation merges: validate Phase 1 GraphQL documents and webhook fixtures against the current stable Admin API; approve and record the selected version; avoid building on a near-retirement version; keep every inventory mutation excluded.
+3. **Reason:** Sync foundation must not be built on invalid or retiring operations.
+4. **Merchant impact:** None immediate.
+5. **Technical impact:** Validation evidence before sync PRs.
+6. **Migration:** None in planning.
+7. **Risks:** Building sync on retiring/invalid API shapes.
+8. **Final:** **PROPOSED**.
