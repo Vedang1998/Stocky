@@ -173,3 +173,14 @@ Cursor has not claimed this setting was changed without settings evidence.
 ## Next step
 
 Stop after green CI on the exact final head and PR description update. Do not merge. Do not start Phase 1. Do not mark the correction gate closed.
+
+## Post-merge note (added by Phase 0 closure documentation PR)
+
+Historical evidence above is preserved. After the events recorded here:
+
+- Claude’s final independent review returned **`READY FOR PHASE 1 FOUNDATION`** (see `CORRECTION_FINAL_REVIEW_REPORT.md`).
+- ChatGPT accepted that verdict.
+- The user explicitly authorized squash merge of PR #7.
+- PR #7 was squash-merged into `main` as `6fbe4c1d8497c3be2cd3ef5a8619ee63ccd8fdfb`.
+- Formal Phase 0 correction-gate closure is recorded by the documentation-only closure PR on branch `docs/phase-0-closure` (permanent closure record once that PR merges).
+- Phase 1 remains **not started**. Production inventory writes remain **unapproved**. Inventory-write flags remain default **OFF**.
