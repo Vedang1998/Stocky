@@ -115,9 +115,16 @@ Format: current rule → proposed → reason → merchant impact → technical i
 
 ---
 
-# Decisions — Phase 1 (proposed)
+# Decisions — Phase 1
 
-These decisions are recorded from the documentation-only Phase 1 planning draft. They are **PROPOSED** until ChatGPT explicitly approves the final Phase 1 brief and the planning PR merges. This Cursor documentation task is **not** product-owner approval.
+ChatGPT approved the Phase 1 planning decisions reviewed by Claude at head `835088d3c0294222b14d67a5875709f299062439` on **2026-07-30**.
+
+Status for each decision below:
+
+`APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES`
+
+None of these decisions are implemented merely because they are approved. Inventory-write approval remains separate and ungranted. F-016 / R-022 and R-014 remain open P1 implementation gates until implemented and independently verified.
+
 
 ## D-011 — Phase 1 scope and boundaries
 
@@ -128,7 +135,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Focused additive foundation work after brief approval.
 6. **Migration:** Additive only; preserve legacy `shop` columns through Phase 1.
 7. **Risks:** Scope creep into later phases; premature write enablement.
-8. **Final:** **PROPOSED** — awaiting ChatGPT brief approval.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-012 — Canonical Shop and direct shopId ownership
 
@@ -139,7 +146,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Additive schema + backfill + access conversion.
 6. **Migration:** Nullable ownership first; quarantine inconsistent rows; never guess.
 7. **Risks:** Incomplete backfill; inconsistent parent/child ownership.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-013 — Composite tenant foreign keys
 
@@ -150,7 +157,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Constraint and relation redesign with additive migrations.
 6. **Migration:** Enforce only after unresolved ownership count is zero.
 7. **Risks:** Existing inconsistent rows block enforcement.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-014 — Forced PostgreSQL Row-Level Security
 
@@ -161,7 +168,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** SQL policies; runtime must set transaction-local tenant context; immutability tests required.
 6. **Migration:** Convert all runtime access before activating RLS.
 7. **Risks:** Rollback to pre-tenant-aware app after RLS is unsafe; incomplete WITH CHECK / immutability.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-015 — Restricted runtime database role
 
@@ -172,7 +179,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Separate DB credentials for web/workers.
 6. **Migration:** Role provisioning and privilege verification tests.
 7. **Risks:** Misconfigured role ownership or `BYPASSRLS`.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-016 — Separate migration database role
 
@@ -183,7 +190,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** CI and deploy use migration-owner vs runtime roles.
 6. **Migration:** Documented role setup in runbooks.
 7. **Risks:** Accidental runtime use of migration credentials.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-017 — Transaction-local tenant context
 
@@ -194,7 +201,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Tenant-bound data-access contract for routes, workers, jobs, exports, privacy, reconciliation; validated job envelopes.
 6. **Migration:** Convert all current domain access before RLS activation.
 7. **Risks:** Connection-pool context leakage; client-controlled tenant context; unvalidated job envelopes.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-018 — Restricted Session and Shop bootstrap exception
 
@@ -205,7 +212,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Narrow bootstrap API; boundary tests.
 6. **Migration:** None destructive.
 7. **Risks:** Bootstrap expands into a general bypass.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-019 — Public App Store distribution and environment separation
 
@@ -216,7 +223,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Separate Linked apps / env configs.
 6. **Migration:** None until verified.
 7. **Risks:** Deploying without Q-002 evidence.
-8. **Final:** **PROPOSED** — pending Partner Dashboard evidence (Q-002).
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`). Approved product direction pending Q-002 Partner Dashboard evidence.
 
 ## D-020 — Trial and private development-plan hypothesis
 
@@ -227,7 +234,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Defer entitlement schema/enforcement.
 6. **Migration:** None.
 7. **Risks:** Premature billing/entitlement implementation.
-8. **Final:** **PROPOSED** — billing implementation deferred.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`). Approved working commercial hypothesis, not a validated final price or implemented billing plan; billing implementation deferred.
 
 ## D-021 — Uninstall and privacy webhook behavior
 
@@ -238,7 +245,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Real privacy processors in Phase 1 after brief approval.
 6. **Migration:** Deletion manifests and retention exceptions.
 7. **Risks:** Incomplete deletion; jobs continuing after uninstall.
-8. **Final:** **PROPOSED** — legal review still required (Q-008).
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`). Approved privacy-policy direction pending legal review under Q-008.
 
 ## D-022 — Dependency-ordered Phase 1 implementation PR sequence
 
@@ -249,7 +256,7 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** No later Phase 1 PR begins until PR 3 is reviewed, accepted, and merged.
 6. **Migration:** Additive throughout.
 7. **Risks:** Skipping enforcement gate; mixed scopes.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`).
 
 ## D-023 — Shopify API-version validation before sync implementation
 
@@ -260,4 +267,4 @@ These decisions are recorded from the documentation-only Phase 1 planning draft.
 5. **Technical impact:** Validation evidence before sync PRs.
 6. **Migration:** None in planning.
 7. **Risks:** Building sync on retiring/invalid API shapes.
-8. **Final:** **PROPOSED**.
+8. **Final:** **APPROVED BY CHATGPT — EFFECTIVE AS IMPLEMENTATION AUTHORITY ONLY AFTER PR #9 MERGES** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`). Approved API-validation gate; does not itself select or change an API version.

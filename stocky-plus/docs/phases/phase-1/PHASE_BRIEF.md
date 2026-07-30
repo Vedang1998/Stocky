@@ -1,20 +1,26 @@
 # Phase 1 Brief — Tenant-Safe Shopify Fact Foundation
 
-**Status:** DRAFT — IMPLEMENTATION NOT AUTHORIZED
+**Status:** APPROVED BY CHATGPT — AWAITING PLANNING PR MERGE; IMPLEMENTATION NOT AUTHORIZED
 **Product owner:** ChatGPT
 **Implementation owner:** Cursor
 **Independent reviewer:** Claude Code
 **Planning base:** `main` at Phase 0 closure merge `8e4f757c4717baba0ece74135b062324ff429ee6`
 
-> This brief does not authorize implementation while its status is `DRAFT`.
+> ChatGPT approved the substantive Phase 1 planning scope reviewed by Claude at head `835088d3c0294222b14d67a5875709f299062439` on 2026-07-30.
 >
-> Phase 1 implementation may begin only after:
+> This approval approves the reviewed planning scope and decisions. It does **not** authorize Cursor to implement from the unmerged documentation branch. It does **not** authorize inventory writes, production deployment, or Phase 2.
 >
-> 1. ChatGPT explicitly approves the final brief;
-> 2. the documentation-only Phase 1 planning pull request is independently reviewed;
-> 3. that planning pull request is merged into `main`;
-> 4. Cursor starts the first approved implementation PR from the updated `main`.
+> Implementation authority becomes effective only after:
 >
+> 1. this planning-record update is committed and pushed;
+> 2. CI passes on the resulting exact head;
+> 3. ChatGPT independently verifies that final head and CI;
+> 4. the user explicitly authorizes PR #9 to be merged;
+> 5. PR #9 is merged into `main`;
+> 6. Cursor starts the first separately authorized Phase 1 implementation PR from the updated `main`.
+>
+> Phase 1 implementation must use separately approved branches in the dependency order defined by this brief.
+> F-016 / R-022 and R-014 remain open P1 implementation gates until implemented and independently verified.
 > No inventory-write flag is approved for enablement by this brief.
 
 ## Goal
@@ -709,8 +715,15 @@ Production rollout requires a separate reviewed deployment plan and explicit aut
 
 ## Approval
 
-**Approved by:**
-**Approved date:**
-**Approved scope version:**
+**Approved by:** ChatGPT
+**Approved date:** 2026-07-30
+**Approved reviewed scope:** Phase 1 brief at Claude-reviewed head `835088d3c0294222b14d67a5875709f299062439`
+**Independent correction-review verdict:** `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL`
+**Approval condition:** Effective as implementation authority only after PR #9 is explicitly authorized by the user and merged into `main`
+**Implementation status:** NOT STARTED
+**Production inventory writes:** UNAPPROVED
+**Inventory-write flags:** DEFAULT OFF
+
+ChatGPT’s approval approves the reviewed planning scope and decisions only. It does not authorize Cursor to implement from the unmerged documentation branch, enable inventory writes, authorize production deployment, or authorize Phase 2.
 
 Implementation authorization becomes effective only after the approved planning pull request containing this brief is merged into `main`.

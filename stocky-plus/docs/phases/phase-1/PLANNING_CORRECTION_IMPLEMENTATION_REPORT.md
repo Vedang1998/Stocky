@@ -63,24 +63,22 @@
 | Field | Value |
 |---|---|
 | Previous reviewed head | `eae8cfdf215e78226f35ba9a2046bddd93590c2c` |
-| Correction commit / new PR head | `cec0a10f65e96f5d29b34ec41e59ada5bec0528f` — verify live on GitHub PR #9; not immutable closure evidence |
-| New CI run ID | _recorded in PR #9 description after CI completes_ |
-| New CI job ID | _recorded in PR #9 description after CI completes_ |
-| Workflow run actual `head_sha` | _recorded in PR #9 description after CI completes_ |
-| CI conclusion | _recorded in PR #9 description after CI completes_ |
+| Primary correction commit | `cec0a10f65e96f5d29b34ec41e59ada5bec0528f` |
+| PR head reviewed by Claude | `835088d3c0294222b14d67a5875709f299062439` |
+| Corrected-head CI | Permanently recorded in `PROJECT_STATUS.md` (ChatGPT authenticated verification of run `30564344329`); also historically present in PR #9 description |
 
-Authoritative corrected-head CI association is recorded in the PR #9 description after CI completes, without a self-referential documentation commit that only chases that commit’s own SHA.
+P3-14 correction: the previous row that labeled `cec0a10…` as “new PR head” was wrong. `cec0a10…` is the primary correction commit; `835088d…` is the PR head Claude reviewed.
 
 ## Unresolved evidence
 
-* Claude re-review of the corrected head has not occurred.
-* ChatGPT has not approved the Phase 1 brief.
+* Claude correction review returned `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL` (preserved in `PLANNING_CORRECTION_REVIEW_REPORT.md`).
+* ChatGPT approved the reviewed planning scope on 2026-07-30; implementation authority remains contingent on PR #9 merge and explicit user merge authorization.
 * Q-002 Partner Dashboard evidence still required.
 * Q-008 legal review still required before production privacy policy.
 * Q-011 / F-016 / R-022 remain open implementation gates.
-* R-014 Phase 1 money rules are proposed, not implemented.
+* R-014 Phase 1 money rules are approved as planning direction, not implemented.
 * No production migration or deployment is authorized.
 
 ## Exact next action
 
-Independent Claude re-review of the corrected head and its CI association (`head_sha` must match the workflow run), then ChatGPT decides whether the brief may be approved.
+Return to ChatGPT for final exact-head verification of this planning-record update and obtain explicit user merge authorization for PR #9.

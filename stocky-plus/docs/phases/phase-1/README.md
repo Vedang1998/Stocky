@@ -2,11 +2,14 @@
 
 This folder is the Phase 1 planning and permanent phase record.
 
-**Phase 1 status:** PLANNING ONLY — IMPLEMENTATION NOT STARTED
-**Brief status:** `DRAFT — IMPLEMENTATION NOT AUTHORIZED`
+**Phase 1 status:** PLANNING APPROVED — IMPLEMENTATION NOT STARTED
+**Brief status:** `APPROVED BY CHATGPT — AWAITING PLANNING PR MERGE; IMPLEMENTATION NOT AUTHORIZED`
 **Initial planning review:** `NOT READY`
-**Planning corrections:** documentation-only; applied; awaiting independent re-review
-**Active PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) — must remain open and draft until successful re-review and ChatGPT approval
+**Planning correction-review:** `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL`
+**ChatGPT planning approval:** APPROVED 2026-07-30
+**Active PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) — OPEN, DRAFT, UNMERGED
+**Merge authorization:** NOT YET GRANTED
+**Phase 1 implementation:** NOT STARTED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -20,11 +23,11 @@ No inventory-write flag is approved for enablement by Phase 1 planning.
 
 ## Reading order
 
-1. `PHASE_BRIEF.md` — draft planning brief (implementation not authorized while `DRAFT`)
-2. `PLANNING_REVIEW_REPORT.md` — Claude initial planning review (`NOT READY` at head `eae8cfdf215e78226f35ba9a2046bddd93590c2c`)
-3. `PLANNING_CORRECTION_IMPLEMENTATION_REPORT.md` — documentation-only corrections C-1 through C-11
-4. Future `PLANNING_CORRECTION_REVIEW_REPORT.md` — reserved for Claude’s re-review of the corrected head
-5. Future focused implementation reports and independent review reports — reserved; one per approved implementation PR after implementation begins, in dependency order
+1. `PHASE_BRIEF.md`
+2. `PLANNING_REVIEW_REPORT.md`
+3. `PLANNING_CORRECTION_IMPLEMENTATION_REPORT.md`
+4. `PLANNING_CORRECTION_REVIEW_REPORT.md`
+5. Future focused implementation and review records — reserved; one per approved implementation PR after implementation begins, in dependency order
 6. Future Phase 1 exit review — reserved for Phase 1 closure
 
 Do not treat future reserved report locations as existing files until those reports are written.
@@ -42,13 +45,15 @@ Do not treat future reserved report locations as existing files until those repo
 
 Phase 1 runtime implementation has **not** started.
 
-The brief remains draft. Corrections improve planning documents only and do not authorize implementation.
+ChatGPT approved the reviewed planning scope on 2026-07-30. Implementation authority becomes effective only after PR #9 is explicitly authorized by the user and merged into `main`.
 
 Implementation may begin only after:
 
-1. ChatGPT explicitly approves the final brief;
-2. Claude independently re-reviews and accepts the corrected planning PR;
-3. that planning PR is merged into `main`;
-4. Cursor starts the first separately approved implementation PR from the updated `main`.
+1. ChatGPT’s planning approval is recorded (done);
+2. Claude’s correction review is preserved (done);
+3. PR #9 receives exact-head CI for the final planning-record tip and ChatGPT verification;
+4. the user explicitly authorizes merge;
+5. PR #9 is merged into `main`;
+6. Cursor starts the first separately approved implementation PR from the updated `main`.
 
 Merging the planning PR does not enable inventory writes and does not authorize work outside the approved brief.

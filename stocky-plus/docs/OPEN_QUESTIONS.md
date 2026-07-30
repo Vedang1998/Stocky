@@ -12,7 +12,7 @@
 | Q-008 | Uninstall + `shop/redact` retention window and what operational data is erased vs anonymized | Compliance + support; D-021 | Product + legal | Phase 1 privacy processors before production | **Open — recommended policy recorded; legal review still required** |
 | Q-009 | Should Phase 0 freeze also hide Receiving/Stocktake/Transfer nav entries while flags are off? | UX clarity vs auditability | Product | Optional UX polish | Open |
 | Q-010 | Native Shopify transfer receive mutation replacement for removed `inventoryTransferComplete` | Transfer Phase 5 design | Engineering research | Phase 5 | Open |
-| Q-011 | Phase 1 foundation must add database-enforced tenant isolation (canonical Shop, shopId, composite tenant constraints, forced RLS, restricted runtime role, separate migration role, transaction-local context, bootstrap exception, real PostgreSQL and pool isolation tests) — Claude F-016 / R-022 | **P1 gating requirement.** Application-layer shop filters alone are insufficient. | Product + Cursor (Phase 1) | Phase 1 foundation — **mandatory implementation gate until merged and independently verified** | **Open — layered decision proposed in draft brief; not implemented** |
+| Q-011 | Phase 1 foundation must add database-enforced tenant isolation (canonical Shop, shopId, composite tenant constraints, forced RLS, restricted runtime role, separate migration role, transaction-local context, bootstrap exception, real PostgreSQL and pool isolation tests) — Claude F-016 / R-022 | **P1 gating requirement.** Application-layer shop filters alone are insufficient. Planning direction approved by ChatGPT 2026-07-30; not implemented. | Product + Cursor (Phase 1) | Phase 1 foundation — **mandatory implementation gate until merged and independently verified** | **Open — planning direction approved; not implemented** |
 
 ## Q-002 — evidence still required
 
@@ -69,4 +69,4 @@ Proposed layered isolation decision (draft brief / D-012–D-018), expanded by p
 * lock-conscious constraint rollout;
 * ownership-quarantine resolution before enforcement.
 
-Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022. Do **not** close Q-011 as implemented.
+Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022. Do **not** close Q-011 as implemented. ChatGPT’s 2026-07-30 planning approval approves the layered direction only; it does not close the implementation gate.
