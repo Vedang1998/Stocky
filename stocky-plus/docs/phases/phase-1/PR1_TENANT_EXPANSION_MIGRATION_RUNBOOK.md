@@ -105,7 +105,10 @@ npm run tenant:schema:drift
 
 ## Dataset boundaries (R10)
 
-Each run persists per-table `highWaterMark`, `rowCount`, and membership SHA-256 over ordered IDs at start. Empty tables keep an empty boundary. Ownership checksums and diagnostics are bounded to that subject set. Membership drift inside the boundary fails closed.
+Each run persists `phase1-tenant-subject-v2` starting evidence under one REPEATABLE READ transaction: per-table `highWaterMark`, `rowCount`, ordered evidence columns, and streaming subject digests (not ID-only). Session has a separate evidence boundary used only for domain discovery. Empty tables keep an empty boundary. Ownership checksums and diagnostics are bounded to that subject set. Subject drift inside the boundary fails closed. Resume must reuse the original persisted starting evidence (fail closed if absent).
+
+**Superseded:** Prior R9 concurrent-index overlap evidence recorded at head `fb04345f129b8664566c5947f2ad75f57102269b` is **rejected**. Current proof requires REPEATABLE READ holders with non-null `backend_xmin`, target-relation progress in `waiting for old snapshots`, positive `ShareUpdateExclusiveLock`, and true promise-settlement timing across ≥10 iterations.
+
 
 ## Status / checkpoint / resume
 

@@ -69,6 +69,8 @@ describe("full-engine affected-row races (R11)", () => {
 
     const raceClient = new Client({ connectionString: DATABASE_URL });
     await raceClient.connect();
+    await raceClient.query(`SET lock_timeout = '5s'`);
+    await raceClient.query(`SET statement_timeout = '30s'`);
     try {
       const result = await runTenantBackfill({
         prisma,
@@ -110,6 +112,8 @@ describe("full-engine affected-row races (R11)", () => {
 
     const raceClient = new Client({ connectionString: DATABASE_URL });
     await raceClient.connect();
+    await raceClient.query(`SET lock_timeout = '5s'`);
+    await raceClient.query(`SET statement_timeout = '30s'`);
     try {
       const result = await runTenantBackfill({
         prisma,
@@ -181,6 +185,8 @@ describe("full-engine affected-row races (R11)", () => {
 
     const raceClient = new Client({ connectionString: DATABASE_URL });
     await raceClient.connect();
+    await raceClient.query(`SET lock_timeout = '5s'`);
+    await raceClient.query(`SET statement_timeout = '30s'`);
     try {
       const result = await runTenantBackfill({
         prisma,

@@ -91,10 +91,20 @@ describe("dataset boundaries and membership checksums (R10)", () => {
     const meta = run.resumeMetadata as {
       datasetBoundaries?: Record<
         string,
-        { rowCount: number; membershipChecksum: string; highWaterMark: string | null }
+        {
+          rowCount: number;
+          subjectDigest: string;
+          highWaterMark: string | null;
+          evidenceVersion: string;
+        }
       >;
+      startingEvidence?: { evidenceVersion: string };
     };
     expect(meta.datasetBoundaries?.Supplier?.rowCount).toBe(2);
+    expect(meta.datasetBoundaries?.Supplier?.subjectDigest).toBeTruthy();
+    expect(meta.startingEvidence?.evidenceVersion).toBe(
+      "phase1-tenant-subject-v2",
+    );
 
     const above = await prisma.supplier.findUnique({
       where: { id: "sup-bound-zzz-above" },
@@ -325,9 +335,9 @@ describe("dataset boundaries and membership checksums (R10)", () => {
     });
     const boundaries = (
       runMeta.resumeMetadata as {
-        datasetBoundaries?: Record<string, { membershipChecksum: string }>;
+        datasetBoundaries?: Record<string, { subjectDigest: string }>;
       }
     ).datasetBoundaries;
-    expect(boundaries?.PurchaseOrder?.membershipChecksum).toBeTruthy();
+    expect(boundaries?.PurchaseOrder?.subjectDigest).toBeTruthy();
   }, 180_000);
 });

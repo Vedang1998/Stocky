@@ -20,7 +20,7 @@ jobs:
   validate:
     name: Lint, typecheck, test, build, Prisma, GraphQL
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
 
     services:
       postgres:
@@ -121,6 +121,9 @@ jobs:
 
       - name: Migration and tenant-backfill tests
         run: npm run test:migrations
+
+      - name: Constrained-memory subject evidence
+        run: npm run test:subject-memory
 
       - name: Build
         run: npm run build
