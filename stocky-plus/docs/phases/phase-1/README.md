@@ -2,27 +2,43 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 ACCEPTED — AWAITING EXPLICIT USER MERGE AUTHORIZATION
-**Active branch:** `phase-1/tenant-expand`
-**Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
-**Independently reviewed implementation head:** `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**Exact-head CI:** run `30633301468`, job `91164602626`, conclusion `success`
+**Phase 1 status:** IN PROGRESS (PR 1 closed; later PRs remain)
+**Phase 1 PR 1:** ACCEPTED, SQUASH-MERGED, AND CLOSED
+**Active implementation branch:** none
+**Active implementation PR:** none
+**PR #11:** CLOSED AND SQUASH-MERGED
+**Authorized PR #11 head:** `6e5b024254615f3259aeb8d8252305d86bd63777`
+**Capable-local review verdict:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
+**Documentation finalization / authorized merge head:** `6e5b024254615f3259aeb8d8252305d86bd63777`
+**Squash merge SHA:** `44a24f3387c1dae0351490367c06bef10f333425`
+**Merge timestamp:** `2026-07-31T22:19:49Z`
+**Pre-merge exact-head CI:** run `30643441951`, job `91198830409`, conclusion `success`
 **Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**ChatGPT decision:** `PR 1 ACCEPTED` (D-025) — merge not authorized
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
-**PR 2 / PR 3:** NOT STARTED
+**PR 2:** NOT STARTED — next dependency-ordered implementation PR
+**PR 3:** NOT STARTED
+**Residual gates:** F-016 / R-022 / Q-011; R-014; operational backfill / zero-unresolved evidence; R-013 / R-062; inventory-write release gates
 
 ## Mandatory gate
 
-**F-016 / R-022** remains an open P1 database-isolation gate. PR 1 does not resolve it.
+**F-016 / R-022** remains an open P1 database-isolation gate. PR 1 merge does not resolve it.
 **Q-011** remains open until enforcement is merged and independently verified.
 **R-014**, operational backfill / zero-unresolved evidence, **R-013 / R-062** dependency hardening, and inventory-write release gates remain open.
-PR 1 tooling corrections through F-F00–F-F07 were independently verified at `28e7717…` and accepted for PR 1 technical scope; that does not close the later enforcement or operational gates.
+PR 1 tooling corrections through F-F00–F-F07 were independently verified at `28e7717…`, accepted (D-025), and squash-merged as `44a24f3…` (D-026). That does not close the later enforcement or operational gates.
+
+## Phase progress
+
+- Phase 1 itself is still **in progress**.
+- PR 1 is **ACCEPTED, SQUASH-MERGED, AND CLOSED**.
+- PR 2 (tenant-bound access conversion) is the next dependency-ordered implementation PR and has **not started**.
+- PR 3 (database-enforcement gate) has **not started**.
+- No later Phase 1 PR may begin early.
 
 ## Reading order
 
@@ -43,6 +59,6 @@ PR 1 tooling corrections through F-F00–F-F07 were independently verified at `2
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024, D-025)
+- Decisions: `../../DECISIONS.md` (includes D-024, D-025, D-026)
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`
