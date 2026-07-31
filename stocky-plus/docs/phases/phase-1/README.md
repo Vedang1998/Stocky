@@ -2,11 +2,12 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 CORRECTIONS IMPLEMENTED — AWAITING FRESH CLAUDE REVIEW
+**Phase 1 implementation:** PR 1 CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
 **Active branch:** `phase-1/tenant-expand`
 **Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
-**Claude PR 1 review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
-**Pre-review residual gaps:** R1–R8 implemented; awaiting ChatGPT exact-head verification then fresh Claude review
+**Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
+**Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
+**Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 2 / PR 3:** NOT STARTED
@@ -14,7 +15,7 @@
 ## Mandatory gate
 
 **F-016 / R-022** remains an open P1 database-isolation gate. PR 1 does not resolve it.
-**Q-011**, **R-028 / R-029**, and **R-041 through R-046** remain open.
+**Q-011**, **R-028 / R-029**, **R-041 through R-055** remain open until independent acceptance.
 
 ## Reading order
 
@@ -28,7 +29,7 @@
 8. `PR1_TENANT_EXPANSION_REVIEW_REPORT.md` — Claude original `NOT READY` (verbatim)
 9. `PR1_TENANT_EXPANSION_CORRECTION_BACKLOG.md`
 10. `PR1_TENANT_EXPANSION_CORRECTION_IMPLEMENTATION_REPORT.md`
-11. Future correction review report — reserved for fresh Claude review
+11. `PR1_TENANT_EXPANSION_CORRECTION_REVIEW_REPORT.md` — Claude correction-review `NOT READY` (verbatim; chain-of-custody commit before F-N corrections)
 
 ## Related documents
 

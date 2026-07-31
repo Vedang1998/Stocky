@@ -1,53 +1,35 @@
 # PR 1 — Tenant Expansion Correction Backlog
 
-**Claude-reviewed head:** `7aabb095806716697bfea2783379351b15e1cda2`
-**Verdict preserved:** `NOT READY`
-**Product-owner decision:** All findings F-PR1-01 through F-PR1-15 accepted; ordinary non-concurrent index deviation rejected.
-**ChatGPT pre-review residual gaps:** R1–R13
-**Prior live tip (pre R9–R13):** `adf0b52103c517c904a7a33ee76cfaca29971860`
-**Implementation status posture:** `IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION` (code present; findings not independently closed)
-**Mandatory verification outstanding:** Fresh Claude review of the live PR tip after ChatGPT exact-head verification
+**Original Claude-reviewed head:** `7aabb095806716697bfea2783379351b15e1cda2`
+**Correction-review Claude head:** `fb04345f129b8664566c5947f2ad75f57102269b`
+**Correction-review verdict preserved:** `NOT READY` (verbatim in `PR1_TENANT_EXPANSION_CORRECTION_REVIEW_REPORT.md`)
+**Product-owner decision:** F-N01 through F-N09 accepted; prior R9 evidence at `fb04345f…` **rejected and superseded**; no findings deferred.
+**Implementation status posture:** `IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION`
+**PR #11:** open, draft, unmerged — corrections in progress on `phase-1/tenant-expand`
+**PR 2 / PR 3:** NOT STARTED
 
-| ID | Severity | Root cause | Files | Correction design | Tests | Status | Evidence | Residual risk |
-|---|---|---|---|---|---|---|---|---|
-| F-PR1-01 | P1 | Dry-run never persists parent `shopId`; children read persisted column | `engine.ts` | Proposed-ownership map; children use persisted or proposed parent | `dry-run-apply-equivalence.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Equivalence suite present | Open until Claude accepts corrected head |
-| F-PR1-02 | P1 | Checkpoint advanced without durable issues | `engine.ts` | Persist issues + detections in same batch `$transaction` as checkpoint | `batch-atomicity.migration.test.ts`, `detection-history.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Atomicity + detection suites | Open until Claude accepts corrected head |
-| F-PR1-03 | P1 | Cross-domain issues omitted from unresolved/blocking gate | `engine.ts`, `cli.ts` | Diagnostic phases; `blockingIssueCount`; `COMPLETED_WITH_ISSUES`; exit 2 | `cross-domain-blocking.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Blocking suite present | Open until Claude accepts corrected head |
-| F-PR1-04 | P1 | Re-detected RESOLVED stayed RESOLVED; overloaded `issueCount` | schema + migration + engine | Reopen + durable `TenantOwnershipIssueDetection`; distinct counts | `issue-reopen-counts.migration.test.ts`, `detection-history.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Reopen + history suites | Open until Claude accepts corrected head |
-| F-PR1-05 | P2 | Ordinary CREATE INDEX in Prisma migrate | tooling + D-024 | CONCURRENTLY via pinned pg client; real Prisma drift | `indexes.migration.test.ts`, `schema-drift.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Index + drift suites | Production still unauthorized; Claude verification pending |
-| F-PR1-06 | P1 | IF NOT EXISTS accepted INVALID indexes | index tooling | Pre/post catalog verification; fail closed; interrupted CONCURRENTLY tests | invalid/wrong-table/wrong-def suites | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Fail-closed + invalid remnant tests | Open until Claude accepts corrected head |
-| F-PR1-07 | P2 | Pooled Prisma advisory lock reentrancy/leak | `apply-lock.ts` | Dedicated `pg.Client`; backend PID match on unlock | `apply-lock.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | PID + denial + release suites | Ops must use direct URL; Claude verification pending |
-| F-PR1-08 | P2 | No DNS length bounds | `shop-domain.ts` | Label ≤63; hostname ≤253; distinct reasons | domain unit suite | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Boundary tests present | Open until Claude accepts corrected head |
-| F-PR1-09 | P2 | Non-ASCII survived toLowerCase | `shop-domain.ts` | Reject non-ASCII before lowercasing | Kelvin/Turkish/confusable tests | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Non-ASCII tests present | Open until Claude accepts corrected head |
-| F-PR1-10 | P2 | beforeCounts recomputed on resume | `engine.ts` | Preserve original beforeCounts/metadata | `resume-before-counts.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Resume suite present | Open until Claude accepts corrected head |
-| F-PR1-11 | P3 | “Non-mutating” dry-run wording | CLI/runbook/docs | Precise control-record wording | Doc review | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Wording updated | Open until Claude accepts corrected head |
-| F-PR1-12 | P3 | Stale report identity/CI | reports | Non-self-referential immutable heads vs live PR tip | Doc fields | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | See correction report | Pending fresh Claude review |
-| F-PR1-13 | P3 | Trailing whitespace | Markdown | Remove trailing spaces | `git diff --check` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Check required in CI | Open until Claude accepts corrected head |
-| F-PR1-14 | P3 | Updated counted without affected rows / stale concurrency | `engine.ts` | RETURNING + re-read after zero-row UPDATE (R5) | `affected-row-concurrency.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Concurrency classification suite | Open until Claude accepts corrected head |
-| F-PR1-15 | P3 | Dynamic SQL identifiers without assert | `tables.ts`, `engine.ts` | Allowlist assert before interpolate | `allowlist.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Allowlist suite present | Open until Claude accepts corrected head |
+| ID | Severity | Root cause | Correction design | Status | Residual risk |
+|---|---|---|---|---|---|
+| F-N01 | P1 | R9 holders used READ COMMITTED; settle time after await; accidental race | REPEATABLE READ READ ONLY holder with non-null `backend_xmin`; require `waiting for old snapshots` + target-relation `ShareUpdateExclusiveLock`; settle via promise handlers; ≥10 iterations | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Prior R9 evidence superseded |
+| F-N02 | P1 | Unbounded `SELECT DISTINCT shop` outside subject | Discovery only from coherent starting evidence; Session evidence boundary; direct-owner shops within HWM | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
+| F-N03 | P1 | ID-only membership checksum; misleading drift message | `phase1-tenant-subject-v2` field manifests + streaming subject digests; honest error text | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
+| F-N04 | P2 | Split starting reads without one snapshot | One REPEATABLE READ capture transaction; persist compact evidence; resume fail-closed | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
+| F-N05 | P3 | `buildSettled \|\| true` tautology | Removed | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
+| F-N06 | P3 | Vacuous AccessExclusiveLock absence on empty locks | Require ≥1 granted target-table lock + positive ShareUpdateExclusiveLock | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
+| F-N07 | P2 | Full ID array materialization | Bounded keyset streaming SHA-256; constrained-heap fixture | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
+| F-N08 | P3 | Review artifact chain of custody | This wave: review report committed alone before corrections | PROCESS — addressed for this wave | Keep for future phases |
+| F-N09 | P3 | Drift stderr host/URL leakage | `redactPrismaDiagnosticText` + classified safe failures | IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION | Open until Claude accepts |
 
-## ChatGPT residual gap backlog (R1–R13)
+## Prior finding families (still awaiting independent closure)
 
-| ID | Status | Residual risk |
-|---|---|---|
-| R1 Real Prisma schema drift | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R2 Compatibility-index safety tests | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R3 Bounded statement timeout | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R4 Apply-lock backend PID proofs | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R5 Affected-row concurrency re-read | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R6 Durable run-to-issue detections | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R7 Record identity wording | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R8 Backlog honesty | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R9 Deterministic concurrent-index overlap | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R10 Dataset boundaries + membership checksums | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R11 Full-engine affected-row races | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R12 Explicit maintenance URL for index apply | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
-| R13 Schema-datasource Prisma drift (no URL argv) | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
+Original F-PR1-01…15 and R1–R13 remain `IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION` / not independently closed. Claude could not execute Prisma-dependent commands in the correction review environment.
 
 ## Explicitly still open (not closed by PR 1 code)
 
-* **F-016 / R-022** — OPEN (database isolation gate; not resolved by PR 1)
+* **F-016 / R-022** — OPEN
 * **Q-011** — OPEN
-* **R-028 / R-029** — OPEN (pending fresh Claude correction review + later zero-unresolved evidence)
+* **R-028 / R-029** — OPEN
 * **R-041 through R-046** — OPEN
+* **R-047 through R-055** (F-N01–F-N09) — OPEN until independent acceptance
 * **PR 2 / PR 3** — NOT STARTED
+* **Production inventory writes** — UNAPPROVED; flags DEFAULT OFF
