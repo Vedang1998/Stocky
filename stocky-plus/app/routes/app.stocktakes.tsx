@@ -5,24 +5,23 @@ import type {
 } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { fetchLocations } from "../services/shopify-gql.server";
 import { adjustShopifyInventory } from "../services/shopify-sync.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, db } = await requireAdminTenant(request);
   const [stocktakes, locations, variants] = await Promise.all([
-    prisma.stocktake.findMany({
-      where: { shop: session.shop },
+    db.stocktake.findMany({
+      where: {},
       include: { lineItems: true },
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
     fetchLocations(admin),
-    prisma.shopifyVariantCache.findMany({
-      where: { shop: session.shop },
+    db.shopifyVariantCache.findMany({
+      where: {},
       orderBy: { title: "asc" },
       take: 250,
     }),
@@ -31,8 +30,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { admin, tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
@@ -40,13 +39,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const locationId = form.get("locationId") as string;
 
     // Freeze expected quantities from the latest inventory snapshots.
-    const snapshots = await prisma.inventorySnapshot.findMany({
-      where: { shop, locationId },
+    const snapshots = await db.inventorySnapshot.findMany({
+      where: { locationId },
       orderBy: { snapshotDate: "desc" },
       distinct: ["shopifyVariantId"],
     });
 
-    await prisma.stocktake.create({
+    await db.stocktake.create({
       data: {
         shop,
         locationId,
@@ -54,7 +53,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         status: "IN_PROGRESS",
         startedAt: new Date(),
         lineItems: {
-          create: snapshots.map((s) => ({
+          create: snapshots.map((s: any) => ({
             shopifyVariantId: s.shopifyVariantId,
             expectedQty: s.quantityAvailable,
           })),
@@ -67,20 +66,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "addItem") {
     const stocktakeId = form.get("stocktakeId") as string;
     const variantId = form.get("variantId") as string;
-    const stocktake = await prisma.stocktake.findFirst({
-      where: { id: stocktakeId, shop },
+    const stocktake = await db.stocktake.findFirst({
+      where: { id: stocktakeId },
     });
     if (!stocktake) return { error: "Stocktake not found" };
 
-    const existing = await prisma.stocktakeLineItem.findFirst({
+    const existing = await db.stocktakeLineItem.findFirst({
       where: { stocktakeId: stocktake.id, shopifyVariantId: variantId },
     });
     if (!existing) {
-      const snapshot = await prisma.inventorySnapshot.findFirst({
-        where: { shop, shopifyVariantId: variantId },
+      const snapshot = await db.inventorySnapshot.findFirst({
+        where: { shopifyVariantId: variantId },
         orderBy: { snapshotDate: "desc" },
       });
-      await prisma.stocktakeLineItem.create({
+      await db.stocktakeLineItem.create({
         data: {
           stocktakeId: stocktake.id,
           shopifyVariantId: variantId,
@@ -93,12 +92,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "count") {
     const lineId = form.get("lineId") as string;
-    const line = await prisma.stocktakeLineItem.findFirst({
-      where: { id: lineId, stocktake: { shop } },
+    const line = await db.stocktakeLineItem.findFirst({
+      where: { id: lineId },
     });
     if (!line) return { error: "Stocktake line not found" };
 
-    await prisma.stocktakeLineItem.update({
+    await db.stocktakeLineItem.update({
       where: { id: line.id },
       data: { countedQty: parseInt(form.get("countedQty") as string, 10) },
     });
@@ -118,8 +117,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const stocktakeId = form.get("stocktakeId") as string;
-    const stocktake = await prisma.stocktake.findFirst({
-      where: { id: stocktakeId, shop },
+    const stocktake = await db.stocktake.findFirst({
+      where: { id: stocktakeId },
       include: { lineItems: true },
     });
     if (!stocktake) return { error: "Stocktake not found" };
@@ -130,7 +129,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       const delta = line.countedQty - line.expectedQty;
       if (delta === 0) continue;
 
-      const cache = await prisma.shopifyVariantCache.findUnique({
+      const cache = await db.shopifyVariantCache.findUnique({
         where: {
           shop_shopifyVariantId: {
             shop,
@@ -164,7 +163,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     }
 
-    await prisma.stocktake.update({
+    await db.stocktake.update({
       where: { id: stocktakeId },
       data: { status: "COMPLETED", completedAt: new Date() },
     });
@@ -181,7 +180,7 @@ export default function Stocktakes() {
   const locationName = (id: string) =>
     locations.find((l) => l.id === id)?.name ?? id;
   const variantTitle = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   return (
     <s-page heading="Stocktakes (Cycle Counts)">
@@ -216,7 +215,7 @@ export default function Stocktakes() {
         </s-paragraph>
       </s-section>
 
-      {stocktakes.map((st) => (
+      {stocktakes.map((st: any) => (
         <s-section
           key={st.id}
           heading={`${st.name} — ${locationName(st.locationId)}`}
@@ -240,7 +239,7 @@ export default function Stocktakes() {
                 <input type="hidden" name="stocktakeId" value={st.id} />
                 <s-stack direction="inline" gap="base">
                   <s-select label="Add variant to sheet" name="variantId">
-                    {variants.map((v) => (
+                    {variants.map((v: any) => (
                       <s-option
                         key={v.shopifyVariantId}
                         value={v.shopifyVariantId}
@@ -266,7 +265,7 @@ export default function Stocktakes() {
                   <s-table-header>Entry</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
-                  {st.lineItems.map((line) => (
+                  {st.lineItems.map((line: any) => (
                     <s-table-row key={line.id}>
                       <s-table-cell>
                         {variantTitle(line.shopifyVariantId)}

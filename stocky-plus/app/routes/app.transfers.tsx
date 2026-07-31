@@ -5,8 +5,7 @@ import type {
 } from "react-router";
 import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { fetchLocations } from "../services/shopify-gql.server";
 import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import {
@@ -16,17 +15,17 @@ import {
 } from "../services/shopify-sync.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, db } = await requireAdminTenant(request);
   const [transfers, locations, variants] = await Promise.all([
-    prisma.transferOrder.findMany({
-      where: { shop: session.shop },
+    db.transferOrder.findMany({
+      where: {},
       include: { lineItems: true },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
     fetchLocations(admin),
-    prisma.shopifyVariantCache.findMany({
-      where: { shop: session.shop },
+    db.shopifyVariantCache.findMany({
+      where: {},
       orderBy: { title: "asc" },
       take: 250,
     }),
@@ -35,8 +34,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { admin, tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
@@ -46,7 +45,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (source === destination) {
       return { error: "Source and destination must differ" };
     }
-    await prisma.transferOrder.create({
+    await db.transferOrder.create({
       data: {
         shop,
         sourceLocationId: source,
@@ -60,12 +59,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "addLine") {
     const transferId = form.get("transferId") as string;
-    const transfer = await prisma.transferOrder.findFirst({
-      where: { id: transferId, shop },
+    const transfer = await db.transferOrder.findFirst({
+      where: { id: transferId },
     });
     if (!transfer) return { error: "Transfer not found" };
 
-    await prisma.transferLineItem.create({
+    await db.transferLineItem.create({
       data: {
         transferOrderId: transfer.id,
         shopifyVariantId: form.get("variantId") as string,
@@ -78,12 +77,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "pick") {
     const lineId = form.get("lineId") as string;
     const qty = parseInt(form.get("pickedQty") as string, 10);
-    const line = await prisma.transferLineItem.findFirst({
-      where: { id: lineId, transferOrder: { shop } },
+    const line = await db.transferLineItem.findFirst({
+      where: { id: lineId },
     });
     if (!line) return { error: "Transfer line not found" };
 
-    await prisma.transferLineItem.update({
+    await db.transferLineItem.update({
       where: { id: line.id },
       data: { pickedQty: qty },
     });
@@ -100,8 +99,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const transferId = form.get("transferId") as string;
-    const transfer = await prisma.transferOrder.findFirst({
-      where: { id: transferId, shop },
+    const transfer = await db.transferOrder.findFirst({
+      where: { id: transferId },
       include: { lineItems: true },
     });
     if (!transfer || transfer.lineItems.length === 0) {
@@ -111,7 +110,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Resolve inventoryItemIds from the variant cache for the Shopify mutation.
     const lineInputs: Array<{ inventoryItemId: string; quantity: number }> = [];
     for (const line of transfer.lineItems) {
-      const cache = await prisma.shopifyVariantCache.findUnique({
+      const cache = await db.shopifyVariantCache.findUnique({
         where: {
           shop_shopifyVariantId: {
             shop,
@@ -139,7 +138,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
       if (shopifyTransfer) {
         await markShopifyTransferReadyToShip(admin, shopifyTransfer.id);
-        await prisma.transferOrder.update({
+        await db.transferOrder.update({
           where: { id: transferId },
           data: {
             status: "IN_TRANSIT",
@@ -164,8 +163,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     const transferId = form.get("transferId") as string;
-    const transfer = await prisma.transferOrder.findFirst({
-      where: { id: transferId, shop },
+    const transfer = await db.transferOrder.findFirst({
+      where: { id: transferId },
       include: { lineItems: true },
     });
     if (!transfer) return { error: "Transfer not found" };
@@ -182,20 +181,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         transfer.shopifyTransferId ?? "missing-shopify-transfer-id",
       );
 
-      await prisma.$transaction([
-        ...transfer.lineItems.map((line) =>
-          prisma.transferLineItem.update({
+      await db.$transaction(async (tx) => {
+        for (const line of transfer.lineItems) {
+          await tx.transferLineItem.update({
             where: { id: line.id },
             data: {
               receivedQty: line.pickedQty > 0 ? line.pickedQty : line.quantity,
             },
-          }),
-        ),
-        prisma.transferOrder.update({
+          });
+        }
+        await tx.transferOrder.update({
           where: { id: transferId },
           data: { status: "RECEIVED", receivedAt: new Date() },
-        }),
-      ]);
+        });
+      });
       return { ok: true };
     } catch (err) {
       return {
@@ -208,8 +207,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "cancel") {
-    await prisma.transferOrder.updateMany({
-      where: { id: form.get("transferId") as string, shop, status: "DRAFT" },
+    await db.transferOrder.updateMany({
+      where: { id: form.get("transferId") as string, status: "DRAFT" },
       data: { status: "CANCELLED" },
     });
     return { ok: true };
@@ -232,7 +231,7 @@ export default function Transfers() {
   const locationName = (id: string) =>
     locations.find((l) => l.id === id)?.name ?? id;
   const variantTitle = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   return (
     <s-page heading="Transfer Orders">
@@ -270,7 +269,7 @@ export default function Transfers() {
         </Form>
       </s-section>
 
-      {transfers.map((transfer) => (
+      {transfers.map((transfer: any) => (
         <s-section
           key={transfer.id}
           heading={`${locationName(transfer.sourceLocationId)} → ${locationName(transfer.destinationLocationId)}`}
@@ -293,7 +292,7 @@ export default function Transfers() {
                   <s-table-header>Picking</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
-                  {transfer.lineItems.map((line) => (
+                  {transfer.lineItems.map((line: any) => (
                     <s-table-row key={line.id}>
                       <s-table-cell>
                         {variantTitle(line.shopifyVariantId)}
@@ -334,7 +333,7 @@ export default function Transfers() {
                 <input type="hidden" name="transferId" value={transfer.id} />
                 <s-stack direction="inline" gap="base">
                   <s-select label="Variant" name="variantId" required>
-                    {variants.map((v) => (
+                    {variants.map((v: any) => (
                       <s-option
                         key={v.shopifyVariantId}
                         value={v.shopifyVariantId}

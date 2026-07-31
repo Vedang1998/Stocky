@@ -5,18 +5,17 @@ import type {
 } from "react-router";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { db } = await requireAdminTenant(request);
   const [components, variants] = await Promise.all([
-    prisma.bomComponent.findMany({
-      where: { shop: session.shop },
+    db.bomComponent.findMany({
+      where: {},
       orderBy: { bundleVariantId: "asc" },
     }),
-    prisma.shopifyVariantCache.findMany({
-      where: { shop: session.shop },
+    db.shopifyVariantCache.findMany({
+      where: {},
       orderBy: { title: "asc" },
       take: 250,
     }),
@@ -25,7 +24,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
@@ -35,16 +35,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (bundleVariantId === componentVariantId) {
       return { error: "A bundle cannot contain itself" };
     }
-    await prisma.bomComponent.upsert({
+    await db.bomComponent.upsert({
       where: {
         shop_bundleVariantId_componentVariantId: {
-          shop: session.shop,
+          shop,
           bundleVariantId,
           componentVariantId,
         },
       },
       create: {
-        shop: session.shop,
+        shop,
         bundleVariantId,
         componentVariantId,
         quantity: parseFloat((form.get("quantity") as string) || "1"),
@@ -56,8 +56,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "delete") {
-    await prisma.bomComponent.deleteMany({
-      where: { id: form.get("id") as string, shop: session.shop },
+    await db.bomComponent.deleteMany({
+      where: { id: form.get("id") as string },
     });
   }
 
@@ -68,7 +68,7 @@ export default function Bundles() {
   const { components, variants } = useLoaderData<typeof loader>();
 
   const variantTitle = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   const bundles = new Map<string, typeof components>();
   for (const c of components) {
@@ -89,7 +89,7 @@ export default function Bundles() {
           <input type="hidden" name="intent" value="add" />
           <s-stack direction="inline" gap="base">
             <s-select label="Bundle variant" name="bundleVariantId" required>
-              {variants.map((v) => (
+              {variants.map((v: any) => (
                 <s-option key={v.shopifyVariantId} value={v.shopifyVariantId}>
                   {v.title}
                 </s-option>
@@ -100,7 +100,7 @@ export default function Bundles() {
               name="componentVariantId"
               required
             >
-              {variants.map((v) => (
+              {variants.map((v: any) => (
                 <s-option key={v.shopifyVariantId} value={v.shopifyVariantId}>
                   {v.title}
                 </s-option>
@@ -129,7 +129,7 @@ export default function Bundles() {
               <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {comps.map((c) => (
+              {comps.map((c: any) => (
                 <s-table-row key={c.id}>
                   <s-table-cell>
                     {variantTitle(c.componentVariantId)}

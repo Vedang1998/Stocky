@@ -1,8 +1,9 @@
-import prisma from "../db.server";
 import type { AbcClass, AbcMetric } from "@prisma/client";
+import type { TenantDb } from "../tenant/tenant-db.server";
 
 export interface ForecastInput {
-  shop: string;
+  /** @deprecated Untrusted display/legacy field — authority comes from TenantDb. */
+  shop?: string;
   variantId: string;
   locationId: string;
   lookbackDays?: number;
@@ -54,15 +55,14 @@ export function calculateToBuy(
 }
 
 async function countOutOfStockDays(
-  shop: string,
+  db: TenantDb,
   variantId: string,
   locationId: string,
   start: Date,
   end: Date,
 ): Promise<number> {
-  const snapshots = await prisma.inventorySnapshot.findMany({
+  const snapshots = await db.inventorySnapshot.findMany({
     where: {
-      shop,
       shopifyVariantId: variantId,
       locationId,
       snapshotDate: { gte: start, lte: end },
@@ -71,51 +71,66 @@ async function countOutOfStockDays(
 
   if (snapshots.length === 0) return 0;
 
-  return snapshots.filter((s) => s.quantityAvailable <= 0).length;
+  return snapshots.filter((s: { quantityAvailable: number }) => s.quantityAvailable <= 0)
+    .length;
 }
 
 async function getUnitsSold(
-  shop: string,
+  db: TenantDb,
   variantId: string,
   locationId: string,
   start: Date,
   end: Date,
 ): Promise<number> {
-  const aggregates = await prisma.salesDailyAggregate.findMany({
+  const aggregates = await db.salesDailyAggregate.findMany({
     where: {
-      shop,
       shopifyVariantId: variantId,
       locationId,
       date: { gte: start, lte: end },
     },
   });
-  return aggregates.reduce((sum, a) => sum + a.unitsSold, 0);
+  return aggregates.reduce(
+    (sum: number, a: { unitsSold: number }) => sum + a.unitsSold,
+    0,
+  );
 }
 
 async function getIncomingQty(
-  shop: string,
+  db: TenantDb,
   variantId: string,
 ): Promise<number> {
-  const openPOs = await prisma.purchaseOrder.findMany({
+  const openPOs = await db.purchaseOrder.findMany({
     where: {
-      shop,
       status: { in: ["ORDERED", "PARTIAL"] },
     },
     include: { lineItems: true },
   });
 
-  return openPOs.reduce((sum, po) => {
-    const line = po.lineItems.find((l) => l.shopifyVariantId === variantId);
-    if (!line) return sum;
-    return sum + (line.orderedQty - line.receivedQty);
-  }, 0);
+  return openPOs.reduce(
+    (
+      sum: number,
+      po: {
+        lineItems: Array<{
+          shopifyVariantId: string;
+          orderedQty: number;
+          receivedQty: number;
+        }>;
+      },
+    ) => {
+      const line = po.lineItems.find((l) => l.shopifyVariantId === variantId);
+      if (!line) return sum;
+      return sum + (line.orderedQty - line.receivedQty);
+    },
+    0,
+  );
 }
 
 export async function computeForecast(
+  db: TenantDb,
   input: ForecastInput,
 ): Promise<ForecastResult> {
-  const settings = await prisma.shopSettings.findUnique({
-    where: { shop: input.shop },
+  const settings = await db.shopSettings.findUnique({
+    where: { shop: db.authority.myshopifyDomain },
   });
 
   const lookbackDays =
@@ -130,10 +145,10 @@ export async function computeForecast(
     input.lookbackStart ??
     new Date(end.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
 
-  const override = await prisma.forecastOverride.findUnique({
+  const override = await db.forecastOverride.findUnique({
     where: {
       shop_variantId_locationId: {
-        shop: input.shop,
+        shop: db.authority.myshopifyDomain,
         variantId: input.variantId,
         locationId: input.locationId,
       },
@@ -149,20 +164,20 @@ export async function computeForecast(
 
   const [unitsSold, outOfStockDays, incoming] = await Promise.all([
     getUnitsSold(
-      input.shop,
+      db,
       input.variantId,
       input.locationId,
       effectiveStart,
       effectiveEnd,
     ),
     countOutOfStockDays(
-      input.shop,
+      db,
       input.variantId,
       input.locationId,
       effectiveStart,
       effectiveEnd,
     ),
-    getIncomingQty(input.shop, input.variantId),
+    getIncomingQty(db, input.variantId),
   ]);
 
   const dailySalesVelocity = calculateDailySalesVelocity(
@@ -171,7 +186,7 @@ export async function computeForecast(
     outOfStockDays,
   );
 
-  const mapping = await prisma.supplierSkuMapping.findFirst({
+  const mapping = await db.supplierSkuMapping.findFirst({
     where: { shopifyVariantId: input.variantId },
     include: { supplier: true },
   });
@@ -184,9 +199,8 @@ export async function computeForecast(
     safetyStock,
   );
 
-  const onHand = await prisma.inventorySnapshot.findFirst({
+  const onHand = await db.inventorySnapshot.findFirst({
     where: {
-      shop: input.shop,
       shopifyVariantId: input.variantId,
       locationId: input.locationId,
     },
@@ -213,17 +227,16 @@ export async function computeForecast(
 }
 
 export async function runAbcAnalysis(
-  shop: string,
+  db: TenantDb,
   metric: AbcMetric = "REVENUE",
   locationId = "all",
 ): Promise<void> {
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-  const aggregates = await prisma.salesDailyAggregate.groupBy({
+  const aggregates = await db.salesDailyAggregate.groupBy({
     by: ["shopifyVariantId"],
     where: {
-      shop,
       ...(locationId !== "all" ? { locationId } : {}),
       date: { gte: ninetyDaysAgo },
     },
@@ -277,9 +290,11 @@ export async function runAbcAnalysis(
     });
   }
 
+  const shop = db.authority.myshopifyDomain;
+
   await Promise.all(
     classifications.map((c) =>
-      prisma.variantAbcClass.upsert({
+      db.variantAbcClass.upsert({
         where: {
           shop_shopifyVariantId_locationId_metric: {
             shop,
@@ -309,7 +324,7 @@ export async function runAbcAnalysis(
 }
 
 export async function getDeadStock(
-  shop: string,
+  db: TenantDb,
   days = 120,
 ): Promise<
   Array<{
@@ -322,10 +337,10 @@ export async function getDeadStock(
 > {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - days);
+  const shop = db.authority.myshopifyDomain;
 
-  const variantsWithStock = await prisma.inventorySnapshot.findMany({
+  const variantsWithStock = await db.inventorySnapshot.findMany({
     where: {
-      shop,
       quantityAvailable: { gt: 0 },
       snapshotDate: { gte: cutoff },
     },
@@ -335,9 +350,8 @@ export async function getDeadStock(
   const deadStock = [];
 
   for (const snap of variantsWithStock) {
-    const sales = await prisma.salesDailyAggregate.aggregate({
+    const sales = await db.salesDailyAggregate.aggregate({
       where: {
-        shop,
         shopifyVariantId: snap.shopifyVariantId,
         date: { gte: cutoff },
       },
@@ -345,7 +359,7 @@ export async function getDeadStock(
     });
 
     if ((sales._sum.unitsSold ?? 0) === 0) {
-      const cache = await prisma.shopifyVariantCache.findUnique({
+      const cache = await db.shopifyVariantCache.findUnique({
         where: {
           shop_shopifyVariantId: {
             shop,
@@ -354,7 +368,7 @@ export async function getDeadStock(
         },
       });
 
-      const latestPO = await prisma.pOLineItem.findFirst({
+      const latestPO = await db.pOLineItem.findFirst({
         where: { shopifyVariantId: snap.shopifyVariantId },
         orderBy: { id: "desc" },
       });
@@ -376,9 +390,11 @@ export async function getDeadStock(
   return deadStock.sort((a, b) => b.tiedUpCapital - a.tiedUpCapital);
 }
 
-export async function getInventoryValuation(shop: string) {
-  const latestSnapshots = await prisma.inventorySnapshot.findMany({
-    where: { shop },
+export async function getInventoryValuation(db: TenantDb) {
+  const shop = db.authority.myshopifyDomain;
+
+  const latestSnapshots = await db.inventorySnapshot.findMany({
+    where: {},
     orderBy: { snapshotDate: "desc" },
     distinct: ["shopifyVariantId", "locationId"],
   });
@@ -387,7 +403,7 @@ export async function getInventoryValuation(shop: string) {
   const lines = [];
 
   for (const snap of latestSnapshots) {
-    const latestPO = await prisma.pOLineItem.findFirst({
+    const latestPO = await db.pOLineItem.findFirst({
       where: { shopifyVariantId: snap.shopifyVariantId },
       orderBy: { id: "desc" },
     });
@@ -398,7 +414,7 @@ export async function getInventoryValuation(shop: string) {
     const value = snap.quantityAvailable * unitCost;
     totalValue += value;
 
-    const cache = await prisma.shopifyVariantCache.findUnique({
+    const cache = await db.shopifyVariantCache.findUnique({
       where: {
         shop_shopifyVariantId: {
           shop,
@@ -420,9 +436,9 @@ export async function getInventoryValuation(shop: string) {
   return { totalValue, lines };
 }
 
-export async function getLowStockAlerts(shop: string) {
-  return prisma.lowStockAlert.findMany({
-    where: { shop, acknowledged: false },
+export async function getLowStockAlerts(db: TenantDb) {
+  return db.lowStockAlert.findMany({
+    where: { acknowledged: false },
     orderBy: { createdAt: "desc" },
     take: 50,
   });

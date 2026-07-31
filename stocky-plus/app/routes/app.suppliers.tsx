@@ -5,13 +5,12 @@ import type {
 } from "react-router";
 import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const suppliers = await prisma.supplier.findMany({
-    where: { shop: session.shop },
+  const { db } = await requireAdminTenant(request);
+  const suppliers = await db.supplier.findMany({
+    where: {},
     include: {
       _count: { select: { skuMappings: true, purchaseOrders: true } },
     },
@@ -21,14 +20,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { tenant, db } = await requireAdminTenant(request);
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
   if (intent === "create") {
-    await prisma.supplier.create({
+    await db.supplier.create({
       data: {
-        shop: session.shop,
+        shop: tenant.myshopifyDomain,
         name: form.get("name") as string,
         accountNumber: (form.get("accountNumber") as string) || null,
         contactEmail: (form.get("contactEmail") as string) || null,
@@ -40,8 +39,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "delete") {
     const id = form.get("id") as string;
-    await prisma.supplier.deleteMany({
-      where: { id, shop: session.shop },
+    await db.supplier.deleteMany({
+      where: { id },
     });
   }
 
@@ -92,7 +91,7 @@ export default function Suppliers() {
               <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {suppliers.map((s) => (
+              {suppliers.map((s: any) => (
                 <s-table-row key={s.id}>
                   <s-table-cell>
                     <s-link href={`/app/suppliers/${s.id}`}>{s.name}</s-link>

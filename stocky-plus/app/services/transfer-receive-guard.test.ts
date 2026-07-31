@@ -9,12 +9,14 @@ import type { ActionFunctionArgs } from "react-router";
 import { UnsupportedShopifyOperationError } from "./shopify-sync.server";
 
 const SHOP = "shop-a.myshopify.com";
+const SHOP_ID = "shop-a-canonical-id";
 
 const {
   prismaMock,
   authenticateAdmin,
   completeShopifyTransfer,
   createShopifyTransfer,
+  resolveCanonicalShopByDomain,
 } = vi.hoisted(() => {
   const prismaMock = {
     transferOrder: {
@@ -40,6 +42,7 @@ const {
     authenticateAdmin: vi.fn(),
     completeShopifyTransfer: vi.fn(),
     createShopifyTransfer: vi.fn(),
+    resolveCanonicalShopByDomain: vi.fn(),
   };
 });
 
@@ -49,6 +52,20 @@ vi.mock("../shopify.server", () => ({
   authenticate: {
     admin: authenticateAdmin,
   },
+}));
+
+vi.mock("../tenant/bootstrap.server", () => ({
+  shopifySessionStorage: {
+    storeSession: vi.fn(),
+    loadSession: vi.fn(),
+    deleteSession: vi.fn(),
+    deleteSessions: vi.fn(),
+    findSessionsByShop: vi.fn(),
+  },
+  normalizeVerifiedShopifyDomain: (raw: string) => raw,
+  resolveCanonicalShopByDomain,
+  deleteSessionsForShop: vi.fn(),
+  updateSessionScope: vi.fn(),
 }));
 
 vi.mock("./shopify-gql.server", () => ({
@@ -92,6 +109,10 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
       session: { shop: SHOP },
       admin: { graphql: vi.fn() },
       redirect: vi.fn(),
+    });
+    resolveCanonicalShopByDomain.mockResolvedValue({
+      id: SHOP_ID,
+      myshopifyDomain: SHOP,
     });
     completeShopifyTransfer.mockImplementation(async () => {
       throw new UnsupportedShopifyOperationError(

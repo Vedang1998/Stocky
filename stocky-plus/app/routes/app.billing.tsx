@@ -5,8 +5,7 @@ import type {
 } from "react-router";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
   createAppSubscription,
 } from "../services/shopify-sync.server";
@@ -38,8 +37,8 @@ const PLANS = [
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { admin, tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
 
   // Refresh subscription status from Shopify on every visit (handles the
   // return redirect after the merchant approves the charge).
@@ -65,7 +64,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     (s) => s.status === "ACTIVE",
   );
 
-  const settings = await prisma.shopSettings.upsert({
+  const settings = await db.shopSettings.upsert({
     where: { shop },
     create: {
       shop,
@@ -82,7 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, redirect } = await authenticate.admin(request);
+  const { admin, redirect } = await requireAdminTenant(request);
   const form = await request.formData();
   const planName = form.get("plan") as string;
   const plan = PLANS.find((p) => p.name === planName);
@@ -99,6 +98,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   );
 
   if (result?.confirmationUrl) {
+    if (!redirect) {
+      return { error: "Could not redirect to subscription confirmation" };
+    }
     // Break out of the iframe so the merchant can approve the charge.
     return redirect(result.confirmationUrl, { target: "_top" });
   }

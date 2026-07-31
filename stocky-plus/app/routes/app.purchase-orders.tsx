@@ -5,8 +5,7 @@ import type {
 } from "react-router";
 import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { fetchLocations } from "../services/shopify-gql.server";
 import {
@@ -18,21 +17,21 @@ import {
 } from "../services/landed-cost.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, db } = await requireAdminTenant(request);
   const [orders, suppliers, locations, variants] = await Promise.all([
-    prisma.purchaseOrder.findMany({
-      where: { shop: session.shop },
+    db.purchaseOrder.findMany({
+      where: {},
       include: { supplier: true, lineItems: true },
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
-    prisma.supplier.findMany({
-      where: { shop: session.shop },
+    db.supplier.findMany({
+      where: {},
       orderBy: { name: "asc" },
     }),
     fetchLocations(admin),
-    prisma.shopifyVariantCache.findMany({
-      where: { shop: session.shop },
+    db.shopifyVariantCache.findMany({
+      where: {},
       orderBy: { title: "asc" },
       take: 250,
     }),
@@ -41,19 +40,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
   if (intent === "create") {
     const supplierId = form.get("supplierId") as string;
-    const supplier = await prisma.supplier.findFirst({
-      where: { id: supplierId, shop },
+    const supplier = await db.supplier.findFirst({
+      where: { id: supplierId },
     });
     if (!supplier) return { error: "Supplier not found" };
 
-    await prisma.purchaseOrder.create({
+    await db.purchaseOrder.create({
       data: {
         shop,
         supplierId: supplier.id,
@@ -84,18 +83,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const variantId = form.get("variantId") as string;
     const manualCost = form.get("unitCost") as string;
 
-    const po = await prisma.purchaseOrder.findFirst({
-      where: { id: poId, shop },
+    const po = await db.purchaseOrder.findFirst({
+      where: { id: poId },
     });
     if (!po) return { error: "Purchase order not found" };
 
     // Tiered pricing from Module 1 is the default; a manual entry overrides it.
-    const tierCost = await resolveTieredUnitCost(po.supplierId, variantId, qty);
+    const tierCost = await resolveTieredUnitCost(db, po.supplierId, variantId, qty);
     const unitCost = manualCost
       ? parseFloat(manualCost)
       : Number(tierCost ?? 0);
 
-    const mapping = await prisma.supplierSkuMapping.findUnique({
+    const mapping = await db.supplierSkuMapping.findUnique({
       where: {
         supplierId_shopifyVariantId: {
           supplierId: po.supplierId,
@@ -103,7 +102,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         },
       },
     });
-    const cache = await prisma.shopifyVariantCache.findUnique({
+    const cache = await db.shopifyVariantCache.findUnique({
       where: {
         shop_shopifyVariantId: {
           shop,
@@ -112,7 +111,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       },
     });
 
-    await prisma.pOLineItem.create({
+    await db.pOLineItem.create({
       data: {
         purchaseOrderId: po.id,
         shopifyVariantId: variantId,
@@ -129,22 +128,22 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "updateQty") {
     const lineItemId = form.get("lineItemId") as string;
     const qty = parseInt(form.get("quantity") as string, 10);
-    const line = await prisma.pOLineItem.findFirst({
-      where: { id: lineItemId, purchaseOrder: { shop } },
+    const line = await db.pOLineItem.findFirst({
+      where: { id: lineItemId },
     });
     if (!line) return { error: "PO line not found" };
-    await recalculatePOLineCost(line.id, qty);
+    await recalculatePOLineCost(db, line.id, qty);
     return { ok: true };
   }
 
   if (intent === "order") {
     const poId = form.get("poId") as string;
-    const po = await prisma.purchaseOrder.findFirst({
-      where: { id: poId, shop },
+    const po = await db.purchaseOrder.findFirst({
+      where: { id: poId },
     });
     if (!po) return { error: "Purchase order not found" };
-    await applyLandedCostsToPO(po.id);
-    await prisma.purchaseOrder.update({
+    await applyLandedCostsToPO(db, po.id);
+    await db.purchaseOrder.update({
       where: { id: po.id },
       data: { status: "ORDERED", orderedAt: new Date() },
     });
@@ -153,8 +152,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "cancel") {
     const poId = form.get("poId") as string;
-    const result = await prisma.purchaseOrder.updateMany({
-      where: { id: poId, shop },
+    const result = await db.purchaseOrder.updateMany({
+      where: { id: poId },
       data: { status: "CANCELLED" },
     });
     if (result.count === 0) return { error: "Purchase order not found" };
@@ -179,21 +178,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const poId = form.get("poId") as string;
     const lineItemId = form.get("lineItemId") as string;
     const qty = parseInt(form.get("receivedQty") as string, 10);
-    const po = await prisma.purchaseOrder.findFirst({
-      where: { id: poId, shop },
+    const po = await db.purchaseOrder.findFirst({
+      where: { id: poId },
       include: { lineItems: { where: { id: lineItemId } } },
     });
     if (!po || po.lineItems.length === 0) {
       return { error: "Purchase order or line not found" };
     }
 
-    await receivePartialPO(po.id, [{ lineItemId, receivedQty: qty }]);
+    await receivePartialPO(db, po.id, [{ lineItemId, receivedQty: qty }]);
 
-    const refreshed = await prisma.purchaseOrder.findFirst({
-      where: { id: po.id, shop },
+    const refreshed = await db.purchaseOrder.findFirst({
+      where: { id: po.id },
     });
     if (refreshed?.status === "RECEIVED") {
-      await recordLeadTimeSnapshot(refreshed.supplierId, po.id);
+      await recordLeadTimeSnapshot(db, refreshed.supplierId, po.id);
     }
     return { ok: true };
   }
@@ -216,7 +215,7 @@ export default function PurchaseOrders() {
   const isSubmitting = navigation.state === "submitting";
 
   const variantTitle = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   return (
     <s-page heading="Purchase Orders">
@@ -225,7 +224,7 @@ export default function PurchaseOrders() {
           <input type="hidden" name="intent" value="create" />
           <s-stack direction="block" gap="base">
             <s-select label="Supplier" name="supplierId" required>
-              {suppliers.map((s) => (
+              {suppliers.map((s: any) => (
                 <s-option key={s.id} value={s.id}>
                   {s.name}
                 </s-option>
@@ -282,7 +281,7 @@ export default function PurchaseOrders() {
           </s-paragraph>
         </s-section>
       ) : (
-        orders.map((po) => (
+        orders.map((po: any) => (
           <s-section
             key={po.id}
             heading={`${po.supplier.name} — ${po.poNumber ?? po.id.slice(-6).toUpperCase()}`}
@@ -318,7 +317,7 @@ export default function PurchaseOrders() {
                     <s-table-header>Actions</s-table-header>
                   </s-table-header-row>
                   <s-table-body>
-                    {po.lineItems.map((li) => (
+                    {po.lineItems.map((li: any) => (
                       <s-table-row key={li.id}>
                         <s-table-cell>
                           {variantTitle(li.shopifyVariantId)}
@@ -390,7 +389,7 @@ export default function PurchaseOrders() {
                   <input type="hidden" name="poId" value={po.id} />
                   <s-stack direction="inline" gap="base">
                     <s-select label="Variant" name="variantId" required>
-                      {variants.map((v) => (
+                      {variants.map((v: any) => (
                         <s-option
                           key={v.shopifyVariantId}
                           value={v.shopifyVariantId}

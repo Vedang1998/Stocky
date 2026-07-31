@@ -1,7 +1,8 @@
 /**
  * Cross-shop denial characterization — Shop B must not mutate Shop A records.
  *
- * Authenticated shop is always session.shop from authenticate.admin (server-side).
+ * Authenticated shop is always session.shop from authenticate.admin (server-side),
+ * resolved through requireAdminTenant → TenantDb auto-scoping.
  * Inventory-write flags remain default OFF; no Shopify GraphQL mutations occur.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,6 +10,7 @@ import type { ActionFunctionArgs } from "react-router";
 
 const SHOP_A = "shop-a.myshopify.com";
 const SHOP_B = "shop-b.myshopify.com";
+const SHOP_B_ID = "shop-b-canonical-id";
 
 const {
   prismaMock,
@@ -21,6 +23,7 @@ const {
   recalculatePOLineCost,
   resolveTieredUnitCost,
   featureFlags,
+  resolveCanonicalShopByDomain,
 } = vi.hoisted(() => {
   const prismaMock = {
     purchaseOrder: {
@@ -97,6 +100,7 @@ const {
     receivePartialPO: vi.fn(),
     recalculatePOLineCost: vi.fn(),
     resolveTieredUnitCost: vi.fn(),
+    resolveCanonicalShopByDomain: vi.fn(),
     featureFlags: {
       stocktakeInventoryWrites: vi.fn(() => false),
       adjustmentWrites: vi.fn(() => false),
@@ -113,6 +117,20 @@ vi.mock("../shopify.server", () => ({
   authenticate: {
     admin: authenticateAdmin,
   },
+}));
+
+vi.mock("../tenant/bootstrap.server", () => ({
+  shopifySessionStorage: {
+    storeSession: vi.fn(),
+    loadSession: vi.fn(),
+    deleteSession: vi.fn(),
+    deleteSessions: vi.fn(),
+    findSessionsByShop: vi.fn(),
+  },
+  normalizeVerifiedShopifyDomain: (raw: string) => raw,
+  resolveCanonicalShopByDomain,
+  deleteSessionsForShop: vi.fn(),
+  updateSessionScope: vi.fn(),
 }));
 
 vi.mock("../services/shopify-gql.server", () => ({
@@ -174,6 +192,24 @@ function authAsShopB() {
     admin: { graphql: vi.fn() },
     redirect: vi.fn(),
   });
+  resolveCanonicalShopByDomain.mockResolvedValue({
+    id: SHOP_B_ID,
+    myshopifyDomain: SHOP_B,
+  });
+}
+
+/** TenantDb merges caller where with direct-model shop scope via AND. */
+function directScoped(where: Record<string, unknown>) {
+  return {
+    AND: [where, { shopId: SHOP_B_ID, shop: SHOP_B }],
+  };
+}
+
+/** TenantDb merges caller where with child-model shopId scope via AND. */
+function childScoped(where: Record<string, unknown>) {
+  return {
+    AND: [where, { shopId: SHOP_B_ID }],
+  };
 }
 
 describe("cross-shop denial", () => {
@@ -212,7 +248,7 @@ describe("cross-shop denial", () => {
 
     expect(authenticateAdmin).toHaveBeenCalled();
     expect(prismaMock.purchaseOrder.findFirst).toHaveBeenCalledWith({
-      where: { id: "po-shop-a", shop: SHOP_B },
+      where: directScoped({ id: "po-shop-a" }),
     });
     expect(result).toEqual({ error: "Purchase order not found" });
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
@@ -236,7 +272,7 @@ describe("cross-shop denial", () => {
     );
 
     expect(prismaMock.stocktakeLineItem.findFirst).toHaveBeenCalledWith({
-      where: { id: "stl-shop-a", stocktake: { shop: SHOP_B } },
+      where: childScoped({ id: "stl-shop-a" }),
     });
     expect(result).toEqual({ error: "Stocktake line not found" });
     expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
@@ -259,7 +295,7 @@ describe("cross-shop denial", () => {
     );
 
     expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
-      where: { id: "tr-shop-a", shop: SHOP_B },
+      where: directScoped({ id: "tr-shop-a" }),
     });
     expect(result).toEqual({ error: "Transfer not found" });
     expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
@@ -285,7 +321,7 @@ describe("cross-shop denial", () => {
     ).rejects.toMatchObject({ status: 404 });
 
     expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
-      where: { id: "supplier-shop-a", shop: SHOP_B },
+      where: directScoped({ id: "supplier-shop-a" }),
     });
     expect(prismaMock.supplierSkuMapping.deleteMany).not.toHaveBeenCalled();
     expect(prismaMock.volumePriceTier.deleteMany).not.toHaveBeenCalled();
@@ -307,7 +343,7 @@ describe("cross-shop denial", () => {
     );
 
     expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
-      where: { id: "supplier-shop-a", shop: SHOP_B },
+      where: directScoped({ id: "supplier-shop-a" }),
     });
     expect(result).toEqual({ error: "Supplier not found" });
     expect(prismaMock.supplierSkuMapping.findFirst).not.toHaveBeenCalled();
@@ -330,7 +366,7 @@ describe("cross-shop denial", () => {
 
     expect(authenticateAdmin).toHaveBeenCalled();
     expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
-      where: { id: "po-shop-a", shop: SHOP_B },
+      where: directScoped({ id: "po-shop-a" }),
       data: { status: "CANCELLED" },
     });
     expect(result).toEqual({ error: "Purchase order not found" });
@@ -346,26 +382,26 @@ describe("cross-shop denial", () => {
 
   it("rejects client-supplied Shop A as authority on PO cancel (session shop wins)", async () => {
     // Control test — not counted as a standalone record-level denial case.
-    // Session shop is Shop B even if a form field tries to smuggle Shop A.
+    // Conflicting form shop must never establish authority; requireAdminTenant denies.
     const { action } = await import("../routes/app.purchase-orders");
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
 
-    const result = await action(
-      actionArgs(
-        formRequest({
-          intent: "cancel",
-          poId: "po-shop-a",
-          shop: SHOP_A,
-        }),
+    await expect(
+      action(
+        actionArgs(
+          formRequest({
+            intent: "cancel",
+            poId: "po-shop-a",
+            shop: SHOP_A,
+          }),
+        ),
       ),
-    );
+    ).rejects.toMatchObject({
+      code: "client_shop_conflict",
+    });
 
     expect(authenticateAdmin).toHaveBeenCalled();
-    expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
-      where: { id: "po-shop-a", shop: SHOP_B },
-      data: { status: "CANCELLED" },
-    });
-    expect(result).toEqual({ error: "Purchase order not found" });
+    expect(prismaMock.purchaseOrder.updateMany).not.toHaveBeenCalled();
     expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.update).not.toHaveBeenCalled();
@@ -392,7 +428,7 @@ describe("cross-shop denial", () => {
 
       expect(authenticateAdmin).toHaveBeenCalled();
       expect(prismaMock.stocktake.findFirst).toHaveBeenCalledWith({
-        where: { id: "st-shop-a", shop: SHOP_B },
+        where: directScoped({ id: "st-shop-a" }),
         include: { lineItems: true },
       });
       expect(result).toEqual({ error: "Stocktake not found" });
@@ -428,7 +464,7 @@ describe("cross-shop denial", () => {
 
       expect(authenticateAdmin).toHaveBeenCalled();
       expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
-        where: { id: "tr-shop-a", shop: SHOP_B },
+        where: directScoped({ id: "tr-shop-a" }),
         include: { lineItems: true },
       });
       expect(result).toEqual({ error: "Transfer has no line items" });
@@ -470,10 +506,13 @@ describe("cross-shop denial", () => {
 
     expect(authenticateAdmin).toHaveBeenCalled();
     expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
-      where: { id: "supplier-shop-b", shop: SHOP_B },
+      where: directScoped({ id: "supplier-shop-b" }),
     });
     expect(prismaMock.supplierSkuMapping.findFirst).toHaveBeenCalledWith({
-      where: { id: "map-shop-a", supplierId: "supplier-shop-b" },
+      where: childScoped({
+        id: "map-shop-a",
+        supplierId: "supplier-shop-b",
+      }),
     });
     expect(result).toEqual({ ok: false });
     expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();

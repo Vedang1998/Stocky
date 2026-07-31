@@ -5,28 +5,27 @@ import type {
 } from "react-router";
 import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { getLowStockAlerts } from "../services/forecasting.server";
 import { enqueueCatalogSync } from "../jobs/queue.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
 
   const [settings, alerts, openPOs, supplierCount, cachedVariants] =
     await Promise.all([
-      prisma.shopSettings.upsert({
+      db.shopSettings.upsert({
         where: { shop },
         create: { shop },
         update: {},
       }),
-      getLowStockAlerts(shop),
-      prisma.purchaseOrder.count({
-        where: { shop, status: { in: ["ORDERED", "PARTIAL"] } },
+      getLowStockAlerts(db),
+      db.purchaseOrder.count({
+        where: { status: { in: ["ORDERED", "PARTIAL"] } },
       }),
-      prisma.supplier.count({ where: { shop } }),
-      prisma.shopifyVariantCache.count({ where: { shop } }),
+      db.supplier.count({ where: {} }),
+      db.shopifyVariantCache.count({ where: {} }),
     ]);
 
   return {
@@ -39,18 +38,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { tenant, db } = await requireAdminTenant(request);
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
-    await enqueueCatalogSync(session.shop);
+    await enqueueCatalogSync(tenant);
     return { synced: true };
   }
 
   if (intent === "ackAlert") {
-    await prisma.lowStockAlert.updateMany({
-      where: { id: form.get("alertId") as string, shop: session.shop },
+    await db.lowStockAlert.updateMany({
+      where: { id: form.get("alertId") as string },
       data: { acknowledged: true },
     });
     return { ok: true };
@@ -107,7 +106,7 @@ export default function Dashboard() {
               <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {alerts.map((alert) => (
+              {alerts.map((alert: any) => (
                 <s-table-row key={alert.id}>
                   <s-table-cell>{alert.shopifyVariantId}</s-table-cell>
                   <s-table-cell>{alert.currentStock}</s-table-cell>

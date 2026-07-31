@@ -1,5 +1,10 @@
 import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
+import type { TenantAuthority } from "../tenant/authority.server";
+import {
+  createTenantJobEnvelope,
+  type TenantJobEnvelopeV1,
+} from "../tenant/job-envelope.server";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
@@ -17,8 +22,18 @@ export const CRON_QUEUE = "stocky-cron";
 
 export type WebhookJobData = {
   topic: string;
-  shop: string;
+  /** Informational only — never authority. */
+  payloadShop: string;
   payload: Record<string, unknown>;
+  tenant: TenantJobEnvelopeV1;
+};
+
+export type CatalogSyncJobData = {
+  tenant: TenantJobEnvelopeV1;
+};
+
+export type AbcShopJobData = {
+  tenant: TenantJobEnvelopeV1;
 };
 
 let webhookQueue: Queue<WebhookJobData> | null = null;
@@ -53,17 +68,57 @@ export function getCronQueue(): Queue {
 }
 
 /** Enqueue and return immediately so the webhook route can 200 within 50ms. */
-export async function enqueueWebhook(data: WebhookJobData, webhookId?: string) {
+export async function enqueueWebhook(
+  data: {
+    topic: string;
+    payloadShop: string;
+    payload: Record<string, unknown>;
+    tenant: TenantAuthority | TenantJobEnvelopeV1;
+  },
+  webhookId?: string,
+) {
+  const envelope =
+    "schemaVersion" in data.tenant
+      ? data.tenant
+      : createTenantJobEnvelope(data.tenant, `webhook:${data.topic}`);
+
   await getWebhookQueue().add(
     data.topic,
-    data,
+    {
+      topic: data.topic,
+      payloadShop: data.payloadShop,
+      payload: data.payload,
+      tenant: envelope,
+    },
     // Shopify retries webhooks; the webhookId jobId dedupes redeliveries.
     webhookId ? { jobId: webhookId } : undefined,
   );
 }
 
-export async function enqueueCatalogSync(shop: string) {
-  await getCronQueue().add("catalog-sync", { shop });
+export async function enqueueCatalogSync(
+  tenantOrEnvelope: TenantAuthority | TenantJobEnvelopeV1,
+) {
+  const envelope =
+    "schemaVersion" in tenantOrEnvelope
+      ? tenantOrEnvelope
+      : createTenantJobEnvelope(tenantOrEnvelope, "catalog_sync");
+
+  await getCronQueue().add("catalog-sync", {
+    tenant: envelope,
+  } satisfies CatalogSyncJobData);
+}
+
+export async function enqueueAbcAnalysisForShop(
+  tenantOrEnvelope: TenantAuthority | TenantJobEnvelopeV1,
+) {
+  const envelope =
+    "schemaVersion" in tenantOrEnvelope
+      ? tenantOrEnvelope
+      : createTenantJobEnvelope(tenantOrEnvelope, "abc_analysis");
+
+  await getCronQueue().add("abc-analysis-shop", {
+    tenant: envelope,
+  } satisfies AbcShopJobData);
 }
 
 export function createWebhookWorker(
@@ -82,6 +137,10 @@ export function createCronWorker(processor: (job: Job) => Promise<void>) {
   });
 }
 
+/**
+ * Schedule the weekly ABC control-plane tick. The tick enumerates canonical
+ * Shops and enqueues per-shop envelope jobs — it must not query ShopSettings.
+ */
 export async function scheduleAbcAnalysisCron() {
   await getCronQueue().add(
     "abc-analysis",

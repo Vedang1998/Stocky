@@ -6,34 +6,31 @@ import type {
 } from "react-router";
 import { useFetcher, useLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { receivePartialPO, recordLeadTimeSnapshot } from "../services/landed-cost.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { db } = await requireAdminTenant(request);
 
-  const openPOs = await prisma.purchaseOrder.findMany({
-    where: { shop, status: { in: ["ORDERED", "PARTIAL"] } },
+  const openPOs = await db.purchaseOrder.findMany({
+    where: { status: { in: ["ORDERED", "PARTIAL"] } },
     include: { supplier: true, lineItems: true },
     orderBy: { orderedAt: "desc" },
   });
 
-  const variantIds = openPOs.flatMap((po) =>
-    po.lineItems.map((li) => li.shopifyVariantId),
+  const variantIds = openPOs.flatMap((po: any) =>
+    po.lineItems.map((li: any) => li.shopifyVariantId),
   );
-  const variants = await prisma.shopifyVariantCache.findMany({
-    where: { shop, shopifyVariantId: { in: variantIds } },
+  const variants = await db.shopifyVariantCache.findMany({
+    where: { shopifyVariantId: { in: variantIds } },
   });
 
   return { openPOs, variants };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { db } = await requireAdminTenant(request);
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
@@ -53,21 +50,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const barcode = (form.get("barcode") as string).trim();
     if (!barcode) return { error: "Empty scan" };
 
-    const variant = await prisma.shopifyVariantCache.findFirst({
-      where: { shop, barcode },
+    const variant = await db.shopifyVariantCache.findFirst({
+      where: { barcode },
     });
     if (!variant) {
       return { error: `No variant found for barcode ${barcode}` };
     }
 
-    const po = await prisma.purchaseOrder.findFirst({
-      where: { id: poId, shop },
+    const po = await db.purchaseOrder.findFirst({
+      where: { id: poId },
       include: { lineItems: true },
     });
     if (!po) return { error: "PO not found" };
 
     const line = po.lineItems.find(
-      (li) =>
+      (li: any) =>
         li.shopifyVariantId === variant.shopifyVariantId &&
         li.receivedQty < li.orderedQty,
     );
@@ -77,13 +74,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       };
     }
 
-    await receivePartialPO(po.id, [{ lineItemId: line.id, receivedQty: 1 }]);
+    await receivePartialPO(db, po.id, [{ lineItemId: line.id, receivedQty: 1 }]);
 
-    const updated = await prisma.purchaseOrder.findFirst({
-      where: { id: po.id, shop },
+    const updated = await db.purchaseOrder.findFirst({
+      where: { id: po.id },
     });
     if (updated?.status === "RECEIVED") {
-      await recordLeadTimeSnapshot(updated.supplierId, po.id);
+      await recordLeadTimeSnapshot(db, updated.supplierId, po.id);
     }
 
     return {
@@ -115,9 +112,9 @@ export default function Warehouse() {
   const [sessionScans, setSessionScans] = useState<SessionScan[]>([]);
   const barcodeRef = useRef<ComponentRef<"s-text-field">>(null);
 
-  const selectedPO = openPOs.find((po) => po.id === poId);
+  const selectedPO = openPOs.find((po: any) => po.id === poId);
   const variantTitle = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   // Accumulate scans client-side so "Confirm Receipt" prints exactly what
   // was received in this session (the Stocky receiving/labeling loop).
@@ -173,7 +170,7 @@ export default function Warehouse() {
               setSessionScans([]);
             }}
           >
-            {openPOs.map((po) => (
+            {openPOs.map((po: any) => (
               <s-option key={po.id} value={po.id}>
                 {po.supplier.name} — {po.id.slice(-6).toUpperCase()} (
                 {po.status})
@@ -230,7 +227,7 @@ export default function Warehouse() {
               <s-table-header>Status</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {selectedPO.lineItems.map((li) => (
+              {selectedPO.lineItems.map((li: any) => (
                 <s-table-row key={li.id}>
                   <s-table-cell>{variantTitle(li.shopifyVariantId)}</s-table-cell>
                   <s-table-cell>{li.orderedQty}</s-table-cell>

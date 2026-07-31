@@ -1,5 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
   getDeadStock,
   getInventoryValuation,
@@ -16,12 +16,11 @@ function toCsv(headers: string[], rows: Array<Array<string | number>>): string {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { db } = await requireAdminTenant(request);
   const report = new URL(request.url).searchParams.get("report");
 
   if (report === "valuation") {
-    const { lines } = await getInventoryValuation(shop);
+    const { lines } = await getInventoryValuation(db);
     const csv = toCsv(
       ["Variant", "Location", "Quantity", "Unit landed cost", "Value"],
       lines.map((l) => [
@@ -41,7 +40,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   if (report === "deadstock") {
-    const deadStock = await getDeadStock(shop, 120);
+    const deadStock = await getDeadStock(db, 120);
     const csv = toCsv(
       ["Variant", "Quantity", "Avg landed cost", "Tied-up capital"],
       deadStock.map((d) => [

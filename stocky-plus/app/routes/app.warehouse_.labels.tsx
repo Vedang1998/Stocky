@@ -1,6 +1,5 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 /**
  * Resource route: generates ZPL barcode labels for the exact quantities
@@ -10,8 +9,8 @@ import prisma from "../db.server";
  * Connect using the same barcode values.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const url = new URL(request.url);
   const itemsParam = url.searchParams.get("items") ?? "";
 
@@ -34,7 +33,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const zplBlocks: string[] = [];
 
   for (const item of items) {
-    const variant = await prisma.shopifyVariantCache.findUnique({
+    const variant = await db.shopifyVariantCache.findUnique({
       where: {
         shop_shopifyVariantId: { shop, shopifyVariantId: item.variantId },
       },

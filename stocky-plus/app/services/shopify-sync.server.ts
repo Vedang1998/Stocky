@@ -1,4 +1,4 @@
-import prisma from "../db.server";
+import type { TenantDb } from "../tenant/tenant-db.server";
 import {
   pollBulkOperation,
   runBulkProductSync,
@@ -25,9 +25,10 @@ interface BulkProductRow {
 }
 
 export async function ingestBulkVariantCache(
-  shop: string,
+  db: TenantDb,
   jsonlUrl: string,
 ): Promise<number> {
+  const shop = db.authority.myshopifyDomain;
   const response = await fetch(jsonlUrl);
   const text = await response.text();
   const lines = text.trim().split("\n").filter(Boolean);
@@ -62,7 +63,7 @@ export async function ingestBulkVariantCache(
       weightUnit: variant.inventoryItem?.measurement?.weight?.unit,
     };
 
-    await prisma.shopifyVariantCache.upsert({
+    await db.shopifyVariantCache.upsert({
       where: {
         shop_shopifyVariantId: { shop, shopifyVariantId: variant.id },
       },
@@ -80,7 +81,10 @@ export async function ingestBulkVariantCache(
   return count;
 }
 
-export async function startCatalogSync(admin: AdminGraphQLClient, shop: string) {
+export async function startCatalogSync(
+  db: TenantDb,
+  admin: AdminGraphQLClient,
+) {
   await runBulkProductSync(admin);
 
   let attempts = 0;
@@ -89,7 +93,7 @@ export async function startCatalogSync(admin: AdminGraphQLClient, shop: string) 
     const op = await pollBulkOperation(admin);
     if (!op) break;
     if (op.status === "COMPLETED" && op.url) {
-      return ingestBulkVariantCache(shop, op.url);
+      return ingestBulkVariantCache(db, op.url);
     }
     if (op.status === "FAILED") {
       throw new Error(`Bulk sync failed: ${op.errorCode}`);
@@ -255,23 +259,25 @@ export async function completeShopifyTransfer(
 }
 
 export async function processBomSale(
-  shop: string,
+  db: TenantDb,
   bundleVariantId: string,
   quantitySold: number,
 ) {
-  const components = await prisma.bomComponent.findMany({
-    where: { shop, bundleVariantId },
+  const components = await db.bomComponent.findMany({
+    where: { bundleVariantId },
   });
 
-  return components.map((c) => ({
-    componentVariantId: c.componentVariantId,
-    quantityToDecrement: Number(c.quantity) * quantitySold,
-  }));
+  return components.map(
+    (c: { componentVariantId: string; quantity: { toString(): string } | number }) => ({
+      componentVariantId: c.componentVariantId,
+      quantityToDecrement: Number(c.quantity) * quantitySold,
+    }),
+  );
 }
 
-export async function checkSubscriptionGate(shop: string): Promise<boolean> {
-  const settings = await prisma.shopSettings.findUnique({
-    where: { shop },
+export async function checkSubscriptionGate(db: TenantDb): Promise<boolean> {
+  const settings = await db.shopSettings.findUnique({
+    where: { shop: db.authority.myshopifyDomain },
   });
   return settings?.subscriptionActive ?? false;
 }

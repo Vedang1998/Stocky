@@ -1,9 +1,23 @@
 import type { Job } from "bullmq";
-import prisma from "../../db.server";
 import { unauthenticated } from "../../shopify.server";
 import type { WebhookJobData } from "../queue.server";
-import { computeForecast, runAbcAnalysis } from "../../services/forecasting.server";
-import { processBomSale, startCatalogSync } from "../../services/shopify-sync.server";
+import {
+  enqueueAbcAnalysisForShop,
+} from "../queue.server";
+import {
+  computeForecast,
+  runAbcAnalysis,
+} from "../../services/forecasting.server";
+import {
+  processBomSale,
+  startCatalogSync,
+} from "../../services/shopify-sync.server";
+import {
+  resolveTenantJobContext,
+  type TenantJobContext,
+} from "../../tenant/job-envelope.server";
+import { planPerShopSchedulerJobs } from "../../tenant/scheduler.server";
+import type { TenantDb } from "../../tenant/tenant-db.server";
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -11,7 +25,11 @@ function startOfDay(date: Date): Date {
   return d;
 }
 
-async function handleOrderCreate(shop: string, payload: Record<string, unknown>) {
+async function handleOrderCreate(
+  db: TenantDb,
+  payload: Record<string, unknown>,
+) {
+  const shop = db.authority.myshopifyDomain;
   const order = payload as {
     id: number;
     line_items?: Array<{
@@ -29,7 +47,7 @@ async function handleOrderCreate(shop: string, payload: Record<string, unknown>)
     if (!item.variant_id) continue;
     const variantGid = `gid://shopify/ProductVariant/${item.variant_id}`;
 
-    await prisma.salesDailyAggregate.upsert({
+    await db.salesDailyAggregate.upsert({
       where: {
         shop_shopifyVariantId_locationId_date: {
           shop,
@@ -52,10 +70,10 @@ async function handleOrderCreate(shop: string, payload: Record<string, unknown>)
       },
     });
 
-    const bomComponents = await processBomSale(shop, variantGid, item.quantity);
+    const bomComponents = await processBomSale(db, variantGid, item.quantity);
     if (bomComponents.length > 0) {
       for (const comp of bomComponents) {
-        await prisma.salesDailyAggregate.upsert({
+        await db.salesDailyAggregate.upsert({
           where: {
             shop_shopifyVariantId_locationId_date: {
               shop,
@@ -82,9 +100,10 @@ async function handleOrderCreate(shop: string, payload: Record<string, unknown>)
 }
 
 async function handleOrderCancelled(
-  shop: string,
+  db: TenantDb,
   payload: Record<string, unknown>,
 ) {
+  const shop = db.authority.myshopifyDomain;
   const order = payload as {
     line_items?: Array<{
       variant_id: number | null;
@@ -100,7 +119,7 @@ async function handleOrderCancelled(
     if (!item.variant_id) continue;
     const variantGid = `gid://shopify/ProductVariant/${item.variant_id}`;
 
-    const existing = await prisma.salesDailyAggregate.findUnique({
+    const existing = await db.salesDailyAggregate.findUnique({
       where: {
         shop_shopifyVariantId_locationId_date: {
           shop,
@@ -112,7 +131,7 @@ async function handleOrderCancelled(
     });
 
     if (existing) {
-      await prisma.salesDailyAggregate.update({
+      await db.salesDailyAggregate.update({
         where: { id: existing.id },
         data: {
           unitsSold: Math.max(0, existing.unitsSold - item.quantity),
@@ -127,9 +146,10 @@ async function handleOrderCancelled(
 }
 
 async function handleRefundCreate(
-  shop: string,
+  db: TenantDb,
   payload: Record<string, unknown>,
 ) {
+  const shop = db.authority.myshopifyDomain;
   const refund = payload as {
     refund_line_items?: Array<{
       line_item?: { variant_id: number | null; quantity: number; price: string };
@@ -146,7 +166,7 @@ async function handleRefundCreate(
     const variantGid = `gid://shopify/ProductVariant/${lineItem.variant_id}`;
     const qty = item.quantity;
 
-    const existing = await prisma.salesDailyAggregate.findUnique({
+    const existing = await db.salesDailyAggregate.findUnique({
       where: {
         shop_shopifyVariantId_locationId_date: {
           shop,
@@ -158,7 +178,7 @@ async function handleRefundCreate(
     });
 
     if (existing) {
-      await prisma.salesDailyAggregate.update({
+      await db.salesDailyAggregate.update({
         where: { id: existing.id },
         data: {
           unitsSold: Math.max(0, existing.unitsSold - qty),
@@ -173,9 +193,10 @@ async function handleRefundCreate(
 }
 
 async function handleInventoryUpdate(
-  shop: string,
+  db: TenantDb,
   payload: Record<string, unknown>,
 ) {
+  const shop = db.authority.myshopifyDomain;
   const inv = payload as {
     inventory_item_id: number;
     location_id: number;
@@ -183,7 +204,7 @@ async function handleInventoryUpdate(
   };
 
   const variantGid = await resolveVariantFromInventoryItem(
-    shop,
+    db,
     inv.inventory_item_id,
   );
   if (!variantGid) return;
@@ -191,7 +212,7 @@ async function handleInventoryUpdate(
   const locationGid = `gid://shopify/Location/${inv.location_id}`;
   const today = startOfDay(new Date());
 
-  await prisma.inventorySnapshot.upsert({
+  await db.inventorySnapshot.upsert({
     where: {
       shop_shopifyVariantId_locationId_snapshotDate: {
         shop,
@@ -212,21 +233,17 @@ async function handleInventoryUpdate(
     },
   });
 
-  const forecast = await computeForecast({
-    shop,
+  const forecast = await computeForecast(db, {
     variantId: variantGid,
     locationId: locationGid,
   });
 
-  const abc = await prisma.variantAbcClass.findFirst({
-    where: { shop, shopifyVariantId: variantGid },
+  const abc = await db.variantAbcClass.findFirst({
+    where: { shopifyVariantId: variantGid },
   });
 
-  if (
-    abc?.abcClass === "A" &&
-    forecast.onHand < forecast.reorderPoint
-  ) {
-    await prisma.lowStockAlert.create({
+  if (abc?.abcClass === "A" && forecast.onHand < forecast.reorderPoint) {
+    await db.lowStockAlert.create({
       data: {
         shop,
         shopifyVariantId: variantGid,
@@ -239,33 +256,42 @@ async function handleInventoryUpdate(
 }
 
 async function resolveVariantFromInventoryItem(
-  shop: string,
+  db: TenantDb,
   inventoryItemId: number,
 ): Promise<string | null> {
-  const cache = await prisma.shopifyVariantCache.findFirst({
+  const cache = await db.shopifyVariantCache.findFirst({
     where: {
-      shop,
       inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
     },
   });
   return cache?.shopifyVariantId ?? null;
 }
 
+async function requireJobContext(
+  rawTenant: unknown,
+  payloadShop?: string,
+): Promise<TenantJobContext> {
+  // Merchant access is forbidden until envelope validation succeeds.
+  return resolveTenantJobContext(rawTenant, { payloadShop });
+}
+
 export async function processWebhookJob(job: Job<WebhookJobData>) {
-  const { topic, shop, payload } = job.data;
+  const { topic, payload, payloadShop, tenant: envelope } = job.data;
+
+  const { db } = await requireJobContext(envelope, payloadShop);
 
   switch (topic) {
     case "orders/create":
-      await handleOrderCreate(shop, payload);
+      await handleOrderCreate(db, payload);
       break;
     case "orders/cancelled":
-      await handleOrderCancelled(shop, payload);
+      await handleOrderCancelled(db, payload);
       break;
     case "refunds/create":
-      await handleRefundCreate(shop, payload);
+      await handleRefundCreate(db, payload);
       break;
     case "inventory_levels/update":
-      await handleInventoryUpdate(shop, payload);
+      await handleInventoryUpdate(db, payload);
       break;
     default:
       console.warn(`Unhandled webhook topic: ${topic}`);
@@ -274,17 +300,29 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
 
 export async function processCronJob(job: Job) {
   if (job.name === "abc-analysis") {
-    const shops = await prisma.shopSettings.findMany({ select: { shop: true } });
-    for (const { shop } of shops) {
-      await runAbcAnalysis(shop, "REVENUE");
-      await runAbcAnalysis(shop, "VOLUME");
+    // Control-plane tick: enumerate canonical Shops and enqueue per-shop jobs.
+    const planned = await planPerShopSchedulerJobs("weekly_abc_analysis");
+    for (const item of planned) {
+      await enqueueAbcAnalysisForShop(item.envelope);
     }
+    return;
+  }
+
+  if (job.name === "abc-analysis-shop") {
+    const { tenant: envelope } = job.data as { tenant: unknown };
+    const { db } = await requireJobContext(envelope);
+    await runAbcAnalysis(db, "REVENUE");
+    await runAbcAnalysis(db, "VOLUME");
+    return;
   }
 
   if (job.name === "catalog-sync") {
-    const { shop } = job.data as { shop: string };
-    const { admin } = await unauthenticated.admin(shop);
-    const count = await startCatalogSync(admin, shop);
-    console.log(`Catalog sync for ${shop}: ${count} variants cached`);
+    const { tenant: envelope } = job.data as { tenant: unknown };
+    const { db, tenant } = await requireJobContext(envelope);
+    const { admin } = await unauthenticated.admin(tenant.myshopifyDomain);
+    const count = await startCatalogSync(db, admin);
+    console.log(
+      `Catalog sync for ${tenant.myshopifyDomain}: ${count} variants cached`,
+    );
   }
 }

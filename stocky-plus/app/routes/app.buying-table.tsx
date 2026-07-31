@@ -7,8 +7,7 @@ import type {
 import { Form, redirect, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { AbcMetric } from "@prisma/client";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
   fetchInventoryLevels,
   fetchLocations,
@@ -35,38 +34,38 @@ interface BuyingRow {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { admin, tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const url = new URL(request.url);
   const supplierId = url.searchParams.get("supplierId") ?? "";
   const metric: AbcMetric =
     url.searchParams.get("metric") === "VOLUME" ? "VOLUME" : "REVENUE";
 
-  const settings = await prisma.shopSettings.upsert({
+  const settings = await db.shopSettings.upsert({
     where: { shop },
     create: { shop },
     update: {},
   });
 
   const [suppliers, locations] = await Promise.all([
-    prisma.supplier.findMany({ where: { shop }, orderBy: { name: "asc" } }),
+    db.supplier.findMany({ where: {}, orderBy: { name: "asc" } }),
     fetchLocations(admin),
   ]);
   const locationId =
     url.searchParams.get("locationId") || locations[0]?.id || "all";
 
   const rows: BuyingRow[] = [];
-  const supplier = suppliers.find((s) => s.id === supplierId);
+  const supplier = suppliers.find((s: any) => s.id === supplierId);
 
   if (supplier && settings.subscriptionActive) {
-    const mappings = await prisma.supplierSkuMapping.findMany({
+    const mappings = await db.supplierSkuMapping.findMany({
       where: { supplierId: supplier.id },
       take: 50,
     });
 
     for (const mapping of mappings) {
       const [cache, abc, override, forecast] = await Promise.all([
-        prisma.shopifyVariantCache.findUnique({
+        db.shopifyVariantCache.findUnique({
           where: {
             shop_shopifyVariantId: {
               shop,
@@ -74,7 +73,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             },
           },
         }),
-        prisma.variantAbcClass.findUnique({
+        db.variantAbcClass.findUnique({
           where: {
             shop_shopifyVariantId_locationId_metric: {
               shop,
@@ -84,7 +83,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             },
           },
         }),
-        prisma.forecastOverride.findUnique({
+        db.forecastOverride.findUnique({
           where: {
             shop_variantId_locationId: {
               shop,
@@ -93,8 +92,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
             },
           },
         }),
-        computeForecast({
-          shop,
+        computeForecast(db, {
           variantId: mapping.shopifyVariantId,
           locationId,
           leadTimeDays: supplier.leadTimeDays ?? undefined,
@@ -150,8 +148,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { tenant, db } = await requireAdminTenant(request);
+  const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
@@ -167,7 +165,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           "Development subscription activation is disabled. Set ALLOW_DEV_SUBSCRIPTION_ACTIVATE=true only in non-production environments.",
       };
     }
-    await prisma.shopSettings.upsert({
+    await db.shopSettings.upsert({
       where: { shop },
       create: { shop, subscriptionActive: true, subscriptionPlan: "dev" },
       update: { subscriptionActive: true, subscriptionPlan: "dev" },
@@ -182,7 +180,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const end = new Date(form.get("lookbackEnd") as string);
 
     if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && start < end) {
-      await prisma.forecastOverride.upsert({
+      await db.forecastOverride.upsert({
         where: { shop_variantId_locationId: { shop, variantId, locationId } },
         create: {
           shop,
@@ -200,8 +198,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (intent === "clearLookback") {
     const variantId = form.get("variantId") as string;
     const locationId = form.get("locationId") as string;
-    await prisma.forecastOverride.deleteMany({
-      where: { shop, variantId, locationId },
+    await db.forecastOverride.deleteMany({
+      where: { variantId, locationId },
     });
     return { ok: true };
   }
@@ -210,8 +208,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const supplierId = form.get("supplierId") as string;
     const locationId = form.get("locationId") as string;
 
-    const supplier = await prisma.supplier.findFirst({
-      where: { id: supplierId, shop },
+    const supplier = await db.supplier.findFirst({
+      where: { id: supplierId },
     });
     if (!supplier) return { error: "Supplier not found" };
 
@@ -228,7 +226,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       let qty = parseInt(value as string, 10);
       if (!qty || qty <= 0) continue;
 
-      const mapping = await prisma.supplierSkuMapping.findFirst({
+      const mapping = await db.supplierSkuMapping.findFirst({
         where: { id: mappingId, supplierId: supplier.id },
       });
       if (!mapping) continue;
@@ -239,6 +237,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       qty = Math.ceil(qty / mapping.packSize) * mapping.packSize;
 
       const tierCost = await resolveTieredUnitCost(
+        db,
         supplier.id,
         mapping.shopifyVariantId,
         qty,
@@ -253,7 +252,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (lines.length > 0) {
-      await prisma.purchaseOrder.create({
+      await db.purchaseOrder.create({
         data: {
           shop,
           supplierId: supplier.id,
@@ -334,7 +333,7 @@ export default function BuyingTable() {
           <s-stack direction="inline" gap="base">
             <s-select label="Vendor" name="supplierId" value={supplierId}>
               <s-option value="">Select a vendor</s-option>
-              {suppliers.map((s) => (
+              {suppliers.map((s: any) => (
                 <s-option key={s.id} value={s.id}>
                   {s.name}
                 </s-option>
