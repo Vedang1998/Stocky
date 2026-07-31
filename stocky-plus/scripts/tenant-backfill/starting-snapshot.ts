@@ -97,12 +97,52 @@ export type StartingEvidenceV2 = {
   postgresSnapshot: string | null;
   /** Versioned evidence budget active at capture (resume-compatibility input). */
   evidenceBudget: TenantEvidenceBudget;
+  /** Configured capture timeout active for this run (F-F04). */
+  captureTimeoutMs: number;
+  /** Per-phase capture telemetry in milliseconds (F-F04). */
+  phaseTimingsMs: Record<string, number>;
   beforeCounts: Record<string, number>;
   shopSnapshot: ShopStartingSnapshot;
   sessionEvidence: SessionSubjectEvidence;
   tables: DatasetBoundaries;
   domainDiscovery: DomainDiscoveryEvidence;
 };
+
+// ─── Starting-snapshot capture timeout (F-F04) ──────────────────────────────
+
+export const DEFAULT_STARTING_SNAPSHOT_TIMEOUT_MS = 180_000;
+export const MIN_STARTING_SNAPSHOT_TIMEOUT_MS = 10_000;
+export const MAX_STARTING_SNAPSHOT_TIMEOUT_MS = 1_800_000;
+
+/**
+ * Resolve TENANT_STARTING_SNAPSHOT_TIMEOUT_MS with strict integer parsing and
+ * documented bounds. Invalid values fail BEFORE the snapshot transaction opens.
+ * The timeout remains finite — the bound cannot be disabled.
+ */
+export function resolveStartingSnapshotTimeoutMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number {
+  const raw = env.TENANT_STARTING_SNAPSHOT_TIMEOUT_MS?.trim();
+  if (raw === undefined || raw === "") {
+    return DEFAULT_STARTING_SNAPSHOT_TIMEOUT_MS;
+  }
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(
+      `TENANT_STARTING_SNAPSHOT_TIMEOUT_MS must be a strict integer milliseconds value (got ${JSON.stringify(raw)})`,
+    );
+  }
+  const value = Number(raw);
+  if (
+    !Number.isSafeInteger(value) ||
+    value < MIN_STARTING_SNAPSHOT_TIMEOUT_MS ||
+    value > MAX_STARTING_SNAPSHOT_TIMEOUT_MS
+  ) {
+    throw new Error(
+      `TENANT_STARTING_SNAPSHOT_TIMEOUT_MS=${raw} outside accepted bounds [${MIN_STARTING_SNAPSHOT_TIMEOUT_MS}..${MAX_STARTING_SNAPSHOT_TIMEOUT_MS}]`,
+    );
+  }
+  return value;
+}
 
 export type DiscoveryIssueDraft = {
   tableName: string;
@@ -252,6 +292,24 @@ export function parseStartingEvidence(
   }
   // F-F02: configured budget must be compatible with the original run.
   assertEvidenceBudgetCompatible(ev.evidenceBudget, resolveEvidenceBudget());
+  // F-F04: recorded capture timeout must exist within documented bounds.
+  // Resume never recaptures, so compatibility means the original recorded
+  // configuration is present and valid.
+  if (
+    typeof ev.captureTimeoutMs !== "number" ||
+    !Number.isSafeInteger(ev.captureTimeoutMs) ||
+    ev.captureTimeoutMs < MIN_STARTING_SNAPSHOT_TIMEOUT_MS ||
+    ev.captureTimeoutMs > MAX_STARTING_SNAPSHOT_TIMEOUT_MS
+  ) {
+    throw new Error(
+      "Resume failed closed: startingEvidence.captureTimeoutMs missing or outside documented bounds",
+    );
+  }
+  if (!ev.phaseTimingsMs || typeof ev.phaseTimingsMs !== "object") {
+    throw new Error(
+      "Resume failed closed: startingEvidence.phaseTimingsMs missing",
+    );
+  }
   return ev;
 }
 
@@ -275,9 +333,82 @@ export async function captureStartingEvidence(
   options?: CaptureStartingEvidenceOptions,
 ): Promise<CapturedStartingEvidence> {
   const batchSize = resolveSubjectEvidenceBatchSize(options?.batchSize);
-  // Budget resolves (and fails on invalid configuration) before the
-  // transaction opens.
+  // Budget and timeout resolve (and fail on invalid configuration) BEFORE the
+  // transaction opens (F-F02 / F-F04).
   const budget = resolveEvidenceBudget();
+  const captureTimeoutMs = resolveStartingSnapshotTimeoutMs();
+
+  // Phase telemetry (F-F04): per-phase elapsed time, safe failure diagnostics.
+  const captureStartNs = process.hrtime.bigint();
+  const phaseTimingsMs: Record<string, number> = {};
+  let currentPhase = "transaction_init";
+  let phaseStartNs = captureStartNs;
+  const enterPhase = (name: string): void => {
+    const now = process.hrtime.bigint();
+    phaseTimingsMs[currentPhase] =
+      (phaseTimingsMs[currentPhase] ?? 0) + Number(now - phaseStartNs) / 1e6;
+    currentPhase = name;
+    phaseStartNs = now;
+  };
+
+  try {
+    return await captureStartingEvidenceInTransaction(prisma, {
+      batchSize,
+      budget,
+      captureTimeoutMs,
+      phaseTimingsMs,
+      enterPhase,
+      onSnapshotEstablished: options?.onSnapshotEstablished,
+    });
+  } catch (error) {
+    // Safe diagnostic only: phase, elapsed, configured timeout, evidence
+    // version, table where applicable. Never raw merchant domains, database
+    // URLs, or credentials.
+    const elapsedMs = Number(process.hrtime.bigint() - captureStartNs) / 1e6;
+    const tableName = currentPhase.includes(":")
+      ? currentPhase.split(":")[1]
+      : null;
+    const prismaCode = (error as { code?: string }).code;
+    // eslint-disable-next-line no-console
+    console.error(
+      JSON.stringify({
+        event: "tenant_starting_snapshot_failure",
+        phase: currentPhase,
+        elapsedMs,
+        configuredTimeoutMs: captureTimeoutMs,
+        evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+        tableName,
+        errorName: error instanceof Error ? error.name : "unknown",
+        prismaErrorCode:
+          typeof prismaCode === "string" && /^P\d{4}$/.test(prismaCode)
+            ? prismaCode
+            : null,
+      }),
+    );
+    throw error;
+  }
+}
+
+type CaptureInternalOptions = {
+  batchSize: number;
+  budget: TenantEvidenceBudget;
+  captureTimeoutMs: number;
+  phaseTimingsMs: Record<string, number>;
+  enterPhase: (name: string) => void;
+  onSnapshotEstablished?: (tx: Prisma.TransactionClient) => Promise<void>;
+};
+
+async function captureStartingEvidenceInTransaction(
+  prisma: PrismaClient,
+  opts: CaptureInternalOptions,
+): Promise<CapturedStartingEvidence> {
+  const {
+    batchSize,
+    budget,
+    captureTimeoutMs,
+    phaseTimingsMs,
+    enterPhase,
+  } = opts;
 
   return prisma.$transaction(
     async (tx) => {
@@ -312,16 +443,18 @@ export async function captureStartingEvidence(
       }
       const postgresSnapshot = observed.snapshot ?? null;
 
-      if (options?.onSnapshotEstablished) {
-        await options.onSnapshotEstablished(tx);
+      if (opts.onSnapshotEstablished) {
+        await opts.onSnapshotEstablished(tx);
       }
 
+      enterPhase("before_counts");
       const beforeCounts: Record<string, number> = {};
       beforeCounts.Shop = await countTable(tx, "Shop");
       for (const table of BACKFILL_TABLE_ORDER) {
         beforeCounts[table] = await countTable(tx, table);
       }
 
+      enterPhase("shop_evidence");
       // F-F02: enforce the supported Shop ceiling BEFORE loading rows.
       if (beforeCounts.Shop > budget.maxShops) {
         throw new EvidenceCapacityError({
@@ -357,14 +490,17 @@ export async function captureStartingEvidence(
         ),
       };
 
+      enterPhase("session_evidence");
       const sessionEvidence = await streamSessionSubjectEvidence(tx, {
         batchSize,
       });
 
+      enterPhase("table_subject_evidence");
       const tables = await loadDatasetBoundaries(tx, batchSize);
 
       // Bounded streaming domain discovery (F-F02): counters, incremental
       // digests, bounded samples; never a complete raw-domain array.
+      enterPhase("domain_discovery");
       const validNormalized = new Set<string>();
       let validOverflowCount = 0;
       let invalidTotalDetected = 0;
@@ -467,6 +603,7 @@ export async function captureStartingEvidence(
           .join("\n"),
       );
 
+      enterPhase("final_serialization");
       const evidence: StartingEvidenceV2 = {
         evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
         domainNormalizationVersion: SHOP_DOMAIN_NORMALIZATION_VERSION,
@@ -475,6 +612,8 @@ export async function captureStartingEvidence(
         transactionReadOnly: observed.transaction_read_only,
         postgresSnapshot,
         evidenceBudget: budget,
+        captureTimeoutMs,
+        phaseTimingsMs: { ...phaseTimingsMs },
         beforeCounts,
         shopSnapshot,
         sessionEvidence,
@@ -501,12 +640,17 @@ export async function captureStartingEvidence(
       // F-F02: serialized byte budget enforced before any run-record persist.
       assertSerializedWithinBudget("startingEvidence", evidence, budget);
 
+      // Close final_serialization phase timing before returning.
+      enterPhase("done");
+      evidence.phaseTimingsMs = { ...phaseTimingsMs };
+      delete evidence.phaseTimingsMs.done;
+
       return { evidence, discoveryIssueDrafts };
     },
     {
       isolationLevel: "RepeatableRead",
       maxWait: 15_000,
-      timeout: 180_000,
+      timeout: captureTimeoutMs,
     },
   );
 }

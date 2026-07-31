@@ -54,6 +54,10 @@ describe("read-only starting snapshot enforcement (F-F01/F-F07)", () => {
     expect(evidence.postgresSnapshot).toBeTruthy();
     expect(evidence.capturedAt).toBeTruthy();
     expect(evidence.evidenceVersion).toBe("phase1-tenant-subject-v2");
+    // F-F04: timeout and phase telemetry are recorded in starting evidence.
+    expect(evidence.captureTimeoutMs).toBeGreaterThanOrEqual(10_000);
+    expect(evidence.phaseTimingsMs).toBeTruthy();
+    expect(Object.keys(evidence.phaseTimingsMs).length).toBeGreaterThan(0);
   }, 120_000);
 
   it("PostgreSQL rejects a write inside the snapshot with SQLSTATE 25006 and nothing commits", async () => {
