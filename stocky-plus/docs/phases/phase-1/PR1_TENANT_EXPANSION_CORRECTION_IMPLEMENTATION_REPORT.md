@@ -1,15 +1,15 @@
 # Phase 1 Correction Implementation Report — PR 1 Tenant Expansion
 
-**Status:** INDEPENDENTLY VERIFIED — ACCEPTED FOR PR 1 (D-025) — AWAITING EXPLICIT USER MERGE AUTHORIZATION
+**Status:** ACCEPTED, SQUASH-MERGED, AND CLOSED (D-025 / D-026)
 **Implementer:** Cursor
 
 ## Identity (immutable heads vs live tip)
 
 | Item | Value |
 |---|---|
-| Base main SHA | `8ccc8d29a78e05615b31324b38df17f4f1d1296e` |
+| Base main SHA (pre-merge) | `8ccc8d29a78e05615b31324b38df17f4f1d1296e` |
 | Branch | `phase-1/tenant-expand` |
-| Pull request | [#11](https://github.com/Vedang1998/Stocky/pull/11) (draft, OPEN, unmerged) |
+| Pull request | [#11](https://github.com/Vedang1998/Stocky/pull/11) — **CLOSED AND SQUASH-MERGED** |
 | Original Claude-reviewed head | `7aabb095806716697bfea2783379351b15e1cda2` — `NOT READY` |
 | Correction-review Claude head | `fb04345f129b8664566c5947f2ad75f57102269b` — `NOT READY` |
 | Follow-up reviewed head (immutable) | `aa5f425f446d79ff1bc24ac17a5944cdb8072159` — `NOT READY` |
@@ -19,12 +19,30 @@
 | Capable-local verdict | `READY FOR CHATGPT PR 1 ACCEPTANCE` (preserved verbatim in `PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md`) |
 | Capable-local review date | 2026-07-31 |
 | Exact-head CI at reviewed head | run `30633301468`, job `91164602626`, conclusion `success` |
-| ChatGPT decision | `PR 1 ACCEPTED` (D-025) — merge not authorized |
-| Docs-only finalization tip | Recorded after push — **mutable**; must not change the reviewed implementation tree |
+| ChatGPT technical acceptance | `PR 1 ACCEPTED` (D-025) |
+| Documentation finalization / authorized merge head | `6e5b024254615f3259aeb8d8252305d86bd63777` |
+| Pre-merge exact-head CI at authorized head | run `30643441951`, job `91198830409`, conclusion `success` |
+| Merge closure | D-026 |
+
+## Immutable merge evidence
+
+| Field | Value |
+|---|---|
+| PR number | [#11](https://github.com/Vedang1998/Stocky/pull/11) |
+| Authorized head | `6e5b024254615f3259aeb8d8252305d86bd63777` |
+| Merge method | SQUASH |
+| Squash merge SHA | `44a24f3387c1dae0351490367c06bef10f333425` |
+| Merge timestamp | `2026-07-31T22:19:49Z` |
+| Pre-merge exact-head CI | workflow `CI`; run `30643441951`; job `91198830409` (`Lint, typecheck, test, build, Prisma, GraphQL`); conclusion `success`; `head_sha` = authorized head |
+| Production / merchant data | **No production or merchant data was accessed** |
+| Deployment | **No deployment occurred** |
+| RLS / runtime conversion | **No RLS or runtime tenant conversion was activated** |
+| PR 2 / PR 3 | **Not started** |
+| Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
 
 ## Summary
 
-Addressed Claude follow-up findings **F-F00 through F-F07** on draft PR #11 without merging, without starting PR 2/3, without RLS/runtime conversion, and without enabling inventory writes. F-N01–F-N09 corrections remain in place. Capable-local independent review at `28e77178602ca486e5138ca2f80e8947d8e113c0` returned **`READY FOR CHATGPT PR 1 ACCEPTANCE`**. ChatGPT accepted PR 1 technically (D-025). **No P0 or P1 correction remains for PR 1 scope.** Merge remains unauthorized.
+Addressed Claude follow-up findings **F-F00 through F-F07** on draft PR #11 without starting PR 2/3, without RLS/runtime conversion, and without enabling inventory writes. F-N01–F-N09 corrections remain in place. Capable-local independent review at `28e77178602ca486e5138ca2f80e8947d8e113c0` returned **`READY FOR CHATGPT PR 1 ACCEPTANCE`**. ChatGPT accepted PR 1 technically (D-025). PR #11 was then squash-merged at authorized head `6e5b024254615f3259aeb8d8252305d86bd63777` as `44a24f3387c1dae0351490367c06bef10f333425` (D-026). **No P0 or P1 correction remains for PR 1 scope.** Phase 1 itself remains in progress.
 
 Historical failure states and rejected evidence (including prior R9 at `fb04345f…`) are preserved and not erased.
 
@@ -87,7 +105,7 @@ Historical failure states and rejected evidence (including prior R9 at `fb04345f
 | New `pg` chain advisories | **none** (pg and transitive packages clean in audit) |
 | `npm audit fix` / broad upgrades | **not performed** |
 
-Pre-existing advisories remain tracked under **R-013** and **R-062**. They are **not** resolved by PR #11 acceptance.
+Pre-existing advisories remain tracked under **R-013** and **R-062**. They are **not** resolved by PR #11 acceptance or merge.
 
 ## F-PR1-11 (non-blocking)
 
@@ -118,6 +136,7 @@ Environment: disposable PostgreSQL 16; inventory-write flags false. Capable-loca
 | `npm run graphql-codegen` | 0 |
 
 Exact-head CI at reviewed head: run `30633301468`, job `91164602626`, conclusion `success`.
+Pre-merge exact-head CI at authorized head: run `30643441951`, job `91198830409`, conclusion `success`.
 
 ## Explicit non-claims
 
@@ -126,9 +145,9 @@ Exact-head CI at reviewed head: run `30633301468`, job `91164602626`, conclusion
 - No RLS / non-null tenant enforcement / composite child FKs / Shop ownership FKs / runtime conversion.
 - PR 2 and PR 3 not started.
 - Inventory writes UNAPPROVED; every inventory-write flag DEFAULT OFF.
-- Technical acceptance does **not** authorize merge, deployment, production backfill, RLS activation, inventory mutations, PR 2, or PR 3.
+- PR 1 merge does **not** complete Phase 1 and does **not** authorize production backfill, RLS activation, inventory mutations, PR 2, or PR 3.
 - Residual gates remain: F-016 / R-022 / Q-011, R-014, operational backfill / zero-unresolved evidence, dependency hardening, inventory-write release.
 
 ## Next action
 
-Return to ChatGPT for docs-only exact-head verification and explicit user merge authorization.
+Return to ChatGPT for PR 2 tenant-bound access conversion authorization and the exact Cursor implementation prompt.

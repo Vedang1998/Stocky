@@ -292,3 +292,14 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** No schema or runtime change in the acceptance/finalization record. Production migration/backfill remains unauthorized until a later reviewed deployment plan and explicit authorization.
 7. **Risks:** Technical acceptance must not be misread as deployment, production backfill, RLS activation, inventory-write enablement, PR 2, PR 3, or merge authorization.
 8. **Final:** **ACCEPTED for PR 1 technical scope** (2026-07-31). Explicitly does **not** authorize deployment, production backfill, RLS activation, inventory mutations, PR 2, PR 3, or merge. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**. PR 2 and PR 3 remain **NOT STARTED**.
+
+## D-026 — Phase 1 PR 1 merge closure
+
+1. **Current:** PR [#11](https://github.com/Vedang1998/Stocky/pull/11) was technically accepted under D-025 and then authorized for merge at exact head `6e5b024254615f3259aeb8d8252305d86bd63777`.
+2. **Proposed / accepted:** PR #11 was **squash-merged** to `main` as `44a24f3387c1dae0351490367c06bef10f333425` at `2026-07-31T22:19:49Z`. Phase 1 PR 1 is **merged and closed**. PR 1 acceptance and merge do **not** mean Phase 1 is complete. PR 2 is the next approved dependency-ordered unit and must start from updated `main` on branch `phase-1/tenant-access`. PR 2 implementation has **not started**. PR 3 implementation has **not started**.
+3. **Reason:** Record permanent GitHub closure of the PR 1 workflow after explicit user squash-merge, without authorizing later Phase 1 work, deployment, or inventory writes.
+4. **Merchant impact:** No production or merchant-data change from this documentation decision. No deployment or production migration is authorized by this decision.
+5. **Technical impact:** Main now includes the PR 1 tenant-expansion and backfill foundation at squash SHA `44a24f3387c1dae0351490367c06bef10f333425`. Residual gates remain open: **F-016 / R-022 / Q-011**, **R-014**, operational backfill / zero-unresolved evidence, dependency hardening, and inventory-write release gates.
+6. **Migration:** No additional schema or runtime change in this status-sync decision. Production migration/backfill remains unauthorized until a later reviewed deployment plan and explicit authorization.
+7. **Risks:** Merge of PR 1 tooling must not be misread as Phase 1 completion, PR 2/PR 3 start, production backfill completion, RLS/runtime activation, or inventory-write approval. **R-028** and **R-029** remain open operational/enforcement-transition risks.
+8. **Final:** **ACCEPTED** (2026-07-31). PR 1 is merged and closed. Phase 1 remains in progress. PR 2 and PR 3 remain **NOT STARTED**. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**. No deployment or production migration is authorized by this decision.
