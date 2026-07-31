@@ -73,7 +73,17 @@ type IssueDraft = {
   proposedCanonicalShop?: string | null;
 };
 
-type RowClassificationKind = "updated" | "unchanged" | "unresolved";
+type RowClassificationKind =
+  | "updated"
+  | "unchanged"
+  | "concurrently_resolved"
+  | "unresolved";
+
+export type ApplyShopIdUpdateResult =
+  | { kind: "updated" }
+  | { kind: "unchanged" }
+  | { kind: "concurrently_resolved" }
+  | { kind: "unresolved"; issue: IssueDraft };
 
 type ProposedOwnership = {
   proposedShopId: string;
@@ -159,6 +169,10 @@ async function persistIssues(
       where: { fingerprint },
     });
 
+    let ownershipIssueId: string;
+    let reopenedIssue = false;
+    let wasOpenAfterDetection = true;
+
     if (existing) {
       const reopen =
         existing.status === "RESOLVED"
@@ -169,9 +183,12 @@ async function persistIssues(
             }
           : { status: existing.status };
 
-      if (existing.status === "RESOLVED") reopened += 1;
+      if (existing.status === "RESOLVED") {
+        reopened += 1;
+        reopenedIssue = true;
+      }
 
-      await tx.tenantOwnershipIssue.update({
+      const updated = await tx.tenantOwnershipIssue.update({
         where: { fingerprint },
         data: {
           lastDetectedRunId: runId,
@@ -185,8 +202,10 @@ async function persistIssues(
           ...reopen,
         },
       });
+      ownershipIssueId = updated.id;
+      wasOpenAfterDetection = updated.status === "OPEN";
     } else {
-      await tx.tenantOwnershipIssue.create({
+      const created = await tx.tenantOwnershipIssue.create({
         data: {
           id: cuidLike(),
           fingerprint,
@@ -206,12 +225,41 @@ async function persistIssues(
           lastDetectedAt: now,
         },
       });
+      ownershipIssueId = created.id;
+      wasOpenAfterDetection = true;
+    }
+
+    // Durable per-run detection; unique(runId, fingerprint) prevents resume duplicates.
+    const priorDetection = await tx.tenantOwnershipIssueDetection.findUnique({
+      where: { runId_fingerprint: { runId, fingerprint } },
+    });
+    if (!priorDetection) {
+      await tx.tenantOwnershipIssueDetection.create({
+        data: {
+          id: cuidLike(),
+          runId,
+          ownershipIssueId,
+          fingerprint,
+          detectedStatus: wasOpenAfterDetection ? "OPEN" : "RESOLVED",
+          tableName: issue.tableName,
+          rowId: issue.rowId,
+          reasonCode: issue.reasonCode,
+          detectedAt: now,
+          wasOpenAfterDetection,
+          reopenedIssue,
+        },
+      });
     }
   }
 
   return { detected, reopened };
 }
 
+/**
+ * currentRun* counts are derived from TenantOwnershipIssueDetection (immutable per run).
+ * blockingIssueCount is explicitly the current global OPEN issue count (not historical).
+ * firstDetectedRunId / lastDetectedRunId remain current-state pointers on the issue row.
+ */
 async function countRunIssueMetrics(
   prisma: PrismaClient,
   runId: string,
@@ -221,16 +269,17 @@ async function countRunIssueMetrics(
   currentRunOpenIssueCount: number;
   globalOpenIssueCount: number;
 }> {
-  const [globalOpenIssueCount, currentRunDetectedIssueCount, currentRunOpenIssueCount] =
-    await Promise.all([
-      prisma.tenantOwnershipIssue.count({ where: { status: "OPEN" } }),
-      prisma.tenantOwnershipIssue.count({
-        where: { lastDetectedRunId: runId },
-      }),
-      prisma.tenantOwnershipIssue.count({
-        where: { lastDetectedRunId: runId, status: "OPEN" },
-      }),
-    ]);
+  const [
+    globalOpenIssueCount,
+    currentRunDetectedIssueCount,
+    currentRunOpenIssueCount,
+  ] = await Promise.all([
+    prisma.tenantOwnershipIssue.count({ where: { status: "OPEN" } }),
+    prisma.tenantOwnershipIssueDetection.count({ where: { runId } }),
+    prisma.tenantOwnershipIssueDetection.count({
+      where: { runId, wasOpenAfterDetection: true },
+    }),
+  ]);
 
   return {
     blockingIssueCount: globalOpenIssueCount,
@@ -560,8 +609,12 @@ export async function runTenantBackfill(
             });
             if (outcome.issue) batchIssues.push(outcome.issue);
             if (outcome.kind === "updated") bUpdated += 1;
-            else if (outcome.kind === "unchanged") bUnchanged += 1;
-            else bUnresolved += 1;
+            else if (
+              outcome.kind === "unchanged" ||
+              outcome.kind === "concurrently_resolved"
+            ) {
+              bUnchanged += 1;
+            } else bUnresolved += 1;
           }
 
           await persistIssues(tx, runId, batchIssues);
@@ -992,9 +1045,21 @@ async function processDirectRow(args: {
     table,
     row.id,
     expectedShopId,
-    existingShopId,
   );
-  return { kind: affected };
+  if (affected.kind === "unresolved") {
+    proposedOwnership.set(key, {
+      proposedShopId: expectedShopId,
+      normalizedDomain: normalized.normalized,
+      kind: "unresolved",
+    });
+    return { kind: "unresolved", issue: affected.issue };
+  }
+  proposedOwnership.set(key, {
+    proposedShopId: expectedShopId,
+    normalizedDomain: normalized.normalized,
+    kind: affected.kind,
+  });
+  return { kind: affected.kind };
 }
 
 async function processChildRow(args: {
@@ -1122,36 +1187,81 @@ async function processChildRow(args: {
     table,
     row.id,
     expectedParentShopId,
-    existingShopId,
   );
-  return { kind: affected };
+  if (affected.kind === "unresolved") {
+    return { kind: "unresolved", issue: affected.issue };
+  }
+  return { kind: affected.kind };
 }
 
-async function applyShopIdUpdate(
+/**
+ * Apply nullable→expected shopId update. On zero affected rows, re-read current
+ * shopId inside the same transaction and classify (R5). Never returns unresolved
+ * without a durable issue draft.
+ */
+export async function applyShopIdUpdate(
   tx: PrismaClient,
   table: string,
   rowId: string,
   expectedShopId: string,
-  existingShopId: string | null,
-): Promise<RowClassificationKind> {
+): Promise<ApplyShopIdUpdateResult> {
   assertApprovedTable(table);
   const updated = await tx.$queryRawUnsafe<Array<{ id: string }>>(
     `UPDATE "${table}" SET "shopId" = $1 WHERE id = $2 AND "shopId" IS NULL RETURNING id`,
     expectedShopId,
     rowId,
   );
+  if (updated.length > 1) {
+    throw new Error(
+      `Unexpected multi-row UPDATE for ${table} id=${rowId}: affected=${updated.length}`,
+    );
+  }
   if (updated.length === 1) {
-    return "updated";
+    const verifyRows = await tx.$queryRawUnsafe<
+      Array<{ shopId: string | null }>
+    >(`SELECT "shopId" FROM "${table}" WHERE id = $1`, rowId);
+    if (verifyRows.length !== 1 || verifyRows[0]!.shopId !== expectedShopId) {
+      throw new Error(
+        `Unexpected UPDATE outcome for ${table} id=${rowId}: shopId after update is ${JSON.stringify(verifyRows[0]?.shopId)} (expected ${expectedShopId})`,
+      );
+    }
+    return { kind: "updated" };
   }
-  if (existingShopId === expectedShopId) {
-    return "unchanged";
+
+  const currentRows = await tx.$queryRawUnsafe<
+    Array<{ shopId: string | null }>
+  >(`SELECT "shopId" FROM "${table}" WHERE id = $1`, rowId);
+
+  if (currentRows.length === 0) {
+    throw new Error(
+      `Missing row during shopId apply for ${table} id=${rowId}: row no longer exists`,
+    );
   }
-  if (existingShopId && existingShopId !== expectedShopId) {
-    return "unresolved";
+  if (currentRows.length > 1) {
+    throw new Error(
+      `Unexpected multi-row SELECT for ${table} id=${rowId}: rows=${currentRows.length}`,
+    );
   }
-  throw new Error(
-    `Unexpected UPDATE outcome for ${table} id=${rowId}: expected shopId ${expectedShopId}`,
-  );
+
+  const currentShopId = currentRows[0]!.shopId;
+  if (currentShopId === expectedShopId) {
+    return { kind: "concurrently_resolved" };
+  }
+  if (currentShopId == null) {
+    throw new Error(
+      `Unexpected UPDATE outcome for ${table} id=${rowId}: shopId remains null after zero-row update toward ${expectedShopId}`,
+    );
+  }
+  return {
+    kind: "unresolved",
+    issue: {
+      tableName: table,
+      rowId,
+      reasonCode: "CONCURRENT_SHOP_ID_CONFLICT",
+      currentOwnershipEvidence: { shopId: currentShopId },
+      conflictingOwnershipEvidence: { expectedShopId },
+    },
+  };
 }
 
 async function detectDuplicateShopSettings(

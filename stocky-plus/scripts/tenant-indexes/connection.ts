@@ -1,4 +1,9 @@
 import { Client } from "pg";
+import {
+  formatPostgresTimeoutMs,
+  resolveLockTimeoutMs,
+  resolveStatementTimeoutMs,
+} from "./timeouts";
 
 const POOLER_PATTERN = /pooler|pgbouncer/i;
 
@@ -21,16 +26,15 @@ export function resolveMaintenanceDatabaseUrl(): string {
 }
 
 export type MaintenanceClientOptions = {
-  lockTimeout?: string;
-  statementTimeout?: string;
+  /** Override lock timeout milliseconds (still validated when read from env if omitted). */
+  lockTimeoutMs?: number;
+  /** Override statement timeout milliseconds. */
+  statementTimeoutMs?: number;
 };
-
-const DEFAULT_LOCK_TIMEOUT = "5s";
-/** CONCURRENTLY builds can run long; disable statement timeout on maintenance sessions. */
-const DEFAULT_STATEMENT_TIMEOUT = "0";
 
 /**
  * Dedicated pg.Client for CREATE INDEX CONCURRENTLY (not pooled, not in a transaction).
+ * Applies finite lock_timeout and statement_timeout on the same pinned connection.
  */
 export async function getMaintenanceClient(
   options: MaintenanceClientOptions = {},
@@ -39,12 +43,16 @@ export async function getMaintenanceClient(
   const client = new Client({ connectionString });
   await client.connect();
 
-  const lockTimeout = options.lockTimeout ?? DEFAULT_LOCK_TIMEOUT;
-  const statementTimeout =
-    options.statementTimeout ?? DEFAULT_STATEMENT_TIMEOUT;
+  const lockTimeoutMs = options.lockTimeoutMs ?? resolveLockTimeoutMs();
+  const statementTimeoutMs =
+    options.statementTimeoutMs ?? resolveStatementTimeoutMs();
 
-  await client.query(`SET lock_timeout = '${lockTimeout}'`);
-  await client.query(`SET statement_timeout = '${statementTimeout}'`);
+  await client.query(
+    `SET lock_timeout = '${formatPostgresTimeoutMs(lockTimeoutMs)}'`,
+  );
+  await client.query(
+    `SET statement_timeout = '${formatPostgresTimeoutMs(statementTimeoutMs)}'`,
+  );
 
   return client;
 }

@@ -10,6 +10,7 @@
 1. `20260730160000_tenant_expansion` — `Shop`, backfill control tables, nullable `shopId` columns
 2. `20260730160100_tenant_compatibility_indexes` — **no-op marker** (indexes are NOT created here; see D-024)
 3. `20260730210000_tenant_backfill_correction` — `COMPLETED_WITH_ISSUES`, issue reopen fields
+4. `20260730220000_tenant_ownership_issue_detection` — durable per-run `TenantOwnershipIssueDetection` history
 
 Do **not** modify `20260728000000_init_stocky_plus`.
 
@@ -18,7 +19,28 @@ A database is PR-1-ready only after:
 1. `npx prisma migrate deploy`
 2. `npm run tenant:indexes:apply -- --apply`
 3. `npm run tenant:indexes:verify`
-4. `npm run tenant:schema:drift`
+4. `npm run tenant:schema:drift` — **Prisma** `migrate diff --from-url … --to-schema-datamodel prisma/schema.prisma --exit-code` (independent of manifest verify)
+
+## Index maintenance timeouts
+
+| Variable | Default | Rules |
+|---|---|---|
+| `TENANT_INDEX_STATEMENT_TIMEOUT_MS` | `1800000` (30 min) | Positive bounded integer; `0` and invalid rejected |
+| `TENANT_INDEX_LOCK_TIMEOUT_MS` | `5000` | Positive bounded integer; remains finite |
+
+Timeout failure must leave data intact; recovery for invalid index remnants requires explicitly authorized `DROP INDEX CONCURRENTLY`. Production timeout values remain subject to a later deployment plan.
+
+## Ownership issue metrics
+
+| Field | Authority |
+|---|---|
+| `currentRunDetectedIssueCount` | Count of `TenantOwnershipIssueDetection` rows for the run |
+| `currentRunOpenIssueCount` | Detections for the run with `wasOpenAfterDetection = true` |
+| `globalOpenIssueCount` | Current global `TenantOwnershipIssue` rows with `status = OPEN` |
+| `blockingIssueCount` | Explicitly equal to `globalOpenIssueCount` (current open blockers; not historical) |
+| `firstDetectedRunId` / `lastDetectedRunId` | Current-state pointers on the issue row (not historical metrics) |
+
+Historical status for run A must remain stable after run B redetects or resolves the same fingerprint.
 
 ## Normalization
 

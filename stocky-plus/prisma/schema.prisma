@@ -96,6 +96,7 @@ model TenantBackfillRun {
   checkpoints TenantBackfillCheckpoint[]
   issuesFirst TenantOwnershipIssue[]     @relation("IssueFirstDetectedRun")
   issuesLast  TenantOwnershipIssue[]     @relation("IssueLastDetectedRun")
+  issueDetections TenantOwnershipIssueDetection[]
 
   @@index([status, createdAt])
 }
@@ -142,10 +143,39 @@ model TenantOwnershipIssue {
 
   firstDetectedRun TenantBackfillRun @relation("IssueFirstDetectedRun", fields: [firstDetectedRunId], references: [id])
   lastDetectedRun  TenantBackfillRun @relation("IssueLastDetectedRun", fields: [lastDetectedRunId], references: [id])
+  detections       TenantOwnershipIssueDetection[]
 
   @@index([tableName, status])
   @@index([reasonCode, status])
   @@index([rowId, tableName])
+}
+
+/**
+ * Immutable per-run detection history for ownership issues (R6).
+ * Historical metrics for run A must remain stable after run B redetects the same fingerprint.
+ * currentRunDetectedIssueCount / currentRunOpenIssueCount are derived from these rows,
+ * not from mutable lastDetectedRunId. blockingIssueCount = current global OPEN issues.
+ */
+model TenantOwnershipIssueDetection {
+  id                    String                     @id @default(cuid())
+  runId                 String
+  ownershipIssueId      String
+  fingerprint           String
+  detectedStatus        TenantOwnershipIssueStatus
+  tableName             String
+  rowId                 String
+  reasonCode            String
+  detectedAt            DateTime                   @default(now())
+  wasOpenAfterDetection Boolean
+  reopenedIssue         Boolean                    @default(false)
+
+  run   TenantBackfillRun    @relation(fields: [runId], references: [id], onDelete: Cascade)
+  issue TenantOwnershipIssue @relation(fields: [ownershipIssueId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, fingerprint])
+  @@index([runId, detectedAt])
+  @@index([ownershipIssueId])
+  @@index([tableName, reasonCode])
 }
 
 // ─── Module 1: Advanced Supplier Master ─────────────────────────────────────

@@ -6,7 +6,9 @@ import { TENANT_COMPATIBILITY_INDEXES } from "./manifest";
 export function recoveryInstruction(indexName: string): string {
   return (
     `Index "${indexName}" exists but is invalid or mismatched. ` +
-    `Recovery: DROP INDEX CONCURRENTLY IF EXISTS "${indexName}"; ` +
+    `The tool does not silently repair or drop it. ` +
+    `Recovery requires an explicitly authorized ` +
+    `DROP INDEX CONCURRENTLY IF EXISTS "${indexName}"; ` +
     `then re-run npm run tenant:indexes:apply -- --apply`
   );
 }

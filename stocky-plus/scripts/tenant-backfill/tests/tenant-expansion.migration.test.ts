@@ -70,6 +70,10 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     MIGRATIONS_DIR,
     "20260730210000_tenant_backfill_correction",
   );
+  const detection = join(
+    MIGRATIONS_DIR,
+    "20260730220000_tenant_ownership_issue_detection",
+  );
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
   mkdirSync(parked, { recursive: true });
   const expansionPark = join(parked, "20260730160000_tenant_expansion");
@@ -81,15 +85,21 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     parked,
     "20260730210000_tenant_backfill_correction",
   );
+  const detectionPark = join(
+    parked,
+    "20260730220000_tenant_ownership_issue_detection",
+  );
 
   try {
     if (existsSync(expansion)) renameSync(expansion, expansionPark);
     if (existsSync(indexes)) renameSync(indexes, indexesPark);
     if (existsSync(correction)) renameSync(correction, correctionPark);
+    if (existsSync(detection)) renameSync(detection, detectionPark);
     const initOut = migrateDeploy();
     renameSync(expansionPark, expansion);
     renameSync(indexesPark, indexes);
     renameSync(correctionPark, correction);
+    renameSync(detectionPark, detection);
     const restOut = migrateDeploy();
     return { initOut, restOut };
   } catch (error) {
@@ -101,6 +111,9 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     }
     if (existsSync(correctionPark) && !existsSync(correction)) {
       renameSync(correctionPark, correction);
+    }
+    if (existsSync(detectionPark) && !existsSync(detection)) {
+      renameSync(detectionPark, detection);
     }
     throw error;
   }

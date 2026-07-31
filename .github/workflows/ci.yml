@@ -98,8 +98,13 @@ jobs:
       - name: Compatibility index verify
         run: npm run tenant:indexes:verify
 
-      - name: Schema index drift check
+      - name: Prisma schema drift check
         run: npm run tenant:schema:drift
+
+      - name: Post-apply index plan (all valid_exact)
+        run: |
+          npm run tenant:indexes:plan
+        # plan exits 0 when all indexes are valid_exact
 
       - name: Git diff check
         run: git diff --check

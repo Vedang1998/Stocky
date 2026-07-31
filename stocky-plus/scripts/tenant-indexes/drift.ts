@@ -1,14 +1,16 @@
 #!/usr/bin/env tsx
-import { getMaintenanceClient } from "./connection";
-import { checkSchemaIndexDrift } from "./drift-lib";
+import { assertNoPrismaSchemaDrift } from "./drift-lib";
+import { resolveMaintenanceDatabaseUrl } from "./connection";
 
+/**
+ * Complete Prisma schema drift check against the live database.
+ *
+ * Prerequisites (CI / runbook): migrate deploy → indexes apply → indexes verify,
+ * then this command. Manifest verification remains `tenant:indexes:verify`.
+ */
 async function main() {
-  const client = await getMaintenanceClient();
-  try {
-    await checkSchemaIndexDrift(client);
-  } finally {
-    await client.end();
-  }
+  const url = resolveMaintenanceDatabaseUrl();
+  assertNoPrismaSchemaDrift(url);
 }
 
 main().catch((error) => {

@@ -1,23 +1,24 @@
 # Project Status
 
 **Updated:** 2026-07-30
-**Current stage:** Phase 1 PR 1 corrections in progress after Claude `NOT READY`
+**Current stage:** Phase 1 PR 1 residual pre-review corrections implemented; awaiting exact-head CI + ChatGPT verification + fresh Claude review
 **Current main SHA:** `8ccc8d29a78e05615b31324b38df17f4f1d1296e`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** IN PROGRESS — PR 1 CORRECTIONS IN PROGRESS
+**Phase 1 implementation:** IN PROGRESS — PR 1 CORRECTIONS IMPLEMENTED — AWAITING FRESH CLAUDE REVIEW
 **Active branch:** `phase-1/tenant-expand`
 **Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
 **Claude PR 1 review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
 **F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE
 **Q-011:** OPEN
 **R-014:** OPEN P1 IMPLEMENTATION GATE
+**R-028 / R-029 / R-041–R-046:** OPEN (mitigated in code; not independently closed)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 2:** NOT STARTED
 **PR 3:** NOT STARTED
-**Next action:** Complete corrections push; obtain fresh Claude PR 1 correction review of the exact corrected head
+**Next action:** Push residual-gap head; confirm exact-head CI; return to ChatGPT for exact-head verification before fresh Claude correction review
 
 ## Current truth
 
@@ -25,8 +26,10 @@
 - Phase 1 planning remains APPROVED AND MERGED; implementation authority EFFECTIVE.
 - PR [#11](https://github.com/Vedang1998/Stocky/pull/11) received independent Claude verdict **`NOT READY`** at head `7aabb095806716697bfea2783379351b15e1cda2`.
 - Product owner accepted all findings F-PR1-01 through F-PR1-15 and rejected the ordinary non-concurrent index deviation (D-024).
-- Corrections continue on `phase-1/tenant-expand` (no new branch; no merge).
+- ChatGPT found residual pre-review gaps R1–R8; corrections continue on `phase-1/tenant-expand` (no new branch; no merge).
+- Implementation status may be coded complete while findings remain open pending fresh Claude acceptance of the live tip.
 - F-016 / R-022 and Q-011 remain OPEN. Production inventory writes remain UNAPPROVED. Flags remain DEFAULT OFF.
+- PR 2 and PR 3 remain NOT STARTED.
 
 ## Phase 1 post-merge status sync PR #10 merge evidence (immutable)
 
