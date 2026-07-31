@@ -99,9 +99,13 @@ npm run tenant:indexes:verify
 npm run tenant:schema:drift
 ```
 
-- One CONCURRENTLY operation at a time; no `IF NOT EXISTS` as proof of correctness
-- Invalid/mismatched same-name index → fail closed
-- Recovery: authorized `DROP INDEX CONCURRENTLY` then re-apply
+- Mutating apply **requires** explicit `TENANT_MAINTENANCE_DATABASE_URL` (no `DATABASE_URL` fallback).
+- Pooler/PgBouncer URL string patterns are rejected as a guardrail only; operators remain responsible for a genuinely direct endpoint in a later deployment plan.
+- Schema drift: `prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code` with `DATABASE_URL` in the child environment (URL not placed on argv).
+
+## Dataset boundaries (R10)
+
+Each run persists per-table `highWaterMark`, `rowCount`, and membership SHA-256 over ordered IDs at start. Empty tables keep an empty boundary. Ownership checksums and diagnostics are bounded to that subject set. Membership drift inside the boundary fails closed.
 
 ## Status / checkpoint / resume
 

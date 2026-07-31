@@ -45,6 +45,12 @@ export function checksumRows(
   return sha256Hex(canonicalJson(normalized));
 }
 
+/** Deterministic SHA-256 over ordered row IDs (run membership / boundary evidence). */
+export function membershipChecksum(ids: string[]): string {
+  const ordered = [...ids].sort((a, b) => a.localeCompare(b));
+  return sha256Hex(canonicalJson(ordered));
+}
+
 export function issueFingerprint(parts: {
   tableName: string;
   rowId: string;

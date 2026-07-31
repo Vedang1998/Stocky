@@ -33,7 +33,10 @@ function printHelp() {
   tsx scripts/tenant-indexes/cli.ts apply --apply
   tsx scripts/tenant-indexes/cli.ts verify
 
-Uses TENANT_MAINTENANCE_DATABASE_URL or DATABASE_URL (direct PostgreSQL, not pooler).
+Plan/verify may use TENANT_MAINTENANCE_DATABASE_URL or DATABASE_URL (direct PostgreSQL).
+Mutating apply requires an explicit TENANT_MAINTENANCE_DATABASE_URL (no DATABASE_URL fallback).
+Pooler/PgBouncer URL string patterns are rejected as a guardrail only — operators remain
+responsible for supplying a genuinely direct PostgreSQL endpoint in a later deployment plan.
 Never run apply against production without a reviewed deployment plan.
 `);
 }
@@ -46,7 +49,8 @@ async function main() {
   }
 
   const mode = parseMode(argv);
-  const client = await getMaintenanceClient();
+  const requireExplicitMaintenanceUrl = mode === "apply";
+  const client = await getMaintenanceClient({ requireExplicitMaintenanceUrl });
 
   try {
     if (mode === "plan") {

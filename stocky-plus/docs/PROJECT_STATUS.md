@@ -1,7 +1,7 @@
 # Project Status
 
 **Updated:** 2026-07-30
-**Current stage:** Phase 1 PR 1 residual pre-review corrections implemented; awaiting exact-head CI + ChatGPT verification + fresh Claude review
+**Current stage:** Phase 1 PR 1 R9–R13 evidence-gap corrections implemented; awaiting exact-head CI + ChatGPT verification + fresh Claude review
 **Current main SHA:** `8ccc8d29a78e05615b31324b38df17f4f1d1296e`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
@@ -10,6 +10,7 @@
 **Active branch:** `phase-1/tenant-expand`
 **Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
 **Claude PR 1 review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
+**Prior live tip (pre R9–R13):** `adf0b52103c517c904a7a33ee76cfaca29971860`
 **F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE
 **Q-011:** OPEN
 **R-014:** OPEN P1 IMPLEMENTATION GATE
@@ -18,7 +19,7 @@
 **Inventory-write flags:** DEFAULT OFF
 **PR 2:** NOT STARTED
 **PR 3:** NOT STARTED
-**Next action:** Push residual-gap head; confirm exact-head CI; return to ChatGPT for exact-head verification before fresh Claude correction review
+**Next action:** Confirm exact-head CI on the new tip; return to ChatGPT for exact-head verification before fresh Claude correction review
 
 ## Current truth
 
@@ -26,7 +27,7 @@
 - Phase 1 planning remains APPROVED AND MERGED; implementation authority EFFECTIVE.
 - PR [#11](https://github.com/Vedang1998/Stocky/pull/11) received independent Claude verdict **`NOT READY`** at head `7aabb095806716697bfea2783379351b15e1cda2`.
 - Product owner accepted all findings F-PR1-01 through F-PR1-15 and rejected the ordinary non-concurrent index deviation (D-024).
-- ChatGPT found residual pre-review gaps R1–R8; corrections continue on `phase-1/tenant-expand` (no new branch; no merge).
+- ChatGPT found residual gaps R1–R13; corrections continue on `phase-1/tenant-expand` (no new branch; no merge).
 - Implementation status may be coded complete while findings remain open pending fresh Claude acceptance of the live tip.
 - F-016 / R-022 and Q-011 remain OPEN. Production inventory writes remain UNAPPROVED. Flags remain DEFAULT OFF.
 - PR 2 and PR 3 remain NOT STARTED.

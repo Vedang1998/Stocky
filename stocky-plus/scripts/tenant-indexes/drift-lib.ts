@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveMaintenanceDatabaseUrl } from "./connection";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const APP_ROOT = join(__dirname, "..", "..");
@@ -14,20 +13,35 @@ export type PrismaMigrateDiffResult = {
 };
 
 /**
- * Compare the live PostgreSQL database to prisma/schema.prisma using Prisma 6.16.3
- * `migrate diff --exit-code`.
+ * Compare the live PostgreSQL database (via schema datasource + DATABASE_URL env)
+ * to prisma/schema.prisma using Prisma 6.16.3 `migrate diff --exit-code`.
  *
- * Exit codes from Prisma:
- * - 0: empty diff (no drift)
- * - 1: error
- * - 2: non-empty diff (drift)
+ * Preferred form avoids placing the connection URL in process argv:
+ *   prisma migrate diff
+ *     --from-schema-datasource prisma/schema.prisma
+ *     --to-schema-datamodel prisma/schema.prisma
+ *     --exit-code
  *
- * This is independent of `tenant:indexes:verify` (exact compatibility-index manifest).
+ * Exit codes: 0 empty, 1 error, 2 non-empty drift.
+ * Independent of `tenant:indexes:verify`.
  */
 export function runPrismaSchemaDriftDiff(
   databaseUrl?: string,
 ): PrismaMigrateDiffResult {
-  const url = databaseUrl ?? resolveMaintenanceDatabaseUrl();
+  const url =
+    databaseUrl?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    process.env.TENANT_MAINTENANCE_DATABASE_URL?.trim() ||
+    "";
+  if (!url) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr:
+        "DATABASE_URL (or explicit databaseUrl argument for tests) is required for prisma schema drift via --from-schema-datasource",
+    };
+  }
+
   try {
     const stdout = execFileSync(
       "npx",
@@ -35,8 +49,8 @@ export function runPrismaSchemaDriftDiff(
         "prisma",
         "migrate",
         "diff",
-        "--from-url",
-        url,
+        "--from-schema-datasource",
+        PRISMA_SCHEMA_PATH,
         "--to-schema-datamodel",
         PRISMA_SCHEMA_PATH,
         "--exit-code",
@@ -74,8 +88,8 @@ export function assertNoPrismaSchemaDrift(databaseUrl?: string): void {
       JSON.stringify({
         event: "tenant_prisma_schema_drift_ok",
         command:
-          "prisma migrate diff --from-url <db> --to-schema-datamodel prisma/schema.prisma --exit-code",
-        note: "Independent of tenant:indexes:verify (compatibility-index manifest).",
+          "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
+        note: "DATABASE_URL supplied via child-process environment (not argv). Independent of tenant:indexes:verify.",
       }),
     );
     return;
@@ -85,7 +99,7 @@ export function assertNoPrismaSchemaDrift(databaseUrl?: string): void {
     throw new Error(
       [
         "Prisma schema drift detected: live database does not match prisma/schema.prisma.",
-        "Command: prisma migrate diff --from-url <db> --to-schema-datamodel prisma/schema.prisma --exit-code",
+        "Command: prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
         "Diff output:",
         result.stdout.trim() || "(empty stdout)",
         result.stderr.trim() ? `stderr:\n${result.stderr.trim()}` : "",

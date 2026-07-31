@@ -5,7 +5,14 @@ import {
   normalizeShopDomain,
 } from "../../app/lib/shop-domain";
 import { acquireApplyLock, type ApplyLockHandle } from "./apply-lock";
-import { checksumRows, issueFingerprint, sha256Hex } from "./checksum";
+import {
+  assertMembershipUnchanged,
+  loadDatasetBoundaries,
+  recomputeMembershipChecksum,
+  type DatasetBoundaries,
+  type TableDatasetBoundary,
+} from "./boundaries";
+import { checksumRows, issueFingerprint, membershipChecksum, sha256Hex } from "./checksum";
 import type { OwnershipReasonCode } from "./reason-codes";
 import {
   assertApprovedParentRelation,
@@ -23,6 +30,12 @@ export type BackfillMode = "dry-run" | "apply";
 
 export type CountMap = Record<string, number>;
 
+export type BeforeShopIdUpdateHook = (info: {
+  table: string;
+  rowId: string;
+  expectedShopId: string;
+}) => void | Promise<void>;
+
 export type BackfillOptions = {
   prisma: PrismaClient;
   mode: BackfillMode;
@@ -38,6 +51,13 @@ export type BackfillOptions = {
   stopAfterBatches?: number;
   /** Fault injection: throw after a successful batch commit (tests). */
   throwAfterBatchCommit?: boolean;
+  /** Fault injection: throw after a named diagnostic checkpoint commits (tests). */
+  throwAfterDiagnosticPhase?: DiagnosticPhaseName;
+  /**
+   * Test-only hook immediately before the guarded shopId UPDATE (R11).
+   * Production default is absent/no-op.
+   */
+  onBeforeShopIdUpdate?: BeforeShopIdUpdateHook;
 };
 
 export type BackfillResult = {
@@ -91,7 +111,7 @@ type ProposedOwnership = {
   kind: RowClassificationKind;
 };
 
-type HighWaterMarkMap = Record<string, string>;
+type HighWaterMarkMap = Record<string, string | null>;
 
 const PARENT_TABLES_WITH_LEGACY_SHOP = new Set([
   "Supplier",
@@ -127,23 +147,12 @@ async function countTable(prisma: PrismaClient, table: string): Promise<number> 
   return Number(rows[0]?.c ?? 0);
 }
 
-async function maxTableId(
-  prisma: PrismaClient,
-  table: BackfillTableName,
-): Promise<string> {
-  assertApprovedTable(table);
-  const rows = await prisma.$queryRawUnsafe<Array<{ max_id: string | null }>>(
-    `SELECT MAX(id)::text AS max_id FROM "${table}"`,
-  );
-  return rows[0]?.max_id ?? "";
-}
-
-async function loadHighWaterMarks(
-  prisma: PrismaClient,
-): Promise<HighWaterMarkMap> {
+function highWaterMarksFromBoundaries(
+  boundaries: DatasetBoundaries,
+): HighWaterMarkMap {
   const map: HighWaterMarkMap = {};
   for (const table of BACKFILL_TABLE_ORDER) {
-    map[table] = await maxTableId(prisma, table);
+    map[table] = boundaries[table]?.highWaterMark ?? null;
   }
   return map;
 }
@@ -343,6 +352,8 @@ export async function runTenantBackfill(
     onBatchCommitted,
     stopAfterBatches,
     throwAfterBatchCommit,
+    throwAfterDiagnosticPhase,
+    onBeforeShopIdUpdate,
   } = options;
 
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 5000) {
@@ -363,6 +374,7 @@ export async function runTenantBackfill(
   const unresolvedCounts = emptyCounts();
   const checksums: Record<string, string> = {};
   let beforeCounts = emptyCounts();
+  let datasetBoundaries: DatasetBoundaries = {};
   let highWaterMarks: HighWaterMarkMap = {};
   let shopsWouldCreate = 0;
   let batchesCommitted = 0;
@@ -409,17 +421,27 @@ export async function runTenantBackfill(
       runBatchSize = batchSize;
 
       const meta = (existing.resumeMetadata as Record<string, unknown> | null) ?? {};
+      datasetBoundaries =
+        (meta.datasetBoundaries as DatasetBoundaries | undefined) ??
+        (await loadDatasetBoundaries(prisma));
       highWaterMarks =
         (meta.highWaterMarks as HighWaterMarkMap | undefined) ??
-        (await loadHighWaterMarks(prisma));
+        highWaterMarksFromBoundaries(datasetBoundaries);
 
       const resumeAttempts =
         typeof meta.resumeAttempts === "number" ? meta.resumeAttempts + 1 : 1;
 
-      const existingUnresolved = existing.unresolvedCounts as CountMap | null;
-      if (existingUnresolved) {
-        for (const [key, value] of Object.entries(existingUnresolved)) {
-          unresolvedCounts[key] = value;
+      // Rebuild unresolved from table checkpoints; diagnostics rehydrate separately (R10).
+      for (const table of BACKFILL_TABLE_ORDER) {
+        const cp = await prisma.tenantBackfillCheckpoint.findUnique({
+          where: { runId_tableName: { runId, tableName: table } },
+        });
+        if (cp) {
+          unresolvedCounts[table] = cp.unresolvedCount;
+          examinedCounts[table] = cp.examinedCount;
+          updatedCounts[table] = cp.updatedCount;
+          unchangedCounts[table] = cp.unchangedCount;
+          if (cp.checksum) checksums[table] = cp.checksum;
         }
       }
 
@@ -432,6 +454,7 @@ export async function runTenantBackfill(
           resumeMetadata: {
             ...meta,
             highWaterMarks,
+            datasetBoundaries,
             resumeAttempts,
           },
           updatedAt: new Date(),
@@ -442,7 +465,8 @@ export async function runTenantBackfill(
       for (const table of BACKFILL_TABLE_ORDER) {
         beforeCounts[table] = await countTable(prisma, table);
       }
-      highWaterMarks = await loadHighWaterMarks(prisma);
+      datasetBoundaries = await loadDatasetBoundaries(prisma);
+      highWaterMarks = highWaterMarksFromBoundaries(datasetBoundaries);
 
       await prisma.tenantBackfillRun.create({
         data: {
@@ -460,7 +484,11 @@ export async function runTenantBackfill(
           unchangedCounts: emptyCounts(),
           unresolvedCounts: emptyCounts(),
           checksums: {},
-          resumeMetadata: { highWaterMarks, resumeAttempts: 0 },
+          resumeMetadata: {
+            highWaterMarks,
+            datasetBoundaries,
+            resumeAttempts: 0,
+          },
           updatedAt: new Date(),
         },
       });
@@ -563,7 +591,12 @@ export async function runTenantBackfill(
       let updated = checkpoint?.updatedCount ?? 0;
       let unchanged = checkpoint?.unchangedCount ?? 0;
       let unresolved = checkpoint?.unresolvedCount ?? 0;
-      const hwm = highWaterMarks[table] ?? "";
+      const boundary = datasetBoundaries[table] ?? {
+        highWaterMark: null,
+        rowCount: 0,
+        membershipChecksum: membershipChecksum([]),
+      };
+      const hwm = boundary.highWaterMark;
 
       await prisma.tenantBackfillCheckpoint.upsert({
         where: { runId_tableName: { runId, tableName: table } },
@@ -606,6 +639,7 @@ export async function runTenantBackfill(
               domainToShopId,
               proposedOwnership,
               apply,
+              onBeforeShopIdUpdate,
             });
             if (outcome.issue) batchIssues.push(outcome.issue);
             if (outcome.kind === "updated") bUpdated += 1;
@@ -684,6 +718,7 @@ export async function runTenantBackfill(
               unresolvedCounts,
               resumeMetadata: {
                 highWaterMarks,
+                datasetBoundaries,
                 interrupted: true,
                 lastTable: table,
                 lastProcessedId: lastId,
@@ -709,7 +744,10 @@ export async function runTenantBackfill(
         }
       }
 
-      const checksum = await tableOwnershipChecksum(prisma, table);
+      const membership = await recomputeMembershipChecksum(prisma, table, hwm);
+      assertMembershipUnchanged(table, boundary, membership);
+
+      const checksum = await tableOwnershipChecksum(prisma, table, hwm);
       checksums[table] = checksum;
 
       examinedCounts[table] = examined;
@@ -735,11 +773,22 @@ export async function runTenantBackfill(
       const checkpoint = await prisma.tenantBackfillCheckpoint.findUnique({
         where: { runId_tableName: { runId, tableName: phase } },
       });
+
+      const diagnosticIssues = await runDiagnosticPhase(
+        prisma,
+        phase,
+        datasetBoundaries,
+      );
+
       if (checkpoint?.status === "COMPLETED") {
+        // Rehydrate unresolved contribution without skipping (R10).
+        incrementUnresolvedForIssues(unresolvedCounts, diagnosticIssues);
+        await prisma.$transaction(async (tx) => {
+          await persistIssues(tx, runId, diagnosticIssues);
+        });
         continue;
       }
 
-      const diagnosticIssues = await runDiagnosticPhase(prisma, phase);
       incrementUnresolvedForIssues(unresolvedCounts, diagnosticIssues);
 
       await prisma.$transaction(async (tx) => {
@@ -765,6 +814,28 @@ export async function runTenantBackfill(
           },
         });
       });
+
+      if (throwAfterDiagnosticPhase === phase) {
+        throw new Error(
+          `Fault injection: throwAfterDiagnosticPhase=${phase}`,
+        );
+      }
+    }
+
+    // Final membership verification for every merchant table before success.
+    for (const table of BACKFILL_TABLE_ORDER) {
+      const boundary = datasetBoundaries[table]!;
+      const membership = await recomputeMembershipChecksum(
+        prisma,
+        table,
+        boundary.highWaterMark,
+      );
+      assertMembershipUnchanged(table, boundary, membership);
+      checksums[table] = await tableOwnershipChecksum(
+        prisma,
+        table,
+        boundary.highWaterMark,
+      );
     }
 
     const shops = await prisma.shop.findMany({
@@ -797,6 +868,7 @@ export async function runTenantBackfill(
         checksums,
         resumeMetadata: {
           highWaterMarks,
+          datasetBoundaries,
           batchesCommitted,
           shopsWouldCreate,
         },
@@ -853,14 +925,39 @@ export async function runTenantBackfill(
 async function runDiagnosticPhase(
   prisma: PrismaClient,
   phase: DiagnosticPhaseName,
+  boundaries: DatasetBoundaries,
 ): Promise<IssueDraft[]> {
   const issues: IssueDraft[] = [];
   if (phase === "diagnostic:po_supplier") {
-    await diagnosePurchaseOrderSupplierMismatch(prisma, issues);
+    await diagnosePurchaseOrderSupplierMismatch(
+      prisma,
+      issues,
+      boundaries.PurchaseOrder ?? {
+        highWaterMark: null,
+        rowCount: 0,
+        membershipChecksum: membershipChecksum([]),
+      },
+    );
   } else if (phase === "diagnostic:lead_time") {
-    await diagnoseLeadTimeSnapshots(prisma, issues);
+    await diagnoseLeadTimeSnapshots(
+      prisma,
+      issues,
+      boundaries.LeadTimeSnapshot ?? {
+        highWaterMark: null,
+        rowCount: 0,
+        membershipChecksum: membershipChecksum([]),
+      },
+    );
   } else if (phase === "diagnostic:duplicate_shop_settings") {
-    await detectDuplicateShopSettings(prisma, issues);
+    await detectDuplicateShopSettings(
+      prisma,
+      issues,
+      boundaries.ShopSettings ?? {
+        highWaterMark: null,
+        rowCount: 0,
+        membershipChecksum: membershipChecksum([]),
+      },
+    );
   }
   return issues;
 }
@@ -871,22 +968,25 @@ async function fetchBatch(
   prisma: PrismaClient,
   table: BackfillTableName,
   afterId: string,
-  highWaterMark: string,
+  highWaterMark: string | null,
   batchSize: number,
 ): Promise<Row[]> {
   assertApprovedTable(table);
 
-  const hwmParams = highWaterMark.length > 0 ? [highWaterMark] : [];
+  // Empty run boundary: process nothing even if rows appear later (R10).
+  if (highWaterMark === null) {
+    return [];
+  }
 
   if ((DIRECT_OWNER_TABLES as readonly string[]).includes(table)) {
     return prisma.$queryRawUnsafe<Row[]>(
       `SELECT id, shop, "shopId" FROM "${table}"
-       WHERE id > $1${highWaterMark.length > 0 ? ` AND id <= $3` : ""}
+       WHERE id > $1 AND id <= $3
        ORDER BY id ASC
        LIMIT $2`,
       afterId,
       batchSize,
-      ...hwmParams,
+      highWaterMark,
     );
   }
 
@@ -896,12 +996,12 @@ async function fetchBatch(
   return prisma.$queryRawUnsafe<Row[]>(
     `SELECT c.id, c."shopId", c."${parent.parentIdColumn}" AS "parentId"
      FROM "${table}" c
-     WHERE c.id > $1${highWaterMark.length > 0 ? ` AND c.id <= $3` : ""}
+     WHERE c.id > $1 AND c.id <= $3
      ORDER BY c.id ASC
      LIMIT $2`,
     afterId,
     batchSize,
-    ...hwmParams,
+    highWaterMark,
   );
 }
 
@@ -912,8 +1012,17 @@ async function processRow(args: {
   domainToShopId: Map<string, string>;
   proposedOwnership: Map<string, ProposedOwnership>;
   apply: boolean;
+  onBeforeShopIdUpdate?: BeforeShopIdUpdateHook;
 }): Promise<{ kind: RowClassificationKind; issue?: IssueDraft }> {
-  const { tx, table, row, domainToShopId, proposedOwnership, apply } = args;
+  const {
+    tx,
+    table,
+    row,
+    domainToShopId,
+    proposedOwnership,
+    apply,
+    onBeforeShopIdUpdate,
+  } = args;
 
   if ((DIRECT_OWNER_TABLES as readonly string[]).includes(table)) {
     return processDirectRow({
@@ -923,9 +1032,17 @@ async function processRow(args: {
       domainToShopId,
       proposedOwnership,
       apply,
+      onBeforeShopIdUpdate,
     });
   }
-  return processChildRow({ tx, table, row, proposedOwnership, apply });
+  return processChildRow({
+    tx,
+    table,
+    row,
+    proposedOwnership,
+    apply,
+    onBeforeShopIdUpdate,
+  });
 }
 
 async function processDirectRow(args: {
@@ -935,8 +1052,17 @@ async function processDirectRow(args: {
   domainToShopId: Map<string, string>;
   proposedOwnership: Map<string, ProposedOwnership>;
   apply: boolean;
+  onBeforeShopIdUpdate?: BeforeShopIdUpdateHook;
 }): Promise<{ kind: RowClassificationKind; issue?: IssueDraft }> {
-  const { tx, table, row, domainToShopId, proposedOwnership, apply } = args;
+  const {
+    tx,
+    table,
+    row,
+    domainToShopId,
+    proposedOwnership,
+    apply,
+    onBeforeShopIdUpdate,
+  } = args;
   const rawShop = String(row.shop ?? "");
   const existingShopId = (row.shopId as string | null) ?? null;
   const normalized = normalizeShopDomain(rawShop);
@@ -1040,6 +1166,14 @@ async function processDirectRow(args: {
     return { kind: "updated" };
   }
 
+  if (onBeforeShopIdUpdate) {
+    await onBeforeShopIdUpdate({
+      table,
+      rowId: row.id,
+      expectedShopId,
+    });
+  }
+
   const affected = await applyShopIdUpdate(
     tx,
     table,
@@ -1068,8 +1202,10 @@ async function processChildRow(args: {
   row: Row;
   proposedOwnership: Map<string, ProposedOwnership>;
   apply: boolean;
+  onBeforeShopIdUpdate?: BeforeShopIdUpdateHook;
 }): Promise<{ kind: RowClassificationKind; issue?: IssueDraft }> {
-  const { tx, table, row, proposedOwnership, apply } = args;
+  const { tx, table, row, proposedOwnership, apply, onBeforeShopIdUpdate } =
+    args;
   const parentMeta = CHILD_PARENT[table as (typeof CHILD_OWNER_TABLES)[number]];
   assertApprovedParentRelation(parentMeta.parentTable, parentMeta.parentIdColumn);
   const parentId = String(row.parentId ?? "");
@@ -1182,6 +1318,14 @@ async function processChildRow(args: {
     return { kind: "updated" };
   }
 
+  if (onBeforeShopIdUpdate) {
+    await onBeforeShopIdUpdate({
+      table,
+      rowId: row.id,
+      expectedShopId: expectedParentShopId,
+    });
+  }
+
   const affected = await applyShopIdUpdate(
     tx,
     table,
@@ -1267,10 +1411,14 @@ export async function applyShopIdUpdate(
 async function detectDuplicateShopSettings(
   prisma: PrismaClient,
   issues: IssueDraft[],
+  boundary: TableDatasetBoundary,
 ): Promise<void> {
   assertApprovedTable("ShopSettings");
+  if (boundary.highWaterMark === null) return;
+
   const rows = await prisma.$queryRawUnsafe<Array<{ id: string; shop: string }>>(
-    `SELECT id, shop FROM "ShopSettings" ORDER BY id`,
+    `SELECT id, shop FROM "ShopSettings" WHERE id <= $1 ORDER BY id`,
+    boundary.highWaterMark,
   );
 
   const byNormalized = new Map<string, Array<{ id: string; shop: string }>>();
@@ -1303,9 +1451,12 @@ async function detectDuplicateShopSettings(
 async function diagnosePurchaseOrderSupplierMismatch(
   prisma: PrismaClient,
   issues: IssueDraft[],
+  boundary: TableDatasetBoundary,
 ): Promise<void> {
   assertApprovedTable("PurchaseOrder");
   assertApprovedTable("Supplier");
+  if (boundary.highWaterMark === null) return;
+
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
@@ -1317,7 +1468,9 @@ async function diagnosePurchaseOrderSupplierMismatch(
     `SELECT po.id, po.shop, po."supplierId", s.shop AS "supplierShop"
      FROM "PurchaseOrder" po
      LEFT JOIN "Supplier" s ON s.id = po."supplierId"
+     WHERE po.id <= $1
      ORDER BY po.id`,
+    boundary.highWaterMark,
   );
 
   for (const row of rows) {
@@ -1347,10 +1500,13 @@ async function diagnosePurchaseOrderSupplierMismatch(
 async function diagnoseLeadTimeSnapshots(
   prisma: PrismaClient,
   issues: IssueDraft[],
+  boundary: TableDatasetBoundary,
 ): Promise<void> {
   assertApprovedTable("LeadTimeSnapshot");
   assertApprovedTable("Supplier");
   assertApprovedTable("PurchaseOrder");
+  if (boundary.highWaterMark === null) return;
+
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
@@ -1370,7 +1526,9 @@ async function diagnoseLeadTimeSnapshots(
      FROM "LeadTimeSnapshot" lt
      LEFT JOIN "Supplier" s ON s.id = lt."supplierId"
      LEFT JOIN "PurchaseOrder" po ON po.id = lt."purchaseOrderId"
+     WHERE lt.id <= $1
      ORDER BY lt.id`,
+    boundary.highWaterMark,
   );
 
   for (const row of rows) {
@@ -1436,11 +1594,18 @@ async function diagnoseLeadTimeSnapshots(
 async function tableOwnershipChecksum(
   prisma: PrismaClient,
   table: BackfillTableName,
+  highWaterMark: string | null,
 ): Promise<string> {
   assertApprovedTable(table);
+  if (highWaterMark === null) {
+    return checksumRows([], ["id", "shopId"]);
+  }
   const rows = await prisma.$queryRawUnsafe<
     Array<{ id: string; shopId: string | null }>
-  >(`SELECT id, "shopId" FROM "${table}" ORDER BY id`);
+  >(
+    `SELECT id, "shopId" FROM "${table}" WHERE id <= $1 ORDER BY id`,
+    highWaterMark,
+  );
   return checksumRows(
     rows.map((r) => ({ id: r.id, shopId: r.shopId })),
     ["id", "shopId"],

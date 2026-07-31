@@ -3,7 +3,8 @@
 **Claude-reviewed head:** `7aabb095806716697bfea2783379351b15e1cda2`
 **Verdict preserved:** `NOT READY`
 **Product-owner decision:** All findings F-PR1-01 through F-PR1-15 accepted; ordinary non-concurrent index deviation rejected.
-**ChatGPT pre-review residual gaps:** R1–R8 (this correction pass)
+**ChatGPT pre-review residual gaps:** R1–R13
+**Prior live tip (pre R9–R13):** `adf0b52103c517c904a7a33ee76cfaca29971860`
 **Implementation status posture:** `IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION` (code present; findings not independently closed)
 **Mandatory verification outstanding:** Fresh Claude review of the live PR tip after ChatGPT exact-head verification
 
@@ -25,7 +26,7 @@
 | F-PR1-14 | P3 | Updated counted without affected rows / stale concurrency | `engine.ts` | RETURNING + re-read after zero-row UPDATE (R5) | `affected-row-concurrency.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Concurrency classification suite | Open until Claude accepts corrected head |
 | F-PR1-15 | P3 | Dynamic SQL identifiers without assert | `tables.ts`, `engine.ts` | Allowlist assert before interpolate | `allowlist.migration.test.ts` | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Allowlist suite present | Open until Claude accepts corrected head |
 
-## ChatGPT residual gap backlog (R1–R8)
+## ChatGPT residual gap backlog (R1–R13)
 
 | ID | Status | Residual risk |
 |---|---|---|
@@ -37,6 +38,11 @@
 | R6 Durable run-to-issue detections | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
 | R7 Record identity wording | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
 | R8 Backlog honesty | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
+| R9 Deterministic concurrent-index overlap | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
+| R10 Dataset boundaries + membership checksums | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
+| R11 Full-engine affected-row races | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
+| R12 Explicit maintenance URL for index apply | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
+| R13 Schema-datasource Prisma drift (no URL argv) | IMPLEMENTED — AWAITING FRESH CLAUDE VERIFICATION | Open until Claude accepts |
 
 ## Explicitly still open (not closed by PR 1 code)
 

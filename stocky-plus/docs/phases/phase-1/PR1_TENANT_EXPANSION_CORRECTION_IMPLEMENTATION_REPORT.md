@@ -19,13 +19,20 @@ Do not store a commit’s own SHA inside itself as a “final PR head.” Distin
 | Primary correction-head CI | run `30592780673` / job `91038478251` / success |
 | Correction record-association head | `e8f91ae46e4b1a2dc09ea29c2f72dac3e25cc115` |
 | Correction record-association CI | run `30593038504` / job `91039234708` / success |
-| Pre-review residual gap prior head | `e8f91ae46e4b1a2dc09ea29c2f72dac3e25cc115` |
-| Later residual-gap implementation commit(s) | Recorded in PR description after push (not self-referential here) |
-| Current live PR tip + exact-head CI | Recorded in PR description and ChatGPT verification — **mutable**; never called “final” inside an earlier commit |
+| Pre-review residual gap prior tip (R1–R8) | `adf0b52103c517c904a7a33ee76cfaca29971860` |
+| R9–R13 evidence-gap implementation commit(s) | Recorded in PR description after push (not self-referential here) |
+| Current live PR tip + exact-head CI | Recorded in PR description and ChatGPT verification — **mutable** |
 
 ## Summary
 
 Addressed Claude findings F-PR1-01…F-PR1-15 and ChatGPT residual gaps R1–R8 on draft PR #11 without merging, without starting PR 2/3, and without activating enforcement. Findings remain **open for fresh Claude verification** — implementation status is not independent closure.
+
+### R9–R13 (ChatGPT evidence gaps before Claude)
+- R9: Concurrent index overlap proved via builder PID + `pg_stat_progress_create_index` / locks before writes
+- R10: Dataset boundaries with membership SHA-256; ownership checksums bounded; diagnostics bounded; diagnostic resume rehydrates
+- R11: Full-engine races via `onBeforeShopIdUpdate` hook + separate sessions; exact `CONCURRENT_SHOP_ID_CONFLICT`
+- R12: `tenant:indexes:apply` requires explicit `TENANT_MAINTENANCE_DATABASE_URL`
+- R13: Drift uses `--from-schema-datasource` with `DATABASE_URL` in child env (not argv)
 
 ## Residual-gap corrections (R1–R8)
 

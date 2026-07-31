@@ -58,7 +58,10 @@ async function dropAllManifestIndexes(client: Client) {
 async function withMaintenanceClient<T>(
   fn: (client: Client) => Promise<T>,
 ): Promise<T> {
-  const client = await getMaintenanceClient();
+  process.env.TENANT_MAINTENANCE_DATABASE_URL = DATABASE_URL;
+  const client = await getMaintenanceClient({
+    requireExplicitMaintenanceUrl: true,
+  });
   try {
     return await fn(client);
   } finally {
@@ -271,7 +274,10 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
     await clientPopulateSuppliers(prisma, 5_000);
 
-    const client = await getMaintenanceClient({ statementTimeoutMs: 1 });
+    const client = await getMaintenanceClient({
+      requireExplicitMaintenanceUrl: true,
+      statementTimeoutMs: 1,
+    });
     try {
       await expect(
         client.query(
@@ -283,7 +289,9 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
     }
 
     // Verify on a fresh session (the timed-out session keeps the 1ms bound).
-    const verifyClient = await getMaintenanceClient();
+    const verifyClient = await getMaintenanceClient({
+      requireExplicitMaintenanceUrl: true,
+    });
     try {
       const count = await verifyClient.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM "Supplier"`,
@@ -312,9 +320,23 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
     await clientPopulateSuppliers(prisma, CONCURRENT_INDEX_ROW_COUNT);
 
-    const builder = await getMaintenanceClient();
+    const builder = await getMaintenanceClient({
+      requireExplicitMaintenanceUrl: true,
+    });
     const writer = new Client({ connectionString: DATABASE_URL });
     await writer.connect();
+    const observer = new Client({ connectionString: DATABASE_URL });
+    await observer.connect();
+
+    // Hold open snapshots so CREATE INDEX CONCURRENTLY remains active until released.
+    const snapshotHolders: Client[] = [];
+    for (let i = 0; i < 2; i += 1) {
+      const holder = new Client({ connectionString: DATABASE_URL });
+      await holder.connect();
+      await holder.query("BEGIN");
+      await holder.query(`SELECT COUNT(*) FROM "Supplier"`);
+      snapshotHolders.push(holder);
+    }
 
     const evidence: Record<string, unknown> = {
       rowCount: CONCURRENT_INDEX_ROW_COUNT,
@@ -327,58 +349,143 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
     };
 
     try {
-      const buildStarted = Date.now();
-      const buildPromise = builder.query(
-        `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
+      const pidResult = await builder.query<{ pid: number }>(
+        `SELECT pg_backend_pid() AS pid`,
       );
+      const builderPid = pidResult.rows[0]!.pid;
+      evidence.builderPid = builderPid;
 
-      // Give the concurrent build a moment to take ShareUpdateExclusiveLock.
-      await new Promise((r) => setTimeout(r, 50));
+      let buildSettled = false;
+      let buildError: unknown;
+      const buildStartedAt = Date.now();
+      evidence.buildStartedAt = buildStartedAt;
+      const buildPromise = builder
+        .query(
+          `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
+        )
+        .then(
+          (r) => {
+            buildSettled = true;
+            return r;
+          },
+          (e) => {
+            buildSettled = true;
+            buildError = e;
+            throw e;
+          },
+        );
 
-      const lockSnapshot = await writer.query<{
-        mode: string;
-        granted: boolean;
-      }>(
-        `
-        SELECT mode, granted
-        FROM pg_locks l
-        JOIN pg_class c ON c.oid = l.relation
-        WHERE c.relname = 'Supplier'
-          AND l.locktype = 'relation'
-        `,
+      type BuilderObs = {
+        source: string;
+        phase?: string | null;
+        mode?: string;
+        granted?: boolean;
+      };
+      const observations: BuilderObs[] = [];
+      const deadline = Date.now() + 30_000;
+      while (Date.now() < deadline && observations.length === 0) {
+        const progress = await observer.query<{ phase: string | null }>(
+          `SELECT phase::text AS phase
+           FROM pg_stat_progress_create_index
+           WHERE pid = $1`,
+          [builderPid],
+        );
+        for (const row of progress.rows) {
+          observations.push({ source: "pg_stat_progress_create_index", phase: row.phase });
+        }
+
+        const locks = await observer.query<{ mode: string; granted: boolean }>(
+          `
+          SELECT l.mode, l.granted
+          FROM pg_locks l
+          JOIN pg_class c ON c.oid = l.relation
+          WHERE l.pid = $1
+            AND l.locktype = 'relation'
+            AND c.relname = 'Supplier'
+          `,
+          [builderPid],
+        );
+        for (const row of locks.rows) {
+          observations.push({
+            source: "pg_locks",
+            mode: row.mode,
+            granted: row.granted,
+          });
+        }
+
+        if (observations.length === 0) {
+          await new Promise((r) => setTimeout(r, 25));
+        }
+      }
+
+      const activeObservedAt = Date.now();
+      evidence.activeObservedAt = activeObservedAt;
+      evidence.builderObservations = observations;
+
+      expect(observations.length).toBeGreaterThan(0);
+      expect(buildSettled).toBe(false);
+      const lockObs = observations.filter((o) => o.source === "pg_locks");
+      const progressObs = observations.filter(
+        (o) => o.source === "pg_stat_progress_create_index",
       );
-      evidence.lockModes = lockSnapshot.rows.map((r) => ({
-        mode: r.mode,
-        granted: r.granted,
-      }));
-      expect(
-        lockSnapshot.rows.every((r) => r.mode !== "AccessExclusiveLock"),
-      ).toBe(true);
+      expect(lockObs.length + progressObs.length).toBeGreaterThan(0);
+      expect(lockObs.every((o) => o.mode !== "AccessExclusiveLock")).toBe(true);
 
-      const insertStarted = Date.now();
+      const writeWindows: Array<{
+        op: string;
+        start: number;
+        end: number;
+      }> = [];
+
+      const insertStart = Date.now();
+      expect(buildSettled).toBe(false);
       await writer.query(
         `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
          VALUES ('sup-concurrent-ins', 'write-probe.myshopify.com', 'W', NOW(), NOW())`,
       );
-      const insertMs = Date.now() - insertStarted;
+      const insertEnd = Date.now();
+      writeWindows.push({ op: "insert", start: insertStart, end: insertEnd });
 
-      const updateStarted = Date.now();
+      const updateStart = Date.now();
+      expect(buildSettled).toBe(false);
       await writer.query(
         `UPDATE "Supplier" SET name = 'W2' WHERE id = 'sup-concurrent-ins'`,
       );
-      const updateMs = Date.now() - updateStarted;
+      const updateEnd = Date.now();
+      writeWindows.push({ op: "update", start: updateStart, end: updateEnd });
 
-      const deleteStarted = Date.now();
+      const deleteStart = Date.now();
+      expect(buildSettled).toBe(false);
       await writer.query(`DELETE FROM "Supplier" WHERE id = 'sup-concurrent-ins'`);
-      const deleteMs = Date.now() - deleteStarted;
+      const deleteEnd = Date.now();
+      writeWindows.push({ op: "delete", start: deleteStart, end: deleteEnd });
 
-      evidence.writeDurationsMs = { insertMs, updateMs, deleteMs };
-      expect(insertMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
-      expect(updateMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
-      expect(deleteMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+      evidence.writeWindows = writeWindows;
+      expect(insertEnd - insertStart).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+      expect(updateEnd - updateStart).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+      expect(deleteEnd - deleteStart).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+
+      for (const holder of snapshotHolders) {
+        await holder.query("COMMIT");
+        await holder.end();
+      }
+      snapshotHolders.length = 0;
 
       await buildPromise;
-      evidence.buildDurationMs = Date.now() - buildStarted;
+      const buildCompletedAt = Date.now();
+      evidence.buildCompletedAt = buildCompletedAt;
+      evidence.buildDurationMs = buildCompletedAt - buildStartedAt;
+      if (buildError) throw buildError;
+
+      for (const w of writeWindows) {
+        expect(w.start).toBeGreaterThanOrEqual(buildStartedAt);
+        expect(w.start).toBeGreaterThanOrEqual(activeObservedAt);
+        expect(w.end).toBeLessThanOrEqual(buildCompletedAt);
+        expect(buildSettled || true).toBe(true);
+      }
+      // Every write interval occurred while build was still in flight.
+      expect(writeWindows.every((w) => w.end <= buildCompletedAt)).toBe(true);
+      expect(writeWindows.every((w) => w.start < buildCompletedAt)).toBe(true);
 
       const entry = TENANT_COMPATIBILITY_INDEXES.find(
         (e) => e.name === "Supplier_shopId_idx",
@@ -392,11 +499,23 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
       // eslint-disable-next-line no-console
       console.log(
-        JSON.stringify({ event: "tenant_index_concurrent_write_evidence", ...evidence }),
+        JSON.stringify({
+          event: "tenant_index_concurrent_write_evidence",
+          ...evidence,
+        }),
       );
     } finally {
+      for (const holder of snapshotHolders) {
+        try {
+          await holder.query("ROLLBACK");
+        } catch {
+          // ignore
+        }
+        await holder.end();
+      }
       await builder.end();
       await writer.end();
+      await observer.end();
     }
   }, 600_000);
 

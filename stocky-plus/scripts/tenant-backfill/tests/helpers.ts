@@ -4,7 +4,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PrismaClient } from "@prisma/client";
 import { PrismaClient as PrismaClientCtor } from "@prisma/client";
-import { Client } from "pg";
 import { expect } from "vitest";
 import { applyIndexes } from "../../tenant-indexes/apply";
 import { BACKFILL_TABLE_ORDER } from "../tables";
@@ -54,8 +53,10 @@ export function migrateDeploy(): string {
 }
 
 export async function applyCompatibilityIndexes(): Promise<void> {
-  const client = new Client({ connectionString: DATABASE_URL });
-  await client.connect();
+  process.env.TENANT_MAINTENANCE_DATABASE_URL = DATABASE_URL;
+  const client = await (
+    await import("../../tenant-indexes/connection")
+  ).getMaintenanceClient({ requireExplicitMaintenanceUrl: true });
   try {
     await applyIndexes(client, { apply: true });
   } finally {
