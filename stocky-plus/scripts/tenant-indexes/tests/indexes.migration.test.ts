@@ -29,6 +29,8 @@ const DATABASE_URL =
 const CONCURRENT_WRITE_THRESHOLD_MS = 15_000;
 /** Populated fixture — large enough that CIC remains observable under RR holders. */
 const CONCURRENT_INDEX_ROW_COUNT = 100_000;
+/** Larger fixture for observable active build/validation scan phases (F-F03). */
+const ACTIVE_PHASE_ROW_COUNT = 400_000;
 
 function run(cmd: string, args: string[]) {
   return execFileSync(cmd, args, {
@@ -618,6 +620,332 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           "fb04345f129b8664566c5947f2ad75f57102269b",
       }),
     );
+  }, 900_000);
+
+  it("DML overlaps active build-scan and validation-scan phases (F-F03), 3 iterations", async () => {
+    await resetPublicSchema(prisma);
+    run("npx", ["prisma", "migrate", "deploy"]);
+
+    await withMaintenanceClient(async (client) => {
+      await applyIndexes(client, { apply: true });
+    });
+
+    await clientPopulateSuppliers(prisma, ACTIVE_PHASE_ROW_COUNT);
+
+    const iterationEvidence: Array<Record<string, unknown>> = [];
+
+    for (let iteration = 1; iteration <= 3; iteration += 1) {
+      await withMaintenanceClient(async (client) => {
+        await client.query(
+          `DROP INDEX CONCURRENTLY IF EXISTS "Supplier_shopId_idx"`,
+        );
+      });
+
+      const builder = await getMaintenanceClient({
+        requireExplicitMaintenanceUrl: true,
+      });
+      const writer = new Client({ connectionString: DATABASE_URL });
+      await writer.connect();
+      const observer = new Client({ connectionString: DATABASE_URL });
+      await observer.connect();
+
+      // Writer-gate transactions make phase entry deterministic: CREATE INDEX
+      // CONCURRENTLY parks at "waiting for writers before build" until gate1
+      // commits and at "waiting for writers before validation" until gate2
+      // commits, so each active phase starts exactly when we release it.
+      const gate1 = new Client({ connectionString: DATABASE_URL });
+      await gate1.connect();
+      const gate2 = new Client({ connectionString: DATABASE_URL });
+      await gate2.connect();
+
+      const evidence: Record<string, unknown> = {
+        iteration,
+        rowCount: ACTIVE_PHASE_ROW_COUNT,
+        writeThresholdMs: CONCURRENT_WRITE_THRESHOLD_MS,
+        environment: {
+          node: process.version,
+          platform: process.platform,
+          databaseUrlHost: new URL(DATABASE_URL).host,
+        },
+      };
+
+      try {
+        // Deterministically lengthen the active phases: no parallel workers
+        // and a tiny sort budget force long external build and validation scans.
+        await builder.query(`SET max_parallel_maintenance_workers = 0`);
+        await builder.query(`SET maintenance_work_mem = '1MB'`);
+
+        const pidResult = await builder.query<{ pid: number }>(
+          `SELECT pg_backend_pid() AS pid`,
+        );
+        const builderPid = pidResult.rows[0]!.pid;
+        evidence.builderPid = builderPid;
+
+        // Gate 1 open before the build starts — first WaitForLockers waits on it.
+        await gate1.query("BEGIN");
+        await gate1.query(
+          `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+           VALUES ('sup-gate1-${iteration}', 'gate.myshopify.com', 'G1', NOW(), NOW())`,
+        );
+
+        let buildSettled = false;
+        let buildError: unknown;
+        let buildSettledAtNs: bigint | null = null;
+        const buildStartedAtNs = process.hrtime.bigint();
+        evidence.buildStartedAtNs = buildStartedAtNs.toString();
+
+        const buildPromise = builder
+          .query(
+            `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
+          )
+          .then(
+            (r) => {
+              buildSettledAtNs = process.hrtime.bigint();
+              buildSettled = true;
+              return r;
+            },
+            (e) => {
+              buildSettledAtNs = process.hrtime.bigint();
+              buildSettled = true;
+              buildError = e;
+              throw e;
+            },
+          );
+
+        type PhaseWrites = {
+          phaseAtStart: string;
+          relid: string;
+          schema: string;
+          lockModes: string[];
+          writeWindows: Array<{
+            op: string;
+            startNs: string;
+            endNs: string;
+            durationMs: number;
+          }>;
+        };
+        const phasesSeen = new Set<string>();
+
+        const waitForPhase = async (
+          target: string,
+          deadlineMs: number,
+        ): Promise<{ phase: string; relid: string; schema: string }> => {
+          const deadline = Date.now() + deadlineMs;
+          for (;;) {
+            if (buildSettled) {
+              throw new Error(
+                `Iteration ${iteration}: build settled before phase "${target}" was observed ` +
+                  `(phasesSeen=${JSON.stringify([...phasesSeen])})`,
+              );
+            }
+            if (Date.now() > deadline) {
+              throw new Error(
+                `Iteration ${iteration}: timed out waiting for phase "${target}" ` +
+                  `(phasesSeen=${JSON.stringify([...phasesSeen])})`,
+              );
+            }
+            const progress = await observer.query<{
+              phase: string | null;
+              relid: string;
+              schema: string;
+            }>(
+              `SELECT p.phase::text AS phase, p.relid::text AS relid,
+                      n.nspname AS schema
+               FROM pg_stat_progress_create_index p
+               JOIN pg_class c ON c.oid = p.relid
+               JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE p.pid = $1 AND c.relname = 'Supplier'`,
+              [builderPid],
+            );
+            const row = progress.rows[0];
+            if (row?.phase) {
+              phasesSeen.add(row.phase);
+              if (row.phase === target) {
+                return { phase: row.phase, relid: row.relid, schema: row.schema };
+              }
+            }
+          }
+        };
+
+        const grantedTargetLocks = async (): Promise<string[]> => {
+          const locks = await observer.query<{ mode: string }>(
+            `SELECT l.mode
+             FROM pg_locks l
+             JOIN pg_class c ON c.oid = l.relation
+             WHERE l.pid = $1
+               AND l.locktype = 'relation'
+               AND c.relname = 'Supplier'
+               AND l.granted = true`,
+            [builderPid],
+          );
+          return locks.rows.map((l) => l.mode);
+        };
+
+        const timedWritesDuringPhase = async (
+          observedPhase: { phase: string; relid: string; schema: string },
+          lockModes: string[],
+          idSuffix: string,
+        ): Promise<PhaseWrites> => {
+          const windows: PhaseWrites["writeWindows"] = [];
+          const rowId = `sup-active-${idSuffix}`;
+          const ops: Array<{ op: string; sql: string }> = [
+            {
+              op: "insert",
+              sql: `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+                    VALUES ('${rowId}', 'active-probe.myshopify.com', 'A', NOW(), NOW())`,
+            },
+            {
+              op: "update",
+              sql: `UPDATE "Supplier" SET name = 'A2' WHERE id = '${rowId}'`,
+            },
+            {
+              op: "delete",
+              sql: `DELETE FROM "Supplier" WHERE id = '${rowId}'`,
+            },
+          ];
+          for (const { op, sql } of ops) {
+            expect(buildSettled).toBe(false);
+            const startNs = process.hrtime.bigint();
+            await writer.query(sql);
+            const endNs = process.hrtime.bigint();
+            expect(buildSettled).toBe(false);
+            expect(buildSettledAtNs).toBeNull();
+            const durationMs = Number(endNs - startNs) / 1e6;
+            expect(durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+            windows.push({
+              op,
+              startNs: startNs.toString(),
+              endNs: endNs.toString(),
+              durationMs,
+            });
+          }
+          return {
+            phaseAtStart: observedPhase.phase,
+            relid: observedPhase.relid,
+            schema: observedPhase.schema,
+            lockModes,
+            writeWindows: windows,
+          };
+        };
+
+        // Deterministic build gate: CIC parks until gate1 commits.
+        await waitForPhase("waiting for writers before build", 60_000);
+        // Gate 2 opens while CIC is parked — it is outside the first locker
+        // snapshot but inside the validation locker snapshot.
+        await gate2.query("BEGIN");
+        await gate2.query(
+          `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+           VALUES ('sup-gate2-${iteration}', 'gate.myshopify.com', 'G2', NOW(), NOW())`,
+        );
+        await gate1.query("COMMIT");
+
+        // PostgreSQL 16 reports the btree build sub-phase in the phase text.
+        const buildPhase = await waitForPhase(
+          "building index: scanning table",
+          120_000,
+        );
+        const buildLocks = await grantedTargetLocks();
+        expect(buildLocks.length).toBeGreaterThan(0);
+        expect(buildLocks).toContain("ShareUpdateExclusiveLock");
+        expect(buildLocks).not.toContain("AccessExclusiveLock");
+        const buildScanWrites = await timedWritesDuringPhase(
+          buildPhase,
+          buildLocks,
+          `build-${iteration}`,
+        );
+
+        // Deterministic validation gate: CIC parks until gate2 commits.
+        await waitForPhase("waiting for writers before validation", 120_000);
+        await gate2.query("COMMIT");
+
+        const validationPhase = await waitForPhase(
+          "index validation: scanning table",
+          120_000,
+        );
+        const validationLocks = await grantedTargetLocks();
+        expect(validationLocks.length).toBeGreaterThan(0);
+        expect(validationLocks).toContain("ShareUpdateExclusiveLock");
+        expect(validationLocks).not.toContain("AccessExclusiveLock");
+        const validationScanWrites = await timedWritesDuringPhase(
+          validationPhase,
+          validationLocks,
+          `validate-${iteration}`,
+        );
+
+        await buildPromise;
+        expect(buildSettledAtNs).not.toBeNull();
+        const settledAt = buildSettledAtNs!;
+        evidence.buildSettledAtNs = settledAt.toString();
+        evidence.buildDurationMs = Number(settledAt - buildStartedAtNs) / 1e6;
+        if (buildError) throw buildError;
+
+        evidence.phasesSeen = [...phasesSeen];
+        evidence.buildScanWrites = buildScanWrites;
+        evidence.validationScanWrites = validationScanWrites;
+
+        expect(buildScanWrites.phaseAtStart).toBe(
+          "building index: scanning table",
+        );
+        expect(validationScanWrites.phaseAtStart).toBe(
+          "index validation: scanning table",
+        );
+
+        for (const phaseWrites of [buildScanWrites, validationScanWrites]) {
+          expect(phaseWrites.schema).toBe("public");
+          expect(phaseWrites.lockModes).toContain("ShareUpdateExclusiveLock");
+          expect(phaseWrites.lockModes).not.toContain("AccessExclusiveLock");
+          expect(phaseWrites.writeWindows).toHaveLength(3);
+          for (const w of phaseWrites.writeWindows) {
+            expect(BigInt(w.startNs) > buildStartedAtNs).toBe(true);
+            expect(BigInt(w.endNs) < settledAt).toBe(true);
+            expect(w.durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+          }
+        }
+
+        // Remove committed gate rows so later iterations start identically.
+        await writer.query(
+          `DELETE FROM "Supplier" WHERE id IN ('sup-gate1-${iteration}', 'sup-gate2-${iteration}')`,
+        );
+
+        const entry = TENANT_COMPATIBILITY_INDEXES.find(
+          (e) => e.name === "Supplier_shopId_idx",
+        )!;
+        const inspected = await inspectIndex(builder, entry.name);
+        expect(classifyIndex(entry, inspected)).toBe("valid_exact");
+        if (inspected.status === "present") {
+          expect(inspected.indisvalid).toBe(true);
+          expect(inspected.indisready).toBe(true);
+        }
+        evidence.indexVerification = "valid_exact";
+
+        iterationEvidence.push(evidence);
+        // eslint-disable-next-line no-console
+        console.log(
+          JSON.stringify({
+            event: "tenant_index_active_phase_write_evidence",
+            ...evidence,
+          }),
+        );
+      } finally {
+        for (const gate of [gate1, gate2]) {
+          try {
+            await gate.query("ROLLBACK");
+          } catch {
+            // already committed or closed
+          }
+          try {
+            await gate.end();
+          } catch {
+            // ignore
+          }
+        }
+        await builder.end();
+        await writer.end();
+        await observer.end();
+      }
+    }
+
+    expect(iterationEvidence).toHaveLength(3);
   }, 900_000);
 
   it("verify fails when indexes were dropped after apply", async () => {
