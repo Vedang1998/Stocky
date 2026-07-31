@@ -72,6 +72,32 @@ Addressed Claude follow-up findings **F-F00 through F-F07** (product-owner accep
 
 Pre-existing advisories remain tracked under **R-013** (and follow-up **R-062**). They are not resolved by PR #11. No product-owner decision required for a newly introduced vulnerable dependency.
 
+## Local validation (tip `dfe05865fc8ee2b51fa15e3bc16241b9221e1087`)
+
+Environment: disposable PostgreSQL 16 at `localhost:5432` / `stocky_plus_migrations`; inventory-write flags false.
+
+| Command | Exit |
+|---|---|
+| `git diff --check` | 0 |
+| `npm ci` | 0 (32 high advisories reported; unchanged vs main) |
+| `npx prisma generate` | 0 |
+| `npx prisma validate` | 0 |
+| `npx prisma migrate deploy` | 0 |
+| `npm run tenant:indexes:plan` (pre-apply) | **1** (expected: 28 missing) |
+| `npm run tenant:indexes:apply -- --apply` | 0 |
+| `npm run tenant:indexes:verify` | 0 |
+| `npm run tenant:schema:drift` | 0 (`tenant_prisma_schema_drift_ok`) |
+| `npm run tenant:indexes:plan` (post-apply) | 0 (`valid_exact: 28`) |
+| `npm run test:migrations` | 0 (106 tests / 24 files) |
+| `npm run test:subject-memory` | 0 (2 tests) |
+| `npm run lint` | 0 |
+| `npm run typecheck` | 0 |
+| `npm test` | 0 (56 tests) |
+| `npm run build` | 0 |
+| `npm run graphql-codegen` | 0 |
+
+Exact-head CI run/job IDs recorded in the PR description after push.
+
 ## Explicit non-claims
 
 - No production or merchant data accessed.
