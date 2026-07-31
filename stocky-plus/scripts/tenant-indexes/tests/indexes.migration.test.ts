@@ -27,7 +27,8 @@ const DATABASE_URL =
 
 /** Concurrent-write acceptance threshold during CONCURRENTLY index build. */
 const CONCURRENT_WRITE_THRESHOLD_MS = 15_000;
-const CONCURRENT_INDEX_ROW_COUNT = 20_000;
+/** Populated fixture — large enough that CIC remains observable under RR holders. */
+const CONCURRENT_INDEX_ROW_COUNT = 100_000;
 
 function run(cmd: string, args: string[]) {
   return execFileSync(cmd, args, {
@@ -309,215 +310,315 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
     }
   }, 300_000);
 
-  it("concurrent representative writes remain available during CONCURRENTLY index build", async () => {
+  it("deterministic REPEATABLE READ overlap: ShareUpdateExclusiveLock, no AccessExclusiveLock, 10 iterations", async () => {
     await resetPublicSchema(prisma);
     run("npx", ["prisma", "migrate", "deploy"]);
 
     await withMaintenanceClient(async (client) => {
       await applyIndexes(client, { apply: true });
-      await client.query(`DROP INDEX CONCURRENTLY IF EXISTS "Supplier_shopId_idx"`);
     });
 
     await clientPopulateSuppliers(prisma, CONCURRENT_INDEX_ROW_COUNT);
 
-    const builder = await getMaintenanceClient({
-      requireExplicitMaintenanceUrl: true,
-    });
-    const writer = new Client({ connectionString: DATABASE_URL });
-    await writer.connect();
-    const observer = new Client({ connectionString: DATABASE_URL });
-    await observer.connect();
+    const allIterationEvidence: Array<Record<string, unknown>> = [];
 
-    // Hold open snapshots so CREATE INDEX CONCURRENTLY remains active until released.
-    const snapshotHolders: Client[] = [];
-    for (let i = 0; i < 2; i += 1) {
+    for (let iteration = 1; iteration <= 10; iteration += 1) {
+      await withMaintenanceClient(async (client) => {
+        await client.query(
+          `DROP INDEX CONCURRENTLY IF EXISTS "Supplier_shopId_idx"`,
+        );
+      });
+
+      const builder = await getMaintenanceClient({
+        requireExplicitMaintenanceUrl: true,
+      });
+      const writer = new Client({ connectionString: DATABASE_URL });
+      await writer.connect();
+      const observer = new Client({ connectionString: DATABASE_URL });
+      await observer.connect();
+
+      // Holder: REPEATABLE READ READ ONLY with positively retained backend_xmin.
       const holder = new Client({ connectionString: DATABASE_URL });
       await holder.connect();
-      await holder.query("BEGIN");
+      await holder.query(
+        "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
+      );
       await holder.query(`SELECT COUNT(*) FROM "Supplier"`);
-      snapshotHolders.push(holder);
-    }
-
-    const evidence: Record<string, unknown> = {
-      rowCount: CONCURRENT_INDEX_ROW_COUNT,
-      writeThresholdMs: CONCURRENT_WRITE_THRESHOLD_MS,
-      environment: {
-        node: process.version,
-        platform: process.platform,
-        databaseUrlHost: new URL(DATABASE_URL).host,
-      },
-    };
-
-    try {
-      const pidResult = await builder.query<{ pid: number }>(
+      const holderPidRes = await holder.query<{ pid: number }>(
         `SELECT pg_backend_pid() AS pid`,
       );
-      const builderPid = pidResult.rows[0]!.pid;
-      evidence.builderPid = builderPid;
+      const holderPid = holderPidRes.rows[0]!.pid;
+      const holderStatus = await observer.query<{
+        state: string | null;
+        backend_xmin: string | null;
+      }>(
+        `SELECT state, backend_xmin::text AS backend_xmin
+         FROM pg_stat_activity WHERE pid = $1`,
+        [holderPid],
+      );
+      expect(holderStatus.rows[0]?.state).toBe("idle in transaction");
+      expect(holderStatus.rows[0]?.backend_xmin).toBeTruthy();
+      const holderBackendXmin = holderStatus.rows[0]!.backend_xmin;
 
-      let buildSettled = false;
-      let buildError: unknown;
-      const buildStartedAt = Date.now();
-      evidence.buildStartedAt = buildStartedAt;
-      const buildPromise = builder
-        .query(
-          `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
-        )
-        .then(
-          (r) => {
-            buildSettled = true;
-            return r;
-          },
-          (e) => {
-            buildSettled = true;
-            buildError = e;
-            throw e;
-          },
-        );
-
-      type BuilderObs = {
-        source: string;
-        phase?: string | null;
-        mode?: string;
-        granted?: boolean;
+      const evidence: Record<string, unknown> = {
+        iteration,
+        rowCount: CONCURRENT_INDEX_ROW_COUNT,
+        writeThresholdMs: CONCURRENT_WRITE_THRESHOLD_MS,
+        holderPid,
+        holderBackendXmin,
+        environment: {
+          node: process.version,
+          platform: process.platform,
+          databaseUrlHost: new URL(DATABASE_URL).host,
+          supersededPriorR9Head:
+            "fb04345f129b8664566c5947f2ad75f57102269b",
+          note: "Prior R9 READ COMMITTED holder evidence rejected and superseded",
+        },
       };
-      const observations: BuilderObs[] = [];
-      const deadline = Date.now() + 30_000;
-      while (Date.now() < deadline && observations.length === 0) {
-        const progress = await observer.query<{ phase: string | null }>(
-          `SELECT phase::text AS phase
-           FROM pg_stat_progress_create_index
-           WHERE pid = $1`,
-          [builderPid],
+
+      try {
+        const pidResult = await builder.query<{ pid: number }>(
+          `SELECT pg_backend_pid() AS pid`,
         );
-        for (const row of progress.rows) {
-          observations.push({ source: "pg_stat_progress_create_index", phase: row.phase });
+        const builderPid = pidResult.rows[0]!.pid;
+        evidence.builderPid = builderPid;
+
+        let buildSettled = false;
+        let buildError: unknown;
+        let buildSettledAtNs: bigint | null = null;
+        const buildStartedAtNs = process.hrtime.bigint();
+        evidence.buildStartedAtNs = buildStartedAtNs.toString();
+
+        const buildPromise = builder
+          .query(
+            `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
+          )
+          .then(
+            (r) => {
+              buildSettledAtNs = process.hrtime.bigint();
+              buildSettled = true;
+              return r;
+            },
+            (e) => {
+              buildSettledAtNs = process.hrtime.bigint();
+              buildSettled = true;
+              buildError = e;
+              throw e;
+            },
+          );
+
+        type ProgressObs = { phase: string | null };
+        type LockObs = { mode: string; granted: boolean };
+        let progressObs: ProgressObs[] = [];
+        let lockObs: LockObs[] = [];
+        let waitingForSnapshot = false;
+        const deadline = Date.now() + 120_000;
+
+        while (Date.now() < deadline) {
+          if (buildSettled) {
+            throw new Error(
+              `Iteration ${iteration}: CREATE INDEX CONCURRENTLY settled before positive overlap observation (waitingForOlderSnapshots=${waitingForSnapshot})`,
+            );
+          }
+
+          const progress = await observer.query<{
+            phase: string | null;
+            relid: string;
+          }>(
+            `SELECT p.phase::text AS phase, p.relid::text AS relid
+             FROM pg_stat_progress_create_index p
+             JOIN pg_class c ON c.oid = p.relid
+             WHERE p.pid = $1 AND c.relname = 'Supplier'`,
+            [builderPid],
+          );
+          const locks = await observer.query<{
+            mode: string;
+            granted: boolean;
+          }>(
+            `
+            SELECT l.mode, l.granted
+            FROM pg_locks l
+            JOIN pg_class c ON c.oid = l.relation
+            WHERE l.pid = $1
+              AND l.locktype = 'relation'
+              AND c.relname = 'Supplier'
+              AND l.granted = true
+            `,
+            [builderPid],
+          );
+
+          if (progress.rows.length > 0) {
+            progressObs = progress.rows.map((r) => ({ phase: r.phase }));
+            waitingForSnapshot = progress.rows.some((r) =>
+              /waiting for old snapshots/i.test(r.phase ?? ""),
+            );
+          }
+          if (locks.rows.length > 0) {
+            lockObs = locks.rows;
+          }
+
+          // Require target-relation progress AND granted ShareUpdateExclusiveLock
+          // AND the waiting-for-older-snapshots phase (proves RR holder is active).
+          if (
+            waitingForSnapshot &&
+            lockObs.length > 0 &&
+            lockObs.some((l) => l.mode === "ShareUpdateExclusiveLock")
+          ) {
+            break;
+          }
+          await new Promise((r) => setTimeout(r, 20));
         }
 
-        const locks = await observer.query<{ mode: string; granted: boolean }>(
-          `
-          SELECT l.mode, l.granted
-          FROM pg_locks l
-          JOIN pg_class c ON c.oid = l.relation
-          WHERE l.pid = $1
-            AND l.locktype = 'relation'
-            AND c.relname = 'Supplier'
-          `,
-          [builderPid],
-        );
-        for (const row of locks.rows) {
-          observations.push({
-            source: "pg_locks",
-            mode: row.mode,
-            granted: row.granted,
+        if (!waitingForSnapshot) {
+          throw new Error(
+            `Iteration ${iteration}: timed out without observing waiting for old snapshots ` +
+              `(progress=${JSON.stringify(progressObs)} locks=${JSON.stringify(lockObs)} buildSettled=${buildSettled})`,
+          );
+        }
+
+        const activeObservedAtNs = process.hrtime.bigint();
+        evidence.activeObservedAtNs = activeObservedAtNs.toString();
+        evidence.progressPhase = progressObs.map((p) => p.phase);
+        evidence.targetTableLockModes = lockObs.map((l) => l.mode);
+        evidence.waitingForOlderSnapshots = waitingForSnapshot;
+
+        expect(buildSettled).toBe(false);
+        expect(progressObs.length).toBeGreaterThan(0);
+        expect(lockObs.length).toBeGreaterThan(0);
+        expect(
+          lockObs.some((l) => l.mode === "ShareUpdateExclusiveLock"),
+        ).toBe(true);
+        expect(
+          lockObs.every((l) => l.mode !== "AccessExclusiveLock"),
+        ).toBe(true);
+        expect(
+          lockObs.some((l) => l.mode === "AccessExclusiveLock"),
+        ).toBe(false);
+
+        const writeWindows: Array<{
+          op: string;
+          startNs: string;
+          endNs: string;
+          durationMs: number;
+        }> = [];
+
+        const timedWrite = async (
+          op: string,
+          fn: () => Promise<unknown>,
+        ): Promise<void> => {
+          expect(buildSettled).toBe(false);
+          const startNs = process.hrtime.bigint();
+          expect(startNs > activeObservedAtNs).toBe(true);
+          await fn();
+          const endNs = process.hrtime.bigint();
+          expect(buildSettled).toBe(false);
+          expect(buildSettledAtNs).toBeNull();
+          const durationMs = Number(endNs - startNs) / 1e6;
+          writeWindows.push({
+            op,
+            startNs: startNs.toString(),
+            endNs: endNs.toString(),
+            durationMs,
           });
-        }
+          expect(durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+        };
 
-        if (observations.length === 0) {
-          await new Promise((r) => setTimeout(r, 25));
-        }
-      }
+        await timedWrite("insert", () =>
+          writer.query(
+            `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+             VALUES ('sup-concurrent-ins', 'write-probe.myshopify.com', 'W', NOW(), NOW())`,
+          ),
+        );
+        await timedWrite("update", () =>
+          writer.query(
+            `UPDATE "Supplier" SET name = 'W2' WHERE id = 'sup-concurrent-ins'`,
+          ),
+        );
+        await timedWrite("delete", () =>
+          writer.query(
+            `DELETE FROM "Supplier" WHERE id = 'sup-concurrent-ins'`,
+          ),
+        );
 
-      const activeObservedAt = Date.now();
-      evidence.activeObservedAt = activeObservedAt;
-      evidence.builderObservations = observations;
+        evidence.writeWindows = writeWindows;
 
-      expect(observations.length).toBeGreaterThan(0);
-      expect(buildSettled).toBe(false);
-      const lockObs = observations.filter((o) => o.source === "pg_locks");
-      const progressObs = observations.filter(
-        (o) => o.source === "pg_stat_progress_create_index",
-      );
-      expect(lockObs.length + progressObs.length).toBeGreaterThan(0);
-      expect(lockObs.every((o) => o.mode !== "AccessExclusiveLock")).toBe(true);
+        // Holder must remain open through all representative writes.
+        const holderStill = await observer.query<{
+          state: string | null;
+          backend_xmin: string | null;
+        }>(
+          `SELECT state, backend_xmin::text AS backend_xmin
+           FROM pg_stat_activity WHERE pid = $1`,
+          [holderPid],
+        );
+        expect(holderStill.rows[0]?.state).toBe("idle in transaction");
+        expect(holderStill.rows[0]?.backend_xmin).toBeTruthy();
 
-      const writeWindows: Array<{
-        op: string;
-        start: number;
-        end: number;
-      }> = [];
-
-      const insertStart = Date.now();
-      expect(buildSettled).toBe(false);
-      await writer.query(
-        `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
-         VALUES ('sup-concurrent-ins', 'write-probe.myshopify.com', 'W', NOW(), NOW())`,
-      );
-      const insertEnd = Date.now();
-      writeWindows.push({ op: "insert", start: insertStart, end: insertEnd });
-
-      const updateStart = Date.now();
-      expect(buildSettled).toBe(false);
-      await writer.query(
-        `UPDATE "Supplier" SET name = 'W2' WHERE id = 'sup-concurrent-ins'`,
-      );
-      const updateEnd = Date.now();
-      writeWindows.push({ op: "update", start: updateStart, end: updateEnd });
-
-      const deleteStart = Date.now();
-      expect(buildSettled).toBe(false);
-      await writer.query(`DELETE FROM "Supplier" WHERE id = 'sup-concurrent-ins'`);
-      const deleteEnd = Date.now();
-      writeWindows.push({ op: "delete", start: deleteStart, end: deleteEnd });
-
-      evidence.writeWindows = writeWindows;
-      expect(insertEnd - insertStart).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
-      expect(updateEnd - updateStart).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
-      expect(deleteEnd - deleteStart).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
-
-      for (const holder of snapshotHolders) {
         await holder.query("COMMIT");
         await holder.end();
-      }
-      snapshotHolders.length = 0;
 
-      await buildPromise;
-      const buildCompletedAt = Date.now();
-      evidence.buildCompletedAt = buildCompletedAt;
-      evidence.buildDurationMs = buildCompletedAt - buildStartedAt;
-      if (buildError) throw buildError;
+        await buildPromise;
+        expect(buildSettledAtNs).not.toBeNull();
+        const settledAt = buildSettledAtNs!;
+        evidence.buildSettledAtNs = settledAt.toString();
+        evidence.buildDurationMs = Number(settledAt - buildStartedAtNs) / 1e6;
+        if (buildError) throw buildError;
 
-      for (const w of writeWindows) {
-        expect(w.start).toBeGreaterThanOrEqual(buildStartedAt);
-        expect(w.start).toBeGreaterThanOrEqual(activeObservedAt);
-        expect(w.end).toBeLessThanOrEqual(buildCompletedAt);
-        expect(buildSettled || true).toBe(true);
-      }
-      // Every write interval occurred while build was still in flight.
-      expect(writeWindows.every((w) => w.end <= buildCompletedAt)).toBe(true);
-      expect(writeWindows.every((w) => w.start < buildCompletedAt)).toBe(true);
+        for (const w of writeWindows) {
+          const start = BigInt(w.startNs);
+          const end = BigInt(w.endNs);
+          expect(start > activeObservedAtNs).toBe(true);
+          expect(end < settledAt).toBe(true);
+          expect(start < settledAt).toBe(true);
+        }
 
-      const entry = TENANT_COMPATIBILITY_INDEXES.find(
-        (e) => e.name === "Supplier_shopId_idx",
-      )!;
-      const inspected = await inspectIndex(builder, entry.name);
-      expect(classifyIndex(entry, inspected)).toBe("valid_exact");
-      if (inspected.status === "present") {
-        expect(inspected.indisvalid).toBe(true);
-        expect(inspected.indisready).toBe(true);
-      }
+        const entry = TENANT_COMPATIBILITY_INDEXES.find(
+          (e) => e.name === "Supplier_shopId_idx",
+        )!;
+        const inspected = await inspectIndex(builder, entry.name);
+        expect(classifyIndex(entry, inspected)).toBe("valid_exact");
+        if (inspected.status === "present") {
+          expect(inspected.indisvalid).toBe(true);
+          expect(inspected.indisready).toBe(true);
+        }
+        evidence.indexVerification = "valid_exact";
 
-      // eslint-disable-next-line no-console
-      console.log(
-        JSON.stringify({
-          event: "tenant_index_concurrent_write_evidence",
-          ...evidence,
-        }),
-      );
-    } finally {
-      for (const holder of snapshotHolders) {
+        allIterationEvidence.push(evidence);
+        // eslint-disable-next-line no-console
+        console.log(
+          JSON.stringify({
+            event: "tenant_index_concurrent_write_evidence_v2",
+            ...evidence,
+          }),
+        );
+      } finally {
         try {
           await holder.query("ROLLBACK");
         } catch {
+          // already closed
+        }
+        try {
+          await holder.end();
+        } catch {
           // ignore
         }
-        await holder.end();
+        await builder.end();
+        await writer.end();
+        await observer.end();
       }
-      await builder.end();
-      await writer.end();
-      await observer.end();
     }
-  }, 600_000);
+
+    expect(allIterationEvidence).toHaveLength(10);
+    // eslint-disable-next-line no-console
+    console.log(
+      JSON.stringify({
+        event: "tenant_index_concurrent_write_evidence_v2_summary",
+        iterations: allIterationEvidence.length,
+        supersededPriorR9Head:
+          "fb04345f129b8664566c5947f2ad75f57102269b",
+      }),
+    );
+  }, 900_000);
 
   it("verify fails when indexes were dropped after apply", async () => {
     await resetPublicSchema(prisma);
