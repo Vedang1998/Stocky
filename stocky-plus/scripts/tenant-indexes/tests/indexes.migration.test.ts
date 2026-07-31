@@ -278,21 +278,26 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
         ),
       ).rejects.toThrow(/canceling statement due to statement timeout|timeout/i);
+    } finally {
+      await client.end();
+    }
 
-      const count = await client.query<{ c: string }>(
+    // Verify on a fresh session (the timed-out session keeps the 1ms bound).
+    const verifyClient = await getMaintenanceClient();
+    try {
+      const count = await verifyClient.query<{ c: string }>(
         `SELECT COUNT(*)::text AS c FROM "Supplier"`,
       );
       expect(Number(count.rows[0]!.c)).toBeGreaterThanOrEqual(5_000);
 
-      const inspected = await inspectIndex(client, "Supplier_shopId_idx");
-      // May be missing or invalid remnant; tool must not auto-drop either way.
+      const inspected = await inspectIndex(verifyClient, "Supplier_shopId_idx");
       if (inspected.status === "present") {
         expect(recoveryInstruction("Supplier_shopId_idx")).toMatch(
           /DROP INDEX CONCURRENTLY/i,
         );
       }
     } finally {
-      await client.end();
+      await verifyClient.end();
     }
   }, 300_000);
 
