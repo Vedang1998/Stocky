@@ -284,7 +284,9 @@ describe("subject evidence v2 (F-N02/F-N03/F-N04/F-N07)", () => {
   it("captureStartingEvidence records phase1-tenant-subject-v2", async () => {
     await prepareEmptyDatabase(prisma);
     await seedShopA();
-    const evidence = await captureStartingEvidence(prisma, { batchSize: 10 });
+    const { evidence } = await captureStartingEvidence(prisma, {
+      batchSize: 10,
+    });
     expect(evidence.evidenceVersion).toBe(TENANT_SUBJECT_EVIDENCE_VERSION);
     expect(evidence.tables.Supplier.rowCount).toBe(1);
     expect(evidence.tables.Supplier.evidenceColumns).toEqual([
@@ -294,5 +296,11 @@ describe("subject evidence v2 (F-N02/F-N03/F-N04/F-N07)", () => {
     ]);
     expect(evidence.sessionEvidence.highWaterMark).toBe("sess-subj-a");
     expect(evidence.postgresSnapshot).toBeTruthy();
+    expect(evidence.evidenceBudget.budgetVersion).toBe(
+      "phase1-evidence-budget-v1",
+    );
+    expect(evidence.domainDiscovery.validDomains.domains).toContain(
+      "subj-a.myshopify.com",
+    );
   }, 120_000);
 });

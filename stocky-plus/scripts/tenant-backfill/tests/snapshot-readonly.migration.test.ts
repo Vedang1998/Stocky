@@ -46,7 +46,9 @@ describe("read-only starting snapshot enforcement (F-F01/F-F07)", () => {
     await prepareEmptyDatabase(prisma);
     await seed();
 
-    const evidence = await captureStartingEvidence(prisma, { batchSize: 10 });
+    const { evidence } = await captureStartingEvidence(prisma, {
+      batchSize: 10,
+    });
     expect(evidence.transactionIsolation).toBe("repeatable read");
     expect(evidence.transactionReadOnly).toBe("on");
     expect(evidence.postgresSnapshot).toBeTruthy();

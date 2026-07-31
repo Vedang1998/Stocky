@@ -13,11 +13,13 @@ import {
 } from "./boundaries";
 import { checksumRows, issueFingerprint, sha256Hex } from "./checksum";
 import type { OwnershipReasonCode } from "./reason-codes";
+import { assertSerializedWithinBudget } from "./evidence-budget";
 import {
   boundariesFromStartingEvidence,
   captureStartingEvidence,
   highWaterMarksFromBoundaries,
   parseStartingEvidence,
+  type DiscoveryIssueDraft,
   type StartingEvidenceV2,
 } from "./starting-snapshot";
 import { TENANT_SUBJECT_EVIDENCE_VERSION } from "./subject-manifest";
@@ -369,6 +371,7 @@ export async function runTenantBackfill(
   let shopsActuallyInserted = 0;
   let shopsReusedAfterConcurrentCreate = 0;
   let startingEvidence: StartingEvidenceV2 | undefined;
+  let discoveryIssueDrafts: DiscoveryIssueDraft[] = [];
   let batchesCommitted = 0;
   let runBatchSize = batchSize;
 
@@ -446,32 +449,60 @@ export async function runTenantBackfill(
         }
       }
 
+      const resumeMeta = {
+        ...meta,
+        evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+        startingEvidence,
+        highWaterMarks,
+        datasetBoundaries,
+        shopsWouldCreatePredicted: shopsWouldCreate,
+        resumeAttempts,
+      };
+      assertSerializedWithinBudget(
+        "resumeMetadata",
+        resumeMeta,
+        startingEvidence.evidenceBudget,
+      );
       await prisma.tenantBackfillRun.update({
         where: { id: runId },
         data: {
           status: "RUNNING",
           failureSummary: null,
           failedAt: null,
-          resumeMetadata: {
-            ...meta,
-            evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
-            startingEvidence,
-            highWaterMarks,
-            datasetBoundaries,
-            shopsWouldCreatePredicted: shopsWouldCreate,
-            resumeAttempts,
-          },
+          resumeMetadata: resumeMeta,
           updatedAt: new Date(),
         },
       });
     } else {
-      startingEvidence = await captureStartingEvidence(prisma);
+      const captured = await captureStartingEvidence(prisma);
+      startingEvidence = captured.evidence;
+      discoveryIssueDrafts = captured.discoveryIssueDrafts;
       beforeCounts = { ...startingEvidence.beforeCounts };
       datasetBoundaries = boundariesFromStartingEvidence(startingEvidence);
       highWaterMarks = highWaterMarksFromBoundaries(datasetBoundaries);
       shopsWouldCreate =
         startingEvidence.domainDiscovery.shopsWouldCreatePredicted;
 
+      const createMeta = {
+        evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+        startingEvidence,
+        startingEvidenceSerializedBytes: 0,
+        highWaterMarks,
+        datasetBoundaries,
+        shopsWouldCreatePredicted: shopsWouldCreate,
+        resumeAttempts: 0,
+      };
+      // F-F02: UTF-8 serialized size enforced before persisting the run record.
+      createMeta.startingEvidenceSerializedBytes = assertSerializedWithinBudget(
+        "startingEvidence",
+        startingEvidence,
+        startingEvidence.evidenceBudget,
+      );
+      assertSerializedWithinBudget(
+        "resumeMetadata",
+        createMeta,
+        startingEvidence.evidenceBudget,
+      );
       await prisma.tenantBackfillRun.create({
         data: {
           id: runId,
@@ -488,14 +519,7 @@ export async function runTenantBackfill(
           unchangedCounts: emptyCounts(),
           unresolvedCounts: emptyCounts(),
           checksums: {},
-          resumeMetadata: {
-            evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
-            startingEvidence,
-            highWaterMarks,
-            datasetBoundaries,
-            shopsWouldCreatePredicted: shopsWouldCreate,
-            resumeAttempts: 0,
-          },
+          resumeMetadata: createMeta,
           updatedAt: new Date(),
         },
       });
@@ -504,10 +528,13 @@ export async function runTenantBackfill(
     const domainToShopId = new Map<string, string>();
     const discoveryIssues: IssueDraft[] = [];
 
-    // Seed map from starting Shop snapshot, then refresh IDs for domains that
-    // already existed (or were created concurrently) without changing prediction.
-    for (const row of startingEvidence.shopSnapshot.rows) {
-      domainToShopId.set(row.myshopifyDomain, row.id);
+    // Seed map from the bounded starting Shop snapshot, then refresh IDs for
+    // domains that already existed (or were created concurrently) without
+    // changing prediction.
+    for (const [domain, shopId] of Object.entries(
+      startingEvidence.shopSnapshot.domainToShopId,
+    )) {
+      domainToShopId.set(domain, shopId);
     }
     const liveShops = await prisma.shop.findMany({
       select: { id: true, myshopifyDomain: true },
@@ -516,7 +543,9 @@ export async function runTenantBackfill(
       domainToShopId.set(shop.myshopifyDomain, shop.id);
     }
 
-    for (const draft of startingEvidence.domainDiscovery.invalidIssues) {
+    // Invalid-domain issue drafts are transient capture output (bounded by the
+    // evidence budget) — persisted durably below, never inside resumeMetadata.
+    for (const draft of discoveryIssueDrafts) {
       discoveryIssues.push({
         tableName: draft.tableName,
         rowId: draft.rowId,
@@ -525,10 +554,10 @@ export async function runTenantBackfill(
       });
     }
 
-    for (const normalized of startingEvidence.domainDiscovery
-      .validNormalizedDomains) {
-      const predictedMissing = !startingEvidence.shopSnapshot.domains.includes(
-        normalized,
+    for (const normalized of startingEvidence.domainDiscovery.validDomains
+      .domains) {
+      const predictedMissing = !(
+        normalized in startingEvidence.shopSnapshot.domainToShopId
       );
       let shopId = domainToShopId.get(normalized);
       if (!shopId) {
@@ -705,6 +734,24 @@ export async function runTenantBackfill(
           unresolvedCounts[table] = unresolved;
 
           const metrics = await countRunIssueMetrics(prisma, runId);
+          const interruptMeta = {
+            evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+            startingEvidence,
+            highWaterMarks,
+            datasetBoundaries,
+            shopsWouldCreatePredicted: shopsWouldCreate,
+            shopsActuallyInserted,
+            shopsReusedAfterConcurrentCreate,
+            interrupted: true,
+            lastTable: table,
+            lastProcessedId: lastId,
+            batchesCommitted,
+          };
+          assertSerializedWithinBudget(
+            "resumeMetadata",
+            interruptMeta,
+            startingEvidence!.evidenceBudget,
+          );
           await prisma.tenantBackfillRun.update({
             where: { id: runId },
             data: {
@@ -713,19 +760,7 @@ export async function runTenantBackfill(
               updatedCounts,
               unchangedCounts,
               unresolvedCounts,
-              resumeMetadata: {
-                evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
-                startingEvidence,
-                highWaterMarks,
-                datasetBoundaries,
-                shopsWouldCreatePredicted: shopsWouldCreate,
-                shopsActuallyInserted,
-                shopsReusedAfterConcurrentCreate,
-                interrupted: true,
-                lastTable: table,
-                lastProcessedId: lastId,
-                batchesCommitted,
-              },
+              resumeMetadata: interruptMeta,
               updatedAt: new Date(),
             },
           });
@@ -820,6 +855,21 @@ export async function runTenantBackfill(
         [phase]: { issues: diagnosticIssues },
       };
 
+      const diagnosticMeta = {
+        ...meta,
+        evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+        startingEvidence,
+        highWaterMarks,
+        datasetBoundaries,
+        shopsWouldCreatePredicted: shopsWouldCreate,
+        diagnosticEvidence: nextDiagnosticEvidence,
+      };
+      assertSerializedWithinBudget(
+        "resumeMetadata",
+        diagnosticMeta,
+        startingEvidence!.evidenceBudget,
+      );
+
       await prisma.$transaction(async (tx) => {
         await persistIssues(tx, runId, diagnosticIssues);
         await tx.tenantBackfillCheckpoint.upsert({
@@ -845,15 +895,7 @@ export async function runTenantBackfill(
         await tx.tenantBackfillRun.update({
           where: { id: runId },
           data: {
-            resumeMetadata: {
-              ...meta,
-              evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
-              startingEvidence,
-              highWaterMarks,
-              datasetBoundaries,
-              shopsWouldCreatePredicted: shopsWouldCreate,
-              diagnosticEvidence: nextDiagnosticEvidence,
-            },
+            resumeMetadata: diagnosticMeta,
             updatedAt: new Date(),
           },
         });
@@ -906,6 +948,22 @@ export async function runTenantBackfill(
     const finalMeta =
       (finalRun.resumeMetadata as Record<string, unknown> | null) ?? {};
 
+    const finalResumeMeta = {
+      ...finalMeta,
+      evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+      startingEvidence,
+      highWaterMarks,
+      datasetBoundaries,
+      batchesCommitted,
+      shopsWouldCreatePredicted: shopsWouldCreate,
+      shopsActuallyInserted,
+      shopsReusedAfterConcurrentCreate,
+    };
+    assertSerializedWithinBudget(
+      "resumeMetadata",
+      finalResumeMeta,
+      startingEvidence.evidenceBudget,
+    );
     await prisma.tenantBackfillRun.update({
       where: { id: runId },
       data: {
@@ -916,17 +974,7 @@ export async function runTenantBackfill(
         unchangedCounts,
         unresolvedCounts,
         checksums,
-        resumeMetadata: {
-          ...finalMeta,
-          evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
-          startingEvidence,
-          highWaterMarks,
-          datasetBoundaries,
-          batchesCommitted,
-          shopsWouldCreatePredicted: shopsWouldCreate,
-          shopsActuallyInserted,
-          shopsReusedAfterConcurrentCreate,
-        },
+        resumeMetadata: finalResumeMeta,
         updatedAt: new Date(),
       },
     });
@@ -948,20 +996,50 @@ export async function runTenantBackfill(
     const message = error instanceof Error ? error.message : String(error);
     try {
       const metrics = await countRunIssueMetrics(prisma, runId);
-      await prisma.tenantBackfillRun.update({
+      const existingRun = await prisma.tenantBackfillRun.findUnique({
         where: { id: runId },
-        data: {
-          status: "FAILED",
-          failedAt: new Date(),
-          failureSummary: message.slice(0, 2000),
-          examinedCounts,
-          updatedCounts,
-          unchangedCounts,
-          unresolvedCounts,
-          checksums,
-          updatedAt: new Date(),
-        },
       });
+      if (existingRun) {
+        await prisma.tenantBackfillRun.update({
+          where: { id: runId },
+          data: {
+            status: "FAILED",
+            failedAt: new Date(),
+            failureSummary: message.slice(0, 2000),
+            examinedCounts,
+            updatedCounts,
+            unchangedCounts,
+            unresolvedCounts,
+            checksums,
+            updatedAt: new Date(),
+          },
+        });
+      } else {
+        // Fail-closed capture failures (for example evidence-capacity overflow)
+        // occur before the run record exists — persist an explicit FAILED
+        // record so the failure is durable and auditable.
+        await prisma.tenantBackfillRun.create({
+          data: {
+            id: runId,
+            normalizationVersion: SHOP_DOMAIN_NORMALIZATION_VERSION,
+            mode: apply ? "APPLY" : "DRY_RUN",
+            status: "FAILED",
+            batchSize,
+            startedAt: new Date(),
+            failedAt: new Date(),
+            failureSummary: message.slice(0, 2000),
+            sourceMainSha: sourceMainSha ?? null,
+            schemaVersion: schemaVersion ?? null,
+            beforeCounts,
+            examinedCounts,
+            updatedCounts,
+            unchangedCounts,
+            unresolvedCounts,
+            checksums,
+            updatedAt: new Date(),
+          },
+        });
+      }
       return {
         ...baseFailureResult(),
         ...metrics,

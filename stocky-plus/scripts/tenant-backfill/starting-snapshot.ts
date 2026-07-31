@@ -5,8 +5,8 @@
  * `SET TRANSACTION READ ONLY` is the first SQL statement inside the
  * interactive transaction, before any snapshot/count/evidence query, and the
  * observed `transaction_isolation` / `transaction_read_only` settings are
- * verified fail-closed and persisted as evidence. Compact evidence is
- * persisted; the snapshot transaction is committed before mutation.
+ * verified fail-closed and persisted as evidence. Compact, bounded evidence
+ * is persisted (F-F02); the snapshot transaction is committed before mutation.
  */
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
@@ -15,13 +15,23 @@ import {
 } from "../../app/lib/shop-domain";
 import { checksumRows, sha256Hex } from "./checksum";
 import {
-  type DatasetBoundaries,
-  type SessionSubjectEvidence,
-  type TableSubjectEvidence,
+  EvidenceCapacityError,
+  assertEvidenceBudgetCompatible,
+  assertSerializedWithinBudget,
+  resolveEvidenceBudget,
+  type TenantEvidenceBudget,
+} from "./evidence-budget";
+import type { OwnershipReasonCode } from "./reason-codes";
+import {
+  SourceDomainEvidenceCollector,
   loadDatasetBoundaries,
   resolveSubjectEvidenceBatchSize,
-  streamDirectOwnerDistinctShops,
+  streamDistinctShopValues,
   streamSessionSubjectEvidence,
+  type DatasetBoundaries,
+  type SessionSubjectEvidence,
+  type SourceDomainEvidence,
+  type TableSubjectEvidence,
 } from "./subject-evidence";
 import { TENANT_SUBJECT_EVIDENCE_VERSION } from "./subject-manifest";
 import {
@@ -30,23 +40,50 @@ import {
   type BackfillTableName,
 } from "./tables";
 
+/**
+ * Bounded Shop starting snapshot (F-F02): row count, digest over ordered
+ * (id, myshopifyDomain), and the domain-to-ID map required by the backfill —
+ * only within the explicit supported ceiling. No redundant full arrays.
+ */
 export type ShopStartingSnapshot = {
   rowCount: number;
-  domains: string[];
   checksum: string;
-  rows: Array<{ id: string; myshopifyDomain: string }>;
+  domainToShopId: Record<string, string>;
+  supportedCeiling: number;
+  serializedBytes: number;
+};
+
+export type ValidDomainEvidence = {
+  /** Deterministic count of the complete valid normalized-domain set. */
+  count: number;
+  /** Deterministic SHA-256 digest over the ordered normalized-domain set. */
+  digest: string;
+  /**
+   * Complete canonical normalized-domain set required by the backfill,
+   * bounded by evidenceBudget.maxNormalizedDomains (fail closed if exceeded —
+   * never silently truncated).
+   */
+  domains: string[];
+  sampleTruncated: boolean;
+  omittedCount: number;
+};
+
+export type InvalidDomainEvidence = {
+  /** Total invalid distinct values detected across all sources. */
+  totalDetected: number;
+  /** SHA-256 over ordered per-source redacted evidence digests. */
+  digest: string;
+  issueCeiling: number;
+  /** Always false on a successful capture — overflow fails closed. */
+  overflowed: boolean;
 };
 
 export type DomainDiscoveryEvidence = {
-  validNormalizedDomains: string[];
-  invalidIssues: Array<{
-    tableName: string;
-    rowId: string;
-    reasonCode: "INVALID_SHOP_DOMAIN";
-    sourceShopValues: Prisma.InputJsonValue;
-  }>;
+  validDomains: ValidDomainEvidence;
+  invalidDomains: InvalidDomainEvidence;
+  /** Keyed by "Session" and each direct-owner table. */
+  perSource: Record<string, SourceDomainEvidence>;
   shopsWouldCreatePredicted: number;
-  directOwnerRawShops: Record<string, string[]>;
 };
 
 export type StartingEvidenceV2 = {
@@ -58,6 +95,8 @@ export type StartingEvidenceV2 = {
   /** Observed via current_setting inside the capture transaction (F-F01). */
   transactionReadOnly: string;
   postgresSnapshot: string | null;
+  /** Versioned evidence budget active at capture (resume-compatibility input). */
+  evidenceBudget: TenantEvidenceBudget;
   beforeCounts: Record<string, number>;
   shopSnapshot: ShopStartingSnapshot;
   sessionEvidence: SessionSubjectEvidence;
@@ -65,15 +104,23 @@ export type StartingEvidenceV2 = {
   domainDiscovery: DomainDiscoveryEvidence;
 };
 
-function redactShopEvidence(raw: string): {
-  length: number;
-  sha256Prefix: string;
-} {
-  return {
-    length: raw.length,
-    sha256Prefix: sha256Hex(raw).slice(0, 16),
-  };
-}
+export type DiscoveryIssueDraft = {
+  tableName: string;
+  rowId: string;
+  reasonCode: OwnershipReasonCode;
+  sourceShopValues: Prisma.InputJsonValue;
+};
+
+export type CapturedStartingEvidence = {
+  evidence: StartingEvidenceV2;
+  /**
+   * Transient, bounded (evidenceBudget.maxDiscoveryIssues) invalid-domain
+   * issue drafts. Persisted as durable TenantOwnershipIssue records by the
+   * engine AFTER the read-only snapshot commits — never stored inside
+   * resumeMetadata.
+   */
+  discoveryIssueDrafts: DiscoveryIssueDraft[];
+};
 
 async function countTable(
   db: { $queryRawUnsafe: PrismaClient["$queryRawUnsafe"] },
@@ -146,6 +193,46 @@ export function parseStartingEvidence(
       "Resume failed closed: domainDiscovery.shopsWouldCreatePredicted missing",
     );
   }
+  // F-F02: bounded evidence structures are required for resume.
+  if (
+    !ev.shopSnapshot.domainToShopId ||
+    typeof ev.shopSnapshot.domainToShopId !== "object" ||
+    typeof ev.shopSnapshot.rowCount !== "number" ||
+    typeof ev.shopSnapshot.checksum !== "string"
+  ) {
+    throw new Error(
+      "Resume failed closed: startingEvidence.shopSnapshot.domainToShopId missing or malformed",
+    );
+  }
+  const valid = ev.domainDiscovery.validDomains;
+  if (
+    !valid ||
+    !Array.isArray(valid.domains) ||
+    typeof valid.count !== "number" ||
+    typeof valid.digest !== "string" ||
+    valid.count !== valid.domains.length
+  ) {
+    throw new Error(
+      "Resume failed closed: domainDiscovery.validDomains missing or inconsistent",
+    );
+  }
+  if (!ev.domainDiscovery.invalidDomains || !ev.domainDiscovery.perSource) {
+    throw new Error(
+      "Resume failed closed: domainDiscovery.invalidDomains/perSource missing",
+    );
+  }
+  for (const source of ["Session", ...DIRECT_OWNER_TABLES]) {
+    const s = ev.domainDiscovery.perSource[source];
+    if (
+      !s ||
+      typeof s.redactedEvidenceDigest !== "string" ||
+      typeof s.distinctRawShopCount !== "number"
+    ) {
+      throw new Error(
+        `Resume failed closed: domainDiscovery.perSource.${source} missing or malformed`,
+      );
+    }
+  }
   // F-F01: resume must preserve the original database-enforced read-only
   // snapshot identity; recapture or missing enforcement evidence fails closed.
   if (ev.transactionIsolation !== "repeatable read") {
@@ -163,6 +250,8 @@ export function parseStartingEvidence(
       "Resume failed closed: startingEvidence.postgresSnapshot missing",
     );
   }
+  // F-F02: configured budget must be compatible with the original run.
+  assertEvidenceBudgetCompatible(ev.evidenceBudget, resolveEvidenceBudget());
   return ev;
 }
 
@@ -184,8 +273,11 @@ export type CaptureStartingEvidenceOptions = {
 export async function captureStartingEvidence(
   prisma: PrismaClient,
   options?: CaptureStartingEvidenceOptions,
-): Promise<StartingEvidenceV2> {
+): Promise<CapturedStartingEvidence> {
   const batchSize = resolveSubjectEvidenceBatchSize(options?.batchSize);
+  // Budget resolves (and fails on invalid configuration) before the
+  // transaction opens.
+  const budget = resolveEvidenceBudget();
 
   return prisma.$transaction(
     async (tx) => {
@@ -230,16 +322,26 @@ export async function captureStartingEvidence(
         beforeCounts[table] = await countTable(tx, table);
       }
 
+      // F-F02: enforce the supported Shop ceiling BEFORE loading rows.
+      if (beforeCounts.Shop > budget.maxShops) {
+        throw new EvidenceCapacityError({
+          kind: "shops",
+          ceiling: budget.maxShops,
+          detectedCount: beforeCounts.Shop,
+          detail: `canonical Shop table has ${beforeCounts.Shop} rows`,
+        });
+      }
       const shopRows = await tx.$queryRawUnsafe<
         Array<{ id: string; myshopifyDomain: string }>
       >(
         `SELECT id, "myshopifyDomain" FROM "Shop" ORDER BY id COLLATE "C" ASC`,
       );
+      const domainToShopId: Record<string, string> = {};
+      for (const row of shopRows) {
+        domainToShopId[row.myshopifyDomain] = row.id;
+      }
       const shopSnapshot: ShopStartingSnapshot = {
         rowCount: shopRows.length,
-        domains: shopRows
-          .map((r) => r.myshopifyDomain)
-          .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
         checksum: checksumRows(
           shopRows.map((r) => ({
             id: r.id,
@@ -247,58 +349,106 @@ export async function captureStartingEvidence(
           })),
           ["id", "myshopifyDomain"],
         ),
-        rows: shopRows,
+        domainToShopId,
+        supportedCeiling: budget.maxShops,
+        serializedBytes: Buffer.byteLength(
+          JSON.stringify(domainToShopId),
+          "utf8",
+        ),
       };
 
       const sessionEvidence = await streamSessionSubjectEvidence(tx, {
         batchSize,
-        normalizeShopDomain,
       });
 
       const tables = await loadDatasetBoundaries(tx, batchSize);
 
-      const existingDomains = new Set(shopSnapshot.domains);
+      // Bounded streaming domain discovery (F-F02): counters, incremental
+      // digests, bounded samples; never a complete raw-domain array.
       const validNormalized = new Set<string>();
-      const invalidIssues: DomainDiscoveryEvidence["invalidIssues"] = [];
-      const directOwnerRawShops: Record<string, string[]> = {};
+      let validOverflowCount = 0;
+      let invalidTotalDetected = 0;
+      const discoveryIssueDrafts: DiscoveryIssueDraft[] = [];
+      const perSource: Record<string, SourceDomainEvidence> = {};
 
-      for (const domain of sessionEvidence.normalizedDomains) {
-        validNormalized.add(domain);
+      const observeValue = (source: string) => {
+        const collector = new SourceDomainEvidenceCollector(
+          budget.maxSamplesPerSource,
+          budget.maxNormalizedDomains,
+        );
+        const observe = (raw: string) => {
+          const result = normalizeShopDomain(raw);
+          collector.observe(raw, result);
+          if (result.ok) {
+            if (validNormalized.size < budget.maxNormalizedDomains) {
+              validNormalized.add(result.normalized);
+            } else if (!validNormalized.has(result.normalized)) {
+              validOverflowCount += 1;
+            }
+          } else {
+            invalidTotalDetected += 1;
+            if (discoveryIssueDrafts.length < budget.maxDiscoveryIssues) {
+              discoveryIssueDrafts.push({
+                tableName: source,
+                rowId: `domain:${sha256Hex(raw).slice(0, 16)}`,
+                reasonCode: "INVALID_SHOP_DOMAIN",
+                sourceShopValues: {
+                  source,
+                  evidence: {
+                    length: raw.length,
+                    sha256Prefix: sha256Hex(raw).slice(0, 16),
+                  },
+                  normalizeReason: result.reason,
+                },
+              });
+            }
+          }
+        };
+        return { collector, observe };
+      };
+
+      {
+        const { collector, observe } = observeValue("Session");
+        await streamDistinctShopValues(
+          tx,
+          "Session",
+          sessionEvidence.highWaterMark,
+          batchSize,
+          observe,
+        );
+        perSource.Session = collector.finish(sessionEvidence.rowCount);
       }
-      for (const inv of sessionEvidence.invalidCandidates) {
-        invalidIssues.push({
-          tableName: "Session",
-          rowId: `domain:${inv.evidence.sha256Prefix}`,
-          reasonCode: "INVALID_SHOP_DOMAIN",
-          sourceShopValues: {
-            source: "Session",
-            evidence: inv.evidence,
-            normalizeReason: inv.normalizeReason,
-          },
+      for (const table of DIRECT_OWNER_TABLES) {
+        const { collector, observe } = observeValue(table);
+        await streamDistinctShopValues(
+          tx,
+          table,
+          tables[table]!.highWaterMark,
+          batchSize,
+          observe,
+        );
+        perSource[table] = collector.finish(tables[table]!.rowCount);
+      }
+
+      // Fail closed on capacity overflow — never silently truncate the
+      // operational subject and never allow a clean run with omitted issues.
+      if (validOverflowCount > 0) {
+        throw new EvidenceCapacityError({
+          kind: "normalized_domains",
+          ceiling: budget.maxNormalizedDomains,
+          detectedCount: validNormalized.size + validOverflowCount,
+          detail:
+            "complete valid normalized-domain set required by the backfill exceeds the configured ceiling " +
+            "(at least the reported count; overflow values counted without storage)",
         });
       }
-
-      for (const table of DIRECT_OWNER_TABLES) {
-        const hwm = tables[table]!.highWaterMark;
-        const rawShops = await streamDirectOwnerDistinctShops(tx, table, hwm);
-        directOwnerRawShops[table] = rawShops;
-        for (const raw of rawShops) {
-          const result = normalizeShopDomain(raw);
-          if (!result.ok) {
-            invalidIssues.push({
-              tableName: table,
-              rowId: `domain:${sha256Hex(raw).slice(0, 16)}`,
-              reasonCode: "INVALID_SHOP_DOMAIN",
-              sourceShopValues: {
-                source: table,
-                evidence: redactShopEvidence(raw),
-                normalizeReason: result.reason,
-              },
-            });
-            continue;
-          }
-          validNormalized.add(result.normalized);
-        }
+      if (invalidTotalDetected > budget.maxDiscoveryIssues) {
+        throw new EvidenceCapacityError({
+          kind: "discovery_issues",
+          ceiling: budget.maxDiscoveryIssues,
+          detectedCount: invalidTotalDetected,
+          detail: "invalid shop-domain values exceed the discovery-issue ceiling",
+        });
       }
 
       const validNormalizedDomains = [...validNormalized].sort((a, b) =>
@@ -306,10 +456,16 @@ export async function captureStartingEvidence(
       );
       let shopsWouldCreatePredicted = 0;
       for (const domain of validNormalizedDomains) {
-        if (!existingDomains.has(domain)) {
+        if (!(domain in domainToShopId)) {
           shopsWouldCreatePredicted += 1;
         }
       }
+
+      const invalidDigestHash = sha256Hex(
+        ["Session", ...DIRECT_OWNER_TABLES]
+          .map((source) => `${source}:${perSource[source]!.redactedEvidenceDigest}`)
+          .join("\n"),
+      );
 
       const evidence: StartingEvidenceV2 = {
         evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
@@ -318,18 +474,34 @@ export async function captureStartingEvidence(
         transactionIsolation: observed.isolation_level,
         transactionReadOnly: observed.transaction_read_only,
         postgresSnapshot,
+        evidenceBudget: budget,
         beforeCounts,
         shopSnapshot,
         sessionEvidence,
         tables,
         domainDiscovery: {
-          validNormalizedDomains,
-          invalidIssues,
+          validDomains: {
+            count: validNormalizedDomains.length,
+            digest: sha256Hex(validNormalizedDomains.join("\n")),
+            domains: validNormalizedDomains,
+            sampleTruncated: false,
+            omittedCount: 0,
+          },
+          invalidDomains: {
+            totalDetected: invalidTotalDetected,
+            digest: invalidDigestHash,
+            issueCeiling: budget.maxDiscoveryIssues,
+            overflowed: false,
+          },
+          perSource,
           shopsWouldCreatePredicted,
-          directOwnerRawShops,
         },
       };
-      return evidence;
+
+      // F-F02: serialized byte budget enforced before any run-record persist.
+      assertSerializedWithinBudget("startingEvidence", evidence, budget);
+
+      return { evidence, discoveryIssueDrafts };
     },
     {
       isolationLevel: "RepeatableRead",

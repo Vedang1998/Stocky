@@ -255,44 +255,26 @@ export function boundaryPredicate(
   };
 }
 
+/** Session evidence boundary — subject digest only; domain evidence is
+ *  captured through the bounded per-source collector (F-F02). */
 export type SessionSubjectEvidence = {
   evidenceVersion: typeof TENANT_SUBJECT_EVIDENCE_VERSION;
   evidenceColumns: string[];
   rowCount: number;
   highWaterMark: string | null;
   subjectDigest: string;
-  normalizedDomains: string[];
-  invalidCandidates: Array<{
-    evidence: ReturnType<typeof redactSessionShop>;
-    normalizeReason: string;
-  }>;
 };
-
-function redactSessionShop(raw: string): {
-  length: number;
-  sha256Prefix: string;
-} {
-  return {
-    length: raw.length,
-    sha256Prefix: sha256Hex(raw).slice(0, 16),
-  };
-}
 
 export async function streamSessionSubjectEvidence(
   db: EvidenceDb,
   options: {
     batchSize: number;
     highWaterMarkBound?: string | null;
-    normalizeShopDomain: (raw: string) =>
-      | { ok: true; normalized: string }
-      | { ok: false; reason: string };
   },
 ): Promise<SessionSubjectEvidence> {
   const columns = SESSION_SUBJECT_EVIDENCE_COLUMNS;
   const batchSize = options.batchSize;
   const bound = options.highWaterMarkBound;
-  const normalized = new Set<string>();
-  const invalidCandidates: SessionSubjectEvidence["invalidCandidates"] = [];
 
   if (bound === null) {
     return {
@@ -301,8 +283,6 @@ export async function streamSessionSubjectEvidence(
       rowCount: 0,
       highWaterMark: null,
       subjectDigest: initSubjectHash(columns).digest("hex"),
-      normalizedDomains: [],
-      invalidCandidates: [],
     };
   }
 
@@ -338,16 +318,6 @@ export async function streamSessionSubjectEvidence(
       feedRow(hash, columns, row);
       rowCount += 1;
       lastId = String(row.id);
-      const raw = String(row.shop ?? "");
-      const result = options.normalizeShopDomain(raw);
-      if (result.ok) {
-        normalized.add(result.normalized);
-      } else {
-        invalidCandidates.push({
-          evidence: redactSessionShop(raw),
-          normalizeReason: result.reason,
-        });
-      }
     }
     afterId = lastId!;
     if (rows.length < batchSize) break;
@@ -359,23 +329,144 @@ export async function streamSessionSubjectEvidence(
     rowCount,
     highWaterMark: lastId,
     subjectDigest: hash.digest("hex"),
-    normalizedDomains: [...normalized].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
-    invalidCandidates,
   };
 }
 
-export async function streamDirectOwnerDistinctShops(
+// ─── Bounded per-source domain evidence (F-F02) ─────────────────────────────
+
+export type RedactedDomainSample = {
+  /** Raw string length only — never the raw merchant domain. */
+  length: number;
+  /** SHA-256 prefix of the raw string. */
+  sha256Prefix: string;
+  /** "valid" or the normalization failure reason. */
+  normalization: string;
+  /** Present only when valid (canonical normalized form, not raw legacy). */
+  normalizedDomain?: string;
+};
+
+export type SourceDomainEvidence = {
+  sourceRowCount: number;
+  distinctRawShopCount: number;
+  distinctValidNormalizedCount: number;
+  invalidValueCount: number;
+  /** SHA-256 over ordered redacted source evidence entries. */
+  redactedEvidenceDigest: string;
+  samples: RedactedDomainSample[];
+  samplesTruncated: boolean;
+  omittedCount: number;
+};
+
+export type NormalizeShopDomainFn = (raw: string) =>
+  | { ok: true; normalized: string }
+  | { ok: false; reason: string };
+
+/**
+ * Streaming per-source domain-evidence aggregation: incremental digest,
+ * bounded samples, counters only. Never retains every raw or corrupt value.
+ */
+export class SourceDomainEvidenceCollector {
+  private readonly hash = createHash("sha256");
+  private readonly validDistinct = new Set<string>();
+  private validDistinctOverflow = 0;
+  private distinctRawShopCount = 0;
+  private invalidValueCount = 0;
+  private readonly samples: RedactedDomainSample[] = [];
+
+  constructor(
+    private readonly sampleCap: number,
+    private readonly validSetCap: number,
+  ) {}
+
+  /** Observe one DISTINCT raw shop value (stream must be deduplicated + ordered). */
+  observe(
+    raw: string,
+    result: ReturnType<NormalizeShopDomainFn>,
+  ): void {
+    this.distinctRawShopCount += 1;
+    const sha256Prefix = sha256Hex(raw).slice(0, 16);
+    const normalization = result.ok ? "valid" : result.reason;
+    this.hash.update(`${raw.length}:${sha256Prefix}:${normalization}\n`, "utf8");
+    if (result.ok) {
+      if (this.validDistinct.size < this.validSetCap) {
+        this.validDistinct.add(result.normalized);
+      } else if (!this.validDistinct.has(result.normalized)) {
+        this.validDistinctOverflow += 1;
+      }
+    } else {
+      this.invalidValueCount += 1;
+    }
+    if (this.samples.length < this.sampleCap) {
+      this.samples.push({
+        length: raw.length,
+        sha256Prefix,
+        normalization,
+        ...(result.ok ? { normalizedDomain: result.normalized } : {}),
+      });
+    }
+  }
+
+  finish(sourceRowCount: number): SourceDomainEvidence {
+    const omittedCount = this.distinctRawShopCount - this.samples.length;
+    return {
+      sourceRowCount,
+      distinctRawShopCount: this.distinctRawShopCount,
+      distinctValidNormalizedCount:
+        this.validDistinct.size + this.validDistinctOverflow,
+      invalidValueCount: this.invalidValueCount,
+      redactedEvidenceDigest: this.hash.digest("hex"),
+      samples: this.samples,
+      samplesTruncated: omittedCount > 0,
+      omittedCount,
+    };
+  }
+}
+
+/**
+ * Stream DISTINCT shop values within the subject boundary using bounded
+ * keyset batches (no full array, no array_agg). Values arrive deduplicated in
+ * deterministic C-collation order.
+ */
+export async function streamDistinctShopValues(
   db: EvidenceDb,
-  table: BackfillTableName,
+  table: BackfillTableName | "Session",
   highWaterMark: string | null,
-): Promise<string[]> {
-  assertApprovedTable(table);
-  if (highWaterMark === null) return [];
-  const rows = await db.$queryRawUnsafe<Array<{ shop: string }>>(
-    `SELECT DISTINCT shop COLLATE "C" AS shop FROM "${table}"
-     WHERE id <= $1
-     ORDER BY shop COLLATE "C" ASC`,
-    highWaterMark,
-  );
-  return rows.map((r) => r.shop);
+  batchSize: number,
+  observe: (raw: string) => void,
+): Promise<void> {
+  if (table !== "Session") {
+    assertApprovedTable(table);
+  }
+  if (highWaterMark === null) return;
+
+  let afterShop: string | null = null;
+  for (;;) {
+    let rows: Array<{ shop: string }>;
+    if (afterShop === null) {
+      rows = await db.$queryRawUnsafe<Array<{ shop: string }>>(
+        `SELECT DISTINCT shop COLLATE "C" AS shop FROM "${table}"
+         WHERE id <= $1
+         ORDER BY shop COLLATE "C" ASC
+         LIMIT $2`,
+        highWaterMark,
+        batchSize,
+      );
+    } else {
+      rows = await db.$queryRawUnsafe<Array<{ shop: string }>>(
+        `SELECT DISTINCT shop COLLATE "C" AS shop FROM "${table}"
+         WHERE id <= $1 AND shop COLLATE "C" > $2
+         ORDER BY shop COLLATE "C" ASC
+         LIMIT $3`,
+        highWaterMark,
+        afterShop,
+        batchSize,
+      );
+    }
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      observe(row.shop);
+    }
+    afterShop = rows[rows.length - 1]!.shop;
+    if (rows.length < batchSize) break;
+  }
 }

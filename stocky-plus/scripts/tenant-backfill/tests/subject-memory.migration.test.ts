@@ -55,7 +55,7 @@ describe("constrained-heap subject evidence (F-N07)", () => {
     `);
 
     const beforeMem = process.memoryUsage().heapUsed;
-    const evidence = await captureStartingEvidence(prisma, {
+    const { evidence } = await captureStartingEvidence(prisma, {
       batchSize: BATCH_SIZE,
     });
     const afterMem = process.memoryUsage().heapUsed;
@@ -96,5 +96,90 @@ describe("constrained-heap subject evidence (F-N07)", () => {
     // exceed a tight heap when combined with Prisma client; streaming must finish.
     expect(elapsedMs).toBeLessThan(180_000);
     expect(evidence.tables.InventorySnapshot.subjectDigest.length).toBe(64);
+  }, 300_000);
+
+  it("high-cardinality corrupt domain discovery stays bounded under 256MB heap (F-F02)", async () => {
+    const CORRUPT_ROWS = 20_000;
+    process.env.TENANT_EVIDENCE_MAX_DISCOVERY_ISSUES = "30000";
+    try {
+      await prepareEmptyDatabase(prisma);
+      await prisma.session.create({
+        data: {
+          id: "sess-hc",
+          shop: "hc.myshopify.com",
+          state: "s",
+          accessToken: "tok",
+          isOnline: false,
+        },
+      });
+      // Distinct-value count approaches row count — every shop value corrupt
+      // and unique.
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+        SELECT
+          'sup-hc-' || lpad(g::text, 8, '0'),
+          'CORRUPT@@ value ' || g,
+          'H' || g,
+          NOW(),
+          NOW()
+        FROM generate_series(1, ${CORRUPT_ROWS}) AS g
+      `);
+
+      const beforeMem = process.memoryUsage().heapUsed;
+      const started = Date.now();
+      const first = await captureStartingEvidence(prisma, {
+        batchSize: BATCH_SIZE,
+      });
+      const elapsedMs = Date.now() - started;
+      const afterMem = process.memoryUsage().heapUsed;
+
+      const supplier = first.evidence.domainDiscovery.perSource.Supplier!;
+      expect(supplier.distinctRawShopCount).toBe(CORRUPT_ROWS);
+      expect(supplier.invalidValueCount).toBe(CORRUPT_ROWS);
+      expect(supplier.samples.length).toBeLessThanOrEqual(
+        first.evidence.evidenceBudget.maxSamplesPerSource,
+      );
+      expect(supplier.samplesTruncated).toBe(true);
+      expect(supplier.omittedCount).toBe(
+        CORRUPT_ROWS - supplier.samples.length,
+      );
+      expect(first.evidence.domainDiscovery.invalidDomains.totalDetected).toBe(
+        CORRUPT_ROWS,
+      );
+      expect(first.discoveryIssueDrafts.length).toBe(CORRUPT_ROWS);
+
+      // No raw corrupt value in serialized evidence.
+      const serialized = JSON.stringify(first.evidence);
+      expect(serialized).not.toContain("CORRUPT@@");
+      expect(serialized).not.toContain("CORRUPT@@ value 1");
+
+      // Deterministic digests across captures.
+      const second = await captureStartingEvidence(prisma, {
+        batchSize: BATCH_SIZE,
+      });
+      expect(
+        second.evidence.domainDiscovery.perSource.Supplier!
+          .redactedEvidenceDigest,
+      ).toBe(supplier.redactedEvidenceDigest);
+      expect(second.evidence.domainDiscovery.invalidDomains.digest).toBe(
+        first.evidence.domainDiscovery.invalidDomains.digest,
+      );
+
+      // eslint-disable-next-line no-console
+      console.log(
+        JSON.stringify({
+          event: "tenant_domain_evidence_memory",
+          fixtureRows: CORRUPT_ROWS,
+          batchSize: BATCH_SIZE,
+          elapsedMs,
+          heapUsedBeforeMb: beforeMem / (1024 * 1024),
+          heapUsedAfterMb: afterMem / (1024 * 1024),
+          heapDeltaMb: (afterMem - beforeMem) / (1024 * 1024),
+          maxOldSpaceHintMb: 256,
+        }),
+      );
+    } finally {
+      delete process.env.TENANT_EVIDENCE_MAX_DISCOVERY_ISSUES;
+    }
   }, 300_000);
 });
