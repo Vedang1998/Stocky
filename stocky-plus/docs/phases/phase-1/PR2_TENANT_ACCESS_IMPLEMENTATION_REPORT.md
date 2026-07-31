@@ -18,11 +18,9 @@
 
 ## Commits
 
-Recorded at report authoring time (update after final push):
-
-1. `2a14f19` — Convert app and webhook routes to tenant-bound DB access (foundations + route/service/job conversion)
-2. `219a5e3` — Share phase1-shop-domain-v1 via app/tenant/shop-domain
-3. _(subsequent)_ — Tenant access audit, tests, and evidence docs
+1. `2a14f19d220c46c0ecab186377cf7bd6f3dd9d2b` — Convert app and webhook routes to tenant-bound DB access (foundations + route/service/job conversion)
+2. `219a5e3dda85cf781839f418d004f09a25573b50` — Share phase1-shop-domain-v1 via app/tenant/shop-domain
+3. `80e928b52102cde19f357822cd1b1dc0824d062b` — Add PR 2 tenant access evidence and tests
 
 ## Architecture decisions
 
