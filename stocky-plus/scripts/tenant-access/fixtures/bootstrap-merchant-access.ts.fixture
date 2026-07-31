@@ -1,0 +1,6 @@
+// Negative fixture — bootstrap accessing a merchant model.
+import rawPrisma from "../../../app/db.server";
+
+export async function badBootstrap() {
+  return rawPrisma.supplier.findMany();
+}

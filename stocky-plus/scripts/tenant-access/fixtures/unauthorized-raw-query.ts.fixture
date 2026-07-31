@@ -1,0 +1,6 @@
+// Negative fixture — unauthorized raw SQL in a service-like path.
+import prisma from "../../../app/db.server";
+
+export async function badRaw() {
+  return prisma.$queryRawUnsafe("SELECT * FROM \"Supplier\"");
+}

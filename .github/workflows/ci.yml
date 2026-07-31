@@ -106,6 +106,15 @@ jobs:
           npm run tenant:indexes:plan
         # plan exits 0 when all indexes are valid_exact
 
+      - name: Tenant access architecture audit
+        run: npm run tenant:access:audit
+
+      - name: Tenant access inventory freshness
+        run: npm run tenant:access:inventory:check
+
+      - name: Tenant access tests
+        run: npm run test:tenant-access
+
       - name: Git diff check
         run: git diff --check
         working-directory: .

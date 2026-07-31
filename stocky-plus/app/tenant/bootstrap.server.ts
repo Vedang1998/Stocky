@@ -21,8 +21,29 @@ export type CanonicalShopIdentity = {
   readonly myshopifyDomain: string;
 };
 
-/** Session-storage adapter constructed inside the bootstrap boundary. */
-export const shopifySessionStorage = new PrismaSessionStorage(rawPrisma);
+/** Session-storage adapter constructed inside the bootstrap boundary (lazy). */
+let _shopifySessionStorage: PrismaSessionStorage | null = null;
+
+function getShopifySessionStorage(): PrismaSessionStorage {
+  if (!_shopifySessionStorage) {
+    _shopifySessionStorage = new PrismaSessionStorage(rawPrisma);
+  }
+  return _shopifySessionStorage;
+}
+
+export const shopifySessionStorage: PrismaSessionStorage = new Proxy(
+  {} as PrismaSessionStorage,
+  {
+    get(_target, prop, receiver) {
+      const storage = getShopifySessionStorage() as unknown as Record<
+        PropertyKey,
+        unknown
+      >;
+      const value = Reflect.get(storage, prop, receiver);
+      return typeof value === "function" ? value.bind(storage) : value;
+    },
+  },
+);
 
 export function normalizeVerifiedShopifyDomain(raw: string): string {
   const result = normalizeShopDomain(raw);
