@@ -1,6 +1,6 @@
 # Phase 1 Correction Implementation Report — PR 1 Tenant Expansion
 
-**Status:** CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
+**Status:** FOLLOW-UP CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
 **Implementer:** Cursor
 
 ## Identity (immutable heads vs live tip)
@@ -12,66 +12,75 @@
 | Pull request | [#11](https://github.com/Vedang1998/Stocky/pull/11) (draft, OPEN, unmerged) |
 | Original Claude-reviewed head | `7aabb095806716697bfea2783379351b15e1cda2` |
 | Correction-review Claude head | `fb04345f129b8664566c5947f2ad75f57102269b` |
-| Correction-review verdict | `NOT READY` (preserved verbatim in `PR1_TENANT_EXPANSION_CORRECTION_REVIEW_REPORT.md`) |
-| Review-record commit (docs only) | Recorded after push (first custody commit before F-N code) |
+| Follow-up reviewed head (immutable) | `aa5f425f446d79ff1bc24ac17a5944cdb8072159` |
+| Follow-up verdict | `NOT READY` (preserved verbatim in `PR1_TENANT_EXPANSION_CORRECTION_FOLLOWUP_REVIEW_REPORT.md`) |
+| Follow-up review-record commit | `948fef9` (docs only; before F-F code) |
 | Current live PR tip + exact-head CI | Recorded in PR description after push — **mutable** |
 
 ## Summary
 
-Addressed Claude correction-review findings **F-N01 through F-N09** on draft PR #11 without merging, without starting PR 2/3, without RLS/runtime conversion, and without enabling inventory writes. Prior R9 evidence at `fb04345f…` is **rejected and superseded**. Findings remain open pending unrestricted independent verification.
+Addressed Claude follow-up findings **F-F00 through F-F07** (product-owner accepted) on draft PR #11 without merging, without starting PR 2/3, without RLS/runtime conversion, and without enabling inventory writes. F-N01–F-N09 corrections remain in place. No finding is independently closed. F-F00 remains an external review-environment gate.
 
-## Subject-evidence version and field manifest
+## F-F01 / F-F07 — database-enforced READ ONLY starting snapshot
 
-- Evidence version: **`phase1-tenant-subject-v2`**
-- Domain normalization remains: **`phase1-shop-domain-v1`**
-- Manifest: `scripts/tenant-backfill/subject-manifest.ts`
-- Streaming digests: `scripts/tenant-backfill/subject-evidence.ts`
-- Coherent capture: `scripts/tenant-backfill/starting-snapshot.ts`
+1. First SQL in the capture interactive transaction: `SET TRANSACTION READ ONLY`.
+2. Immediately observe and persist `transaction_isolation`, `transaction_read_only`, and `pg_current_snapshot()`.
+3. Fail closed unless isolation is `repeatable read` and `transaction_read_only` is `on`.
+4. Test-only `onSnapshotEstablished` hook proves SQLSTATE `25006` rejects writes; operational entry points never pass the hook.
+5. Comments describe the enforced guarantee precisely.
 
-Direct-owner fields include `id`, legacy `shop`, and immutable creation evidence where present (`createdAt` / `calculatedAt`). Child-owner fields include `id`, parent FKs, and LeadTime `supplierId`+`purchaseOrderId`+`recordedAt`. Nullable `shopId` is excluded.
+## F-F02 — bounded / redacted domain-discovery evidence
 
-## Coherent-snapshot architecture
+- Budget version: **`phase1-evidence-budget-v1`** (`scripts/tenant-backfill/evidence-budget.ts`).
+- Durable `resumeMetadata` / `startingEvidence` no longer stores complete raw-domain arrays (`directOwnerRawShops` removed).
+- Valid normalized domains: count + SHA-256 digest + full operational set within an explicit ceiling (fail closed before mutation if exceeded).
+- Per-source evidence: counts, digests, bounded redacted samples (length, hash prefix, normalization reason — not complete raw merchant domains).
+- Invalid domains: aggregate counts/digest + durable issue drafts under an explicit issue ceiling; overflow fails closed before mutation.
+- Shop snapshot: `domainToShopId` map within supported Shop ceiling; row count + checksum; no duplicate full `rows`/`domains` arrays.
+- Serialized UTF-8 byte budget enforced before creating/updating `TenantBackfillRun`.
 
-1. `BEGIN` REPEATABLE READ (Prisma interactive transaction).
-2. Capture Shop snapshot, beforeCounts, table subject digests, Session evidence, bounded domain discovery, `shopsWouldCreatePredicted`, postgres snapshot id.
-3. Persist compact `startingEvidence` on the run; commit before mutation.
-4. Resume parses `startingEvidence` and fail-closes if absent/malformed — never recaptures.
+## F-F03 — active build / validation scan DML overlap
 
-## Session evidence-boundary design
+- Retained ≥10-iteration old-snapshot-wait proof.
+- Added active-phase proof during PostgreSQL 16 phases `building index: scanning table` and `index validation: scanning table` with builder-PID-constrained observation, `ShareUpdateExclusiveLock` (no `AccessExclusiveLock`), settlement-before-build-complete, and `valid_exact`.
+- Production claim is limited to the phases empirically tested.
 
-Evidence-only (no `shopId` on Session; Shopify session storage unchanged): high-water Session id, row count, subject digest over `(id, shop)`, normalized domains, redacted invalid candidates. New Session rows after capture belong to a later run.
+## F-F04 — configurable starting-snapshot timeout + phase telemetry
 
-## F-N01 / F-N05 / F-N06 — concurrent-index proof (supersedes prior R9)
+- `TENANT_STARTING_SNAPSHOT_TIMEOUT_MS` (default 180000; bounds 10000–1800000); invalid values fail before the transaction opens.
+- Phase timings recorded for transaction init, counts, Shop, Session, table subjects, domain discovery, and serialization.
+- Safe failure diagnostics omit raw merchant domains, URLs, and credentials.
 
-- Holder: `BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY` with non-null `backend_xmin` while idle in transaction.
-- Builder: exact PID + target relation progress must reach **`waiting for old snapshots`** with granted **`ShareUpdateExclusiveLock`** and no `AccessExclusiveLock`.
-- Settle timestamp captured inside promise fulfillment/rejection via `process.hrtime.bigint()`.
-- 10 deterministic iterations; fixture 100,000 Supplier rows.
-- Removed tautology `buildSettled || true`.
+## F-F05 — fail-closed drift diagnostics
 
-## Local validation (representative)
+- Exit 0 → fixed success event only.
+- Exit 2 → allowlisted, bounded schema-diff statement classes only; unrecognized text discarded; truncation flagged.
+- Other exits → fixed command class / exit / category / optional `P####`; no raw stdout/stderr.
+- Regex redaction retained as defence in depth only.
+- Architecture test asserts error paths do not log raw streams.
 
-| Command | Exit |
+## F-F06 — dependency advisory investigation
+
+| Compare | Value |
 |---|---|
-| `git diff --check` | 0 |
-| `npm run test:migrations` | 0 (78 tests) |
-| `npm run test:subject-memory` | 0 (25k rows, batch 250, heap delta ~6MB under 256MB cap) |
-| `npm run lint` | 0 |
-| `npm run typecheck` | 0 |
-| `npm test` | 0 (56 tests) |
-| `npm run build` | 0 |
+| Base main (`8ccc8d29…`) `npm audit --package-lock-only` | 32 high, 0 critical/moderate/low |
+| PR head (this tip) `npm audit --package-lock-only` | 32 high, 0 critical/moderate/low |
+| Advisory count delta | **unchanged** |
+| PR #11 package.json changes | Added runtime `pg@^8.16.3`; dev `@types/pg@^8.15.4`; maintenance scripts only |
+| New `pg` chain advisories | **none** (pg and transitive packages clean in audit) |
+| `npm audit fix` / broad upgrades | **not performed** |
 
-Prisma migrate/plan/apply/verify/drift and graphql-codegen must be re-recorded on the pushed tip / CI. Independent Claude review must use an unrestricted environment (`binaries.prisma.sh`, `shopify.dev`).
+Pre-existing advisories remain tracked under **R-013** (and follow-up **R-062**). They are not resolved by PR #11. No product-owner decision required for a newly introduced vulnerable dependency.
 
 ## Explicit non-claims
 
 - No production or merchant data accessed.
 - No deployment.
-- No RLS / non-null tenant enforcement / composite child FKs / runtime conversion.
+- No RLS / non-null tenant enforcement / composite child FKs / Shop ownership FKs / runtime conversion.
 - PR 2 and PR 3 not started.
 - Inventory writes UNAPPROVED; every inventory-write flag DEFAULT OFF.
-- Findings not independently closed.
+- Findings F-F00–F-F07 and earlier waves are **not** independently closed.
 
 ## Next action
 
-Return to ChatGPT for exact-head verification and an unrestricted fresh Claude correction review.
+Return to ChatGPT for exact-head verification and a capable local Claude Code correction review.

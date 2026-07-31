@@ -2,11 +2,12 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
+**Phase 1 implementation:** PR 1 FOLLOW-UP CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
 **Active branch:** `phase-1/tenant-expand`
 **Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
 **Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
+**Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
@@ -15,7 +16,7 @@
 ## Mandatory gate
 
 **F-016 / R-022** remains an open P1 database-isolation gate. PR 1 does not resolve it.
-**Q-011**, **R-028 / R-029**, **R-041 through R-055** remain open until independent acceptance.
+**Q-011**, **R-028 / R-029**, **R-041 through R-063**, and **F-F00 through F-F07** remain open until independent acceptance or explicit disposition. F-F00 remains open until a capable independent reviewer executes the required suite.
 
 ## Reading order
 
@@ -30,6 +31,7 @@
 9. `PR1_TENANT_EXPANSION_CORRECTION_BACKLOG.md`
 10. `PR1_TENANT_EXPANSION_CORRECTION_IMPLEMENTATION_REPORT.md`
 11. `PR1_TENANT_EXPANSION_CORRECTION_REVIEW_REPORT.md` — Claude correction-review `NOT READY` (verbatim; chain-of-custody commit before F-N corrections)
+12. `PR1_TENANT_EXPANSION_CORRECTION_FOLLOWUP_REVIEW_REPORT.md` — Claude follow-up `NOT READY` at `aa5f425…` (verbatim; chain-of-custody commit before F-F corrections)
 
 ## Related documents
 

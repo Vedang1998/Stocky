@@ -30,6 +30,40 @@ A database is PR-1-ready only after:
 
 Timeout failure must leave data intact; recovery for invalid index remnants requires explicitly authorized `DROP INDEX CONCURRENTLY`. Production timeout values remain subject to a later deployment plan.
 
+## Starting-snapshot timeout and evidence budget (F-F01 / F-F02 / F-F04)
+
+The starting-evidence transaction is **REPEATABLE READ** and database-enforced **READ ONLY** (`SET TRANSACTION READ ONLY` as the first SQL statement). Observed `transaction_isolation`, `transaction_read_only`, and `pg_current_snapshot()` are persisted and fail-closed on mismatch.
+
+| Variable | Default | Bounds | Rules |
+|---|---|---|---|
+| `TENANT_STARTING_SNAPSHOT_TIMEOUT_MS` | `180000` | `10000`–`1800000` | Strict integer; invalid fails before opening the transaction; value recorded in starting evidence; resume compatibility checked |
+| `TENANT_EVIDENCE_MAX_NORMALIZED_DOMAINS` | `5000` | `1`–`100000` | Complete valid normalized-domain set ceiling; exceed → fail closed before mutation |
+| `TENANT_EVIDENCE_MAX_SHOPS` | `10000` | `1`–`100000` | Supported Shop count for this Phase 1 maintenance operation |
+| `TENANT_EVIDENCE_MAX_DISCOVERY_ISSUES` | `10000` | `10`–`100000` | Durable discovery-issue ceiling; overflow → evidence-capacity failure (cannot COMPLETED) |
+| `TENANT_EVIDENCE_MAX_SAMPLES_PER_SOURCE` | `20` | `0`–`100` | Bounded redacted samples per source |
+| `TENANT_EVIDENCE_MAX_SERIALIZED_BYTES` | `1000000` | `65536`–`16000000` | UTF-8 serialized `startingEvidence` ceiling; enforced before run-record persist |
+
+Budget version: **`phase1-evidence-budget-v1`**. Do not raise defaults drastically to “fix” timeouts; diagnose via phase telemetry instead.
+
+### Capture phase telemetry
+
+On timeout/failure the tool emits a safe diagnostic with: phase name, elapsed ms, configured timeout, evidence version, table name where applicable. It never includes raw merchant domains, database URLs, or credentials.
+
+Phases: `transaction_init`, `before_counts`, `shop_evidence`, `session_evidence`, `table_subject_evidence`, `domain_discovery`, `final_serialization`.
+
+### Operating envelope (representative fixtures — not universal scalability)
+
+Purpose: establish an operating envelope for disposable PostgreSQL 16. These are local/CI fixture observations, not a production capacity claim.
+
+| Fixture | Approximate size | Observation |
+|---|---|---|
+| Empty / tiny merchant seed | ≤10 rows/table | Capture completes well under default timeout; serialized evidence ≪ 1 MiB |
+| Constrained-memory subject digest | 25k rows, batch 250, Node heap cap 256 MiB | Streaming digest stays within heap; used by `npm run test:subject-memory` |
+| High-cardinality corrupt domains | Distinct corrupt `shop` values approaching row count | Aggregation remains bounded; raw domains absent from `resumeMetadata` |
+| Concurrent-index overlap | 100k–400k Supplier rows | Old-snapshot-wait (≥10 iters) + active build/validation scan DML proofs |
+
+Record exact tip measurements in the correction implementation report / CI logs when re-run.
+
 ## Ownership issue metrics
 
 | Field | Authority |
@@ -105,9 +139,19 @@ npm run tenant:schema:drift
 
 ## Dataset boundaries (R10)
 
-Each run persists `phase1-tenant-subject-v2` starting evidence under one REPEATABLE READ transaction: per-table `highWaterMark`, `rowCount`, ordered evidence columns, and streaming subject digests (not ID-only). Session has a separate evidence boundary used only for domain discovery. Empty tables keep an empty boundary. Ownership checksums and diagnostics are bounded to that subject set. Subject drift inside the boundary fails closed. Resume must reuse the original persisted starting evidence (fail closed if absent).
+Each run persists `phase1-tenant-subject-v2` starting evidence under one **REPEATABLE READ + database-enforced READ ONLY** transaction: per-table `highWaterMark`, `rowCount`, ordered evidence columns, and streaming subject digests (not ID-only). Session has a separate evidence boundary used only for domain discovery. Empty tables keep an empty boundary. Ownership checksums and diagnostics are bounded to that subject set. Subject drift inside the boundary fails closed. Resume must reuse the original persisted starting evidence and evidence-budget/timeout settings (fail closed if absent or incompatible). Durable evidence must not contain complete raw merchant-domain arrays.
 
-**Superseded:** Prior R9 concurrent-index overlap evidence recorded at head `fb04345f129b8664566c5947f2ad75f57102269b` is **rejected**. Current proof requires REPEATABLE READ holders with non-null `backend_xmin`, target-relation progress in `waiting for old snapshots`, positive `ShareUpdateExclusiveLock`, and true promise-settlement timing across ≥10 iterations.
+**Superseded:** Prior R9 concurrent-index overlap evidence recorded at head `fb04345f129b8664566c5947f2ad75f57102269b` is **rejected**. Current proof requires REPEATABLE READ holders with non-null `backend_xmin`, target-relation progress in `waiting for old snapshots`, positive `ShareUpdateExclusiveLock`, and true promise-settlement timing across ≥10 iterations, plus active-phase DML during `building index: scanning table` and (where observable) `index validation: scanning table`.
+
+## Prisma schema drift diagnostics (F-F05)
+
+`npm run tenant:schema:drift` uses fail-closed diagnostics:
+
+- Exit 0 → fixed success event only.
+- Exit 2 → allowlisted bounded schema-diff statement classes only (object type, approved identifier, change category); unrecognized text discarded.
+- Other exits → fixed command class / exit code / error category / optional recognized Prisma `P####` code only.
+
+Raw stdout/stderr are never passed to operator-facing logs or thrown messages. Regex redaction is defence in depth only.
 
 
 ## Status / checkpoint / resume
