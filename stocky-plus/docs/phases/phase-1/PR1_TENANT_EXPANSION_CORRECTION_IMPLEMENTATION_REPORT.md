@@ -1,6 +1,6 @@
 # Phase 1 Correction Implementation Report — PR 1 Tenant Expansion
 
-**Status:** FOLLOW-UP CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
+**Status:** INDEPENDENTLY VERIFIED — ACCEPTED FOR PR 1 (D-025) — AWAITING EXPLICIT USER MERGE AUTHORIZATION
 **Implementer:** Cursor
 
 ## Identity (immutable heads vs live tip)
@@ -10,16 +10,23 @@
 | Base main SHA | `8ccc8d29a78e05615b31324b38df17f4f1d1296e` |
 | Branch | `phase-1/tenant-expand` |
 | Pull request | [#11](https://github.com/Vedang1998/Stocky/pull/11) (draft, OPEN, unmerged) |
-| Original Claude-reviewed head | `7aabb095806716697bfea2783379351b15e1cda2` |
-| Correction-review Claude head | `fb04345f129b8664566c5947f2ad75f57102269b` |
-| Follow-up reviewed head (immutable) | `aa5f425f446d79ff1bc24ac17a5944cdb8072159` |
+| Original Claude-reviewed head | `7aabb095806716697bfea2783379351b15e1cda2` — `NOT READY` |
+| Correction-review Claude head | `fb04345f129b8664566c5947f2ad75f57102269b` — `NOT READY` |
+| Follow-up reviewed head (immutable) | `aa5f425f446d79ff1bc24ac17a5944cdb8072159` — `NOT READY` |
 | Follow-up verdict | `NOT READY` (preserved verbatim in `PR1_TENANT_EXPANSION_CORRECTION_FOLLOWUP_REVIEW_REPORT.md`) |
 | Follow-up review-record commit | `948fef9` (docs only; before F-F code) |
-| Current live PR tip + exact-head CI | Recorded in PR description after push — **mutable** |
+| Capable-local reviewed head (immutable) | `28e77178602ca486e5138ca2f80e8947d8e113c0` |
+| Capable-local verdict | `READY FOR CHATGPT PR 1 ACCEPTANCE` (preserved verbatim in `PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md`) |
+| Capable-local review date | 2026-07-31 |
+| Exact-head CI at reviewed head | run `30633301468`, job `91164602626`, conclusion `success` |
+| ChatGPT decision | `PR 1 ACCEPTED` (D-025) — merge not authorized |
+| Docs-only finalization tip | Recorded after push — **mutable**; must not change the reviewed implementation tree |
 
 ## Summary
 
-Addressed Claude follow-up findings **F-F00 through F-F07** (product-owner accepted) on draft PR #11 without merging, without starting PR 2/3, without RLS/runtime conversion, and without enabling inventory writes. F-N01–F-N09 corrections remain in place. No finding is independently closed. F-F00 remains an external review-environment gate.
+Addressed Claude follow-up findings **F-F00 through F-F07** on draft PR #11 without merging, without starting PR 2/3, without RLS/runtime conversion, and without enabling inventory writes. F-N01–F-N09 corrections remain in place. Capable-local independent review at `28e77178602ca486e5138ca2f80e8947d8e113c0` returned **`READY FOR CHATGPT PR 1 ACCEPTANCE`**. ChatGPT accepted PR 1 technically (D-025). **No P0 or P1 correction remains for PR 1 scope.** Merge remains unauthorized.
+
+Historical failure states and rejected evidence (including prior R9 at `fb04345f…`) are preserved and not erased.
 
 ## F-F01 / F-F07 — database-enforced READ ONLY starting snapshot
 
@@ -28,6 +35,8 @@ Addressed Claude follow-up findings **F-F00 through F-F07** (product-owner accep
 3. Fail closed unless isolation is `repeatable read` and `transaction_read_only` is `on`.
 4. Test-only `onSnapshotEstablished` hook proves SQLSTATE `25006` rejects writes; operational entry points never pass the hook.
 5. Comments describe the enforced guarantee precisely.
+
+**Status:** independently verified and accepted for PR 1.
 
 ## F-F02 — bounded / redacted domain-discovery evidence
 
@@ -39,17 +48,23 @@ Addressed Claude follow-up findings **F-F00 through F-F07** (product-owner accep
 - Shop snapshot: `domainToShopId` map within supported Shop ceiling; row count + checksum; no duplicate full `rows`/`domains` arrays.
 - Serialized UTF-8 byte budget enforced before creating/updating `TenantBackfillRun`.
 
+**Status:** independently verified and accepted for PR 1.
+
 ## F-F03 — active build / validation scan DML overlap
 
 - Retained ≥10-iteration old-snapshot-wait proof.
 - Added active-phase proof during PostgreSQL 16 phases `building index: scanning table` and `index validation: scanning table` with builder-PID-constrained observation, `ShareUpdateExclusiveLock` (no `AccessExclusiveLock`), settlement-before-build-complete, and `valid_exact`.
 - Production claim is limited to the phases empirically tested.
 
+**Status:** independently verified and accepted for PR 1.
+
 ## F-F04 — configurable starting-snapshot timeout + phase telemetry
 
 - `TENANT_STARTING_SNAPSHOT_TIMEOUT_MS` (default 180000; bounds 10000–1800000); invalid values fail before the transaction opens.
 - Phase timings recorded for transaction init, counts, Shop, Session, table subjects, domain discovery, and serialization.
 - Safe failure diagnostics omit raw merchant domains, URLs, and credentials.
+
+**Status:** independently verified and accepted for PR 1.
 
 ## F-F05 — fail-closed drift diagnostics
 
@@ -59,22 +74,28 @@ Addressed Claude follow-up findings **F-F00 through F-F07** (product-owner accep
 - Regex redaction retained as defence in depth only.
 - Architecture test asserts error paths do not log raw streams.
 
+**Status:** independently verified and accepted for PR 1.
+
 ## F-F06 — dependency advisory investigation
 
 | Compare | Value |
 |---|---|
 | Base main (`8ccc8d29…`) `npm audit --package-lock-only` | 32 high, 0 critical/moderate/low |
-| PR head (this tip) `npm audit --package-lock-only` | 32 high, 0 critical/moderate/low |
+| Reviewed PR head (`28e7717…`) `npm audit --package-lock-only` | 32 high, 0 critical/moderate/low |
 | Advisory count delta | **unchanged** |
 | PR #11 package.json changes | Added runtime `pg@^8.16.3`; dev `@types/pg@^8.15.4`; maintenance scripts only |
 | New `pg` chain advisories | **none** (pg and transitive packages clean in audit) |
 | `npm audit fix` / broad upgrades | **not performed** |
 
-Pre-existing advisories remain tracked under **R-013** (and follow-up **R-062**). They are not resolved by PR #11. No product-owner decision required for a newly introduced vulnerable dependency.
+Pre-existing advisories remain tracked under **R-013** and **R-062**. They are **not** resolved by PR #11 acceptance.
 
-## Local validation (tip `dfe05865fc8ee2b51fa15e3bc16241b9221e1087`)
+## F-PR1-11 (non-blocking)
 
-Environment: disposable PostgreSQL 16 at `localhost:5432` / `stocky_plus_migrations`; inventory-write flags false.
+Capable-local review recorded F-PR1-11 as a non-blocking P3 wording item (dry-run “non-mutating” CLI help text). Explicitly deferred to a future focused documentation/help-text cleanup. Application and CLI source were **not** changed in this acceptance finalization.
+
+## Local validation (tip preceding docs-only finalization; reviewed head `28e77178602ca486e5138ca2f80e8947d8e113c0`)
+
+Environment: disposable PostgreSQL 16; inventory-write flags false. Capable-local review independently re-executed the required suite; see the preserved capable-local report for full command evidence, including the disclosed transient `test:subject-memory` connection contention note.
 
 | Command | Exit |
 |---|---|
@@ -88,15 +109,15 @@ Environment: disposable PostgreSQL 16 at `localhost:5432` / `stocky_plus_migrati
 | `npm run tenant:indexes:verify` | 0 |
 | `npm run tenant:schema:drift` | 0 (`tenant_prisma_schema_drift_ok`) |
 | `npm run tenant:indexes:plan` (post-apply) | 0 (`valid_exact: 28`) |
-| `npm run test:migrations` | 0 (106 tests / 24 files) |
-| `npm run test:subject-memory` | 0 (2 tests) |
+| `npm run test:migrations` | 0 |
+| `npm run test:subject-memory` | 0 |
 | `npm run lint` | 0 |
 | `npm run typecheck` | 0 |
-| `npm test` | 0 (56 tests) |
+| `npm test` | 0 |
 | `npm run build` | 0 |
 | `npm run graphql-codegen` | 0 |
 
-Exact-head CI run/job IDs recorded in the PR description after push.
+Exact-head CI at reviewed head: run `30633301468`, job `91164602626`, conclusion `success`.
 
 ## Explicit non-claims
 
@@ -105,8 +126,9 @@ Exact-head CI run/job IDs recorded in the PR description after push.
 - No RLS / non-null tenant enforcement / composite child FKs / Shop ownership FKs / runtime conversion.
 - PR 2 and PR 3 not started.
 - Inventory writes UNAPPROVED; every inventory-write flag DEFAULT OFF.
-- Findings F-F00–F-F07 and earlier waves are **not** independently closed.
+- Technical acceptance does **not** authorize merge, deployment, production backfill, RLS activation, inventory mutations, PR 2, or PR 3.
+- Residual gates remain: F-016 / R-022 / Q-011, R-014, operational backfill / zero-unresolved evidence, dependency hardening, inventory-write release.
 
 ## Next action
 
-Return to ChatGPT for exact-head verification and a capable local Claude Code correction review.
+Return to ChatGPT for docs-only exact-head verification and explicit user merge authorization.

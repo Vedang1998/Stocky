@@ -1,40 +1,45 @@
 # Project Status
 
 **Updated:** 2026-07-31
-**Current stage:** Phase 1 PR 1 F-F00–F-F07 follow-up corrections implemented; awaiting exact-head CI + ChatGPT verification + capable local Claude Code correction review
+**Current stage:** Phase 1 PR 1 ACCEPTED — AWAITING EXPLICIT USER MERGE AUTHORIZATION
 **Current main SHA:** `8ccc8d29a78e05615b31324b38df17f4f1d1296e`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** IN PROGRESS — PR 1 FOLLOW-UP CORRECTIONS IMPLEMENTED — AWAITING INDEPENDENT VERIFICATION
+**Phase 1 implementation:** PR 1 ACCEPTED — AWAITING EXPLICIT USER MERGE AUTHORIZATION
 **Active branch:** `phase-1/tenant-expand`
 **Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
+**Independently reviewed implementation head:** `28e77178602ca486e5138ca2f80e8947d8e113c0`
+**Exact-head CI:** run `30633301468`, job `91164602626` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = reviewed head
 **Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b` (preserved verbatim)
-**Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim in `PR1_TENANT_EXPANSION_CORRECTION_FOLLOWUP_REVIEW_REPORT.md`)
+**Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim)
+**Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim in `phases/phase-1/PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md`)
+**ChatGPT decision:** `PR 1 ACCEPTED` (D-025) — merge not authorized
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
-**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE
-**Q-011:** OPEN
+**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE (not resolved by PR 1)
+**Q-011:** OPEN (enforcement not implemented)
 **R-014:** OPEN P1 IMPLEMENTATION GATE
-**R-028 / R-029 / R-041–R-063:** OPEN (mitigated or tracked in code/docs; not independently closed)
-**F-F00–F-F07:** OPEN (F-F00 environment gate; F-F01–F-F05/F-F07 coded; F-F06 investigated/tracked)
+**R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks (PR 1 tooling independently accepted)
+**R-013 / R-062:** OPEN (dependency hardening; 32 high advisories unchanged)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 2:** NOT STARTED
 **PR 3:** NOT STARTED
-**Next action:** Return to ChatGPT for exact-head verification and a capable local Claude Code correction review
+**Next action:** Return to ChatGPT for docs-only exact-head verification and explicit user merge authorization.
 
 ## Current truth
 
 - Phase 0 remains CLOSED.
 - Phase 1 planning remains APPROVED AND MERGED; implementation authority EFFECTIVE.
-- PR [#11](https://github.com/Vedang1998/Stocky/pull/11) received a follow-up independent verdict **`NOT READY`** at head `aa5f425f446d79ff1bc24ac17a5944cdb8072159`.
-- Product owner accepted F-F00 through F-F07; F-F00 is an external review gate requiring a truly capable local review environment.
-- Corrections continue on `phase-1/tenant-expand` (no new branch; no merge; PR remains draft).
-- Implementation status for F-F01–F-F05 and F-F07 is coded complete while findings remain open pending capable independent verification. F-F06 is investigated: advisory count unchanged vs base main; no broad dependency upgrades.
-- F-016 / R-022 and Q-011 remain OPEN. Production inventory writes remain UNAPPROVED. Flags remain DEFAULT OFF.
-- PR 2 and PR 3 remain NOT STARTED. No RLS / non-null tenant enforcement / runtime conversion / inventory-write enablement.
-- No finding is independently closed.
+- Capable-local independent review at `28e77178602ca486e5138ca2f80e8947d8e113c0` returned **`READY FOR CHATGPT PR 1 ACCEPTANCE`**. No commit existed after that head at review time. Exact-head CI succeeded on that head.
+- ChatGPT recorded **`PR 1 ACCEPTED`** (D-025). Technical acceptance does **not** authorize merge, deployment, production backfill, RLS activation, inventory mutations, PR 2, or PR 3.
+- PR [#11](https://github.com/Vedang1998/Stocky/pull/11) remains OPEN, draft, and unmerged pending explicit user merge authorization.
+- Finalization after the reviewed head is documentation-only. The independently reviewed implementation tree remains unchanged apart from documentation files.
+- No production or merchant data was accessed. No deployment occurred. No RLS or runtime tenant conversion was added.
+- Inventory writes remain UNAPPROVED. Every inventory-write flag remains DEFAULT OFF.
+- PR 2 and PR 3 remain NOT STARTED.
+- Residual gates remain: F-016 / R-022 / Q-011, R-014, operational backfill / zero-unresolved evidence, dependency hardening, and inventory-write release gates.
 
 ## Phase 1 post-merge status sync PR #10 merge evidence (immutable)
 
@@ -49,7 +54,7 @@
 
 ## Next action
 
-1. Confirm exact-head CI on the new tip.
-2. Return to ChatGPT for exact-head verification and a capable local Claude Code correction review.
-3. Do not merge PR #11 without ChatGPT acceptance + user authorization after a READY correction review.
+1. Return to ChatGPT for docs-only exact-head verification and explicit user merge authorization.
+2. Do not merge PR #11 without explicit user authorization.
+3. Do not mark PR #11 ready without that authorization workflow.
 4. Do not start PR 2 or PR 3.
