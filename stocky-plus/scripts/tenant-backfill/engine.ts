@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   SHOP_DOMAIN_NORMALIZATION_VERSION,
@@ -7,13 +7,20 @@ import {
 import { acquireApplyLock, type ApplyLockHandle } from "./apply-lock";
 import {
   assertMembershipUnchanged,
-  loadDatasetBoundaries,
   recomputeMembershipChecksum,
   type DatasetBoundaries,
   type TableDatasetBoundary,
 } from "./boundaries";
-import { checksumRows, issueFingerprint, membershipChecksum, sha256Hex } from "./checksum";
+import { checksumRows, issueFingerprint, sha256Hex } from "./checksum";
 import type { OwnershipReasonCode } from "./reason-codes";
+import {
+  boundariesFromStartingEvidence,
+  captureStartingEvidence,
+  highWaterMarksFromBoundaries,
+  parseStartingEvidence,
+  type StartingEvidenceV2,
+} from "./starting-snapshot";
+import { TENANT_SUBJECT_EVIDENCE_VERSION } from "./subject-manifest";
 import {
   assertApprovedParentRelation,
   assertApprovedTable,
@@ -137,24 +144,6 @@ function ownershipKey(table: string, rowId: string): string {
 
 function redactShopEvidence(raw: string): { length: number; sha256: string } {
   return { length: raw.length, sha256: sha256Hex(raw) };
-}
-
-async function countTable(prisma: PrismaClient, table: string): Promise<number> {
-  assertApprovedTable(table);
-  const rows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
-    `SELECT COUNT(*)::bigint AS c FROM "${table}"`,
-  );
-  return Number(rows[0]?.c ?? 0);
-}
-
-function highWaterMarksFromBoundaries(
-  boundaries: DatasetBoundaries,
-): HighWaterMarkMap {
-  const map: HighWaterMarkMap = {};
-  for (const table of BACKFILL_TABLE_ORDER) {
-    map[table] = boundaries[table]?.highWaterMark ?? null;
-  }
-  return map;
 }
 
 async function persistIssues(
@@ -377,6 +366,9 @@ export async function runTenantBackfill(
   let datasetBoundaries: DatasetBoundaries = {};
   let highWaterMarks: HighWaterMarkMap = {};
   let shopsWouldCreate = 0;
+  let shopsActuallyInserted = 0;
+  let shopsReusedAfterConcurrentCreate = 0;
+  let startingEvidence: StartingEvidenceV2 | undefined;
   let batchesCommitted = 0;
   let runBatchSize = batchSize;
 
@@ -417,21 +409,22 @@ export async function runTenantBackfill(
       // schemaVersion, and beforeCounts remain on the run record for audit.
       // Resume may use a different caller batchSize because progress is keyed by
       // lastProcessedId, not batch index.
-      beforeCounts = (existing.beforeCounts as CountMap | null) ?? emptyCounts();
+      // Resume MUST use original persisted startingEvidence — never recapture.
+      const meta =
+        (existing.resumeMetadata as Record<string, unknown> | null) ?? {};
+      startingEvidence = parseStartingEvidence(meta.startingEvidence);
+      beforeCounts = { ...startingEvidence.beforeCounts };
+      datasetBoundaries = boundariesFromStartingEvidence(startingEvidence);
+      highWaterMarks = highWaterMarksFromBoundaries(datasetBoundaries);
+      shopsWouldCreate =
+        startingEvidence.domainDiscovery.shopsWouldCreatePredicted;
       runBatchSize = batchSize;
-
-      const meta = (existing.resumeMetadata as Record<string, unknown> | null) ?? {};
-      datasetBoundaries =
-        (meta.datasetBoundaries as DatasetBoundaries | undefined) ??
-        (await loadDatasetBoundaries(prisma));
-      highWaterMarks =
-        (meta.highWaterMarks as HighWaterMarkMap | undefined) ??
-        highWaterMarksFromBoundaries(datasetBoundaries);
 
       const resumeAttempts =
         typeof meta.resumeAttempts === "number" ? meta.resumeAttempts + 1 : 1;
 
-      // Rebuild unresolved from table checkpoints; diagnostics rehydrate separately (R10).
+      // Rebuild unresolved from table checkpoints; diagnostics rehydrate from
+      // completed checkpoint counts without recalculating against a new subject.
       for (const table of BACKFILL_TABLE_ORDER) {
         const cp = await prisma.tenantBackfillCheckpoint.findUnique({
           where: { runId_tableName: { runId, tableName: table } },
@@ -444,6 +437,14 @@ export async function runTenantBackfill(
           if (cp.checksum) checksums[table] = cp.checksum;
         }
       }
+      for (const phase of DIAGNOSTIC_PHASES) {
+        const cp = await prisma.tenantBackfillCheckpoint.findUnique({
+          where: { runId_tableName: { runId, tableName: phase } },
+        });
+        if (cp?.status === "COMPLETED") {
+          examinedCounts[phase] = cp.examinedCount;
+        }
+      }
 
       await prisma.tenantBackfillRun.update({
         where: { id: runId },
@@ -453,20 +454,23 @@ export async function runTenantBackfill(
           failedAt: null,
           resumeMetadata: {
             ...meta,
+            evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+            startingEvidence,
             highWaterMarks,
             datasetBoundaries,
+            shopsWouldCreatePredicted: shopsWouldCreate,
             resumeAttempts,
           },
           updatedAt: new Date(),
         },
       });
     } else {
-      beforeCounts.Shop = await countTable(prisma, "Shop");
-      for (const table of BACKFILL_TABLE_ORDER) {
-        beforeCounts[table] = await countTable(prisma, table);
-      }
-      datasetBoundaries = await loadDatasetBoundaries(prisma);
+      startingEvidence = await captureStartingEvidence(prisma);
+      beforeCounts = { ...startingEvidence.beforeCounts };
+      datasetBoundaries = boundariesFromStartingEvidence(startingEvidence);
       highWaterMarks = highWaterMarksFromBoundaries(datasetBoundaries);
+      shopsWouldCreate =
+        startingEvidence.domainDiscovery.shopsWouldCreatePredicted;
 
       await prisma.tenantBackfillRun.create({
         data: {
@@ -485,8 +489,11 @@ export async function runTenantBackfill(
           unresolvedCounts: emptyCounts(),
           checksums: {},
           resumeMetadata: {
+            evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+            startingEvidence,
             highWaterMarks,
             datasetBoundaries,
+            shopsWouldCreatePredicted: shopsWouldCreate,
             resumeAttempts: 0,
           },
           updatedAt: new Date(),
@@ -497,76 +504,70 @@ export async function runTenantBackfill(
     const domainToShopId = new Map<string, string>();
     const discoveryIssues: IssueDraft[] = [];
 
-    const existingShops = await prisma.shop.findMany({
+    // Seed map from starting Shop snapshot, then refresh IDs for domains that
+    // already existed (or were created concurrently) without changing prediction.
+    for (const row of startingEvidence.shopSnapshot.rows) {
+      domainToShopId.set(row.myshopifyDomain, row.id);
+    }
+    const liveShops = await prisma.shop.findMany({
       select: { id: true, myshopifyDomain: true },
     });
-    for (const shop of existingShops) {
+    for (const shop of liveShops) {
       domainToShopId.set(shop.myshopifyDomain, shop.id);
     }
 
-    type DomainCandidate = { source: string; raw: string };
-    const candidates: DomainCandidate[] = [];
-
-    const sessions = await prisma.$queryRawUnsafe<Array<{ shop: string }>>(
-      `SELECT DISTINCT shop FROM "Session" ORDER BY shop`,
-    );
-    for (const row of sessions) {
-      candidates.push({ source: "Session", raw: row.shop });
+    for (const draft of startingEvidence.domainDiscovery.invalidIssues) {
+      discoveryIssues.push({
+        tableName: draft.tableName,
+        rowId: draft.rowId,
+        reasonCode: draft.reasonCode,
+        sourceShopValues: draft.sourceShopValues,
+      });
     }
 
-    for (const table of DIRECT_OWNER_TABLES) {
-      assertApprovedTable(table);
-      const rows = await prisma.$queryRawUnsafe<Array<{ shop: string }>>(
-        `SELECT DISTINCT shop FROM "${table}" ORDER BY shop`,
+    for (const normalized of startingEvidence.domainDiscovery
+      .validNormalizedDomains) {
+      const predictedMissing = !startingEvidence.shopSnapshot.domains.includes(
+        normalized,
       );
-      for (const row of rows) {
-        candidates.push({ source: table, raw: row.shop });
-      }
-    }
-
-    for (const candidate of candidates) {
-      const result = normalizeShopDomain(candidate.raw);
-      if (!result.ok) {
-        discoveryIssues.push({
-          tableName: candidate.source,
-          rowId: `domain:${createHash("sha256").update(candidate.raw).digest("hex").slice(0, 16)}`,
-          reasonCode: "INVALID_SHOP_DOMAIN",
-          sourceShopValues: {
-            source: candidate.source,
-            evidence: redactShopEvidence(candidate.raw),
-            normalizeReason: result.reason,
-          },
-        });
-        continue;
-      }
-
-      let shopId = domainToShopId.get(result.normalized);
+      let shopId = domainToShopId.get(normalized);
       if (!shopId) {
         shopId = cuidLike();
-        shopsWouldCreate += 1;
         if (apply) {
           await prisma.shop.upsert({
-            where: { myshopifyDomain: result.normalized },
+            where: { myshopifyDomain: normalized },
             create: {
               id: shopId,
-              myshopifyDomain: result.normalized,
+              myshopifyDomain: normalized,
               updatedAt: new Date(),
             },
             update: {},
           });
           const persisted = await prisma.shop.findUniqueOrThrow({
-            where: { myshopifyDomain: result.normalized },
+            where: { myshopifyDomain: normalized },
           });
+          if (persisted.id !== shopId) {
+            shopsReusedAfterConcurrentCreate += 1;
+          } else {
+            shopsActuallyInserted += 1;
+            updatedCounts.Shop += 1;
+          }
           shopId = persisted.id;
-          updatedCounts.Shop += 1;
         }
-        domainToShopId.set(result.normalized, shopId);
-      } else {
+        domainToShopId.set(normalized, shopId);
+      } else if (!resumeRunId) {
+        if (predictedMissing) {
+          shopsReusedAfterConcurrentCreate += 1;
+        }
         unchangedCounts.Shop += 1;
       }
     }
 
-    if (discoveryIssues.length > 0) {
+    // Historical prediction is immutable — shopsWouldCreate stays at snapshot value.
+    void shopsActuallyInserted;
+    void shopsReusedAfterConcurrentCreate;
+
+    if (discoveryIssues.length > 0 && !resumeRunId) {
       await prisma.$transaction(async (tx) => {
         await persistIssues(tx, runId, discoveryIssues);
       });
@@ -591,11 +592,7 @@ export async function runTenantBackfill(
       let updated = checkpoint?.updatedCount ?? 0;
       let unchanged = checkpoint?.unchangedCount ?? 0;
       let unresolved = checkpoint?.unresolvedCount ?? 0;
-      const boundary = datasetBoundaries[table] ?? {
-        highWaterMark: null,
-        rowCount: 0,
-        membershipChecksum: membershipChecksum([]),
-      };
+      const boundary = datasetBoundaries[table]!;
       const hwm = boundary.highWaterMark;
 
       await prisma.tenantBackfillCheckpoint.upsert({
@@ -717,8 +714,13 @@ export async function runTenantBackfill(
               unchangedCounts,
               unresolvedCounts,
               resumeMetadata: {
+                evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+                startingEvidence,
                 highWaterMarks,
                 datasetBoundaries,
+                shopsWouldCreatePredicted: shopsWouldCreate,
+                shopsActuallyInserted,
+                shopsReusedAfterConcurrentCreate,
                 interrupted: true,
                 lastTable: table,
                 lastProcessedId: lastId,
@@ -774,22 +776,49 @@ export async function runTenantBackfill(
         where: { runId_tableName: { runId, tableName: phase } },
       });
 
+      const runRow = await prisma.tenantBackfillRun.findUniqueOrThrow({
+        where: { id: runId },
+      });
+      const meta =
+        (runRow.resumeMetadata as Record<string, unknown> | null) ?? {};
+      const diagnosticEvidence =
+        (meta.diagnosticEvidence as
+          | Record<string, { issues: IssueDraft[] }>
+          | undefined) ?? {};
+
+      if (checkpoint?.status === "COMPLETED") {
+        const stored = diagnosticEvidence[phase];
+        if (!stored || !Array.isArray(stored.issues)) {
+          throw new Error(
+            `Resume failed closed: completed diagnostic checkpoint ${phase} lacks durable diagnosticEvidence`,
+          );
+        }
+        // Rehydrate unresolved contribution from durable evidence — do not
+        // recalculate against a possibly different live subject (C6).
+        incrementUnresolvedForIssues(unresolvedCounts, stored.issues);
+        examinedCounts[phase] = checkpoint.examinedCount;
+        unresolvedCounts[phase] = checkpoint.unresolvedCount;
+        continue;
+      }
+
+      // Parent/subject evidence must still match the starting snapshot before
+      // diagnostics run, or drift fails closed instead of a silent re-diagnosis.
+      await assertDiagnosticSubjectStable(prisma, phase, datasetBoundaries);
+
       const diagnosticIssues = await runDiagnosticPhase(
         prisma,
         phase,
         datasetBoundaries,
       );
 
-      if (checkpoint?.status === "COMPLETED") {
-        // Rehydrate unresolved contribution without skipping (R10).
-        incrementUnresolvedForIssues(unresolvedCounts, diagnosticIssues);
-        await prisma.$transaction(async (tx) => {
-          await persistIssues(tx, runId, diagnosticIssues);
-        });
-        continue;
-      }
-
       incrementUnresolvedForIssues(unresolvedCounts, diagnosticIssues);
+      unresolvedCounts[phase] = diagnosticIssues.length;
+      examinedCounts[phase] = diagnosticIssues.length;
+
+      const nextDiagnosticEvidence = {
+        ...diagnosticEvidence,
+        [phase]: { issues: diagnosticIssues },
+      };
 
       await prisma.$transaction(async (tx) => {
         await persistIssues(tx, runId, diagnosticIssues);
@@ -810,6 +839,21 @@ export async function runTenantBackfill(
             examinedCount: diagnosticIssues.length,
             unresolvedCount: diagnosticIssues.length,
             status: "COMPLETED",
+            updatedAt: new Date(),
+          },
+        });
+        await tx.tenantBackfillRun.update({
+          where: { id: runId },
+          data: {
+            resumeMetadata: {
+              ...meta,
+              evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+              startingEvidence,
+              highWaterMarks,
+              datasetBoundaries,
+              shopsWouldCreatePredicted: shopsWouldCreate,
+              diagnosticEvidence: nextDiagnosticEvidence,
+            },
             updatedAt: new Date(),
           },
         });
@@ -856,6 +900,12 @@ export async function runTenantBackfill(
       checkpointsComplete,
     });
 
+    const finalRun = await prisma.tenantBackfillRun.findUniqueOrThrow({
+      where: { id: runId },
+    });
+    const finalMeta =
+      (finalRun.resumeMetadata as Record<string, unknown> | null) ?? {};
+
     await prisma.tenantBackfillRun.update({
       where: { id: runId },
       data: {
@@ -867,10 +917,15 @@ export async function runTenantBackfill(
         unresolvedCounts,
         checksums,
         resumeMetadata: {
+          ...finalMeta,
+          evidenceVersion: TENANT_SUBJECT_EVIDENCE_VERSION,
+          startingEvidence,
           highWaterMarks,
           datasetBoundaries,
           batchesCommitted,
-          shopsWouldCreate,
+          shopsWouldCreatePredicted: shopsWouldCreate,
+          shopsActuallyInserted,
+          shopsReusedAfterConcurrentCreate,
         },
         updatedAt: new Date(),
       },
@@ -922,6 +977,29 @@ export async function runTenantBackfill(
   }
 }
 
+async function assertDiagnosticSubjectStable(
+  prisma: PrismaClient,
+  phase: DiagnosticPhaseName,
+  boundaries: DatasetBoundaries,
+): Promise<void> {
+  const tables: BackfillTableName[] =
+    phase === "diagnostic:po_supplier"
+      ? ["PurchaseOrder", "Supplier"]
+      : phase === "diagnostic:lead_time"
+        ? ["LeadTimeSnapshot", "Supplier", "PurchaseOrder"]
+        : ["ShopSettings"];
+
+  for (const table of tables) {
+    const expected = boundaries[table]!;
+    const actual = await recomputeMembershipChecksum(
+      prisma,
+      table,
+      expected.highWaterMark,
+    );
+    assertMembershipUnchanged(table, expected, actual);
+  }
+}
+
 async function runDiagnosticPhase(
   prisma: PrismaClient,
   phase: DiagnosticPhaseName,
@@ -932,31 +1010,19 @@ async function runDiagnosticPhase(
     await diagnosePurchaseOrderSupplierMismatch(
       prisma,
       issues,
-      boundaries.PurchaseOrder ?? {
-        highWaterMark: null,
-        rowCount: 0,
-        membershipChecksum: membershipChecksum([]),
-      },
+      boundaries.PurchaseOrder!,
     );
   } else if (phase === "diagnostic:lead_time") {
     await diagnoseLeadTimeSnapshots(
       prisma,
       issues,
-      boundaries.LeadTimeSnapshot ?? {
-        highWaterMark: null,
-        rowCount: 0,
-        membershipChecksum: membershipChecksum([]),
-      },
+      boundaries.LeadTimeSnapshot!,
     );
   } else if (phase === "diagnostic:duplicate_shop_settings") {
     await detectDuplicateShopSettings(
       prisma,
       issues,
-      boundaries.ShopSettings ?? {
-        highWaterMark: null,
-        rowCount: 0,
-        membershipChecksum: membershipChecksum([]),
-      },
+      boundaries.ShopSettings!,
     );
   }
   return issues;

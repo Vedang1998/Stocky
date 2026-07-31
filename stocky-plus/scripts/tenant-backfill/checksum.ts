@@ -45,9 +45,13 @@ export function checksumRows(
   return sha256Hex(canonicalJson(normalized));
 }
 
-/** Deterministic SHA-256 over ordered row IDs (run membership / boundary evidence). */
+/**
+ * @deprecated ID-only membership checksum — superseded by phase1-tenant-subject-v2
+ * streaming subject digests in subject-evidence.ts. Retained only for isolated
+ * unit/helper callers; must not be used as run-subject evidence.
+ */
 export function membershipChecksum(ids: string[]): string {
-  const ordered = [...ids].sort((a, b) => a.localeCompare(b));
+  const ordered = [...ids].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   return sha256Hex(canonicalJson(ordered));
 }
 
