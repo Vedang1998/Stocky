@@ -15,8 +15,8 @@
 | Claude-reviewed PR head | `7aabb095806716697bfea2783379351b15e1cda2` |
 | Claude-reviewed-head CI | run `30578683952` / job `90993206934` / success |
 | Claude verdict | `NOT READY` (preserved verbatim) |
-| Final corrected PR head | *(filled after push)* |
-| Final corrected-head CI | *(filled after CI)* |
+| Final corrected PR head | `3a6ae28d714ab95f54ae6b48dd8c8e5291f997a8` |
+| Final corrected-head CI | run `30592780673` / job `91038478251` / success |
 | Environment | Disposable PostgreSQL 16; Node 22; npm 11.5.2; `pg` Client for maintenance |
 
 ## Summary
@@ -69,7 +69,7 @@ All mandatory P1, required P2, and required P3 cleanup items from the product-ow
 | `npm run lint` | 0 | passed |
 | `npm run typecheck` | 0 | passed |
 | `npm test` | 0 | passed (56 tests) |
-| Final suite + CI | *(record after push)* | |
+| Final suite + CI | 0 | passed | Local suite green; exact-head CI `30592780673` / `91038478251` success on `3a6ae28…` |
 
 ## Dry-run language
 
