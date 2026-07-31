@@ -2,7 +2,9 @@
 /**
  * Tenant ownership backfill CLI — Phase 1 PR 1.
  *
- * Default mode is dry-run (non-mutating). Mutation requires --apply.
+ * Default mode is dry-run. Dry-run does not mutate merchant ownership rows,
+ * but it writes backfill run, checkpoint, and issue diagnostic records.
+ * Mutation of merchant ownership and Shop rows requires --apply.
  */
 import { PrismaClient } from "@prisma/client";
 import { runTenantBackfill, type BackfillMode } from "./engine";
@@ -40,8 +42,10 @@ function printHelp() {
   console.log(`Usage:
   npx tsx scripts/tenant-backfill/cli.ts [--dry-run|--apply] [--batch-size N] [--resume-run-id ID]
 
-Default: --dry-run (non-mutating).
-Mutation requires explicit --apply.
+Default: --dry-run.
+Dry-run does not mutate merchant ownership rows, but it writes backfill run,
+checkpoint, and issue diagnostic records.
+Apply requires TENANT_MAINTENANCE_DATABASE_URL (non-pooler) and explicit --apply.
 Never run --apply against production without a reviewed deployment plan.
 `);
 }
@@ -73,19 +77,25 @@ async function main() {
 
     if (result.status === "FAILED") {
       process.exitCode = 1;
-    } else if (
-      result.status === "COMPLETED" &&
-      Object.values(result.unresolvedCounts).some((n) => n > 0)
-    ) {
+    } else if (result.status === "COMPLETED_WITH_ISSUES") {
       console.log(
         JSON.stringify({
-          event: "tenant_backfill_unresolved_warning",
+          event: "tenant_backfill_blocking_warning",
           message:
-            "Unresolved ownership remains; blocks later PR 3 enforcement. F-016/R-022 not resolved.",
+            "Blocking ownership issues and/or unresolved rows remain; blocks later PR 3 enforcement.",
+          blockingIssueCount: result.blockingIssueCount,
+          globalOpenIssueCount: result.globalOpenIssueCount,
+          currentRunOpenIssueCount: result.currentRunOpenIssueCount,
+          currentRunDetectedIssueCount: result.currentRunDetectedIssueCount,
           unresolvedCounts: result.unresolvedCounts,
-          issueCount: result.issueCount,
+          shopsWouldCreate: result.shopsWouldCreate,
         }),
       );
+      process.exitCode = 2;
+    } else if (result.status === "COMPLETED") {
+      process.exitCode = 0;
+    } else if (result.status === "INTERRUPTED") {
+      process.exitCode = 0;
     }
   } catch (error) {
     console.error(

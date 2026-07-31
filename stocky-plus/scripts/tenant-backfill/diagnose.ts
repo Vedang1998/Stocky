@@ -1,7 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Tenant ownership diagnostics — Phase 1 PR 1.
- * Always non-mutating (dry-run).
+ * Dry-run does not mutate merchant ownership rows, but writes run/checkpoint/issue records.
  */
 import { PrismaClient } from "@prisma/client";
 import { runTenantBackfill } from "./engine";
@@ -31,16 +31,22 @@ async function main() {
         currentOwnershipEvidence: true,
         conflictingOwnershipEvidence: true,
         parentLineage: true,
+        reopenedAt: true,
+        reopenCount: true,
       },
     });
 
-    // Ensure no access tokens / emails leak — evidence is already redacted.
     console.log(
       JSON.stringify(
         {
           event: "tenant_diagnose_result",
           runId: result.runId,
           status: result.status,
+          blockingIssueCount: result.blockingIssueCount,
+          globalOpenIssueCount: result.globalOpenIssueCount,
+          currentRunOpenIssueCount: result.currentRunOpenIssueCount,
+          currentRunDetectedIssueCount: result.currentRunDetectedIssueCount,
+          shopsWouldCreate: result.shopsWouldCreate,
           beforeCounts: result.beforeCounts,
           examinedCounts: result.examinedCounts,
           updatedCounts: result.updatedCounts,
@@ -56,6 +62,7 @@ async function main() {
     );
 
     if (result.status === "FAILED") process.exitCode = 1;
+    else if (result.status === "COMPLETED_WITH_ISSUES") process.exitCode = 2;
   } catch (error) {
     console.error(
       JSON.stringify({

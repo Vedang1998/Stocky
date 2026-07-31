@@ -1,0 +1,7 @@
+-- Phase 1 PR 1 tenant backfill correction (F-PR1-04, COMPLETED_WITH_ISSUES)
+
+ALTER TYPE "TenantBackfillRunStatus" ADD VALUE IF NOT EXISTS 'COMPLETED_WITH_ISSUES';
+
+ALTER TABLE "TenantOwnershipIssue"
+  ADD COLUMN IF NOT EXISTS "reopenedAt" TIMESTAMP(3),
+  ADD COLUMN IF NOT EXISTS "reopenCount" INTEGER NOT NULL DEFAULT 0;

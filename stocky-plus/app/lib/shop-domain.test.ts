@@ -51,4 +51,49 @@ describe("phase1-shop-domain-v1 normalization", () => {
       normalized: "a1-b2.myshopify.com",
     });
   });
+
+  it("accepts 63-character store label and rejects 64", () => {
+    const label63 = "a".repeat(63);
+    const label64 = "a".repeat(64);
+    expect(normalizeShopDomain(`${label63}.myshopify.com`)).toEqual({
+      ok: true,
+      normalized: `${label63}.myshopify.com`,
+    });
+    expect(normalizeShopDomain(`${label64}.myshopify.com`)).toEqual({
+      ok: false,
+      reason: "store_label_too_long",
+    });
+  });
+
+  it("enforces hostname length bound of 253", () => {
+    // 253 - ".myshopify.com".length = 253 - 14 = 239 label chars would be max
+    // but label max is 63, so hostname max for valid myshopify hosts is 63+14=77.
+    // Still reject any pre-normalized trimmed string over 253.
+    const overlong = `${"a".repeat(240)}.myshopify.com`;
+    expect(overlong.length).toBeGreaterThan(253);
+    expect(normalizeShopDomain(overlong)).toEqual({
+      ok: false,
+      reason: "hostname_too_long",
+    });
+  });
+
+  it("rejects non-ASCII before lowercasing (Kelvin, Turkish I, controls)", () => {
+    expect(normalizeShopDomain("\u212Ashop.myshopify.com")).toEqual({
+      ok: false,
+      reason: "non_ascii",
+    });
+    expect(normalizeShopDomain("İstanbul.myshopify.com")).toEqual({
+      ok: false,
+      reason: "non_ascii",
+    });
+    expect(normalizeShopDomain("ıstanbul.myshopify.com")).toEqual({
+      ok: false,
+      reason: "non_ascii",
+    });
+    expect(normalizeShopDomain("café.myshopify.com")).toEqual({
+      ok: false,
+      reason: "non_ascii",
+    });
+    expect(normalizeShopDomain("shop\u0000.myshopify.com").ok).toBe(false);
+  });
 });

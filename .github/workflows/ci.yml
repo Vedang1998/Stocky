@@ -41,6 +41,7 @@ jobs:
       # Test-only placeholders — no real Shopify credentials or merchant data.
       NODE_ENV: test
       DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
+      TENANT_MAINTENANCE_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       REDIS_URL: redis://localhost:6379
       SHOPIFY_API_KEY: ci-test-api-key
       SHOPIFY_API_SECRET: ci-test-api-secret
@@ -88,6 +89,21 @@ jobs:
 
       - name: Apply migrations to ephemeral PostgreSQL
         run: npx prisma migrate deploy
+
+      - name: Compatibility index apply
+        run: npm run tenant:indexes:apply -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+
+      - name: Compatibility index verify
+        run: npm run tenant:indexes:verify
+
+      - name: Schema index drift check
+        run: npm run tenant:schema:drift
+
+      - name: Git diff check
+        run: git diff --check
+        working-directory: .
 
       - name: Lint
         run: npm run lint

@@ -270,3 +270,14 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** None in planning.
 7. **Risks:** Building sync on retiring/invalid API shapes.
 8. **Final:** **APPROVED AND EFFECTIVE FOLLOWING PR #9 MERGE** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`). Approved API-validation gate; does not itself select or change an API version.
+
+## D-024 — Concurrent tenant compatibility-index deployment (PR 1 correction)
+
+1. **Current (rejected PR 1 attempt):** Ordinary `CREATE INDEX` / `CREATE UNIQUE INDEX` with `IF NOT EXISTS` inside Prisma Migrate on merchant tables.
+2. **Proposed / accepted:** Ordinary non-concurrent compatibility-index creation on populated merchant tables is **rejected**. Same-name `IF NOT EXISTS` is **not** evidence that an index is valid or correctly defined. PR 1 compatibility indexes require `CREATE INDEX CONCURRENTLY` / `CREATE UNIQUE INDEX CONCURRENTLY` outside an incompatible migration transaction, plus exact catalog pre/post verification (`indisvalid`, definition, uniqueness, table, columns). Production execution remains unauthorized. No major Prisma upgrade is authorized in this correction. Phase 1 product scope is unchanged.
+3. **Reason:** Claude F-PR1-05 / F-PR1-06; product-owner rejection of the ordinary-index deviation.
+4. **Merchant impact:** Avoids write-blocking DDL and silently accepted INVALID unique indexes.
+5. **Technical impact:** `20260730160100` rewritten to no-op; `scripts/tenant-indexes/` + CI apply/verify/drift.
+6. **Migration:** Additive tooling; unmerged migration file rewritten in place with documented rationale.
+7. **Risks:** Operators must run index tooling after migrate; residual until fresh Claude review accepts corrected head.
+8. **Final:** **Accepted for PR 1 corrections** (2026-07-30). Does not authorize production deployment.

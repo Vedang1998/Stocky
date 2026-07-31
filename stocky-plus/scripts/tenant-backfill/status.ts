@@ -19,7 +19,9 @@ async function main() {
   const prisma = new PrismaClient();
   try {
     const status = await getBackfillStatus(prisma, runId);
-    console.log(JSON.stringify({ event: "tenant_backfill_status", ...status }, null, 2));
+    console.log(
+      JSON.stringify({ event: "tenant_backfill_status", ...status }, null, 2),
+    );
     if (!status.run) process.exitCode = 1;
   } catch (error) {
     console.error(

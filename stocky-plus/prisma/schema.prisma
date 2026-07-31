@@ -55,6 +55,7 @@ enum TenantBackfillRunStatus {
   PENDING
   RUNNING
   COMPLETED
+  COMPLETED_WITH_ISSUES
   FAILED
 }
 
@@ -134,6 +135,8 @@ model TenantOwnershipIssue {
   proposedCanonicalShop      String?
   status                     TenantOwnershipIssueStatus @default(OPEN)
   resolutionEvidence         Json?
+  reopenedAt                 DateTime?
+  reopenCount                Int                        @default(0)
   firstDetectedAt            DateTime                   @default(now())
   lastDetectedAt             DateTime                   @default(now())
 

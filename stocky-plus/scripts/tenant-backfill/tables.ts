@@ -50,6 +50,42 @@ export const CHILD_PARENT: Record<
   },
 };
 
+/** Frozen allowlist for SQL identifier interpolation (F-PR1-15). */
+export const APPROVED_MERCHANT_TABLES: ReadonlySet<string> = new Set([
+  ...BACKFILL_TABLE_ORDER,
+  "Shop",
+]);
+
+export function assertApprovedTable(name: string): void {
+  if (!APPROVED_MERCHANT_TABLES.has(name)) {
+    throw new Error(`Table not approved for tenant backfill SQL: ${name}`);
+  }
+}
+
+export function assertApprovedParentRelation(
+  parentTable: string,
+  parentIdColumn: string,
+): void {
+  assertApprovedTable(parentTable);
+  for (const child of CHILD_OWNER_TABLES) {
+    const meta = CHILD_PARENT[child];
+    if (meta.parentTable === parentTable && meta.parentIdColumn === parentIdColumn) {
+      return;
+    }
+  }
+  throw new Error(
+    `Parent relation not approved: ${parentTable}.${parentIdColumn}`,
+  );
+}
+
+export const DIAGNOSTIC_PHASES = [
+  "diagnostic:po_supplier",
+  "diagnostic:lead_time",
+  "diagnostic:duplicate_shop_settings",
+] as const;
+
+export type DiagnosticPhaseName = (typeof DIAGNOSTIC_PHASES)[number];
+
 /** Prisma model → quoted SQL table name (same for these models). */
 export function sqlTable(name: BackfillTableName | "Session" | "Shop"): string {
   return `"${name}"`;

@@ -9,9 +9,11 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { runTenantBackfill } from "../engine";
-import { TENANT_BACKFILL_ADVISORY_LOCK_KEY } from "../tables";
+import { acquireApplyLock } from "../apply-lock";
 import { featureFlags } from "../../../app/lib/feature-flags.server";
 import { normalizeShopDomain } from "../../../app/lib/shop-domain";
+import { Client } from "pg";
+import { applyIndexes } from "../../tenant-indexes/apply";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = join(__dirname, "..", "..", "..");
@@ -42,6 +44,16 @@ function migrateDeploy(): string {
   return run("npx", ["prisma", "migrate", "deploy"]);
 }
 
+async function applyCompatibilityIndexes() {
+  const client = new Client({ connectionString: DATABASE_URL });
+  await client.connect();
+  try {
+    await applyIndexes(client, { apply: true });
+  } finally {
+    await client.end();
+  }
+}
+
 /**
  * Apply only the historical main init migration, then restore PR 1 migrations
  * so `migrate deploy` applies expansion + indexes on top.
@@ -54,6 +66,10 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     MIGRATIONS_DIR,
     "20260730160100_tenant_compatibility_indexes",
   );
+  const correction = join(
+    MIGRATIONS_DIR,
+    "20260730210000_tenant_backfill_correction",
+  );
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
   mkdirSync(parked, { recursive: true });
   const expansionPark = join(parked, "20260730160000_tenant_expansion");
@@ -61,13 +77,19 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     parked,
     "20260730160100_tenant_compatibility_indexes",
   );
+  const correctionPark = join(
+    parked,
+    "20260730210000_tenant_backfill_correction",
+  );
 
   try {
     if (existsSync(expansion)) renameSync(expansion, expansionPark);
     if (existsSync(indexes)) renameSync(indexes, indexesPark);
+    if (existsSync(correction)) renameSync(correction, correctionPark);
     const initOut = migrateDeploy();
     renameSync(expansionPark, expansion);
     renameSync(indexesPark, indexes);
+    renameSync(correctionPark, correction);
     const restOut = migrateDeploy();
     return { initOut, restOut };
   } catch (error) {
@@ -76,6 +98,9 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     }
     if (existsSync(indexesPark) && !existsSync(indexes)) {
       renameSync(indexesPark, indexes);
+    }
+    if (existsSync(correctionPark) && !existsSync(correction)) {
+      renameSync(correctionPark, correction);
     }
     throw error;
   }
@@ -99,6 +124,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     const out = migrateDeploy();
     expect(out).toContain("20260730160000_tenant_expansion");
     expect(out).toContain("20260730160100_tenant_compatibility_indexes");
+    expect(out).toContain("20260730210000_tenant_backfill_correction");
   }, 120_000);
 
   it("applies new migrations on top of current-main init schema", async () => {
@@ -108,11 +134,13 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(initOut).not.toContain("20260730160000_tenant_expansion");
     expect(restOut).toContain("20260730160000_tenant_expansion");
     expect(restOut).toContain("20260730160100_tenant_compatibility_indexes");
+    expect(restOut).toContain("20260730210000_tenant_backfill_correction");
   }, 180_000);
 
   it("preserves legacy shop, Session shape, nullable shopId, indexes; no RLS/composite FKs; flags OFF", async () => {
     await resetPublicSchema(prisma);
     migrateDeploy();
+    await applyCompatibilityIndexes();
 
     const merchantTables = [
       "Supplier",
@@ -233,6 +261,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
   it("backfills ownership, quarantines issues, resumes, stays idempotent, denies concurrent apply", async () => {
     await resetPublicSchema(prisma);
     migrateDeploy();
+    await applyCompatibilityIndexes();
+
+    process.env.TENANT_MAINTENANCE_DATABASE_URL = DATABASE_URL;
 
     const shopA = "shop-a.myshopify.com";
     const shopB = "shop-b.myshopify.com";
@@ -374,7 +405,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       mode: "dry-run",
       batchSize: 2,
     });
-    expect(dry.status).toBe("COMPLETED");
+    expect(dry.status).toBe("COMPLETED_WITH_ISSUES");
+    expect(dry.blockingIssueCount).toBeGreaterThan(0);
 
     const afterDry = await prisma.supplier.findUnique({
       where: { id: supplierA.id },
@@ -395,7 +427,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       batchSize: 50,
       resumeRunId: interrupted.runId,
     });
-    expect(resumed.status).toBe("COMPLETED");
+    expect(resumed.status).toBe("COMPLETED_WITH_ISSUES");
 
     const aAfter = await prisma.supplier.findUnique({
       where: { id: supplierA.id },
@@ -457,27 +489,16 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       mode: "apply",
       batchSize: 50,
     });
-    expect(second.status).toBe("COMPLETED");
+    expect(second.status).toBe("COMPLETED_WITH_ISSUES");
     expect(second.checksums.Supplier).toBe(resumed.checksums.Supplier);
 
-    // Concurrent apply denied — lock must be held on a *different* session
-    // (PostgreSQL advisory locks are re-entrant within the same session).
-    const locker = new PrismaClient({
-      datasources: { db: { url: DATABASE_URL } },
-    });
+    const lock = await acquireApplyLock();
     try {
-      const held = await locker.$queryRawUnsafe<Array<{ locked: boolean }>>(
-        `SELECT pg_try_advisory_lock(${TENANT_BACKFILL_ADVISORY_LOCK_KEY}) AS locked`,
-      );
-      expect(held[0]?.locked).toBe(true);
       await expect(
         runTenantBackfill({ prisma, mode: "apply", batchSize: 10 }),
       ).rejects.toThrow(/Concurrent tenant backfill apply is denied/);
-      await locker.$queryRawUnsafe<Array<{ unlocked: boolean }>>(
-        `SELECT pg_advisory_unlock(${TENANT_BACKFILL_ADVISORY_LOCK_KEY}) AS unlocked`,
-      );
     } finally {
-      await locker.$disconnect();
+      await lock.release();
     }
 
     const dry2 = await runTenantBackfill({
@@ -485,7 +506,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       mode: "dry-run",
       batchSize: 50,
     });
-    expect(dry2.status).toBe("COMPLETED");
+    expect(dry2.status).toBe("COMPLETED_WITH_ISSUES");
     expect(dry2.unresolvedCounts.Supplier).toBeGreaterThan(0);
 
     expect(poA.id).toBe("po-a");

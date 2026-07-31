@@ -26,7 +26,11 @@
     "test:migrations": "vitest run --config vitest.migrations.config.ts",
     "tenant:diagnose": "tsx scripts/tenant-backfill/diagnose.ts",
     "tenant:backfill": "tsx scripts/tenant-backfill/cli.ts",
-    "tenant:backfill:status": "tsx scripts/tenant-backfill/status.ts"
+    "tenant:backfill:status": "tsx scripts/tenant-backfill/status.ts",
+    "tenant:indexes:plan": "tsx scripts/tenant-indexes/cli.ts plan",
+    "tenant:indexes:apply": "tsx scripts/tenant-indexes/cli.ts apply",
+    "tenant:indexes:verify": "tsx scripts/tenant-indexes/cli.ts verify",
+    "tenant:schema:drift": "tsx scripts/tenant-indexes/drift.ts"
   },
   "type": "module",
   "packageManager": "npm@11.5.2",
@@ -49,6 +53,7 @@
     "bullmq": "^5.34.8",
     "ioredis": "^5.6.0",
     "isbot": "^5.1.31",
+    "pg": "^8.16.3",
     "prisma": "^6.16.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -60,6 +65,7 @@
     "@shopify/polaris-types": "1.0.1",
     "@types/eslint": "^9.6.1",
     "@types/node": "^25.5.2",
+    "@types/pg": "^8.15.4",
     "@types/react": "^18.3.25",
     "@types/react-dom": "^18.3.7",
     "@typescript-eslint/eslint-plugin": "^6.21.0",

@@ -1,9 +1,9 @@
 # PR 1 — Tenant Ownership Inventory
 
-**Phase:** 1  
-**Work unit:** PR 1 — Tenant expansion and backfill  
-**Branch:** `phase-1/tenant-expand`  
-**Normalization:** `phase1-shop-domain-v1`  
+**Phase:** 1
+**Work unit:** PR 1 — Tenant expansion and backfill
+**Branch:** `phase-1/tenant-expand`
+**Normalization:** `phase1-shop-domain-v1`
 **Status:** Implemented (nullable ownership only; no enforcement)
 
 ## Session (bootstrap exception — not migrated)

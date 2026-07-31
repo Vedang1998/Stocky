@@ -1,18 +1,22 @@
 import { createHash, randomBytes } from "node:crypto";
-import type { PrismaClient, Prisma } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   SHOP_DOMAIN_NORMALIZATION_VERSION,
   normalizeShopDomain,
 } from "../../app/lib/shop-domain";
+import { acquireApplyLock, type ApplyLockHandle } from "./apply-lock";
 import { checksumRows, issueFingerprint, sha256Hex } from "./checksum";
 import type { OwnershipReasonCode } from "./reason-codes";
 import {
+  assertApprovedParentRelation,
+  assertApprovedTable,
   BACKFILL_TABLE_ORDER,
   CHILD_OWNER_TABLES,
   CHILD_PARENT,
+  DIAGNOSTIC_PHASES,
   DIRECT_OWNER_TABLES,
-  TENANT_BACKFILL_ADVISORY_LOCK_KEY,
   type BackfillTableName,
+  type DiagnosticPhaseName,
 } from "./tables";
 
 export type BackfillMode = "dry-run" | "apply";
@@ -25,29 +29,36 @@ export type BackfillOptions = {
   batchSize: number;
   sourceMainSha?: string;
   schemaVersion?: string;
-  /** Resume an existing run (same mode). */
   resumeRunId?: string;
-  /** Injected for interrupted-apply tests. */
   onBatchCommitted?: (info: {
     tableName: string;
     lastProcessedId: string;
     examinedInBatch: number;
   }) => void | Promise<void>;
-  /** Stop after N apply batches across all tables (test interrupt). */
   stopAfterBatches?: number;
+  /** Fault injection: throw after a successful batch commit (tests). */
+  throwAfterBatchCommit?: boolean;
 };
 
 export type BackfillResult = {
   runId: string;
   mode: BackfillMode;
-  status: "COMPLETED" | "FAILED" | "INTERRUPTED";
+  status:
+    | "COMPLETED"
+    | "COMPLETED_WITH_ISSUES"
+    | "FAILED"
+    | "INTERRUPTED";
+  blockingIssueCount: number;
+  currentRunDetectedIssueCount: number;
+  currentRunOpenIssueCount: number;
+  globalOpenIssueCount: number;
+  shopsWouldCreate: number;
   beforeCounts: CountMap;
   examinedCounts: CountMap;
   updatedCounts: CountMap;
   unchangedCounts: CountMap;
   unresolvedCounts: CountMap;
   checksums: Record<string, string>;
-  issueCount: number;
   failureSummary?: string;
 };
 
@@ -62,10 +73,22 @@ type IssueDraft = {
   proposedCanonicalShop?: string | null;
 };
 
-type DomainCandidate = {
-  source: string;
-  raw: string;
+type RowClassificationKind = "updated" | "unchanged" | "unresolved";
+
+type ProposedOwnership = {
+  proposedShopId: string;
+  normalizedDomain?: string;
+  kind: RowClassificationKind;
 };
+
+type HighWaterMarkMap = Record<string, string>;
+
+const PARENT_TABLES_WITH_LEGACY_SHOP = new Set([
+  "Supplier",
+  "PurchaseOrder",
+  "TransferOrder",
+  "Stocktake",
+]);
 
 function cuidLike(): string {
   return `c${randomBytes(12).toString("hex")}`;
@@ -74,37 +97,188 @@ function cuidLike(): string {
 function emptyCounts(): CountMap {
   const map: CountMap = { Shop: 0 };
   for (const t of BACKFILL_TABLE_ORDER) map[t] = 0;
+  for (const phase of DIAGNOSTIC_PHASES) map[phase] = 0;
   return map;
 }
 
-async function countTable(
-  prisma: PrismaClient,
-  table: string,
-): Promise<number> {
+function ownershipKey(table: string, rowId: string): string {
+  return `${table}:${rowId}`;
+}
+
+function redactShopEvidence(raw: string): { length: number; sha256: string } {
+  return { length: raw.length, sha256: sha256Hex(raw) };
+}
+
+async function countTable(prisma: PrismaClient, table: string): Promise<number> {
+  assertApprovedTable(table);
   const rows = await prisma.$queryRawUnsafe<Array<{ c: bigint }>>(
     `SELECT COUNT(*)::bigint AS c FROM "${table}"`,
   );
   return Number(rows[0]?.c ?? 0);
 }
 
-async function tryAdvisoryLock(prisma: PrismaClient): Promise<boolean> {
-  const rows = await prisma.$queryRawUnsafe<Array<{ locked: boolean }>>(
-    `SELECT pg_try_advisory_lock(${TENANT_BACKFILL_ADVISORY_LOCK_KEY}) AS locked`,
+async function maxTableId(
+  prisma: PrismaClient,
+  table: BackfillTableName,
+): Promise<string> {
+  assertApprovedTable(table);
+  const rows = await prisma.$queryRawUnsafe<Array<{ max_id: string | null }>>(
+    `SELECT MAX(id)::text AS max_id FROM "${table}"`,
   );
-  return Boolean(rows[0]?.locked);
+  return rows[0]?.max_id ?? "";
 }
 
-async function releaseAdvisoryLock(prisma: PrismaClient): Promise<void> {
-  await prisma.$queryRawUnsafe<Array<{ unlocked: boolean }>>(
-    `SELECT pg_advisory_unlock(${TENANT_BACKFILL_ADVISORY_LOCK_KEY}) AS unlocked`,
-  );
+async function loadHighWaterMarks(
+  prisma: PrismaClient,
+): Promise<HighWaterMarkMap> {
+  const map: HighWaterMarkMap = {};
+  for (const table of BACKFILL_TABLE_ORDER) {
+    map[table] = await maxTableId(prisma, table);
+  }
+  return map;
 }
 
-function redactShopEvidence(raw: string): { length: number; sha256: string } {
+async function persistIssues(
+  tx: Prisma.TransactionClient,
+  runId: string,
+  issues: IssueDraft[],
+): Promise<{ detected: number; reopened: number }> {
+  const now = new Date();
+  let detected = 0;
+  let reopened = 0;
+
+  for (const issue of issues) {
+    detected += 1;
+    const fingerprint = issueFingerprint({
+      tableName: issue.tableName,
+      rowId: issue.rowId,
+      reasonCode: issue.reasonCode,
+    });
+
+    const existing = await tx.tenantOwnershipIssue.findUnique({
+      where: { fingerprint },
+    });
+
+    if (existing) {
+      const reopen =
+        existing.status === "RESOLVED"
+          ? {
+              status: "OPEN" as const,
+              reopenedAt: now,
+              reopenCount: { increment: 1 },
+            }
+          : { status: existing.status };
+
+      if (existing.status === "RESOLVED") reopened += 1;
+
+      await tx.tenantOwnershipIssue.update({
+        where: { fingerprint },
+        data: {
+          lastDetectedRunId: runId,
+          lastDetectedAt: now,
+          currentOwnershipEvidence: issue.currentOwnershipEvidence ?? undefined,
+          conflictingOwnershipEvidence:
+            issue.conflictingOwnershipEvidence ?? undefined,
+          parentLineage: issue.parentLineage ?? undefined,
+          sourceShopValues: issue.sourceShopValues ?? undefined,
+          proposedCanonicalShop: issue.proposedCanonicalShop ?? undefined,
+          ...reopen,
+        },
+      });
+    } else {
+      await tx.tenantOwnershipIssue.create({
+        data: {
+          id: cuidLike(),
+          fingerprint,
+          firstDetectedRunId: runId,
+          lastDetectedRunId: runId,
+          tableName: issue.tableName,
+          rowId: issue.rowId,
+          reasonCode: issue.reasonCode,
+          currentOwnershipEvidence: issue.currentOwnershipEvidence ?? undefined,
+          conflictingOwnershipEvidence:
+            issue.conflictingOwnershipEvidence ?? undefined,
+          parentLineage: issue.parentLineage ?? undefined,
+          sourceShopValues: issue.sourceShopValues ?? undefined,
+          proposedCanonicalShop: issue.proposedCanonicalShop ?? undefined,
+          status: "OPEN",
+          firstDetectedAt: now,
+          lastDetectedAt: now,
+        },
+      });
+    }
+  }
+
+  return { detected, reopened };
+}
+
+async function countRunIssueMetrics(
+  prisma: PrismaClient,
+  runId: string,
+): Promise<{
+  blockingIssueCount: number;
+  currentRunDetectedIssueCount: number;
+  currentRunOpenIssueCount: number;
+  globalOpenIssueCount: number;
+}> {
+  const [globalOpenIssueCount, currentRunDetectedIssueCount, currentRunOpenIssueCount] =
+    await Promise.all([
+      prisma.tenantOwnershipIssue.count({ where: { status: "OPEN" } }),
+      prisma.tenantOwnershipIssue.count({
+        where: { lastDetectedRunId: runId },
+      }),
+      prisma.tenantOwnershipIssue.count({
+        where: { lastDetectedRunId: runId, status: "OPEN" },
+      }),
+    ]);
+
   return {
-    length: raw.length,
-    sha256: sha256Hex(raw),
+    blockingIssueCount: globalOpenIssueCount,
+    currentRunDetectedIssueCount,
+    currentRunOpenIssueCount,
+    globalOpenIssueCount,
   };
+}
+
+function incrementUnresolvedForIssues(
+  unresolvedCounts: CountMap,
+  issues: IssueDraft[],
+): void {
+  for (const issue of issues) {
+    unresolvedCounts[issue.tableName] =
+      (unresolvedCounts[issue.tableName] ?? 0) + 1;
+  }
+}
+
+function allCheckpointsComplete(
+  prisma: PrismaClient,
+  runId: string,
+): Promise<boolean> {
+  const expected = [...BACKFILL_TABLE_ORDER, ...DIAGNOSTIC_PHASES];
+  return prisma.tenantBackfillCheckpoint
+    .findMany({ where: { runId } })
+    .then((rows) => {
+      const completed = new Set(
+        rows.filter((r) => r.status === "COMPLETED").map((r) => r.tableName),
+      );
+      return expected.every((name) => completed.has(name));
+    });
+}
+
+function runFinishedClean(args: {
+  blockingIssueCount: number;
+  unresolvedCounts: CountMap;
+  checkpointsComplete: boolean;
+}): "COMPLETED" | "COMPLETED_WITH_ISSUES" {
+  const unresolvedZero = Object.values(args.unresolvedCounts).every((n) => n === 0);
+  if (
+    args.blockingIssueCount === 0 &&
+    unresolvedZero &&
+    args.checkpointsComplete
+  ) {
+    return "COMPLETED";
+  }
+  return "COMPLETED_WITH_ISSUES";
 }
 
 export async function runTenantBackfill(
@@ -119,6 +293,7 @@ export async function runTenantBackfill(
     resumeRunId,
     onBatchCommitted,
     stopAfterBatches,
+    throwAfterBatchCommit,
   } = options;
 
   if (!Number.isInteger(batchSize) || batchSize < 1 || batchSize > 5000) {
@@ -126,34 +301,44 @@ export async function runTenantBackfill(
   }
 
   const apply = mode === "apply";
-  let lockHeld = false;
+  let applyLock: ApplyLockHandle | undefined;
 
   if (apply) {
-    lockHeld = await tryAdvisoryLock(prisma);
-    if (!lockHeld) {
-      throw new Error(
-        "Concurrent tenant backfill apply is denied (advisory lock held)",
-      );
-    }
+    applyLock = await acquireApplyLock();
   }
 
-  const issues: IssueDraft[] = [];
-  const beforeCounts = emptyCounts();
+  const proposedOwnership = new Map<string, ProposedOwnership>();
   const examinedCounts = emptyCounts();
   const updatedCounts = emptyCounts();
   const unchangedCounts = emptyCounts();
   const unresolvedCounts = emptyCounts();
   const checksums: Record<string, string> = {};
+  let beforeCounts = emptyCounts();
+  let highWaterMarks: HighWaterMarkMap = {};
+  let shopsWouldCreate = 0;
   let batchesCommitted = 0;
+  let runBatchSize = batchSize;
 
   const runId = resumeRunId ?? cuidLike();
 
-  try {
-    beforeCounts.Shop = await countTable(prisma, "Shop");
-    for (const table of BACKFILL_TABLE_ORDER) {
-      beforeCounts[table] = await countTable(prisma, table);
-    }
+  const baseFailureResult = (): BackfillResult => ({
+    runId,
+    mode,
+    status: "FAILED",
+    blockingIssueCount: 0,
+    currentRunDetectedIssueCount: 0,
+    currentRunOpenIssueCount: 0,
+    globalOpenIssueCount: 0,
+    shopsWouldCreate,
+    beforeCounts,
+    examinedCounts,
+    updatedCounts,
+    unchangedCounts,
+    unresolvedCounts,
+    checksums,
+  });
 
+  try {
     if (resumeRunId) {
       const existing = await prisma.tenantBackfillRun.findUnique({
         where: { id: resumeRunId },
@@ -167,15 +352,49 @@ export async function runTenantBackfill(
       ) {
         throw new Error("Resume run mode mismatch");
       }
+      // Compatible-resume rule (F-PR1-10 / C8): original batchSize, sourceMainSha,
+      // schemaVersion, and beforeCounts remain on the run record for audit.
+      // Resume may use a different caller batchSize because progress is keyed by
+      // lastProcessedId, not batch index.
+      beforeCounts = (existing.beforeCounts as CountMap | null) ?? emptyCounts();
+      runBatchSize = batchSize;
+
+      const meta = (existing.resumeMetadata as Record<string, unknown> | null) ?? {};
+      highWaterMarks =
+        (meta.highWaterMarks as HighWaterMarkMap | undefined) ??
+        (await loadHighWaterMarks(prisma));
+
+      const resumeAttempts =
+        typeof meta.resumeAttempts === "number" ? meta.resumeAttempts + 1 : 1;
+
+      const existingUnresolved = existing.unresolvedCounts as CountMap | null;
+      if (existingUnresolved) {
+        for (const [key, value] of Object.entries(existingUnresolved)) {
+          unresolvedCounts[key] = value;
+        }
+      }
+
       await prisma.tenantBackfillRun.update({
         where: { id: runId },
         data: {
           status: "RUNNING",
           failureSummary: null,
           failedAt: null,
+          resumeMetadata: {
+            ...meta,
+            highWaterMarks,
+            resumeAttempts,
+          },
+          updatedAt: new Date(),
         },
       });
     } else {
+      beforeCounts.Shop = await countTable(prisma, "Shop");
+      for (const table of BACKFILL_TABLE_ORDER) {
+        beforeCounts[table] = await countTable(prisma, table);
+      }
+      highWaterMarks = await loadHighWaterMarks(prisma);
+
       await prisma.tenantBackfillRun.create({
         data: {
           id: runId,
@@ -192,13 +411,23 @@ export async function runTenantBackfill(
           unchangedCounts: emptyCounts(),
           unresolvedCounts: emptyCounts(),
           checksums: {},
-          resumeMetadata: {},
+          resumeMetadata: { highWaterMarks, resumeAttempts: 0 },
           updatedAt: new Date(),
         },
       });
     }
 
-    // ── Discover / upsert shops from Session + direct-owner legacy shop ──
+    const domainToShopId = new Map<string, string>();
+    const discoveryIssues: IssueDraft[] = [];
+
+    const existingShops = await prisma.shop.findMany({
+      select: { id: true, myshopifyDomain: true },
+    });
+    for (const shop of existingShops) {
+      domainToShopId.set(shop.myshopifyDomain, shop.id);
+    }
+
+    type DomainCandidate = { source: string; raw: string };
     const candidates: DomainCandidate[] = [];
 
     const sessions = await prisma.$queryRawUnsafe<Array<{ shop: string }>>(
@@ -209,6 +438,7 @@ export async function runTenantBackfill(
     }
 
     for (const table of DIRECT_OWNER_TABLES) {
+      assertApprovedTable(table);
       const rows = await prisma.$queryRawUnsafe<Array<{ shop: string }>>(
         `SELECT DISTINCT shop FROM "${table}" ORDER BY shop`,
       );
@@ -217,22 +447,10 @@ export async function runTenantBackfill(
       }
     }
 
-    const domainToShopId = new Map<string, string>();
-    const invalidByRaw = new Map<string, string>();
-
-    // Load existing shops
-    const existingShops = await prisma.shop.findMany({
-      select: { id: true, myshopifyDomain: true },
-    });
-    for (const shop of existingShops) {
-      domainToShopId.set(shop.myshopifyDomain, shop.id);
-    }
-
     for (const candidate of candidates) {
       const result = normalizeShopDomain(candidate.raw);
       if (!result.ok) {
-        invalidByRaw.set(candidate.raw, result.reason);
-        issues.push({
+        discoveryIssues.push({
           tableName: candidate.source,
           rowId: `domain:${createHash("sha256").update(candidate.raw).digest("hex").slice(0, 16)}`,
           reasonCode: "INVALID_SHOP_DOMAIN",
@@ -248,6 +466,7 @@ export async function runTenantBackfill(
       let shopId = domainToShopId.get(result.normalized);
       if (!shopId) {
         shopId = cuidLike();
+        shopsWouldCreate += 1;
         if (apply) {
           await prisma.shop.upsert({
             where: { myshopifyDomain: result.normalized },
@@ -262,18 +481,20 @@ export async function runTenantBackfill(
             where: { myshopifyDomain: result.normalized },
           });
           shopId = persisted.id;
+          updatedCounts.Shop += 1;
         }
         domainToShopId.set(result.normalized, shopId);
-        if (apply) updatedCounts.Shop += 1;
       } else {
         unchangedCounts.Shop += 1;
       }
     }
 
-    // Detect ShopSettings that collide after normalization
-    await detectDuplicateShopSettings(prisma, issues);
+    if (discoveryIssues.length > 0) {
+      await prisma.$transaction(async (tx) => {
+        await persistIssues(tx, runId, discoveryIssues);
+      });
+    }
 
-    // ── Process tables ──
     for (const table of BACKFILL_TABLE_ORDER) {
       const checkpoint = await prisma.tenantBackfillCheckpoint.findUnique({
         where: { runId_tableName: { runId, tableName: table } },
@@ -293,6 +514,7 @@ export async function runTenantBackfill(
       let updated = checkpoint?.updatedCount ?? 0;
       let unchanged = checkpoint?.unchangedCount ?? 0;
       let unresolved = checkpoint?.unresolvedCount ?? 0;
+      const hwm = highWaterMarks[table] ?? "";
 
       await prisma.tenantBackfillCheckpoint.upsert({
         where: { runId_tableName: { runId, tableName: table } },
@@ -308,14 +530,17 @@ export async function runTenantBackfill(
           status: "IN_PROGRESS",
           updatedAt: new Date(),
         },
-        update: {
-          status: "IN_PROGRESS",
-          updatedAt: new Date(),
-        },
+        update: { status: "IN_PROGRESS", updatedAt: new Date() },
       });
 
       for (;;) {
-        const batch = await fetchBatch(prisma, table, lastId, batchSize);
+        const batch = await fetchBatch(
+          prisma,
+          table,
+          lastId,
+          hwm,
+          runBatchSize,
+        );
         if (batch.length === 0) break;
 
         const batchResult = await prisma.$transaction(async (tx) => {
@@ -330,6 +555,7 @@ export async function runTenantBackfill(
               table,
               row,
               domainToShopId,
+              proposedOwnership,
               apply,
             });
             if (outcome.issue) batchIssues.push(outcome.issue);
@@ -337,6 +563,8 @@ export async function runTenantBackfill(
             else if (outcome.kind === "unchanged") bUnchanged += 1;
             else bUnresolved += 1;
           }
+
+          await persistIssues(tx, runId, batchIssues);
 
           const newLast = String(batch[batch.length - 1]!.id);
           const nextExamined = examined + batch.length;
@@ -363,7 +591,6 @@ export async function runTenantBackfill(
             bUpdated,
             bUnchanged,
             bUnresolved,
-            batchIssues,
           };
         });
 
@@ -372,7 +599,6 @@ export async function runTenantBackfill(
         updated += batchResult.bUpdated;
         unchanged += batchResult.bUnchanged;
         unresolved += batchResult.bUnresolved;
-        issues.push(...batchResult.batchIssues);
         batchesCommitted += 1;
 
         await onBatchCommitted?.({
@@ -381,13 +607,20 @@ export async function runTenantBackfill(
           examinedInBatch: batchResult.batchLen,
         });
 
-        if (stopAfterBatches !== undefined && batchesCommitted >= stopAfterBatches) {
+        if (throwAfterBatchCommit) {
+          throw new Error("Fault injection: throwAfterBatchCommit");
+        }
+
+        if (
+          stopAfterBatches !== undefined &&
+          batchesCommitted >= stopAfterBatches
+        ) {
           examinedCounts[table] = examined;
           updatedCounts[table] = updated;
           unchangedCounts[table] = unchanged;
           unresolvedCounts[table] = unresolved;
 
-          await persistIssues(prisma, runId, issues);
+          const metrics = await countRunIssueMetrics(prisma, runId);
           await prisma.tenantBackfillRun.update({
             where: { id: runId },
             data: {
@@ -397,6 +630,7 @@ export async function runTenantBackfill(
               unchangedCounts,
               unresolvedCounts,
               resumeMetadata: {
+                highWaterMarks,
                 interrupted: true,
                 lastTable: table,
                 lastProcessedId: lastId,
@@ -410,23 +644,16 @@ export async function runTenantBackfill(
             runId,
             mode,
             status: "INTERRUPTED",
+            shopsWouldCreate,
             beforeCounts,
             examinedCounts,
             updatedCounts,
             unchangedCounts,
             unresolvedCounts,
             checksums,
-            issueCount: issues.length,
+            ...metrics,
           };
         }
-      }
-
-      // Cross-domain diagnostics for specific tables
-      if (table === "PurchaseOrder") {
-        await diagnosePurchaseOrderSupplierMismatch(prisma, issues);
-      }
-      if (table === "LeadTimeSnapshot") {
-        await diagnoseLeadTimeSnapshots(prisma, issues);
       }
 
       const checksum = await tableOwnershipChecksum(prisma, table);
@@ -451,7 +678,42 @@ export async function runTenantBackfill(
       });
     }
 
-    // Final shop checksum
+    for (const phase of DIAGNOSTIC_PHASES) {
+      const checkpoint = await prisma.tenantBackfillCheckpoint.findUnique({
+        where: { runId_tableName: { runId, tableName: phase } },
+      });
+      if (checkpoint?.status === "COMPLETED") {
+        continue;
+      }
+
+      const diagnosticIssues = await runDiagnosticPhase(prisma, phase);
+      incrementUnresolvedForIssues(unresolvedCounts, diagnosticIssues);
+
+      await prisma.$transaction(async (tx) => {
+        await persistIssues(tx, runId, diagnosticIssues);
+        await tx.tenantBackfillCheckpoint.upsert({
+          where: { runId_tableName: { runId, tableName: phase } },
+          create: {
+            id: cuidLike(),
+            runId,
+            tableName: phase,
+            examinedCount: diagnosticIssues.length,
+            updatedCount: 0,
+            unchangedCount: 0,
+            unresolvedCount: diagnosticIssues.length,
+            status: "COMPLETED",
+            updatedAt: new Date(),
+          },
+          update: {
+            examinedCount: diagnosticIssues.length,
+            unresolvedCount: diagnosticIssues.length,
+            status: "COMPLETED",
+            updatedAt: new Date(),
+          },
+        });
+      });
+    }
+
     const shops = await prisma.shop.findMany({
       select: { id: true, myshopifyDomain: true },
       orderBy: { id: "asc" },
@@ -462,24 +724,29 @@ export async function runTenantBackfill(
     );
     examinedCounts.Shop = shops.length;
 
-    await persistIssues(prisma, runId, issues);
-
-    const openIssues = await prisma.tenantOwnershipIssue.count({
-      where: { status: "OPEN" },
+    const metrics = await countRunIssueMetrics(prisma, runId);
+    const checkpointsComplete = await allCheckpointsComplete(prisma, runId);
+    const finalStatus = runFinishedClean({
+      blockingIssueCount: metrics.blockingIssueCount,
+      unresolvedCounts,
+      checkpointsComplete,
     });
 
     await prisma.tenantBackfillRun.update({
       where: { id: runId },
       data: {
-        status: "COMPLETED",
+        status: finalStatus,
         completedAt: new Date(),
-        beforeCounts,
         examinedCounts,
         updatedCounts,
         unchangedCounts,
         unresolvedCounts,
         checksums,
-        resumeMetadata: { batchesCommitted },
+        resumeMetadata: {
+          highWaterMarks,
+          batchesCommitted,
+          shopsWouldCreate,
+        },
         updatedAt: new Date(),
       },
     });
@@ -487,18 +754,20 @@ export async function runTenantBackfill(
     return {
       runId,
       mode,
-      status: "COMPLETED",
+      status: finalStatus,
+      shopsWouldCreate,
       beforeCounts,
       examinedCounts,
       updatedCounts,
       unchangedCounts,
       unresolvedCounts,
       checksums,
-      issueCount: openIssues,
+      ...metrics,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     try {
+      const metrics = await countRunIssueMetrics(prisma, runId);
       await prisma.tenantBackfillRun.update({
         where: { id: runId },
         data: {
@@ -513,85 +782,34 @@ export async function runTenantBackfill(
           updatedAt: new Date(),
         },
       });
+      return {
+        ...baseFailureResult(),
+        ...metrics,
+        failureSummary: message,
+      };
     } catch {
-      // ignore secondary failure
+      return { ...baseFailureResult(), failureSummary: message };
     }
-    return {
-      runId,
-      mode,
-      status: "FAILED",
-      beforeCounts,
-      examinedCounts,
-      updatedCounts,
-      unchangedCounts,
-      unresolvedCounts,
-      checksums,
-      issueCount: issues.length,
-      failureSummary: message,
-    };
   } finally {
-    if (lockHeld) {
-      await releaseAdvisoryLock(prisma);
+    if (applyLock) {
+      await applyLock.release();
     }
   }
 }
 
-async function persistIssues(
+async function runDiagnosticPhase(
   prisma: PrismaClient,
-  runId: string,
-  issues: IssueDraft[],
-): Promise<void> {
-  const now = new Date();
-  for (const issue of issues) {
-    const fingerprint = issueFingerprint({
-      tableName: issue.tableName,
-      rowId: issue.rowId,
-      reasonCode: issue.reasonCode,
-    });
-
-    const existing = await prisma.tenantOwnershipIssue.findUnique({
-      where: { fingerprint },
-    });
-
-    if (existing) {
-      await prisma.tenantOwnershipIssue.update({
-        where: { fingerprint },
-        data: {
-          lastDetectedRunId: runId,
-          lastDetectedAt: now,
-          currentOwnershipEvidence: issue.currentOwnershipEvidence ?? undefined,
-          conflictingOwnershipEvidence:
-            issue.conflictingOwnershipEvidence ?? undefined,
-          parentLineage: issue.parentLineage ?? undefined,
-          sourceShopValues: issue.sourceShopValues ?? undefined,
-          proposedCanonicalShop: issue.proposedCanonicalShop ?? undefined,
-          // Never silently delete; keep OPEN unless previously resolved.
-          status: existing.status === "RESOLVED" ? "RESOLVED" : "OPEN",
-        },
-      });
-    } else {
-      await prisma.tenantOwnershipIssue.create({
-        data: {
-          id: cuidLike(),
-          fingerprint,
-          firstDetectedRunId: runId,
-          lastDetectedRunId: runId,
-          tableName: issue.tableName,
-          rowId: issue.rowId,
-          reasonCode: issue.reasonCode,
-          currentOwnershipEvidence: issue.currentOwnershipEvidence ?? undefined,
-          conflictingOwnershipEvidence:
-            issue.conflictingOwnershipEvidence ?? undefined,
-          parentLineage: issue.parentLineage ?? undefined,
-          sourceShopValues: issue.sourceShopValues ?? undefined,
-          proposedCanonicalShop: issue.proposedCanonicalShop ?? undefined,
-          status: "OPEN",
-          firstDetectedAt: now,
-          lastDetectedAt: now,
-        },
-      });
-    }
+  phase: DiagnosticPhaseName,
+): Promise<IssueDraft[]> {
+  const issues: IssueDraft[] = [];
+  if (phase === "diagnostic:po_supplier") {
+    await diagnosePurchaseOrderSupplierMismatch(prisma, issues);
+  } else if (phase === "diagnostic:lead_time") {
+    await diagnoseLeadTimeSnapshots(prisma, issues);
+  } else if (phase === "diagnostic:duplicate_shop_settings") {
+    await detectDuplicateShopSettings(prisma, issues);
   }
+  return issues;
 }
 
 type Row = Record<string, unknown> & { id: string };
@@ -600,30 +818,37 @@ async function fetchBatch(
   prisma: PrismaClient,
   table: BackfillTableName,
   afterId: string,
+  highWaterMark: string,
   batchSize: number,
 ): Promise<Row[]> {
-  if (
-    (DIRECT_OWNER_TABLES as readonly string[]).includes(table)
-  ) {
+  assertApprovedTable(table);
+
+  const hwmParams = highWaterMark.length > 0 ? [highWaterMark] : [];
+
+  if ((DIRECT_OWNER_TABLES as readonly string[]).includes(table)) {
     return prisma.$queryRawUnsafe<Row[]>(
       `SELECT id, shop, "shopId" FROM "${table}"
-       WHERE id > $1
+       WHERE id > $1${highWaterMark.length > 0 ? ` AND id <= $3` : ""}
        ORDER BY id ASC
        LIMIT $2`,
       afterId,
       batchSize,
+      ...hwmParams,
     );
   }
 
   const parent = CHILD_PARENT[table as (typeof CHILD_OWNER_TABLES)[number]];
+  assertApprovedParentRelation(parent.parentTable, parent.parentIdColumn);
+
   return prisma.$queryRawUnsafe<Row[]>(
     `SELECT c.id, c."shopId", c."${parent.parentIdColumn}" AS "parentId"
      FROM "${table}" c
-     WHERE c.id > $1
+     WHERE c.id > $1${highWaterMark.length > 0 ? ` AND c.id <= $3` : ""}
      ORDER BY c.id ASC
      LIMIT $2`,
     afterId,
     batchSize,
+    ...hwmParams,
   );
 }
 
@@ -632,17 +857,22 @@ async function processRow(args: {
   table: BackfillTableName;
   row: Row;
   domainToShopId: Map<string, string>;
+  proposedOwnership: Map<string, ProposedOwnership>;
   apply: boolean;
-}): Promise<{
-  kind: "updated" | "unchanged" | "unresolved";
-  issue?: IssueDraft;
-}> {
-  const { tx, table, row, domainToShopId, apply } = args;
+}): Promise<{ kind: RowClassificationKind; issue?: IssueDraft }> {
+  const { tx, table, row, domainToShopId, proposedOwnership, apply } = args;
 
   if ((DIRECT_OWNER_TABLES as readonly string[]).includes(table)) {
-    return processDirectRow({ tx, table, row, domainToShopId, apply });
+    return processDirectRow({
+      tx,
+      table,
+      row,
+      domainToShopId,
+      proposedOwnership,
+      apply,
+    });
   }
-  return processChildRow({ tx, table, row, apply });
+  return processChildRow({ tx, table, row, proposedOwnership, apply });
 }
 
 async function processDirectRow(args: {
@@ -650,19 +880,23 @@ async function processDirectRow(args: {
   table: BackfillTableName;
   row: Row;
   domainToShopId: Map<string, string>;
+  proposedOwnership: Map<string, ProposedOwnership>;
   apply: boolean;
-}): Promise<{
-  kind: "updated" | "unchanged" | "unresolved";
-  issue?: IssueDraft;
-}> {
-  const { tx, table, row, domainToShopId, apply } = args;
+}): Promise<{ kind: RowClassificationKind; issue?: IssueDraft }> {
+  const { tx, table, row, domainToShopId, proposedOwnership, apply } = args;
   const rawShop = String(row.shop ?? "");
   const existingShopId = (row.shopId as string | null) ?? null;
   const normalized = normalizeShopDomain(rawShop);
+  const key = ownershipKey(table, row.id);
 
   if (!normalized.ok) {
+    const kind: RowClassificationKind = "unresolved";
+    proposedOwnership.set(key, {
+      proposedShopId: "",
+      kind,
+    });
     return {
-      kind: "unresolved",
+      kind,
       issue: {
         tableName: table,
         rowId: row.id,
@@ -678,9 +912,14 @@ async function processDirectRow(args: {
 
   const expectedShopId = domainToShopId.get(normalized.normalized);
   if (!expectedShopId) {
-    // Should not happen after discovery; treat as unresolved.
+    const kind: RowClassificationKind = "unresolved";
+    proposedOwnership.set(key, {
+      proposedShopId: "",
+      normalizedDomain: normalized.normalized,
+      kind,
+    });
     return {
-      kind: "unresolved",
+      kind,
       issue: {
         tableName: table,
         rowId: row.id,
@@ -703,8 +942,14 @@ async function processDirectRow(args: {
       existingShop && existingShop.myshopifyDomain !== normalized.normalized
         ? "CONFLICTING_NORMALIZED_DOMAIN"
         : "EXISTING_SHOP_ID_MISMATCH";
+    const kind: RowClassificationKind = "unresolved";
+    proposedOwnership.set(key, {
+      proposedShopId: expectedShopId,
+      normalizedDomain: normalized.normalized,
+      kind,
+    });
     return {
-      kind: "unresolved",
+      kind,
       issue: {
         tableName: table,
         rowId: row.id,
@@ -724,38 +969,55 @@ async function processDirectRow(args: {
   }
 
   if (existingShopId === expectedShopId) {
+    proposedOwnership.set(key, {
+      proposedShopId: expectedShopId,
+      normalizedDomain: normalized.normalized,
+      kind: "unchanged",
+    });
     return { kind: "unchanged" };
   }
 
-  // existingShopId is null — set it
-  if (apply) {
-    await tx.$executeRawUnsafe(
-      `UPDATE "${table}" SET "shopId" = $1 WHERE id = $2 AND "shopId" IS NULL`,
-      expectedShopId,
-      row.id,
-    );
+  proposedOwnership.set(key, {
+    proposedShopId: expectedShopId,
+    normalizedDomain: normalized.normalized,
+    kind: "updated",
+  });
+
+  if (!apply) {
+    return { kind: "updated" };
   }
-  return { kind: "updated" };
+
+  const affected = await applyShopIdUpdate(
+    tx,
+    table,
+    row.id,
+    expectedShopId,
+    existingShopId,
+  );
+  return { kind: affected };
 }
 
 async function processChildRow(args: {
   tx: PrismaClient;
   table: BackfillTableName;
   row: Row;
+  proposedOwnership: Map<string, ProposedOwnership>;
   apply: boolean;
-}): Promise<{
-  kind: "updated" | "unchanged" | "unresolved";
-  issue?: IssueDraft;
-}> {
-  const { tx, table, row, apply } = args;
+}): Promise<{ kind: RowClassificationKind; issue?: IssueDraft }> {
+  const { tx, table, row, proposedOwnership, apply } = args;
   const parentMeta = CHILD_PARENT[table as (typeof CHILD_OWNER_TABLES)[number]];
+  assertApprovedParentRelation(parentMeta.parentTable, parentMeta.parentIdColumn);
   const parentId = String(row.parentId ?? "");
   const existingShopId = (row.shopId as string | null) ?? null;
 
+  const shopSelect = PARENT_TABLES_WITH_LEGACY_SHOP.has(parentMeta.parentTable)
+    ? `, shop`
+    : "";
+  assertApprovedTable(parentMeta.parentTable);
   const parents = await tx.$queryRawUnsafe<
     Array<{ id: string; shopId: string | null; shop?: string }>
   >(
-    `SELECT id, "shopId"${parentMeta.parentTable === "Supplier" || parentMeta.parentTable === "PurchaseOrder" || parentMeta.parentTable === "TransferOrder" || parentMeta.parentTable === "Stocktake" ? `, shop` : ``}
+    `SELECT id, "shopId"${shopSelect}
      FROM "${parentMeta.parentTable}" WHERE id = $1`,
     parentId,
   );
@@ -777,7 +1039,43 @@ async function processChildRow(args: {
     };
   }
 
-  if (!parent.shopId) {
+  const parentKey = ownershipKey(parentMeta.parentTable, parent.id);
+  const proposedParent = proposedOwnership.get(parentKey);
+  let expectedParentShopId: string | null = parent.shopId;
+
+  if (expectedParentShopId && proposedParent?.proposedShopId) {
+    if (proposedParent.proposedShopId !== expectedParentShopId) {
+      return {
+        kind: "unresolved",
+        issue: {
+          tableName: table,
+          rowId: row.id,
+          reasonCode: "PARENT_CHILD_SHOP_MISMATCH",
+          currentOwnershipEvidence: { shopId: existingShopId },
+          conflictingOwnershipEvidence: {
+            parentShopId: expectedParentShopId,
+            proposedParentShopId: proposedParent.proposedShopId,
+          },
+          parentLineage: {
+            parentTable: parentMeta.parentTable,
+            parentId: parent.id,
+          },
+        },
+      };
+    }
+  }
+
+  if (!expectedParentShopId) {
+    if (
+      proposedParent &&
+      proposedParent.kind !== "unresolved" &&
+      proposedParent.proposedShopId
+    ) {
+      expectedParentShopId = proposedParent.proposedShopId;
+    }
+  }
+
+  if (!expectedParentShopId) {
     return {
       kind: "unresolved",
       issue: {
@@ -787,14 +1085,14 @@ async function processChildRow(args: {
         parentLineage: {
           parentTable: parentMeta.parentTable,
           parentId: parent.id,
-          parentShopId: null,
+          parentShopId: parent.shopId,
         },
         currentOwnershipEvidence: { shopId: existingShopId },
       },
     };
   }
 
-  if (existingShopId && existingShopId !== parent.shopId) {
+  if (existingShopId && existingShopId !== expectedParentShopId) {
     return {
       kind: "unresolved",
       issue: {
@@ -802,7 +1100,7 @@ async function processChildRow(args: {
         rowId: row.id,
         reasonCode: "PARENT_CHILD_SHOP_MISMATCH",
         currentOwnershipEvidence: { shopId: existingShopId },
-        conflictingOwnershipEvidence: { parentShopId: parent.shopId },
+        conflictingOwnershipEvidence: { parentShopId: expectedParentShopId },
         parentLineage: {
           parentTable: parentMeta.parentTable,
           parentId: parent.id,
@@ -811,27 +1109,59 @@ async function processChildRow(args: {
     };
   }
 
-  if (existingShopId === parent.shopId) {
+  if (existingShopId === expectedParentShopId) {
     return { kind: "unchanged" };
   }
 
-  if (apply) {
-    await tx.$executeRawUnsafe(
-      `UPDATE "${table}" SET "shopId" = $1 WHERE id = $2 AND "shopId" IS NULL`,
-      parent.shopId,
-      row.id,
-    );
+  if (!apply) {
+    return { kind: "updated" };
   }
-  return { kind: "updated" };
+
+  const affected = await applyShopIdUpdate(
+    tx,
+    table,
+    row.id,
+    expectedParentShopId,
+    existingShopId,
+  );
+  return { kind: affected };
+}
+
+async function applyShopIdUpdate(
+  tx: PrismaClient,
+  table: string,
+  rowId: string,
+  expectedShopId: string,
+  existingShopId: string | null,
+): Promise<RowClassificationKind> {
+  assertApprovedTable(table);
+  const updated = await tx.$queryRawUnsafe<Array<{ id: string }>>(
+    `UPDATE "${table}" SET "shopId" = $1 WHERE id = $2 AND "shopId" IS NULL RETURNING id`,
+    expectedShopId,
+    rowId,
+  );
+  if (updated.length === 1) {
+    return "updated";
+  }
+  if (existingShopId === expectedShopId) {
+    return "unchanged";
+  }
+  if (existingShopId && existingShopId !== expectedShopId) {
+    return "unresolved";
+  }
+  throw new Error(
+    `Unexpected UPDATE outcome for ${table} id=${rowId}: expected shopId ${expectedShopId}`,
+  );
 }
 
 async function detectDuplicateShopSettings(
   prisma: PrismaClient,
   issues: IssueDraft[],
 ): Promise<void> {
-  const rows = await prisma.$queryRawUnsafe<
-    Array<{ id: string; shop: string }>
-  >(`SELECT id, shop FROM "ShopSettings" ORDER BY id`);
+  assertApprovedTable("ShopSettings");
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; shop: string }>>(
+    `SELECT id, shop FROM "ShopSettings" ORDER BY id`,
+  );
 
   const byNormalized = new Map<string, Array<{ id: string; shop: string }>>();
   for (const row of rows) {
@@ -864,6 +1194,8 @@ async function diagnosePurchaseOrderSupplierMismatch(
   prisma: PrismaClient,
   issues: IssueDraft[],
 ): Promise<void> {
+  assertApprovedTable("PurchaseOrder");
+  assertApprovedTable("Supplier");
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
@@ -906,6 +1238,9 @@ async function diagnoseLeadTimeSnapshots(
   prisma: PrismaClient,
   issues: IssueDraft[],
 ): Promise<void> {
+  assertApprovedTable("LeadTimeSnapshot");
+  assertApprovedTable("Supplier");
+  assertApprovedTable("PurchaseOrder");
   const rows = await prisma.$queryRawUnsafe<
     Array<{
       id: string;
@@ -945,11 +1280,7 @@ async function diagnoseLeadTimeSnapshots(
     if (row.supplierShop && row.poShop) {
       const sNorm = normalizeShopDomain(row.supplierShop);
       const pNorm = normalizeShopDomain(row.poShop);
-      if (
-        sNorm.ok &&
-        pNorm.ok &&
-        sNorm.normalized !== pNorm.normalized
-      ) {
+      if (sNorm.ok && pNorm.ok && sNorm.normalized !== pNorm.normalized) {
         issues.push({
           tableName: "LeadTimeSnapshot",
           rowId: row.id,
@@ -996,6 +1327,7 @@ async function tableOwnershipChecksum(
   prisma: PrismaClient,
   table: BackfillTableName,
 ): Promise<string> {
+  assertApprovedTable(table);
   const rows = await prisma.$queryRawUnsafe<
     Array<{ id: string; shopId: string | null }>
   >(`SELECT id, "shopId" FROM "${table}" ORDER BY id`);
@@ -1013,15 +1345,16 @@ export async function getBackfillStatus(
   checkpoints: Awaited<
     ReturnType<PrismaClient["tenantBackfillCheckpoint"]["findMany"]>
   >;
-  openIssueCount: number;
+  blockingIssueCount: number;
+  globalOpenIssueCount: number;
+  currentRunOpenIssueCount: number;
+  currentRunDetectedIssueCount: number;
 }> {
   const run = await prisma.tenantBackfillRun.findUnique({ where: { id: runId } });
   const checkpoints = await prisma.tenantBackfillCheckpoint.findMany({
     where: { runId },
     orderBy: { tableName: "asc" },
   });
-  const openIssueCount = await prisma.tenantOwnershipIssue.count({
-    where: { status: "OPEN" },
-  });
-  return { run, checkpoints, openIssueCount };
+  const metrics = await countRunIssueMetrics(prisma, runId);
+  return { run, checkpoints, ...metrics };
 }
