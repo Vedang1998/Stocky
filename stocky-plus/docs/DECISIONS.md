@@ -270,3 +270,25 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** None in planning.
 7. **Risks:** Building sync on retiring/invalid API shapes.
 8. **Final:** **APPROVED AND EFFECTIVE FOLLOWING PR #9 MERGE** (2026-07-30; reviewed scope head `835088d3c0294222b14d67a5875709f299062439`). Approved API-validation gate; does not itself select or change an API version.
+
+## D-024 — Concurrent tenant compatibility-index deployment (PR 1 correction)
+
+1. **Current (rejected PR 1 attempt):** Ordinary `CREATE INDEX` / `CREATE UNIQUE INDEX` with `IF NOT EXISTS` inside Prisma Migrate on merchant tables.
+2. **Proposed / accepted:** Ordinary non-concurrent compatibility-index creation on populated merchant tables is **rejected**. Same-name `IF NOT EXISTS` is **not** evidence that an index is valid or correctly defined. PR 1 compatibility indexes require `CREATE INDEX CONCURRENTLY` / `CREATE UNIQUE INDEX CONCURRENTLY` outside an incompatible migration transaction, plus exact catalog pre/post verification (`indisvalid`, definition, uniqueness, table, columns). Production execution remains unauthorized. No major Prisma upgrade is authorized in this correction. Phase 1 product scope is unchanged.
+3. **Reason:** Claude F-PR1-05 / F-PR1-06; product-owner rejection of the ordinary-index deviation.
+4. **Merchant impact:** Avoids write-blocking DDL and silently accepted INVALID unique indexes.
+5. **Technical impact:** `20260730160100` rewritten to no-op; `scripts/tenant-indexes/` + CI apply/verify/drift.
+6. **Migration:** Additive tooling; unmerged migration file rewritten in place with documented rationale.
+7. **Risks:** Operators must run index tooling after migrate; residual until fresh Claude review accepts corrected head.
+8. **Final:** **Accepted for PR 1 corrections** (2026-07-30). Does not authorize production deployment.
+
+## D-025 — Phase 1 PR 1 technical acceptance (awaiting explicit user merge authorization)
+
+1. **Current:** Draft PR [#11](https://github.com/Vedang1998/Stocky/pull/11) (`phase-1/tenant-expand`) delivered the Phase 1 PR 1 tenant-expansion and backfill foundation through multiple correction waves. Capable-local independent Claude Code review on 2026-07-31 at head `28e77178602ca486e5138ca2f80e8947d8e113c0` (base `8ccc8d29a78e05615b31324b38df17f4f1d1296e`) returned **`READY FOR CHATGPT PR 1 ACCEPTANCE`** (preserved verbatim in `phases/phase-1/PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md`). Exact-head CI run `30633301468` / job `91164602626` concluded `success` on that same head.
+2. **Proposed / accepted:** ChatGPT product-owner decision: **`PR 1 ACCEPTED`**. Technical acceptance of the independently reviewed implementation head is recorded. Merge status: **not authorized and not merged**. PR #11 remains open, draft, and unmerged pending **explicit user merge authorization**.
+3. **Reason:** Capable-local review independently re-executed the required suite (PostgreSQL 16, Prisma engines, shopify.dev, authenticated GitHub evidence), closed the F-F00 environment gate for this review, and found no remaining P0 or P1 correction for PR 1 scope.
+4. **Merchant impact:** No merchant-visible production change from this decision alone. No deployment, production backfill, or inventory mutation is authorized.
+5. **Technical impact:** Documentation finalization only after the reviewed head. The independently reviewed implementation tree at `28e77178602ca486e5138ca2f80e8947d8e113c0` is accepted as the PR 1 technical baseline. Residual gates remain open: **F-016 / R-022 / Q-011** (database-enforced isolation), **R-014** (exact money), actual operational backfill / zero-unresolved evidence, dependency hardening (**R-013 / R-062**), and inventory-write release gates.
+6. **Migration:** No schema or runtime change in the acceptance/finalization record. Production migration/backfill remains unauthorized until a later reviewed deployment plan and explicit authorization.
+7. **Risks:** Technical acceptance must not be misread as deployment, production backfill, RLS activation, inventory-write enablement, PR 2, PR 3, or merge authorization.
+8. **Final:** **ACCEPTED for PR 1 technical scope** (2026-07-31). Explicitly does **not** authorize deployment, production backfill, RLS activation, inventory mutations, PR 2, PR 3, or merge. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**. PR 2 and PR 3 remain **NOT STARTED**.

@@ -1,27 +1,28 @@
 # Phase 1 Record — Tenant-Safe Shopify Fact Foundation
 
-This folder is the Phase 1 planning and permanent phase record.
-
 **Phase 1 planning:** APPROVED AND MERGED
-**Brief status:** `APPROVED AND MERGED — PHASE 1 IMPLEMENTATION AUTHORITY EFFECTIVE`
-**Initial planning review:** `NOT READY`
-**Planning correction-review:** `READY FOR CHATGPT PHASE 1 BRIEF APPROVAL`
-**ChatGPT planning approval:** APPROVED 2026-07-30
-**Planning PR:** [#9](https://github.com/Vedang1998/Stocky/pull/9) — **MERGED** (squash `9fc1025b73be9bbe774a948b4a2302f5664670f3`)
 **Implementation authority:** EFFECTIVE
-**Phase 1 implementation:** NOT STARTED
-**Phase 1 implementation branches:** NONE
-**Next phase record / work unit:** PR 1 — tenant expansion and backfill (`phase-1/tenant-expand`)
+**Phase 1 implementation:** PR 1 ACCEPTED — AWAITING EXPLICIT USER MERGE AUTHORIZATION
+**Active branch:** `phase-1/tenant-expand`
+**Active PR:** [#11](https://github.com/Vedang1998/Stocky/pull/11) — OPEN, draft, unmerged
+**Independently reviewed implementation head:** `28e77178602ca486e5138ca2f80e8947d8e113c0`
+**Exact-head CI:** run `30633301468`, job `91164602626`, conclusion `success`
+**Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
+**Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
+**Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
+**Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
+**ChatGPT decision:** `PR 1 ACCEPTED` (D-025) — merge not authorized
+**Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
+**PR 2 / PR 3:** NOT STARTED
 
 ## Mandatory gate
 
-**F-016 / R-022** is a mandatory Phase 1 **P1** database-isolation gate.
-
-Application-layer shop filters alone are insufficient. Phase 1 must deliver database-enforced tenant isolation (canonical `Shop`, direct `shopId`, composite tenant foreign keys, forced PostgreSQL RLS, restricted runtime role, separate migration role, and real PostgreSQL isolation tests) as specified in `PHASE_BRIEF.md`.
-
-No inventory-write flag is approved for enablement by Phase 1 planning.
+**F-016 / R-022** remains an open P1 database-isolation gate. PR 1 does not resolve it.
+**Q-011** remains open until enforcement is merged and independently verified.
+**R-014**, operational backfill / zero-unresolved evidence, **R-013 / R-062** dependency hardening, and inventory-write release gates remain open.
+PR 1 tooling corrections through F-F00–F-F07 were independently verified at `28e7717…` and accepted for PR 1 technical scope; that does not close the later enforcement or operational gates.
 
 ## Reading order
 
@@ -29,26 +30,19 @@ No inventory-write flag is approved for enablement by Phase 1 planning.
 2. `PLANNING_REVIEW_REPORT.md`
 3. `PLANNING_CORRECTION_IMPLEMENTATION_REPORT.md`
 4. `PLANNING_CORRECTION_REVIEW_REPORT.md`
-5. Future focused implementation and review records — reserved; one per approved implementation PR after implementation begins, in dependency order
-6. Future Phase 1 exit review — reserved for Phase 1 closure
-
-Do not treat future reserved report locations as existing files until those reports are written.
+5. `PR1_TENANT_OWNERSHIP_INVENTORY.md`
+6. `PR1_TENANT_EXPANSION_MIGRATION_RUNBOOK.md`
+7. `PR1_TENANT_EXPANSION_IMPLEMENTATION_REPORT.md`
+8. `PR1_TENANT_EXPANSION_REVIEW_REPORT.md` — Claude original `NOT READY` (verbatim)
+9. `PR1_TENANT_EXPANSION_CORRECTION_BACKLOG.md`
+10. `PR1_TENANT_EXPANSION_CORRECTION_IMPLEMENTATION_REPORT.md`
+11. `PR1_TENANT_EXPANSION_CORRECTION_REVIEW_REPORT.md` — Claude correction-review `NOT READY` (verbatim; chain-of-custody commit before F-N corrections)
+12. `PR1_TENANT_EXPANSION_CORRECTION_FOLLOWUP_REVIEW_REPORT.md` — Claude follow-up `NOT READY` at `aa5f425…` (verbatim; chain-of-custody commit before F-F corrections)
+13. `PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md` — capable local independent review; reviewed head `28e77178602ca486e5138ca2f80e8947d8e113c0`; verdict `READY FOR CHATGPT PR 1 ACCEPTANCE`; preserved verbatim
 
 ## Related documents
 
-- Historical Phase 0 planning proposal: `../../PHASE_1_TECHNICAL_PLAN.md` (not implementation authority; superseded by the approved Phase 1 brief after planning merges)
-- Live project status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md`
+- Live status: `../../PROJECT_STATUS.md`
+- Decisions: `../../DECISIONS.md` (includes D-024, D-025)
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`
-- Approved product rules: `../../product/`
-
-## Implementation authorization
-
-Phase 1 planning is complete and merged. Implementation authority is **EFFECTIVE**.
-
-Phase 1 runtime implementation has **not** started. No implementation branch exists yet.
-
-Next authorized work is **PR 1 — tenant expansion and backfill** on `phase-1/tenant-expand` from updated `main`, after the post-merge status sync is complete.
-
-Merging the planning PR does not enable inventory writes and does not authorize work outside the approved brief.
