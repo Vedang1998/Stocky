@@ -1,5 +1,5 @@
 import prisma from "../app/db.server";
-import { normalizeShopDomain } from "../app/lib/shop-domain";
+import { normalizeShopDomain } from "../app/tenant/shop-domain";
 
 /**
  * Optional demo data for local development.
