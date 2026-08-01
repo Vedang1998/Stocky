@@ -14,7 +14,7 @@
 | Independent correction-review report commit | `b5fbd2bd346dee1730500be46d47c4fb164fd788` |
 | Starting head for this cycle | `b5fbd2bd346dee1730500be46d47c4fb164fd788` |
 | Follow-up implementation head |  |
-| Handoff head | recorded after documentation commit / exact-head CI |
+| Handoff head | recorded in PR body / ChatGPT return (tip after evidence commit) |
 | PR state | OPEN, draft, unmerged |
 
 ## Independent review context
