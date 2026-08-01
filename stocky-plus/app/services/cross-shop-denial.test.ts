@@ -198,17 +198,54 @@ function authAsShopB() {
   });
 }
 
-/** TenantDb merges caller where with direct-model shop scope via AND. */
+/** TenantDb merges caller where with direct-model nullable-compatible scope. */
 function directScoped(where: Record<string, unknown>) {
   return {
-    AND: [where, { shopId: SHOP_B_ID, shop: SHOP_B }],
+    AND: [
+      where,
+      {
+        OR: [
+          { AND: [{ shopId: SHOP_B_ID }, { shop: SHOP_B }] },
+          { AND: [{ shopId: null }, { shop: SHOP_B }] },
+        ],
+      },
+    ],
   };
 }
 
-/** TenantDb merges caller where with child-model shopId scope via AND. */
-function childScoped(where: Record<string, unknown>) {
+/**
+ * TenantDb merges caller where with child lineage scope:
+ * (shopId = tenant OR shopId IS NULL) AND parent relation tenant-scoped.
+ */
+function childScoped(
+  where: Record<string, unknown>,
+  parentRelation = "supplier",
+) {
   return {
-    AND: [where, { shopId: SHOP_B_ID }],
+    AND: [
+      where,
+      {
+        AND: [
+          { OR: [{ shopId: SHOP_B_ID }, { shopId: null }] },
+          {
+            [parentRelation]: {
+              OR: [
+                { AND: [{ shopId: SHOP_B_ID }, { shop: SHOP_B }] },
+                { AND: [{ shopId: null }, { shop: SHOP_B }] },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function scopedLineItemsInclude(parentRelation: string) {
+  return {
+    lineItems: {
+      where: childScoped({}, parentRelation).AND[1],
+    },
   };
 }
 
@@ -272,7 +309,7 @@ describe("cross-shop denial", () => {
     );
 
     expect(prismaMock.stocktakeLineItem.findFirst).toHaveBeenCalledWith({
-      where: childScoped({ id: "stl-shop-a" }),
+      where: childScoped({ id: "stl-shop-a" }, "stocktake"),
     });
     expect(result).toEqual({ error: "Stocktake line not found" });
     expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
@@ -429,7 +466,7 @@ describe("cross-shop denial", () => {
       expect(authenticateAdmin).toHaveBeenCalled();
       expect(prismaMock.stocktake.findFirst).toHaveBeenCalledWith({
         where: directScoped({ id: "st-shop-a" }),
-        include: { lineItems: true },
+        include: scopedLineItemsInclude("stocktake"),
       });
       expect(result).toEqual({ error: "Stocktake not found" });
       expect(prismaMock.stocktake.update).not.toHaveBeenCalled();
@@ -465,7 +502,7 @@ describe("cross-shop denial", () => {
       expect(authenticateAdmin).toHaveBeenCalled();
       expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
         where: directScoped({ id: "tr-shop-a" }),
-        include: { lineItems: true },
+        include: scopedLineItemsInclude("transferOrder"),
       });
       expect(result).toEqual({ error: "Transfer has no line items" });
       expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();

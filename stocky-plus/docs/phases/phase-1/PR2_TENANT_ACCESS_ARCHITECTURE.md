@@ -95,19 +95,44 @@ Workers call `resolveTenantJobContext` **before** any merchant access.
 
 ## Exception model
 
-See allowlist in `scripts/tenant-access/allowlist.ts`. Exact IDs:
+Exceptions are **exact-file** entries in `scripts/tenant-access/allowlist.ts`. Directory-wide / wildcard paths are forbidden.
 
 | ID | Path | Category |
 |---|---|---|
 | EX-RAW-001 | `app/db.server.ts` | raw Prisma construction |
 | EX-BOOT-001 | `app/tenant/bootstrap.server.ts` | restricted bootstrap |
 | EX-TDB-001 | `app/tenant/tenant-db.server.ts` | tenant-bound access |
-| EX-BF-001 | `scripts/tenant-backfill/` | PR 1 maintenance |
-| EX-IDX-001 | `scripts/tenant-indexes/` | PR 1 indexes |
+| EX-BF-* | exact `scripts/tenant-backfill/**` files | PR 1 maintenance |
+| EX-IDX-* | exact `scripts/tenant-indexes/**` files | PR 1 indexes |
 | EX-SEED-001 | `prisma/seed.ts` | dev seed |
-| EX-TEST-001 | `app/tenant/__tests__/` | integration test harness |
+| EX-TEST-* | exact `app/tenant/__tests__/**` files | integration test harness |
 
-CI: `npm run tenant:access:audit`, `tenant:access:inventory:check`, `test:tenant-access`.
+CI: `tenant:access:audit`, `tenant:access:inventory:check`, granular tenant PostgreSQL/relation/envelope/Redis/client-hint/nested-write suites, then full `test:tenant-access`.
+
+## Tenant scope (corrected)
+
+### Direct models
+
+```
+(shopId = tenant.shopId AND shop = tenant.domain)
+OR (shopId IS NULL AND shop = tenant.domain)
+```
+
+Foreign non-null `shopId` is never recovered via legacy `shop`. Conflicting pairs fail closed. Updates must not mutate `shopId` or `shop` (no silent repair).
+
+### Child models
+
+Parent must prove same-tenant ownership; child `shopId` is either the current tenant or null under that verified parent lineage. Secondary evidence such as `LeadTimeSnapshot.purchaseOrderId` is validated. Ambiguous lineage fails closed.
+
+### Relations and nested writes
+
+`include` / `select` / `_count` are recursively scoped. Unknown merchant relation shapes fail closed. `connect` / `set` / `disconnect` / nested update/delete targets are resolved through tenant-scoped lookups before mutation. PR 3 RLS remains defense in depth — not a substitute for this application contract.
+
+## Job envelope transport integrity (PR 2) vs persistence (PR 4)
+
+**PR 2 transport authentication and integrity:** HMAC-SHA256 over deterministic unsigned fields, dedicated `TENANT_JOB_ENVELOPE_SECRET` (≥32 bytes), `timingSafeEqual`, closed source allowlist, parsed `issuedAt` with 5-minute future skew and 24-hour max age, producers accept branded `TenantAuthority` only.
+
+**PR 4 persistence (not this PR):** durable envelope ledger, replay governance, dead letters, durable idempotency. Version/shape/Shop matching alone is **not** integrity validation.
 
 ## PR 3 handoff
 
@@ -120,8 +145,8 @@ PR 2 establishes application-level tenant authority and scoped access. PR 3 must
 
 ## Known residual gaps
 
-- Nullable `shopId` rows not backfilled remain invisible to tenant-scoped reads (operational backfill gate)
-- Nested `include` of relations can still return child rows loaded by Prisma relation (composite FK/RLS in PR 3)
-- Job envelope is transport-validated only — not DB-persisted (PR 4)
+- Operational backfill of nullable `shopId` remains an environment gate (not executed in PR 2)
+- Job envelope is cryptographically transport-authenticated — not DB-persisted (PR 4)
 - Pool leakage of DB session variables is N/A until RLS session vars (PR 3); app-level TenantDb isolation tests cover concurrent shops on a shared Prisma pool
+- Webhook path requires pre-existing canonical Shop (`createIfMissing: false`); Shopify redelivery covers install races (F-PR2-07 residual — no provenance schema added)
 - Inventory writes remain frozen and default OFF

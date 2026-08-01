@@ -314,3 +314,14 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** No schema migration in PR 2. No production backfill. Nullable `shopId` remains until PR 3 / operational backfill gates.
 7. **Risks:** Application scoping is necessary but not sufficient without PR 3 DB enforcement. Job envelope persistence/replay remain PR 4 (R-039 not fully closed). Inventory writes remain unapproved.
 8. **Final:** **AUTHORIZED FOR PR 2 IMPLEMENTATION — PENDING INDEPENDENT REVIEW AND CHATGPT ACCEPTANCE**. Explicitly does **not** implement RLS, roles, non-null constraints, composite FKs, or production backfill. PR 3 remains the hard database-enforcement gate. PR 4 retains database-backed queue/control-plane persistence and durable replay. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
+
+## D-028 — Phase 1 PR 2 corrections required
+
+1. **Current:** Independent Claude Code review of PR 2 implementation head `6f9ca22c069a46003b6944ff56c888ff91e95cdc` issued verdict **`NOT READY — CORRECTIONS REQUIRED`** with three P1, three P2, and three P3 findings (F-PR2-01..09). Report preserved verbatim in `PR2_TENANT_ACCESS_REVIEW_REPORT.md`.
+2. **Proposed:** All P1 and P2 findings are mandatory corrections on draft PR #13 / `phase-1/tenant-access`. P3 items require documentation correction and evaluated webhook disposition without unapproved schema. PR 2 remains unaccepted. PR #13 remains draft and unmerged. PR 3 remains not started. No deployment, RLS, production backfill, or inventory writes are authorized.
+3. **Reason:** Application-layer tenant bypasses (nullable ownership invisibility, unscoped nested relations, unsigned job envelopes) and scanner/client-hint/nested-write gaps must be corrected before acceptance.
+4. **Merchant impact:** Corrections restore visibility of nullable PR 1 rows, prevent cross-tenant relation disclosure, and cryptographically authenticate worker transport. No production data access.
+5. **Technical impact:** TenantDb compatibility scope + recursive relation/nested-write validation; HMAC job envelopes; scanner completeness; client-hint traversal; CI Redis + envelope secret; expanded PostgreSQL/Redis tests.
+6. **Migration:** No schema migration. No production backfill. No RLS/roles/non-null/composite FKs.
+7. **Risks:** R-064..R-067 track correction areas pending independent verification. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4.
+8. **Final:** **AUTHORIZED FOR PR 2 CORRECTION IMPLEMENTATION — PENDING INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**.

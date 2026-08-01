@@ -36,6 +36,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       # Test-only placeholders — no real Shopify credentials or merchant data.
@@ -43,6 +52,8 @@ jobs:
       DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       TENANT_MAINTENANCE_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       REDIS_URL: redis://localhost:6379
+      # Test-only envelope secret (≥32 bytes). Never a production secret.
+      TENANT_JOB_ENVELOPE_SECRET: "ci-test-only-tenant-job-envelope-secret-32b!"
       SHOPIFY_API_KEY: ci-test-api-key
       SHOPIFY_API_SECRET: ci-test-api-secret
       SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
@@ -111,6 +122,27 @@ jobs:
 
       - name: Tenant access inventory freshness
         run: npm run tenant:access:inventory:check
+
+      - name: Tenant access PostgreSQL tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nullable-ownership.test.ts app/tenant/__tests__/tenant-db.test.ts app/tenant/__tests__/bootstrap.test.ts
+
+      - name: Tenant relation isolation tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/relation-isolation.test.ts
+
+      - name: Tenant job-envelope integrity tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts
+
+      - name: Tenant queue/Redis tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/queue-redis.test.ts
+
+      - name: Client authority denial tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/client-hints.test.ts app/tenant/__tests__/authority.test.ts
+
+      - name: Nested write ownership tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-writes.test.ts
+
+      - name: Tenant access architecture negative fixtures
+        run: npm run test:tenant-access -- scripts/tenant-access/architecture-audit.test.ts
 
       - name: Tenant access tests
         run: npm run test:tenant-access

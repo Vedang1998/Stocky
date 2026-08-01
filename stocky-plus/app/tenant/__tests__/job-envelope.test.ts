@@ -70,7 +70,8 @@ describe("tenant job envelope v1 integrity (PR 2 C-03)", () => {
     ) {
       // Re-sign only when caller wants a structurally valid alternate envelope.
       if (overrides.signature === undefined) {
-        const { signature: _s, ...unsigned } = merged;
+        const unsigned = { ...merged };
+        delete (unsigned as { signature?: string }).signature;
         return {
           ...unsigned,
           signature: signTenantJobEnvelope(unsigned),
@@ -137,7 +138,8 @@ describe("tenant job envelope v1 integrity (PR 2 C-03)", () => {
 
   it("invalid date is denied", async () => {
     const env = createTenantJobEnvelope(authA(), "catalog_sync");
-    const { signature: _s, ...unsigned } = env;
+    const unsigned = { ...env };
+    delete (unsigned as { signature?: string }).signature;
     const bad = {
       ...unsigned,
       issuedAt: "not-a-date",
@@ -153,7 +155,8 @@ describe("tenant job envelope v1 integrity (PR 2 C-03)", () => {
 
   it("future timestamp beyond skew is denied", async () => {
     const env = createTenantJobEnvelope(authA(), "catalog_sync");
-    const { signature: _s, ...unsigned } = env;
+    const unsigned = { ...env };
+    delete (unsigned as { signature?: string }).signature;
     const issuedAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const bad = {
       ...unsigned,
@@ -167,7 +170,8 @@ describe("tenant job envelope v1 integrity (PR 2 C-03)", () => {
 
   it("expired envelope is denied", async () => {
     const env = createTenantJobEnvelope(authA(), "catalog_sync");
-    const { signature: _s, ...unsigned } = env;
+    const unsigned = { ...env };
+    delete (unsigned as { signature?: string }).signature;
     const issuedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
     const bad = {
       ...unsigned,
@@ -188,7 +192,8 @@ describe("tenant job envelope v1 integrity (PR 2 C-03)", () => {
 
   it("removed signed field is denied", async () => {
     const env = createTenantJobEnvelope(authA(), "catalog_sync");
-    const { correlationId: _c, ...rest } = env;
+    const rest = { ...env };
+    delete (rest as { correlationId?: string }).correlationId;
     await expect(resolveTenantJobContext(rest)).rejects.toMatchObject({
       code: "missing_envelope_correlation",
     });
@@ -196,7 +201,8 @@ describe("tenant job envelope v1 integrity (PR 2 C-03)", () => {
 
   it("missing signature is denied", async () => {
     const env = createTenantJobEnvelope(authA(), "catalog_sync");
-    const { signature: _s, ...rest } = env;
+    const rest = { ...env };
+    delete (rest as { signature?: string }).signature;
     await expect(resolveTenantJobContext(rest)).rejects.toMatchObject({
       code: "missing_envelope_signature",
     });

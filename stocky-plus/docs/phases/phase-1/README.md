@@ -18,7 +18,8 @@
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027 — authorized for implementation, pending review)
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028 — authorized for correction implementation, pending independent correction review)
+**Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22c069a46003b6944ff56c888ff91e95cdc` (preserved verbatim)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
@@ -58,10 +59,14 @@
 14. `PR2_TENANT_ACCESS_ARCHITECTURE.md`
 15. `PR2_TENANT_ACCESS_INVENTORY.md` — mechanically generated; do not edit by hand
 16. `PR2_TENANT_ACCESS_IMPLEMENTATION_REPORT.md`
+17. `PR2_TENANT_ACCESS_REVIEW_REPORT.md` — Claude original `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22…` (verbatim; chain-of-custody preface only)
+18. `PR2_TENANT_ACCESS_CORRECTION_BACKLOG.md`
+19. `PR2_TENANT_ACCESS_CORRECTION_IMPLEMENTATION_REPORT.md`
 
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024, D-025, D-026, D-027)
+- Decisions: `../../DECISIONS.md` (includes D-024, D-025, D-026, D-027, D-028)
+- Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`

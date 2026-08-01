@@ -195,7 +195,7 @@ describe("tenant access architecture audit", () => {
     }).toThrow(/wildcard|directory/);
   });
 
-  it("fails when generated inventory would be stale", () => {
+  it("fails when generated inventory would be stale", async () => {
     const inventoryPath = path.join(
       APP_ROOT,
       "docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md",
@@ -205,7 +205,7 @@ describe("tenant access architecture audit", () => {
       fs.writeFileSync(inventoryPath, original + "\n<!-- stale -->\n");
       let failed = false;
       try {
-        const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+        const { execFileSync } = await import("node:child_process");
         execFileSync(
           process.execPath,
           [
