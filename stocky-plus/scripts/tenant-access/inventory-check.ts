@@ -1,6 +1,7 @@
 #!/usr/bin/env tsx
 /**
  * Fail when the checked-in inventory markdown is stale vs a fresh scan.
+ * Inventory generation is deterministic (content digest, no wall-clock).
  */
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -23,7 +24,6 @@ if (!fs.existsSync(INVENTORY)) {
 
 const checkedIn = fs.readFileSync(INVENTORY, "utf8");
 
-// Regenerate to a temp buffer by running inventory --stdout
 const fresh = execFileSync(
   process.execPath,
   [
@@ -34,16 +34,7 @@ const fresh = execFileSync(
   { cwd: APP_ROOT, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 },
 );
 
-function normalize(md: string): string {
-  // Ignore generatedAt timestamp line for freshness comparison
-  return md
-    .split("\n")
-    .filter((line) => !line.startsWith("**Generated at:**"))
-    .join("\n")
-    .trim();
-}
-
-if (normalize(checkedIn) !== normalize(fresh)) {
+if (checkedIn.trim() !== fresh.trim()) {
   console.error(
     "PR2_TENANT_ACCESS_INVENTORY.md is stale. Run: npm run tenant:access:inventory",
   );
@@ -51,5 +42,8 @@ if (normalize(checkedIn) !== normalize(fresh)) {
 }
 
 console.log(
-  JSON.stringify({ event: "tenant_access_inventory_fresh", path: "docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md" }),
+  JSON.stringify({
+    event: "tenant_access_inventory_fresh",
+    path: "docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md",
+  }),
 );

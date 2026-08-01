@@ -64,7 +64,7 @@ const md = `# PR 2 — Tenant Access Inventory
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** \`phase-1/tenant-access\`
 **Generator:** \`scripts/tenant-access/inventory.ts\` (deterministic scanner)
-**Generated at:** ${result.generatedAt}
+**Content digest:** \`${result.contentDigest}\`
 **Scanned files:** ${result.scannedFiles.length}
 **Findings:** ${rows.length}
 **Converted paths:** ${converted}
@@ -96,11 +96,11 @@ ${Object.entries(byCategory)
 
 ## Approved exceptions
 
-| ID | Path | Category | Production/runtime | Removal/review condition |
-|---|---|---|---|---|
+| ID | Path | Category | Production/runtime | Owner | Removal/review condition |
+|---|---|---|---|---|---|
 ${ACCESS_EXCEPTIONS.map(
   (e) =>
-    `| ${e.id} | \`${e.path}\` | ${e.category} | ${e.productionRuntime} | ${e.removalOrReviewCondition} |`,
+    `| ${e.id} | \`${e.path}\` | ${e.category} | ${e.productionRuntime} | ${e.owner} | ${e.expirationPhaseOrRemovalCondition} |`,
 ).join("\n")}
 
 ## Access path inventory
@@ -136,6 +136,7 @@ ${JSON.stringify(
     violations: result.violations.length,
     exceptionsUsed: result.exceptionsUsed,
     modelsCovered: result.modelsCovered,
+    contentDigest: result.contentDigest,
   },
   null,
   2,

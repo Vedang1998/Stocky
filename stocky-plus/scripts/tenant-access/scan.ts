@@ -12,7 +12,12 @@ import {
   MERCHANT_OWNED_MODELS,
   MERCHANT_DELEGATE_NAMES,
 } from "../../app/tenant/models";
-import { ACCESS_EXCEPTIONS, exceptionForPath } from "./allowlist";
+import {
+  ACCESS_EXCEPTIONS,
+  exceptionForPath,
+  MAINTENANCE_MODULE_PREFIXES,
+} from "./allowlist";
+import { createHash } from "node:crypto";
 
 export type ExecutionCategory =
   | "route"
@@ -49,12 +54,19 @@ export type AccessFinding = {
   exceptionJustification?: string;
   kind:
     | "db_server_import"
+    | "db_server_dynamic_import"
+    | "db_server_reexport"
     | "prisma_client_construction"
     | "merchant_delegate_call"
+    | "computed_delegate_access"
     | "raw_sql"
     | "transaction"
     | "bootstrap_merchant_access"
     | "issue_authority_outside_tenant"
+    | "maintenance_runtime_import"
+    | "raw_shop_queue_payload"
+    | "arbitrary_envelope_enqueue"
+    | "wildcard_allowlist"
     | "type_only_prisma_import";
   isTypeOnly?: boolean;
 };
@@ -130,8 +142,37 @@ function walkTsFiles(dir: string, out: string[] = []): string[] {
 
 function isDbServerSpecifier(spec: string): boolean {
   // Match only the raw Prisma module — not tenant-db.server / bootstrap.server.
-  const base = spec.split("/").pop() ?? spec;
-  return base === "db.server" || base === "db.server.ts";
+  const cleaned = spec.split("?")[0] ?? spec;
+  const base = cleaned.split("/").pop() ?? cleaned;
+  return (
+    base === "db.server" ||
+    base === "db.server.ts" ||
+    cleaned === "~/db.server" ||
+    cleaned === "@/db.server" ||
+    cleaned.endsWith("/db.server") ||
+    cleaned.endsWith("/db.server.ts")
+  );
+}
+
+function isMaintenanceSpecifier(spec: string): boolean {
+  const cleaned = spec.replace(/\\/g, "/");
+  return (
+    cleaned.includes("tenant-backfill") ||
+    cleaned.includes("tenant-indexes") ||
+    MAINTENANCE_MODULE_PREFIXES.some((p) => cleaned.includes(p.replace(/\/$/, "")))
+  );
+}
+
+function isRuntimeSurface(exec: ExecutionCategory): boolean {
+  return (
+    exec === "route" ||
+    exec === "service" ||
+    exec === "worker" ||
+    exec === "job" ||
+    exec === "export" ||
+    exec === "privacy" ||
+    exec === "reconciliation"
+  );
 }
 
 function collectFindings(
@@ -481,6 +522,194 @@ function collectFindings(
       });
     }
 
+    // Dynamic import("../db.server") / import(`...db.server`)
+    if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments.length > 0
+    ) {
+      const arg = node.arguments[0];
+      let spec: string | null = null;
+      if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
+        spec = arg.text;
+      } else if (ts.isTemplateExpression(arg)) {
+        spec = arg.head.text + arg.templateSpans.map((s) => s.literal.text).join("");
+      }
+      if (spec && isDbServerSpecifier(spec)) {
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        const allowed = Boolean(exception);
+        findings.push({
+          file: rel,
+          line,
+          symbol: `import(${spec})`,
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "dynamic import of app/db.server",
+          newAccessMethod: allowed
+            ? `approved exception ${exception!.id}`
+            : "MUST use tenant-bound / bootstrap boundary",
+          authoritySource: allowed ? exception!.category : "none",
+          conversionStatus: allowed ? "approved_exception" : "violation",
+          testEvidence: "tenant:access:audit dynamic-import fixture",
+          exceptionId: exception?.id,
+          exceptionJustification: exception?.reason,
+          kind: "db_server_dynamic_import",
+        });
+        hasValueDbImport = true;
+      }
+    }
+
+    // Re-export: export ... from "...db.server"
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
+      const spec = (node.moduleSpecifier as ts.StringLiteral).text;
+      if (isDbServerSpecifier(spec)) {
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        const allowed = Boolean(exception);
+        findings.push({
+          file: rel,
+          line,
+          symbol: `export from ${spec}`,
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "re-export of app/db.server",
+          newAccessMethod: allowed
+            ? `approved exception ${exception!.id}`
+            : "forbidden re-export chain to raw Prisma",
+          authoritySource: allowed ? exception!.category : "none",
+          conversionStatus: allowed ? "approved_exception" : "violation",
+          testEvidence: "tenant:access:audit re-export fixture",
+          exceptionId: exception?.id,
+          exceptionJustification: exception?.reason,
+          kind: "db_server_reexport",
+        });
+      }
+    }
+
+    // Runtime surfaces importing maintenance modules
+    if (
+      ts.isImportDeclaration(node) &&
+      node.moduleSpecifier &&
+      isRuntimeSurface(exec)
+    ) {
+      const spec = (node.moduleSpecifier as ts.StringLiteral).text;
+      if (isMaintenanceSpecifier(spec)) {
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        findings.push({
+          file: rel,
+          line,
+          symbol: spec,
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "runtime import of maintenance module",
+          newAccessMethod: "forbidden",
+          authoritySource: "none",
+          conversionStatus: "violation",
+          testEvidence: "tenant:access:audit maintenance import graph",
+          kind: "maintenance_runtime_import",
+        });
+      }
+    }
+
+    // Computed / element-access delegate: client["sup" + "plier"] / client[name]
+    if (ts.isElementAccessExpression(node)) {
+      const exprText = node.expression.getText(source);
+      const looksLikeClient =
+        hasValueDbImport ||
+        /\b(prisma|rawPrisma|client|db)\b/.test(exprText);
+      if (looksLikeClient && isRuntimeSurface(exec) && !exception) {
+        const arg = node.argumentExpression;
+        const argText = arg?.getText(source) ?? "";
+        const computesDelegate =
+          ts.isBinaryExpression(arg!) ||
+          ts.isTemplateExpression(arg!) ||
+          (ts.isIdentifier(arg!) && arg.text !== "id") ||
+          /sup|plier|purchase|stock|transfer|bom|alert|forecast|sales|variant|inventory|supplier|shopSettings/i.test(
+            argText,
+          );
+        if (computesDelegate) {
+          const line =
+            source.getLineAndCharacterOfPosition(node.getStart(source)).line +
+            1;
+          findings.push({
+            file: rel,
+            line,
+            symbol: `${exprText}[...]`,
+            executionCategory: exec,
+            modelsTouched: MERCHANT_OWNED_MODELS.slice() as string[],
+            oldAccessMethod: "computed/aliased delegate access",
+            newAccessMethod: "MUST use TenantDb delegates",
+            authoritySource: "none",
+            conversionStatus: "violation",
+            testEvidence: "tenant:access:audit computed-delegate fixture",
+            kind: "computed_delegate_access",
+          });
+        }
+      }
+    }
+
+    // Raw shop-only queue payload: { shop: ... } without tenant envelope field
+    if (
+      (exec === "job" || exec === "worker" || exec === "route") &&
+      ts.isCallExpression(node) &&
+      /enqueue|queue\.add|\.add\(/.test(node.expression.getText(source))
+    ) {
+      const callText = node.getText(source);
+      if (
+        (/\bshop\s*:/.test(callText) || /\{\s*shop\s*[,}]/.test(callText)) &&
+        !/\btenant\s*:/.test(callText) &&
+        !/TenantAuthority|createTenantJobEnvelope|tenant-job-envelope/.test(
+          callText,
+        )
+      ) {
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        findings.push({
+          file: rel,
+          line,
+          symbol: node.expression.getText(source),
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "raw shop-only queue payload",
+          newAccessMethod: "MUST enqueue branded TenantAuthority envelope",
+          authoritySource: "none",
+          conversionStatus: "violation",
+          testEvidence: "tenant:access:audit raw-shop-queue fixture",
+          kind: "raw_shop_queue_payload",
+        });
+      }
+    }
+
+    // Producer accepting TenantAuthority | TenantJobEnvelopeV1 unions
+    if (
+      (rel.endsWith("queue.server.ts") || exec === "job") &&
+      ts.isUnionTypeNode(node)
+    ) {
+      const text = node.getText(source);
+      if (
+        text.includes("TenantAuthority") &&
+        text.includes("TenantJobEnvelope")
+      ) {
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        findings.push({
+          file: rel,
+          line,
+          symbol: text.slice(0, 80),
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "queue producer accepts arbitrary envelope union",
+          newAccessMethod: "MUST accept branded TenantAuthority only",
+          authoritySource: "none",
+          conversionStatus: "violation",
+          testEvidence: "tenant:access:audit arbitrary-envelope fixture",
+          kind: "arbitrary_envelope_enqueue",
+        });
+      }
+    }
+
     ts.forEachChild(node, visit);
   };
 
@@ -499,7 +728,8 @@ export type ScanResult = {
   violations: AccessFinding[];
   exceptionsUsed: string[];
   modelsCovered: string[];
-  generatedAt: string;
+  /** Deterministic digest of findings — not a wall-clock timestamp. */
+  contentDigest: string;
 };
 
 export function scanRepository(options?: {
@@ -524,16 +754,37 @@ export function scanRepository(options?: {
     return fixAndCollect(fileAbs, rel);
   });
 
+  // Reject wildcard / directory-wide allowlist entries
+  for (const ex of ACCESS_EXCEPTIONS) {
+    if (
+      ex.path.includes("*") ||
+      ex.path.includes("?") ||
+      ex.path.endsWith("/")
+    ) {
+      findings.push({
+        file: ex.path,
+        line: 0,
+        symbol: ex.id,
+        executionCategory: "other",
+        modelsTouched: [],
+        oldAccessMethod: "allowlist entry",
+        newAccessMethod: "wildcard/directory allowlist forbidden",
+        authoritySource: "n/a",
+        conversionStatus: "violation",
+        testEvidence: "tenant:access:audit wildcard-allowlist fixture",
+        exceptionId: ex.id,
+        exceptionJustification: "exact file paths required",
+        kind: "wildcard_allowlist",
+      });
+    }
+  }
+
   // Stale allowlist detection: exception paths that match no finding/file
   if (checkAllowlistPaths) {
     for (const ex of ACCESS_EXCEPTIONS) {
       const abs = path.join(APP_ROOT, ex.path);
-      const exists =
-        fs.existsSync(abs) ||
-        files.some((f) =>
-          relFromApp(f).startsWith(ex.path.replace(/\/$/, "")),
-        );
-      if (!exists && !ex.path.endsWith("/")) {
+      const exists = fs.existsSync(abs);
+      if (!exists) {
         findings.push({
           file: ex.path,
           line: 0,
@@ -581,6 +832,15 @@ export function scanRepository(options?: {
     }
   }
 
+  const stable = findings
+    .map(
+      (f) =>
+        `${f.file}|${f.line}|${f.kind}|${f.symbol}|${f.conversionStatus}|${f.exceptionId ?? ""}`,
+    )
+    .sort()
+    .join("\n");
+  const contentDigest = createHash("sha256").update(stable).digest("hex");
+
   return {
     appRoot: APP_ROOT,
     scannedFiles: files.map(relFromApp),
@@ -594,7 +854,7 @@ export function scanRepository(options?: {
       ),
     ].sort(),
     modelsCovered: [...new Set(modelsCovered)].sort(),
-    generatedAt: new Date().toISOString(),
+    contentDigest,
   };
 }
 
