@@ -504,6 +504,8 @@ describe("tenant-bound database contract (PR 2)", () => {
 
   it("no raw Prisma client escapes the tenant module", () => {
     expect(tenantDbExposesRawClient(dbA)).toBe(false);
-    expect(() => (dbA as any).$queryRaw).toThrow(TenantAccessError);
+    expect(() => (dbA as unknown as { $queryRaw: unknown }).$queryRaw).toThrow(
+      TenantAccessError,
+    );
   });
 });

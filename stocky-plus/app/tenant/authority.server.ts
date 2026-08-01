@@ -85,8 +85,9 @@ export function assertTenantAuthority(
 
 /** Explicitly reject attempts to build authority from raw client-controlled values. */
 export function rejectRawAuthorityConstruction(
-  _shopOrShopId: string,
+  shopOrShopId: string,
 ): never {
+  void shopOrShopId;
   throw new TenantAuthorityError(
     "raw_authority_forbidden",
     "Raw shop domain or shopId cannot construct tenant authority",

@@ -22,17 +22,19 @@ export type CanonicalShopIdentity = {
 };
 
 /** Session-storage adapter constructed inside the bootstrap boundary (lazy). */
-let _shopifySessionStorage: PrismaSessionStorage | null = null;
+type SessionStorage = PrismaSessionStorage<typeof rawPrisma>;
 
-function getShopifySessionStorage(): PrismaSessionStorage {
+let _shopifySessionStorage: SessionStorage | null = null;
+
+function getShopifySessionStorage(): SessionStorage {
   if (!_shopifySessionStorage) {
     _shopifySessionStorage = new PrismaSessionStorage(rawPrisma);
   }
   return _shopifySessionStorage;
 }
 
-export const shopifySessionStorage: PrismaSessionStorage = new Proxy(
-  {} as PrismaSessionStorage,
+export const shopifySessionStorage: SessionStorage = new Proxy(
+  {} as SessionStorage,
   {
     get(_target, prop, receiver) {
       const storage = getShopifySessionStorage() as unknown as Record<

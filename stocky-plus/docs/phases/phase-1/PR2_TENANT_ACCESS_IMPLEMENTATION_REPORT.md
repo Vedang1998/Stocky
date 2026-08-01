@@ -21,6 +21,7 @@
 1. `2a14f19d220c46c0ecab186377cf7bd6f3dd9d2b` — Convert app and webhook routes to tenant-bound DB access (foundations + route/service/job conversion)
 2. `219a5e3dda85cf781839f418d004f09a25573b50` — Share phase1-shop-domain-v1 via app/tenant/shop-domain
 3. `80e928b52102cde19f357822cd1b1dc0824d062b` — Add PR 2 tenant access evidence and tests
+4. `dd6ca397dd3b5c848fe3211a44595a93acdcd23d` — Record PR 2 implementation commit SHAs in evidence report
 
 ## Architecture decisions
 

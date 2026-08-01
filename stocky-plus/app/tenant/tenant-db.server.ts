@@ -336,8 +336,9 @@ async function rewriteUniqueRead(
   operation: string,
   args: Record<string, unknown>,
   authority: TenantAuthority,
-  _query: (args: unknown) => Promise<unknown>,
+  query: (args: unknown) => Promise<unknown>,
 ): Promise<unknown> {
+  void query;
   const scope = tenantScopeWhere(model, authority);
   const where = args.where;
 
@@ -379,10 +380,10 @@ async function rewriteUniqueWrite(
       authority,
     );
 
-    const existing = await delegate.findFirst({
+    const existing = (await delegate.findFirst({
       where: scopedWhere,
       select: { id: true },
-    });
+    })) as { id: string } | null;
     if (!existing) {
       throw new TenantAccessError(
         "not_found",
@@ -398,19 +399,19 @@ async function rewriteUniqueWrite(
   }
 
   // delete — tenant-scoped deleteMany only
-  const existing = await delegate.findFirst({
+  const existing = (await delegate.findFirst({
     where: scopedWhere,
     select: { id: true },
-  });
+  })) as { id: string } | null;
   if (!existing) {
     throw new TenantAccessError(
       "not_found",
       `${model} not found for tenant delete`,
     );
   }
-  const deleted = await delegate.deleteMany({
+  const deleted = (await delegate.deleteMany({
     where: { id: existing.id, ...scope },
-  });
+  })) as { count: number };
   if (deleted.count === 0) {
     throw new TenantAccessError(
       "not_found",
@@ -468,7 +469,12 @@ function getDelegate(client: PrismaLike, model: string) {
     );
   }
   const name = MERCHANT_DELEGATE_NAMES[model as MerchantOwnedModel];
-  return (client as Record<string, any>)[name];
+  return (
+    client as unknown as Record<
+      string,
+      { [op: string]: (args?: unknown) => Promise<unknown> }
+    >
+  )[name];
 }
 
 async function runScopedOperation(
@@ -619,26 +625,33 @@ function buildTenantDelegates(client: PrismaLike, authority: TenantAuthority) {
   return delegates;
 }
 
+/**
+ * Per-model delegate surface. Intentionally loose so route/service call sites
+ * retain Prisma-like ergonomics while runtime scoping is enforced in this module.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type TenantModelDelegate = any;
+
 export type TenantDb = {
   readonly authority: TenantAuthority;
-  supplier: any;
-  purchaseOrder: any;
-  shopifyVariantCache: any;
-  inventorySnapshot: any;
-  variantAbcClass: any;
-  forecastOverride: any;
-  salesDailyAggregate: any;
-  shopSettings: any;
-  transferOrder: any;
-  stocktake: any;
-  bomComponent: any;
-  lowStockAlert: any;
-  supplierSkuMapping: any;
-  volumePriceTier: any;
-  leadTimeSnapshot: any;
-  pOLineItem: any;
-  transferLineItem: any;
-  stocktakeLineItem: any;
+  supplier: TenantModelDelegate;
+  purchaseOrder: TenantModelDelegate;
+  shopifyVariantCache: TenantModelDelegate;
+  inventorySnapshot: TenantModelDelegate;
+  variantAbcClass: TenantModelDelegate;
+  forecastOverride: TenantModelDelegate;
+  salesDailyAggregate: TenantModelDelegate;
+  shopSettings: TenantModelDelegate;
+  transferOrder: TenantModelDelegate;
+  stocktake: TenantModelDelegate;
+  bomComponent: TenantModelDelegate;
+  lowStockAlert: TenantModelDelegate;
+  supplierSkuMapping: TenantModelDelegate;
+  volumePriceTier: TenantModelDelegate;
+  leadTimeSnapshot: TenantModelDelegate;
+  pOLineItem: TenantModelDelegate;
+  transferLineItem: TenantModelDelegate;
+  stocktakeLineItem: TenantModelDelegate;
   $transaction: <T>(fn: (db: TenantDb) => Promise<T>) => Promise<T>;
 };
 

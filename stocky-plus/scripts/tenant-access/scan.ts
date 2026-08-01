@@ -369,7 +369,10 @@ function collectFindings(
             !rel.startsWith("app/tenant/"));
 
         // bootstrap accessing merchant models is always a violation
-        if (exec === "bootstrap" && MERCHANT_OWNED_MODELS.includes(model as any)) {
+        if (
+          exec === "bootstrap" &&
+          (MERCHANT_OWNED_MODELS as readonly string[]).includes(model)
+        ) {
           findings.push({
             file: rel,
             line,

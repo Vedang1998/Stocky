@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import type {
   ActionFunctionArgs,

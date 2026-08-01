@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import type {
   ActionFunctionArgs,
   HeadersFunction,
