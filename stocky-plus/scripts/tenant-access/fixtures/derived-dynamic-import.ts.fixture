@@ -1,0 +1,5 @@
+const path = "../" + "db.server";
+export async function load() {
+  const db = (await import(path)).default;
+  await db.supplier.findMany({});
+}

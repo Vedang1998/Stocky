@@ -1,0 +1,6 @@
+import db from "../db.server";
+
+export async function run() {
+  const { supplier: delegate } = db;
+  await delegate.findMany({});
+}

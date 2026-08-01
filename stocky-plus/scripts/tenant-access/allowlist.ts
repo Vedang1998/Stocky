@@ -88,7 +88,12 @@ const TEST_FILES = [
   "app/tenant/__tests__/nullable-ownership.test.ts",
   "app/tenant/__tests__/relation-isolation.test.ts",
   "app/tenant/__tests__/nested-writes.test.ts",
+  "app/tenant/__tests__/nested-selector-auth.test.ts",
+  "app/tenant/__tests__/legacy-normalization.test.ts",
+  "app/tenant/__tests__/partial-select-update.test.ts",
+  "app/tenant/__tests__/write-atomicity.test.ts",
   "app/tenant/__tests__/client-hints.test.ts",
+  "app/tenant/__tests__/large-payload-hints.test.ts",
   "app/tenant/__tests__/queue-redis.test.ts",
 ] as const;
 
@@ -219,11 +224,34 @@ function assertExactAllowlistShape(): void {
 
 assertExactAllowlistShape();
 
+/**
+ * Resolve an allowlist exception for a repository-root-relative path.
+ *
+ * Production matching is exact only (F-PR2C-11). Fixture scans must pass
+ * paths already normalized relative to their explicit scan root so they
+ * compare equal to configured exception paths — never via workspace suffix.
+ */
 export function exceptionForPath(relPath: string): AccessException | undefined {
-  const normalized = relPath.replace(/\\/g, "/");
-  return ACCESS_EXCEPTIONS.find(
-    (ex) => normalized === ex.path || normalized.endsWith(`/${ex.path}`),
-  );
+  const normalized = relPath.replace(/\\/g, "/").replace(/^\.\//, "");
+  return ACCESS_EXCEPTIONS.find((ex) => normalized === ex.path);
+}
+
+/** Exported for tests that must exercise the real shape guard. */
+export function assertAllowlistPathsAreExact(
+  entries: ReadonlyArray<{ id: string; path: string }>,
+): void {
+  for (const ex of entries) {
+    if (
+      ex.path.includes("*") ||
+      ex.path.includes("?") ||
+      ex.path.endsWith("/") ||
+      ex.path.includes("/**")
+    ) {
+      throw new Error(
+        `Allowlist entry ${ex.id} uses forbidden wildcard/directory path: ${ex.path}`,
+      );
+    }
+  }
 }
 
 /** Maintenance modules that must never be imported by runtime app surfaces. */

@@ -175,6 +175,108 @@ function isRuntimeSurface(exec: ExecutionCategory): boolean {
   );
 }
 
+/**
+ * Conservative constant-folding for import/delegate key provenance (F-PR2C-07).
+ * Supports string literals, concatenation, no-sub template literals, template
+ * literals without dynamic substitutions, const aliases of those, and
+ * simple array `.join("")` used in committed negative probes.
+ *
+ * Enforcement boundary: intra-file tracking only — not complete interprocedural
+ * taint analysis across module boundaries.
+ */
+function constantFoldString(
+  node: ts.Expression | undefined,
+  consts: Map<string, string>,
+): string | null {
+  if (!node) return null;
+  if (ts.isParenthesizedExpression(node)) {
+    return constantFoldString(node.expression, consts);
+  }
+  if (ts.isAsExpression(node)) {
+    return constantFoldString(node.expression, consts);
+  }
+  // Legacy type assertion <string>expr — optional in modern TS ASTs.
+  if (
+    typeof (ts as unknown as { isTypeAssertionExpression?: unknown })
+      .isTypeAssertionExpression === "function" &&
+    (ts as unknown as { isTypeAssertionExpression: (n: ts.Node) => boolean })
+      .isTypeAssertionExpression(node)
+  ) {
+    return constantFoldString(
+      (node as unknown as { expression: ts.Expression }).expression,
+      consts,
+    );
+  }
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  if (ts.isIdentifier(node)) {
+    return consts.get(node.text) ?? null;
+  }
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = constantFoldString(node.left, consts);
+    const right = constantFoldString(node.right, consts);
+    if (left != null && right != null) return left + right;
+    return null;
+  }
+  if (ts.isTemplateExpression(node)) {
+    let out = node.head.text;
+    for (const span of node.templateSpans) {
+      const part = constantFoldString(span.expression, consts);
+      if (part == null) return null;
+      out += part + span.literal.text;
+    }
+    return out;
+  }
+  // ["sup","plier"].join("") or part.join("")
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    node.expression.name.text === "join"
+  ) {
+    const recv = node.expression.expression;
+    const sepArg = node.arguments[0];
+    const sep =
+      sepArg == null
+        ? ","
+        : ts.isStringLiteral(sepArg) || ts.isNoSubstitutionTemplateLiteral(sepArg)
+          ? sepArg.text
+          : null;
+    if (sep == null) return null;
+    if (ts.isArrayLiteralExpression(recv)) {
+      const parts: string[] = [];
+      for (const el of recv.elements) {
+        const p = constantFoldString(el as ts.Expression, consts);
+        if (p == null) return null;
+        parts.push(p);
+      }
+      return parts.join(sep);
+    }
+    if (ts.isIdentifier(recv) && consts.has(recv.text + "[]")) {
+      // Not tracked as array — fail closed by returning null (unresolved).
+      return null;
+    }
+  }
+  return null;
+}
+
+function collectConstStringBindings(source: ts.SourceFile): Map<string, string> {
+  const consts = new Map<string, string>();
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+      const folded = constantFoldString(node.initializer, consts);
+      if (folded != null) {
+        consts.set(node.name.text, folded);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  // Second pass for forward references in simple chains
+  visit(source);
+  return consts;
+}
+
 function collectFindings(
   fileAbs: string,
   relPath?: string,
@@ -190,7 +292,10 @@ function collectFindings(
   const exec = classifyExecution(rel);
 
   const valueImportFromDb = new Set<string>();
+  const taintedRawClients = new Set<string>();
+  const authorityAliases = new Set<string>(["issueTenantAuthority"]);
   let hasValueDbImport = false;
+  const constStrings = collectConstStringBindings(source);
 
   const visit = (node: ts.Node) => {
     if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
@@ -228,9 +333,14 @@ function collectFindings(
           if (clause?.namedBindings && ts.isNamespaceImport(clause.namedBindings)) {
             names.push(clause.namedBindings.name.text);
           }
-          for (const n of names) valueImportFromDb.add(n);
-          // default import often named prisma/db/rawPrisma
-          if (clause?.name) valueImportFromDb.add(clause.name.text);
+          for (const n of names) {
+            valueImportFromDb.add(n);
+            taintedRawClients.add(n);
+          }
+          if (clause?.name) {
+            valueImportFromDb.add(clause.name.text);
+            taintedRawClients.add(clause.name.text);
+          }
 
           const allowed = Boolean(exception);
           findings.push({
@@ -256,8 +366,161 @@ function collectFindings(
         }
       }
 
+      // Aliased issueTenantAuthority imports
+      if (
+        (spec.includes("authority.server") || spec.includes("/tenant")) &&
+        node.importClause?.namedBindings &&
+        ts.isNamedImports(node.importClause.namedBindings)
+      ) {
+        for (const el of node.importClause.namedBindings.elements) {
+          const imported = (el.propertyName ?? el.name).text;
+          if (imported === "issueTenantAuthority") {
+            authorityAliases.add(el.name.text);
+          }
+        }
+      }
+
       if (spec === "@prisma/client" || spec.startsWith("@prisma/client/")) {
         // type-only OK; value PrismaClient construction checked separately
+      }
+    }
+
+    // Assignment / destructuring provenance from tainted raw clients
+    if (ts.isVariableDeclaration(node)) {
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isIdentifier(node.initializer) &&
+        taintedRawClients.has(node.initializer.text)
+      ) {
+        taintedRawClients.add(node.name.text);
+        hasValueDbImport = true;
+      }
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isPropertyAccessExpression(node.initializer) &&
+        ts.isIdentifier(node.initializer.expression) &&
+        taintedRawClients.has(node.initializer.expression.text) &&
+        node.initializer.name.text === "default"
+      ) {
+        taintedRawClients.add(node.name.text);
+        hasValueDbImport = true;
+      }
+      // const { supplier: delegate } = db
+      if (
+        ts.isObjectBindingPattern(node.name) &&
+        node.initializer &&
+        ts.isIdentifier(node.initializer) &&
+        taintedRawClients.has(node.initializer.text)
+      ) {
+        for (const el of node.name.elements) {
+          if (ts.isBindingElement(el) && ts.isIdentifier(el.name)) {
+            taintedRawClients.add(el.name.text);
+            hasValueDbImport = true;
+            const line =
+              source.getLineAndCharacterOfPosition(node.getStart(source)).line +
+              1;
+            if (isRuntimeSurface(exec) && !exception) {
+              findings.push({
+                file: rel,
+                line,
+                symbol: `destructure ${el.name.text}`,
+                executionCategory: exec,
+                modelsTouched: MERCHANT_OWNED_MODELS.slice() as string[],
+                oldAccessMethod: "destructured raw Prisma delegate",
+                newAccessMethod: "MUST use TenantDb delegates",
+                authoritySource: "none",
+                conversionStatus: "violation",
+                testEvidence: "tenant:access:audit destructure fixture",
+                kind: "computed_delegate_access",
+              });
+            }
+          }
+        }
+      }
+      // await import(path) assignment
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isAwaitExpression(node.initializer) &&
+        ts.isCallExpression(node.initializer.expression) &&
+        node.initializer.expression.expression.kind === ts.SyntaxKind.ImportKeyword
+      ) {
+        const arg = node.initializer.expression.arguments[0];
+        const spec =
+          constantFoldString(arg as ts.Expression | undefined, constStrings) ??
+          (arg && (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))
+            ? arg.text
+            : null);
+        if (spec && isDbServerSpecifier(spec)) {
+          taintedRawClients.add(node.name.text);
+          hasValueDbImport = true;
+        } else if (
+          spec == null &&
+          isRuntimeSurface(exec) &&
+          !exception &&
+          arg
+        ) {
+          // Unresolved dynamic import on a runtime surface — fail closed.
+          const line =
+            source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+          findings.push({
+            file: rel,
+            line,
+            symbol: `import(${arg.getText(source)})`,
+            executionCategory: exec,
+            modelsTouched: [],
+            oldAccessMethod: "unresolved dynamic import",
+            newAccessMethod: "fail closed unless exact allowlist",
+            authoritySource: "none",
+            conversionStatus: "violation",
+            testEvidence: "tenant:access:audit unresolved-dynamic fixture",
+            kind: "db_server_dynamic_import",
+          });
+        }
+      }
+      // const db = (await import(path)).default
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isPropertyAccessExpression(node.initializer) &&
+        node.initializer.name.text === "default" &&
+        ts.isParenthesizedExpression(node.initializer.expression)
+      ) {
+        const inner = node.initializer.expression.expression;
+        if (
+          ts.isAwaitExpression(inner) &&
+          ts.isCallExpression(inner.expression) &&
+          inner.expression.expression.kind === ts.SyntaxKind.ImportKeyword
+        ) {
+          const arg = inner.expression.arguments[0];
+          const spec = constantFoldString(
+            arg as ts.Expression | undefined,
+            constStrings,
+          );
+          if (spec && isDbServerSpecifier(spec)) {
+            taintedRawClients.add(node.name.text);
+            hasValueDbImport = true;
+          } else if (spec == null && isRuntimeSurface(exec) && !exception) {
+            const line =
+              source.getLineAndCharacterOfPosition(node.getStart(source)).line +
+              1;
+            findings.push({
+              file: rel,
+              line,
+              symbol: `import(${arg?.getText(source) ?? "?"})`,
+              executionCategory: exec,
+              modelsTouched: [],
+              oldAccessMethod: "unresolved dynamic import",
+              newAccessMethod: "fail closed unless exact allowlist",
+              authoritySource: "none",
+              conversionStatus: "violation",
+              testEvidence: "tenant:access:audit unresolved-dynamic fixture",
+              kind: "db_server_dynamic_import",
+            });
+          }
+        }
       }
     }
 
@@ -391,18 +654,28 @@ function collectFindings(
         DELEGATE_TO_MODEL[target.name.text]
       ) {
         const model = DELEGATE_TO_MODEL[target.name.text];
-        const receiver = target.expression.getText(source);
+        const receiverExpr = target.expression;
+        const receiver = receiverExpr.getText(source);
+        const receiverRoot = ts.isIdentifier(receiverExpr)
+          ? receiverExpr.text
+          : receiver;
         const line =
           source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        const receiverIsTainted =
+          taintedRawClients.has(receiverRoot) ||
+          (ts.isIdentifier(receiverExpr) &&
+            taintedRawClients.has(receiverExpr.text));
         const viaTenantDb =
-          receiver === "db" ||
-          /^db[A-Z]/.test(receiver) ||
-          receiver.endsWith(".db") ||
-          receiver === "tenantDb" ||
-          receiver === "tx" ||
-          receiver.startsWith("ctx.db") ||
-          rel.startsWith("app/tenant/tenant-db.server.ts");
+          !receiverIsTainted &&
+          (receiver === "db" ||
+            /^db[A-Z]/.test(receiver) ||
+            receiver.endsWith(".db") ||
+            receiver === "tenantDb" ||
+            receiver === "tx" ||
+            receiver.startsWith("ctx.db") ||
+            rel.startsWith("app/tenant/tenant-db.server.ts"));
         const viaRaw =
+          receiverIsTainted ||
           receiver === "prisma" ||
           receiver === "rawPrisma" ||
           (receiver === "db" &&
@@ -427,7 +700,7 @@ function collectFindings(
             testEvidence: "tenant:access:audit bootstrap fixture",
             kind: "bootstrap_merchant_access",
           });
-        } else if (viaTenantDb && !hasValueDbImport) {
+        } else if (viaTenantDb && !hasValueDbImport && !receiverIsTainted) {
           findings.push({
             file: rel,
             line,
@@ -498,11 +771,38 @@ function collectFindings(
       }
     }
 
-    // issueTenantAuthority called outside app/tenant
+    // Calls on destructured/tainted delegate bindings: delegate.findMany()
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      taintedRawClients.has(node.expression.expression.text) &&
+      !DELEGATE_TO_MODEL[node.expression.expression.text] &&
+      isRuntimeSurface(exec) &&
+      !exception
+    ) {
+      const line =
+        source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      findings.push({
+        file: rel,
+        line,
+        symbol: `${node.expression.expression.text}.${node.expression.name.text}`,
+        executionCategory: exec,
+        modelsTouched: MERCHANT_OWNED_MODELS.slice() as string[],
+        oldAccessMethod: "tainted raw-client / destructured delegate call",
+        newAccessMethod: "MUST use TenantDb",
+        authoritySource: "none",
+        conversionStatus: "violation",
+        testEvidence: "tenant:access:audit tainted-delegate fixture",
+        kind: "merchant_delegate_call",
+      });
+    }
+
+    // issueTenantAuthority (including aliases) called outside app/tenant
     if (
       ts.isCallExpression(node) &&
       ts.isIdentifier(node.expression) &&
-      node.expression.text === "issueTenantAuthority" &&
+      authorityAliases.has(node.expression.text) &&
       !rel.startsWith("app/tenant/")
     ) {
       const line =
@@ -510,7 +810,7 @@ function collectFindings(
       findings.push({
         file: rel,
         line,
-        symbol: "issueTenantAuthority",
+        symbol: node.expression.text,
         executionCategory: exec,
         modelsTouched: [],
         oldAccessMethod: "authority issuance",
@@ -522,18 +822,19 @@ function collectFindings(
       });
     }
 
-    // Dynamic import("../db.server") / import(`...db.server`)
+    // Dynamic import — constant-fold derived specifiers (F-PR2C-07)
     if (
       ts.isCallExpression(node) &&
       node.expression.kind === ts.SyntaxKind.ImportKeyword &&
       node.arguments.length > 0
     ) {
       const arg = node.arguments[0];
-      let spec: string | null = null;
-      if (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg)) {
+      let spec = constantFoldString(arg, constStrings);
+      if (
+        spec == null &&
+        (ts.isStringLiteral(arg) || ts.isNoSubstitutionTemplateLiteral(arg))
+      ) {
         spec = arg.text;
-      } else if (ts.isTemplateExpression(arg)) {
-        spec = arg.head.text + arg.templateSpans.map((s) => s.literal.text).join("");
       }
       if (spec && isDbServerSpecifier(spec)) {
         const line =
@@ -557,6 +858,30 @@ function collectFindings(
           kind: "db_server_dynamic_import",
         });
         hasValueDbImport = true;
+      } else if (
+        spec == null &&
+        isRuntimeSurface(exec) &&
+        !exception &&
+        arg &&
+        !ts.isStringLiteral(arg) &&
+        !ts.isNoSubstitutionTemplateLiteral(arg)
+      ) {
+        // Unresolved non-literal dynamic import on runtime surface — fail closed.
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        findings.push({
+          file: rel,
+          line,
+          symbol: `import(${arg.getText(source)})`,
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "unresolved dynamic import",
+          newAccessMethod: "fail closed unless exact allowlist",
+          authoritySource: "none",
+          conversionStatus: "violation",
+          testEvidence: "tenant:access:audit unresolved-dynamic fixture",
+          kind: "db_server_dynamic_import",
+        });
       }
     }
 
@@ -615,28 +940,31 @@ function collectFindings(
 
     // Computed / element-access delegate: client["sup" + "plier"] / client[name]
     if (ts.isElementAccessExpression(node)) {
-      const exprText = node.expression.getText(source);
+      const expr = node.expression;
+      const exprText = expr.getText(source);
+      const rootId = ts.isIdentifier(expr) ? expr.text : null;
       const looksLikeClient =
         hasValueDbImport ||
+        (rootId != null && taintedRawClients.has(rootId)) ||
         /\b(prisma|rawPrisma|client|db)\b/.test(exprText);
       if (looksLikeClient && isRuntimeSurface(exec) && !exception) {
         const arg = node.argumentExpression;
-        const argText = arg?.getText(source) ?? "";
-        const computesDelegate =
-          ts.isBinaryExpression(arg!) ||
-          ts.isTemplateExpression(arg!) ||
-          (ts.isIdentifier(arg!) && arg.text !== "id") ||
-          /sup|plier|purchase|stock|transfer|bom|alert|forecast|sales|variant|inventory|supplier|shopSettings/i.test(
-            argText,
-          );
-        if (computesDelegate) {
+        const folded = constantFoldString(arg, constStrings);
+        const isComputedKey =
+          folded == null ||
+          Boolean(DELEGATE_TO_MODEL[folded]) ||
+          ts.isBinaryExpression(arg) ||
+          ts.isTemplateExpression(arg) ||
+          ts.isCallExpression(arg) ||
+          ts.isIdentifier(arg);
+        if (isComputedKey) {
           const line =
             source.getLineAndCharacterOfPosition(node.getStart(source)).line +
             1;
           findings.push({
             file: rel,
             line,
-            symbol: `${exprText}[...]`,
+            symbol: `${exprText}[${folded ?? arg.getText(source)}]`,
             executionCategory: exec,
             modelsTouched: MERCHANT_OWNED_MODELS.slice() as string[],
             oldAccessMethod: "computed/aliased delegate access",
@@ -651,18 +979,35 @@ function collectFindings(
     }
 
     // Raw shop-only queue payload: { shop: ... } without tenant envelope field
+    // Also catches computed keys that constant-fold to "shop" (F-PR2C-07 B-9).
     if (
       (exec === "job" || exec === "worker" || exec === "route") &&
       ts.isCallExpression(node) &&
       /enqueue|queue\.add|\.add\(/.test(node.expression.getText(source))
     ) {
       const callText = node.getText(source);
+      let computedShopKey = false;
+      for (const arg of node.arguments) {
+        if (!ts.isObjectLiteralExpression(arg)) continue;
+        for (const prop of arg.properties) {
+          if (
+            ts.isPropertyAssignment(prop) &&
+            ts.isComputedPropertyName(prop.name)
+          ) {
+            const folded = constantFoldString(prop.name.expression, constStrings);
+            if (folded && /^(shop|shopid|myshopifydomain)$/i.test(folded)) {
+              computedShopKey = true;
+            }
+          }
+        }
+      }
       if (
-        (/\bshop\s*:/.test(callText) || /\{\s*shop\s*[,}]/.test(callText)) &&
-        !/\btenant\s*:/.test(callText) &&
-        !/TenantAuthority|createTenantJobEnvelope|tenant-job-envelope/.test(
-          callText,
-        )
+        computedShopKey ||
+        ((/\bshop\s*:/.test(callText) || /\{\s*shop\s*[,}]/.test(callText)) &&
+          !/\btenant\s*:/.test(callText) &&
+          !/TenantAuthority|createTenantJobEnvelope|tenant-job-envelope/.test(
+            callText,
+          ))
       ) {
         const line =
           source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
@@ -678,6 +1023,40 @@ function collectFindings(
           conversionStatus: "violation",
           testEvidence: "tenant:access:audit raw-shop-queue fixture",
           kind: "raw_shop_queue_payload",
+        });
+      }
+    }
+
+    // Producer accepting TenantJobEnvelopeV1 as an arbitrary envelope input
+    if (
+      (rel.endsWith("queue.server.ts") || exec === "job") &&
+      (ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node))
+    ) {
+      const params = node.parameters;
+      if (
+        params.some((p) => {
+          const t = p.type?.getText(source) ?? "";
+          return t.includes("TenantJobEnvelope");
+        })
+      ) {
+        const line =
+          source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+        const name =
+          ts.isFunctionDeclaration(node) && node.name
+            ? node.name.text
+            : "envelopeProducer";
+        findings.push({
+          file: rel,
+          line,
+          symbol: name,
+          executionCategory: exec,
+          modelsTouched: [],
+          oldAccessMethod: "producer accepts TenantJobEnvelopeV1",
+          newAccessMethod: "MUST accept branded TenantAuthority only",
+          authoritySource: "none",
+          conversionStatus: "violation",
+          testEvidence: "tenant:access:audit arbitrary-envelope fixture",
+          kind: "arbitrary_envelope_enqueue",
         });
       }
     }
@@ -708,6 +1087,33 @@ function collectFindings(
           kind: "arbitrary_envelope_enqueue",
         });
       }
+    }
+
+    // Direct Queue construction outside approved queue boundary
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "Queue" &&
+      isRuntimeSurface(exec) &&
+      !exception &&
+      !rel.endsWith("queue.server.ts") &&
+      !rel.includes("/jobs/queue")
+    ) {
+      const line =
+        source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
+      findings.push({
+        file: rel,
+        line,
+        symbol: "new Queue",
+        executionCategory: exec,
+        modelsTouched: [],
+        oldAccessMethod: "direct BullMQ Queue construction",
+        newAccessMethod: "MUST use approved queue boundary",
+        authoritySource: "none",
+        conversionStatus: "violation",
+        testEvidence: "tenant:access:audit queue-construction fixture",
+        kind: "arbitrary_envelope_enqueue",
+      });
     }
 
     ts.forEachChild(node, visit);

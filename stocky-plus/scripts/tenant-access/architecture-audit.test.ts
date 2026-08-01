@@ -2,6 +2,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  assertAllowlistPathsAreExact,
+  exceptionForPath,
+} from "./allowlist";
 import { scanRepository, type AccessFinding } from "./scan";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -174,25 +178,102 @@ describe("tenant access architecture audit", () => {
     ).toBe(true);
   });
 
-  it("fails when allowlist contains a directory-wide path", () => {
-    // Simulate by scanning a fixture tree and injecting a synthetic check
-    // against a directory path via scanRepository allowlist validation.
-    // The production allowlist asserts exact files at module load; this test
-    // verifies the scanner emits wildcard_allowlist when given such an entry
-    // through a dedicated probe file that re-exports a bad path marker.
-    const probe = path.join(TMP, "scripts/tenant-access/bad-allowlist-probe.ts");
-    fs.mkdirSync(path.dirname(probe), { recursive: true });
-    fs.writeFileSync(
-      probe,
-      `export const BAD = "scripts/tenant-backfill/";\n`,
+  it("fails on derived dynamic import path concatenation (F-PR2C-07 B-1)", () => {
+    const violations = scanFixture(
+      "derived-dynamic-import.ts.fixture",
+      "app/services/derived-dynamic.ts",
     );
-    // Direct unit assertion of the allowlist shape guard:
-    expect(() => {
-      const badPath = "scripts/tenant-backfill/";
-      if (badPath.endsWith("/")) {
-        throw new Error(`wildcard/directory allowlist forbidden: ${badPath}`);
-      }
-    }).toThrow(/wildcard|directory/);
+    expect(
+      violations.some(
+        (v) =>
+          v.kind === "db_server_dynamic_import" ||
+          v.kind === "merchant_delegate_call",
+      ),
+    ).toBe(true);
+  });
+
+  it("fails on computed join delegate access (F-PR2C-07 B-2)", () => {
+    const violations = scanFixture(
+      "computed-join-delegate.ts.fixture",
+      "app/services/computed-join.ts",
+    );
+    expect(
+      violations.some((v) => v.kind === "computed_delegate_access"),
+    ).toBe(true);
+  });
+
+  it("fails on destructured raw delegate (F-PR2C-07 B-3)", () => {
+    const violations = scanFixture(
+      "destructured-delegate.ts.fixture",
+      "app/services/destructured.ts",
+    );
+    expect(
+      violations.some(
+        (v) =>
+          v.kind === "computed_delegate_access" ||
+          v.kind === "merchant_delegate_call" ||
+          v.kind === "db_server_import",
+      ),
+    ).toBe(true);
+  });
+
+  it("fails on re-export alias of db.server (F-PR2C-07)", () => {
+    const violations = scanFixture(
+      "reexport-alias-db.ts.fixture",
+      "app/services/data-client.ts",
+    );
+    expect(violations.some((v) => v.kind === "db_server_reexport")).toBe(true);
+  });
+
+  it("fails on aliased issueTenantAuthority outside tenant (F-PR2C-07 B-6)", () => {
+    const violations = scanFixture(
+      "aliased-issue-authority.ts.fixture",
+      "app/services/mint-authority.ts",
+    );
+    expect(
+      violations.some((v) => v.kind === "issue_authority_outside_tenant"),
+    ).toBe(true);
+  });
+
+  it("fails when producer forwards TenantJobEnvelopeV1 (F-PR2C-07 B-5)", () => {
+    const violations = scanFixture(
+      "forwarding-envelope-producer.ts.fixture",
+      "app/jobs/queue.server.ts",
+    );
+    expect(
+      violations.some((v) => v.kind === "arbitrary_envelope_enqueue"),
+    ).toBe(true);
+  });
+
+  it("fails on computed shop key in queue payload (F-PR2C-07 B-9)", () => {
+    const violations = scanFixture(
+      "computed-shop-queue-key.ts.fixture",
+      "app/jobs/computed-shop-queue.ts",
+    );
+    expect(
+      violations.some(
+        (v) =>
+          v.kind === "raw_shop_queue_payload" ||
+          v.kind === "arbitrary_envelope_enqueue",
+      ),
+    ).toBe(true);
+  });
+
+  it("fails when allowlist contains a directory-wide path via real validator", () => {
+    expect(() =>
+      assertAllowlistPathsAreExact([
+        { id: "EX-BAD", path: "scripts/tenant-backfill/" },
+      ]),
+    ).toThrow(/wildcard|directory/);
+  });
+
+  it("exact allowlist matching does not inherit suffix paths (F-PR2C-11)", () => {
+    expect(exceptionForPath("other-workspace/app/db.server.ts")).toBeUndefined();
+    expect(exceptionForPath("nested-copy/app/db.server.ts")).toBeUndefined();
+    expect(
+      exceptionForPath("fixture-root/app/tenant/tenant-db.server.ts"),
+    ).toBeUndefined();
+    expect(exceptionForPath("app/db.server.ts")?.id).toBe("EX-RAW-001");
   });
 
   it("fails when generated inventory would be stale", async () => {

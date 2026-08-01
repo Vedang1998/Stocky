@@ -1,0 +1,8 @@
+import { Queue } from "bullmq";
+
+const queue = new Queue("sync");
+const key = "sh" + "op";
+
+export async function bad() {
+  await queue.add("sync", { [key]: "victim.myshopify.com", payload: {} });
+}
