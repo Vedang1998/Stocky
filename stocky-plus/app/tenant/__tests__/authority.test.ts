@@ -15,6 +15,14 @@ import {
   SHOP_B_DOMAIN,
 } from "./helpers";
 
+function adminAuth(shop: string) {
+  return async () =>
+    ({
+      admin: {} as never,
+      session: { shop } as never,
+    }) as never;
+}
+
 describe("tenant authority (PR 2)", () => {
   let prisma: PrismaClient;
   let shopAId: string;
@@ -45,14 +53,10 @@ describe("tenant authority (PR 2)", () => {
   });
 
   it("verified Shop A resolves to Shop A authority", async () => {
-    const ctx = await requireAdminTenant(
-      new Request("https://example.com/app"),
-      async () =>
-        ({
-          admin: {} as never,
-          session: { shop: SHOP_A_DOMAIN } as never,
-        }) as never,
-    );
+    const ctx = await requireAdminTenant({
+      request: new Request("https://example.com/app"),
+      authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+    });
     expect(ctx.tenant.shopId).toBe(shopAId);
     expect(ctx.tenant.myshopifyDomain).toBe(SHOP_A_DOMAIN);
     expect(ctx.tenant.source).toBe("verified_admin_request");
@@ -61,89 +65,73 @@ describe("tenant authority (PR 2)", () => {
 
   it("malformed authenticated domain fails closed", async () => {
     await expect(
-      requireAdminTenant(new Request("https://example.com/app"), async () => ({
-        admin: {} as never,
-        session: { shop: "https://evil.myshopify.com" } as never,
-      })),
+      requireAdminTenant({
+        request: new Request("https://example.com/app"),
+        authenticateAdmin: adminAuth("https://evil.myshopify.com"),
+      }),
     ).rejects.toBeInstanceOf(TenantAuthorityError);
   });
 
   it("authenticated domain with no canonical Shop fails closed", async () => {
     await expect(
-      requireAdminTenant(new Request("https://example.com/app"), async () => ({
-        admin: {} as never,
-        session: { shop: "missing-shop.myshopify.com" } as never,
-      })),
+      requireAdminTenant({
+        request: new Request("https://example.com/app"),
+        authenticateAdmin: adminAuth("missing-shop.myshopify.com"),
+      }),
     ).rejects.toMatchObject({ code: "canonical_shop_missing" });
   });
 
   it("denies client query shop=ShopB", async () => {
     await expect(
-      requireAdminTenant(
-        new Request(`https://example.com/app?shop=${SHOP_B_DOMAIN}`),
-        async () => ({
-          admin: {} as never,
-          session: { shop: SHOP_A_DOMAIN } as never,
-        }),
-      ),
+      requireAdminTenant({
+        request: new Request(`https://example.com/app?shop=${SHOP_B_DOMAIN}`),
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+      }),
     ).rejects.toMatchObject({ code: "client_shop_conflict" });
   });
 
   it("denies client header shop=ShopB", async () => {
     await expect(
-      requireAdminTenant(
-        new Request("https://example.com/app", {
+      requireAdminTenant({
+        request: new Request("https://example.com/app", {
           headers: { shop: SHOP_B_DOMAIN },
         }),
-        async () => ({
-          admin: {} as never,
-          session: { shop: SHOP_A_DOMAIN } as never,
-        }),
-      ),
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+      }),
     ).rejects.toMatchObject({ code: "client_shop_conflict" });
   });
 
   it("denies JSON shopId=ShopB", async () => {
     await expect(
-      requireAdminTenant(
-        new Request("https://example.com/app", {
+      requireAdminTenant({
+        request: new Request("https://example.com/app", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ shopId: shopBId }),
         }),
-        async () => ({
-          admin: {} as never,
-          session: { shop: SHOP_A_DOMAIN } as never,
-        }),
-      ),
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+      }),
     ).rejects.toMatchObject({ code: "client_shop_conflict" });
   });
 
   it("denies form shop=ShopB", async () => {
     await expect(
-      requireAdminTenant(
-        new Request("https://example.com/app", {
+      requireAdminTenant({
+        request: new Request("https://example.com/app", {
           method: "POST",
           headers: { "content-type": "application/x-www-form-urlencoded" },
           body: `shop=${encodeURIComponent(SHOP_B_DOMAIN)}`,
         }),
-        async () => ({
-          admin: {} as never,
-          session: { shop: SHOP_A_DOMAIN } as never,
-        }),
-      ),
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+      }),
     ).rejects.toMatchObject({ code: "client_shop_conflict" });
   });
 
   it("matching client domain does not establish authority by itself", async () => {
-    const ctx = await requireAdminTenant(
-      new Request(`https://example.com/app?shop=${SHOP_A_DOMAIN}`),
-      async () => ({
-        admin: {} as never,
-        session: { shop: SHOP_A_DOMAIN } as never,
-      }),
-    );
-    // Authority still comes from verified session resolution, not the query param.
+    const ctx = await requireAdminTenant({
+      request: new Request(`https://example.com/app?shop=${SHOP_A_DOMAIN}`),
+      authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+    });
     expect(ctx.tenant.shopId).toBe(shopAId);
     expect(isTenantAuthority({ shopId: shopAId } as never)).toBe(false);
   });
@@ -171,12 +159,13 @@ describe("tenant authority (PR 2)", () => {
     ).toBe(false);
   });
 
-  it("only issueTenantAuthority creates branded authority", () => {
+  it("issueTenantAuthority brands only via approved issuer", () => {
     const a = issueTenantAuthority({
       shopId: shopAId,
       myshopifyDomain: SHOP_A_DOMAIN,
       source: "verified_admin_request",
     });
     expect(isTenantAuthority(a)).toBe(true);
+    expect(isTenantAuthority({ ...a })).toBe(false);
   });
 });
