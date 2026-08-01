@@ -16,7 +16,7 @@
 | Reviewed head | `6f9ca22c069a46003b6944ff56c888ff91e95cdc` |
 | Preservation commit | `1db2ce51468172676af4ea3fd46ea177608f6a50` |
 | Correction commits | see git log after preservation |
-| Final exact head | `45d9d90c5329d61dc1bf8893f03dd059ed4edac4` |
+| Final exact head |  |
 | PR state | OPEN, draft, unmerged |
 
 ## Finding disposition
