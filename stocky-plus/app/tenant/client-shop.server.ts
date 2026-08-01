@@ -1,9 +1,22 @@
 /**
- * Detect client-supplied shop identifiers. They never establish authority.
- * A conflicting value is denied; a matching value is ignored for authority.
+ * Client shop-hint conflict detection (F-PR2C-08).
  *
- * C-06: bounded recursive inspection across query (incl. duplicates), headers,
- * JSON (nested/arrays), form/multipart, and route parameters.
+ * Direct inspection for query/headers/params/form field names.
+ * JSON/multipart bodies use byte + node/depth budgets sized for ordinary
+ * inventory payloads (bulk PO / stocktake / transfer lines), not a 200-node cliff.
+ *
+ * Limits (product rationale):
+ * - MAX_BODY_BYTES = 1_048_576 (1 MiB): aligned with typical Shopify app request
+ *   body ceilings for admin embedded POSTs; larger bodies fail closed.
+ * - MAX_NODES = 20_000: above a 5_000-line stocktake-style payload of small
+ *   objects (~3 scalars each) while still bounding pathological graphs.
+ * - MAX_DEPTH = 12: nested form/JSON shapes beyond ordinary business depth.
+ * - MAX_STRING_LENGTH = 512: shop-hint string bound (unchanged).
+ *
+ * A recognized shop-hint key with a nested object is walked for string leaves;
+ * it is not denied merely for nesting. Denial requires an observed conflicting
+ * string hint, malformed structure only when traversal limits are exceeded, or
+ * body-byte overflow.
  */
 
 import type { CanonicalShopIdentity } from "./bootstrap.server";
@@ -20,9 +33,17 @@ const SHOP_HINT_KEYS = new Set([
   "shop_domain",
 ]);
 
-const MAX_DEPTH = 6;
-const MAX_NODES = 200;
-const MAX_STRING_LENGTH = 512;
+/** Documented body-byte ceiling for hint inspection. */
+export const CLIENT_HINT_MAX_BODY_BYTES = 1_048_576;
+/** Documented node budget — above largest ordinary accepted payload. */
+export const CLIENT_HINT_MAX_NODES = 20_000;
+export const CLIENT_HINT_MAX_DEPTH = 12;
+export const CLIENT_HINT_MAX_STRING_LENGTH = 512;
+
+const MAX_DEPTH = CLIENT_HINT_MAX_DEPTH;
+const MAX_NODES = CLIENT_HINT_MAX_NODES;
+const MAX_STRING_LENGTH = CLIENT_HINT_MAX_STRING_LENGTH;
+const MAX_BODY_BYTES = CLIENT_HINT_MAX_BODY_BYTES;
 
 export type ClientShopHint = {
   key: string;
@@ -104,11 +125,10 @@ function walkJson(
             else walkJson(item, hints, depth + 1, state, source, key);
           }
         } else if (child != null && typeof child === "object") {
-          // Recognized shop-hint key with nested object — fail closed.
-          throw new TenantAuthorityError(
-            "client_shop_hint_limit",
-            `Recognized shop-hint key ${key} has a nested structure that exceeds safe inspection`,
-          );
+          // Walk nested object under a hint key for string leaves; do not deny
+          // ordinary business objects named "shop" unless a conflicting string
+          // is observed (or traversal limits are exceeded).
+          walkJson(child, hints, depth + 1, state, source, key);
         }
       } else {
         walkJson(child, hints, depth + 1, state, source, key);
@@ -158,11 +178,19 @@ export async function extractClientShopHints(
   const contentType = request.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     try {
-      const body = await request.clone().json();
+      const raw = await request.clone().text();
+      if (raw.length > MAX_BODY_BYTES) {
+        throw new TenantAuthorityError(
+          "client_shop_hint_limit",
+          "Client shop-hint inspection exceeded maximum body byte size",
+        );
+      }
+      if (raw.length === 0) return hints;
+      const body = JSON.parse(raw) as unknown;
       walkJson(body, hints, 0, { nodes: 0 }, "json");
     } catch (err) {
       if (err instanceof TenantAuthorityError) throw err;
-      // ignore unreadable body
+      // ignore unreadable / malformed JSON body
     }
   } else if (
     contentType.includes("application/x-www-form-urlencoded") ||
@@ -170,28 +198,29 @@ export async function extractClientShopHints(
   ) {
     try {
       const form = await request.clone().formData();
-      const asObject: Record<string, unknown> = {};
+      // Inspect field names and bracket-path segments directly — do not build
+      // a giant unrelated object graph for ordinary form payloads.
       for (const [key, value] of form.entries()) {
         if (typeof value !== "string") continue;
-        // Nested form-style keys: shop[id], nested[shop], etc.
+        if (key.length + value.length > MAX_BODY_BYTES) {
+          throw new TenantAuthorityError(
+            "client_shop_hint_limit",
+            "Client shop-hint inspection exceeded maximum body byte size",
+          );
+        }
+        if (isShopHintKey(key)) {
+          pushHint(hints, key, value, "form");
+          continue;
+        }
         if (key.includes("[") && key.endsWith("]")) {
           const parts = key.replace(/\]/g, "").split("[");
-          let cursor: Record<string, unknown> = asObject;
-          for (let i = 0; i < parts.length - 1; i++) {
-            const part = parts[i]!;
-            if (!isPlainRecord(cursor[part])) cursor[part] = {};
-            cursor = cursor[part] as Record<string, unknown>;
+          for (const part of parts) {
+            if (isShopHintKey(part)) {
+              pushHint(hints, part, value, "form");
+            }
           }
-          cursor[parts[parts.length - 1]!] = value;
-        } else if (key in asObject) {
-          const existing = asObject[key];
-          if (Array.isArray(existing)) existing.push(value);
-          else asObject[key] = [existing, value];
-        } else {
-          asObject[key] = value;
         }
       }
-      walkJson(asObject, hints, 0, { nodes: 0 }, "form");
     } catch (err) {
       if (err instanceof TenantAuthorityError) throw err;
       // ignore unreadable body
@@ -199,10 +228,6 @@ export async function extractClientShopHints(
   }
 
   return hints;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function hintMatchesShop(
