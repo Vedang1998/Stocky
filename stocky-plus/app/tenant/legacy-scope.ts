@@ -160,14 +160,27 @@ export async function resolveDirectTenantScopeWhere(
   }
 
   // Trusted tenant-access module only — never exposed to callers.
+  //
+  // non-null shopId = tenant authorizes unless legacy shop looks like a
+  // different *.myshopify.com host (conflict fail-closed). Empty/malformed
+  // legacy with matching shopId remains visible (review matrix case 10).
+  // null shopId requires lower(btrim(shop)) = canonical domain.
   const rows = await (client as PrismaClient).$queryRaw<{ id: string }[]>`
     SELECT id FROM ${Prisma.raw(`"${table}"`)}
-    WHERE "shopId" = ${authority.shopId}
-       OR (
-         "shopId" IS NULL
-         AND "shop" IS NOT NULL
-         AND lower(btrim("shop")) = ${authority.myshopifyDomain}
-       )
+    WHERE (
+      "shopId" = ${authority.shopId}
+      AND NOT (
+        "shop" IS NOT NULL
+        AND btrim("shop") <> ''
+        AND lower(btrim("shop")) LIKE '%.myshopify.com'
+        AND lower(btrim("shop")) <> ${authority.myshopifyDomain}
+      )
+    )
+    OR (
+      "shopId" IS NULL
+      AND "shop" IS NOT NULL
+      AND lower(btrim("shop")) = ${authority.myshopifyDomain}
+    )
   `;
 
   if (rows.length === 0) {
