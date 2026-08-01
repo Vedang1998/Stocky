@@ -18,8 +18,9 @@
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028 — authorized for correction implementation, pending independent correction review)
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029 — pending second independent correction review)
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22c069a46003b6944ff56c888ff91e95cdc` (preserved verbatim)
+**Claude PR 2 correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06a8a399bbfb17687399c59582f1712f442` (report commit `b5fbd2bd346dee1730500be46d47c4fb164fd788`; preserved verbatim)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
@@ -37,7 +38,7 @@
 
 - Phase 1 itself is still **in progress**.
 - PR 1 is **ACCEPTED, SQUASH-MERGED, AND CLOSED**.
-- PR 2 (tenant-bound access conversion) is **IN PROGRESS** on `phase-1/tenant-access`.
+- PR 2 (tenant-bound access conversion) is **FOLLOW-UP CORRECTIONS IN PROGRESS** on `phase-1/tenant-access` (draft PR #13; unaccepted).
 - PR 3 (database-enforcement gate) has **not started**.
 - No later Phase 1 PR may begin early.
 

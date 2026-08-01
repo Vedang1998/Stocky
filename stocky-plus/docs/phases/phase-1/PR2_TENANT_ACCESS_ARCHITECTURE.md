@@ -126,7 +126,13 @@ Parent must prove same-tenant ownership; child `shopId` is either the current te
 
 ### Relations and nested writes
 
-`include` / `select` / `_count` are recursively scoped. Unknown merchant relation shapes fail closed. `connect` / `set` / `disconnect` / nested update/delete targets are resolved through tenant-scoped lookups before mutation. PR 3 RLS remains defense in depth — not a substitute for this application contract.
+`include` / `select` / `_count` are recursively scoped. Unknown merchant relation shapes fail closed.
+
+Every nested relation selector (`connect` / `set` / `disconnect` / nested `update` / `delete` / `connectOrCreate.where`, object and array forms) is validated through model-aware unique-selector metadata (`app/tenant/selectors.ts`), resolved with a tenant/lineage-scoped lookup, and rewritten to canonical `{ id }` (or explicit `create`) before Prisma mutation. Unsupported selector shapes fail closed. `connectOrCreate` performs an unscoped existence check after a tenant miss so a foreign global unique match cannot be connected. Nested `updateMany` / `deleteMany` array forms receive scalar tenant predicates (Prisma ScalarWhereInput cannot carry relation filters; the parent nested write already constrains the collection).
+
+Partial nested `select` injects minimum ownership proof fields internally and strips them before return. Single-row `update` uses real Prisma `update` (not `updateMany`) so nested writes and `include`/`select` projections are preserved, inside an internal serializable transaction when not already nested.
+
+PR 3 RLS / composite FKs remain defense in depth — not a substitute for this application contract.
 
 ## Job envelope transport integrity (PR 2) vs persistence (PR 4)
 

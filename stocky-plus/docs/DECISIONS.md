@@ -325,3 +325,14 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** No schema migration. No production backfill. No RLS/roles/non-null/composite FKs.
 7. **Risks:** R-064..R-067 track correction areas pending independent verification. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4.
 8. **Final:** **AUTHORIZED FOR PR 2 CORRECTION IMPLEMENTATION — PENDING INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**.
+
+## D-029 — Phase 1 PR 2 follow-up corrections required
+
+1. **Current:** Independent Claude Code correction review of first corrected head `e6a9a06a8a399bbfb17687399c59582f1712f442` issued verdict **`NOT READY — FURTHER CORRECTIONS REQUIRED`** with three P1, five P2, and three P3 findings (F-PR2C-01..11). Report preserved at `b5fbd2bd346dee1730500be46d47c4fb164fd788` (`PR2_TENANT_ACCESS_CORRECTION_REVIEW_REPORT.md`). F-PR2-03 remains closed. F-PR2-07..09 remain closed/documented.
+2. **Proposed:** Mandatory follow-up corrections on draft PR #13 / `phase-1/tenant-access` covering model-aware nested selectors, connectOrCreate global-match fail-closed, array nested mutations, normalization-aware legacy shop, partial-select proof fields, real single-row update, scanner provenance, large-payload hint limits, write atomicity, evidence correction, and exact allowlist matching. PR 2 remains unaccepted. PR #13 remains draft and unmerged. PR 3 remains not started.
+3. **Reason:** Demonstrated application-layer cross-tenant nested mutations and product regressions remain after the first correction wave.
+4. **Merchant impact:** Prevents cross-tenant re-parenting of supplier mappings / lead-time snapshots / transfer and stocktake lines; restores visibility of normalizable legacy shop rows; prevents denial of ordinary large PO/stocktake payloads.
+5. **Technical impact:** `selectors.ts` / `legacy-scope.ts` / TenantDb rewrite; scanner constant-folding; client-hint budget raise; CI focused suites; documentation D-029.
+6. **Migration:** No schema migration. No production backfill. No RLS/roles/non-null/composite FKs.
+7. **Risks:** R-064..R-067 and new follow-up risks remain `implemented — pending independent verification`. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4.
+8. **Final:** **AUTHORIZED FOR PR 2 FOLLOW-UP CORRECTION IMPLEMENTATION — PENDING SECOND INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. No deployment, production backfill, RLS, or inventory writes are authorized.
