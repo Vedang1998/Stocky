@@ -7,21 +7,15 @@ import { randomUUID } from "node:crypto";
 import {
   enumerateCanonicalShopsForScheduler,
 } from "./bootstrap.server";
-import {
-  createTenantJobEnvelope,
-  type TenantJobEnvelopeV1,
-} from "./job-envelope.server";
-import { issueTenantAuthority } from "./authority.server";
+import { issueTenantAuthority, type TenantAuthority } from "./authority.server";
 
 export type ScheduledShopJob = {
   shopId: string;
   myshopifyDomain: string;
-  envelope: TenantJobEnvelopeV1;
+  tenant: TenantAuthority;
 };
 
-export async function planPerShopSchedulerJobs(
-  source: string,
-): Promise<ScheduledShopJob[]> {
+export async function planPerShopSchedulerJobs(): Promise<ScheduledShopJob[]> {
   const shops = await enumerateCanonicalShopsForScheduler();
   const correlationRoot = randomUUID();
 
@@ -36,7 +30,7 @@ export async function planPerShopSchedulerJobs(
     return {
       shopId: shop.id,
       myshopifyDomain: shop.myshopifyDomain,
-      envelope: createTenantJobEnvelope(tenant, source),
+      tenant,
     };
   });
 }

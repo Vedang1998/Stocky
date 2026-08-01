@@ -6,7 +6,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { shopifySessionStorage } from "./tenant/bootstrap.server";
 import { runAfterAuthTenantBootstrap } from "./tenant/after-auth.server";
-import { enqueueCatalogSync } from "./jobs/queue.server";
+import { enqueueAfterAuthCatalogSync } from "./jobs/queue.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -22,9 +22,9 @@ const shopify = shopifyApp({
   },
   hooks: {
     afterAuth: async ({ session }) => {
-      const { envelope } = await runAfterAuthTenantBootstrap(session);
+      const { tenant } = await runAfterAuthTenantBootstrap(session);
       try {
-        await enqueueCatalogSync(envelope);
+        await enqueueAfterAuthCatalogSync(tenant);
       } catch (err) {
         // Redis may be down during first local boot — dashboard sync still works.
         console.warn("Catalog sync enqueue skipped:", err);

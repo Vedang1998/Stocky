@@ -269,16 +269,19 @@ async function resolveVariantFromInventoryItem(
 
 async function requireJobContext(
   rawTenant: unknown,
-  payloadShop?: string,
+  options?: { payloadShop?: string; expectedJobNameOrTopic?: string },
 ): Promise<TenantJobContext> {
   // Merchant access is forbidden until envelope validation succeeds.
-  return resolveTenantJobContext(rawTenant, { payloadShop });
+  return resolveTenantJobContext(rawTenant, options);
 }
 
 export async function processWebhookJob(job: Job<WebhookJobData>) {
   const { topic, payload, payloadShop, tenant: envelope } = job.data;
 
-  const { db } = await requireJobContext(envelope, payloadShop);
+  const { db } = await requireJobContext(envelope, {
+    payloadShop,
+    expectedJobNameOrTopic: topic,
+  });
 
   switch (topic) {
     case "orders/create":
@@ -301,16 +304,18 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
 export async function processCronJob(job: Job) {
   if (job.name === "abc-analysis") {
     // Control-plane tick: enumerate canonical Shops and enqueue per-shop jobs.
-    const planned = await planPerShopSchedulerJobs("weekly_abc_analysis");
+    const planned = await planPerShopSchedulerJobs();
     for (const item of planned) {
-      await enqueueAbcAnalysisForShop(item.envelope);
+      await enqueueAbcAnalysisForShop(item.tenant);
     }
     return;
   }
 
   if (job.name === "abc-analysis-shop") {
     const { tenant: envelope } = job.data as { tenant: unknown };
-    const { db } = await requireJobContext(envelope);
+    const { db } = await requireJobContext(envelope, {
+      expectedJobNameOrTopic: "abc-analysis-shop",
+    });
     await runAbcAnalysis(db, "REVENUE");
     await runAbcAnalysis(db, "VOLUME");
     return;
@@ -318,7 +323,9 @@ export async function processCronJob(job: Job) {
 
   if (job.name === "catalog-sync") {
     const { tenant: envelope } = job.data as { tenant: unknown };
-    const { db, tenant } = await requireJobContext(envelope);
+    const { db, tenant } = await requireJobContext(envelope, {
+      expectedJobNameOrTopic: "catalog-sync",
+    });
     const { admin } = await unauthenticated.admin(tenant.myshopifyDomain);
     const count = await startCatalogSync(db, admin);
     console.log(

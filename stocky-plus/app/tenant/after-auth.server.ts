@@ -9,14 +9,14 @@
  */
 
 import type { Session } from "@shopify/shopify-api";
+import type { TenantAuthority } from "./authority.server";
 import { resolveAuthorityAfterVerifiedAuth } from "./bootstrap.server";
-import { createTenantJobEnvelope } from "./job-envelope.server";
 import { createTenantDb } from "./tenant-db.server";
 
 export type AfterAuthResult = {
   shopId: string;
   myshopifyDomain: string;
-  envelope: ReturnType<typeof createTenantJobEnvelope>;
+  tenant: TenantAuthority;
 };
 
 export async function runAfterAuthTenantBootstrap(
@@ -36,17 +36,13 @@ export async function runAfterAuthTenantBootstrap(
       shop: tenant.myshopifyDomain,
       shopId: tenant.shopId,
     },
-    update: {
-      // Idempotent alignment of nullable ownership to the verified tenant.
-      shopId: tenant.shopId,
-    },
+    // C-01: do not silently repair nullable ownership on update.
+    update: {},
   });
-
-  const envelope = createTenantJobEnvelope(tenant, "after_auth_catalog_sync");
 
   return {
     shopId: shop.id,
     myshopifyDomain: shop.myshopifyDomain,
-    envelope,
+    tenant,
   };
 }

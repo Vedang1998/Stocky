@@ -1,10 +1,13 @@
 import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
 import type { TenantAuthority } from "../tenant/authority.server";
+import { isTenantAuthority } from "../tenant/authority.server";
 import {
   createTenantJobEnvelope,
   type TenantJobEnvelopeV1,
+  type TenantJobSource,
 } from "../tenant/job-envelope.server";
+import { TenantAuthorityError } from "../tenant/errors";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
@@ -39,6 +42,19 @@ export type AbcShopJobData = {
 let webhookQueue: Queue<WebhookJobData> | null = null;
 let cronQueue: Queue | null = null;
 
+function requireAuthority(
+  tenant: TenantAuthority,
+  label: string,
+): TenantAuthority {
+  if (!isTenantAuthority(tenant)) {
+    throw new TenantAuthorityError(
+      "enqueue_requires_authority",
+      `${label} accepts branded TenantAuthority only — pre-built envelopes are not accepted`,
+    );
+  }
+  return tenant;
+}
+
 export function getWebhookQueue(): Queue<WebhookJobData> {
   if (!webhookQueue) {
     webhookQueue = new Queue<WebhookJobData>(WEBHOOK_QUEUE, {
@@ -67,20 +83,23 @@ export function getCronQueue(): Queue {
   return cronQueue;
 }
 
+function webhookSource(topic: string): TenantJobSource {
+  const source = `webhook:${topic}`;
+  return source as TenantJobSource;
+}
+
 /** Enqueue and return immediately so the webhook route can 200 within 50ms. */
 export async function enqueueWebhook(
   data: {
     topic: string;
     payloadShop: string;
     payload: Record<string, unknown>;
-    tenant: TenantAuthority | TenantJobEnvelopeV1;
+    tenant: TenantAuthority;
   },
   webhookId?: string,
 ) {
-  const envelope =
-    "schemaVersion" in data.tenant
-      ? data.tenant
-      : createTenantJobEnvelope(data.tenant, `webhook:${data.topic}`);
+  const tenant = requireAuthority(data.tenant, "enqueueWebhook");
+  const envelope = createTenantJobEnvelope(tenant, webhookSource(data.topic));
 
   await getWebhookQueue().add(
     data.topic,
@@ -90,31 +109,31 @@ export async function enqueueWebhook(
       payload: data.payload,
       tenant: envelope,
     },
-    // Shopify retries webhooks; the webhookId jobId dedupes redeliveries.
     webhookId ? { jobId: webhookId } : undefined,
   );
 }
 
-export async function enqueueCatalogSync(
-  tenantOrEnvelope: TenantAuthority | TenantJobEnvelopeV1,
-) {
-  const envelope =
-    "schemaVersion" in tenantOrEnvelope
-      ? tenantOrEnvelope
-      : createTenantJobEnvelope(tenantOrEnvelope, "catalog_sync");
+export async function enqueueCatalogSync(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueCatalogSync");
+  const envelope = createTenantJobEnvelope(auth, "catalog_sync");
 
   await getCronQueue().add("catalog-sync", {
     tenant: envelope,
   } satisfies CatalogSyncJobData);
 }
 
-export async function enqueueAbcAnalysisForShop(
-  tenantOrEnvelope: TenantAuthority | TenantJobEnvelopeV1,
-) {
-  const envelope =
-    "schemaVersion" in tenantOrEnvelope
-      ? tenantOrEnvelope
-      : createTenantJobEnvelope(tenantOrEnvelope, "abc_analysis");
+/** Dedicated producer for afterAuth catalog sync (approved source). */
+export async function enqueueAfterAuthCatalogSync(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueAfterAuthCatalogSync");
+  const envelope = createTenantJobEnvelope(auth, "after_auth_catalog_sync");
+  await getCronQueue().add("catalog-sync", {
+    tenant: envelope,
+  } satisfies CatalogSyncJobData);
+}
+
+export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueAbcAnalysisForShop");
+  const envelope = createTenantJobEnvelope(auth, "abc_analysis");
 
   await getCronQueue().add("abc-analysis-shop", {
     tenant: envelope,
