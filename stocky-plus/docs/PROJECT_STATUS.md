@@ -8,7 +8,7 @@
 **Phase 1 implementation authority:** EFFECTIVE
 **Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 IN IMPLEMENTATION/REVIEW; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/tenant-access`
-**Active implementation PR:** _(filled when draft PR opened)_
+**Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft)
 **PR #12:** CLOSED AND SQUASH-MERGED — Phase 1 PR 1 merge-closure status sync on main as `04289d61f605414597ac85f47830a3c9d2f9e33d`
 **PR #11:** CLOSED AND SQUASH-MERGED
 **Authorized PR #11 head:** `6e5b024254615f3259aeb8d8252305d86bd63777`

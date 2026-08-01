@@ -6,7 +6,7 @@
 **Phase 1 PR 1:** ACCEPTED, SQUASH-MERGED, AND CLOSED
 **Phase 1 PR 2:** IN PROGRESS
 **Active implementation branch:** `phase-1/tenant-access`
-**Active implementation PR:** _(filled when draft PR opened)_
+**Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft)
 **PR #11:** CLOSED AND SQUASH-MERGED
 **Authorized PR #11 head:** `6e5b024254615f3259aeb8d8252305d86bd63777`
 **Capable-local review verdict:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`

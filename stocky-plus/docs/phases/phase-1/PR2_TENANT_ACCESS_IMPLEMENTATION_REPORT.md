@@ -22,6 +22,10 @@
 2. `219a5e3dda85cf781839f418d004f09a25573b50` — Share phase1-shop-domain-v1 via app/tenant/shop-domain
 3. `80e928b52102cde19f357822cd1b1dc0824d062b` — Add PR 2 tenant access evidence and tests
 4. `dd6ca397dd3b5c848fe3211a44595a93acdcd23d` — Record PR 2 implementation commit SHAs in evidence report
+5. `8a5a8e43e9e9ecba320572781d6139c065f39f37` — Fix PR 2 lint/typecheck and isolate tenant integration tests
+
+**Draft PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13)  
+**Exact head at PR open:** `8a5a8e43e9e9ecba320572781d6139c065f39f37`
 
 ## Architecture decisions
 
