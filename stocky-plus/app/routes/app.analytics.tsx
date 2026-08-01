@@ -15,7 +15,7 @@ import {
 } from "../services/forecasting.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request });
 
   const [deadStock, valuation, alerts] = await Promise.all([
     getDeadStock(db, 120),
@@ -33,7 +33,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request });
   const form = await request.formData();
   const intent = form.get("intent") as string;
 

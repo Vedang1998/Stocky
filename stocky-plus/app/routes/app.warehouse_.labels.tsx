@@ -10,7 +10,7 @@ import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
  * Connect using the same barcode values.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant(request);
+  const { tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const url = new URL(request.url);
   const itemsParam = url.searchParams.get("items") ?? "";

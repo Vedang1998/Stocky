@@ -44,14 +44,20 @@ export type AdminTenantContext = {
   db: TenantDb;
 };
 
+export type RequireAdminTenantInput = {
+  request: Request;
+  params?: Record<string, string | undefined>;
+  authenticateAdmin?: AuthenticateAdmin;
+};
+
 /**
- * @param request Incoming loader/action request
- * @param authenticateAdmin Injectable for tests; defaults to shopify.authenticate.admin
+ * Derive branded tenant authority from a verified admin request.
+ * Pass route `params` so conflicting shop identifiers in the path are denied.
  */
 export async function requireAdminTenant(
-  request: Request,
-  authenticateAdmin?: AuthenticateAdmin,
+  input: RequireAdminTenantInput,
 ): Promise<AdminTenantContext> {
+  const { request, params, authenticateAdmin } = input;
   const authenticate =
     authenticateAdmin ??
     (await import("../shopify.server")).authenticate.admin;
@@ -72,7 +78,7 @@ export async function requireAdminTenant(
     );
   }
 
-  await denyConflictingClientShop(request, shop);
+  await denyConflictingClientShop(request, shop, params);
 
   const tenant = issueTenantAuthority({
     shopId: shop.id,

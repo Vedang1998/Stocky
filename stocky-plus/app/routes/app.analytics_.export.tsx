@@ -17,7 +17,7 @@ function toCsv(headers: string[], rows: Array<Array<string | number>>): string {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request });
   const report = new URL(request.url).searchParams.get("report");
 
   if (report === "valuation") {

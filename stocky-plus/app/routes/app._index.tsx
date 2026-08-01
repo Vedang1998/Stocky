@@ -11,7 +11,7 @@ import { getLowStockAlerts } from "../services/forecasting.server";
 import { enqueueCatalogSync } from "../jobs/queue.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant(request);
+  const { tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
 
   const [settings, alerts, openPOs, supplierCount, cachedVariants] =
@@ -39,7 +39,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant(request);
+  const { tenant, db } = await requireAdminTenant({ request });
   const form = await request.formData();
   const intent = form.get("intent") as string;
 

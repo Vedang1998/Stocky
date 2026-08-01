@@ -38,7 +38,7 @@ const PLANS = [
 ];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, tenant, db } = await requireAdminTenant(request);
+  const { admin, tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
 
   // Refresh subscription status from Shopify on every visit (handles the
@@ -82,7 +82,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, redirect } = await requireAdminTenant(request);
+  const { admin, redirect } = await requireAdminTenant({ request });
   const form = await request.formData();
   const planName = form.get("plan") as string;
   const plan = PLANS.find((p) => p.name === planName);

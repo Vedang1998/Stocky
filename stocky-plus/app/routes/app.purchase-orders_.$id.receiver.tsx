@@ -8,7 +8,7 @@ import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
  * Shows retail prices but deliberately hides wholesale/unit costs.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request, params });
   const po = await db.purchaseOrder.findFirst({
     where: { id: params.id },
     include: { supplier: true, lineItems: true },

@@ -8,7 +8,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await authenticate.webhook(request);
 
   // Use verified `shop` from authenticate.webhook only
-  const { envelope } = await resolveWebhookTenant(
+  const { tenant } = await resolveWebhookTenant(
     shop,
     topic ?? "inventory_levels/update",
   );
@@ -17,7 +17,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       topic: "inventory_levels/update",
       payloadShop: shop,
       payload: payload as Record<string, unknown>,
-      tenant: envelope,
+      tenant,
     },
     webhookId,
   );

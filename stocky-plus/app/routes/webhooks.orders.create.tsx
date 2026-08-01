@@ -7,13 +7,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, payload, webhookId, topic } = await authenticate.webhook(request);
 
   // Use verified `shop` from authenticate.webhook only
-  const { envelope } = await resolveWebhookTenant(shop, topic ?? "orders/create");
+  const { tenant } = await resolveWebhookTenant(shop, topic ?? "orders/create");
   await enqueueWebhook(
     {
       topic: "orders/create",
       payloadShop: shop,
       payload: payload as Record<string, unknown>,
-      tenant: envelope,
+      tenant,
     },
     webhookId,
   );

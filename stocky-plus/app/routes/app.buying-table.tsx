@@ -35,7 +35,7 @@ interface BuyingRow {
 }
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, tenant, db } = await requireAdminTenant(request);
+  const { admin, tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const url = new URL(request.url);
   const supplierId = url.searchParams.get("supplierId") ?? "";
@@ -149,7 +149,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant(request);
+  const { tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;

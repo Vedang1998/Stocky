@@ -12,7 +12,7 @@ import { fetchLocations } from "../services/shopify-gql.server";
 import { adjustShopifyInventory } from "../services/shopify-sync.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant(request);
+  const { admin, db } = await requireAdminTenant({ request });
   const [stocktakes, locations, variants] = await Promise.all([
     db.stocktake.findMany({
       where: {},
@@ -31,7 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, tenant, db } = await requireAdminTenant(request);
+  const { admin, tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;

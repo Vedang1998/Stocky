@@ -9,7 +9,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request });
   const suppliers = await db.supplier.findMany({
     where: {},
     include: {
@@ -21,7 +21,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant(request);
+  const { tenant, db } = await requireAdminTenant({ request });
   const form = await request.formData();
   const intent = form.get("intent") as string;
 

@@ -12,7 +12,7 @@ import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { receivePartialPO, recordLeadTimeSnapshot } from "../services/landed-cost.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request });
 
   const openPOs = await db.purchaseOrder.findMany({
     where: { status: { in: ["ORDERED", "PARTIAL"] } },
@@ -31,7 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { db } = await requireAdminTenant(request);
+  const { db } = await requireAdminTenant({ request });
   const form = await request.formData();
   const intent = form.get("intent") as string;
 

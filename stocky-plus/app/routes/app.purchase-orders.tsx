@@ -18,7 +18,7 @@ import {
 } from "../services/landed-cost.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant(request);
+  const { admin, db } = await requireAdminTenant({ request });
   const [orders, suppliers, locations, variants] = await Promise.all([
     db.purchaseOrder.findMany({
       where: {},
@@ -41,7 +41,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant(request);
+  const { tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
