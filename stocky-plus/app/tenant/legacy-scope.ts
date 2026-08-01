@@ -19,12 +19,9 @@ import type { TenantAuthority } from "./authority.server";
 import { TenantAccessError } from "./errors";
 import {
   CHILD_MODEL_SET,
-  DIRECT_MERCHANT_MODELS,
   DIRECT_MODEL_SET,
-  MERCHANT_DELEGATE_NAMES,
   PARENT_OWNERSHIP_RULES,
   type DirectMerchantModel,
-  type MerchantOwnedModel,
 } from "./models";
 import { parentRelationFieldName } from "./relations";
 import { normalizeShopDomain } from "./shop-domain";
@@ -160,12 +157,21 @@ export async function resolveDirectTenantScopeWhere(
   }
 
   // Trusted tenant-access module only — never exposed to callers.
-  //
+  // Prefer lower(btrim) ID resolution when raw SQL is available. Fall back to
+  // sync Prisma predicates for mocked clients (unit tests) that lack $queryRaw;
+  // post-load rowOwnershipOk still applies normalizer conflict rules.
+  const raw = (client as PrismaClient).$queryRaw;
+  if (typeof raw !== "function") {
+    return directTenantScopeWhereSync(authority);
+  }
+
   // non-null shopId = tenant authorizes unless legacy shop looks like a
   // different *.myshopify.com host (conflict fail-closed). Empty/malformed
   // legacy with matching shopId remains visible (review matrix case 10).
   // null shopId requires lower(btrim(shop)) = canonical domain.
-  const rows = await (client as PrismaClient).$queryRaw<{ id: string }[]>`
+  const rows = await raw.call(
+    client,
+    Prisma.sql`
     SELECT id FROM ${Prisma.raw(`"${table}"`)}
     WHERE (
       "shopId" = ${authority.shopId}
@@ -181,7 +187,8 @@ export async function resolveDirectTenantScopeWhere(
       AND "shop" IS NOT NULL
       AND lower(btrim("shop")) = ${authority.myshopifyDomain}
     )
-  `;
+  `,
+  ) as Array<{ id: string }>;
 
   if (rows.length === 0) {
     return { id: { in: [] as string[] } };

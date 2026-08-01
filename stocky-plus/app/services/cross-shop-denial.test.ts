@@ -90,6 +90,10 @@ const {
     $transaction: vi.fn(),
   };
 
+  prismaMock.$transaction.mockImplementation(async (fn: (tx: typeof prismaMock) => unknown) =>
+    fn(prismaMock),
+  );
+
   return {
     prismaMock,
     authenticateAdmin: vi.fn(),
@@ -205,8 +209,18 @@ function directScoped(where: Record<string, unknown>) {
       where,
       {
         OR: [
-          { AND: [{ shopId: SHOP_B_ID }, { shop: SHOP_B }] },
-          { AND: [{ shopId: null }, { shop: SHOP_B }] },
+          { shopId: SHOP_B_ID },
+          {
+            AND: [
+              { shopId: null },
+              {
+                shop: {
+                  equals: SHOP_B,
+                  mode: "insensitive",
+                },
+              },
+            ],
+          },
         ],
       },
     ],
@@ -230,8 +244,18 @@ function childScoped(
           {
             [parentRelation]: {
               OR: [
-                { AND: [{ shopId: SHOP_B_ID }, { shop: SHOP_B }] },
-                { AND: [{ shopId: null }, { shop: SHOP_B }] },
+                { shopId: SHOP_B_ID },
+                {
+                  AND: [
+                    { shopId: null },
+                    {
+                      shop: {
+                        equals: SHOP_B,
+                        mode: "insensitive",
+                      },
+                    },
+                  ],
+                },
               ],
             },
           },
