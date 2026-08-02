@@ -120,10 +120,10 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
     });
     expect(found?.id).toBe(owned.id);
 
-    // Foreign-only variant id is tenant-scoped not-found (shop is coerced to
-    // the authenticated domain; no Shop B row is ever returned).
-    expect(
-      await dbA().shopifyVariantCache.findUnique({
+    // Foreign shop in a unique selector is rejected (F-PR2R3-02) — never
+    // coerced onto the authenticated tenant.
+    await expect(
+      dbA().shopifyVariantCache.findUnique({
         where: {
           shop_shopifyVariantId: {
             shop: SHOP_B_DOMAIN,
@@ -131,7 +131,7 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
           },
         },
       }),
-    ).toBeNull();
+    ).rejects.toMatchObject({ code: "foreign_selector_tenant" });
 
     const updated = await dbA().shopifyVariantCache.update({
       where: {

@@ -17,6 +17,7 @@ import {
   tenantScopeWhere,
   type TenantScopeMemo,
 } from "./legacy-scope";
+import { normalizeShopDomain } from "./shop-domain";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
@@ -324,9 +325,99 @@ export function flattenUniqueSelectorPredicate(
 }
 
 /**
+ * Inspect every tenant-bearing field in a unique selector before flatten,
+ * coerce, or scoped lookup (F-PR2R3-02).
+ *
+ * - shopId equal to authenticated shopId → acceptable
+ * - shopId different non-empty → foreign_selector_tenant
+ * - shopId malformed/empty → unsupported_relation_selector
+ * - shop normalizing to authenticated domain → acceptable
+ * - shop normalizing to another domain → foreign_selector_tenant
+ * - shop malformed → unsupported_relation_selector
+ *
+ * Never overwrite a supplied foreign tenant value with current authority.
+ */
+export function assertSelectorTenantIntent(
+  targetModel: MerchantOwnedModel,
+  selector: unknown,
+  authority: TenantAuthority,
+): void {
+  // Validate shape first (throws unsupported_relation_selector on malformed).
+  const predicate = flattenUniqueSelectorPredicate(targetModel, selector);
+
+  if ("shopId" in predicate) {
+    const value = predicate.shopId;
+    if (value == null || value === "") {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Selector for ${targetModel} has invalid shopId`,
+      );
+    }
+    if (typeof value !== "string") {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Selector for ${targetModel} has invalid shopId`,
+      );
+    }
+    if (value !== authority.shopId) {
+      throw new TenantAccessError(
+        "foreign_selector_tenant",
+        `Selector for ${targetModel} references a foreign shopId`,
+      );
+    }
+  }
+
+  if ("shop" in predicate) {
+    const value = predicate.shop;
+    if (value == null || value === "") {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Selector for ${targetModel} has invalid shop`,
+      );
+    }
+    if (typeof value !== "string") {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Selector for ${targetModel} has invalid shop`,
+      );
+    }
+    const normalized = normalizeShopDomain(value);
+    if (!normalized.ok) {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Selector for ${targetModel} has malformed shop domain`,
+      );
+    }
+    if (normalized.normalized !== authority.myshopifyDomain) {
+      throw new TenantAccessError(
+        "foreign_selector_tenant",
+        `Selector for ${targetModel} references a foreign shop domain`,
+      );
+    }
+  }
+}
+
+/**
+ * After tenant-intent validation, rewrite own-domain shop variants to the
+ * canonical authenticated domain for Prisma equality matching.
+ */
+export function canonicalizeOwnShopInPredicate(
+  predicate: Record<string, unknown>,
+  authority: TenantAuthority,
+): Record<string, unknown> {
+  if ("shop" in predicate && typeof predicate.shop === "string") {
+    return { ...predicate, shop: authority.myshopifyDomain };
+  }
+  return predicate;
+}
+
+/**
  * Resolve a unique selector to at most one owned row id under tenant scope.
  * Returns null for foreign/missing (caller maps to not_found / foreign).
  * Never passes compound WhereUniqueInput wrapper keys into findFirst.
+ *
+ * Tenant-bearing components are validated before any legacy-evidence
+ * collection or selector rewriting (F-PR2R3-01 / F-PR2R3-02).
  */
 export async function resolveOwnedUniqueRow(args: {
   client: PrismaLike;
@@ -344,15 +435,30 @@ export async function resolveOwnedUniqueRow(args: {
     );
   }
 
+  // Reject foreign tenant-bearing selectors before legacy evidence collection.
+  assertSelectorTenantIntent(targetModel, selector, authority);
+
   let predicate = flattenUniqueSelectorPredicate(targetModel, selector);
-  // Coerce legacy shop equality in selectors to the authenticated domain so
-  // case/whitespace caller variants still resolve owned rows (tenant scope
-  // separately authorizes null-owned rows via distinct raw representations).
-  if ("shop" in predicate && typeof predicate.shop === "string") {
-    predicate = { ...predicate, shop: authority.myshopifyDomain };
-  }
-  const scope = await tenantScopeWhere(client, targetModel, authority, memo);
+  // Only own-domain case/whitespace variants remain; canonicalize for equality.
+  predicate = canonicalizeOwnShopInPredicate(predicate, authority);
+
+  // Canonical ID-only selectors can resolve against non-null shopId ownership
+  // without collecting null-ownership legacy forms first (F-PR2R3-01).
   const delegate = getDelegate(client, targetModel);
+  const keys = Object.keys(predicate);
+  if (keys.length === 1 && keys[0] === "id" && typeof predicate.id === "string") {
+    const canonical = (await delegate.findMany({
+      where: { id: predicate.id, shopId: authority.shopId },
+      select: { id: true },
+      take: 1,
+    })) as Array<{ id: string }>;
+    if (canonical.length === 1) {
+      return { id: canonical[0]!.id };
+    }
+    // Fall through to full scope (null-owned compatibility) when no canonical hit.
+  }
+
+  const scope = await tenantScopeWhere(client, targetModel, authority, memo);
 
   const found = (await delegate.findMany({
     where: { AND: [predicate, scope] },

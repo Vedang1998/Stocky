@@ -189,7 +189,7 @@ describe("tenant normalization consistency tests (F-PR2R2-05 / D-030)", () => {
     }
   });
 
-  it("top-level findMany/findUnique/count/updateMany/deleteMany agree with ownership", async () => {
+  it("top-level findMany/findUnique/count agree with ownership (read family)", async () => {
     const seeded: Array<Shape & { id: string }> = [];
     for (const shape of shapes()) {
       const row = await prisma.supplier.create({

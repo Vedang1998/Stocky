@@ -8,11 +8,11 @@
  *   non-null shopId equal to another tenant → denied
  *   null shopId → normalized legacy shop must equal current domain
  *
- * Scalable tenant scope (F-PR2R2-02):
+ * Scalable tenant scope (F-PR2R2-02 / F-PR2R3-01):
  *   Never materialize owned row IDs into `{ id: { in: [...] } }`.
  *   Canonical branch: `{ shopId: authority.shopId }`
  *   Null compatibility: distinct raw legacy `shop` strings that normalize
- *   to the authenticated domain via lower(btrim(shop)) equivalence.
+ *   to the authenticated domain, bounded by phase1-legacy-evidence-v1.
  */
 
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -25,7 +25,10 @@ import {
   type DirectMerchantModel,
 } from "./models";
 import { parentRelationFieldName } from "./relations";
-import { normalizeShopDomain } from "./shop-domain";
+import {
+  normalizeShopDomain,
+  shopDomainTrimCharacters,
+} from "./shop-domain";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
@@ -44,6 +47,36 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   BomComponent: "BomComponent",
   LowStockAlert: "LowStockAlert",
 };
+
+/**
+ * Versioned bound on distinct null-ownership legacy representations
+ * (F-PR2R3-01). Far below PostgreSQL’s ~32,765 bind-parameter ceiling.
+ */
+export const LEGACY_EVIDENCE_VERSION = "phase1-legacy-evidence-v1" as const;
+
+/** Default distinct-form limit per model × tenant. */
+export const DEFAULT_MAX_DISTINCT_LEGACY_SHOP_FORMS = 1024;
+
+/**
+ * Absolute ceiling that configuration may never exceed. Remains far below
+ * PostgreSQL’s parameter limit so overflow is always an application signal.
+ */
+export const ABSOLUTE_MAX_DISTINCT_LEGACY_SHOP_FORMS = 4096;
+
+function resolveLegacyEvidenceLimit(): number {
+  const raw = process.env.TENANT_MAX_DISTINCT_LEGACY_SHOP_FORMS;
+  if (raw == null || raw === "") {
+    return DEFAULT_MAX_DISTINCT_LEGACY_SHOP_FORMS;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return DEFAULT_MAX_DISTINCT_LEGACY_SHOP_FORMS;
+  }
+  return Math.min(parsed, ABSOLUTE_MAX_DISTINCT_LEGACY_SHOP_FORMS);
+}
+
+export const MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT =
+  resolveLegacyEvidenceLimit();
 
 /** Per-operation memo for distinct raw legacy shop representations. */
 export type TenantScopeMemo = {
@@ -123,7 +156,7 @@ export function rowOwnershipOk(
 
 /**
  * Accepted normalization variants for regression tests and mocked-client
- * fallback — derived from phase1-shop-domain-v1 (trim + lowercase only).
+ * fallback — derived from phase1-shop-domain-v1 (ECMAScript trim + lowercase).
  */
 export function acceptedLegacyShopVariants(canonicalDomain: string): string[] {
   const upper = canonicalDomain.toUpperCase();
@@ -134,17 +167,40 @@ export function acceptedLegacyShopVariants(canonicalDomain: string): string[] {
     `${canonicalDomain} `,
     `  ${canonicalDomain}  `,
     ` ${upper} `,
+    `\t${canonicalDomain}`,
+    `${canonicalDomain}\n`,
+    `\r${canonicalDomain}\r`,
+    `\u00A0${canonicalDomain}`,
+    `\uFEFF${canonicalDomain}`,
   ];
 }
 
 /**
  * Build the direct-model Prisma where from distinct raw legacy representations.
  * Parameter count depends on distinct historical representations, not row count.
+ * Caller must ensure `matchingRawLegacyRepresentations.length` is within
+ * `MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT`.
  */
 export function buildDirectTenantScopeWhere(
   authority: TenantAuthority,
   matchingRawLegacyRepresentations: string[],
 ): Record<string, unknown> {
+  if (
+    matchingRawLegacyRepresentations.length >
+    MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT
+  ) {
+    throw new TenantAccessError(
+      "legacy_evidence_overflow",
+      safeLegacyOverflowMessage({
+        model: "(build)",
+        shopId: authority.shopId,
+        limit: MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT,
+        observedCount: matchingRawLegacyRepresentations.length,
+        correlationId: authority.correlationId,
+      }),
+    );
+  }
+
   const nullBranch: Record<string, unknown> = {
     AND: [
       { shopId: null },
@@ -163,11 +219,35 @@ export function buildDirectTenantScopeWhere(
   };
 }
 
+function safeLegacyOverflowMessage(args: {
+  model: string;
+  shopId: string;
+  limit: number;
+  observedCount: number;
+  correlationId?: string;
+}): string {
+  // Structured diagnostics only — never include raw legacy values.
+  return [
+    `legacy_evidence_overflow version=${LEGACY_EVIDENCE_VERSION}`,
+    `model=${args.model}`,
+    `shopId=${args.shopId}`,
+    `limit=${args.limit}`,
+    `observedCount=${args.observedCount}`,
+    `correlationId=${args.correlationId ?? "none"}`,
+  ].join(" ");
+}
+
 /**
  * Query distinct raw legacy shop strings for null-shopId rows that normalize
- * to the authenticated domain. SQL lower(btrim(shop)) is proven equivalent to
- * the null-branch of phase1-shop-domain-v1 for values that survive normalize
- * (trim + lowercase; URL/path/scheme forms never equal the domain after btrim).
+ * to the authenticated domain.
+ *
+ * SQL candidate discovery uses `lower(btrim(shop, <exact ECMAScript trim set>))`
+ * matching phase1-shop-domain-v1. SQL is never final authority — every raw
+ * value must still pass `normalizeShopDomain` before inclusion (F-PR2R3-03).
+ *
+ * Collection is hard-bounded by phase1-legacy-evidence-v1 (F-PR2R3-01).
+ * Overflow throws `legacy_evidence_overflow` without building an `in` list
+ * and without sending a near-limit query to PostgreSQL.
  */
 export async function resolveMatchingRawLegacyShops(
   client: PrismaLike,
@@ -189,12 +269,30 @@ export async function resolveMatchingRawLegacyShops(
       );
     }
 
+    const limit = MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT;
     const raw = (client as PrismaClient).$queryRaw;
     if (typeof raw !== "function") {
       // Mocked clients (unit tests): use accepted variants only.
-      return acceptedLegacyShopVariants(authority.myshopifyDomain);
+      const variants = acceptedLegacyShopVariants(authority.myshopifyDomain);
+      if (variants.length > limit) {
+        throw new TenantAccessError(
+          "legacy_evidence_overflow",
+          safeLegacyOverflowMessage({
+            model,
+            shopId: authority.shopId,
+            limit,
+            observedCount: variants.length,
+            correlationId: authority.correlationId,
+          }),
+        );
+      }
+      return variants;
     }
 
+    const trimChars = shopDomainTrimCharacters();
+    // Fetch at most limit+1 so we can detect overflow without materializing
+    // tens of thousands of bind parameters into a Prisma `in` list.
+    const fetchCap = limit + 1;
     const rows = (await raw.call(
       client,
       Prisma.sql`
@@ -202,11 +300,46 @@ export async function resolveMatchingRawLegacyShops(
         FROM ${Prisma.raw(`"${table}"`)}
         WHERE "shopId" IS NULL
           AND "shop" IS NOT NULL
-          AND lower(btrim("shop")) = ${authority.myshopifyDomain}
+          AND lower(btrim("shop", ${trimChars})) = ${authority.myshopifyDomain}
+        LIMIT ${fetchCap}
       `,
     )) as Array<{ shop: string }>;
 
-    return rows.map((r) => r.shop);
+    if (rows.length > limit) {
+      throw new TenantAccessError(
+        "legacy_evidence_overflow",
+        safeLegacyOverflowMessage({
+          model,
+          shopId: authority.shopId,
+          limit,
+          observedCount: rows.length,
+          correlationId: authority.correlationId,
+        }),
+      );
+    }
+
+    // Final authority: JavaScript normalizer (SQL is candidate discovery only).
+    const accepted: string[] = [];
+    for (const row of rows) {
+      if (legacyShopMatchesTenant(row.shop, authority)) {
+        accepted.push(row.shop);
+      }
+    }
+
+    if (accepted.length > limit) {
+      throw new TenantAccessError(
+        "legacy_evidence_overflow",
+        safeLegacyOverflowMessage({
+          model,
+          shopId: authority.shopId,
+          limit,
+          observedCount: accepted.length,
+          correlationId: authority.correlationId,
+        }),
+      );
+    }
+
+    return accepted;
   })();
 
   if (memo) memo.legacyRawByModel.set(cacheKey, promise);

@@ -4,6 +4,11 @@
  */
 export {
   SHOP_DOMAIN_NORMALIZATION_VERSION,
+  PHASE1_SHOP_DOMAIN_SPEC,
+  ECMA_SCRIPT_TRIM_CODE_POINTS,
+  shopDomainTrimCharacters,
   normalizeShopDomain,
+  SHOP_DOMAIN_NORMALIZATION_CORPUS,
   type ShopDomainNormalizationResult,
+  type ShopDomainCorpusEntry,
 } from "../tenant/shop-domain";

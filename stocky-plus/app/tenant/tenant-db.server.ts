@@ -41,6 +41,7 @@ import {
 } from "./relations";
 import {
   appendNestedOperation,
+  assertSelectorTenantIntent,
   flattenUniqueSelectorPredicate,
   globalUniqueSelectorExists,
   normalizeToArray,
@@ -48,6 +49,7 @@ import {
   resolveOwnedRelationSelectors,
   resolveOwnedUniqueRow,
 } from "./selectors";
+import { normalizeShopDomain } from "./shop-domain";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
@@ -270,11 +272,25 @@ function hasTenantBearingUnique(
   }
 
   if (DIRECT_MODEL_SET.has(model)) {
-    if (where.shop === authority.myshopifyDomain) return true;
+    if (typeof where.shop === "string") {
+      const normalized = normalizeShopDomain(where.shop);
+      if (
+        normalized.ok &&
+        normalized.normalized === authority.myshopifyDomain
+      ) {
+        return true;
+      }
+    }
 
     for (const value of Object.values(where)) {
-      if (isPlainObject(value) && value.shop === authority.myshopifyDomain) {
-        return true;
+      if (isPlainObject(value) && typeof value.shop === "string") {
+        const normalized = normalizeShopDomain(value.shop);
+        if (
+          normalized.ok &&
+          normalized.normalized === authority.myshopifyDomain
+        ) {
+          return true;
+        }
       }
     }
   }
@@ -1238,17 +1254,33 @@ async function assertLeadTimeSecondaryOwnership(
   }
 }
 
+/**
+ * After tenant-intent validation, rewrite own-domain shop variants in a
+ * WhereUniqueInput to the authenticated canonical domain for Prisma upsert.
+ * Foreign tenant values must already have been rejected (F-PR2R3-02).
+ */
 function coerceDirectShopInWhere(
   where: unknown,
   authority: TenantAuthority,
+  model: string,
 ): unknown {
   if (!isPlainObject(where)) return where;
+
+  // Validate before any rewrite — never coerce foreign shop/shopId.
+  if (MERCHANT_MODEL_SET.has(model)) {
+    assertSelectorTenantIntent(
+      model as MerchantOwnedModel,
+      where,
+      authority,
+    );
+  }
+
   const next: Record<string, unknown> = { ...where };
-  if ("shop" in next) {
+  if (typeof next.shop === "string") {
     next.shop = authority.myshopifyDomain;
   }
   for (const [key, value] of Object.entries(next)) {
-    if (isPlainObject(value) && "shop" in value) {
+    if (isPlainObject(value) && typeof value.shop === "string") {
       next[key] = { ...value, shop: authority.myshopifyDomain };
     }
   }
@@ -1460,6 +1492,15 @@ async function rewriteUpsert(
     const { client, authority } = txState;
     const where = args.where;
 
+    // Reject foreign tenant-bearing selectors before any create/update.
+    if (MERCHANT_MODEL_SET.has(model) && where != null) {
+      assertSelectorTenantIntent(
+        model as MerchantOwnedModel,
+        where,
+        authority,
+      );
+    }
+
     if (!hasTenantBearingUnique(model, where, authority)) {
       throw new TenantAccessError(
         "unsafe_upsert",
@@ -1468,7 +1509,7 @@ async function rewriteUpsert(
     }
 
     // Upsert WhereUniqueInput is passed to Prisma as-is (compound wrappers OK).
-    const coercedWhere = coerceDirectShopInWhere(where, authority);
+    const coercedWhere = coerceDirectShopInWhere(where, authority, model);
 
     let create = injectOwnership(
       model,

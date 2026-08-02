@@ -150,8 +150,23 @@ jobs:
       - name: Tenant array nested-mutation tests
         run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts
 
-      - name: Tenant legacy normalization compatibility tests
-        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization.test.ts app/tenant/__tests__/normalization-consistency.test.ts
+      - name: Tenant legacy normalization read consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/normalization-consistency.test.ts app/tenant/__tests__/legacy-normalization.test.ts
+
+      - name: Tenant legacy SQL/JS normalization equivalence tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-equivalence.test.ts
+
+      - name: Tenant legacy bulk-mutation consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts
+
+      - name: Tenant legacy relation consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-relations.test.ts
+
+      - name: Tenant legacy-evidence overflow tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-evidence-overflow.test.ts
+
+      - name: Tenant-bearing unique-selector tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/tenant-bearing-unique-selectors.test.ts
 
       - name: Tenant partial-selection tests
         run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts
