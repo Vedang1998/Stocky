@@ -53,15 +53,35 @@ describe("tenant legacy-evidence overflow (F-PR2R3-01)", () => {
   async function seedDistinctLegacyForms(n: number) {
     await prisma.$executeRawUnsafe(`TRUNCATE "Supplier" CASCADE`);
     if (n === 0) return;
-    // Distinct leading-space counts — all normalize to SHOP_A_DOMAIN.
+    // Encode g as a fixed-length base-6 sequence over ASCII ECMAScript trim
+    // characters via chr() — PostgreSQL E'\v' is NOT vertical tab.
+    // 6^6 = 46656 ≥ 40_000 distinct short forms.
     await prisma.$executeRawUnsafe(
       `
-      INSERT INTO "Supplier" (id, shop, "shopId", name)
+      INSERT INTO "Supplier" (id, shop, "shopId", name, currency, "createdAt", "updatedAt")
       SELECT
         md5(random()::text || clock_timestamp()::text || g::text),
-        repeat(' ', g) || $1,
+        (
+          SELECT string_agg(ch, '' ORDER BY ord DESC)
+          FROM (
+            SELECT
+              pos AS ord,
+              (ARRAY[
+                chr(32),  -- space
+                chr(9),   -- tab
+                chr(10),  -- LF
+                chr(13),  -- CR
+                chr(11),  -- VT
+                chr(12)   -- FF
+              ])[1 + ((((g - 1) / power(6, pos)::int) % 6))::int] AS ch
+            FROM generate_series(0, 5) AS pos
+          ) s
+        ) || $1,
         NULL,
-        'legacy-' || g
+        'legacy-' || g,
+        'USD',
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
       FROM generate_series(1, $2) AS g
       `,
       SHOP_A_DOMAIN,
@@ -92,8 +112,10 @@ describe("tenant legacy-evidence overflow (F-PR2R3-01)", () => {
       const canonical = await seedCanonicalRow();
       const count = await dbA().supplier.count({});
       expect(count).toBe(n + 1);
-      const found = await dbA().supplier.findMany({ take: 5 });
-      expect(found.some((r: { id: string }) => r.id === canonical.id)).toBe(
+      const foundCanonical = await dbA().supplier.findMany({
+        where: { id: canonical.id },
+      });
+      expect(foundCanonical.some((r: { id: string }) => r.id === canonical.id)).toBe(
         true,
       );
       expect(await dbA().supplier.aggregate({ _count: { _all: true } })).toEqual(

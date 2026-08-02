@@ -184,6 +184,7 @@ describe("tenant-bearing unique selectors (F-PR2R3-02)", () => {
         shopId: shopBId,
         shopifyVariantId: "gid://only-b",
         sku: "B-ONLY",
+        title: "B-only",
       },
     });
     const before = await snapshotRow(prisma, "shopifyVariantCache", foreign.id);
@@ -212,6 +213,7 @@ describe("tenant-bearing unique selectors (F-PR2R3-02)", () => {
         shopId: shopAId,
         shopifyVariantId: "gid://norm",
         sku: "N",
+        title: "Norm",
       },
     });
 
