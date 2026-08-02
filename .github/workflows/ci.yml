@@ -165,6 +165,18 @@ jobs:
       - name: Tenant legacy-evidence overflow tests
         run: npm run test:tenant-access -- app/tenant/__tests__/legacy-evidence-overflow.test.ts
 
+      - name: Tenant legacy unique-selector resolution tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-unique-selector-resolution.test.ts
+
+      - name: Tenant legacy evidence configuration tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-evidence-config.test.ts
+
+      - name: Tenant legacy candidate-superset normalization tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts
+
+      - name: Tenant legacy overflow operation-matrix tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts
+
       - name: Tenant-bearing unique-selector tests
         run: npm run test:tenant-access -- app/tenant/__tests__/tenant-bearing-unique-selectors.test.ts
 
