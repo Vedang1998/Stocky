@@ -1,12 +1,12 @@
 # Project Status
 
 **Updated:** 2026-08-02
-**Current stage:** Phase 1 PR 2 FOURTH CORRECTION CYCLE IN PROGRESS
+**Current stage:** Phase 1 PR 2 FIFTH CORRECTION CYCLE IN PROGRESS
 **Current main SHA:** `04289d61f605414597ac85f47830a3c9d2f9e33d`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 THIRD CORRECTION WAVE INDEPENDENTLY REJECTED; FOURTH CORRECTION CYCLE IN PROGRESS; Phase 1 itself remains IN PROGRESS
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 FOURTH CORRECTION WAVE INDEPENDENTLY REJECTED; FIFTH CORRECTION CYCLE IN PROGRESS; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/tenant-access`
 **Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft, unmerged)
 **PR 2 original independently reviewed head:** `6f9ca22c069a46003b6944ff56c888ff91e95cdc`
@@ -16,15 +16,20 @@
 **PR 2 third-cycle reviewed handoff head:** `fec8500095197798be183d08b3dd004632adba80`
 **PR 2 third independent review report-only commit:** `000e53cdae6cd39b690fc8107d7d3f4f4791adf1`
 **PR 2 fourth-cycle runtime/test implementation head:** `21aba6660e71fa5af558d81499190ee8eb0e645e`
-**PR 2 fourth-cycle prior green evidence tip:** `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` (run `30762016174`, job `91534135863`, success)
-**PR 2 fourth-cycle final handoff tip:** `867460f84bdc76673d2c676e83124bce83183964` (run `30762359407`, job `91535068210`, success)
+**PR 2 fourth-cycle reviewed handoff head:** `93e8044aea3958e8efe36f774e7d99ae6a0dd687`
+**PR 2 fourth independent review report-only commit:** `6a73be7d23fd3bcbe19ebc30f65440e2c641093b`
+**PR 2 fourth-cycle intermediate green tip (not final handoff):** `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`, success)
+**PR 2 fifth-cycle runtime/test implementation head:** `5a69783c18208e89ee70623058966c5e5a0ec6b1`
+**PR 2 fifth-cycle final handoff tip:** *(pending exact-head CI after documentation pin)*
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` (preserved verbatim)
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06…` (report commit `b5fbd2b…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb…` (report commit `fed21a48…`; preserved verbatim) — P0:0 P1:3 P2:3 P3:4; no cross-tenant read/write reproduced
 **Claude PR 2 third correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `fec8500…` (report commit `000e53c…`; preserved verbatim) — P0:0 P1:0 P2:3 P3:4; no cross-tenant read/write reproduced
-**ChatGPT correction authorization:** D-028; follow-up D-029; third cycle D-030; fourth cycle **D-031**
+**Claude PR 2 fourth correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `93e8044…` (report commit `6a73be7…`; preserved verbatim) — P0:0 P1:1 P2:0 P3:4; no cross-tenant read/write reproduced
+**ChatGPT correction authorization:** D-028; follow-up D-029; third cycle D-030; fourth cycle D-031; fifth cycle **D-032 / D-033**
 **PR 2 third-cycle intermediate green documentation tip (not final reviewed head):** `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` (run `30736171401`, job `91465255400`, success)
 **PR 2 third-cycle reviewed handoff CI:** run `30736427413`, job `91465920750`, conclusion `success`, `head_sha` = `fec8500095197798be183d08b3dd004632adba80`
+**PR 2 fourth-cycle reviewed handoff CI:** run `30763065246`, job `91536946610`, conclusion `success`, `head_sha` = `93e8044aea3958e8efe36f774e7d99ae6a0dd687`
 **Third-cycle correction range commit count:** `fed21a48…`..`fec8500…` = **11** (prior prompt expected 12 was incorrect; merge base exact; no history rewrite)
 **PR #12:** CLOSED AND SQUASH-MERGED — Phase 1 PR 1 merge-closure status sync on main as `04289d61f605414597ac85f47830a3c9d2f9e33d`
 **PR #11:** CLOSED AND SQUASH-MERGED
@@ -38,7 +43,7 @@
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b` (preserved verbatim)
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim)
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim in `phases/phase-1/PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md`)
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030); `PR 2 fourth correction cycle required` (D-031 — pending fourth independent correction review)
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030); `PR 2 fourth correction cycle required` (D-031); `PR 2 fifth correction cycle required` (D-032 / D-033 — pending fifth independent correction review)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE (not resolved by PR 1 or PR 2 application scoping)
 **Q-011:** OPEN (enforcement not implemented)
@@ -46,16 +51,17 @@
 **R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
 **R-013 / R-062:** OPEN (dependency hardening)
 **R-072 / R-073 / R-074:** OPEN — fourth-cycle corrections implemented pending independent verification
+**R-075 / R-076 / R-077 / R-078:** OPEN — fifth-cycle corrections implemented pending independent verification
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 1:** MERGED AND CLOSED
-**PR 2:** FOURTH CORRECTION CYCLE IN PROGRESS on `phase-1/tenant-access` (unaccepted; draft PR #13)
+**PR 2:** FIFTH CORRECTION CYCLE IN PROGRESS on `phase-1/tenant-access` (unaccepted; draft PR #13)
 **PR 3:** NOT STARTED
 **Redis history disposition:** Accepted repository-history hygiene residual — synthetic `dump.rdb` blob `cae7715f893091a413923b54488f74c59a71e058` (843 bytes; introduced `45d9d90`, deleted `20659dd`) remains reachable; no credentials/PII/merchant data; no secret rotation or history rewrite required; `*.rdb` ignored going forward
 **No production deployment**
 **No production backfill**
 **No RLS activation**
-**Next action:** Return to ChatGPT for exact-head triage and the fourth independent PR 2 correction-review prompt.
+**Next action:** Return to ChatGPT for exact-head triage and the fifth independent PR 2 correction-review prompt.
 
 ## Current truth
 
@@ -64,9 +70,9 @@
 - Phase 1 itself remains IN PROGRESS.
 - PR [#12](https://github.com/Vedang1998/Stocky/pull/12) squash-merged the PR 1 merge-closure status sync; current main SHA is `04289d61f605414597ac85f47830a3c9d2f9e33d`.
 - PR [#11](https://github.com/Vedang1998/Stocky/pull/11) remains CLOSED AND SQUASH-MERGED (`44a24f3…`).
-- PR 2 heads `6f9ca22…`, `e6a9a06…`, `99d7a2bb…`, and `fec8500…` were independently rejected; fourth corrections proceed under D-031 on draft PR #13.
-- Closed security posture items from the third review must remain closed (no cross-tenant disclosure/mutation; signed envelopes; nested-selector denial; array isolation; serializable writes; scanner provenance; exact allowlist; write flags OFF).
-- F-PR2R3-01..07 are mandatory fourth-cycle items (implementation pending independent verification).
+- PR 2 heads `6f9ca22…`, `e6a9a06…`, `99d7a2bb…`, `fec8500…`, and `93e8044…` were independently rejected; fifth corrections proceed under D-032/D-033 on draft PR #13.
+- No cross-tenant read/write was reproduced at the fourth review; prior security regressions remain closed.
+- F-PR2R4-01..05 are mandatory fifth-cycle items (implementation pending independent verification).
 - D-030 ownership rule is unchanged: non-null canonical `shopId` is authoritative; legacy `shop` is fallback evidence only when `shopId` is null.
 - PR 3 has **not started**. No later Phase 1 PR may begin early.
 - No production deployment or production backfill.
@@ -78,12 +84,8 @@
 
 | Field | Value |
 |---|---|
-| PR | [#11](https://github.com/Vedang1998/Stocky/pull/11) |
-| State | CLOSED AND SQUASH-MERGED |
-| Merge method | SQUASH |
 | Authorized head | `6e5b024254615f3259aeb8d8252305d86bd63777` |
 | Squash merge SHA | `44a24f3387c1dae0351490367c06bef10f333425` |
 | Merge timestamp | `2026-07-31T22:19:49Z` |
-| Pre-merge exact-head CI | run `30643441951`, job `91198830409`, conclusion `success` |
-| Capable-local reviewed head | `28e77178602ca486e5138ca2f80e8947d8e113c0` |
-| Decision | D-026 |
+| Pre-merge CI | run `30643441951`, job `91198830409`, success |
+| Decision | D-025 / D-026 |

@@ -15,13 +15,16 @@
 | Fourth-cycle starting head | `000e53cdae6cd39b690fc8107d7d3f4f4791adf1` |
 | **Fourth-cycle runtime/test implementation head** | **`21aba6660e71fa5af558d81499190ee8eb0e645e`** |
 | Prior green evidence tip | `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` (run `30762016174`, job `91534135863`, success) |
-| **Fourth-cycle final handoff head** | **`ba5eee16f4121ffb128133102e55fbd35397665c`** |
+| Intermediate green documentation tip (not final fourth-cycle handoff) | `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`, success) |
+| **Fourth-cycle reviewed final handoff head** | **`93e8044aea3958e8efe36f774e7d99ae6a0dd687`** |
+| Exact-head CI on reviewed handoff | run `30763065246`, job `91536946610`, conclusion `success`, `head_sha` = `93e8044aea3958e8efe36f774e7d99ae6a0dd687` |
+| Fourth independent review report-only commit | `6a73be7d23fd3bcbe19ebc30f65440e2c641093b` |
 | PR state | OPEN, draft, unmerged |
-| Exact-head CI on final handoff | run `30762725271`, job `91536046005`, conclusion `success`, `head_sha` = `ba5eee16f4121ffb128133102e55fbd35397665c` |
+| Exact-head CI on intermediate tip `ba5eee1…` | run `30762725271`, job `91536046005`, conclusion `success` |
 | Exact-head CI on `867460f…` | run `30762359407`, job `91535068210`, conclusion `success` |
 | Exact-head CI on prior tip `bd2fc24…` | run `30762016174`, job `91534135863`, conclusion `success` |
 | Third-cycle correction range commit count | `fed21a48…`..`fec8500…` = **11** (prior prompt expected 12 was incorrect; merge base exact; no history rewrite) |
-| Intermediate green documentation tip (not final reviewed head) | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
+| Intermediate green documentation tip (third cycle; not final reviewed head) | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
 
 ## Independent review context
 
@@ -155,7 +158,7 @@ No focused step used a `-t` filter. Constrained-memory subject evidence step was
 
 Any subsequent documentation-only pin advances the tip; ChatGPT must triage the exact PR tip after confirming green CI on that tip. Runtime/test implementation head remains `21aba66…`.
 
-## Exact-head CI evidence (final handoff tip `ba5eee1…`)
+## Exact-head CI evidence (intermediate tip `ba5eee1…` — not final handoff)
 
 | Field | Value |
 |---|---|
@@ -167,4 +170,18 @@ Any subsequent documentation-only pin advances the tip; ChatGPT must triage the 
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30762725271 |
 
-Runtime/test implementation head remains `21aba66…`. This documentation pin advances the tip; exact-head CI for the new tip is required before ChatGPT triage if the tip moves again.
+`ba5eee1…` is an **intermediate green documentation tip only**. It is **not** the fourth-cycle final handoff head.
+
+## Exact-head CI evidence (reviewed fourth-cycle final handoff `93e8044…`)
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30763065246` |
+| Job ID | `91536946610` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `93e8044aea3958e8efe36f774e7d99ae6a0dd687` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30763065246 |
+
+Runtime/test implementation head remains `21aba66…`. Reviewed final handoff head is `93e8044…`. Fourth independent review report-only commit is `6a73be7…`.
