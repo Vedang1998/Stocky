@@ -256,7 +256,22 @@ export function parseOwnedRelationSelector(
   }
 
   if (match.kind === "scalar") {
-    if (value == null || (typeof value !== "string" && typeof value !== "number")) {
+    if (value == null) {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Scalar selector ${targetModel}.${key} has invalid value`,
+      );
+    }
+    // Primary keys and string unique fields must be strings — reject numbers
+    // that would otherwise surface as PrismaClientValidationError.
+    if (key === "id" || key.endsWith("Id") || key === "shop") {
+      if (typeof value !== "string") {
+        throw new TenantAccessError(
+          "unsupported_relation_selector",
+          `Scalar selector ${targetModel}.${key} has invalid value`,
+        );
+      }
+    } else if (typeof value !== "string" && typeof value !== "number") {
       // Dates for unique fields are objects — allow Date for date fields.
       if (!(value instanceof Date)) {
         throw new TenantAccessError(

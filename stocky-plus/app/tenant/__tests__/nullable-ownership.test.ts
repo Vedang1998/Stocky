@@ -83,7 +83,9 @@ describe("nullable ownership compatibility matrix (C-01)", () => {
     const { canonical } = await seedDirectCases();
     const db = dbA();
     const found = await db.supplier.findMany({});
+    // D-030: canonical shopId authorizes even when legacy shop conflicts.
     expect(found.map((s: { name: string }) => s.name).sort()).toEqual([
+      "canonical-conflict-legacy",
       "canonical-match",
       "null-shopId-match",
     ]);
@@ -146,18 +148,22 @@ describe("nullable ownership compatibility matrix (C-01)", () => {
     ).not.toBeNull();
   });
 
-  it("4 direct canonical shopId with conflicting legacy shop: denied", async () => {
+  it("4 direct canonical shopId with conflicting legacy shop: allowed (D-030)", async () => {
     const { conflict } = await seedDirectCases();
     const db = dbA();
+    // D-030: non-null shopId = tenant is authoritative; legacy shop is
+    // non-authoritative compatibility data and must not hide the row.
+    const row = await db.supplier.findFirst({ where: { id: conflict.id } });
+    expect(row?.name).toBe("canonical-conflict-legacy");
+    const updated = await db.supplier.update({
+      where: { id: conflict.id },
+      data: { name: "conflict-updated" },
+    });
+    expect(updated.name).toBe("conflict-updated");
+    // Do not silently repair legacy shop.
     expect(
-      await db.supplier.findFirst({ where: { id: conflict.id } }),
-    ).toBeNull();
-    await expect(
-      db.supplier.update({
-        where: { id: conflict.id },
-        data: { name: "nope" },
-      }),
-    ).rejects.toMatchObject({ code: "not_found" });
+      (await prisma.supplier.findUnique({ where: { id: conflict.id } }))?.shop,
+    ).toBe(SHOP_B_DOMAIN);
   });
 
   it("5 child canonical shopId same-tenant parent: allowed", async () => {

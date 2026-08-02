@@ -90,9 +90,14 @@ describe("tenant mixed relation ownership tests (F-PR2R2-03)", () => {
     for (const row of rows) {
       if (row.supplier) {
         expect(row.supplier.name).not.toBe("SECRET-UNPROVABLE");
-        expect(Object.keys(row.supplier)).not.toContain("shopId");
+      } else {
+        // Unprovable to-one is null — no foreign fields reach the caller.
+        expect(row.supplier).toBeNull();
       }
     }
+    expect(
+      JSON.stringify(rows).includes("SECRET-UNPROVABLE"),
+    ).toBe(false);
   });
 
   it("canonical shopId supplier with malformed/foreign legacy shop is returned (D-030)", async () => {

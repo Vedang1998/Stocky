@@ -95,6 +95,14 @@ const TEST_FILES = [
   "app/tenant/__tests__/client-hints.test.ts",
   "app/tenant/__tests__/large-payload-hints.test.ts",
   "app/tenant/__tests__/queue-redis.test.ts",
+  "app/tenant/__tests__/top-level-unique-selectors.test.ts",
+  "app/tenant/__tests__/tenant-scope-scale.test.ts",
+  "app/tenant/__tests__/mixed-relation-ownership.test.ts",
+  "app/tenant/__tests__/connect-or-create-merge.test.ts",
+  "app/tenant/__tests__/normalization-consistency.test.ts",
+  "app/tenant/__tests__/lead-time-partial-select.test.ts",
+  "app/tenant/__tests__/client-hint-byte-limits.test.ts",
+  "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {

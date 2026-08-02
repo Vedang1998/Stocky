@@ -202,7 +202,22 @@ function authAsShopB() {
   });
 }
 
-/** TenantDb merges caller where with direct-model nullable-compatible scope. */
+/** Accepted phase1-shop-domain-v1 variants used by mocked-client scope fallback. */
+function legacyShopIn(domain: string) {
+  const upper = domain.toUpperCase();
+  return {
+    in: [
+      domain,
+      upper,
+      ` ${domain}`,
+      `${domain} `,
+      `  ${domain}  `,
+      ` ${upper} `,
+    ],
+  };
+}
+
+/** TenantDb merges caller where with direct-model scalable D-030 scope. */
 function directScoped(where: Record<string, unknown>) {
   return {
     AND: [
@@ -213,12 +228,7 @@ function directScoped(where: Record<string, unknown>) {
           {
             AND: [
               { shopId: null },
-              {
-                shop: {
-                  equals: SHOP_B,
-                  mode: "insensitive",
-                },
-              },
+              { shop: legacyShopIn(SHOP_B) },
             ],
           },
         ],
@@ -248,12 +258,7 @@ function childScoped(
                 {
                   AND: [
                     { shopId: null },
-                    {
-                      shop: {
-                        equals: SHOP_B,
-                        mode: "insensitive",
-                      },
-                    },
+                    { shop: legacyShopIn(SHOP_B) },
                   ],
                 },
               ],

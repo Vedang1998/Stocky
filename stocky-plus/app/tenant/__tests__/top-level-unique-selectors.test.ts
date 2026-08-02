@@ -105,7 +105,7 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
       data: {
         shop: SHOP_B_DOMAIN,
         shopId: shopBId,
-        shopifyVariantId: SHARED_EXTERNAL_ID,
+        shopifyVariantId: "gid://shopify/ProductVariant/only-b",
         title: "B",
       },
     });
@@ -120,12 +120,14 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
     });
     expect(found?.id).toBe(owned.id);
 
+    // Foreign-only variant id is tenant-scoped not-found (shop is coerced to
+    // the authenticated domain; no Shop B row is ever returned).
     expect(
       await dbA().shopifyVariantCache.findUnique({
         where: {
           shop_shopifyVariantId: {
             shop: SHOP_B_DOMAIN,
-            shopifyVariantId: SHARED_EXTERNAL_ID,
+            shopifyVariantId: "gid://shopify/ProductVariant/only-b",
           },
         },
       }),
