@@ -23,6 +23,7 @@
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06a8a399bbfb17687399c59582f1712f442` (report commit `b5fbd2bd…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0` (report commit `fed21a48…`; preserved verbatim)
 **PR 2 third-cycle implementation head:** `d7058294af7eb3d8f287f48cd0657a74475892e7`
+**PR 2 third-cycle final handoff tip (green CI):** `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` (run `30736171401`, job `91465255400`)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF

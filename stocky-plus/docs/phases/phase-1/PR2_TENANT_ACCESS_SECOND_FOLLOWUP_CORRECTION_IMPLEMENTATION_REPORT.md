@@ -16,9 +16,10 @@
 | Second correction-review report | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | Starting head for this cycle | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | **Third-cycle implementation head** | **`d7058294af7eb3d8f287f48cd0657a74475892e7`** |
-| Final handoff head | `476fa8c652d28e8c6c50c0700805f0d511e7ba8c` (CI re-run required on this tip) |
+| Final handoff head (green tip) | **`bab5fe90cfd81a1f0351d9f6d6db709378b2b25e`** |
 | PR state | OPEN, draft, unmerged |
-| Exact-head CI (pre-handoff tip `c142e8fe…`) | run `30735830014`, job `91464351163`, conclusion `success`, `head_sha` = `c142e8fe215904007b1464ebd78bc8fd9097f126` |
+| Exact-head CI on handoff tip | run `30736171401`, job `91465255400`, conclusion `success`, `head_sha` = `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
+| Prior green tip | `c142e8fe215904007b1464ebd78bc8fd9097f126` (run `30735830014`, job `91464351163`) |
 
 ## Independent review context
 
@@ -82,18 +83,19 @@ Non-null `shopId` equal to the current tenant authorizes the row. Legacy `shop` 
 Return to ChatGPT for exact-head triage and the third independent PR 2 correction-review prompt.
 
 
-## Exact-head CI evidence
+## Exact-head CI evidence (final handoff tip)
 
 | Field | Value |
 |---|---|
 | Workflow | CI |
-| Run ID | `30735830014` |
-| Job ID | `91464351163` |
+| Run ID | `30736171401` |
+| Job ID | `91465255400` |
 | Job name | Lint, typecheck, test, build, Prisma, GraphQL |
-| `head_sha` | `c142e8fe215904007b1464ebd78bc8fd9097f126` |
+| `head_sha` | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
 | Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30736171401 |
 
-### Focused steps (tests actually executed)
+### Focused steps (tests actually executed on `bab5fe90…`)
 
 | Step | File | Tests |
 |---|---|---|
@@ -105,6 +107,9 @@ Return to ChatGPT for exact-head triage and the third independent PR 2 correctio
 | Tenant LeadTimeSnapshot projection tests | `lead-time-partial-select.test.ts` | 3 passed |
 | Tenant request-byte and shop-hint tests | `client-hint-byte-limits.test.ts` | 7 passed |
 | Tenant authority-issuer scanner tests | `authority-issuer-scanner.test.ts` | 7 passed |
+| Full Tenant access tests | `npm run test:tenant-access` | **198 passed** |
 
-No focused step used a `-t` filter that can match zero tests. Full `Tenant access tests` suite also passed on this head.
+No focused step used a `-t` filter that can match zero tests. Scale evidence at n=40000: `findManyMs≈6`, `countMs≈10`; no bind-parameter failure.
+
+**Note:** Any subsequent evidence-only documentation commit advances the PR tip. ChatGPT must triage the exact PR tip SHA after confirming green CI on that tip (recorded in the PR body). The runtime/test implementation head remains `d7058294…`.
 
