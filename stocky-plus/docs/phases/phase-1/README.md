@@ -2,9 +2,9 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 status:** IN PROGRESS (PR 1 closed; PR 2 third correction cycle in progress; later PRs remain)
+**Phase 1 status:** IN PROGRESS (PR 1 closed; PR 2 fourth correction cycle in progress; later PRs remain)
 **Phase 1 PR 1:** ACCEPTED, SQUASH-MERGED, AND CLOSED
-**Phase 1 PR 2:** THIRD CORRECTION CYCLE IN PROGRESS (unaccepted)
+**Phase 1 PR 2:** FOURTH CORRECTION CYCLE IN PROGRESS (unaccepted)
 **Active implementation branch:** `phase-1/tenant-access`
 **Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft)
 **PR #11:** CLOSED AND SQUASH-MERGED
@@ -18,12 +18,16 @@
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030 — pending third independent correction review)
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030); `PR 2 fourth correction cycle required` (D-031 — pending fourth independent correction review)
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22c069a46003b6944ff56c888ff91e95cdc` (preserved verbatim)
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06a8a399bbfb17687399c59582f1712f442` (report commit `b5fbd2bd…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0` (report commit `fed21a48…`; preserved verbatim)
-**PR 2 third-cycle implementation head:** `d7058294af7eb3d8f287f48cd0657a74475892e7`
-**PR 2 third-cycle final handoff tip (green CI):** `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` (run `30736171401`, job `91465255400`)
+**Claude PR 2 third correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `fec8500095197798be183d08b3dd004632adba80` (report commit `000e53c…`; preserved verbatim)
+**PR 2 third-cycle runtime/test implementation head:** `d7058294af7eb3d8f287f48cd0657a74475892e7`
+**PR 2 third-cycle reviewed handoff head:** `fec8500095197798be183d08b3dd004632adba80`
+**PR 2 third independent review report-only commit:** `000e53cdae6cd39b690fc8107d7d3f4f4791adf1`
+**PR 2 third-cycle intermediate green documentation tip (not final reviewed head):** `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` (run `30736171401`)
+**Third-cycle correction range commit count:** `fed21a48…`..`fec8500…` = **11** (not 12)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
