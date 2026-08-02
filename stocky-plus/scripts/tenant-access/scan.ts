@@ -293,9 +293,75 @@ function collectFindings(
 
   const valueImportFromDb = new Set<string>();
   const taintedRawClients = new Set<string>();
+  /** Local bindings that resolve to issueTenantAuthority (incl. aliases). */
   const authorityAliases = new Set<string>(["issueTenantAuthority"]);
+  /** Namespace imports from authority / tenant modules (import * as auth). */
+  const authorityNamespaces = new Set<string>();
   let hasValueDbImport = false;
   const constStrings = collectConstStringBindings(source);
+
+  function isAuthorityModuleSpecifier(spec: string): boolean {
+    return (
+      spec.includes("authority.server") ||
+      spec.endsWith("/tenant") ||
+      spec.endsWith("/tenant/index") ||
+      spec.includes("/tenant/authority")
+    );
+  }
+
+  function recordAuthorityIssuerFinding(symbol: string, line: number): void {
+    if (rel.startsWith("app/tenant/")) return;
+    findings.push({
+      file: rel,
+      line,
+      symbol,
+      executionCategory: exec,
+      modelsTouched: [],
+      oldAccessMethod: "authority issuance",
+      newAccessMethod: "forbidden outside app/tenant",
+      authoritySource: "none",
+      conversionStatus: "violation",
+      testEvidence: "tenant:access:audit authority-issuer fixture",
+      kind: "issue_authority_outside_tenant",
+    });
+  }
+
+  function expressionIsAuthorityIssuer(expr: ts.Expression): boolean {
+    if (ts.isIdentifier(expr) && authorityAliases.has(expr.text)) return true;
+    if (
+      ts.isPropertyAccessExpression(expr) &&
+      ts.isIdentifier(expr.expression) &&
+      authorityNamespaces.has(expr.expression.text) &&
+      (expr.name.text === "issueTenantAuthority" ||
+        authorityAliases.has(expr.name.text))
+    ) {
+      return true;
+    }
+    // Computed: auth["issueTenantAuthority"] or auth[key] where key folds.
+    if (
+      ts.isElementAccessExpression(expr) &&
+      ts.isIdentifier(expr.expression) &&
+      authorityNamespaces.has(expr.expression.text)
+    ) {
+      const folded = constantFoldString(expr.argumentExpression, constStrings);
+      if (
+        folded === "issueTenantAuthority" ||
+        (folded != null && authorityAliases.has(folded))
+      ) {
+        return true;
+      }
+      if (
+        ts.isStringLiteral(expr.argumentExpression) ||
+        ts.isNoSubstitutionTemplateLiteral(expr.argumentExpression)
+      ) {
+        const text = expr.argumentExpression.text;
+        if (text === "issueTenantAuthority" || authorityAliases.has(text)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
 
   const visit = (node: ts.Node) => {
     if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
@@ -366,9 +432,9 @@ function collectFindings(
         }
       }
 
-      // Aliased issueTenantAuthority imports
+      // Named / aliased issueTenantAuthority imports
       if (
-        (spec.includes("authority.server") || spec.includes("/tenant")) &&
+        isAuthorityModuleSpecifier(spec) &&
         node.importClause?.namedBindings &&
         ts.isNamedImports(node.importClause.namedBindings)
       ) {
@@ -380,13 +446,59 @@ function collectFindings(
         }
       }
 
+      // Namespace import: import * as authority from "./authority.server"
+      if (
+        isAuthorityModuleSpecifier(spec) &&
+        node.importClause?.namedBindings &&
+        ts.isNamespaceImport(node.importClause.namedBindings)
+      ) {
+        authorityNamespaces.add(node.importClause.namedBindings.name.text);
+      }
+
       if (spec === "@prisma/client" || spec.startsWith("@prisma/client/")) {
         // type-only OK; value PrismaClient construction checked separately
       }
     }
 
     // Assignment / destructuring provenance from tainted raw clients
+    // and authority-issuer aliases (F-PR2R2-09).
     if (ts.isVariableDeclaration(node)) {
+      // const mint = issueTenantAuthority
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        expressionIsAuthorityIssuer(node.initializer)
+      ) {
+        authorityAliases.add(node.name.text);
+      }
+      // const { issueTenantAuthority: mint } = authorityNamespace
+      if (
+        ts.isObjectBindingPattern(node.name) &&
+        node.initializer &&
+        ts.isIdentifier(node.initializer) &&
+        authorityNamespaces.has(node.initializer.text)
+      ) {
+        for (const el of node.name.elements) {
+          if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
+          const imported =
+            el.propertyName && ts.isIdentifier(el.propertyName)
+              ? el.propertyName.text
+              : el.name.text;
+          if (imported === "issueTenantAuthority") {
+            authorityAliases.add(el.name.text);
+          }
+        }
+      }
+      // Identity helper passthrough: const pass = (fn) => fn; const mint = pass(issueTenantAuthority)
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isCallExpression(node.initializer) &&
+        node.initializer.arguments.length === 1 &&
+        expressionIsAuthorityIssuer(node.initializer.arguments[0]!)
+      ) {
+        authorityAliases.add(node.name.text);
+      }
       if (
         ts.isIdentifier(node.name) &&
         node.initializer &&
@@ -798,28 +910,14 @@ function collectFindings(
       });
     }
 
-    // issueTenantAuthority (including aliases) called outside app/tenant
+    // issueTenantAuthority (including aliases / namespace / computed) outside app/tenant
     if (
       ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      authorityAliases.has(node.expression.text) &&
-      !rel.startsWith("app/tenant/")
+      expressionIsAuthorityIssuer(node.expression)
     ) {
       const line =
         source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
-      findings.push({
-        file: rel,
-        line,
-        symbol: node.expression.text,
-        executionCategory: exec,
-        modelsTouched: [],
-        oldAccessMethod: "authority issuance",
-        newAccessMethod: "forbidden outside app/tenant",
-        authoritySource: "none",
-        conversionStatus: "violation",
-        testEvidence: "tenant:access:audit",
-        kind: "issue_authority_outside_tenant",
-      });
+      recordAuthorityIssuerFinding(node.expression.getText(source), line);
     }
 
     // Dynamic import — constant-fold derived specifiers (F-PR2C-07)
@@ -1118,6 +1216,72 @@ function collectFindings(
 
     ts.forEachChild(node, visit);
   };
+
+  // Pre-pass: collect authority issuer aliases before emission so forward
+  // references within the same file are visible (intra-file only).
+  const collectAuthorityAliases = (node: ts.Node): void => {
+    if (ts.isImportDeclaration(node) && node.moduleSpecifier) {
+      const spec = (node.moduleSpecifier as ts.StringLiteral).text;
+      if (
+        isAuthorityModuleSpecifier(spec) &&
+        node.importClause?.namedBindings &&
+        ts.isNamedImports(node.importClause.namedBindings)
+      ) {
+        for (const el of node.importClause.namedBindings.elements) {
+          const imported = (el.propertyName ?? el.name).text;
+          if (imported === "issueTenantAuthority") {
+            authorityAliases.add(el.name.text);
+          }
+        }
+      }
+      if (
+        isAuthorityModuleSpecifier(spec) &&
+        node.importClause?.namedBindings &&
+        ts.isNamespaceImport(node.importClause.namedBindings)
+      ) {
+        authorityNamespaces.add(node.importClause.namedBindings.name.text);
+      }
+    }
+    if (ts.isVariableDeclaration(node)) {
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        expressionIsAuthorityIssuer(node.initializer)
+      ) {
+        authorityAliases.add(node.name.text);
+      }
+      if (
+        ts.isObjectBindingPattern(node.name) &&
+        node.initializer &&
+        ts.isIdentifier(node.initializer) &&
+        authorityNamespaces.has(node.initializer.text)
+      ) {
+        for (const el of node.name.elements) {
+          if (!ts.isBindingElement(el) || !ts.isIdentifier(el.name)) continue;
+          const imported =
+            el.propertyName && ts.isIdentifier(el.propertyName)
+              ? el.propertyName.text
+              : el.name.text;
+          if (imported === "issueTenantAuthority") {
+            authorityAliases.add(el.name.text);
+          }
+        }
+      }
+      if (
+        ts.isIdentifier(node.name) &&
+        node.initializer &&
+        ts.isCallExpression(node.initializer) &&
+        node.initializer.arguments.length === 1 &&
+        expressionIsAuthorityIssuer(node.initializer.arguments[0]!)
+      ) {
+        authorityAliases.add(node.name.text);
+      }
+    }
+    ts.forEachChild(node, collectAuthorityAliases);
+  };
+  // Run alias collection twice for short identity-helper chains.
+  collectAuthorityAliases(source);
+  collectAuthorityAliases(source);
 
   visit(source);
   return findings;
