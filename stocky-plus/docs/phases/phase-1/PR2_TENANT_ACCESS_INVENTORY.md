@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `1af8217403731a5c18f2eab7ab0ec640906df64f1ba87ad5327f61fcc78303ca`
-**Scanned files:** 147
-**Findings:** 931
-**Converted paths:** 373
-**Approved exception findings:** 558
+**Content digest:** `c12c0fc0df67a7ba3b20f067b70ee8aad8c15ea9a79111f3aa24de635911ba45`
+**Scanned files:** 151
+**Findings:** 1017
+**Converted paths:** 404
+**Approved exception findings:** 613
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,24 +21,24 @@ All 18 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 421 |
-| PurchaseOrder | 176 |
-| ShopifyVariantCache | 127 |
-| InventorySnapshot | 103 |
-| VariantAbcClass | 87 |
-| ForecastOverride | 88 |
-| SalesDailyAggregate | 93 |
-| ShopSettings | 94 |
-| TransferOrder | 97 |
-| Stocktake | 94 |
-| BomComponent | 88 |
-| LowStockAlert | 86 |
-| SupplierSkuMapping | 155 |
-| VolumePriceTier | 84 |
-| LeadTimeSnapshot | 106 |
-| POLineItem | 104 |
-| TransferLineItem | 90 |
-| StocktakeLineItem | 90 |
+| Supplier | 455 |
+| PurchaseOrder | 180 |
+| ShopifyVariantCache | 139 |
+| InventorySnapshot | 109 |
+| VariantAbcClass | 93 |
+| ForecastOverride | 94 |
+| SalesDailyAggregate | 99 |
+| ShopSettings | 124 |
+| TransferOrder | 100 |
+| Stocktake | 97 |
+| BomComponent | 94 |
+| LowStockAlert | 89 |
+| SupplierSkuMapping | 158 |
+| VolumePriceTier | 87 |
+| LeadTimeSnapshot | 109 |
+| POLineItem | 107 |
+| TransferLineItem | 93 |
+| StocktakeLineItem | 93 |
 
 ## Counts by execution category
 
@@ -50,7 +50,7 @@ All 18 approved merchant-owned models must appear below.
 | script | 45 |
 | service | 34 |
 | tenant_infra | 4 |
-| test | 750 |
+| test | 836 |
 | worker | 10 |
 
 ## Approved exceptions
@@ -137,7 +137,10 @@ All 18 approved merchant-owned models must appear below.
 | EX-TEST-025 | `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-026 | `app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-027 | `app/tenant/__tests__/legacy-normalization-relations.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
-| EX-TEST-028 | `scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-028 | `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-029 | `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-030 | `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-031 | `scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 
 ## Access path inventory
 
@@ -379,19 +382,26 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts` | 148 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts` | 158 / `prisma.purchaseOrder.findUnique` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-026 | migration_tests | approved exception | allowlist EX-TEST-026 | EX-TEST-026 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts` | 161 / `prisma.purchaseOrder.findUnique` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-026 | migration_tests | approved exception | allowlist EX-TEST-026 | EX-TEST-026 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 34 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 127 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 134 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 138 / `dbA().supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 142 / `dbA().supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 149 / `dbA().supplier.count` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 151 / `dbA().supplier.aggregate` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 154 / `dbA().supplier.groupBy` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 161 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 166 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 169 / `dbA().supplier.updateMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 174 / `dbA().supplier.deleteMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 178 / `prisma.supplier.count` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 46 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-029 | migration_tests | approved exception | allowlist EX-TEST-029 | EX-TEST-029 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 104 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-029 | migration_tests | approved exception | allowlist EX-TEST-029 | EX-TEST-029 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 149 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-029 | migration_tests | approved exception | allowlist EX-TEST-029 | EX-TEST-029 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 173 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-029 | migration_tests | approved exception | allowlist EX-TEST-029 | EX-TEST-029 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 191 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-029 | migration_tests | approved exception | allowlist EX-TEST-029 | EX-TEST-029 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 200 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-029 | migration_tests | approved exception | allowlist EX-TEST-029 | EX-TEST-029 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | 222 / `db.supplier.count` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 39 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 133 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 140 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 144 / `dbA().supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 148 / `dbA().supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 155 / `dbA().supplier.count` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 157 / `dbA().supplier.aggregate` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 160 / `dbA().supplier.groupBy` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 167 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 172 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 175 / `dbA().supplier.updateMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 180 / `dbA().supplier.deleteMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-normalization-equivalence.test.ts` | 184 / `prisma.supplier.count` | test | Supplier | direct prisma delegate | approved exception EX-TEST-025 | migration_tests | approved exception | allowlist EX-TEST-025 | EX-TEST-025 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/legacy-normalization-relations.test.ts` | 29 / `prisma.pOLineItem.deleteMany` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-027 | migration_tests | approved exception | allowlist EX-TEST-027 | EX-TEST-027 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/legacy-normalization-relations.test.ts` | 30 / `prisma.purchaseOrder.deleteMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-027 | migration_tests | approved exception | allowlist EX-TEST-027 | EX-TEST-027 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/legacy-normalization-relations.test.ts` | 31 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-027 | migration_tests | approved exception | allowlist EX-TEST-027 | EX-TEST-027 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -434,6 +444,85 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/legacy-normalization.test.ts` | 170 / `prisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-010 | migration_tests | approved exception | allowlist EX-TEST-010 | EX-TEST-010 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/legacy-normalization.test.ts` | 178 / `prisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-010 | migration_tests | approved exception | allowlist EX-TEST-010 | EX-TEST-010 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/legacy-normalization.test.ts` | 187 / `dbA().supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 50 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-030 | migration_tests | approved exception | tenant:access:audit | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 52 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-030 | migration_tests | approved exception | tenant:access:audit | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 87 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 94 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 101 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 112 / `db.supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 115 / `db.supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 118 / `db.supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 124 / `db.supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 130 / `db.supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 136 / `db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 139 / `db.supplier.count` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 143 / `db.supplier.aggregate` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 146 / `db.supplier.groupBy` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 149 / `db.supplier.updateMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 151 / `db.supplier.deleteMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 157 / `db.supplier.findUnique` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 161 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 166 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 172 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 179 / `dbA().supplier.delete` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 181 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 186 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-030 | migration_tests | approved exception | tenant:access:audit | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 188 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 195 / `prisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 205 / `dbA().supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | 215 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-030 | migration_tests | approved exception | allowlist EX-TEST-030 | EX-TEST-030 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 44 / `prisma.bomComponent.deleteMany` | test | BomComponent | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 45 / `prisma.forecastOverride.deleteMany` | test | ForecastOverride | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 46 / `prisma.variantAbcClass.deleteMany` | test | VariantAbcClass | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 47 / `prisma.salesDailyAggregate.deleteMany` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 48 / `prisma.inventorySnapshot.deleteMany` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 49 / `prisma.shopifyVariantCache.deleteMany` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 50 / `prisma.shopSettings.deleteMany` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 51 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 76 / `prisma.shopSettings.create` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 87 / `dbA().shopSettings.findUnique` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 93 / `dbA().shopSettings.update` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 100 / `prisma.shopSettings.count` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 101 / `dbA().shopSettings.upsert` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 112 / `prisma.shopSettings.count` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 114 / `dbA().shopSettings.delete` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 115 / `prisma.shopSettings.count` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 123 / `prisma.shopifyVariantCache.create` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 139 / `dbA().shopifyVariantCache.findUnique` | test | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 142 / `dbA().shopifyVariantCache.update` | test | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 149 / `prisma.shopifyVariantCache.count` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 150 / `dbA().shopifyVariantCache.upsert` | test | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 162 / `prisma.shopifyVariantCache.count` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 164 / `dbA().shopifyVariantCache.delete` | test | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 165 / `prisma.shopifyVariantCache.count` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 188 / `prisma.inventorySnapshot.create` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 216 / `prisma.inventorySnapshot.count` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 221 / `prisma.salesDailyAggregate.create` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 249 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 254 / `prisma.variantAbcClass.create` | test | VariantAbcClass | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 282 / `prisma.variantAbcClass.count` | test | VariantAbcClass | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 287 / `prisma.bomComponent.create` | test | BomComponent | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 312 / `prisma.bomComponent.count` | test | BomComponent | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 317 / `prisma.forecastOverride.create` | test | ForecastOverride | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 344 / `prisma.forecastOverride.count` | test | ForecastOverride | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 379 / `prisma.shopSettings.create` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 386 / `prisma.shopSettings.create` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 393 / `prisma.shopSettings.findMany` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 398 / `dbA().shopSettings.findUnique` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 402 / `dbA().shopSettings.update` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 409 / `dbA().shopSettings.delete` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 413 / `dbA().shopSettings.upsert` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 420 / `prisma.shopSettings.findMany` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 425 / `prisma.shopSettings.create` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 443 / `prisma.shopSettings.findMany` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 451 / `dbA().shopSettings.findUnique` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 462 / `dbA().shopSettings.upsert` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 472 / `prisma.shopSettings.count` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 474 / `dbA().shopSettings.upsert` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 485 / `prisma.shopSettings.count` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 489 / `prisma.shopSettings.create` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 493 / `dbA().shopSettings.findUnique` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | 495 / `prisma.shopSettings.count` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-028 | migration_tests | approved exception | allowlist EX-TEST-028 | EX-TEST-028 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/mixed-relation-ownership.test.ts` | 28 / `prisma.pOLineItem.deleteMany` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-018 | migration_tests | approved exception | allowlist EX-TEST-018 | EX-TEST-018 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/mixed-relation-ownership.test.ts` | 29 / `prisma.purchaseOrder.deleteMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-018 | migration_tests | approved exception | allowlist EX-TEST-018 | EX-TEST-018 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/mixed-relation-ownership.test.ts` | 30 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-018 | migration_tests | approved exception | allowlist EX-TEST-018 | EX-TEST-018 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -898,8 +987,8 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/after-auth.server.ts` | 33 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/bootstrap.server.ts` | 11 / `rawPrisma` | bootstrap | — | value import of app/db.server | approved exception EX-BOOT-001 | restricted_bootstrap | approved exception | allowlist EX-BOOT-001 | EX-BOOT-001 | Session + Shop bootstrap and session-storage adapter |
 | `app/tenant/tenant-db.server.ts` | 18 / `rawPrisma` | tenant_infra | — | value import of app/db.server | approved exception EX-TDB-001 | tenant_bound_access | approved exception | allowlist EX-TDB-001 | EX-TDB-001 | Tenant-bound DB contract wraps raw client; never returns it to callers |
-| `app/tenant/tenant-db.server.ts` | 1326 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/tenant/tenant-db.server.ts` | 1825 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/tenant-db.server.ts` | 1325 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/tenant-db.server.ts` | 1846 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `prisma/seed.ts` | 1 / `prisma` | script | — | value import of app/db.server | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 33 / `prisma.shopSettings.upsert` | script | ShopSettings | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 50 / `prisma.supplier.upsert` | script | Supplier | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
@@ -1079,8 +1168,8 @@ All 18 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 147,
-  "findings": 931,
+  "scannedFiles": 151,
+  "findings": 1017,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1133,7 +1222,10 @@ All 18 approved merchant-owned models must appear below.
     "EX-TEST-024",
     "EX-TEST-025",
     "EX-TEST-026",
-    "EX-TEST-027"
+    "EX-TEST-027",
+    "EX-TEST-028",
+    "EX-TEST-029",
+    "EX-TEST-030"
   ],
   "modelsCovered": [
     "BomComponent",
@@ -1155,6 +1247,6 @@ All 18 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "1af8217403731a5c18f2eab7ab0ec640906df64f1ba87ad5327f61fcc78303ca"
+  "contentDigest": "c12c0fc0df67a7ba3b20f067b70ee8aad8c15ea9a79111f3aa24de635911ba45"
 }
 ```

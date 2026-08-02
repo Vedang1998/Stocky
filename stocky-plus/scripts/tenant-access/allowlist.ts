@@ -107,6 +107,9 @@ const TEST_FILES = [
   "app/tenant/__tests__/legacy-normalization-equivalence.test.ts",
   "app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts",
   "app/tenant/__tests__/legacy-normalization-relations.test.ts",
+  "app/tenant/__tests__/legacy-unique-selector-resolution.test.ts",
+  "app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts",
+  "app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts",
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
 ] as const;
 
