@@ -16,10 +16,12 @@
 | Second correction-review report | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | Starting head for this cycle | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | **Third-cycle implementation head** | **`d7058294af7eb3d8f287f48cd0657a74475892e7`** |
-| Final handoff head (green tip) | **`bab5fe90cfd81a1f0351d9f6d6db709378b2b25e`** |
+| Third-cycle reviewed handoff head | **`fec8500095197798be183d08b3dd004632adba80`** |
+| Intermediate green documentation tip (not final reviewed head) | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
 | PR state | OPEN, draft, unmerged |
-| Exact-head CI on handoff tip | run `30736171401`, job `91465255400`, conclusion `success`, `head_sha` = `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
-| Prior green tip | `c142e8fe215904007b1464ebd78bc8fd9097f126` (run `30735830014`, job `91464351163`) |
+| Exact-head CI on reviewed handoff | run `30736427413`, job `91465920750`, conclusion `success`, `head_sha` = `fec8500095197798be183d08b3dd004632adba80` |
+| Prior intermediate green tip CI | `bab5fe90…` run `30736171401`, job `91465255400` |
+| Third-cycle correction range commit count | `fed21a48…`..`fec8500…` = **11** (prior expected 12 was incorrect; merge base exact; no history rewrite) |
 
 ## Independent review context
 
@@ -83,7 +85,7 @@ Non-null `shopId` equal to the current tenant authorizes the row. Legacy `shop` 
 Return to ChatGPT for exact-head triage and the third independent PR 2 correction-review prompt.
 
 
-## Exact-head CI evidence (final handoff tip)
+## Exact-head CI evidence (intermediate green documentation tip `bab5fe90…`)
 
 | Field | Value |
 |---|---|
@@ -94,6 +96,7 @@ Return to ChatGPT for exact-head triage and the third independent PR 2 correctio
 | `head_sha` | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30736171401 |
+| Note | Intermediate documentation tip only — **not** the third-cycle reviewed handoff. Reviewed handoff is `fec8500…` (run `30736427413`). |
 
 ### Focused steps (tests actually executed on `bab5fe90…`)
 
@@ -111,5 +114,5 @@ Return to ChatGPT for exact-head triage and the third independent PR 2 correctio
 
 No focused step used a `-t` filter that can match zero tests. Scale evidence at n=40000: `findManyMs≈6`, `countMs≈10`; no bind-parameter failure.
 
-**Note:** Any subsequent evidence-only documentation commit advances the PR tip. ChatGPT must triage the exact PR tip SHA after confirming green CI on that tip (recorded in the PR body). The runtime/test implementation head remains `d7058294…`.
+**Note:** The third-cycle reviewed handoff head is `fec8500095197798be183d08b3dd004632adba80`. The runtime/test implementation head remains `d7058294…`. Third-cycle correction range commit count is **11** (`fed21a48…`..`fec8500…`).
 
