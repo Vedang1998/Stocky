@@ -285,7 +285,7 @@ export default function PurchaseOrders() {
         orders.map((po: any) => (
           <s-section
             key={po.id}
-            heading={`${po.supplier.name} — ${po.poNumber ?? po.id.slice(-6).toUpperCase()}`}
+            heading={`${po.supplier?.name ?? "Unresolved supplier"} — ${po.poNumber ?? po.id.slice(-6).toUpperCase()}`}
           >
             <s-stack direction="block" gap="base">
               <s-stack direction="inline" gap="base">

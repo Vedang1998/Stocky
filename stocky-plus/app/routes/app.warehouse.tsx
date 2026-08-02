@@ -173,7 +173,8 @@ export default function Warehouse() {
           >
             {openPOs.map((po: any) => (
               <s-option key={po.id} value={po.id}>
-                {po.supplier.name} — {po.id.slice(-6).toUpperCase()} (
+                {po.supplier?.name ?? "Unresolved supplier"} —{" "}
+                {po.id.slice(-6).toUpperCase()} (
                 {po.status})
               </s-option>
             ))}

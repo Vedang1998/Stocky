@@ -191,7 +191,7 @@ export async function computeForecast(
     include: { supplier: true },
   });
   const leadTimeDays =
-    input.leadTimeDays ?? mapping?.supplier.leadTimeDays ?? 7;
+    input.leadTimeDays ?? mapping?.supplier?.leadTimeDays ?? 7;
 
   const reorderPoint = calculateReorderPoint(
     dailySalesVelocity,

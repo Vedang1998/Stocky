@@ -61,7 +61,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       h(
         Text,
         { style: styles.meta },
-        `Supplier: ${po.supplier.name}    Ordered: ${po.orderedAt ? new Date(po.orderedAt).toLocaleDateString() : "—"}    Status: ${po.status}`,
+        `Supplier: ${po.supplier?.name ?? "Unresolved supplier"}    Ordered: ${po.orderedAt ? new Date(po.orderedAt).toLocaleDateString() : "—"}    Status: ${po.status}`,
       ),
       h(
         View,

@@ -4,14 +4,14 @@
  * Created only from branded TenantAuthority. Does not expose the raw Prisma
  * client, unrestricted TransactionClient, or raw SQL helpers to callers.
  *
- * Follow-up corrections (F-PR2C-01..09):
- * - Model-aware relation selector authorization + canonical { id } rewrite
- * - connectOrCreate foreign global-match fail-closed
- * - Array-form nested bulk mutation scoping
- * - Normalization-aware legacy ownership (phase1-shop-domain-v1)
- * - Partial-selection proof-field injection/stripping
- * - Real single-row update with nested writes + projections
- * - Precheck + mutation atomicity via internal transactions
+ * Third correction cycle (F-PR2R2-01..09 / D-030):
+ * - Top-level compound unique selector flattening + canonical { id } rewrite
+ * - Scalable tenant predicates (no owned-row ID materialization)
+ * - Row-level unprovable to-one nulling / to-many filtering
+ * - connectOrCreate sibling merge
+ * - Unified D-030 ownership (canonical shopId authoritative)
+ * - LeadTimeSnapshot purchaseOrderId proof injection
+ * - Async relation scopes from the same compatibility adapter
  */
 
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -27,11 +27,12 @@ import {
   type MerchantOwnedModel,
 } from "./models";
 import {
+  createTenantScopeMemo,
   mergeWhere,
-  nestedBulkScalarScopeWhere,
+  nestedBulkScalarScopeWhereAsync,
   rowOwnershipOk,
   tenantScopeWhere,
-  tenantScopeWhereSync,
+  type TenantScopeMemo,
 } from "./legacy-scope";
 import {
   fkToRelationName,
@@ -39,10 +40,13 @@ import {
   type MerchantRelationMeta,
 } from "./relations";
 import {
+  appendNestedOperation,
+  flattenUniqueSelectorPredicate,
   globalUniqueSelectorExists,
   normalizeToArray,
   resolveOwnedRelationSelector,
   resolveOwnedRelationSelectors,
+  resolveOwnedUniqueRow,
 } from "./selectors";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
@@ -52,6 +56,8 @@ type ClientState = {
   authority: TenantAuthority;
   /** True when this client is already inside TenantDb.$transaction or an internal write tx. */
   inTransaction: boolean;
+  /** Memoized scalable scopes / legacy representations for this operation/tx. */
+  scopeMemo: TenantScopeMemo;
 };
 
 const UNSAFE_CLIENT_KEYS = new Set([
@@ -82,6 +88,7 @@ const RELATION_WRITE_OPS = new Set([
 /** Proof fields injected for ownership validation; stripped before return. */
 const PROOF_FIELDS_DIRECT = ["id", "shopId", "shop"] as const;
 const PROOF_FIELDS_CHILD = ["id", "shopId"] as const;
+const PROOF_FIELDS_LEAD_TIME = ["id", "shopId", "purchaseOrderId"] as const;
 
 type ProofPlan = {
   /** Relative path from root result, e.g. "supplier" or "lineItems[]" */
@@ -100,6 +107,8 @@ export {
   tenantScopeWhereSync,
   rowOwnershipOk,
   mergeWhere,
+  buildDirectTenantScopeWhere,
+  createTenantScopeMemo,
 } from "./legacy-scope";
 
 function rejectForeignShopId(
@@ -290,13 +299,18 @@ function getDelegate(client: PrismaLike, model: string) {
 }
 
 async function assertParentIdOwned(
-  client: PrismaLike,
+  state: ClientState,
   parentModel: MerchantOwnedModel,
   parentId: string,
-  authority: TenantAuthority,
 ): Promise<void> {
+  const { client, authority, scopeMemo } = state;
   const delegate = getDelegate(client, parentModel);
-  const scope = await tenantScopeWhere(client, parentModel, authority);
+  const scope = await tenantScopeWhere(
+    client,
+    parentModel,
+    authority,
+    scopeMemo,
+  );
   const parent = await delegate.findFirst({
     where: mergeWhere({ id: parentId }, scope),
     select: { id: true },
@@ -311,47 +325,35 @@ async function assertParentIdOwned(
 }
 
 async function assertParentOwnership(
-  client: PrismaLike,
+  state: ClientState,
   model: string,
   data: Record<string, unknown>,
-  authority: TenantAuthority,
 ): Promise<void> {
   const rule = PARENT_OWNERSHIP_RULES[model];
   if (!rule) return;
 
   const parentId = data[rule.foreignKey];
   if (typeof parentId === "string" && parentId) {
-    await assertParentIdOwned(client, rule.parentModel, parentId, authority);
+    await assertParentIdOwned(state, rule.parentModel, parentId);
   } else {
     const connect = data[fkToRelationName(rule.foreignKey)];
     if (isPlainObject(connect) && typeof connect.id === "string") {
-      await assertParentIdOwned(
-        client,
-        rule.parentModel,
-        connect.id,
-        authority,
-      );
+      await assertParentIdOwned(state, rule.parentModel, connect.id);
     } else if (
       isPlainObject(connect) &&
       isPlainObject(connect.connect) &&
       typeof connect.connect.id === "string"
     ) {
       await assertParentIdOwned(
-        client,
+        state,
         rule.parentModel,
         connect.connect.id,
-        authority,
       );
     }
   }
 
   if (model === "LeadTimeSnapshot" && typeof data.purchaseOrderId === "string") {
-    await assertParentIdOwned(
-      client,
-      "PurchaseOrder",
-      data.purchaseOrderId,
-      authority,
-    );
+    await assertParentIdOwned(state, "PurchaseOrder", data.purchaseOrderId);
   }
 }
 
@@ -360,13 +362,19 @@ async function assertParentOwnership(
  * Mutates `value` in place to rewrite selectors to canonical `{ id }` /
  * explicit connect|create so Prisma never evaluates unscoped caller selectors.
  */
+/**
+ * Normalize and authorize nested relation write ops (F-PR2C-01/02/03, F-PR2R2-04).
+ * Rewrites selectors to canonical `{ id }` / explicit connect|create so Prisma
+ * never evaluates unscoped caller selectors. Merges connectOrCreate results
+ * into sibling connect/create without discarding caller intent.
+ */
 async function validateRelationWriteValue(
-  client: PrismaLike,
+  state: ClientState,
   rel: MerchantRelationMeta,
   value: unknown,
-  authority: TenantAuthority,
   path: string,
 ): Promise<unknown> {
+  const { client, authority, scopeMemo } = state;
   if (value === true || value === false || value == null) return value;
 
   if (!isPlainObject(value) && !Array.isArray(value)) {
@@ -378,13 +386,13 @@ async function validateRelationWriteValue(
 
   // Bare array form (rare) — treat as connect selectors.
   if (Array.isArray(value)) {
-    const resolved = await resolveOwnedRelationSelectors({
+    return resolveOwnedRelationSelectors({
       client,
       targetModel: rel.targetModel,
       selectors: value,
       authority,
+      memo: scopeMemo,
     });
-    return resolved;
   }
 
   const next: Record<string, unknown> = { ...value };
@@ -422,6 +430,7 @@ async function validateRelationWriteValue(
       targetModel: rel.targetModel,
       selectors: next.connect,
       authority,
+      memo: scopeMemo,
     });
     next.connect = Array.isArray(next.connect) ? resolved : resolved[0];
   }
@@ -432,6 +441,7 @@ async function validateRelationWriteValue(
       targetModel: rel.targetModel,
       selectors: next.set,
       authority,
+      memo: scopeMemo,
     });
     next.set = resolved;
   }
@@ -442,13 +452,15 @@ async function validateRelationWriteValue(
       targetModel: rel.targetModel,
       selectors: next.disconnect,
       authority,
+      memo: scopeMemo,
     });
     next.disconnect = Array.isArray(next.disconnect) ? resolved : resolved[0];
   }
 
   if ("connectOrCreate" in next) {
     const items = normalizeToArray(next.connectOrCreate);
-    const rewritten: unknown[] = [];
+    const rewrittenConnects: Array<{ id: string }> = [];
+    const rewrittenCreates: Record<string, unknown>[] = [];
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (!isPlainObject(item)) {
@@ -464,15 +476,27 @@ async function validateRelationWriteValue(
         );
       }
 
-      const scope = await tenantScopeWhere(client, rel.targetModel, authority);
+      // Flatten compound wrappers before scoped findFirst (F-PR2R2-01).
+      let predicate = flattenUniqueSelectorPredicate(
+        rel.targetModel,
+        item.where,
+      );
+      if ("shop" in predicate && typeof predicate.shop === "string") {
+        predicate = { ...predicate, shop: authority.myshopifyDomain };
+      }
+      const scope = await tenantScopeWhere(
+        client,
+        rel.targetModel,
+        authority,
+        scopeMemo,
+      );
       const owned = (await getDelegate(client, rel.targetModel).findFirst({
-        where: mergeWhere(item.where, scope),
+        where: mergeWhere(predicate, scope),
         select: { id: true },
       })) as { id: string } | null;
 
       if (owned) {
-        // Prefer explicit connect so Prisma never re-evaluates caller where.
-        rewritten.push({ connect: { id: owned.id } });
+        rewrittenConnects.push({ id: owned.id });
         continue;
       }
 
@@ -504,63 +528,18 @@ async function validateRelationWriteValue(
         item.create as Record<string, unknown>,
         authority,
       );
-      await assertParentOwnership(client, rel.targetModel, injected, authority);
-      await validateNestedRelationWrites(
-        client,
-        rel.targetModel,
-        injected,
-        authority,
-      );
-      // Explicit create branch — do not pass original connectOrCreate to Prisma.
-      rewritten.push({ create: injected });
+      await assertParentOwnership(state, rel.targetModel, injected);
+      await validateNestedRelationWrites(state, rel.targetModel, injected);
+      rewrittenCreates.push(injected);
     }
 
-    // Prisma nested connectOrCreate expects connectOrCreate shape; we rewrite
-    // the whole relation value into sequential connect/create ops when mixed.
-    // When every item is create-only or connect-only, flatten accordingly.
-    if (rewritten.length === 1 && isPlainObject(rewritten[0])) {
-      const sole = rewritten[0] as Record<string, unknown>;
-      if ("connect" in sole && !("create" in sole)) {
-        delete next.connectOrCreate;
-        next.connect = sole.connect;
-      } else if ("create" in sole && !("connect" in sole)) {
-        delete next.connectOrCreate;
-        next.create = sole.create;
-      } else {
-        next.connectOrCreate = Array.isArray(next.connectOrCreate)
-          ? rewritten.map((r) => {
-              if (isPlainObject(r) && "connect" in r) {
-                return {
-                  where: r.connect,
-                  create: {}, // unreachable — connect path already rewritten
-                };
-              }
-              return r;
-            })
-          : rewritten[0];
-        // Safer: if we still have connectOrCreate, convert mixed array to
-        // create + connect siblings is not valid Prisma. Use first form only
-        // when single; for multi, expand into create array + connect array.
-        const connects = rewritten
-          .filter((r) => isPlainObject(r) && "connect" in r)
-          .map((r) => (r as { connect: { id: string } }).connect);
-        const creates = rewritten
-          .filter((r) => isPlainObject(r) && "create" in r)
-          .map((r) => (r as { create: Record<string, unknown> }).create);
-        delete next.connectOrCreate;
-        if (connects.length) next.connect = connects.length === 1 ? connects[0] : connects;
-        if (creates.length) next.create = creates.length === 1 ? creates[0] : creates;
-      }
-    } else {
-      const connects = rewritten
-        .filter((r) => isPlainObject(r) && "connect" in r)
-        .map((r) => (r as { connect: { id: string } }).connect);
-      const creates = rewritten
-        .filter((r) => isPlainObject(r) && "create" in r)
-        .map((r) => (r as { create: Record<string, unknown> }).create);
-      delete next.connectOrCreate;
-      if (connects.length) next.connect = connects.length === 1 ? connects[0] : connects;
-      if (creates.length) next.create = creates.length === 1 ? creates[0] : creates;
+    delete next.connectOrCreate;
+    // Merge with existing sibling connect/create — never overwrite (F-PR2R2-04).
+    if (rewrittenConnects.length) {
+      next.connect = appendNestedOperation(next.connect, rewrittenConnects);
+    }
+    if (rewrittenCreates.length) {
+      next.create = appendNestedOperation(next.create, rewrittenCreates);
     }
   }
 
@@ -575,12 +554,11 @@ async function validateRelationWriteValue(
         );
       }
       const injected = injectOwnership(rel.targetModel, row, authority);
-      await assertParentOwnership(client, rel.targetModel, injected, authority);
+      await assertParentOwnership(state, rel.targetModel, injected);
       const nested = (await validateNestedRelationWrites(
-        client,
+        state,
         rel.targetModel,
         injected,
-        authority,
       )) as Record<string, unknown>;
       injectedRows.push(nested);
     }
@@ -609,7 +587,7 @@ async function validateRelationWriteValue(
         );
       }
       const injected = injectOwnership(rel.targetModel, row, authority);
-      await assertParentOwnership(client, rel.targetModel, injected, authority);
+      await assertParentOwnership(state, rel.targetModel, injected);
       injectedRows.push(injected);
     }
     next.createMany = {
@@ -641,6 +619,7 @@ async function validateRelationWriteValue(
         targetModel: rel.targetModel,
         selector: item.where,
         authority,
+        memo: scopeMemo,
       });
       if (!isPlainObject(item.data)) {
         throw new TenantAccessError(
@@ -654,10 +633,9 @@ async function validateRelationWriteValue(
         authority,
       );
       const nestedData = (await validateNestedRelationWrites(
-        client,
+        state,
         rel.targetModel,
         scrubbed,
-        authority,
       )) as Record<string, unknown>;
       rewrittenUpdates.push({ where: resolved, data: nestedData });
     }
@@ -670,8 +648,12 @@ async function validateRelationWriteValue(
   if ("updateMany" in next) {
     const items = normalizeToArray(next.updateMany);
     const rewritten: unknown[] = [];
-    // Nested updateMany uses ScalarWhereInput — relation filters are illegal.
-    const scope = nestedBulkScalarScopeWhere(rel.targetModel, authority);
+    const scope = await nestedBulkScalarScopeWhereAsync(
+      client,
+      rel.targetModel,
+      authority,
+      scopeMemo,
+    );
     for (const item of items) {
       if (!isPlainObject(item)) {
         throw new TenantAccessError(
@@ -690,12 +672,7 @@ async function validateRelationWriteValue(
         item.data as Record<string, unknown>,
         authority,
       );
-      await validateNestedRelationWrites(
-        client,
-        rel.targetModel,
-        scrubbed,
-        authority,
-      );
+      await validateNestedRelationWrites(state, rel.targetModel, scrubbed);
       rewritten.push({
         where: mergeWhere(item.where, scope),
         data: scrubbed,
@@ -713,14 +690,19 @@ async function validateRelationWriteValue(
       targetModel: rel.targetModel,
       selectors: next.delete,
       authority,
+      memo: scopeMemo,
     });
     next.delete = Array.isArray(next.delete) ? resolved : resolved[0];
   }
 
   if ("deleteMany" in next) {
-    // Nested deleteMany is ScalarWhereInput | ScalarWhereInput[] (no { where } wrapper).
     const items = normalizeToArray(next.deleteMany);
-    const scope = nestedBulkScalarScopeWhere(rel.targetModel, authority);
+    const scope = await nestedBulkScalarScopeWhereAsync(
+      client,
+      rel.targetModel,
+      authority,
+      scopeMemo,
+    );
     const rewritten: unknown[] = [];
     for (const item of items) {
       if (item === true || item == null) {
@@ -733,10 +715,7 @@ async function validateRelationWriteValue(
           `Malformed deleteMany element at ${path}`,
         );
       }
-      // Callers may pass either a bare ScalarWhereInput or `{ where: ... }`.
       const filter = isPlainObject(item.where) ? item.where : item;
-      // If they passed `{ where }` exclusively, treat as where; if they passed
-      // extra keys like `data`, reject.
       if ("where" in item && Object.keys(item).some((k) => k !== "where")) {
         throw new TenantAccessError(
           "unknown_relation_operation",
@@ -762,10 +741,9 @@ async function validateRelationWriteValue(
 }
 
 async function validateNestedRelationWrites(
-  client: PrismaLike,
+  state: ClientState,
   model: string,
   data: Record<string, unknown>,
-  authority: TenantAuthority,
 ): Promise<Record<string, unknown>> {
   const next: Record<string, unknown> = { ...data };
   for (const [key, value] of Object.entries(data)) {
@@ -787,10 +765,9 @@ async function validateNestedRelationWrites(
     }
 
     next[key] = await validateRelationWriteValue(
-      client,
+      state,
       rel,
       value,
-      authority,
       `${model}.${key}`,
     );
   }
@@ -798,6 +775,7 @@ async function validateNestedRelationWrites(
 }
 
 function proofFieldsFor(model: string): readonly string[] {
+  if (model === "LeadTimeSnapshot") return PROOF_FIELDS_LEAD_TIME;
   if (DIRECT_MODEL_SET.has(model)) return PROOF_FIELDS_DIRECT;
   if (CHILD_MODEL_SET.has(model)) return PROOF_FIELDS_CHILD;
   return ["id"];
@@ -843,30 +821,43 @@ function stripInjectedProofFields(
   return result;
 }
 
-function scopeNestedWhereArgs(
+/** Recursively strip all fields from an unprovable relation payload. */
+function scrubRelationPayload(value: unknown): null {
+  if (isPlainObject(value)) {
+    for (const key of Object.keys(value)) {
+      delete value[key];
+    }
+  }
+  return null;
+}
+
+async function scopeNestedWhereArgs(
+  state: ClientState,
   targetModel: MerchantOwnedModel,
   relArgs: Record<string, unknown>,
-  authority: TenantAuthority,
   plans: ProofPlan[],
   pathPrefix: string,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
+  const { client, authority, scopeMemo } = state;
   const next = { ...relArgs };
-  next.where = mergeWhere(
-    next.where,
-    tenantScopeWhereSync(targetModel, authority),
+  const scope = await tenantScopeWhere(
+    client,
+    targetModel,
+    authority,
+    scopeMemo,
   );
+  next.where = mergeWhere(next.where, scope);
   if (next.include) {
-    next.include = scopeRelationObject(
+    next.include = await scopeRelationObject(
+      state,
       targetModel,
       next.include,
-      authority,
       "include",
       plans,
       pathPrefix,
     );
   }
   if (next.select) {
-    // Inject proof fields into nested select.
     const needed = proofFieldsFor(targetModel);
     const injected: string[] = [];
     if (isPlainObject(next.select)) {
@@ -878,19 +869,19 @@ function scopeNestedWhereArgs(
         }
       }
       if (injected.length) plans.push({ path: pathPrefix, injected });
-      next.select = scopeRelationObject(
+      next.select = await scopeRelationObject(
+        state,
         targetModel,
         sel,
-        authority,
         "select",
         plans,
         pathPrefix,
       );
     } else {
-      next.select = scopeRelationObject(
+      next.select = await scopeRelationObject(
+        state,
         targetModel,
         next.select,
-        authority,
         "select",
         plans,
         pathPrefix,
@@ -900,14 +891,15 @@ function scopeNestedWhereArgs(
   return next;
 }
 
-function scopeRelationObject(
+async function scopeRelationObject(
+  state: ClientState,
   sourceModel: string,
   value: unknown,
-  authority: TenantAuthority,
   mode: "include" | "select",
   plans: ProofPlan[] = [],
   pathPrefix = "",
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
+  const { client, authority, scopeMemo } = state;
   if (value === true) {
     throw new TenantAccessError(
       "unknown_relation_shape",
@@ -924,7 +916,7 @@ function scopeRelationObject(
   const out: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(value)) {
     if (key === "_count") {
-      out._count = scopeCountArg(sourceModel, raw, authority);
+      out._count = await scopeCountArg(state, sourceModel, raw);
       continue;
     }
 
@@ -959,10 +951,15 @@ function scopeRelationObject(
 
     if (raw === true) {
       if (rel.cardinality === "many" && rel.nestedWherePermitted) {
-        out[key] = {
-          where: tenantScopeWhereSync(rel.targetModel, authority),
-        };
+        const scope = await tenantScopeWhere(
+          client,
+          rel.targetModel,
+          authority,
+          scopeMemo,
+        );
+        out[key] = { where: scope };
       } else {
+        // To-one: load inside TenantDb; post-load nulls unprovable rows.
         out[key] = true;
       }
       continue;
@@ -976,10 +973,10 @@ function scopeRelationObject(
     }
 
     if (rel.cardinality === "many" && rel.nestedWherePermitted) {
-      out[key] = scopeNestedWhereArgs(
+      out[key] = await scopeNestedWhereArgs(
+        state,
         rel.targetModel,
         raw,
-        authority,
         plans,
         childPath,
       );
@@ -992,10 +989,10 @@ function scopeRelationObject(
         );
       }
       if (nested.include) {
-        nested.include = scopeRelationObject(
+        nested.include = await scopeRelationObject(
+          state,
           rel.targetModel,
           nested.include,
-          authority,
           "include",
           plans,
           childPath,
@@ -1013,18 +1010,15 @@ function scopeRelationObject(
             }
           }
           if (injected.length) plans.push({ path: childPath, injected });
-          nested.select = scopeRelationObject(
+          nested.select = await scopeRelationObject(
+            state,
             rel.targetModel,
             sel,
-            authority,
             "select",
             plans,
             childPath,
           );
         }
-      } else if (mode === "select") {
-        // Selecting a to-one relation as nested object without select/include
-        // — ensure proof fields if it's a field map (shouldn't happen).
       }
       out[key] = nested;
     }
@@ -1032,11 +1026,12 @@ function scopeRelationObject(
   return out;
 }
 
-function scopeCountArg(
+async function scopeCountArg(
+  state: ClientState,
   sourceModel: string,
   raw: unknown,
-  authority: TenantAuthority,
-): unknown {
+): Promise<unknown> {
+  const { client, authority, scopeMemo } = state;
   if (raw === true) {
     throw new TenantAccessError(
       "unknown_relation_shape",
@@ -1058,15 +1053,18 @@ function scopeCountArg(
         `Unknown or non-countable relation '${key}' in _count on ${sourceModel}`,
       );
     }
+    const scope = await tenantScopeWhere(
+      client,
+      rel.targetModel,
+      authority,
+      scopeMemo,
+    );
     if (value === true) {
-      select[key] = { where: tenantScopeWhereSync(rel.targetModel, authority) };
+      select[key] = { where: scope };
     } else if (isPlainObject(value)) {
       select[key] = {
         ...value,
-        where: mergeWhere(
-          value.where,
-          tenantScopeWhereSync(rel.targetModel, authority),
-        ),
+        where: mergeWhere(value.where, scope),
       };
     } else {
       throw new TenantAccessError(
@@ -1078,48 +1076,75 @@ function scopeCountArg(
   return { ...raw, select };
 }
 
-function applyRelationScopes(
+async function applyRelationScopes(
+  state: ClientState,
   model: string,
   args: Record<string, unknown>,
-  authority: TenantAuthority,
   plans: ProofPlan[],
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const next = { ...args };
   if ("include" in next) {
-    next.include = scopeRelationObject(
+    next.include = await scopeRelationObject(
+      state,
       model,
       next.include,
-      authority,
       "include",
       plans,
     );
   }
   if ("select" in next) {
-    next.select = scopeRelationObject(
-      model,
-      next.select,
-      authority,
-      "select",
-      plans,
-    );
+    // Inject top-level proof fields when selecting a subset.
+    if (isPlainObject(next.select)) {
+      const needed = proofFieldsFor(model);
+      const injected: string[] = [];
+      const sel = { ...next.select };
+      for (const f of needed) {
+        if (!(f in sel)) {
+          sel[f] = true;
+          injected.push(f);
+        }
+      }
+      if (injected.length) plans.push({ path: "", injected });
+      next.select = await scopeRelationObject(
+        state,
+        model,
+        sel,
+        "select",
+        plans,
+      );
+    } else {
+      next.select = await scopeRelationObject(
+        state,
+        model,
+        next.select,
+        "select",
+        plans,
+      );
+    }
   }
   return next;
 }
 
+/**
+ * Post-load relation ownership (F-PR2R2-03 / D-030).
+ * Unprovable to-one → null (parent retained). Unprovable to-many → filtered.
+ * Top-level access to the unprovable row itself remains denied elsewhere.
+ */
 async function validateLoadedRelations(
-  client: PrismaLike,
+  state: ClientState,
   model: string,
   result: unknown,
-  authority: TenantAuthority,
 ): Promise<void> {
   if (result == null) return;
   if (Array.isArray(result)) {
     for (const row of result) {
-      await validateLoadedRelations(client, model, row, authority);
+      await validateLoadedRelations(state, model, row);
     }
     return;
   }
   if (!isPlainObject(result)) return;
+
+  const { client, authority, scopeMemo } = state;
 
   for (const [key, value] of Object.entries(result)) {
     if (key === "_count" || value == null) continue;
@@ -1128,61 +1153,76 @@ async function validateLoadedRelations(
 
     if (rel.cardinality === "many") {
       if (!Array.isArray(value)) continue;
+      const kept: unknown[] = [];
       for (const child of value) {
-        if (isPlainObject(child)) {
-          if (!rowOwnershipOk(rel.targetModel, child, authority)) {
-            throw new TenantAccessError(
-              "foreign_relation_row",
-              `Relation ${model}.${key} returned a foreign or ambiguous row`,
-            );
-          }
-          await validateLoadedRelations(
-            client,
-            rel.targetModel,
-            child,
-            authority,
-          );
+        if (!isPlainObject(child)) continue;
+        if (!rowOwnershipOk(rel.targetModel, child, authority)) {
+          continue; // filter unprovable / foreign children
         }
+        // Secondary lineage for LeadTimeSnapshot
+        if (rel.targetModel === "LeadTimeSnapshot") {
+          try {
+            await assertLeadTimeSecondaryOwnership(
+              state,
+              rel.targetModel,
+              child,
+            );
+          } catch {
+            continue;
+          }
+        }
+        await validateLoadedRelations(state, rel.targetModel, child);
+        kept.push(child);
       }
+      result[key] = kept;
       continue;
     }
 
-    // To-one: prove ownership. Proof fields should already be injected.
+    // To-one: null when unprovable; do not abort the parent query.
     if (!isPlainObject(value)) {
-      throw new TenantAccessError(
-        "foreign_relation_row",
-        `To-one relation ${model}.${key} has invalid shape`,
-      );
+      result[key] = null;
+      continue;
     }
 
+    let owned = false;
     if (typeof value.id === "string") {
-      const scope = await tenantScopeWhere(client, rel.targetModel, authority);
-      const owned = await getDelegate(client, rel.targetModel).findFirst({
+      const scope = await tenantScopeWhere(
+        client,
+        rel.targetModel,
+        authority,
+        scopeMemo,
+      );
+      const found = await getDelegate(client, rel.targetModel).findFirst({
         where: mergeWhere({ id: value.id }, scope),
         select: { id: true },
       });
-      if (!owned) {
-        throw new TenantAccessError(
-          "foreign_relation_row",
-          `To-one relation ${model}.${key} is not owned by the current tenant`,
-        );
-      }
-    } else if (!rowOwnershipOk(rel.targetModel, value, authority)) {
-      throw new TenantAccessError(
-        "foreign_relation_row",
-        `To-one relation ${model}.${key} failed ownership proof`,
-      );
+      owned = found != null;
+    } else {
+      owned = rowOwnershipOk(rel.targetModel, value, authority);
     }
 
-    await validateLoadedRelations(client, rel.targetModel, value, authority);
+    if (!owned) {
+      result[key] = scrubRelationPayload(value);
+      continue;
+    }
+
+    if (rel.targetModel === "LeadTimeSnapshot") {
+      try {
+        await assertLeadTimeSecondaryOwnership(state, rel.targetModel, value);
+      } catch {
+        result[key] = scrubRelationPayload(value);
+        continue;
+      }
+    }
+
+    await validateLoadedRelations(state, rel.targetModel, value);
   }
 }
 
 async function assertLeadTimeSecondaryOwnership(
-  client: PrismaLike,
+  state: ClientState,
   model: string,
   result: unknown,
-  authority: TenantAuthority,
 ): Promise<void> {
   if (model !== "LeadTimeSnapshot" || result == null) return;
   const rows = Array.isArray(result) ? result : [result];
@@ -1194,12 +1234,7 @@ async function assertLeadTimeSecondaryOwnership(
         "LeadTimeSnapshot missing purchaseOrderId ownership evidence",
       );
     }
-    await assertParentIdOwned(
-      client,
-      "PurchaseOrder",
-      row.purchaseOrderId,
-      authority,
-    );
+    await assertParentIdOwned(state, "PurchaseOrder", row.purchaseOrderId);
   }
 }
 
@@ -1262,6 +1297,8 @@ async function withWriteTransaction<T>(
             client: tx,
             authority: state.authority,
             inTransaction: true,
+            // Fresh memo inside the serializable transaction.
+            scopeMemo: createTenantScopeMemo(),
           }),
         {
           isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -1283,25 +1320,50 @@ async function rewriteUniqueRead(
   operation: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
-  const { client, authority } = state;
-  const scope = await tenantScopeWhere(client, model, authority);
+  const { client, authority, scopeMemo } = state;
+  if (!MERCHANT_MODEL_SET.has(model)) {
+    throw new TenantAccessError(
+      "unknown_merchant_model",
+      `Model ${model} is not merchant-owned`,
+    );
+  }
+
+  // Flatten compound WhereUniqueInput → scalar predicates, then scope.
+  let ownedId: { id: string } | null;
+  try {
+    ownedId = await resolveOwnedUniqueRow({
+      client,
+      targetModel: model as MerchantOwnedModel,
+      selector: args.where,
+      authority,
+      memo: scopeMemo,
+    });
+  } catch (err) {
+    if (err instanceof TenantAccessError) throw err;
+    throw err;
+  }
+
+  if (!ownedId) {
+    if (operation === "findUniqueOrThrow") {
+      throw new TenantAccessError("not_found", `${model} not found for tenant`);
+    }
+    return null;
+  }
+
   const plans: ProofPlan[] = [];
-  const scopedArgs = applyRelationScopes(model, args, authority, plans);
+  const scopedArgs = await applyRelationScopes(state, model, args, plans);
   const findFirst = getDelegate(client, model).findFirst;
   const row = await findFirst({
     ...scopedArgs,
-    where: mergeWhere(
-      coerceDirectShopInWhere(scopedArgs.where, authority),
-      scope,
-    ),
+    where: { id: ownedId.id },
   });
 
   if (operation === "findUniqueOrThrow" && !row) {
     throw new TenantAccessError("not_found", `${model} not found for tenant`);
   }
 
-  await validateLoadedRelations(client, model, row, authority);
-  await assertLeadTimeSecondaryOwnership(client, model, row, authority);
+  await validateLoadedRelations(state, model, row);
+  await assertLeadTimeSecondaryOwnership(state, model, row);
   stripInjectedProofFields(row, plans);
   return row;
 }
@@ -1313,13 +1375,24 @@ async function rewriteUniqueWrite(
   args: Record<string, unknown>,
 ): Promise<unknown> {
   return withWriteTransaction(state, async (txState) => {
-    const { client, authority } = txState;
-    const scope = await tenantScopeWhere(client, model, authority);
+    const { client, authority, scopeMemo } = txState;
     const delegate = getDelegate(client, model);
-    const scopedWhere = mergeWhere(
-      coerceDirectShopInWhere(args.where, authority),
-      scope,
-    );
+
+    const owned = await resolveOwnedUniqueRow({
+      client,
+      targetModel: model as MerchantOwnedModel,
+      selector: args.where,
+      authority,
+      memo: scopeMemo,
+    });
+    if (!owned) {
+      throw new TenantAccessError(
+        "not_found",
+        `${model} not found for tenant ${operation}`,
+      );
+    }
+
+    const scope = await tenantScopeWhere(client, model, authority, scopeMemo);
 
     if (operation === "update") {
       let data = scrubUpdateData(
@@ -1327,23 +1400,12 @@ async function rewriteUniqueWrite(
         (args.data ?? {}) as Record<string, unknown>,
         authority,
       );
-      data = await validateNestedRelationWrites(client, model, data, authority);
-      await assertParentOwnership(client, model, data, authority);
-
-      const existing = (await delegate.findFirst({
-        where: scopedWhere,
-        select: { id: true },
-      })) as { id: string } | null;
-      if (!existing) {
-        throw new TenantAccessError(
-          "not_found",
-          `${model} not found for tenant update`,
-        );
-      }
+      data = await validateNestedRelationWrites(txState, model, data);
+      await assertParentOwnership(txState, model, data);
 
       // Re-check ownership inside the same transaction (fail closed if lost).
       const stillOwned = (await delegate.findFirst({
-        where: mergeWhere({ id: existing.id }, scope),
+        where: mergeWhere({ id: owned.id }, scope),
         select: { id: true },
       })) as { id: string } | null;
       if (!stillOwned) {
@@ -1354,41 +1416,30 @@ async function rewriteUniqueWrite(
       }
 
       const plans: ProofPlan[] = [];
-      const projection = applyRelationScopes(
+      const projection = await applyRelationScopes(
+        txState,
         model,
         {
           ...(args.select ? { select: args.select } : {}),
           ...(args.include ? { include: args.include } : {}),
         },
-        authority,
         plans,
       );
 
-      // Real single-row update — preserves nested writes and projections.
       const updateArgs: Record<string, unknown> = {
-        where: { id: existing.id },
+        where: { id: owned.id },
         data,
         ...projection,
       };
 
       const updated = await delegate.update(updateArgs);
-      await validateLoadedRelations(client, model, updated, authority);
+      await validateLoadedRelations(txState, model, updated);
       stripInjectedProofFields(updated, plans);
       return updated;
     }
 
-    const existing = (await delegate.findFirst({
-      where: scopedWhere,
-      select: { id: true },
-    })) as { id: string } | null;
-    if (!existing) {
-      throw new TenantAccessError(
-        "not_found",
-        `${model} not found for tenant delete`,
-      );
-    }
     const deleted = (await delegate.deleteMany({
-      where: mergeWhere({ id: existing.id }, scope),
+      where: mergeWhere({ id: owned.id }, scope),
     })) as { count: number };
     if (deleted.count === 0) {
       throw new TenantAccessError(
@@ -1396,7 +1447,7 @@ async function rewriteUniqueWrite(
         `${model} not found for tenant delete`,
       );
     }
-    return { id: existing.id };
+    return { id: owned.id };
   });
 }
 
@@ -1416,6 +1467,7 @@ async function rewriteUpsert(
       );
     }
 
+    // Upsert WhereUniqueInput is passed to Prisma as-is (compound wrappers OK).
     const coercedWhere = coerceDirectShopInWhere(where, authority);
 
     let create = injectOwnership(
@@ -1423,25 +1475,25 @@ async function rewriteUpsert(
       (args.create ?? {}) as Record<string, unknown>,
       authority,
     );
-    await assertParentOwnership(client, model, create, authority);
-    create = await validateNestedRelationWrites(client, model, create, authority);
+    await assertParentOwnership(txState, model, create);
+    create = await validateNestedRelationWrites(txState, model, create);
 
     let update = scrubUpdateData(
       model,
       (args.update ?? {}) as Record<string, unknown>,
       authority,
     );
-    update = await validateNestedRelationWrites(client, model, update, authority);
+    update = await validateNestedRelationWrites(txState, model, update);
 
     const plans: ProofPlan[] = [];
-    const scopedArgs = applyRelationScopes(model, args, authority, plans);
+    const scopedArgs = await applyRelationScopes(txState, model, args, plans);
     const row = await getDelegate(client, model).upsert({
       ...scopedArgs,
       where: coercedWhere,
       create,
       update,
     });
-    await validateLoadedRelations(client, model, row, authority);
+    await validateLoadedRelations(txState, model, row);
     stripInjectedProofFields(row, plans);
     return row;
   });
@@ -1461,8 +1513,7 @@ async function runScopedOperation(
     );
   }
 
-  const { client, authority } = state;
-  const scope = await tenantScopeWhere(client, model, authority);
+  const { client, authority, scopeMemo } = state;
 
   switch (operation) {
     case "findUnique":
@@ -1475,8 +1526,14 @@ async function runScopedOperation(
     case "count":
     case "aggregate":
     case "groupBy": {
+      const scope = await tenantScopeWhere(
+        client,
+        model,
+        authority,
+        scopeMemo,
+      );
       const plans: ProofPlan[] = [];
-      const scopedArgs = applyRelationScopes(model, args, authority, plans);
+      const scopedArgs = await applyRelationScopes(state, model, args, plans);
       const result = await query({
         ...scopedArgs,
         where: mergeWhere(scopedArgs.where, scope),
@@ -1492,54 +1549,35 @@ async function runScopedOperation(
             `${model} not found for tenant`,
           );
         }
-        await validateLoadedRelations(client, model, result, authority);
-        await assertLeadTimeSecondaryOwnership(
-          client,
-          model,
-          result,
-          authority,
-        );
+        await validateLoadedRelations(state, model, result);
+        await assertLeadTimeSecondaryOwnership(state, model, result);
         stripInjectedProofFields(result, plans);
       }
       return result;
     }
 
     case "create":
+      // Ordinary create does not need a precomputed tenant scope (F-PR2R2-02).
       return withWriteTransaction(state, async (txState) => {
         let data = injectOwnership(
           model,
           (args.data ?? {}) as Record<string, unknown>,
           txState.authority,
         );
-        await assertParentOwnership(
-          txState.client,
-          model,
-          data,
-          txState.authority,
-        );
-        data = await validateNestedRelationWrites(
-          txState.client,
-          model,
-          data,
-          txState.authority,
-        );
+        await assertParentOwnership(txState, model, data);
+        data = await validateNestedRelationWrites(txState, model, data);
         const plans: ProofPlan[] = [];
-        const scopedArgs = applyRelationScopes(
+        const scopedArgs = await applyRelationScopes(
+          txState,
           model,
           args,
-          txState.authority,
           plans,
         );
         const created = await getDelegate(txState.client, model).create({
           ...scopedArgs,
           data,
         });
-        await validateLoadedRelations(
-          txState.client,
-          model,
-          created,
-          txState.authority,
-        );
+        await validateLoadedRelations(txState, model, created);
         stripInjectedProofFields(created, plans);
         return created;
       });
@@ -1555,17 +1593,11 @@ async function runScopedOperation(
               row as Record<string, unknown>,
               txState.authority,
             );
-            await assertParentOwnership(
-              txState.client,
-              model,
-              injected,
-              txState.authority,
-            );
+            await assertParentOwnership(txState, model, injected);
             injected = await validateNestedRelationWrites(
-              txState.client,
+              txState,
               model,
               injected,
-              txState.authority,
             );
             data.push(injected);
           }
@@ -1579,18 +1611,8 @@ async function runScopedOperation(
           (records ?? {}) as Record<string, unknown>,
           txState.authority,
         );
-        await assertParentOwnership(
-          txState.client,
-          model,
-          data,
-          txState.authority,
-        );
-        data = await validateNestedRelationWrites(
-          txState.client,
-          model,
-          data,
-          txState.authority,
-        );
+        await assertParentOwnership(txState, model, data);
+        data = await validateNestedRelationWrites(txState, model, data);
         return getDelegate(txState.client, model).createMany({
           ...args,
           data,
@@ -1607,16 +1629,12 @@ async function runScopedOperation(
           (args.data ?? {}) as Record<string, unknown>,
           txState.authority,
         );
-        data = await validateNestedRelationWrites(
-          txState.client,
-          model,
-          data,
-          txState.authority,
-        );
+        data = await validateNestedRelationWrites(txState, model, data);
         const txScope = await tenantScopeWhere(
           txState.client,
           model,
           txState.authority,
+          txState.scopeMemo,
         );
         return getDelegate(txState.client, model).updateMany({
           ...args,
@@ -1637,6 +1655,7 @@ async function runScopedOperation(
           txState.client,
           model,
           txState.authority,
+          txState.scopeMemo,
         );
         return getDelegate(txState.client, model).deleteMany({
           ...args,
@@ -1680,7 +1699,11 @@ function buildTenantDelegates(state: ClientState) {
     for (const operation of operations) {
       wrapped[operation] = async (args: Record<string, unknown> = {}) =>
         runScopedOperation(
-          state,
+          // Fresh memo per top-level operation; nested writes share via state.
+          {
+            ...state,
+            scopeMemo: createTenantScopeMemo(),
+          },
           model,
           operation,
           args,
@@ -1731,7 +1754,12 @@ function createTenantDbFromClient(
   inTransaction: boolean,
 ): TenantDb {
   assertTenantAuthority(authority);
-  const state: ClientState = { client, authority, inTransaction };
+  const state: ClientState = {
+    client,
+    authority,
+    inTransaction,
+    scopeMemo: createTenantScopeMemo(),
+  };
   const delegates = buildTenantDelegates(state);
 
   const db: TenantDb = {

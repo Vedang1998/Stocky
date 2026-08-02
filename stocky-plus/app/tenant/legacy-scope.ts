@@ -1,17 +1,18 @@
 /**
- * Normalization-aware legacy ownership adapter (F-PR2C-04).
+ * Normalization-aware legacy ownership adapter (F-PR2R2-02 / F-PR2R2-05 / D-030).
  *
  * Single authority: phase1-shop-domain-v1 via normalizeShopDomain.
  *
- * Direct-row contract (independent review matrix + option b):
- *   non-null shopId equal to tenant → authorized (legacy shop not required
- *     to match exactly; conflicting normalizable-to-foreign shop fails closed
- *     on post-load validation when proof fields are present)
+ * Direct-row contract (D-030 — supersedes prior conflict rule):
+ *   non-null shopId equal to tenant → owned (legacy shop is non-authoritative)
+ *   non-null shopId equal to another tenant → denied
  *   null shopId → normalized legacy shop must equal current domain
  *
- * Database prefilter for null-shopId uses lower(btrim(shop)) via trusted
- * raw SQL ID resolution so whitespace/case variants are neither excluded
- * nor left as foreign false-positives in counts/bulk mutations.
+ * Scalable tenant scope (F-PR2R2-02):
+ *   Never materialize owned row IDs into `{ id: { in: [...] } }`.
+ *   Canonical branch: `{ shopId: authority.shopId }`
+ *   Null compatibility: distinct raw legacy `shop` strings that normalize
+ *   to the authenticated domain via lower(btrim(shop)) equivalence.
  */
 
 import { Prisma, type PrismaClient } from "@prisma/client";
@@ -44,6 +45,19 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   LowStockAlert: "LowStockAlert",
 };
 
+/** Per-operation memo for distinct raw legacy shop representations. */
+export type TenantScopeMemo = {
+  legacyRawByModel: Map<string, Promise<string[]>>;
+  scopeByModel: Map<string, Promise<Record<string, unknown>>>;
+};
+
+export function createTenantScopeMemo(): TenantScopeMemo {
+  return {
+    legacyRawByModel: new Map(),
+    scopeByModel: new Map(),
+  };
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -51,7 +65,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 /**
  * Whether a stored legacy shop string authorizes for the current tenant under
  * phase1-shop-domain-v1. Malformed values never authorize on the null-shopId
- * branch; they also never authorize when used as sole evidence.
+ * branch.
  */
 export function legacyShopMatchesTenant(
   rawShop: unknown,
@@ -64,11 +78,12 @@ export function legacyShopMatchesTenant(
 }
 
 /**
- * Post-load / mutation ownership proof for a direct or child row.
+ * Post-load / mutation ownership proof for a direct or child row (D-030).
  *
  * Direct:
- *   shopId === tenant → OK unless legacy shop normalizes to a *foreign* domain
+ *   shopId === tenant → OK (legacy shop ignored)
  *   shopId == null → legacy shop must normalize to tenant domain
+ *   shopId === foreign → denied
  * Child:
  *   shopId === tenant or null (lineage enforced separately via parent scope)
  */
@@ -86,15 +101,7 @@ export function rowOwnershipOk(
     }
 
     if (shopId === authority.shopId) {
-      // Canonical shopId authorizes. Fail closed only when legacy shop is
-      // present and normalizes to a different tenant (conflict).
-      if (typeof shop === "string" && shop.length > 0) {
-        const normalized = normalizeShopDomain(shop);
-        if (normalized.ok && normalized.normalized !== authority.myshopifyDomain) {
-          return false;
-        }
-        // Malformed / empty-with-shopId: still authorized via shopId (case 10).
-      }
+      // D-030: canonical shopId is authoritative; legacy shop is non-authoritative.
       return true;
     }
 
@@ -115,85 +122,128 @@ export function rowOwnershipOk(
 }
 
 /**
- * Sync Prisma where used when ID-list resolution is unavailable.
- * Prefer resolveDirectTenantScopeWhere for correctness on whitespace variants.
+ * Accepted normalization variants for regression tests and mocked-client
+ * fallback — derived from phase1-shop-domain-v1 (trim + lowercase only).
  */
-export function directTenantScopeWhereSync(
+export function acceptedLegacyShopVariants(canonicalDomain: string): string[] {
+  const upper = canonicalDomain.toUpperCase();
+  return [
+    canonicalDomain,
+    upper,
+    ` ${canonicalDomain}`,
+    `${canonicalDomain} `,
+    `  ${canonicalDomain}  `,
+    ` ${upper} `,
+  ];
+}
+
+/**
+ * Build the direct-model Prisma where from distinct raw legacy representations.
+ * Parameter count depends on distinct historical representations, not row count.
+ */
+export function buildDirectTenantScopeWhere(
   authority: TenantAuthority,
+  matchingRawLegacyRepresentations: string[],
 ): Record<string, unknown> {
-  return {
-    OR: [
-      { shopId: authority.shopId },
+  const nullBranch: Record<string, unknown> = {
+    AND: [
+      { shopId: null },
       {
-        AND: [
-          { shopId: null },
-          {
-            shop: {
-              equals: authority.myshopifyDomain,
-              mode: "insensitive",
-            },
-          },
-        ],
+        shop: {
+          in:
+            matchingRawLegacyRepresentations.length > 0
+              ? matchingRawLegacyRepresentations
+              : ([] as string[]),
+        },
       },
     ],
+  };
+  return {
+    OR: [{ shopId: authority.shopId }, nullBranch],
   };
 }
 
 /**
- * Resolve direct-model ownership to an ID-list where using trusted raw SQL
- * so lower(btrim(shop)) semantics stay correct for counts and bulk writes.
+ * Query distinct raw legacy shop strings for null-shopId rows that normalize
+ * to the authenticated domain. SQL lower(btrim(shop)) is proven equivalent to
+ * the null-branch of phase1-shop-domain-v1 for values that survive normalize
+ * (trim + lowercase; URL/path/scheme forms never equal the domain after btrim).
+ */
+export async function resolveMatchingRawLegacyShops(
+  client: PrismaLike,
+  model: DirectMerchantModel,
+  authority: TenantAuthority,
+  memo?: TenantScopeMemo,
+): Promise<string[]> {
+  const cacheKey = model;
+  if (memo?.legacyRawByModel.has(cacheKey)) {
+    return memo.legacyRawByModel.get(cacheKey)!;
+  }
+
+  const promise = (async () => {
+    const table = DIRECT_TABLE[model];
+    if (!table) {
+      throw new TenantAccessError(
+        "unknown_merchant_model",
+        `No table mapping for direct model ${model}`,
+      );
+    }
+
+    const raw = (client as PrismaClient).$queryRaw;
+    if (typeof raw !== "function") {
+      // Mocked clients (unit tests): use accepted variants only.
+      return acceptedLegacyShopVariants(authority.myshopifyDomain);
+    }
+
+    const rows = (await raw.call(
+      client,
+      Prisma.sql`
+        SELECT DISTINCT "shop" AS shop
+        FROM ${Prisma.raw(`"${table}"`)}
+        WHERE "shopId" IS NULL
+          AND "shop" IS NOT NULL
+          AND lower(btrim("shop")) = ${authority.myshopifyDomain}
+      `,
+    )) as Array<{ shop: string }>;
+
+    return rows.map((r) => r.shop);
+  })();
+
+  if (memo) memo.legacyRawByModel.set(cacheKey, promise);
+  return promise;
+}
+
+/**
+ * Resolve scalable direct-model tenant scope (no owned-row ID materialization).
  */
 export async function resolveDirectTenantScopeWhere(
   client: PrismaLike,
   model: DirectMerchantModel,
   authority: TenantAuthority,
+  memo?: TenantScopeMemo,
 ): Promise<Record<string, unknown>> {
-  const table = DIRECT_TABLE[model];
-  if (!table) {
-    throw new TenantAccessError(
-      "unknown_merchant_model",
-      `No table mapping for direct model ${model}`,
-    );
-  }
-
-  // Trusted tenant-access module only — never exposed to callers.
-  // Prefer lower(btrim) ID resolution when raw SQL is available. Fall back to
-  // sync Prisma predicates for mocked clients (unit tests) that lack $queryRaw;
-  // post-load rowOwnershipOk still applies normalizer conflict rules.
-  const raw = (client as PrismaClient).$queryRaw;
-  if (typeof raw !== "function") {
-    return directTenantScopeWhereSync(authority);
-  }
-
-  // non-null shopId = tenant authorizes unless legacy shop looks like a
-  // different *.myshopify.com host (conflict fail-closed). Empty/malformed
-  // legacy with matching shopId remains visible (review matrix case 10).
-  // null shopId requires lower(btrim(shop)) = canonical domain.
-  const rows = await raw.call(
+  const matching = await resolveMatchingRawLegacyShops(
     client,
-    Prisma.sql`
-    SELECT id FROM ${Prisma.raw(`"${table}"`)}
-    WHERE (
-      "shopId" = ${authority.shopId}
-      AND NOT (
-        "shop" IS NOT NULL
-        AND btrim("shop") <> ''
-        AND lower(btrim("shop")) LIKE '%.myshopify.com'
-        AND lower(btrim("shop")) <> ${authority.myshopifyDomain}
-      )
-    )
-    OR (
-      "shopId" IS NULL
-      AND "shop" IS NOT NULL
-      AND lower(btrim("shop")) = ${authority.myshopifyDomain}
-    )
-  `,
-  ) as Array<{ id: string }>;
+    model,
+    authority,
+    memo,
+  );
+  return buildDirectTenantScopeWhere(authority, matching);
+}
 
-  if (rows.length === 0) {
-    return { id: { in: [] as string[] } };
-  }
-  return { id: { in: rows.map((r) => r.id) } };
+/**
+ * Sync Prisma where used only as a last-resort fallback when async resolution
+ * is unavailable. Prefer resolveDirectTenantScopeWhere / tenantScopeWhere.
+ * Uses accepted variants so whitespace/case null-owned rows remain visible
+ * under the same D-030 null-branch rule.
+ */
+export function directTenantScopeWhereSync(
+  authority: TenantAuthority,
+): Record<string, unknown> {
+  return buildDirectTenantScopeWhere(
+    authority,
+    acceptedLegacyShopVariants(authority.myshopifyDomain),
+  );
 }
 
 export function childTenantScopeWhereSync(
@@ -215,8 +265,6 @@ export function childTenantScopeWhereSync(
     );
   }
 
-  // Parent nested filter uses sync scope; parent IDs with whitespace legacy
-  // shop are still matched when parent has non-null shopId (option b).
   const parentScope = DIRECT_MODEL_SET.has(rule.parentModel)
     ? directTenantScopeWhereSync(authority)
     : childTenantScopeWhereSync(rule.parentModel, authority);
@@ -234,67 +282,83 @@ export function childTenantScopeWhereSync(
 }
 
 /**
- * Async tenant scope — uses ID-list resolution for direct models so
- * normalization-equivalent legacy shops are neither excluded nor over-included.
+ * Async tenant scope — scalable predicates for direct models; nested parent
+ * predicates for children. Memoized per operation/transaction when provided.
  */
 export async function tenantScopeWhere(
   client: PrismaLike,
   model: string,
   authority: TenantAuthority,
+  memo?: TenantScopeMemo,
 ): Promise<Record<string, unknown>> {
-  if (DIRECT_MODEL_SET.has(model)) {
-    return resolveDirectTenantScopeWhere(
-      client,
-      model as DirectMerchantModel,
-      authority,
-    );
+  if (memo?.scopeByModel.has(model)) {
+    return memo.scopeByModel.get(model)!;
   }
-  if (CHILD_MODEL_SET.has(model)) {
-    const rule = PARENT_OWNERSHIP_RULES[model];
-    if (!rule) {
-      throw new TenantAccessError(
-        "missing_parent_lineage",
-        `Child model ${model} has no parent ownership rule`,
-      );
-    }
-    const parentField = parentRelationFieldName(model);
-    if (!parentField) {
-      throw new TenantAccessError(
-        "missing_parent_lineage",
-        `Child model ${model} parent relation is ambiguous`,
-      );
-    }
 
-    // Resolve parent IDs with full normalization semantics, then scope children.
-    let parentScope: Record<string, unknown>;
-    if (DIRECT_MODEL_SET.has(rule.parentModel)) {
-      parentScope = await resolveDirectTenantScopeWhere(
+  const promise = (async (): Promise<Record<string, unknown>> => {
+    if (DIRECT_MODEL_SET.has(model)) {
+      return resolveDirectTenantScopeWhere(
         client,
-        rule.parentModel as DirectMerchantModel,
+        model as DirectMerchantModel,
         authority,
+        memo,
       );
-    } else {
-      parentScope = await tenantScopeWhere(client, rule.parentModel, authority);
     }
+    if (CHILD_MODEL_SET.has(model)) {
+      const rule = PARENT_OWNERSHIP_RULES[model];
+      if (!rule) {
+        throw new TenantAccessError(
+          "missing_parent_lineage",
+          `Child model ${model} has no parent ownership rule`,
+        );
+      }
+      const parentField = parentRelationFieldName(model);
+      if (!parentField) {
+        throw new TenantAccessError(
+          "missing_parent_lineage",
+          `Child model ${model} parent relation is ambiguous`,
+        );
+      }
 
-    return {
-      AND: [
-        {
-          OR: [{ shopId: authority.shopId }, { shopId: null }],
-        },
-        {
-          [parentField]: parentScope,
-        },
-      ],
-    };
-  }
-  throw new TenantAccessError(
-    "unknown_merchant_model",
-    `Model ${model} is not an approved merchant-owned model`,
-  );
+      let parentScope: Record<string, unknown>;
+      if (DIRECT_MODEL_SET.has(rule.parentModel)) {
+        parentScope = await resolveDirectTenantScopeWhere(
+          client,
+          rule.parentModel as DirectMerchantModel,
+          authority,
+          memo,
+        );
+      } else {
+        parentScope = await tenantScopeWhere(
+          client,
+          rule.parentModel,
+          authority,
+          memo,
+        );
+      }
+
+      return {
+        AND: [
+          {
+            OR: [{ shopId: authority.shopId }, { shopId: null }],
+          },
+          {
+            [parentField]: parentScope,
+          },
+        ],
+      };
+    }
+    throw new TenantAccessError(
+      "unknown_merchant_model",
+      `Model ${model} is not an approved merchant-owned model`,
+    );
+  })();
+
+  if (memo) memo.scopeByModel.set(model, promise);
+  return promise;
 }
 
-/** Sync fallback for nested include where injection (no await at build time). */
+/** Sync fallback for rare paths that cannot await (prefer async). */
 export function tenantScopeWhereSync(
   model: string,
   authority: TenantAuthority,
@@ -313,31 +377,20 @@ export function tenantScopeWhereSync(
 
 /**
  * Scalar-only tenant predicate for nested updateMany / deleteMany.
- * Prisma ScalarWhereInput rejects relation filters, and the parent nested
- * write already constrains the child collection to the parent row.
+ * Same D-030 ownership rule; uses distinct raw legacy representations when
+ * provided (async caller supplies them). Never uses owned-row ID lists.
  */
 export function nestedBulkScalarScopeWhere(
   model: string,
   authority: TenantAuthority,
+  matchingRawLegacyRepresentations?: string[],
 ): Record<string, unknown> {
   if (DIRECT_MODEL_SET.has(model)) {
-    // Direct children in a nested collection still carry shopId/shop.
-    return {
-      OR: [
-        { shopId: authority.shopId },
-        {
-          AND: [
-            { shopId: null },
-            {
-              shop: {
-                equals: authority.myshopifyDomain,
-                mode: "insensitive",
-              },
-            },
-          ],
-        },
-      ],
-    };
+    return buildDirectTenantScopeWhere(
+      authority,
+      matchingRawLegacyRepresentations ??
+        acceptedLegacyShopVariants(authority.myshopifyDomain),
+    );
   }
   if (CHILD_MODEL_SET.has(model)) {
     return {
@@ -350,6 +403,24 @@ export function nestedBulkScalarScopeWhere(
   );
 }
 
+export async function nestedBulkScalarScopeWhereAsync(
+  client: PrismaLike,
+  model: string,
+  authority: TenantAuthority,
+  memo?: TenantScopeMemo,
+): Promise<Record<string, unknown>> {
+  if (DIRECT_MODEL_SET.has(model)) {
+    const matching = await resolveMatchingRawLegacyShops(
+      client,
+      model as DirectMerchantModel,
+      authority,
+      memo,
+    );
+    return nestedBulkScalarScopeWhere(model, authority, matching);
+  }
+  return nestedBulkScalarScopeWhere(model, authority);
+}
+
 export function mergeWhere(
   existing: unknown,
   scope: Record<string, unknown>,
@@ -358,22 +429,6 @@ export function mergeWhere(
     return { ...scope };
   }
   return { AND: [existing, scope] };
-}
-
-/**
- * Accepted normalization variants for regression tests — derived from the
- * actual phase1-shop-domain-v1 rules (trim + lowercase only; no URL forms).
- */
-export function acceptedLegacyShopVariants(canonicalDomain: string): string[] {
-  const upper = canonicalDomain.toUpperCase();
-  return [
-    canonicalDomain,
-    upper,
-    ` ${canonicalDomain}`,
-    `${canonicalDomain} `,
-    `  ${canonicalDomain}  `,
-    ` ${upper} `,
-  ];
 }
 
 export { DIRECT_TABLE };

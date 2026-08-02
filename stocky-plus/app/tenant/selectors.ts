@@ -13,7 +13,10 @@ import {
   MERCHANT_MODEL_SET,
   type MerchantOwnedModel,
 } from "./models";
-import { tenantScopeWhere } from "./legacy-scope";
+import {
+  tenantScopeWhere,
+  type TenantScopeMemo,
+} from "./legacy-scope";
 
 type PrismaLike = PrismaClient | Prisma.TransactionClient;
 
@@ -295,16 +298,29 @@ export function parseOwnedRelationSelector(
 }
 
 /**
- * Resolve a relation-target selector to a canonical owned `{ id }`.
- * Performs tenant-scoped lookup; requires exactly one owned row.
+ * Flatten a validated unique selector into scalar WhereInput equality
+ * predicates (compound wrappers expanded). Shared by nested and top-level.
  */
-export async function resolveOwnedRelationSelector(args: {
+export function flattenUniqueSelectorPredicate(
+  targetModel: MerchantOwnedModel,
+  selector: unknown,
+): Record<string, unknown> {
+  return parseOwnedRelationSelector(targetModel, selector);
+}
+
+/**
+ * Resolve a unique selector to at most one owned row id under tenant scope.
+ * Returns null for foreign/missing (caller maps to not_found / foreign).
+ * Never passes compound WhereUniqueInput wrapper keys into findFirst.
+ */
+export async function resolveOwnedUniqueRow(args: {
   client: PrismaLike;
   targetModel: MerchantOwnedModel;
   selector: unknown;
   authority: TenantAuthority;
-}): Promise<{ id: string }> {
-  const { client, targetModel, selector, authority } = args;
+  memo?: TenantScopeMemo;
+}): Promise<{ id: string } | null> {
+  const { client, targetModel, selector, authority, memo } = args;
 
   if (!MERCHANT_MODEL_SET.has(targetModel)) {
     throw new TenantAccessError(
@@ -313,8 +329,14 @@ export async function resolveOwnedRelationSelector(args: {
     );
   }
 
-  const predicate = parseOwnedRelationSelector(targetModel, selector);
-  const scope = await tenantScopeWhere(client, targetModel, authority);
+  let predicate = flattenUniqueSelectorPredicate(targetModel, selector);
+  // Coerce legacy shop equality in selectors to the authenticated domain so
+  // case/whitespace caller variants still resolve owned rows (tenant scope
+  // separately authorizes null-owned rows via distinct raw representations).
+  if ("shop" in predicate && typeof predicate.shop === "string") {
+    predicate = { ...predicate, shop: authority.myshopifyDomain };
+  }
+  const scope = await tenantScopeWhere(client, targetModel, authority, memo);
   const delegate = getDelegate(client, targetModel);
 
   const found = (await delegate.findMany({
@@ -323,20 +345,35 @@ export async function resolveOwnedRelationSelector(args: {
     take: 2,
   })) as Array<{ id: string }>;
 
-  if (found.length === 0) {
-    throw new TenantAccessError(
-      "foreign_relation_target",
-      `${targetModel} relation target is missing or foreign to the tenant`,
-    );
-  }
+  if (found.length === 0) return null;
   if (found.length > 1) {
     throw new TenantAccessError(
       "foreign_relation_target",
-      `${targetModel} relation selector matched multiple owned rows`,
+      `${targetModel} unique selector matched multiple owned rows`,
     );
   }
-
   return { id: found[0]!.id };
+}
+
+/**
+ * Resolve a relation-target selector to a canonical owned `{ id }`.
+ * Performs tenant-scoped lookup; requires exactly one owned row.
+ */
+export async function resolveOwnedRelationSelector(args: {
+  client: PrismaLike;
+  targetModel: MerchantOwnedModel;
+  selector: unknown;
+  authority: TenantAuthority;
+  memo?: TenantScopeMemo;
+}): Promise<{ id: string }> {
+  const found = await resolveOwnedUniqueRow(args);
+  if (!found) {
+    throw new TenantAccessError(
+      "foreign_relation_target",
+      `${args.targetModel} relation target is missing or foreign to the tenant`,
+    );
+  }
+  return found;
 }
 
 /**
@@ -348,8 +385,9 @@ export async function resolveOwnedRelationSelectors(args: {
   targetModel: MerchantOwnedModel;
   selectors: unknown;
   authority: TenantAuthority;
+  memo?: TenantScopeMemo;
 }): Promise<Array<{ id: string }>> {
-  const { client, targetModel, selectors, authority } = args;
+  const { client, targetModel, selectors, authority, memo } = args;
   const items = normalizeToArray(selectors);
   const out: Array<{ id: string }> = [];
   for (const item of items) {
@@ -359,10 +397,27 @@ export async function resolveOwnedRelationSelectors(args: {
         targetModel,
         selector: item,
         authority,
+        memo,
       }),
     );
   }
   return out;
+}
+
+/**
+ * Merge rewritten nested connect/create elements into existing sibling ops
+ * without discarding caller intent (F-PR2R2-04).
+ */
+export function appendNestedOperation(
+  existing: unknown,
+  additions: unknown[],
+): unknown {
+  if (additions.length === 0) return existing;
+  const existingItems =
+    existing === undefined ? [] : normalizeToArray(existing);
+  const merged = [...existingItems, ...additions];
+  if (merged.length === 1) return merged[0];
+  return merged;
 }
 
 export function normalizeToArray(value: unknown): unknown[] {
@@ -407,9 +462,20 @@ export async function globalUniqueSelectorExists(args: {
 
   const delegate = getDelegate(client, targetModel);
   // Narrow unscoped existence check inside the trusted tenant-access module.
-  const row = await delegate.findFirst({
-    where: whereUnique,
-    select: { id: true },
-  });
-  return row != null;
+  // Use findUnique with the original WhereUniqueInput shape (compound wrappers
+  // are valid here). Fall back to flattened findFirst if needed.
+  try {
+    const row = await delegate.findUnique({
+      where: whereUnique,
+      select: { id: true },
+    });
+    return row != null;
+  } catch {
+    const predicate = parseOwnedRelationSelector(targetModel, selector);
+    const row = await delegate.findFirst({
+      where: predicate,
+      select: { id: true },
+    });
+    return row != null;
+  }
 }
