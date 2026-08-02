@@ -15,7 +15,8 @@
 | Intermediate green documentation tip (not final fourth-cycle handoff) | `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`) |
 | Fifth-cycle starting head | `6a73be7d23fd3bcbe19ebc30f65440e2c641093b` |
 | **Fifth-cycle runtime/test implementation head** | **`5a69783c18208e89ee70623058966c5e5a0ec6b1`** |
-| Fifth-cycle final handoff head | *(recorded after exact-head CI on documentation tip)* |
+| **Fifth-cycle final handoff head** | **`ab25f57c30568c8bcbf8b0b89661868ccd20bbfe`** |
+| Exact-head CI on final handoff | run `30771419539`, job `91559144905`, conclusion `success`, `head_sha` = `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` |
 | PR state | OPEN, draft, unmerged |
 
 ## Independent review context
@@ -136,9 +137,28 @@ When another part of the same model contains excessive null legacy forms:
 | `npm run graphql-codegen` | 0 |
 | `git diff --check` | 0 |
 
-## Exact-head CI
+## Exact-head CI evidence (final handoff tip `ab25f57…`)
 
-Recorded after green CI on the final handoff tip (see PROJECT_STATUS / PR body).
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30771419539` |
+| Job ID | `91559144905` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30771419539 |
+
+Runtime/test implementation head remains `5a69783…`. This documentation pin advances the tip; exact-head CI for any newer tip is required before ChatGPT triage if the tip moves again.
+
+### Focused CI steps (executed in workflow)
+
+| Step | File | Local count |
+|---|---|---:|
+| Tenant legacy unique-selector resolution tests | `legacy-unique-selector-resolution.test.ts` | 29 |
+| Tenant legacy evidence configuration tests | `legacy-evidence-config.test.ts` | 6 |
+| Tenant legacy candidate-superset normalization tests | `legacy-normalization-candidate-superset.test.ts` | 6 |
+| Tenant legacy overflow operation-matrix tests | `legacy-overflow-operation-matrix.test.ts` | 3 |
 
 ## Prohibited-scope confirmation
 

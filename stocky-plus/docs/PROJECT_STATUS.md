@@ -20,7 +20,7 @@
 **PR 2 fourth independent review report-only commit:** `6a73be7d23fd3bcbe19ebc30f65440e2c641093b`
 **PR 2 fourth-cycle intermediate green tip (not final handoff):** `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`, success)
 **PR 2 fifth-cycle runtime/test implementation head:** `5a69783c18208e89ee70623058966c5e5a0ec6b1`
-**PR 2 fifth-cycle final handoff tip:** *(pending exact-head CI after documentation pin)*
+**PR 2 fifth-cycle final handoff tip:** `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` (run `30771419539`, job `91559144905`, success)
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` (preserved verbatim)
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06…` (report commit `b5fbd2b…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb…` (report commit `fed21a48…`; preserved verbatim) — P0:0 P1:3 P2:3 P3:4; no cross-tenant read/write reproduced
