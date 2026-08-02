@@ -15,9 +15,10 @@
 | Fourth-cycle starting head | `000e53cdae6cd39b690fc8107d7d3f4f4791adf1` |
 | **Fourth-cycle runtime/test implementation head** | **`21aba6660e71fa5af558d81499190ee8eb0e645e`** |
 | Prior green evidence tip | `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` (run `30762016174`, job `91534135863`, success) |
-| **Fourth-cycle final handoff head** | **`867460f84bdc76673d2c676e83124bce83183964`** |
+| **Fourth-cycle final handoff head** | **`ba5eee16f4121ffb128133102e55fbd35397665c`** |
 | PR state | OPEN, draft, unmerged |
-| Exact-head CI on final handoff | run `30762359407`, job `91535068210`, conclusion `success`, `head_sha` = `867460f84bdc76673d2c676e83124bce83183964` |
+| Exact-head CI on final handoff | run `30762725271`, job `91536046005`, conclusion `success`, `head_sha` = `ba5eee16f4121ffb128133102e55fbd35397665c` |
+| Exact-head CI on `867460f…` | run `30762359407`, job `91535068210`, conclusion `success` |
 | Exact-head CI on prior tip `bd2fc24…` | run `30762016174`, job `91534135863`, conclusion `success` |
 | Third-cycle correction range commit count | `fed21a48…`..`fec8500…` = **11** (prior prompt expected 12 was incorrect; merge base exact; no history rewrite) |
 | Intermediate green documentation tip (not final reviewed head) | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
@@ -153,3 +154,17 @@ No focused step used a `-t` filter. Constrained-memory subject evidence step was
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30762359407 |
 
 Any subsequent documentation-only pin advances the tip; ChatGPT must triage the exact PR tip after confirming green CI on that tip. Runtime/test implementation head remains `21aba66…`.
+
+## Exact-head CI evidence (final handoff tip `ba5eee1…`)
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30762725271` |
+| Job ID | `91536046005` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `ba5eee16f4121ffb128133102e55fbd35397665c` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30762725271 |
+
+Runtime/test implementation head remains `21aba66…`. This documentation pin advances the tip; exact-head CI for the new tip is required before ChatGPT triage if the tip moves again.
