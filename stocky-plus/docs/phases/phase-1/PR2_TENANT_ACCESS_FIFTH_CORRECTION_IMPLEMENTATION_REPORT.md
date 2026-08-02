@@ -16,8 +16,9 @@
 | Fifth-cycle starting head | `6a73be7d23fd3bcbe19ebc30f65440e2c641093b` |
 | **Fifth-cycle runtime/test implementation head** | **`5a69783c18208e89ee70623058966c5e5a0ec6b1`** |
 | Prior green documentation tip | `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` (run `30771419539`, job `91559144905`, success) |
-| **Fifth-cycle final handoff head** | **`0fd3f13fd8c9d72813380681d9b3fee7229e7d91`** |
-| Exact-head CI on final handoff | run `30771919140`, job `91560408324`, conclusion `success`, `head_sha` = `0fd3f13fd8c9d72813380681d9b3fee7229e7d91` |
+| Intermediate green tip | `0fd3f13fd8c9d72813380681d9b3fee7229e7d91` (run `30771919140`, job `91560408324`, success) |
+| **Fifth-cycle final handoff head** | **`520021c8da5950e7d7818a00996e13cedaf4588d`** |
+| Exact-head CI on final handoff | run `30772466853`, job `91561885234`, conclusion `success`, `head_sha` = `520021c8da5950e7d7818a00996e13cedaf4588d` |
 | PR state | OPEN, draft, unmerged |
 
 ## Independent review context
@@ -150,7 +151,7 @@ When another part of the same model contains excessive null legacy forms:
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30771419539 |
 
-## Exact-head CI evidence (final handoff tip `0fd3f13…`)
+## Exact-head CI evidence (intermediate tip `0fd3f13…`)
 
 | Field | Value |
 |---|---|
@@ -161,6 +162,18 @@ When another part of the same model contains excessive null legacy forms:
 | `head_sha` | `0fd3f13fd8c9d72813380681d9b3fee7229e7d91` |
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30771919140 |
+
+## Exact-head CI evidence (final handoff tip `520021c…`)
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30772466853` |
+| Job ID | `91561885234` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `520021c8da5950e7d7818a00996e13cedaf4588d` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30772466853 |
 
 Runtime/test implementation head remains `5a69783…`. This documentation pin advances the tip; exact-head CI for the new tip is required before ChatGPT triage if the tip moves again.
 
