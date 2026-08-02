@@ -466,9 +466,12 @@ export async function resolveOwnedUniqueRow(args: {
   // Two-stage canonical ID lookup (F-PR2R4-05): avoid legacy discovery when
   // the fetched row already has non-null current-tenant shopId.
   if (keys.length === 1 && keys[0] === "id" && typeof predicate.id === "string") {
+    const selectFields = DIRECT_MODEL_SET.has(targetModel)
+      ? { id: true, shopId: true, shop: true }
+      : { id: true, shopId: true };
     const byId = (await delegate.findMany({
       where: { id: predicate.id },
-      select: { id: true, shopId: true, shop: true },
+      select: selectFields,
       take: 1,
     })) as Array<{ id: string; shopId: string | null; shop?: string | null }>;
 
