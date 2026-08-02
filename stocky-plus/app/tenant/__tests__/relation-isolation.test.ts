@@ -3,7 +3,6 @@ import type { PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
 import { createTenantDb } from "../tenant-db.server";
 import { ROUTE_RELATION_SHAPES } from "../relations";
-import { TenantAccessError } from "../errors";
 import {
   createPrisma,
   resetPublicSchema,
@@ -215,7 +214,7 @@ describe("recursive relation isolation (C-02)", () => {
     expect(row.purchaseOrders[0].lineItems).toHaveLength(1);
   });
 
-  it("to-one supplier on PO fails closed when foreign", async () => {
+  it("to-one supplier on PO is nulled when foreign (F-PR2R2-03)", async () => {
     const foreignSupplier = await prisma.supplier.create({
       data: { shop: SHOP_B_DOMAIN, shopId: shopBId, name: "B" },
     });
@@ -229,12 +228,13 @@ describe("recursive relation isolation (C-02)", () => {
         status: "DRAFT",
       },
     });
-    await expect(
-      dbA().purchaseOrder.findUnique({
-        where: { id: po.id },
-        include: { supplier: true },
-      }),
-    ).rejects.toBeInstanceOf(TenantAccessError);
+    const row = await dbA().purchaseOrder.findUnique({
+      where: { id: po.id },
+      include: { supplier: true },
+    });
+    expect(row).not.toBeNull();
+    expect(row.id).toBe(po.id);
+    expect(row.supplier).toBeNull();
   });
 
   it("transfer and stocktake line includes are scoped", async () => {

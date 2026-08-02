@@ -152,15 +152,16 @@ describe("tenant large-payload client-hint tests (F-PR2C-08)", () => {
     ).rejects.toMatchObject({ code: "client_shop_hint_limit" });
   });
 
-  it("ignores malformed JSON without affecting authority", async () => {
-    const ctx = await requireAdminTenant({
-      request: new Request("https://example.com/app", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{not-json",
+  it("rejects malformed declared JSON with a stable error (F-PR2R2-07)", async () => {
+    await expect(
+      requireAdminTenant({
+        request: new Request("https://example.com/app", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{not-json",
+        }),
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
       }),
-      authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
-    });
-    expect(ctx.tenant.shopId).toBe(shopAId);
+    ).rejects.toMatchObject({ code: "client_shop_hint_malformed_json" });
   });
 });

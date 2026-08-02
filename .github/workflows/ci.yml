@@ -145,19 +145,19 @@ jobs:
         run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts
 
       - name: Tenant connectOrCreate foreign-match tests
-        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts -t "connectOrCreate"
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts app/tenant/__tests__/connect-or-create-merge.test.ts
 
       - name: Tenant array nested-mutation tests
-        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts -t "array-form"
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts
 
       - name: Tenant legacy normalization compatibility tests
-        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization.test.ts
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization.test.ts app/tenant/__tests__/normalization-consistency.test.ts
 
       - name: Tenant partial-selection tests
-        run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts -t "partial"
+        run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts
 
       - name: Tenant update projection and nested-write tests
-        run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts -t "update"
+        run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts
 
       - name: Tenant scanner provenance tests
         run: npm run test:tenant-access -- scripts/tenant-access/architecture-audit.test.ts
@@ -167,6 +167,30 @@ jobs:
 
       - name: Tenant write atomicity tests
         run: npm run test:tenant-access -- app/tenant/__tests__/write-atomicity.test.ts
+
+      - name: Tenant top-level unique-selector tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/top-level-unique-selectors.test.ts
+
+      - name: Tenant scope scale tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/tenant-scope-scale.test.ts
+
+      - name: Tenant mixed relation ownership tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/mixed-relation-ownership.test.ts
+
+      - name: Tenant connectOrCreate merge tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/connect-or-create-merge.test.ts
+
+      - name: Tenant normalization consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/normalization-consistency.test.ts
+
+      - name: Tenant LeadTimeSnapshot projection tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/lead-time-partial-select.test.ts
+
+      - name: Tenant request-byte and shop-hint tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/client-hint-byte-limits.test.ts
+
+      - name: Tenant authority-issuer scanner tests
+        run: npm run test:tenant-access -- scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts
 
       - name: Tenant access architecture negative fixtures
         run: npm run test:tenant-access -- scripts/tenant-access/architecture-audit.test.ts
