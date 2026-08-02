@@ -8,7 +8,7 @@ import type { PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
 import { TenantAccessError } from "../errors";
 import {
-  MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT,
+  getMaxDistinctLegacyShopFormsPerModelTenant,
   LEGACY_EVIDENCE_VERSION,
 } from "../legacy-scope";
 import { createTenantDb } from "../tenant-db.server";
@@ -20,7 +20,7 @@ import {
   SHOP_B_DOMAIN,
 } from "./helpers";
 
-const LIMIT = MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT;
+const LIMIT = getMaxDistinctLegacyShopFormsPerModelTenant();
 
 describe("tenant legacy-evidence overflow (F-PR2R3-01)", () => {
   let prisma: PrismaClient;

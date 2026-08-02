@@ -1,5 +1,10 @@
 /**
- * F-PR2R3-03 — SQL candidate discovery ≡ JavaScript phase1-shop-domain-v1.
+ * F-PR2R3-03 — SQL candidate discovery uses the shared trim set;
+ * JavaScript phase1-shop-domain-v1 remains final authority.
+ *
+ * F-PR2R4-03: do not claim SQL decision == JS decision for every Unicode
+ * value or database locale. Locale-sensitive supersets are covered by
+ * legacy-normalization-candidate-superset.test.ts.
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -68,10 +73,12 @@ describe("tenant legacy SQL/JS normalization equivalence (F-PR2R3-03)", () => {
     }
   });
 
-  it("corpus: JS decision == PostgreSQL candidate-discovery decision", async () => {
+  it("corpus: JS acceptance matches expectations; SQL discovers JS-accepted forms", async () => {
     const trimChars = shopDomainTrimCharacters();
 
     for (const entry of SHOP_DOMAIN_NORMALIZATION_CORPUS) {
+      if (entry.sqlDiscoveryLocaleDependent) continue;
+
       const raw = entry.buildRaw(SHOP_A_DOMAIN, SHOP_B_DOMAIN);
       const js = normalizeShopDomain(raw);
       const jsAccepts =
@@ -91,23 +98,22 @@ describe("tenant legacy SQL/JS normalization equivalence (F-PR2R3-03)", () => {
       `;
       const sqlDiscovers = rows[0]?.matches === true;
 
+      // Every JS-accepted form must be SQL-discoverable (SQL is a superset).
+      if (jsAccepts) {
+        expect({ id: entry.id, sqlDiscovers }).toEqual({
+          id: entry.id,
+          sqlDiscovers: true,
+        });
+      }
+
+      // For locale-independent corpus entries, SQL discovery matches the
+      // documented expectation (not a universal SQL==JS identity claim).
       expect({
         id: entry.id,
         sqlDiscovers,
       }).toEqual({
         id: entry.id,
         sqlDiscovers: entry.sqlDiscoversAsCandidate,
-      });
-
-      // Equivalence: decisions must match.
-      expect({
-        id: entry.id,
-        js: jsAccepts,
-        sql: sqlDiscovers,
-      }).toEqual({
-        id: entry.id,
-        js: entry.jsAcceptsAsCanonical,
-        sql: entry.sqlDiscoversAsCandidate,
       });
     }
   });

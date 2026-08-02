@@ -207,8 +207,12 @@ export function normalizeShopDomain(
 }
 
 /**
- * Shared corpus entries for JS ↔ PostgreSQL equivalence tests (F-PR2R3-03).
- * Each entry is evaluated against an authenticated canonical domain.
+ * Shared corpus entries for JS / PostgreSQL candidate-discovery tests
+ * (F-PR2R3-03 / F-PR2R4-03).
+ *
+ * SQL discovery is a bounded locale-sensitive **superset**. JavaScript
+ * `phase1-shop-domain-v1` is the final authorization authority. Do not assert
+ * `SQL decision == JS decision` for every Unicode value or database locale.
  */
 export type ShopDomainCorpusEntry = {
   id: string;
@@ -216,8 +220,17 @@ export type ShopDomainCorpusEntry = {
   buildRaw: (canonicalDomain: string, foreignDomain: string) => string;
   /** Whether JS normalize accepts and equals the authenticated domain. */
   jsAcceptsAsCanonical: boolean;
-  /** Whether SQL candidate discovery should surface this raw value. */
+  /**
+   * Whether SQL candidate discovery *may* surface this raw value under some
+   * database ctype. When true and jsAcceptsAsCanonical is false, the value is
+   * a documented SQL-superset residual that JS must still deny.
+   */
   sqlDiscoversAsCandidate: boolean;
+  /**
+   * When true, SQL discovery is locale-dependent (e.g. Kelvin sign under
+   * UTF-8 ctype). Tests must not require a fixed SQL decision across locales.
+   */
+  sqlDiscoveryLocaleDependent?: boolean;
 };
 
 export const SHOP_DOMAIN_NORMALIZATION_CORPUS: readonly ShopDomainCorpusEntry[] =
