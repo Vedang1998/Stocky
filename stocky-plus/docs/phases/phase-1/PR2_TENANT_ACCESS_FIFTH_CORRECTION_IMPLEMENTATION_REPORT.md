@@ -15,8 +15,9 @@
 | Intermediate green documentation tip (not final fourth-cycle handoff) | `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`) |
 | Fifth-cycle starting head | `6a73be7d23fd3bcbe19ebc30f65440e2c641093b` |
 | **Fifth-cycle runtime/test implementation head** | **`5a69783c18208e89ee70623058966c5e5a0ec6b1`** |
-| **Fifth-cycle final handoff head** | **`ab25f57c30568c8bcbf8b0b89661868ccd20bbfe`** |
-| Exact-head CI on final handoff | run `30771419539`, job `91559144905`, conclusion `success`, `head_sha` = `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` |
+| Prior green documentation tip | `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` (run `30771419539`, job `91559144905`, success) |
+| **Fifth-cycle final handoff head** | **`0fd3f13fd8c9d72813380681d9b3fee7229e7d91`** |
+| Exact-head CI on final handoff | run `30771919140`, job `91560408324`, conclusion `success`, `head_sha` = `0fd3f13fd8c9d72813380681d9b3fee7229e7d91` |
 | PR state | OPEN, draft, unmerged |
 
 ## Independent review context
@@ -137,7 +138,7 @@ When another part of the same model contains excessive null legacy forms:
 | `npm run graphql-codegen` | 0 |
 | `git diff --check` | 0 |
 
-## Exact-head CI evidence (final handoff tip `ab25f57…`)
+## Exact-head CI evidence (prior tip `ab25f57…`)
 
 | Field | Value |
 |---|---|
@@ -149,7 +150,19 @@ When another part of the same model contains excessive null legacy forms:
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30771419539 |
 
-Runtime/test implementation head remains `5a69783…`. This documentation pin advances the tip; exact-head CI for any newer tip is required before ChatGPT triage if the tip moves again.
+## Exact-head CI evidence (final handoff tip `0fd3f13…`)
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30771919140` |
+| Job ID | `91560408324` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `0fd3f13fd8c9d72813380681d9b3fee7229e7d91` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30771919140 |
+
+Runtime/test implementation head remains `5a69783…`. This documentation pin advances the tip; exact-head CI for the new tip is required before ChatGPT triage if the tip moves again.
 
 ### Focused CI steps (executed in workflow)
 
