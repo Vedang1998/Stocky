@@ -5,7 +5,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
-import { TenantAccessError } from "../errors";
 import { getMaxDistinctLegacyShopFormsPerModelTenant } from "../legacy-scope";
 import { createTenantDb } from "../tenant-db.server";
 import {

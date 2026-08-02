@@ -6,7 +6,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
 import { runAfterAuthTenantBootstrap } from "../after-auth.server";
-import { TenantAccessError } from "../errors";
 import { createTenantDb } from "../tenant-db.server";
 import {
   createPrisma,
@@ -205,7 +204,6 @@ describe("tenant legacy unique-selector resolution (F-PR2R4-01)", () => {
       },
       create: {
         shop: SHOP_A_DOMAIN,
-        shopId: shopAId,
         shopifyVariantId: SHARED_EXTERNAL_ID,
         locationId: "loc-1",
         quantityAvailable: 0,
@@ -238,7 +236,6 @@ describe("tenant legacy unique-selector resolution (F-PR2R4-01)", () => {
       },
       create: {
         shop: SHOP_A_DOMAIN,
-        shopId: shopAId,
         shopifyVariantId: SHARED_EXTERNAL_ID,
         locationId: "loc-1",
         date: new Date("2026-01-02"),
@@ -271,7 +268,6 @@ describe("tenant legacy unique-selector resolution (F-PR2R4-01)", () => {
       },
       create: {
         shop: SHOP_A_DOMAIN,
-        shopId: shopAId,
         shopifyVariantId: SHARED_EXTERNAL_ID,
         locationId: "all",
         metric: "REVENUE",
@@ -302,7 +298,6 @@ describe("tenant legacy unique-selector resolution (F-PR2R4-01)", () => {
       },
       create: {
         shop: SHOP_A_DOMAIN,
-        shopId: shopAId,
         bundleVariantId: "bundle-1",
         componentVariantId: "comp-1",
         quantity: 1,
@@ -333,7 +328,6 @@ describe("tenant legacy unique-selector resolution (F-PR2R4-01)", () => {
       },
       create: {
         shop: SHOP_A_DOMAIN,
-        shopId: shopAId,
         variantId: SHARED_EXTERNAL_ID,
         locationId: "loc-1",
         lookbackStart: new Date("2026-02-01"),
