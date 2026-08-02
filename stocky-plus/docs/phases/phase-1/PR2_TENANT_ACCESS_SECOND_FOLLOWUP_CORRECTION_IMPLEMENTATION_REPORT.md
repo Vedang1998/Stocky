@@ -16,7 +16,7 @@
 | Second correction-review report | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | Starting head for this cycle | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | **Third-cycle implementation head** | **`d7058294af7eb3d8f287f48cd0657a74475892e7`** |
-| Final handoff head | see tip after this evidence refresh (must match PR HEAD with green CI) |
+| Final handoff head | `476fa8c652d28e8c6c50c0700805f0d511e7ba8c` (CI re-run required on this tip) |
 | PR state | OPEN, draft, unmerged |
 | Exact-head CI (pre-handoff tip `c142e8fe…`) | run `30735830014`, job `91464351163`, conclusion `success`, `head_sha` = `c142e8fe215904007b1464ebd78bc8fd9097f126` |
 
