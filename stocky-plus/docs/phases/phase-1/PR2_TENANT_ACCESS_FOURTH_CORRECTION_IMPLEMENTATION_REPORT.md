@@ -14,8 +14,10 @@
 | Third independent review report-only commit | `000e53cdae6cd39b690fc8107d7d3f4f4791adf1` |
 | Fourth-cycle starting head | `000e53cdae6cd39b690fc8107d7d3f4f4791adf1` |
 | **Fourth-cycle runtime/test implementation head** | **`21aba6660e71fa5af558d81499190ee8eb0e645e`** |
-| Fourth-cycle final handoff head | *(recorded in a later evidence-only tip after exact-head CI)* |
+| Prior green evidence tip | `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` (run `30762016174`, job `91534135863`, success) |
+| Fourth-cycle final handoff head | *(this evidence commit — recorded after push / exact-head CI in PR body)* |
 | PR state | OPEN, draft, unmerged |
+| Exact-head CI on `bd2fc24…` | run `30762016174`, job `91534135863`, conclusion `success`, `head_sha` = `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` |
 | Third-cycle correction range commit count | `fed21a48…`..`fec8500…` = **11** (prior prompt expected 12 was incorrect; merge base exact; no history rewrite) |
 | Intermediate green documentation tip (not final reviewed head) | `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` |
 
@@ -110,3 +112,29 @@ Source of truth: `phase1-shop-domain-v1` in `app/tenant/shop-domain.ts`. Shared 
 ## Next action
 
 Return to ChatGPT for exact-head triage and the fourth independent PR 2 correction-review prompt.
+
+## Exact-head CI evidence (prior green tip `bd2fc24…`)
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30762016174` |
+| Job ID | `91534135863` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30762016174 |
+
+### New focused steps (tests actually executed on `bd2fc24…`)
+
+| Step | File | Tests |
+|---|---|---:|
+| Tenant legacy-evidence overflow tests | `legacy-evidence-overflow.test.ts` | 12 |
+| Tenant-bearing unique-selector tests | `tenant-bearing-unique-selectors.test.ts` | 6 |
+| Tenant legacy SQL/JS normalization equivalence tests | `legacy-normalization-equivalence.test.ts` | 4 |
+| Tenant legacy bulk-mutation consistency tests | `legacy-normalization-bulk-mutations.test.ts` | 2 |
+| Tenant legacy relation consistency tests | `legacy-normalization-relations.test.ts` | 2 |
+| Tenant legacy normalization read consistency tests | `normalization-consistency.test.ts` + `legacy-normalization.test.ts` | 5 |
+| Full Tenant access tests | `npm run test:tenant-access` | **224** |
+
+No focused step used a `-t` filter. Constrained-memory subject evidence step was present in workflow; job conclusion success.

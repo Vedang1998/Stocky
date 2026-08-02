@@ -16,6 +16,7 @@
 **PR 2 third-cycle reviewed handoff head:** `fec8500095197798be183d08b3dd004632adba80`
 **PR 2 third independent review report-only commit:** `000e53cdae6cd39b690fc8107d7d3f4f4791adf1`
 **PR 2 fourth-cycle runtime/test implementation head:** `21aba6660e71fa5af558d81499190ee8eb0e645e`
+**PR 2 fourth-cycle prior green evidence tip:** `bd2fc24b2e71510d2b03dab4371d83c7a4d8f12c` (run `30762016174`, job `91534135863`, success)
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` (preserved verbatim)
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06…` (report commit `b5fbd2b…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb…` (report commit `fed21a48…`; preserved verbatim) — P0:0 P1:3 P2:3 P3:4; no cross-tenant read/write reproduced
