@@ -16,8 +16,9 @@
 | Second correction-review report | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | Starting head for this cycle | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | **Third-cycle implementation head** | **`d7058294af7eb3d8f287f48cd0657a74475892e7`** |
-| Final handoff head | `75b3bccd95c70e8f5fd45fac0c0e30337cb391c8` |
+| Final handoff head | see tip after this evidence refresh (must match PR HEAD with green CI) |
 | PR state | OPEN, draft, unmerged |
+| Exact-head CI (pre-handoff tip `c142e8fe…`) | run `30735830014`, job `91464351163`, conclusion `success`, `head_sha` = `c142e8fe215904007b1464ebd78bc8fd9097f126` |
 
 ## Independent review context
 
@@ -79,3 +80,31 @@ Non-null `shopId` equal to the current tenant authorizes the row. Legacy `shop` 
 ## Next action
 
 Return to ChatGPT for exact-head triage and the third independent PR 2 correction-review prompt.
+
+
+## Exact-head CI evidence
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30735830014` |
+| Job ID | `91464351163` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `c142e8fe215904007b1464ebd78bc8fd9097f126` |
+| Conclusion | `success` |
+
+### Focused steps (tests actually executed)
+
+| Step | File | Tests |
+|---|---|---|
+| Tenant top-level unique-selector tests | `top-level-unique-selectors.test.ts` | 7 passed |
+| Tenant scope scale tests | `tenant-scope-scale.test.ts` | 6 passed |
+| Tenant mixed relation ownership tests | `mixed-relation-ownership.test.ts` | 5 passed |
+| Tenant connectOrCreate merge tests | `connect-or-create-merge.test.ts` | 4 passed |
+| Tenant normalization consistency tests | `normalization-consistency.test.ts` | 2 passed |
+| Tenant LeadTimeSnapshot projection tests | `lead-time-partial-select.test.ts` | 3 passed |
+| Tenant request-byte and shop-hint tests | `client-hint-byte-limits.test.ts` | 7 passed |
+| Tenant authority-issuer scanner tests | `authority-issuer-scanner.test.ts` | 7 passed |
+
+No focused step used a `-t` filter that can match zero tests. Full `Tenant access tests` suite also passed on this head.
+
