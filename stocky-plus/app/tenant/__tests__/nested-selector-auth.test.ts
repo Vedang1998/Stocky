@@ -149,7 +149,7 @@ describe("tenant nested selector authorization (F-PR2C-01/02/03)", () => {
           },
         },
       }),
-    ).rejects.toMatchObject({ code: "foreign_relation_target" });
+    ).rejects.toMatchObject({ code: "foreign_selector_tenant" });
 
     const stillB = await prisma.supplier.findUnique({
       where: { id: supplierB.id },
@@ -171,7 +171,7 @@ describe("tenant nested selector authorization (F-PR2C-01/02/03)", () => {
           },
         },
       }),
-    ).rejects.toMatchObject({ code: "foreign_relation_target" });
+    ).rejects.toMatchObject({ code: "foreign_selector_tenant" });
 
     const lines = await prisma.transferLineItem.count({
       where: { transferOrderId: transferB.id },
@@ -193,7 +193,7 @@ describe("tenant nested selector authorization (F-PR2C-01/02/03)", () => {
           },
         },
       }),
-    ).rejects.toMatchObject({ code: "foreign_relation_target" });
+    ).rejects.toMatchObject({ code: "foreign_selector_tenant" });
 
     const lines = await prisma.stocktakeLineItem.count({
       where: { stocktakeId: stocktakeB.id },

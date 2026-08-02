@@ -7,6 +7,7 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
+import { acceptedLegacyShopVariants } from "../tenant/legacy-scope";
 
 const SHOP_A = "shop-a.myshopify.com";
 const SHOP_B = "shop-b.myshopify.com";
@@ -204,16 +205,8 @@ function authAsShopB() {
 
 /** Accepted phase1-shop-domain-v1 variants used by mocked-client scope fallback. */
 function legacyShopIn(domain: string) {
-  const upper = domain.toUpperCase();
   return {
-    in: [
-      domain,
-      upper,
-      ` ${domain}`,
-      `${domain} `,
-      `  ${domain}  `,
-      ` ${upper} `,
-    ],
+    in: acceptedLegacyShopVariants(domain),
   };
 }
 

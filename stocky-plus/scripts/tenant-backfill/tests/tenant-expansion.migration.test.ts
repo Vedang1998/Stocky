@@ -3,7 +3,13 @@
  * Requires DATABASE_URL / TENANT_MIGRATION_DATABASE_URL on disposable PostgreSQL 16.
  */
 import { execFileSync } from "node:child_process";
-import { renameSync, existsSync, mkdirSync } from "node:fs";
+import {
+  renameSync,
+  existsSync,
+  mkdirSync,
+  cpSync,
+  rmSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -18,6 +24,18 @@ import { applyIndexes } from "../../tenant-indexes/apply";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = join(__dirname, "..", "..", "..");
 const MIGRATIONS_DIR = join(APP_ROOT, "prisma", "migrations");
+
+/** OverlayFS-safe directory move (rename can raise EXDEV). */
+function moveDir(from: string, to: string): void {
+  try {
+    renameSync(from, to);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code !== "EXDEV") throw err;
+    cpSync(from, to, { recursive: true });
+    rmSync(from, { recursive: true, force: true });
+  }
+}
 
 const DATABASE_URL =
   process.env.TENANT_MIGRATION_DATABASE_URL ??
@@ -91,29 +109,29 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
   );
 
   try {
-    if (existsSync(expansion)) renameSync(expansion, expansionPark);
-    if (existsSync(indexes)) renameSync(indexes, indexesPark);
-    if (existsSync(correction)) renameSync(correction, correctionPark);
-    if (existsSync(detection)) renameSync(detection, detectionPark);
+    if (existsSync(expansion)) moveDir(expansion, expansionPark);
+    if (existsSync(indexes)) moveDir(indexes, indexesPark);
+    if (existsSync(correction)) moveDir(correction, correctionPark);
+    if (existsSync(detection)) moveDir(detection, detectionPark);
     const initOut = migrateDeploy();
-    renameSync(expansionPark, expansion);
-    renameSync(indexesPark, indexes);
-    renameSync(correctionPark, correction);
-    renameSync(detectionPark, detection);
+    moveDir(expansionPark, expansion);
+    moveDir(indexesPark, indexes);
+    moveDir(correctionPark, correction);
+    moveDir(detectionPark, detection);
     const restOut = migrateDeploy();
     return { initOut, restOut };
   } catch (error) {
     if (existsSync(expansionPark) && !existsSync(expansion)) {
-      renameSync(expansionPark, expansion);
+      moveDir(expansionPark, expansion);
     }
     if (existsSync(indexesPark) && !existsSync(indexes)) {
-      renameSync(indexesPark, indexes);
+      moveDir(indexesPark, indexes);
     }
     if (existsSync(correctionPark) && !existsSync(correction)) {
-      renameSync(correctionPark, correction);
+      moveDir(correctionPark, correction);
     }
     if (existsSync(detectionPark) && !existsSync(detection)) {
-      renameSync(detectionPark, detection);
+      moveDir(detectionPark, detection);
     }
     throw error;
   }

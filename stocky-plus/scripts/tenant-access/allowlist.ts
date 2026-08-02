@@ -102,6 +102,11 @@ const TEST_FILES = [
   "app/tenant/__tests__/normalization-consistency.test.ts",
   "app/tenant/__tests__/lead-time-partial-select.test.ts",
   "app/tenant/__tests__/client-hint-byte-limits.test.ts",
+  "app/tenant/__tests__/legacy-evidence-overflow.test.ts",
+  "app/tenant/__tests__/tenant-bearing-unique-selectors.test.ts",
+  "app/tenant/__tests__/legacy-normalization-equivalence.test.ts",
+  "app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts",
+  "app/tenant/__tests__/legacy-normalization-relations.test.ts",
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
 ] as const;
 

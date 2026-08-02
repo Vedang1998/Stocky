@@ -74,12 +74,15 @@ describe("tenant legacy normalization relation consistency (F-PR2R3-04)", () => 
       },
     });
 
-    const rows = await dbA().purchaseOrder.findMany({
+    const rows = (await dbA().purchaseOrder.findMany({
       include: { supplier: true },
       orderBy: { locationId: "asc" },
-    });
+    })) as Array<{
+      id: string;
+      supplier: { id: string } | null;
+    }>;
     expect(rows).toHaveLength(2);
-    const byId = new Map(rows.map((r: { id: string; supplier: { id: string } | null }) => [r.id, r]));
+    const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get(poOwned.id)?.supplier?.id).toBe(ownedSupplier.id);
     expect(byId.get(poForeign.id)?.supplier).toBeNull();
   });
@@ -113,18 +116,19 @@ describe("tenant legacy normalization relation consistency (F-PR2R3-04)", () => 
       },
     });
 
-    const row = await dbA().supplier.findUnique({
+    const row = (await dbA().supplier.findUnique({
       where: { id: parent.id },
       include: {
         purchaseOrders: true,
         _count: { select: { purchaseOrders: true } },
       },
-    });
+    })) as {
+      purchaseOrders: Array<{ id: string }>;
+      _count: { purchaseOrders: number };
+    } | null;
 
     expect(row).not.toBeNull();
-    const ids = new Set(
-      (row!.purchaseOrders as Array<{ id: string }>).map((c) => c.id),
-    );
+    const ids = new Set(row!.purchaseOrders.map((c) => c.id));
     expect(ids.has(childTab.id)).toBe(true);
     expect(ids.has(childLf.id)).toBe(true);
     expect(ids.size).toBe(2);
