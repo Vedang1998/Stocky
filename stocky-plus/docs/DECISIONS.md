@@ -371,3 +371,31 @@ None of these decisions are implemented merely because they are approved. Invent
 7. **Migration:** No schema migration. No production backfill. No ownership repair. No RLS/roles/non-null/composite FKs/tenant-key triggers. Nullable `shopId` remains until PR 3 / operational backfill gates.
 8. **Risks:** R-072 (legacy evidence overflow), R-073 (tenant-bearing selector coercion), R-074 (normalization implementation divergence) — correction implemented pending independent verification. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4. Inventory writes remain unapproved.
 9. **Final:** **AUTHORIZED FOR PR 2 FOURTH CORRECTION IMPLEMENTATION — PENDING FOURTH INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. PR 3 remains **not started**. No deployment, production backfill, RLS, schema change, or inventory writes are authorized.
+
+## D-032 — Phase 1 PR 2 fifth correction cycle required
+
+1. **Current:** Independent Claude Code fourth correction review of implementation handoff head `93e8044aea3958e8efe36f774e7d99ae6a0dd687` issued verdict **`NOT READY — FURTHER CORRECTIONS REQUIRED`** with **P0: 0 · P1: 1 · P2: 0 · P3: 4** findings (F-PR2R4-01..05). Report preserved at `6a73be7d23fd3bcbe19ebc30f65440e2c641093b` (`PR2_TENANT_ACCESS_FOURTH_CORRECTION_REVIEW_REPORT.md`). Fourth-cycle runtime/test implementation head was `21aba6660e71fa5af558d81499190ee8eb0e645e`. **No cross-tenant read or write was reproduced.** Overflow remains fail-closed; foreign tenant-bearing selectors remain rejected; nested writes remain atomic; exact-head CI was genuine; Redis-history residual remains accepted synthetic-only.
+2. **Proposed:** Mandatory fifth correction cycle on draft PR #13 / `phase-1/tenant-access` covering:
+   - **F-PR2R4-01 (P1):** resolve null-owned legacy rows through shop-bearing unique selectors using set-valued accepted raw representations; prevent silent upsert duplicate creation; fail closed on normalized ambiguity with `ambiguous_legacy_unique_selector`; fix live `after-auth` ShopSettings path;
+   - **F-PR2R4-02 (P3):** correct permanent head identity (`21aba666…` runtime/test; `93e8044…` reviewed handoff; `6a73be7…` report-only; demote `ba5eee1…`);
+   - **F-PR2R4-03 (P3):** document SQL candidate discovery as a bounded locale-sensitive superset; JS `phase1-shop-domain-v1` remains final authority;
+   - **F-PR2R4-04 (P3):** strict evidence-limit configuration parsing with lazy validated singleton / test-only reset;
+   - **F-PR2R4-05 (P3):** narrow and document overflow blast radius; two-stage canonical ID and `shopId_id` paths avoid unnecessary legacy discovery.
+3. **Ownership rule:** D-030 remains unchanged — non-null current-tenant `shopId` owned regardless of legacy shop; non-null foreign `shopId` denied; null `shopId` requires normalized legacy match under `phase1-shop-domain-v1`.
+4. **Reason:** Isolation posture is correct; acceptance is withheld for a merchant data-integrity defect (duplicate creation / wrong singleton settings) plus documentary and robustness residuals.
+5. **Merchant impact:** Prevents silent duplicate `ShopSettings` (and other shop-bearing unique models) on auth when legacy rows use whitespace/case variants; preserves configured merchant settings; clarifies overflow and configuration failure modes.
+6. **Technical impact:** `selectors.ts` / `tenant-db.server.ts` unique-selector resolution; `legacy-scope.ts` config + comments; focused PostgreSQL suites; CI file gates; documentation D-032 / D-033 / R-075..R-078.
+7. **Migration:** No schema migration. No production backfill. No ownership repair. No RLS/roles/non-null/composite FKs/tenant-key triggers. Nullable `shopId` remains until PR 3 / operational backfill gates.
+8. **Risks:** R-075 (legacy unique-selector duplicate creation), R-076 (locale-sensitive candidate discovery), R-077 (legacy evidence configuration parsing), R-078 (compatibility overflow blast radius) — correction implemented pending independent verification after this cycle. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4. Inventory writes remain unapproved.
+9. **Final:** **AUTHORIZED FOR PR 2 FIFTH CORRECTION IMPLEMENTATION — PENDING FIFTH INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. PR 3 remains **not started**. No deployment, production backfill, RLS, schema change, or inventory writes are authorized.
+
+## D-033 — Phase 1 PR 2 fifth correction cycle required (acceptance framing)
+
+1. **Current:** Same reviewed head and report as D-032 (`93e8044…` / `6a73be7…`). One P1 and four P3 findings. No cross-tenant access was reproduced. Unique-selector duplicate creation is the acceptance blocker. SQL candidate discovery is a superset, not final authority.
+2. **Proposed:** Implement F-PR2R4-01..05 under the D-032 authorization boundary; keep PR #13 draft and unaccepted; do not start PR 3; do not authorize schema, migration, backfill, RLS, or inventory writes.
+3. **Reason:** Permanent framing for fifth-cycle acceptance triage after independent review.
+4. **Merchant impact:** Same as D-032.
+5. **Technical impact:** Same as D-032.
+6. **Migration:** None authorized.
+7. **Risks:** R-075..R-078 remain open until independently verified. Q-011 / F-016 / R-022 remain open.
+8. **Final:** **FIFTH CORRECTION CYCLE AUTHORIZED — PENDING INDEPENDENT VERIFICATION**. PR #13 remains **draft and unaccepted**.
