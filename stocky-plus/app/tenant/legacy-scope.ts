@@ -50,7 +50,7 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
 
 /**
  * Versioned bound on distinct null-ownership legacy representations
- * (F-PR2R3-01). Far below PostgreSQL’s ~32,765 bind-parameter ceiling.
+ * (F-PR2R3-01 / F-PR2R4-04). Far below PostgreSQL’s ~32,765 bind-parameter ceiling.
  */
 export const LEGACY_EVIDENCE_VERSION = "phase1-legacy-evidence-v1" as const;
 
@@ -63,20 +63,73 @@ export const DEFAULT_MAX_DISTINCT_LEGACY_SHOP_FORMS = 1024;
  */
 export const ABSOLUTE_MAX_DISTINCT_LEGACY_SHOP_FORMS = 4096;
 
-function resolveLegacyEvidenceLimit(): number {
-  const raw = process.env.TENANT_MAX_DISTINCT_LEGACY_SHOP_FORMS;
+/** Entire input must be a base-10 integer; surrounding whitespace is rejected. */
+const STRICT_BASE10_INTEGER = /^[0-9]+$/;
+
+let cachedLegacyEvidenceLimit: number | undefined;
+
+/**
+ * Strictly parse TENANT_MAX_DISTINCT_LEGACY_SHOP_FORMS (F-PR2R4-04).
+ * Valid: absent/empty → default 1024; integers 1..4096.
+ * Invalid: partial numeric strings, exponents, hex, signs, decimals, whitespace.
+ */
+export function parseLegacyEvidenceLimitConfig(
+  raw: string | undefined | null,
+): number {
   if (raw == null || raw === "") {
     return DEFAULT_MAX_DISTINCT_LEGACY_SHOP_FORMS;
   }
-  const parsed = Number.parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 1) {
-    return DEFAULT_MAX_DISTINCT_LEGACY_SHOP_FORMS;
+  if (!STRICT_BASE10_INTEGER.test(raw)) {
+    throw new TenantAccessError(
+      "legacy_evidence_config_invalid",
+      `Invalid TENANT_MAX_DISTINCT_LEGACY_SHOP_FORMS: must be a base-10 integer with no surrounding whitespace (got non-integer input)`,
+    );
   }
-  return Math.min(parsed, ABSOLUTE_MAX_DISTINCT_LEGACY_SHOP_FORMS);
+  // Safe: entire string matched digits only.
+  const parsed = Number(raw);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < 1 ||
+    parsed > ABSOLUTE_MAX_DISTINCT_LEGACY_SHOP_FORMS
+  ) {
+    throw new TenantAccessError(
+      "legacy_evidence_config_invalid",
+      `Invalid TENANT_MAX_DISTINCT_LEGACY_SHOP_FORMS: must be an integer in 1..${ABSOLUTE_MAX_DISTINCT_LEGACY_SHOP_FORMS}`,
+    );
+  }
+  return parsed;
 }
 
-export const MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT =
-  resolveLegacyEvidenceLimit();
+/**
+ * Lazy validated singleton for the process-wide legacy evidence limit.
+ * Caches only after successful validation; does not reread inconsistently.
+ */
+export function getMaxDistinctLegacyShopFormsPerModelTenant(): number {
+  if (cachedLegacyEvidenceLimit !== undefined) {
+    return cachedLegacyEvidenceLimit;
+  }
+  const resolved = parseLegacyEvidenceLimitConfig(
+    process.env.TENANT_MAX_DISTINCT_LEGACY_SHOP_FORMS,
+  );
+  cachedLegacyEvidenceLimit = resolved;
+  return resolved;
+}
+
+/**
+ * Test-only reset of the lazy config singleton. Not exported from app/tenant
+ * production barrel (`index.ts`).
+ */
+export function resetLegacyEvidenceLimitForTests(): void {
+  cachedLegacyEvidenceLimit = undefined;
+}
+
+/**
+ * @deprecated Use getMaxDistinctLegacyShopFormsPerModelTenant().
+ * Getter retained so existing imports that treated this as a number keep
+ * working when accessed as a live value via this alias function call sites
+ * updated in-module.
+ */
+export { getMaxDistinctLegacyShopFormsPerModelTenant as MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT };
 
 /** Per-operation memo for distinct raw legacy shop representations. */
 export type TenantScopeMemo = {
@@ -179,22 +232,20 @@ export function acceptedLegacyShopVariants(canonicalDomain: string): string[] {
  * Build the direct-model Prisma where from distinct raw legacy representations.
  * Parameter count depends on distinct historical representations, not row count.
  * Caller must ensure `matchingRawLegacyRepresentations.length` is within
- * `MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT`.
+ * getMaxDistinctLegacyShopFormsPerModelTenant().
  */
 export function buildDirectTenantScopeWhere(
   authority: TenantAuthority,
   matchingRawLegacyRepresentations: string[],
 ): Record<string, unknown> {
-  if (
-    matchingRawLegacyRepresentations.length >
-    MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT
-  ) {
+  const limit = getMaxDistinctLegacyShopFormsPerModelTenant();
+  if (matchingRawLegacyRepresentations.length > limit) {
     throw new TenantAccessError(
       "legacy_evidence_overflow",
       safeLegacyOverflowMessage({
         model: "(build)",
         shopId: authority.shopId,
-        limit: MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT,
+        limit,
         observedCount: matchingRawLegacyRepresentations.length,
         correlationId: authority.correlationId,
       }),
@@ -241,9 +292,17 @@ function safeLegacyOverflowMessage(args: {
  * Query distinct raw legacy shop strings for null-shopId rows that normalize
  * to the authenticated domain.
  *
- * SQL candidate discovery uses `lower(btrim(shop, <exact ECMAScript trim set>))`
- * matching phase1-shop-domain-v1. SQL is never final authority — every raw
- * value must still pass `normalizeShopDomain` before inclusion (F-PR2R3-03).
+ * Contract (F-PR2R3-03 / F-PR2R4-03):
+ * - SQL candidate discovery is a **bounded locale/ctype-sensitive superset**.
+ *   PostgreSQL `lower()` may accept values (e.g. Kelvin sign U+212A under
+ *   UTF-8 ctype) that JavaScript `phase1-shop-domain-v1` rejects.
+ * - SQL must never omit a JavaScript-accepted candidate for the authenticated
+ *   domain (trim set matches ECMAScript; case rule is lowercase ASCII domains).
+ * - JavaScript `normalizeShopDomain` is the **final authorization authority**.
+ *   Every SQL candidate is re-validated; JS-rejected values never enter the
+ *   authorization `in` set.
+ * - Extra SQL-only candidates still count toward the overflow budget
+ *   (`rows.length > limit` before the JS filter).
  *
  * Collection is hard-bounded by phase1-legacy-evidence-v1 (F-PR2R3-01).
  * Overflow throws `legacy_evidence_overflow` without building an `in` list
@@ -269,7 +328,7 @@ export async function resolveMatchingRawLegacyShops(
       );
     }
 
-    const limit = MAX_DISTINCT_LEGACY_SHOP_FORMS_PER_MODEL_TENANT;
+    const limit = getMaxDistinctLegacyShopFormsPerModelTenant();
     const raw = (client as PrismaClient).$queryRaw;
     if (typeof raw !== "function") {
       // Mocked clients (unit tests): use accepted variants only.
@@ -305,6 +364,7 @@ export async function resolveMatchingRawLegacyShops(
       `,
     )) as Array<{ shop: string }>;
 
+    // Overflow on SQL candidate count (may include JS-rejected supersets).
     if (rows.length > limit) {
       throw new TenantAccessError(
         "legacy_evidence_overflow",
@@ -319,6 +379,8 @@ export async function resolveMatchingRawLegacyShops(
     }
 
     // Final authority: JavaScript normalizer (SQL is candidate discovery only).
+    // Do not claim SQL decision == JavaScript decision for every Unicode value
+    // or database locale (F-PR2R4-03).
     const accepted: string[] = [];
     for (const row of rows) {
       if (legacyShopMatchesTenant(row.shop, authority)) {
