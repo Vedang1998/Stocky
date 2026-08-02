@@ -32,7 +32,7 @@
 **PR 2 fourth independent review report-only commit:** `6a73be7d23fd3bcbe19ebc30f65440e2c641093b`
 **PR 2 fourth-cycle intermediate green tip (not final handoff):** `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`)
 **PR 2 fifth-cycle runtime/test implementation head:** `5a69783c18208e89ee70623058966c5e5a0ec6b1`
-**PR 2 fifth-cycle final handoff tip:** `520021c8da5950e7d7818a00996e13cedaf4588d` (run `30772466853`, job `91561885234`)
+**PR 2 fifth-cycle final handoff tip:** `96c1029f143ba5e4a52094eef58ec29bf7b339ea` (run `30772826351`, job `91562852894`)
 **Third-cycle correction range commit count:** `fed21a48…`..`fec8500…` = **11** (not 12)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED

@@ -163,7 +163,7 @@ When another part of the same model contains excessive null legacy forms:
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30771919140 |
 
-## Exact-head CI evidence (final handoff tip `520021c…`)
+## Exact-head CI evidence (intermediate tip `520021c…`)
 
 | Field | Value |
 |---|---|
@@ -175,7 +175,19 @@ When another part of the same model contains excessive null legacy forms:
 | Conclusion | `success` |
 | URL | https://github.com/Vedang1998/Stocky/actions/runs/30772466853 |
 
-Runtime/test implementation head remains `5a69783…`. This documentation pin advances the tip; exact-head CI for the new tip is required before ChatGPT triage if the tip moves again.
+## Exact-head CI evidence (final handoff tip `96c1029…`)
+
+| Field | Value |
+|---|---|
+| Workflow | CI |
+| Run ID | `30772826351` |
+| Job ID | `91562852894` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| `head_sha` | `96c1029f143ba5e4a52094eef58ec29bf7b339ea` |
+| Conclusion | `success` |
+| URL | https://github.com/Vedang1998/Stocky/actions/runs/30772826351 |
+
+Runtime/test implementation head remains `5a69783…`. Any further documentation-only tip advance requires a new exact-head CI before ChatGPT triage.
 
 ### Focused CI steps (executed in workflow)
 
