@@ -16,7 +16,7 @@
 | Second correction-review report | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | Starting head for this cycle | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` |
 | **Third-cycle implementation head** | **`d7058294af7eb3d8f287f48cd0657a74475892e7`** |
-| Final handoff head | recorded in subsequent evidence-only commit / PR tip |
+| Final handoff head | `75b3bccd95c70e8f5fd45fac0c0e30337cb391c8` |
 | PR state | OPEN, draft, unmerged |
 
 ## Independent review context
