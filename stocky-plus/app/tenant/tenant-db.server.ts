@@ -1255,36 +1255,35 @@ async function assertLeadTimeSecondaryOwnership(
 }
 
 /**
- * After tenant-intent validation, rewrite own-domain shop variants in a
- * WhereUniqueInput to the authenticated canonical domain for Prisma upsert.
- * Foreign tenant values must already have been rejected (F-PR2R3-02).
+ * Prove a previously resolved row remains owned without collecting null-legacy
+ * evidence when the row already has non-null current-tenant shopId (F-PR2R4-05).
  */
-function coerceDirectShopInWhere(
-  where: unknown,
-  authority: TenantAuthority,
+async function assertStillOwnedById(
+  state: ClientState,
   model: string,
-): unknown {
-  if (!isPlainObject(where)) return where;
+  ownedId: string,
+): Promise<void> {
+  const { client, authority, scopeMemo } = state;
+  const delegate = getDelegate(client, model);
 
-  // Validate before any rewrite — never coerce foreign shop/shopId.
-  if (MERCHANT_MODEL_SET.has(model)) {
-    assertSelectorTenantIntent(
-      model as MerchantOwnedModel,
-      where,
-      authority,
+  const canonical = (await delegate.findFirst({
+    where: { id: ownedId, shopId: authority.shopId },
+    select: { id: true },
+  })) as { id: string } | null;
+  if (canonical) return;
+
+  // Null-owned / child lineage path — may require legacy discovery.
+  const scope = await tenantScopeWhere(client, model, authority, scopeMemo);
+  const stillOwned = (await delegate.findFirst({
+    where: mergeWhere({ id: ownedId }, scope),
+    select: { id: true },
+  })) as { id: string } | null;
+  if (!stillOwned) {
+    throw new TenantAccessError(
+      "not_found",
+      `${model} is no longer owned by the current tenant`,
     );
   }
-
-  const next: Record<string, unknown> = { ...where };
-  if (typeof next.shop === "string") {
-    next.shop = authority.myshopifyDomain;
-  }
-  for (const [key, value] of Object.entries(next)) {
-    if (isPlainObject(value) && typeof value.shop === "string") {
-      next[key] = { ...value, shop: authority.myshopifyDomain };
-    }
-  }
-  return next;
 }
 
 const SERIALIZATION_RETRY_LIMIT = 3;
@@ -1424,8 +1423,6 @@ async function rewriteUniqueWrite(
       );
     }
 
-    const scope = await tenantScopeWhere(client, model, authority, scopeMemo);
-
     if (operation === "update") {
       let data = scrubUpdateData(
         model,
@@ -1436,16 +1433,8 @@ async function rewriteUniqueWrite(
       await assertParentOwnership(txState, model, data);
 
       // Re-check ownership inside the same transaction (fail closed if lost).
-      const stillOwned = (await delegate.findFirst({
-        where: mergeWhere({ id: owned.id }, scope),
-        select: { id: true },
-      })) as { id: string } | null;
-      if (!stillOwned) {
-        throw new TenantAccessError(
-          "not_found",
-          `${model} is no longer owned by the current tenant`,
-        );
-      }
+      // Canonical non-null shopId avoids legacy discovery (F-PR2R4-05).
+      await assertStillOwnedById(txState, model, owned.id);
 
       const plans: ProofPlan[] = [];
       const projection = await applyRelationScopes(
@@ -1470,8 +1459,11 @@ async function rewriteUniqueWrite(
       return updated;
     }
 
+    await assertStillOwnedById(txState, model, owned.id);
+    // Delete by primary key after ownership proof — do not re-enter overflow
+    // discovery for canonically owned rows.
     const deleted = (await delegate.deleteMany({
-      where: mergeWhere({ id: owned.id }, scope),
+      where: { id: owned.id },
     })) as { count: number };
     if (deleted.count === 0) {
       throw new TenantAccessError(
@@ -1489,7 +1481,7 @@ async function rewriteUpsert(
   args: Record<string, unknown>,
 ): Promise<unknown> {
   return withWriteTransaction(state, async (txState) => {
-    const { client, authority } = txState;
+    const { client, authority, scopeMemo } = txState;
     const where = args.where;
 
     // Reject foreign tenant-bearing selectors before any create/update.
@@ -1508,9 +1500,49 @@ async function rewriteUpsert(
       );
     }
 
-    // Upsert WhereUniqueInput is passed to Prisma as-is (compound wrappers OK).
-    const coercedWhere = coerceDirectShopInWhere(where, authority, model);
+    // F-PR2R4-01: resolve normalized legacy ownership before create/update.
+    // Never coerce shop to a canonical literal and let Prisma create a duplicate.
+    const owned = await resolveOwnedUniqueRow({
+      client,
+      targetModel: model as MerchantOwnedModel,
+      selector: where,
+      authority,
+      memo: scopeMemo,
+    });
 
+    const plans: ProofPlan[] = [];
+    // Projection only — never spread upsert where/create/update into update/create.
+    const projectionArgs = await applyRelationScopes(
+      txState,
+      model,
+      {
+        ...(args.select ? { select: args.select } : {}),
+        ...(args.include ? { include: args.include } : {}),
+      },
+      plans,
+    );
+    const delegate = getDelegate(client, model);
+
+    if (owned) {
+      let update = scrubUpdateData(
+        model,
+        (args.update ?? {}) as Record<string, unknown>,
+        authority,
+      );
+      update = await validateNestedRelationWrites(txState, model, update);
+      await assertStillOwnedById(txState, model, owned.id);
+
+      const updated = await delegate.update({
+        ...projectionArgs,
+        where: { id: owned.id },
+        data: update,
+      });
+      await validateLoadedRelations(txState, model, updated);
+      stripInjectedProofFields(updated, plans);
+      return updated;
+    }
+
+    // No owned row — create only when selector intent is valid and unambiguous.
     let create = injectOwnership(
       model,
       (args.create ?? {}) as Record<string, unknown>,
@@ -1519,24 +1551,13 @@ async function rewriteUpsert(
     await assertParentOwnership(txState, model, create);
     create = await validateNestedRelationWrites(txState, model, create);
 
-    let update = scrubUpdateData(
-      model,
-      (args.update ?? {}) as Record<string, unknown>,
-      authority,
-    );
-    update = await validateNestedRelationWrites(txState, model, update);
-
-    const plans: ProofPlan[] = [];
-    const scopedArgs = await applyRelationScopes(txState, model, args, plans);
-    const row = await getDelegate(client, model).upsert({
-      ...scopedArgs,
-      where: coercedWhere,
-      create,
-      update,
+    const created = await delegate.create({
+      ...projectionArgs,
+      data: create,
     });
-    await validateLoadedRelations(txState, model, row);
-    stripInjectedProofFields(row, plans);
-    return row;
+    await validateLoadedRelations(txState, model, created);
+    stripInjectedProofFields(created, plans);
+    return created;
   });
 }
 

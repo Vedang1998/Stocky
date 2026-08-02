@@ -9,11 +9,16 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { TenantAuthority } from "./authority.server";
 import { TenantAccessError } from "./errors";
 import {
+  CHILD_MODEL_SET,
+  DIRECT_MODEL_SET,
   MERCHANT_DELEGATE_NAMES,
   MERCHANT_MODEL_SET,
+  type DirectMerchantModel,
   type MerchantOwnedModel,
 } from "./models";
 import {
+  resolveMatchingRawLegacyShops,
+  rowOwnershipOk,
   tenantScopeWhere,
   type TenantScopeMemo,
 } from "./legacy-scope";
@@ -398,8 +403,9 @@ export function assertSelectorTenantIntent(
 }
 
 /**
- * After tenant-intent validation, rewrite own-domain shop variants to the
- * canonical authenticated domain for Prisma equality matching.
+ * @deprecated Do not coerce shop selectors to a single canonical literal.
+ * Null-owned legacy rows store raw shop values; use set-valued ownership
+ * predicates via resolveOwnedUniqueRow (F-PR2R4-01).
  */
 export function canonicalizeOwnShopInPredicate(
   predicate: Record<string, unknown>,
@@ -411,13 +417,28 @@ export function canonicalizeOwnShopInPredicate(
   return predicate;
 }
 
+/** Non-tenant business-key components of a flattened unique predicate. */
+function businessKeyPredicate(
+  predicate: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(predicate)) {
+    if (key === "shop" || key === "shopId") continue;
+    out[key] = value;
+  }
+  return out;
+}
+
 /**
  * Resolve a unique selector to at most one owned row id under tenant scope.
  * Returns null for foreign/missing (caller maps to not_found / foreign).
  * Never passes compound WhereUniqueInput wrapper keys into findFirst.
  *
  * Tenant-bearing components are validated before any legacy-evidence
- * collection or selector rewriting (F-PR2R3-01 / F-PR2R3-02).
+ * collection (F-PR2R3-01 / F-PR2R3-02 / F-PR2R4-01 / F-PR2R4-05).
+ *
+ * Shop-bearing selectors use set-valued null-compatibility ownership —
+ * never raw equality against one canonical shop literal.
  */
 export async function resolveOwnedUniqueRow(args: {
   client: PrismaLike;
@@ -438,30 +459,150 @@ export async function resolveOwnedUniqueRow(args: {
   // Reject foreign tenant-bearing selectors before legacy evidence collection.
   assertSelectorTenantIntent(targetModel, selector, authority);
 
-  let predicate = flattenUniqueSelectorPredicate(targetModel, selector);
-  // Only own-domain case/whitespace variants remain; canonicalize for equality.
-  predicate = canonicalizeOwnShopInPredicate(predicate, authority);
-
-  // Canonical ID-only selectors can resolve against non-null shopId ownership
-  // without collecting null-ownership legacy forms first (F-PR2R3-01).
+  const predicate = flattenUniqueSelectorPredicate(targetModel, selector);
   const delegate = getDelegate(client, targetModel);
   const keys = Object.keys(predicate);
+
+  // Two-stage canonical ID lookup (F-PR2R4-05): avoid legacy discovery when
+  // the fetched row already has non-null current-tenant shopId.
   if (keys.length === 1 && keys[0] === "id" && typeof predicate.id === "string") {
+    const byId = (await delegate.findMany({
+      where: { id: predicate.id },
+      select: { id: true, shopId: true, shop: true },
+      take: 1,
+    })) as Array<{ id: string; shopId: string | null; shop?: string | null }>;
+
+    if (byId.length === 0) return null;
+    const row = byId[0]!;
+    if (row.shopId === authority.shopId) {
+      return { id: row.id };
+    }
+    if (row.shopId != null && row.shopId !== authority.shopId) {
+      return null;
+    }
+    // null shopId — bounded legacy / parent-lineage proof only.
+    if (DIRECT_MODEL_SET.has(targetModel)) {
+      const matching = await resolveMatchingRawLegacyShops(
+        client,
+        targetModel as DirectMerchantModel,
+        authority,
+        memo,
+      );
+      if (
+        typeof row.shop === "string" &&
+        matching.includes(row.shop) &&
+        rowOwnershipOk(targetModel, row as Record<string, unknown>, authority)
+      ) {
+        return { id: row.id };
+      }
+      return null;
+    }
+    if (CHILD_MODEL_SET.has(targetModel)) {
+      const scope = await tenantScopeWhere(client, targetModel, authority, memo);
+      const owned = (await delegate.findMany({
+        where: { AND: [{ id: predicate.id }, scope] },
+        select: { id: true },
+        take: 1,
+      })) as Array<{ id: string }>;
+      return owned.length === 1 ? { id: owned[0]!.id } : null;
+    }
+    return null;
+  }
+
+  // Canonical shopId_id (and flat shopId+id) — no null-legacy collection.
+  if (
+    typeof predicate.shopId === "string" &&
+    predicate.shopId === authority.shopId &&
+    typeof predicate.id === "string" &&
+    !("shop" in predicate)
+  ) {
     const canonical = (await delegate.findMany({
       where: { id: predicate.id, shopId: authority.shopId },
       select: { id: true },
       take: 1,
     })) as Array<{ id: string }>;
-    if (canonical.length === 1) {
-      return { id: canonical[0]!.id };
+    if (canonical.length === 1) return { id: canonical[0]!.id };
+    return null;
+  }
+
+  // Shop-bearing unique selectors: ownership OR of canonical shopId and
+  // null-compatible accepted raw representations (F-PR2R4-01).
+  if ("shop" in predicate && typeof predicate.shop === "string") {
+    if (!DIRECT_MODEL_SET.has(targetModel)) {
+      throw new TenantAccessError(
+        "unsupported_relation_selector",
+        `Shop selector is not valid for ${targetModel}`,
+      );
     }
-    // Fall through to full scope (null-owned compatibility) when no canonical hit.
+
+    const matching = await resolveMatchingRawLegacyShops(
+      client,
+      targetModel as DirectMerchantModel,
+      authority,
+      memo,
+    );
+
+    const ownership: Record<string, unknown> = {
+      OR: [
+        { shopId: authority.shopId },
+        {
+          AND: [
+            { shopId: null },
+            {
+              shop: {
+                in: matching.length > 0 ? matching : ([] as string[]),
+              },
+            },
+          ],
+        },
+      ],
+    };
+
+    const business = businessKeyPredicate(predicate);
+    const where: Record<string, unknown> =
+      Object.keys(business).length === 0
+        ? ownership
+        : { AND: [business, ownership] };
+
+    const found = (await delegate.findMany({
+      where,
+      select: { id: true },
+      take: 2,
+    })) as Array<{ id: string }>;
+
+    if (found.length === 0) return null;
+    if (found.length > 1) {
+      throw new TenantAccessError(
+        "ambiguous_legacy_unique_selector",
+        `${targetModel} unique selector matched multiple owned rows under normalized legacy shop`,
+      );
+    }
+    return { id: found[0]!.id };
+  }
+
+  // Remaining selectors (e.g. LeadTimeSnapshot.purchaseOrderId): scoped lookup
+  // without inventing shop predicates. Prefer canonical shopId when present.
+  const business = businessKeyPredicate(predicate);
+  if (typeof predicate.shopId === "string") {
+    // Foreign shopId already rejected by assertSelectorTenantIntent.
+    const found = (await delegate.findMany({
+      where: { AND: [business, { shopId: authority.shopId }] },
+      select: { id: true },
+      take: 2,
+    })) as Array<{ id: string }>;
+    if (found.length === 0) return null;
+    if (found.length > 1) {
+      throw new TenantAccessError(
+        "ambiguous_legacy_unique_selector",
+        `${targetModel} unique selector matched multiple owned rows`,
+      );
+    }
+    return { id: found[0]!.id };
   }
 
   const scope = await tenantScopeWhere(client, targetModel, authority, memo);
-
   const found = (await delegate.findMany({
-    where: { AND: [predicate, scope] },
+    where: { AND: [business, scope] },
     select: { id: true },
     take: 2,
   })) as Array<{ id: string }>;
@@ -469,7 +610,7 @@ export async function resolveOwnedUniqueRow(args: {
   if (found.length === 0) return null;
   if (found.length > 1) {
     throw new TenantAccessError(
-      "foreign_relation_target",
+      "ambiguous_legacy_unique_selector",
       `${targetModel} unique selector matched multiple owned rows`,
     );
   }
