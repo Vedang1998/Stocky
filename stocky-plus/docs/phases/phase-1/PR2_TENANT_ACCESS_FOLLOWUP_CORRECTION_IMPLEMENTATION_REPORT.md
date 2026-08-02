@@ -1,9 +1,11 @@
 # Phase 1 PR 2 — Follow-up Correction Implementation Report
 
-**Decision:** D-029
-**Branch:** `phase-1/tenant-access`
-**Pull request:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft, unmerged)
+**Decision:** D-029  
+**Branch:** `phase-1/tenant-access`  
+**Pull request:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft, unmerged)  
 **Authorized base:** `main@04289d61f605414597ac85f47830a3c9d2f9e33d`
+
+> **SUPERSEDED FOR ACCEPTANCE.** This follow-up cycle produced implementation head `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0`, which the second independent correction review (`fed21a48a5ae77a61f62b5bd899c698c48a68f49`) rejected as `NOT READY — FURTHER CORRECTIONS REQUIRED`. Do not treat this report as a passing review. Third-cycle work proceeds under **D-030** — see `PR2_TENANT_ACCESS_SECOND_FOLLOWUP_CORRECTION_IMPLEMENTATION_REPORT.md`.
 
 ## Identity
 
@@ -13,8 +15,9 @@
 | First corrected implementation head | `e6a9a06a8a399bbfb17687399c59582f1712f442` |
 | Independent correction-review report commit | `b5fbd2bd346dee1730500be46d47c4fb164fd788` |
 | Starting head for this cycle | `b5fbd2bd346dee1730500be46d47c4fb164fd788` |
-| Follow-up implementation head |  |
-| Handoff head | recorded in PR body / ChatGPT return (tip after evidence commit) |
+| Follow-up implementation head | `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0` |
+| Second independent correction-review report | `fed21a48a5ae77a61f62b5bd899c698c48a68f49` (verdict: NOT READY) |
+| Handoff head | superseded by D-030 third correction cycle |
 | PR state | OPEN, draft, unmerged |
 
 ## Independent review context

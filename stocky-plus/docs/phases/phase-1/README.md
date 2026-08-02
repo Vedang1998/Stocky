@@ -2,9 +2,9 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 status:** IN PROGRESS (PR 1 closed; PR 2 in progress; later PRs remain)
+**Phase 1 status:** IN PROGRESS (PR 1 closed; PR 2 third correction cycle in progress; later PRs remain)
 **Phase 1 PR 1:** ACCEPTED, SQUASH-MERGED, AND CLOSED
-**Phase 1 PR 2:** IN PROGRESS
+**Phase 1 PR 2:** THIRD CORRECTION CYCLE IN PROGRESS (unaccepted)
 **Active implementation branch:** `phase-1/tenant-access`
 **Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft)
 **PR #11:** CLOSED AND SQUASH-MERGED
@@ -18,9 +18,11 @@
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029 — pending second independent correction review)
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030 — pending third independent correction review)
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22c069a46003b6944ff56c888ff91e95cdc` (preserved verbatim)
-**Claude PR 2 correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06a8a399bbfb17687399c59582f1712f442` (report commit `b5fbd2bd346dee1730500be46d47c4fb164fd788`; preserved verbatim)
+**Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06a8a399bbfb17687399c59582f1712f442` (report commit `b5fbd2bd…`; preserved verbatim)
+**Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0` (report commit `fed21a48…`; preserved verbatim)
+**PR 2 third-cycle implementation head:** `d7058294af7eb3d8f287f48cd0657a74475892e7`
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
@@ -38,7 +40,7 @@
 
 - Phase 1 itself is still **in progress**.
 - PR 1 is **ACCEPTED, SQUASH-MERGED, AND CLOSED**.
-- PR 2 (tenant-bound access conversion) is **FOLLOW-UP CORRECTIONS IN PROGRESS** on `phase-1/tenant-access` (draft PR #13; unaccepted).
+- PR 2 (tenant-bound access conversion) is **THIRD CORRECTION CYCLE IN PROGRESS** on `phase-1/tenant-access` (draft PR #13; unaccepted; D-030).
 - PR 3 (database-enforcement gate) has **not started**.
 - No later Phase 1 PR may begin early.
 
@@ -63,11 +65,15 @@
 17. `PR2_TENANT_ACCESS_REVIEW_REPORT.md` — Claude original `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22…` (verbatim; chain-of-custody preface only)
 18. `PR2_TENANT_ACCESS_CORRECTION_BACKLOG.md`
 19. `PR2_TENANT_ACCESS_CORRECTION_IMPLEMENTATION_REPORT.md`
+20. `PR2_TENANT_ACCESS_CORRECTION_REVIEW_REPORT.md` — first correction review `NOT READY` at `e6a9a06…` (verbatim)
+21. `PR2_TENANT_ACCESS_FOLLOWUP_CORRECTION_BACKLOG.md` / `…_IMPLEMENTATION_REPORT.md` — superseded for acceptance by D-030
+22. `PR2_TENANT_ACCESS_FOLLOWUP_CORRECTION_REVIEW_REPORT.md` — second correction review `NOT READY` at `99d7a2bb…` (verbatim; report `fed21a48…`)
+23. `PR2_TENANT_ACCESS_SECOND_FOLLOWUP_CORRECTION_BACKLOG.md` / `…_IMPLEMENTATION_REPORT.md` — D-030 third cycle
 
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024, D-025, D-026, D-027, D-028)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-030)
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`

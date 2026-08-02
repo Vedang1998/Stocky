@@ -109,26 +109,36 @@ Exceptions are **exact-file** entries in `scripts/tenant-access/allowlist.ts`. D
 
 CI: `tenant:access:audit`, `tenant:access:inventory:check`, granular tenant PostgreSQL/relation/envelope/Redis/client-hint/nested-write suites, then full `test:tenant-access`.
 
-## Tenant scope (corrected)
+## Tenant scope (D-030)
 
 ### Direct models
 
+Canonical `shopId` is authoritative:
+
 ```
-(shopId = tenant.shopId AND shop = tenant.domain)
-OR (shopId IS NULL AND shop = tenant.domain)
+shopId = tenant.shopId
+OR (shopId IS NULL AND shop IN matchingRawLegacyRepresentations)
 ```
 
-Foreign non-null `shopId` is never recovered via legacy `shop`. Conflicting pairs fail closed. Updates must not mutate `shopId` or `shop` (no silent repair).
+where `matchingRawLegacyRepresentations` are the distinct stored legacy `shop` strings on null-`shopId` rows whose `lower(btrim(shop))` equals the authenticated canonical domain (equivalent to the null branch of `phase1-shop-domain-v1`).
+
+When `shopId` is non-null and equals the tenant, legacy `shop` is non-authoritative compatibility data and must not hide the row (missing/empty/malformed/uppercase/whitespace/URL/path/non-Shopify/conflicting domain). Foreign non-null `shopId` is denied. Do not silently repair legacy `shop`. Updates must not mutate `shopId` or `shop`.
+
+**Scalability:** tenant predicates must not materialize owned row IDs into `{ id: { in: [...] } }`. Parameter count depends on distinct historical legacy representations, not owned-row count.
 
 ### Child models
 
-Parent must prove same-tenant ownership; child `shopId` is either the current tenant or null under that verified parent lineage. Secondary evidence such as `LeadTimeSnapshot.purchaseOrderId` is validated. Ambiguous lineage fails closed.
+A child is owned only when (1) its verified parent is tenant-owned and (2) its own `shopId` is the current tenant ID or null under the verified-parent compatibility path. Foreign non-null child `shopId` always fails closed. Secondary evidence such as `LeadTimeSnapshot.purchaseOrderId` is injected for proof and validated.
 
 ### Relations and nested writes
 
-`include` / `select` / `_count` are recursively scoped. Unknown merchant relation shapes fail closed.
+`include` / `select` / `_count` use the same async ownership adapter as top-level operations. Unknown merchant relation shapes fail closed.
 
-Every nested relation selector (`connect` / `set` / `disconnect` / nested `update` / `delete` / `connectOrCreate.where`, object and array forms) is validated through model-aware unique-selector metadata (`app/tenant/selectors.ts`), resolved with a tenant/lineage-scoped lookup, and rewritten to canonical `{ id }` (or explicit `create`) before Prisma mutation. Unsupported selector shapes fail closed. `connectOrCreate` performs an unscoped existence check after a tenant miss so a foreign global unique match cannot be connected. Nested `updateMany` / `deleteMany` array forms receive scalar tenant predicates (Prisma ScalarWhereInput cannot carry relation filters; the parent nested write already constrains the collection).
+For a tenant-owned parent: an unprovable/foreign requested to-one relation is returned as `null` (no fields leak); unprovable/foreign to-many children are filtered out. One unprovable relation must not abort the entire parent query. Top-level access to the unprovable row itself remains denied.
+
+Every nested relation selector (`connect` / `set` / `disconnect` / nested `update` / `delete` / `connectOrCreate.where`, object and array forms) is validated through model-aware unique-selector metadata (`app/tenant/selectors.ts`), flattened when compound, resolved with a tenant/lineage-scoped lookup, and rewritten to canonical `{ id }` (or explicit `create`) before Prisma mutation. `connectOrCreate` merges rewritten connect/create into sibling operations via `appendNestedOperation` (never silently discards caller intent) and performs an unscoped existence check after a tenant miss so a foreign global unique match cannot be connected.
+
+Top-level `findUnique` / `update` / `delete` flatten compound WhereUniqueInput wrappers into scalar equality predicates before scoped lookup, then rewrite mutations to `{ id }`.
 
 Partial nested `select` injects minimum ownership proof fields internally and strips them before return. Single-row `update` uses real Prisma `update` (not `updateMany`) so nested writes and `include`/`select` projections are preserved, inside an internal serializable transaction when not already nested.
 
