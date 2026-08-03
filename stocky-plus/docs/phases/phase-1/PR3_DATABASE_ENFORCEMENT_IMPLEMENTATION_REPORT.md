@@ -21,23 +21,25 @@
 | Prior handoff head (failed CI) | `1467483455f4cd4726fb5cfd65ee2b6d247903bc` |
 | Runtime/test implementation head | `aeeecc264e9203641aa07dcd6d814c5a1aba2aab` |
 | Empty CI retrigger | `6ffa2d31045d9eb6480a5ae72c4dd3dc484897ee` |
-| Final exact PR head | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` |
+| Implementation tip with first green CI | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (run `30785527274`) |
+| Final exact PR head | `af964c0a8f59b39403973a5dac7ea0dea573b760` |
 
-Commits (implementation → exact-head handoff): `0d4ba3c` → `5808838` → `ffdd55c` → `4035f6e` → `aeeecc2` → `1467483` → `a254178` → `27234f6` → `d4dd43f` → `6ffa2d3` → `bc6734d` → `0ee3ae0`.
+Commits (implementation → exact-head handoff): `0d4ba3c` → `5808838` → `ffdd55c` → `4035f6e` → `aeeecc2` → `1467483` → `a254178` → `27234f6` → `d4dd43f` → `6ffa2d3` → `bc6734d` → `0ee3ae0` → `5652ff1` → `af964c0`.
 
 ## Exact-head CI evidence
 
 | Field | Value |
 |---|---|
 | Workflow | CI |
-| Run ID | `30785527274` |
-| Job ID | `91598235660` |
+| Run ID | `30786147408` |
+| Job ID | `91599953008` |
 | Job name | Lint, typecheck, test, build, Prisma, GraphQL |
-| Actual `head_sha` | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` |
+| Actual `head_sha` | `af964c0a8f59b39403973a5dac7ea0dea573b760` |
 | Conclusion | **success** |
 | Skipped material steps | **none** |
+| Prior green implementation tip | `0ee3ae0` / run `30785527274` / job `91598235660` (superseded only by documentation commits) |
 
-### Enforcement-specific steps (all success)
+### Enforcement-specific steps (all success on final tip `af964c0` and prior tip `0ee3ae0`)
 
 | Step | Command / suite | Outcome |
 |---|---|---|
@@ -56,7 +58,7 @@ Commits (implementation → exact-head handoff): `0d4ba3c` → `5808838` → `ff
 
 Prisma generate / validate / migrate deploy; Tenant compatibility index apply + verify; Tenant schema drift; Tenant access architecture audit; Tenant access inventory freshness; Tenant-access PostgreSQL and Redis suites; Migration/backfill tests; Subject-memory tests; Lint; Typecheck; Unit tests; Build; GraphQL codegen.
 
-### Observed test counts (exact-head CI)
+### Observed test counts (exact-head CI on `0ee3ae0`; reconfirmed green on `af964c0`)
 
 | Suite | Count |
 |---|---|

@@ -11,8 +11,9 @@
 **Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft, open, unmerged)
 **PR 3 runtime/test implementation head:** `aeeecc264e9203641aa07dcd6d814c5a1aba2aab`
 **PR 3 prior failed handoff head:** `1467483455f4cd4726fb5cfd65ee2b6d247903bc`
-**PR 3 exact final PR head (CI green):** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`
-**PR 3 exact-head CI:** workflow `CI`, run `30785527274`, job `91598235660` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`
+**PR 3 exact final PR head (CI green):** `af964c0a8f59b39403973a5dac7ea0dea573b760`
+**PR 3 exact-head CI:** workflow `CI`, run `30786147408`, job `91599953008` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `af964c0a8f59b39403973a5dac7ea0dea573b760`
+**PR 3 prior green implementation tip:** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (run `30785527274`, job `91598235660`)
 **Phase 1 PR 2:** MERGED AND CLOSED
 **PR #13:** CLOSED AND SQUASH-MERGED
 **Authorized PR head:** `5fc98192d2ca350de358316d9383e39103b98c80`
@@ -96,7 +97,7 @@
 - PR 2 application-layer tenant access is accepted and merged. **It does not resolve database-enforced tenant isolation.**
 - **Q-011 remains open** because database enforcement is PR 3 (implementation complete on disposable/CI fixtures only; production not authorized; pending independent verification).
 - F-016 / R-022 remain open implementation gates (implementation complete — pending independent verification; not closed by Cursor).
-- PR 3 is **IN PROGRESS** on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) at exact head `0ee3ae0…` with green exact-head CI run `30785527274` / job `91598235660`. No later Phase 1 PR may begin before PR 3 is accepted and merged.
+- PR 3 is **IN PROGRESS** on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) at exact head `af964c0…` with green exact-head CI run `30786147408` / job `91599953008`. No later Phase 1 PR may begin before PR 3 is accepted and merged.
 - No production deployment or production backfill occurred.
 - RLS / database roles are implemented on disposable/CI fixtures only — **production RLS activation is NOT AUTHORIZED**.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
