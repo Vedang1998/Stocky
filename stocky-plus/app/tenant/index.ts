@@ -46,6 +46,12 @@ export { resolveWebhookTenant } from "./webhook-tenant.server";
 export { planPerShopSchedulerJobs } from "./scheduler.server";
 export { runAfterAuthTenantBootstrap } from "./after-auth.server";
 export {
+  TENANT_DB_CONTEXT_VERSION,
+  setTransactionLocalTenantContext,
+  assertTransactionLocalTenantContext,
+  withTenantBoundTransaction,
+} from "./db-context.server";
+export {
   MERCHANT_OWNED_MODELS,
   DIRECT_MERCHANT_MODELS,
   CHILD_MERCHANT_MODELS,
