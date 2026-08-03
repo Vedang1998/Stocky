@@ -29,6 +29,16 @@ export function requireMigrationUrl(): string {
   return resolveMigrationDatabaseUrl({ requireExplicit: false });
 }
 
+function requireRuntimeRolePassword(): string {
+  const password = process.env.STOCKY_RUNTIME_ROLE_PASSWORD?.trim();
+  if (!password) {
+    throw new Error(
+      "STOCKY_RUNTIME_ROLE_PASSWORD is required for database-isolation tests",
+    );
+  }
+  return password;
+}
+
 export function requireRuntimeUrl(): string {
   // Isolation suite always requires an explicit runtime URL.
   process.env.STOCKY_REQUIRE_RUNTIME_DB_URL = "1";
@@ -62,14 +72,14 @@ export async function resetAndEnforce(): Promise<{
   // Disposable fixture tests may edit allowlisted harness files after the
   // checked-in PR2 inventory was generated; CI still enforces inventory freshness.
   process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY = "1";
-  if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
-    process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
-  }
+  const runtimePassword = requireRuntimeRolePassword();
 
   const migrationPrisma = createMigrationPrisma();
   await migrationPrisma.$executeRawUnsafe(`DROP SCHEMA public CASCADE`);
   await migrationPrisma.$executeRawUnsafe(`CREATE SCHEMA public`);
-  await migrationPrisma.$executeRawUnsafe(`GRANT ALL ON SCHEMA public TO public`);
+  await migrationPrisma.$executeRawUnsafe(
+    `GRANT ALL ON SCHEMA public TO public`,
+  );
   await migrationPrisma.$executeRawUnsafe(
     `GRANT ALL ON SCHEMA public TO CURRENT_USER`,
   );
@@ -80,19 +90,15 @@ export async function resetAndEnforce(): Promise<{
     stdio: "pipe",
   });
 
-  execFileSync(
-    "npm",
-    ["run", "tenant:indexes:apply", "--", "--apply"],
-    {
-      cwd: APP_ROOT,
-      env: {
-        ...process.env,
-        DATABASE_URL: migrationUrl,
-        TENANT_MAINTENANCE_DATABASE_URL: migrationUrl,
-      },
-      stdio: "pipe",
+  execFileSync("npm", ["run", "tenant:indexes:apply", "--", "--apply"], {
+    cwd: APP_ROOT,
+    env: {
+      ...process.env,
+      DATABASE_URL: migrationUrl,
+      TENANT_MAINTENANCE_DATABASE_URL: migrationUrl,
     },
-  );
+    stdio: "pipe",
+  });
 
   const client = await getMigrationClient({
     requireExplicitMigrationUrl: true,
@@ -109,11 +115,9 @@ export async function resetAndEnforce(): Promise<{
     // Build runtime URL if not set (CI/local disposable).
     if (!process.env.DATABASE_RUNTIME_URL) {
       const runtimeRole = defaultRuntimeRoleName();
-      const password =
-        process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only"; // pragma: allowlist secret
       const u = new URL(migrationUrl);
       u.username = runtimeRole;
-      u.password = password;
+      u.password = runtimePassword;
       process.env.DATABASE_RUNTIME_URL = u.toString();
     }
 

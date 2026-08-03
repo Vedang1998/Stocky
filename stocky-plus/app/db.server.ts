@@ -9,177 +9,102 @@
  * TENANT_MAINTENANCE_DATABASE_URL via scripts/tenant-enforcement/connection.ts
  * and must never be wired through this module for web/worker processes.
  *
- * F-PR3-06: semantic URL comparison rejects equivalent privileged forms.
+ * F-PR3C-01: connected-identity verification runs before merchant processing.
+ * URL comparison is an early defence only — not authority.
  * F-PR3-25/26: test reset helper is not a production export path; Proxy binds
  * methods to the real client (not the proxy receiver).
  */
 import { PrismaClient } from "@prisma/client";
+import {
+  getVerifiedRuntimePrisma,
+  resetVerifiedPrismaSingletonForTests,
+} from "./db/runtime-identity.server";
 
-declare global {
-  // eslint-disable-next-line no-var
-  var prismaGlobal: PrismaClient | undefined;
-  // eslint-disable-next-line no-var
-  var prismaRuntimeUrl: string | undefined;
-  // eslint-disable-next-line no-var
-  var prismaInitPromise: Promise<void> | undefined;
-}
-
-function databaseUrlsSemanticallyEqual(a: string, b: string): boolean {
-  try {
-    const normalize = (raw: string) => {
-      let input = raw.trim();
-      if (input.startsWith("postgres://")) {
-        input = `postgresql://${input.slice("postgres://".length)}`;
-      }
-      const parsed = new URL(input);
-      if (parsed.protocol !== "postgresql:") {
-        throw new Error("unsupported");
-      }
-      const hostRaw = parsed.hostname.toLowerCase();
-      const host =
-        hostRaw === "127.0.0.1" || hostRaw === "::1" ? "localhost" : hostRaw;
-      const port = parsed.port ? Number(parsed.port) : 5432;
-      const database = decodeURIComponent(parsed.pathname.replace(/^\//, "")).replace(
-        /\/+$/,
-        "",
-      );
-      const user = decodeURIComponent(parsed.username || "");
-      return { user, host, port, database };
-    };
-    const left = normalize(a);
-    const right = normalize(b);
-    return (
-      left.user === right.user &&
-      left.host === right.host &&
-      left.port === right.port &&
-      left.database === right.database
-    );
-  } catch {
-    return false;
-  }
-}
-
-export function resolveRuntimeDatabaseUrl(
-  env: NodeJS.ProcessEnv = process.env,
-): string | undefined {
-  const runtime = env.DATABASE_RUNTIME_URL?.trim() || "";
-  const migration =
-    env.DATABASE_MIGRATION_URL?.trim() ||
-    env.TENANT_MAINTENANCE_DATABASE_URL?.trim() ||
-    "";
-  const fallback = env.DATABASE_URL?.trim() || "";
-  const requireRuntime =
-    env.STOCKY_REQUIRE_RUNTIME_DB_URL === "1" || env.NODE_ENV === "production";
-
-  if (requireRuntime) {
-    if (!runtime) {
-      throw new Error(
-        "DATABASE_RUNTIME_URL is required for production-like runtime (refusing privileged DATABASE_URL fallback)",
-      );
-    }
-    try {
-      void new URL(
-        runtime.startsWith("postgres://")
-          ? `postgresql://${runtime.slice("postgres://".length)}`
-          : runtime,
-      );
-    } catch {
-      throw new Error("malformed_database_url:DATABASE_RUNTIME_URL");
-    }
-    if (migration && databaseUrlsSemanticallyEqual(runtime, migration)) {
-      throw new Error(
-        "DATABASE_RUNTIME_URL must not equal the migration/maintenance URL (semantic identity)",
-      );
-    }
-    if (
-      fallback &&
-      migration &&
-      databaseUrlsSemanticallyEqual(runtime, fallback) &&
-      databaseUrlsSemanticallyEqual(fallback, migration)
-    ) {
-      throw new Error(
-        "DATABASE_RUNTIME_URL must not equal the privileged DATABASE_URL (semantic identity)",
-      );
-    }
-    return runtime;
-  }
-
-  if (runtime) {
-    if (migration && databaseUrlsSemanticallyEqual(runtime, migration)) {
-      throw new Error(
-        "DATABASE_RUNTIME_URL must not equal the migration/maintenance URL (semantic identity)",
-      );
-    }
-    return runtime;
-  }
-
-  return fallback || undefined;
-}
-
-function createPrismaClient(url: string | undefined): PrismaClient {
-  if (url) {
-    return new PrismaClient({ datasources: { db: { url } } });
-  }
-  return new PrismaClient();
-}
+export {
+  resolveRuntimeDatabaseUrl,
+  getVerifiedRuntimePrisma,
+  assertSafeRuntimeConnectedIdentity,
+  databaseUrlsSemanticallyEqual,
+  normalizeDatabaseUrlIdentity,
+} from "./db/runtime-identity.server";
 
 /**
- * Resolve (and lazily recreate) the runtime Prisma singleton when the
- * effective DATABASE_RUNTIME_URL changes — required for disposable test
- * setups that provision the runtime role after module import.
- *
- * Production creates once. Non-production awaits prior disconnect before
- * replacement to avoid racing multiple privileged clients (F-PR3-26 area).
+ * Ensure the runtime Prisma client is connected and identity-verified.
+ * Call from workers / startup before merchant processing when an explicit
+ * ready-gate is preferred. Ordinary proxy access also awaits the same init.
  */
-function getPrisma(): PrismaClient {
-  const resolvedUrl = resolveRuntimeDatabaseUrl();
-  if (
-    process.env.NODE_ENV !== "production" &&
-    (!global.prismaGlobal || global.prismaRuntimeUrl !== resolvedUrl)
-  ) {
-    const previous = global.prismaGlobal;
-    global.prismaGlobal = createPrismaClient(resolvedUrl);
-    global.prismaRuntimeUrl = resolvedUrl;
-    if (previous) {
-      // Fire-and-forget disconnect of the prior client after replacement.
-      void previous.$disconnect();
-    }
-  }
-  if (!global.prismaGlobal) {
-    global.prismaGlobal = createPrismaClient(resolvedUrl);
-    global.prismaRuntimeUrl = resolvedUrl;
-  }
-  return global.prismaGlobal;
+export async function ensureRuntimePrismaReady(): Promise<PrismaClient> {
+  return getVerifiedRuntimePrisma();
 }
-
-const prisma = new Proxy({} as PrismaClient, {
-  get(_target, prop) {
-    const client = getPrisma();
-    // Bind methods to the real client — never pass the proxy as receiver
-    // (F-PR3-26).
-    const value = Reflect.get(client, prop, client);
-    return typeof value === "function" ? value.bind(client) : value;
-  },
-});
 
 /**
  * Drop the lazily-cached runtime Prisma client. Test harnesses that
  * DROP SCHEMA / recreate tables must call this so pooled connections and
  * privilege assumptions are not reused against a destroyed catalog.
- * Forbidden in production. Prefer importing from app/test-utils when possible.
+ * Forbidden in production. After reset, the next access re-verifies identity.
+ * Prefer importing from app/test-utils when possible — not a production path.
  */
 export async function resetPrismaSingletonForTests(): Promise<void> {
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "resetPrismaSingletonForTests is forbidden when NODE_ENV=production",
-    );
-  }
-  if (process.env.STOCKY_ALLOW_PRISMA_TEST_RESET !== "1" && process.env.NODE_ENV === "test") {
-    // Allowed in test by default; explicit deny only via production check above.
-  }
-  await global.prismaGlobal?.$disconnect();
-  global.prismaGlobal = undefined;
-  global.prismaRuntimeUrl = undefined;
+  await resetVerifiedPrismaSingletonForTests();
 }
+
+/**
+ * Proxy that awaits concurrency-safe identity verification before any
+ * client or model-delegate operation. Two concurrent first requests share
+ * one init promise; failure rejects waiters and leaves no usable client.
+ */
+function createVerifiedPrismaProxy(): PrismaClient {
+  const handler: ProxyHandler<PrismaClient> = {
+    get(_target, prop) {
+      // Avoid thenable detection treating the proxy as a Promise.
+      if (prop === "then") return undefined;
+
+      if (typeof prop === "symbol") {
+        return undefined;
+      }
+
+      const propName = prop as string;
+
+      // Top-level PrismaClient methods / fields ($transaction, $queryRaw, …)
+      if (propName.startsWith("$") || propName === "constructor") {
+        return async (...args: unknown[]) => {
+          const client = await getVerifiedRuntimePrisma();
+          const value = Reflect.get(client, propName, client);
+          if (typeof value === "function") {
+            return (value as (...a: unknown[]) => unknown).apply(client, args);
+          }
+          return value;
+        };
+      }
+
+      // Model delegates (supplier, purchaseOrder, …) — nested proxy so
+      // findMany/create/etc. await verification first.
+      return new Proxy(
+        {},
+        {
+          get(_delegateTarget, method) {
+            if (typeof method === "symbol") return undefined;
+            return async (...args: unknown[]) => {
+              const client = await getVerifiedRuntimePrisma();
+              const delegate = Reflect.get(client, propName, client) as Record<
+                string,
+                unknown
+              >;
+              const fn = delegate?.[method as string];
+              if (typeof fn !== "function") {
+                return fn;
+              }
+              return (fn as (...a: unknown[]) => unknown).apply(delegate, args);
+            };
+          },
+        },
+      );
+    },
+  };
+
+  return new Proxy({} as PrismaClient, handler);
+}
+
+const prisma = createVerifiedPrismaProxy();
 
 export default prisma;

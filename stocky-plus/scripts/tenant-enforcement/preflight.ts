@@ -62,6 +62,22 @@ export type PreflightResult = {
   mutating: false;
   progress: EnforcementProgress;
   recoveryHint?: string;
+  /**
+   * Classification of resume-preflight findings (F-PR3C-07).
+   * incomplete_enforcement — missing objects from interrupted apply
+   * known_safe_partial_state — partial but safe to resume
+   * dangerous_definition_drift — policy/trigger/FK tampering
+   * dangerous_privilege_drift — grants/membership/default ACL
+   * repair_authorization_required — needs --acknowledge-dangerous-drift-repair
+   */
+  driftClass?:
+    | "incomplete_enforcement"
+    | "known_safe_partial_state"
+    | "dangerous_definition_drift"
+    | "dangerous_privilege_drift"
+    | "repair_authorization_required"
+    | "clean";
+  dangerousDriftCodes?: string[];
 };
 
 async function columnExists(
@@ -229,7 +245,10 @@ export async function assessEnforcementProgress(
 
 export async function runPreflight(
   client: Client,
-  options: { mode?: PreflightMode } = {},
+  options: {
+    mode?: PreflightMode;
+    acknowledgeDangerousDriftRepair?: boolean;
+  } = {},
 ): Promise<PreflightResult> {
   const mode: PreflightMode = options.mode ?? "resume";
   const globalFailures: string[] = [];
@@ -388,6 +407,126 @@ export async function runPreflight(
     );
   }
 
+  // F-PR3C-07: resume/final preflight must distinguish incomplete vs dangerous drift.
+  const dangerousDriftCodes: string[] = [];
+  let driftClass:
+    | "incomplete_enforcement"
+    | "known_safe_partial_state"
+    | "dangerous_definition_drift"
+    | "dangerous_privilege_drift"
+    | "repair_authorization_required"
+    | "clean" = "clean";
+
+  if (mode === "resume" || mode === "final") {
+    const { verifyEnforcement } = await import("./verify");
+    const { verifyRoles, collectDefaultAclFailures } = await import("./roles");
+    const { defaultRuntimeRoleName } = await import("./connection");
+
+    const def = await verifyEnforcement(client);
+    // Incomplete/missing codes are expected during interrupted apply resume.
+    // Tampered/altered definitions are dangerous and require acknowledgement.
+    const incompleteCode =
+      /_(missing|not_enabled|not_forced|nullable)$|^fk_missing$|^composite_key_missing$|^policy_count_mismatch$|^rls_not_/;
+    // Missing objects are resumable only during a genuine first/partial apply.
+    // Once every merchant table has the terminal NOT NULL + FORCE RLS posture,
+    // a later missing FK/policy or disabled RLS is tampering, not harmless
+    // incompleteness. This also prevents ordinary apply from silently erasing
+    // drift while runtime DML is already live.
+    const terminalTablePosture =
+      progress.forcedRlsCount === MERCHANT_SQL_TABLES.length &&
+      progress.notNullCount === MERCHANT_SQL_TABLES.length;
+    const definitionDanger = def.issues.filter(
+      (i) =>
+        (!incompleteCode.test(i.code) || terminalTablePosture) &&
+        /^(policy_|trigger_|fk_|composite_|rls_|shopId_|helper_|unexpected_|not_null_)/.test(
+          i.code,
+        ),
+    );
+    for (const issue of definitionDanger) {
+      const code = issue.table
+        ? `dangerous_definition_drift:${issue.code}:${issue.table}`
+        : `dangerous_definition_drift:${issue.code}`;
+      dangerousDriftCodes.push(code);
+    }
+
+    const roles = await verifyRoles(client, {
+      requireMerchantDml: progress.complete,
+    });
+    const privilegeDanger = roles.failures.filter(
+      (f) =>
+        !f.startsWith("missing_priv:") &&
+        !f.startsWith("missing_execute_") &&
+        !f.startsWith("runtime_role_missing") &&
+        (f.startsWith("public_grant:") ||
+          f.startsWith("excess_") ||
+          f.startsWith("member_of") ||
+          f.startsWith("admin_option") ||
+          f.startsWith("runtime_has_") ||
+          f.startsWith("runtime_is_") ||
+          f.startsWith("runtime_can_") ||
+          f.startsWith("runtime_owns_") ||
+          f.startsWith("unsafe_default_") ||
+          f.startsWith("public_schema_create") ||
+          f.startsWith("unexpected_merchant_priv") ||
+          f.startsWith("excess_sequence")),
+    );
+    for (const f of privilegeDanger) {
+      dangerousDriftCodes.push(`dangerous_privilege_drift:${f}`);
+    }
+
+    // Incomplete (missing objects) vs tampered (altered definitions):
+    // if progress is partial and only missing_* / incomplete codes exist, that
+    // is known_safe_partial_state. Altered policies/triggers/grants are dangerous.
+    if (dangerousDriftCodes.length > 0) {
+      const hasDefinition = dangerousDriftCodes.some((c) =>
+        c.startsWith("dangerous_definition_drift:"),
+      );
+      const hasPrivilege = dangerousDriftCodes.some((c) =>
+        c.startsWith("dangerous_privilege_drift:"),
+      );
+      driftClass = hasPrivilege
+        ? "dangerous_privilege_drift"
+        : hasDefinition
+          ? "dangerous_definition_drift"
+          : "repair_authorization_required";
+
+      if (!options.acknowledgeDangerousDriftRepair) {
+        driftClass = "repair_authorization_required";
+        for (const code of dangerousDriftCodes) {
+          globalFailures.push(code);
+        }
+        globalFailures.push(
+          "repair_authorization_required:pass_--acknowledge-dangerous-drift-repair",
+        );
+      }
+      // When acknowledged, leave ok based on data-readiness failures only;
+      // apply may normalize definition drift. Wrong same-named FKs still refuse.
+    } else if (progress.partial) {
+      driftClass = "known_safe_partial_state";
+    } else if (!progress.complete && !progress.notStarted) {
+      driftClass = "incomplete_enforcement";
+    } else if (progress.notStarted) {
+      driftClass = "incomplete_enforcement";
+    } else {
+      driftClass = "clean";
+    }
+
+    // Default ACLs always surface even when roles.verify is otherwise clean.
+    const defaults = await collectDefaultAclFailures(
+      client,
+      defaultRuntimeRoleName(),
+    );
+    for (const d of defaults) {
+      if (!dangerousDriftCodes.includes(`dangerous_privilege_drift:${d}`)) {
+        dangerousDriftCodes.push(`dangerous_privilege_drift:${d}`);
+        if (!options.acknowledgeDangerousDriftRepair) {
+          globalFailures.push(`dangerous_privilege_drift:${d}`);
+          driftClass = "repair_authorization_required";
+        }
+      }
+    }
+  }
+
   const ok = globalFailures.length === 0 && tables.every((t) => t.ok);
 
   return {
@@ -400,10 +539,15 @@ export async function runPreflight(
     productionDataInspected: false,
     mutating: false,
     progress,
-    recoveryHint: progress.partial
-      ? "Partial enforcement detected — resume apply is allowed; Prisma drift gate skipped"
-      : progress.complete
-        ? "Enforcement complete — use tenant:enforcement:drift for final definition checks"
-        : undefined,
+    driftClass,
+    dangerousDriftCodes:
+      dangerousDriftCodes.length > 0 ? dangerousDriftCodes : undefined,
+    recoveryHint: !ok && dangerousDriftCodes.length > 0
+      ? "Dangerous definition/privilege drift detected — re-run with --acknowledge-dangerous-drift-repair only after reviewing exact codes; verifiers remain read-only"
+      : progress.partial
+        ? "Partial enforcement detected — resume apply is allowed; Prisma drift gate skipped"
+        : progress.complete
+          ? "Enforcement complete — use tenant:enforcement:drift for final definition checks"
+          : undefined,
   };
 }

@@ -332,12 +332,15 @@ async function checkTrigger(
       detail: row.proname,
     });
   }
-  // 'O' = origin (enabled for normal sessions); 'D' disabled; 'R' replica; 'A' always
+  // 'O' = origin (enabled for normal sessions) — exact expected state (F-PR3C-10).
+  // 'D' disabled; 'R' replica; 'A' always — all treated as drift.
   if (row.tgenabled === "D") {
     issues.push({ code: "trigger_disabled", table, detail: name });
   } else if (row.tgenabled === "R") {
     issues.push({ code: "trigger_replica_only", table, detail: name });
-  } else if (row.tgenabled !== "O" && row.tgenabled !== "A") {
+  } else if (row.tgenabled === "A") {
+    issues.push({ code: "trigger_always_enabled", table, detail: name });
+  } else if (row.tgenabled !== "O") {
     issues.push({
       code: "trigger_wrong_enabled_state",
       table,
@@ -637,11 +640,20 @@ async function checkHelperFunction(
      FROM pg_proc p
      JOIN pg_namespace n ON n.oid = p.pronamespace
      JOIN pg_roles r ON r.oid = p.proowner
-     WHERE n.nspname = 'public' AND p.proname = $1`,
+     WHERE n.nspname = 'public'
+       AND p.proname = $1
+       AND pg_get_function_identity_arguments(p.oid) = ''`,
     [proname],
   );
   if ((res.rowCount ?? 0) === 0) {
     issues.push({ code: "helper_missing", detail: proname });
+    return;
+  }
+  if ((res.rowCount ?? 0) !== 1) {
+    issues.push({
+      code: "helper_ambiguous_signature",
+      detail: `${proname}:matches=${res.rowCount ?? 0}`,
+    });
     return;
   }
   const row = res.rows[0];
@@ -696,13 +708,7 @@ export async function verifyEnforcement(
   }
 
   for (const key of COMPOSITE_PARENT_KEYS) {
-    await checkCompositeKey(
-      client,
-      key.name,
-      key.table,
-      key.columns,
-      issues,
-    );
+    await checkCompositeKey(client, key.name, key.table, key.columns, issues);
   }
 
   for (const fk of COMPOSITE_FOREIGN_KEYS) {
@@ -721,7 +727,17 @@ export async function verifyEnforcement(
     );
   }
 
-  void ENFORCEMENT_CONTEXT_VERSION;
+  // Role / default-ACL / sequence privilege drift surfaces through roles verify.
+  // Let verifyRoles derive whether RLS is fully forced. Missing merchant DML is
+  // filtered below for definitions_verified, while existing post-grant DML must
+  // not be misclassified as a pre-RLS privilege.
+  const { verifyRoles } = await import("./roles");
+  const roles = await verifyRoles(client);
+  for (const failure of roles.failures) {
+    // missing_priv is expected before runtime_grants_applied.
+    if (failure.startsWith("missing_priv:")) continue;
+    issues.push({ code: failure, detail: failure });
+  }
 
   return {
     event: "tenant_enforcement_verify",
@@ -739,7 +755,11 @@ export async function verifyRlsOnly(
     await checkRls(client, table, issues);
     await checkPolicies(client, table, runtimeRole, issues);
   }
-  return { event: "tenant_enforcement_verify", ok: issues.length === 0, issues };
+  return {
+    event: "tenant_enforcement_verify",
+    ok: issues.length === 0,
+    issues,
+  };
 }
 
 export async function verifyImmutabilityOnly(
@@ -750,7 +770,11 @@ export async function verifyImmutabilityOnly(
   for (const table of MERCHANT_SQL_TABLES) {
     await checkTrigger(client, table, issues);
   }
-  return { event: "tenant_enforcement_verify", ok: issues.length === 0, issues };
+  return {
+    event: "tenant_enforcement_verify",
+    ok: issues.length === 0,
+    issues,
+  };
 }
 
 export async function detectEnforcementDrift(

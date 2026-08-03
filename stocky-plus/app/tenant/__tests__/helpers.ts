@@ -21,13 +21,27 @@ export const SHARED_EXTERNAL_ID = "gid://shopify/ProductVariant/999001";
 export function requireDatabaseUrl(): string {
   const url = process.env.DATABASE_URL;
   if (!url) {
-    throw new Error("DATABASE_URL is required for tenant-access integration tests");
+    throw new Error(
+      "DATABASE_URL is required for tenant-access integration tests",
+    );
   }
   return url;
 }
 
+function requireRuntimeRolePassword(): string {
+  const password = process.env.STOCKY_RUNTIME_ROLE_PASSWORD?.trim();
+  if (!password) {
+    throw new Error(
+      "STOCKY_RUNTIME_ROLE_PASSWORD is required for tenant-access integration tests",
+    );
+  }
+  return password;
+}
+
 export function createPrisma(): PrismaClient {
-  return new PrismaClient({ datasources: { db: { url: requireDatabaseUrl() } } });
+  return new PrismaClient({
+    datasources: { db: { url: requireDatabaseUrl() } },
+  });
 }
 
 /**
@@ -64,9 +78,7 @@ async function regrantRuntimeRoleAfterSchemaReset(
     requireExplicitMigrationUrl: false,
   });
   try {
-    if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
-      process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
-    }
+    const password = requireRuntimeRolePassword();
     // PR2 tenant-access harness intentionally runs without FORCE RLS; grant
     // merchant DML only under the disposable-test escape hatch.
     process.env.STOCKY_ALLOW_UNRESTRICTED_RUNTIME_GRANTS = "1";
@@ -82,8 +94,6 @@ async function regrantRuntimeRoleAfterSchemaReset(
 
     if (!process.env.DATABASE_RUNTIME_URL?.trim()) {
       const runtimeRole = defaultRuntimeRoleName();
-      const password =
-        process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only"; // pragma: allowlist secret
       const u = new URL(migrationUrl);
       u.username = runtimeRole;
       u.password = password;

@@ -6,10 +6,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyEnforcement } from "../apply";
-import {
-  getMigrationClient,
-  resolveMigrationDatabaseUrl,
-} from "../connection";
+import { getMigrationClient, resolveMigrationDatabaseUrl } from "../connection";
 import { provisionRoles } from "../roles";
 
 const APP_ROOT = path.resolve(
@@ -17,27 +14,38 @@ const APP_ROOT = path.resolve(
   "../../..",
 );
 
+export function requireRuntimeRolePassword(): string {
+  const password = process.env.STOCKY_RUNTIME_ROLE_PASSWORD?.trim();
+  if (!password) {
+    throw new Error(
+      "STOCKY_RUNTIME_ROLE_PASSWORD is required for enforcement tests (no hardcoded fallback)",
+    );
+  }
+  return password;
+}
+
 export function ensureEnforcementTestEnv(): string {
   const url = resolveMigrationDatabaseUrl({ requireExplicit: false });
+  const runtimePassword = requireRuntimeRolePassword();
   process.env.TENANT_MAINTENANCE_DATABASE_URL =
     process.env.TENANT_MAINTENANCE_DATABASE_URL || url;
   process.env.DATABASE_MIGRATION_URL =
     process.env.DATABASE_MIGRATION_URL || url;
   process.env.DATABASE_URL = process.env.DATABASE_URL || url;
   process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY = "1";
-  if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
-    process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
-  }
+  // F-PR3C-17: never invent a password — require explicit env (CI supplies it).
   if (!process.env.DATABASE_RUNTIME_URL) {
     const u = new URL(url);
     u.username = process.env.STOCKY_RUNTIME_ROLE || "stocky_runtime";
-    u.password = process.env.STOCKY_RUNTIME_ROLE_PASSWORD;
+    u.password = runtimePassword;
     process.env.DATABASE_RUNTIME_URL = u.toString();
   }
   return url;
 }
 
-export async function resetSchemaAndApplyEnforcement(): Promise<{
+export async function resetSchemaAndApplyEnforcement(options?: {
+  acknowledgeDangerousDriftRepair?: boolean;
+}): Promise<{
   prisma: PrismaClient;
 }> {
   const url = ensureEnforcementTestEnv();
@@ -72,7 +80,11 @@ export async function resetSchemaAndApplyEnforcement(): Promise<{
     if (!prep.ok) {
       throw new Error(`prepare failed: ${prep.errors.join(",")}`);
     }
-    const apply = await applyEnforcement(client, { apply: true });
+    const apply = await applyEnforcement(client, {
+      apply: true,
+      acknowledgeDangerousDriftRepair:
+        options?.acknowledgeDangerousDriftRepair === true,
+    });
     if (!apply.ok) {
       throw new Error(
         `apply failed: ${apply.steps

@@ -8,6 +8,13 @@ import {
   TENANT_CONTEXT_VERSION_FN,
 } from "./manifest";
 
+// Re-export shared URL identity helpers so tooling does not diverge from the
+// application runtime module (F-PR3C-01).
+export {
+  databaseUrlsSemanticallyEqual,
+  normalizeDatabaseUrlIdentity,
+} from "../../app/db/runtime-identity.server";
+
 /** Canonical tenant predicate used by all merchant RLS policies. */
 export function expectedTenantPredicateSql(): string {
   return `(${quoteBare("shopId")} IS NOT NULL) AND (${quoteBare("shopId")} = ${TENANT_CONTEXT_HELPER_FN}()) AND (${TENANT_CONTEXT_VERSION_FN}() = '${ENFORCEMENT_CONTEXT_VERSION}')`;
@@ -72,64 +79,4 @@ export function fkActionCode(action: string): string {
     if (name === upper) return code;
   }
   throw new Error(`unknown_fk_action:${action}`);
-}
-
-/**
- * Normalize a database URL for early semantic comparison.
- * Does not replace post-connect identity verification.
- */
-export function normalizeDatabaseUrlIdentity(raw: string): {
-  scheme: string;
-  user: string;
-  host: string;
-  port: number;
-  database: string;
-} {
-  let input = raw.trim();
-  if (!input) {
-    throw new Error("empty_database_url");
-  }
-  // Accept postgres:// alias
-  if (input.startsWith("postgres://")) {
-    input = `postgresql://${input.slice("postgres://".length)}`;
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(input);
-  } catch {
-    throw new Error(`malformed_database_url`);
-  }
-  if (parsed.protocol !== "postgresql:") {
-    throw new Error(`unsupported_database_url_scheme:${parsed.protocol}`);
-  }
-  const hostRaw = parsed.hostname.toLowerCase();
-  const host =
-    hostRaw === "127.0.0.1" || hostRaw === "::1" ? "localhost" : hostRaw;
-  const port = parsed.port ? Number(parsed.port) : 5432;
-  // pathname may be "/db" or "/db/" — strip trailing slash
-  let database = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  database = database.replace(/\/+$/, "");
-  if (!database) {
-    throw new Error("database_url_missing_database");
-  }
-  const user = decodeURIComponent(parsed.username || "");
-  if (!user) {
-    throw new Error("database_url_missing_user");
-  }
-  return { scheme: "postgresql", user, host, port, database };
-}
-
-export function databaseUrlsSemanticallyEqual(a: string, b: string): boolean {
-  try {
-    const left = normalizeDatabaseUrlIdentity(a);
-    const right = normalizeDatabaseUrlIdentity(b);
-    return (
-      left.user === right.user &&
-      left.host === right.host &&
-      left.port === right.port &&
-      left.database === right.database
-    );
-  } catch {
-    return false;
-  }
 }

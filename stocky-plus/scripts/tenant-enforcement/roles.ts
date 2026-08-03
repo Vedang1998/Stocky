@@ -8,6 +8,7 @@ import type { Client } from "pg";
 import {
   BOOTSTRAP_TABLES,
   CONTROL_TABLES,
+  IMMUTABILITY_TRIGGER_FN,
   MERCHANT_SQL_TABLES,
   TENANT_CONTEXT_HELPER_FN,
   TENANT_CONTEXT_VERSION_FN,
@@ -31,6 +32,159 @@ const FORBIDDEN_TABLE_PRIVS = [
   "REFERENCES",
   "TRIGGER",
 ] as const;
+
+const SEQUENCE_PRIVS = ["USAGE", "SELECT", "UPDATE"] as const;
+
+/**
+ * Inspect pg_default_acl for unsafe grants to runtime or PUBLIC (F-PR3C-02).
+ * Returns stable issue codes — does not mutate.
+ */
+export async function collectDefaultAclFailures(
+  client: Client,
+  runtimeRole: string,
+): Promise<string[]> {
+  const failures: string[] = [];
+  const rows = await client.query<{
+    owner: string;
+    schema: string;
+    objtype: string;
+    grantee: string;
+    privilege_type: string;
+  }>(
+    `SELECT
+       r.rolname AS owner,
+       n.nspname AS schema,
+       d.defaclobjtype AS objtype,
+       CASE WHEN acl.grantee = 0 THEN 'public' ELSE g.rolname END AS grantee,
+       acl.privilege_type
+     FROM pg_default_acl d
+     JOIN pg_namespace n ON n.oid = d.defaclnamespace
+     JOIN pg_roles r ON r.oid = d.defaclrole
+     CROSS JOIN LATERAL aclexplode(d.defaclacl) acl
+     LEFT JOIN pg_roles g ON g.oid = acl.grantee
+     WHERE n.nspname = 'public'
+       AND d.defaclacl IS NOT NULL`,
+  );
+
+  for (const row of rows.rows) {
+    const grantee = row.grantee;
+    const isRuntime = grantee === runtimeRole;
+    const isPublic = grantee === "public";
+    if (!isRuntime && !isPublic) continue;
+
+    const granteeKey = isPublic ? "public" : "runtime";
+    const obj =
+      row.objtype === "r"
+        ? "table"
+        : row.objtype === "S"
+          ? "sequence"
+          : row.objtype === "f"
+            ? "function"
+            : row.objtype === "T"
+              ? "type"
+              : `obj_${row.objtype}`;
+    failures.push(
+      `unsafe_default_${obj}_priv:${granteeKey}:${row.owner}:${row.schema}:${row.privilege_type}`,
+    );
+  }
+  return [...new Set(failures)];
+}
+
+/**
+ * Inspect all public-schema sequences for runtime/PUBLIC privileges (F-PR3C-05).
+ */
+export async function collectSequencePrivilegeFailures(
+  client: Client,
+  runtimeRole: string,
+): Promise<string[]> {
+  const failures: string[] = [];
+  const seqs = await client.query<{
+    seqname: string;
+    owner: string;
+  }>(
+    `SELECT c.relname AS seqname, r.rolname AS owner
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     JOIN pg_roles r ON r.oid = c.relowner
+     WHERE n.nspname = 'public' AND c.relkind = 'S'`,
+  );
+
+  for (const seq of seqs.rows) {
+    if (seq.owner === runtimeRole) {
+      failures.push(
+        `excess_sequence_ownership:${seq.seqname}:owner:${seq.owner}:public`,
+      );
+    }
+    for (const priv of SEQUENCE_PRIVS) {
+      const runtimeHas = await client.query<{ has: boolean }>(
+        `SELECT has_sequence_privilege($1, format('%I.%I', 'public', $2::text), $3) AS has`,
+        [runtimeRole, seq.seqname, priv],
+      );
+      if (runtimeHas.rows[0]?.has) {
+        failures.push(
+          `excess_sequence_priv:${seq.seqname}:${runtimeRole}:${priv}:${seq.owner}:public`,
+        );
+      }
+      const publicHas = await client.query<{ has: boolean }>(
+        `SELECT has_sequence_privilege('public', format('%I.%I', 'public', $1::text), $2) AS has`,
+        [seq.seqname, priv],
+      );
+      if (publicHas.rows[0]?.has) {
+        failures.push(
+          `excess_sequence_priv:${seq.seqname}:public:${priv}:${seq.owner}:public`,
+        );
+      }
+    }
+  }
+  return [...new Set(failures)];
+}
+
+/**
+ * Digest of public-schema ACL-related catalog state for read-only verifier tests.
+ */
+export async function catalogPrivilegeDigest(client: Client): Promise<string> {
+  const res = await client.query<{ digest: string }>(
+    `SELECT md5(string_agg(part, '|' ORDER BY part)) AS digest
+     FROM (
+       SELECT 'nsp:' || n.nspname || ':' || COALESCE(n.nspacl::text, '') AS part
+       FROM pg_namespace n WHERE n.nspname = 'public'
+       UNION ALL
+       SELECT 'rel:' || c.relname || ':' || c.relkind::text || ':' ||
+              COALESCE(c.relacl::text, '') || ':owner=' || r.rolname
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_roles r ON r.oid = c.relowner
+       WHERE n.nspname = 'public' AND c.relkind IN ('r', 'S', 'v', 'm')
+       UNION ALL
+       SELECT 'defacl:' || r.rolname || ':' || n.nspname || ':' ||
+              d.defaclobjtype::text || ':' || COALESCE(d.defaclacl::text, '')
+       FROM pg_default_acl d
+       JOIN pg_namespace n ON n.oid = d.defaclnamespace
+       JOIN pg_roles r ON r.oid = d.defaclrole
+       WHERE n.nspname = 'public'
+     ) s`,
+  );
+  return res.rows[0]?.digest ?? "";
+}
+
+/**
+ * Run a verifier callback inside a READ ONLY transaction when possible.
+ */
+export async function withReadOnlyVerifyTransaction<T>(
+  client: Client,
+  fn: () => Promise<T>,
+): Promise<T> {
+  await client.query("BEGIN");
+  try {
+    await client.query("SET TRANSACTION READ ONLY");
+    const result = await fn();
+    await client.query("ROLLBACK");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  }
+}
 
 export type RoleProvisionResult = {
   event: "tenant_roles_provision";
@@ -162,6 +316,8 @@ export async function provisionRoles(
     phase?: "prepare" | "grants" | "full" | "test_harness_unrestricted";
     /** Explicitly authorized repair of dangerous attribute/membership drift */
     repairDangerousDrift?: boolean;
+    /** Explicitly authorized repair of dangerous default privileges (F-PR3C-02) */
+    repairDangerousDefaultPrivileges?: boolean;
   },
 ): Promise<RoleProvisionResult> {
   const migrationRole = assertSafeRoleName(defaultMigrationRoleName());
@@ -336,12 +492,77 @@ export async function provisionRoles(
       revokesApplied.push("_prisma_migrations");
     }
 
-    await client.query(
-      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
-    );
-    await client.query(
-      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-    );
+    // F-PR3C-02: detect unsafe default ACLs before any revoke. Do not silently
+    // normalize — require --repair-dangerous-default-privileges.
+    const defaultAclBefore = await collectDefaultAclFailures(client, runtimeRole);
+    if (defaultAclBefore.length > 0) {
+      detectedDrift.push(...defaultAclBefore);
+      if (!options.repairDangerousDefaultPrivileges) {
+        errors.push(
+          `dangerous_default_acl_drift:${defaultAclBefore.join(",")}:repair_required`,
+        );
+      } else {
+        const owners = await client.query<{ owner: string }>(
+          `SELECT DISTINCT r.rolname AS owner
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           JOIN pg_roles r ON r.oid = c.relowner
+           WHERE n.nspname = 'public' AND c.relkind = 'r'
+             AND c.relname = ANY($1::text[])
+           UNION
+           SELECT current_user::text AS owner`,
+          [MERCHANT_SQL_TABLES],
+        );
+        for (const owner of owners.rows.map((o) => o.owner)) {
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
+          );
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
+          );
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
+          );
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+          );
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC`,
+          );
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(runtimeRole)}`,
+          );
+        }
+        const after = await collectDefaultAclFailures(client, runtimeRole);
+        repairedDrift.push(
+          `repaired_default_acl:before=${defaultAclBefore.length}:after=${after.length}:codes=${defaultAclBefore.join(",")}`,
+        );
+        if (after.length > 0) {
+          errors.push(`default_acl_repair_incomplete:${after.join(",")}`);
+        }
+      }
+    } else {
+      // Preventive: ensure current session role does not leave future defaults.
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(runtimeRole)}`,
+      );
+    }
   }
 
   if (options.apply && phase === "test_harness_unrestricted") {
@@ -641,42 +862,43 @@ export async function verifyRoles(
   }
 
   // Schema CREATE must be absent for runtime (direct or via PUBLIC).
-  await client.query(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`).catch(
-    () => undefined,
+  // F-PR3C-03: do NOT revoke — verifiers are strictly read-only.
+  const schemaCreateDirect = await client.query<{ privilege_type: string }>(
+    `SELECT privilege_type
+     FROM pg_namespace n
+     CROSS JOIN LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) acl
+     JOIN pg_roles r ON r.oid = acl.grantee
+     WHERE n.nspname = 'public'
+       AND r.rolname = $1
+       AND privilege_type = 'CREATE'`,
+    [runtimeRole],
   );
+  const schemaCreatePublic = await client.query<{ privilege_type: string }>(
+    `SELECT privilege_type
+     FROM pg_namespace n
+     CROSS JOIN LATERAL aclexplode(COALESCE(n.nspacl, acldefault('n', n.nspowner))) acl
+     WHERE n.nspname = 'public'
+       AND acl.grantee = 0
+       AND privilege_type = 'CREATE'`,
+  );
+  if ((schemaCreateDirect.rowCount ?? 0) > 0) {
+    failures.push("excess_schema_create");
+  }
+  if ((schemaCreatePublic.rowCount ?? 0) > 0) {
+    failures.push("public_schema_create");
+  }
+
+  // Also catch via has_schema_privilege when PUBLIC CREATE grants it.
   const schemaCreate = await client.query<{ has: boolean }>(
     `SELECT has_schema_privilege($1, 'public', 'CREATE') AS has`,
     [runtimeRole],
   );
-  if (schemaCreate.rows[0]?.has) {
-    // Distinguish direct ACL grant vs residual PUBLIC grant.
-    const direct = await client.query<{ privilege_type: string }>(
-      `SELECT privilege_type
-       FROM pg_namespace n
-       CROSS JOIN LATERAL aclexplode(n.nspacl) acl
-       JOIN pg_roles r ON r.oid = acl.grantee
-       WHERE n.nspname = 'public'
-         AND n.nspacl IS NOT NULL
-         AND r.rolname = $1
-         AND privilege_type = 'CREATE'`,
-      [runtimeRole],
-    );
-    const viaPublic = await client.query<{ privilege_type: string }>(
-      `SELECT privilege_type
-       FROM pg_namespace n
-       CROSS JOIN LATERAL aclexplode(n.nspacl) acl
-       WHERE n.nspname = 'public'
-         AND n.nspacl IS NOT NULL
-         AND acl.grantee = 0
-         AND privilege_type = 'CREATE'`,
-    );
-    if ((direct.rowCount ?? 0) > 0) {
-      failures.push("excess_schema_create");
-    } else if ((viaPublic.rowCount ?? 0) > 0) {
-      failures.push("public_schema_create");
-    } else {
-      failures.push("excess_schema_create");
-    }
+  if (
+    schemaCreate.rows[0]?.has &&
+    (schemaCreateDirect.rowCount ?? 0) === 0 &&
+    (schemaCreatePublic.rowCount ?? 0) === 0
+  ) {
+    failures.push("excess_schema_create");
   }
 
   if (migrationRole === runtimeRole) {
@@ -695,12 +917,13 @@ export async function verifyRoles(
   if (actualOwner && actualOwner === runtimeRole) {
     failures.push("runtime_is_table_owner");
   }
-  if (ownerSample.rows[0]?.rolsuper) {
-    // Documented residual: CI/local owner may be superuser (F-PR3-13).
-    // Fail only when STOCKY_REQUIRE_NONSUPERUSER_OWNER=1.
-    if (process.env.STOCKY_REQUIRE_NONSUPERUSER_OWNER === "1") {
-      failures.push(`migration_owner_is_superuser:${actualOwner}`);
-    }
+  // F-PR3C-16: require non-superuser owner when explicitly demanded
+  // (staging/production verification paths set STOCKY_REQUIRE_NONSUPERUSER_OWNER=1).
+  if (
+    ownerSample.rows[0]?.rolsuper &&
+    process.env.STOCKY_REQUIRE_NONSUPERUSER_OWNER === "1"
+  ) {
+    failures.push(`migration_owner_is_superuser:${actualOwner}`);
   }
 
   const fnPriv = await client.query<{ has: boolean }>(
@@ -718,6 +941,22 @@ export async function verifyRoles(
   );
   if (immPriv.rows[0]?.has) {
     failures.push("runtime_can_execute_immutability_fn");
+  }
+
+  // F-PR3C-02: future-object default privileges
+  failures.push(...(await collectDefaultAclFailures(client, runtimeRole)));
+
+  // F-PR3C-05: sequence privileges
+  failures.push(...(await collectSequencePrivilegeFailures(client, runtimeRole)));
+
+  // PUBLIC EXECUTE on immutability function is forbidden.
+  const immPublic = await client.query<{ has: boolean }>(
+    `SELECT has_function_privilege('public', 'stocky_prevent_shop_id_mutation()', 'EXECUTE') AS has`,
+  );
+  if (immPublic.rows[0]?.has) {
+    failures.push(
+      `unsafe_default_function_priv:public:EXECUTE:${IMMUTABILITY_TRIGGER_FN}`,
+    );
   }
 
   return {

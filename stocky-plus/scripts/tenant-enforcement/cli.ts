@@ -138,10 +138,14 @@ async function main() {
       // FORCE RLS is already complete.
       const phase = argv.includes("--with-merchant-dml") ? "full" : "prepare";
       const repairDangerousDrift = argv.includes("--repair-dangerous-drift");
+      const repairDangerousDefaultPrivileges = argv.includes(
+        "--repair-dangerous-default-privileges",
+      );
       const result = await provisionRoles(client, {
         apply: true,
         phase,
         repairDangerousDrift,
+        repairDangerousDefaultPrivileges,
       });
       console.log(JSON.stringify(result));
       if (!result.ok) process.exitCode = 1;

@@ -5,12 +5,17 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { getMigrationClient } from "../connection";
 import { verifyRoles } from "../roles";
-import { resetSchemaAndApplyEnforcement } from "./helpers";
+import {
+  requireRuntimeRolePassword,
+  resetSchemaAndApplyEnforcement,
+} from "./helpers";
 
 describe("PR3 exact privilege allowlist", () => {
   let prisma: PrismaClient;
 
   beforeAll(async () => {
+    // The harness must receive this from CI/local env; it never invents one.
+    expect(requireRuntimeRolePassword().length).toBeGreaterThan(0);
     ({ prisma } = await resetSchemaAndApplyEnforcement());
   }, 300_000);
 

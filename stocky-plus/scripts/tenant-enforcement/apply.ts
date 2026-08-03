@@ -55,8 +55,13 @@ export type EnforcementApplyResult = {
   steps: EnforcementStep[];
   preflightOk: boolean;
   maxObservedLockHoldMs: number;
-  unsafe_runtime_access: boolean;
+  /** Measured when possible; "unknown" when measurement could not run (F-PR3C-09). */
+  unsafe_runtime_access: boolean | "unknown";
+  unsafe_runtime_access_reason?: string;
   recoveryHint?: string;
+  lockReleaseFailed?: boolean;
+  lockReleaseDetail?: string;
+  advisoryLockBackendPid?: number;
   stepDurationsMs?: {
     p50: number;
     p95: number;
@@ -99,6 +104,24 @@ async function tryAdvisoryLock(client: Client): Promise<{
     acquired: Boolean(lock.rows[0]?.ok),
     backendPid: pid.rows[0].pid,
   };
+}
+
+async function measureUnsafeRuntimeAccess(
+  client: Client,
+): Promise<{
+  unsafe_runtime_access: boolean | "unknown";
+  unsafe_runtime_access_reason?: string;
+}> {
+  try {
+    const safety = await assertSafeRuntimeAccess(client);
+    return { unsafe_runtime_access: safety.unsafe_runtime_access };
+  } catch (err) {
+    return {
+      unsafe_runtime_access: "unknown",
+      unsafe_runtime_access_reason:
+        err instanceof Error ? err.message : String(err),
+    };
+  }
 }
 
 async function releaseAdvisoryLock(client: Client): Promise<void> {
@@ -554,6 +577,8 @@ export type ApplyEnforcementOptions = {
    * interruption. Production CLI never sets this.
    */
   failAfterStepId?: string;
+  /** Explicit acknowledgement required to normalize dangerous definition/privilege drift (F-PR3C-07). */
+  acknowledgeDangerousDriftRepair?: boolean;
 };
 
 /** Major interruption checkpoints used by adversarial resume tests. */
@@ -591,15 +616,21 @@ export async function applyEnforcement(
       steps,
       preflightOk: false,
       maxObservedLockHoldMs: 0,
-      unsafe_runtime_access: false,
+      unsafe_runtime_access: "unknown",
+      unsafe_runtime_access_reason: "apply_not_requested",
     };
   }
 
   let preflight;
   try {
-    preflight = await runPreflight(client, { mode: "resume" });
+    preflight = await runPreflight(client, {
+      mode: "resume",
+      acknowledgeDangerousDriftRepair:
+        options.acknowledgeDangerousDriftRepair === true,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const measured = await measureUnsafeRuntimeAccess(client);
     return {
       event: "tenant_enforcement_apply",
       ok: false,
@@ -611,13 +642,14 @@ export async function applyEnforcement(
       })),
       preflightOk: false,
       maxObservedLockHoldMs: 0,
-      unsafe_runtime_access: false,
+      ...measured,
       recoveryHint:
         "Preflight failed with structured exception; fix lock/timeout contention and re-run",
     };
   }
 
   if (!preflight.ok) {
+    const measured = await measureUnsafeRuntimeAccess(client);
     return {
       event: "tenant_enforcement_apply",
       ok: false,
@@ -634,7 +666,7 @@ export async function applyEnforcement(
       })),
       preflightOk: false,
       maxObservedLockHoldMs: 0,
-      unsafe_runtime_access: false,
+      ...measured,
       recoveryHint: preflight.recoveryHint,
     };
   }
@@ -643,6 +675,7 @@ export async function applyEnforcement(
   if (!lock.acquired) {
     steps[0].status = "failed";
     steps[0].error = "advisory_lock_unavailable";
+    const measured = await measureUnsafeRuntimeAccess(client);
     return {
       event: "tenant_enforcement_apply",
       ok: false,
@@ -650,10 +683,14 @@ export async function applyEnforcement(
       steps,
       preflightOk: true,
       maxObservedLockHoldMs: 0,
-      unsafe_runtime_access: false,
+      ...measured,
       recoveryHint: "Another enforcement apply holds the advisory lock; retry later",
     };
   }
+
+  let lockReleaseFailed = false;
+  let lockReleaseDetail: string | undefined;
+  let result: EnforcementApplyResult | undefined;
 
   const mark = async (
     id: string,
@@ -715,7 +752,8 @@ export async function applyEnforcement(
         await client.query(helperFunctionsSql());
       }))
     ) {
-      return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
     }
 
     if (
@@ -729,7 +767,8 @@ export async function applyEnforcement(
         }
       }))
     ) {
-      return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
     }
 
     for (const idx of COMPOSITE_FK_SUPPORTING_INDEXES) {
@@ -744,7 +783,8 @@ export async function applyEnforcement(
           );
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
     }
 
@@ -759,7 +799,8 @@ export async function applyEnforcement(
           );
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
     }
 
@@ -769,35 +810,40 @@ export async function applyEnforcement(
           await addNotValidNotNullCheck(client, table);
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
       if (
         !(await runStep(`not_null_validate:${table}`, async () => {
           await validateConstraint(client, shopIdNotNullCheckName(table));
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
       if (
         !(await runStep(`not_null_set:${table}`, async () => {
           await setShopIdNotNull(client, table);
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
       if (
         !(await runStep(`shop_fk:${table}`, async () => {
           await addShopFk(client, table);
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
       if (
         !(await runStep(`shop_fk_validate:${table}`, async () => {
           await validateConstraint(client, shopIdFkToShopName(table));
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
     }
 
@@ -810,14 +856,16 @@ export async function applyEnforcement(
           await addCompositeFk(client, fk);
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
       if (
         !(await runStep(`cfk_validate:${fk.name}`, async () => {
           await validateConstraint(client, fk.name);
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
     }
 
@@ -832,7 +880,8 @@ export async function applyEnforcement(
           await client.query(immutabilityTriggerSql(table));
         }))
       ) {
-        return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+        result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
       }
     }
 
@@ -846,7 +895,8 @@ export async function applyEnforcement(
         }
       }))
     ) {
-      return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
     }
 
     if (
@@ -862,7 +912,8 @@ export async function applyEnforcement(
         }
       }))
     ) {
-      return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
     }
 
     if (
@@ -881,12 +932,13 @@ export async function applyEnforcement(
         }
       }))
     ) {
-      return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
     }
 
     const safety = await assertSafeRuntimeAccess(client);
     const sorted = [...durations].sort((a, b) => a - b);
-    return {
+    result = {
       event: "tenant_enforcement_apply",
       ok: steps.every((s) => s.status === "completed") && !safety.unsafe_runtime_access,
       applied: true,
@@ -900,12 +952,26 @@ export async function applyEnforcement(
         max: percentile(sorted, 100),
       },
     };
+    return result;
   } finally {
     try {
       await releaseAdvisoryLock(client);
-    } catch {
-      // Unlock failure is reported via thrown error in release; swallow in finally
-      // only if client already closed — apply caller still has step result.
+    } catch (err) {
+      lockReleaseFailed = true;
+      lockReleaseDetail =
+        err instanceof Error ? err.message : String(err);
+    }
+    if (lockReleaseFailed && result) {
+      result.lockReleaseFailed = true;
+      result.lockReleaseDetail = lockReleaseDetail;
+      result.advisoryLockBackendPid = lock.backendPid;
+      result.ok = false;
+      result.recoveryHint = [
+        result.recoveryHint,
+        `advisory_unlock_failed:backend_pid=${lock.backendPid}:key=${TENANT_ENFORCEMENT_ADVISORY_LOCK_KEY}:reconnect_and_pg_advisory_unlock`,
+      ]
+        .filter(Boolean)
+        .join("; ");
     }
   }
 }
