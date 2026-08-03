@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `2bdd8c54bff49c4b416f99cb122f6b0ff3fadda4b28ae6a7b4d0fc01465c7b50`
+**Content digest:** `6ba21393ce7c47e3cf94cfd26a7ea3b606d6ab59a9738e6897bb48720bf07f32`
 **Scanned files:** 167
-**Findings:** 1048
+**Findings:** 1049
 **Converted paths:** 411
-**Approved exception findings:** 637
+**Approved exception findings:** 638
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -50,7 +50,7 @@ All 18 approved merchant-owned models must appear below.
 | script | 45 |
 | service | 34 |
 | tenant_infra | 5 |
-| test | 866 |
+| test | 867 |
 | worker | 10 |
 
 ## Approved exceptions
@@ -345,11 +345,12 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 106 / `dbA.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 109 / `dbB.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 129 / `db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/helpers.ts` | 24 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/helpers.ts` | 30 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/helpers.ts` | 31 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/helpers.ts` | 32 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/helpers.ts` | 33 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 5 / `resetPrismaSingletonForTests` | test | — | value import of app/db.server | approved exception EX-TEST-001 | migration_tests | approved exception | allowlist EX-TEST-001 | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 30 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 91 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 92 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 93 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 94 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/job-envelope.test.ts` | 36 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-004 | migration_tests | approved exception | allowlist EX-TEST-004 | EX-TEST-004 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/job-envelope.test.ts` | 97 / `ctx.db.supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/job-envelope.test.ts` | 281 / `prisma.supplier.count` | test | Supplier | direct prisma delegate | approved exception EX-TEST-004 | migration_tests | approved exception | allowlist EX-TEST-004 | EX-TEST-004 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1216,7 +1217,7 @@ All 18 approved merchant-owned models must appear below.
 ```json
 {
   "scannedFiles": 167,
-  "findings": 1048,
+  "findings": 1049,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1298,6 +1299,6 @@ All 18 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "2bdd8c54bff49c4b416f99cb122f6b0ff3fadda4b28ae6a7b4d0fc01465c7b50"
+  "contentDigest": "6ba21393ce7c47e3cf94cfd26a7ea3b606d6ab59a9738e6897bb48720bf07f32"
 }
 ```

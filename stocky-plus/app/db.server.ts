@@ -92,4 +92,21 @@ const prisma = new Proxy({} as PrismaClient, {
   },
 });
 
+/**
+ * Drop the lazily-cached runtime Prisma client. Test harnesses that
+ * DROP SCHEMA / recreate tables must call this so pooled connections and
+ * privilege assumptions are not reused against a destroyed catalog.
+ * Forbidden in production.
+ */
+export async function resetPrismaSingletonForTests(): Promise<void> {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "resetPrismaSingletonForTests is forbidden when NODE_ENV=production",
+    );
+  }
+  await global.prismaGlobal?.$disconnect();
+  global.prismaGlobal = undefined;
+  global.prismaRuntimeUrl = undefined;
+}
+
 export default prisma;
