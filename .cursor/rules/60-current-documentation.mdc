@@ -1,0 +1,18 @@
+---
+description: Current external documentation and source hierarchy
+alwaysApply: true
+---
+
+# Current external facts
+
+For current Shopify, Prisma, PostgreSQL, Cursor, GitHub, billing, API-version,
+App Store, Built for Shopify or dependency facts:
+
+- use current official documentation;
+- prefer primary sources;
+- record the documentation version or access date when material;
+- separate official fact from inference and product decision;
+- do not use old model memory as the source of truth;
+- do not change product behavior based only on community content;
+- do not browse unrelated sources when approved product documents already decide
+  the requirement.
