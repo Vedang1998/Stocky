@@ -31,7 +31,7 @@ Do **not** mark any finding closed when Cursor’s tests pass. PR 3 remains unac
 | `57016ed4b685c8958ad49d821f4afd9ea9894a9b` | Independently reviewed implementation head |
 | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` | Actual last runtime/test implementation head before review |
 | `ebcd0263ee726829f517d729abe601c7416a0952` | Review-report-only commit; required correction starting head |
-| (correction commits) | Cursor correction implementation — pending independent verification |
+| `b02d660` … `01cced4` (+ docs tip) | Cursor correction implementation — pending independent verification |
 
 The independent review report file must remain unchanged.
 

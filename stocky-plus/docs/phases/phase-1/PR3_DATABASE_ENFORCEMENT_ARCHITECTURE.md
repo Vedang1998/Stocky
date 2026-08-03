@@ -4,7 +4,9 @@
 **Work unit:** PR 3 — Database enforcement  
 **Branch:** `phase-1/tenant-enforcement`  
 **Starting main:** `00fb925721ad374b3ff976652ec99dbf655ebb11`  
-**Status:** Implementation complete — pending independent verification  
+**Status:** Correction implemented — pending independent verification (D-037)  
+**Original independently reviewed head:** `57016ed4b685c8958ad49d821f4afd9ea9894a9b` (`NOT READY`)  
+**Actual prior runtime/test head:** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`  
 **Production execution:** NOT AUTHORIZED
 
 ## Purpose
@@ -52,16 +54,25 @@ On every approved merchant-domain table (18):
 
 ## Non-null ownership + composite constraints
 
-Low-lock rollout via `tenant:enforcement:apply`:
+Low-lock rollout via `tenant:enforcement:apply` (security-preserving order):
 
-1. Supporting indexes (`CREATE INDEX CONCURRENTLY` where needed)
-2. Unique `(shopId, id)` on all 18 merchant tables
-3. `CHECK ("shopId" IS NOT NULL) NOT VALID` → `VALIDATE` → `SET NOT NULL`
-4. `shopId → Shop(id)` FK NOT VALID → VALIDATE
-5. Composite tenant FKs NOT VALID → VALIDATE (child/cross-domain/LeadTimeSnapshot PO lineage)
-6. RLS + immutability triggers
+1. Helper functions
+2. `roles_prepared` — restricted role attributes; **revoke** merchant DML (no unrestricted grants)
+3. Supporting indexes (`CREATE INDEX CONCURRENTLY` where needed)
+4. Unique `(shopId, id)` on all 18 merchant tables
+5. `CHECK ("shopId" IS NOT NULL) NOT VALID` → `VALIDATE` → `SET NOT NULL`
+6. `shopId → Shop(id)` FK NOT VALID → VALIDATE
+7. Composite tenant FKs NOT VALID → VALIDATE (child/cross-domain/LeadTimeSnapshot PO lineage)
+8. Per-table ENABLE/FORCE RLS + exact policies + immutability triggers
+9. `definitions_verified` — catalog definition verify must pass
+10. `runtime_grants_applied` — merchant DML **only after** step 9
+11. `final_verified`
 
-Prisma schema keeps `shopId` optional for expand/migrate compatibility; the live DB is NOT NULL after apply. Prisma schema drift is required **before** enforcement; after enforcement the DB intentionally diverges on nullability/FKs/RLS.
+Invariant: runtime merchant DML is never active without exact verified RLS.
+
+Verification compares actual PostgreSQL catalog definitions (policy expressions, FK columns/actions, trigger enablement/function digest, recursive role membership, exact privilege allowlist) — not names/counts alone.
+
+Prisma schema keeps `shopId` optional for expand/migrate compatibility; the live DB is NOT NULL after apply. Prisma schema drift is required **before** enforcement; after enforcement the DB intentionally diverges on nullability/FKs/RLS (expected-divergence path for ops tooling).
 
 ## Bootstrap (D-018)
 

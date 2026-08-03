@@ -1,7 +1,7 @@
 # Project Status
 
 **Updated:** 2026-08-03
-**Current stage:** Phase 1 PR 3 IN PROGRESS — database enforcement implementation complete, pending independent verification
+**Current stage:** Phase 1 PR 3 CORRECTIONS — correction implemented, pending independent verification (D-037)
 **Current main SHA:** `00fb925721ad374b3ff976652ec99dbf655ebb11`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
@@ -9,11 +9,16 @@
 **Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/tenant-enforcement`
 **Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft, open, unmerged)
-**PR 3 runtime/test implementation head:** `aeeecc264e9203641aa07dcd6d814c5a1aba2aab`
-**PR 3 prior failed handoff head:** `1467483455f4cd4726fb5cfd65ee2b6d247903bc`
-**PR 3 exact final PR head (CI green):** `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2`
-**PR 3 exact-head CI:** workflow `CI`, run `30786796167`, job `91601769081` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2`
-**PR 3 prior green tips:** `0ee3ae0` (run `30785527274`); `af964c0` (run `30786147408`)
+**PR 3 independently reviewed implementation head:** `57016ed4b685c8958ad49d821f4afd9ea9894a9b` — `NOT READY — CORRECTIONS REQUIRED`
+**PR 3 review-report / correction start head:** `ebcd0263ee726829f517d729abe601c7416a0952`
+**PR 3 actual last runtime/test head (pre-correction):** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (corrects false `aeeecc2…` claim)
+**PR 3 correction runtime/test tip:** `01cced426e8cbdfebb8580c20bfc4f2041713c59`
+**PR 3 correction status:** Correction implemented — pending independent verification
+**PR 3 prior failed handoff head (historical):** `1467483455f4cd4726fb5cfd65ee2b6d247903bc`
+**PR 3 prior exact final PR head before review (historical):** `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2`
+**PR 3 prior green tips (historical):** `0ee3ae0` (run `30785527274`); `af964c0` (run `30786147408`); `9c2c98c` (run `30786796167`)
+**ChatGPT decision:** D-037 — Phase 1 PR 3 corrections required (P0:0 P1:6 P2:14 P3:9)
+**New correction risks:** R-080..R-085 OPEN — pending independent verification
 **Phase 1 PR 2:** MERGED AND CLOSED
 **PR #13:** CLOSED AND SQUASH-MERGED
 **Authorized PR head:** `5fc98192d2ca350de358316d9383e39103b98c80`
@@ -65,8 +70,9 @@
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim)
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
-**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE — Implementation complete — pending independent verification (not closed by Cursor)
-**Q-011:** OPEN — Implementation complete — pending independent verification (PR 3; production not authorized)
+**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE — Correction implemented — pending independent verification (not closed by Cursor)
+**Q-011:** OPEN — Correction implemented — pending independent verification (PR 3; production not authorized)
+**R-080..R-085:** OPEN — Correction implemented — pending independent verification
 **R-014:** OPEN P1 IMPLEMENTATION GATE
 **R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
 **R-013 / R-062:** OPEN (dependency hardening)
@@ -78,12 +84,13 @@
 **Inventory-write flags:** DEFAULT OFF
 **PR 1:** MERGED AND CLOSED
 **PR 2:** MERGED AND CLOSED
-**PR 3:** IN PROGRESS — Implementation complete — pending independent verification
+**PR 3:** IN PROGRESS — Correction implemented — pending independent verification (draft PR #15)
+**PR 4:** BLOCKED
 **Redis history disposition:** Accepted repository-history hygiene residual — synthetic `dump.rdb` blob `cae7715f893091a413923b54488f74c59a71e058` (843 bytes; introduced `45d9d90`, deleted `20659dd`) remains reachable; no credentials/PII/merchant data; no secret rotation or history rewrite required; `*.rdb` ignored going forward
 **No production deployment**
 **No production backfill**
 **RLS:** Implemented on disposable/CI fixtures only — production RLS activation NOT AUTHORIZED
-**Next action:** Return to ChatGPT for exact-head verification and the independent PR 3 database-enforcement review prompt.
+**Next action:** Return to ChatGPT for exact-head triage and the independent PR 3 correction-review prompt.
 
 ## Current truth
 
@@ -95,9 +102,9 @@
 - PR [#11](https://github.com/Vedang1998/Stocky/pull/11) remains CLOSED AND SQUASH-MERGED (`44a24f3…`).
 - Phase 1 PR 2 application-layer tenant access is **ACCEPTED AND MERGED** (D-034 / D-035). Accepted implementation head `70f4a80…`. Authoritative independent review `ff3f9f6…`. Final pre-merge CI run `30776644228`, job `91573286240`, success.
 - PR 2 application-layer tenant access is accepted and merged. **It does not resolve database-enforced tenant isolation.**
-- **Q-011 remains open** because database enforcement is PR 3 (implementation complete on disposable/CI fixtures only; production not authorized; pending independent verification).
-- F-016 / R-022 remain open implementation gates (implementation complete — pending independent verification; not closed by Cursor).
-- PR 3 is **IN PROGRESS** on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) at exact head `9c2c98c…` with green exact-head CI run `30786796167` / job `91601769081`. No later Phase 1 PR may begin before PR 3 is accepted and merged.
+- **Q-011 remains open** (correction implemented on disposable/CI fixtures only; production not authorized; pending independent verification).
+- F-016 / R-022 / R-080..R-085 remain open implementation gates (correction implemented — pending independent verification; not closed by Cursor).
+- Independent PR 3 review at `57016ed…` returned `NOT READY — CORRECTIONS REQUIRED`. Correction implemented on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) starting from `ebcd026…` — **pending independent verification**. Prior runtime/test head was `0ee3ae0…` (not `aeeecc2…`). No later Phase 1 PR may begin before PR 3 is accepted and merged.
 - No production deployment or production backfill occurred.
 - RLS / database roles are implemented on disposable/CI fixtures only — **production RLS activation is NOT AUTHORIZED**.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.

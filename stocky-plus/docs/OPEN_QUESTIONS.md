@@ -75,4 +75,6 @@ Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforce
 
 **PR 2 acceptance note:** Phase 1 PR 2 technical implementation is **ACCEPTED** (D-034) at reviewed handoff head `70f4a80aab2366108a71fd80320b0f824bfe0cce` with authoritative fifth review report `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` (verdict `READY FOR CHATGPT PR 2 ACCEPTANCE`).
 
-**PR 2 merge-closure historical note:** PR 2 application-layer tenant contract **merged** in PR [#13](https://github.com/Vedang1998/Stocky/pull/13) (authorized head `5fc98192d2ca350de358316d9383e39103b98c80`; squash `e9c4f87eb28ce0e957a8cbd159719586892f8b98`; `2026-08-03T01:38:59Z`; D-035). **Q-011 remains OPEN.** Database enforcement has not started and must be implemented, independently reviewed and accepted in PR 3. Do **not** close Q-011.
+**PR 2 merge-closure historical note:** PR 2 application-layer tenant contract **merged** in PR [#13](https://github.com/Vedang1998/Stocky/pull/13) (authorized head `5fc98192d2ca350de358316d9383e39103b98c80`; squash `e9c4f87eb28ce0e957a8cbd159719586892f8b98`; `2026-08-03T01:38:59Z`; D-035). **Q-011 remains OPEN.**
+
+**PR 3 correction note (D-037):** Independent review at `57016ed…` returned `NOT READY — CORRECTIONS REQUIRED`. Correction implemented on `phase-1/tenant-enforcement` (draft PR #15) — **pending independent verification**. Prior runtime/test head was `0ee3ae0…` (not `aeeecc2…`). Production execution remains unauthorized. Do **not** close Q-011.

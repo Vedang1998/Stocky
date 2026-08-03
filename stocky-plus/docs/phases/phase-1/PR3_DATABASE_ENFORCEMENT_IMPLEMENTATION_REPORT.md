@@ -1,10 +1,12 @@
 # PR 3 — Database Enforcement Implementation Report
 
+> **Identity correction (D-037 / F-PR3-21):** The field below historically labeled `Runtime/test implementation head: aeeecc2…` was **incorrect**. The actual last runtime/test implementation commit before independent review was `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`. See `PR3_DATABASE_ENFORCEMENT_CORRECTION_IMPLEMENTATION_REPORT.md` for the correction cycle. This original report is preserved for chain-of-custody; do not treat its pre-review “accepted” claims as current.
+
 **Phase:** 1  
 **Work unit:** PR 3 — Database enforcement  
 **Branch:** `phase-1/tenant-enforcement`  
 **Starting main SHA:** `00fb925721ad374b3ff976652ec99dbf655ebb11`  
-**Status:** Implementation complete — pending independent verification  
+**Status:** SUPERSEDED for acceptance by D-037 correction cycle — original implementation was independently reviewed `NOT READY`; see correction implementation report  
 **Production execution:** NOT AUTHORIZED  
 **Inventory writes:** UNAPPROVED / flags DEFAULT OFF
 
@@ -19,7 +21,7 @@
 | Merge state | Unmerged |
 | Current main | `00fb925721ad374b3ff976652ec99dbf655ebb11` |
 | Prior handoff head (failed CI) | `1467483455f4cd4726fb5cfd65ee2b6d247903bc` |
-| Runtime/test implementation head | `aeeecc264e9203641aa07dcd6d814c5a1aba2aab` |
+| Runtime/test implementation head (HISTORICALLY MISLABELED; actual last pre-review runtime/test = `0ee3ae0…`) | `aeeecc264e9203641aa07dcd6d814c5a1aba2aab` |
 | Empty CI retrigger | `6ffa2d31045d9eb6480a5ae72c4dd3dc484897ee` |
 | Implementation tip with first green CI | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (run `30785527274`) |
 | Documentation tip with green CI | `af964c0a8f59b39403973a5dac7ea0dea573b760` (run `30786147408`) |
