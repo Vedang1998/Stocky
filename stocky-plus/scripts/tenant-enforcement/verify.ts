@@ -46,6 +46,24 @@ const CMD_MAP: Record<string, string> = {
   delete: "d",
 };
 
+function normalizeRoleArray(roles: unknown): string[] {
+  if (Array.isArray(roles)) {
+    return roles.map(String).filter(Boolean);
+  }
+  if (typeof roles === "string") {
+    const trimmed = roles.trim();
+    if (!trimmed || trimmed === "{}") return [];
+    // Postgres array literal: {a,b} or {"a","b"}
+    return trimmed
+      .replace(/^\{/, "")
+      .replace(/\}$/, "")
+      .split(",")
+      .map((s) => s.replace(/^"|"$/g, "").trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 async function checkRls(
   client: Client,
   table: string,
@@ -132,26 +150,27 @@ async function checkPolicies(
         detail: name,
       });
     }
+    const roles = normalizeRoleArray(row.roles);
     // Empty polroles = PUBLIC
-    if (row.roles.length === 0) {
+    if (roles.length === 0) {
       issues.push({
         code: "public_policy",
         table,
         detail: name,
       });
     } else {
-      if (!row.roles.includes(runtimeRole)) {
+      if (!roles.includes(runtimeRole)) {
         issues.push({
           code: "policy_wrong_role",
           table,
-          detail: `${name}:roles=${row.roles.join(",")}`,
+          detail: `${name}:roles=${roles.join(",")}`,
         });
       }
-      if (row.roles.some((r) => r !== runtimeRole)) {
+      if (roles.some((r) => r !== runtimeRole)) {
         issues.push({
           code: "policy_extra_role",
           table,
-          detail: `${name}:roles=${row.roles.join(",")}`,
+          detail: `${name}:roles=${roles.join(",")}`,
         });
       }
     }
@@ -545,8 +564,8 @@ async function checkFkDefinition(
       detail: `${spec.name}:got=${row.parent_table}`,
     });
   }
-  const childCols = row.child_cols ?? [];
-  const parentCols = row.parent_cols ?? [];
+  const childCols = normalizeRoleArray(row.child_cols);
+  const parentCols = normalizeRoleArray(row.parent_cols);
   if (
     childCols.length !== spec.childColumns.length ||
     childCols.some((c, i) => c !== spec.childColumns[i])
@@ -770,8 +789,8 @@ export async function readFkCatalogDefinition(
     confdeltype: string;
     child_table: string;
     parent_table: string;
-    child_cols: string[];
-    parent_cols: string[];
+    child_cols: unknown;
+    parent_cols: unknown;
   }>(
     `SELECT c.convalidated,
             c.confupdtype::text AS confupdtype,
@@ -799,8 +818,8 @@ export async function readFkCatalogDefinition(
   return {
     childTable: row.child_table,
     parentTable: row.parent_table,
-    childColumns: row.child_cols ?? [],
-    parentColumns: row.parent_cols ?? [],
+    childColumns: normalizeRoleArray(row.child_cols),
+    parentColumns: normalizeRoleArray(row.parent_cols),
     onDelete: row.confdeltype,
     onUpdate: row.confupdtype,
     validated: row.convalidated,

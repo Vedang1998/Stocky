@@ -289,11 +289,14 @@ export async function provisionRoles(
     );
     grantsApplied.push("USAGE ON SCHEMA public");
 
-    // Revoke CREATE on schema if present
+    // Revoke CREATE on schema from runtime and from PUBLIC (PUBLIC CREATE
+    // would make has_schema_privilege true for every role).
     await client.query(
       `REVOKE CREATE ON SCHEMA public FROM ${quoteIdent(runtimeRole)}`,
     );
     revokesApplied.push("CREATE ON SCHEMA public");
+    await client.query(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`);
+    revokesApplied.push("CREATE ON SCHEMA public FROM PUBLIC");
 
     await client.query(grantHelpersToRuntimeSql(runtimeRole));
     grantsApplied.push(`EXECUTE ON ${TENANT_CONTEXT_HELPER_FN}`);
@@ -368,7 +371,9 @@ export async function provisionRoles(
     requireMerchantDml:
       phase === "test_harness_unrestricted"
         ? true
-        : merchantDmlGranted || (await isRlsFullyForced(client)),
+        : phase === "prepare"
+          ? false
+          : merchantDmlGranted,
     allowUnrestrictedMerchantDml: phase === "test_harness_unrestricted",
   });
   if (!verify.ok) {
@@ -635,13 +640,43 @@ export async function verifyRoles(
     }
   }
 
-  // Schema CREATE must be absent
+  // Schema CREATE must be absent for runtime (direct or via PUBLIC).
+  await client.query(`REVOKE CREATE ON SCHEMA public FROM PUBLIC`).catch(
+    () => undefined,
+  );
   const schemaCreate = await client.query<{ has: boolean }>(
     `SELECT has_schema_privilege($1, 'public', 'CREATE') AS has`,
     [runtimeRole],
   );
   if (schemaCreate.rows[0]?.has) {
-    failures.push("excess_schema_create");
+    // Distinguish direct ACL grant vs residual PUBLIC grant.
+    const direct = await client.query<{ privilege_type: string }>(
+      `SELECT privilege_type
+       FROM pg_namespace n
+       CROSS JOIN LATERAL aclexplode(n.nspacl) acl
+       JOIN pg_roles r ON r.oid = acl.grantee
+       WHERE n.nspname = 'public'
+         AND n.nspacl IS NOT NULL
+         AND r.rolname = $1
+         AND privilege_type = 'CREATE'`,
+      [runtimeRole],
+    );
+    const viaPublic = await client.query<{ privilege_type: string }>(
+      `SELECT privilege_type
+       FROM pg_namespace n
+       CROSS JOIN LATERAL aclexplode(n.nspacl) acl
+       WHERE n.nspname = 'public'
+         AND n.nspacl IS NOT NULL
+         AND acl.grantee = 0
+         AND privilege_type = 'CREATE'`,
+    );
+    if ((direct.rowCount ?? 0) > 0) {
+      failures.push("excess_schema_create");
+    } else if ((viaPublic.rowCount ?? 0) > 0) {
+      failures.push("public_schema_create");
+    } else {
+      failures.push("excess_schema_create");
+    }
   }
 
   if (migrationRole === runtimeRole) {

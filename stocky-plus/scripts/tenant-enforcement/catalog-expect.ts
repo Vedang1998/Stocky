@@ -19,17 +19,38 @@ function quoteBare(ident: string): string {
 
 /**
  * Normalize pg_get_expr / policy text for deterministic comparison.
- * Strips ::text casts PostgreSQL may inject; collapses whitespace; lowercases.
+ * Strips ::text casts PostgreSQL may inject; collapses whitespace; lowercases;
+ * unwraps a single redundant outer parenthesis pair PostgreSQL often adds.
  */
 export function normalizeCatalogExpr(expr: string | null | undefined): string | null {
   if (expr == null) return null;
-  return expr
+  let out = expr
     .replace(/::text\b/gi, "")
     .replace(/\s+/g, " ")
     .replace(/\(\s+/g, "(")
     .replace(/\s+\)/g, ")")
     .trim()
     .toLowerCase();
+
+  // Unwrap balanced outer parentheses while the whole expression is wrapped.
+  while (out.startsWith("(") && out.endsWith(")")) {
+    let depth = 0;
+    let wrapsAll = true;
+    for (let i = 0; i < out.length; i++) {
+      const ch = out[i];
+      if (ch === "(") depth += 1;
+      else if (ch === ")") {
+        depth -= 1;
+        if (depth === 0 && i < out.length - 1) {
+          wrapsAll = false;
+          break;
+        }
+      }
+    }
+    if (!wrapsAll || depth !== 0) break;
+    out = out.slice(1, -1).trim();
+  }
+  return out;
 }
 
 export function expectedNormalizedTenantPredicate(): string {
