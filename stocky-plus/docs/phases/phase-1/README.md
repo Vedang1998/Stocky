@@ -5,7 +5,7 @@
 **Phase 1 status:** IN PROGRESS (PR 1 and PR 2 merged and closed; PR 3 correction implemented on draft PR #15 — pending independent verification; D-037)
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
-**Phase 1 PR 3:** IN PROGRESS — draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15); independently reviewed head `57016ed…` `NOT READY`; correction start `ebcd026…`; prior runtime/test head `0ee3ae0…`; correction tip `01cced4…`; status: Correction implemented — pending independent verification
+**Phase 1 PR 3:** IN PROGRESS — draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15); independently reviewed head `57016ed…` `NOT READY`; correction start `ebcd026…`; prior runtime/test head `0ee3ae0…`; exact head `a132719…`; exact-head CI run `30826604464` / job `91729808946` success; status: Correction implemented — pending independent verification
 **Next authorized implementation unit:** independent correction review + ChatGPT acceptance of PR 3 (no PR 4 until PR 3 is accepted and merged)
 **Active implementation branch:** `phase-1/tenant-enforcement`
 **Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft, open, unmerged)

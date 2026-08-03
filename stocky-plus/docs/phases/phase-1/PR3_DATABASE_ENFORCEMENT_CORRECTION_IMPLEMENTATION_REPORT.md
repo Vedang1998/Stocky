@@ -24,7 +24,7 @@
 | `fe16e2b…` | Exact RLS/FK/trigger verification + safe apply + identity/roles |
 | `66c692e…` | Catalog parsing / prepare-verify bugfixes |
 | `01cced4…` | Resumable interrupt suite + Vitest discovery + access allowlist |
-| (this documentation tip) | Evidence / runbook / status sync — see `git rev-parse HEAD` at handoff |
+| `a132719cbe300699f8f276c1dd3f5ba7453e87d4` | Evidence / runbook / status sync + exact-head CI green |
 
 Independent review report preserved verbatim:
 
@@ -165,7 +165,18 @@ Adversarial probes reproduced review failures and then restored clean:
 
 ## CI
 
-Exact-head CI for the final documentation tip must be recorded after this commit lands. Prior correction runtime tip `01cced4…` must show named correction steps succeeding with nonzero tests (file-path selection; no zero-match `-t` filters).
+| Field | Value |
+| --- | --- |
+| Workflow | CI |
+| Run ID | `30826604464` |
+| Job ID | `91729808946` |
+| Job name | Lint, typecheck, test, build, Prisma, GraphQL |
+| Actual `head_sha` | `a132719cbe300699f8f276c1dd3f5ba7453e87d4` |
+| Conclusion | **success** |
+| Skipped material steps | **none** |
+| Named correction steps | All success (definition-drift, composite-drift, immutability-drift, partial-apply, interruption/resume, role-membership, exact-privilege, connected-identity, populated concurrency, deadlock/timeout recovery) |
+
+If a later documentation-only tip is pushed after this green head, obtain CI again on that tip before handoff.
 
 Required named steps (CI workflow):
 
