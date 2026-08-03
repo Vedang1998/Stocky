@@ -34,7 +34,7 @@ Every finding: **IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**
 
 | ID | Sev | Exact correction | Primary files | Regression tests |
 | --- | :---: | --- | --- | --- |
-| F-PR3C-01 | P1 | Shared `app/db/runtime-identity.server.ts`; `db.server` awaits verified connect before merchant delegates; concurrency-safe init; re-verify after reset | `app/db/runtime-identity.server.ts`, `app/db.server.ts`, `connection.ts` | `runtime-connected-identity-app.test.ts` (8) |
+| F-PR3C-01 | P1 | Shared `app/db/runtime-identity.server.ts`; `db.server` awaits verified connect before merchant delegates; concurrency-safe init; re-verify after reset; `EX-RAW-002` + enforcement test allowlist for access audit | `app/db/runtime-identity.server.ts`, `app/db.server.ts`, `connection.ts`, `tenant-access/allowlist.ts` | `runtime-connected-identity-app.test.ts` (8) |
 | F-PR3C-02 | P1 | `pg_default_acl` inspection; stable `unsafe_default_*` codes; fail-closed provision; `--repair-dangerous-default-privileges` | `roles.ts`, `verify.ts`, `cli.ts` | `default-privilege-drift.test.ts` |
 | F-PR3C-03 | P2 | Removed mutating REVOKE from `verifyRoles`; read-only transaction helper; digest equality | `roles.ts` | `verifier-readonly.test.ts` (2) |
 | F-PR3C-04 | P2 | Dedicated deadlock/timeout/cancel suite + distinct CI step | `deadlock-timeout-recovery.test.ts`, `ci.yml` | 6 tests incl. proven deadlock |

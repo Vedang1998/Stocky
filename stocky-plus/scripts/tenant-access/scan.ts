@@ -655,12 +655,14 @@ function collectFindings(
       // Exact construction module or exception paths
       const constructionAllowed =
         rel === "app/db.server.ts" ||
+        rel === "app/db/runtime-identity.server.ts" ||
         (exception &&
           (exception.category === "pr1_maintenance_backfill" ||
             exception.category === "pr1_compatibility_indexes" ||
             exception.category === "pr3_database_enforcement" ||
             exception.category === "dev_seed" ||
-            exception.category === "migration_tests"));
+            exception.category === "migration_tests" ||
+            exception.category === "raw_prisma_construction"));
 
       findings.push({
         file: rel,

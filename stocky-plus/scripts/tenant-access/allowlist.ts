@@ -134,6 +134,21 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/helpers.ts",
   "scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts",
   "scripts/tenant-enforcement/tests/populated-concurrency.test.ts",
+  "scripts/tenant-enforcement/tests/connected-identity.test.ts",
+  "scripts/tenant-enforcement/tests/role-membership.test.ts",
+  "scripts/tenant-enforcement/tests/definition-drift.test.ts",
+  "scripts/tenant-enforcement/tests/composite-definition-drift.test.ts",
+  "scripts/tenant-enforcement/tests/immutability-trigger-drift.test.ts",
+  "scripts/tenant-enforcement/tests/exact-privilege-allowlist.test.ts",
+  "scripts/tenant-enforcement/tests/runtime-connected-identity-app.test.ts",
+  "scripts/tenant-enforcement/tests/default-privilege-drift.test.ts",
+  "scripts/tenant-enforcement/tests/verifier-readonly.test.ts",
+  "scripts/tenant-enforcement/tests/deadlock-timeout-recovery.test.ts",
+  "scripts/tenant-enforcement/tests/sequence-privilege.test.ts",
+  "scripts/tenant-enforcement/tests/exact-privilege-complete-matrix.test.ts",
+  "scripts/tenant-enforcement/tests/resume-preflight-drift.test.ts",
+  "scripts/tenant-enforcement/tests/catalog-qualification.test.ts",
+  "scripts/tenant-enforcement/tests/advisory-unlock-failure.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {
@@ -224,6 +239,21 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     owner: "platform-db",
     expirationPhaseOrRemovalCondition:
       "Retained as the sole construction point; never imported by routes/services/workers",
+  },
+  {
+    id: "EX-RAW-002",
+    path: "app/db/runtime-identity.server.ts",
+    category: "raw_prisma_construction",
+    reason:
+      "Shared runtime connected-identity verification (F-PR3C-01); constructs verified Prisma clients and runs catalog identity queries before merchant processing",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for verified runtime init",
+      "Catalog-only $queryRawUnsafe for role/identity assertions (no merchant row access)",
+    ],
+    productionRuntime: "yes",
+    owner: "platform-db",
+    expirationPhaseOrRemovalCondition:
+      "Retained while application runtime must fail closed on privileged connected identity",
   },
   {
     id: "EX-BOOT-001",
