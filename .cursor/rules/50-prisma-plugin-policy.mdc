@@ -1,0 +1,45 @@
+---
+description: Constrain the Prisma Cursor plugin to documentation and analysis for Stocky
+alwaysApply: true
+---
+
+# Prisma Plugin Policy (Stocky)
+
+For this repository, the Prisma Cursor plugin is limited to **documentation and analysis**.
+
+It must **not** independently choose migration strategy, mutate databases, or upgrade Prisma.
+
+## Allowed
+
+- Reading Prisma schema, migrations, and related docs
+- Explaining Prisma concepts, SQL implications, and migration options
+- Running read-only analysis when explicitly requested (for example `prisma validate`, `prisma migrate status`, `prisma migrate diff` without applying)
+- Drafting additive migration SQL or Prisma schema proposals for human review
+
+## Forbidden without explicit human approval in the current task
+
+Do **not** use Prisma plugin MCP tools, skills, or hooks to:
+
+1. Run `prisma db push` (or any equivalent schema push)
+2. Upgrade Prisma / rewrite the project onto a new Prisma major version
+3. Connect to or manage a remote Prisma Postgres / Prisma Data Platform database (`Prisma-Remote` and related tools)
+4. Execute migrations without approval (`migrate-dev`, `migrate deploy`, `migrate reset`, schema update execution, or applying SQL)
+
+Also do **not** call:
+
+- `Prisma-Remote` tools that create, delete, recover, or mutate databases, connection strings, backups, object-store buckets, or that execute SQL / schema updates
+- `Prisma-Local` `migrate-dev` or any tool that applies migrations
+- Automation that chooses between `db push` and `migrate` on its own
+
+## Required migration behavior
+
+When schema changes are needed:
+
+1. Prefer additive, reviewed Prisma Migrate files under the app's existing migration workflow
+2. Present the proposed migration strategy and SQL for approval
+3. Wait for explicit approval before applying anything to a database
+4. Never treat plugin defaults or skills as authority over Stocky migration policy
+
+## If plugin capabilities reappear
+
+Plugin cache MCP/hook settings may be restored by Cursor. This rule remains authoritative for Stocky regardless of which Prisma MCP servers or skills are currently loaded.
