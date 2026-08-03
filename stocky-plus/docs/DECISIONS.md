@@ -399,3 +399,15 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** None authorized.
 7. **Risks:** R-075..R-078 remain open until independently verified. Q-011 / F-016 / R-022 remain open.
 8. **Final:** **FIFTH CORRECTION CYCLE AUTHORIZED — PENDING INDEPENDENT VERIFICATION**. PR #13 remains **draft and unaccepted**.
+
+## D-034 — Phase 1 PR 2 technically accepted
+
+1. **Current:** Independent Claude Code fifth correction review of exact implementation/handoff head `70f4a80aab2366108a71fd80320b0f824bfe0cce` issued verdict **`READY FOR CHATGPT PR 2 ACCEPTANCE`** with **P0: 0 · P1: 0 · P2: 0 · P3: 3** findings (F-PR2R5-01..03). First report-only commit was `7fcff5e14ae99aebae46496c7fadf138bca7166a` (Kelvin-sign cell incorrect). Authoritative corrected report commit is `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` (`PR2_TENANT_ACCESS_FIFTH_CORRECTION_REVIEW_REPORT.md`). Neither report commit changed implementation code. No history rewrite is required. Fifth-cycle runtime/test tip label `5a69783…`; actual final runtime/test commit `0366658255ecbbd5e09168cbf43fbf135e2a2b33`; intermediate documented green tip `96c1029…` (not final handoff).
+2. **Proposed / decided:** Grant **technical acceptance** of Phase 1 PR 2 application-layer tenant-bound access conversion at `70f4a80…`.
+3. **Acceptance scope:** Technical implementation accepted. F-PR2R4-01..05 closed at the reviewed head. Accepted nonblocking P3 residuals: P3-A focused-test omissions independently covered; P3-B concurrent upsert retry exhaustion (R-079); P3-C head identity (`70f4a80…`, not `96c1029…`).
+4. **Explicit non-authorization:** PR #13 is **not yet merge-authorized**. Final documentation synchronization and exact-head CI remain required after this decision record. PR 3 remains **not started**. F-016 / R-022 / Q-011 remain open implementation gates. No deployment or production backfill is authorized. No inventory write is authorized. Every inventory-write flag remains default OFF.
+5. **Merchant impact:** Merchants gain a technically accepted application-layer tenant contract for ShopSettings and other shop-bearing unique models without silent duplicate creation; database-enforced isolation remains a later PR 3 gate.
+6. **Technical impact:** Documentation-only acceptance finalization; no runtime, test, schema, migration, package, or CI workflow change authorized by this decision.
+7. **Migration:** None.
+8. **Risks:** R-075..R-078 closed for PR 2 at `70f4a80…`. R-079 remains open as an accepted reliability residual. R-013/R-062, R-014, R-022, R-024..R-027, and later-phase risks remain open. Q-011 remains open.
+9. **Final:** **PHASE 1 PR 2 TECHNICAL IMPLEMENTATION ACCEPTED**. PR #13 remains **OPEN, DRAFT, UNMERGED**. Merge authorization is **NOT YET GRANTED**. Next action: ChatGPT exact-head verification and explicit user merge authorization after documentation-only finalization CI succeeds.

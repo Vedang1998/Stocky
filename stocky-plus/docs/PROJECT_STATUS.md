@@ -1,12 +1,12 @@
 # Project Status
 
-**Updated:** 2026-08-02
-**Current stage:** Phase 1 PR 2 FIFTH CORRECTION CYCLE IN PROGRESS
+**Updated:** 2026-08-03
+**Current stage:** Phase 1 PR 2 TECHNICALLY ACCEPTED — MERGE NOT YET AUTHORIZED
 **Current main SHA:** `04289d61f605414597ac85f47830a3c9d2f9e33d`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 FOURTH CORRECTION WAVE INDEPENDENTLY REJECTED; FIFTH CORRECTION CYCLE IN PROGRESS; Phase 1 itself remains IN PROGRESS
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 TECHNICALLY ACCEPTED — MERGE NOT YET AUTHORIZED; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/tenant-access`
 **Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft, unmerged)
 **PR 2 original independently reviewed head:** `6f9ca22c069a46003b6944ff56c888ff91e95cdc`
@@ -19,19 +19,24 @@
 **PR 2 fourth-cycle reviewed handoff head:** `93e8044aea3958e8efe36f774e7d99ae6a0dd687`
 **PR 2 fourth independent review report-only commit:** `6a73be7d23fd3bcbe19ebc30f65440e2c641093b`
 **PR 2 fourth-cycle intermediate green tip (not final handoff):** `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`, success)
-**PR 2 fifth-cycle runtime/test implementation head:** `5a69783c18208e89ee70623058966c5e5a0ec6b1`
-**PR 2 fifth-cycle prior green documentation tip:** `ab25f57c30568c8bcbf8b0b89661868ccd20bbfe` (run `30771419539`, job `91559144905`, success)
-**PR 2 fifth-cycle intermediate green tip:** `520021c8da5950e7d7818a00996e13cedaf4588d` (run `30772466853`, job `91561885234`, success)
-**PR 2 fifth-cycle final handoff tip:** `96c1029f143ba5e4a52094eef58ec29bf7b339ea` (run `30772826351`, job `91562852894`, success)
+**PR 2 fifth-cycle runtime/test tip label:** `5a69783c18208e89ee70623058966c5e5a0ec6b1` (inventory-refresh tip; last commit that touched runtime/test code is `0366658255ecbbd5e09168cbf43fbf135e2a2b33`)
+**PR 2 fifth-cycle actual final runtime/test commit:** `0366658255ecbbd5e09168cbf43fbf135e2a2b33`
+**PR 2 fifth-cycle reviewed implementation/handoff head:** `70f4a80aab2366108a71fd80320b0f824bfe0cce`
+**PR 2 fifth-cycle intermediate documented green tip (not final handoff):** `96c1029f143ba5e4a52094eef58ec29bf7b339ea` (run `30772826351`, job `91562852894`, success)
+**PR 2 first fifth-review report-only commit:** `7fcff5e14ae99aebae46496c7fadf138bca7166a` (Kelvin-sign cell later corrected; do not erase)
+**PR 2 authoritative corrected fifth-review report commit:** `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd`
+**Accepted PR 2 implementation/handoff head (D-034):** `70f4a80aab2366108a71fd80320b0f824bfe0cce`
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` (preserved verbatim)
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06…` (report commit `b5fbd2b…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb…` (report commit `fed21a48…`; preserved verbatim) — P0:0 P1:3 P2:3 P3:4; no cross-tenant read/write reproduced
 **Claude PR 2 third correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `fec8500…` (report commit `000e53c…`; preserved verbatim) — P0:0 P1:0 P2:3 P3:4; no cross-tenant read/write reproduced
 **Claude PR 2 fourth correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `93e8044…` (report commit `6a73be7…`; preserved verbatim) — P0:0 P1:1 P2:0 P3:4; no cross-tenant read/write reproduced
-**ChatGPT correction authorization:** D-028; follow-up D-029; third cycle D-030; fourth cycle D-031; fifth cycle **D-032 / D-033**
+**Claude PR 2 fifth correction review:** `READY FOR CHATGPT PR 2 ACCEPTANCE` at `70f4a80…` (first report `7fcff5e…`; authoritative corrected report `ff3f9f6…`; preserved verbatim) — P0:0 P1:0 P2:0 P3:3 accepted/nonblocking
+**ChatGPT decisions:** D-025..D-033; **D-034 — Phase 1 PR 2 technically accepted** (merge not yet authorized)
 **PR 2 third-cycle intermediate green documentation tip (not final reviewed head):** `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` (run `30736171401`, job `91465255400`, success)
 **PR 2 third-cycle reviewed handoff CI:** run `30736427413`, job `91465920750`, conclusion `success`, `head_sha` = `fec8500095197798be183d08b3dd004632adba80`
 **PR 2 fourth-cycle reviewed handoff CI:** run `30763065246`, job `91536946610`, conclusion `success`, `head_sha` = `93e8044aea3958e8efe36f774e7d99ae6a0dd687`
+**PR 2 fifth-cycle reviewed handoff CI:** run `30773194142`, job `91563836345`, conclusion `success`, `head_sha` = `70f4a80aab2366108a71fd80320b0f824bfe0cce`
 **Third-cycle correction range commit count:** `fed21a48…`..`fec8500…` = **11** (prior prompt expected 12 was incorrect; merge base exact; no history rewrite)
 **PR #12:** CLOSED AND SQUASH-MERGED — Phase 1 PR 1 merge-closure status sync on main as `04289d61f605414597ac85f47830a3c9d2f9e33d`
 **PR #11:** CLOSED AND SQUASH-MERGED
@@ -39,31 +44,32 @@
 **Squash merge SHA:** `44a24f3387c1dae0351490367c06bef10f333425`
 **Merge timestamp:** `2026-07-31T22:19:49Z`
 **Pre-merge exact-head CI:** run `30643441951`, job `91198830409` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = authorized head
-**Independently reviewed implementation head:** `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**Documentation finalization / authorized merge head:** `6e5b024254615f3259aeb8d8252305d86bd63777`
+**Independently reviewed implementation head (PR 1):** `28e77178602ca486e5138ca2f80e8947d8e113c0`
+**Documentation finalization / authorized merge head (PR 1):** `6e5b024254615f3259aeb8d8252305d86bd63777`
 **Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b` (preserved verbatim)
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim)
-**Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim in `phases/phase-1/PR1_TENANT_EXPANSION_CAPABLE_LOCAL_REVIEW_REPORT.md`)
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030); `PR 2 fourth correction cycle required` (D-031); `PR 2 fifth correction cycle required` (D-032 / D-033 — pending fifth independent correction review)
+**Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE (not resolved by PR 1 or PR 2 application scoping)
-**Q-011:** OPEN (enforcement not implemented)
+**Q-011:** OPEN (enforcement not implemented; PR 2 application-layer contract accepted; database enforcement is PR 3)
 **R-014:** OPEN P1 IMPLEMENTATION GATE
 **R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
 **R-013 / R-062:** OPEN (dependency hardening)
-**R-072 / R-073 / R-074:** OPEN — fourth-cycle corrections implemented pending independent verification
-**R-075 / R-076 / R-077 / R-078:** OPEN — fifth-cycle corrections implemented pending independent verification
+**R-072 / R-073 / R-074:** CLOSED for PR 2 at `70f4a80…` (fourth-cycle items independently verified closed)
+**R-075 / R-076 / R-077 / R-078:** CLOSED for PR 2 at `70f4a80…` (fifth-cycle items independently verified closed)
+**R-079:** OPEN — accepted PR 2 reliability residual (serializable upsert retry exhaustion; no integrity impact)
+**Accepted P3 residuals (PR 2):** P3-A focused-test omissions independently covered; P3-B concurrent upsert retry exhaustion (R-079); P3-C head identity (`70f4a80…`, not `96c1029…`)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 1:** MERGED AND CLOSED
-**PR 2:** FIFTH CORRECTION CYCLE IN PROGRESS on `phase-1/tenant-access` (unaccepted; draft PR #13)
+**PR 2:** TECHNICALLY ACCEPTED — MERGE NOT YET AUTHORIZED on `phase-1/tenant-access` (draft PR #13)
 **PR 3:** NOT STARTED
 **Redis history disposition:** Accepted repository-history hygiene residual — synthetic `dump.rdb` blob `cae7715f893091a413923b54488f74c59a71e058` (843 bytes; introduced `45d9d90`, deleted `20659dd`) remains reachable; no credentials/PII/merchant data; no secret rotation or history rewrite required; `*.rdb` ignored going forward
 **No production deployment**
 **No production backfill**
 **No RLS activation**
-**Next action:** Return to ChatGPT for exact-head triage and the fifth independent PR 2 correction-review prompt.
+**Next action:** ChatGPT exact-head verification and explicit user merge authorization after documentation-only finalization CI succeeds.
 
 ## Current truth
 
@@ -72,15 +78,16 @@
 - Phase 1 itself remains IN PROGRESS.
 - PR [#12](https://github.com/Vedang1998/Stocky/pull/12) squash-merged the PR 1 merge-closure status sync; current main SHA is `04289d61f605414597ac85f47830a3c9d2f9e33d`.
 - PR [#11](https://github.com/Vedang1998/Stocky/pull/11) remains CLOSED AND SQUASH-MERGED (`44a24f3…`).
-- PR 2 heads `6f9ca22…`, `e6a9a06…`, `99d7a2bb…`, `fec8500…`, and `93e8044…` were independently rejected; fifth corrections proceed under D-032/D-033 on draft PR #13.
-- No cross-tenant read/write was reproduced at the fourth review; prior security regressions remain closed.
-- F-PR2R4-01..05 are mandatory fifth-cycle items (implementation pending independent verification).
-- D-030 ownership rule is unchanged: non-null canonical `shopId` is authoritative; legacy `shop` is fallback evidence only when `shopId` is null.
-- PR 3 has **not started**. No later Phase 1 PR may begin early.
+- Phase 1 PR 2 technical implementation is **ACCEPTED** at `70f4a80…` (D-034). Independent verdict: `READY FOR CHATGPT PR 2 ACCEPTANCE` (authoritative report `ff3f9f6…`).
+- PR #13 remains **OPEN, DRAFT, UNMERGED**. Merge authorization is **not yet granted**.
+- Do not call `96c1029…` the final handoff tip; exact reviewed fifth-cycle handoff is `70f4a80…`.
+- First fifth-review report commit `7fcff5e…` had an incorrect Kelvin-sign cell; authoritative corrected report is `ff3f9f6…`. Neither report commit changed implementation code. No history rewrite.
+- PR 2 application-layer tenant contract is accepted. **Q-011 remains open** because database enforcement is PR 3.
+- F-016 / R-022 remain open implementation gates.
+- PR 3 has **not started**.
 - No production deployment or production backfill.
 - No RLS or database-role enforcement activated.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
-- Residual gates remain: F-016 / R-022 / Q-011, R-014, operational backfill / zero-unresolved evidence, dependency hardening, and inventory-write release gates.
 
 ## Phase 1 PR 1 (#11) merge evidence (immutable)
 
