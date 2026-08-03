@@ -45,14 +45,20 @@ export async function setTransactionLocalTenantContext(
 export async function readTransactionLocalTenantContext(
   tx: TxClient,
 ): Promise<TenantDbContextSnapshot> {
-  const rows = await tx.$queryRaw<
+  // Use $queryRawUnsafe so unit-test Prisma mocks can omit $queryRaw and still
+  // hit the legacy-scope mocked-client fallback (acceptedLegacyShopVariants).
+  // Production/disposable clients expose both APIs.
+  const rows = await tx.$queryRawUnsafe<
     { shop_id: string | null; ctx_ver: string | null; corr: string | null }[]
-  >`
-    SELECT
-      NULLIF(current_setting(${GUC_SHOP_ID}, true), '') AS shop_id,
-      NULLIF(current_setting(${GUC_CONTEXT_VERSION}, true), '') AS ctx_ver,
-      NULLIF(current_setting(${GUC_CORRELATION_ID}, true), '') AS corr
-  `;
+  >(
+    `SELECT
+      NULLIF(current_setting($1, true), '') AS shop_id,
+      NULLIF(current_setting($2, true), '') AS ctx_ver,
+      NULLIF(current_setting($3, true), '') AS corr`,
+    GUC_SHOP_ID,
+    GUC_CONTEXT_VERSION,
+    GUC_CORRELATION_ID,
+  );
   const row = rows[0];
   return {
     shopId: row?.shop_id ?? null,

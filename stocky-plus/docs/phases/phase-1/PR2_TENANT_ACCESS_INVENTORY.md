@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `6d9a02606b31bf5f13ee6ea476db244f973a123b69d5749bb3befc8e4c2806c4`
-**Scanned files:** 167
-**Findings:** 1049
+**Content digest:** `f93d5527b43322b2d3b4fe2568d6689a324eaa9440af18ca5fe1ff2a15406284`
+**Scanned files:** 168
+**Findings:** 1050
 **Converted paths:** 411
-**Approved exception findings:** 638
+**Approved exception findings:** 639
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,24 +21,24 @@ All 18 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 477 |
-| PurchaseOrder | 192 |
-| ShopifyVariantCache | 149 |
-| InventorySnapshot | 119 |
-| VariantAbcClass | 103 |
-| ForecastOverride | 104 |
-| SalesDailyAggregate | 109 |
-| ShopSettings | 134 |
-| TransferOrder | 110 |
-| Stocktake | 107 |
-| BomComponent | 104 |
-| LowStockAlert | 99 |
-| SupplierSkuMapping | 168 |
-| VolumePriceTier | 97 |
-| LeadTimeSnapshot | 120 |
-| POLineItem | 119 |
-| TransferLineItem | 103 |
-| StocktakeLineItem | 103 |
+| Supplier | 478 |
+| PurchaseOrder | 193 |
+| ShopifyVariantCache | 150 |
+| InventorySnapshot | 120 |
+| VariantAbcClass | 104 |
+| ForecastOverride | 105 |
+| SalesDailyAggregate | 110 |
+| ShopSettings | 135 |
+| TransferOrder | 111 |
+| Stocktake | 108 |
+| BomComponent | 105 |
+| LowStockAlert | 100 |
+| SupplierSkuMapping | 169 |
+| VolumePriceTier | 98 |
+| LeadTimeSnapshot | 121 |
+| POLineItem | 120 |
+| TransferLineItem | 104 |
+| StocktakeLineItem | 104 |
 
 ## Counts by execution category
 
@@ -49,7 +49,7 @@ All 18 approved merchant-owned models must appear below.
 | route | 85 |
 | script | 45 |
 | service | 34 |
-| tenant_infra | 5 |
+| tenant_infra | 6 |
 | test | 867 |
 | worker | 10 |
 
@@ -1026,7 +1026,8 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/write-atomicity.test.ts` | 78 / `prisma.supplierSkuMapping.findMany` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-012 | migration_tests | approved exception | allowlist EX-TEST-012 | EX-TEST-012 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/after-auth.server.ts` | 33 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/bootstrap.server.ts` | 11 / `rawPrisma` | bootstrap | — | value import of app/db.server | approved exception EX-BOOT-001 | restricted_bootstrap | approved exception | allowlist EX-BOOT-001 | EX-BOOT-001 | Session + Shop bootstrap and session-storage adapter |
-| `app/tenant/db-context.server.ts` | 104 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/db-context.server.ts` | 51 / `$queryRawUnsafe` | tenant_infra | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $queryRawUnsafe | approved exception EX-TDB-002 | tenant_bound_access | approved exception | tenant:access:audit | EX-TDB-002 | Transaction-local tenant context setter (set_config is_local=true) for RLS |
+| `app/tenant/db-context.server.ts` | 110 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/tenant/tenant-db.server.ts` | 18 / `rawPrisma` | tenant_infra | — | value import of app/db.server | approved exception EX-TDB-001 | tenant_bound_access | approved exception | allowlist EX-TDB-001 | EX-TDB-001 | Tenant-bound DB contract wraps raw client; never returns it to callers |
 | `app/tenant/tenant-db.server.ts` | 1336 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/tenant/tenant-db.server.ts` | 1897 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
@@ -1216,8 +1217,8 @@ All 18 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 167,
-  "findings": 1049,
+  "scannedFiles": 168,
+  "findings": 1050,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1249,6 +1250,7 @@ All 18 approved merchant-owned models must appear below.
     "EX-RAW-001",
     "EX-SEED-001",
     "EX-TDB-001",
+    "EX-TDB-002",
     "EX-TEST-001",
     "EX-TEST-002",
     "EX-TEST-004",
@@ -1299,6 +1301,6 @@ All 18 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "6d9a02606b31bf5f13ee6ea476db244f973a123b69d5749bb3befc8e4c2806c4"
+  "contentDigest": "f93d5527b43322b2d3b4fe2568d6689a324eaa9440af18ca5fe1ff2a15406284"
 }
 ```
