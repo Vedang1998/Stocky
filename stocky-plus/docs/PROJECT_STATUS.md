@@ -8,7 +8,11 @@
 **Phase 1 implementation authority:** EFFECTIVE
 **Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/tenant-enforcement`
-**Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft)
+**Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft, open, unmerged)
+**PR 3 runtime/test implementation head:** `aeeecc264e9203641aa07dcd6d814c5a1aba2aab`
+**PR 3 prior failed handoff head:** `1467483455f4cd4726fb5cfd65ee2b6d247903bc`
+**PR 3 exact final PR head (CI green):** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`
+**PR 3 exact-head CI:** workflow `CI`, run `30785527274`, job `91598235660` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`
 **Phase 1 PR 2:** MERGED AND CLOSED
 **PR #13:** CLOSED AND SQUASH-MERGED
 **Authorized PR head:** `5fc98192d2ca350de358316d9383e39103b98c80`
@@ -78,7 +82,7 @@
 **No production deployment**
 **No production backfill**
 **RLS:** Implemented on disposable/CI fixtures only — production RLS activation NOT AUTHORIZED
-**Next action:** Return to ChatGPT for exact-head triage and the independent PR 3 database-enforcement review prompt.
+**Next action:** Return to ChatGPT for exact-head verification and the independent PR 3 database-enforcement review prompt.
 
 ## Current truth
 
@@ -90,11 +94,11 @@
 - PR [#11](https://github.com/Vedang1998/Stocky/pull/11) remains CLOSED AND SQUASH-MERGED (`44a24f3…`).
 - Phase 1 PR 2 application-layer tenant access is **ACCEPTED AND MERGED** (D-034 / D-035). Accepted implementation head `70f4a80…`. Authoritative independent review `ff3f9f6…`. Final pre-merge CI run `30776644228`, job `91573286240`, success.
 - PR 2 application-layer tenant access is accepted and merged. **It does not resolve database-enforced tenant isolation.**
-- **Q-011 remains open** because database enforcement is PR 3.
-- F-016 / R-022 remain open implementation gates.
-- PR 3 has **not started**. The next implementation work is PR 3 database enforcement. No later Phase 1 PR may begin before PR 3 is accepted and merged.
+- **Q-011 remains open** because database enforcement is PR 3 (implementation complete on disposable/CI fixtures only; production not authorized; pending independent verification).
+- F-016 / R-022 remain open implementation gates (implementation complete — pending independent verification; not closed by Cursor).
+- PR 3 is **IN PROGRESS** on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) at exact head `0ee3ae0…` with green exact-head CI run `30785527274` / job `91598235660`. No later Phase 1 PR may begin before PR 3 is accepted and merged.
 - No production deployment or production backfill occurred.
-- No RLS or database-role enforcement activated.
+- RLS / database roles are implemented on disposable/CI fixtures only — **production RLS activation is NOT AUTHORIZED**.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
 
 ## Phase 1 PR 2 (#13) merge evidence (immutable)
