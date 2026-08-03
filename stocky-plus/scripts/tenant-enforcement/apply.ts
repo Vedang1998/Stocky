@@ -547,9 +547,37 @@ async function failSafe(
   };
 }
 
+export type ApplyEnforcementOptions = {
+  apply: boolean;
+  /**
+   * Test-only: after the named step completes successfully, throw to simulate
+   * interruption. Production CLI never sets this.
+   */
+  failAfterStepId?: string;
+};
+
+/** Major interruption checkpoints used by adversarial resume tests. */
+export function majorInterruptionCheckpoints(): string[] {
+  const tables = [...MERCHANT_SQL_TABLES];
+  const sortedFks = [...COMPOSITE_FOREIGN_KEYS].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const lastFk = sortedFks[sortedFks.length - 1]?.name;
+  return [
+    "roles_prepared",
+    `not_null_check:${tables[0]}`,
+    lastFk ? `cfk_validate:${lastFk}` : "roles_prepared",
+    `rls:${tables[0]}`,
+    `rls:${tables[tables.length - 1]}`,
+    "definitions_verified",
+    "runtime_grants_applied",
+    "final_verified",
+  ];
+}
+
 export async function applyEnforcement(
   client: Client,
-  options: { apply: boolean },
+  options: ApplyEnforcementOptions,
 ): Promise<EnforcementApplyResult> {
   const steps = buildStepList();
   let maxObservedLockHoldMs = 0;
@@ -630,11 +658,12 @@ export async function applyEnforcement(
   const mark = async (
     id: string,
     fn: () => Promise<void>,
-  ): Promise<boolean> => {
+  ): Promise<"ok" | "failed" | "interrupt"> => {
     const step = steps.find((s) => s.id === id);
     if (!step) throw new Error(`unknown_step:${id}`);
     let attempt = 0;
-    while (true) {
+    // Bounded retry loop for deadlock/lock timeout only.
+    for (;;) {
       attempt += 1;
       const started = Date.now();
       try {
@@ -645,7 +674,11 @@ export async function applyEnforcement(
         step.attempts = attempt;
         maxObservedLockHoldMs = Math.max(maxObservedLockHoldMs, held);
         durations.push(held);
-        return true;
+        if (options.failAfterStepId && options.failAfterStepId === id) {
+          step.error = `injected_interrupt_after:${id}`;
+          return "interrupt";
+        }
+        return "ok";
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const held = Date.now() - started;
@@ -662,14 +695,23 @@ export async function applyEnforcement(
         step.error = message;
         step.lockHoldMs = held;
         step.attempts = attempt;
-        return false;
+        return "failed";
       }
     }
   };
 
+  const runStep = async (
+    id: string,
+    fn: () => Promise<void>,
+  ): Promise<boolean> => {
+    const result = await mark(id, fn);
+    if (result === "ok") return true;
+    return false; // failed or interrupt → caller failSafe
+  };
+
   try {
     if (
-      !(await mark("helpers", async () => {
+      !(await runStep("helpers", async () => {
         await client.query(helperFunctionsSql());
       }))
     ) {
@@ -677,7 +719,7 @@ export async function applyEnforcement(
     }
 
     if (
-      !(await mark("roles_prepared", async () => {
+      !(await runStep("roles_prepared", async () => {
         const result = await provisionRoles(client, {
           apply: true,
           phase: "prepare",
@@ -692,7 +734,7 @@ export async function applyEnforcement(
 
     for (const idx of COMPOSITE_FK_SUPPORTING_INDEXES) {
       if (
-        !(await mark(`index:${idx.name}`, async () => {
+        !(await runStep(`index:${idx.name}`, async () => {
           await createIndexConcurrently(
             client,
             idx.name,
@@ -708,7 +750,7 @@ export async function applyEnforcement(
 
     for (const key of COMPOSITE_PARENT_KEYS) {
       if (
-        !(await mark(`composite_key:${key.name}`, async () => {
+        !(await runStep(`composite_key:${key.name}`, async () => {
           await createUniqueIndexConcurrently(
             client,
             key.name,
@@ -723,35 +765,35 @@ export async function applyEnforcement(
 
     for (const table of MERCHANT_SQL_TABLES) {
       if (
-        !(await mark(`not_null_check:${table}`, async () => {
+        !(await runStep(`not_null_check:${table}`, async () => {
           await addNotValidNotNullCheck(client, table);
         }))
       ) {
         return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
       }
       if (
-        !(await mark(`not_null_validate:${table}`, async () => {
+        !(await runStep(`not_null_validate:${table}`, async () => {
           await validateConstraint(client, shopIdNotNullCheckName(table));
         }))
       ) {
         return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
       }
       if (
-        !(await mark(`not_null_set:${table}`, async () => {
+        !(await runStep(`not_null_set:${table}`, async () => {
           await setShopIdNotNull(client, table);
         }))
       ) {
         return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
       }
       if (
-        !(await mark(`shop_fk:${table}`, async () => {
+        !(await runStep(`shop_fk:${table}`, async () => {
           await addShopFk(client, table);
         }))
       ) {
         return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
       }
       if (
-        !(await mark(`shop_fk_validate:${table}`, async () => {
+        !(await runStep(`shop_fk_validate:${table}`, async () => {
           await validateConstraint(client, shopIdFkToShopName(table));
         }))
       ) {
@@ -764,14 +806,14 @@ export async function applyEnforcement(
     );
     for (const fk of sortedFks) {
       if (
-        !(await mark(`cfk:${fk.name}`, async () => {
+        !(await runStep(`cfk:${fk.name}`, async () => {
           await addCompositeFk(client, fk);
         }))
       ) {
         return failSafe(client, steps, true, maxObservedLockHoldMs, durations);
       }
       if (
-        !(await mark(`cfk_validate:${fk.name}`, async () => {
+        !(await runStep(`cfk_validate:${fk.name}`, async () => {
           await validateConstraint(client, fk.name);
         }))
       ) {
@@ -782,7 +824,7 @@ export async function applyEnforcement(
     const runtimeRole = defaultRuntimeRoleName();
     for (const table of MERCHANT_SQL_TABLES) {
       if (
-        !(await mark(`rls:${table}`, async () => {
+        !(await runStep(`rls:${table}`, async () => {
           // Per-table statements — each mark() is its own unit; do not wrap
           // all tables in one multi-statement implicit transaction.
           await client.query(rlsEnableSql(table));
@@ -795,7 +837,7 @@ export async function applyEnforcement(
     }
 
     if (
-      !(await mark("definitions_verified", async () => {
+      !(await runStep("definitions_verified", async () => {
         const verify = await verifyEnforcement(client);
         if (!verify.ok) {
           throw new Error(
@@ -808,7 +850,7 @@ export async function applyEnforcement(
     }
 
     if (
-      !(await mark("runtime_grants_applied", async () => {
+      !(await runStep("runtime_grants_applied", async () => {
         const result = await provisionRoles(client, {
           apply: true,
           phase: "grants",
@@ -824,7 +866,7 @@ export async function applyEnforcement(
     }
 
     if (
-      !(await mark("final_verified", async () => {
+      !(await runStep("final_verified", async () => {
         const verify = await verifyEnforcement(client);
         if (!verify.ok) {
           throw new Error(

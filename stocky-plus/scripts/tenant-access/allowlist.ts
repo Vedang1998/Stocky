@@ -130,6 +130,10 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/timeouts.ts",
   "scripts/tenant-enforcement/verify.ts",
   "scripts/tenant-enforcement/tests/enforcement.migration.test.ts",
+  // PR 3 correction adversarial suites (exact-file exceptions; disposable fixtures only)
+  "scripts/tenant-enforcement/tests/helpers.ts",
+  "scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts",
+  "scripts/tenant-enforcement/tests/populated-concurrency.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {

@@ -27,7 +27,7 @@ const POLINES_PER_SHOP = 2000; // 100_000 total
 
 describe("PR3 populated enforcement concurrency", () => {
   let prisma: PrismaClient | undefined;
-  let evidence: {
+  const evidence: {
     applyOk: boolean;
     maxLockHoldMs: number;
     p50: number;

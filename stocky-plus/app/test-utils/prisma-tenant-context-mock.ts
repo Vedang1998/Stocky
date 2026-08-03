@@ -19,7 +19,7 @@ export const STOCKY_UNIT_PRISMA_MOCK = "__stockyUnitMock" as const;
 type TenantContextPrismaMock = {
   $executeRaw: ReturnType<typeof vi.fn>;
   $executeRawUnsafe: ReturnType<typeof vi.fn>;
-  $queryRaw: ReturnType<typeof vi.fn>;
+  $queryRaw?: ReturnType<typeof vi.fn>;
   $queryRawUnsafe: ReturnType<typeof vi.fn>;
   $transaction: ReturnType<typeof vi.fn>;
   [STOCKY_UNIT_PRISMA_MOCK]?: true;

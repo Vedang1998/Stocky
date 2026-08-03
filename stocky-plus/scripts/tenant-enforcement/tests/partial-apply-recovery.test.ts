@@ -1,12 +1,18 @@
 /**
  * Unsafe partial-apply recovery + interruption/resume tests (F-PR3-01/02).
+ *
+ * Injects failure after each major checkpoint, asserts no unrestricted
+ * merchant access, then resumes apply to a fully verified final state.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { applyEnforcement } from "../apply";
+import {
+  applyEnforcement,
+  majorInterruptionCheckpoints,
+} from "../apply";
 import { getMigrationClient } from "../connection";
 import { runPreflight } from "../preflight";
 import {
@@ -64,16 +70,14 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
     });
     try {
       await provisionRoles(client, { apply: true, phase: "prepare" });
-      // Simulate partial apply: set NOT NULL on one table (causes Prisma drift)
       await client.query(
         `ALTER TABLE "Supplier" ALTER COLUMN "shopId" SET NOT NULL`,
       );
       const preflight = await runPreflight(client, { mode: "resume" });
       expect(preflight.ok).toBe(true);
-      expect(preflight.progress.partial || preflight.progress.notNullCount > 0).toBe(
-        true,
-      );
-      // Full apply from partial state must succeed
+      expect(
+        preflight.progress.partial || preflight.progress.notNullCount > 0,
+      ).toBe(true);
       const apply = await applyEnforcement(client, { apply: true });
       expect(apply.ok).toBe(true);
       expect(apply.unsafe_runtime_access).toBe(false);
@@ -84,7 +88,6 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
   });
 
   it("failure before RLS keeps runtime without merchant DML", async () => {
-    // Reset again for a clean interruption scenario
     await prisma.$disconnect();
     prisma = await resetBare();
     const client = await getMigrationClient({
@@ -92,29 +95,21 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
     });
     try {
       await provisionRoles(client, { apply: true, phase: "prepare" });
-      // Inject a bad same-named FK mid-path by creating wrong constraint name
-      // that will be detected when we reach that step — instead, revoke and
-      // assert safety after prepare + constraints without RLS.
-      // Run apply then manually strip RLS and ensure failSafe revokes DML.
       const apply = await applyEnforcement(client, { apply: true });
       expect(apply.ok).toBe(true);
 
-      // Simulate stranded state: revoke FORCE RLS and keep grants
       for (const table of MERCHANT_SQL_TABLES) {
         await client.query(
           `ALTER TABLE "${table}" NO FORCE ROW LEVEL SECURITY`,
         );
         await client.query(`ALTER TABLE "${table}" DISABLE ROW LEVEL SECURITY`);
       }
-      // Grants still present — unsafe
       let safety = await assertSafeRuntimeAccess(client);
       expect(safety.unsafe_runtime_access).toBe(true);
 
-      // Resume preflight must still allow recovery
-      const preflight = await runPreflight(client, { mode: resumeMode() });
+      const preflight = await runPreflight(client, { mode: "resume" });
       expect(preflight.ok).toBe(true);
 
-      // Re-apply must restore safe state
       const recovered = await applyEnforcement(client, { apply: true });
       expect(recovered.ok).toBe(true);
       expect(recovered.unsafe_runtime_access).toBe(false);
@@ -130,19 +125,14 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
       requireExplicitMigrationUrl: true,
     });
     try {
-      // Start from enforced DB, drop one policy, grant still present
       await client.query(
         `DROP POLICY IF EXISTS "Supplier_tenant_select" ON "Supplier"`,
       );
       await revokeMerchantDml(client, "stocky_runtime");
-      // Manually grant without RLS policy — unsafe
       await client.query(
         `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "Supplier" TO stocky_runtime`,
       );
-      // Apply should detect wrong/missing policy during definitions or rls step
-      // and leave safe
       const apply = await applyEnforcement(client, { apply: true });
-      // Either succeeds (repairs policy) or fails safe
       const safety = await assertSafeRuntimeAccess(client);
       expect(safety.unsafe_runtime_access).toBe(false);
       if (!apply.ok) {
@@ -154,8 +144,61 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
       await client.end();
     }
   });
-});
 
-function resumeMode(): "resume" {
-  return "resume";
-}
+  for (const checkpoint of majorInterruptionCheckpoints()) {
+    it(
+      `interrupt after ${checkpoint} stays safe and resumes to final verify`,
+      async () => {
+        await prisma.$disconnect();
+        prisma = await resetBare();
+        const client = await getMigrationClient({
+          requireExplicitMigrationUrl: true,
+        });
+        try {
+          await provisionRoles(client, { apply: true, phase: "prepare" });
+
+          const interrupted = await applyEnforcement(client, {
+            apply: true,
+            failAfterStepId: checkpoint,
+          });
+          expect(interrupted.ok).toBe(false);
+          expect(interrupted.unsafe_runtime_access).toBe(false);
+          const safetyAfterInterrupt = await assertSafeRuntimeAccess(client);
+          expect(safetyAfterInterrupt.unsafe_runtime_access).toBe(false);
+
+          const interruptedStep = interrupted.steps.find(
+            (s) => s.id === checkpoint,
+          );
+          expect(interruptedStep?.status).toBe("completed");
+          expect(interruptedStep?.error).toContain(
+            `injected_interrupt_after:${checkpoint}`,
+          );
+
+          const remainingPending = interrupted.steps.filter(
+            (s) => s.status === "pending",
+          );
+          // final_verified interrupt: no pending remaining
+          if (checkpoint !== "final_verified") {
+            expect(remainingPending.length).toBeGreaterThan(0);
+          }
+
+          const resumePreflight = await runPreflight(client, {
+            mode: "resume",
+          });
+          expect(resumePreflight.ok).toBe(true);
+
+          const resumed = await applyEnforcement(client, { apply: true });
+          expect(resumed.ok).toBe(true);
+          expect(resumed.unsafe_runtime_access).toBe(false);
+          expect(
+            resumed.steps.every((s) => s.status === "completed"),
+          ).toBe(true);
+          expect((await verifyEnforcement(client)).ok).toBe(true);
+        } finally {
+          await client.end();
+        }
+      },
+      300_000,
+    );
+  }
+});
