@@ -1,8 +1,8 @@
 # Phase 1 PR 2 — Fifth Correction Cycle Implementation Report
 
-**Decision:** D-032 / D-033 / **D-034 (technically accepted)**
-**Branch:** `phase-1/tenant-access`
-**Pull request:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft, unmerged; merge not yet authorized)
+**Decision:** D-032 / D-033 / **D-034 (technically accepted)** / **D-035 (merge closure)**
+**Branch:** `phase-1/tenant-access` (historical implementation branch; closed with PR #13)
+**Pull request:** [#13](https://github.com/Vedang1998/Stocky/pull/13) — **MERGED AND CLOSED**
 **Authorized base:** `main@04289d61f605414597ac85f47830a3c9d2f9e33d`
 
 ## Identity
@@ -22,11 +22,27 @@
 | **Authoritative corrected fifth-review report commit** | **`ff3f9f6a6e9b57cde7df248553694a857b5bc6dd`** |
 | Independent verdict | `READY FOR CHATGPT PR 2 ACCEPTANCE` |
 | Findings | P0:0 · P1:0 · P2:0 · P3:3 accepted/nonblocking |
-| ChatGPT technical acceptance | **D-034 — ACCEPTED** (merge not yet authorized) |
+| ChatGPT technical acceptance | **D-034 — ACCEPTED** |
 | Exact-head CI on reviewed handoff | run `30773194142`, job `91563836345`, conclusion `success`, `head_sha` = `70f4a80aab2366108a71fd80320b0f824bfe0cce` |
-| PR state | OPEN, draft, unmerged |
+| Merge closure | **D-035** |
+| Final status | **PR 2 MERGED AND CLOSED** |
 
 Do **not** call `96c1029…` the final handoff tip. Exact reviewed fifth-cycle handoff is `70f4a80…`.
+
+## Immutable merge-closure evidence
+
+| Field | Value |
+|---|---|
+| Authorized merge head | `5fc98192d2ca350de358316d9383e39103b98c80` |
+| Squash merge SHA | `e9c4f87eb28ce0e957a8cbd159719586892f8b98` |
+| Merge timestamp | `2026-08-03T01:38:59Z` |
+| Final pre-merge CI | run `30776644228`, job `91573286240`, conclusion `success`, `head_sha` `5fc98192d2ca350de358316d9383e39103b98c80` |
+| Accepted implementation head | `70f4a80aab2366108a71fd80320b0f824bfe0cce` |
+| Authoritative independent review | `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` |
+| Final status | **PR 2 MERGED AND CLOSED** |
+| Decision | D-034 / D-035 |
+
+Previous implementation and review chain above is preserved.
 
 ## Finding dispositions (independently verified)
 
@@ -117,14 +133,14 @@ Canonical create / `{id}` / `shopId_id` paths do not require legacy discovery. B
 ## Acceptance and prohibited-scope confirmation
 
 - Technical acceptance granted under D-034 at `70f4a80…`
-- PR #13 remains draft and unmerged; merge authorization not yet granted
+- Merge closure recorded under D-035; PR #13 **MERGED AND CLOSED** at authorized head `5fc9819…` as squash `e9c4f87…`
 - PR 3 not started; F-016 / R-022 / Q-011 remain open
 - No production deployment / backfill / ownership repair
 - No Prisma schema or migration change; no RLS / roles / non-null shopId / composite FKs / triggers
 - No inventory mutation; all inventory-write flags default OFF
-- All six independent review reports unchanged by acceptance finalization
+- All six independent review reports unchanged by acceptance finalization or merge-closure documentation
 - First fifth-review report commit `7fcff5e…` retained; authoritative report is `ff3f9f6…`
 
 ## Next action
 
-ChatGPT exact-head verification and explicit user merge authorization after documentation-only finalization CI succeeds.
+Return to ChatGPT for exact-head verification and merge authorization of the PR 2 closure sync. PR 3 receives a separate ChatGPT implementation prompt after this sync is merged.
