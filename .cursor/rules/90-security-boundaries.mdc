@@ -1,0 +1,30 @@
+---
+description: Secrets, production, deployment and destructive-action restrictions
+alwaysApply: true
+---
+
+# Security boundaries
+
+Never:
+- read or write .env or production-secret files;
+- commit tokens, passwords, database dumps, RDB files or customer information;
+- connect to a production database;
+- connect an MCP server to a production database;
+- run Shopify deployment or release commands;
+- execute production migrations or backfills;
+- enable inventory-write flags;
+- mutate Shopify inventory;
+- force-push;
+- rebase after independent review starts;
+- amend reviewed commits;
+- reset --hard;
+- delete Git history;
+- bypass branch protection;
+- merge without explicit authorization.
+
+Use only:
+- disposable PostgreSQL;
+- isolated Redis;
+- test-only credentials;
+- approved non-production Shopify stores;
+- restricted, allowlisted network access.

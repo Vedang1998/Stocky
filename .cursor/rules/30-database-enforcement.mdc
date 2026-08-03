@@ -1,0 +1,32 @@
+---
+description: PostgreSQL tenant-enforcement requirements
+globs:
+  - "stocky-plus/scripts/tenant-enforcement/**"
+  - "stocky-plus/app/tenant/**"
+  - "stocky-plus/app/db.server.ts"
+  - "stocky-plus/prisma/**"
+  - "stocky-plus/**/*isolation*.test.ts"
+  - "stocky-plus/**/*migration*.test.ts"
+alwaysApply: false
+---
+
+# Database enforcement rules
+
+- Verification must compare exact PostgreSQL catalog definitions, not only names,
+  counts or object existence.
+- Every verifier must be tested by injecting the defect it claims to detect.
+- Runtime merchant DML must never be active while exact verified RLS is absent.
+- Partial apply failures must leave a safe and resumable state.
+- Tenant context must be transaction-local.
+- Runtime roles must not own merchant tables or have BYPASSRLS.
+- Verify direct and transitive role membership.
+- Verify actual connected database identity and role attributes.
+- Do not rely only on database-URL string comparison.
+- Test populated tables with concurrent traffic.
+- Empty-table lock timing is smoke evidence only.
+- Composite foreign-key verification must inspect exact local and referenced
+  columns, order, actions, validation and deferrability.
+- RLS verification must inspect actual USING and WITH CHECK expressions.
+- Trigger verification must inspect enablement, event, timing, function and
+  function definition.
+- Any enforcement failure must prove unsafe_runtime_access=false.

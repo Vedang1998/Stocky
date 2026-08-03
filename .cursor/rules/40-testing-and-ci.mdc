@@ -1,0 +1,31 @@
+---
+description: Testing, CI and adversarial verification standards
+alwaysApply: true
+---
+
+# Testing standards
+
+For every important requirement:
+1. Add a positive test.
+2. Add a negative test.
+3. Add a bypass attempt.
+4. Add a drift or partial-failure test where relevant.
+5. Prove the test fails before the correction when practical.
+
+Do not accept:
+- a focused command that runs zero tests;
+- a name filter that may match nothing;
+- a test step with no assertions;
+- test names as evidence;
+- mocked PostgreSQL enforcement behavior;
+- empty fixtures as production-scale evidence;
+- green CI on a different SHA.
+
+Focused CI steps must:
+- execute a distinct command or file;
+- run nonzero tests;
+- expose the observed test count;
+- fail when no test is collected;
+- run before aggregate suites where useful.
+
+A test command is evidence only for the exact code and environment on which it ran.
