@@ -68,7 +68,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
       ).toBe(true);
       // Restore
       const { applyEnforcement } = await import("../apply");
-      const restored = await applyEnforcement(client, { apply: true });
+      const restored = await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true });
       expect(restored.ok).toBe(true);
       expect((await verifyRlsOnly(client)).ok).toBe(true);
     });
@@ -89,7 +89,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         rls.issues.some((i) => i.code === "policy_missing_with_check"),
       ).toBe(true);
       const { applyEnforcement } = await import("../apply");
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
     });
   });
 
@@ -106,7 +106,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
       expect(rls.ok).toBe(false);
       expect(rls.issues.some((i) => i.code === "public_policy")).toBe(true);
       const { applyEnforcement } = await import("../apply");
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
     });
   });
 
@@ -147,7 +147,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         ),
       ).toBe(true);
       const { applyEnforcement } = await import("../apply");
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
     });
   });
 
@@ -173,7 +173,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
       ).toBe(true);
       // Re-apply must refuse silent accept
       const { applyEnforcement } = await import("../apply");
-      const apply = await applyEnforcement(client, { apply: true });
+      const apply = await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true });
       expect(apply.ok).toBe(false);
       expect(
         apply.steps.some(
@@ -186,7 +186,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
       await client.query(`
         ALTER TABLE "POLineItem" DROP CONSTRAINT "POLineItem_shopId_purchaseOrderId_fkey";
       `);
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
       expect((await verifyEnforcement(client)).ok).toBe(true);
     });
   });
@@ -209,7 +209,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         `ALTER TABLE "PurchaseOrder" DROP CONSTRAINT "PurchaseOrder_shopId_supplierId_fkey"`,
       );
       const { applyEnforcement } = await import("../apply");
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
     });
   });
 
@@ -263,7 +263,7 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         imm.issues.some((i) => i.code === "trigger_function_body_drift"),
       ).toBe(true);
       const { applyEnforcement } = await import("../apply");
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
       expect((await verifyImmutabilityOnly(client)).ok).toBe(true);
     });
   });

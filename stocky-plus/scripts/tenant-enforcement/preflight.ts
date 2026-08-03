@@ -426,7 +426,7 @@ export async function runPreflight(
     // Incomplete/missing codes are expected during interrupted apply resume.
     // Tampered/altered definitions are dangerous and require acknowledgement.
     const incompleteCode =
-      /_(missing|not_enabled|not_forced|nullable)$|^fk_missing$|^composite_key_missing$|^policy_count_mismatch$|^rls_not_/;
+      /_(missing|not_enabled|not_forced|nullable)$|^fk_missing$|^composite_key_missing$|^policy_count_mismatch$|^rls_not_|^not_null_check_unvalidated$|^fk_not_validated$/;
     // Missing objects are resumable only during a genuine first/partial apply.
     // Once every merchant table has the terminal NOT NULL + FORCE RLS posture,
     // a later missing FK/policy or disabled RLS is tampering, not harmless

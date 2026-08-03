@@ -107,10 +107,26 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
       let safety = await assertSafeRuntimeAccess(client);
       expect(safety.unsafe_runtime_access).toBe(true);
 
-      const preflight = await runPreflight(client, { mode: "resume" });
+      const refused = await runPreflight(client, { mode: "resume" });
+      expect(refused.ok).toBe(false);
+      expect(
+        refused.globalFailures.some(
+          (f) =>
+            f.includes("dangerous_") ||
+            f.includes("repair_authorization_required"),
+        ),
+      ).toBe(true);
+
+      const preflight = await runPreflight(client, {
+        mode: "resume",
+        acknowledgeDangerousDriftRepair: true,
+      });
       expect(preflight.ok).toBe(true);
 
-      const recovered = await applyEnforcement(client, { apply: true });
+      const recovered = await applyEnforcement(client, {
+        apply: true,
+        acknowledgeDangerousDriftRepair: true,
+      });
       expect(recovered.ok).toBe(true);
       expect(recovered.unsafe_runtime_access).toBe(false);
       safety = await assertSafeRuntimeAccess(client);
@@ -132,7 +148,10 @@ describe("PR3 unsafe partial-apply recovery and interruption/resume", () => {
       await client.query(
         `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "Supplier" TO stocky_runtime`,
       );
-      const apply = await applyEnforcement(client, { apply: true });
+      const apply = await applyEnforcement(client, {
+        apply: true,
+        acknowledgeDangerousDriftRepair: true,
+      });
       const safety = await assertSafeRuntimeAccess(client);
       expect(safety.unsafe_runtime_access).toBe(false);
       if (!apply.ok) {

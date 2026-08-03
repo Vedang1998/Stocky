@@ -42,7 +42,7 @@ describe("PR3 composite FK definition drift", () => {
             i.code === "fk_wrong_referenced_columns",
         ),
       ).toBe(true);
-      const apply = await applyEnforcement(client, { apply: true });
+      const apply = await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true });
       expect(apply.ok).toBe(false);
       expect(
         apply.steps.some(
@@ -54,7 +54,7 @@ describe("PR3 composite FK definition drift", () => {
       await client.query(
         `ALTER TABLE "POLineItem" DROP CONSTRAINT "POLineItem_shopId_purchaseOrderId_fkey"`,
       );
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
     } finally {
       await client.end();
     }
@@ -80,7 +80,7 @@ describe("PR3 composite FK definition drift", () => {
       await client.query(
         `ALTER TABLE "PurchaseOrder" DROP CONSTRAINT "PurchaseOrder_shopId_supplierId_fkey"`,
       );
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, { apply: true, acknowledgeDangerousDriftRepair: true })).ok).toBe(true);
     } finally {
       await client.end();
     }

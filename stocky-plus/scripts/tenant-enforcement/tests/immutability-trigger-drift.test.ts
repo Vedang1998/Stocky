@@ -107,7 +107,10 @@ describe("PR3 immutability trigger definition drift", () => {
       expect(
         imm.issues.some((i) => i.code === "trigger_function_body_drift"),
       ).toBe(true);
-      expect((await applyEnforcement(client, { apply: true })).ok).toBe(true);
+      expect((await applyEnforcement(client, {
+        apply: true,
+        acknowledgeDangerousDriftRepair: true,
+      })).ok).toBe(true);
       expect((await verifyImmutabilityOnly(client)).ok).toBe(true);
     } finally {
       await client.end();
