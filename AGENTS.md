@@ -183,3 +183,43 @@ When an approved product rule needs to change, document:
 8. Final decision
 
 No agent may silently substitute a different rule.
+
+## Cursor Cloud specific instructions
+
+The application lives in `stocky-plus/`. Run all `npm`/`npx prisma` commands from
+that directory. Node 22 and npm 11.5.2 are preinstalled; the environment update
+script refreshes JS deps (`npm install`) and the Prisma client (`npx prisma generate`).
+
+PostgreSQL 16 and Redis 7 are installed in the environment snapshot but are **not**
+auto-started (this container has no systemd). Start both once per session before
+running the app or DB-backed tests:
+
+```bash
+sudo pg_ctlcluster 16 main start   # PostgreSQL on :5432
+sudo redis-server --daemonize yes  # Redis on :6379
+```
+
+The Postgres role, password, and database name match the values in
+`stocky-plus/docker-compose.yml` (role/db `stocky` / `stocky_plus`). If a fresh
+snapshot is missing them, create a login role with that password plus a
+`stocky`-owned `stocky_plus` database via `sudo -u postgres psql` /
+`sudo -u postgres createdb -O`.
+
+`stocky-plus/.env` is git-ignored and required at runtime. If it is missing,
+recreate it from `.env.example`: point `DATABASE_URL` at the local `stocky_plus`
+database (host `localhost:5432`, the docker-compose credentials), point
+`REDIS_URL` at local Redis on its default port `6379`, and set
+`TENANT_JOB_ENVELOPE_SECRET` to at least 32 bytes (`openssl rand -base64 48`).
+The `DATABASE_URL`/`REDIS_URL` values match `stocky-plus/docker-compose.yml`.
+`SHOPIFY_API_KEY`/`SHOPIFY_API_SECRET`
+can be placeholder values for local dev and tests. After Postgres is up on a fresh
+DB, apply schema with `npx prisma migrate deploy` (optional demo data: `npm run db:seed`).
+
+Running the app: `npm run dev` maps to `shopify app dev`, which needs interactive
+Shopify Partner auth plus a public tunnel and does **not** work headlessly here.
+For local dev/testing run the React Router dev server directly with
+`npx react-router dev` (serves on :3000); the background worker is `npm run worker`
+(requires Redis). Standard lint/test/build commands are in `stocky-plus/package.json`
+and its `README.md`. Note the DB-backed suites `npm run test:migrations` and
+`npm run test:tenant-access` create and drop scratch databases, so Postgres must be
+running for them.
