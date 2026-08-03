@@ -15,11 +15,14 @@
 | Starting main | `00fb925721ad374b3ff976652ec99dbf655ebb11` |
 | Branch | `phase-1/tenant-enforcement` |
 | Decision | D-036 |
-| PR state | Draft (to be filled with number after open) |
+| PR state | Draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) |
 | Merge state | Unmerged |
 | Current main | `00fb925721ad374b3ff976652ec99dbf655ebb11` |
 
-Commit list and exact heads are recorded in the draft PR body after push.
+| Runtime/test implementation head | `aeeecc264e9203641aa07dcd6d814c5a1aba2aab` |
+| Final handoff head | `aeeecc264e9203641aa07dcd6d814c5a1aba2aab` |
+
+Commits: `0d4ba3c` → `5808838` → `ffdd55c` → `4035f6e` → `aeeecc2`.
 
 ## Inventory
 
