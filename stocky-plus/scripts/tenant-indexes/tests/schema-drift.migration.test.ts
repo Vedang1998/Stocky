@@ -118,7 +118,7 @@ describe("prisma schema drift check", () => {
 
       const verifyAfter = await verifyIndexes(client);
       expect(verifyAfter.ok).toBe(true);
-      expect(TENANT_COMPATIBILITY_INDEXES.length).toBe(28);
+      expect(TENANT_COMPATIBILITY_INDEXES.length).toBe(44);
     } finally {
       await client.end();
     }

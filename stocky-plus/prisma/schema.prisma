@@ -34,7 +34,10 @@ model Session {
 
 // ─── Canonical Shop (Phase 1 PR 1) ───────────────────────────────────────────
 // Minimal tenant identity only. Billing/plan/entitlement/privacy fields are
-// deferred. shopId foreign-key enforcement is deferred to PR 3.
+// deferred. Database-enforced shopId NOT NULL, composite FKs, and RLS are
+// applied by PR 3 external enforcement tooling (not Prisma Migrate alone).
+// Prisma keeps shopId optional for expand/migrate compatibility; the live DB
+// must have NOT NULL after tenant:enforcement:apply.
 
 model Shop {
   id              String   @id @default(cuid())
@@ -220,6 +223,7 @@ model SupplierSkuMapping {
   @@index([shopifyVariantId])
   @@index([shopId])
   @@index([shopId, supplierId])
+  @@unique([shopId, id])
 }
 
 model VolumePriceTier {
@@ -236,6 +240,7 @@ model VolumePriceTier {
   @@index([supplierId, variantId])
   @@index([shopId])
   @@index([shopId, supplierId])
+  @@unique([shopId, id])
 }
 
 model LeadTimeSnapshot {
@@ -250,6 +255,8 @@ model LeadTimeSnapshot {
 
   @@index([shopId])
   @@index([shopId, supplierId])
+  @@index([shopId, purchaseOrderId])
+  @@unique([shopId, id])
 }
 
 // ─── Module 2: Purchase Order Engine ────────────────────────────────────────
@@ -294,6 +301,7 @@ model PurchaseOrder {
   @@index([shop, status])
   @@index([supplierId])
   @@index([shopId])
+  @@index([shopId, supplierId])
   @@unique([shopId, id])
 }
 
@@ -318,6 +326,7 @@ model POLineItem {
   @@index([shopifyVariantId])
   @@index([shopId])
   @@index([shopId, purchaseOrderId])
+  @@unique([shopId, id])
 }
 
 // ─── Shopify data cache ─────────────────────────────────────────────────────
@@ -340,6 +349,7 @@ model ShopifyVariantCache {
   @@unique([shop, shopifyVariantId])
   @@index([shop, barcode])
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model InventorySnapshot {
@@ -354,6 +364,7 @@ model InventorySnapshot {
   @@unique([shop, shopifyVariantId, locationId, snapshotDate])
   @@index([shop, snapshotDate])
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 // ─── Module 3: Forecasting & ABC ────────────────────────────────────────────
@@ -383,6 +394,7 @@ model VariantAbcClass {
 
   @@unique([shop, shopifyVariantId, locationId, metric])
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model ForecastOverride {
@@ -396,6 +408,7 @@ model ForecastOverride {
 
   @@unique([shop, variantId, locationId])
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model SalesDailyAggregate {
@@ -411,6 +424,7 @@ model SalesDailyAggregate {
   @@unique([shop, shopifyVariantId, locationId, date])
   @@index([shop, date])
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 model ShopSettings {
@@ -425,6 +439,7 @@ model ShopSettings {
   subscriptionPlan    String?
 
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 // ─── Module 5: Transfer Orders ────────────────────────────────────────────────
@@ -470,6 +485,7 @@ model TransferLineItem {
 
   @@index([shopId])
   @@index([shopId, transferOrderId])
+  @@unique([shopId, id])
 }
 
 // ─── Module 4: Stocktakes ─────────────────────────────────────────────────────
@@ -510,6 +526,7 @@ model StocktakeLineItem {
 
   @@index([shopId])
   @@index([shopId, stocktakeId])
+  @@unique([shopId, id])
 }
 
 // ─── Module 9: Bill of Materials ──────────────────────────────────────────────
@@ -524,6 +541,7 @@ model BomComponent {
 
   @@unique([shop, bundleVariantId, componentVariantId])
   @@index([shopId])
+  @@unique([shopId, id])
 }
 
 // ─── Module 6: Alerts ─────────────────────────────────────────────────────────
@@ -541,4 +559,5 @@ model LowStockAlert {
 
   @@index([shop, acknowledged])
   @@index([shopId])
+  @@unique([shopId, id])
 }
