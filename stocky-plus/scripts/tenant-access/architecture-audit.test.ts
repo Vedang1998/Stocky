@@ -37,7 +37,9 @@ describe("tenant access architecture audit", () => {
     const result = scanRepository();
     expect(result.violations).toEqual([]);
     expect(result.modelsCovered.length).toBe(18);
-    expect(result.exceptionsUsed).toContain("EX-RAW-001");
+    // Construction moved to runtime-identity (F-PR3C-01); EX-RAW-001 remains
+    // the allowlisted proxy facade path but is not necessarily "used".
+    expect(result.exceptionsUsed).toContain("EX-RAW-002");
     expect(result.exceptionsUsed).toContain("EX-BOOT-001");
     expect(result.exceptionsUsed).toContain("EX-TDB-001");
     expect(result.contentDigest).toMatch(/^[a-f0-9]{64}$/);

@@ -230,15 +230,16 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     id: "EX-RAW-001",
     path: "app/db.server.ts",
     category: "raw_prisma_construction",
-    reason: "Single approved low-level PrismaClient construction module",
+    reason:
+      "Verified Prisma proxy facade for approved infrastructure only (construction and connected-identity checks live in EX-RAW-002 / runtime-identity.server.ts)",
     permittedModelsOrOperations: [
-      "PrismaClient construction",
-      "default export for approved infrastructure only",
+      "Verified Prisma proxy default export",
+      "Re-export of identity helpers for approved infrastructure only",
     ],
     productionRuntime: "yes",
     owner: "platform-db",
     expirationPhaseOrRemovalCondition:
-      "Retained as the sole construction point; never imported by routes/services/workers",
+      "Retained as the sole application import facade; never imported by routes/services/workers for merchant access",
   },
   {
     id: "EX-RAW-002",

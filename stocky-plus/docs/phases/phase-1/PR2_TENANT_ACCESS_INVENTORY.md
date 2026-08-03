@@ -57,7 +57,7 @@ All 18 approved merchant-owned models must appear below.
 
 | ID | Path | Category | Production/runtime | Owner | Removal/review condition |
 |---|---|---|---|---|---|
-| EX-RAW-001 | `app/db.server.ts` | raw_prisma_construction | yes | platform-db | Retained as the sole construction point; never imported by routes/services/workers |
+| EX-RAW-001 | `app/db.server.ts` | raw_prisma_construction | yes | platform-db | Retained as the sole application import facade; never imported by routes/services/workers for merchant access |
 | EX-RAW-002 | `app/db/runtime-identity.server.ts` | raw_prisma_construction | yes | platform-db | Retained while application runtime must fail closed on privileged connected identity |
 | EX-BOOT-001 | `app/tenant/bootstrap.server.ts` | restricted_bootstrap | yes | phase-1-pr2-tenant-access | Review if bootstrap needs expansion; must never gain merchant delegates |
 | EX-TDB-001 | `app/tenant/tenant-db.server.ts` | tenant_bound_access | yes | phase-1-pr2-tenant-access | Core PR 2 contract — retained until superseded by equivalent enforcement |
