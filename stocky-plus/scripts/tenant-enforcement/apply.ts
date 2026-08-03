@@ -219,11 +219,29 @@ async function createIndexConcurrently(
 async function constraintExists(
   client: Client,
   name: string,
+  table?: string,
 ): Promise<boolean> {
-  const res = await client.query(
-    `SELECT 1 FROM pg_constraint WHERE conname = $1`,
-    [name],
-  );
+  const res = table
+    ? await client.query(
+        `SELECT 1
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         WHERE n.nspname = 'public'
+           AND t.relname = $1
+           AND c.conname = $2`,
+        [table, name],
+      )
+    : await client.query(
+        `SELECT 1
+         FROM pg_constraint c
+         JOIN pg_namespace n ON n.oid = c.connamespace
+         WHERE n.nspname = 'public' AND c.conname = $1`,
+        [name],
+      );
+  if ((res.rowCount ?? 0) > 1) {
+    throw new Error(`constraint_ambiguous:${name}:matches=${res.rowCount}`);
+  }
   return (res.rowCount ?? 0) > 0;
 }
 
@@ -232,10 +250,16 @@ async function addNotValidNotNullCheck(
   table: string,
 ): Promise<void> {
   const name = shopIdNotNullCheckName(table);
-  if (await constraintExists(client, name)) {
+  if (await constraintExists(client, name, table)) {
     const validated = await client.query<{ convalidated: boolean }>(
-      `SELECT convalidated FROM pg_constraint WHERE conname = $1`,
-      [name],
+      `SELECT c.convalidated
+       FROM pg_constraint c
+       JOIN pg_class t ON t.oid = c.conrelid
+       JOIN pg_namespace n ON n.oid = t.relnamespace
+       WHERE n.nspname = 'public'
+         AND t.relname = $1
+         AND c.conname = $2`,
+      [table, name],
     );
     if ((validated.rowCount ?? 0) > 0) return;
   }
@@ -246,16 +270,31 @@ async function addNotValidNotNullCheck(
   );
 }
 
-async function validateConstraint(client: Client, name: string): Promise<void> {
-  const res = await client.query<{ relname: string; convalidated: boolean }>(
-    `SELECT t.relname, c.convalidated
-     FROM pg_constraint c
-     JOIN pg_class t ON t.oid = c.conrelid
-     WHERE c.conname = $1`,
-    [name],
-  );
+async function validateConstraint(client: Client, name: string, table?: string): Promise<void> {
+  const res = table
+    ? await client.query<{ relname: string; convalidated: boolean }>(
+        `SELECT t.relname, c.convalidated
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         WHERE n.nspname = 'public'
+           AND t.relname = $1
+           AND c.conname = $2`,
+        [table, name],
+      )
+    : await client.query<{ relname: string; convalidated: boolean }>(
+        `SELECT t.relname, c.convalidated
+         FROM pg_constraint c
+         JOIN pg_class t ON t.oid = c.conrelid
+         JOIN pg_namespace n ON n.oid = t.relnamespace
+         WHERE n.nspname = 'public' AND c.conname = $1`,
+        [name],
+      );
   if ((res.rowCount ?? 0) === 0) {
     throw new Error(`constraint_missing:${name}`);
+  }
+  if ((res.rowCount ?? 0) > 1) {
+    throw new Error(`constraint_ambiguous:${name}:matches=${res.rowCount}`);
   }
   if (res.rows[0].convalidated) return;
   await client.query(

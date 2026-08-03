@@ -86,7 +86,12 @@ async function main() {
 
   try {
     if (mode === "preflight") {
-      const result = await runPreflight(client);
+      const result = await runPreflight(client, {
+        mode: "resume",
+        acknowledgeDangerousDriftRepair: argv.includes(
+          "--acknowledge-dangerous-drift-repair",
+        ),
+      });
       console.log(JSON.stringify(result));
       if (!result.ok) process.exitCode = 1;
       return;
@@ -105,7 +110,12 @@ async function main() {
         process.exitCode = 1;
         return;
       }
-      const result = await applyEnforcement(client, { apply: true });
+      const result = await applyEnforcement(client, {
+        apply: true,
+        acknowledgeDangerousDriftRepair: argv.includes(
+          "--acknowledge-dangerous-drift-repair",
+        ),
+      });
       console.log(JSON.stringify(result));
       if (!result.ok) process.exitCode = 1;
       return;

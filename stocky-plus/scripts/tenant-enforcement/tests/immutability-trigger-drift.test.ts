@@ -67,6 +67,30 @@ describe("PR3 immutability trigger definition drift", () => {
     }
   });
 
+  it("detects ENABLE ALWAYS immutability trigger as drift", async () => {
+    const client = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      await client.query(
+        `ALTER TABLE "Supplier" ENABLE ALWAYS TRIGGER "trg_Supplier_shopId_immutable"`,
+      );
+      const imm = await verifyImmutabilityOnly(client);
+      expect(imm.ok).toBe(false);
+      expect(imm.issues.some((i) => i.code === "trigger_always_enabled")).toBe(
+        true,
+      );
+      expect((await verifyEnforcement(client)).ok).toBe(false);
+      expect((await detectEnforcementDrift(client)).ok).toBe(false);
+      await client.query(
+        `ALTER TABLE "Supplier" ENABLE TRIGGER "trg_Supplier_shopId_immutable"`,
+      );
+      expect((await verifyImmutabilityOnly(client)).ok).toBe(true);
+    } finally {
+      await client.end();
+    }
+  });
+
   it("detects altered trigger function body", async () => {
     const client = await getMigrationClient({
       requireExplicitMigrationUrl: true,

@@ -208,7 +208,13 @@ jobs:
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
       - name: Tenant enforcement interruption/resume tests
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts -t "interrupt after|resume preflight"
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant deadlock-timeout-cancellation recovery tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/deadlock-timeout-recovery.test.ts
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
@@ -225,20 +231,62 @@ jobs:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
+      - name: Tenant exact privilege complete-matrix tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/exact-privilege-complete-matrix.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant sequence privilege tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/sequence-privilege.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant default-privilege drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/default-privilege-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant verifier read-only tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/verifier-readonly.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
       - name: Tenant runtime connected-identity tests
         run: npm run test:migrations -- scripts/tenant-enforcement/tests/connected-identity.test.ts
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
-      - name: Tenant populated enforcement concurrency tests
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/populated-concurrency.test.ts
+      - name: Tenant runtime connected-identity application tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/runtime-connected-identity-app.test.ts
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
-      - name: Tenant enforcement deadlock/timeout recovery tests
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts
+      - name: Tenant resume-preflight corrected-state drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/resume-preflight-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant catalog qualification tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/catalog-qualification.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant advisory-unlock failure tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/advisory-unlock-failure.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant populated runtime-traffic concurrency tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/populated-concurrency.test.ts
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}

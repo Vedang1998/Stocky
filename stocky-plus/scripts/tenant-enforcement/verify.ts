@@ -413,10 +413,22 @@ async function checkNotNull(
   }
   // Helper CHECK may remain after SET NOT NULL; if present it must be validated.
   const check = await client.query<{ convalidated: boolean }>(
-    `SELECT convalidated FROM pg_constraint WHERE conname = $1`,
-    [shopIdNotNullCheckName(table)],
+    `SELECT c.convalidated
+     FROM pg_constraint c
+     JOIN pg_class t ON t.oid = c.conrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
+     WHERE n.nspname = 'public'
+       AND t.relname = $1
+       AND c.conname = $2`,
+    [table, shopIdNotNullCheckName(table)],
   );
-  if ((check.rowCount ?? 0) > 0 && !check.rows[0].convalidated) {
+  if ((check.rowCount ?? 0) > 1) {
+    issues.push({
+      code: "not_null_check_ambiguous",
+      table,
+      detail: shopIdNotNullCheckName(table),
+    });
+  } else if ((check.rowCount ?? 0) > 0 && !check.rows[0].convalidated) {
     issues.push({
       code: "not_null_check_unvalidated",
       table,
@@ -542,13 +554,25 @@ async function checkFkDefinition(
             ) AS parent_cols
      FROM pg_constraint c
      JOIN pg_class child ON child.oid = c.conrelid
+     JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
      JOIN pg_class parent ON parent.oid = c.confrelid
-     WHERE c.conname = $1 AND c.contype = 'f'`,
-    [spec.name],
+     JOIN pg_namespace parent_ns ON parent_ns.oid = parent.relnamespace
+     WHERE c.conname = $1
+       AND c.contype = 'f'
+       AND child_ns.nspname = 'public'
+       AND child.relname = $2`,
+    [spec.name, spec.childTable],
   );
 
   if ((res.rowCount ?? 0) === 0) {
     issues.push({ code: "fk_missing", detail: spec.name });
+    return;
+  }
+  if ((res.rowCount ?? 0) > 1) {
+    issues.push({
+      code: "fk_ambiguous_matches",
+      detail: `${spec.name}:matches=${res.rowCount}`,
+    });
     return;
   }
   const row = res.rows[0];
@@ -833,10 +857,17 @@ export async function readFkCatalogDefinition(
             ) AS parent_cols
      FROM pg_constraint c
      JOIN pg_class child ON child.oid = c.conrelid
+     JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
      JOIN pg_class parent ON parent.oid = c.confrelid
-     WHERE c.conname = $1 AND c.contype = 'f'`,
+     WHERE c.conname = $1
+       AND c.contype = 'f'
+       AND child_ns.nspname = 'public'`,
     [name],
   );
+  if ((res.rowCount ?? 0) === 0) return null;
+  if ((res.rowCount ?? 0) > 1) {
+    throw new Error(`fk_ambiguous_matches:${name}:matches=${res.rowCount}`);
+  }
   if ((res.rowCount ?? 0) === 0) return null;
   const row = res.rows[0];
   return {

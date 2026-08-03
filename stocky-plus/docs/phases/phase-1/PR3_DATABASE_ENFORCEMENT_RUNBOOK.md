@@ -11,6 +11,9 @@
 3. Disposable or staging PostgreSQL 16 with **direct** (non-pooler) migration connection.
 4. Explicit `DATABASE_MIGRATION_URL` / `TENANT_MAINTENANCE_DATABASE_URL`.
 5. Backup / restore rehearsal completed before any future production approval (not authorized here).
+6. **Migration owner is not superuser** for staging/production verification paths. Set `STOCKY_REQUIRE_NONSUPERUSER_OWNER=1`. Bootstrap may use a superuser only to create the migration owner; ordinary enforcement must not use the cluster superuser as the application table owner.
+7. Migration owner owns the intended application schema/tables and has only required migration authority; runtime role remains separate (`stocky_runtime`).
+8. Migration credentials must **not** be available to normal web or worker processes.
 
 ## Operator sequence (disposable / future staging only)
 
@@ -73,17 +76,19 @@ Ordered stages (disposable / future staging only — no production rollout autho
 | 5. Policies + ENABLE/FORCE RLS | Exact policies/triggers installed per table | Resume; DML still revoked |
 | 6. Definitions verified | Catalog verify `ok:true` | Do not grant if verify fails |
 | 7. Runtime grants | Merchant DML granted **only after** step 6 | On any later failure, revoke unless verify still passes |
-| 8. App traffic on runtime URL | `DATABASE_RUNTIME_URL` + `STOCKY_REQUIRE_RUNTIME_DB_URL=1` | Fail closed on privileged URL |
+| 8. App traffic on runtime URL | `DATABASE_RUNTIME_URL` + `STOCKY_REQUIRE_RUNTIME_DB_URL=1`; connected-identity verification before merchant processing | Fail closed on privileged **connected identity** even when no migration URL is present in the application environment |
 | 9. Final verify / drift | Continuous CI + operator verify | Treat drift as incident |
 | 10. Blue/green | Both colors must be tenant-aware post-RLS releases | Never route to pre-PR-3 app after RLS |
 
 ## Runtime cutover
 
 1. Application release must already use `TenantDb` + transaction-local context.
-2. Configure `DATABASE_RUNTIME_URL` to the restricted role (semantic identity ≠ migration URL).
+2. Configure `DATABASE_RUNTIME_URL` to the restricted role (semantic identity ≠ migration URL when migration URL is present).
 3. Set `STOCKY_REQUIRE_RUNTIME_DB_URL=1` in production-like environments.
-4. Do not leave web/workers on the migration URL.
-5. Do not grant runtime merchant DML before exact verified RLS.
+4. Do not leave web/workers on the migration URL — migration credentials should not be available to normal web or worker processes.
+5. **The application verifies the actual connected runtime identity before merchant processing; privileged runtime identity fails closed even when no migration URL is present in the application environment.** URL comparison is an early defence only and is not authority.
+6. Do not grant runtime merchant DML before exact verified RLS.
+7. Staging/production verification must set `STOCKY_REQUIRE_NONSUPERUSER_OWNER=1`.
 
 ## Rollback boundaries
 
