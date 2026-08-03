@@ -13,8 +13,9 @@
 **PR 3 review-report / correction start head:** `ebcd0263ee726829f517d729abe601c7416a0952`
 **PR 3 actual last runtime/test head (pre-correction):** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (corrects false `aeeecc2…` claim)
 **PR 3 correction runtime/test tip:** `01cced426e8cbdfebb8580c20bfc4f2041713c59`
-**PR 3 exact final PR head (CI green):** `a132719cbe300699f8f276c1dd3f5ba7453e87d4`
-**PR 3 exact-head CI:** workflow `CI`, run `30826604464`, job `91729808946` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `a132719cbe300699f8f276c1dd3f5ba7453e87d4`
+**PR 3 exact final PR head (CI green):** `030753460ad6b4e228c4acd65f29bd77b241318d`
+**PR 3 exact-head CI:** workflow `CI`, run `30828120871`, job `91734905661` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `030753460ad6b4e228c4acd65f29bd77b241318d`
+**PR 3 prior green correction tip:** `a132719cbe300699f8f276c1dd3f5ba7453e87d4` (run `30826604464` / job `91729808946`)
 **PR 3 correction status:** Correction implemented — pending independent verification
 **PR 3 prior failed handoff head (historical):** `1467483455f4cd4726fb5cfd65ee2b6d247903bc`
 **PR 3 prior exact final PR head before review (historical):** `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2`

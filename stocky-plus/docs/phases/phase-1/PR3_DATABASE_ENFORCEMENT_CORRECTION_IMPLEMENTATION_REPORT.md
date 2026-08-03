@@ -24,7 +24,8 @@
 | `fe16e2b…` | Exact RLS/FK/trigger verification + safe apply + identity/roles |
 | `66c692e…` | Catalog parsing / prepare-verify bugfixes |
 | `01cced4…` | Resumable interrupt suite + Vitest discovery + access allowlist |
-| `a132719cbe300699f8f276c1dd3f5ba7453e87d4` | Evidence / runbook / status sync + exact-head CI green |
+| `a132719cbe300699f8f276c1dd3f5ba7453e87d4` | Evidence / runbook / status sync (intermediate green tip)
+| `030753460ad6b4e228c4acd65f29bd77b241318d` | Exact final PR head with green CI recording prior tip |
 
 Independent review report preserved verbatim:
 
@@ -168,15 +169,15 @@ Adversarial probes reproduced review failures and then restored clean:
 | Field | Value |
 | --- | --- |
 | Workflow | CI |
-| Run ID | `30826604464` |
-| Job ID | `91729808946` |
+| Run ID | `30828120871` |
+| Job ID | `91734905661` |
 | Job name | Lint, typecheck, test, build, Prisma, GraphQL |
-| Actual `head_sha` | `a132719cbe300699f8f276c1dd3f5ba7453e87d4` |
+| Actual `head_sha` | `030753460ad6b4e228c4acd65f29bd77b241318d` |
 | Conclusion | **success** |
 | Skipped material steps | **none** |
 | Named correction steps | All success (definition-drift, composite-drift, immutability-drift, partial-apply, interruption/resume, role-membership, exact-privilege, connected-identity, populated concurrency, deadlock/timeout recovery) |
 
-If a later documentation-only tip is pushed after this green head, obtain CI again on that tip before handoff.
+Prior green tip `a132719cbe300699f8f276c1dd3f5ba7453e87d4` / run `30826604464` / job `91729808946` also success with all named correction steps.
 
 Required named steps (CI workflow):
 
