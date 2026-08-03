@@ -120,8 +120,8 @@ describe("PR3 enforcement migration suite", () => {
         const u = new URL(migrationUrl());
         u.username = process.env.STOCKY_RUNTIME_ROLE || "stocky_runtime";
         u.password =
-          process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only";
- // pragma: allowlist secret        process.env.DATABASE_RUNTIME_URL = u.toString();
+          process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only"; // pragma: allowlist secret
+        process.env.DATABASE_RUNTIME_URL = u.toString();
       }
 
       const plan = await planEnforcement(client);

@@ -104,8 +104,8 @@ export async function resetAndEnforce(): Promise<{
     if (!process.env.DATABASE_RUNTIME_URL) {
       const runtimeRole = defaultRuntimeRoleName();
       const password =
-        process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only";
- // pragma: allowlist secret      const u = new URL(migrationUrl);
+        process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only"; // pragma: allowlist secret
+      const u = new URL(migrationUrl);
       u.username = runtimeRole;
       u.password = password;
       process.env.DATABASE_RUNTIME_URL = u.toString();
