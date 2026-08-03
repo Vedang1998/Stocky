@@ -91,7 +91,7 @@
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024..D-030)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-034)
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`
