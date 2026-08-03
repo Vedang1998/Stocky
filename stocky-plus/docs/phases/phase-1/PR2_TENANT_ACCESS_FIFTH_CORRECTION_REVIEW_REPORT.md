@@ -342,12 +342,16 @@ any locale. The asymmetry is one-directional and safe.
 
 ### 6.3 Locale evidence — measured, not asserted
 
+The Kelvin sign below is `U+212A`; the probe domain is
+`boo` + `U+212A` + `site.myshopify.com`, whose ASCII counterpart is
+`booksite.myshopify.com`.
+
 | Probe | `C.UTF-8` database | `C` database |
 |---|---|---|
-| `lower('K' U+212A) = 'k'` | `true` | `false` |
+| `lower(U+212A) = 'k'` | `true` | `false` |
 | Kelvin domain matches canonical via `lower(btrim(...))` | `true` (SQL discovers) | `false` (SQL does not discover) |
 | JS-accepted form (NBSP + uppercase + trailing BOM) discovered by SQL | `true` | `true` |
-| `normalizeShopDomain("booKsite.myshopify.com")` | `{ ok: false, reason: "non_ascii" }` | same |
+| `normalizeShopDomain` on the Kelvin-sign domain | `{ ok: false, reason: "non_ascii" }` | same |
 | Kelvin value present in final authorization set | **no** | **no** |
 
 This is the exact predicted behaviour: SQL is a strict superset under UTF-8
@@ -371,7 +375,7 @@ or collation migration.
 | Every SQL candidate revalidated in JavaScript | ✅ `legacy-scope.ts:384-389` |
 | JS-rejected values never enter the authorization set | ✅ |
 | Kelvin sign denied | ✅ both locales |
-| Non-ASCII confusables denied | ✅ Cyrillic `е` prefix → `non_ascii` |
+| Non-ASCII confusables denied | ✅ Cyrillic-ye prefix (`U+0435`) → `non_ascii` |
 | Extra SQL candidates count toward the evidence limit | ✅ in code (`rows.length > limit`, `legacy-scope.ts:368-379`) — **not exercised by the focused test** (F-PR2R5-02) |
 | No raw rejected value exposed | ✅ `safeLegacyOverflowMessage` emits only model/shopId/limit/count/correlationId |
 
@@ -679,7 +683,7 @@ touched at any point.
 9. **Required regression test:** none automatable; add head-identity wording to
    the cycle-closeout checklist so a documentation tip advance always
    re-pins the record.
-10. **Blocks acceptance:** **No.** The `96c1029…→70f4a80…` delta is
+10. **Blocks acceptance:** **No.** The `96c1029…` → `70f4a80…` delta is
     documentation-only (verified by diff: two commits touching only the
     fifth-cycle report and the phase README — zero runtime, test, schema,
     migration or configuration change), the reviewed head carries its own green
