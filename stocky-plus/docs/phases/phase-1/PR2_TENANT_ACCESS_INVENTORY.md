@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `cf59f7d6f3f83336a57ddec8c3496ed01c09607e7f31317bcdb0c64623ac3819`
+**Content digest:** `2bdd8c54bff49c4b416f99cb122f6b0ff3fadda4b28ae6a7b4d0fc01465c7b50`
 **Scanned files:** 167
 **Findings:** 1048
 **Converted paths:** 411
@@ -340,11 +340,11 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/db-isolation/isolation.test.ts` | 388 / `migrationPrisma.leadTimeSnapshot.create` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/isolation.test.ts` | 400 / `migrationPrisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/isolation.test.ts` | 424 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 37 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-033 | migration_tests | approved exception | allowlist EX-TEST-033 | EX-TEST-033 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 60 / `ctx.db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 104 / `dbA.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 107 / `dbB.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 127 / `db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 39 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-033 | migration_tests | approved exception | allowlist EX-TEST-033 | EX-TEST-033 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 62 / `ctx.db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 106 / `dbA.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 109 / `dbB.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 129 / `db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/helpers.ts` | 24 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/helpers.ts` | 30 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/helpers.ts` | 31 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1298,6 +1298,6 @@ All 18 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "cf59f7d6f3f83336a57ddec8c3496ed01c09607e7f31317bcdb0c64623ac3819"
+  "contentDigest": "2bdd8c54bff49c4b416f99cb122f6b0ff3fadda4b28ae6a7b4d0fc01465c7b50"
 }
 ```
