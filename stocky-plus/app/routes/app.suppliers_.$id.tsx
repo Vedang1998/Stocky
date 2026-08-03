@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -5,13 +6,12 @@ import type {
 } from "react-router";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const supplier = await prisma.supplier.findFirst({
-    where: { id: params.id, shop: session.shop },
+  const { db } = await requireAdminTenant({ request, params });
+  const supplier = await db.supplier.findFirst({
+    where: { id: params.id },
     include: {
       skuMappings: true,
       volumeTiers: { orderBy: [{ variantId: "asc" }, { minQty: "asc" }] },
@@ -22,8 +22,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Supplier not found", { status: 404 });
   }
 
-  const variants = await prisma.shopifyVariantCache.findMany({
-    where: { shop: session.shop },
+  const variants = await db.shopifyVariantCache.findMany({
+    where: {},
     orderBy: { title: "asc" },
     take: 250,
   });
@@ -32,9 +32,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const supplier = await prisma.supplier.findFirst({
-    where: { id: params.id, shop: session.shop },
+  const { db } = await requireAdminTenant({ request, params });
+  const supplier = await db.supplier.findFirst({
+    where: { id: params.id },
   });
   if (!supplier) throw new Response("Supplier not found", { status: 404 });
 
@@ -42,7 +42,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "updateNotes") {
-    await prisma.supplier.update({
+    await db.supplier.update({
       where: { id: supplier.id },
       data: {
         vendorNotes: (form.get("vendorNotes") as string) || null,
@@ -56,7 +56,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "addMapping") {
-    await prisma.supplierSkuMapping.upsert({
+    await db.supplierSkuMapping.upsert({
       where: {
         supplierId_shopifyVariantId: {
           supplierId: supplier.id,
@@ -79,7 +79,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "deleteMapping") {
-    await prisma.supplierSkuMapping.deleteMany({
+    await db.supplierSkuMapping.deleteMany({
       where: {
         id: form.get("mappingId") as string,
         supplierId: supplier.id,
@@ -89,7 +89,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   if (intent === "addTier") {
     const maxQtyRaw = form.get("maxQty") as string;
-    await prisma.volumePriceTier.create({
+    await db.volumePriceTier.create({
       data: {
         supplierId: supplier.id,
         variantId: form.get("variantId") as string,
@@ -101,7 +101,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "deleteTier") {
-    await prisma.volumePriceTier.deleteMany({
+    await db.volumePriceTier.deleteMany({
       where: {
         id: form.get("tierId") as string,
         supplierId: supplier.id,
@@ -116,7 +116,7 @@ export default function SupplierDetail() {
   const { supplier, variants } = useLoaderData<typeof loader>();
 
   const variantTitle = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   return (
     <s-page heading={supplier.name}>
@@ -179,7 +179,7 @@ export default function SupplierDetail() {
           <input type="hidden" name="intent" value="addMapping" />
           <s-stack direction="inline" gap="base">
             <s-select label="Shopify variant" name="variantId" required>
-              {variants.map((v) => (
+              {variants.map((v: any) => (
                 <s-option key={v.shopifyVariantId} value={v.shopifyVariantId}>
                   {v.title}
                 </s-option>
@@ -209,7 +209,7 @@ export default function SupplierDetail() {
               <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {supplier.skuMappings.map((m) => (
+              {supplier.skuMappings.map((m: any) => (
                 <s-table-row key={m.id}>
                   <s-table-cell>{variantTitle(m.shopifyVariantId)}</s-table-cell>
                   <s-table-cell>{m.vendorSku}</s-table-cell>
@@ -236,7 +236,7 @@ export default function SupplierDetail() {
           <input type="hidden" name="intent" value="addTier" />
           <s-stack direction="inline" gap="base">
             <s-select label="Variant" name="variantId" required>
-              {variants.map((v) => (
+              {variants.map((v: any) => (
                 <s-option key={v.shopifyVariantId} value={v.shopifyVariantId}>
                   {v.title}
                 </s-option>
@@ -264,7 +264,7 @@ export default function SupplierDetail() {
               <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {supplier.volumeTiers.map((t) => (
+              {supplier.volumeTiers.map((t: any) => (
                 <s-table-row key={t.id}>
                   <s-table-cell>{variantTitle(t.variantId)}</s-table-cell>
                   <s-table-cell>{t.minQty}</s-table-cell>
@@ -289,7 +289,7 @@ export default function SupplierDetail() {
       {supplier.leadTimeSnapshots.length > 0 && (
         <s-section slot="aside" heading="Recent lead times">
           <s-unordered-list>
-            {supplier.leadTimeSnapshots.map((snap) => (
+            {supplier.leadTimeSnapshots.map((snap: any) => (
               <s-list-item key={snap.id}>
                 {snap.leadTimeDays.toFixed(1)} days (
                 {new Date(snap.recordedAt).toLocaleDateString()})

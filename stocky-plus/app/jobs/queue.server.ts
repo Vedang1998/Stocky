@@ -1,5 +1,13 @@
 import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
+import type { TenantAuthority } from "../tenant/authority.server";
+import { isTenantAuthority } from "../tenant/authority.server";
+import {
+  createTenantJobEnvelope,
+  type TenantJobEnvelopeV1,
+  type TenantJobSource,
+} from "../tenant/job-envelope.server";
+import { TenantAuthorityError } from "../tenant/errors";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
 
@@ -17,12 +25,35 @@ export const CRON_QUEUE = "stocky-cron";
 
 export type WebhookJobData = {
   topic: string;
-  shop: string;
+  /** Informational only — never authority. */
+  payloadShop: string;
   payload: Record<string, unknown>;
+  tenant: TenantJobEnvelopeV1;
+};
+
+export type CatalogSyncJobData = {
+  tenant: TenantJobEnvelopeV1;
+};
+
+export type AbcShopJobData = {
+  tenant: TenantJobEnvelopeV1;
 };
 
 let webhookQueue: Queue<WebhookJobData> | null = null;
 let cronQueue: Queue | null = null;
+
+function requireAuthority(
+  tenant: TenantAuthority,
+  label: string,
+): TenantAuthority {
+  if (!isTenantAuthority(tenant)) {
+    throw new TenantAuthorityError(
+      "enqueue_requires_authority",
+      `${label} accepts branded TenantAuthority only — pre-built envelopes are not accepted`,
+    );
+  }
+  return tenant;
+}
 
 export function getWebhookQueue(): Queue<WebhookJobData> {
   if (!webhookQueue) {
@@ -52,18 +83,61 @@ export function getCronQueue(): Queue {
   return cronQueue;
 }
 
+function webhookSource(topic: string): TenantJobSource {
+  const source = `webhook:${topic}`;
+  return source as TenantJobSource;
+}
+
 /** Enqueue and return immediately so the webhook route can 200 within 50ms. */
-export async function enqueueWebhook(data: WebhookJobData, webhookId?: string) {
+export async function enqueueWebhook(
+  data: {
+    topic: string;
+    payloadShop: string;
+    payload: Record<string, unknown>;
+    tenant: TenantAuthority;
+  },
+  webhookId?: string,
+) {
+  const tenant = requireAuthority(data.tenant, "enqueueWebhook");
+  const envelope = createTenantJobEnvelope(tenant, webhookSource(data.topic));
+
   await getWebhookQueue().add(
     data.topic,
-    data,
-    // Shopify retries webhooks; the webhookId jobId dedupes redeliveries.
+    {
+      topic: data.topic,
+      payloadShop: data.payloadShop,
+      payload: data.payload,
+      tenant: envelope,
+    },
     webhookId ? { jobId: webhookId } : undefined,
   );
 }
 
-export async function enqueueCatalogSync(shop: string) {
-  await getCronQueue().add("catalog-sync", { shop });
+export async function enqueueCatalogSync(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueCatalogSync");
+  const envelope = createTenantJobEnvelope(auth, "catalog_sync");
+
+  await getCronQueue().add("catalog-sync", {
+    tenant: envelope,
+  } satisfies CatalogSyncJobData);
+}
+
+/** Dedicated producer for afterAuth catalog sync (approved source). */
+export async function enqueueAfterAuthCatalogSync(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueAfterAuthCatalogSync");
+  const envelope = createTenantJobEnvelope(auth, "after_auth_catalog_sync");
+  await getCronQueue().add("catalog-sync", {
+    tenant: envelope,
+  } satisfies CatalogSyncJobData);
+}
+
+export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueAbcAnalysisForShop");
+  const envelope = createTenantJobEnvelope(auth, "abc_analysis");
+
+  await getCronQueue().add("abc-analysis-shop", {
+    tenant: envelope,
+  } satisfies AbcShopJobData);
 }
 
 export function createWebhookWorker(
@@ -82,6 +156,10 @@ export function createCronWorker(processor: (job: Job) => Promise<void>) {
   });
 }
 
+/**
+ * Schedule the weekly ABC control-plane tick. The tick enumerates canonical
+ * Shops and enqueues per-shop envelope jobs — it must not query ShopSettings.
+ */
 export async function scheduleAbcAnalysisCron() {
   await getCronQueue().add(
     "abc-analysis",

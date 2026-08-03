@@ -1,0 +1,6 @@
+import prisma from "../db.server";
+
+export async function leak() {
+  const suppliers = prisma.supplier;
+  return suppliers.findMany({});
+}

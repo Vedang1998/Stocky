@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -5,8 +6,7 @@ import type {
 } from "react-router";
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
   getDeadStock,
   getInventoryValuation,
@@ -15,13 +15,12 @@ import {
 } from "../services/forecasting.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
+  const { db } = await requireAdminTenant({ request });
 
   const [deadStock, valuation, alerts] = await Promise.all([
-    getDeadStock(shop, 120),
-    getInventoryValuation(shop),
-    getLowStockAlerts(shop),
+    getDeadStock(db, 120),
+    getInventoryValuation(db),
+    getLowStockAlerts(db),
   ]);
 
   return {
@@ -34,19 +33,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { db } = await requireAdminTenant({ request });
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
   if (intent === "runAbc") {
-    await runAbcAnalysis(session.shop, "REVENUE");
-    await runAbcAnalysis(session.shop, "VOLUME");
+    await runAbcAnalysis(db, "REVENUE");
+    await runAbcAnalysis(db, "VOLUME");
     return { ok: true };
   }
 
   if (intent === "ackAlert") {
-    await prisma.lowStockAlert.updateMany({
-      where: { id: form.get("alertId") as string, shop: session.shop },
+    await db.lowStockAlert.updateMany({
+      where: { id: form.get("alertId") as string },
       data: { acknowledged: true },
     });
     return { ok: true };
@@ -129,7 +128,7 @@ export default function Analytics() {
               <s-table-header>Actions</s-table-header>
             </s-table-header-row>
             <s-table-body>
-              {alerts.map((a) => (
+              {alerts.map((a: any) => (
                 <s-table-row key={a.id}>
                   <s-table-cell>{a.shopifyVariantId}</s-table-cell>
                   <s-table-cell>{a.currentStock}</s-table-cell>

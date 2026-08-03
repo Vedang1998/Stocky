@@ -1,0 +1,9 @@
+import { issueTenantAuthority as mint } from "../tenant/authority.server";
+
+export function bad() {
+  return mint({
+    shopId: "x",
+    myshopifyDomain: "x.myshopify.com",
+    source: "verified_admin_request",
+  });
+}

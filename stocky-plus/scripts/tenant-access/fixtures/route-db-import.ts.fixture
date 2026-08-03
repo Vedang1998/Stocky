@@ -1,0 +1,6 @@
+// Negative fixture — must fail tenant:access:audit when scanned.
+import prisma from "../../../app/db.server";
+
+export async function badRoute() {
+  return prisma.supplier.findMany();
+}

@@ -1,0 +1,6 @@
+import db from "../db.server";
+
+export async function run() {
+  const part = ["sup", "plier"].join("");
+  await db[part].findMany({});
+}

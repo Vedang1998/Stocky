@@ -1,28 +1,28 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import { createElement as h } from "react";
 import type { LoaderFunctionArgs } from "react-router";
-import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 /**
  * Resource route: PDF receiver document for warehouse staff.
  * Shows retail prices but deliberately hides wholesale/unit costs.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const po = await prisma.purchaseOrder.findFirst({
-    where: { id: params.id, shop: session.shop },
+  const { db } = await requireAdminTenant({ request, params });
+  const po = await db.purchaseOrder.findFirst({
+    where: { id: params.id },
     include: { supplier: true, lineItems: true },
   });
   if (!po) throw new Response("Purchase order not found", { status: 404 });
 
-  const variantIds = po.lineItems.map((li) => li.shopifyVariantId);
-  const variants = await prisma.shopifyVariantCache.findMany({
-    where: { shop: session.shop, shopifyVariantId: { in: variantIds } },
+  const variantIds = po.lineItems.map((li: any) => li.shopifyVariantId);
+  const variants = await db.shopifyVariantCache.findMany({
+    where: { shopifyVariantId: { in: variantIds } },
   });
   const titleFor = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.title ?? id;
+    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
   const barcodeFor = (id: string) =>
-    variants.find((v) => v.shopifyVariantId === id)?.barcode ?? "";
+    variants.find((v: any) => v.shopifyVariantId === id)?.barcode ?? "";
 
   const { renderToBuffer, Document, Page, Text, View, StyleSheet } =
     await import("@react-pdf/renderer");
@@ -61,7 +61,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       h(
         Text,
         { style: styles.meta },
-        `Supplier: ${po.supplier.name}    Ordered: ${po.orderedAt ? new Date(po.orderedAt).toLocaleDateString() : "—"}    Status: ${po.status}`,
+        `Supplier: ${po.supplier?.name ?? "Unresolved supplier"}    Ordered: ${po.orderedAt ? new Date(po.orderedAt).toLocaleDateString() : "—"}    Status: ${po.status}`,
       ),
       h(
         View,
@@ -72,7 +72,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         h(Text, { style: styles.colPrice }, "Retail"),
         h(Text, { style: styles.checkbox }, "Counted"),
       ),
-      ...po.lineItems.map((li) =>
+      ...po.lineItems.map((li: any) =>
         h(
           View,
           { style: styles.row, key: li.id },

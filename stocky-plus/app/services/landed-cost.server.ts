@@ -1,6 +1,6 @@
-import prisma from "../db.server";
 import type { LandedCostMethod } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/library";
+import type { TenantDb } from "../tenant/tenant-db.server";
 
 export interface LandedCostLineInput {
   id: string;
@@ -53,8 +53,11 @@ export function allocateLandedCosts(
   return allocations;
 }
 
-export async function applyLandedCostsToPO(purchaseOrderId: string) {
-  const po = await prisma.purchaseOrder.findUnique({
+export async function applyLandedCostsToPO(
+  db: TenantDb,
+  purchaseOrderId: string,
+) {
+  const po = await db.purchaseOrder.findUnique({
     where: { id: purchaseOrderId },
     include: { lineItems: true },
   });
@@ -64,21 +67,29 @@ export async function applyLandedCostsToPO(purchaseOrderId: string) {
   const customs = Number(po.customsCost ?? 0);
 
   const allocations = allocateLandedCosts(
-    po.lineItems.map((li) => ({
-      id: li.id,
-      unitCost: li.unitCost,
-      weight: li.weight,
-      volume: li.volume,
-      orderedQty: li.orderedQty,
-    })),
+    po.lineItems.map(
+      (li: {
+        id: string;
+        unitCost: Decimal;
+        weight: Decimal | null;
+        volume: Decimal | null;
+        orderedQty: number;
+      }) => ({
+        id: li.id,
+        unitCost: li.unitCost,
+        weight: li.weight,
+        volume: li.volume,
+        orderedQty: li.orderedQty,
+      }),
+    ),
     freight,
     customs,
     po.landedCostMethod,
   );
 
   await Promise.all(
-    po.lineItems.map((li) =>
-      prisma.pOLineItem.update({
+    po.lineItems.map((li: { id: string }) =>
+      db.pOLineItem.update({
         where: { id: li.id },
         data: { allocatedLandedCost: allocations.get(li.id) ?? new Decimal(0) },
       }),
@@ -94,17 +105,21 @@ export function getTrueUnitCost(
 }
 
 export async function resolveTieredUnitCost(
+  db: TenantDb,
   supplierId: string,
   variantId: string,
   quantity: number,
 ): Promise<Decimal | null> {
-  const tiers = await prisma.volumePriceTier.findMany({
+  const tiers = await db.volumePriceTier.findMany({
     where: { supplierId, variantId },
     orderBy: { minQty: "desc" },
   });
 
   for (const tier of tiers) {
-    if (quantity >= tier.minQty && (tier.maxQty === null || quantity <= tier.maxQty)) {
+    if (
+      quantity >= tier.minQty &&
+      (tier.maxQty === null || quantity <= tier.maxQty)
+    ) {
       return tier.unitCost;
     }
   }
@@ -112,27 +127,29 @@ export async function resolveTieredUnitCost(
 }
 
 export async function recalculatePOLineCost(
+  db: TenantDb,
   lineItemId: string,
   newQty: number,
 ): Promise<void> {
-  const line = await prisma.pOLineItem.findUnique({
+  const line = await db.pOLineItem.findUnique({
     where: { id: lineItemId },
     include: { purchaseOrder: true },
   });
   if (!line || line.manualCostOverride) return;
 
   const tierCost = await resolveTieredUnitCost(
+    db,
     line.purchaseOrder.supplierId,
     line.shopifyVariantId,
     newQty,
   );
   if (tierCost) {
-    await prisma.pOLineItem.update({
+    await db.pOLineItem.update({
       where: { id: lineItemId },
       data: { unitCost: tierCost, orderedQty: newQty },
     });
   } else {
-    await prisma.pOLineItem.update({
+    await db.pOLineItem.update({
       where: { id: lineItemId },
       data: { orderedQty: newQty },
     });
@@ -140,36 +157,44 @@ export async function recalculatePOLineCost(
 }
 
 export async function receivePartialPO(
+  db: TenantDb,
   purchaseOrderId: string,
   receivedItems: Array<{ lineItemId: string; receivedQty: number }>,
 ) {
-  const po = await prisma.purchaseOrder.findUnique({
+  const po = await db.purchaseOrder.findUnique({
     where: { id: purchaseOrderId },
     include: { lineItems: true },
   });
   if (!po) throw new Error("Purchase order not found");
 
   for (const item of receivedItems) {
-    const line = po.lineItems.find((l) => l.id === item.lineItemId);
+    const line = po.lineItems.find(
+      (l: { id: string }) => l.id === item.lineItemId,
+    );
     if (!line) continue;
     const newReceived = Math.min(
       line.receivedQty + item.receivedQty,
       line.orderedQty,
     );
-    await prisma.pOLineItem.update({
+    await db.pOLineItem.update({
       where: { id: item.lineItemId },
       data: { receivedQty: newReceived },
     });
   }
 
-  const updated = await prisma.pOLineItem.findMany({
+  const updated = await db.pOLineItem.findMany({
     where: { purchaseOrderId },
   });
 
-  const allReceived = updated.every((l) => l.receivedQty >= l.orderedQty);
-  const anyReceived = updated.some((l) => l.receivedQty > 0);
+  const allReceived = updated.every(
+    (l: { receivedQty: number; orderedQty: number }) =>
+      l.receivedQty >= l.orderedQty,
+  );
+  const anyReceived = updated.some(
+    (l: { receivedQty: number }) => l.receivedQty > 0,
+  );
 
-  await prisma.purchaseOrder.update({
+  await db.purchaseOrder.update({
     where: { id: purchaseOrderId },
     data: {
       status: allReceived ? "RECEIVED" : anyReceived ? "PARTIAL" : po.status,
@@ -181,10 +206,11 @@ export async function receivePartialPO(
 }
 
 export async function recordLeadTimeSnapshot(
+  db: TenantDb,
   supplierId: string,
   purchaseOrderId: string,
 ) {
-  const po = await prisma.purchaseOrder.findUnique({
+  const po = await db.purchaseOrder.findUnique({
     where: { id: purchaseOrderId },
   });
   if (!po?.orderedAt || !po.fullyReceivedAt) return;
@@ -193,21 +219,24 @@ export async function recordLeadTimeSnapshot(
     (po.fullyReceivedAt.getTime() - po.orderedAt.getTime()) /
     (1000 * 60 * 60 * 24);
 
-  await prisma.leadTimeSnapshot.create({
+  await db.leadTimeSnapshot.create({
     data: { supplierId, purchaseOrderId, leadTimeDays },
   });
 
   const ninetyDaysAgo = new Date();
   ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-  const snapshots = await prisma.leadTimeSnapshot.findMany({
+  const snapshots = await db.leadTimeSnapshot.findMany({
     where: { supplierId, recordedAt: { gte: ninetyDaysAgo } },
   });
 
   if (snapshots.length > 0) {
     const avg =
-      snapshots.reduce((s, snap) => s + snap.leadTimeDays, 0) / snapshots.length;
-    await prisma.supplier.update({
+      snapshots.reduce(
+        (s: number, snap: { leadTimeDays: number }) => s + snap.leadTimeDays,
+        0,
+      ) / snapshots.length;
+    await db.supplier.update({
       where: { id: supplierId },
       data: { leadTimeDays: avg },
     });

@@ -1,0 +1,8 @@
+import type { TenantAuthority } from "../tenant/authority.server";
+import type { TenantJobEnvelopeV1 } from "../tenant/job-envelope.server";
+
+export async function enqueueCatalogSync(
+  tenantOrEnvelope: TenantAuthority | TenantJobEnvelopeV1,
+) {
+  void tenantOrEnvelope;
+}

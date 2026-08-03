@@ -31,7 +31,11 @@
     "tenant:indexes:plan": "tsx scripts/tenant-indexes/cli.ts plan",
     "tenant:indexes:apply": "tsx scripts/tenant-indexes/cli.ts apply",
     "tenant:indexes:verify": "tsx scripts/tenant-indexes/cli.ts verify",
-    "tenant:schema:drift": "tsx scripts/tenant-indexes/drift.ts"
+    "tenant:schema:drift": "tsx scripts/tenant-indexes/drift.ts",
+    "tenant:access:audit": "tsx scripts/tenant-access/audit.ts",
+    "tenant:access:inventory": "tsx scripts/tenant-access/inventory.ts",
+    "tenant:access:inventory:check": "tsx scripts/tenant-access/inventory-check.ts",
+    "test:tenant-access": "vitest run --config vitest.tenant-access.config.ts"
   },
   "type": "module",
   "packageManager": "npm@11.5.2",

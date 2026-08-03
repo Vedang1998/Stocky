@@ -1,0 +1,6 @@
+// Negative fixture — service importing raw Prisma.
+import prisma from "../../../app/db.server";
+
+export async function badService(shop: string) {
+  return prisma.purchaseOrder.findMany({ where: { shop } });
+}

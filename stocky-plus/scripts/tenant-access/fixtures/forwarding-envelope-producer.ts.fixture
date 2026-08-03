@@ -1,0 +1,8 @@
+import { Queue } from "bullmq";
+import type { TenantJobEnvelopeV1 } from "../tenant/job-envelope.server";
+
+const q = new Queue("anything");
+
+export async function enqueueAnything(envelope: TenantJobEnvelopeV1) {
+  await q.add("sync", envelope);
+}

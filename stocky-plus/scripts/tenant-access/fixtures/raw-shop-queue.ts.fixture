@@ -1,0 +1,3 @@
+export async function enqueueBad(queue: { add: Function }, shop: string) {
+  await queue.add("sync", { shop: shop, payload: {} });
+}

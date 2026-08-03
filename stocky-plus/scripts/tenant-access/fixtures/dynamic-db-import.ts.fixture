@@ -1,0 +1,5 @@
+export async function leak(shop: string) {
+  const client: any = (await import("../db.server")).default;
+  const table = client["sup" + "plier"];
+  return table.findMany({ where: { shop } });
+}

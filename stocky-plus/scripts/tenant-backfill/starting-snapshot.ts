@@ -12,7 +12,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   SHOP_DOMAIN_NORMALIZATION_VERSION,
   normalizeShopDomain,
-} from "../../app/lib/shop-domain";
+} from "../../app/tenant/shop-domain";
 import { checksumRows, sha256Hex } from "./checksum";
 import {
   EvidenceCapacityError,

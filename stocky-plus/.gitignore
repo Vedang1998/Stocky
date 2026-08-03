@@ -34,6 +34,9 @@ pnpm-lock.yaml
 # Transient parked Prisma migrations during test:migrations
 .tmp-parked-migrations/
 
+# Transient tenant-access audit fixture copies
+.tmp-tenant-audit/
+
 # GraphQL codegen outputs (regenerated in CI via npm run graphql-codegen)
 # Do not commit the downloaded Admin schema cache.
 /app/types/admin-*.schema.json

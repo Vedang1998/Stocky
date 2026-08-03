@@ -36,6 +36,15 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       # Test-only placeholders — no real Shopify credentials or merchant data.
@@ -43,6 +52,8 @@ jobs:
       DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       TENANT_MAINTENANCE_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       REDIS_URL: redis://localhost:6379
+      # Test-only envelope secret (≥32 bytes). Never a production secret.
+      TENANT_JOB_ENVELOPE_SECRET: "ci-test-only-tenant-job-envelope-secret-32b!"
       SHOPIFY_API_KEY: ci-test-api-key
       SHOPIFY_API_SECRET: ci-test-api-secret
       SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
@@ -105,6 +116,114 @@ jobs:
         run: |
           npm run tenant:indexes:plan
         # plan exits 0 when all indexes are valid_exact
+
+      - name: Tenant access architecture audit
+        run: npm run tenant:access:audit
+
+      - name: Tenant access inventory freshness
+        run: npm run tenant:access:inventory:check
+
+      - name: Tenant access PostgreSQL tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nullable-ownership.test.ts app/tenant/__tests__/tenant-db.test.ts app/tenant/__tests__/bootstrap.test.ts
+
+      - name: Tenant relation isolation tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/relation-isolation.test.ts
+
+      - name: Tenant job-envelope integrity tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts
+
+      - name: Tenant queue/Redis tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/queue-redis.test.ts
+
+      - name: Client authority denial tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/client-hints.test.ts app/tenant/__tests__/authority.test.ts
+
+      - name: Nested write ownership tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-writes.test.ts
+
+      - name: Tenant nested selector authorization tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts
+
+      - name: Tenant connectOrCreate foreign-match tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts app/tenant/__tests__/connect-or-create-merge.test.ts
+
+      - name: Tenant array nested-mutation tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/nested-selector-auth.test.ts
+
+      - name: Tenant legacy normalization read consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/normalization-consistency.test.ts app/tenant/__tests__/legacy-normalization.test.ts
+
+      - name: Tenant legacy SQL/JS normalization equivalence tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-equivalence.test.ts
+
+      - name: Tenant legacy bulk-mutation consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-bulk-mutations.test.ts
+
+      - name: Tenant legacy relation consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-relations.test.ts
+
+      - name: Tenant legacy-evidence overflow tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-evidence-overflow.test.ts
+
+      - name: Tenant legacy unique-selector resolution tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-unique-selector-resolution.test.ts
+
+      - name: Tenant legacy evidence configuration tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-evidence-config.test.ts
+
+      - name: Tenant legacy candidate-superset normalization tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts
+
+      - name: Tenant legacy overflow operation-matrix tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts
+
+      - name: Tenant-bearing unique-selector tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/tenant-bearing-unique-selectors.test.ts
+
+      - name: Tenant partial-selection tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts
+
+      - name: Tenant update projection and nested-write tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/partial-select-update.test.ts
+
+      - name: Tenant scanner provenance tests
+        run: npm run test:tenant-access -- scripts/tenant-access/architecture-audit.test.ts
+
+      - name: Tenant large-payload client-hint tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/large-payload-hints.test.ts
+
+      - name: Tenant write atomicity tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/write-atomicity.test.ts
+
+      - name: Tenant top-level unique-selector tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/top-level-unique-selectors.test.ts
+
+      - name: Tenant scope scale tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/tenant-scope-scale.test.ts
+
+      - name: Tenant mixed relation ownership tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/mixed-relation-ownership.test.ts
+
+      - name: Tenant connectOrCreate merge tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/connect-or-create-merge.test.ts
+
+      - name: Tenant normalization consistency tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/normalization-consistency.test.ts
+
+      - name: Tenant LeadTimeSnapshot projection tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/lead-time-partial-select.test.ts
+
+      - name: Tenant request-byte and shop-hint tests
+        run: npm run test:tenant-access -- app/tenant/__tests__/client-hint-byte-limits.test.ts
+
+      - name: Tenant authority-issuer scanner tests
+        run: npm run test:tenant-access -- scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts
+
+      - name: Tenant access architecture negative fixtures
+        run: npm run test:tenant-access -- scripts/tenant-access/architecture-audit.test.ts
+
+      - name: Tenant access tests
+        run: npm run test:tenant-access
 
       - name: Git diff check
         run: git diff --check

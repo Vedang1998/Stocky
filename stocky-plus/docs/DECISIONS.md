@@ -303,3 +303,111 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** No additional schema or runtime change in this status-sync decision. Production migration/backfill remains unauthorized until a later reviewed deployment plan and explicit authorization.
 7. **Risks:** Merge of PR 1 tooling must not be misread as Phase 1 completion, PR 2/PR 3 start, production backfill completion, RLS/runtime activation, or inventory-write approval. **R-028** and **R-029** remain open operational/enforcement-transition risks.
 8. **Final:** **ACCEPTED** (2026-07-31). PR 1 is merged and closed. Phase 1 remains in progress. PR 2 and PR 3 remain **NOT STARTED**. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**. No deployment or production migration is authorized by this decision.
+
+## D-027 — Phase 1 PR 2 tenant-bound access contract
+
+1. **Current:** Runtime merchant access used unrestricted global Prisma plus legacy `shop` string filters derived from `session.shop` / webhook payloads. PR 1 added nullable `shopId` and backfill tooling but did not convert runtime access.
+2. **Proposed:** PR 2 is authorized from `main@04289d61f605414597ac85f47830a3c9d2f9e33d` on branch `phase-1/tenant-access`. Canonical tenant authority comes only from verified Shopify authentication or validated server-created job transport (`tenant-job-envelope-v1`). Client-supplied shop identifiers are never authority. Runtime merchant access must go through the tenant-bound contract. Raw Prisma is restricted to approved infrastructure/maintenance exceptions. Bootstrap is limited to Session, Shop, and narrow canonical Shop enumeration. Mechanically generated inventory + CI architecture audit enforce the boundary.
+3. **Reason:** Establish application-level tenant authority and scoped DB access before PR 3 adds RLS, roles, non-null constraints, and composite FKs.
+4. **Merchant impact:** No intentional product-behavior redesign. Safer tenancy for routes/services/workers. No deployment or production backfill authorized.
+5. **Technical impact:** `app/tenant/**` contract; route/service/job conversion; scanner under `scripts/tenant-access/`; CI gates `tenant:access:audit`, `tenant:access:inventory:check`, `test:tenant-access`.
+6. **Migration:** No schema migration in PR 2. No production backfill. Nullable `shopId` remains until PR 3 / operational backfill gates.
+7. **Risks:** Application scoping is necessary but not sufficient without PR 3 DB enforcement. Job envelope persistence/replay remain PR 4 (R-039 not fully closed). Inventory writes remain unapproved.
+8. **Final:** **AUTHORIZED FOR PR 2 IMPLEMENTATION — PENDING INDEPENDENT REVIEW AND CHATGPT ACCEPTANCE**. Explicitly does **not** implement RLS, roles, non-null constraints, composite FKs, or production backfill. PR 3 remains the hard database-enforcement gate. PR 4 retains database-backed queue/control-plane persistence and durable replay. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
+
+## D-028 — Phase 1 PR 2 corrections required
+
+1. **Current:** Independent Claude Code review of PR 2 implementation head `6f9ca22c069a46003b6944ff56c888ff91e95cdc` issued verdict **`NOT READY — CORRECTIONS REQUIRED`** with three P1, three P2, and three P3 findings (F-PR2-01..09). Report preserved verbatim in `PR2_TENANT_ACCESS_REVIEW_REPORT.md`.
+2. **Proposed:** All P1 and P2 findings are mandatory corrections on draft PR #13 / `phase-1/tenant-access`. P3 items require documentation correction and evaluated webhook disposition without unapproved schema. PR 2 remains unaccepted. PR #13 remains draft and unmerged. PR 3 remains not started. No deployment, RLS, production backfill, or inventory writes are authorized.
+3. **Reason:** Application-layer tenant bypasses (nullable ownership invisibility, unscoped nested relations, unsigned job envelopes) and scanner/client-hint/nested-write gaps must be corrected before acceptance.
+4. **Merchant impact:** Corrections restore visibility of nullable PR 1 rows, prevent cross-tenant relation disclosure, and cryptographically authenticate worker transport. No production data access.
+5. **Technical impact:** TenantDb compatibility scope + recursive relation/nested-write validation; HMAC job envelopes; scanner completeness; client-hint traversal; CI Redis + envelope secret; expanded PostgreSQL/Redis tests.
+6. **Migration:** No schema migration. No production backfill. No RLS/roles/non-null/composite FKs.
+7. **Risks:** R-064..R-067 track correction areas pending independent verification. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4.
+8. **Final:** **AUTHORIZED FOR PR 2 CORRECTION IMPLEMENTATION — PENDING INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**.
+
+## D-029 — Phase 1 PR 2 follow-up corrections required
+
+1. **Current:** Independent Claude Code correction review of first corrected head `e6a9a06a8a399bbfb17687399c59582f1712f442` issued verdict **`NOT READY — FURTHER CORRECTIONS REQUIRED`** with three P1, five P2, and three P3 findings (F-PR2C-01..11). Report preserved at `b5fbd2bd346dee1730500be46d47c4fb164fd788` (`PR2_TENANT_ACCESS_CORRECTION_REVIEW_REPORT.md`). F-PR2-03 remains closed. F-PR2-07..09 remain closed/documented.
+2. **Proposed:** Mandatory follow-up corrections on draft PR #13 / `phase-1/tenant-access` covering model-aware nested selectors, connectOrCreate global-match fail-closed, array nested mutations, normalization-aware legacy shop, partial-select proof fields, real single-row update, scanner provenance, large-payload hint limits, write atomicity, evidence correction, and exact allowlist matching. PR 2 remains unaccepted. PR #13 remains draft and unmerged. PR 3 remains not started.
+3. **Reason:** Demonstrated application-layer cross-tenant nested mutations and product regressions remain after the first correction wave.
+4. **Merchant impact:** Prevents cross-tenant re-parenting of supplier mappings / lead-time snapshots / transfer and stocktake lines; restores visibility of normalizable legacy shop rows; prevents denial of ordinary large PO/stocktake payloads.
+5. **Technical impact:** `selectors.ts` / `legacy-scope.ts` / TenantDb rewrite; scanner constant-folding; client-hint budget raise; CI focused suites; documentation D-029.
+6. **Migration:** No schema migration. No production backfill. No RLS/roles/non-null/composite FKs.
+7. **Risks:** R-064..R-067 and new follow-up risks remain `implemented — pending independent verification`. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4.
+8. **Final:** **AUTHORIZED FOR PR 2 FOLLOW-UP CORRECTION IMPLEMENTATION — PENDING SECOND INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. No deployment, production backfill, RLS, or inventory writes are authorized.
+
+## D-030 — Phase 1 PR 2 third correction cycle required
+
+1. **Current:** Independent Claude Code second correction review of implementation head `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0` issued verdict **`NOT READY — FURTHER CORRECTIONS REQUIRED`** with **P0: 0 · P1: 3 · P2: 3 · P3: 4** findings (F-PR2R2-01..10). Report preserved at `fed21a48a5ae77a61f62b5bd899c698c48a68f49` (`PR2_TENANT_ACCESS_FOLLOWUP_CORRECTION_REVIEW_REPORT.md`). No cross-tenant read or write was reproduced. Signed job envelopes, nested-selector denial, array nested isolation, update projections, serializable writes, raw-Prisma scanner provenance, exact allowlist matching, and default-off inventory-write gates remain closed.
+2. **Proposed:** Mandatory third correction cycle on draft PR #13 / `phase-1/tenant-access` covering top-level compound-unique selector flattening, scalable tenant predicates (no owned-row-ID materialization), row-level unprovable relation nulling/filtering, `connectOrCreate` sibling merge, unified D-030 ownership, LeadTimeSnapshot lineage proof, UTF-8 body-byte accounting, key-specific shop hints, issuer-alias scanner coverage, and permanent evidence/CI corrections.
+3. **Revised canonical ownership rule (supersedes prior non-null shopId + legacy-agreement conflict rule):**
+   - **Non-null `shopId` = current tenant:** row is owned. Legacy `shop` is non-authoritative compatibility data and must not hide a canonically owned row (missing/empty/malformed/uppercase/whitespace/URL/path/non-Shopify/conflicting domain). Do not silently repair legacy `shop`.
+   - **Non-null `shopId` = another tenant:** denied.
+   - **Null `shopId`:** normalized legacy `shop` must equal the authenticated canonical domain under exact `phase1-shop-domain-v1` semantics. Malformed/absent/foreign legacy evidence remains unprovable and denied.
+   - **Child rows:** owned only when (1) verified parent is tenant-owned and (2) child `shopId` is the current tenant ID or null under the verified-parent compatibility path. Foreign non-null child `shopId` always fails closed.
+4. **Reason:** The tenant-isolation posture is materially stronger, but the tenant-bound contract remains functionally unreliable for normal merchant workflows and realistic data scale (compound selectors broken, bind-parameter cliff at ≥32,766 owned rows, whole-query denial on one unprovable relation).
+5. **Merchant impact:** Restores live owned workflows that currently throw `PrismaClientValidationError`; removes hard failure once a merchant model exceeds PostgreSQL bind limits; keeps owned parent lists usable when one included relation is unprovable (relation becomes null / filtered, parent preserved).
+6. **Technical impact:** `selectors.ts` top-level unique resolver; `legacy-scope.ts` scalable predicates + D-030 unification; TenantDb relation nulling/merge; client-hint byte accounting; scanner issuer aliases; focused CI file gates; documentation D-030.
+7. **Migration:** No schema migration. No production backfill. No ownership repair. No RLS/roles/non-null/composite FKs/tenant-key triggers. Nullable `shopId` remains until PR 3 / operational backfill gates.
+8. **Risks:** R-064..R-067 and third-cycle risks remain `implemented — pending independent verification`. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4. Inventory writes remain unapproved.
+9. **Final:** **AUTHORIZED FOR PR 2 THIRD CORRECTION IMPLEMENTATION — PENDING THIRD INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. PR 3 remains **not started**. No deployment, production backfill, RLS, or inventory writes are authorized.
+
+## D-031 — Phase 1 PR 2 fourth correction cycle required
+
+1. **Current:** Independent Claude Code third correction review of handoff head `fec8500095197798be183d08b3dd004632adba80` issued verdict **`NOT READY — FURTHER CORRECTIONS REQUIRED`** with **P0: 0 · P1: 0 · P2: 3 · P3: 4** findings (F-PR2R3-01..07). Report preserved at `000e53cdae6cd39b690fc8107d7d3f4f4791adf1` (`PR2_TENANT_ACCESS_THIRD_CORRECTION_REVIEW_REPORT.md`). Third-cycle runtime/test implementation head was `d7058294af7eb3d8f287f48cd0657a74475892e7`. **No cross-tenant read or write was reproduced.** All twelve prior security regressions remain closed. Remaining defects are bounded execution, selector intent, normalization equivalence, and evidence accuracy.
+2. **Proposed:** Mandatory fourth correction cycle on draft PR #13 / `phase-1/tenant-access` covering:
+   - **F-PR2R3-01:** versioned `phase1-legacy-evidence-v1` bound on distinct null-ownership legacy representations (default 1024; absolute safe max far below PostgreSQL’s ~32,765 bind ceiling); fail closed with `legacy_evidence_overflow` — never silently omit null-owned rows, never send near-limit `in` lists, never disclose raw forms;
+   - **F-PR2R3-02:** reject foreign tenant-bearing unique selectors with `foreign_selector_tenant` instead of coercing them onto the authenticated shop;
+   - **F-PR2R3-03:** one shared `phase1-shop-domain-v1` normalization specification; SQL candidate discovery must use the exact ECMAScript trim code-point set; JS remains final authority;
+   - **F-PR2R3-04:** honest focused CI naming and dedicated bulk-mutation / relation consistency suites;
+   - **F-PR2R3-05:** correct third-cycle commit count (`fed21a48…`..`fec8500…` = **11**, not 12; prior prompt expected count was incorrect; merge base exact; no history rewrite);
+   - **F-PR2R3-06:** correct permanent head identity (runtime/test `d7058294…`, reviewed handoff `fec8500…`, report-only `000e53c…`; `bab5fe90…` was an intermediate green documentation tip only);
+   - **F-PR2R3-07:** accept synthetic Redis-history residual (`dump.rdb` blob reachable; no secret rotation or history rewrite).
+3. **Ownership rule:** D-030 remains unchanged — non-null current-tenant `shopId` owned regardless of legacy shop; non-null foreign `shopId` denied; null `shopId` requires normalized legacy match under `phase1-shop-domain-v1`.
+4. **Reason:** Isolation posture is materially correct; acceptance is withheld for controlled fail-closed overflow, selector-intent integrity, SQL/JS normalization equivalence, and documentary accuracy.
+5. **Merchant impact:** Prevents uncontrolled PostgreSQL bind failures on corrupt/excessive null-ownership evidence; prevents silent wrong-row mutation from foreign selectors; restores visibility of null-owned rows whose raw forms use ECMAScript whitespace beyond spaces; improves evidence honesty for reviewers.
+6. **Technical impact:** `legacy-scope.ts` overflow bound; `selectors.ts` / `tenant-db.server.ts` tenant-intent validation; `shop-domain.ts` shared trim specification; focused PostgreSQL suites; CI file gates; documentation D-031 / R-072..R-074.
+7. **Migration:** No schema migration. No production backfill. No ownership repair. No RLS/roles/non-null/composite FKs/tenant-key triggers. Nullable `shopId` remains until PR 3 / operational backfill gates.
+8. **Risks:** R-072 (legacy evidence overflow), R-073 (tenant-bearing selector coercion), R-074 (normalization implementation divergence) — correction implemented pending independent verification. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4. Inventory writes remain unapproved.
+9. **Final:** **AUTHORIZED FOR PR 2 FOURTH CORRECTION IMPLEMENTATION — PENDING FOURTH INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. PR 3 remains **not started**. No deployment, production backfill, RLS, schema change, or inventory writes are authorized.
+
+## D-032 — Phase 1 PR 2 fifth correction cycle required
+
+1. **Current:** Independent Claude Code fourth correction review of implementation handoff head `93e8044aea3958e8efe36f774e7d99ae6a0dd687` issued verdict **`NOT READY — FURTHER CORRECTIONS REQUIRED`** with **P0: 0 · P1: 1 · P2: 0 · P3: 4** findings (F-PR2R4-01..05). Report preserved at `6a73be7d23fd3bcbe19ebc30f65440e2c641093b` (`PR2_TENANT_ACCESS_FOURTH_CORRECTION_REVIEW_REPORT.md`). Fourth-cycle runtime/test implementation head was `21aba6660e71fa5af558d81499190ee8eb0e645e`. **No cross-tenant read or write was reproduced.** Overflow remains fail-closed; foreign tenant-bearing selectors remain rejected; nested writes remain atomic; exact-head CI was genuine; Redis-history residual remains accepted synthetic-only.
+2. **Proposed:** Mandatory fifth correction cycle on draft PR #13 / `phase-1/tenant-access` covering:
+   - **F-PR2R4-01 (P1):** resolve null-owned legacy rows through shop-bearing unique selectors using set-valued accepted raw representations; prevent silent upsert duplicate creation; fail closed on normalized ambiguity with `ambiguous_legacy_unique_selector`; fix live `after-auth` ShopSettings path;
+   - **F-PR2R4-02 (P3):** correct permanent head identity (`21aba666…` runtime/test; `93e8044…` reviewed handoff; `6a73be7…` report-only; demote `ba5eee1…`);
+   - **F-PR2R4-03 (P3):** document SQL candidate discovery as a bounded locale-sensitive superset; JS `phase1-shop-domain-v1` remains final authority;
+   - **F-PR2R4-04 (P3):** strict evidence-limit configuration parsing with lazy validated singleton / test-only reset;
+   - **F-PR2R4-05 (P3):** narrow and document overflow blast radius; two-stage canonical ID and `shopId_id` paths avoid unnecessary legacy discovery.
+3. **Ownership rule:** D-030 remains unchanged — non-null current-tenant `shopId` owned regardless of legacy shop; non-null foreign `shopId` denied; null `shopId` requires normalized legacy match under `phase1-shop-domain-v1`.
+4. **Reason:** Isolation posture is correct; acceptance is withheld for a merchant data-integrity defect (duplicate creation / wrong singleton settings) plus documentary and robustness residuals.
+5. **Merchant impact:** Prevents silent duplicate `ShopSettings` (and other shop-bearing unique models) on auth when legacy rows use whitespace/case variants; preserves configured merchant settings; clarifies overflow and configuration failure modes.
+6. **Technical impact:** `selectors.ts` / `tenant-db.server.ts` unique-selector resolution; `legacy-scope.ts` config + comments; focused PostgreSQL suites; CI file gates; documentation D-032 / D-033 / R-075..R-078.
+7. **Migration:** No schema migration. No production backfill. No ownership repair. No RLS/roles/non-null/composite FKs/tenant-key triggers. Nullable `shopId` remains until PR 3 / operational backfill gates.
+8. **Risks:** R-075 (legacy unique-selector duplicate creation), R-076 (locale-sensitive candidate discovery), R-077 (legacy evidence configuration parsing), R-078 (compatibility overflow blast radius) — correction implemented pending independent verification after this cycle. F-016/R-022/Q-011 remain open for PR 3. R-039 persistence remains PR 4. Inventory writes remain unapproved.
+9. **Final:** **AUTHORIZED FOR PR 2 FIFTH CORRECTION IMPLEMENTATION — PENDING FIFTH INDEPENDENT CORRECTION REVIEW AND CHATGPT ACCEPTANCE**. PR 2 remains **unaccepted**. PR #13 remains **draft and unmerged**. PR 3 remains **not started**. No deployment, production backfill, RLS, schema change, or inventory writes are authorized.
+
+## D-033 — Phase 1 PR 2 fifth correction cycle required (acceptance framing)
+
+1. **Current:** Same reviewed head and report as D-032 (`93e8044…` / `6a73be7…`). One P1 and four P3 findings. No cross-tenant access was reproduced. Unique-selector duplicate creation is the acceptance blocker. SQL candidate discovery is a superset, not final authority.
+2. **Proposed:** Implement F-PR2R4-01..05 under the D-032 authorization boundary; keep PR #13 draft and unaccepted; do not start PR 3; do not authorize schema, migration, backfill, RLS, or inventory writes.
+3. **Reason:** Permanent framing for fifth-cycle acceptance triage after independent review.
+4. **Merchant impact:** Same as D-032.
+5. **Technical impact:** Same as D-032.
+6. **Migration:** None authorized.
+7. **Risks:** R-075..R-078 remain open until independently verified. Q-011 / F-016 / R-022 remain open.
+8. **Final:** **FIFTH CORRECTION CYCLE AUTHORIZED — PENDING INDEPENDENT VERIFICATION**. PR #13 remains **draft and unaccepted**.
+
+## D-034 — Phase 1 PR 2 technically accepted
+
+1. **Current:** Independent Claude Code fifth correction review of exact implementation/handoff head `70f4a80aab2366108a71fd80320b0f824bfe0cce` issued verdict **`READY FOR CHATGPT PR 2 ACCEPTANCE`** with **P0: 0 · P1: 0 · P2: 0 · P3: 3** findings (F-PR2R5-01..03). First report-only commit was `7fcff5e14ae99aebae46496c7fadf138bca7166a` (Kelvin-sign cell incorrect). Authoritative corrected report commit is `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` (`PR2_TENANT_ACCESS_FIFTH_CORRECTION_REVIEW_REPORT.md`). Neither report commit changed implementation code. No history rewrite is required. Fifth-cycle runtime/test tip label `5a69783…`; actual final runtime/test commit `0366658255ecbbd5e09168cbf43fbf135e2a2b33`; intermediate documented green tip `96c1029…` (not final handoff).
+2. **Proposed / decided:** Grant **technical acceptance** of Phase 1 PR 2 application-layer tenant-bound access conversion at `70f4a80…`.
+3. **Acceptance scope:** Technical implementation accepted. F-PR2R4-01..05 closed at the reviewed head. Accepted nonblocking P3 residuals: P3-A focused-test omissions independently covered; P3-B concurrent upsert retry exhaustion (R-079); P3-C head identity (`70f4a80…`, not `96c1029…`).
+4. **Explicit non-authorization:** PR #13 is **not yet merge-authorized**. Final documentation synchronization and exact-head CI remain required after this decision record. PR 3 remains **not started**. F-016 / R-022 / Q-011 remain open implementation gates. No deployment or production backfill is authorized. No inventory write is authorized. Every inventory-write flag remains default OFF.
+5. **Merchant impact:** Merchants gain a technically accepted application-layer tenant contract for ShopSettings and other shop-bearing unique models without silent duplicate creation; database-enforced isolation remains a later PR 3 gate.
+6. **Technical impact:** Documentation-only acceptance finalization; no runtime, test, schema, migration, package, or CI workflow change authorized by this decision.
+7. **Migration:** None.
+8. **Risks:** R-075..R-078 closed for PR 2 at `70f4a80…`. R-079 remains open as an accepted reliability residual. R-013/R-062, R-014, R-022, R-024..R-027, and later-phase risks remain open. Q-011 remains open.
+9. **Final:** **PHASE 1 PR 2 TECHNICAL IMPLEMENTATION ACCEPTED**. PR #13 remains **OPEN, DRAFT, UNMERGED**. Merge authorization is **NOT YET GRANTED**. Next action: ChatGPT exact-head verification and explicit user merge authorization after documentation-only finalization CI succeeds.

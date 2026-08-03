@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import {
   SHOP_DOMAIN_NORMALIZATION_VERSION,
   normalizeShopDomain,
-} from "../../app/lib/shop-domain";
+} from "../../app/tenant/shop-domain";
 import { acquireApplyLock, type ApplyLockHandle } from "./apply-lock";
 import {
   assertMembershipUnchanged,
