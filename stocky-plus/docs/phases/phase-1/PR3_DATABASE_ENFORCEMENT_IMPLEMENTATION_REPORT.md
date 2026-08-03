@@ -25,22 +25,22 @@
 | Documentation tip with green CI | `af964c0a8f59b39403973a5dac7ea0dea573b760` (run `30786147408`) |
 | Final exact PR head | `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2` |
 
-Commits (implementation → exact-head handoff): `0d4ba3c` → `5808838` → `ffdd55c` → `4035f6e` → `aeeecc2` → `1467483` → `a254178` → `27234f6` → `d4dd43f` → `6ffa2d3` → `bc6734d` → `0ee3ae0` → `5652ff1` → `af964c0`.
+Commits (implementation → exact-head handoff): `0d4ba3c` → `5808838` → `ffdd55c` → `4035f6e` → `aeeecc2` → `1467483` → `a254178` → `27234f6` → `d4dd43f` → `6ffa2d3` → `bc6734d` → `0ee3ae0` → `5652ff1` → `af964c0` → `9c2c98c`.
 
 ## Exact-head CI evidence
 
 | Field | Value |
 |---|---|
 | Workflow | CI |
-| Run ID | `30786147408` |
-| Job ID | `91599953008` |
+| Run ID | `30786796167` |
+| Job ID | `91601769081` |
 | Job name | Lint, typecheck, test, build, Prisma, GraphQL |
-| Actual `head_sha` | `af964c0a8f59b39403973a5dac7ea0dea573b760` |
+| Actual `head_sha` | `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2` |
 | Conclusion | **success** |
 | Skipped material steps | **none** |
-| Prior green implementation tip | `0ee3ae0` / run `30785527274` / job `91598235660` (superseded only by documentation commits) |
+| Prior green tips | `0ee3ae0` / `30785527274`; `af964c0` / `30786147408` |
 
-### Enforcement-specific steps (all success on final tip `af964c0` and prior tip `0ee3ae0`)
+### Enforcement-specific steps (all success on final tip `9c2c98c`)
 
 | Step | Command / suite | Outcome |
 |---|---|---|

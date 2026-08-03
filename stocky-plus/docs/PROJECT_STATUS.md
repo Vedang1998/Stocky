@@ -97,7 +97,7 @@
 - PR 2 application-layer tenant access is accepted and merged. **It does not resolve database-enforced tenant isolation.**
 - **Q-011 remains open** because database enforcement is PR 3 (implementation complete on disposable/CI fixtures only; production not authorized; pending independent verification).
 - F-016 / R-022 remain open implementation gates (implementation complete — pending independent verification; not closed by Cursor).
-- PR 3 is **IN PROGRESS** on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) at exact head `af964c0…` with green exact-head CI run `30786147408` / job `91599953008`. No later Phase 1 PR may begin before PR 3 is accepted and merged.
+- PR 3 is **IN PROGRESS** on draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15) at exact head `9c2c98c…` with green exact-head CI run `30786796167` / job `91601769081`. No later Phase 1 PR may begin before PR 3 is accepted and merged.
 - No production deployment or production backfill occurred.
 - RLS / database roles are implemented on disposable/CI fixtures only — **production RLS activation is NOT AUTHORIZED**.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
