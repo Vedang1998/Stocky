@@ -183,6 +183,66 @@ jobs:
       - name: Tenant low-lock enforcement migration tests
         run: npm run test:migrations -- scripts/tenant-enforcement/tests/enforcement.migration.test.ts
 
+      - name: Tenant RLS definition-drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/definition-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant composite-definition drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/composite-definition-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant immutability-trigger drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/immutability-trigger-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant unsafe partial-apply recovery tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement interruption/resume tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant role-membership escalation tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/role-membership.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant exact privilege allowlist tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/exact-privilege-allowlist.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant runtime connected-identity tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/connected-identity.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant populated enforcement concurrency tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/populated-concurrency.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement deadlock/timeout recovery tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
       - name: Tenant access architecture audit
         run: npm run tenant:access:audit
 

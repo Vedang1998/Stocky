@@ -111,26 +111,23 @@ describe("PR3 worker/job + export/privacy/reconciliation isolation", () => {
     ]);
   });
 
-  for (const surface of [
-    "export",
-    "privacy",
-    "reconciliation",
-    "replay_repair",
-    "scheduler",
-  ] as const) {
-    it(`${surface}: context required; foreign context denied; no pool leakage`, async () => {
+  // F-PR3-16: export/privacy/reconciliation/replay_repair code paths do not
+  // yet exist in the repo (deferred to later Phase 1 PRs). Keep a single
+  // explicit deferred-surface isolation check for verified_job / scheduler
+  // envelope sources only — do not imply nonexistent module coverage.
+  it("verified_job and verified_scheduler envelopes isolate TenantDb; pool context clears (export/privacy/reconciliation/replay deferred)", async () => {
+    for (const source of ["verified_job", "verified_scheduler"] as const) {
       const authority = issueTenantAuthority({
         shopId: shopAId,
         myshopifyDomain: SHOP_A_DOMAIN,
-        source: surface === "scheduler" ? "verified_scheduler" : "verified_job",
-        correlationId: `${surface}-corr`,
+        source,
+        correlationId: `${source}-corr`,
       });
       const db = createTenantDb(authority);
       const rows = await db.supplier.findMany();
       expect(rows).toHaveLength(1);
       expect(rows[0].id).toBe("job-a");
 
-      // Foreign context via raw runtime still denied for B rows when A set
       await withRuntimePg(async (client) => {
         await client.query("BEGIN");
         await client.query(
@@ -145,18 +142,17 @@ describe("PR3 worker/job + export/privacy/reconciliation isolation", () => {
         expect(visible.rows.map((r) => r.id)).toEqual(["job-a"]);
         await client.query("COMMIT");
 
-        // After commit — no leakage
         const bare = await client.query(`SELECT id FROM "Supplier"`);
         expect(bare.rows).toHaveLength(0);
       });
 
-      // Raw SQL cannot bypass — missing context empty
       await withRuntimePg(async (client) => {
-        const bare = await client.query(`SELECT id FROM "Supplier" WHERE id = 'job-b'`);
+        const bare = await client.query(
+          `SELECT id FROM "Supplier" WHERE id = 'job-b'`,
+        );
         expect(bare.rows).toHaveLength(0);
       });
-
-      void TenantAccessError;
-    });
-  }
+    }
+    void TenantAccessError;
+  });
 });

@@ -1,6 +1,12 @@
 /**
  * Zero-unresolved enforcement preflight — fail-closed, non-mutating.
  * Never logs merchant data values — only table names and safe counts.
+ *
+ * Modes (F-PR3-01):
+ *   initial — data readiness before first enforcement; requires Prisma schema drift ok
+ *   resume  — allows already-correct prior enforcement objects; skips Prisma drift
+ *             when partial/complete enforcement divergence is present
+ *   final   — requires complete exact enforcement (used by drift CLI path)
  */
 import type { Client } from "pg";
 import { execFileSync } from "node:child_process";
@@ -19,6 +25,8 @@ const APP_ROOT = path.resolve(
   "../..",
 );
 
+export type PreflightMode = "initial" | "resume" | "final";
+
 export type TablePreflight = {
   table: string;
   shopIdColumnExists: boolean;
@@ -33,14 +41,27 @@ export type TablePreflight = {
   failures: string[];
 };
 
+export type EnforcementProgress = {
+  forcedRlsCount: number;
+  enabledRlsCount: number;
+  notNullCount: number;
+  compositeFkCount: number;
+  partial: boolean;
+  complete: boolean;
+  notStarted: boolean;
+};
+
 export type PreflightResult = {
   event: "tenant_enforcement_preflight";
   ok: boolean;
+  mode: PreflightMode;
   merchantTableCount: number;
   tables: TablePreflight[];
   globalFailures: string[];
   productionDataInspected: false;
   mutating: false;
+  progress: EnforcementProgress;
+  recoveryHint?: string;
 };
 
 async function columnExists(
@@ -142,11 +163,9 @@ function runExternalCheck(command: string, args: string[]): string | null {
   }
 }
 
-export async function runPreflight(client: Client): Promise<PreflightResult> {
-  const globalFailures: string[] = [];
-  const tables: TablePreflight[] = [];
-
-  // Detect whether PR 3 enforcement (FORCE RLS) is already active.
+export async function assessEnforcementProgress(
+  client: Client,
+): Promise<EnforcementProgress> {
   const forced = await client.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
      FROM pg_class c
@@ -156,25 +175,117 @@ export async function runPreflight(client: Client): Promise<PreflightResult> {
        AND c.relforcerowsecurity`,
     [MERCHANT_SQL_TABLES],
   );
-  const enforcementAlreadyApplied =
-    Number(forced.rows[0]?.c ?? 0) === MERCHANT_SQL_TABLES.length;
+  const enabled = await client.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = ANY($1::text[])
+       AND c.relrowsecurity`,
+    [MERCHANT_SQL_TABLES],
+  );
+  const notNull = await client.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c
+     FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name = ANY($1::text[])
+       AND column_name = 'shopId'
+       AND is_nullable = 'NO'`,
+    [MERCHANT_SQL_TABLES],
+  );
+  const cfkNames = COMPOSITE_FOREIGN_KEYS.map((f) => f.name);
+  const cfk = await client.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c
+     FROM pg_constraint
+     WHERE contype = 'f' AND conname = ANY($1::text[])`,
+    [cfkNames],
+  );
 
-  // PR 1 schema drift — only required before enforcement. After FORCE RLS /
-  // NOT NULL / composite FKs, the live DB intentionally diverges from the
-  // Prisma expand-compatible schema (shopId remains optional in Prisma).
-  if (!enforcementAlreadyApplied) {
+  const forcedRlsCount = Number(forced.rows[0]?.c ?? 0);
+  const enabledRlsCount = Number(enabled.rows[0]?.c ?? 0);
+  const notNullCount = Number(notNull.rows[0]?.c ?? 0);
+  const compositeFkCount = Number(cfk.rows[0]?.c ?? 0);
+  const complete =
+    forcedRlsCount === MERCHANT_SQL_TABLES.length &&
+    notNullCount === MERCHANT_SQL_TABLES.length &&
+    compositeFkCount === COMPOSITE_FOREIGN_KEYS.length;
+  const notStarted =
+    forcedRlsCount === 0 &&
+    enabledRlsCount === 0 &&
+    notNullCount === 0 &&
+    compositeFkCount === 0;
+  const partial = !complete && !notStarted;
+
+  return {
+    forcedRlsCount,
+    enabledRlsCount,
+    notNullCount,
+    compositeFkCount,
+    partial,
+    complete,
+    notStarted,
+  };
+}
+
+export async function runPreflight(
+  client: Client,
+  options: { mode?: PreflightMode } = {},
+): Promise<PreflightResult> {
+  const mode: PreflightMode = options.mode ?? "resume";
+  const globalFailures: string[] = [];
+  const tables: TablePreflight[] = [];
+
+  let progress: EnforcementProgress;
+  try {
+    progress = await assessEnforcementProgress(client);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return {
+      event: "tenant_enforcement_preflight",
+      ok: false,
+      mode,
+      merchantTableCount: MERCHANT_SQL_TABLES.length,
+      tables: [],
+      globalFailures: [`preflight_catalog_error:${message}`],
+      productionDataInspected: false,
+      mutating: false,
+      progress: {
+        forcedRlsCount: 0,
+        enabledRlsCount: 0,
+        notNullCount: 0,
+        compositeFkCount: 0,
+        partial: false,
+        complete: false,
+        notStarted: true,
+      },
+      recoveryHint:
+        "Catalog read failed (lock/timeout?). Retry preflight; no mutation occurred.",
+    };
+  }
+
+  // Prisma schema drift — only for initial/not-started. After any enforcement
+  // divergence (NOT NULL / composite FK / RLS), live DB intentionally diverges.
+  const skipPrismaDrift =
+    mode === "resume" ||
+    mode === "final" ||
+    progress.partial ||
+    progress.complete;
+  if (!skipPrismaDrift) {
     const driftFail = runExternalCheck("tenant:schema:drift", []);
     if (driftFail) globalFailures.push(driftFail);
   }
 
-  // PR 2 access inventory freshness (skippable for disposable fixture tests that
-  // edit allowlisted harness files; CI still runs inventory:check as its own gate)
-  if (process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY !== "1") {
+  // Access inventory freshness — only skip in disposable fixture tests.
+  // Refuse skip when STOCKY_PREFLIGHT_ALLOW_SKIP_ACCESS_INVENTORY is unset
+  // AND NODE_ENV=production.
+  const skipInv = process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY === "1";
+  if (skipInv && process.env.NODE_ENV === "production") {
+    globalFailures.push("preflight_skip_access_inventory_forbidden_in_production");
+  } else if (!skipInv) {
     const invFail = runExternalCheck("tenant:access:inventory:check", []);
     if (invFail) globalFailures.push(invFail);
   }
 
-  // Compatibility indexes valid
   const idxFail = runExternalCheck("tenant:indexes:verify", []);
   if (idxFail) globalFailures.push(idxFail);
 
@@ -241,17 +352,16 @@ export async function runPreflight(client: Client): Promise<PreflightResult> {
     });
   }
 
-  // Global open quarantine across any merchant table
-  const globalOpen = await client.query<{ c: string }>(
-    `SELECT COUNT(*)::text AS c FROM "TenantOwnershipIssue" WHERE status = 'OPEN'`,
-  ).catch(() => ({ rows: [{ c: "0" }] }));
+  const globalOpen = await client
+    .query<{ c: string }>(
+      `SELECT COUNT(*)::text AS c FROM "TenantOwnershipIssue" WHERE status = 'OPEN'`,
+    )
+    .catch(() => ({ rows: [{ c: "0" }] }));
   if (Number(globalOpen.rows[0]?.c ?? 0) > 0) {
     globalFailures.push("global_open_quarantine_issues");
   }
 
-  // Required composite key names present as indexes (may be invalid until apply)
   for (const key of COMPOSITE_PARENT_KEYS) {
-    // Only require PR1 keys to already be valid; others created during apply.
     const pr1Existing = MERCHANT_TABLES.find(
       (t) => t.sqlTable === key.table && t.existingShopIdIdUnique,
     );
@@ -272,16 +382,28 @@ export async function runPreflight(client: Client): Promise<PreflightResult> {
     }
   }
 
-  const ok =
-    globalFailures.length === 0 && tables.every((t) => t.ok);
+  if (mode === "final" && !progress.complete) {
+    globalFailures.push(
+      `enforcement_incomplete:forced=${progress.forcedRlsCount}/${MERCHANT_SQL_TABLES.length}`,
+    );
+  }
+
+  const ok = globalFailures.length === 0 && tables.every((t) => t.ok);
 
   return {
     event: "tenant_enforcement_preflight",
     ok,
+    mode,
     merchantTableCount: MERCHANT_SQL_TABLES.length,
     tables,
     globalFailures,
     productionDataInspected: false,
     mutating: false,
+    progress,
+    recoveryHint: progress.partial
+      ? "Partial enforcement detected — resume apply is allowed; Prisma drift gate skipped"
+      : progress.complete
+        ? "Enforcement complete — use tenant:enforcement:drift for final definition checks"
+        : undefined,
   };
 }

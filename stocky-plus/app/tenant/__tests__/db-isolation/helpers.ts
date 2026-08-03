@@ -62,6 +62,9 @@ export async function resetAndEnforce(): Promise<{
   // Disposable fixture tests may edit allowlisted harness files after the
   // checked-in PR2 inventory was generated; CI still enforces inventory freshness.
   process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY = "1";
+  if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
+    process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
+  }
 
   const migrationPrisma = createMigrationPrisma();
   await migrationPrisma.$executeRawUnsafe(`DROP SCHEMA public CASCADE`);
@@ -95,7 +98,10 @@ export async function resetAndEnforce(): Promise<{
     requireExplicitMigrationUrl: true,
   });
   try {
-    const roles = await provisionRoles(client, { apply: true });
+    const roles = await provisionRoles(client, {
+      apply: true,
+      phase: "prepare",
+    });
     if (!roles.ok) {
       throw new Error(`role provision failed: ${roles.errors.join(",")}`);
     }

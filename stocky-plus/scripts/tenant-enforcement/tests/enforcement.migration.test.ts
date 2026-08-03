@@ -28,6 +28,9 @@ function migrationUrl(): string {
     process.env.DATABASE_MIGRATION_URL || url;
   process.env.DATABASE_URL = process.env.DATABASE_URL || url;
   process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY = "1";
+  if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
+    process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
+  }
   return url;
 }
 
@@ -74,7 +77,7 @@ describe("PR3 enforcement migration suite", () => {
       requireExplicitMigrationUrl: true,
     });
     try {
-      const result = await runPreflight(client);
+      const result = await runPreflight(client, { mode: "initial" });
       expect(result.ok).toBe(true);
       expect(result.productionDataInspected).toBe(false);
       expect(result.mutating).toBe(false);
@@ -97,7 +100,7 @@ describe("PR3 enforcement migration suite", () => {
       requireExplicitMigrationUrl: true,
     });
     try {
-      const result = await runPreflight(client);
+      const result = await runPreflight(client, { mode: "initial" });
       expect(result.ok).toBe(false);
       const supplier = result.tables.find((t) => t.table === "Supplier");
       expect(supplier?.nullShopIdCount).toBeGreaterThan(0);
@@ -115,7 +118,7 @@ describe("PR3 enforcement migration suite", () => {
       requireExplicitMigrationUrl: true,
     });
     try {
-      await provisionRoles(client, { apply: true });
+      await provisionRoles(client, { apply: true, phase: "prepare" });
       if (!process.env.DATABASE_RUNTIME_URL) {
         const u = new URL(migrationUrl());
         u.username = process.env.STOCKY_RUNTIME_ROLE || "stocky_runtime";
@@ -130,6 +133,7 @@ describe("PR3 enforcement migration suite", () => {
 
       const first = await applyEnforcement(client, { apply: true });
       expect(first.ok).toBe(true);
+      expect(first.unsafe_runtime_access).toBe(false);
       maxLockHoldMs = Math.max(maxLockHoldMs, first.maxObservedLockHoldMs);
 
       const second = await applyEnforcement(client, { apply: true });
@@ -139,7 +143,6 @@ describe("PR3 enforcement migration suite", () => {
       const verify = await verifyEnforcement(client);
       expect(verify.ok).toBe(true);
 
-      // Document lock evidence — not claiming zero locking
       expect(maxLockHoldMs).toBeGreaterThanOrEqual(0);
       expect(maxLockHoldMs).toBeLessThan(120_000);
     } finally {
@@ -148,7 +151,6 @@ describe("PR3 enforcement migration suite", () => {
   });
 
   it("records lock evidence summary", () => {
-    // Assertion that the suite captured an observed lock-hold metric.
     expect(typeof maxLockHoldMs).toBe("number");
   });
 });

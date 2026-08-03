@@ -64,7 +64,16 @@ async function regrantRuntimeRoleAfterSchemaReset(
     requireExplicitMigrationUrl: false,
   });
   try {
-    const roles = await provisionRoles(client, { apply: true });
+    if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
+      process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
+    }
+    // PR2 tenant-access harness intentionally runs without FORCE RLS; grant
+    // merchant DML only under the disposable-test escape hatch.
+    process.env.STOCKY_ALLOW_UNRESTRICTED_RUNTIME_GRANTS = "1";
+    const roles = await provisionRoles(client, {
+      apply: true,
+      phase: "test_harness_unrestricted",
+    });
     if (!roles.ok) {
       throw new Error(
         `tenant-access harness role provision failed: ${roles.errors.join(",")}`,

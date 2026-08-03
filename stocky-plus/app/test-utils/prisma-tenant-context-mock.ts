@@ -1,10 +1,11 @@
 /**
  * Prisma mock helpers for unit tests that exercise TenantDb after PR 3.
- * TenantDb opens a transaction and calls $executeRaw / $queryRawUnsafe to set
+ * TenantDb opens a transaction and calls $executeRaw / $queryRaw to set
  * and assert transaction-local tenant context before merchant-domain work.
  *
- * Intentionally does NOT install $queryRaw — legacy-scope treats a missing
- * $queryRaw as a mocked client and uses acceptedLegacyShopVariants().
+ * Mocks model the production API ($queryRaw tagged templates). Legacy-scope
+ * detects unit mocks via the explicit __stockyUnitMock marker — not by
+ * omitting $queryRaw (F-PR3-29(b)).
  */
 import { vi } from "vitest";
 import {
@@ -13,16 +14,20 @@ import {
   GUC_SHOP_ID,
 } from "../tenant/db-context.server";
 
+export const STOCKY_UNIT_PRISMA_MOCK = "__stockyUnitMock" as const;
+
 type TenantContextPrismaMock = {
   $executeRaw: ReturnType<typeof vi.fn>;
   $executeRawUnsafe: ReturnType<typeof vi.fn>;
+  $queryRaw: ReturnType<typeof vi.fn>;
   $queryRawUnsafe: ReturnType<typeof vi.fn>;
   $transaction: ReturnType<typeof vi.fn>;
+  [STOCKY_UNIT_PRISMA_MOCK]?: true;
   [key: string]: unknown;
 };
 
 /**
- * Attach $executeRaw / $queryRawUnsafe / $transaction behavior so TenantDb can
+ * Attach $executeRaw / $queryRaw / $transaction behavior so TenantDb can
  * establish and verify phase1-db-tenant-context-v1 against the mock client.
  */
 export function attachTenantDbContextMocks<T extends TenantContextPrismaMock>(
@@ -31,6 +36,8 @@ export function attachTenantDbContextMocks<T extends TenantContextPrismaMock>(
   let shopId: string | null = null;
   let ctxVer: string | null = null;
   let corr: string | null = null;
+
+  prismaMock[STOCKY_UNIT_PRISMA_MOCK] = true;
 
   prismaMock.$executeRaw = vi.fn(
     async (_strings: TemplateStringsArray, ...values: unknown[]) => {
@@ -43,15 +50,15 @@ export function attachTenantDbContextMocks<T extends TenantContextPrismaMock>(
     },
   );
   prismaMock.$executeRawUnsafe = vi.fn(async () => 0);
+  prismaMock.$queryRaw = vi.fn(async () => [
+    { shop_id: shopId, ctx_ver: ctxVer, corr },
+  ]);
   prismaMock.$queryRawUnsafe = vi.fn(async () => [
     { shop_id: shopId, ctx_ver: ctxVer, corr },
   ]);
   prismaMock.$transaction = vi.fn(async (fn: (tx: T) => unknown) =>
     fn(prismaMock),
   );
-
-  // Ensure legacy-scope mock-client fallback remains available.
-  delete (prismaMock as { $queryRaw?: unknown }).$queryRaw;
 
   return prismaMock;
 }

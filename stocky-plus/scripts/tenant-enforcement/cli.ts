@@ -133,7 +133,16 @@ async function main() {
         process.exitCode = 1;
         return;
       }
-      const result = await provisionRoles(client, { apply: true });
+      // Default: prepare only (no merchant DML). Merchant DML is applied by
+      // enforcement apply after verified RLS, or via --with-merchant-dml when
+      // FORCE RLS is already complete.
+      const phase = argv.includes("--with-merchant-dml") ? "full" : "prepare";
+      const repairDangerousDrift = argv.includes("--repair-dangerous-drift");
+      const result = await provisionRoles(client, {
+        apply: true,
+        phase,
+        repairDangerousDrift,
+      });
       console.log(JSON.stringify(result));
       if (!result.ok) process.exitCode = 1;
       return;
