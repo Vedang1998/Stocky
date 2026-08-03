@@ -22,7 +22,8 @@
 | Runtime/test implementation head | `aeeecc264e9203641aa07dcd6d814c5a1aba2aab` |
 | Empty CI retrigger | `6ffa2d31045d9eb6480a5ae72c4dd3dc484897ee` |
 | Implementation tip with first green CI | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (run `30785527274`) |
-| Final exact PR head | `af964c0a8f59b39403973a5dac7ea0dea573b760` |
+| Documentation tip with green CI | `af964c0a8f59b39403973a5dac7ea0dea573b760` (run `30786147408`) |
+| Final exact PR head | `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2` |
 
 Commits (implementation → exact-head handoff): `0d4ba3c` → `5808838` → `ffdd55c` → `4035f6e` → `aeeecc2` → `1467483` → `a254178` → `27234f6` → `d4dd43f` → `6ffa2d3` → `bc6734d` → `0ee3ae0` → `5652ff1` → `af964c0`.
 

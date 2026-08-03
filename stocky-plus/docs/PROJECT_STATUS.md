@@ -11,9 +11,9 @@
 **Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft, open, unmerged)
 **PR 3 runtime/test implementation head:** `aeeecc264e9203641aa07dcd6d814c5a1aba2aab`
 **PR 3 prior failed handoff head:** `1467483455f4cd4726fb5cfd65ee2b6d247903bc`
-**PR 3 exact final PR head (CI green):** `af964c0a8f59b39403973a5dac7ea0dea573b760`
-**PR 3 exact-head CI:** workflow `CI`, run `30786147408`, job `91599953008` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `af964c0a8f59b39403973a5dac7ea0dea573b760`
-**PR 3 prior green implementation tip:** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (run `30785527274`, job `91598235660`)
+**PR 3 exact final PR head (CI green):** `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2`
+**PR 3 exact-head CI:** workflow `CI`, run `30786796167`, job `91601769081` (`Lint, typecheck, test, build, Prisma, GraphQL`), conclusion `success`, `head_sha` = `9c2c98cbfe51fb57ba5f79c6c9d975048893d4e2`
+**PR 3 prior green tips:** `0ee3ae0` (run `30785527274`); `af964c0` (run `30786147408`)
 **Phase 1 PR 2:** MERGED AND CLOSED
 **PR #13:** CLOSED AND SQUASH-MERGED
 **Authorized PR head:** `5fc98192d2ca350de358316d9383e39103b98c80`
