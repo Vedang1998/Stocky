@@ -2,23 +2,33 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 status:** IN PROGRESS (PR 1 closed; PR 2 technically accepted — merge not yet authorized; later PRs remain)
-**Phase 1 PR 1:** ACCEPTED, SQUASH-MERGED, AND CLOSED
-**Phase 1 PR 2:** TECHNICALLY ACCEPTED — MERGE NOT YET AUTHORIZED (D-034)
-**Active implementation branch:** `phase-1/tenant-access`
-**Active implementation PR:** [#13](https://github.com/Vedang1998/Stocky/pull/13) (draft, unmerged)
+**Phase 1 status:** IN PROGRESS (PR 1 and PR 2 merged and closed; PR 3 not started)
+**Phase 1 PR 1:** MERGED AND CLOSED
+**Phase 1 PR 2:** MERGED AND CLOSED
+**Phase 1 PR 3:** NOT STARTED
+**Next authorized implementation unit:** PR 3 — database-enforcement gate
+**Active implementation branch:** none (PR 2 closed; PR 3 not started)
+**Active implementation PR:** none
+**PR #13:** CLOSED AND SQUASH-MERGED
+**Authorized PR #13 head:** `5fc98192d2ca350de358316d9383e39103b98c80`
+**Accepted implementation head:** `70f4a80aab2366108a71fd80320b0f824bfe0cce`
+**Authoritative independent review:** `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd`
+**Squash merge SHA:** `e9c4f87eb28ce0e957a8cbd159719586892f8b98`
+**Merge timestamp:** `2026-08-03T01:38:59Z`
+**Final pre-merge exact-head CI:** run `30776644228`, job `91573286240`, conclusion `success`, `head_sha` = authorized head
+**Current main SHA:** `e9c4f87eb28ce0e957a8cbd159719586892f8b98`
 **PR #11:** CLOSED AND SQUASH-MERGED
 **Authorized PR #11 head:** `6e5b024254615f3259aeb8d8252305d86bd63777`
 **Capable-local review verdict:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**Documentation finalization / authorized merge head:** `6e5b024254615f3259aeb8d8252305d86bd63777`
-**Squash merge SHA:** `44a24f3387c1dae0351490367c06bef10f333425`
-**Merge timestamp:** `2026-07-31T22:19:49Z`
-**Pre-merge exact-head CI:** run `30643441951`, job `91198830409`, conclusion `success`
+**Documentation finalization / authorized merge head (PR 1):** `6e5b024254615f3259aeb8d8252305d86bd63777`
+**Squash merge SHA (PR #11):** `44a24f3387c1dae0351490367c06bef10f333425`
+**Merge timestamp (PR #11):** `2026-07-31T22:19:49Z`
+**Pre-merge exact-head CI (PR #11):** run `30643441951`, job `91198830409`, conclusion `success`
 **Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
 **Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b`
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159`
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030); `PR 2 fourth correction cycle required` (D-031); `PR 2 fifth correction cycle required` (D-032 / D-033); **`PR 2 technically accepted` (D-034 — merge not yet authorized)**
+**ChatGPT decisions:** `PR 1 ACCEPTED` (D-025); `PR 1 merge closure` (D-026); `PR 2 tenant-bound access` (D-027); `PR 2 corrections required` (D-028); `PR 2 follow-up corrections required` (D-029); `PR 2 third correction cycle required` (D-030); `PR 2 fourth correction cycle required` (D-031); `PR 2 fifth correction cycle required` (D-032 / D-033); `PR 2 technically accepted` (D-034); **`PR 2 merge closure` (D-035)**
 **Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` at `6f9ca22c069a46003b6944ff56c888ff91e95cdc` (preserved verbatim)
 **Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06a8a399bbfb17687399c59582f1712f442` (report commit `b5fbd2bd…`; preserved verbatim)
 **Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0` (report commit `fed21a48…`; preserved verbatim)
@@ -43,24 +53,47 @@
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
-**PR 2 authorized base:** `main@04289d61f605414597ac85f47830a3c9d2f9e33d`
 **PR 3:** NOT STARTED
-**Residual gates:** F-016 / R-022 / Q-011; R-014; operational backfill / zero-unresolved evidence; R-013 / R-062; R-079; inventory-write release gates
+**Residual gates:** F-016 / R-022 / Q-011; R-024 through R-027; R-014; operational backfill / zero-unresolved evidence; R-079; R-013 / R-062; inventory-write release gates
 **Accepted P3 residuals:** P3-A focused-test omissions; P3-B concurrent upsert retry exhaustion (R-079); P3-C head identity (`70f4a80…`, not `96c1029…`)
 
 ## Mandatory gate
 
-**F-016 / R-022** remains an open P1 database-isolation gate. PR 1 merge and PR 2 application scoping do not resolve it.
+**F-016 / R-022** remains an open P1 database-isolation gate. PR 1 merge and PR 2 application scoping do **not** resolve it.
 **Q-011** remains open until enforcement is merged and independently verified.
-**R-014**, operational backfill / zero-unresolved evidence, **R-013 / R-062** dependency hardening, and inventory-write release gates remain open.
+**R-024 through R-027**, **R-014**, operational backfill / zero-unresolved evidence, **R-079**, **R-013 / R-062** dependency hardening, and inventory-write release gates remain open.
+
+PR 2 application-layer tenant access is accepted and merged.
+It does **not** resolve database-enforced tenant isolation.
 
 ## Phase progress
 
 - Phase 1 itself is still **in progress**.
-- PR 1 is **ACCEPTED, SQUASH-MERGED, AND CLOSED**.
-- PR 2 (tenant-bound access conversion) is **TECHNICALLY ACCEPTED — MERGE NOT YET AUTHORIZED** on `phase-1/tenant-access` (draft PR #13; D-034; accepted head `70f4a80…`).
+- PR 1 is **MERGED AND CLOSED**.
+- PR 2 (tenant-bound access conversion) is **MERGED AND CLOSED** (PR #13 squash-merged; D-034 / D-035).
 - PR 3 (database-enforcement gate) has **not started**.
-- No later Phase 1 PR may begin early.
+- Next authorized implementation unit: **PR 3 — database-enforcement gate**.
+- No later Phase 1 PR may begin before PR 3 is accepted and merged.
+
+## Immutable PR 2 (#13) merge evidence
+
+| Field | Value |
+|---|---|
+| PR number | [#13](https://github.com/Vedang1998/Stocky/pull/13) |
+| Authorized head | `5fc98192d2ca350de358316d9383e39103b98c80` |
+| Merge method | SQUASH |
+| Squash merge SHA | `e9c4f87eb28ce0e957a8cbd159719586892f8b98` |
+| Merge timestamp | `2026-08-03T01:38:59Z` |
+| Accepted implementation head | `70f4a80aab2366108a71fd80320b0f824bfe0cce` |
+| Authoritative independent review | `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` |
+| Final pre-merge CI | workflow `CI`; run `30776644228`; job `91573286240`; conclusion `success`; `head_sha` = authorized head |
+| Decision | D-034 / D-035 |
+| Production / merchant data | **No production or merchant data was accessed** |
+| Deployment | **No deployment occurred** |
+| Production backfill | **No production backfill occurred** |
+| RLS / database roles / non-null shopId / composite FKs | **Not activated / not started** |
+| PR 3 | **NOT STARTED** |
+| Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
 
 ## Reading order
 
@@ -91,7 +124,7 @@
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024..D-034)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-035)
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`
