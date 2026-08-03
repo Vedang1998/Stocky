@@ -649,6 +649,7 @@ function collectFindings(
         (exception!.category === "raw_prisma_construction" ||
           exception!.category === "pr1_maintenance_backfill" ||
           exception!.category === "pr1_compatibility_indexes" ||
+          exception!.category === "pr3_database_enforcement" ||
           exception!.category === "migration_tests" ||
           exception!.category === "dev_seed");
       // Exact construction module or exception paths
@@ -657,6 +658,7 @@ function collectFindings(
         (exception &&
           (exception.category === "pr1_maintenance_backfill" ||
             exception.category === "pr1_compatibility_indexes" ||
+            exception.category === "pr3_database_enforcement" ||
             exception.category === "dev_seed" ||
             exception.category === "migration_tests"));
 
@@ -696,6 +698,7 @@ function collectFindings(
           Boolean(exception) &&
           (exception!.category === "pr1_maintenance_backfill" ||
             exception!.category === "pr1_compatibility_indexes" ||
+            exception!.category === "pr3_database_enforcement" ||
             exception!.category === "tenant_bound_access" ||
             exception!.category === "raw_prisma_construction" ||
             exception!.category === "migration_tests");

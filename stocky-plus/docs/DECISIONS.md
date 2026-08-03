@@ -422,3 +422,14 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Migration:** No additional schema or runtime change in this status-sync decision. Production migration/backfill remains unauthorized until a later reviewed deployment plan and explicit authorization.
 7. **Risks:** Merge of PR 2 application scoping must not be misread as resolving F-016 / R-022 / Q-011, as Phase 1 completion, as PR 3 start, as production backfill completion, as RLS/runtime-role activation, or as inventory-write approval. **R-028** and **R-029** remain open operational/enforcement-transition risks. **R-079** remains open as an accepted reliability residual.
 8. **Final:** **ACCEPTED** (2026-08-03). PR 2 is merged and closed. Phase 1 remains in progress. PR 3 remains **NOT STARTED**. This decision does **not** authorize PR 3 implementation by itself; PR 3 receives a separate ChatGPT implementation prompt after this sync is merged. Inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**. No deployment or production migration is authorized by this decision.
+
+## D-036 — Phase 1 PR 3 database enforcement authorized
+
+1. **Current:** PR 1 and PR 2 are merged and closed. Application-layer TenantDb exists. Database enforcement (non-null shopId, composite tenant FKs, forced RLS, restricted runtime role, transaction-local context, immutability triggers) was not started.
+2. **Proposed / accepted authorization:** Phase 1 PR 3 is authorized from starting main `00fb925721ad374b3ff976652ec99dbf655ebb11` on branch `phase-1/tenant-enforcement`. Scope is the approved database-enforcement unit only.
+3. **Reason:** F-016 / R-022 / Q-011; D-012 through D-018; Phase 1 brief dependency-ordered PR sequence.
+4. **Merchant impact:** None in production — production execution is not authorized by this decision.
+5. **Technical impact:** Preflight, role provisioning, composite keys/FKs, FORCE RLS, immutability triggers, TenantDb transaction-local context, real PostgreSQL isolation tests, CI gates, runbook.
+6. **Migration:** Low-lock external enforcement tooling; helper functions via Prisma migrate; production apply remains separately unauthorized.
+7. **Risks:** R-024 through R-027 remain open until independently verified; R-028/R-029 operational transition; after RLS the pre-Phase-1 app is not a valid rollback target.
+8. **Final:** **AUTHORIZED TO BEGIN** (2026-08-03). PR 3 remains pending implementation/review/acceptance. Production execution is not authorized. PR 4 remains blocked. Inventory writes remain UNAPPROVED. Inventory-write flags remain DEFAULT OFF. Q-011 / F-016 / R-022 must not be closed by Cursor alone.

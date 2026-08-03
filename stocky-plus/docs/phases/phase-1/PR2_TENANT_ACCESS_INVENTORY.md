@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `27b1cfe6cfc3f3175ce5b3dda84e637bd3523e82d1ed78385c6ca9fe2f25c1d6`
-**Scanned files:** 151
-**Findings:** 1017
-**Converted paths:** 404
-**Approved exception findings:** 613
+**Content digest:** `cf59f7d6f3f83336a57ddec8c3496ed01c09607e7f31317bcdb0c64623ac3819`
+**Scanned files:** 167
+**Findings:** 1048
+**Converted paths:** 411
+**Approved exception findings:** 637
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,24 +21,24 @@ All 18 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 455 |
-| PurchaseOrder | 180 |
-| ShopifyVariantCache | 139 |
-| InventorySnapshot | 109 |
-| VariantAbcClass | 93 |
-| ForecastOverride | 94 |
-| SalesDailyAggregate | 99 |
-| ShopSettings | 124 |
-| TransferOrder | 100 |
-| Stocktake | 97 |
-| BomComponent | 94 |
-| LowStockAlert | 89 |
-| SupplierSkuMapping | 158 |
-| VolumePriceTier | 87 |
-| LeadTimeSnapshot | 109 |
-| POLineItem | 107 |
-| TransferLineItem | 93 |
-| StocktakeLineItem | 93 |
+| Supplier | 477 |
+| PurchaseOrder | 192 |
+| ShopifyVariantCache | 149 |
+| InventorySnapshot | 119 |
+| VariantAbcClass | 103 |
+| ForecastOverride | 104 |
+| SalesDailyAggregate | 109 |
+| ShopSettings | 134 |
+| TransferOrder | 110 |
+| Stocktake | 107 |
+| BomComponent | 104 |
+| LowStockAlert | 99 |
+| SupplierSkuMapping | 168 |
+| VolumePriceTier | 97 |
+| LeadTimeSnapshot | 120 |
+| POLineItem | 119 |
+| TransferLineItem | 103 |
+| StocktakeLineItem | 103 |
 
 ## Counts by execution category
 
@@ -49,8 +49,8 @@ All 18 approved merchant-owned models must appear below.
 | route | 85 |
 | script | 45 |
 | service | 34 |
-| tenant_infra | 4 |
-| test | 836 |
+| tenant_infra | 5 |
+| test | 866 |
 | worker | 10 |
 
 ## Approved exceptions
@@ -60,6 +60,7 @@ All 18 approved merchant-owned models must appear below.
 | EX-RAW-001 | `app/db.server.ts` | raw_prisma_construction | yes | platform-db | Retained as the sole construction point; never imported by routes/services/workers |
 | EX-BOOT-001 | `app/tenant/bootstrap.server.ts` | restricted_bootstrap | yes | phase-1-pr2-tenant-access | Review if bootstrap needs expansion; must never gain merchant delegates |
 | EX-TDB-001 | `app/tenant/tenant-db.server.ts` | tenant_bound_access | yes | phase-1-pr2-tenant-access | Core PR 2 contract — retained until superseded by equivalent enforcement |
+| EX-TDB-002 | `app/tenant/db-context.server.ts` | tenant_bound_access | yes | phase-1-pr3-database-enforcement | Core PR 3 context contract — retained with TenantDb |
 | EX-SEED-001 | `prisma/seed.ts` | dev_seed | no | devex | Replace with tenant-bound seed helper before any shared staging seed |
 | EX-BF-001 | `scripts/tenant-backfill/apply-lock.ts` | pr1_maintenance_backfill | maintenance_only | phase-1-tenant-ownership | Retire after operational backfill complete and PR 3 enforcement live (Phase 1 PR 3+) |
 | EX-BF-002 | `scripts/tenant-backfill/boundaries.ts` | pr1_maintenance_backfill | maintenance_only | phase-1-tenant-ownership | Retire after operational backfill complete and PR 3 enforcement live (Phase 1 PR 3+) |
@@ -110,6 +111,18 @@ All 18 approved merchant-owned models must appear below.
 | EX-IDX-015 | `scripts/tenant-indexes/tests/maintenance-url.unit.test.ts` | pr1_compatibility_indexes | maintenance_only | phase-1-tenant-ownership | Retained as ops tooling until superseded; review at PR 3 RLS cutover |
 | EX-IDX-016 | `scripts/tenant-indexes/tests/schema-drift.migration.test.ts` | pr1_compatibility_indexes | maintenance_only | phase-1-tenant-ownership | Retained as ops tooling until superseded; review at PR 3 RLS cutover |
 | EX-IDX-017 | `scripts/tenant-indexes/tests/timeouts.unit.test.ts` | pr1_compatibility_indexes | maintenance_only | phase-1-tenant-ownership | Retained as ops tooling until superseded; review at PR 3 RLS cutover |
+| EX-ENF-001 | `scripts/tenant-enforcement/apply.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-002 | `scripts/tenant-enforcement/cli.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-003 | `scripts/tenant-enforcement/connection.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-004 | `scripts/tenant-enforcement/inventory-check.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-005 | `scripts/tenant-enforcement/inventory.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-006 | `scripts/tenant-enforcement/manifest.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-007 | `scripts/tenant-enforcement/preflight.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-008 | `scripts/tenant-enforcement/roles.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-009 | `scripts/tenant-enforcement/sql.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-010 | `scripts/tenant-enforcement/timeouts.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-011 | `scripts/tenant-enforcement/verify.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-012 | `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
 | EX-TEST-001 | `app/tenant/__tests__/helpers.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-002 | `app/tenant/__tests__/authority.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-003 | `app/tenant/__tests__/bootstrap.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
@@ -140,14 +153,17 @@ All 18 approved merchant-owned models must appear below.
 | EX-TEST-028 | `app/tenant/__tests__/legacy-unique-selector-resolution.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-029 | `app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-030 | `app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
-| EX-TEST-031 | `scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-031 | `app/tenant/__tests__/db-isolation/helpers.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-032 | `app/tenant/__tests__/db-isolation/isolation.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-033 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-034 | `scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 
 ## Access path inventory
 
 | File | Line or symbol | Execution category | Models touched | Old access method | New access method | Authority source | Conversion status | Test evidence | Exception ID | Exception justification |
 |---|---|---|---|---|---|---|---|---|---|---|
-| `app/db.server.ts` | 10 / `new PrismaClient` | other | — | PrismaClient construction | approved exception EX-RAW-001 | infrastructure | approved exception | tenant:access:audit | EX-RAW-001 | Single approved low-level PrismaClient construction module |
-| `app/db.server.ts` | 14 / `new PrismaClient` | other | — | PrismaClient construction | approved exception EX-RAW-001 | infrastructure | approved exception | tenant:access:audit | EX-RAW-001 | Single approved low-level PrismaClient construction module |
+| `app/db.server.ts` | 60 / `new PrismaClient` | other | — | PrismaClient construction | approved exception EX-RAW-001 | infrastructure | approved exception | tenant:access:audit | EX-RAW-001 | Single approved low-level PrismaClient construction module |
+| `app/db.server.ts` | 62 / `new PrismaClient` | other | — | PrismaClient construction | approved exception EX-RAW-001 | infrastructure | approved exception | tenant:access:audit | EX-RAW-001 | Single approved low-level PrismaClient construction module |
 | `app/jobs/workers/webhook-processor.ts` | 50 / `db.salesDailyAggregate.upsert` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
 | `app/jobs/workers/webhook-processor.ts` | 76 / `db.salesDailyAggregate.upsert` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
 | `app/jobs/workers/webhook-processor.ts` | 122 / `db.salesDailyAggregate.findUnique` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
@@ -306,6 +322,29 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 219 / `prisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 243 / `prisma.leadTimeSnapshot.count` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 246 / `prisma.leadTimeSnapshot.findUnique` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/helpers.ts` | 39 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-031 | infrastructure | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/helpers.ts` | 45 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-031 | infrastructure | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/helpers.ts` | 67 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-031 | migration_tests | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/helpers.ts` | 68 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-031 | migration_tests | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/helpers.ts` | 69 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-031 | migration_tests | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/helpers.ts` | 70 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-031 | migration_tests | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 106 / `migrationPrisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 114 / `migrationPrisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 228 / `migrationPrisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 302 / `db.supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 308 / `db.supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 329 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 335 / `migrationPrisma.purchaseOrder.createMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 361 / `migrationPrisma.pOLineItem.create` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 374 / `migrationPrisma.pOLineItem.create` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 388 / `migrationPrisma.leadTimeSnapshot.create` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 400 / `migrationPrisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/isolation.test.ts` | 424 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-032 | migration_tests | approved exception | allowlist EX-TEST-032 | EX-TEST-032 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 37 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-033 | migration_tests | approved exception | allowlist EX-TEST-033 | EX-TEST-033 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 60 / `ctx.db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 104 / `dbA.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 107 / `dbB.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 127 / `db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/helpers.ts` | 24 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/helpers.ts` | 30 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/helpers.ts` | 31 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -986,9 +1025,10 @@ All 18 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/write-atomicity.test.ts` | 78 / `prisma.supplierSkuMapping.findMany` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-012 | migration_tests | approved exception | allowlist EX-TEST-012 | EX-TEST-012 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/after-auth.server.ts` | 33 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/bootstrap.server.ts` | 11 / `rawPrisma` | bootstrap | — | value import of app/db.server | approved exception EX-BOOT-001 | restricted_bootstrap | approved exception | allowlist EX-BOOT-001 | EX-BOOT-001 | Session + Shop bootstrap and session-storage adapter |
+| `app/tenant/db-context.server.ts` | 104 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/tenant/tenant-db.server.ts` | 18 / `rawPrisma` | tenant_infra | — | value import of app/db.server | approved exception EX-TDB-001 | tenant_bound_access | approved exception | allowlist EX-TDB-001 | EX-TDB-001 | Tenant-bound DB contract wraps raw client; never returns it to callers |
-| `app/tenant/tenant-db.server.ts` | 1325 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/tenant/tenant-db.server.ts` | 1846 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/tenant-db.server.ts` | 1336 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/tenant-db.server.ts` | 1897 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `prisma/seed.ts` | 1 / `prisma` | script | — | value import of app/db.server | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 33 / `prisma.shopSettings.upsert` | script | ShopSettings | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 50 / `prisma.supplier.upsert` | script | Supplier | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
@@ -1152,6 +1192,13 @@ All 18 approved merchant-owned models must appear below.
 | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | 486 / `prisma.supplierSkuMapping.findUnique` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-BF-032 | pr1_maintenance_backfill | approved exception | allowlist EX-BF-032 | EX-BF-032 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
 | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | 491 / `prisma.supplierSkuMapping.findUnique` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-BF-032 | pr1_maintenance_backfill | approved exception | allowlist EX-BF-032 | EX-BF-032 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
 | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | 496 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $queryRawUnsafe | approved exception EX-BF-032 | pr1_maintenance_backfill | approved exception | tenant:access:audit | EX-BF-032 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 36 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-ENF-012 | infrastructure | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 37 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 38 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 39 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 40 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 91 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 106 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
 | `scripts/tenant-indexes/tests/indexes.migration.test.ts` | 49 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-IDX-014 | pr1_compatibility_indexes | approved exception | tenant:access:audit | EX-IDX-014 | PR 1 compatibility index apply/verify/drift tooling (exact file) |
 | `scripts/tenant-indexes/tests/indexes.migration.test.ts` | 50 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-IDX-014 | pr1_compatibility_indexes | approved exception | tenant:access:audit | EX-IDX-014 | PR 1 compatibility index apply/verify/drift tooling (exact file) |
 | `scripts/tenant-indexes/tests/indexes.migration.test.ts` | 51 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-IDX-014 | pr1_compatibility_indexes | approved exception | tenant:access:audit | EX-IDX-014 | PR 1 compatibility index apply/verify/drift tooling (exact file) |
@@ -1168,8 +1215,8 @@ All 18 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 151,
-  "findings": 1017,
+  "scannedFiles": 167,
+  "findings": 1048,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1195,6 +1242,7 @@ All 18 approved merchant-owned models must appear below.
     "EX-BF-031",
     "EX-BF-032",
     "EX-BOOT-001",
+    "EX-ENF-012",
     "EX-IDX-014",
     "EX-IDX-016",
     "EX-RAW-001",
@@ -1225,7 +1273,10 @@ All 18 approved merchant-owned models must appear below.
     "EX-TEST-027",
     "EX-TEST-028",
     "EX-TEST-029",
-    "EX-TEST-030"
+    "EX-TEST-030",
+    "EX-TEST-031",
+    "EX-TEST-032",
+    "EX-TEST-033"
   ],
   "modelsCovered": [
     "BomComponent",
@@ -1247,6 +1298,6 @@ All 18 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "27b1cfe6cfc3f3175ce5b3dda84e637bd3523e82d1ed78385c6ca9fe2f25c1d6"
+  "contentDigest": "cf59f7d6f3f83336a57ddec8c3496ed01c09607e7f31317bcdb0c64623ac3819"
 }
 ```

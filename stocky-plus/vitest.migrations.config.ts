@@ -6,6 +6,7 @@ export default defineConfig({
     include: [
       "scripts/tenant-backfill/tests/**/*.test.ts",
       "scripts/tenant-indexes/tests/**/*.test.ts",
+      "scripts/tenant-enforcement/tests/**/*.migration.test.ts",
     ],
     testTimeout: 180_000,
     hookTimeout: 180_000,

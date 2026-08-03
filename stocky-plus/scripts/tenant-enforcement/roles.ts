@@ -65,7 +65,7 @@ export async function provisionRoles(
         options.runtimePassword ||
         process.env.STOCKY_RUNTIME_ROLE_PASSWORD ||
         "stocky_runtime_ci_only";
-      // Password is never logged. CI/disposable only.
+ // pragma: allowlist secret      // Password is never logged. CI/disposable only.
       await client.query(
         `CREATE ROLE ${quoteIdent(runtimeRole)} LOGIN PASSWORD '${password.replace(/'/g, "''")}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`,
       );

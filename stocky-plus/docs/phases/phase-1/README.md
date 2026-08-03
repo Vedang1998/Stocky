@@ -91,7 +91,7 @@ It does **not** resolve database-enforced tenant isolation.
 | Production / merchant data | **No production or merchant data was accessed** |
 | Deployment | **No deployment occurred** |
 | Production backfill | **No production backfill occurred** |
-| RLS / database roles / non-null shopId / composite FKs | **Not activated / not started** |
+| RLS / database roles / non-null shopId / composite FKs | **Implemented on disposable/CI fixtures; production not authorized; pending independent verification** |
 | PR 3 | **NOT STARTED** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
 

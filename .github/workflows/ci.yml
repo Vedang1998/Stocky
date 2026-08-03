@@ -50,10 +50,16 @@ jobs:
       # Test-only placeholders — no real Shopify credentials or merchant data.
       NODE_ENV: test
       DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
+      DATABASE_MIGRATION_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       TENANT_MAINTENANCE_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
+      # Provisioned by tenant:roles:provision (test-only password).
+      DATABASE_RUNTIME_URL: postgresql://stocky_runtime:stocky_runtime_ci_only@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
+      STOCKY_RUNTIME_ROLE: stocky_runtime
+      STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_ci_only  # pragma: allowlist secret
+      STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
       REDIS_URL: redis://localhost:6379
       # Test-only envelope secret (≥32 bytes). Never a production secret.
-      TENANT_JOB_ENVELOPE_SECRET: "ci-test-only-tenant-job-envelope-secret-32b!"
+      TENANT_JOB_ENVELOPE_SECRET: "ci-test-only-tenant-job-envelope-secret-32b!"  # pragma: allowlist secret
       SHOPIFY_API_KEY: ci-test-api-key
       SHOPIFY_API_SECRET: ci-test-api-secret
       SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
@@ -116,6 +122,66 @@ jobs:
         run: |
           npm run tenant:indexes:plan
         # plan exits 0 when all indexes are valid_exact
+
+      - name: Tenant enforcement inventory freshness
+        run: npm run tenant:enforcement:inventory:check
+
+      - name: Tenant database role provisioning
+        run: npm run tenant:roles:provision -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement preflight
+        run: npm run tenant:enforcement:preflight
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement apply
+        run: npm run tenant:enforcement:apply -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant database role verification
+        run: npm run tenant:roles:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant RLS policy verification
+        run: npm run tenant:rls:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant immutability verification
+        run: npm run tenant:immutability:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant composite constraint verification
+        run: npm run tenant:enforcement:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement drift verification
+        run: npm run tenant:enforcement:drift
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant pooled-connection isolation tests
+        run: npm run test:db-isolation -- app/tenant/__tests__/db-isolation/isolation.test.ts
+
+      - name: Tenant database isolation full suite
+        run: npm run test:db-isolation
+
+      - name: Tenant low-lock enforcement migration tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/enforcement.migration.test.ts
 
       - name: Tenant access architecture audit
         run: npm run tenant:access:audit

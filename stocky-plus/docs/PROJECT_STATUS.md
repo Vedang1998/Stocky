@@ -1,14 +1,14 @@
 # Project Status
 
 **Updated:** 2026-08-03
-**Current stage:** Phase 1 PR 2 MERGED AND CLOSED — PR 3 NOT STARTED
-**Current main SHA:** `e9c4f87eb28ce0e957a8cbd159719586892f8b98`
+**Current stage:** Phase 1 PR 3 IN PROGRESS — database enforcement implementation complete, pending independent verification
+**Current main SHA:** `00fb925721ad374b3ff976652ec99dbf655ebb11`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
 **Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; Phase 1 itself remains IN PROGRESS
-**Active implementation branch:** none (PR 2 closed; PR 3 not started)
-**Active implementation PR:** none
+**Active implementation branch:** `phase-1/tenant-enforcement`
+**Active implementation PR:** draft (to be linked after open)
 **Phase 1 PR 2:** MERGED AND CLOSED
 **PR #13:** CLOSED AND SQUASH-MERGED
 **Authorized PR head:** `5fc98192d2ca350de358316d9383e39103b98c80`
@@ -60,8 +60,8 @@
 **Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim)
 **Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim)
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
-**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE (not resolved by PR 1 or PR 2 application scoping)
-**Q-011:** OPEN (enforcement not implemented; PR 2 application-layer contract merged in PR #13; database enforcement is PR 3)
+**F-016 / R-022:** OPEN P1 IMPLEMENTATION GATE — Implementation complete — pending independent verification (not closed by Cursor)
+**Q-011:** OPEN — Implementation complete — pending independent verification (PR 3; production not authorized)
 **R-014:** OPEN P1 IMPLEMENTATION GATE
 **R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
 **R-013 / R-062:** OPEN (dependency hardening)
@@ -73,12 +73,12 @@
 **Inventory-write flags:** DEFAULT OFF
 **PR 1:** MERGED AND CLOSED
 **PR 2:** MERGED AND CLOSED
-**PR 3:** NOT STARTED
+**PR 3:** IN PROGRESS — Implementation complete — pending independent verification
 **Redis history disposition:** Accepted repository-history hygiene residual — synthetic `dump.rdb` blob `cae7715f893091a413923b54488f74c59a71e058` (843 bytes; introduced `45d9d90`, deleted `20659dd`) remains reachable; no credentials/PII/merchant data; no secret rotation or history rewrite required; `*.rdb` ignored going forward
 **No production deployment**
 **No production backfill**
-**No RLS activation**
-**Next action:** Return to ChatGPT for exact-head verification and merge authorization of the PR 2 closure sync.
+**RLS:** Implemented on disposable/CI fixtures only — production RLS activation NOT AUTHORIZED
+**Next action:** Return to ChatGPT for exact-head triage and the independent PR 3 database-enforcement review prompt.
 
 ## Current truth
 

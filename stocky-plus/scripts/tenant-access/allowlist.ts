@@ -9,6 +9,7 @@ export type ExceptionCategory =
   | "tenant_bound_access"
   | "pr1_maintenance_backfill"
   | "pr1_compatibility_indexes"
+  | "pr3_database_enforcement"
   | "migration_tests"
   | "dev_seed";
 
@@ -110,7 +111,25 @@ const TEST_FILES = [
   "app/tenant/__tests__/legacy-unique-selector-resolution.test.ts",
   "app/tenant/__tests__/legacy-normalization-candidate-superset.test.ts",
   "app/tenant/__tests__/legacy-overflow-operation-matrix.test.ts",
+  "app/tenant/__tests__/db-isolation/helpers.ts",
+  "app/tenant/__tests__/db-isolation/isolation.test.ts",
+  "app/tenant/__tests__/db-isolation/worker-surfaces.test.ts",
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
+] as const;
+
+const ENFORCEMENT_FILES = [
+  "scripts/tenant-enforcement/apply.ts",
+  "scripts/tenant-enforcement/cli.ts",
+  "scripts/tenant-enforcement/connection.ts",
+  "scripts/tenant-enforcement/inventory-check.ts",
+  "scripts/tenant-enforcement/inventory.ts",
+  "scripts/tenant-enforcement/manifest.ts",
+  "scripts/tenant-enforcement/preflight.ts",
+  "scripts/tenant-enforcement/roles.ts",
+  "scripts/tenant-enforcement/sql.ts",
+  "scripts/tenant-enforcement/timeouts.ts",
+  "scripts/tenant-enforcement/verify.ts",
+  "scripts/tenant-enforcement/tests/enforcement.migration.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {
@@ -146,6 +165,25 @@ function indexExceptions(): AccessException[] {
     owner: "phase-1-tenant-ownership",
     expirationPhaseOrRemovalCondition:
       "Retained as ops tooling until superseded; review at PR 3 RLS cutover",
+  }));
+}
+
+function enforcementExceptions(): AccessException[] {
+  return ENFORCEMENT_FILES.map((path, i) => ({
+    id: `EX-ENF-${String(i + 1).padStart(3, "0")}`,
+    path,
+    category: "pr3_database_enforcement" as const,
+    reason:
+      "PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file)",
+    permittedModelsOrOperations: [
+      "pg Client DDL/DCL/inspect",
+      "PrismaClient in enforcement migration tests",
+      "merchant table catalog metadata only",
+    ],
+    productionRuntime: "maintenance_only" as const,
+    owner: "phase-1-pr3-database-enforcement",
+    expirationPhaseOrRemovalCondition:
+      "Retained as enforcement ops tooling; production apply remains separately authorized",
   }));
 }
 
@@ -208,6 +246,21 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
       "Core PR 2 contract — retained until superseded by equivalent enforcement",
   },
   {
+    id: "EX-TDB-002",
+    path: "app/tenant/db-context.server.ts",
+    category: "tenant_bound_access",
+    reason:
+      "Transaction-local tenant context setter (set_config is_local=true) for RLS",
+    permittedModelsOrOperations: [
+      "set_config / current_setting on transaction client only",
+      "No merchant-table DML",
+    ],
+    productionRuntime: "yes",
+    owner: "phase-1-pr3-database-enforcement",
+    expirationPhaseOrRemovalCondition:
+      "Core PR 3 context contract — retained with TenantDb",
+  },
+  {
     id: "EX-SEED-001",
     path: "prisma/seed.ts",
     category: "dev_seed",
@@ -220,6 +273,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
   },
   ...backfillExceptions(),
   ...indexExceptions(),
+  ...enforcementExceptions(),
   ...testExceptions(),
 ];
 
