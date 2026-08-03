@@ -49,9 +49,6 @@ const digest = createHash("sha256")
 
 function merchantRows(): string {
   return MERCHANT_TABLES.map((t) => {
-    const policies = ["select", "insert", "update", "delete"]
-      .map((c) => rlsPolicyName(t.sqlTable, c as "select"))
-      .join(", ");
     return `| ${t.prismaModel} | \`${t.sqlTable}\` | nullable in Prisma (DB NOT NULL after enforcement) | ${t.legacyShopField ? "`shop`" : "—"} | ${t.parentRelationships.join(", ") || "—"} | ${t.childRelationships.join(", ") || "—"} | ${t.crossDomainRelationships.join(", ") || "—"} | ${t.existingShopIdIdUnique ? `\`${compositeKeyName(t.sqlTable)}\` (PR1)` : "compatibility shopId idx only"} | \`${compositeKeyName(t.sqlTable)}\` | ${COMPOSITE_FOREIGN_KEYS.filter((f) => f.childTable === t.sqlTable)
       .map((f) => `\`${f.name}\``)
       .join(", ") || "—"} | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | \`${immutabilityTriggerName(t.sqlTable)}\` | no | ${t.expectedRuntimePrivileges.join("/")} | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |`;

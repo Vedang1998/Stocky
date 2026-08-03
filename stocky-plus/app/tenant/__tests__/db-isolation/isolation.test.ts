@@ -4,14 +4,12 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import { Client, Pool } from "pg";
+import { Pool } from "pg";
 import { issueTenantAuthority } from "../../authority.server";
 import { createTenantDb } from "../../tenant-db.server";
 import { MERCHANT_OWNED_MODELS } from "../../models";
 import { TENANT_DB_CONTEXT_VERSION } from "../../db-context.server";
 import {
-  createMigrationPrisma,
-  requireMigrationUrl,
   requireRuntimeUrl,
   resetAndEnforce,
   seedTwoShops,
