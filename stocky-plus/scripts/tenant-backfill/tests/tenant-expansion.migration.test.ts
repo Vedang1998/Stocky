@@ -73,65 +73,48 @@ async function applyCompatibilityIndexes() {
 }
 
 /**
- * Apply only the historical main init migration, then restore PR 1 migrations
- * so `migrate deploy` applies expansion + indexes on top.
+ * Apply only the historical main init migration, then restore later migrations
+ * so `migrate deploy` applies expansion + indexes + subsequent phases on top.
  * Park folders OUTSIDE prisma/migrations — Prisma treats every subdirectory
  * there as a migration (empty dirs cause P3015).
+ *
+ * Every migration after init must be parked for the init-only pass; otherwise
+ * later additive migrations (e.g. sync control plane ALTER TABLE "Shop") run
+ * before tenant_expansion creates Shop.
  */
 function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
-  const expansion = join(MIGRATIONS_DIR, "20260730160000_tenant_expansion");
-  const indexes = join(
-    MIGRATIONS_DIR,
+  const afterInit = [
+    "20260730160000_tenant_expansion",
     "20260730160100_tenant_compatibility_indexes",
-  );
-  const correction = join(
-    MIGRATIONS_DIR,
     "20260730210000_tenant_backfill_correction",
-  );
-  const detection = join(
-    MIGRATIONS_DIR,
     "20260730220000_tenant_ownership_issue_detection",
-  );
+    "20260803120000_tenant_enforcement_helpers",
+    "20260804180000_sync_control_plane",
+  ] as const;
+
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
   mkdirSync(parked, { recursive: true });
-  const expansionPark = join(parked, "20260730160000_tenant_expansion");
-  const indexesPark = join(
-    parked,
-    "20260730160100_tenant_compatibility_indexes",
-  );
-  const correctionPark = join(
-    parked,
-    "20260730210000_tenant_backfill_correction",
-  );
-  const detectionPark = join(
-    parked,
-    "20260730220000_tenant_ownership_issue_detection",
-  );
+  const parkedPaths = afterInit.map((name) => ({
+    name,
+    src: join(MIGRATIONS_DIR, name),
+    dest: join(parked, name),
+  }));
 
   try {
-    if (existsSync(expansion)) moveDir(expansion, expansionPark);
-    if (existsSync(indexes)) moveDir(indexes, indexesPark);
-    if (existsSync(correction)) moveDir(correction, correctionPark);
-    if (existsSync(detection)) moveDir(detection, detectionPark);
+    for (const p of parkedPaths) {
+      if (existsSync(p.src)) moveDir(p.src, p.dest);
+    }
     const initOut = migrateDeploy();
-    moveDir(expansionPark, expansion);
-    moveDir(indexesPark, indexes);
-    moveDir(correctionPark, correction);
-    moveDir(detectionPark, detection);
+    for (const p of parkedPaths) {
+      if (existsSync(p.dest)) moveDir(p.dest, p.src);
+    }
     const restOut = migrateDeploy();
     return { initOut, restOut };
   } catch (error) {
-    if (existsSync(expansionPark) && !existsSync(expansion)) {
-      moveDir(expansionPark, expansion);
-    }
-    if (existsSync(indexesPark) && !existsSync(indexes)) {
-      moveDir(indexesPark, indexes);
-    }
-    if (existsSync(correctionPark) && !existsSync(correction)) {
-      moveDir(correctionPark, correction);
-    }
-    if (existsSync(detectionPark) && !existsSync(detection)) {
-      moveDir(detectionPark, detection);
+    for (const p of parkedPaths) {
+      if (existsSync(p.dest) && !existsSync(p.src)) {
+        moveDir(p.dest, p.src);
+      }
     }
     throw error;
   }
