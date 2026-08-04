@@ -96,10 +96,35 @@ describe.sequential("catalog qualification", () => {
         GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_id(text) TO PUBLIC;
       `);
 
-      // The insecure overload is not the zero-argument helper used by RLS and
-      // must neither satisfy nor contaminate verification of that exact object.
+      // The insecure overload is not the zero-argument helper used by RLS.
+      // Signature-qualified helper lookup must still evaluate the exact ()
+      // object (no helper_missing / helper_ambiguous_signature), while F-NEW-02
+      // must reject the unexpected overload / ambiguous name.
       const result = await verifyEnforcement(client);
-      expect(result.ok).toBe(true);
+      expect(
+        result.issues.some(
+          (issue) =>
+            issue.code === "helper_missing" ||
+            issue.code === "helper_ambiguous_signature" ||
+            issue.code === "helper_security_definer" ||
+            issue.code === "helper_public_execute",
+        ),
+      ).toBe(false);
+      expect(result.ok).toBe(false);
+      expect(
+        result.issues.some(
+          (issue) =>
+            issue.code.includes(
+              "ambiguous_function_overload:stocky_current_tenant_id",
+            ) ||
+            issue.code.includes(
+              "unapproved_security_definer:stocky_current_tenant_id(",
+            ) ||
+            issue.code.includes(
+              "public_function_execute:stocky_current_tenant_id(",
+            ),
+        ),
+      ).toBe(true);
     } finally {
       await client.query(
         `REVOKE ALL ON FUNCTION public.stocky_current_tenant_id(text) FROM PUBLIC`,
