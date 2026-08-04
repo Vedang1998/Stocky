@@ -20,10 +20,11 @@ import {
   defaultRuntimeRoleName,
 } from "./connection";
 import { verifyRlsOnly } from "./verify";
-export {
+import {
   defaultControlPlaneRoleName,
   provisionControlPlaneRole,
 } from "../sync-control-plane/roles";
+export { defaultControlPlaneRoleName, provisionControlPlaneRole };
 
 const ALLOWED_TABLE_PRIVS = new Set([
   "SELECT",
