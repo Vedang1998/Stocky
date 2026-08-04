@@ -161,6 +161,7 @@ export async function enumerateCanonicalShopsForScheduler(): Promise<
   CanonicalShopIdentity[]
 > {
   return rawPrisma.shop.findMany({
+    where: { processingEnabled: true },
     select: { id: true, myshopifyDomain: true },
     orderBy: { myshopifyDomain: "asc" },
   });

@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** NOT STARTED
-**Next authorized implementation unit:** documentation-only PR 3 closure synchronization, then return to ChatGPT for a fresh repository review and separate PR 4 authorization
-**Active implementation branch:** NONE
-**Active implementation PR:** NONE
-**Current main SHA:** `deef5d7c7881fb128121b8ff82fd0b2282fbee0b`
-**ChatGPT decisions:** D-025..D-039; **D-040 — Phase 1 PR 3 technically accepted**; **D-041 — Phase 1 PR 3 merge closure**
+**Phase 1 PR 4:** IN PROGRESS (D-042)
+**Next authorized implementation unit:** Phase 1 PR 4 — Synchronization Control Plane on `phase-1/sync-control-plane`
+**Active implementation branch:** `phase-1/sync-control-plane`
+**Active implementation PR:** pending draft open
+**Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
+**ChatGPT decisions:** D-025..D-041; **D-042 — Phase 1 PR 4 synchronization control plane authorized**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -21,9 +21,11 @@
 - PR 1 is **MERGED AND CLOSED**.
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
-- PR 4 is **NOT STARTED** and requires a separate ChatGPT authorization after this closure PR is merged.
+- PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
+- PR 4 is **IN PROGRESS** under D-042 on `phase-1/sync-control-plane`.
+- PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
-- Do **not** authorize PR 4 in this documentation PR.
+- Do **not** begin PR 5 in this PR.
 
 ## Immutable PR 3 (#15) merge evidence
 
@@ -124,11 +126,14 @@
 28. `PR3_DATABASE_ENFORCEMENT_THIRD_CORRECTION_REVIEW_REPORT.md` — authoritative `READY FOR CHATGPT PR 3 ACCEPTANCE` (verbatim; do not modify)
 29. `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted nonblocking P3 residuals R-095..R-098
 30. `PR3_DATABASE_ENFORCEMENT_MERGE_CLOSURE.md` — concise merge-closure identities
+31. `PR4_SYNC_CONTROL_PLANE_ARCHITECTURE.md` — PR 4 architecture (D-042)
+32. `PR4_SYNC_CONTROL_PLANE_INVENTORY.md` — mechanically generated; do not edit by hand
+33. `PR4_SYNC_CONTROL_PLANE_IMPLEMENTATION_REPORT.md` — Cursor implementation evidence (pending independent verification)
 
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024..D-041)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-042)
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`

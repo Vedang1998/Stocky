@@ -4,7 +4,7 @@
 |---|---|---|---|---|---|
 | Q-001 | What is the public App Store name and brand system? | F-131; listing, billing handles, support | Product (ChatGPT) | Before any store listing / Phase 6 | Open |
 | Q-002 | Confirm Partner Dashboard distribution for the linked app (public vs custom) and whether separate prod/dev/staging apps exist | F-002; deploy strategy; D-019 | Product + Partner account holder | Before any Phase 1 deployment work | **Open — evidence still required** |
-| Q-003 | Which Shopify Admin API version is the project pin after GraphQL ops are fixed? | Invalid inventoryLevel / transfer complete ops on 2025-10; D-023 requires validation before sync implementation | Product + Cursor | Before first Phase 1 sync implementation merge | Open |
+| Q-003 | Which Shopify Admin API version is the project pin after GraphQL ops are fixed? | Invalid inventoryLevel / transfer complete ops on 2025-10; D-023 requires validation before sync implementation | Product + Cursor | Before first Phase 1 sync implementation merge | **Open — Decision target: 2026-07 (D-042). Implementation closure requires exact-head webhook and GraphQL validation.** |
 | Q-004 | Incoming inventory: app-PO only until native API, or dual-source with badges immediately? | Forecast accuracy; community pain S26 | Product | Phase 2 worksheet | Open |
 | Q-005 | Cost authority default for pilots (Shopify cost vs app average vs landed)? | Onboarding step 6; F-106 | Product + pilot merchant | Phase 4 | Open |
 | Q-006 | Trial length and development test-plan commercial terms | Entitlement design; D-020 | Product | Future billing/entitlement work (not Phase 1 implementation) | **Open — recommended decision recorded; not implemented** |

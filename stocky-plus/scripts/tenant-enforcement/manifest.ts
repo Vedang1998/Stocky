@@ -13,6 +13,8 @@ export const GUC_CORRELATION_ID = "stocky.correlation_id";
 export const TENANT_CONTEXT_HELPER_FN = "stocky_current_tenant_id";
 export const TENANT_CONTEXT_VERSION_FN = "stocky_current_tenant_context_version";
 export const IMMUTABILITY_TRIGGER_FN = "stocky_prevent_shop_id_mutation";
+/** Merchant RLS gate — false when Shop.processingEnabled is false. */
+export const SHOP_PROCESSING_ENABLED_FN = "stocky_shop_processing_enabled";
 
 /** Advisory lock namespace for enforcement apply ('STK3'). */
 export const TENANT_ENFORCEMENT_ADVISORY_LOCK_KEY = 0x53544b33;
@@ -20,7 +22,8 @@ export const TENANT_ENFORCEMENT_ADVISORY_LOCK_KEY = 0x53544b33;
 export type TableClassification =
   | "merchant_domain"
   | "bootstrap"
-  | "control_maintenance";
+  | "control_maintenance"
+  | "platform_control_plane";
 
 export type MerchantKind = "direct" | "child";
 
@@ -58,8 +61,8 @@ export type MerchantTableSpec = {
 export type NonMerchantTableSpec = {
   prismaModel: string;
   sqlTable: string;
-  classification: "bootstrap" | "control_maintenance";
-  shopIdNullableInPrisma: null;
+  classification: "bootstrap" | "control_maintenance" | "platform_control_plane";
+  shopIdNullableInPrisma: null | false;
   legacyShopField: boolean;
   rlsRequired: false;
   immutabilityTriggerRequired: false;
@@ -630,6 +633,144 @@ export const COMPOSITE_FK_SUPPORTING_INDEXES: readonly {
 ];
 
 export const MERCHANT_SQL_TABLES = MERCHANT_TABLES.map((t) => t.sqlTable);
+
+const CONTROL_PLANE_DML: ("SELECT" | "INSERT" | "UPDATE" | "DELETE")[] = [
+  "SELECT",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+];
+
+/** Phase 1 PR 4 platform sync control-plane tables (tenant-owned, no merchant RLS). */
+export const PLATFORM_CONTROL_PLANE_TABLES: readonly NonMerchantTableSpec[] = [
+  {
+    prismaModel: "WebhookDelivery",
+    sqlTable: "WebhookDelivery",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Durable webhook inbox — control-plane DML only",
+  },
+  {
+    prismaModel: "DurableJob",
+    sqlTable: "DurableJob",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Logical control-plane job — control-plane DML only",
+  },
+  {
+    prismaModel: "JobAttempt",
+    sqlTable: "JobAttempt",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Append-only attempt ledger",
+  },
+  {
+    prismaModel: "DeadLetter",
+    sqlTable: "DeadLetter",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Terminal dead-letter disposition",
+  },
+  {
+    prismaModel: "JobReplay",
+    sqlTable: "JobReplay",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Auditable replay lineage",
+  },
+  {
+    prismaModel: "SyncRun",
+    sqlTable: "SyncRun",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "PR5/PR6 sync-run scaffolding",
+  },
+  {
+    prismaModel: "SyncCursor",
+    sqlTable: "SyncCursor",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Domain watermarks",
+  },
+  {
+    prismaModel: "ReconciliationRun",
+    sqlTable: "ReconciliationRun",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "PR8 reconciliation scaffolding",
+  },
+  {
+    prismaModel: "DataIssue",
+    sqlTable: "DataIssue",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Discrepancy scaffolding",
+  },
+  {
+    prismaModel: "SyncHealth",
+    sqlTable: "SyncHealth",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes: "Deterministic health per domain",
+  },
+] as const;
+
+/** SQL table names for control-plane privilege grants. */
+export const PLATFORM_CONTROL_PLANE_SQL_TABLES =
+  PLATFORM_CONTROL_PLANE_TABLES.map((t) => t.sqlTable);
+
+// Silence unused — DML list documents intended control-plane privileges.
+void CONTROL_PLANE_DML;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== 18) {

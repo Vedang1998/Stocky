@@ -56,6 +56,7 @@ jobs:
       DATABASE_RUNTIME_URL: postgresql://stocky_runtime:stocky_runtime_ci_only@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
       STOCKY_RUNTIME_ROLE: stocky_runtime
       STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_ci_only  # pragma: allowlist secret
+      STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_ci_only  # pragma: allowlist secret
       STOCKY_BOOTSTRAP_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
       STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
       REDIS_URL: redis://localhost:6379
@@ -343,6 +344,28 @@ jobs:
 
       - name: Tenant access inventory freshness
         run: npm run tenant:access:inventory:check
+
+      - name: Sync control-plane inventory freshness
+        run: npm run sync:inventory:check
+
+      - name: Sync control-plane role provisioning
+        run: npm run sync:roles:provision -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+          STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_ci_only
+
+      - name: Sync control-plane role verification
+        run: npm run sync:roles:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Sync control-plane integration tests
+        run: npm run test:sync-integration
+        env:
+          STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
+          DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_ci_only@localhost:5432/stocky_plus_ci
 
       - name: Tenant access PostgreSQL tests
         run: npm run test:tenant-access -- app/tenant/__tests__/nullable-ownership.test.ts app/tenant/__tests__/tenant-db.test.ts app/tenant/__tests__/bootstrap.test.ts

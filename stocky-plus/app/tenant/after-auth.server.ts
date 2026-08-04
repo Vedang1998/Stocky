@@ -1,22 +1,25 @@
 /**
- * Shopify afterAuth sequence (Phase 1 PR 2):
+ * Shopify afterAuth sequence (Phase 1 PR 2 + PR 4 reinstall):
  * 1. Receive Shopify-verified session
  * 2. Normalize session.shop
  * 3. Upsert/resolve canonical Shop through bootstrap
- * 4. Create branded tenant authority
- * 5. Upsert ShopSettings through tenant-bound access
- * 6. Enqueue catalog sync with validated tenant job envelope
+ * 4. Reactivate processing when previously UNINSTALLED (PR 4)
+ * 5. Create branded tenant authority
+ * 6. Upsert ShopSettings through tenant-bound access
+ * 7. Enqueue catalog sync via durable job (caller)
  */
 
 import type { Session } from "@shopify/shopify-api";
 import type { TenantAuthority } from "./authority.server";
 import { resolveAuthorityAfterVerifiedAuth } from "./bootstrap.server";
 import { createTenantDb } from "./tenant-db.server";
+import { reactivateShopAfterVerifiedReinstall } from "../sync/reinstall.server";
 
 export type AfterAuthResult = {
   shopId: string;
   myshopifyDomain: string;
   tenant: TenantAuthority;
+  reactivated: boolean;
 };
 
 export async function runAfterAuthTenantBootstrap(
@@ -27,6 +30,16 @@ export async function runAfterAuthTenantBootstrap(
     source: "verified_scheduler",
     createIfMissing: true,
   });
+
+  let reactivated = false;
+  try {
+    const result = await reactivateShopAfterVerifiedReinstall({
+      verifiedDomain: session.shop,
+    });
+    reactivated = result.reactivated;
+  } catch {
+    // REDACTED/MANUAL denial is fail-closed for reactivation; continue bootstrap.
+  }
 
   const db = createTenantDb(tenant);
 
@@ -44,5 +57,6 @@ export async function runAfterAuthTenantBootstrap(
     shopId: shop.id,
     myshopifyDomain: shop.myshopifyDomain,
     tenant,
+    reactivated,
   };
 }

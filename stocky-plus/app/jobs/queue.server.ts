@@ -1,15 +1,20 @@
 import { Queue, Worker, type Job } from "bullmq";
 import IORedis from "ioredis";
+import { randomUUID } from "node:crypto";
 import type { TenantAuthority } from "../tenant/authority.server";
 import { isTenantAuthority } from "../tenant/authority.server";
-import {
-  createTenantJobEnvelope,
-  type TenantJobEnvelopeV1,
-  type TenantJobSource,
-} from "../tenant/job-envelope.server";
+import type { TenantJobEnvelopeV1 } from "../tenant/job-envelope.server";
+import type { TenantJobEnvelopeV2 } from "../sync/envelope-v2.server";
 import { TenantAuthorityError } from "../tenant/errors";
+import { createDurableJob } from "../sync/intake.server";
 
-const REDIS_URL = process.env.REDIS_URL ?? "redis://localhost:6379";
+async function kickDispatcher(batchSize = 5): Promise<void> {
+  // Dynamic import avoids circular dependency with dispatcher → queue.
+  const { dispatchPendingJobs } = await import("../sync/dispatcher.server");
+  await dispatchPendingJobs({ batchSize }).catch(() => undefined);
+}
+
+const REDIS_URL = process.env.REDIS_URL ?? "[REDACTED]";
 
 let connection: IORedis | null = null;
 
@@ -28,15 +33,21 @@ export type WebhookJobData = {
   /** Informational only — never authority. */
   payloadShop: string;
   payload: Record<string, unknown>;
-  tenant: TenantJobEnvelopeV1;
+  /** v2 preferred; v1 accepted only for in-flight pre-cutover jobs. */
+  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2;
+  durableJobId?: string;
 };
 
 export type CatalogSyncJobData = {
-  tenant: TenantJobEnvelopeV1;
+  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2;
+  durableJobId?: string;
+  payload?: Record<string, unknown>;
 };
 
 export type AbcShopJobData = {
-  tenant: TenantJobEnvelopeV1;
+  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2;
+  durableJobId?: string;
+  payload?: Record<string, unknown>;
 };
 
 let webhookQueue: Queue<WebhookJobData> | null = null;
@@ -83,12 +94,10 @@ export function getCronQueue(): Queue {
   return cronQueue;
 }
 
-function webhookSource(topic: string): TenantJobSource {
-  const source = `webhook:${topic}`;
-  return source as TenantJobSource;
-}
-
-/** Enqueue and return immediately so the webhook route can 200 within 50ms. */
+/**
+ * @deprecated Prefer ingestAuthenticatedWebhook from routes. Kept as a thin
+ * helper that creates a durable webhook job for tests/legacy callers.
+ */
 export async function enqueueWebhook(
   data: {
     topic: string;
@@ -99,45 +108,70 @@ export async function enqueueWebhook(
   webhookId?: string,
 ) {
   const tenant = requireAuthority(data.tenant, "enqueueWebhook");
-  const envelope = createTenantJobEnvelope(tenant, webhookSource(data.topic));
-
-  await getWebhookQueue().add(
-    data.topic,
-    {
-      topic: data.topic,
-      payloadShop: data.payloadShop,
-      payload: data.payload,
-      tenant: envelope,
-    },
-    webhookId ? { jobId: webhookId } : undefined,
-  );
+  await createDurableJob({
+    shopId: tenant.shopId,
+    jobType: `webhook:${data.topic}`,
+    source: `webhook:${data.topic}`,
+    queueName: WEBHOOK_QUEUE,
+    payloadSchemaVersion: `legacy-enqueue-${data.topic}`,
+    sanitizedPayload: data.payload,
+    idempotencyKey: webhookId
+      ? `webhook:${webhookId}`
+      : `webhook-legacy:${tenant.shopId}:${data.topic}:${randomUUID()}`,
+    correlationId: tenant.correlationId,
+    causationId: tenant.causationId,
+  });
+  await kickDispatcher();
 }
 
+/** Create durable catalog-sync job; dispatcher enqueues to BullMQ. */
 export async function enqueueCatalogSync(tenant: TenantAuthority) {
   const auth = requireAuthority(tenant, "enqueueCatalogSync");
-  const envelope = createTenantJobEnvelope(auth, "catalog_sync");
-
-  await getCronQueue().add("catalog-sync", {
-    tenant: envelope,
-  } satisfies CatalogSyncJobData);
+  await createDurableJob({
+    shopId: auth.shopId,
+    jobType: "catalog-sync",
+    source: "catalog_sync",
+    queueName: CRON_QUEUE,
+    payloadSchemaVersion: "catalog-sync-v1",
+    sanitizedPayload: { shopId: auth.shopId },
+    idempotencyKey: `catalog-sync:${auth.shopId}:${auth.correlationId}`,
+    correlationId: auth.correlationId,
+    causationId: auth.causationId,
+  });
+  await kickDispatcher();
 }
 
 /** Dedicated producer for afterAuth catalog sync (approved source). */
 export async function enqueueAfterAuthCatalogSync(tenant: TenantAuthority) {
   const auth = requireAuthority(tenant, "enqueueAfterAuthCatalogSync");
-  const envelope = createTenantJobEnvelope(auth, "after_auth_catalog_sync");
-  await getCronQueue().add("catalog-sync", {
-    tenant: envelope,
-  } satisfies CatalogSyncJobData);
+  await createDurableJob({
+    shopId: auth.shopId,
+    jobType: "catalog-sync",
+    source: "after_auth_catalog_sync",
+    queueName: CRON_QUEUE,
+    payloadSchemaVersion: "catalog-sync-v1",
+    sanitizedPayload: { shopId: auth.shopId, reason: "after_auth" },
+    idempotencyKey: `after-auth-catalog-sync:${auth.shopId}:${auth.correlationId}`,
+    correlationId: auth.correlationId,
+    causationId: auth.causationId,
+  });
+  await kickDispatcher();
 }
 
 export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
   const auth = requireAuthority(tenant, "enqueueAbcAnalysisForShop");
-  const envelope = createTenantJobEnvelope(auth, "abc_analysis");
-
-  await getCronQueue().add("abc-analysis-shop", {
-    tenant: envelope,
-  } satisfies AbcShopJobData);
+  await createDurableJob({
+    shopId: auth.shopId,
+    jobType: "abc-analysis-shop",
+    source: "abc_analysis",
+    queueName: CRON_QUEUE,
+    payloadSchemaVersion: "abc-analysis-shop-v1",
+    sanitizedPayload: { shopId: auth.shopId },
+    idempotencyKey: `abc-analysis-shop:${auth.shopId}:${auth.correlationId}`,
+    correlationId: auth.correlationId,
+    causationId: auth.causationId,
+  });
+  await kickDispatcher();
 }
 
 export function createWebhookWorker(
