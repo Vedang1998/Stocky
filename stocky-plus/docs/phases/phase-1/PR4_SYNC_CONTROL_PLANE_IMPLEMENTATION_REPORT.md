@@ -43,7 +43,9 @@
 | Type | Additive only |
 | Tables | 10 control-plane + Shop lifecycle columns |
 | Helper | `stocky_shop_processing_enabled(text)` |
+| `updatedAt` | NOT NULL without DB DEFAULT (matches Prisma `@updatedAt`; corrected before merge after schema-drift CI fail) |
 | Empty/current-schema deploy (disposable PG16) | `npx prisma migrate deploy` → exit 0; “No pending migrations” on repeat |
+| Schema drift | `npm run tenant:schema:drift` → `tenant_prisma_schema_drift_ok` after correction |
 | Production execution | **Not run** |
 
 ## Local disposable evidence (environment)
