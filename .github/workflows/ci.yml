@@ -57,6 +57,8 @@ jobs:
       STOCKY_RUNTIME_ROLE: stocky_runtime
       STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_ci_only  # pragma: allowlist secret
       STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_ci_only  # pragma: allowlist secret
+      DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_ci_only@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
+      STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
       STOCKY_BOOTSTRAP_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
       STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
       REDIS_URL: redis://localhost:6379
@@ -378,6 +380,9 @@ jobs:
 
       - name: Tenant queue/Redis tests
         run: npm run test:tenant-access -- app/tenant/__tests__/queue-redis.test.ts
+        env:
+          STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
+          DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_ci_only@localhost:5432/stocky_plus_ci
 
       - name: Client authority denial tests
         run: npm run test:tenant-access -- app/tenant/__tests__/client-hints.test.ts app/tenant/__tests__/authority.test.ts

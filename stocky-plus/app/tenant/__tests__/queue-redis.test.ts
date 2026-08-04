@@ -33,6 +33,8 @@ describe("tenant queue/Redis envelope integration (C-03)", () => {
   let redis: IORedis;
 
   beforeAll(async () => {
+    // Durable producers require control-plane Prisma; disposable suites may fall back.
+    process.env.STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK ??= "1";
     resetTenantJobEnvelopeSecretCache();
     requireTenantJobEnvelopeSecret();
     prisma = createPrisma();
