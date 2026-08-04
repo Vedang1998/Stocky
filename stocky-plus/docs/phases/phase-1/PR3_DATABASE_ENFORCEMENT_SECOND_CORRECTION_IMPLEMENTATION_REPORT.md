@@ -2,9 +2,9 @@
 
 **Authority:** ChatGPT (D-038)
 **Implementation owner:** Cursor
-**Status:** `SECOND CORRECTION IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
+**Status:** `SECOND CORRECTION IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` (historical for this cycle)
 
-Do not mark findings closed. Independent Claude Code review is required.
+> **Live supersession (F-NEW-03 / D-039):** Independent second-correction review at report `440a93e…` returned `NOT READY — FURTHER CORRECTIONS REQUIRED`. Pre-third-correction runtime/test head is `24cc4d8…` (not `046a3b1…`). Live PR 3 status and third-correction evidence live in `PR3_DATABASE_ENFORCEMENT_THIRD_CORRECTION_*` and the PR #15 body.
 
 ---
 
