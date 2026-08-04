@@ -1,10 +1,29 @@
 # PR 3 — Database Enforcement Third Correction Implementation Report
 
-**Authority:** ChatGPT (D-039)
+**Authority:** ChatGPT (D-039); technical acceptance D-040; merge closure D-041
 **Implementation owner:** Cursor
-**Status:** `THIRD CORRECTION IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
+**Status:** `THIRD CORRECTION ACCEPTED AND MERGED` (historical implementation evidence below remains unchanged)
 
-Do not mark findings closed. Independent Claude Code review is required.
+Do not treat the pre-acceptance “pending independent verification” language below as current live status. Live status is recorded in `PROJECT_STATUS.md`, D-040 / D-041, and `PR3_DATABASE_ENFORCEMENT_MERGE_CLOSURE.md`.
+
+---
+
+## Post-merge closure note (documentation only)
+
+This section is additive. Prior implementation evidence in this report remains historical and is not rewritten.
+
+| Field | Value |
+|---|---|
+| Accepted runtime/test implementation | `01dbb6fd97b38864894069dd3ee30524a236e764` |
+| Authoritative independent review | `a51f03bc33397692bf5901ce4e78b862fc84de9d` |
+| Independent verdict | `READY FOR CHATGPT PR 3 ACCEPTANCE` (P0:0 P1:0 P2:0 P3:4 accepted nonblocking) |
+| Synchronized final PR head | `c88c9a74c50912cb79cd59b4bd7cbb08c2351157` |
+| Exact-head CI | workflow `CI`, run `30922984027`, job `92038054067`, success |
+| Squash merge | `deef5d7c7881fb128121b8ff82fd0b2282fbee0b` at `2026-08-04T15:39:20Z` |
+| Decisions | D-040 / D-041 |
+| Accepted P3 residuals | P3-e..P3-h moved to `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md` as R-095..R-098 |
+
+Independent review reports remain unmodified. No production execution, merchant-data access, deployment, backfill, ownership repair, or inventory mutation occurred. Inventory-write flags remain default OFF. PR 4 is not started.
 
 ---
 
@@ -25,7 +44,7 @@ All three independent review reports remain byte-identical and unmodified.
 
 ## Finding disposition
 
-Every finding: **IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**
+Every finding below was recorded at handoff as **IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**. Independent third-correction review later verified them closed at `01dbb6f…` (report `a51f03…`; D-040). The table itself is preserved as historical handoff evidence.
 
 | ID | Sev | Exact correction | Primary files | Regression tests |
 | --- | :---: | --- | --- | --- |
@@ -69,8 +88,10 @@ Non-superuser evidence (observed): `migration_owner.rolsuper=false`, `rolbypassr
 - No inventory mutation; inventory-write flags DEFAULT OFF
 - No real secrets
 - Independent review reports unchanged
-- PR #15 remains draft and unmerged
+- Historical handoff note: PR #15 was draft and unmerged at the time this evidence was first recorded; it is now closed and squash-merged under D-041
 
 ## Next action
 
-Return to ChatGPT for exact-head verification and the independent PR 3 third-correction review prompt.
+Historical handoff next action (superseded by merge): return to ChatGPT for exact-head verification and the independent PR 3 third-correction review prompt.
+
+**Current next action:** Return to ChatGPT for documentation-only PR 3 closure review and merge decision.
