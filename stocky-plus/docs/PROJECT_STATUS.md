@@ -1,8 +1,8 @@
 # Project Status
 
-**Updated:** 2026-08-03
-**Current stage:** Phase 1 PR 3 SECOND CORRECTIONS — second correction implemented, pending independent verification (D-038)
-**Current main SHA:** `00fb925721ad374b3ff976652ec99dbf655ebb11`
+**Updated:** 2026-08-04
+**Current stage:** Phase 1 PR 3 THIRD CORRECTIONS — third correction implemented, pending independent verification (D-039)
+**Current main SHA:** `d58a897fdad96eb1dec70d0029dcc34ed9f1dd86`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
@@ -15,10 +15,13 @@
 **PR 3 first correction runtime/test tip:** `01cced426e8cbdfebb8580c20bfc4f2041713c59`
 **PR 3 first correction handoff reviewed by Claude:** `cb9d04ebe1a99df2f8b4db0188efd20049c59633`
 **PR 3 second review-report / second-correction start head:** `7865e30cf6ab7a57aa0025f170f861c2a1233b28` — `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:2 P2:6 P3:9)
-**PR 3 second correction status:** SECOND CORRECTION IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
-**ChatGPT decision:** D-038 — Phase 1 PR 3 second corrections required
-**New second-correction risks:** R-086..R-090 OPEN — pending independent verification
-**Live PR head / exact-head CI:** recorded authoritatively in the PR #15 body after exact-head CI (F-PR3C-13)
+**PR 3 second-correction independently reviewed implementation head:** `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b`
+**PR 3 second correction review-report / third-correction start head:** `440a93eaf2d87a9b8cf2c7390740d79be6453d05` — `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:1 P2:3 P3:4)
+**PR 3 actual last runtime/test head before third correction:** `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b` (corrects false `046a3b1…` claim — F-NEW-03)
+**PR 3 third correction status:** THIRD CORRECTION IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
+**ChatGPT decision:** D-039 — Phase 1 PR 3 third corrections required
+**New third-correction risks:** R-091..R-094 OPEN — pending independent verification
+**Live PR head / exact-head CI:** recorded authoritatively in the PR #15 body after exact-head CI (F-NEW-03)
 **PR 3 prior exact final PR head (first correction CI green, historical):** `030753460ad6b4e228c4acd65f29bd77b241318d`
 **PR 3 prior exact-head CI (historical):** workflow `CI`, run `30828120871`, job `91734905661`, conclusion `success`
 **Phase 1 PR 2:** MERGED AND CLOSED

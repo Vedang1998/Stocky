@@ -14,6 +14,8 @@
 6. **Migration owner is not superuser** for staging/production verification paths. Set `STOCKY_REQUIRE_NONSUPERUSER_OWNER=1`. Bootstrap may use a superuser only to create the migration owner; ordinary enforcement must not use the cluster superuser as the application table owner.
 7. Migration owner owns the intended application schema/tables and has only required migration authority; runtime role remains separate (`stocky_runtime`).
 8. Migration credentials must **not** be available to normal web or worker processes.
+9. **Future-function defaults:** enforcement establishes persistent `pg_default_acl` entries so newly created functions do not inherit PostgreSQL’s built-in PUBLIC EXECUTE. Absent function default-ACL rows are treated as unsafe.
+10. **Merchant DML denial window:** during `tenant:enforcement:apply`, runtime merchant DML is revoked until RLS is verified and grants are restored. Coordinate application cutover or maintenance controls — successful-query latency alone is not the merchant experience. Expected denial class during that window is SQLSTATE `42501`.
 
 ## Operator sequence (disposable / future staging only)
 

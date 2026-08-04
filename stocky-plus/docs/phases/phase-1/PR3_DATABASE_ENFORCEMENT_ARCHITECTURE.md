@@ -4,9 +4,11 @@
 **Work unit:** PR 3 — Database enforcement  
 **Branch:** `phase-1/tenant-enforcement`  
 **Starting main:** `00fb925721ad374b3ff976652ec99dbf655ebb11`  
-**Status:** Correction implemented — pending independent verification (D-037)  
+**Status:** Third correction implemented — pending independent verification (D-039)  
 **Original independently reviewed head:** `57016ed4b685c8958ad49d821f4afd9ea9894a9b` (`NOT READY`)  
-**Actual prior runtime/test head:** `0ee3ae027d746b9696c990dfbc59976f4ef56ae7`  
+**Second-correction reviewed implementation head:** `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b`  
+**Third-correction start head:** `440a93eaf2d87a9b8cf2c7390740d79be6453d05`  
+**Actual prior runtime/test head before third correction:** `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b` (not `046a3b1…`)  
 **Production execution:** NOT AUTHORIZED
 
 ## Purpose
@@ -17,12 +19,17 @@ PR 2’s application-layer `TenantDb` contract is necessary but insufficient. PR
 
 | Role | Env | Responsibilities |
 |---|---|---|
-| Migration owner | `DATABASE_MIGRATION_URL` / `TENANT_MAINTENANCE_DATABASE_URL` | Owns schema objects; runs migrations; provisions grants; never used by web/workers |
-| Restricted runtime | `DATABASE_RUNTIME_URL` | Ordinary SELECT/INSERT/UPDATE/DELETE subject to FORCE RLS; no BYPASSRLS; no ownership; no DDL |
+| Bootstrap administrator | `STOCKY_BOOTSTRAP_DATABASE_URL` (test/CI) | Create database + non-superuser migration owner; never used for ordinary apply/runtime |
+| Migration owner | `DATABASE_MIGRATION_URL` / `TENANT_MAINTENANCE_DATABASE_URL` | Non-superuser; `CREATEROLE` when required to manage runtime; owns schema; runs migrations/enforcement; never used by web/workers |
+| Restricted runtime | `DATABASE_RUNTIME_URL` | Ordinary SELECT/INSERT/UPDATE/DELETE subject to FORCE RLS; no BYPASSRLS; no ownership; no DDL; NOINHERIT |
 
 Configurable names: `STOCKY_MIGRATION_ROLE` (default `stocky_migration`), `STOCKY_RUNTIME_ROLE` (default `stocky_runtime`).
 
+**PostgreSQL 16 creator membership (P3-d):** a non-superuser `CREATEROLE` migration owner that creates the runtime role is auto-granted membership **in** the runtime role with `ADMIN OPTION`, `INHERIT false`, `SET false`. Direction is owner→runtime (administration). Runtime→owner membership remains prohibited. Runtime cannot `SET ROLE` to the migration owner.
+
 Production-like runtime (`NODE_ENV=production` or `STOCKY_REQUIRE_RUNTIME_DB_URL=1`) **fails closed** if `DATABASE_RUNTIME_URL` is missing or equals the migration URL.
+
+**Privileged attribute drift:** `rolsuper` / `rolbypassrls` / `rolcreatedb` on the runtime role fail closed with bootstrap-repair codes. Non-superuser owners never attempt `ALTER ROLE … NOSUPERUSER/NOBYPASSRLS`.
 
 ## Transaction-local tenant context (D-017)
 

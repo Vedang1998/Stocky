@@ -9,7 +9,7 @@
 **Source review:** `PR3_DATABASE_ENFORCEMENT_CORRECTION_REVIEW_REPORT.md` (preserved verbatim)
 **Independently reviewed handoff head:** `cb9d04ebe1a99df2f8b4db0188efd20049c59633`
 **Second review-report-only commit / required starting head:** `7865e30cf6ab7a57aa0025f170f861c2a1233b28`
-**Actual last runtime/test implementation head (first correction):** `01cced426e8cbdfebb8580c20bfc4f2041713c59`
+**Actual last runtime/test implementation head (second correction):** `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b` (F-NEW-03: corrects any live claim that `046a3b1` was the last runtime/test head)
 **Decision:** D-038 — Phase 1 PR 3 second corrections required
 
 **Finding counts from second independent review:** P0: 0 · P1: 2 · P2: 6 · P3: 9
