@@ -424,9 +424,9 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     return;
   }
 
-  // v1 compatibility window
-  if (envelope.schemaVersion !== TENANT_JOB_ENVELOPE_VERSION) {
-    // Attempt parse to surface a clear error; also accepts if somehow already parsed.
+  // v1 compatibility window (narrow after v2 branch above).
+  const v1Schema = (envelope as { schemaVersion?: string }).schemaVersion;
+  if (v1Schema !== TENANT_JOB_ENVELOPE_VERSION) {
     try {
       parseTenantJobEnvelopeV2(envelope);
     } catch {
@@ -434,7 +434,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     }
     throw new TenantAuthorityError(
       "unknown_envelope_version",
-      `Unsupported envelope version: ${String(envelope.schemaVersion)}`,
+      `Unsupported envelope version: ${String(v1Schema)}`,
     );
   }
 

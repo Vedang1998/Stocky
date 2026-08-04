@@ -3,6 +3,7 @@
  * delete sessions via bootstrap.
  */
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import { deleteSessionsForShop } from "../tenant/bootstrap.server";
 import { normalizeShopDomain } from "../tenant/shop-domain";
 import { requireTargetApiVersion } from "./api-version.server";
@@ -107,7 +108,7 @@ export async function processUninstall(
         topic: "app/uninstalled",
         apiVersionReceived: apiVersion,
         payloadSchemaVersion: sanitized.schemaVersion,
-        sanitizedPayload: sanitized.projection,
+        sanitizedPayload: sanitized.projection as Prisma.InputJsonValue,
         payloadDigest,
         correlationId,
         state: "COMPLETED",

@@ -2,7 +2,7 @@
  * Durable webhook intake — DB is source of truth; Redis not required for 200.
  */
 import { randomUUID } from "node:crypto";
-import type { DurableJob, WebhookDelivery } from "@prisma/client";
+import type { DurableJob, WebhookDelivery, Prisma } from "@prisma/client";
 import { normalizeShopDomain } from "../tenant/shop-domain";
 import { requireTargetApiVersion } from "./api-version.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
@@ -124,7 +124,7 @@ export async function ingestAuthenticatedWebhook(
         source: webhookSource(input.topic),
         queueName: "stocky-webhooks",
         payloadSchemaVersion: sanitized.schemaVersion,
-        sanitizedPayload: sanitized.projection,
+        sanitizedPayload: sanitized.projection as Prisma.InputJsonValue,
         payloadDigest,
         idempotencyKey: `webhook:${input.webhookId}`,
         correlationId,
@@ -141,7 +141,7 @@ export async function ingestAuthenticatedWebhook(
         topic: input.topic,
         apiVersionReceived: apiVersion,
         payloadSchemaVersion: sanitized.schemaVersion,
-        sanitizedPayload: sanitized.projection,
+        sanitizedPayload: sanitized.projection as Prisma.InputJsonValue,
         payloadDigest,
         correlationId,
         state: "JOB_CREATED",
@@ -205,7 +205,7 @@ export async function createDurableJob(input: {
         source: input.source,
         queueName: input.queueName,
         payloadSchemaVersion: input.payloadSchemaVersion,
-        sanitizedPayload: input.sanitizedPayload,
+        sanitizedPayload: input.sanitizedPayload as Prisma.InputJsonValue,
         payloadDigest,
         idempotencyKey: input.idempotencyKey,
         correlationId,

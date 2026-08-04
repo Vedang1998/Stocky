@@ -295,16 +295,7 @@ export async function resolveTenantJobContextV2(
 
   if (options?.expectedJobNameOrTopic) {
     assertSourceMatchesJob(
-      {
-        schemaVersion: "tenant-job-envelope-v1",
-        shopId: envelope.shopId,
-        myshopifyDomain: envelope.myshopifyDomain,
-        source: envelope.source,
-        correlationId: envelope.correlationId,
-        causationId: envelope.causationId,
-        issuedAt: envelope.issuedAt,
-        signature: envelope.signature,
-      },
+      { source: envelope.source },
       options.expectedJobNameOrTopic,
     );
   }
