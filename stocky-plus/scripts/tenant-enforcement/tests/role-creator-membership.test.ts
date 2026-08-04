@@ -2,6 +2,9 @@
  * PostgreSQL 16 non-superuser CREATEROLE creator-membership behavior (P3-d).
  */
 import { afterAll, describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client } from "pg";
 import { getBootstrapClient } from "../connection";
 import {
@@ -15,6 +18,11 @@ import {
   requireRuntimeRolePassword,
   type NonSuperuserOwnerFixture,
 } from "./helpers";
+
+const APP_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 
 describe.sequential("postgresql 16 role-creator membership", () => {
   let fixture: NonSuperuserOwnerFixture | undefined;
@@ -37,6 +45,12 @@ describe.sequential("postgresql 16 role-creator membership", () => {
       STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY: "1",
     });
 
+    execFileSync("npx", ["prisma", "migrate", "deploy"], {
+      cwd: APP_ROOT,
+      env: { ...process.env },
+      stdio: "pipe",
+    });
+
     const mig = new Client({ connectionString: fixture.migrationUrl });
     await mig.connect();
     try {
@@ -47,6 +61,10 @@ describe.sequential("postgresql 16 role-creator membership", () => {
       });
       expect(created.ok).toBe(true);
       expect(created.createdRuntimeRole).toBe(true);
+
+      await mig.query(
+        `GRANT CONNECT ON DATABASE ${fixture.databaseName} TO ${fixture.runtimeRole}`,
+      );
 
       const edges = await readRuntimeCreatorMembership(
         mig,
@@ -61,7 +79,6 @@ describe.sequential("postgresql 16 role-creator membership", () => {
         },
       ]);
 
-      // Runtime cannot assume migration owner.
       const runtime = new Client({ connectionString: fixture.runtimeUrl });
       await runtime.connect();
       try {
@@ -72,16 +89,16 @@ describe.sequential("postgresql 16 role-creator membership", () => {
         await runtime.end();
       }
 
-      // Migration owner can still administer runtime (ALTER alterable attrs).
       await mig.query(
         `ALTER ROLE ${fixture.runtimeRole} NOCREATEROLE NOINHERIT`,
       );
-
       expect((await verifyRoles(mig)).ok).toBe(true);
 
-      // Unsafe reverse: runtime member of owner.
       const boot = await getBootstrapClient();
       try {
+        await boot.query(
+          `REVOKE ${fixture.runtimeRole} FROM ${fixture.migrationOwner}`,
+        );
         await boot.query(
           `GRANT ${fixture.migrationOwner} TO ${fixture.runtimeRole}`,
         );
@@ -122,9 +139,9 @@ describe.sequential("postgresql 16 role-creator membership", () => {
       await mig.end();
       const boot3 = await getBootstrapClient();
       try {
-        await boot3.query(
-          `REVOKE stocky_mid_creator_esc FROM ${fixture.runtimeRole}`,
-        ).catch(() => undefined);
+        await boot3
+          .query(`REVOKE stocky_mid_creator_esc FROM ${fixture!.runtimeRole}`)
+          .catch(() => undefined);
         await boot3.query(`DROP ROLE IF EXISTS stocky_mid_creator_esc`);
       } finally {
         await boot3.end();

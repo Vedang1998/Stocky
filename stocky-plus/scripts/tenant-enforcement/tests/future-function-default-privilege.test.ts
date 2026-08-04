@@ -37,33 +37,26 @@ describe.sequential("future-function default privileges", () => {
       );
       const owner = ownerRes.rows[0].owner;
 
-      // Strip function defaults to reproduce the absent-row hole.
-      await client.query(
-        `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(owner)}`,
+      // Fresh role with no pg_default_acl row — proves absent ≠ safe.
+      const probeRole = `stocky_fn_defacl_${Date.now().toString(36)}`;
+      await client.query(`CREATE ROLE ${probeRole} NOLOGIN`);
+      const absentEffective = await readEffectiveDefaultAcl(
+        client,
+        probeRole,
+        "f",
       );
-      await client.query(
-        `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(owner)}`,
-      );
-
-      const effective = await readEffectiveDefaultAcl(client, owner, "f");
-      expect(effective.absent).toBe(true);
-      expect(effective.grants.some((g) => g.grantee === "public")).toBe(true);
-
-      const failures = await collectDefaultAclFailures(client, "stocky_runtime");
+      expect(absentEffective.absent).toBe(true);
+      expect(absentEffective.source).toBe("acldefault");
       expect(
-        failures.some((f) =>
-          f.startsWith("unsafe_default_function_absent_acldefault:"),
-        ),
+        absentEffective.grants.some((g) => g.grantee === "public"),
       ).toBe(true);
 
-      const roles = await verifyRoles(client);
-      expect(roles.ok).toBe(false);
+      await establishSafeFunctionDefaultPrivileges(client, probeRole);
+      const secured = await readEffectiveDefaultAcl(client, probeRole, "f");
+      expect(secured.absent).toBe(false);
+      expect(secured.grants.some((g) => g.grantee === "public")).toBe(false);
 
-      await establishSafeFunctionDefaultPrivileges(client, owner);
-      const after = await readEffectiveDefaultAcl(client, owner, "f");
-      expect(after.absent).toBe(false);
-      expect(after.grants.some((g) => g.grantee === "public")).toBe(false);
-
+      // Session owner: probe future function after clean enforcement.
       const probe = await verifyFutureFunctionDefaultsWithProbe(
         client,
         "stocky_runtime",
@@ -79,6 +72,12 @@ describe.sequential("future-function default privileges", () => {
         `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public
            GRANT EXECUTE ON FUNCTIONS TO PUBLIC`,
       );
+      const failures = await collectDefaultAclFailures(client, "stocky_runtime");
+      expect(
+        failures.some((f) => f.startsWith("unsafe_default_function_priv:")),
+      ).toBe(true);
+      expect((await verifyRoles(client)).ok).toBe(false);
+
       const refused = await provisionRoles(client, {
         apply: true,
         phase: "prepare",
@@ -98,8 +97,34 @@ describe.sequential("future-function default privileges", () => {
         repaired.repairedDrift.some((d) => d.includes("probe=ok")),
       ).toBe(true);
       expect((await verifyEnforcement(client)).ok).toBe(true);
+      expect(
+        (await verifyRoles(client, { requireMerchantDml: false })).ok,
+      ).toBe(true);
+      const grants = await provisionRoles(client, {
+        apply: true,
+        phase: "grants",
+      });
+      expect(grants.ok).toBe(true);
       expect((await verifyRoles(client)).ok).toBe(true);
     } finally {
+      try {
+        // Drop default-ACL dependency before DROP ROLE.
+        const roles = await client.query<{ rolname: string }>(
+          `SELECT rolname FROM pg_roles WHERE rolname LIKE 'stocky_fn_defacl_%'`,
+        );
+        for (const row of roles.rows) {
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(row.rolname)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(row.rolname)}`,
+          );
+          await client.query(
+            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(row.rolname)} REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(row.rolname)}`,
+          );
+          await client.query(`DROP ROLE IF EXISTS ${quoteIdent(row.rolname)}`);
+        }
+        await client.query(`DROP ROLE IF EXISTS stocky_fn_defacl_probe`);
+      } catch {
+        // best-effort cleanup
+      }
       await client.end();
     }
   }, 300_000);

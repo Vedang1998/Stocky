@@ -187,41 +187,54 @@ describe.sequential("non-superuser migration-owner full enforcement", () => {
       );
       expect(Number(forced.rows[0].c)).toBe(MERCHANT_SQL_TABLES.length);
 
-      // Missing tenant context denies; current tenant works; cross-tenant fails.
-      const shopA = await mig.query<{ id: string }>(
-        `INSERT INTO "Shop" (id, "myshopifyDomain", "createdAt", "updatedAt")
-         VALUES ('shop_a', 'a.myshopify.com', NOW(), NOW()) RETURNING id`,
-      );
-      const shopB = await mig.query<{ id: string }>(
-        `INSERT INTO "Shop" (id, "myshopifyDomain", "createdAt", "updatedAt")
-         VALUES ('shop_b', 'b.myshopify.com', NOW(), NOW()) RETURNING id`,
-      );
-      await mig.query(
-        `INSERT INTO "Supplier" (id, shop, "shopId", name, "createdAt", "updatedAt")
-         VALUES ('sup_a', 'a.myshopify.com', $1, 'A', NOW(), NOW()),
-                ('sup_b', 'b.myshopify.com', $2, 'B', NOW(), NOW())`,
-        [shopA.rows[0].id, shopB.rows[0].id],
-      );
+      // Seed via bootstrap: FORCE RLS applies to non-superuser table owners too,
+      // and policies are granted only to the runtime role.
+      const bootSeed = await getBootstrapClient();
+      const bootOnDb = new Client({
+        connectionString: (() => {
+          const u = new URL(fixture.bootstrapUrl);
+          u.pathname = `/${fixture.databaseName}`;
+          return u.toString();
+        })(),
+      });
+      await bootOnDb.connect();
+      try {
+        await bootOnDb.query(
+          `INSERT INTO "Shop" (id, "myshopifyDomain", "createdAt", "updatedAt")
+           VALUES ('shop_a', 'a.myshopify.com', NOW(), NOW()),
+                  ('shop_b', 'b.myshopify.com', NOW(), NOW())`,
+        );
+        await bootOnDb.query(
+          `INSERT INTO "Supplier" (id, shop, "shopId", name, "createdAt", "updatedAt")
+           VALUES ('sup_a', 'a.myshopify.com', 'shop_a', 'A', NOW(), NOW()),
+                  ('sup_b', 'b.myshopify.com', 'shop_b', 'B', NOW(), NOW())`,
+        );
+      } finally {
+        await bootOnDb.end();
+        await bootSeed.end();
+      }
 
       const runtime = new Client({ connectionString: fixture.runtimeUrl });
       await runtime.connect();
       try {
         await runtime.query("BEGIN");
-        await expect(
-          runtime.query(`SELECT id FROM "Supplier"`),
-        ).rejects.toThrow();
+        // Missing tenant context: RLS filters to zero rows (does not raise).
+        const denied = await runtime.query(`SELECT id FROM "Supplier"`);
+        expect(denied.rows).toEqual([]);
         await runtime.query("ROLLBACK");
 
         await runtime.query("BEGIN");
         await runtime.query(
           `SELECT set_config('stocky.current_shop_id', $1, true)`,
-          [shopA.rows[0].id],
+          ["shop_a"],
         );
         await runtime.query(
           `SELECT set_config('stocky.tenant_context_version', 'phase1-db-tenant-context-v1', true)`,
         );
         const own = await runtime.query(`SELECT id FROM "Supplier"`);
         expect(own.rows.map((r) => r.id)).toEqual(["sup_a"]);
+        // Cross-tenant row must not be visible.
+        expect(own.rows.some((r) => r.id === "sup_b")).toBe(false);
         await runtime.query("COMMIT");
       } finally {
         await runtime.end();
@@ -339,6 +352,10 @@ describe.sequential("non-superuser migration-owner full enforcement", () => {
         try {
           await boot3.query(
             `ALTER ROLE ${local.runtimeRole} NOBYPASSRLS`,
+          );
+          // Break PG16 creator membership before granting the reverse edge.
+          await boot3.query(
+            `REVOKE ${local.runtimeRole} FROM ${local.migrationOwner}`,
           );
           await boot3.query(
             `GRANT ${local.migrationOwner} TO ${local.runtimeRole}`,

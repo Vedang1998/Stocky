@@ -114,10 +114,75 @@ export async function readEffectiveDefaultAcl(
   const res = await client.query<{
     absent: boolean;
     source: "schema" | "global" | "acldefault";
-    effective_acl: string;
+    grantee: string;
+    privilege_type: string;
   }>(
     `WITH role_row AS (
        SELECT oid, rolname FROM pg_roles WHERE rolname = $1
+     ),
+     public_ns AS (
+       SELECT oid FROM pg_namespace WHERE nspname = 'public'
+     ),
+     schema_def AS (
+       SELECT d.defaclacl
+       FROM pg_default_acl d, role_row r, public_ns n
+       WHERE d.defaclrole = r.oid
+         AND d.defaclnamespace = n.oid
+         AND d.defaclobjtype = $2
+     ),
+     global_def AS (
+       SELECT d.defaclacl
+       FROM pg_default_acl d, role_row r
+       WHERE d.defaclrole = r.oid
+         AND d.defaclnamespace = 0
+         AND d.defaclobjtype = $2
+     ),
+     effective AS (
+       SELECT
+         (SELECT defaclacl FROM schema_def) IS NULL
+           AND (SELECT defaclacl FROM global_def) IS NULL AS absent,
+         CASE
+           WHEN (SELECT defaclacl FROM schema_def) IS NOT NULL THEN 'schema'
+           WHEN (SELECT defaclacl FROM global_def) IS NOT NULL THEN 'global'
+           ELSE 'acldefault'
+         END AS source,
+         COALESCE(
+           (SELECT defaclacl FROM schema_def),
+           (SELECT defaclacl FROM global_def),
+           acldefault($2::"char", (SELECT oid FROM role_row))
+         ) AS effective_acl
+       FROM role_row
+     )
+     SELECT
+       e.absent,
+       e.source,
+       CASE WHEN acl.grantee = 0 THEN 'public' ELSE COALESCE(g.rolname, acl.grantee::text) END AS grantee,
+       acl.privilege_type
+     FROM effective e
+     CROSS JOIN LATERAL aclexplode(e.effective_acl) acl
+     LEFT JOIN pg_roles g ON g.oid = acl.grantee`,
+    [owner, objtype],
+  );
+  if ((res.rowCount ?? 0) === 0) {
+    // Role exists but effective ACL exploded to zero grants (empty ACL).
+    const exists = await client.query(`SELECT 1 FROM pg_roles WHERE rolname = $1`, [
+      owner,
+    ]);
+    if ((exists.rowCount ?? 0) === 0) {
+      throw new Error(`default_acl_owner_missing:${owner}`);
+    }
+  }
+  const first = res.rows[0];
+  const grants = res.rows
+    .filter((r) => r.grantee && r.privilege_type)
+    .map((r) => ({ grantee: r.grantee, privilege_type: r.privilege_type }));
+  const meta = await client.query<{
+    absent: boolean;
+    source: "schema" | "global" | "acldefault";
+    effective_acl: string;
+  }>(
+    `WITH role_row AS (
+       SELECT oid FROM pg_roles WHERE rolname = $1
      ),
      public_ns AS (
        SELECT oid FROM pg_namespace WHERE nspname = 'public'
@@ -152,29 +217,14 @@ export async function readEffectiveDefaultAcl(
      FROM role_row`,
     [owner, objtype],
   );
-  if ((res.rowCount ?? 0) === 0) {
-    throw new Error(`default_acl_owner_missing:${owner}`);
-  }
-  const row = res.rows[0];
-  const grantsRes = await client.query<{
-    grantee: string;
-    privilege_type: string;
-  }>(
-    `SELECT
-       CASE WHEN acl.grantee = 0 THEN 'public' ELSE COALESCE(g.rolname, acl.grantee::text) END AS grantee,
-       acl.privilege_type
-     FROM aclexplode($1::aclitem[]) acl
-     LEFT JOIN pg_roles g ON g.oid = acl.grantee`,
-    [row.effective_acl],
-  );
   return {
     owner,
     schema: "public",
     objtype,
-    absent: row.absent,
-    source: row.source,
-    effectiveAcl: row.effective_acl,
-    grants: grantsRes.rows,
+    absent: meta.rows[0]?.absent ?? first?.absent ?? true,
+    source: meta.rows[0]?.source ?? first?.source ?? "acldefault",
+    effectiveAcl: meta.rows[0]?.effective_acl ?? "",
+    grants,
   };
 }
 
