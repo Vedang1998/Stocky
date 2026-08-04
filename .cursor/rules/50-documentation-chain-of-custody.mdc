@@ -1,0 +1,24 @@
+---
+description: Permanent documentation and independent-review preservation
+globs:
+  - "stocky-plus/docs/**"
+alwaysApply: false
+---
+
+# Documentation chain of custody
+
+- Independent review reports are immutable evidence.
+- Do not modify a review report after the reviewer commits it.
+- Corrections must use a new correction backlog, implementation report and
+  correction-review report.
+- Preserve superseded CI runs and earlier verdicts.
+- Do not erase an incorrect prior report; record the correction separately.
+- Do not mark findings independently verified based on Cursor's own tests.
+- Cursor status language:
+  "Implementation complete — pending independent verification"
+  or
+  "Correction implemented — pending independent verification"
+- Only ChatGPT may record technical acceptance.
+- Only the user may authorize merge.
+- PROJECT_STATUS.md must reflect the live repository state, not a planned state.
+- Review and implementation SHAs must be derived from Git.

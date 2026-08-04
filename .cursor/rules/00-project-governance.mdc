@@ -1,53 +1,43 @@
 ---
-description: Permanent project governance and source-of-truth rules for Stocky Migration
+description: Permanent Stocky Migration governance and authority boundaries
 alwaysApply: true
 ---
 
-# Stocky Migration — Core Cursor Rule
+# Stocky Migration governance
 
-You are the implementation engineer for this project.
+Repository: Vedang1998/Stocky
+Application: stocky-plus/
 
-Read `AGENTS.md` before substantial work.
+Before substantial work, read:
+1. AGENTS.md
+2. stocky-plus/docs/README.md
+3. stocky-plus/docs/PROJECT_STATUS.md
+4. Active phase records
+5. Relevant approved product documents
 
-Then read:
+Authority:
+- ChatGPT owns product decisions, architecture, scope, acceptance criteria,
+  phase control, merge recommendations and agent coordination.
+- Cursor implements only approved scope.
+- Claude Code independently reviews.
+- The user alone authorizes merges after ChatGPT acceptance.
+- GitHub is the permanent project record.
 
-- `stocky-plus/docs/product/00_READ_ME_FIRST.md`;
-- the product documents in its required order;
-- the active task prompt under `stocky-plus/docs/agents/`.
+Hard boundaries:
+- Never commit directly to main.
+- Never mark a PR ready or merge without explicit authorization.
+- Never begin a later PR or phase early.
+- Never claim a command, test, CI run, build, migration, repository state,
+  deployment or external fact without direct evidence.
+- Never access production or merchant data without explicit authorization.
+- Never deploy or execute a production backfill without explicit authorization.
+- Never enable inventory-write flags without explicit authorization.
+- Never mutate Shopify inventory unless separately approved.
+- Never commit secrets, credentials, .env files, customer data or production data.
 
-## Authority
-
-The approved product documents take precedence over unfinished code, old prompts, README claims, prior replenishment-only assumptions, and implementation convenience.
-
-Do not redefine product requirements, formulas, inventory authority, pricing architecture, or release scope independently.
-
-When implementation conflicts with an approved rule, stop changing product behavior and document the conflict for a product decision.
-
-## Roles
-
-- ChatGPT owns product requirements, research, business logic, architecture direction, pricing, and acceptance criteria.
-- Cursor owns implementation, migrations, tests, technical documentation, and focused pull requests.
-- Claude Code independently verifies security, correctness, and readiness.
-
-## Non-negotiable product rules
-
-- Build full Stocky functional parity, not only replenishment.
-- Do not copy Stocky branding or imply a first-party Shopify product.
-- Shopify is authoritative for products, variants, orders, refunds, locations, and sellable inventory.
-- The app owns advanced supplier, purchasing, receipt, cost, analytics, and audit ledgers only where authority is explicitly documented.
-- Preserve variant-level identity.
-- Make every forecast explainable.
-- Keep Stocky Parity and Smart Forecast modes separate.
-- Treat mobile and Shopify POS as first-class surfaces.
-- Allow merchants to export operational data.
-- Do not force MOQ, pack, lead-time, safety-stock, or case-rounding rules globally.
-- Do not release destructive workflows without reconciliation and recovery.
-
-## Scope discipline
-
-Do not build future phases early.
-Do not overbuild unrelated ERP functionality.
-Do not rewrite useful foundations merely because they are imperfect.
-Do not preserve unsafe behavior merely because it already exists.
-
-Prefer characterization tests, additive migrations, incremental replacement, feature flags, and focused pull requests.
+Approved product documents override:
+- unfinished code;
+- old prompts;
+- README claims;
+- implementation convenience;
+- model assumptions.

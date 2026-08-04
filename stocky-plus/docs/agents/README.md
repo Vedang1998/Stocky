@@ -44,11 +44,14 @@ Cursor should load the project rules from:
 
 The rules are intentionally split:
 
-- `00-project-governance.mdc` — source of truth, agent roles, product boundaries;
-- `10-delivery-and-evidence.mdc` — Git, tests, evidence, and pull-request reporting;
-- `20-inventory-data-safety.mdc` — tenancy, inventory writes, ledgers, sync, and recovery;
-- `30-forecasting-cost-reporting.mdc` — deterministic formulas, ABC/U, costs, and reports;
-- `40-pricing-ai-entitlements.mdc` — plans, billing, entitlements, AI authorization, and cost controls.
+- `00-project-governance.mdc` — permanent governance and authority boundaries;
+- `10-phase-workflow.mdc` — required phase and pull-request workflow;
+- `20-repository-evidence.mdc` — Git, CI, and handoff evidence requirements;
+- `30-database-enforcement.mdc` — PostgreSQL tenant-enforcement requirements;
+- `40-testing-and-ci.mdc` — testing, CI, and adversarial verification standards;
+- `50-documentation-chain-of-custody.mdc` — documentation and independent-review preservation;
+- `60-current-documentation.mdc` — current external documentation and source hierarchy;
+- `90-security-boundaries.mdc` — secrets, production, deployment, and destructive-action restrictions.
 
 For Phase 0, Cursor used:
 

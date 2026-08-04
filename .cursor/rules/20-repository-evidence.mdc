@@ -1,0 +1,48 @@
+---
+description: Git, CI and handoff evidence requirements
+alwaysApply: true
+---
+
+# Evidence rules
+
+Before editing, record:
+- origin/main SHA;
+- current branch;
+- current HEAD;
+- working-tree state;
+- authorized starting SHA;
+- active PR number, if any.
+
+Before handoff:
+1. Fetch the live remote state.
+2. Derive all commits since the authorized starting SHA.
+3. Classify each commit:
+   - runtime;
+   - schema/migration;
+   - database tooling;
+   - test;
+   - CI;
+   - documentation;
+   - empty retrigger;
+   - independent review report.
+4. Derive the actual last runtime/test implementation commit from Git history.
+5. Distinguish:
+   - starting main;
+   - runtime/test implementation head;
+   - reviewed implementation head;
+   - review-report-only commit;
+   - documentation finalization head;
+   - live PR head.
+6. Verify CI head_sha equals the live PR head.
+7. Record superseded failed and cancelled CI runs.
+8. Never call a branch complete based only on a report.
+9. Never put a commit's own unknown future SHA inside that same commit.
+10. After any documentation sync commit, obtain CI again if exact-head CI is required.
+
+Required final checks:
+- git status --porcelain
+- git diff --check
+- git rev-parse HEAD
+- git rev-parse origin/main
+- live PR head
+- live CI head_sha

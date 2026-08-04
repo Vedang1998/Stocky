@@ -1,0 +1,36 @@
+---
+description: Required phase and pull-request workflow
+alwaysApply: true
+---
+
+# Required workflow
+
+Each implementation unit follows this sequence:
+
+1. ChatGPT authorizes a focused PR.
+2. Cursor verifies exact main, branch and clean working tree.
+3. Cursor reads the required records.
+4. Cursor implements only approved scope.
+5. Cursor runs focused tests while implementing.
+6. Cursor performs adversarial self-review.
+7. Cursor runs the full required suite.
+8. Cursor opens or updates a draft PR.
+9. Cursor records exact implementation and CI evidence.
+10. Claude Code independently reviews the exact implementation head.
+11. Cursor implements approved corrections.
+12. Claude independently re-reviews.
+13. ChatGPT makes the technical acceptance decision.
+14. User explicitly authorizes merge.
+15. PR is merged.
+16. Project status is synchronized.
+17. Only then may the next PR begin.
+
+Stop when:
+- expected main or branch HEAD differs;
+- the working tree is not clean before starting;
+- the active phase records conflict;
+- the work requires a later PR;
+- ownership or data must be guessed;
+- production access is required;
+- prohibited scope becomes necessary;
+- required tests cannot be executed.
