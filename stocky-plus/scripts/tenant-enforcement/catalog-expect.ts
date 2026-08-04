@@ -17,7 +17,9 @@ export {
 
 /** Canonical tenant predicate used by all merchant RLS policies. */
 export function expectedTenantPredicateSql(): string {
-  return `(${quoteBare("shopId")} IS NOT NULL) AND (${quoteBare("shopId")} = ${TENANT_CONTEXT_HELPER_FN}()) AND (${TENANT_CONTEXT_VERSION_FN}() = '${ENFORCEMENT_CONTEXT_VERSION}') AND (stocky_shop_processing_enabled(${quoteBare("shopId")}))`;
+  // Match PostgreSQL's stored policy expression shape after CREATE POLICY:
+  // comparisons are parenthesized; trailing function-call conjunct is not.
+  return `(${quoteBare("shopId")} IS NOT NULL) AND (${quoteBare("shopId")} = ${TENANT_CONTEXT_HELPER_FN}()) AND (${TENANT_CONTEXT_VERSION_FN}() = '${ENFORCEMENT_CONTEXT_VERSION}') AND stocky_shop_processing_enabled(${quoteBare("shopId")})`;
 }
 
 function quoteBare(ident: string): string {

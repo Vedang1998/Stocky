@@ -10,6 +10,7 @@ export type ExceptionCategory =
   | "pr1_maintenance_backfill"
   | "pr1_compatibility_indexes"
   | "pr3_database_enforcement"
+  | "pr4_sync_control_plane"
   | "migration_tests"
   | "dev_seed";
 
@@ -225,6 +226,42 @@ function testExceptions(): AccessException[] {
   }));
 }
 
+function syncControlPlaneExceptions(): AccessException[] {
+  const files = [
+    "app/sync/control-plane-db.server.ts",
+    "app/sync/intake.server.ts",
+    "app/sync/lifecycle.server.ts",
+    "app/sync/replay.server.ts",
+    "app/sync/uninstall.server.ts",
+    "app/sync/dispatcher.server.ts",
+  ] as const;
+  return files.map((path, i) => ({
+    id: `EX-SYNC-${String(i + 1).padStart(3, "0")}`,
+    path,
+    category: "pr4_sync_control_plane" as const,
+    reason:
+      "Phase 1 PR 4 durable sync control-plane uses dedicated control-plane Prisma + $transaction (not merchant TenantDb)",
+    permittedModelsOrOperations: [
+      "WebhookDelivery",
+      "DurableJob",
+      "JobAttempt",
+      "DeadLetter",
+      "JobReplay",
+      "SyncRun",
+      "SyncCursor",
+      "ReconciliationRun",
+      "DataIssue",
+      "SyncHealth",
+      "Shop lifecycle fields",
+      "PrismaClient via DATABASE_CONTROL_PLANE_URL only",
+    ],
+    productionRuntime: "yes" as const,
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retained while durable sync control-plane remains the DB system of record for intake/dispatch",
+  }));
+}
+
 export const ACCESS_EXCEPTIONS: AccessException[] = [
   {
     id: "EX-RAW-002",
@@ -291,6 +328,24 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Replace with tenant-bound seed helper before any shared staging seed",
   },
+  {
+    id: "EX-SYNC-TEST-001",
+    path: "app/sync/__tests__/sync-control-plane.integration.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 sync control-plane disposable PostgreSQL/Redis integration harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "Shop / Session fixture setup",
+      "Control-plane table exercise",
+      "Restricted-role grant verification via raw SQL",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 sync-integration suite requires disposable fixtures",
+  },
+  ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),
   ...enforcementExceptions(),

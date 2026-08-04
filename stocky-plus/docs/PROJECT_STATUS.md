@@ -60,7 +60,7 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Implement PR 4 on `phase-1/sync-control-plane`, open draft PR, obtain exact-head CI, return to ChatGPT for independent Claude Code review.
+**Next action:** Draft PR #20 open on `phase-1/sync-control-plane`. Obtain exact-head CI on the final tip, then return to ChatGPT for independent Claude Code PR 4 review.
 
 ## Current truth
 

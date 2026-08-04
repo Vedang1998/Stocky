@@ -146,10 +146,7 @@ function sanitizeUninstallProjection(
 export function isSanitizedWebhookTopic(
   topic: string,
 ): topic is SanitizedWebhookTopic {
-  return Object.prototype.hasOwnProperty.call(
-    WEBHOOK_PROJECTION_SCHEMA_VERSIONS,
-    topic,
-  );
+  return Object.hasOwn(WEBHOOK_PROJECTION_SCHEMA_VERSIONS, topic);
 }
 
 /**

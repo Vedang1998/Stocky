@@ -23,7 +23,7 @@ import {
   parseTenantJobEnvelopeV2,
 } from "../envelope-v2.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
-import { issueTenantAuthority } from "../../tenant/authority.server";
+import { issueSyncDispatchAuthority } from "../../tenant/sync-dispatch-authority.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
 import { assertTransition } from "../state-machine.server";
 import { WEBHOOK_QUEUE } from "../../jobs/queue.server";
@@ -390,7 +390,7 @@ describe("sync control-plane integration", () => {
     expect(replayed.newJob.id).not.toBe(r.job!.id);
     expect(replayed.newJob.causationId).toBe(r.job!.id);
 
-    const tenant = issueTenantAuthority({
+    const tenant = issueSyncDispatchAuthority({
       shopId: shopAId,
       myshopifyDomain: SHOP_A,
       source: "verified_job",
@@ -451,7 +451,7 @@ describe("sync control-plane integration", () => {
   });
 
   it("envelope security: digest tamper fails signature", async () => {
-    const tenant = issueTenantAuthority({
+    const tenant = issueSyncDispatchAuthority({
       shopId: shopAId,
       myshopifyDomain: SHOP_A,
       source: "verified_job",

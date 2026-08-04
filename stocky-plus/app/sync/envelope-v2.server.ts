@@ -3,10 +3,8 @@
  * Preserves PR 2 secret strength and source allowlist; adds durable bindings.
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-  issueTenantAuthority,
-  type TenantAuthority,
-} from "../tenant/authority.server";
+import type { TenantAuthority } from "../tenant/authority.server";
+import { issueSyncDispatchAuthority } from "../tenant/sync-dispatch-authority.server";
 import {
   ENVELOPE_MAX_AGE_MS,
   ENVELOPE_MAX_FUTURE_SKEW_MS,
@@ -335,7 +333,7 @@ export async function resolveTenantJobContextV2(
     myshopifyDomain: envelope.myshopifyDomain,
   });
 
-  const tenant = issueTenantAuthority({
+  const tenant = issueSyncDispatchAuthority({
     shopId: shop.id,
     myshopifyDomain: shop.myshopifyDomain,
     source: "verified_job",

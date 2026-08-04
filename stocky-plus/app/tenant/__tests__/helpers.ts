@@ -124,6 +124,18 @@ export async function resetPublicSchema(prisma: PrismaClient): Promise<void> {
   await resetPrismaSingletonForTests();
 }
 
+export async function wipeSyncControlPlaneTables(
+  prisma: PrismaClient,
+): Promise<void> {
+  // Control-plane FKs to Shop are ON DELETE RESTRICT — clear them before shop.deleteMany.
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
+      "JobReplay", "DeadLetter", "JobAttempt", "WebhookDelivery", "DurableJob"
+    CASCADE
+  `);
+}
+
 export async function seedTwoShops(prisma: PrismaClient) {
   const shopA = await prisma.shop.create({
     data: { myshopifyDomain: SHOP_A_DOMAIN },

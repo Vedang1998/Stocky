@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import type { DurableJob } from "@prisma/client";
 import { Prisma } from "@prisma/client";
-import { issueTenantAuthority } from "../tenant/authority.server";
+import { issueSyncDispatchAuthority } from "../tenant/sync-dispatch-authority.server";
 import { assertTenantJobSource, type TenantJobSource } from "../tenant/job-envelope.server";
 import {
   CRON_QUEUE,
@@ -117,7 +117,7 @@ async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
   }
 
   assertTenantJobSource(job.source);
-  const tenant = issueTenantAuthority({
+  const tenant = issueSyncDispatchAuthority({
     shopId: shop.id,
     myshopifyDomain: shop.myshopifyDomain,
     source: "verified_scheduler",
