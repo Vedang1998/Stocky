@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
 import { acceptedLegacyShopVariants } from "../tenant/legacy-scope";
+import { attachTenantDbContextMocks } from "../test-utils/prisma-tenant-context-mock";
 
 const SHOP_A = "shop-a.myshopify.com";
 const SHOP_B = "shop-b.myshopify.com";
@@ -88,12 +89,11 @@ const {
       findMany: vi.fn(),
       findFirst: vi.fn(),
     },
+    $executeRaw: vi.fn(),
+    $executeRawUnsafe: vi.fn(),
+    $queryRawUnsafe: vi.fn(),
     $transaction: vi.fn(),
   };
-
-  prismaMock.$transaction.mockImplementation(async (fn: (tx: typeof prismaMock) => unknown) =>
-    fn(prismaMock),
-  );
 
   return {
     prismaMock,
@@ -274,6 +274,7 @@ function scopedLineItemsInclude(parentRelation: string) {
 describe("cross-shop denial", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    attachTenantDbContextMocks(prismaMock);
     authAsShopB();
     // Ensure inventory-write flags stay OFF for every denial case.
     featureFlags.stocktakeInventoryWrites.mockReturnValue(false);

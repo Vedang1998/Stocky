@@ -367,7 +367,9 @@ export function runPrismaSchemaDriftDiff(
 }
 
 /**
- * Fail closed unless the live database matches prisma/schema.prisma with an empty diff.
+ * Fail closed unless the live database matches prisma/schema.prisma with an empty diff,
+ * OR the only differences are expected Phase 1 PR 3 enforcement divergences
+ * (NOT NULL shopId, Shop FKs, composite tenant FKs) when enforcement is active (F-PR3-07).
  * Never surfaces raw stdout, stderr, or unsanitized exception text.
  */
 export function assertNoPrismaSchemaDrift(databaseUrl?: string): void {
@@ -382,7 +384,84 @@ export function assertNoPrismaSchemaDrift(databaseUrl?: string): void {
     return;
   }
 
+  if (result.exitCode === 2) {
+    const failure = classifyDriftFailure(result);
+    const diffs = failure.differences ?? [];
+    const unexpected = diffs.filter((d) => !isExpectedEnforcementDivergence(d));
+    if (
+      diffs.length > 0 &&
+      unexpected.length === 0 &&
+      process.env.STOCKY_ENFORCEMENT_SCHEMA_DIVERGENCE_EXPECTED === "1"
+    ) {
+      console.log(
+        JSON.stringify({
+          event: "tenant_prisma_schema_drift_expected_enforcement_divergence",
+          commandClass: "prisma_migrate_diff",
+          exitCode: 0,
+          expectedDifferenceCount: diffs.length,
+          note: "Live DB has PR 3 enforcement objects absent from expand-compatible Prisma schema. Do not run db:migrate / db:push against an enforced database.",
+        }),
+      );
+      return;
+    }
+    // Improve "(none recognized)" — still fail, but name the enforcement risk.
+    if (diffs.length === 0) {
+      throw new Error(
+        [
+          failure.summary,
+          "No allowlisted differences were recognized from migrate-diff output.",
+          "If enforcement (NOT NULL / composite FKs) is applied, set STOCKY_ENFORCEMENT_SCHEMA_DIVERGENCE_EXPECTED=1 after verifying via tenant:enforcement:verify,",
+          "or treat this as unexpected drift. Never run prisma migrate dev / db push on an enforced database.",
+        ].join("\n"),
+      );
+    }
+    throw new Error(formatSafeDriftFailure(failure));
+  }
+
   throw new Error(formatSafeDriftFailure(classifyDriftFailure(result)));
+}
+
+/** Expected PR 3 divergences from expand-compatible Prisma schema. */
+export function isExpectedEnforcementDivergence(
+  diff: SafeDriftDifference,
+): boolean {
+  const id = diff.identifier;
+  if (diff.changeCategory !== "drop" && diff.changeCategory !== "alter") {
+    return false;
+  }
+  // Composite / shop FKs and NOT NULL helper checks
+  if (/_shopId_.*_fkey$/.test(id) || /_shopId_fkey_shop$/.test(id)) {
+    return true;
+  }
+  if (/_shopId_not_null$/.test(id)) return true;
+  // ALTER TABLE merchant — DROP NOT NULL / DROP CONSTRAINT emitted as table alter/drop
+  const merchantTables = [
+    "Supplier",
+    "PurchaseOrder",
+    "ShopifyVariantCache",
+    "InventorySnapshot",
+    "VariantAbcClass",
+    "ForecastOverride",
+    "SalesDailyAggregate",
+    "ShopSettings",
+    "TransferOrder",
+    "Stocktake",
+    "BomComponent",
+    "LowStockAlert",
+    "SupplierSkuMapping",
+    "VolumePriceTier",
+    "LeadTimeSnapshot",
+    "POLineItem",
+    "TransferLineItem",
+    "StocktakeLineItem",
+  ];
+  if (
+    (diff.objectType === "table" || diff.objectType === "constraint") &&
+    merchantTables.includes(id)
+  ) {
+    return diff.changeCategory === "alter" || diff.changeCategory === "drop";
+  }
+  return false;
 }
 
 /**

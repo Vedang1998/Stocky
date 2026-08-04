@@ -330,7 +330,10 @@ export async function resolveMatchingRawLegacyShops(
 
     const limit = getMaxDistinctLegacyShopFormsPerModelTenant();
     const raw = (client as PrismaClient).$queryRaw;
-    if (typeof raw !== "function") {
+    const isUnitMock =
+      (client as { __stockyUnitMock?: boolean }).__stockyUnitMock === true ||
+      typeof raw !== "function";
+    if (isUnitMock) {
       // Mocked clients (unit tests): use accepted variants only.
       const variants = acceptedLegacyShopVariants(authority.myshopifyDomain);
       if (variants.length > limit) {

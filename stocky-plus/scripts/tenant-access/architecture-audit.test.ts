@@ -3,10 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  ACCESS_EXCEPTIONS,
   assertAllowlistPathsAreExact,
   exceptionForPath,
 } from "./allowlist";
-import { scanRepository, type AccessFinding } from "./scan";
+import { assertNoViolations, scanRepository, type AccessFinding } from "./scan";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, "fixtures");
@@ -37,7 +38,9 @@ describe("tenant access architecture audit", () => {
     const result = scanRepository();
     expect(result.violations).toEqual([]);
     expect(result.modelsCovered.length).toBe(18);
-    expect(result.exceptionsUsed).toContain("EX-RAW-001");
+    // P3-c: EX-RAW-001 removed — construction lives in EX-RAW-002 only.
+    expect(result.exceptionsUsed).toContain("EX-RAW-002");
+    expect(result.exceptionsUsed).not.toContain("EX-RAW-001");
     expect(result.exceptionsUsed).toContain("EX-BOOT-001");
     expect(result.exceptionsUsed).toContain("EX-TDB-001");
     expect(result.contentDigest).toMatch(/^[a-f0-9]{64}$/);
@@ -273,7 +276,25 @@ describe("tenant access architecture audit", () => {
     expect(
       exceptionForPath("fixture-root/app/tenant/tenant-db.server.ts"),
     ).toBeUndefined();
-    expect(exceptionForPath("app/db.server.ts")?.id).toBe("EX-RAW-001");
+    // P3-c: EX-RAW-001 removed; facade has no raw construction exception.
+    expect(exceptionForPath("app/db.server.ts")).toBeUndefined();
+    expect(exceptionForPath("app/db/runtime-identity.server.ts")?.id).toBe(
+      "EX-RAW-002",
+    );
+  });
+
+  it("fails closed on unused or duplicated raw exception IDs (P3-c)", () => {
+    const result = scanRepository();
+    expect(() => assertNoViolations(result)).not.toThrow();
+    expect(ACCESS_EXCEPTIONS.some((ex) => ex.id === "EX-RAW-001")).toBe(false);
+    const ids = ACCESS_EXCEPTIONS.map((ex) => ex.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const raw = ACCESS_EXCEPTIONS.filter(
+      (ex) => ex.category === "raw_prisma_construction",
+    );
+    for (const ex of raw) {
+      expect(result.exceptionsUsed).toContain(ex.id);
+    }
   });
 
   it("fails when generated inventory would be stale", async () => {

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
 import { UnsupportedShopifyOperationError } from "./shopify-sync.server";
+import { attachTenantDbContextMocks } from "../test-utils/prisma-tenant-context-mock";
 
 const SHOP = "shop-a.myshopify.com";
 const SHOP_ID = "shop-a-canonical-id";
@@ -34,6 +35,9 @@ const {
       findUnique: vi.fn(),
       findMany: vi.fn(),
     },
+    $executeRaw: vi.fn(),
+    $executeRawUnsafe: vi.fn(),
+    $queryRawUnsafe: vi.fn(),
     $transaction: vi.fn(),
   };
 
@@ -102,6 +106,7 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    attachTenantDbContextMocks(prismaMock);
     // Enable only for these receive-path cases (assertInventoryWriteEnabled
     // reads process.env). Defaults remain OFF outside this suite.
     process.env.FEATURE_TRANSFER_WRITES = "true";
@@ -165,9 +170,11 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
     expect(result).toEqual({
       error: expect.stringMatching(/unsupported/i),
     });
-    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    // PR 3 TenantDb may open a read transaction to set/assert tenant context;
+    // local receipt mutations must still be absent.
     expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
     expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.transferOrder.updateMany).not.toHaveBeenCalled();
   });
 
   it("does not mutate locally when Shopify transfer id is absent", async () => {
@@ -193,9 +200,11 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
     expect(result).toEqual({
       error: expect.stringMatching(/unsupported/i),
     });
-    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+    // PR 3 TenantDb may open a read transaction to set/assert tenant context;
+    // local receipt mutations must still be absent.
     expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
     expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.transferOrder.updateMany).not.toHaveBeenCalled();
   });
 
   it("returns a clear unsupported-operation response to the merchant", async () => {

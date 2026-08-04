@@ -2,13 +2,13 @@
 
 **Phase 1 planning:** APPROVED AND MERGED
 **Implementation authority:** EFFECTIVE
-**Phase 1 status:** IN PROGRESS (PR 1 and PR 2 merged and closed; PR 3 not started)
+**Phase 1 status:** IN PROGRESS (PR 1 and PR 2 merged and closed; PR 3 third correction implemented on draft PR #15 — pending independent verification; D-039)
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
-**Phase 1 PR 3:** NOT STARTED
-**Next authorized implementation unit:** PR 3 — database-enforcement gate
-**Active implementation branch:** none (PR 2 closed; PR 3 not started)
-**Active implementation PR:** none
+**Phase 1 PR 3:** IN PROGRESS — draft PR [#15](https://github.com/Vedang1998/Stocky/pull/15); second-correction reviewed head `24cc4d8…` `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:1 P2:3 P3:4); third-correction start `440a93e…`; pre-third-correction runtime/test head `24cc4d8…` (not `046a3b1…`); status: THIRD CORRECTION IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
+**Next authorized implementation unit:** independent third-correction review + ChatGPT acceptance of PR 3 (no PR 4 until PR 3 is accepted and merged)
+**Active implementation branch:** `phase-1/tenant-enforcement`
+**Active implementation PR:** [#15](https://github.com/Vedang1998/Stocky/pull/15) (draft, open, unmerged)
 **PR #13:** CLOSED AND SQUASH-MERGED
 **Authorized PR #13 head:** `5fc98192d2ca350de358316d9383e39103b98c80`
 **Accepted implementation head:** `70f4a80aab2366108a71fd80320b0f824bfe0cce`
@@ -53,8 +53,8 @@
 **Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
-**PR 3:** NOT STARTED
-**Residual gates:** F-016 / R-022 / Q-011; R-024 through R-027; R-014; operational backfill / zero-unresolved evidence; R-079; R-013 / R-062; inventory-write release gates
+**PR 3:** IN PROGRESS — Correction implemented — pending independent verification (D-037)
+**Residual gates:** F-016 / R-022 / Q-011; R-024 through R-027; R-014; R-028/R-029; R-080..R-085; operational backfill / zero-unresolved evidence; R-079; R-013 / R-062; inventory-write release gates
 **Accepted P3 residuals:** P3-A focused-test omissions; P3-B concurrent upsert retry exhaustion (R-079); P3-C head identity (`70f4a80…`, not `96c1029…`)
 
 ## Mandatory gate
@@ -71,8 +71,8 @@ It does **not** resolve database-enforced tenant isolation.
 - Phase 1 itself is still **in progress**.
 - PR 1 is **MERGED AND CLOSED**.
 - PR 2 (tenant-bound access conversion) is **MERGED AND CLOSED** (PR #13 squash-merged; D-034 / D-035).
-- PR 3 (database-enforcement gate) has **not started**.
-- Next authorized implementation unit: **PR 3 — database-enforcement gate**.
+- PR 3 (database-enforcement gate) is **IN PROGRESS** on draft PR #15; original review `NOT READY`; corrections pending independent verification.
+- Next authorized implementation unit: **independent PR 3 correction review + ChatGPT acceptance**.
 - No later Phase 1 PR may begin before PR 3 is accepted and merged.
 
 ## Immutable PR 2 (#13) merge evidence
@@ -91,7 +91,7 @@ It does **not** resolve database-enforced tenant isolation.
 | Production / merchant data | **No production or merchant data was accessed** |
 | Deployment | **No deployment occurred** |
 | Production backfill | **No production backfill occurred** |
-| RLS / database roles / non-null shopId / composite FKs | **Not activated / not started** |
+| RLS / database roles / non-null shopId / composite FKs | **Implemented on disposable/CI fixtures; production not authorized; pending independent verification** |
 | PR 3 | **NOT STARTED** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
 

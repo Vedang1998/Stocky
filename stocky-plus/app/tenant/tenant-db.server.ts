@@ -17,6 +17,10 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import rawPrisma from "../db.server";
 import { assertTenantAuthority, type TenantAuthority } from "./authority.server";
+import {
+  assertTransactionLocalTenantContext,
+  setTransactionLocalTenantContext,
+} from "./db-context.server";
 import { TenantAccessError } from "./errors";
 import {
   CHILD_MODEL_SET,
@@ -1299,15 +1303,21 @@ function isSerializationFailure(err: unknown): boolean {
 }
 
 /**
- * Run ownership-dependent writes inside one DB transaction (F-PR2C-06/09).
- * Reuses the current transaction client when already nested; otherwise starts
- * an internal serializable transaction with bounded retry.
+ * Run work inside a tenant-bound DB transaction with transaction-local context
+ * (PR 3 / D-017). Reuses the current transaction when already nested; verifies
+ * context matches TenantAuthority. Does not hold transactions across Shopify
+ * network I/O, Redis waits, or user interaction.
  */
-async function withWriteTransaction<T>(
+async function withTenantBoundTransactionState<T>(
   state: ClientState,
   fn: (txState: ClientState) => Promise<T>,
+  options: { serializable?: boolean } = {},
 ): Promise<T> {
   if (state.inTransaction) {
+    await assertTransactionLocalTenantContext(
+      state.client as Prisma.TransactionClient,
+      state.authority,
+    );
     return fn(state);
   }
 
@@ -1315,34 +1325,53 @@ async function withWriteTransaction<T>(
   if (typeof root.$transaction !== "function") {
     throw new TenantAccessError(
       "nested_transaction_unsupported",
-      "Write transaction requires a root Prisma client",
+      "Tenant-bound transaction requires a root Prisma client",
     );
   }
 
+  const retries = options.serializable ? SERIALIZATION_RETRY_LIMIT : 1;
   let lastError: unknown;
-  for (let attempt = 0; attempt < SERIALIZATION_RETRY_LIMIT; attempt++) {
+  for (let attempt = 0; attempt < retries; attempt++) {
     try {
       return await root.$transaction(
-        async (tx) =>
-          fn({
+        async (tx) => {
+          await setTransactionLocalTenantContext(tx, state.authority);
+          await assertTransactionLocalTenantContext(tx, state.authority);
+          return fn({
             client: tx,
             authority: state.authority,
             inTransaction: true,
-            // Fresh memo inside the serializable transaction.
             scopeMemo: createTenantScopeMemo(),
-          }),
+          });
+        },
         {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          ...(options.serializable
+            ? {
+                isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+              }
+            : {}),
           maxWait: 5_000,
           timeout: 15_000,
         },
       );
     } catch (err) {
       lastError = err;
-      if (!isSerializationFailure(err)) throw err;
+      if (!options.serializable || !isSerializationFailure(err)) throw err;
     }
   }
   throw lastError;
+}
+
+/**
+ * Run ownership-dependent writes inside one DB transaction (F-PR2C-06/09).
+ * Reuses the current transaction client when already nested; otherwise starts
+ * an internal serializable tenant-bound transaction with bounded retry.
+ */
+async function withWriteTransaction<T>(
+  state: ClientState,
+  fn: (txState: ClientState) => Promise<T>,
+): Promise<T> {
+  return withTenantBoundTransactionState(state, fn, { serializable: true });
 }
 
 async function rewriteUniqueRead(
@@ -1572,6 +1601,26 @@ async function runScopedOperation(
     throw new TenantAccessError(
       "model_not_permitted",
       `Tenant DB cannot access model ${model}`,
+    );
+  }
+
+  // PR 3 / D-017: every merchant-domain read establishes transaction-local
+  // tenant context before querying. Writes already use withWriteTransaction.
+  const readOps = new Set([
+    "findUnique",
+    "findUniqueOrThrow",
+    "findFirst",
+    "findFirstOrThrow",
+    "findMany",
+    "count",
+    "aggregate",
+    "groupBy",
+  ]);
+  if (readOps.has(operation) && !state.inTransaction) {
+    return withTenantBoundTransactionState(state, (txState) =>
+      runScopedOperation(txState, model, operation, args, (scopedArgs) =>
+        getDelegate(txState.client, model)[operation](scopedArgs),
+      ),
     );
   }
 
@@ -1829,10 +1878,12 @@ function createTenantDbFromClient(
     ...(delegates as Omit<TenantDb, "authority" | "$transaction">),
     $transaction: async <T>(fn: (tx: TenantDb) => Promise<T>): Promise<T> => {
       if (inTransaction) {
-        throw new TenantAccessError(
-          "nested_transaction_unsupported",
-          "Nested tenant transactions are not supported",
+        // Reuse current transaction; verify context matches authority.
+        await assertTransactionLocalTenantContext(
+          client as Prisma.TransactionClient,
+          authority,
         );
+        return fn(db);
       }
       if (
         !("$transaction" in client) ||
@@ -1844,6 +1895,8 @@ function createTenantDbFromClient(
         );
       }
       return (client as PrismaClient).$transaction(async (tx) => {
+        await setTransactionLocalTenantContext(tx, authority);
+        await assertTransactionLocalTenantContext(tx, authority);
         const tenantTx = createTenantDbFromClient(tx, authority, true);
         return fn(tenantTx);
       });

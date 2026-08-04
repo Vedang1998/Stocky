@@ -50,10 +50,17 @@ jobs:
       # Test-only placeholders — no real Shopify credentials or merchant data.
       NODE_ENV: test
       DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
+      DATABASE_MIGRATION_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
       TENANT_MAINTENANCE_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
+      # Provisioned by tenant:roles:provision (test-only password).
+      DATABASE_RUNTIME_URL: postgresql://stocky_runtime:stocky_runtime_ci_only@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
+      STOCKY_RUNTIME_ROLE: stocky_runtime
+      STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_ci_only  # pragma: allowlist secret
+      STOCKY_BOOTSTRAP_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
+      STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
       REDIS_URL: redis://localhost:6379
       # Test-only envelope secret (≥32 bytes). Never a production secret.
-      TENANT_JOB_ENVELOPE_SECRET: "ci-test-only-tenant-job-envelope-secret-32b!"
+      TENANT_JOB_ENVELOPE_SECRET: "ci-test-only-tenant-job-envelope-secret-32b!"  # pragma: allowlist secret
       SHOPIFY_API_KEY: ci-test-api-key
       SHOPIFY_API_SECRET: ci-test-api-secret
       SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
@@ -116,6 +123,220 @@ jobs:
         run: |
           npm run tenant:indexes:plan
         # plan exits 0 when all indexes are valid_exact
+
+      - name: Tenant enforcement inventory freshness
+        run: npm run tenant:enforcement:inventory:check
+
+      - name: Tenant database role provisioning
+        run: npm run tenant:roles:provision -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement preflight
+        run: npm run tenant:enforcement:preflight
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement apply
+        run: npm run tenant:enforcement:apply -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant database role verification
+        run: npm run tenant:roles:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant RLS policy verification
+        run: npm run tenant:rls:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant immutability verification
+        run: npm run tenant:immutability:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant composite constraint verification
+        run: npm run tenant:enforcement:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement drift verification
+        run: npm run tenant:enforcement:drift
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant pooled-connection isolation tests
+        run: npm run test:db-isolation -- app/tenant/__tests__/db-isolation/isolation.test.ts
+
+      - name: Tenant database isolation full suite
+        run: npm run test:db-isolation
+
+      - name: Tenant low-lock enforcement migration tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/enforcement.migration.test.ts
+
+      - name: Tenant RLS definition-drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/definition-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant composite-definition drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/composite-definition-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant immutability-trigger drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/immutability-trigger-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant unsafe partial-apply recovery tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant enforcement interruption/resume tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/partial-apply-recovery.test.ts -t "interrupt after|resume preflight"
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant deadlock-timeout-cancellation recovery tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/deadlock-timeout-recovery.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant role-membership escalation tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/role-membership.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant exact privilege allowlist tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/exact-privilege-allowlist.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant exact privilege complete-matrix tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/exact-privilege-complete-matrix.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant sequence privilege tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/sequence-privilege.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant default-privilege drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/default-privilege-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant verifier read-only tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/verifier-readonly.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant runtime connected-identity tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/connected-identity.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant runtime connected-identity application tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/runtime-connected-identity-app.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant resume-preflight corrected-state drift tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/resume-preflight-drift.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant catalog qualification tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/catalog-qualification.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant advisory-unlock failure tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/advisory-unlock-failure.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant populated runtime-traffic concurrency tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/populated-concurrency.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant non-superuser migration-owner full enforcement
+        run: |
+          set -euo pipefail
+          echo "Bootstrapping non-superuser CREATEROLE migration owner attributes..."
+          PGPASSWORD=stocky psql -h localhost -U stocky -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_mig_ci') THEN
+              CREATE ROLE stocky_mig_ci LOGIN PASSWORD 'stocky_mig_ci_only' NOSUPERUSER NOCREATEDB CREATEROLE NOBYPASSRLS NOINHERIT;
+            END IF;
+          END$$;
+          SQL
+          ATTRS=$(PGPASSWORD=stocky psql -h localhost -U stocky -d postgres -Atc "SELECT rolsuper::text||','||rolbypassrls::text||','||rolcreaterole::text||','||rolcreatedb::text FROM pg_roles WHERE rolname='stocky_mig_ci'")
+          echo "migration_owner.attrs=$ATTRS"
+          # psql -Atc emits boolean::text as true/false (not f/t).
+          test "$ATTRS" = "false,false,true,false"
+          echo "migration_owner.rolsuper = false"
+          echo "migration_owner.rolbypassrls = false"
+          echo "migration_owner.rolcreaterole = true"
+          echo "migration_owner.rolcreatedb = false"
+          npm run test:migrations -- scripts/tenant-enforcement/tests/non-superuser-migration-owner.test.ts
+        env:
+          STOCKY_BOOTSTRAP_DATABASE_URL: ${{ env.STOCKY_BOOTSTRAP_DATABASE_URL }}
+          STOCKY_RUNTIME_ROLE_PASSWORD: ${{ env.STOCKY_RUNTIME_ROLE_PASSWORD }}
+
+      - name: Tenant future-function default-privilege tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/future-function-default-privilege.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant populated merchant-error classification tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/merchant-error-classification.test.ts
+
+      - name: Tenant PostgreSQL role-creator membership tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/role-creator-membership.test.ts
+        env:
+          STOCKY_BOOTSTRAP_DATABASE_URL: ${{ env.STOCKY_BOOTSTRAP_DATABASE_URL }}
+          STOCKY_RUNTIME_ROLE_PASSWORD: ${{ env.STOCKY_RUNTIME_ROLE_PASSWORD }}
+
+      - name: Tenant catalog qualification follow-up tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/catalog-qualification-followup.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
       - name: Tenant access architecture audit
         run: npm run tenant:access:audit

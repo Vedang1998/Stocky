@@ -73,8 +73,8 @@ async function withMaintenanceClient<T>(
 }
 
 describe("tenant compatibility index manifest", () => {
-  it("lists 28 expected indexes", () => {
-    expect(TENANT_COMPATIBILITY_INDEXES).toHaveLength(28);
+  it("lists 44 expected indexes", () => {
+    expect(TENANT_COMPATIBILITY_INDEXES).toHaveLength(44);
   });
 
   it("normalizeIndexDef lowercases and collapses whitespace", () => {
@@ -115,7 +115,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
     await withMaintenanceClient(async (client) => {
       const first = await applyIndexes(client, { apply: true });
-      expect(first.created).toHaveLength(28);
+      expect(first.created).toHaveLength(44);
       expect(first.skipped).toHaveLength(0);
 
       const plan = await planIndexes(client);
@@ -126,7 +126,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
       const second = await applyIndexes(client, { apply: true });
       expect(second.created).toHaveLength(0);
-      expect(second.skipped).toHaveLength(28);
+      expect(second.skipped).toHaveLength(44);
     });
   }, 300_000);
 
