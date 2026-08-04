@@ -3,7 +3,7 @@
  * CI fails when producers/queues/workers/webhooks/replay paths drift.
  */
 
-export const SYNC_INVENTORY_VERSION = "phase1-pr4-sync-inventory-v1";
+export const SYNC_INVENTORY_VERSION = "phase1-pr4-sync-inventory-v2-correction";
 
 export type SyncSurfaceKind =
   | "producer"
@@ -13,7 +13,8 @@ export type SyncSurfaceKind =
   | "replay_path"
   | "dispatcher"
   | "sanitizer"
-  | "control_plane_table";
+  | "control_plane_table"
+  | "merchant_table";
 
 export type SyncSurface = {
   kind: SyncSurfaceKind;
@@ -262,6 +263,20 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "prisma/schema.prisma",
     symbol: "SyncHealth",
     notes: "platform_control_plane",
+  },
+  {
+    kind: "control_plane_table",
+    id: "table:JobDispatch",
+    path: "prisma/schema.prisma",
+    symbol: "JobDispatch",
+    notes: "platform_control_plane — append-only dispatch identity (D-043)",
+  },
+  {
+    kind: "merchant_table",
+    id: "table:SyncApplicationReceipt",
+    path: "prisma/schema.prisma",
+    symbol: "SyncApplicationReceipt",
+    notes: "merchant_domain — exactly-once application receipt (F-PR4-01)",
   },
 ] as const;
 

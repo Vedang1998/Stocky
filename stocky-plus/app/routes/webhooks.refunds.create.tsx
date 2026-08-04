@@ -10,7 +10,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await ingestAuthenticatedWebhook({
     verifiedShop: shop,
     topic: "refunds/create",
-    webhookId: webhookId ?? `missing-${Date.now()}`,
+    webhookId: webhookId ?? null,
     apiVersion,
     payload,
   });

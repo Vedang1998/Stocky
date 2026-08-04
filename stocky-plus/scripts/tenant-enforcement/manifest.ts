@@ -44,7 +44,8 @@ export type MerchantTableSpec = {
   sqlTable: string;
   classification: "merchant_domain";
   kind: MerchantKind;
-  shopIdNullableInPrisma: true;
+  /** Legacy merchant tables remain Prisma-nullable for compatibility; new tables may be non-null. */
+  shopIdNullableInPrisma: boolean;
   legacyShopField: boolean;
   parentRelationships: string[];
   childRelationships: string[];
@@ -293,6 +294,24 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     childRelationships: [],
     crossDomainRelationships: [],
     existingShopIdIdUnique: false,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "SyncApplicationReceipt",
+    sqlTable: "SyncApplicationReceipt",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
     requiredCompositeKey: true,
     rlsRequired: true,
     immutabilityTriggerRequired: true,
@@ -763,6 +782,19 @@ export const PLATFORM_CONTROL_PLANE_TABLES: readonly NonMerchantTableSpec[] = [
     expectedRuntimePrivileges: [],
     notes: "Deterministic health per domain",
   },
+  {
+    prismaModel: "JobDispatch",
+    sqlTable: "JobDispatch",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes:
+      "Append-only dispatch identity (PR4 correction); control-plane RLS via sync correction migration",
+  },
 ] as const;
 
 /** SQL table names for control-plane privilege grants. */
@@ -773,9 +805,9 @@ export const PLATFORM_CONTROL_PLANE_SQL_TABLES =
 void CONTROL_PLANE_DML;
 
 export function assertMerchantTableCount(): void {
-  if (MERCHANT_TABLES.length !== 18) {
+  if (MERCHANT_TABLES.length !== 19) {
     throw new Error(
-      `Expected 18 merchant tables, found ${MERCHANT_TABLES.length}`,
+      `Expected 19 merchant tables, found ${MERCHANT_TABLES.length}`,
     );
   }
 }

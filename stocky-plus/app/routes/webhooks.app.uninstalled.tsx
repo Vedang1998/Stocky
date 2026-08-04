@@ -10,7 +10,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   await processUninstall({
     verifiedShop: shop,
-    webhookId: webhookId ?? `uninstall-${Date.now()}`,
+    webhookId: webhookId ?? null,
     apiVersion,
     payload,
   });

@@ -149,6 +149,17 @@ export const MODEL_UNIQUE_SELECTORS: Record<
     model: "LowStockAlert",
     selectors: [{ kind: "scalar", name: "id" }],
   },
+  SyncApplicationReceipt: {
+    model: "SyncApplicationReceipt",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      {
+        kind: "compound",
+        name: "shopId_applicationKey",
+        fields: ["shopId", "applicationKey"],
+      },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [

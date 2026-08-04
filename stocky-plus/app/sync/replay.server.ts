@@ -1,10 +1,12 @@
 /**
  * Dead-letter replay — new DurableJob + JobReplay lineage; original immutable.
+ * F-PR4-15: require original DEAD_LETTERED + DeadLetter OPEN; lock both.
  */
 import { randomUUID } from "node:crypto";
 import type { DeadLetter, DurableJob, JobReplay, Prisma } from "@prisma/client";
 import { getControlPlanePrisma } from "./control-plane-db.server";
 import { DURABLE_JOB_AUTHORITY_VERSION } from "./intake.server";
+import { executionStrategyForJobType } from "./execution-strategy.server";
 import { SyncControlPlaneError } from "./errors";
 
 export type ReplayDeadLetterResult = {
@@ -17,6 +19,7 @@ export type ReplayDeadLetterResult = {
 /**
  * Replay an OPEN dead letter into a new PENDING DurableJob.
  * Never mutates the original job payload.
+ * Application key for webhook replays remains the original webhook delivery.
  */
 export async function replayDeadLetter(input: {
   deadLetterId: string;
@@ -40,9 +43,12 @@ export async function replayDeadLetter(input: {
       );
     }
 
-    const deadLetter = await tx.deadLetter.findFirst({
-      where: { id: input.deadLetterId, shopId: input.shopId },
-    });
+    const deadLetters = await tx.$queryRaw<DeadLetter[]>`
+      SELECT * FROM "DeadLetter"
+      WHERE id = ${input.deadLetterId} AND "shopId" = ${input.shopId}
+      FOR UPDATE
+    `;
+    const deadLetter = deadLetters[0];
     if (!deadLetter) {
       throw new SyncControlPlaneError(
         "dead_letter_not_found",
@@ -56,20 +62,28 @@ export async function replayDeadLetter(input: {
       );
     }
 
-    const originalJob = await tx.durableJob.findFirst({
-      where: { id: deadLetter.durableJobId, shopId: input.shopId },
-    });
+    const originalJobs = await tx.$queryRaw<DurableJob[]>`
+      SELECT * FROM "DurableJob"
+      WHERE id = ${deadLetter.durableJobId} AND "shopId" = ${input.shopId}
+      FOR UPDATE
+    `;
+    const originalJob = originalJobs[0];
     if (!originalJob) {
       throw new SyncControlPlaneError(
         "job_not_found",
         "Original DurableJob not found",
       );
     }
+    if (originalJob.state !== "DEAD_LETTERED") {
+      throw new SyncControlPlaneError(
+        "replay_requires_dead_lettered",
+        `Original DurableJob state is ${originalJob.state}, expected DEAD_LETTERED`,
+      );
+    }
 
     const correlationId = randomUUID();
     const replayIdempotency = `replay:${originalJob.id}:${correlationId}`;
 
-    // Copy payload by value — do not mutate original.
     const payloadCopy = structuredClone(
       originalJob.sanitizedPayload,
     ) as Prisma.InputJsonValue;
@@ -87,9 +101,14 @@ export async function replayDeadLetter(input: {
         correlationId,
         causationId: originalJob.id,
         authorityVersion: DURABLE_JOB_AUTHORITY_VERSION,
+        executionStrategy:
+          originalJob.executionStrategy ??
+          executionStrategyForJobType(originalJob.jobType),
         state: "PENDING",
         maxAttempts: originalJob.maxAttempts,
         nextEligibleAt: new Date(),
+        // Preserve webhook delivery link so application key stays stable.
+        webhookDeliveryId: originalJob.webhookDeliveryId,
       },
     });
 

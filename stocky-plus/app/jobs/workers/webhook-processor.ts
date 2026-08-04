@@ -21,6 +21,16 @@ import {
   resolveTenantJobContextV2,
   TENANT_JOB_ENVELOPE_V2_VERSION,
 } from "../../sync/envelope-v2.server";
+import {
+  resolveTenantJobContextV3,
+  TENANT_JOB_ENVELOPE_V3_VERSION,
+} from "../../sync/envelope-v3.server";
+import { applyWithApplicationReceipt } from "../../sync/application-receipt.server";
+import {
+  APPLICATION_ALREADY_APPLIED,
+  APPLICATION_OUTCOME_UNCERTAIN,
+  resolveApplicationKey,
+} from "../../sync/execution-strategy.server";
 import { getControlPlanePrisma } from "../../sync/control-plane-db.server";
 import {
   claimAttempt,
@@ -329,9 +339,8 @@ async function runLegacyWebhookHandler(
 }
 
 /**
- * Process a webhook BullMQ job.
- * v2: verify envelope against durable job, lifecycle, then legacy handlers.
- * v1: compatibility path for in-flight pre-cutover jobs only.
+ * Process a webhook BullMQ job with exactly-once merchant application (F-PR4-01)
+ * and envelope/dispatch identity assertions (F-PR4-16).
  */
 export async function processWebhookJob(job: Job<WebhookJobData>) {
   const { topic, payload, payloadShop, tenant: envelope } = job.data;
@@ -344,7 +353,178 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     );
   }
 
+  if (envelope.schemaVersion === TENANT_JOB_ENVELOPE_V3_VERSION) {
+    const durableJobId =
+      job.data.durableJobId ??
+      (typeof envelope.durableJobId === "string" ? envelope.durableJobId : null);
+    if (!durableJobId) {
+      throw new SyncControlPlaneError(
+        "job_not_found",
+        "v3 webhook job missing durableJobId",
+      );
+    }
+
+    const durable = await getControlPlanePrisma().durableJob.findUnique({
+      where: { id: durableJobId },
+    });
+    if (!durable) {
+      throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
+    }
+
+    await assertShopProcessingEnabled(durable.shopId);
+
+    const bullmqJobId = String(job.id ?? job.data.queueJobId ?? "");
+    const ctx = await resolveTenantJobContextV3(envelope, {
+      payloadShop,
+      expectedJobNameOrTopic: topic,
+      expectedDurableJobId: durable.id,
+      expectedPayloadDigest: durable.payloadDigest,
+      expectedQueueJobId: job.data.queueJobId ?? bullmqJobId,
+      expectedDispatchId: job.data.dispatchId,
+      expectedDispatchSequence: job.data.dispatchSequence,
+    });
+
+    // F-PR4-16 — explicit identity assertions before merchant access.
+    if (durable.shopId !== ctx.envelope.shopId) {
+      throw new SyncControlPlaneError(
+        "envelope_shop_mismatch",
+        "durable.shopId !== envelope.shopId",
+      );
+    }
+    if (durable.payloadDigest !== ctx.envelope.payloadDigest) {
+      throw new SyncControlPlaneError(
+        "payload_digest_mismatch",
+        "durable.payloadDigest !== envelope.payloadDigest",
+      );
+    }
+    if (durable.id !== ctx.envelope.durableJobId) {
+      throw new SyncControlPlaneError(
+        "envelope_durable_job_mismatch",
+        "durable.id !== envelope.durableJobId",
+      );
+    }
+    if (
+      job.data.queueJobId &&
+      job.data.queueJobId !== ctx.envelope.queueJobId
+    ) {
+      throw new SyncControlPlaneError(
+        "envelope_queue_job_mismatch",
+        "dispatch queueJobId does not match envelope",
+      );
+    }
+    if (bullmqJobId && bullmqJobId !== ctx.envelope.queueJobId) {
+      throw new SyncControlPlaneError(
+        "envelope_queue_job_mismatch",
+        "BullMQ job ID does not match envelope queueJobId",
+      );
+    }
+
+    if (durable.state === "CANCELLED") {
+      throw new SyncControlPlaneError(
+        "illegal_job_transition",
+        "DurableJob was cancelled",
+      );
+    }
+
+    const { attempt } = await claimAttempt({
+      durableJobId: durable.id,
+      shopId: durable.shopId,
+      workerId,
+      jobDispatchId: job.data.dispatchId ?? ctx.envelope.dispatchId,
+    });
+
+    try {
+      const handlerPayload =
+        (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
+
+      if (!durable.webhookDeliveryId) {
+        throw new SyncControlPlaneError(
+          APPLICATION_OUTCOME_UNCERTAIN,
+          "Webhook job missing webhookDeliveryId for application key",
+        );
+      }
+
+      const applicationKey = resolveApplicationKey({
+        jobType: durable.jobType,
+        webhookDeliveryId: durable.webhookDeliveryId,
+        idempotencyKey: durable.idempotencyKey,
+      });
+
+      // Atomic merchant application: all writes + receipt in one tenant tx.
+      const applyResult = await ctx.db.$transaction(async (tx) => {
+        return applyWithApplicationReceipt(
+          tx,
+          {
+            applicationKey,
+            sourceJobType: durable.jobType,
+            rootDurableJobId: durable.causationId ?? durable.id,
+            applyingDurableJobId: durable.id,
+            payloadDigest: durable.payloadDigest,
+          },
+          async (tdb) => {
+            await runLegacyWebhookHandler(topic, tdb, handlerPayload);
+            return { applied: true as const };
+          },
+        );
+      });
+
+      await completeAttemptSuccess({
+        durableJobId: durable.id,
+        shopId: durable.shopId,
+        attemptId: attempt.id,
+        workerId,
+        resultMetadata: { applicationStatus: applyResult.status },
+      });
+    } catch (err) {
+      if (
+        err instanceof SyncControlPlaneError &&
+        err.code === APPLICATION_ALREADY_APPLIED
+      ) {
+        // Concurrent loser — finalize success without duplicate merchant effects
+        // only if receipt exists; otherwise dead-letter uncertain.
+        await completeAttemptSuccess({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+          resultMetadata: { applicationStatus: "already_applied_race" },
+        });
+        return;
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+      const retryable =
+        !(err instanceof SyncControlPlaneError) &&
+        !(err instanceof TenantAuthorityError);
+      if (retryable) {
+        await completeAttemptRetry({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+          errorCode: "processor_error",
+          failureSummary: message,
+        });
+      } else {
+        await completeAttemptFail({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          errorCode:
+            err instanceof SyncControlPlaneError
+              ? err.code
+              : "non_retryable_processor_error",
+          failureSummary: message,
+          deadLetter: true,
+        });
+      }
+      throw err;
+    }
+    return;
+  }
+
   if (envelope.schemaVersion === TENANT_JOB_ENVELOPE_V2_VERSION) {
+    // In-flight v2 compatibility — still use application receipts when durable.
     const durableJobId =
       job.data.durableJobId ??
       (typeof envelope.durableJobId === "string" ? envelope.durableJobId : null);
@@ -371,6 +551,13 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       expectedPayloadDigest: durable.payloadDigest,
     });
 
+    if (durable.shopId !== ctx.envelope.shopId) {
+      throw new SyncControlPlaneError(
+        "envelope_shop_mismatch",
+        "durable.shopId !== envelope.shopId",
+      );
+    }
+
     if (durable.state === "CANCELLED") {
       throw new SyncControlPlaneError(
         "illegal_job_transition",
@@ -387,11 +574,36 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     try {
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
-      await runLegacyWebhookHandler(topic, ctx.db, handlerPayload);
+      if (durable.webhookDeliveryId) {
+        const applicationKey = resolveApplicationKey({
+          jobType: durable.jobType,
+          webhookDeliveryId: durable.webhookDeliveryId,
+          idempotencyKey: durable.idempotencyKey,
+        });
+        await ctx.db.$transaction(async (tx) => {
+          await applyWithApplicationReceipt(
+            tx,
+            {
+              applicationKey,
+              sourceJobType: durable.jobType,
+              rootDurableJobId: durable.causationId ?? durable.id,
+              applyingDurableJobId: durable.id,
+              payloadDigest: durable.payloadDigest,
+            },
+            async (tdb) => {
+              await runLegacyWebhookHandler(topic, tdb, handlerPayload);
+              return { applied: true as const };
+            },
+          );
+        });
+      } else {
+        await runLegacyWebhookHandler(topic, ctx.db, handlerPayload);
+      }
       await completeAttemptSuccess({
         durableJobId: durable.id,
         shopId: durable.shopId,
         attemptId: attempt.id,
+        workerId,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -403,6 +615,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           durableJobId: durable.id,
           shopId: durable.shopId,
           attemptId: attempt.id,
+          workerId,
           errorCode: "processor_error",
           failureSummary: message,
         });
@@ -424,7 +637,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     return;
   }
 
-  // v1 compatibility window (narrow after v2 branch above).
+  // v1 compatibility window (narrow).
   const v1Schema = (envelope as { schemaVersion?: string }).schemaVersion;
   if (v1Schema !== TENANT_JOB_ENVELOPE_VERSION) {
     try {
@@ -460,6 +673,9 @@ export async function processCronJob(job: Job) {
   const data = job.data as {
     tenant?: unknown;
     durableJobId?: string;
+    dispatchId?: string;
+    dispatchSequence?: number;
+    queueJobId?: string;
   };
 
   if (job.name === "abc-analysis-shop" || job.name === "catalog-sync") {
@@ -470,7 +686,10 @@ export async function processCronJob(job: Job) {
       );
     }
 
-    if (data.tenant.schemaVersion === TENANT_JOB_ENVELOPE_V2_VERSION) {
+    const isV3 = data.tenant.schemaVersion === TENANT_JOB_ENVELOPE_V3_VERSION;
+    const isV2 = data.tenant.schemaVersion === TENANT_JOB_ENVELOPE_V2_VERSION;
+
+    if (isV3 || isV2) {
       const durableJobId =
         data.durableJobId ??
         (typeof data.tenant.durableJobId === "string"
@@ -479,7 +698,7 @@ export async function processCronJob(job: Job) {
       if (!durableJobId) {
         throw new SyncControlPlaneError(
           "job_not_found",
-          "v2 cron job missing durableJobId",
+          "cron job missing durableJobId",
         );
       }
       const durable = await getControlPlanePrisma().durableJob.findUnique({
@@ -490,19 +709,37 @@ export async function processCronJob(job: Job) {
       }
       await assertShopProcessingEnabled(durable.shopId);
 
-      const ctx = await resolveTenantJobContextV2(data.tenant, {
-        expectedJobNameOrTopic: job.name,
-        expectedDurableJobId: durable.id,
-        expectedPayloadDigest: durable.payloadDigest,
-      });
+      const ctx = isV3
+        ? await resolveTenantJobContextV3(data.tenant, {
+            expectedJobNameOrTopic: job.name,
+            expectedDurableJobId: durable.id,
+            expectedPayloadDigest: durable.payloadDigest,
+            expectedQueueJobId: data.queueJobId ?? String(job.id ?? ""),
+            expectedDispatchId: data.dispatchId,
+            expectedDispatchSequence: data.dispatchSequence,
+          })
+        : await resolveTenantJobContextV2(data.tenant, {
+            expectedJobNameOrTopic: job.name,
+            expectedDurableJobId: durable.id,
+            expectedPayloadDigest: durable.payloadDigest,
+          });
+
+      if (durable.shopId !== ctx.envelope.shopId) {
+        throw new SyncControlPlaneError(
+          "envelope_shop_mismatch",
+          "durable.shopId !== envelope.shopId",
+        );
+      }
 
       const { attempt } = await claimAttempt({
         durableJobId: durable.id,
         shopId: durable.shopId,
         workerId,
+        jobDispatchId: data.dispatchId,
       });
 
       try {
+        // REBUILDABLE_IDEMPOTENT — repeated execution converges.
         if (job.name === "abc-analysis-shop") {
           await runAbcAnalysis(ctx.db, "REVENUE");
           await runAbcAnalysis(ctx.db, "VOLUME");
@@ -519,6 +756,7 @@ export async function processCronJob(job: Job) {
           durableJobId: durable.id,
           shopId: durable.shopId,
           attemptId: attempt.id,
+          workerId,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -526,6 +764,7 @@ export async function processCronJob(job: Job) {
           durableJobId: durable.id,
           shopId: durable.shopId,
           attemptId: attempt.id,
+          workerId,
           errorCode: "processor_error",
           failureSummary: message,
         });

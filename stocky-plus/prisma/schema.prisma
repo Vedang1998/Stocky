@@ -59,6 +59,7 @@ model Shop {
   webhookDeliveries   WebhookDelivery[]
   durableJobs         DurableJob[]
   jobAttempts         JobAttempt[]
+  jobDispatches       JobDispatch[]
   deadLetters         DeadLetter[]
   jobReplays          JobReplay[]
   syncRuns            SyncRun[]
@@ -66,6 +67,7 @@ model Shop {
   reconciliationRuns  ReconciliationRun[]
   dataIssues          DataIssue[]
   syncHealth          SyncHealth[]
+  syncApplicationReceipts SyncApplicationReceipt[]
 }
 
 // ─── Tenant backfill control (Phase 1 PR 1) ──────────────────────────────────
@@ -594,6 +596,8 @@ enum WebhookDeliveryState {
   JOB_CREATED
   COMPLETED
   FAILED
+  CONFLICT
+  QUARANTINED
 }
 
 enum DurableJobState {
@@ -614,6 +618,26 @@ enum JobAttemptOutcome {
   NON_RETRYABLE_FAILURE
   CANCELLED
   DENIED
+  ABANDONED
+  LEASE_EXPIRED
+  WORKER_LOST
+}
+
+enum JobDispatchState {
+  PENDING_ENQUEUE
+  ENQUEUED
+  OBSERVED
+  STARTED
+  COMPLETED
+  FAILED
+  SUPERSEDED
+}
+
+enum JobExecutionStrategy {
+  ATOMIC_APPLICATION_RECEIPT
+  REBUILDABLE_IDEMPOTENT
+  NO_AUTOMATIC_RETRY
+  CONTROL_ONLY
 }
 
 enum DeadLetterResolutionState {
@@ -656,69 +680,77 @@ enum DataIssueStatus {
 }
 
 model WebhookDelivery {
-  id                   String               @id @default(cuid())
-  shopId               String
-  shopifyWebhookId     String
-  topic                String               @db.VarChar(128)
-  apiVersionReceived   String               @db.VarChar(32)
-  receivedAt           DateTime             @default(now())
-  payloadSchemaVersion String               @db.VarChar(64)
-  sanitizedPayload     Json
-  payloadDigest        String               @db.VarChar(64)
-  correlationId        String
-  duplicateCount       Int                  @default(0)
-  firstSeenAt          DateTime             @default(now())
-  lastSeenAt           DateTime             @default(now())
-  state                WebhookDeliveryState @default(RECEIVED)
-  durableJobId         String?
-  completedAt          DateTime?
-  failedAt             DateTime?
-  failureCode          String?              @db.VarChar(64)
-  failureSummary       String?              @db.VarChar(512)
-  createdAt            DateTime             @default(now())
-  updatedAt            DateTime             @updatedAt
+  id                        String               @id @default(cuid())
+  shopId                    String
+  /// Null when Shopify omits X-Shopify-Webhook-Id — quarantine only; never idempotent.
+  shopifyWebhookId          String?
+  topic                     String               @db.VarChar(128)
+  apiVersionReceived        String               @db.VarChar(32)
+  receivedAt                DateTime             @default(now())
+  payloadSchemaVersion      String               @db.VarChar(64)
+  sanitizedPayload          Json
+  payloadDigest             String               @db.VarChar(64)
+  correlationId             String
+  duplicateCount            Int                  @default(0)
+  payloadDigestMismatchCount Int                 @default(0)
+  lastConflictingDigest     String?              @db.VarChar(64)
+  firstMismatchAt           DateTime?
+  lastMismatchAt            DateTime?
+  quarantineReason          String?              @db.VarChar(128)
+  firstSeenAt               DateTime             @default(now())
+  lastSeenAt                DateTime             @default(now())
+  state                     WebhookDeliveryState @default(RECEIVED)
+  durableJobId              String?
+  completedAt               DateTime?
+  failedAt                  DateTime?
+  failureCode               String?              @db.VarChar(64)
+  failureSummary            String?              @db.VarChar(512)
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
 
   shop       Shop        @relation(fields: [shopId], references: [id], onDelete: Restrict)
   durableJob DurableJob? @relation(fields: [durableJobId], references: [id], onDelete: SetNull)
 
-  @@unique([shopId, shopifyWebhookId])
   @@unique([shopId, id])
   @@index([shopId, state, receivedAt])
   @@index([shopId, topic, receivedAt])
 }
 
 model DurableJob {
-  id                   String          @id @default(cuid())
-  shopId               String
-  jobType              String          @db.VarChar(128)
-  source               String          @db.VarChar(128)
-  queueName            String          @db.VarChar(64)
-  payloadSchemaVersion String          @db.VarChar(64)
-  sanitizedPayload     Json
-  payloadDigest        String          @db.VarChar(64)
-  idempotencyKey       String          @db.VarChar(256)
-  correlationId        String
-  causationId          String?
-  authorityVersion     String          @db.VarChar(64)
-  state                DurableJobState @default(PENDING)
-  attemptCount         Int             @default(0)
-  maxAttempts          Int             @default(3)
-  nextEligibleAt       DateTime        @default(now())
-  leaseOwner           String?         @db.VarChar(128)
-  leaseExpiresAt       DateTime?
-  enqueuedAt           DateTime?
-  startedAt            DateTime?
-  completedAt          DateTime?
-  cancelledAt          DateTime?
-  deadLetteredAt       DateTime?
-  failureCode          String?         @db.VarChar(64)
-  failureSummary       String?         @db.VarChar(512)
-  webhookDeliveryId    String?
-  createdAt            DateTime        @default(now())
-  updatedAt            DateTime        @updatedAt
+  id                     String                @id @default(cuid())
+  shopId                 String
+  jobType                String                @db.VarChar(128)
+  source                 String                @db.VarChar(128)
+  queueName              String                @db.VarChar(64)
+  payloadSchemaVersion   String                @db.VarChar(64)
+  sanitizedPayload       Json
+  payloadDigest          String                @db.VarChar(64)
+  idempotencyKey         String                @db.VarChar(256)
+  correlationId          String
+  causationId            String?
+  authorityVersion       String                @db.VarChar(64)
+  executionStrategy      JobExecutionStrategy  @default(ATOMIC_APPLICATION_RECEIPT)
+  state                  DurableJobState       @default(PENDING)
+  attemptCount           Int                   @default(0)
+  maxAttempts            Int                   @default(3)
+  nextEligibleAt         DateTime              @default(now())
+  leaseOwner             String?               @db.VarChar(128)
+  leaseExpiresAt         DateTime?
+  activeDispatchSequence Int?
+  enqueuedAt             DateTime?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  cancelledAt            DateTime?
+  deadLetteredAt         DateTime?
+  failureCode            String?               @db.VarChar(64)
+  failureSummary         String?               @db.VarChar(512)
+  webhookDeliveryId      String?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict)
   attempts          JobAttempt[]
+  dispatches        JobDispatch[]
   deadLetters       DeadLetter[]
   replaysAsOriginal JobReplay[]       @relation("ReplayOriginalJob")
   replaysAsNew      JobReplay[]       @relation("ReplayNewJob")
@@ -732,29 +764,87 @@ model DurableJob {
   @@index([leaseExpiresAt])
 }
 
-model JobAttempt {
-  id               String            @id @default(cuid())
+model JobDispatch {
+  id               String          @id @default(cuid())
   shopId           String
   durableJobId     String
-  attemptNumber    Int
-  workerId         String            @db.VarChar(128)
-  startedAt        DateTime          @default(now())
-  finishedAt       DateTime?
-  outcome          JobAttemptOutcome?
-  retryClassification String?        @db.VarChar(64)
-  backoffMs        Int?
-  errorCode        String?           @db.VarChar(64)
-  failureSummary   String?           @db.VarChar(512)
-  resultMetadata   Json?
-  createdAt        DateTime          @default(now())
+  dispatchSequence Int
+  queueName        String          @db.VarChar(64)
+  queueJobId       String          @db.VarChar(256)
+  state            JobDispatchState @default(PENDING_ENQUEUE)
+  leaseOwner       String?         @db.VarChar(128)
+  leaseExpiresAt   DateTime?
+  createdAt        DateTime        @default(now())
+  enqueuedAt       DateTime?
+  observedAt       DateTime?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  failureCode      String?         @db.VarChar(64)
+  failureSummary   String?         @db.VarChar(512)
+  payloadDigest    String          @db.VarChar(64)
+  updatedAt        DateTime        @updatedAt
 
-  shop       Shop       @relation(fields: [shopId], references: [id], onDelete: Restrict)
-  durableJob DurableJob @relation(fields: [durableJobId], references: [id], onDelete: Restrict)
+  shop       Shop         @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  durableJob DurableJob   @relation(fields: [durableJobId], references: [id], onDelete: Restrict)
+  attempts   JobAttempt[]
+
+  @@unique([durableJobId, dispatchSequence])
+  @@unique([queueName, queueJobId])
+  @@unique([shopId, id])
+  @@index([shopId, durableJobId, createdAt])
+  @@index([state, leaseExpiresAt])
+}
+
+model JobAttempt {
+  id                  String             @id @default(cuid())
+  shopId              String
+  durableJobId        String
+  attemptNumber       Int
+  workerId            String             @db.VarChar(128)
+  jobDispatchId       String?
+  leaseOwner          String?            @db.VarChar(128)
+  leaseExpiresAt      DateTime?
+  heartbeatAt         DateTime?
+  startedAt           DateTime           @default(now())
+  finishedAt          DateTime?
+  outcome             JobAttemptOutcome?
+  retryClassification String?            @db.VarChar(64)
+  backoffMs           Int?
+  errorCode           String?            @db.VarChar(64)
+  failureSummary      String?            @db.VarChar(512)
+  resultMetadata      Json?
+  createdAt           DateTime           @default(now())
+
+  shop       Shop         @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  durableJob DurableJob   @relation(fields: [durableJobId], references: [id], onDelete: Restrict)
+  dispatch   JobDispatch? @relation(fields: [jobDispatchId], references: [id], onDelete: SetNull)
 
   @@unique([shopId, durableJobId, attemptNumber])
   @@unique([shopId, id])
   @@index([shopId, durableJobId, startedAt])
   @@index([durableJobId, attemptNumber])
+}
+
+/// Merchant-domain exactly-once application receipt (F-PR4-01).
+model SyncApplicationReceipt {
+  id                        String   @id @default(cuid())
+  shopId                    String
+  applicationKey            String   @db.VarChar(256)
+  sourceJobType             String   @db.VarChar(128)
+  rootDurableJobId          String
+  firstApplyingDurableJobId String
+  payloadDigest             String   @db.VarChar(64)
+  applicationSchemaVersion  String   @db.VarChar(64)
+  appliedAt                 DateTime @default(now())
+  resultMetadata            Json?
+  createdAt                 DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
+
+  @@unique([shopId, applicationKey])
+  @@unique([shopId, id])
+  @@index([shopId, rootDurableJobId])
+  @@index([shopId, appliedAt])
 }
 
 model DeadLetter {

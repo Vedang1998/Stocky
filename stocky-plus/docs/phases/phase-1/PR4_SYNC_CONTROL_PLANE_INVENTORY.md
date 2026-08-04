@@ -4,9 +4,9 @@
 **Work unit:** PR 4 — Synchronization control plane
 **Branch:** `phase-1/sync-control-plane`
 **Generator:** `scripts/sync-control-plane/inventory.ts` (deterministic)
-**Inventory version:** `phase1-pr4-sync-inventory-v1`
-**Content digest:** `5f7592af47eda7c7938ef9ed98e17f8bfc610c69e4e83ca9512b127f14fe80bb`
-**Surfaces:** 34
+**Inventory version:** `phase1-pr4-sync-inventory-v2-correction`
+**Content digest:** `48e62809a4c80c40119638842b7cfa4be4d126c6c17f839e28a2d73261fb3317`
+**Surfaces:** 36
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run sync:inventory`.
@@ -16,8 +16,9 @@
 
 | Kind | Count |
 |---|---|
-| control_plane_table | 10 |
+| control_plane_table | 11 |
 | dispatcher | 1 |
+| merchant_table | 1 |
 | producer | 5 |
 | queue | 2 |
 | replay_path | 1 |
@@ -63,6 +64,8 @@
 | control_plane_table | `table:ReconciliationRun` | `prisma/schema.prisma` | `ReconciliationRun` | platform_control_plane |
 | control_plane_table | `table:DataIssue` | `prisma/schema.prisma` | `DataIssue` | platform_control_plane |
 | control_plane_table | `table:SyncHealth` | `prisma/schema.prisma` | `SyncHealth` | platform_control_plane |
+| control_plane_table | `table:JobDispatch` | `prisma/schema.prisma` | `JobDispatch` | platform_control_plane — append-only dispatch identity (D-043) |
+| merchant_table | `table:SyncApplicationReceipt` | `prisma/schema.prisma` | `SyncApplicationReceipt` | merchant_domain — exactly-once application receipt (F-PR4-01) |
 
 ## Completeness rules
 

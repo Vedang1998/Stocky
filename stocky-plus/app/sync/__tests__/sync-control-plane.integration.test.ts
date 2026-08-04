@@ -88,7 +88,7 @@ describe("sync control-plane integration", () => {
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
-        "JobReplay", "DeadLetter", "JobAttempt", "WebhookDelivery", "DurableJob"
+        "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery", "DurableJob", "SyncApplicationReceipt"
       CASCADE
     `);
     await prisma.shop.deleteMany({

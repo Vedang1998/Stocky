@@ -1,6 +1,7 @@
 /**
- * Topic-specific webhook payload sanitizers.
+ * Topic-specific webhook payload sanitizers with validated bounds (F-PR4-12).
  * Persist only approved projection keys; strip PII; keep money as strings.
+ * On overflow: fail closed — no silent truncation of operational data.
  */
 import { SyncControlPlaneError } from "./errors";
 
@@ -20,32 +21,129 @@ export type SanitizedWebhookProjection = {
   projection: Record<string, unknown>;
 };
 
+/**
+ * Engineering limits for persisted webhook projections (F-PR4-12).
+ * Chosen to bound memory/storage amplification while admitting legitimate
+ * large orders. Overflow fails closed with a stable error code.
+ */
+export const PROJECTION_BOUNDS = {
+  maxUtf8Bytes: 256 * 1024,
+  maxDepth: 8,
+  maxNodes: 2_000,
+  maxArrayElements: 500,
+  maxLineItems: 250,
+  maxStringLength: 4_096,
+  maxObjectKeys: 64,
+} as const;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function utf8ByteLength(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
+function assertScalarId(value: unknown, field: string): string | number | null {
+  if (value == null) return null;
+  if (typeof value === "string") {
+    if (utf8ByteLength(value) > PROJECTION_BOUNDS.maxStringLength) {
+      throw new SyncControlPlaneError(
+        "projection_bounds_exceeded",
+        `Field ${field} exceeds max string length`,
+      );
+    }
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  throw new SyncControlPlaneError(
+    "projection_scalar_type_invalid",
+    `Field ${field} must be string, number, or null — objects/arrays are rejected`,
+  );
 }
 
 /** Keep money fields as exact strings — never Number/parseFloat. */
 function moneyString(value: unknown): string | null {
   if (value == null) return null;
-  if (typeof value === "string") return value;
+  if (typeof value === "string") {
+    if (utf8ByteLength(value) > PROJECTION_BOUNDS.maxStringLength) {
+      throw new SyncControlPlaneError(
+        "projection_bounds_exceeded",
+        "Money string exceeds max length",
+      );
+    }
+    return value;
+  }
   if (typeof value === "number" && Number.isFinite(value)) {
-    // Coerce numeric wire values to string without float arithmetic on money.
     return String(value);
   }
-  return null;
+  throw new SyncControlPlaneError(
+    "projection_scalar_type_invalid",
+    "Money field must be string, finite number, or null",
+  );
+}
+
+function countNodes(value: unknown, depth: number): number {
+  if (depth > PROJECTION_BOUNDS.maxDepth) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      `Projection exceeds max depth ${PROJECTION_BOUNDS.maxDepth}`,
+    );
+  }
+  if (value == null || typeof value !== "object") return 1;
+  if (Array.isArray(value)) {
+    if (value.length > PROJECTION_BOUNDS.maxArrayElements) {
+      throw new SyncControlPlaneError(
+        "projection_bounds_exceeded",
+        `Array exceeds max elements ${PROJECTION_BOUNDS.maxArrayElements}`,
+      );
+    }
+    let n = 1;
+    for (const item of value) n += countNodes(item, depth + 1);
+    return n;
+  }
+  const keys = Object.keys(value as object);
+  if (keys.length > PROJECTION_BOUNDS.maxObjectKeys) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      `Object exceeds max keys ${PROJECTION_BOUNDS.maxObjectKeys}`,
+    );
+  }
+  let n = 1;
+  for (const k of keys) {
+    n += countNodes((value as Record<string, unknown>)[k], depth + 1);
+  }
+  return n;
+}
+
+function assertProjectionBounds(projection: Record<string, unknown>): void {
+  const nodes = countNodes(projection, 0);
+  if (nodes > PROJECTION_BOUNDS.maxNodes) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      `Projection exceeds max nodes ${PROJECTION_BOUNDS.maxNodes}`,
+    );
+  }
+  const json = JSON.stringify(projection);
+  if (utf8ByteLength(json) > PROJECTION_BOUNDS.maxUtf8Bytes) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      `Projection exceeds max UTF-8 bytes ${PROJECTION_BOUNDS.maxUtf8Bytes}`,
+    );
+  }
 }
 
 function pickLineItem(raw: unknown): Record<string, unknown> | null {
   if (!isRecord(raw)) return null;
   return {
-    id: raw.id ?? null,
-    variant_id: raw.variant_id ?? null,
-    product_id: raw.product_id ?? null,
-    sku: typeof raw.sku === "string" ? raw.sku : null,
+    id: assertScalarId(raw.id, "line_item.id"),
+    variant_id: assertScalarId(raw.variant_id, "line_item.variant_id"),
+    product_id: assertScalarId(raw.product_id, "line_item.product_id"),
+    sku: typeof raw.sku === "string" ? raw.sku.slice(0, PROJECTION_BOUNDS.maxStringLength) : null,
     quantity: typeof raw.quantity === "number" ? raw.quantity : null,
     price: moneyString(raw.price),
     total_discount: moneyString(raw.total_discount),
-    location_id: raw.location_id ?? null,
+    location_id: assertScalarId(raw.location_id, "line_item.location_id"),
     fulfillment_status:
       typeof raw.fulfillment_status === "string" ? raw.fulfillment_status : null,
   };
@@ -55,13 +153,21 @@ function sanitizeOrderProjection(
   payload: Record<string, unknown>,
   topic: "orders/create" | "orders/cancelled",
 ): Record<string, unknown> {
-  const lineItems = Array.isArray(payload.line_items)
-    ? payload.line_items.map(pickLineItem).filter(Boolean)
-    : [];
+  const rawLines = Array.isArray(payload.line_items) ? payload.line_items : [];
+  if (rawLines.length > PROJECTION_BOUNDS.maxLineItems) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      `line_items exceeds max ${PROJECTION_BOUNDS.maxLineItems}`,
+    );
+  }
+  const lineItems = rawLines.map(pickLineItem).filter(Boolean);
 
   return {
-    id: payload.id ?? null,
-    admin_graphql_api_id: payload.admin_graphql_api_id ?? null,
+    id: assertScalarId(payload.id, "id"),
+    admin_graphql_api_id: assertScalarId(
+      payload.admin_graphql_api_id,
+      "admin_graphql_api_id",
+    ),
     name: typeof payload.name === "string" ? payload.name : null,
     created_at: typeof payload.created_at === "string" ? payload.created_at : null,
     updated_at: typeof payload.updated_at === "string" ? payload.updated_at : null,
@@ -83,8 +189,6 @@ function sanitizeOrderProjection(
     total_tax: moneyString(payload.total_tax),
     total_discounts: moneyString(payload.total_discounts),
     line_items: lineItems,
-    // Explicitly omit: customer, email, phone, billing_address, shipping_address,
-    // note, note_attributes, browser_ip, client_details, payment tokens, etc.
     _topic: topic,
   };
 }
@@ -92,29 +196,36 @@ function sanitizeOrderProjection(
 function sanitizeRefundProjection(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
-  const refundLineItems = Array.isArray(payload.refund_line_items)
+  const rawRefundLines = Array.isArray(payload.refund_line_items)
     ? payload.refund_line_items
-        .map((item) => {
-          if (!isRecord(item)) return null;
-          const lineItem = isRecord(item.line_item)
-            ? pickLineItem(item.line_item)
-            : null;
-          return {
-            id: item.id ?? null,
-            quantity: typeof item.quantity === "number" ? item.quantity : null,
-            restock_type:
-              typeof item.restock_type === "string" ? item.restock_type : null,
-            line_item: lineItem,
-          };
-        })
-        .filter(Boolean)
     : [];
+  if (rawRefundLines.length > PROJECTION_BOUNDS.maxLineItems) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      `refund_line_items exceeds max ${PROJECTION_BOUNDS.maxLineItems}`,
+    );
+  }
+  const refundLineItems = rawRefundLines
+    .map((item) => {
+      if (!isRecord(item)) return null;
+      const lineItem = isRecord(item.line_item)
+        ? pickLineItem(item.line_item)
+        : null;
+      return {
+        id: assertScalarId(item.id, "refund_line_item.id"),
+        quantity: typeof item.quantity === "number" ? item.quantity : null,
+        restock_type:
+          typeof item.restock_type === "string" ? item.restock_type : null,
+        line_item: lineItem,
+      };
+    })
+    .filter(Boolean);
 
   return {
-    id: payload.id ?? null,
-    order_id: payload.order_id ?? null,
+    id: assertScalarId(payload.id, "id"),
+    order_id: assertScalarId(payload.order_id, "order_id"),
     created_at: typeof payload.created_at === "string" ? payload.created_at : null,
-    note: null, // strip free-text notes (may contain PII)
+    note: null,
     refund_line_items: refundLineItems,
   };
 }
@@ -123,8 +234,11 @@ function sanitizeInventoryProjection(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    inventory_item_id: payload.inventory_item_id ?? null,
-    location_id: payload.location_id ?? null,
+    inventory_item_id: assertScalarId(
+      payload.inventory_item_id,
+      "inventory_item_id",
+    ),
+    location_id: assertScalarId(payload.location_id, "location_id"),
     available: typeof payload.available === "number" ? payload.available : null,
     updated_at: typeof payload.updated_at === "string" ? payload.updated_at : null,
   };
@@ -134,7 +248,7 @@ function sanitizeUninstallProjection(
   payload: Record<string, unknown>,
 ): Record<string, unknown> {
   return {
-    id: payload.id ?? null,
+    id: assertScalarId(payload.id, "id"),
     domain: typeof payload.domain === "string" ? payload.domain : null,
     myshopify_domain:
       typeof payload.myshopify_domain === "string"
@@ -151,6 +265,7 @@ export function isSanitizedWebhookTopic(
 
 /**
  * Sanitize a verified webhook payload into a versioned control-plane projection.
+ * Fail closed on bound overflow or invalid scalar types.
  */
 export function sanitizeWebhookPayload(
   topic: string,
@@ -197,5 +312,6 @@ export function sanitizeWebhookPayload(
     }
   }
 
+  assertProjectionBounds(projection);
   return { schemaVersion, topic, projection };
 }

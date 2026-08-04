@@ -14,13 +14,38 @@ async function kickDispatcher(batchSize = 5): Promise<void> {
   await dispatchPendingJobs({ batchSize }).catch(() => undefined);
 }
 
-const REDIS_URL = process.env.REDIS_URL ?? "[REDACTED]";
+/**
+ * Require an explicitly configured Redis URL (F-PR4-19).
+ * Never fall back to a redaction placeholder or unexpected host.
+ */
+export function requireRedisUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const raw = env.REDIS_URL;
+  if (raw == null || raw.trim() === "") {
+    throw new Error(
+      "redis_url_not_configured: REDIS_URL must be set explicitly for queue functionality",
+    );
+  }
+  const trimmed = raw.trim();
+  if (
+    trimmed === "[REDACTED]" ||
+    trimmed.includes("[REDACTED]") ||
+    trimmed === "undefined" ||
+    trimmed === "null"
+  ) {
+    throw new Error(
+      "redis_url_invalid: REDIS_URL must not be a redaction placeholder",
+    );
+  }
+  return trimmed;
+}
 
 let connection: IORedis | null = null;
 
 function getConnection(): IORedis {
   if (!connection) {
-    connection = new IORedis(REDIS_URL, { maxRetriesPerRequest: null });
+    connection = new IORedis(requireRedisUrl(), { maxRetriesPerRequest: null });
   }
   return connection;
 }
@@ -33,9 +58,12 @@ export type WebhookJobData = {
   /** Informational only — never authority. */
   payloadShop: string;
   payload: Record<string, unknown>;
-  /** v2 preferred; v1 accepted only for in-flight pre-cutover jobs. */
-  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2;
+  /** v3 preferred; v2 accepted only for in-flight pre-cutover jobs. */
+  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2 | import("../sync/envelope-v3.server").TenantJobEnvelopeV3;
   durableJobId?: string;
+  dispatchId?: string;
+  dispatchSequence?: number;
+  queueJobId?: string;
 };
 
 export type CatalogSyncJobData = {

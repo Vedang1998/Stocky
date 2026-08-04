@@ -1845,6 +1845,7 @@ export type TenantDb = {
   stocktake: TenantModelDelegate;
   bomComponent: TenantModelDelegate;
   lowStockAlert: TenantModelDelegate;
+  syncApplicationReceipt: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
   volumePriceTier: TenantModelDelegate;
   leadTimeSnapshot: TenantModelDelegate;

@@ -1,9 +1,9 @@
 /**
- * Dispatcher: claim PENDING / expired leases via FOR UPDATE SKIP LOCKED,
- * sign fresh envelope v2, enqueue to BullMQ, ack ENQUEUED.
+ * Dispatcher: fair indexed claim, JobDispatch identity, envelope v3, BullMQ delivery.
+ * F-PR4-02 / F-PR4-05 / F-PR4-11 / F-PR4-13
  */
 import { randomUUID } from "node:crypto";
-import type { DurableJob } from "@prisma/client";
+import type { DurableJob, JobDispatch } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { issueSyncDispatchAuthority } from "../tenant/sync-dispatch-authority.server";
 import { assertTenantJobSource, type TenantJobSource } from "../tenant/job-envelope.server";
@@ -14,11 +14,13 @@ import {
   getWebhookQueue,
 } from "../jobs/queue.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
-import { createTenantJobEnvelopeV2 } from "./envelope-v2.server";
+import { createTenantJobEnvelopeV3 } from "./envelope-v3.server";
+import { executionStrategyForJobType } from "./execution-strategy.server";
 import { assertTransition } from "./state-machine.server";
 
 export const DEFAULT_DISPATCH_BATCH_SIZE = 50;
 export const DEFAULT_DISPATCH_LEASE_MS = 30_000;
+export const DEFAULT_MAX_PER_SHOP = 2;
 
 type ClaimedJobRow = {
   id: string;
@@ -32,77 +34,187 @@ type ClaimedJobRow = {
   correlationId: string;
   causationId: string | null;
   state: string;
+  executionStrategy: string;
+  activeDispatchSequence: number | null;
 };
 
-async function recoverExpiredLeases(
+export function formatQueueJobId(
+  durableJobId: string,
+  dispatchSequence: number,
+): string {
+  return `${durableJobId}:${dispatchSequence}`;
+}
+
+async function recoverExpiredDispatchLeases(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   now: Date,
 ): Promise<number> {
-  const expired = await prisma.durableJob.findMany({
-    where: {
-      state: "DISPATCH_LEASED",
-      leaseExpiresAt: { lt: now },
-    },
-    select: { id: true, state: true },
-    take: 200,
-  });
-
-  let recovered = 0;
-  for (const job of expired) {
-    assertTransition(job.state, "PENDING");
-    await prisma.durableJob.update({
-      where: { id: job.id },
-      data: {
-        state: "PENDING",
-        leaseOwner: null,
-        leaseExpiresAt: null,
-      },
-    });
-    recovered += 1;
-  }
-  return recovered;
+  // CAS: DISPATCH_LEASED → PENDING only when lease expired.
+  const result = await prisma.$executeRaw`
+    UPDATE "DurableJob"
+    SET
+      state = 'PENDING',
+      "leaseOwner" = NULL,
+      "leaseExpiresAt" = NULL,
+      "updatedAt" = ${now}
+    WHERE state = 'DISPATCH_LEASED'
+      AND "leaseExpiresAt" IS NOT NULL
+      AND "leaseExpiresAt" < ${now}
+  `;
+  return Number(result);
 }
 
-async function claimBatch(
+/**
+ * Fair claim: one round-robin pass selecting up to maxPerShop per shop,
+ * using index-supported per-state queries (F-PR4-11 / F-PR4-13).
+ */
+async function claimBatchFair(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   batchSize: number,
   leaseMs: number,
   workerId: string,
   now: Date,
+  maxPerShop: number,
 ): Promise<ClaimedJobRow[]> {
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
-  // FOR UPDATE SKIP LOCKED — cross-shop claim without BYPASSRLS.
-  const rows = await prisma.$queryRaw<ClaimedJobRow[]>`
+  // Index-supported candidates per eligible state (partial indexes).
+  const pending = await prisma.$queryRaw<ClaimedJobRow[]>`
     SELECT
       id, "shopId", "jobType", source, "queueName",
       "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
-      "correlationId", "causationId", state
+      "correlationId", "causationId", state,
+      "executionStrategy"::text AS "executionStrategy",
+      "activeDispatchSequence"
     FROM "DurableJob"
-    WHERE state IN ('PENDING', 'RETRY_WAIT')
+    WHERE state = 'PENDING'
       AND "nextEligibleAt" <= ${now}
-    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC
-    LIMIT ${batchSize}
+    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+    LIMIT ${batchSize * 4}
     FOR UPDATE SKIP LOCKED
   `;
 
+  const retryWait = await prisma.$queryRaw<ClaimedJobRow[]>`
+    SELECT
+      id, "shopId", "jobType", source, "queueName",
+      "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
+      "correlationId", "causationId", state,
+      "executionStrategy"::text AS "executionStrategy",
+      "activeDispatchSequence"
+    FROM "DurableJob"
+    WHERE state = 'RETRY_WAIT'
+      AND "nextEligibleAt" <= ${now}
+    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+    LIMIT ${batchSize * 4}
+    FOR UPDATE SKIP LOCKED
+  `;
+
+  // Merge by nextEligibleAt order while applying per-shop fairness.
+  const merged = [...pending, ...retryWait].sort((a, b) => {
+    // Stable-ish: prefer PENDING over RETRY_WAIT only when equal eligibility —
+    // we already sorted each list; merge by id for determinism after concat sort.
+    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  });
+
+  // Re-sort by eligibility using a second pass over the raw rows isn't available
+  // after FOR UPDATE; use shop-fair selection on the locked set.
+  const perShop = new Map<string, number>();
+  const selected: ClaimedJobRow[] = [];
+
+  // Prefer earlier-created among locked rows for fairness rounds.
+  const byShop = new Map<string, ClaimedJobRow[]>();
+  for (const row of [...pending, ...retryWait]) {
+    const list = byShop.get(row.shopId) ?? [];
+    list.push(row);
+    byShop.set(row.shopId, list);
+  }
+
+  // Round-robin across shops.
+  let progress = true;
+  while (selected.length < batchSize && progress) {
+    progress = false;
+    for (const [, list] of byShop) {
+      if (selected.length >= batchSize) break;
+      const taken = perShop.get(list[0]?.shopId ?? "") ?? 0;
+      if (taken >= maxPerShop) continue;
+      const next = list.shift();
+      if (!next) continue;
+      selected.push(next);
+      perShop.set(next.shopId, taken + 1);
+      progress = true;
+    }
+  }
+
   const claimed: ClaimedJobRow[] = [];
-  for (const row of rows) {
+  for (const row of selected) {
     assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
-    await prisma.durableJob.update({
-      where: { id: row.id },
-      data: {
-        state: "DISPATCH_LEASED",
-        leaseOwner: workerId,
-        leaseExpiresAt,
-      },
-    });
+    const updated = await prisma.$queryRaw<Array<{ id: string }>>`
+      UPDATE "DurableJob"
+      SET
+        state = 'DISPATCH_LEASED',
+        "leaseOwner" = ${workerId},
+        "leaseExpiresAt" = ${leaseExpiresAt},
+        "updatedAt" = ${now}
+      WHERE id = ${row.id}
+        AND state = ${row.state}
+      RETURNING id
+    `;
+    if (updated.length === 0) continue;
     claimed.push({ ...row, state: "DISPATCH_LEASED" });
   }
+
+  // Silence unused merge variable (kept for future eligibility merge).
+  void merged;
   return claimed;
 }
 
-async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
+async function ensureDispatchRecord(
+  prisma: ReturnType<typeof getControlPlanePrisma>,
+  job: ClaimedJobRow,
+  workerId: string,
+  leaseMs: number,
+  now: Date,
+): Promise<JobDispatch> {
+  // Reuse unacknowledged PENDING_ENQUEUE dispatch for the same sequence (ack-loss recovery).
+  const existingPending = await prisma.jobDispatch.findFirst({
+    where: {
+      durableJobId: job.id,
+      shopId: job.shopId,
+      state: "PENDING_ENQUEUE",
+    },
+    orderBy: { dispatchSequence: "desc" },
+  });
+  if (existingPending) {
+    return existingPending;
+  }
+
+  const last = await prisma.jobDispatch.findFirst({
+    where: { durableJobId: job.id, shopId: job.shopId },
+    orderBy: { dispatchSequence: "desc" },
+  });
+  const nextSeq = (last?.dispatchSequence ?? 0) + 1;
+  const queueJobId = formatQueueJobId(job.id, nextSeq);
+  const leaseExpiresAt = new Date(now.getTime() + leaseMs);
+
+  return prisma.jobDispatch.create({
+    data: {
+      shopId: job.shopId,
+      durableJobId: job.id,
+      dispatchSequence: nextSeq,
+      queueName: job.queueName,
+      queueJobId,
+      state: "PENDING_ENQUEUE",
+      leaseOwner: workerId,
+      leaseExpiresAt,
+      payloadDigest: job.payloadDigest,
+    },
+  });
+}
+
+async function enqueueWithDispatch(
+  job: ClaimedJobRow,
+  dispatch: JobDispatch,
+): Promise<{ created: boolean }> {
   const shop = await getControlPlanePrisma().shop.findUnique({
     where: { id: job.shopId },
     select: {
@@ -112,8 +224,7 @@ async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
     },
   });
   if (!shop || !shop.processingEnabled) {
-    // Leave leased; lifecycle/uninstall will cancel or lease recovery returns PENDING.
-    return;
+    return { created: false };
   }
 
   assertTenantJobSource(job.source);
@@ -125,10 +236,13 @@ async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
     causationId: job.causationId ?? undefined,
   });
 
-  const envelope = createTenantJobEnvelopeV2({
+  const envelope = createTenantJobEnvelopeV3({
     tenant,
     source: job.source as TenantJobSource,
     durableJobId: job.id,
+    dispatchId: dispatch.id,
+    dispatchSequence: dispatch.dispatchSequence,
+    queueJobId: dispatch.queueJobId,
     payloadDigest: job.payloadDigest,
   });
 
@@ -138,6 +252,17 @@ async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
     !Array.isArray(job.sanitizedPayload)
       ? (job.sanitizedPayload as Record<string, unknown>)
       : {};
+
+  const queue =
+    job.queueName === WEBHOOK_QUEUE || job.jobType.startsWith("webhook:")
+      ? getWebhookQueue()
+      : getCronQueue();
+
+  // Reconcile: if queue already has this deterministic job ID, do not create a new sequence.
+  const existing = await queue.getJob(dispatch.queueJobId);
+  if (existing) {
+    return { created: false };
+  }
 
   if (job.queueName === WEBHOOK_QUEUE || job.jobType.startsWith("webhook:")) {
     const topic = job.jobType.startsWith("webhook:")
@@ -151,8 +276,11 @@ async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
         payload,
         tenant: envelope,
         durableJobId: job.id,
+        dispatchId: dispatch.id,
+        dispatchSequence: dispatch.dispatchSequence,
+        queueJobId: dispatch.queueJobId,
       },
-      { jobId: job.id },
+      { jobId: dispatch.queueJobId },
     );
   } else {
     const name =
@@ -166,23 +294,42 @@ async function enqueueClaimedJob(job: ClaimedJobRow): Promise<void> {
       {
         tenant: envelope,
         durableJobId: job.id,
+        dispatchId: dispatch.id,
+        dispatchSequence: dispatch.dispatchSequence,
+        queueJobId: dispatch.queueJobId,
         payload,
       },
-      { jobId: job.id },
+      { jobId: dispatch.queueJobId },
     );
   }
+
+  return { created: true };
 }
 
 async function ackEnqueued(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   jobId: string,
+  dispatchId: string,
+  dispatchSequence: number,
   now: Date,
-): Promise<void> {
-  const current = await prisma.durableJob.findUnique({ where: { id: jobId } });
-  if (!current || current.state !== "DISPATCH_LEASED") return;
-  assertTransition("DISPATCH_LEASED", "ENQUEUED");
-  await prisma.durableJob.update({
-    where: { id: jobId },
+): Promise<boolean> {
+  const jobAck = await prisma.$queryRaw<Array<{ id: string }>>`
+    UPDATE "DurableJob"
+    SET
+      state = 'ENQUEUED',
+      "enqueuedAt" = ${now},
+      "leaseOwner" = NULL,
+      "leaseExpiresAt" = NULL,
+      "activeDispatchSequence" = ${dispatchSequence},
+      "updatedAt" = ${now}
+    WHERE id = ${jobId}
+      AND state = 'DISPATCH_LEASED'
+    RETURNING id
+  `;
+  if (jobAck.length === 0) return false;
+
+  await prisma.jobDispatch.update({
+    where: { id: dispatchId },
     data: {
       state: "ENQUEUED",
       enqueuedAt: now,
@@ -190,6 +337,7 @@ async function ackEnqueued(
       leaseExpiresAt: null,
     },
   });
+  return true;
 }
 
 export type DispatchPendingJobsResult = {
@@ -201,38 +349,70 @@ export type DispatchPendingJobsResult = {
 };
 
 /**
- * Claim eligible durable jobs and deliver to BullMQ.
- * Redis failure leaves jobs DISPATCH_LEASED until lease expiry recovery.
+ * Claim eligible durable jobs and deliver to BullMQ with distinct dispatch IDs.
  */
 export async function dispatchPendingJobs(options?: {
   batchSize?: number;
   leaseMs?: number;
   workerId?: string;
+  maxPerShop?: number;
 }): Promise<DispatchPendingJobsResult> {
   const batchSize = options?.batchSize ?? DEFAULT_DISPATCH_BATCH_SIZE;
   const leaseMs = options?.leaseMs ?? DEFAULT_DISPATCH_LEASE_MS;
+  const maxPerShop = options?.maxPerShop ?? DEFAULT_MAX_PER_SHOP;
   const workerId = options?.workerId ?? `dispatcher:${randomUUID()}`;
   const prisma = getControlPlanePrisma();
   const now = new Date();
 
-  const recoveredLeases = await recoverExpiredLeases(prisma, now);
-  const claimed = await claimBatch(prisma, batchSize, leaseMs, workerId, now);
+  const recoveredLeases = await recoverExpiredDispatchLeases(prisma, now);
+  const claimed = await claimBatchFair(
+    prisma,
+    batchSize,
+    leaseMs,
+    workerId,
+    now,
+    maxPerShop,
+  );
 
   let enqueued = 0;
   let failed = 0;
 
   for (const job of claimed) {
+    // Ensure execution strategy is set (backfill default for older rows).
+    if (!job.executionStrategy) {
+      const strategy = executionStrategyForJobType(job.jobType);
+      await prisma.durableJob.update({
+        where: { id: job.id },
+        data: { executionStrategy: strategy },
+      });
+      job.executionStrategy = strategy;
+    }
+
     try {
-      await enqueueClaimedJob(job);
-      await ackEnqueued(prisma, job.id, new Date());
-      enqueued += 1;
+      const dispatch = await ensureDispatchRecord(
+        prisma,
+        job,
+        workerId,
+        leaseMs,
+        now,
+      );
+      await enqueueWithDispatch(job, dispatch);
+      const acked = await ackEnqueued(
+        prisma,
+        job.id,
+        dispatch.id,
+        dispatch.dispatchSequence,
+        new Date(),
+      );
+      if (acked) enqueued += 1;
     } catch (err) {
       failed += 1;
       console.error(
         `dispatchPendingJobs failed for ${job.id}:`,
         err instanceof Error ? err.message : err,
       );
-      // Leave DISPATCH_LEASED — lease expiry recovers to PENDING.
+      // Leave DISPATCH_LEASED — lease expiry recovers to PENDING; same dispatch
+      // sequence is reused on next claim via PENDING_ENQUEUE reuse.
     }
   }
 
@@ -245,5 +425,4 @@ export async function dispatchPendingJobs(options?: {
   };
 }
 
-// Silence unused import when CRON_QUEUE only used for typing clarity.
 void CRON_QUEUE;

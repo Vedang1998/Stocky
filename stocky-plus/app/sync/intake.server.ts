@@ -1,24 +1,30 @@
 /**
  * Durable webhook intake — DB is source of truth; Redis not required for 200.
+ * Corrections: F-PR4-08, F-PR4-18, F-PR4-20
  */
 import { randomUUID } from "node:crypto";
 import type { DurableJob, WebhookDelivery, Prisma } from "@prisma/client";
 import { normalizeShopDomain } from "../tenant/shop-domain";
-import { requireTargetApiVersion } from "./api-version.server";
+import {
+  resolveApiVersionForPersistence,
+  validateReceivedApiVersion,
+} from "./api-version.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
 import { digestCanonicalJson } from "./digest.server";
 import { SyncControlPlaneError } from "./errors";
+import { executionStrategyForJobType } from "./execution-strategy.server";
 import {
   sanitizeWebhookPayload,
   type SanitizedWebhookTopic,
 } from "./sanitize.server";
 
-export const DURABLE_JOB_AUTHORITY_VERSION = "tenant-job-envelope-v2" as const;
+export const DURABLE_JOB_AUTHORITY_VERSION = "tenant-job-envelope-v3" as const;
 
 export type IngestAuthenticatedWebhookInput = {
   verifiedShop: string;
   topic: string;
-  webhookId: string;
+  /** Null/undefined → quarantine; never invent a time-based key. */
+  webhookId: string | null | undefined;
   apiVersion: string | null | undefined;
   payload: unknown;
   correlationId?: string;
@@ -28,6 +34,8 @@ export type IngestAuthenticatedWebhookResult = {
   delivery: WebhookDelivery;
   job: DurableJob | null;
   duplicate: boolean;
+  quarantined: boolean;
+  conflict: boolean;
 };
 
 function webhookJobType(topic: string): string {
@@ -64,9 +72,30 @@ async function resolveShopViaControlPlane(verifiedShop: string) {
   return shopRow;
 }
 
+async function createDataIssue(
+  tx: Prisma.TransactionClient,
+  input: {
+    shopId: string;
+    reasonCode: string;
+    severity?: "INFO" | "WARNING" | "ERROR" | "CRITICAL";
+    redactedEvidence?: Prisma.InputJsonValue;
+  },
+) {
+  await tx.dataIssue.create({
+    data: {
+      shopId: input.shopId,
+      reasonCode: input.reasonCode.slice(0, 64),
+      severity: input.severity ?? "ERROR",
+      redactedEvidence: input.redactedEvidence,
+    },
+  });
+}
+
 /**
  * Authenticated webhook → sanitize → digest → durable delivery + PENDING job.
- * Duplicate (shopId, shopifyWebhookId) bumps counters and does not create a second job.
+ * Missing Shopify webhook ID → quarantine only (F-PR4-20).
+ * Divergent digest for same ID → conflict quarantine (F-PR4-08).
+ * Unsupported API version → durable quarantine, no job (F-PR4-18).
  */
 export async function ingestAuthenticatedWebhook(
   input: IngestAuthenticatedWebhookInput,
@@ -74,7 +103,6 @@ export async function ingestAuthenticatedWebhook(
   const shopRow = await resolveShopViaControlPlane(input.verifiedShop);
   const prisma = getControlPlanePrisma();
 
-  // Uninstall is handled by processUninstall — other topics deny when disabled.
   if (!shopRow.processingEnabled && input.topic !== "app/uninstalled") {
     throw new SyncControlPlaneError(
       "shop_processing_disabled",
@@ -82,40 +110,290 @@ export async function ingestAuthenticatedWebhook(
     );
   }
 
-  const apiVersion = requireTargetApiVersion(input.apiVersion);
-  const sanitized = sanitizeWebhookPayload(
-    input.topic as SanitizedWebhookTopic,
-    input.payload,
-  );
-  const payloadDigest = digestCanonicalJson(sanitized.projection);
+  const apiValidation = validateReceivedApiVersion(input.apiVersion);
+  const apiVersionPersisted = resolveApiVersionForPersistence(input.apiVersion);
   const correlationId = input.correlationId ?? randomUUID();
   const now = new Date();
 
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.webhookDelivery.findUnique({
-      where: {
-        shopId_shopifyWebhookId: {
+  // Missing Shopify webhook ID — quarantine, no processing job (F-PR4-20).
+  if (input.webhookId == null || input.webhookId.trim() === "") {
+    let sanitizedProjection: Record<string, unknown> = {};
+    let payloadDigest = digestCanonicalJson({ quarantine: true });
+    let schemaVersion = "quarantine-missing-webhook-id-v1";
+    try {
+      const sanitized = sanitizeWebhookPayload(
+        input.topic as SanitizedWebhookTopic,
+        input.payload,
+      );
+      sanitizedProjection = sanitized.projection;
+      payloadDigest = digestCanonicalJson(sanitized.projection);
+      schemaVersion = sanitized.schemaVersion;
+    } catch {
+      // Even sanitize failure still gets a quarantine receipt.
+      sanitizedProjection = { _quarantine: true };
+    }
+
+    const delivery = await prisma.$transaction(async (tx) => {
+      const created = await tx.webhookDelivery.create({
+        data: {
           shopId: shopRow.id,
-          shopifyWebhookId: input.webhookId,
+          shopifyWebhookId: null,
+          topic: input.topic,
+          apiVersionReceived: apiVersionPersisted,
+          payloadSchemaVersion: schemaVersion,
+          sanitizedPayload: sanitizedProjection as Prisma.InputJsonValue,
+          payloadDigest,
+          correlationId,
+          state: "QUARANTINED",
+          quarantineReason: "missing_shopify_webhook_id",
+          firstSeenAt: now,
+          lastSeenAt: now,
         },
-      },
+      });
+      await createDataIssue(tx, {
+        shopId: shopRow.id,
+        reasonCode: "missing_shopify_webhook_id",
+        redactedEvidence: {
+          topic: input.topic,
+          deliveryId: created.id,
+          apiVersion: apiVersionPersisted,
+        },
+      });
+      return created;
+    });
+
+    return {
+      delivery,
+      job: null,
+      duplicate: false,
+      quarantined: true,
+      conflict: false,
+    };
+  }
+
+  const webhookId = input.webhookId.trim();
+
+  // Unsupported / missing API version — durable quarantine, no job (F-PR4-18).
+  if (!apiValidation.ok) {
+    let sanitizedProjection: Record<string, unknown> = { _quarantine: true };
+    let payloadDigest = digestCanonicalJson(sanitizedProjection);
+    let schemaVersion = "quarantine-api-version-v1";
+    try {
+      const sanitized = sanitizeWebhookPayload(
+        input.topic as SanitizedWebhookTopic,
+        input.payload,
+      );
+      sanitizedProjection = sanitized.projection;
+      payloadDigest = digestCanonicalJson(sanitized.projection);
+      schemaVersion = sanitized.schemaVersion;
+    } catch {
+      /* keep quarantine stub */
+    }
+
+    const delivery = await prisma.$transaction(async (tx) => {
+      const existing = await tx.webhookDelivery.findFirst({
+        where: { shopId: shopRow.id, shopifyWebhookId: webhookId },
+      });
+      if (existing) {
+        await tx.webhookDelivery.update({
+          where: { id: existing.id },
+          data: { duplicateCount: { increment: 1 }, lastSeenAt: now },
+        });
+        return existing;
+      }
+      const created = await tx.webhookDelivery.create({
+        data: {
+          shopId: shopRow.id,
+          shopifyWebhookId: webhookId,
+          topic: input.topic,
+          apiVersionReceived: apiVersionPersisted,
+          payloadSchemaVersion: schemaVersion,
+          sanitizedPayload: sanitizedProjection as Prisma.InputJsonValue,
+          payloadDigest,
+          correlationId,
+          state: "QUARANTINED",
+          quarantineReason:
+            apiValidation.reason === "missing"
+              ? "api_version_missing"
+              : "api_version_unsupported",
+          firstSeenAt: now,
+          lastSeenAt: now,
+        },
+      });
+      await createDataIssue(tx, {
+        shopId: shopRow.id,
+        reasonCode:
+          apiValidation.reason === "missing"
+            ? "api_version_missing"
+            : "api_version_unsupported",
+        redactedEvidence: {
+          topic: input.topic,
+          receivedApiVersion: apiValidation.received,
+          deliveryId: created.id,
+        },
+      });
+      return created;
+    });
+
+    return {
+      delivery,
+      job: null,
+      duplicate: false,
+      quarantined: true,
+      conflict: false,
+    };
+  }
+
+  let sanitized;
+  try {
+    sanitized = sanitizeWebhookPayload(
+      input.topic as SanitizedWebhookTopic,
+      input.payload,
+    );
+  } catch (err) {
+    if (
+      err instanceof SyncControlPlaneError &&
+      (err.code === "projection_bounds_exceeded" ||
+        err.code === "projection_scalar_type_invalid")
+    ) {
+      const delivery = await prisma.$transaction(async (tx) => {
+        const created = await tx.webhookDelivery.create({
+          data: {
+            shopId: shopRow.id,
+            shopifyWebhookId: webhookId,
+            topic: input.topic,
+            apiVersionReceived: apiVersionPersisted,
+            payloadSchemaVersion: "quarantine-projection-bounds-v1",
+            sanitizedPayload: { _quarantine: true, reason: err.code },
+            payloadDigest: digestCanonicalJson({ reason: err.code }),
+            correlationId,
+            state: "QUARANTINED",
+            quarantineReason: err.code,
+            firstSeenAt: now,
+            lastSeenAt: now,
+          },
+        });
+        await createDataIssue(tx, {
+          shopId: shopRow.id,
+          reasonCode: err.code.slice(0, 64),
+          redactedEvidence: { topic: input.topic, deliveryId: created.id },
+        });
+        return created;
+      });
+      return {
+        delivery,
+        job: null,
+        duplicate: false,
+        quarantined: true,
+        conflict: false,
+      };
+    }
+    throw err;
+  }
+
+  const payloadDigest = digestCanonicalJson(sanitized.projection);
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.webhookDelivery.findFirst({
+      where: { shopId: shopRow.id, shopifyWebhookId: webhookId },
       include: { durableJob: true },
     });
 
     if (existing) {
+      // Same digest → duplicate.
+      if (existing.payloadDigest === payloadDigest) {
+        const updated = await tx.webhookDelivery.update({
+          where: { id: existing.id },
+          data: {
+            duplicateCount: { increment: 1 },
+            lastSeenAt: now,
+          },
+        });
+        return {
+          delivery: updated,
+          job: existing.durableJob,
+          duplicate: true,
+          quarantined: false,
+          conflict: false,
+        };
+      }
+
+      // Divergent digest — preserve original; record conflict (F-PR4-08).
       const updated = await tx.webhookDelivery.update({
         where: { id: existing.id },
         data: {
           duplicateCount: { increment: 1 },
+          payloadDigestMismatchCount: { increment: 1 },
+          lastConflictingDigest: payloadDigest,
+          firstMismatchAt: existing.firstMismatchAt ?? now,
+          lastMismatchAt: now,
           lastSeenAt: now,
+          state:
+            existing.state === "COMPLETED" || existing.state === "FAILED"
+              ? existing.state
+              : "CONFLICT",
+          quarantineReason:
+            existing.state === "COMPLETED" || existing.state === "FAILED"
+              ? existing.quarantineReason
+              : "payload_digest_conflict",
         },
       });
+
+      await createDataIssue(tx, {
+        shopId: shopRow.id,
+        reasonCode: "webhook_payload_digest_conflict",
+        severity: "CRITICAL",
+        redactedEvidence: {
+          deliveryId: existing.id,
+          originalDigest: existing.payloadDigest,
+          conflictingDigest: payloadDigest,
+          topic: input.topic,
+        },
+      });
+
+      // If first job has not applied, cancel/quarantine it.
+      if (
+        existing.durableJob &&
+        !["SUCCEEDED", "DEAD_LETTERED", "CANCELLED"].includes(
+          existing.durableJob.state,
+        )
+      ) {
+        await tx.durableJob.updateMany({
+          where: {
+            id: existing.durableJob.id,
+            shopId: shopRow.id,
+            state: {
+              in: [
+                "PENDING",
+                "DISPATCH_LEASED",
+                "ENQUEUED",
+                "RETRY_WAIT",
+                "RUNNING",
+              ],
+            },
+          },
+          data: {
+            state: "CANCELLED",
+            cancelledAt: now,
+            failureCode: "payload_digest_conflict",
+            failureSummary:
+              "Cancelled — conflicting payload digest for same Shopify webhook ID",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+          },
+        });
+      }
+
       return {
         delivery: updated,
         job: existing.durableJob,
         duplicate: true,
+        quarantined: updated.state === "CONFLICT" || updated.state === "QUARANTINED",
+        conflict: true,
       };
     }
+
+    const strategy = executionStrategyForJobType(webhookJobType(input.topic));
 
     const job = await tx.durableJob.create({
       data: {
@@ -126,9 +404,10 @@ export async function ingestAuthenticatedWebhook(
         payloadSchemaVersion: sanitized.schemaVersion,
         sanitizedPayload: sanitized.projection as Prisma.InputJsonValue,
         payloadDigest,
-        idempotencyKey: `webhook:${input.webhookId}`,
+        idempotencyKey: `webhook:${webhookId}`,
         correlationId,
         authorityVersion: DURABLE_JOB_AUTHORITY_VERSION,
+        executionStrategy: strategy,
         state: "PENDING",
         nextEligibleAt: now,
       },
@@ -137,9 +416,9 @@ export async function ingestAuthenticatedWebhook(
     const delivery = await tx.webhookDelivery.create({
       data: {
         shopId: shopRow.id,
-        shopifyWebhookId: input.webhookId,
+        shopifyWebhookId: webhookId,
         topic: input.topic,
-        apiVersionReceived: apiVersion,
+        apiVersionReceived: apiVersionPersisted,
         payloadSchemaVersion: sanitized.schemaVersion,
         sanitizedPayload: sanitized.projection as Prisma.InputJsonValue,
         payloadDigest,
@@ -160,7 +439,13 @@ export async function ingestAuthenticatedWebhook(
       where: { id: job.id },
     });
 
-    return { delivery, job: refreshedJob, duplicate: false };
+    return {
+      delivery,
+      job: refreshedJob,
+      duplicate: false,
+      quarantined: false,
+      conflict: false,
+    };
   });
 }
 
@@ -196,6 +481,7 @@ export async function createDurableJob(input: {
 
   const payloadDigest = digestCanonicalJson(input.sanitizedPayload);
   const correlationId = input.correlationId ?? randomUUID();
+  const strategy = executionStrategyForJobType(input.jobType);
 
   try {
     return await prisma.durableJob.create({
@@ -211,6 +497,7 @@ export async function createDurableJob(input: {
         correlationId,
         causationId: input.causationId,
         authorityVersion: DURABLE_JOB_AUTHORITY_VERSION,
+        executionStrategy: strategy,
         state: "PENDING",
         maxAttempts: input.maxAttempts ?? 3,
         nextEligibleAt: new Date(),

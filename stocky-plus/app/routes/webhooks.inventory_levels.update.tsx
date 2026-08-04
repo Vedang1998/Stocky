@@ -10,7 +10,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await ingestAuthenticatedWebhook({
     verifiedShop: shop,
     topic: "inventory_levels/update",
-    webhookId: webhookId ?? `missing-${Date.now()}`,
+    webhookId: webhookId ?? null,
     apiVersion,
     payload,
   });
