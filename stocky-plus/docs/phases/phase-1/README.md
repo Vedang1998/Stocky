@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** IN PROGRESS (D-042)
-**Next authorized implementation unit:** Phase 1 PR 4 — Synchronization Control Plane on `phase-1/sync-control-plane`
+**Phase 1 PR 4:** CORRECTIONS REQUIRED (D-043) — not accepted
+**Next authorized implementation unit:** Phase 1 PR 4 correction cycle on `phase-1/sync-control-plane`
 **Active implementation branch:** `phase-1/sync-control-plane`
-**Active implementation PR:** pending draft open
+**Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
-**ChatGPT decisions:** D-025..D-041; **D-042 — Phase 1 PR 4 synchronization control plane authorized**
+**ChatGPT decisions:** D-025..D-042; **D-043 — Phase 1 PR 4 corrections required**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -22,7 +22,8 @@
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
-- PR 4 is **IN PROGRESS** under D-042 on `phase-1/sync-control-plane`.
+- PR 4 is **CORRECTIONS REQUIRED** under D-043 on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- Independent review report head `944cd592…` is preserved and immutable.
 - PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
 - Do **not** begin PR 5 in this PR.
