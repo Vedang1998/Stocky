@@ -149,6 +149,32 @@ export async function getMigrationClient(
   return client;
 }
 
+/**
+ * Bootstrap administrator connection for disposable test setup only.
+ * Never used for Prisma migrations, enforcement apply, or runtime.
+ */
+export function resolveBootstrapDatabaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  const url =
+    env.STOCKY_BOOTSTRAP_DATABASE_URL?.trim() ||
+    env.DATABASE_URL?.trim() ||
+    "";
+  if (!url) {
+    throw new Error(
+      "STOCKY_BOOTSTRAP_DATABASE_URL or DATABASE_URL is required for bootstrap administration",
+    );
+  }
+  return url;
+}
+
+export async function getBootstrapClient(): Promise<Client> {
+  const connectionString = resolveBootstrapDatabaseUrl();
+  const client = new Client({ connectionString });
+  await client.connect();
+  return client;
+}
+
 export async function getRuntimeClient(
   options: { requireRuntime?: boolean; verifyIdentity?: boolean } = {},
 ): Promise<Client> {

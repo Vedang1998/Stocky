@@ -150,11 +150,12 @@ describe("PR3 role membership and exact privilege allowlist", () => {
     }
   });
 
-  it("provision fails closed on BYPASSRLS without repair mode", async () => {
+  it("provision fails closed on BYPASSRLS without attempted repair", async () => {
     const client = await getMigrationClient({
       requireExplicitMigrationUrl: true,
     });
     try {
+      // Injecting BYPASSRLS requires a privileged bootstrap attribute.
       await client.query(`ALTER ROLE stocky_runtime BYPASSRLS`);
       const result = await provisionRoles(client, {
         apply: true,
@@ -164,19 +165,35 @@ describe("PR3 role membership and exact privilege allowlist", () => {
       expect(
         result.detectedDrift.some((d) => d.includes("runtime_has_bypassrls")),
       ).toBe(true);
+      expect(result.errors).toContain(
+        "runtime_role_bypassrls_requires_bootstrap_repair",
+      );
       expect(result.repairedDrift).toHaveLength(0);
+
+      // Even with repairDangerousDrift, SUPERUSER/BYPASSRLS must not be
+      // silently altered from a non-superuser CREATEROLE path (F-NEW-01).
       const repaired = await provisionRoles(client, {
         apply: true,
         phase: "prepare",
         repairDangerousDrift: true,
       });
-      expect(repaired.ok).toBe(true);
+      expect(repaired.ok).toBe(false);
+      expect(repaired.errors).toContain(
+        "runtime_role_bypassrls_requires_bootstrap_repair",
+      );
       expect(
-        repaired.repairedDrift.some((d) =>
-          d.includes("runtime_has_bypassrls"),
+        repaired.repairedDrift.every(
+          (d) => !d.includes("runtime_has_bypassrls"),
         ),
       ).toBe(true);
-      // Re-grant merchant DML after prepare revoked it
+
+      // Bootstrap repair (test-only): clear BYPASSRLS then continue.
+      await client.query(`ALTER ROLE stocky_runtime NOBYPASSRLS`);
+      const restored = await provisionRoles(client, {
+        apply: true,
+        phase: "prepare",
+      });
+      expect(restored.ok).toBe(true);
       const grants = await provisionRoles(client, {
         apply: true,
         phase: "grants",

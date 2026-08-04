@@ -14,6 +14,15 @@ import { fileURLToPath } from "node:url";
 import { applyEnforcement } from "../apply";
 import { getMigrationClient } from "../connection";
 import { TENANT_ENFORCEMENT_ADVISORY_LOCK_KEY } from "../manifest";
+import {
+  assertMerchantErrorSummary,
+  classifyMerchantError,
+  isExpectedMerchantError,
+  summarizeMerchantErrors,
+  type EnforcementTrafficPhase,
+  type MerchantErrorRecord,
+  type MerchantOperation,
+} from "../merchant-error";
 import { provisionRoles, assertSafeRuntimeAccess } from "../roles";
 import { verifyEnforcement } from "../verify";
 import { ensureEnforcementTestEnv } from "./helpers";
@@ -62,6 +71,8 @@ describe("PR3 populated enforcement concurrency", () => {
       maxMs: number;
       errors: number;
       successfulOperations: string[];
+      errorSummary: ReturnType<typeof summarizeMerchantErrors> | null;
+      merchantVisibleNote: string;
     };
     lockSnapshots: number;
     lockSamples: LockSample[];
@@ -86,6 +97,9 @@ describe("PR3 populated enforcement concurrency", () => {
       maxMs: 0,
       errors: 0,
       successfulOperations: [],
+      errorSummary: null,
+      merchantVisibleNote:
+        "Enforcement rollout includes a bounded runtime-DML denial window (SQLSTATE 42501) and must be coordinated with application cutover or maintenance controls; successful-query latency alone is not the merchant experience.",
     },
     lockSnapshots: 0,
     lockSamples: [],
@@ -263,12 +277,18 @@ describe("PR3 populated enforcement concurrency", () => {
 
     const merchantDurationsMs: number[] = [];
     const successfulOperations = new Set<string>();
-    let merchantErrors = 0;
+    const merchantErrors: MerchantErrorRecord[] = [];
+    let merchantSuccesses = 0;
+    let beforeWindowSuccess = 0;
+    let afterWindowSuccess = 0;
+    let trafficPhase: EnforcementTrafficPhase = "pre_apply";
+    let dmlExpectedRevoked = false;
     let stop = false;
     let trafficReadyResolve!: () => void;
     const trafficReady = new Promise<void>((resolve) => {
       trafficReadyResolve = resolve;
     });
+    const trafficStartedAt = performance.now();
 
     const traffic = (async () => {
       const trafficClient = new Client({
@@ -277,14 +297,31 @@ describe("PR3 populated enforcement concurrency", () => {
       await trafficClient.connect();
       let sequence = 0;
       const timed = async (
-        operation: "SELECT" | "INSERT" | "UPDATE" | "DELETE",
+        operation: MerchantOperation,
         query: () => Promise<unknown>,
       ) => {
         const started = performance.now();
         try {
           await query();
+          merchantSuccesses += 1;
+          if (trafficPhase === "pre_apply") beforeWindowSuccess += 1;
+          if (trafficPhase === "post_apply") afterWindowSuccess += 1;
           successfulOperations.add(operation);
           if (successfulOperations.size === 4) trafficReadyResolve();
+        } catch (err) {
+          const { sqlstate, errorClass } = classifyMerchantError(err);
+          const record: MerchantErrorRecord = {
+            operation,
+            sqlstate,
+            errorClass,
+            phase: trafficPhase,
+            dmlExpectedRevoked,
+            expected: false,
+            relativeMs: performance.now() - trafficStartedAt,
+          };
+          record.expected = isExpectedMerchantError(record);
+          merchantErrors.push(record);
+          throw err;
         } finally {
           merchantDurationsMs.push(performance.now() - started);
         }
@@ -296,6 +333,7 @@ describe("PR3 populated enforcement concurrency", () => {
           const shopId = shopIds[shopIndex];
           const domain = `pop-shop-${shopIndex + 1}.myshopify.com`;
           const transientId = `runtime_traffic_${sequence++}`;
+          const errorsBefore = merchantErrors.length;
           try {
             await trafficClient.query("BEGIN");
             await trafficClient.query(
@@ -341,8 +379,21 @@ describe("PR3 populated enforcement concurrency", () => {
               ),
             );
             await trafficClient.query("COMMIT");
-          } catch {
-            merchantErrors += 1;
+          } catch (err) {
+            if (merchantErrors.length === errorsBefore) {
+              const { sqlstate, errorClass } = classifyMerchantError(err);
+              const record: MerchantErrorRecord = {
+                operation: "unknown",
+                sqlstate,
+                errorClass,
+                phase: trafficPhase,
+                dmlExpectedRevoked,
+                expected: false,
+                relativeMs: performance.now() - trafficStartedAt,
+              };
+              record.expected = isExpectedMerchantError(record);
+              merchantErrors.push(record);
+            }
             await trafficClient.query("ROLLBACK").catch(() => undefined);
           }
           await new Promise((resolve) => setTimeout(resolve, 5));
@@ -412,12 +463,26 @@ describe("PR3 populated enforcement concurrency", () => {
         ),
       ]);
 
+      trafficPhase = "during_apply";
+      dmlExpectedRevoked = true;
       const apply = await applyEnforcement(mig, { apply: true });
+      trafficPhase = "post_apply";
+      dmlExpectedRevoked = false;
+      // Allow a short post-window success sampling interval.
+      await new Promise((resolve) => setTimeout(resolve, 250));
       evidence.resumeOk = apply.ok;
       if (evidence.inducedFault) evidence.inducedFault.recovered = apply.ok;
 
       stop = true;
       await Promise.all([traffic, lockObserver]);
+
+      const errorSummary = summarizeMerchantErrors({
+        samples: merchantDurationsMs.length,
+        successes: merchantSuccesses,
+        errors: merchantErrors,
+        beforeWindowSuccess,
+        afterWindowSuccess,
+      });
 
       evidence.applyOk = apply.ok;
       evidence.maxLockHoldMs = apply.maxObservedLockHoldMs;
@@ -430,8 +495,11 @@ describe("PR3 populated enforcement concurrency", () => {
         p50Ms: percentile(merchantDurationsMs, 50),
         p95Ms: percentile(merchantDurationsMs, 95),
         maxMs: percentile(merchantDurationsMs, 100),
-        errors: merchantErrors,
+        errors: merchantErrors.length,
         successfulOperations: [...successfulOperations].sort(),
+        errorSummary,
+        merchantVisibleNote:
+          "Enforcement rollout includes a bounded runtime-DML denial window (SQLSTATE 42501) and must be coordinated with application cutover or maintenance controls; successful-query latency alone is not the merchant experience.",
       };
 
       const safety = await assertSafeRuntimeAccess(mig);
@@ -448,6 +516,13 @@ describe("PR3 populated enforcement concurrency", () => {
       expect(evidence.lockSnapshots).toBeGreaterThan(0);
       expect(evidence.inducedFault?.recovered).toBe(true);
       expect((await verifyEnforcement(mig)).ok).toBe(true);
+      assertMerchantErrorSummary(errorSummary);
+      expect(errorSummary.unexpectedErrors).toBe(0);
+      expect(
+        Object.keys(errorSummary.bySqlstate).every(
+          (s) => s === "42501" || errorSummary.bySqlstate[s] === 0,
+        ),
+      ).toBe(true);
     } finally {
       stop = true;
       await Promise.allSettled([traffic, lockObserver]);

@@ -56,6 +56,7 @@ jobs:
       DATABASE_RUNTIME_URL: postgresql://stocky_runtime:stocky_runtime_ci_only@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
       STOCKY_RUNTIME_ROLE: stocky_runtime
       STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_ci_only  # pragma: allowlist secret
+      STOCKY_BOOTSTRAP_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci  # pragma: allowlist secret
       STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
       REDIS_URL: redis://localhost:6379
       # Test-only envelope secret (≥32 bytes). Never a production secret.
@@ -287,6 +288,51 @@ jobs:
 
       - name: Tenant populated runtime-traffic concurrency tests
         run: npm run test:migrations -- scripts/tenant-enforcement/tests/populated-concurrency.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant non-superuser migration-owner full enforcement
+        run: |
+          set -euo pipefail
+          echo "Bootstrapping non-superuser CREATEROLE migration owner attributes..."
+          PGPASSWORD=stocky psql -h localhost -U stocky -d postgres -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_mig_ci') THEN
+              CREATE ROLE stocky_mig_ci LOGIN PASSWORD 'stocky_mig_ci_only' NOSUPERUSER NOCREATEDB CREATEROLE NOBYPASSRLS NOINHERIT;
+            END IF;
+          END$$;
+          SQL
+          ATTRS=$(PGPASSWORD=stocky psql -h localhost -U stocky -d postgres -Atc "SELECT rolsuper||','||rolbypassrls||','||rolcreaterole||','||rolcreatedb FROM pg_roles WHERE rolname='stocky_mig_ci'")
+          echo "migration_owner.attrs=$ATTRS"
+          test "$ATTRS" = "f,f,t,f"
+          echo "migration_owner.rolsuper = false"
+          echo "migration_owner.rolbypassrls = false"
+          echo "migration_owner.rolcreaterole = true"
+          echo "migration_owner.rolcreatedb = false"
+          npm run test:migrations -- scripts/tenant-enforcement/tests/non-superuser-migration-owner.test.ts
+        env:
+          STOCKY_BOOTSTRAP_DATABASE_URL: ${{ env.STOCKY_BOOTSTRAP_DATABASE_URL }}
+          STOCKY_RUNTIME_ROLE_PASSWORD: ${{ env.STOCKY_RUNTIME_ROLE_PASSWORD }}
+
+      - name: Tenant future-function default-privilege tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/future-function-default-privilege.test.ts
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant populated merchant-error classification tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/merchant-error-classification.test.ts
+
+      - name: Tenant PostgreSQL role-creator membership tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/role-creator-membership.test.ts
+        env:
+          STOCKY_BOOTSTRAP_DATABASE_URL: ${{ env.STOCKY_BOOTSTRAP_DATABASE_URL }}
+          STOCKY_RUNTIME_ROLE_PASSWORD: ${{ env.STOCKY_RUNTIME_ROLE_PASSWORD }}
+
+      - name: Tenant catalog qualification follow-up tests
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/catalog-qualification-followup.test.ts
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}

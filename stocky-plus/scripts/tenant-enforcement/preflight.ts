@@ -212,8 +212,12 @@ export async function assessEnforcementProgress(
   const cfkNames = COMPOSITE_FOREIGN_KEYS.map((f) => f.name);
   const cfk = await client.query<{ c: string }>(
     `SELECT COUNT(*)::text AS c
-     FROM pg_constraint
-     WHERE contype = 'f' AND conname = ANY($1::text[])`,
+     FROM pg_constraint c
+     JOIN pg_class t ON t.oid = c.conrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.contype = 'f'
+       AND c.conname = ANY($1::text[])`,
     [cfkNames],
   );
 

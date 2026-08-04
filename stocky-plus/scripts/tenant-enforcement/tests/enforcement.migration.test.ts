@@ -7,13 +7,11 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { applyEnforcement, planEnforcement } from "../apply";
-import {
-  getMigrationClient,
-  resolveMigrationDatabaseUrl,
-} from "../connection";
+import { getMigrationClient } from "../connection";
 import { runPreflight } from "../preflight";
 import { provisionRoles } from "../roles";
 import { verifyEnforcement } from "../verify";
+import { ensureEnforcementTestEnv, requireRuntimeRolePassword } from "./helpers";
 
 const APP_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -21,17 +19,9 @@ const APP_ROOT = path.resolve(
 );
 
 function migrationUrl(): string {
-  const url = resolveMigrationDatabaseUrl({ requireExplicit: false });
-  process.env.TENANT_MAINTENANCE_DATABASE_URL =
-    process.env.TENANT_MAINTENANCE_DATABASE_URL || url;
-  process.env.DATABASE_MIGRATION_URL =
-    process.env.DATABASE_MIGRATION_URL || url;
-  process.env.DATABASE_URL = process.env.DATABASE_URL || url;
-  process.env.STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY = "1";
-  if (!process.env.STOCKY_RUNTIME_ROLE_PASSWORD) {
-    process.env.STOCKY_RUNTIME_ROLE_PASSWORD = "stocky_runtime_ci_only"; // pragma: allowlist secret
-  }
-  return url;
+  // P3-b: require explicit runtime password; never invent credentials.
+  requireRuntimeRolePassword();
+  return ensureEnforcementTestEnv();
 }
 
 async function resetSchema(): Promise<PrismaClient> {
@@ -122,8 +112,7 @@ describe("PR3 enforcement migration suite", () => {
       if (!process.env.DATABASE_RUNTIME_URL) {
         const u = new URL(migrationUrl());
         u.username = process.env.STOCKY_RUNTIME_ROLE || "stocky_runtime";
-        u.password =
-          process.env.STOCKY_RUNTIME_ROLE_PASSWORD || "stocky_runtime_ci_only"; // pragma: allowlist secret
+        u.password = requireRuntimeRolePassword();
         process.env.DATABASE_RUNTIME_URL = u.toString();
       }
 
@@ -148,9 +137,5 @@ describe("PR3 enforcement migration suite", () => {
     } finally {
       await client.end();
     }
-  });
-
-  it("records lock evidence summary", () => {
-    expect(typeof maxLockHoldMs).toBe("number");
   });
 });

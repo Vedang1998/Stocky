@@ -672,7 +672,7 @@ function collectFindings(
         modelsTouched: [],
         oldAccessMethod: "PrismaClient construction",
         newAccessMethod: constructionAllowed
-          ? `approved exception ${exception?.id ?? "EX-RAW-001"}`
+          ? `approved exception ${exception?.id ?? "EX-RAW-002"}`
           : "forbidden outside approved modules",
         authoritySource: constructionAllowed ? "infrastructure" : "none",
         conversionStatus: constructionAllowed
@@ -680,7 +680,7 @@ function collectFindings(
           : "violation",
         testEvidence: "tenant:access:audit",
         exceptionId: constructionAllowed
-          ? exception?.id ?? "EX-RAW-001"
+          ? exception?.id ?? "EX-RAW-002"
           : undefined,
         exceptionJustification: exception?.reason,
         kind: "prisma_client_construction",
@@ -1452,6 +1452,43 @@ export function assertNoViolations(result: ScanResult): void {
   ]) {
     if (!result.modelsCovered.includes(model)) {
       throw new Error(`Inventory missing merchant model coverage: ${model}`);
+    }
+  }
+
+  // P3-c: raw Prisma construction exceptions must be actively used; no duplicates;
+  // finding paths must match allowlist paths. Broader categories (backfill/index
+  // inventories) remain exact-path allowlists without unused-ID sweep in this cycle.
+  const rawExceptions = ACCESS_EXCEPTIONS.filter(
+    (ex) => ex.category === "raw_prisma_construction",
+  );
+  const ids = ACCESS_EXCEPTIONS.map((ex) => ex.id);
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i);
+  if (dupes.length > 0) {
+    throw new Error(
+      `Duplicated access exception IDs: ${[...new Set(dupes)].join(",")}`,
+    );
+  }
+  if (ids.includes("EX-RAW-001")) {
+    throw new Error(
+      "Stale access exception EX-RAW-001 must be removed (construction lives in EX-RAW-002)",
+    );
+  }
+  const unusedRaw = rawExceptions.filter(
+    (ex) => !result.exceptionsUsed.includes(ex.id),
+  );
+  if (unusedRaw.length > 0) {
+    throw new Error(
+      `Unused raw_prisma_construction exception IDs: ${unusedRaw.map((u) => u.id).join(",")}`,
+    );
+  }
+  for (const ex of rawExceptions) {
+    const matched = result.findings.filter((f) => f.exceptionId === ex.id);
+    for (const finding of matched) {
+      if (finding.file !== ex.path) {
+        throw new Error(
+          `Exception ${ex.id} file mismatch: allowlist=${ex.path} finding=${finding.file}`,
+        );
+      }
     }
   }
 }

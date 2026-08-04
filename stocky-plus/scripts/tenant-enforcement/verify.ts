@@ -491,11 +491,40 @@ async function checkCompositeKey(
     `SELECT a.attname
      FROM pg_index i
      JOIN pg_class c ON c.oid = i.indexrelid
+     JOIN pg_class t ON t.oid = i.indrelid
+     JOIN pg_namespace n ON n.oid = t.relnamespace
      JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
-     WHERE c.relname = $1
+     WHERE n.nspname = 'public'
+       AND c.relname = $1
+       AND t.relname = $2
      ORDER BY array_position(i.indkey, a.attnum)`,
+    [name, table],
+  );
+  if ((cols.rowCount ?? 0) === 0) {
+    issues.push({
+      code: "composite_key_columns_missing",
+      table,
+      detail: name,
+    });
+    return;
+  }
+  // Reject ambiguous same-named indexes in other schemas by requiring the
+  // namespace+relation qualification above; also guard multi-match within public.
+  const matchCount = await client.query<{ c: string }>(
+    `SELECT COUNT(*)::text AS c
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relname = $1 AND c.relkind = 'i'`,
     [name],
   );
+  if (Number(matchCount.rows[0]?.c ?? 0) > 1) {
+    issues.push({
+      code: "composite_key_ambiguous",
+      table,
+      detail: name,
+    });
+    return;
+  }
   const gotCols = cols.rows.map((r) => r.attname);
   if (
     gotCols.length !== expectedColumns.length ||
