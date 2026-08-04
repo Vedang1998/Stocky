@@ -12,7 +12,7 @@
 | Q-008 | Uninstall + `shop/redact` retention window and what operational data is erased vs anonymized | Compliance + support; D-021 | Product + legal | Phase 1 privacy processors before production | **Open — recommended policy recorded; legal review still required** |
 | Q-009 | Should Phase 0 freeze also hide Receiving/Stocktake/Transfer nav entries while flags are off? | UX clarity vs auditability | Product | Optional UX polish | Open |
 | Q-010 | Native Shopify transfer receive mutation replacement for removed `inventoryTransferComplete` | Transfer Phase 5 design | Engineering research | Phase 5 | Open |
-| Q-011 | Phase 1 foundation must add database-enforced tenant isolation (canonical Shop, shopId, composite tenant constraints, forced RLS, restricted runtime role, separate migration role, transaction-local context, bootstrap exception, real PostgreSQL and pool isolation tests) — Claude F-016 / R-022 | **P1 gating requirement.** Application-layer shop filters alone are insufficient. Planning direction approved. PR 1 tooling is merged (D-026) and remains nullable ownership/diagnostics only — **not** enforcement. **PR 2 application-layer tenant contract merged in PR #13 (D-034 / D-035)** and does **not** close this gate; PR 3 remains the hard database-enforcement gate. | Product + Cursor (Phase 1) | Phase 1 foundation — **mandatory implementation gate until enforcement is merged and independently verified** | **Open — Implementation complete — pending independent verification (PR 3 branch `phase-1/tenant-enforcement`; production execution not authorized; do not close until ChatGPT acceptance after capable independent review)** |
+| Q-011 | Phase 1 foundation must add database-enforced tenant isolation (canonical Shop, shopId, composite tenant constraints, forced RLS, restricted runtime role, separate migration role, transaction-local context, bootstrap exception, real PostgreSQL and pool isolation tests) — Claude F-016 / R-022 | **P1 gating requirement.** Application-layer shop filters alone are insufficient. Planning direction approved. PR 1 tooling merged (D-026). PR 2 application-layer tenant contract merged in PR #13 (D-034 / D-035). **PR 3 database enforcement merged in PR #15 (D-040 / D-041)** at accepted implementation `01dbb6f…` / independent review `a51f03…` / squash `deef5d7…`. | Product + Cursor (Phase 1) | Phase 1 foundation — implementation gate closed; production activation separately gated | **CLOSED FOR PHASE 1 IMPLEMENTATION — PR 3 MERGED AND INDEPENDENTLY VERIFIED** (does **not** authorize production activation, production backfill, ownership repair, deployment, or inventory writes; R-028 / R-029 remain open) |
 
 ## Q-002 — evidence still required
 
@@ -55,6 +55,8 @@ Do **not** treat this as final production policy until legal counsel validates r
 
 ## Q-011 — mandatory Phase 1 implementation gate
 
+**Status:** `CLOSED FOR PHASE 1 IMPLEMENTATION — PR 3 MERGED AND INDEPENDENTLY VERIFIED`
+
 Proposed layered isolation decision (approved brief / D-012–D-018), expanded by planning corrections:
 
 * canonical `Shop`;
@@ -69,12 +71,18 @@ Proposed layered isolation decision (approved brief / D-012–D-018), expanded b
 * lock-conscious constraint rollout;
 * ownership-quarantine resolution before enforcement.
 
-Keep Q-011 **open** as a mandatory Phase 1 implementation gate until the enforcement work is merged and independently verified. Composite tenant foreign keys without RLS do not satisfy F-016 / R-022. Do **not** close Q-011 as implemented. ChatGPT’s 2026-07-30 planning approval and PR #9 merge approve the layered direction and make Phase 1 implementation authority effective; they do not close the implementation gate.
+**Implementation closure evidence (D-040 / D-041):** Enforcement merged through PR [#15](https://github.com/Vedang1998/Stocky/pull/15). Accepted runtime/test implementation `01dbb6fd97b38864894069dd3ee30524a236e764`. Authoritative independent review `a51f03bc33397692bf5901ce4e78b862fc84de9d` (verdict `READY FOR CHATGPT PR 3 ACCEPTANCE`; P0:0 P1:0 P2:0 P3:4 accepted nonblocking). Final synchronized PR head `c88c9a74c50912cb79cd59b4bd7cbb08c2351157`. Exact-head CI run `30922984027`, job `92038054067`, success. Squash merge `deef5d7c7881fb128121b8ff82fd0b2282fbee0b` at `2026-08-04T15:39:20Z`.
 
-**PR 1 status note:** PR 1 is **merged** (authorized head `6e5b024254615f3259aeb8d8252305d86bd63777`; squash `44a24f3387c1dae0351490367c06bef10f333425`; D-025/D-026). PR 1 added nullable ownership and backfill tooling (canonical `Shop`, nullable `shopId`, quarantine diagnostics, compatibility indexes). PR 1 did **not** implement non-null tenant enforcement, composite tenant foreign keys, runtime roles, tenant-context enforcement, or RLS. PR 2 is access conversion. PR 3 is the database-enforcement gate. Q-011 remains open.
+Canonical Shop ownership, composite tenant constraints, forced RLS, restricted runtime role, separate migration owner, transaction-local context, and real PostgreSQL/pool isolation tests are implemented in repository `main`.
 
-**PR 2 acceptance note:** Phase 1 PR 2 technical implementation is **ACCEPTED** (D-034) at reviewed handoff head `70f4a80aab2366108a71fd80320b0f824bfe0cce` with authoritative fifth review report `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` (verdict `READY FOR CHATGPT PR 2 ACCEPTANCE`).
+**Q-011 closure does not authorize production activation, production backfill, ownership repair, deployment or inventory writes.**
 
-**PR 2 merge-closure historical note:** PR 2 application-layer tenant contract **merged** in PR [#13](https://github.com/Vedang1998/Stocky/pull/13) (authorized head `5fc98192d2ca350de358316d9383e39103b98c80`; squash `e9c4f87eb28ce0e957a8cbd159719586892f8b98`; `2026-08-03T01:38:59Z`; D-035). **Q-011 remains OPEN.**
+R-028 and R-029 remain open operational gates. Accepted nonblocking residuals R-095..R-098 remain open for production-rehearsal maintenance.
 
-**PR 3 correction note (D-037 / D-038 / D-039):** Independent review at `57016ed…` returned `NOT READY — CORRECTIONS REQUIRED`. First correction handoff `cb9d04e…` was re-reviewed at report `7865e30…` with `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:2 P2:6 P3:9). Second-correction reviewed implementation head `24cc4d8…` was re-reviewed at report `440a93e…` with `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:1 P2:3 P3:4). Third correction implemented on `phase-1/tenant-enforcement` (draft PR #15; D-039) — **pending independent verification**. Production execution remains unauthorized. Do **not** close Q-011.
+**PR 1 status note (historical):** PR 1 is **merged** (authorized head `6e5b024254615f3259aeb8d8252305d86bd63777`; squash `44a24f3387c1dae0351490367c06bef10f333425`; D-025/D-026). PR 1 added nullable ownership and backfill tooling only.
+
+**PR 2 acceptance note (historical):** Phase 1 PR 2 technical implementation is **ACCEPTED** (D-034) at reviewed handoff head `70f4a80aab2366108a71fd80320b0f824bfe0cce` with authoritative fifth review report `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd`.
+
+**PR 2 merge-closure historical note:** PR 2 application-layer tenant contract **merged** in PR [#13](https://github.com/Vedang1998/Stocky/pull/13) (authorized head `5fc98192d2ca350de358316d9383e39103b98c80`; squash `e9c4f87eb28ce0e957a8cbd159719586892f8b98`; `2026-08-03T01:38:59Z`; D-035). That merge alone did **not** close Q-011.
+
+**PR 3 correction history (historical):** Independent review at `57016ed…` returned `NOT READY — CORRECTIONS REQUIRED`. First correction handoff `cb9d04e…` was re-reviewed at report `7865e30…` with `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:2 P2:6 P3:9). Second-correction reviewed implementation head `24cc4d8…` was re-reviewed at report `440a93e…` with `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:1 P2:3 P3:4). Third correction accepted at `01dbb6f…` / report `a51f03…` under D-040; merged under D-041.
