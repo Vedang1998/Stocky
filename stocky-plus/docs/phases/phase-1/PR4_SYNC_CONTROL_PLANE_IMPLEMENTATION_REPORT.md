@@ -19,11 +19,11 @@
 | Starting main | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
 | Branch | `phase-1/sync-control-plane` |
 | Runtime/test implementation head (last runtime change) | `89aeea885f833a913183bde6a4a5159ac9b20261` |
-| Documentation tip (this report commit; may differ from CI head until re-run) | recorded at commit time |
+| Documentation tip | `fc320668e3222a1969ce97467e6cf39b376d3aed` |
 | Current main (unchanged) | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
 | PR state | Draft #20 — OPEN, unmerged |
 
-Commits since main: `0db313f` → `88ba3d5` → `65cef1a` → `c2870cc` → `0111e4e` → `588fe0a` → `8871175` → `89aeea8` → *(docs tip)*.
+Commits since main: `0db313f` → `88ba3d5` → `65cef1a` → `c2870cc` → `0111e4e` → `588fe0a` → `8871175` → `89aeea8` → `fc320668e3222a1969ce97467e6cf39b376d3aed`.
 
 ## Exact-head CI evidence (runtime/test head `89aeea8`)
 
