@@ -304,9 +304,10 @@ jobs:
             END IF;
           END$$;
           SQL
-          ATTRS=$(PGPASSWORD=stocky psql -h localhost -U stocky -d postgres -Atc "SELECT rolsuper||','||rolbypassrls||','||rolcreaterole||','||rolcreatedb FROM pg_roles WHERE rolname='stocky_mig_ci'")
+          ATTRS=$(PGPASSWORD=stocky psql -h localhost -U stocky -d postgres -Atc "SELECT rolsuper::text||','||rolbypassrls::text||','||rolcreaterole::text||','||rolcreatedb::text FROM pg_roles WHERE rolname='stocky_mig_ci'")
           echo "migration_owner.attrs=$ATTRS"
-          test "$ATTRS" = "f,f,t,f"
+          # psql -Atc emits boolean::text as true/false (not f/t).
+          test "$ATTRS" = "false,false,true,false"
           echo "migration_owner.rolsuper = false"
           echo "migration_owner.rolbypassrls = false"
           echo "migration_owner.rolcreaterole = true"
