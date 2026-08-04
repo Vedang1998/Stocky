@@ -257,7 +257,7 @@ All commands run at `7c36bc1…d692fefea7a` in the disposable environment above.
 | `npm run build` | 0 | server + client build succeeded |
 | `npm run graphql-codegen` | 1 | **environment-blocked** — see below |
 | `npm audit --omit=dev` | 1 | 7 high (react-router chain) — **pre-existing, unchanged by this PR** |
-| `npm run test:migrations` | — | see §9.1 |
+| `npm run test:migrations` | 0 | **216 passed** (47 files) — see §9.1 |
 
 Test counts were confirmed non-zero in every suite; no suite silently ran zero tests.
 
@@ -275,17 +275,24 @@ This is **positive evidence** for the API-version review: the resolved
 introspection endpoint is literally `/2026-07`. The step succeeds in CI, where
 egress is permitted. Classified as an environment limitation, not a code failure.
 
-### 9.1 `test:migrations` — partially verified
+### 9.1 `test:migrations` — verified on clean re-run
 
 A first run of `test:migrations` was started in the background and later
 terminated by the reviewer because it concurrently reset the schema and corrupted
-other measurements. Its reported summary (10 failed / 203 passed) is **an
-artifact of that termination and must not be read as a result**. A clean re-run
-was started but had not completed when this report was finalised.
+other measurements in progress. Its reported summary (10 failed / 203 passed) is
+**an artifact of that termination and must not be read as a result**.
 
-`test:migrations` is therefore recorded as **NOT INDEPENDENTLY VERIFIED**. It
-passed in exact-tip CI run `30944452132`. This gap does not affect any finding
-below, all of which were reproduced independently.
+A clean, serial re-run on the rebuilt disposable environment completed
+successfully:
+
+```
+Test Files  47 passed (47)
+     Tests  216 passed (216)
+exit 0
+```
+
+`test:migrations` is therefore **independently verified as passing** at the
+reviewed head.
 
 ---
 
@@ -1384,5 +1391,6 @@ Blocking items for a `READY FOR CHATGPT PR 4 ACCEPTANCE` verdict:
 4. **F-PR4-04** — add `RUNNING` recovery and the one-active-attempt constraint.
 5. **F-PR4-05 through F-PR4-08, F-PR4-11 through F-PR4-13, F-PR4-18 through F-PR4-20** — all P2 findings resolved or formally accepted.
 6. **F-PR4-09, F-PR4-10** — documentation identity corrections.
-7. Independent re-verification of `test:migrations` (§9.1) and, in a
-   network-enabled environment, `graphql-codegen` document validation.
+7. In a network-enabled environment, `graphql-codegen` GraphQL document
+   validation against the live `2026-07` schema (§21), which this environment
+   could not perform.
