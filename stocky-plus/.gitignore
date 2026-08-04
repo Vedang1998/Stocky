@@ -17,6 +17,10 @@ database.sqlite
 .env.*
 !.env.example
 
+# Prisma Client generated output (Prisma ORM 7)
+/generated/prisma
+
+
 # npm is the selected package manager — track package-lock.json.
 # Continue ignoring alternate lockfiles to prevent mixed package managers.
 yarn.lock

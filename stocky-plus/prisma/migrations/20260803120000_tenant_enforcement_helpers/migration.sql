@@ -43,6 +43,27 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION stocky_current_tenant_id() FROM PUBLIC;
-REVOKE ALL ON FUNCTION stocky_current_tenant_context_version() FROM PUBLIC;
-REVOKE ALL ON FUNCTION stocky_prevent_shop_id_mutation() FROM PUBLIC;
+-- Prisma Postgres uses a restricted superuser that cannot REVOKE.
+-- On ordinary PostgreSQL these REVOKEs still apply; on Prisma Postgres they
+-- are skipped so migrate/shadow-DB apply can succeed.
+DO $$
+BEGIN
+  BEGIN
+    REVOKE ALL ON FUNCTION stocky_current_tenant_id() FROM PUBLIC;
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      NULL;
+  END;
+  BEGIN
+    REVOKE ALL ON FUNCTION stocky_current_tenant_context_version() FROM PUBLIC;
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      NULL;
+  END;
+  BEGIN
+    REVOKE ALL ON FUNCTION stocky_prevent_shop_id_mutation() FROM PUBLIC;
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      NULL;
+  END;
+END $$;

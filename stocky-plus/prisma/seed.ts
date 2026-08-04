@@ -1,28 +1,21 @@
-import prisma from "../app/db.server";
-import { normalizeShopDomain } from "../app/tenant/shop-domain";
+import { config as loadEnv } from "dotenv";
+import { prisma } from "../lib/prisma";
+
+loadEnv({ path: ".env", override: true });
 
 /**
- * Optional demo data for local development.
- * Run: npm run db:seed
+ * Demo seed for Prisma Postgres setup verification.
+ * Run via: npx prisma db seed
  *
- * Phase 1 PR 1: upserts canonical Shop, continues writing legacy `shop`,
- * and sets matching nullable `shopId` for seeded records only.
- * This is not runtime-access conversion.
+ * Uses existing Stocky models (Shop / ShopSettings / Supplier).
  */
 async function main() {
-  const shopRaw = process.env.SEED_SHOP ?? "stocky-dev.myshopify.com";
-  const normalized = normalizeShopDomain(shopRaw);
-  if (!normalized.ok) {
-    throw new Error(
-      `SEED_SHOP failed phase1-shop-domain-v1 normalization: ${normalized.reason}`,
-    );
-  }
-  const shop = normalized.normalized;
+  const shopDomain = process.env.SEED_SHOP ?? "stocky-dev.myshopify.com";
 
-  const canonicalShop = await prisma.shop.upsert({
-    where: { myshopifyDomain: shop },
+  const shop = await prisma.shop.upsert({
+    where: { myshopifyDomain: shopDomain },
     create: {
-      myshopifyDomain: shop,
+      myshopifyDomain: shopDomain,
       updatedAt: new Date(),
     },
     update: {
@@ -31,17 +24,17 @@ async function main() {
   });
 
   await prisma.shopSettings.upsert({
-    where: { shop },
+    where: { shop: shopDomain },
     create: {
-      shop,
-      shopId: canonicalShop.id,
+      shop: shopDomain,
+      shopId: shop.id,
       subscriptionActive: true,
       subscriptionPlan: "dev",
       defaultLookbackDays: 30,
       targetDaysOfStock: 14,
     },
     update: {
-      shopId: canonicalShop.id,
+      shopId: shop.id,
       subscriptionActive: true,
       subscriptionPlan: "dev",
     },
@@ -51,8 +44,8 @@ async function main() {
     where: { id: "seed-supplier-1" },
     create: {
       id: "seed-supplier-1",
-      shop,
-      shopId: canonicalShop.id,
+      shop: shopDomain,
+      shopId: shop.id,
       name: "Southern Glazer's Wine & Spirits",
       accountNumber: "SG-10042",
       contactEmail: "orders@example.com",
@@ -61,12 +54,30 @@ async function main() {
       leadTimeDays: 5,
     },
     update: {
-      shopId: canonicalShop.id,
+      shopId: shop.id,
+      name: "Southern Glazer's Wine & Spirits",
+    },
+  });
+
+  const supplierTwo = await prisma.supplier.upsert({
+    where: { id: "seed-supplier-2" },
+    create: {
+      id: "seed-supplier-2",
+      shop: shopDomain,
+      shopId: shop.id,
+      name: "Breakthru Beverage",
+      accountNumber: "BB-20418",
+      contactEmail: "purchasing@example.com",
+      currency: "USD",
+      leadTimeDays: 3,
+    },
+    update: {
+      shopId: shop.id,
     },
   });
 
   console.log(
-    `Seeded Shop ${canonicalShop.id} (${shop}), settings, and supplier "${supplier.name}"`,
+    `Seeded Shop ${shop.id} (${shopDomain}), settings, and suppliers "${supplier.name}", "${supplierTwo.name}"`,
   );
 }
 

@@ -1,10 +1,16 @@
 generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+// Keeps `import … from "@prisma/client"` working for existing server/scripts
+// while lib/prisma.ts uses the Prisma 7 generated client + driver adapter.
+generator clientLegacy {
   provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ─── Shopify session storage (required by template) ─────────────────────────

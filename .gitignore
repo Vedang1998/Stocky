@@ -1,2 +1,5 @@
 *.rdb
 dump.rdb
+
+.env
+.env.*
