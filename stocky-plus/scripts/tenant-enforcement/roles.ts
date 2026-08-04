@@ -60,6 +60,8 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   TENANT_CONTEXT_VERSION_FN,
   IMMUTABILITY_TRIGGER_FN,
   "stocky_shop_processing_enabled",
+  "stocky_durable_job_transition_guard",
+  "stocky_has_application_receipt",
 ]);
 
 type DefaultAclObjType = "r" | "S" | "f";
