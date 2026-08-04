@@ -67,9 +67,14 @@ describe("api version", () => {
     expect(validateReceivedApiVersion("2026-07").ok).toBe(true);
   });
 
-  it("rejects unsupported versions", () => {
-    expect(validateReceivedApiVersion("2025-10").ok).toBe(false);
-    expect(() => requireTargetApiVersion("2025-10")).toThrow(SyncControlPlaneError);
+  it("accepts migration-window adapters 2025-10 and 2026-07", () => {
+    expect(validateReceivedApiVersion("2026-07").ok).toBe(true);
+    expect(validateReceivedApiVersion("2025-10").ok).toBe(true);
+  });
+
+  it("rejects unsupported versions for quarantine", () => {
+    expect(validateReceivedApiVersion("2024-01").ok).toBe(false);
+    expect(() => requireTargetApiVersion("2024-01")).toThrow(SyncControlPlaneError);
   });
 });
 

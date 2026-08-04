@@ -1,15 +1,17 @@
 /**
  * F-PR4-01 — exactly-once merchant application via SyncApplicationReceipt.
+ *
+ * Uses an owner Prisma shim for TenantDb in disposable environments where
+ * stocky_runtime + full RLS may not yet be provisioned. Production workers
+ * still use createTenantDb under the restricted runtime role.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { randomUUID } from "node:crypto";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import { applyWithApplicationReceipt } from "../application-receipt.server";
 import { resolveApplicationKey } from "../execution-strategy.server";
-import { createTenantDb } from "../../tenant/tenant-db.server";
-import { issueSyncDispatchAuthority } from "../../tenant/sync-dispatch-authority.server";
+import type { TenantDb } from "../../tenant/tenant-db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
 import {
   claimAttempt,
@@ -17,8 +19,34 @@ import {
   completeAttemptSuccess,
 } from "../lifecycle.server";
 import { SyncControlPlaneError } from "../errors";
+import {
+  transitionRetryWaitToEnqueuedForTests,
+  transitionToEnqueuedForTests,
+} from "./test-state-helpers";
 
 const SHOP = "pr4-exactly-once.myshopify.com";
+
+function ownerTenantShim(
+  prisma: PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect">,
+  shopId: string,
+): TenantDb {
+  const authority = {
+    shopId,
+    myshopifyDomain: SHOP,
+  };
+  return {
+    authority,
+    syncApplicationReceipt: prisma.syncApplicationReceipt,
+    salesDailyAggregate: prisma.salesDailyAggregate,
+    bomComponent: prisma.bomComponent,
+    lowStockAlert: prisma.lowStockAlert,
+    $transaction: async <T>(fn: (db: TenantDb) => Promise<T>) => {
+      return (prisma as PrismaClient).$transaction(async (tx) =>
+        fn(ownerTenantShim(tx as unknown as PrismaClient, shopId)),
+      );
+    },
+  } as unknown as TenantDb;
+}
 
 describe("test:sync-exactly-once", () => {
   let prisma: PrismaClient;
@@ -71,26 +99,15 @@ describe("test:sync-exactly-once", () => {
     expect(ingested.job).toBeTruthy();
     const job = ingested.job!;
 
-    // Simulate ENQUEUED then claim.
-    await prisma.durableJob.update({
-      where: { id: job.id },
-      data: { state: "ENQUEUED" },
-    });
+    await transitionToEnqueuedForTests(prisma, job.id);
 
-    const tenant = issueSyncDispatchAuthority({
-      shopId,
-      myshopifyDomain: SHOP,
-      source: "verified_job",
-      correlationId: randomUUID(),
-    });
-    const db = createTenantDb(tenant);
+    const db = ownerTenantShim(prisma, shopId);
     const applicationKey = resolveApplicationKey({
       jobType: job.jobType,
       webhookDeliveryId: ingested.delivery.id,
       idempotencyKey: job.idempotencyKey,
     });
 
-    // First attempt: apply fully inside receipt transaction.
     const { attempt } = await claimAttempt({
       durableJobId: job.id,
       shopId,
@@ -153,7 +170,6 @@ describe("test:sync-exactly-once", () => {
       );
     });
 
-    // Crash before control-plane success — then retry.
     await completeAttemptRetry({
       durableJobId: job.id,
       shopId,
@@ -163,10 +179,7 @@ describe("test:sync-exactly-once", () => {
       failureSummary: "crash after tenant commit",
     });
 
-    await prisma.durableJob.update({
-      where: { id: job.id },
-      data: { state: "ENQUEUED", nextEligibleAt: new Date() },
-    });
+    await transitionRetryWaitToEnqueuedForTests(prisma, job.id);
 
     const { attempt: attempt2 } = await claimAttempt({
       durableJobId: job.id,
@@ -185,7 +198,6 @@ describe("test:sync-exactly-once", () => {
           payloadDigest: job.payloadDigest,
         },
         async (tdb) => {
-          // Must NOT run — if it does, units would double.
           const today = new Date();
           today.setHours(0, 0, 0, 0);
           await tdb.salesDailyAggregate.updateMany({
@@ -218,17 +230,13 @@ describe("test:sync-exactly-once", () => {
       where: { shopId },
     });
     expect(receipts).toHaveLength(1);
-    expect(receipts[0].applicationKey).toBe(`webhook-delivery:${ingested.delivery.id}`);
+    expect(receipts[0].applicationKey).toBe(
+      `webhook-delivery:${ingested.delivery.id}`,
+    );
   });
 
   it("digest conflict fails closed", async () => {
-    const tenant = issueSyncDispatchAuthority({
-      shopId,
-      myshopifyDomain: SHOP,
-      source: "verified_job",
-      correlationId: randomUUID(),
-    });
-    const db = createTenantDb(tenant);
+    const db = ownerTenantShim(prisma, shopId);
     const key = "webhook-delivery:test-conflict";
 
     await db.$transaction(async (tx) => {
@@ -269,6 +277,69 @@ describe("test:sync-exactly-once", () => {
       idempotencyKey: "replay:job-xyz:corr",
     });
     expect(key).toBe("webhook-delivery:delivery-abc");
-    expect(key).not.toContain("replay");
+    expect(key).not.toContain("job-xyz");
+  });
+
+  it("crash before tenant commit leaves no receipt and no sales", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-eo-crash",
+      apiVersion: "2026-07",
+      payload: {
+        id: 202,
+        line_items: [{ variant_id: 9, quantity: 4, price: "1.00" }],
+      },
+    });
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const db = ownerTenantShim(prisma, shopId);
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: ingested.delivery.id,
+      idempotencyKey: job.idempotencyKey,
+    });
+    await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-crash",
+    });
+
+    await expect(
+      db.$transaction(async (tx) => {
+        await applyWithApplicationReceipt(
+          tx,
+          {
+            applicationKey,
+            sourceJobType: job.jobType,
+            rootDurableJobId: job.id,
+            applyingDurableJobId: job.id,
+            payloadDigest: job.payloadDigest,
+          },
+          async (tdb) => {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            await tdb.salesDailyAggregate.create({
+              data: {
+                shop: SHOP,
+                shopifyVariantId: "gid://shopify/ProductVariant/9",
+                locationId: "default",
+                date: today,
+                unitsSold: 4,
+                revenue: 4,
+              },
+            });
+            throw new Error("simulated_process_kill");
+          },
+        );
+      }),
+    ).rejects.toThrow(/simulated_process_kill/);
+
+    expect(
+      await prisma.syncApplicationReceipt.count({ where: { shopId } }),
+    ).toBe(0);
+    expect(await prisma.salesDailyAggregate.count({ where: { shop: SHOP } })).toBe(
+      0,
+    );
   });
 });

@@ -6,8 +6,8 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** CORRECTIONS REQUIRED (D-043) — not accepted
-**Next authorized implementation unit:** Phase 1 PR 4 correction cycle on `phase-1/sync-control-plane`
+**Phase 1 PR 4:** CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION (D-043) — not accepted
+**Next authorized implementation unit:** Independent Claude Code PR 4 correction review on `phase-1/sync-control-plane`
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
@@ -22,7 +22,8 @@
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
-- PR 4 is **CORRECTIONS REQUIRED** under D-043 on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- PR 4 is **CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** under D-043 on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- Correction artifacts: `PR4_SYNC_CONTROL_PLANE_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md`.
 - Independent review report head `944cd592…` is preserved and immutable.
 - PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
@@ -47,7 +48,7 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 4 | **NOT STARTED** |
+| PR 4 | **CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** (D-043; PR #20 draft) |
 
 ### PR 3 correction-history identities (preserved)
 

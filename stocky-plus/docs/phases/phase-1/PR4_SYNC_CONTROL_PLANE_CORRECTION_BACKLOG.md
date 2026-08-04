@@ -66,8 +66,8 @@ independent review commits. Do not edit
 | Required correction | Tenant-owned `SyncApplicationReceipt` (`shopId` + `applicationKey` unique); atomic tenant transaction: check receipt → merchant writes → insert receipt last → commit; control-plane success later; job execution strategy matrix (`ATOMIC_APPLICATION_RECEIPT` / `REBUILDABLE_IDEMPOTENT` / `NO_AUTOMATIC_RETRY` / `CONTROL_ONLY`); webhook application key from durable webhook delivery (not replay job ID) |
 | Acceptance test | `test:sync-exactly-once` — crash after first sales line; crash after tenant commit before control-plane success; retry; replay; duplicate delivery; concurrent workers; BOM; low-stock; cancel; refund; inventory; catalog/ABC repeated execution; exact merchant outcomes |
 | Affected risks | R-109 (new); R-032; R-104 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -81,8 +81,8 @@ independent review commits. Do not edit
 | Required correction | Append-only `JobDispatch` with `(durableJobId, dispatchSequence)` and `(queueName, queueJobId)` uniqueness; queue job ID `<durableJobId>:<dispatchSequence>`; envelope `tenant-job-envelope-v3` binds durable job, dispatch identity, queue job ID, digest, tenant, source, correlation, causation; unacknowledged dispatch recovery inspects deterministic queue job ID before new sequence |
 | Acceptance test | `test:sync-dispatch-recovery` — retry while failed BullMQ job retained; after retention deletion; enqueue-then-ack-loss; recovery observes existing / missing queue job; dual dispatcher; ID/envelope mismatch; monotonic sequence; handler execution count |
 | Affected risks | R-099; R-031 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -96,8 +96,8 @@ independent review commits. Do not edit
 | Required correction | Legal transitions `DISPATCH_LEASED → CANCELLED` and `RUNNING → CANCELLED` (or equivalent terminal shutdown); atomic disable + cancel + close attempts + persist delivery; session deletion only after durable disablement commits; session-delete failure must not re-enable shop |
 | Acceptance test | `test:sync-uninstall` — PENDING / DISPATCH_LEASED / ENQUEUED / RUNNING / RETRY_WAIT / mixed; duplicate uninstall; failed session deletion; enqueue race; worker-completion race; uninstall after validation before merchant tx; reinstall after UNINSTALLED; denied reinstall after REDACTED |
 | Affected risks | R-031; R-101 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -111,8 +111,8 @@ independent review commits. Do not edit
 | Required correction | Partial unique `UNIQUE (durableJobId) WHERE finishedAt IS NULL`; attempt lease owner/expiry/heartbeat/dispatch identity; heartbeat renewal; reaper for expired RUNNING; outcome `ABANDONED` / `LEASE_EXPIRED` / `WORKER_LOST`; recovery by execution strategy + application receipt |
 | Acceptance test | `test:sync-attempt-recovery` — worker death; heartbeat expiry/renewal; concurrent reapers; two active-attempt inserts; stale completion after recovery; expired with/without receipt; uncertain job; max-attempt dead letter |
 | Affected risks | R-104; R-032 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -130,8 +130,8 @@ independent review commits. Do not edit
 | Required correction | `SELECT … FOR UPDATE` or CAS `UPDATE … WHERE id AND state RETURNING`; DB trigger rejecting illegal DurableJob transitions for every writer including raw SQL; drift-verified transition definition matching application graph |
 | Acceptance test | success vs uninstall; retry vs dead letter; two completions; two attempt claims; lease recovery vs ack; replay vs DL resolution; stale completion after cancel — exactly one legal outcome |
 | Affected risks | R-107 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -145,8 +145,8 @@ independent review commits. Do not edit
 | Required correction | ENABLE+FORCE RLS on all control-plane tables; no policy for `stocky_runtime`; explicit global policy only for `stocky_control_plane`; exact drift verification matrix (read-only); narrow Shop lifecycle access; no BYPASSRLS / CREATEROLE / CREATEDB / merchant DML / session access |
 | Acceptance test | `test:sync-role-isolation` — one negative fixture per prohibited privilege/policy condition |
 | Affected risks | R-102 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -160,8 +160,8 @@ independent review commits. Do not edit
 | Required correction | TypeScript compiler-API (or equivalent) semantic scanner; exact-file exceptions with stable ID; CI fails for planted shadow/alias/Queue/producer/worker/re-export/computed name/replay/raw-SQL cases; docs claim only what scanner proves |
 | Acceptance test | `test:sync-inventory-audit` — all planted negative fixtures fail CI check |
 | Affected risks | R-110 (new) |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -175,8 +175,8 @@ independent review commits. Do not edit
 | Required correction | Preserve original projection/digest; increment mismatch count; record conflicting digest + first/last mismatch timestamps; bounded DataIssue; conflict/quarantine state; no second logical job; no automatic apply of divergent payload; cancel/quarantine unapplied first job per fail-closed rule |
 | Acceptance test | Concurrent and post-completion same-ID divergent-payload intake |
 | Affected risks | R-106; R-032 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -190,8 +190,8 @@ independent review commits. Do not edit
 | Required correction | Partial indexes for eligible states; index-supported claim plan with `FOR UPDATE SKIP LOCKED`; avoid full sequential scan and external sort at ≥50k jobs |
 | Acceptance test | `test:sync-performance` — `EXPLAIN (ANALYZE, BUFFERS)` at 50k+ jobs; plan-shape assertions |
 | Affected risks | R-111 (new) |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -205,8 +205,8 @@ independent review commits. Do not edit
 | Required correction | Configurable validated bounds (UTF-8 bytes, depth, nodes, array elements, line items, string length, object keys); fail closed on overflow with bounded issue/quarantine and no processing job; validate scalar field types; preserve exact money strings |
 | Acceptance test | Oversized, deeply nested, scalar-object, unusual Unicode, high-line-count fixtures |
 | Affected risks | R-113 (new); R-103 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -220,8 +220,8 @@ independent review commits. Do not edit
 | Required correction | Per-shop fairness (one-per-shop round / bounded max per shop / fair cursor / equivalent starvation-resistant algorithm) |
 | Acceptance test | `test:sync-performance` — multi-shop with dominant backlog; each active shop makes progress; concurrent dispatchers; measured p50/p95 on disposable env (no invented production SLA) |
 | Affected risks | R-111 (new) |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -235,8 +235,8 @@ independent review commits. Do not edit
 | Required correction | Explicit adapters for `2025-10` and `2026-07`; authenticated unsupported version → durable quarantine/delivery + DataIssue + no processing job; document HTTP ack/redelivery policy; Q-003 remains open until live-schema validation |
 | Acceptance test | Intake with `2025-10` and unsupported version asserting durable record and no job |
 | Affected risks | R-033; R-105 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -250,8 +250,8 @@ independent review commits. Do not edit
 | Required correction | Require explicit `REDIS_URL`; lazy fail with stable descriptive configuration error; search PR for other redaction-corrupted source strings; tests/CI set explicit test Redis URL |
 | Acceptance test | Queue module fails closed when `REDIS_URL` unset |
 | Affected risks | R-114 (new) |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -265,8 +265,8 @@ independent review commits. Do not edit
 | Required correction | Quarantine with internal receipt UUID; `shopifyWebhookId = null`; reason `missing_shopify_webhook_id`; DataIssue; no processing job; no business application; partial unique for non-null Shopify webhook IDs; concurrent missing-ID receipts may be separate quarantine rows but never merchant effects |
 | Acceptance test | Concurrent missing-ID deliveries; no merchant effects |
 | Affected risks | R-106; R-109 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -284,8 +284,8 @@ independent review commits. Do not edit
 | Required correction | Separate identities for implementation head, documentation tip, and review-report head; no self-referential “current SHA” claim that becomes false when committed; update PR body and report |
 | Acceptance test | Documentation identities match live Git classifications |
 | Affected risks | R-112 (new) |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -299,8 +299,8 @@ independent review commits. Do not edit
 | Required correction | Set `Active implementation PR: #20 — OPEN, DRAFT, UNMERGED` |
 | Acceptance test | Status file names PR #20 |
 | Affected risks | R-112 (new) |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -314,8 +314,8 @@ independent review commits. Do not edit
 | Required correction | Real state assertion or rely on database-enforced transition validation |
 | Acceptance test | Covered by transition / dead-letter suite |
 | Affected risks | R-107 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -329,8 +329,8 @@ independent review commits. Do not edit
 | Required correction | Require `original.state = DEAD_LETTERED` and `DeadLetter.state = OPEN`; lock both records transactionally |
 | Acceptance test | Replay denied when original not DEAD_LETTERED |
 | Affected risks | R-100; R-108 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -344,8 +344,8 @@ independent review commits. Do not edit
 | Required correction | Assert shopId, payloadDigest, durableJobId, and dispatch identity match envelope and BullMQ job ID before merchant access |
 | Acceptance test | Mismatch fails closed before merchant writes |
 | Affected risks | R-039; R-100 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 
@@ -359,8 +359,8 @@ independent review commits. Do not edit
 | Required correction | Document precisely: completed statements before uninstall commit cannot be undone; subsequent statements see disabled Shop; atomic merchant application txs roll back when later statement denied; long-running txs / external side effects outside guarantee unless explicitly prevented |
 | Acceptance test | Documentation review |
 | Affected risks | R-101 |
-| Correcting commit | *(pending)* |
-| Exact test evidence | *(pending)* |
+| Correcting commit | `a38be9ffb4b6574d8612e522acde584fae038686` (+ follow-up test/CI docs commits) |
+| Exact test evidence | focused gates green locally — see CORRECTION_IMPLEMENTATION_REPORT; pending exact-head CI |
 | Independent-review disposition | PENDING INDEPENDENT VERIFICATION |
 | Status | IMPLEMENTATION PENDING INDEPENDENT VERIFICATION |
 

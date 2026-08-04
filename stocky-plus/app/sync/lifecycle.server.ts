@@ -98,7 +98,7 @@ export async function claimAttempt(input: {
         "leaseExpiresAt" = ${leaseExpiresAt},
         "updatedAt" = ${now}
       WHERE id = ${job.id}
-        AND state = ${job.state}
+        AND state = CAST(${job.state} AS "DurableJobState")
       RETURNING *
     `;
     if (updatedRows.length === 0) {
@@ -218,7 +218,7 @@ export async function completeAttemptSuccess(input: {
         "leaseExpiresAt" = NULL,
         "updatedAt" = ${new Date()}
       WHERE id = ${job.id}
-        AND state = ${job.state}
+        AND state = CAST(${job.state} AS "DurableJobState")
       RETURNING *
     `;
     if (updatedRows.length === 0) {
@@ -315,7 +315,7 @@ export async function completeAttemptRetry(input: {
         "leaseExpiresAt" = NULL,
         "updatedAt" = ${new Date()}
       WHERE id = ${job.id}
-        AND state = ${job.state}
+        AND state = CAST(${job.state} AS "DurableJobState")
       RETURNING *
     `;
     if (updatedRows.length === 0) {
@@ -495,7 +495,7 @@ async function completeAttemptDeadLetterInTx(
       "leaseExpiresAt" = NULL,
       "updatedAt" = ${now}
     WHERE id = ${job.id}
-      AND state = ${preDeadLetter.state}
+      AND state = CAST(${preDeadLetter.state} AS "DurableJobState")
     RETURNING *
   `;
   if (updatedRows.length === 0) {

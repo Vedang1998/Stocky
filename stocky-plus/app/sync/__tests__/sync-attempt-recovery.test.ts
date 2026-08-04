@@ -11,6 +11,7 @@ import {
 } from "../lifecycle.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
+import { transitionToEnqueuedForTests } from "./test-state-helpers";
 
 const SHOP = "pr4-attempt.myshopify.com";
 
@@ -56,10 +57,7 @@ describe("test:sync-attempt-recovery", () => {
         line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
       },
     });
-    await prisma.durableJob.update({
-      where: { id: ingested.job!.id },
-      data: { state: "ENQUEUED" },
-    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
     await claimAttempt({
       durableJobId: ingested.job!.id,
       shopId: ingested.job!.shopId,
@@ -89,10 +87,7 @@ describe("test:sync-attempt-recovery", () => {
         line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
       },
     });
-    await prisma.durableJob.update({
-      where: { id: ingested.job!.id },
-      data: { state: "ENQUEUED" },
-    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
     const { attempt } = await claimAttempt({
       durableJobId: ingested.job!.id,
       shopId: ingested.job!.shopId,
@@ -136,10 +131,7 @@ describe("test:sync-attempt-recovery", () => {
         line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
       },
     });
-    await prisma.durableJob.update({
-      where: { id: ingested.job!.id },
-      data: { state: "ENQUEUED" },
-    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
     const { attempt } = await claimAttempt({
       durableJobId: ingested.job!.id,
       shopId: ingested.job!.shopId,

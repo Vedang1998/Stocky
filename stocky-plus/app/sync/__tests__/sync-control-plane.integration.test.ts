@@ -27,6 +27,10 @@ import { issueSyncDispatchAuthority } from "../../tenant/sync-dispatch-authority
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
 import { assertTransition } from "../state-machine.server";
 import { WEBHOOK_QUEUE } from "../../jobs/queue.server";
+import {
+  transitionRetryWaitToEnqueuedForTests,
+  transitionToEnqueuedForTests,
+} from "./test-state-helpers";
 
 const SHOP_A = "pr4-shop-a.myshopify.com";
 const SHOP_B = "pr4-shop-b.myshopify.com";
@@ -229,10 +233,7 @@ describe("sync control-plane integration", () => {
       apiVersion: "2026-07",
       payload: { id: 7, line_items: [] },
     });
-    await prisma.durableJob.update({
-      where: { id: r.job!.id },
-      data: { state: "ENQUEUED", maxAttempts: 2 },
-    });
+    await transitionToEnqueuedForTests(prisma, r.job!.id, { maxAttempts: 2 });
 
     const a1 = await claimAttempt({
       durableJobId: r.job!.id,
@@ -250,10 +251,7 @@ describe("sync control-plane integration", () => {
     let job = await prisma.durableJob.findUniqueOrThrow({ where: { id: r.job!.id } });
     expect(job.state).toBe("RETRY_WAIT");
 
-    await prisma.durableJob.update({
-      where: { id: job.id },
-      data: { state: "ENQUEUED", nextEligibleAt: new Date() },
-    });
+    await transitionRetryWaitToEnqueuedForTests(prisma, job.id);
     const a2 = await claimAttempt({
       durableJobId: job.id,
       shopId: shopAId,
@@ -285,10 +283,7 @@ describe("sync control-plane integration", () => {
       apiVersion: "2026-07",
       payload: { id: 8, line_items: [] },
     });
-    await prisma.durableJob.update({
-      where: { id: r.job!.id },
-      data: { state: "ENQUEUED" },
-    });
+    await transitionToEnqueuedForTests(prisma, r.job!.id);
     const a1 = await claimAttempt({
       durableJobId: r.job!.id,
       shopId: shopAId,
@@ -302,10 +297,7 @@ describe("sync control-plane integration", () => {
       failureSummary: "fail once",
       backoffMs: 1,
     });
-    await prisma.durableJob.update({
-      where: { id: r.job!.id },
-      data: { state: "ENQUEUED", nextEligibleAt: new Date() },
-    });
+    await transitionRetryWaitToEnqueuedForTests(prisma, r.job!.id);
     const a2 = await claimAttempt({
       durableJobId: r.job!.id,
       shopId: shopAId,
@@ -333,10 +325,7 @@ describe("sync control-plane integration", () => {
       apiVersion: "2026-07",
       payload: { id: 9, line_items: [] },
     });
-    await prisma.durableJob.update({
-      where: { id: r.job!.id },
-      data: { state: "ENQUEUED" },
-    });
+    await transitionToEnqueuedForTests(prisma, r.job!.id);
     await claimAttempt({
       durableJobId: r.job!.id,
       shopId: shopAId,
@@ -362,10 +351,7 @@ describe("sync control-plane integration", () => {
         line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
       },
     });
-    await prisma.durableJob.update({
-      where: { id: r.job!.id },
-      data: { state: "ENQUEUED", maxAttempts: 1 },
-    });
+    await transitionToEnqueuedForTests(prisma, r.job!.id, { maxAttempts: 1 });
     const a1 = await claimAttempt({
       durableJobId: r.job!.id,
       shopId: shopAId,
@@ -413,10 +399,7 @@ describe("sync control-plane integration", () => {
       apiVersion: "2026-07",
       payload: { id: 11, line_items: [] },
     });
-    await prisma.durableJob.update({
-      where: { id: r.job!.id },
-      data: { state: "ENQUEUED", maxAttempts: 1 },
-    });
+    await transitionToEnqueuedForTests(prisma, r.job!.id, { maxAttempts: 1 });
     const a1 = await claimAttempt({
       durableJobId: r.job!.id,
       shopId: shopAId,

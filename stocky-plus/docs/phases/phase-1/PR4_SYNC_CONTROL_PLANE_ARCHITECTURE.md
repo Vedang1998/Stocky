@@ -1,5 +1,8 @@
 # PR 4 — Synchronization Control Plane Architecture
 
+> **D-043 correction cycle:** Architecture extended by additive migration `20260804210000_sync_control_plane_correction` (`SyncApplicationReceipt`, `JobDispatch`, attempt leases, control-plane RLS, transition trigger, envelope v3, fair windowed claim). Status: CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION. See `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md`.
+
+
 **Phase:** 1  
 **Work unit:** PR 4 — Synchronization control plane  
 **Branch:** `phase-1/sync-control-plane`  

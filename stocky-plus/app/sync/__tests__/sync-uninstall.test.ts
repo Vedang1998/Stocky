@@ -12,6 +12,7 @@ import {
   isLegalTransition,
 } from "../state-machine.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
+import { forceCancellableStateForTests } from "./test-state-helpers";
 
 const SHOP = "pr4-uninstall.myshopify.com";
 
@@ -71,29 +72,11 @@ describe("test:sync-uninstall", () => {
           line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
         },
       });
-      await prisma.durableJob.update({
-        where: { id: ingested.job!.id },
-        data: {
-          state,
-          leaseOwner: state === "DISPATCH_LEASED" || state === "RUNNING" ? "x" : null,
-          leaseExpiresAt:
-            state === "DISPATCH_LEASED" || state === "RUNNING"
-              ? new Date(Date.now() + 60_000)
-              : null,
-        },
+      await forceCancellableStateForTests(prisma, {
+        durableJobId: ingested.job!.id,
+        shopId: ingested.job!.shopId,
+        target: state,
       });
-      if (state === "RUNNING") {
-        await prisma.jobAttempt.create({
-          data: {
-            shopId: ingested.job!.shopId,
-            durableJobId: ingested.job!.id,
-            attemptNumber: 1,
-            workerId: "w",
-            leaseOwner: "w",
-            leaseExpiresAt: new Date(Date.now() + 60_000),
-          },
-        });
-      }
 
       const result = await processUninstall({
         verifiedShop: SHOP,
@@ -148,9 +131,10 @@ describe("test:sync-uninstall", () => {
           line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
         },
       });
-      await prisma.durableJob.update({
-        where: { id: r.job!.id },
-        data: { state },
+      await forceCancellableStateForTests(prisma, {
+        durableJobId: r.job!.id,
+        shopId: r.job!.shopId,
+        target: state,
       });
     }
     const result = await processUninstall({

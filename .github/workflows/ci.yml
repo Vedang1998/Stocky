@@ -365,6 +365,29 @@ jobs:
 
       - name: Sync control-plane integration tests
         run: npm run test:sync-integration
+
+      - name: Sync exactly-once application (F-PR4-01)
+        run: npm run test:sync-exactly-once
+
+      - name: Sync dispatch recovery (F-PR4-02)
+        run: npm run test:sync-dispatch-recovery
+
+      - name: Sync uninstall cancel (F-PR4-03)
+        run: npm run test:sync-uninstall
+
+      - name: Sync attempt recovery (F-PR4-04)
+        run: npm run test:sync-attempt-recovery
+
+      - name: Sync role isolation (F-PR4-06)
+        run: npm run test:sync-role-isolation
+
+      - name: Sync inventory audit (F-PR4-07)
+        run: npm run test:sync-inventory-audit
+
+      - name: Sync dispatch performance/fairness (F-PR4-11/13)
+        run: npm run test:sync-performance
+        env:
+          SYNC_PERF_JOB_COUNT: "50000"
         env:
           STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
           DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_ci_only@localhost:5432/stocky_plus_ci

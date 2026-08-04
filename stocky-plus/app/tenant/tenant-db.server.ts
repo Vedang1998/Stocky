@@ -1887,8 +1887,8 @@ function createTenantDbFromClient(
         return fn(db);
       }
       if (
-        !("$transaction" in client) ||
-        typeof (client as PrismaClient).$transaction !== "function"
+        typeof (client as { $transaction?: unknown }).$transaction !==
+        "function"
       ) {
         throw new TenantAccessError(
           "nested_transaction_unsupported",

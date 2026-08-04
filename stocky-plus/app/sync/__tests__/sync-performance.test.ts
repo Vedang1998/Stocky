@@ -50,9 +50,8 @@ describe("test:sync-performance", () => {
   });
 
   it("eligible claim plan uses index at scale (no Seq Scan + external sort)", async () => {
-    // Seed shops + 50k PENDING jobs is heavy; use 5k for CI with plan assertion
-    // that the partial index is chosen. A separate optional stress can scale up.
-    const SCALE = Number(process.env.SYNC_PERF_JOB_COUNT ?? "5000");
+    // Seed ≥50k PENDING jobs across shops (F-PR4-11/13). Override with SYNC_PERF_JOB_COUNT.
+    const SCALE = Number(process.env.SYNC_PERF_JOB_COUNT ?? "50000");
     const shops: string[] = [];
     for (let i = 0; i < 5; i++) {
       const s = await prisma.shop.create({

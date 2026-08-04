@@ -134,8 +134,8 @@ describe("test:sync-dispatch-recovery", () => {
     await q.close();
   });
 
-  it("queue job id encoding is durableJobId:sequence", () => {
-    expect(formatQueueJobId("abc", 3)).toBe("abc:3");
+  it("queue job id encoding is durableJobId__d{sequence}", () => {
+    expect(formatQueueJobId("abc", 3)).toBe("abc__d3");
   });
 
   it("ack-loss recovery reuses PENDING_ENQUEUE dispatch sequence", async () => {

@@ -42,7 +42,28 @@ export function formatQueueJobId(
   durableJobId: string,
   dispatchSequence: number,
 ): string {
-  return `${durableJobId}:${dispatchSequence}`;
+  // BullMQ forbids `:` in custom job IDs. Equivalent deterministic encoding
+  // of durableJobId + dispatchSequence (F-PR4-02).
+  if (durableJobId.includes("__d")) {
+    throw new Error("durableJobId_contains_dispatch_separator");
+  }
+  return `${durableJobId}__d${dispatchSequence}`;
+}
+
+export function parseQueueJobId(queueJobId: string): {
+  durableJobId: string;
+  dispatchSequence: number;
+} {
+  const idx = queueJobId.lastIndexOf("__d");
+  if (idx <= 0) {
+    throw new Error(`invalid_queue_job_id:${queueJobId}`);
+  }
+  const durableJobId = queueJobId.slice(0, idx);
+  const dispatchSequence = Number(queueJobId.slice(idx + 3));
+  if (!Number.isInteger(dispatchSequence) || dispatchSequence < 1) {
+    throw new Error(`invalid_queue_job_id_sequence:${queueJobId}`);
+  }
+  return { durableJobId, dispatchSequence };
 }
 
 async function recoverExpiredDispatchLeases(
@@ -78,94 +99,69 @@ async function claimBatchFair(
 ): Promise<ClaimedJobRow[]> {
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
-  // Index-supported candidates per eligible state (partial indexes).
-  const pending = await prisma.$queryRaw<ClaimedJobRow[]>`
-    SELECT
-      id, "shopId", "jobType", source, "queueName",
-      "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
-      "correlationId", "causationId", state,
-      "executionStrategy"::text AS "executionStrategy",
-      "activeDispatchSequence"
-    FROM "DurableJob"
-    WHERE state = 'PENDING'
-      AND "nextEligibleAt" <= ${now}
-    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
-    LIMIT ${batchSize * 4}
-    FOR UPDATE SKIP LOCKED
-  `;
-
-  const retryWait = await prisma.$queryRaw<ClaimedJobRow[]>`
-    SELECT
-      id, "shopId", "jobType", source, "queueName",
-      "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
-      "correlationId", "causationId", state,
-      "executionStrategy"::text AS "executionStrategy",
-      "activeDispatchSequence"
-    FROM "DurableJob"
-    WHERE state = 'RETRY_WAIT'
-      AND "nextEligibleAt" <= ${now}
-    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
-    LIMIT ${batchSize * 4}
-    FOR UPDATE SKIP LOCKED
-  `;
-
-  // Merge by nextEligibleAt order while applying per-shop fairness.
-  const merged = [...pending, ...retryWait].sort((a, b) => {
-    // Stable-ish: prefer PENDING over RETRY_WAIT only when equal eligibility —
-    // we already sorted each list; merge by id for determinism after concat sort.
-    return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-  });
-
-  // Re-sort by eligibility using a second pass over the raw rows isn't available
-  // after FOR UPDATE; use shop-fair selection on the locked set.
-  const perShop = new Map<string, number>();
-  const selected: ClaimedJobRow[] = [];
-
-  // Prefer earlier-created among locked rows for fairness rounds.
-  const byShop = new Map<string, ClaimedJobRow[]>();
-  for (const row of [...pending, ...retryWait]) {
-    const list = byShop.get(row.shopId) ?? [];
-    list.push(row);
-    byShop.set(row.shopId, list);
-  }
-
-  // Round-robin across shops.
-  let progress = true;
-  while (selected.length < batchSize && progress) {
-    progress = false;
-    for (const [, list] of byShop) {
-      if (selected.length >= batchSize) break;
-      const taken = perShop.get(list[0]?.shopId ?? "") ?? 0;
-      if (taken >= maxPerShop) continue;
-      const next = list.shift();
-      if (!next) continue;
-      selected.push(next);
-      perShop.set(next.shopId, taken + 1);
-      progress = true;
-    }
-  }
-
-  const claimed: ClaimedJobRow[] = [];
-  for (const row of selected) {
-    assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
-    const updated = await prisma.$queryRaw<Array<{ id: string }>>`
-      UPDATE "DurableJob"
-      SET
-        state = 'DISPATCH_LEASED',
-        "leaseOwner" = ${workerId},
-        "leaseExpiresAt" = ${leaseExpiresAt},
-        "updatedAt" = ${now}
-      WHERE id = ${row.id}
-        AND state = ${row.state}
-      RETURNING id
+  return prisma.$transaction(async (tx) => {
+    // Fair candidate set: at most maxPerShop per shop via window ranking,
+    // so a single-shop backlog cannot monopolize the claim window (F-PR4-13).
+    // Concurrent safety: CAS UPDATE … WHERE state = prior RETURNING.
+    const rows = await tx.$queryRaw<ClaimedJobRow[]>`
+      WITH eligible AS (
+        SELECT
+          id, "shopId", "jobType", source, "queueName",
+          "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
+          "correlationId", "causationId", state,
+          "executionStrategy"::text AS "executionStrategy",
+          "activeDispatchSequence",
+          "nextEligibleAt", "createdAt",
+          ROW_NUMBER() OVER (
+            PARTITION BY "shopId"
+            ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+          ) AS shop_rank
+        FROM "DurableJob"
+        WHERE state IN ('PENDING', 'RETRY_WAIT')
+          AND "nextEligibleAt" <= ${now}
+      )
+      SELECT
+        id, "shopId", "jobType", source, "queueName",
+        "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
+        "correlationId", "causationId", state,
+        "executionStrategy", "activeDispatchSequence"
+      FROM eligible
+      WHERE shop_rank <= ${maxPerShop}
+      ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+      LIMIT ${batchSize}
     `;
-    if (updated.length === 0) continue;
-    claimed.push({ ...row, state: "DISPATCH_LEASED" });
-  }
 
-  // Silence unused merge variable (kept for future eligibility merge).
-  void merged;
-  return claimed;
+    if (rows.length === 0) return [];
+
+    const ids = rows.map((r) => r.id);
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "DurableJob"
+      WHERE id = ANY(${ids})
+        AND state IN ('PENDING', 'RETRY_WAIT')
+      FOR UPDATE SKIP LOCKED
+    `;
+    const lockedIds = new Set(locked.map((r) => r.id));
+
+    const claimed: ClaimedJobRow[] = [];
+    for (const row of rows) {
+      if (!lockedIds.has(row.id)) continue;
+      assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
+      const updated = await tx.$queryRaw<Array<{ id: string }>>`
+        UPDATE "DurableJob"
+        SET
+          state = 'DISPATCH_LEASED',
+          "leaseOwner" = ${workerId},
+          "leaseExpiresAt" = ${leaseExpiresAt},
+          "updatedAt" = ${now}
+        WHERE id = ${row.id}
+          AND state = CAST(${row.state} AS "DurableJobState")
+        RETURNING id
+      `;
+      if (updated.length === 0) continue;
+      claimed.push({ ...row, state: "DISPATCH_LEASED" });
+    }
+    return claimed;
+  });
 }
 
 async function ensureDispatchRecord(
