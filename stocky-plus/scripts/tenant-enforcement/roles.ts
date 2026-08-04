@@ -64,6 +64,11 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   "stocky_has_application_receipt",
 ]);
 
+/** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
+const APPROVED_SECURITY_DEFINER_FUNCTIONS = new Set([
+  "stocky_has_application_receipt",
+]);
+
 type DefaultAclObjType = "r" | "S" | "f";
 
 function defaultAclObjLabel(objtype: DefaultAclObjType): string {
@@ -317,7 +322,7 @@ export async function collectFunctionPrivilegeFailures(
       failures.push(`unexpected_function:${fn.signature}:owner:${fn.owner}`);
       continue;
     }
-    if (fn.prosecdef) {
+    if (fn.prosecdef && !APPROVED_SECURITY_DEFINER_FUNCTIONS.has(fn.proname)) {
       failures.push(`unapproved_security_definer:${fn.signature}`);
     }
     const searchPath = (fn.proconfig ?? []).find((c) =>
