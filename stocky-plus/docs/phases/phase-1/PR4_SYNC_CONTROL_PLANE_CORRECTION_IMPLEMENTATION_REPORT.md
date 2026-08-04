@@ -16,7 +16,7 @@
 | Correction starting head (preserved review report) | `944cd5922f12cccc73519e5cb4434985a296e923` |
 | D-043 + backlog documentation | `01c8f9ae26e60dfa5a7fdffbd13179582a0176a9` |
 | Correction runtime/schema/tests (primary) | `a38be9ffb4b6574d8612e522acde584fae038686` |
-| Documentation tip / this report | filled after this documentation commit lands — see git tip on branch |
+| Documentation tip / this report | `6c2030e3c376a70209de918f17333646ea755e4a` (may advance with tip-fill commit) |
 
 Do **not** treat any Cursor SHA as independent closure.
 

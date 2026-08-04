@@ -124,9 +124,40 @@ export async function provisionControlPlaneRole(
     );
     grantsApplied.push("Shop:column-lifecycle");
 
-    await client.query(
-      `GRANT EXECUTE ON FUNCTION stocky_has_application_receipt(text, text) TO ${quoteIdent(role)}`,
-    ).catch(() => undefined);
+    await client
+      .query(
+        `GRANT EXECUTE ON FUNCTION stocky_has_application_receipt(text, text) TO ${quoteIdent(role)}`,
+      )
+      .catch(() => undefined);
+
+    // Migration may run before the role exists; ensure RLS policies here.
+    for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
+      const exists = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = $1`,
+        [table],
+      );
+      if ((exists.rowCount ?? 0) === 0) continue;
+      await client.query(
+        `ALTER TABLE ${quoteIdent(table)} ENABLE ROW LEVEL SECURITY`,
+      );
+      await client.query(
+        `ALTER TABLE ${quoteIdent(table)} FORCE ROW LEVEL SECURITY`,
+      );
+      await client.query(
+        `DO $pol$
+         BEGIN
+           BEGIN
+             CREATE POLICY ${quoteIdent(`${table}_control_plane_all`)}
+               ON ${quoteIdent(table)}
+               FOR ALL TO ${quoteIdent(role)}
+               USING (true) WITH CHECK (true);
+           EXCEPTION WHEN duplicate_object THEN NULL;
+           END;
+         END $pol$`,
+      );
+      grantsApplied.push(`${table}:rls_policy`);
+    }
 
     const runtime = assertSafeRoleName(defaultRuntimeRoleName());
     await client
