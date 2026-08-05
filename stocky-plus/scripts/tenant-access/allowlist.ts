@@ -480,6 +480,22 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Retain while PR 4 second-correction suite requires disposable fixtures",
   },
+  {
+    id: "EX-SYNC-TEST-012",
+    path: "app/sync/__tests__/sync-final-correction.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "BullMQ Queue construct/obliterate for presence and stranded tests",
+      "TRUNCATE via raw SQL in beforeEach",
+      "DurableJob / JobAttempt / DataIssue / SyncHealth fixture assertions",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 final-correction suite requires disposable fixtures",
+  },
   ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),

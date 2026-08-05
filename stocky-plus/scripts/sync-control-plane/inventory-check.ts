@@ -75,6 +75,15 @@ export const SYNC_SCAN_EXCEPTIONS: readonly {
     removalCondition: "When harness moves off direct Queue",
   },
   {
+    id: "EX-SYNC-007",
+    path: "app/sync/__tests__/sync-final-correction.test.ts",
+    category: "test_harness",
+    owner: "sync-control-plane",
+    productionRuntime: false,
+    justification: "D-045 final-correction tests inspect BullMQ jobs and obliterate queues",
+    removalCondition: "When harness moves off direct Queue",
+  },
+  {
     id: "EX-SYNC-006",
     path: "app/tenant/__tests__/queue-redis.test.ts",
     category: "test_harness",
