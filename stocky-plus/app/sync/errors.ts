@@ -37,7 +37,7 @@ export const SYNC_CONTROL_PLANE_ERROR_CODES = [
 ] as const;
 
 export type SyncControlPlaneErrorCode =
-  (typeof SYNC_CONTROL_PLANE_ERROR_CODES)[number] | (string & {});
+  (typeof SYNC_CONTROL_PLANE_ERROR_CODES)[number] | (string & Record<never, never>);
 
 export class SyncControlPlaneError extends Error {
   readonly code: SyncControlPlaneErrorCode;
