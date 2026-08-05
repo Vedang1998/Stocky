@@ -2,15 +2,17 @@
 
 > **D-043 correction cycle:** Architecture extended by additive migration `20260804210000_sync_control_plane_correction` (`SyncApplicationReceipt`, `JobDispatch`, attempt leases, control-plane RLS, transition trigger, envelope v3, fair windowed claim). Status: CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION. See `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md`.
 
+> **D-045 final correction:** Post-rollback SyncApplicationReceipt verification (Repeatable Read) is required before any `APPLICATION_ALREADY_APPLIED` path may finalize `SUCCEEDED`. v2 and v3 share `finalizeApplicationAfterRollback`. Confirmed stranded Redis recovery consumes the durable `attemptCount` budget (see Attempt-budget semantics). BullMQ runnable allowlist for pinned 5.81.2 excludes `paused`. Status: FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION.
+
 
 **Phase:** 1  
 **Work unit:** PR 4 — Synchronization control plane  
 **Branch:** `phase-1/sync-control-plane`  
 **Authorized starting main:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`  
-**Decision:** D-042  
+**Decision:** D-042; final corrections D-045  
 **Shopify Admin API target:** `2026-07` (`ApiVersion.July26`)  
 **Production execution:** NOT AUTHORIZED  
-**Status:** Implementation in progress — pending independent verification
+**Status:** FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
 
 ## Purpose
 
@@ -242,6 +244,50 @@ Web routes must not receive a general raw Prisma client for control-plane scans.
 | Replay | New `DurableJob` + `JobReplay`; original immutable |
 | Uninstall race | RLS processing gate |
 | Cross-shop access | Denied by application filters + absence of runtime grants on control-plane tables |
+
+## Application receipt verification after rollback (D-045 / NEW-PR4-SC01)
+
+When `applyWithApplicationReceipt` raises `APPLICATION_ALREADY_APPLIED`,
+`APPLICATION_DIGEST_CONFLICT`, or `APPLICATION_OUTCOME_UNCERTAIN`, the merchant
+application transaction has rolled back. The worker must **not** finalize
+`SUCCEEDED` from the error code alone.
+
+Shared path for `tenant-job-envelope-v2` and `tenant-job-envelope-v3`:
+
+1. Open a **new** top-level TenantDb transaction at **Repeatable Read**.
+2. Read `SyncApplicationReceipt` by exact `(shopId, applicationKey)`.
+3. Require `receipt.payloadDigest === durable.payloadDigest` for success.
+4. Outcomes:
+   - matching receipt → `completeAttemptSuccess` with
+     `applicationStatus = already_applied_verified_after_rollback`
+   - missing / verification failure → dead-letter `application_outcome_uncertain`
+   - digest mismatch → dead-letter `application_digest_conflict`
+
+Conflict with no readable winner must emit `APPLICATION_OUTCOME_UNCERTAIN`, not
+`APPLICATION_ALREADY_APPLIED`. v1 remains fail-closed and must not access
+merchant handlers.
+
+## Attempt-budget semantics for stranded recovery (D-045 / NEW-PR4-SC08)
+
+For PR 4:
+
+```text
+attemptCount represents consumed durable processing opportunities,
+including a confirmed missing/terminal dispatch that requires redispatch.
+```
+
+A confirmed stranded Redis recovery is not free and must not retry forever.
+
+For retryable stranded recovery:
+
+1. `nextAttemptCount = attemptCount + 1`
+2. If `nextAttemptCount >= maxAttempts`: `ENQUEUED → FAILED → DEAD_LETTERED`
+   with `terminalReason = max_attempts_exceeded`
+3. Otherwise: `ENQUEUED → RETRY_WAIT` with `attemptCount = nextAttemptCount`
+
+Do **not** increment for runnable dispatch, queue unavailable, unknown state,
+missing `activeDispatchSequence`, another reaper’s no-op, failed transaction,
+or evidence-only observation. The increment and state transition must be atomic.
 
 ## Explicit non-goals
 

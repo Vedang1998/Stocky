@@ -28,11 +28,12 @@ This report records Cursor second-correction work only. It does **not** claim ac
 | First correction-review tip / D-044 starting head | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` |
 | Original second-correction tip / mechanical-completion starting head | `1f5b74bca35e580278b9980cb18aa81f0e9c6568` |
 | Mechanical-completion runtime/test head | `0158a09eb3b0f1b62c9459e2db4df344183a6f59` |
-| Documentation / this report tip | `71bb576005501155a2965568db0d6b08b30ca48e` |
-| Exact-head CI `head_sha` | pending at docs write — authoritative in PR #20 body after green |
-| Exact-head CI run / job | pending — see PR #20 body |
+| Documentation + test-fixture synchronization (`71bb576…`) | `71bb576005501155a2965568db0d6b08b30ca48e` — **not** documentation-only; also synchronized two test fixtures |
+| Reviewed runtime/test implementation head (PR tip at independent second-correction review) | `b73a22f67afd9aa29995486afdfc52147c90fb9f` |
+| Independent second-correction review-report tip | `9d43ec9fce7a37b3b336972bbb41a4b0f34e83cd` |
+| Exact-head CI for reviewed runtime/test head `b73a22f…` | run `31029829525`, job `92387401357`, conclusion `success`, `head_sha = b73a22f…` — **not pending** |
 
-Do **not** treat any Cursor SHA as independent closure. Live PR-head identity is authoritative only in the GitHub PR #20 body after exact-head CI.
+Do **not** treat any Cursor SHA as independent closure. Do **not** treat a self-referential committed document SHA as the permanent “final PR tip.” Live PR-head identity and subsequent D-045 correction heads are authoritative only in the GitHub PR #20 body after exact-head CI.
 
 Both independent review reports remain unchanged:
 
@@ -126,10 +127,11 @@ Return to ChatGPT for exact-head verification and a fresh independent Claude Cod
 |---|---|
 | Mechanical-completion starting head | `1f5b74bca35e580278b9980cb18aa81f0e9c6568` |
 | Mechanical-completion runtime/test head | `0158a09eb3b0f1b62c9459e2db4df344183a6f59` |
-| Final PR tip | `71bb576005501155a2965568db0d6b08b30ca48e` |
+| Documentation + test-fixture synchronization | `71bb576005501155a2965568db0d6b08b30ca48e` |
+| Reviewed runtime/test implementation head | `b73a22f67afd9aa29995486afdfc52147c90fb9f` |
+| Independent second-correction review-report tip | `9d43ec9fce7a37b3b336972bbb41a4b0f34e83cd` |
 | First correction-review tip / D-044 start | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` |
 | Base / main | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
-| Exact-head CI | pending at docs write — see PR body after green |
+| Exact-head CI for `b73a22f…` | run `31029829525`, job `92387401357`, success |
 
-Status remains **SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**.
-Do not close findings or risks on Cursor evidence alone.
+D-044 second-correction Cursor work ended at reviewed runtime/test head `b73a22f…`. Subsequent D-045 final corrections start from review-report head `9d43ec9…`. Do not close findings or risks on Cursor evidence alone.

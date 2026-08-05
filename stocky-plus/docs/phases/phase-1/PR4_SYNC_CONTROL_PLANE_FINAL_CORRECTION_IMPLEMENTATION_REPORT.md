@@ -1,0 +1,113 @@
+# Phase 1 PR 4 — Synchronization Control Plane Final Correction Implementation Report
+
+**Status:** `FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`  
+**Authority:** D-045  
+**PR:** #20 — OPEN, DRAFT, UNMERGED  
+**Branch:** `phase-1/sync-control-plane`  
+**PR 5:** BLOCKED  
+**Production / inventory writes:** UNAUTHORIZED; flags default OFF  
+
+```text
+D-045 — PHASE 1 PR 4 FINAL CORRECTIONS REQUIRED.
+NEW-PR4-SC01 THROUGH NEW-PR4-SC08 ARE IN SCOPE.
+THE ORIGINAL REVIEW, FIRST CORRECTION-REVIEW, AND SECOND-CORRECTION
+REVIEW REPORTS MUST REMAIN UNCHANGED.
+PR 5 REMAINS BLOCKED.
+PRODUCTION EXECUTION AND INVENTORY WRITES REMAIN UNAUTHORIZED.
+```
+
+This report records Cursor final-correction work only. It does **not** claim acceptance, readiness, merge authorization, or risk closure.
+
+## D-045 authority and identity
+
+| Identity | SHA / value |
+|---|---|
+| Unchanged `origin/main` / merge base | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
+| Reviewed runtime/test implementation head (D-044) | `b73a22f67afd9aa29995486afdfc52147c90fb9f` |
+| Independent second-correction review-report commit / D-045 starting head | `9d43ec9fce7a37b3b336972bbb41a4b0f34e83cd` |
+| SC01 correction commit | `59f14feac8b5758f08e13ce63750737019d2ed9d` |
+| SC02–SC06 / SC08 correction commit | `10a9154ee368674b68836065f9c164be5dbb0b19` |
+| Final runtime/test head | `10a9154ee368674b68836065f9c164be5dbb0b19` |
+| Documentation / status commit | recorded after this report lands (see Git history; not a self-referential tip) |
+| Live final PR tip / exact-head CI | Authoritative only in GitHub PR #20 body after green CI |
+
+Immutable reports (unchanged):
+
+- `PR4_SYNC_CONTROL_PLANE_REVIEW_REPORT.md`
+- `PR4_SYNC_CONTROL_PLANE_CORRECTION_REVIEW_REPORT.md`
+- `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_REVIEW_REPORT.md`
+
+## Migration
+
+No additive migration required for D-045. Existing migrations were not edited. No production migration executed.
+
+## Finding disposition (Cursor side only)
+
+Every NEW-PR4-SC01…SC08 finding: **IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**
+
+| ID | Sev | Exact correction | Primary files | Tests |
+|---|:---:|---|---|---|
+| NEW-PR4-SC01 | P2 | Post-rollback `verifyApplicationReceiptAfterRollback` at Repeatable Read; shared `finalizeApplicationAfterRollback`; error semantics split (ALREADY_APPLIED / DIGEST_CONFLICT / OUTCOME_UNCERTAIN); v2+v3 processors call shared finalize | `application-receipt.server.ts`, `application-finalize.server.ts`, `webhook-processor.ts`, `tenant-db.server.ts` | `sync-exactly-once` NEW-PR4-SC01:* |
+| NEW-PR4-SC02 | P3 | Test-only Redis fast-fail ms + `STOCKY_TEST_REDIS_FAST_FAIL`; timer clear; late reject absorb | `queue-presence.server.ts`, `queue.server.ts` | `sync-final-correction` SC02 |
+| NEW-PR4-SC03 | P3 | 15-minute cooldown + advisory lock; SyncHealth always current | `dispatcher.server.ts` | `sync-final-correction` SC03 |
+| NEW-PR4-SC04 | P3 | Null `activeDispatchSequence` fail-closed; heartbeat resolves attempt first | `dispatcher.server.ts`, `lifecycle.server.ts` | `sync-final-correction` SC04 |
+| NEW-PR4-SC05 | P3 | FAILED→DEAD_LETTERED `RETURNING` must yield one row or roll back | `dispatcher.server.ts` | `sync-final-correction` SC05 |
+| NEW-PR4-SC06 | P3 | Remove `paused` from runnable allowlist; pin BullMQ 5.81.2 note | `queue-presence.server.ts` | `sync-final-correction` SC06 |
+| NEW-PR4-SC07 | P3 | Correct second-correction implementation identity labels; D-045 status docs | second-correction implementation report; PROJECT_STATUS; phase README; this backlog/report | documentation review |
+| NEW-PR4-SC08 | P3 | Confirmed stranded recovery increments attempt budget; DL at maxAttempts; SC01 aligns v2/v3 | `dispatcher.server.ts`, architecture | `sync-final-correction` SC08 |
+
+### Attempt-budget semantics (PR 4 / SC08)
+
+```text
+attemptCount represents consumed durable processing opportunities,
+including a confirmed missing/terminal dispatch that requires redispatch.
+```
+
+Confirmed stranded recovery is not free. `nextAttemptCount = attemptCount + 1`; if `>= maxAttempts` then `ENQUEUED → FAILED → DEAD_LETTERED` with `terminalReason = max_attempts_exceeded`; else `ENQUEUED → RETRY_WAIT` with atomic increment. No increment for runnable, queue unavailable, unknown state, missing `activeDispatchSequence`, noop, failed transaction, or evidence-only observation.
+
+## Focused test evidence (local / disposable — not acceptance)
+
+| Suite / gate | Observed |
+|---|---|
+| `test:sync-exactly-once` NEW-PR4-SC01 | **14** passed |
+| `test:sync-final-correction` | **16** passed |
+| Full suites | Recorded in PR #20 body after exact-head CI |
+
+Exact-head CI `head_sha`, run, and job are recorded in the PR #20 body after the pushed tip is green. Do not treat local green as acceptance.
+
+## Open risks / questions
+
+Keep **OPEN** (permanent `RISK_REGISTER.md` definitions). Do **not** close on Cursor evidence:
+
+- **R-109** — D-045 final corrections pending independent verification (NEW-PR4-SC01 + prior exactly-once)
+- **R-099** — D-045 final corrections pending independent verification (SC06/SC08 dispatch recovery)
+- **R-104** — remains open (attempt recovery)
+- **R-112** — D-045 final corrections pending independent verification (SC07 identity hygiene)
+- **R-031 / R-032 / R-033** — open until PR 4 acceptance
+- **Q-003** / **F-PR4-18** — OPEN (no live Shopify schema closure claimed)
+
+## Remaining limitations
+
+- Independent Claude Code D-045 review not yet run.
+- Exact-head CI evidence belongs in the PR body, not a tip-identity commit.
+- Q-003 / F-PR4-18 remain open without live Admin API schema validation.
+- Owner Prisma shims remain test-only where disposable envs lack full `stocky_runtime` RLS.
+
+## Safety statement
+
+- No production migration, role change, queue execution, webhook replay, merchant data, ownership repair, or inventory mutation.
+- Inventory-write flags remain OFF.
+- No PR 5 work.
+- No secrets committed.
+- No force-push / amend / rebase of reviewed history.
+- PR #20 remains OPEN, DRAFT, UNMERGED.
+
+## Next action
+
+```text
+Return to ChatGPT for exact-head verification and a focused
+independent Claude Code D-045 correction review.
+```
+
+Status remains **FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**.
+Do not close findings or risks on Cursor evidence alone.
