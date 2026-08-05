@@ -179,6 +179,15 @@ async function captureStatementTimeout(): Promise<CapturedFault> {
 async function captureBackendCancel(): Promise<CapturedFault> {
   const sleeper = await rawMigrationClient();
   const canceller = await rawMigrationClient();
+  // pg may emit a client 'error' for 57014 in addition to rejecting the query
+  // promise; without a listener Vitest treats that as an unhandled error and
+  // fails the suite even when the promise path is asserted correctly.
+  const swallowClientCancel = (err: Error) => {
+    if (!/canceling statement due to user request/i.test(err.message)) {
+      throw err;
+    }
+  };
+  sleeper.on("error", swallowClientCancel);
   try {
     const pid = await sleeper.query<{ pid: number }>(
       `SELECT pg_backend_pid() AS pid`,
@@ -205,6 +214,7 @@ async function captureBackendCancel(): Promise<CapturedFault> {
       retryableByApply: false,
     };
   } finally {
+    sleeper.off("error", swallowClientCancel);
     await sleeper.end();
     await canceller.end();
   }
