@@ -366,20 +366,47 @@ jobs:
       - name: Sync control-plane integration tests
         run: npm run test:sync-integration
 
-      - name: Sync exactly-once application (F-PR4-01)
+      - name: Sync exactly-once application (F-PR4-01 / NEW-PR4-C03)
         run: npm run test:sync-exactly-once
 
-      - name: Sync dispatch recovery (F-PR4-02)
+      - name: "NEW-PR4-C01: retained failed BullMQ dispatch must not false-ENQUEUE"
+        run: npm run test:sync-dispatch-recovery -- -t "retained FAILED queue job must not leave durable ENQUEUED"
+
+      - name: "NEW-PR4-C01: retained completed BullMQ dispatch"
+        run: npm run test:sync-dispatch-recovery -- -t "retained completed deterministic queue job"
+
+      - name: "NEW-PR4-C01: acknowledgement denied without runnable job"
+        run: npm run test:sync-dispatch-recovery -- -t "acknowledgement denied without runnable job"
+
+      - name: "NEW-PR4-C01: stranded ENQUEUED recovery"
+        run: npm run test:sync-dispatch-recovery -- -t "stranded ENQUEUED recovery"
+
+      - name: Sync dispatch recovery (full suite)
         run: npm run test:sync-dispatch-recovery
 
       - name: Sync uninstall cancel (F-PR4-03)
         run: npm run test:sync-uninstall
 
-      - name: Sync attempt recovery (F-PR4-04)
+      - name: "NEW-PR4-C02: nullable webhook delivery in attempt reaper"
+        run: npm run test:sync-attempt-recovery -- -t "nullable webhook delivery identity"
+
+      - name: "NEW-PR4-C02: poison-row batch isolation"
+        run: npm run test:sync-attempt-recovery -- -t "poison NULL webhookDeliveryId"
+
+      - name: Sync attempt recovery (full suite / NEW-PR4-C03)
         run: npm run test:sync-attempt-recovery
 
-      - name: Sync role isolation (F-PR4-06)
+      - name: "NEW-PR4-C04: envelope v1/v2 fail-closed"
+        run: npm run test:sync-envelope-fail-closed
+
+      - name: "NEW-PR4-C06: completeAttemptFail always dead-letters"
+        run: npm run test:sync-attempt-recovery -- -t "completeAttemptFail always dead-letters"
+
+      - name: Sync role isolation (F-PR4-06 / NEW-PR4-C08)
         run: npm run test:sync-role-isolation
+
+      - name: "NEW-PR4-C08: restricted receipt-probe function ownership"
+        run: npm run test:sync-role-isolation -- -t "stocky_has_application_receipt owner is restricted"
 
       - name: Sync inventory audit (F-PR4-07)
         run: npm run test:sync-inventory-audit
@@ -511,6 +538,12 @@ jobs:
 
       - name: Migration and tenant-backfill tests
         run: npm run test:migrations
+
+      - name: "NEW-PR4-C07: role-present migration fixture"
+        run: npm run test:migrations -- scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts -t "NEW-PR4-C07 role-present"
+
+      - name: "NEW-PR4-C07: role-absent migration fixture"
+        run: npm run test:migrations -- scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts -t "NEW-PR4-C07 role-absent"
 
       - name: Constrained-memory subject evidence
         run: npm run test:subject-memory
