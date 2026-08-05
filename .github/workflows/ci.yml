@@ -403,7 +403,8 @@ jobs:
         run: npm run test:sync-exactly-once -- -t "digest mismatch dead-letters conflict"
 
       - name: "NEW-PR4-SC01: v2 and v3 already-applied alignment"
-        run: npm run test:sync-exactly-once -- -t "NEW-PR4-SC01: v[23]"
+        run: |
+          npm run test:sync-exactly-once -- -t 'NEW-PR4-SC01: v[23]'
 
       - name: "NEW-PR4-SC02: production ignores Redis test timeout"
         run: npm run test:sync-final-correction -- -t "production ignores Redis test timeout"
