@@ -37,6 +37,7 @@ const ALL_MIGRATION_NAMES = [
   "20260804180000_sync_control_plane",
   "20260804210000_sync_control_plane_correction",
   "20260804220000_sync_control_plane_correction_defaults",
+  "20260805120000_sync_control_plane_second_correction",
 ] as const;
 
 /**
@@ -69,6 +70,69 @@ async function controlPlaneRoleExists(prisma: PrismaClient): Promise<boolean> {
      ) AS exists`,
   );
   return Boolean(rows[0]?.exists);
+}
+
+/** Create stocky_control_plane when absent (NOLOGIN / NOINHERIT; disposable only). */
+async function ensureControlPlaneRole(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') THEN
+        CREATE ROLE stocky_control_plane NOINHERIT NOLOGIN;
+      END IF;
+    END $$;
+  `);
+}
+
+/**
+ * Drop stocky_control_plane when present. Disposable-DB only — DROP OWNED clears
+ * role-conditional grants/policies left after schema resets.
+ */
+async function dropControlPlaneRole(prisma: PrismaClient): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') THEN
+        DROP OWNED BY stocky_control_plane CASCADE;
+        DROP ROLE stocky_control_plane;
+      END IF;
+    END $$;
+  `);
+}
+
+/** Restore exact prior presence/absence of stocky_control_plane after a fixture. */
+async function restoreControlPlaneRoleState(
+  prisma: PrismaClient,
+  existedBefore: boolean,
+): Promise<void> {
+  const existsNow = await controlPlaneRoleExists(prisma);
+  if (existedBefore && !existsNow) {
+    await ensureControlPlaneRole(prisma);
+  } else if (!existedBefore && existsNow) {
+    await dropControlPlaneRole(prisma);
+  }
+}
+
+async function assertMigrationRecordedExactlyOnce(
+  prisma: PrismaClient,
+): Promise<void> {
+  const recorded = await prisma.$queryRawUnsafe<
+    Array<{ migration_name: string; cnt: bigint }>
+  >(
+    `SELECT migration_name, COUNT(*)::bigint AS cnt
+     FROM _prisma_migrations
+     GROUP BY migration_name
+     ORDER BY migration_name`,
+  );
+  expect(recorded.map((r) => r.migration_name)).toEqual([
+    ...ALL_MIGRATION_NAMES,
+  ]);
+  for (const row of recorded) {
+    expect(Number(row.cnt)).toBe(1);
+  }
+}
+
+function assertSecondDeployNoPending(secondDeployOut: string): void {
+  // NEW-PR4-C07: reject vacuous `/0/` — require Prisma's real no-pending message.
+  expect(secondDeployOut).toMatch(/No pending migrations to apply/i);
 }
 
 async function assertControlPlanePoliciesMatchRole(
@@ -175,6 +239,7 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     "20260804180000_sync_control_plane",
     "20260804210000_sync_control_plane_correction",
     "20260804220000_sync_control_plane_correction_defaults",
+    "20260805120000_sync_control_plane_second_correction",
   ] as const;
 
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -257,80 +322,114 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
-  it("parks PR4 correction migrations for init-only, restores them, applies once, and matches role-conditional policies", async () => {
+  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates eleven control-plane policies", async () => {
     const beforeDir = listMigrationDirEntries();
     expect(beforeDir).toEqual(
       expect.arrayContaining([
         "20260804180000_sync_control_plane",
         "20260804210000_sync_control_plane_correction",
         "20260804220000_sync_control_plane_correction_defaults",
+        "20260805120000_sync_control_plane_second_correction",
         "migration_lock.toml",
       ]),
     );
 
-    // Ensure the CI-like role exists so the pre-fix assertion (policies===0)
-    // would fail; post-fix asserts the exact eleven control-plane policies.
-    await prisma.$executeRawUnsafe(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') THEN
-          CREATE ROLE stocky_control_plane NOINHERIT NOLOGIN;
-        END IF;
-      END $$;
-    `);
-    expect(await controlPlaneRoleExists(prisma)).toBe(true);
+    const roleExistedBefore = await controlPlaneRoleExists(prisma);
+    try {
+      await ensureControlPlaneRole(prisma);
+      expect(await controlPlaneRoleExists(prisma)).toBe(true);
 
-    await resetPublicSchema(prisma);
-    const { initOut, restOut } = migrateInitOnlyThenRest();
+      await resetPublicSchema(prisma);
+      const { initOut, restOut } = migrateInitOnlyThenRest();
 
-    expect(initOut).toContain("20260728000000_init_stocky_plus");
-    expect(initOut).not.toContain("20260804180000_sync_control_plane");
-    expect(initOut).not.toContain("20260804210000_sync_control_plane_correction");
-    expect(initOut).not.toContain(
-      "20260804220000_sync_control_plane_correction_defaults",
-    );
+      expect(initOut).toContain("20260728000000_init_stocky_plus");
+      expect(initOut).not.toContain("20260804180000_sync_control_plane");
+      expect(initOut).not.toContain(
+        "20260804210000_sync_control_plane_correction",
+      );
+      expect(initOut).not.toContain(
+        "20260804220000_sync_control_plane_correction_defaults",
+      );
+      expect(initOut).not.toContain(
+        "20260805120000_sync_control_plane_second_correction",
+      );
 
-    expect(restOut).toContain("20260804180000_sync_control_plane");
-    expect(restOut).toContain("20260804210000_sync_control_plane_correction");
-    expect(restOut).toContain(
-      "20260804220000_sync_control_plane_correction_defaults",
-    );
+      expect(restOut).toContain("20260804180000_sync_control_plane");
+      expect(restOut).toContain("20260804210000_sync_control_plane_correction");
+      expect(restOut).toContain(
+        "20260804220000_sync_control_plane_correction_defaults",
+      );
+      expect(restOut).toContain(
+        "20260805120000_sync_control_plane_second_correction",
+      );
 
-    const recorded = await prisma.$queryRawUnsafe<
-      Array<{ migration_name: string; cnt: bigint }>
-    >(
-      `SELECT migration_name, COUNT(*)::bigint AS cnt
-       FROM _prisma_migrations
-       GROUP BY migration_name
-       ORDER BY migration_name`,
-    );
-    expect(recorded.map((r) => r.migration_name)).toEqual([
-      ...ALL_MIGRATION_NAMES,
-    ]);
-    for (const row of recorded) {
-      expect(Number(row.cnt)).toBe(1);
+      await assertMigrationRecordedExactlyOnce(prisma);
+
+      const second = migrateDeploy();
+      assertSecondDeployNoPending(second);
+      await assertMigrationRecordedExactlyOnce(prisma);
+
+      expect(await controlPlaneRoleExists(prisma)).toBe(true);
+      await assertControlPlanePoliciesMatchRole(prisma);
+
+      expect(listMigrationDirEntries()).toEqual(beforeDir);
+      expect(existsSync(join(APP_ROOT, ".tmp-parked-migrations"))).toBe(false);
+    } finally {
+      await restoreControlPlaneRoleState(prisma, roleExistedBefore);
     }
+  }, 180_000);
 
-    // Second deploy must be a no-op (no pending / no duplicate rows).
-    const second = migrateDeploy();
-    expect(second.toLowerCase()).toMatch(/no pending|already|up to date|0/);
-    const afterSecond = await prisma.$queryRawUnsafe<
-      Array<{ migration_name: string; cnt: bigint }>
-    >(
-      `SELECT migration_name, COUNT(*)::bigint AS cnt
-       FROM _prisma_migrations
-       GROUP BY migration_name
-       ORDER BY migration_name`,
-    );
-    expect(afterSecond.map((r) => r.migration_name)).toEqual([
-      ...ALL_MIGRATION_NAMES,
-    ]);
-    for (const row of afterSecond) {
-      expect(Number(row.cnt)).toBe(1);
+  it("NEW-PR4-C07 role-absent: parks PR4 migrations, applies once, creates zero control-plane policies", async () => {
+    const beforeDir = listMigrationDirEntries();
+    const roleExistedBefore = await controlPlaneRoleExists(prisma);
+    try {
+      await dropControlPlaneRole(prisma);
+      expect(await controlPlaneRoleExists(prisma)).toBe(false);
+
+      await resetPublicSchema(prisma);
+      const { initOut, restOut } = migrateInitOnlyThenRest();
+
+      expect(initOut).toContain("20260728000000_init_stocky_plus");
+      expect(restOut).toContain("20260804180000_sync_control_plane");
+      expect(restOut).toContain("20260804210000_sync_control_plane_correction");
+      expect(restOut).toContain(
+        "20260805120000_sync_control_plane_second_correction",
+      );
+
+      await assertMigrationRecordedExactlyOnce(prisma);
+
+      const second = migrateDeploy();
+      assertSecondDeployNoPending(second);
+      await assertMigrationRecordedExactlyOnce(prisma);
+
+      expect(await controlPlaneRoleExists(prisma)).toBe(false);
+      await assertControlPlanePoliciesMatchRole(prisma);
+
+      expect(listMigrationDirEntries()).toEqual(beforeDir);
+      expect(existsSync(join(APP_ROOT, ".tmp-parked-migrations"))).toBe(false);
+    } finally {
+      await restoreControlPlaneRoleState(prisma, roleExistedBefore);
     }
+  }, 180_000);
 
-    await assertControlPlanePoliciesMatchRole(prisma);
-
-    // Fixture cleanup: migration directory must be fully restored.
+  it("NEW-PR4-C07: parking cleanup restores migration tree after injected assertion failure", async () => {
+    const beforeDir = listMigrationDirEntries();
+    const roleExistedBefore = await controlPlaneRoleExists(prisma);
+    let injectedFailure = false;
+    try {
+      await ensureControlPlaneRole(prisma);
+      await resetPublicSchema(prisma);
+      const { initOut } = migrateInitOnlyThenRest();
+      expect(initOut).toContain("20260728000000_init_stocky_plus");
+      // Intentional assertion failure after parking helper restored folders.
+      expect(initOut).toContain("__injected_assertion_failure__");
+    } catch (err) {
+      injectedFailure = true;
+      expect(String(err)).toMatch(/__injected_assertion_failure__/);
+    } finally {
+      await restoreControlPlaneRoleState(prisma, roleExistedBefore);
+    }
+    expect(injectedFailure).toBe(true);
     expect(listMigrationDirEntries()).toEqual(beforeDir);
     expect(existsSync(join(APP_ROOT, ".tmp-parked-migrations"))).toBe(false);
   }, 180_000);
