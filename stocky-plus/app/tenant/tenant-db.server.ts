@@ -1854,7 +1854,11 @@ export type TenantDb = {
   stocktakeLineItem: TenantModelDelegate;
   $transaction: <T>(
     fn: (db: TenantDb) => Promise<T>,
-    options?: { maxWait?: number; timeout?: number },
+    options?: {
+      maxWait?: number;
+      timeout?: number;
+      isolationLevel?: Prisma.TransactionIsolationLevel;
+    },
   ) => Promise<T>;
 };
 
@@ -1894,7 +1898,11 @@ function createTenantDbFromClient(
       : {}),
     $transaction: async <T>(
       fn: (tx: TenantDb) => Promise<T>,
-      options?: { maxWait?: number; timeout?: number },
+      options?: {
+        maxWait?: number;
+        timeout?: number;
+        isolationLevel?: Prisma.TransactionIsolationLevel;
+      },
     ): Promise<T> => {
       if (inTransaction) {
         // Reuse current transaction; verify context matches authority.

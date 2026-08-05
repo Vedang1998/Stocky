@@ -9,9 +9,16 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
-import { applyWithApplicationReceipt } from "../application-receipt.server";
+import {
+  __setForceMissingWinnerAfterConflictForTests,
+  applyWithApplicationReceipt,
+  verifyApplicationReceiptAfterRollback,
+} from "../application-receipt.server";
+import { finalizeApplicationAfterRollback } from "../application-finalize.server";
 import {
   APPLICATION_ALREADY_APPLIED,
+  APPLICATION_DIGEST_CONFLICT,
+  APPLICATION_OUTCOME_UNCERTAIN,
   executionStrategyForJobType,
   resolveApplicationKey,
 } from "../execution-strategy.server";
@@ -28,7 +35,6 @@ import {
   transitionRetryWaitToEnqueuedForTests,
   transitionToEnqueuedForTests,
 } from "./test-state-helpers";
-
 const SHOP = "pr4-exactly-once.myshopify.com";
 
 function ownerTenantShim(
@@ -53,7 +59,11 @@ function ownerTenantShim(
     $queryRaw: client.$queryRaw.bind(client),
     $transaction: async <T>(
       fn: (db: TenantDb) => Promise<T>,
-      options?: { maxWait?: number; timeout?: number },
+      options?: {
+        maxWait?: number;
+        timeout?: number;
+        isolationLevel?: import("@prisma/client").Prisma.TransactionIsolationLevel;
+      },
     ) => {
       return client.$transaction(
         async (tx) => fn(ownerTenantShim(tx as unknown as PrismaClient, shopId)),
@@ -1485,5 +1495,549 @@ describe("test:sync-exactly-once", () => {
     expect(
       await prisma.syncApplicationReceipt.count({ where: { shopId } }),
     ).toBe(1);
+  });
+
+  // ─── NEW-PR4-SC01 / D-045 post-rollback receipt verification ─────────────
+
+  it("NEW-PR4-SC01: matching receipt verified after rollback → success", async () => {
+    const applicationKey = "webhook-delivery:sc01-match-verify";
+    const digest = "d".repeat(64);
+    const db = ownerTenantShim(prisma, shopId);
+
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: "webhook:orders/create",
+        rootDurableJobId: "root-sc01-match",
+        firstApplyingDurableJobId: "job-sc01-match",
+        payloadDigest: digest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+
+    const verification = await verifyApplicationReceiptAfterRollback(db, {
+      applicationKey,
+      expectedPayloadDigest: digest,
+    });
+    expect(verification.status).toBe("verified");
+    if (verification.status === "verified") {
+      expect(verification.payloadDigest).toBe(digest);
+    }
+  });
+
+  it("NEW-PR4-SC01: matching receipt is read outside the rolled-back transaction", async () => {
+    const applicationKey = "webhook-delivery:sc01-outside-tx";
+    const digest = "e".repeat(64);
+    const db = ownerTenantShim(prisma, shopId);
+
+    await expect(
+      db.$transaction(async (tx) => {
+        await applyWithApplicationReceipt(
+          tx,
+          {
+            applicationKey,
+            sourceJobType: "webhook:orders/create",
+            rootDurableJobId: "root-outside",
+            applyingDurableJobId: "job-outside",
+            payloadDigest: digest,
+          },
+          async () => {
+            throw new Error("force_rollback_after_no_receipt");
+          },
+        );
+      }),
+    ).rejects.toThrow(/force_rollback_after_no_receipt/);
+
+    expect(
+      await prisma.syncApplicationReceipt.count({
+        where: { shopId, applicationKey },
+      }),
+    ).toBe(0);
+
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: "webhook:orders/create",
+        rootDurableJobId: "root-outside",
+        firstApplyingDurableJobId: "job-outside-winner",
+        payloadDigest: digest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+
+    const verification = await verifyApplicationReceiptAfterRollback(db, {
+      applicationKey,
+      expectedPayloadDigest: digest,
+    });
+    expect(verification.status).toBe("verified");
+  });
+
+  it("NEW-PR4-SC01: missing receipt dead-letters uncertain", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-missing-receipt", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-missing",
+    });
+    const db = ownerTenantShim(prisma, shopId);
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: job.webhookDeliveryId,
+      idempotencyKey: job.idempotencyKey,
+    });
+
+    const result = await finalizeApplicationAfterRollback({
+      db,
+      applicationKey,
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-missing",
+    });
+    expect(result.outcome).toBe("dead_lettered");
+    if (result.outcome === "dead_lettered") {
+      expect(result.errorCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+    }
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: job.id },
+    });
+    expect(durable.state).toBe("DEAD_LETTERED");
+    expect(durable.failureCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+  });
+
+  it("NEW-PR4-SC01: no-receipt path produces zero additional merchant writes", async () => {
+    const before = await prisma.salesDailyAggregate.count({
+      where: { shopId },
+    });
+    const ingested = await ingestOrderCreate("wh-sc01-no-write", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-nowrite",
+    });
+    const db = ownerTenantShim(prisma, shopId);
+    await finalizeApplicationAfterRollback({
+      db,
+      applicationKey: resolveApplicationKey({
+        jobType: job.jobType,
+        webhookDeliveryId: job.webhookDeliveryId,
+        idempotencyKey: job.idempotencyKey,
+      }),
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-nowrite",
+    });
+    expect(
+      await prisma.salesDailyAggregate.count({ where: { shopId } }),
+    ).toBe(before);
+  });
+
+  it("NEW-PR4-SC01: digest mismatch dead-letters conflict", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-digest-conflict", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-digest",
+    });
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: job.webhookDeliveryId,
+      idempotencyKey: job.idempotencyKey,
+    });
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: job.jobType,
+        rootDurableJobId: job.id,
+        firstApplyingDurableJobId: job.id,
+        payloadDigest: "f".repeat(64),
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+
+    const result = await finalizeApplicationAfterRollback({
+      db: ownerTenantShim(prisma, shopId),
+      applicationKey,
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-digest",
+    });
+    expect(result.outcome).toBe("dead_lettered");
+    if (result.outcome === "dead_lettered") {
+      expect(result.errorCode).toBe(APPLICATION_DIGEST_CONFLICT);
+    }
+    expect(
+      (await prisma.durableJob.findUniqueOrThrow({ where: { id: job.id } }))
+        .state,
+    ).toBe("DEAD_LETTERED");
+  });
+
+  it("NEW-PR4-SC01: verification query failure → dead-letter uncertain", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-verify-fail", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-vfail",
+    });
+    const brokenDb = {
+      authority: { shopId, myshopifyDomain: SHOP },
+      $transaction: async () => {
+        throw new Error("forced_verification_query_failure");
+      },
+    } as unknown as TenantDb;
+
+    const result = await finalizeApplicationAfterRollback({
+      db: brokenDb,
+      applicationKey: "webhook-delivery:any",
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-vfail",
+    });
+    expect(result.outcome).toBe("dead_lettered");
+    if (result.outcome === "dead_lettered") {
+      expect(result.errorCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+    }
+  });
+
+  it("NEW-PR4-SC01: conflict without readable winner emits APPLICATION_OUTCOME_UNCERTAIN", async () => {
+    const applicationKey = "webhook-delivery:sc01-no-winner";
+    const digest = "a".repeat(64);
+    const db = ownerTenantShim(prisma, shopId);
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: "webhook:orders/create",
+        rootDurableJobId: "root-no-winner",
+        firstApplyingDurableJobId: "job-winner",
+        payloadDigest: digest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+
+    __setForceMissingWinnerAfterConflictForTests(true);
+    try {
+      await expect(
+        db.$transaction(async (tx) =>
+          applyWithApplicationReceipt(
+            tx,
+            {
+              applicationKey,
+              sourceJobType: "webhook:orders/create",
+              rootDurableJobId: "root-no-winner",
+              applyingDurableJobId: "job-loser",
+              payloadDigest: digest,
+            },
+            async () => true,
+          ),
+        ),
+      ).rejects.toMatchObject({ code: APPLICATION_OUTCOME_UNCERTAIN });
+    } finally {
+      __setForceMissingWinnerAfterConflictForTests(false);
+    }
+  });
+
+  it("NEW-PR4-SC01: finalize with matching receipt → already_applied_verified_after_rollback", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-finalize-ok", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-ok",
+    });
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: job.webhookDeliveryId,
+      idempotencyKey: job.idempotencyKey,
+    });
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: job.jobType,
+        rootDurableJobId: job.id,
+        firstApplyingDurableJobId: job.id,
+        payloadDigest: job.payloadDigest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+
+    const result = await finalizeApplicationAfterRollback({
+      db: ownerTenantShim(prisma, shopId),
+      applicationKey,
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-ok",
+    });
+    expect(result.outcome).toBe("succeeded");
+    expect(
+      (await prisma.durableJob.findUniqueOrThrow({ where: { id: job.id } }))
+        .state,
+    ).toBe("SUCCEEDED");
+  });
+
+  it("NEW-PR4-SC01: repeated delivery after verified success does not reapply merchant writes", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-replay", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: job.webhookDeliveryId,
+      idempotencyKey: job.idempotencyKey,
+    });
+    const db = ownerTenantShim(prisma, shopId);
+    await db.$transaction(async (tx) =>
+      applyWithApplicationReceipt(
+        tx,
+        {
+          applicationKey,
+          sourceJobType: job.jobType,
+          rootDurableJobId: job.id,
+          applyingDurableJobId: job.id,
+          payloadDigest: job.payloadDigest,
+        },
+        async (tdb) => {
+          await tdb.salesDailyAggregate.create({
+            data: {
+              shop: SHOP,
+              shopId,
+              shopifyVariantId: "gid://shopify/ProductVariant/sc01-replay",
+              locationId: "default",
+              date: todayUtc(),
+              unitsSold: 1,
+              revenue: 1,
+            },
+          });
+          return true;
+        },
+      ),
+    );
+    const unitsBefore = (
+      await prisma.salesDailyAggregate.findFirstOrThrow({
+        where: {
+          shopId,
+          shopifyVariantId: "gid://shopify/ProductVariant/sc01-replay",
+        },
+      })
+    ).unitsSold;
+
+    const again = await db.$transaction(async (tx) =>
+      applyWithApplicationReceipt(
+        tx,
+        {
+          applicationKey,
+          sourceJobType: job.jobType,
+          rootDurableJobId: job.id,
+          applyingDurableJobId: `${job.id}-replay`,
+          payloadDigest: job.payloadDigest,
+        },
+        async () => {
+          throw new Error("must_not_reapply");
+        },
+      ),
+    );
+    expect(again.status).toBe("already_applied");
+    expect(
+      (
+        await prisma.salesDailyAggregate.findFirstOrThrow({
+          where: {
+            shopId,
+            shopifyVariantId: "gid://shopify/ProductVariant/sc01-replay",
+          },
+        })
+      ).unitsSold,
+    ).toBe(unitsBefore);
+  });
+
+  // Shared finalize path used by both tenant-job-envelope-v2 and -v3 processors.
+  it("NEW-PR4-SC01: v2 matching receipt → verified success", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-v2-match", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-v2-ok",
+    });
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: job.webhookDeliveryId,
+      idempotencyKey: job.idempotencyKey,
+    });
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: job.jobType,
+        rootDurableJobId: job.id,
+        firstApplyingDurableJobId: job.id,
+        payloadDigest: job.payloadDigest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+    const result = await finalizeApplicationAfterRollback({
+      db: ownerTenantShim(prisma, shopId),
+      applicationKey,
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-v2-ok",
+    });
+    expect(result.outcome).toBe("succeeded");
+    if (result.outcome === "succeeded") {
+      expect(result.applicationStatus).toBe(
+        "already_applied_verified_after_rollback",
+      );
+    }
+  });
+
+  it("NEW-PR4-SC01: v2 missing receipt → dead-letter uncertain", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-v2-miss", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-v2-miss",
+    });
+    const result = await finalizeApplicationAfterRollback({
+      db: ownerTenantShim(prisma, shopId),
+      applicationKey: resolveApplicationKey({
+        jobType: job.jobType,
+        webhookDeliveryId: job.webhookDeliveryId,
+        idempotencyKey: job.idempotencyKey,
+      }),
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-v2-miss",
+    });
+    expect(result.outcome).toBe("dead_lettered");
+    expect(
+      (await prisma.durableJob.findUniqueOrThrow({ where: { id: job.id } }))
+        .state,
+    ).toBe("DEAD_LETTERED");
+  });
+
+  it("NEW-PR4-SC01: v3 matching receipt → verified success", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-v3-match", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-v3-ok",
+    });
+    const applicationKey = resolveApplicationKey({
+      jobType: job.jobType,
+      webhookDeliveryId: job.webhookDeliveryId,
+      idempotencyKey: job.idempotencyKey,
+    });
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId,
+        applicationKey,
+        sourceJobType: job.jobType,
+        rootDurableJobId: job.id,
+        firstApplyingDurableJobId: job.id,
+        payloadDigest: job.payloadDigest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+      },
+    });
+    const result = await finalizeApplicationAfterRollback({
+      db: ownerTenantShim(prisma, shopId),
+      applicationKey,
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-v3-ok",
+    });
+    expect(result.outcome).toBe("succeeded");
+    expect(
+      (await prisma.durableJob.findUniqueOrThrow({ where: { id: job.id } }))
+        .state,
+    ).toBe("SUCCEEDED");
+  });
+
+  it("NEW-PR4-SC01: v3 missing receipt → dead-letter uncertain", async () => {
+    const ingested = await ingestOrderCreate("wh-sc01-v3-miss", [
+      { variant_id: 1, quantity: 1, price: "10.00" },
+    ]);
+    const job = ingested.job!;
+    await transitionToEnqueuedForTests(prisma, job.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: job.id,
+      shopId,
+      workerId: "w-sc01-v3-miss",
+    });
+    const result = await finalizeApplicationAfterRollback({
+      db: ownerTenantShim(prisma, shopId),
+      applicationKey: resolveApplicationKey({
+        jobType: job.jobType,
+        webhookDeliveryId: job.webhookDeliveryId,
+        idempotencyKey: job.idempotencyKey,
+      }),
+      expectedPayloadDigest: job.payloadDigest,
+      durableJobId: job.id,
+      shopId,
+      attemptId: attempt.id,
+      workerId: "w-sc01-v3-miss",
+    });
+    expect(result.outcome).toBe("dead_lettered");
+    if (result.outcome === "dead_lettered") {
+      expect(result.errorCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+    }
+  });
+
+  it("NEW-PR4-SC01: RepeatableRead verification never succeeds without matching receipt", async () => {
+    const db = ownerTenantShim(prisma, shopId);
+    const verification = await verifyApplicationReceiptAfterRollback(db, {
+      applicationKey: "webhook-delivery:sc01-rr-absent",
+      expectedPayloadDigest: "c".repeat(64),
+    });
+    expect(verification.status).toBe("missing");
+    expect(verification).not.toMatchObject({ status: "verified" });
   });
 });

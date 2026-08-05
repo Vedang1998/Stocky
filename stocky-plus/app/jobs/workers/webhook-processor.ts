@@ -25,8 +25,10 @@ import {
   TENANT_JOB_ENVELOPE_V3_VERSION,
 } from "../../sync/envelope-v3.server";
 import { applyWithApplicationReceipt } from "../../sync/application-receipt.server";
+import { finalizeApplicationAfterRollback } from "../../sync/application-finalize.server";
 import {
   APPLICATION_ALREADY_APPLIED,
+  APPLICATION_DIGEST_CONFLICT,
   APPLICATION_OUTCOME_UNCERTAIN,
   resolveApplicationKey,
 } from "../../sync/execution-strategy.server";
@@ -432,22 +434,30 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       jobDispatchId: job.data.dispatchId ?? ctx.envelope.dispatchId,
     });
 
+    if (!durable.webhookDeliveryId) {
+      await completeAttemptFail({
+        durableJobId: durable.id,
+        shopId: durable.shopId,
+        attemptId: attempt.id,
+        errorCode: APPLICATION_OUTCOME_UNCERTAIN,
+        failureSummary:
+          "Webhook job missing webhookDeliveryId for application key",
+      });
+      throw new SyncControlPlaneError(
+        APPLICATION_OUTCOME_UNCERTAIN,
+        "Webhook job missing webhookDeliveryId for application key",
+      );
+    }
+
+    const applicationKey = resolveApplicationKey({
+      jobType: durable.jobType,
+      webhookDeliveryId: durable.webhookDeliveryId,
+      idempotencyKey: durable.idempotencyKey,
+    });
+
     try {
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
-
-      if (!durable.webhookDeliveryId) {
-        throw new SyncControlPlaneError(
-          APPLICATION_OUTCOME_UNCERTAIN,
-          "Webhook job missing webhookDeliveryId for application key",
-        );
-      }
-
-      const applicationKey = resolveApplicationKey({
-        jobType: durable.jobType,
-        webhookDeliveryId: durable.webhookDeliveryId,
-        idempotencyKey: durable.idempotencyKey,
-      });
 
       // Atomic merchant application: all writes + receipt in one tenant tx.
       const applyResult = await ctx.db.$transaction(async (tx) => {
@@ -477,16 +487,20 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     } catch (err) {
       if (
         err instanceof SyncControlPlaneError &&
-        err.code === APPLICATION_ALREADY_APPLIED
+        (err.code === APPLICATION_ALREADY_APPLIED ||
+          err.code === APPLICATION_DIGEST_CONFLICT ||
+          err.code === APPLICATION_OUTCOME_UNCERTAIN)
       ) {
-        // Concurrent loser — finalize success without duplicate merchant effects
-        // only if receipt exists; otherwise dead-letter uncertain.
-        await completeAttemptSuccess({
+        // NEW-PR4-SC01: never finalize SUCCEEDED from the error code alone.
+        // Merchant tx has rolled back; verify receipt in a new tenant transaction.
+        await finalizeApplicationAfterRollback({
+          db: ctx.db,
+          applicationKey,
+          expectedPayloadDigest: durable.payloadDigest,
           durableJobId: durable.id,
           shopId: durable.shopId,
           attemptId: attempt.id,
           workerId,
-          resultMetadata: { applicationStatus: "already_applied_race" },
         });
         return;
       }
@@ -593,14 +607,15 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       workerId,
     });
 
+    const applicationKey = resolveApplicationKey({
+      jobType: durable.jobType,
+      webhookDeliveryId: durable.webhookDeliveryId,
+      idempotencyKey: durable.idempotencyKey,
+    });
+
     try {
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
-      const applicationKey = resolveApplicationKey({
-        jobType: durable.jobType,
-        webhookDeliveryId: durable.webhookDeliveryId,
-        idempotencyKey: durable.idempotencyKey,
-      });
       await ctx.db.$transaction(async (tx) => {
         await applyWithApplicationReceipt(
           tx,
@@ -622,13 +637,26 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
         shopId: durable.shopId,
         attemptId: attempt.id,
         workerId,
+        resultMetadata: { applicationStatus: "applied" },
       });
     } catch (err) {
       if (
         err instanceof SyncControlPlaneError &&
-        err.code === APPLICATION_OUTCOME_UNCERTAIN
+        (err.code === APPLICATION_ALREADY_APPLIED ||
+          err.code === APPLICATION_DIGEST_CONFLICT ||
+          err.code === APPLICATION_OUTCOME_UNCERTAIN)
       ) {
-        throw err;
+        // NEW-PR4-SC01: align v2 with v3 — verify receipt after rollback.
+        await finalizeApplicationAfterRollback({
+          db: ctx.db,
+          applicationKey,
+          expectedPayloadDigest: durable.payloadDigest,
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+        });
+        return;
       }
       const message = err instanceof Error ? err.message : String(err);
       const retryable =
@@ -643,10 +671,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           errorCode: "processor_error",
           failureSummary: message,
         });
-      } else if (
-        !(err instanceof SyncControlPlaneError) ||
-        err.code !== APPLICATION_ALREADY_APPLIED
-      ) {
+      } else {
         await completeAttemptFail({
           durableJobId: durable.id,
           shopId: durable.shopId,
