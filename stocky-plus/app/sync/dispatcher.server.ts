@@ -22,6 +22,7 @@ import {
   executionStrategyForJobType,
 } from "./execution-strategy.server";
 import { assertTransition } from "./state-machine.server";
+import { SyncControlPlaneError } from "./errors";
 import {
   classifyAfterQueueAdd,
   inspectQueueDispatchPresence,
@@ -676,6 +677,9 @@ export async function enqueueWithDispatch(
   }
 }
 
+/** Cooldown for indeterminate DataIssue rows (NEW-PR4-SC03 / D-045). */
+export const INDETERMINATE_DATA_ISSUE_COOLDOWN_MS = 15 * 60_000;
+
 async function recordIndeterminateDispatchEvidence(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   input: {
@@ -689,21 +693,11 @@ async function recordIndeterminateDispatchEvidence(
     reason?: string;
   },
 ): Promise<void> {
-  await prisma.dataIssue.create({
-    data: {
-      shopId: input.shopId,
-      reasonCode: input.reasonCode.slice(0, 64),
-      severity: "WARNING",
-      redactedEvidence: {
-        durableJobId: input.durableJobId,
-        dispatchId: input.dispatchId,
-        dispatchSequence: input.dispatchSequence,
-        queueJobId: input.queueJobId,
-        queueState: input.queueState ?? null,
-        reason: input.reason ?? null,
-      },
-    },
-  });
+  const now = new Date();
+  const cooldownStart = new Date(now.getTime() - INDETERMINATE_DATA_ISSUE_COOLDOWN_MS);
+  const reasonCode = input.reasonCode.slice(0, 64);
+
+  // SyncHealth is always the current-state signal.
   await prisma.syncHealth.upsert({
     where: {
       shopId_syncDomain: {
@@ -715,22 +709,60 @@ async function recordIndeterminateDispatchEvidence(
       shopId: input.shopId,
       syncDomain: "dispatch_queue_presence",
       state: "DEGRADED",
-      detailCode: input.reasonCode.slice(0, 64),
+      detailCode: reasonCode,
       detailSummary: `Indeterminate queue presence for dispatch ${input.dispatchSequence}`.slice(
         0,
         512,
       ),
-      computedAt: new Date(),
+      computedAt: now,
     },
     update: {
       state: "DEGRADED",
-      detailCode: input.reasonCode.slice(0, 64),
+      detailCode: reasonCode,
       detailSummary: `Indeterminate queue presence for dispatch ${input.dispatchSequence}`.slice(
         0,
         512,
       ),
-      computedAt: new Date(),
+      computedAt: now,
     },
+  });
+
+  // Bounded DataIssue: first observation or after cooldown, under advisory lock.
+  await prisma.$transaction(async (tx) => {
+    const lockKey = `indet:${input.shopId}:${input.durableJobId}:${input.dispatchSequence}:${reasonCode}`;
+    await tx.$executeRaw`
+      SELECT pg_advisory_xact_lock(hashtext(${lockKey}))
+    `;
+
+    const recent = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "DataIssue"
+      WHERE "shopId" = ${input.shopId}
+        AND "reasonCode" = ${reasonCode}
+        AND "createdAt" >= ${cooldownStart}
+        AND "redactedEvidence"->>'durableJobId' = ${input.durableJobId}
+        AND "redactedEvidence"->>'dispatchId' = ${input.dispatchId}
+        AND COALESCE(("redactedEvidence"->>'dispatchSequence')::int, -999) = ${input.dispatchSequence}
+      LIMIT 1
+    `;
+    if (recent.length > 0) {
+      return;
+    }
+
+    await tx.dataIssue.create({
+      data: {
+        shopId: input.shopId,
+        reasonCode,
+        severity: "WARNING",
+        redactedEvidence: {
+          durableJobId: input.durableJobId,
+          dispatchId: input.dispatchId,
+          dispatchSequence: input.dispatchSequence,
+          queueJobId: input.queueJobId,
+          queueState: input.queueState ?? null,
+          reason: input.reason ?? null,
+        },
+      },
+    });
   });
 }
 
@@ -797,6 +829,15 @@ async function ackEnqueued(
  * (NO_AUTOMATIC_RETRY or attempt limit exhausted).
  * Dead letter may have finalAttemptId = NULL (no active attempt).
  */
+/** Test-only seam: force FAILED→DEAD_LETTERED to return zero rows (NEW-PR4-SC05). */
+let forceDeadLetterTransitionFailForTests = false;
+
+export function __setForceDeadLetterTransitionFailForTests(
+  value: boolean,
+): void {
+  forceDeadLetterTransitionFailForTests = value;
+}
+
 async function terminalizeStrandedEnqueuedJob(
   tx: Prisma.TransactionClient,
   input: {
@@ -882,7 +923,10 @@ async function terminalizeStrandedEnqueuedJob(
     });
   }
 
-  await tx.$executeRaw`
+  // NEW-PR4-SC05: require exactly one FAILED → DEAD_LETTERED row.
+  const deadLetteredRows = forceDeadLetterTransitionFailForTests
+    ? ([] as Array<{ id: string }>)
+    : await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE "DurableJob"
     SET
       state = 'DEAD_LETTERED',
@@ -892,8 +936,17 @@ async function terminalizeStrandedEnqueuedJob(
       "leaseOwner" = NULL,
       "leaseExpiresAt" = NULL,
       "updatedAt" = ${now}
-    WHERE id = ${live.id} AND state = 'FAILED'
+    WHERE id = ${live.id}
+      AND "shopId" = ${live.shopId}
+      AND state = 'FAILED'
+    RETURNING id
   `;
+  if (deadLetteredRows.length !== 1) {
+    throw new SyncControlPlaneError(
+      "illegal_job_transition",
+      "FAILED→DEAD_LETTERED transition did not return exactly one row",
+    );
+  }
 
   await tx.dataIssue.create({
     data: {
@@ -912,25 +965,38 @@ async function terminalizeStrandedEnqueuedJob(
   return "dead_lettered";
 }
 
+/**
+ * Attempt-budget semantics (NEW-PR4-SC08 / D-045):
+ * attemptCount represents consumed durable processing opportunities,
+ * including a confirmed missing/terminal dispatch that requires redispatch.
+ */
 function shouldDeadLetterStranded(job: DurableJob): {
   deadLetter: boolean;
   terminalReason: string;
+  nextAttemptCount: number;
 } {
   const strategy =
     job.executionStrategy ?? executionStrategyForJobType(job.jobType);
+  const nextAttemptCount = job.attemptCount + 1;
   if (strategy === "NO_AUTOMATIC_RETRY") {
     return {
       deadLetter: true,
       terminalReason: APPLICATION_OUTCOME_UNCERTAIN,
+      nextAttemptCount,
     };
   }
-  if (job.attemptCount >= job.maxAttempts) {
+  if (nextAttemptCount >= job.maxAttempts) {
     return {
       deadLetter: true,
       terminalReason: "max_attempts_exceeded",
+      nextAttemptCount,
     };
   }
-  return { deadLetter: false, terminalReason: "stranded_enqueued" };
+  return {
+    deadLetter: false,
+    terminalReason: "stranded_enqueued",
+    nextAttemptCount,
+  };
 }
 
 /**
@@ -982,14 +1048,18 @@ export async function recoverStrandedEnqueuedJobs(options?: {
         });
         if (unfinished > 0) return "noop" as const;
 
+        // NEW-PR4-SC04: null activeDispatchSequence must not omit the filter.
+        if (live.activeDispatchSequence == null) {
+          return { kind: "null_sequence" as const, live };
+        }
+
         const activeDispatch = await tx.jobDispatch.findFirst({
           where: {
             durableJobId: live.id,
             shopId: live.shopId,
-            dispatchSequence: live.activeDispatchSequence ?? undefined,
+            dispatchSequence: live.activeDispatchSequence,
             state: { in: ["ENQUEUED", "OBSERVED", "STARTED", "PENDING_ENQUEUE"] },
           },
-          orderBy: { dispatchSequence: "desc" },
         });
 
         if (!activeDispatch) {
@@ -1010,10 +1080,12 @@ export async function recoverStrandedEnqueuedJobs(options?: {
               : ("noop" as const);
           }
           assertTransition("ENQUEUED", "RETRY_WAIT");
+          // NEW-PR4-SC08: confirmed stranded recovery consumes attempt budget.
           await tx.$executeRaw`
             UPDATE "DurableJob"
             SET
               state = 'RETRY_WAIT',
+              "attemptCount" = ${decision.nextAttemptCount},
               "nextEligibleAt" = ${now},
               "leaseOwner" = NULL,
               "leaseExpiresAt" = NULL,
@@ -1042,6 +1114,24 @@ export async function recoverStrandedEnqueuedJobs(options?: {
       }
       if (outcome === "dead_lettered") {
         deadLettered += 1;
+        continue;
+      }
+      if (
+        outcome &&
+        typeof outcome === "object" &&
+        "kind" in outcome &&
+        outcome.kind === "null_sequence"
+      ) {
+        await recordIndeterminateDispatchEvidence(prisma, {
+          shopId: outcome.live.shopId,
+          durableJobId: outcome.live.id,
+          dispatchId: "none",
+          dispatchSequence: -1,
+          queueJobId: "none",
+          reasonCode: "null_active_dispatch_sequence",
+          reason: "activeDispatchSequence is NULL — fail closed",
+        });
+        indeterminate += 1;
         continue;
       }
       if (outcome === "noop" || !outcome || typeof outcome === "string") {
@@ -1147,6 +1237,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
           UPDATE "DurableJob"
           SET
             state = 'RETRY_WAIT',
+            "attemptCount" = ${decision.nextAttemptCount},
             "nextEligibleAt" = ${now},
             "leaseOwner" = NULL,
             "leaseExpiresAt" = NULL,

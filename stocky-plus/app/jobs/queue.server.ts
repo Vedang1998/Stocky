@@ -47,8 +47,10 @@ function getConnection(): IORedis {
   if (!connection) {
     const url = requireRedisUrl();
     // Fast-fail when tests intentionally point REDIS_URL at an unreachable host.
+    // STOCKY_TEST_REDIS_FAST_FAIL is test-only (NEW-PR4-SC02); ignored outside NODE_ENV=test.
     const fastFail =
-      process.env.STOCKY_TEST_REDIS_FAST_FAIL === "1" ||
+      (process.env.NODE_ENV === "test" &&
+        process.env.STOCKY_TEST_REDIS_FAST_FAIL === "1") ||
       /127\.0\.0\.1:1\b/.test(url) ||
       /\[::1\]:1\b/.test(url);
     connection = new IORedis(url, {

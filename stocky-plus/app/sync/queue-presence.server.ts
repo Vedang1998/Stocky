@@ -1,19 +1,24 @@
 /**
- * BullMQ queue-dispatch presence classification (NEW-PR4-C01 / D-044).
+ * BullMQ queue-dispatch presence classification (NEW-PR4-C01 / D-044 / D-045).
  *
  * `getJob()` returning an object is NOT equivalent to a runnable dispatch.
  * Only the committed runnable-state allowlist may lead to ENQUEUED.
+ *
+ * Pinned BullMQ 5.81.2: `Job.getState()` does not emit `paused`. Upgrading
+ * BullMQ requires revalidating this allowlist against reachable states.
  */
 import type { Job, Queue } from "bullmq";
 
-/** Committed allowlist — fail closed for any other/unknown state. */
+/**
+ * Committed allowlist — fail closed for any other/unknown state.
+ * Subset of states reachable from BullMQ 5.81.2 `Job.getState()`.
+ */
 export const RUNNABLE_BULLMQ_STATES = [
   "waiting",
   "delayed",
   "active",
   "prioritized",
   "waiting-children",
-  "paused",
 ] as const;
 
 export type RunnableBullmqState = (typeof RUNNABLE_BULLMQ_STATES)[number];
@@ -21,6 +26,9 @@ export type RunnableBullmqState = (typeof RUNNABLE_BULLMQ_STATES)[number];
 export const TERMINAL_BULLMQ_STATES = ["completed", "failed"] as const;
 
 export type TerminalBullmqState = (typeof TERMINAL_BULLMQ_STATES)[number];
+
+/** Documented max for the test-only Redis lookup timeout (ms). */
+export const MAX_TEST_REDIS_FAST_FAIL_MS = 5_000;
 
 const RUNNABLE_SET = new Set<string>(RUNNABLE_BULLMQ_STATES);
 const TERMINAL_SET = new Set<string>(TERMINAL_BULLMQ_STATES);
@@ -55,6 +63,28 @@ export function isRunnableBullmqState(state: string): boolean {
 
 export function isTerminalBullmqState(state: string): boolean {
   return TERMINAL_SET.has(state);
+}
+
+/**
+ * Resolve the test-only Redis lookup timeout.
+ * Honored only when NODE_ENV === "test". Ignored in production and development.
+ * Must be a positive integer ≤ MAX_TEST_REDIS_FAST_FAIL_MS.
+ */
+export function resolveTestRedisFastFailMs(
+  env: NodeJS.ProcessEnv = process.env,
+): number | null {
+  if (env.NODE_ENV !== "test") {
+    return null;
+  }
+  const raw = env.STOCKY_TEST_REDIS_FAST_FAIL_MS;
+  if (raw == null || raw.trim() === "") {
+    return null;
+  }
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > MAX_TEST_REDIS_FAST_FAIL_MS) {
+    return null;
+  }
+  return parsed;
 }
 
 /**
@@ -98,19 +128,29 @@ export async function inspectQueueDispatchPresence(
   let existing: Job | undefined;
   try {
     const getJobPromise = queue.getJob(queueJobId);
-    const fastFailMs = Number(process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS ?? "");
-    existing =
-      Number.isFinite(fastFailMs) && fastFailMs > 0
-        ? await Promise.race([
-            getJobPromise,
-            new Promise<undefined>((_, reject) =>
-              setTimeout(
-                () => reject(new Error("queue_lookup_timeout")),
-                fastFailMs,
-              ),
-            ),
-          ])
-        : await getJobPromise;
+    const fastFailMs = resolveTestRedisFastFailMs();
+    if (fastFailMs == null) {
+      existing = await getJobPromise;
+    } else {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        existing = await Promise.race([
+          getJobPromise.finally(() => {
+            if (timer !== undefined) clearTimeout(timer);
+          }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("queue_lookup_timeout")),
+              fastFailMs,
+            );
+          }),
+        ]);
+      } finally {
+        if (timer !== undefined) clearTimeout(timer);
+      }
+      // Absorb late rejection from the losing timeout/getJob promise.
+      void getJobPromise.catch(() => undefined);
+    }
   } catch (err) {
     return {
       status: "QUEUE_UNAVAILABLE",

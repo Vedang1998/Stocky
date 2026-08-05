@@ -130,9 +130,24 @@ export async function renewAttemptHeartbeat(input: {
   const now = new Date();
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
-  const updated = await prisma.jobAttempt.updateMany({
+  // NEW-PR4-SC04: resolve the exact unfinished attempt first — never pass an
+  // optional durableJobId that becomes an omitted Prisma filter.
+  const attempt = await prisma.jobAttempt.findFirst({
     where: {
       id: input.attemptId,
+      shopId: input.shopId,
+      finishedAt: null,
+      leaseOwner: input.workerId,
+    },
+    select: { id: true, durableJobId: true },
+  });
+  if (!attempt || !attempt.durableJobId) {
+    return null;
+  }
+
+  const updated = await prisma.jobAttempt.updateMany({
+    where: {
+      id: attempt.id,
       shopId: input.shopId,
       finishedAt: null,
       leaseOwner: input.workerId,
@@ -146,12 +161,7 @@ export async function renewAttemptHeartbeat(input: {
 
   await prisma.durableJob.updateMany({
     where: {
-      id: (
-        await prisma.jobAttempt.findUnique({
-          where: { id: input.attemptId },
-          select: { durableJobId: true },
-        })
-      )?.durableJobId,
+      id: attempt.durableJobId,
       shopId: input.shopId,
       state: "RUNNING",
       leaseOwner: input.workerId,
@@ -159,7 +169,7 @@ export async function renewAttemptHeartbeat(input: {
     data: { leaseExpiresAt, leaseOwner: input.workerId },
   });
 
-  return prisma.jobAttempt.findUnique({ where: { id: input.attemptId } });
+  return prisma.jobAttempt.findUnique({ where: { id: attempt.id } });
 }
 
 export async function completeAttemptSuccess(input: {
