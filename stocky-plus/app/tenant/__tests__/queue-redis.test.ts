@@ -9,12 +9,13 @@ import {
   resetTenantJobEnvelopeSecretCache,
   resolveTenantJobContext,
 } from "../job-envelope.server";
-import { resolveTenantJobContextV2 } from "../../sync/envelope-v2.server";
+import { resolveTenantJobContextV3 } from "../../sync/envelope-v3.server";
 import {
   enqueueAbcAnalysisForShop,
   enqueueCatalogSync,
   getCronQueue,
   CRON_QUEUE,
+  requireRedisUrl,
 } from "../../jobs/queue.server";
 import { TenantAuthorityError } from "../errors";
 import {
@@ -39,7 +40,7 @@ describe("tenant queue/Redis envelope integration (C-03)", () => {
     requireTenantJobEnvelopeSecret();
     prisma = createPrisma();
     await resetPublicSchema(prisma);
-    redis = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", {
+    redis = new IORedis(requireRedisUrl(), {
       maxRetriesPerRequest: null,
     });
     await redis.ping();
@@ -78,12 +79,12 @@ describe("tenant queue/Redis envelope integration (C-03)", () => {
     expect(job).toBeTruthy();
     const data = job!.data as { tenant: unknown; durableJobId?: string };
     expect(data.durableJobId).toBeTruthy();
-    const ctx = await resolveTenantJobContextV2(data.tenant, {
+    const ctx = await resolveTenantJobContextV3(data.tenant, {
       expectedJobNameOrTopic: "catalog-sync",
       expectedDurableJobId: data.durableJobId,
     });
     expect(ctx.tenant.shopId).toBe(shopAId);
-    expect(ctx.envelope.schemaVersion).toBe("tenant-job-envelope-v2");
+    expect(ctx.envelope.schemaVersion).toBe("tenant-job-envelope-v3");
   });
 
   it("rejects arbitrary pre-built envelope supplied to producer", async () => {
@@ -137,7 +138,7 @@ describe("tenant queue/Redis envelope integration (C-03)", () => {
     const contexts = await Promise.all(
       shopJobs.map((j) => {
         const data = j.data as { tenant: unknown; durableJobId?: string };
-        return resolveTenantJobContextV2(data.tenant, {
+        return resolveTenantJobContextV3(data.tenant, {
           expectedJobNameOrTopic: "abc-analysis-shop",
           expectedDurableJobId: data.durableJobId,
         });

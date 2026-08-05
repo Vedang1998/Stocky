@@ -223,7 +223,7 @@ export function createTenantJobEnvelope(
  * Order: shape → version → fields → domain → source → timestamp → age → signature.
  * Canonical Shop lookup happens in resolveTenantJobContext after this.
  *
- * New dispatches use tenant-job-envelope-v2 (see app/sync/envelope-v2.server.ts).
+ * New dispatches use tenant-job-envelope-v3 (see app/sync/envelope-v3.server.ts).
  * This function remains v1-only; use parseTenantJobEnvelopeAny for workers that
  * must accept both during the compatibility window.
  */

@@ -67,14 +67,26 @@ export type WebhookJobData = {
 };
 
 export type CatalogSyncJobData = {
-  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2;
+  tenant:
+    | TenantJobEnvelopeV1
+    | TenantJobEnvelopeV2
+    | import("../sync/envelope-v3.server").TenantJobEnvelopeV3;
   durableJobId?: string;
+  dispatchId?: string;
+  dispatchSequence?: number;
+  queueJobId?: string;
   payload?: Record<string, unknown>;
 };
 
 export type AbcShopJobData = {
-  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2;
+  tenant:
+    | TenantJobEnvelopeV1
+    | TenantJobEnvelopeV2
+    | import("../sync/envelope-v3.server").TenantJobEnvelopeV3;
   durableJobId?: string;
+  dispatchId?: string;
+  dispatchSequence?: number;
+  queueJobId?: string;
   payload?: Record<string, unknown>;
 };
 
