@@ -1,18 +1,18 @@
 # Project Status
 
 **Updated:** 2026-08-05
-**Current stage:** Phase 1 PR 4 SECOND CORRECTIONS REQUIRED (D-044) — Synchronization Control Plane
+**Current stage:** Phase 1 PR 4 SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION (D-044) — Synchronization Control Plane
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 SECOND CORRECTIONS IN PROGRESS; Phase 1 itself remains IN PROGRESS
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** SECOND CORRECTIONS REQUIRED (D-044) — not accepted
+**Phase 1 PR 4:** SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION (D-044) — not accepted
 **Phase 1:** IN PROGRESS
 **PR 5:** BLOCKED until PR 4 independently reviewed, accepted, and merged
 
@@ -26,6 +26,7 @@
 | Original reviewed implementation | `7c36bc1bf2a1d6ccbd0e9d7131ae2d692fefea7a` |
 | First correction runtime/test | `0697a2878eed3ce8013f59af54de7d0adf98d548` |
 | First correction-review tip / starting head | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` |
+| Original second-correction tip / mechanical-completion starting head | `1f5b74bca35e580278b9980cb18aa81f0e9c6568` |
 | Second-correction scope | NEW-PR4-C01, NEW-PR4-C02 (blocking P1); NEW-PR4-C03…C08 (included) |
 | Status after Cursor work | `SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` |
 | Immutable reports | Original review + first correction-review — do not edit |
@@ -75,7 +76,7 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Cursor implements D-044 second corrections, then returns to ChatGPT for exact-head verification and a fresh independent Claude Code second-correction review. After Cursor handoff: `SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`. Draft PR #20 remains draft — do not merge.
+**Next action:** Return to ChatGPT for exact-head verification and a fresh independent Claude Code PR 4 second-correction review. Cursor has completed D-044 mechanical completion of NEW-PR4-C01. Status: `SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`. Draft PR #20 remains draft — do not merge.
 
 ## Current truth
 
@@ -84,7 +85,7 @@
 - Phase 1 itself remains IN PROGRESS.
 - PR 1 / PR 2 / PR 3 are MERGED AND CLOSED.
 - Current main is `e69bc53d91db75472b0d0998bf1b74ee6246adb1`.
-- PR 4 is **SECOND CORRECTIONS REQUIRED** under D-044 on `phase-1/sync-control-plane`.
+- PR 4 is **SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** under D-044 on `phase-1/sync-control-plane`.
 - Active implementation PR is **#20 — OPEN, DRAFT, UNMERGED**.
 - The original independent review report and the first correction-review report remain immutable.
 - PR 5 remains BLOCKED.

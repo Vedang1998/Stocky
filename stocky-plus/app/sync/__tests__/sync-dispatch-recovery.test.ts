@@ -704,7 +704,7 @@ describe("test:sync-dispatch-recovery", () => {
   async function enqueueStrandedWebhook(webhookId: string): Promise<{
     jobId: string;
     shopId: string;
-    dispatch: { id: string; dispatchSequence: number; queueJobId: string; state: string };
+    dispatch: Awaited<ReturnType<typeof prisma.jobDispatch.findFirstOrThrow>>;
   }> {
     const ingested = await ingestAuthenticatedWebhook({
       verifiedShop: SHOP,
@@ -1083,20 +1083,13 @@ describe("test:sync-dispatch-recovery", () => {
     if (qjB) await qjB.remove();
     await q.close();
 
-    // Shop A: indeterminate unknown; Shop B: confirmed missing → RETRY_WAIT
-    __setQueueStateClassificationSeamForTests((_state) => {
-      // Only force unknown for shop A's queue job id.
-      return null;
-    });
-    // Force shop A indeterminate via UNKNOWN seam keyed by inspecting after we
-    // leave A's redis job present but reclassify as unknown.
-    const originalInspectSeam = (state: string) =>
+    // Shop A: leave Redis job present → UNKNOWN via seam.
+    // Shop B: confirmed missing → RETRY_WAIT (seam only applies when Job exists).
+    __setQueueStateClassificationSeamForTests((state) =>
       state
-        ? ({ status: "UNKNOWN_STATE" as const, queueState: "future-shop-a" })
-        : null;
-
-    // Apply unknown only while A's job still has a Redis object; B is MISSING.
-    __setQueueStateClassificationSeamForTests(originalInspectSeam);
+        ? { status: "UNKNOWN_STATE" as const, queueState: "future-shop-a" }
+        : null,
+    );
 
     const result = await recoverStrandedEnqueuedJobs({
       olderThanMs: 60_000,

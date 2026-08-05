@@ -51,8 +51,10 @@ Do **not** mark any finding or risk closed on Cursor evidence alone. PR #20 rema
 | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` | Unchanged `origin/main` / authorized base |
 | `7c36bc1bf2a1d6ccbd0e9d7131ae2d692fefea7a` | Original independently reviewed implementation head |
 | `0697a2878eed3ce8013f59af54de7d0adf98d548` | First correction runtime/test head |
-| `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` | First correction-review tip; required second-correction starting head |
-| *(second-correction commits)* | Cursor second-correction implementation — pending independent verification |
+| `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` | First correction-review tip; D-044 starting head |
+| `1f5b74bca35e580278b9980cb18aa81f0e9c6568` | Original second-correction tip; mechanical-completion starting head |
+| `0158a09eb3b0f1b62c9459e2db4df344183a6f59` | NEW-PR4-C01 mechanical-completion runtime/test head |
+| *(docs tip)* | Final PR tip after documentation sync — pending independent verification |
 
 Do not amend, rebase, squash, reset away, replace, or force-push the independent review commits. Do not edit:
 
@@ -68,10 +70,10 @@ Do not amend, rebase, squash, reset away, replace, or force-push the independent
 | Field | Value |
 |---|---|
 | Severity | P1 |
-| Object | `app/sync/dispatcher.server.ts`; `app/sync/queue-presence.server.ts`; migration `20260805120000_sync_control_plane_second_correction` |
+| Object | `app/sync/dispatcher.server.ts`; `app/sync/queue-presence.server.ts`; migrations `20260805120000_sync_control_plane_second_correction`, `20260805140000_sync_control_plane_enqueued_failed` |
 | Independent evidence | ADV-1 — `durableJobState='ENQUEUED'`, `runnableInRedis=0`, `failedInRedis=1`; mere `getJob()` object presence treated as success |
-| Required correction | Runnable-state allowlist (`waiting` / `delayed` / `active` / `prioritized` / `waiting-children` / `paused`); never ack `DISPATCH_LEASED → ENQUEUED` unless runnable presence is demonstrated; terminal retained jobs must be superseded with a new dispatch sequence; atomic `ackEnqueued` (DurableJob + JobDispatch identity checks in one transaction); stranded `ENQUEUED` (no unfinished attempt, no runnable Redis dispatch) recovers to `RETRY_WAIT` (`stranded_enqueued`); additive transition-guard + stranded index migration |
-| Acceptance tests | `test:sync-dispatch-recovery` — retained failed/completed queue job does not ack ENQUEUED; terminal supersede + new sequence enqueues runnable job; ack-loss with live runnable reuses dispatch; stranded ENQUEUED recovery; dual-dispatcher / identity mismatch fail closed |
+| Required correction | Runnable-state allowlist (`waiting` / `delayed` / `active` / `prioritized` / `waiting-children` / `paused`); never ack `DISPATCH_LEASED → ENQUEUED` unless runnable presence is demonstrated; terminal retained jobs must be superseded with a new dispatch sequence; **unknown BullMQ states fail closed** (no supersede, no new sequence, no ack, no Redis delete); **queue unavailability is indeterminate** (not proof of absence); stranded `ENQUEUED` (no unfinished attempt, confirmed missing or terminal Redis dispatch) must **retry or dead-letter according to execution strategy and attempt limits** (`ENQUEUED → RETRY_WAIT` when retryable below limits; `ENQUEUED → FAILED → DEAD_LETTERED` for `NO_AUTOMATIC_RETRY` / max attempts, with `finalAttemptId` nullable); atomic `ackEnqueued`; additive transition-guard including `ENQUEUED → FAILED` + stranded index migration |
+| Acceptance tests | `test:sync-dispatch-recovery` — retained failed/completed queue job does not ack ENQUEUED; terminal supersede + new sequence enqueues runnable job; ack-loss with live runnable reuses dispatch; stranded ENQUEUED recovery by strategy/limits; unknown queue state fails closed (no new sequence / no FAILED/SUPERSEDED / no ack); queue outage does not duplicate dispatch; non-retryable and max-attempt stranded jobs dead-letter; dual-dispatcher / identity mismatch fail closed; DB/app transition graphs agree |
 | Affected risks | R-099; R-031; R-032 |
 | Status | IMPLEMENTED — PENDING INDEPENDENT VERIFICATION |
 

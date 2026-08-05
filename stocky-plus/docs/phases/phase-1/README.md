@@ -6,8 +6,8 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** SECOND CORRECTIONS REQUIRED — D-044 — not accepted
-**Next authorized implementation unit:** Cursor implements D-044 second corrections, then returns to ChatGPT for exact-head verification and a fresh independent Claude Code second-correction review
+**Phase 1 PR 4:** SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — D-044 — not accepted
+**Next authorized action:** Return to ChatGPT for exact-head verification and a fresh independent Claude Code PR 4 second-correction review
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
@@ -22,7 +22,7 @@
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
-- PR 4 is **SECOND CORRECTIONS REQUIRED** under D-044 on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- PR 4 is **SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** under D-044 on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
 - After Cursor handoff language: `SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
 - First-cycle correction artifacts: `PR4_SYNC_CONTROL_PLANE_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md`.
 - Second-correction artifacts: `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_IMPLEMENTATION_REPORT.md`.
@@ -50,7 +50,7 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 4 | **SECOND CORRECTIONS REQUIRED** (D-044; PR #20 draft) |
+| PR 4 | **SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** (D-044; PR #20 draft) |
 
 ### PR 3 correction-history identities (preserved)
 
