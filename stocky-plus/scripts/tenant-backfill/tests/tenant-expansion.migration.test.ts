@@ -9,6 +9,7 @@ import {
   mkdirSync,
   cpSync,
   rmSync,
+  readdirSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,6 +25,88 @@ import { applyIndexes } from "../../tenant-indexes/apply";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = join(__dirname, "..", "..", "..");
 const MIGRATIONS_DIR = join(APP_ROOT, "prisma", "migrations");
+
+/** Exact migration folders present on this branch (stable names, not globs). */
+const ALL_MIGRATION_NAMES = [
+  "20260728000000_init_stocky_plus",
+  "20260730160000_tenant_expansion",
+  "20260730160100_tenant_compatibility_indexes",
+  "20260730210000_tenant_backfill_correction",
+  "20260730220000_tenant_ownership_issue_detection",
+  "20260803120000_tenant_enforcement_helpers",
+  "20260804180000_sync_control_plane",
+  "20260804210000_sync_control_plane_correction",
+  "20260804220000_sync_control_plane_correction_defaults",
+] as const;
+
+/**
+ * Control-plane tables that receive stocky_control_plane policies when that
+ * role already exists (see 20260804210000_sync_control_plane_correction).
+ * SyncApplicationReceipt is intentionally omitted — merchant-domain only.
+ */
+const CONTROL_PLANE_POLICY_TABLES = [
+  "WebhookDelivery",
+  "DurableJob",
+  "JobAttempt",
+  "DeadLetter",
+  "JobReplay",
+  "SyncRun",
+  "SyncCursor",
+  "ReconciliationRun",
+  "DataIssue",
+  "SyncHealth",
+  "JobDispatch",
+] as const;
+
+function listMigrationDirEntries(): string[] {
+  return readdirSync(MIGRATIONS_DIR).sort();
+}
+
+async function controlPlaneRoleExists(prisma: PrismaClient): Promise<boolean> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(
+    `SELECT EXISTS (
+       SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane'
+     ) AS exists`,
+  );
+  return Boolean(rows[0]?.exists);
+}
+
+async function assertControlPlanePoliciesMatchRole(
+  prisma: PrismaClient,
+): Promise<void> {
+  const rolePresent = await controlPlaneRoleExists(prisma);
+  const policies = await prisma.$queryRawUnsafe<
+    Array<{ tablename: string; policyname: string; roles: string[] }>
+  >(
+    `SELECT tablename, policyname, roles
+     FROM pg_policies
+     WHERE schemaname = 'public'
+     ORDER BY tablename, policyname`,
+  );
+
+  if (!rolePresent) {
+    // Role absent → correction migration skips CREATE POLICY.
+    expect(policies.length).toBe(0);
+    return;
+  }
+
+  // Role present (CI after sync:roles:provision) → exactly one policy per
+  // control-plane table; SyncApplicationReceipt must remain policy-free here.
+  const expected = [...CONTROL_PLANE_POLICY_TABLES]
+    .map((t) => ({
+      tablename: t,
+      policyname: `${t}_control_plane_all`,
+      roles: ["stocky_control_plane"],
+    }))
+    .sort((a, b) => a.tablename.localeCompare(b.tablename));
+
+  expect(policies).toEqual(expected);
+
+  const receiptPolicies = policies.filter(
+    (p) => p.tablename === "SyncApplicationReceipt",
+  );
+  expect(receiptPolicies.length).toBe(0);
+}
 
 /** OverlayFS-safe directory move (rename can raise EXDEV). */
 function moveDir(from: string, to: string): void {
@@ -119,6 +202,17 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
       }
     }
     throw error;
+  } finally {
+    // Always remove the parking root so a failed/partial run cannot leave
+    // renamed migration folders or an empty parked tree behind.
+    if (existsSync(parked)) {
+      for (const p of parkedPaths) {
+        if (existsSync(p.dest) && !existsSync(p.src)) {
+          moveDir(p.dest, p.src);
+        }
+      }
+      rmSync(parked, { recursive: true, force: true });
+    }
   }
 }
 
@@ -145,12 +239,100 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
 
   it("applies new migrations on top of current-main init schema", async () => {
     await resetPublicSchema(prisma);
+    const beforeDir = listMigrationDirEntries();
     const { initOut, restOut } = migrateInitOnlyThenRest();
     expect(initOut).toContain("20260728000000_init_stocky_plus");
     expect(initOut).not.toContain("20260730160000_tenant_expansion");
+    expect(initOut).not.toContain("20260804210000_sync_control_plane_correction");
+    expect(initOut).not.toContain(
+      "20260804220000_sync_control_plane_correction_defaults",
+    );
     expect(restOut).toContain("20260730160000_tenant_expansion");
     expect(restOut).toContain("20260730160100_tenant_compatibility_indexes");
     expect(restOut).toContain("20260730210000_tenant_backfill_correction");
+    expect(restOut).toContain("20260804210000_sync_control_plane_correction");
+    expect(restOut).toContain(
+      "20260804220000_sync_control_plane_correction_defaults",
+    );
+    expect(listMigrationDirEntries()).toEqual(beforeDir);
+  }, 180_000);
+
+  it("parks PR4 correction migrations for init-only, restores them, applies once, and matches role-conditional policies", async () => {
+    const beforeDir = listMigrationDirEntries();
+    expect(beforeDir).toEqual(
+      expect.arrayContaining([
+        "20260804180000_sync_control_plane",
+        "20260804210000_sync_control_plane_correction",
+        "20260804220000_sync_control_plane_correction_defaults",
+        "migration_lock.toml",
+      ]),
+    );
+
+    // Ensure the CI-like role exists so the pre-fix assertion (policies===0)
+    // would fail; post-fix asserts the exact eleven control-plane policies.
+    await prisma.$executeRawUnsafe(`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') THEN
+          CREATE ROLE stocky_control_plane NOINHERIT NOLOGIN;
+        END IF;
+      END $$;
+    `);
+    expect(await controlPlaneRoleExists(prisma)).toBe(true);
+
+    await resetPublicSchema(prisma);
+    const { initOut, restOut } = migrateInitOnlyThenRest();
+
+    expect(initOut).toContain("20260728000000_init_stocky_plus");
+    expect(initOut).not.toContain("20260804180000_sync_control_plane");
+    expect(initOut).not.toContain("20260804210000_sync_control_plane_correction");
+    expect(initOut).not.toContain(
+      "20260804220000_sync_control_plane_correction_defaults",
+    );
+
+    expect(restOut).toContain("20260804180000_sync_control_plane");
+    expect(restOut).toContain("20260804210000_sync_control_plane_correction");
+    expect(restOut).toContain(
+      "20260804220000_sync_control_plane_correction_defaults",
+    );
+
+    const recorded = await prisma.$queryRawUnsafe<
+      Array<{ migration_name: string; cnt: bigint }>
+    >(
+      `SELECT migration_name, COUNT(*)::bigint AS cnt
+       FROM _prisma_migrations
+       GROUP BY migration_name
+       ORDER BY migration_name`,
+    );
+    expect(recorded.map((r) => r.migration_name)).toEqual([
+      ...ALL_MIGRATION_NAMES,
+    ]);
+    for (const row of recorded) {
+      expect(Number(row.cnt)).toBe(1);
+    }
+
+    // Second deploy must be a no-op (no pending / no duplicate rows).
+    const second = migrateDeploy();
+    expect(second.toLowerCase()).toMatch(/no pending|already|up to date|0/);
+    const afterSecond = await prisma.$queryRawUnsafe<
+      Array<{ migration_name: string; cnt: bigint }>
+    >(
+      `SELECT migration_name, COUNT(*)::bigint AS cnt
+       FROM _prisma_migrations
+       GROUP BY migration_name
+       ORDER BY migration_name`,
+    );
+    expect(afterSecond.map((r) => r.migration_name)).toEqual([
+      ...ALL_MIGRATION_NAMES,
+    ]);
+    for (const row of afterSecond) {
+      expect(Number(row.cnt)).toBe(1);
+    }
+
+    await assertControlPlanePoliciesMatchRole(prisma);
+
+    // Fixture cleanup: migration directory must be fully restored.
+    expect(listMigrationDirEntries()).toEqual(beforeDir);
+    expect(existsSync(join(APP_ROOT, ".tmp-parked-migrations"))).toBe(false);
   }, 180_000);
 
   it("preserves legacy shop, Session shape, nullable shopId, indexes; PR4 control-plane RLS only; no composite FKs; flags OFF", async () => {
@@ -246,11 +428,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       "WebhookDelivery",
     ]);
 
-    // Policies for stocky_control_plane are created only when that role exists.
-    const policies = await prisma.$queryRawUnsafe<Array<{ policyname: string }>>(
-      `SELECT policyname FROM pg_policies WHERE schemaname='public'`,
-    );
-    expect(policies.length).toBe(0);
+    // Policies are role-conditional: created only when stocky_control_plane
+    // already exists (CI after sync role provisioning). Assert exact set.
+    await assertControlPlanePoliciesMatchRole(prisma);
 
     const indexes = await prisma.$queryRawUnsafe<Array<{ indexname: string }>>(
       `SELECT indexname FROM pg_indexes WHERE schemaname='public'`,
