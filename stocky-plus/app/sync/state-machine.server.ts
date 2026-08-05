@@ -17,6 +17,7 @@ export const DURABLE_JOB_TRANSITIONS: ReadonlyArray<
   ["ENQUEUED", "RUNNING"],
   ["ENQUEUED", "CANCELLED"],
   ["ENQUEUED", "RETRY_WAIT"], // NEW-PR4-C01 stranded ENQUEUED recovery
+  ["ENQUEUED", "FAILED"], // NEW-PR4-C01 stranded non-retryable / exhausted terminalization
   ["RUNNING", "SUCCEEDED"],
   ["RUNNING", "RETRY_WAIT"],
   ["RUNNING", "FAILED"],

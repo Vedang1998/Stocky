@@ -381,6 +381,18 @@ jobs:
       - name: "NEW-PR4-C01: stranded ENQUEUED recovery"
         run: npm run test:sync-dispatch-recovery -- -t "stranded ENQUEUED recovery"
 
+      - name: "NEW-PR4-C01: unknown queue state fails closed"
+        run: npm run test:sync-dispatch-recovery -- -t "existing unknown queue state does not create another dispatch sequence"
+
+      - name: "NEW-PR4-C01: queue outage does not duplicate dispatch"
+        run: npm run test:sync-dispatch-recovery -- -t "Redis outage cannot create duplicate dispatches"
+
+      - name: "NEW-PR4-C01: non-retryable stranded job dead-letters"
+        run: npm run test:sync-dispatch-recovery -- -t "NO_AUTOMATIC_RETRY stranded job dead-letters"
+
+      - name: "NEW-PR4-C01: max-attempt stranded job dead-letters"
+        run: npm run test:sync-dispatch-recovery -- -t "max-attempt stranded job dead-letters"
+
       - name: Sync dispatch recovery (full suite)
         run: npm run test:sync-dispatch-recovery
 

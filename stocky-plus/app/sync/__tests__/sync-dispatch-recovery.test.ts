@@ -19,8 +19,17 @@ import {
 } from "../lifecycle.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
-import { WEBHOOK_QUEUE } from "../../jobs/queue.server";
-import { inspectQueueDispatchPresence } from "../queue-presence.server";
+import {
+  WEBHOOK_QUEUE,
+  requireRedisUrl,
+  resetQueueClientsForTests,
+} from "../../jobs/queue.server";
+import {
+  __setQueueStateClassificationSeamForTests,
+  inspectQueueDispatchPresence,
+} from "../queue-presence.server";
+import { APPLICATION_OUTCOME_UNCERTAIN } from "../execution-strategy.server";
+import { DURABLE_JOB_TRANSITION_PAIRS } from "../state-machine.server";
 
 const SHOP = "pr4-dispatch.myshopify.com";
 
@@ -155,13 +164,8 @@ describe("test:sync-dispatch-recovery", () => {
     redis = new IORedis(process.env.REDIS_URL, { maxRetriesPerRequest: null });
   });
 
-  afterAll(async () => {
-    await resetControlPlanePrismaForTests();
-    await prisma.$disconnect();
-    await redis.quit();
-  });
-
   beforeEach(async () => {
+    __setQueueStateClassificationSeamForTests(null);
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
@@ -175,6 +179,13 @@ describe("test:sync-dispatch-recovery", () => {
     await q.obliterate({ force: true }).catch(() => undefined);
     await q.close();
     await resetControlPlanePrismaForTests();
+  });
+
+  afterAll(async () => {
+    __setQueueStateClassificationSeamForTests(null);
+    await resetControlPlanePrismaForTests();
+    await prisma.$disconnect();
+    await redis.quit();
   });
 
   it("retry while failed BullMQ job retained uses new dispatch sequence (F-PR4-02)", async () => {
@@ -512,9 +523,12 @@ describe("test:sync-dispatch-recovery", () => {
         presence.status,
       );
     } else {
-      expect(["not_runnable", "queue_unavailable", "shop_disabled"]).toContain(
-        result.outcome,
-      );
+      expect([
+        "not_runnable",
+        "queue_unavailable",
+        "queue_state_unknown",
+        "shop_disabled",
+      ]).toContain(result.outcome);
     }
 
     // Durable must not already be ENQUEUED from enqueueWithDispatch alone
@@ -683,5 +697,719 @@ describe("test:sync-dispatch-recovery", () => {
     expect(dispatches.every((d) => d.dispatchSequence === 1)).toBe(true);
     expect(dispatches.some((d) => d.state === "ENQUEUED")).toBe(true);
     await q.close();
+  });
+
+  // ─── D-044 NEW-PR4-C01 mechanical completion regressions ─────────────────
+
+  async function enqueueStrandedWebhook(webhookId: string): Promise<{
+    jobId: string;
+    shopId: string;
+    dispatch: { id: string; dispatchSequence: number; queueJobId: string; state: string };
+  }> {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId,
+      apiVersion: "2026-07",
+      payload: {
+        id: Number(webhookId.replace(/\D/g, "").slice(-6) || "1"),
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    const jobId = ingested.job!.id;
+    const shopId = ingested.job!.shopId;
+    expect((await dispatchPendingJobs({ batchSize: 10 })).enqueued).toBe(1);
+    const dispatch = await prisma.jobDispatch.findFirstOrThrow({
+      where: { durableJobId: jobId, dispatchSequence: 1 },
+    });
+    await prisma.durableJob.update({
+      where: { id: jobId },
+      data: { enqueuedAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    return { jobId, shopId, dispatch };
+  }
+
+  it("NEW-PR4-C01: existing unknown queue state does not create another dispatch sequence", async () => {
+    const { jobId, shopId, dispatch } = await enqueueStrandedWebhook("wh-c01-unk-seq");
+    await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
+
+    __setQueueStateClassificationSeamForTests(() => ({
+      status: "UNKNOWN_STATE",
+      queueState: "future-bullmq-state-x",
+    }));
+
+    await prisma.$executeRaw`
+      UPDATE "DurableJob"
+      SET
+        state = 'DISPATCH_LEASED',
+        "leaseOwner" = 'dispatcher:unk-seq',
+        "leaseExpiresAt" = NOW() + INTERVAL '60 seconds',
+        "updatedAt" = NOW()
+      WHERE id = ${jobId} AND state = 'PENDING'
+    `;
+
+    const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    const result = await enqueueWithDispatch(
+      {
+        id: claimed.id,
+        shopId,
+        jobType: claimed.jobType,
+        source: claimed.source,
+        queueName: claimed.queueName,
+        payloadSchemaVersion: claimed.payloadSchemaVersion,
+        sanitizedPayload: claimed.sanitizedPayload,
+        payloadDigest: claimed.payloadDigest,
+        correlationId: claimed.correlationId,
+        causationId: claimed.causationId,
+        state: claimed.state,
+        executionStrategy: claimed.executionStrategy,
+        activeDispatchSequence: claimed.activeDispatchSequence,
+      },
+      { ...dispatch, state: "PENDING_ENQUEUE" },
+      { workerId: "dispatcher:unk-seq" },
+    );
+
+    expect(result.outcome).toBe("queue_state_unknown");
+    if (result.outcome === "queue_state_unknown") {
+      expect(result.dispatch.dispatchSequence).toBe(1);
+      expect(result.queueState).toBe("future-bullmq-state-x");
+    }
+
+    const all = await prisma.jobDispatch.findMany({
+      where: { durableJobId: jobId },
+      orderBy: { dispatchSequence: "asc" },
+    });
+    expect(all).toHaveLength(1);
+    expect(all[0].dispatchSequence).toBe(1);
+    expect(all[0].state).toBe("PENDING_ENQUEUE");
+  });
+
+  it("NEW-PR4-C01: existing unknown queue state is not marked FAILED or SUPERSEDED", async () => {
+    const { jobId, shopId, dispatch } = await enqueueStrandedWebhook("wh-c01-unk-mark");
+    await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
+    __setQueueStateClassificationSeamForTests(() => ({
+      status: "UNKNOWN_STATE",
+      queueState: "future-bullmq-state-y",
+    }));
+    await prisma.$executeRaw`
+      UPDATE "DurableJob"
+      SET state = 'DISPATCH_LEASED', "leaseOwner" = 'dispatcher:unk-mark',
+          "leaseExpiresAt" = NOW() + INTERVAL '60 seconds', "updatedAt" = NOW()
+      WHERE id = ${jobId} AND state = 'PENDING'
+    `;
+    const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    const result = await enqueueWithDispatch(
+      {
+        id: claimed.id,
+        shopId,
+        jobType: claimed.jobType,
+        source: claimed.source,
+        queueName: claimed.queueName,
+        payloadSchemaVersion: claimed.payloadSchemaVersion,
+        sanitizedPayload: claimed.sanitizedPayload,
+        payloadDigest: claimed.payloadDigest,
+        correlationId: claimed.correlationId,
+        causationId: claimed.causationId,
+        state: claimed.state,
+        executionStrategy: claimed.executionStrategy,
+        activeDispatchSequence: claimed.activeDispatchSequence,
+      },
+      { ...dispatch, state: "PENDING_ENQUEUE" },
+      { workerId: "dispatcher:unk-mark" },
+    );
+    expect(result.outcome).toBe("queue_state_unknown");
+    const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
+    expect(d.state).toBe("PENDING_ENQUEUE");
+    expect(d.state).not.toBe("FAILED");
+    expect(d.state).not.toBe("SUPERSEDED");
+  });
+
+  it("NEW-PR4-C01: unknown queue state does not acknowledge the durable job", async () => {
+    const { jobId } = await enqueueStrandedWebhook("wh-c01-unk-ack");
+    const dispatch = await prisma.jobDispatch.findFirstOrThrow({
+      where: { durableJobId: jobId, dispatchSequence: 1 },
+    });
+    await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
+    __setQueueStateClassificationSeamForTests(() => ({
+      status: "UNKNOWN_STATE",
+      queueState: "future-bullmq-state-z",
+    }));
+
+    const before = await prisma.jobDispatch.count({ where: { durableJobId: jobId } });
+    const result = await dispatchPendingJobs({ batchSize: 10 });
+    expect(result.enqueued).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).not.toBe("ENQUEUED");
+    expect(["DISPATCH_LEASED", "PENDING"]).toContain(durable.state);
+
+    const after = await prisma.jobDispatch.count({ where: { durableJobId: jobId } });
+    expect(after).toBe(before);
+  });
+
+  it("NEW-PR4-C01: unknown post-add state preserves the existing dispatch as uncertain", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-c01-post-add-unk",
+      apiVersion: "2026-07",
+      payload: {
+        id: 201,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    const jobId = ingested.job!.id;
+    const shopId = ingested.job!.shopId;
+
+    await prisma.$executeRaw`
+      UPDATE "DurableJob"
+      SET state = 'DISPATCH_LEASED', "leaseOwner" = 'dispatcher:post-add',
+          "leaseExpiresAt" = NOW() + INTERVAL '60 seconds', "updatedAt" = NOW()
+      WHERE id = ${jobId} AND state = 'PENDING'
+    `;
+    const queueJobId = formatQueueJobId(jobId, 1);
+    const dispatch = await prisma.jobDispatch.create({
+      data: {
+        shopId,
+        durableJobId: jobId,
+        dispatchSequence: 1,
+        queueName: WEBHOOK_QUEUE,
+        queueJobId,
+        state: "PENDING_ENQUEUE",
+        payloadDigest: ingested.job!.payloadDigest,
+        leaseOwner: "dispatcher:post-add",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    // Classify as MISSING on inspect, then UNKNOWN after add (job exists in Redis).
+    let call = 0;
+    __setQueueStateClassificationSeamForTests((state) => {
+      call += 1;
+      // First classifyExisting after getJob may not run if MISSING.
+      // After add, classifyAfterQueueAdd → classifyExistingQueueJob.
+      if (call >= 1 && state) {
+        return { status: "UNKNOWN_STATE", queueState: "future-post-add-state" };
+      }
+      return null;
+    });
+
+    // Ensure no pre-existing Redis job so path is MISSING → add → unknown.
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const existing = await q.getJob(queueJobId);
+    if (existing) await existing.remove();
+
+    // Override: force inspect to MISSING by removing job; after add force unknown via seam.
+    // Seam applies only when a job object exists (classifyExistingQueueJob).
+    const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    const result = await enqueueWithDispatch(
+      {
+        id: claimed.id,
+        shopId,
+        jobType: claimed.jobType,
+        source: claimed.source,
+        queueName: claimed.queueName,
+        payloadSchemaVersion: claimed.payloadSchemaVersion,
+        sanitizedPayload: claimed.sanitizedPayload,
+        payloadDigest: claimed.payloadDigest,
+        correlationId: claimed.correlationId,
+        causationId: claimed.causationId,
+        state: claimed.state,
+        executionStrategy: claimed.executionStrategy,
+        activeDispatchSequence: claimed.activeDispatchSequence,
+      },
+      dispatch,
+      { workerId: "dispatcher:post-add" },
+    );
+
+    expect(result.outcome).toBe("queue_state_unknown");
+    if (result.outcome === "queue_state_unknown") {
+      expect(result.dispatch.dispatchSequence).toBe(1);
+    }
+    const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
+    expect(d.state).toBe("PENDING_ENQUEUE");
+    expect(d.dispatchSequence).toBe(1);
+    const all = await prisma.jobDispatch.findMany({ where: { durableJobId: jobId } });
+    expect(all).toHaveLength(1);
+    await q.close();
+  });
+
+  it("NEW-PR4-C01: dispatcher queue lookup failure does not acknowledge or allocate another sequence", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-c01-lookup-fail",
+      apiVersion: "2026-07",
+      payload: {
+        id: 202,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    const jobId = ingested.job!.id;
+    const originalRedis = requireRedisUrl();
+
+    await prisma.$executeRaw`
+      UPDATE "DurableJob"
+      SET state = 'DISPATCH_LEASED', "leaseOwner" = 'dispatcher:outage',
+          "leaseExpiresAt" = NOW() + INTERVAL '60 seconds', "updatedAt" = NOW()
+      WHERE id = ${jobId} AND state = 'PENDING'
+    `;
+    await prisma.jobDispatch.create({
+      data: {
+        shopId: ingested.job!.shopId,
+        durableJobId: jobId,
+        dispatchSequence: 1,
+        queueName: WEBHOOK_QUEUE,
+        queueJobId: formatQueueJobId(jobId, 1),
+        state: "PENDING_ENQUEUE",
+        payloadDigest: ingested.job!.payloadDigest,
+        leaseOwner: "dispatcher:outage",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+
+    try {
+      await resetQueueClientsForTests();
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL = "1";
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS = "500";
+      process.env.REDIS_URL = "redis://127.0.0.1:1";
+      await resetQueueClientsForTests();
+
+      const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+      const dispatch = await prisma.jobDispatch.findFirstOrThrow({
+        where: { durableJobId: jobId },
+      });
+      const result = await enqueueWithDispatch(
+        {
+          id: claimed.id,
+          shopId: claimed.shopId,
+          jobType: claimed.jobType,
+          source: claimed.source,
+          queueName: claimed.queueName,
+          payloadSchemaVersion: claimed.payloadSchemaVersion,
+          sanitizedPayload: claimed.sanitizedPayload,
+          payloadDigest: claimed.payloadDigest,
+          correlationId: claimed.correlationId,
+          causationId: claimed.causationId,
+          state: claimed.state,
+          executionStrategy: claimed.executionStrategy,
+          activeDispatchSequence: claimed.activeDispatchSequence,
+        },
+        dispatch,
+        { workerId: "dispatcher:outage" },
+      );
+      expect(result.outcome).toBe("queue_unavailable");
+      expect(result.dispatch.dispatchSequence).toBe(1);
+
+      const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+      expect(durable.state).toBe("DISPATCH_LEASED");
+      const all = await prisma.jobDispatch.findMany({ where: { durableJobId: jobId } });
+      expect(all).toHaveLength(1);
+      expect(all[0].state).toBe("PENDING_ENQUEUE");
+    } finally {
+      delete process.env.STOCKY_TEST_REDIS_FAST_FAIL;
+      delete process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS;
+      process.env.REDIS_URL = originalRedis;
+      await resetQueueClientsForTests();
+    }
+  });
+
+  it("NEW-PR4-C01: stranded reaper queue lookup failure leaves the job and dispatch unchanged", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-strand-outage");
+    const originalRedis = requireRedisUrl();
+    const beforeJob = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    const beforeDispatch = await prisma.jobDispatch.findUniqueOrThrow({
+      where: { id: dispatch.id },
+    });
+
+    try {
+      await resetQueueClientsForTests();
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL = "1";
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS = "500";
+      process.env.REDIS_URL = "redis://127.0.0.1:1";
+      await resetQueueClientsForTests();
+
+      const result = await recoverStrandedEnqueuedJobs({
+        olderThanMs: 60_000,
+        limit: 10,
+      });
+      expect(result.indeterminate).toBeGreaterThanOrEqual(1);
+      expect(result.recovered).toBe(0);
+      expect(result.deadLettered).toBe(0);
+
+      const afterJob = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+      const afterDispatch = await prisma.jobDispatch.findUniqueOrThrow({
+        where: { id: dispatch.id },
+      });
+      expect(afterJob.state).toBe(beforeJob.state);
+      expect(afterJob.state).toBe("ENQUEUED");
+      expect(afterDispatch.state).toBe(beforeDispatch.state);
+      expect(afterDispatch.dispatchSequence).toBe(1);
+    } finally {
+      delete process.env.STOCKY_TEST_REDIS_FAST_FAIL;
+      delete process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS;
+      process.env.REDIS_URL = originalRedis;
+      await resetQueueClientsForTests();
+    }
+  });
+
+  it("NEW-PR4-C01: queue failure for Shop A does not block Shop B", async () => {
+    const shopB = "pr4-dispatch-b.myshopify.com";
+    await prisma.shop.deleteMany({ where: { myshopifyDomain: shopB } });
+    await prisma.shop.create({ data: { myshopifyDomain: shopB } });
+
+    const a = await enqueueStrandedWebhook("wh-c01-shop-a");
+    const ingestedB = await ingestAuthenticatedWebhook({
+      verifiedShop: shopB,
+      topic: "orders/create",
+      webhookId: "wh-c01-shop-b",
+      apiVersion: "2026-07",
+      payload: {
+        id: 203,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    const jobB = ingestedB.job!.id;
+    expect((await dispatchPendingJobs({ batchSize: 10 })).enqueued).toBeGreaterThanOrEqual(1);
+    await prisma.durableJob.update({
+      where: { id: jobB },
+      data: { enqueuedAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    const dispatchB = await prisma.jobDispatch.findFirstOrThrow({
+      where: { durableJobId: jobB, dispatchSequence: 1 },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qjB = await q.getJob(dispatchB.queueJobId);
+    if (qjB) await qjB.remove();
+    await q.close();
+
+    // Shop A: indeterminate unknown; Shop B: confirmed missing → RETRY_WAIT
+    __setQueueStateClassificationSeamForTests((_state) => {
+      // Only force unknown for shop A's queue job id.
+      return null;
+    });
+    // Force shop A indeterminate via UNKNOWN seam keyed by inspecting after we
+    // leave A's redis job present but reclassify as unknown.
+    const originalInspectSeam = (state: string) =>
+      state
+        ? ({ status: "UNKNOWN_STATE" as const, queueState: "future-shop-a" })
+        : null;
+
+    // Apply unknown only while A's job still has a Redis object; B is MISSING.
+    __setQueueStateClassificationSeamForTests(originalInspectSeam);
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 20,
+    });
+    expect(result.indeterminate).toBeGreaterThanOrEqual(1);
+    expect(result.recovered).toBeGreaterThanOrEqual(1);
+
+    const jobAAfter = await prisma.durableJob.findUniqueOrThrow({ where: { id: a.jobId } });
+    const jobBAfter = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobB } });
+    expect(jobAAfter.state).toBe("ENQUEUED");
+    expect(jobBAfter.state).toBe("RETRY_WAIT");
+  });
+
+  it("NEW-PR4-C01: unknown state in the stranded reaper leaves the job unchanged", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-strand-unk");
+    __setQueueStateClassificationSeamForTests(() => ({
+      status: "UNKNOWN_STATE",
+      queueState: "future-stranded",
+    }));
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 10,
+    });
+    expect(result.indeterminate).toBeGreaterThanOrEqual(1);
+    expect(result.recovered).toBe(0);
+    expect(result.deadLettered).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
+    expect(durable.state).toBe("ENQUEUED");
+    expect(d.state).toBe("ENQUEUED");
+    expect(d.dispatchSequence).toBe(1);
+  });
+
+  it("NEW-PR4-C01: confirmed missing queue job below limits transitions to RETRY_WAIT", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-missing-retry");
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 10,
+    });
+    expect(result.recovered).toBeGreaterThanOrEqual(1);
+    expect(result.deadLettered).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).toBe("RETRY_WAIT");
+    const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
+    expect(d.state).toBe("FAILED");
+  });
+
+  it("NEW-PR4-C01: confirmed terminal queue job below limits transitions to RETRY_WAIT", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-term-retry");
+    await forceQueueJobTerminal(redis, dispatch.queueJobId, "failed");
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 10,
+    });
+    expect(result.recovered).toBeGreaterThanOrEqual(1);
+    expect(result.deadLettered).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).toBe("RETRY_WAIT");
+    const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
+    expect(d.state).toBe("SUPERSEDED");
+  });
+
+  it("NEW-PR4-C01: NO_AUTOMATIC_RETRY stranded job dead-letters with application_outcome_uncertain", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-no-retry");
+    await prisma.durableJob.update({
+      where: { id: jobId },
+      data: { executionStrategy: "NO_AUTOMATIC_RETRY" },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 10,
+    });
+    expect(result.deadLettered).toBeGreaterThanOrEqual(1);
+    expect(result.recovered).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).toBe("DEAD_LETTERED");
+    expect(durable.failureCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+
+    const dls = await prisma.deadLetter.findMany({ where: { durableJobId: jobId } });
+    expect(dls).toHaveLength(1);
+    expect(dls[0].resolutionState).toBe("OPEN");
+    expect(dls[0].finalAttemptId).toBeNull();
+    expect(dls[0].terminalReason).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+
+    // Never redispatched from DEAD_LETTERED
+    const again = await dispatchPendingJobs({ batchSize: 10 });
+    expect(again.enqueued).toBe(0);
+    const after = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(after.state).toBe("DEAD_LETTERED");
+  });
+
+  it("NEW-PR4-C01: max-attempt stranded job dead-letters with max_attempts_exceeded", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-max-att");
+    await prisma.durableJob.update({
+      where: { id: jobId },
+      data: { attemptCount: 3, maxAttempts: 3 },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 10,
+    });
+    expect(result.deadLettered).toBe(1);
+    expect(result.recovered).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).toBe("DEAD_LETTERED");
+    expect(durable.failureCode).toBe("max_attempts_exceeded");
+
+    const dls = await prisma.deadLetter.findMany({ where: { durableJobId: jobId } });
+    expect(dls).toHaveLength(1);
+    expect(dls[0].finalAttemptId).toBeNull();
+    expect(dls[0].terminalReason).toBe("max_attempts_exceeded");
+    expect(dls[0].resolutionState).toBe("OPEN");
+  });
+
+  it("NEW-PR4-C01: dead letter allows finalAttemptId NULL and exactly one OPEN", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-dl-null");
+    await prisma.durableJob.update({
+      where: { id: jobId },
+      data: { executionStrategy: "NO_AUTOMATIC_RETRY" },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
+    // Concurrent second pass must preserve exactly one OPEN DL
+    const second = await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
+    expect(second.deadLettered).toBe(0);
+
+    const open = await prisma.deadLetter.findMany({
+      where: { durableJobId: jobId, resolutionState: "OPEN" },
+    });
+    expect(open).toHaveLength(1);
+    expect(open[0].finalAttemptId).toBeNull();
+  });
+
+  it("NEW-PR4-C01: deadLettered return count increments", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-dl-count");
+    await prisma.durableJob.update({
+      where: { id: jobId },
+      data: { executionStrategy: "NO_AUTOMATIC_RETRY" },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 10,
+    });
+    expect(result.deadLettered).toBe(1);
+  });
+
+  it("NEW-PR4-C01: concurrent stranded reapers produce one legal outcome", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-concurrent");
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    const [r1, r2] = await Promise.all([
+      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+    ]);
+    expect(r1.recovered + r2.recovered).toBe(1);
+    expect(r1.deadLettered + r2.deadLettered).toBe(0);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).toBe("RETRY_WAIT");
+    const openDl = await prisma.deadLetter.count({
+      where: { durableJobId: jobId, resolutionState: "OPEN" },
+    });
+    expect(openDl).toBe(0);
+  });
+
+  it("NEW-PR4-C01: Redis outage cannot create duplicate dispatches", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-outage-dup");
+    await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
+    const originalRedis = requireRedisUrl();
+    const before = await prisma.jobDispatch.count({ where: { durableJobId: jobId } });
+
+    try {
+      await resetQueueClientsForTests();
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL = "1";
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS = "500";
+      process.env.REDIS_URL = "redis://127.0.0.1:1";
+      await resetQueueClientsForTests();
+
+      const result = await dispatchPendingJobs({ batchSize: 10 });
+      expect(result.enqueued).toBe(0);
+
+      const after = await prisma.jobDispatch.count({ where: { durableJobId: jobId } });
+      expect(after).toBe(before);
+      const sequences = await prisma.jobDispatch.findMany({
+        where: { durableJobId: jobId },
+        select: { dispatchSequence: true, state: true },
+      });
+      expect(sequences.every((s) => s.dispatchSequence === 1)).toBe(true);
+    } finally {
+      delete process.env.STOCKY_TEST_REDIS_FAST_FAIL;
+      delete process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS;
+      process.env.REDIS_URL = originalRedis;
+      await resetQueueClientsForTests();
+    }
+  });
+
+  it("NEW-PR4-C01: one indeterminate candidate does not block other candidates", async () => {
+    const a = await enqueueStrandedWebhook("wh-c01-indeterminate-a");
+    const b = await enqueueStrandedWebhook("wh-c01-indeterminate-b");
+
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qjB = await q.getJob(b.dispatch.queueJobId);
+    if (qjB) await qjB.remove();
+    await q.close();
+
+    __setQueueStateClassificationSeamForTests(() => ({
+      status: "UNKNOWN_STATE",
+      queueState: "future-block-test",
+    }));
+    // B is MISSING — seam only applies when a Job object exists (classifyExisting).
+    // So A (still in Redis as waiting) → UNKNOWN; B (removed) → MISSING → recover.
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 20,
+    });
+    expect(result.indeterminate).toBeGreaterThanOrEqual(1);
+    expect(result.recovered).toBeGreaterThanOrEqual(1);
+
+    const jobA = await prisma.durableJob.findUniqueOrThrow({ where: { id: a.jobId } });
+    const jobB = await prisma.durableJob.findUniqueOrThrow({ where: { id: b.jobId } });
+    expect(jobA.state).toBe("ENQUEUED");
+    expect(jobB.state).toBe("RETRY_WAIT");
+  });
+
+  it("NEW-PR4-C01: database and application transition graphs agree", async () => {
+    const pairs = new Set(
+      DURABLE_JOB_TRANSITION_PAIRS.map((p) => `${p.from}->${p.to}`),
+    );
+    expect(pairs.has("ENQUEUED->RETRY_WAIT")).toBe(true);
+    expect(pairs.has("ENQUEUED->FAILED")).toBe(true);
+    expect(pairs.has("FAILED->DEAD_LETTERED")).toBe(true);
+
+    // Prove DB trigger allows ENQUEUED → FAILED → DEAD_LETTERED.
+    const shop = await prisma.shop.findFirstOrThrow({
+      where: { myshopifyDomain: SHOP },
+    });
+    const job = await prisma.durableJob.create({
+      data: {
+        shopId: shop.id,
+        jobType: "webhook:orders/create",
+        source: "webhook:orders/create",
+        queueName: WEBHOOK_QUEUE,
+        payloadSchemaVersion: "test",
+        sanitizedPayload: {},
+        payloadDigest: "digest-transition-agree",
+        idempotencyKey: `transition-agree-${Date.now()}`,
+        correlationId: `corr-transition-${Date.now()}`,
+        authorityVersion: "v1",
+        state: "PENDING",
+        executionStrategy: "NO_AUTOMATIC_RETRY",
+      },
+    });
+    await prisma.$executeRaw`
+      UPDATE "DurableJob" SET state = 'DISPATCH_LEASED', "updatedAt" = NOW()
+      WHERE id = ${job.id} AND state = 'PENDING'
+    `;
+    await prisma.$executeRaw`
+      UPDATE "DurableJob" SET state = 'ENQUEUED', "enqueuedAt" = NOW(), "updatedAt" = NOW()
+      WHERE id = ${job.id} AND state = 'DISPATCH_LEASED'
+    `;
+    await prisma.$executeRaw`
+      UPDATE "DurableJob" SET state = 'FAILED', "updatedAt" = NOW()
+      WHERE id = ${job.id} AND state = 'ENQUEUED'
+    `;
+    await prisma.$executeRaw`
+      UPDATE "DurableJob" SET state = 'DEAD_LETTERED', "deadLetteredAt" = NOW(), "updatedAt" = NOW()
+      WHERE id = ${job.id} AND state = 'FAILED'
+    `;
+    const final = await prisma.durableJob.findUniqueOrThrow({ where: { id: job.id } });
+    expect(final.state).toBe("DEAD_LETTERED");
+
+    // SQL function body must mention ENQUEUED→FAILED.
+    const defs = await prisma.$queryRaw<Array<{ def: string }>>`
+      SELECT pg_get_functiondef(p.oid) AS def
+      FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = 'stocky_durable_job_transition_guard'
+    `;
+    expect(defs.length).toBeGreaterThanOrEqual(1);
+    expect(defs[0].def).toMatch(/ENQUEUED['"]?\s*,\s*['"]FAILED/);
   });
 });

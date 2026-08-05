@@ -21,6 +21,14 @@ describe("test:sync-role-isolation", () => {
     expect(pairs.has("ENQUEUED->RETRY_WAIT")).toBe(true);
   });
 
+  it("application transition graph includes ENQUEUED→FAILED stranded terminalization", () => {
+    const pairs = new Set(
+      DURABLE_JOB_TRANSITION_PAIRS.map((p) => `${p.from}->${p.to}`),
+    );
+    expect(pairs.has("ENQUEUED->FAILED")).toBe(true);
+    expect(pairs.has("FAILED->DEAD_LETTERED")).toBe(true);
+  });
+
   it("control-plane Shop column allowlist excludes Session and tokens", () => {
     expect(CONTROL_PLANE_SHOP_COLUMNS).toContain("processingEnabled");
     expect(CONTROL_PLANE_SHOP_COLUMNS).not.toContain("accessToken");

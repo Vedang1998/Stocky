@@ -34,6 +34,21 @@ export type QueueDispatchPresence =
   | { status: "QUEUE_UNAVAILABLE"; reason: string }
   | { status: "UNKNOWN_STATE"; queueState: string };
 
+/**
+ * Narrow test-only seam for unsupported future BullMQ states that the pinned
+ * BullMQ version cannot naturally produce. Production never sets this.
+ * Must not replace terminal / missing / retained / outage integration tests.
+ */
+let testStateClassificationSeam:
+  | ((queueState: string) => QueueDispatchPresence | null)
+  | null = null;
+
+export function __setQueueStateClassificationSeamForTests(
+  seam: ((queueState: string) => QueueDispatchPresence | null) | null,
+): void {
+  testStateClassificationSeam = seam;
+}
+
 export function isRunnableBullmqState(state: string): boolean {
   return RUNNABLE_SET.has(state);
 }
@@ -59,6 +74,11 @@ export async function classifyExistingQueueJob(
     };
   }
 
+  if (testStateClassificationSeam) {
+    const overridden = testStateClassificationSeam(queueState);
+    if (overridden) return overridden;
+  }
+
   if (isRunnableBullmqState(queueState)) {
     return { status: "RUNNABLE_EXISTING", queueState };
   }
@@ -77,7 +97,20 @@ export async function inspectQueueDispatchPresence(
 ): Promise<QueueDispatchPresence> {
   let existing: Job | undefined;
   try {
-    existing = await queue.getJob(queueJobId);
+    const getJobPromise = queue.getJob(queueJobId);
+    const fastFailMs = Number(process.env.STOCKY_TEST_REDIS_FAST_FAIL_MS ?? "");
+    existing =
+      Number.isFinite(fastFailMs) && fastFailMs > 0
+        ? await Promise.race([
+            getJobPromise,
+            new Promise<undefined>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("queue_lookup_timeout")),
+                fastFailMs,
+              ),
+            ),
+          ])
+        : await getJobPromise;
   } catch (err) {
     return {
       status: "QUEUE_UNAVAILABLE",

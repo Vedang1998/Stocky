@@ -17,7 +17,10 @@ import {
 } from "../jobs/queue.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
 import { createTenantJobEnvelopeV3 } from "./envelope-v3.server";
-import { executionStrategyForJobType } from "./execution-strategy.server";
+import {
+  APPLICATION_OUTCOME_UNCERTAIN,
+  executionStrategyForJobType,
+} from "./execution-strategy.server";
 import { assertTransition } from "./state-machine.server";
 import {
   classifyAfterQueueAdd,
@@ -71,7 +74,21 @@ export type EnqueueDispatchResult =
       outcome: "queue_unavailable";
       reason: string;
       dispatch: JobDispatch;
+    }
+  | {
+      /** Unknown BullMQ state — fail closed; never ack or allocate another sequence. */
+      outcome: "queue_state_unknown";
+      queueState: string;
+      dispatch: JobDispatch;
     };
+
+export type RecoverStrandedEnqueuedResult = {
+  recovered: number;
+  deadLettered: number;
+  stillRunnable: number;
+  indeterminate: number;
+  isolatedFailures: number;
+};
 
 export function formatQueueJobId(
   durableJobId: string,
@@ -467,17 +484,30 @@ export async function enqueueWithDispatch(
     return { outcome: "runnable", presence, dispatch };
   }
 
-  if (
-    presence.status === "TERMINAL_EXISTING" ||
-    presence.status === "UNKNOWN_STATE"
-  ) {
-    // Prior deterministic ID is non-runnable — supersede and allocate a new sequence.
+  // Unknown BullMQ state is not terminal and not absent — fail closed.
+  if (presence.status === "UNKNOWN_STATE") {
+    await recordIndeterminateDispatchEvidence(prisma, {
+      shopId: job.shopId,
+      durableJobId: job.id,
+      dispatchId: dispatch.id,
+      dispatchSequence: dispatch.dispatchSequence,
+      queueJobId: dispatch.queueJobId,
+      reasonCode: "unknown_queue_state",
+      queueState: presence.queueState,
+    });
+    return {
+      outcome: "queue_state_unknown",
+      queueState: presence.queueState,
+      dispatch,
+    };
+  }
+
+  if (presence.status === "TERMINAL_EXISTING") {
+    // Prior deterministic ID is terminal — supersede and allocate a new sequence.
     await supersedeTerminalDispatch(
       prisma,
       dispatch,
-      presence.status === "TERMINAL_EXISTING"
-        ? "retained_terminal_queue_job"
-        : "unknown_queue_state",
+      "retained_terminal_queue_job",
       now,
     );
 
@@ -541,6 +571,29 @@ export async function enqueueWithDispatch(
           dispatch: newDispatch,
         };
       }
+      if (after.status === "UNKNOWN_STATE") {
+        await recordIndeterminateDispatchEvidence(prisma, {
+          shopId: job.shopId,
+          durableJobId: job.id,
+          dispatchId: newDispatch.id,
+          dispatchSequence: newDispatch.dispatchSequence,
+          queueJobId: newDispatch.queueJobId,
+          reasonCode: "unknown_queue_state_post_add",
+          queueState: after.queueState,
+        });
+        return {
+          outcome: "queue_state_unknown",
+          queueState: after.queueState,
+          dispatch: newDispatch,
+        };
+      }
+      if (after.status === "QUEUE_UNAVAILABLE") {
+        return {
+          outcome: "queue_unavailable",
+          reason: after.reason,
+          dispatch: newDispatch,
+        };
+      }
       await markDispatchFailed(
         prisma,
         newDispatch,
@@ -573,14 +626,36 @@ export async function enqueueWithDispatch(
     ) {
       return { outcome: "runnable", presence: after, dispatch };
     }
-    if (after.status === "TERMINAL_EXISTING" || after.status === "UNKNOWN_STATE") {
-      // queue.add returned a retained non-runnable job under this ID.
+    if (after.status === "UNKNOWN_STATE") {
+      // Post-add unknown: enqueue outcome uncertain — preserve sequence.
+      await recordIndeterminateDispatchEvidence(prisma, {
+        shopId: job.shopId,
+        durableJobId: job.id,
+        dispatchId: dispatch.id,
+        dispatchSequence: dispatch.dispatchSequence,
+        queueJobId: dispatch.queueJobId,
+        reasonCode: "unknown_queue_state_post_add",
+        queueState: after.queueState,
+      });
+      return {
+        outcome: "queue_state_unknown",
+        queueState: after.queueState,
+        dispatch,
+      };
+    }
+    if (after.status === "QUEUE_UNAVAILABLE") {
+      return {
+        outcome: "queue_unavailable",
+        reason: after.reason,
+        dispatch,
+      };
+    }
+    if (after.status === "TERMINAL_EXISTING") {
+      // queue.add returned a retained terminal job under this ID.
       await supersedeTerminalDispatch(
         prisma,
         dispatch,
-        after.status === "TERMINAL_EXISTING"
-          ? "retained_terminal_queue_job"
-          : "unknown_queue_state",
+        "retained_terminal_queue_job",
         new Date(),
       );
       return { outcome: "not_runnable", presence: after, dispatch };
@@ -599,6 +674,64 @@ export async function enqueueWithDispatch(
       dispatch,
     };
   }
+}
+
+async function recordIndeterminateDispatchEvidence(
+  prisma: ReturnType<typeof getControlPlanePrisma>,
+  input: {
+    shopId: string;
+    durableJobId: string;
+    dispatchId: string;
+    dispatchSequence: number;
+    queueJobId: string;
+    reasonCode: string;
+    queueState?: string;
+    reason?: string;
+  },
+): Promise<void> {
+  await prisma.dataIssue.create({
+    data: {
+      shopId: input.shopId,
+      reasonCode: input.reasonCode.slice(0, 64),
+      severity: "WARNING",
+      redactedEvidence: {
+        durableJobId: input.durableJobId,
+        dispatchId: input.dispatchId,
+        dispatchSequence: input.dispatchSequence,
+        queueJobId: input.queueJobId,
+        queueState: input.queueState ?? null,
+        reason: input.reason ?? null,
+      },
+    },
+  });
+  await prisma.syncHealth.upsert({
+    where: {
+      shopId_syncDomain: {
+        shopId: input.shopId,
+        syncDomain: "dispatch_queue_presence",
+      },
+    },
+    create: {
+      shopId: input.shopId,
+      syncDomain: "dispatch_queue_presence",
+      state: "DEGRADED",
+      detailCode: input.reasonCode.slice(0, 64),
+      detailSummary: `Indeterminate queue presence for dispatch ${input.dispatchSequence}`.slice(
+        0,
+        512,
+      ),
+      computedAt: new Date(),
+    },
+    update: {
+      state: "DEGRADED",
+      detailCode: input.reasonCode.slice(0, 64),
+      detailSummary: `Indeterminate queue presence for dispatch ${input.dispatchSequence}`.slice(
+        0,
+        512,
+      ),
+      computedAt: new Date(),
+    },
+  });
 }
 
 /**
@@ -660,21 +793,168 @@ async function ackEnqueued(
 }
 
 /**
+ * Terminalize a stranded ENQUEUED job that must not retry
+ * (NO_AUTOMATIC_RETRY or attempt limit exhausted).
+ * Dead letter may have finalAttemptId = NULL (no active attempt).
+ */
+async function terminalizeStrandedEnqueuedJob(
+  tx: Prisma.TransactionClient,
+  input: {
+    job: DurableJob;
+    activeDispatch: JobDispatch | null;
+    dispatchDisposition: "FAILED" | "SUPERSEDED";
+    terminalReason: string;
+    failureSummary: string;
+    now: Date;
+    presenceStatus?: string;
+  },
+): Promise<"dead_lettered" | "noop"> {
+  const { job, now } = input;
+  assertTransition("ENQUEUED", "FAILED");
+
+  const locked = await tx.$queryRaw<DurableJob[]>`
+    SELECT * FROM "DurableJob"
+    WHERE id = ${job.id} AND "shopId" = ${job.shopId} AND state = 'ENQUEUED'
+    FOR UPDATE
+  `;
+  if (locked.length === 0) return "noop";
+  const live = locked[0];
+
+  const unfinished = await tx.jobAttempt.count({
+    where: { durableJobId: live.id, finishedAt: null },
+  });
+  if (unfinished > 0) return "noop";
+
+  if (input.activeDispatch) {
+    const dispatchStill = await tx.jobDispatch.findFirst({
+      where: {
+        id: input.activeDispatch.id,
+        shopId: live.shopId,
+        durableJobId: live.id,
+        dispatchSequence: input.activeDispatch.dispatchSequence,
+        state: { in: ["ENQUEUED", "OBSERVED", "STARTED", "PENDING_ENQUEUE"] },
+      },
+    });
+    if (!dispatchStill) return "noop";
+
+    await tx.jobDispatch.update({
+      where: { id: dispatchStill.id },
+      data: {
+        state: input.dispatchDisposition,
+        completedAt: now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
+  }
+
+  const failed = await tx.$queryRaw<Array<{ id: string }>>`
+    UPDATE "DurableJob"
+    SET
+      state = 'FAILED',
+      "failureCode" = ${input.terminalReason},
+      "failureSummary" = ${input.failureSummary.slice(0, 512)},
+      "leaseOwner" = NULL,
+      "leaseExpiresAt" = NULL,
+      "updatedAt" = ${now}
+    WHERE id = ${live.id} AND state = 'ENQUEUED'
+    RETURNING id
+  `;
+  if (failed.length === 0) return "noop";
+
+  assertTransition("FAILED", "DEAD_LETTERED");
+
+  const openExisting = await tx.deadLetter.findFirst({
+    where: {
+      durableJobId: live.id,
+      shopId: live.shopId,
+      resolutionState: "OPEN",
+    },
+  });
+  if (!openExisting) {
+    await tx.deadLetter.create({
+      data: {
+        shopId: live.shopId,
+        durableJobId: live.id,
+        finalAttemptId: null,
+        terminalReason: input.terminalReason.slice(0, 128),
+      },
+    });
+  }
+
+  await tx.$executeRaw`
+    UPDATE "DurableJob"
+    SET
+      state = 'DEAD_LETTERED',
+      "deadLetteredAt" = ${now},
+      "failureCode" = ${input.terminalReason},
+      "failureSummary" = ${input.failureSummary.slice(0, 512)},
+      "leaseOwner" = NULL,
+      "leaseExpiresAt" = NULL,
+      "updatedAt" = ${now}
+    WHERE id = ${live.id} AND state = 'FAILED'
+  `;
+
+  await tx.dataIssue.create({
+    data: {
+      shopId: live.shopId,
+      reasonCode: input.terminalReason.slice(0, 64),
+      severity: "ERROR",
+      redactedEvidence: {
+        durableJobId: live.id,
+        dispatchId: input.activeDispatch?.id ?? null,
+        presence: input.presenceStatus ?? null,
+        terminalReason: input.terminalReason,
+      },
+    },
+  });
+
+  return "dead_lettered";
+}
+
+function shouldDeadLetterStranded(job: DurableJob): {
+  deadLetter: boolean;
+  terminalReason: string;
+} {
+  const strategy =
+    job.executionStrategy ?? executionStrategyForJobType(job.jobType);
+  if (strategy === "NO_AUTOMATIC_RETRY") {
+    return {
+      deadLetter: true,
+      terminalReason: APPLICATION_OUTCOME_UNCERTAIN,
+    };
+  }
+  if (job.attemptCount >= job.maxAttempts) {
+    return {
+      deadLetter: true,
+      terminalReason: "max_attempts_exceeded",
+    };
+  }
+  return { deadLetter: false, terminalReason: "stranded_enqueued" };
+}
+
+/**
  * Defense-in-depth: recover stranded ENQUEUED jobs with no unfinished attempt
- * and no runnable Redis dispatch (NEW-PR4-C01).
+ * and no runnable Redis dispatch (NEW-PR4-C01 / D-044 mechanical completion).
+ *
+ * QUEUE_UNAVAILABLE / UNKNOWN_STATE are indeterminate — never mutate job/dispatch.
+ * Confirmed MISSING / TERMINAL_EXISTING: retry or dead-letter by strategy/limits.
  */
 export async function recoverStrandedEnqueuedJobs(options?: {
   olderThanMs?: number;
   limit?: number;
   now?: Date;
-}): Promise<{ recovered: number; deadLettered: number }> {
+}): Promise<RecoverStrandedEnqueuedResult> {
   const prisma = getControlPlanePrisma();
   const now = options?.now ?? new Date();
   const olderThanMs = options?.olderThanMs ?? DEFAULT_STRANDED_ENQUEUED_MS;
   const limit = options?.limit ?? 50;
   const cutoff = new Date(now.getTime() - olderThanMs);
   let recovered = 0;
-  const deadLettered = 0;
+  let deadLettered = 0;
+  let stillRunnable = 0;
+  let indeterminate = 0;
+  let isolatedFailures = 0;
 
   const candidates = await prisma.durableJob.findMany({
     where: {
@@ -713,7 +993,22 @@ export async function recoverStrandedEnqueuedJobs(options?: {
         });
 
         if (!activeDispatch) {
-          // No active dispatch — recover to RETRY_WAIT.
+          const decision = shouldDeadLetterStranded(live);
+          if (decision.deadLetter) {
+            const result = await terminalizeStrandedEnqueuedJob(tx, {
+              job: live,
+              activeDispatch: null,
+              dispatchDisposition: "FAILED",
+              terminalReason: decision.terminalReason,
+              failureSummary:
+                "ENQUEUED with no active JobDispatch; non-retryable or exhausted",
+              now,
+              presenceStatus: "NO_ACTIVE_DISPATCH",
+            });
+            return result === "dead_lettered"
+              ? ("dead_lettered" as const)
+              : ("noop" as const);
+          }
           assertTransition("ENQUEUED", "RETRY_WAIT");
           await tx.$executeRaw`
             UPDATE "DurableJob"
@@ -738,13 +1033,15 @@ export async function recoverStrandedEnqueuedJobs(options?: {
           return "recovered" as const;
         }
 
-        // Inspect Redis outside? We need queue state — do it after lock via non-tx check
-        // then re-enter. For atomicity: mark dispatch based on presence inspected before.
         return { kind: "inspect" as const, live, activeDispatch };
       });
 
       if (outcome === "recovered") {
         recovered += 1;
+        continue;
+      }
+      if (outcome === "dead_lettered") {
+        deadLettered += 1;
         continue;
       }
       if (outcome === "noop" || !outcome || typeof outcome === "string") {
@@ -765,58 +1062,101 @@ export async function recoverStrandedEnqueuedJobs(options?: {
         presence.status === "RUNNABLE_EXISTING" ||
         presence.status === "RUNNABLE_CREATED"
       ) {
+        stillRunnable += 1;
         continue;
       }
 
-      await prisma.$transaction(async (tx) => {
-        await tx.jobDispatch.updateMany({
+      if (
+        presence.status === "QUEUE_UNAVAILABLE" ||
+        presence.status === "UNKNOWN_STATE"
+      ) {
+        await recordIndeterminateDispatchEvidence(prisma, {
+          shopId: outcome.live.shopId,
+          durableJobId: outcome.live.id,
+          dispatchId: outcome.activeDispatch.id,
+          dispatchSequence: outcome.activeDispatch.dispatchSequence,
+          queueJobId: outcome.activeDispatch.queueJobId,
+          reasonCode:
+            presence.status === "QUEUE_UNAVAILABLE"
+              ? "queue_unavailable_stranded"
+              : "unknown_queue_state_stranded",
+          queueState:
+            presence.status === "UNKNOWN_STATE" ? presence.queueState : undefined,
+          reason:
+            presence.status === "QUEUE_UNAVAILABLE" ? presence.reason : undefined,
+        });
+        indeterminate += 1;
+        continue;
+      }
+
+      // Confirmed MISSING or TERMINAL_EXISTING.
+      const decision = shouldDeadLetterStranded(outcome.live);
+      const txResult = await prisma.$transaction(async (tx) => {
+        if (decision.deadLetter) {
+          return terminalizeStrandedEnqueuedJob(tx, {
+            job: outcome.live,
+            activeDispatch: outcome.activeDispatch,
+            dispatchDisposition:
+              presence.status === "TERMINAL_EXISTING" ? "SUPERSEDED" : "FAILED",
+            terminalReason: decision.terminalReason,
+            failureSummary:
+              presence.status === "TERMINAL_EXISTING"
+                ? "ENQUEUED with terminal Redis dispatch; non-retryable or exhausted"
+                : "ENQUEUED without Redis dispatch; non-retryable or exhausted",
+            now,
+            presenceStatus: presence.status,
+          });
+        }
+
+        const locked = await tx.$queryRaw<DurableJob[]>`
+          SELECT * FROM "DurableJob"
+          WHERE id = ${outcome.live.id}
+            AND "shopId" = ${outcome.live.shopId}
+            AND state = 'ENQUEUED'
+          FOR UPDATE
+        `;
+        if (locked.length === 0) return "noop" as const;
+
+        const unfinished = await tx.jobAttempt.count({
+          where: { durableJobId: outcome.live.id, finishedAt: null },
+        });
+        if (unfinished > 0) return "noop" as const;
+
+        const dispatchStill = await tx.jobDispatch.findFirst({
           where: {
             id: outcome.activeDispatch.id,
             shopId: outcome.live.shopId,
             state: { in: ["ENQUEUED", "OBSERVED", "STARTED", "PENDING_ENQUEUE"] },
           },
+        });
+        if (!dispatchStill) return "noop" as const;
+
+        await tx.jobDispatch.update({
+          where: { id: dispatchStill.id },
           data: {
-            state: "FAILED",
+            state:
+              presence.status === "TERMINAL_EXISTING" ? "SUPERSEDED" : "FAILED",
             completedAt: now,
             leaseOwner: null,
             leaseExpiresAt: null,
           },
         });
 
-        if (
-          outcome.live.attemptCount >= outcome.live.maxAttempts ||
-          outcome.live.executionStrategy === "NO_AUTOMATIC_RETRY"
-        ) {
-          assertTransition("ENQUEUED", "CANCELLED");
-          // Prefer CANCELLED then operator replay — or FAILED path:
-          // ENQUEUED → RETRY_WAIT is the recovery edge; max attempts → dead-letter via retry claim.
-          await tx.$executeRaw`
-            UPDATE "DurableJob"
-            SET
-              state = 'RETRY_WAIT',
-              "nextEligibleAt" = ${now},
-              "leaseOwner" = NULL,
-              "leaseExpiresAt" = NULL,
-              "failureCode" = 'stranded_enqueued',
-              "failureSummary" = 'ENQUEUED without runnable Redis dispatch',
-              "updatedAt" = ${now}
-            WHERE id = ${outcome.live.id} AND state = 'ENQUEUED'
-          `;
-        } else {
-          assertTransition("ENQUEUED", "RETRY_WAIT");
-          await tx.$executeRaw`
-            UPDATE "DurableJob"
-            SET
-              state = 'RETRY_WAIT',
-              "nextEligibleAt" = ${now},
-              "leaseOwner" = NULL,
-              "leaseExpiresAt" = NULL,
-              "failureCode" = 'stranded_enqueued',
-              "failureSummary" = 'ENQUEUED without runnable Redis dispatch',
-              "updatedAt" = ${now}
-            WHERE id = ${outcome.live.id} AND state = 'ENQUEUED'
-          `;
-        }
+        assertTransition("ENQUEUED", "RETRY_WAIT");
+        const moved = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "DurableJob"
+          SET
+            state = 'RETRY_WAIT',
+            "nextEligibleAt" = ${now},
+            "leaseOwner" = NULL,
+            "leaseExpiresAt" = NULL,
+            "failureCode" = 'stranded_enqueued',
+            "failureSummary" = 'ENQUEUED without runnable Redis dispatch',
+            "updatedAt" = ${now}
+          WHERE id = ${outcome.live.id} AND state = 'ENQUEUED'
+          RETURNING id
+        `;
+        if (moved.length === 0) return "noop" as const;
 
         await tx.dataIssue.create({
           data: {
@@ -830,9 +1170,13 @@ export async function recoverStrandedEnqueuedJobs(options?: {
             },
           },
         });
+        return "recovered" as const;
       });
-      recovered += 1;
+
+      if (txResult === "dead_lettered") deadLettered += 1;
+      else if (txResult === "recovered") recovered += 1;
     } catch (err) {
+      isolatedFailures += 1;
       console.error(
         `recoverStrandedEnqueuedJobs failed for ${job.id}:`,
         err instanceof Error ? err.message : err,
@@ -840,7 +1184,13 @@ export async function recoverStrandedEnqueuedJobs(options?: {
     }
   }
 
-  return { recovered, deadLettered };
+  return {
+    recovered,
+    deadLettered,
+    stillRunnable,
+    indeterminate,
+    isolatedFailures,
+  };
 }
 
 export type DispatchPendingJobsResult = {
@@ -945,11 +1295,17 @@ export async function dispatchPendingJobs(options?: {
         else skippedNotRunnable += 1;
       } else if (result.outcome === "shop_disabled") {
         shopDisabled += 1;
-      } else if (result.outcome === "queue_unavailable") {
-        // Leave DISPATCH_LEASED — lease expiry recovers; same sequence reused.
+      } else if (
+        result.outcome === "queue_unavailable" ||
+        result.outcome === "queue_state_unknown"
+      ) {
+        // Leave DISPATCH_LEASED — lease expiry recovers; same sequence preserved.
+        // Never ack ENQUEUED; never allocate another dispatch from this outcome.
         failed += 1;
         console.error(
-          `dispatchPendingJobs queue unavailable for ${job.id}: ${result.reason}`,
+          result.outcome === "queue_state_unknown"
+            ? `dispatchPendingJobs unknown queue state for ${job.id}: ${result.queueState}`
+            : `dispatchPendingJobs queue unavailable for ${job.id}: ${result.reason}`,
         );
       } else {
         skippedNotRunnable += 1;

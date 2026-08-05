@@ -45,7 +45,19 @@ let connection: IORedis | null = null;
 
 function getConnection(): IORedis {
   if (!connection) {
-    connection = new IORedis(requireRedisUrl(), { maxRetriesPerRequest: null });
+    const url = requireRedisUrl();
+    // Fast-fail when tests intentionally point REDIS_URL at an unreachable host.
+    const fastFail =
+      process.env.STOCKY_TEST_REDIS_FAST_FAIL === "1" ||
+      /127\.0\.0\.1:1\b/.test(url) ||
+      /\[::1\]:1\b/.test(url);
+    connection = new IORedis(url, {
+      maxRetriesPerRequest: fastFail ? 1 : null,
+      connectTimeout: fastFail ? 200 : undefined,
+      enableOfflineQueue: fastFail ? false : undefined,
+      retryStrategy: fastFail ? () => null : undefined,
+      lazyConnect: false,
+    });
   }
   return connection;
 }
@@ -228,6 +240,25 @@ export function createCronWorker(processor: (job: Job) => Promise<void>) {
     connection: getConnection(),
     concurrency: 1,
   });
+}
+
+/**
+ * Test-only: close shared BullMQ clients so a subsequent REDIS_URL change
+ * (e.g. outage simulation) creates fresh connections.
+ */
+export async function resetQueueClientsForTests(): Promise<void> {
+  if (webhookQueue) {
+    await webhookQueue.close().catch(() => undefined);
+    webhookQueue = null;
+  }
+  if (cronQueue) {
+    await cronQueue.close().catch(() => undefined);
+    cronQueue = null;
+  }
+  if (connection) {
+    await connection.quit().catch(() => undefined);
+    connection = null;
+  }
 }
 
 /**
