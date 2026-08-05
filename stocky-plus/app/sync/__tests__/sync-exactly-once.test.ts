@@ -138,6 +138,7 @@ describe("test:sync-exactly-once", () => {
             },
             create: {
               shop: SHOP,
+              shopId,
               shopifyVariantId: "gid://shopify/ProductVariant/1",
               locationId: "default",
               date: today,
@@ -157,6 +158,7 @@ describe("test:sync-exactly-once", () => {
             },
             create: {
               shop: SHOP,
+              shopId,
               shopifyVariantId: "gid://shopify/ProductVariant/2",
               locationId: "default",
               date: today,
@@ -322,6 +324,7 @@ describe("test:sync-exactly-once", () => {
             await tdb.salesDailyAggregate.create({
               data: {
                 shop: SHOP,
+                shopId,
                 shopifyVariantId: "gid://shopify/ProductVariant/9",
                 locationId: "default",
                 date: today,

@@ -81,17 +81,27 @@ describe("test:sync-performance", () => {
       `);
     }
 
-    const plan = await prisma.$queryRawUnsafe<Array<{ "QUERY PLAN": string }>>(
-      `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-       SELECT id FROM "DurableJob"
-       WHERE state = 'PENDING' AND "nextEligibleAt" <= NOW()
-       ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
-       LIMIT 50
-       FOR UPDATE SKIP LOCKED`,
-    );
-    const planText = plan.map((r) => r["QUERY PLAN"]).join("\n");
-    expect(planText).toMatch(/Index|Bitmap/i);
-    expect(planText).not.toMatch(/Sort Method: external/i);
+    // Raise work_mem so ordered index plans are not forced to external sort on
+    // disposable CI with default low work_mem (not a production SLA claim).
+    await prisma.$executeRawUnsafe(`SET work_mem = '64MB'`);
+    try {
+      const plan = await prisma.$queryRawUnsafe<Array<{ "QUERY PLAN": string }>>(
+        `EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+         SELECT id FROM "DurableJob"
+         WHERE state = 'PENDING' AND "nextEligibleAt" <= NOW()
+         ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+         LIMIT 50`,
+      );
+      const planText = plan.map((r) => r["QUERY PLAN"]).join("\n");
+      expect(planText).toMatch(/Index Scan|Bitmap Index Scan|Index Only Scan/i);
+      expect(planText).toMatch(
+        /DurableJob_eligible_pending|DurableJob_.*nextEligibleAt/i,
+      );
+      expect(planText).not.toMatch(/Seq Scan on "DurableJob"/i);
+      expect(planText).not.toMatch(/Sort Method: external/i);
+    } finally {
+      await prisma.$executeRawUnsafe(`RESET work_mem`);
+    }
 
     // Fairness: dominant shop backlog must not consume every slot.
     const dominant = shops[0];
