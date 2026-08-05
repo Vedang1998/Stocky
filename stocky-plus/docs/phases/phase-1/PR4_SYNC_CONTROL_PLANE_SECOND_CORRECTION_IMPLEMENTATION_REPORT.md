@@ -111,3 +111,18 @@ Keep **OPEN** (permanent `RISK_REGISTER.md` definitions). Do **not** close on Cu
 ```text
 Return to ChatGPT for exact-head verification and a fresh independent Claude Code PR 4 second-correction review.
 ```
+
+## Exact-head CI (Cursor-recorded)
+
+| Field | Value |
+|---|---|
+| Second-correction runtime/test head | `6948c74d2c88833251b91a620bcf727f7089ebc9` |
+| Final PR tip (at handoff) | `6948c74d2c88833251b91a620bcf727f7089ebc9` |
+| First correction runtime/test | `0697a2878eed3ce8013f59af54de7d0adf98d548` |
+| First correction-review tip | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` |
+| Base / main | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
+| Exact-head CI | pending at docs write — see PR body after green |
+
+Status remains **SECOND CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**.
+Do not close findings or risks on Cursor evidence alone.
+
