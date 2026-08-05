@@ -17,7 +17,7 @@
 
 ## Merchant model coverage
 
-All 18 approved merchant-owned models must appear below.
+All 19 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|

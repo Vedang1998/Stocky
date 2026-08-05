@@ -37,7 +37,8 @@ describe("tenant access architecture audit", () => {
   it("passes on the real repository (approved exceptions only)", () => {
     const result = scanRepository();
     expect(result.violations).toEqual([]);
-    expect(result.modelsCovered.length).toBe(18);
+    // Includes SyncApplicationReceipt (PR 4 D-043 merchant-domain receipt).
+    expect(result.modelsCovered.length).toBe(19);
     // P3-c: EX-RAW-001 removed — construction lives in EX-RAW-002 only.
     expect(result.exceptionsUsed).toContain("EX-RAW-002");
     expect(result.exceptionsUsed).not.toContain("EX-RAW-001");

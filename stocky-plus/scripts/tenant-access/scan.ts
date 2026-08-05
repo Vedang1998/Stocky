@@ -1392,7 +1392,7 @@ export function scanRepository(options?: {
     ),
   ].sort();
 
-  // Ensure inventory conceptually covers all 18 models even if a model has no call site yet
+  // Ensure inventory conceptually covers all 19 models even if a model has no call site yet
   for (const model of MERCHANT_OWNED_MODELS) {
     if (!modelsCovered.includes(model)) {
       // synthetic coverage marker from model registry (not a violation)
