@@ -38,6 +38,7 @@ const ALL_MIGRATION_NAMES = [
   "20260804210000_sync_control_plane_correction",
   "20260804220000_sync_control_plane_correction_defaults",
   "20260805120000_sync_control_plane_second_correction",
+  "20260805130000_sync_control_plane_receipt_probe_revoke",
 ] as const;
 
 /**
@@ -72,6 +73,27 @@ async function controlPlaneRoleExists(prisma: PrismaClient): Promise<boolean> {
   return Boolean(rows[0]?.exists);
 }
 
+type ControlPlaneRoleSnapshot = {
+  exists: boolean;
+  canLogin: boolean;
+};
+
+async function snapshotControlPlaneRole(
+  prisma: PrismaClient,
+): Promise<ControlPlaneRoleSnapshot> {
+  const rows = await prisma.$queryRawUnsafe<
+    Array<{ exists: boolean; can_login: boolean | null }>
+  >(
+    `SELECT
+       EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') AS exists,
+       (SELECT rolcanlogin FROM pg_roles WHERE rolname = 'stocky_control_plane') AS can_login`,
+  );
+  return {
+    exists: Boolean(rows[0]?.exists),
+    canLogin: Boolean(rows[0]?.can_login),
+  };
+}
+
 /** Create stocky_control_plane when absent (NOLOGIN / NOINHERIT; disposable only). */
 async function ensureControlPlaneRole(prisma: PrismaClient): Promise<void> {
   await prisma.$executeRawUnsafe(`
@@ -98,16 +120,37 @@ async function dropControlPlaneRole(prisma: PrismaClient): Promise<void> {
   `);
 }
 
-/** Restore exact prior presence/absence of stocky_control_plane after a fixture. */
+/**
+ * Restore exact prior presence/absence (and LOGIN capability) of
+ * stocky_control_plane after a fixture. LOGIN restore uses the disposable
+ * STOCKY_CONTROL_PLANE_ROLE_PASSWORD when the prior snapshot was login-capable.
+ */
 async function restoreControlPlaneRoleState(
   prisma: PrismaClient,
-  existedBefore: boolean,
+  before: ControlPlaneRoleSnapshot,
 ): Promise<void> {
-  const existsNow = await controlPlaneRoleExists(prisma);
-  if (existedBefore && !existsNow) {
-    await ensureControlPlaneRole(prisma);
-  } else if (!existedBefore && existsNow) {
+  if (!before.exists) {
     await dropControlPlaneRole(prisma);
+    return;
+  }
+
+  await ensureControlPlaneRole(prisma);
+
+  if (before.canLogin) {
+    const password = process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD;
+    if (!password) {
+      throw new Error(
+        "STOCKY_CONTROL_PLANE_ROLE_PASSWORD required to restore login-capable stocky_control_plane",
+      );
+    }
+    const escaped = password.replace(/'/g, "''");
+    await prisma.$executeRawUnsafe(
+      `ALTER ROLE stocky_control_plane LOGIN PASSWORD '${escaped}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`,
+    );
+  } else {
+    await prisma.$executeRawUnsafe(
+      `ALTER ROLE stocky_control_plane NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`,
+    );
   }
 }
 
@@ -240,6 +283,7 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     "20260804210000_sync_control_plane_correction",
     "20260804220000_sync_control_plane_correction_defaults",
     "20260805120000_sync_control_plane_second_correction",
+    "20260805130000_sync_control_plane_receipt_probe_revoke",
   ] as const;
 
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -330,11 +374,12 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260804210000_sync_control_plane_correction",
         "20260804220000_sync_control_plane_correction_defaults",
         "20260805120000_sync_control_plane_second_correction",
+        "20260805130000_sync_control_plane_receipt_probe_revoke",
         "migration_lock.toml",
       ]),
     );
 
-    const roleExistedBefore = await controlPlaneRoleExists(prisma);
+    const roleExistedBefore = await snapshotControlPlaneRole(prisma);
     try {
       await ensureControlPlaneRole(prisma);
       expect(await controlPlaneRoleExists(prisma)).toBe(true);
@@ -353,6 +398,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain(
         "20260805120000_sync_control_plane_second_correction",
       );
+      expect(initOut).not.toContain(
+        "20260805130000_sync_control_plane_receipt_probe_revoke",
+      );
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -361,6 +409,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260805120000_sync_control_plane_second_correction",
+      );
+      expect(restOut).toContain(
+        "20260805130000_sync_control_plane_receipt_probe_revoke",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
@@ -381,7 +432,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
 
   it("NEW-PR4-C07 role-absent: parks PR4 migrations, applies once, creates zero control-plane policies", async () => {
     const beforeDir = listMigrationDirEntries();
-    const roleExistedBefore = await controlPlaneRoleExists(prisma);
+    const roleExistedBefore = await snapshotControlPlaneRole(prisma);
     try {
       await dropControlPlaneRole(prisma);
       expect(await controlPlaneRoleExists(prisma)).toBe(false);
@@ -394,6 +445,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
       expect(restOut).toContain(
         "20260805120000_sync_control_plane_second_correction",
+      );
+      expect(restOut).toContain(
+        "20260805130000_sync_control_plane_receipt_probe_revoke",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
@@ -414,7 +468,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
 
   it("NEW-PR4-C07: parking cleanup restores migration tree after injected assertion failure", async () => {
     const beforeDir = listMigrationDirEntries();
-    const roleExistedBefore = await controlPlaneRoleExists(prisma);
+    const roleExistedBefore = await snapshotControlPlaneRole(prisma);
     let injectedFailure = false;
     try {
       await ensureControlPlaneRole(prisma);

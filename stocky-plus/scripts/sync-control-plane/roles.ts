@@ -504,7 +504,7 @@ export async function provisionReceiptProbeOwner(
      JOIN pg_namespace n ON n.oid = p.pronamespace
      WHERE n.nspname = 'public'
        AND p.proname = 'stocky_has_application_receipt'
-       AND pg_get_function_identity_arguments(p.oid) = 'text, text'`,
+       AND oidvectortypes(p.proargtypes) = 'text, text'`,
   );
   if ((fnExists.rowCount ?? 0) > 0) {
     await client.query(
@@ -558,10 +558,11 @@ async function verifyReceiptProbeFunction(
      JOIN pg_roles r ON r.oid = p.proowner
      WHERE n.nspname = 'public'
        AND p.proname = 'stocky_has_application_receipt'
-       AND pg_get_function_identity_arguments(p.oid) = 'text, text'`,
+       AND oidvectortypes(p.proargtypes) = 'text, text'`,
   );
   if ((fn.rowCount ?? 0) === 0) {
-    // Function may be absent on pre-correction DBs; not an error for verify alone.
+    // After PR4 correction migrations the probe must exist. Missing = fail closed.
+    errors.push("receipt_probe_function_missing");
     return errors;
   }
 

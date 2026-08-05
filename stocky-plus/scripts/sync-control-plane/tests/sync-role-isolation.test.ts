@@ -183,7 +183,7 @@ describe("test:sync-role-isolation", () => {
         JOIN pg_roles r ON r.oid = p.proowner
         WHERE n.nspname = 'public'
           AND p.proname = 'stocky_has_application_receipt'
-          AND pg_get_function_identity_arguments(p.oid) = 'text, text'
+          AND oidvectortypes(p.proargtypes) = 'text, text'
       `;
       expect(fn.length).toBe(1);
 
@@ -223,7 +223,7 @@ describe("test:sync-role-isolation", () => {
         JOIN pg_roles r ON r.oid = p.proowner
         WHERE n.nspname = 'public'
           AND p.proname = 'stocky_has_application_receipt'
-          AND pg_get_function_identity_arguments(p.oid) = 'text, text'
+          AND oidvectortypes(p.proargtypes) = 'text, text'
       `;
       expect(after[0]?.owner).toBe(expected);
       expect(after[0]?.rolsuper).toBe(false);

@@ -523,7 +523,8 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
 
   if (envelope.schemaVersion === TENANT_JOB_ENVELOPE_V2_VERSION) {
     // NEW-PR4-C04: v2 may execute only with durable identity sufficient for
-    // the same application receipt as v3. Missing webhookDeliveryId → fail closed.
+    // the same application receipt as v3. Missing webhookDeliveryId → fail closed
+    // on the control plane BEFORE opening a merchant-domain tenant transaction.
     const durableJobId =
       job.data.durableJobId ??
       (typeof envelope.durableJobId === "string" ? envelope.durableJobId : null);
@@ -543,6 +544,35 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
 
     await assertShopProcessingEnabled(durable.shopId);
 
+    if (durable.state === "CANCELLED") {
+      throw new SyncControlPlaneError(
+        "illegal_job_transition",
+        "DurableJob was cancelled",
+      );
+    }
+
+    // Fail closed without resolveTenantJobContextV2 / createTenantDb when the
+    // durable webhook identity required for SyncApplicationReceipt is absent.
+    if (!durable.webhookDeliveryId) {
+      const { attempt } = await claimAttempt({
+        durableJobId: durable.id,
+        shopId: durable.shopId,
+        workerId,
+      });
+      await completeAttemptFail({
+        durableJobId: durable.id,
+        shopId: durable.shopId,
+        attemptId: attempt.id,
+        errorCode: APPLICATION_OUTCOME_UNCERTAIN,
+        failureSummary:
+          "v2 webhook missing webhookDeliveryId — refuse merchant write outside receipt",
+      });
+      throw new SyncControlPlaneError(
+        APPLICATION_OUTCOME_UNCERTAIN,
+        "v2 webhook missing webhookDeliveryId",
+      );
+    }
+
     const ctx = await resolveTenantJobContextV2(envelope, {
       payloadShop,
       expectedJobNameOrTopic: topic,
@@ -557,13 +587,6 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       );
     }
 
-    if (durable.state === "CANCELLED") {
-      throw new SyncControlPlaneError(
-        "illegal_job_transition",
-        "DurableJob was cancelled",
-      );
-    }
-
     const { attempt } = await claimAttempt({
       durableJobId: durable.id,
       shopId: durable.shopId,
@@ -571,21 +594,6 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     });
 
     try {
-      if (!durable.webhookDeliveryId) {
-        await completeAttemptFail({
-          durableJobId: durable.id,
-          shopId: durable.shopId,
-          attemptId: attempt.id,
-          errorCode: APPLICATION_OUTCOME_UNCERTAIN,
-          failureSummary:
-            "v2 webhook missing webhookDeliveryId — refuse merchant write outside receipt",
-        });
-        throw new SyncControlPlaneError(
-          APPLICATION_OUTCOME_UNCERTAIN,
-          "v2 webhook missing webhookDeliveryId",
-        );
-      }
-
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
       const applicationKey = resolveApplicationKey({
