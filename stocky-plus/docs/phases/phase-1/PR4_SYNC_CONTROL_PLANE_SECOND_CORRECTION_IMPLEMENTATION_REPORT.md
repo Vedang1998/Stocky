@@ -28,7 +28,7 @@ This report records Cursor second-correction work only. It does **not** claim ac
 | First correction-review tip / D-044 starting head | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` |
 | Original second-correction tip / mechanical-completion starting head | `1f5b74bca35e580278b9980cb18aa81f0e9c6568` |
 | Mechanical-completion runtime/test head | `0158a09eb3b0f1b62c9459e2db4df344183a6f59` |
-| Documentation / this report tip | recorded after docs commit (final PR tip) |
+| Documentation / this report tip | `71bb576005501155a2965568db0d6b08b30ca48e` |
 | Exact-head CI `head_sha` | pending at docs write — authoritative in PR #20 body after green |
 | Exact-head CI run / job | pending — see PR #20 body |
 
@@ -126,7 +126,7 @@ Return to ChatGPT for exact-head verification and a fresh independent Claude Cod
 |---|---|
 | Mechanical-completion starting head | `1f5b74bca35e580278b9980cb18aa81f0e9c6568` |
 | Mechanical-completion runtime/test head | `0158a09eb3b0f1b62c9459e2db4df344183a6f59` |
-| Final PR tip | see docs commit SHA / PR #20 head |
+| Final PR tip | `71bb576005501155a2965568db0d6b08b30ca48e` |
 | First correction-review tip / D-044 start | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` |
 | Base / main | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
 | Exact-head CI | pending at docs write — see PR body after green |

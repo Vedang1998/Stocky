@@ -54,7 +54,7 @@ Do **not** mark any finding or risk closed on Cursor evidence alone. PR #20 rema
 | `4c15028f72be20e4138bdbf85bc5e1d3894b53c6` | First correction-review tip; D-044 starting head |
 | `1f5b74bca35e580278b9980cb18aa81f0e9c6568` | Original second-correction tip; mechanical-completion starting head |
 | `0158a09eb3b0f1b62c9459e2db4df344183a6f59` | NEW-PR4-C01 mechanical-completion runtime/test head |
-| *(docs tip)* | Final PR tip after documentation sync — pending independent verification |
+| `71bb576005501155a2965568db0d6b08b30ca48e` | Documentation / final PR tip — pending independent verification |
 
 Do not amend, rebase, squash, reset away, replace, or force-push the independent review commits. Do not edit:
 
