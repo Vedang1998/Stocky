@@ -83,3 +83,26 @@ export function resolveApplicationKey(input: {
   }
   return logicalApplicationKey(input.idempotencyKey);
 }
+
+/**
+ * Soft-fail variant for recovery paths (NEW-PR4-C02).
+ * Returns null when a webhook lacks durable delivery identity.
+ */
+export function tryResolveApplicationKey(input: {
+  jobType: string;
+  webhookDeliveryId: string | null | undefined;
+  idempotencyKey: string;
+  rootApplicationKey?: string | null;
+}): string | null {
+  try {
+    return resolveApplicationKey(input);
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      err.message === "webhook_application_key_requires_delivery"
+    ) {
+      return null;
+    }
+    throw err;
+  }
+}

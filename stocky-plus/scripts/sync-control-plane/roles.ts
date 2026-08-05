@@ -9,6 +9,8 @@ import { quoteIdent } from "../tenant-enforcement/sql";
 
 export const DEFAULT_CONTROL_PLANE_ROLE = "stocky_control_plane";
 export const DEFAULT_RUNTIME_ROLE = "stocky_runtime";
+/** Dedicated least-privilege owner for stocky_has_application_receipt (NEW-PR4-C08). */
+export const DEFAULT_RECEIPT_PROBE_OWNER_ROLE = "stocky_receipt_probe_owner";
 
 /**
  * Shop columns the control-plane role may SELECT/UPDATE for lifecycle only.
@@ -36,6 +38,15 @@ export function defaultRuntimeRoleName(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
   return env.STOCKY_RUNTIME_ROLE?.trim() || DEFAULT_RUNTIME_ROLE;
+}
+
+export function defaultReceiptProbeOwnerRoleName(
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  return (
+    env.STOCKY_RECEIPT_PROBE_OWNER_ROLE?.trim() ||
+    DEFAULT_RECEIPT_PROBE_OWNER_ROLE
+  );
 }
 
 function assertSafeRoleName(name: string): string {
@@ -124,11 +135,16 @@ export async function provisionControlPlaneRole(
     );
     grantsApplied.push("Shop:column-lifecycle");
 
-    await client
-      .query(
-        `GRANT EXECUTE ON FUNCTION stocky_has_application_receipt(text, text) TO ${quoteIdent(role)}`,
-      )
-      .catch(() => undefined);
+    // NEW-PR4-C08: provision least-privilege probe owner and transfer function ownership
+    // before granting EXECUTE to stocky_control_plane.
+    const probeOwner = assertSafeRoleName(defaultReceiptProbeOwnerRoleName());
+    await provisionReceiptProbeOwner(client, {
+      apply: true,
+      controlPlaneRole: role,
+      runtimeRole: assertSafeRoleName(defaultRuntimeRoleName()),
+      probeOwnerRole: probeOwner,
+    });
+    grantsApplied.push("receipt_probe_owner");
 
     // Migration may run before the role exists; ensure RLS policies here.
     for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
@@ -388,5 +404,245 @@ export async function verifyControlPlaneRole(
     }
   }
 
+  // NEW-PR4-C08: receipt probe function ownership and EXECUTE grants.
+  errors.push(...(await verifyReceiptProbeFunction(client, role, runtime)));
+
   return { ok: errors.length === 0, errors };
+}
+
+/**
+ * Create/adjust stocky_receipt_probe_owner, transfer function ownership, and
+ * grant EXECUTE only to stocky_control_plane (NEW-PR4-C08).
+ */
+export async function provisionReceiptProbeOwner(
+  client: Client,
+  options: {
+    apply: boolean;
+    controlPlaneRole: string;
+    runtimeRole: string;
+    probeOwnerRole: string;
+  },
+): Promise<{ ok: boolean; errors: string[] }> {
+  const errors: string[] = [];
+  const owner = assertSafeRoleName(options.probeOwnerRole);
+  const cp = assertSafeRoleName(options.controlPlaneRole);
+  const runtime = assertSafeRoleName(options.runtimeRole);
+
+  if (!options.apply) {
+    return { ok: true, errors };
+  }
+
+  const existing = await client.query(
+    `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+    [owner],
+  );
+  if ((existing.rowCount ?? 0) === 0) {
+    await client.query(
+      `CREATE ROLE ${quoteIdent(owner)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`,
+    );
+  } else {
+    await client.query(
+      `ALTER ROLE ${quoteIdent(owner)} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOBYPASSRLS`,
+    );
+  }
+
+  // No membership bridges.
+  await client
+    .query(`REVOKE ${quoteIdent(owner)} FROM ${quoteIdent(cp)}`)
+    .catch(() => undefined);
+  await client
+    .query(`REVOKE ${quoteIdent(cp)} FROM ${quoteIdent(owner)}`)
+    .catch(() => undefined);
+  await client
+    .query(`REVOKE ${quoteIdent(owner)} FROM ${quoteIdent(runtime)}`)
+    .catch(() => undefined);
+  await client
+    .query(`REVOKE ${quoteIdent(runtime)} FROM ${quoteIdent(owner)}`)
+    .catch(() => undefined);
+
+  // SELECT-only on SyncApplicationReceipt for the probe owner + exact RLS policy.
+  const receiptExists = await client.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'SyncApplicationReceipt'`,
+  );
+  if ((receiptExists.rowCount ?? 0) > 0) {
+    await client.query(
+      `REVOKE ALL ON TABLE "SyncApplicationReceipt" FROM ${quoteIdent(owner)}`,
+    ).catch(() => undefined);
+    await client.query(
+      `GRANT SELECT ON TABLE "SyncApplicationReceipt" TO ${quoteIdent(owner)}`,
+    );
+    await client.query(
+      `DO $pol$
+       BEGIN
+         BEGIN
+           CREATE POLICY stocky_receipt_probe_select
+             ON "SyncApplicationReceipt"
+             FOR SELECT TO ${quoteIdent(owner)}
+             USING (true);
+         EXCEPTION WHEN duplicate_object THEN NULL;
+         END;
+       END $pol$`,
+    );
+  }
+
+  // Revoke any accidental merchant-table access from probe owner.
+  for (const table of [
+    "Supplier",
+    "PurchaseOrder",
+    "Session",
+    "ShopSettings",
+    "SalesDailyAggregate",
+  ]) {
+    await client
+      .query(`REVOKE ALL ON TABLE ${quoteIdent(table)} FROM ${quoteIdent(owner)}`)
+      .catch(() => undefined);
+  }
+
+  const fnExists = await client.query(
+    `SELECT 1 FROM pg_proc p
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+     WHERE n.nspname = 'public'
+       AND p.proname = 'stocky_has_application_receipt'
+       AND pg_get_function_identity_arguments(p.oid) = 'text, text'`,
+  );
+  if ((fnExists.rowCount ?? 0) > 0) {
+    await client.query(
+      `REVOKE ALL ON FUNCTION public.stocky_has_application_receipt(text, text) FROM PUBLIC`,
+    );
+    await client
+      .query(
+        `REVOKE ALL ON FUNCTION public.stocky_has_application_receipt(text, text) FROM ${quoteIdent(runtime)}`,
+      )
+      .catch(() => undefined);
+    await client
+      .query(
+        `REVOKE ALL ON FUNCTION public.stocky_has_application_receipt(text, text) FROM ${quoteIdent(cp)}`,
+      )
+      .catch(() => undefined);
+
+    // Transfer ownership while migration role still owns the function.
+    await client.query(
+      `ALTER FUNCTION public.stocky_has_application_receipt(text, text) OWNER TO ${quoteIdent(owner)}`,
+    );
+    await client.query(
+      `ALTER FUNCTION public.stocky_has_application_receipt(text, text)
+       SET search_path = pg_catalog, pg_temp`,
+    );
+
+    // Only after ownership transfer may control-plane EXECUTE.
+    await client.query(
+      `GRANT EXECUTE ON FUNCTION public.stocky_has_application_receipt(text, text) TO ${quoteIdent(cp)}`,
+    );
+  }
+
+  return { ok: errors.length === 0, errors };
+}
+
+async function verifyReceiptProbeFunction(
+  client: Client,
+  controlPlaneRole: string,
+  runtimeRole: string,
+): Promise<string[]> {
+  const errors: string[] = [];
+  const ownerName = defaultReceiptProbeOwnerRoleName();
+
+  const fn = await client.query<{
+    owner: string;
+    prosecdef: boolean;
+    proconfig: string[] | null;
+  }>(
+    `SELECT r.rolname AS owner, p.prosecdef, p.proconfig
+     FROM pg_proc p
+     JOIN pg_namespace n ON n.oid = p.pronamespace
+     JOIN pg_roles r ON r.oid = p.proowner
+     WHERE n.nspname = 'public'
+       AND p.proname = 'stocky_has_application_receipt'
+       AND pg_get_function_identity_arguments(p.oid) = 'text, text'`,
+  );
+  if ((fn.rowCount ?? 0) === 0) {
+    // Function may be absent on pre-correction DBs; not an error for verify alone.
+    return errors;
+  }
+
+  const row = fn.rows[0];
+  if (!row.prosecdef) errors.push("receipt_probe_not_security_definer");
+  if (row.owner !== ownerName) {
+    errors.push(`receipt_probe_owner_not_restricted:${row.owner}`);
+  }
+  const cfg = (row.proconfig ?? []).join(",");
+  if (!cfg.includes("search_path=pg_catalog, pg_temp") && !cfg.includes("search_path=pg_catalog,pg_temp")) {
+    errors.push("receipt_probe_unsafe_search_path");
+  }
+
+  const ownerAttrs = await client.query<{
+    rolsuper: boolean;
+    rolbypassrls: boolean;
+    rolcanlogin: boolean;
+    rolinherit: boolean;
+    rolcreaterole: boolean;
+    rolcreatedb: boolean;
+  }>(
+    `SELECT rolsuper, rolbypassrls, rolcanlogin, rolinherit, rolcreaterole, rolcreatedb
+     FROM pg_roles WHERE rolname = $1`,
+    [ownerName],
+  );
+  if ((ownerAttrs.rowCount ?? 0) === 0) {
+    errors.push("receipt_probe_owner_role_missing");
+  } else {
+    const a = ownerAttrs.rows[0];
+    if (a.rolsuper) errors.push("receipt_probe_owner_is_superuser");
+    if (a.rolbypassrls) errors.push("receipt_probe_owner_has_bypassrls");
+    if (a.rolcanlogin) errors.push("receipt_probe_owner_can_login");
+    if (a.rolinherit) errors.push("receipt_probe_owner_has_inherit");
+    if (a.rolcreaterole) errors.push("receipt_probe_owner_has_createrole");
+    if (a.rolcreatedb) errors.push("receipt_probe_owner_has_createdb");
+  }
+
+  // Control-plane must not be a member of the probe owner.
+  const mem = await client.query(
+    `SELECT 1
+     FROM pg_auth_members m
+     JOIN pg_roles r ON r.oid = m.roleid
+     JOIN pg_roles mbr ON mbr.oid = m.member
+     WHERE r.rolname = $1 AND mbr.rolname = $2`,
+    [ownerName, controlPlaneRole],
+  );
+  if ((mem.rowCount ?? 0) > 0) {
+    errors.push("control_plane_member_of_receipt_probe_owner");
+  }
+
+  // EXECUTE grants.
+  const execCp = await client.query(
+    `SELECT has_function_privilege($1, 'stocky_has_application_receipt(text,text)', 'EXECUTE') AS ok`,
+    [controlPlaneRole],
+  );
+  if (execCp.rows[0]?.ok !== true) {
+    errors.push("control_plane_missing_receipt_probe_execute");
+  }
+  const execRt = await client.query(
+    `SELECT has_function_privilege($1, 'stocky_has_application_receipt(text,text)', 'EXECUTE') AS ok`,
+    [runtimeRole],
+  );
+  if (execRt.rows[0]?.ok === true) {
+    errors.push("runtime_has_receipt_probe_execute");
+  }
+  const execPub = await client.query(
+    `SELECT has_function_privilege('public', 'stocky_has_application_receipt(text,text)', 'EXECUTE') AS ok`,
+  );
+  if (execPub.rows[0]?.ok === true) {
+    errors.push("public_has_receipt_probe_execute");
+  }
+
+  // Probe owner must not have Session access.
+  const sessionPriv = await client.query(
+    `SELECT privilege_type FROM information_schema.role_table_grants
+     WHERE grantee = $1 AND table_schema = 'public' AND table_name = 'Session'`,
+    [ownerName],
+  );
+  if ((sessionPriv.rowCount ?? 0) > 0) {
+    errors.push("receipt_probe_owner_has_session_privilege");
+  }
+
+  return errors;
 }

@@ -14,6 +14,13 @@ describe("test:sync-role-isolation", () => {
     expect(pairs.has("RUNNING->CANCELLED")).toBe(true);
   });
 
+  it("application transition graph includes ENQUEUED→RETRY_WAIT stranded recovery", () => {
+    const pairs = new Set(
+      DURABLE_JOB_TRANSITION_PAIRS.map((p) => `${p.from}->${p.to}`),
+    );
+    expect(pairs.has("ENQUEUED->RETRY_WAIT")).toBe(true);
+  });
+
   it("control-plane Shop column allowlist excludes Session and tokens", () => {
     expect(CONTROL_PLANE_SHOP_COLUMNS).toContain("processingEnabled");
     expect(CONTROL_PLANE_SHOP_COLUMNS).not.toContain("accessToken");
@@ -151,6 +158,77 @@ describe("test:sync-role-isolation", () => {
       await prisma.jobAttempt.deleteMany({ where: { durableJobId: job.id } });
       await prisma.durableJob.delete({ where: { id: job.id } });
       await prisma.shop.delete({ where: { id: shop.id } });
+    } finally {
+      await prisma.$disconnect();
+    }
+  });
+
+  it("stocky_has_application_receipt owner is stocky_receipt_probe_owner when provisioned", async () => {
+    const { PrismaClient } = await import("@prisma/client");
+    const { Client } = await import("pg");
+    const {
+      DEFAULT_RECEIPT_PROBE_OWNER_ROLE,
+      defaultReceiptProbeOwnerRoleName,
+      provisionReceiptProbeOwner,
+      defaultControlPlaneRoleName,
+      defaultRuntimeRoleName,
+    } = await import("../roles");
+
+    const prisma = new PrismaClient();
+    try {
+      const fn = await prisma.$queryRaw<Array<{ owner: string }>>`
+        SELECT r.rolname AS owner
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_roles r ON r.oid = p.proowner
+        WHERE n.nspname = 'public'
+          AND p.proname = 'stocky_has_application_receipt'
+          AND pg_get_function_identity_arguments(p.oid) = 'text, text'
+      `;
+      if (fn.length === 0) {
+        // Soft-skip when function absent (pre-correction DB).
+        return;
+      }
+
+      const expected = defaultReceiptProbeOwnerRoleName();
+      expect(expected).toBe(DEFAULT_RECEIPT_PROBE_OWNER_ROLE);
+
+      const roleExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+        SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${expected}) AS exists
+      `;
+      if (!roleExists[0]?.exists) {
+        const url =
+          process.env.DATABASE_MIGRATION_URL ||
+          process.env.TENANT_MAINTENANCE_DATABASE_URL ||
+          process.env.DATABASE_URL;
+        if (!url) {
+          // Soft-skip when we cannot provision without a maintenance URL.
+          return;
+        }
+        const client = new Client({ connectionString: url });
+        await client.connect();
+        try {
+          await provisionReceiptProbeOwner(client, {
+            apply: true,
+            controlPlaneRole: defaultControlPlaneRoleName(),
+            runtimeRole: defaultRuntimeRoleName(),
+            probeOwnerRole: expected,
+          });
+        } finally {
+          await client.end();
+        }
+      }
+
+      const after = await prisma.$queryRaw<Array<{ owner: string }>>`
+        SELECT r.rolname AS owner
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_roles r ON r.oid = p.proowner
+        WHERE n.nspname = 'public'
+          AND p.proname = 'stocky_has_application_receipt'
+          AND pg_get_function_identity_arguments(p.oid) = 'text, text'
+      `;
+      expect(after[0]?.owner).toBe(expected);
     } finally {
       await prisma.$disconnect();
     }
