@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `315c753830a6a7847be4af93f13195e6f9d8dc4ba68d76d625f857251bf81456`
+**Content digest:** `eccf3738e2942f63dfae459435d3e77652b4d545d294f3c35ce718997db104da`
 **Scanned files:** 232
 **Findings:** 1227
 **Converted paths:** 442
@@ -306,14 +306,14 @@ All 19 approved merchant-owned models must appear below.
 | `app/services/forecasting.server.ts` | 202 / `db.inventorySnapshot.findFirst` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 237 / `db.salesDailyAggregate.groupBy` | service | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 297 / `db.variantAbcClass.upsert` | service | VariantAbcClass | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 342 / `db.inventorySnapshot.findMany` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 353 / `db.salesDailyAggregate.aggregate` | service | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 362 / `db.shopifyVariantCache.findUnique` | service | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 371 / `db.pOLineItem.findFirst` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 396 / `db.inventorySnapshot.findMany` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 406 / `db.pOLineItem.findFirst` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 417 / `db.shopifyVariantCache.findUnique` | service | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/forecasting.server.ts` | 440 / `db.lowStockAlert.findMany` | service | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 343 / `db.inventorySnapshot.findMany` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 354 / `db.salesDailyAggregate.aggregate` | service | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 363 / `db.shopifyVariantCache.findUnique` | service | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 372 / `db.pOLineItem.findFirst` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 397 / `db.inventorySnapshot.findMany` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 407 / `db.pOLineItem.findFirst` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 418 / `db.shopifyVariantCache.findUnique` | service | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/forecasting.server.ts` | 441 / `db.lowStockAlert.findMany` | service | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/landed-cost.server.ts` | 60 / `db.purchaseOrder.findUnique` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/landed-cost.server.ts` | 92 / `db.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/landed-cost.server.ts` | 113 / `db.volumePriceTier.findMany` | service | VolumePriceTier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
@@ -1533,6 +1533,6 @@ All 19 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "315c753830a6a7847be4af93f13195e6f9d8dc4ba68d76d625f857251bf81456"
+  "contentDigest": "eccf3738e2942f63dfae459435d3e77652b4d545d294f3c35ce718997db104da"
 }
 ```
