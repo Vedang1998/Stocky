@@ -90,6 +90,8 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     "20260730220000_tenant_ownership_issue_detection",
     "20260803120000_tenant_enforcement_helpers",
     "20260804180000_sync_control_plane",
+    "20260804210000_sync_control_plane_correction",
+    "20260804220000_sync_control_plane_correction_defaults",
   ] as const;
 
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -151,7 +153,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(restOut).toContain("20260730210000_tenant_backfill_correction");
   }, 180_000);
 
-  it("preserves legacy shop, Session shape, nullable shopId, indexes; no RLS/composite FKs; flags OFF", async () => {
+  it("preserves legacy shop, Session shape, nullable shopId, indexes; PR4 control-plane RLS only; no composite FKs; flags OFF", async () => {
     await resetPublicSchema(prisma);
     migrateDeploy();
     await applyCompatibilityIndexes();
@@ -220,13 +222,31 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     );
     expect(sessionShopId.length).toBe(0);
 
+    // D-043 / F-PR4-06: correction migration ENABLE+FORCE RLS on control-plane
+    // tables + SyncApplicationReceipt. Other merchant tables remain without
+    // migration-applied RLS until tenant-enforcement apply.
     const rls = await prisma.$queryRawUnsafe<Array<{ relname: string }>>(
       `SELECT c.relname FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
-       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = true`,
+       WHERE n.nspname = 'public' AND c.relkind = 'r' AND c.relrowsecurity = true
+       ORDER BY c.relname`,
     );
-    expect(rls.length).toBe(0);
+    expect(rls.map((r) => r.relname)).toEqual([
+      "DataIssue",
+      "DeadLetter",
+      "DurableJob",
+      "JobAttempt",
+      "JobDispatch",
+      "JobReplay",
+      "ReconciliationRun",
+      "SyncApplicationReceipt",
+      "SyncCursor",
+      "SyncHealth",
+      "SyncRun",
+      "WebhookDelivery",
+    ]);
 
+    // Policies for stocky_control_plane are created only when that role exists.
     const policies = await prisma.$queryRawUnsafe<Array<{ policyname: string }>>(
       `SELECT policyname FROM pg_policies WHERE schemaname='public'`,
     );
