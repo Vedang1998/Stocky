@@ -1852,7 +1852,10 @@ export type TenantDb = {
   pOLineItem: TenantModelDelegate;
   transferLineItem: TenantModelDelegate;
   stocktakeLineItem: TenantModelDelegate;
-  $transaction: <T>(fn: (db: TenantDb) => Promise<T>) => Promise<T>;
+  $transaction: <T>(
+    fn: (db: TenantDb) => Promise<T>,
+    options?: { maxWait?: number; timeout?: number },
+  ) => Promise<T>;
 };
 
 export function createTenantDb(authority: TenantAuthority): TenantDb {
@@ -1889,7 +1892,10 @@ function createTenantDbFromClient(
           ).$queryRaw.bind(client),
         }
       : {}),
-    $transaction: async <T>(fn: (tx: TenantDb) => Promise<T>): Promise<T> => {
+    $transaction: async <T>(
+      fn: (tx: TenantDb) => Promise<T>,
+      options?: { maxWait?: number; timeout?: number },
+    ): Promise<T> => {
       if (inTransaction) {
         // Reuse current transaction; verify context matches authority.
         await assertTransactionLocalTenantContext(
@@ -1912,7 +1918,7 @@ function createTenantDbFromClient(
         await assertTransactionLocalTenantContext(tx, authority);
         const tenantTx = createTenantDbFromClient(tx, authority, true);
         return fn(tenantTx);
-      });
+      }, options);
     },
   };
 

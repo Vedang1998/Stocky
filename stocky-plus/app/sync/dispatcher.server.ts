@@ -674,7 +674,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
   const limit = options?.limit ?? 50;
   const cutoff = new Date(now.getTime() - olderThanMs);
   let recovered = 0;
-  let deadLettered = 0;
+  const deadLettered = 0;
 
   const candidates = await prisma.durableJob.findMany({
     where: {

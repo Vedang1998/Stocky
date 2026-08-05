@@ -411,7 +411,7 @@ describe("test:sync-envelope-fail-closed", () => {
             id: 9103,
             line_items: [{ variant_id: 1, quantity: 9, price: "1.00" }],
           },
-          tenant: bogus,
+          tenant: bogus as WebhookJobData["tenant"],
         }),
       ),
     ).rejects.toBeInstanceOf(TenantAuthorityError);

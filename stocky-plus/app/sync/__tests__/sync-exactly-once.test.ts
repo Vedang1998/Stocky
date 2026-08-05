@@ -225,7 +225,6 @@ describe("test:sync-exactly-once", () => {
           payloadDigest: job.payloadDigest,
         },
         async (tdb) => {
-          const today = todayUtc();
           await tdb.salesDailyAggregate.updateMany({
             where: { shop: SHOP },
             data: { unitsSold: { increment: 999 } },

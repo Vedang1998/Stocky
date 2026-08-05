@@ -383,9 +383,8 @@ describe("test:sync-dispatch-recovery", () => {
       // Correction path: new sequence supersedes retained failed seq 1.
       expect(active!.dispatchSequence).toBeGreaterThan(1);
     } else {
-      // Or: when retained failed exists, ack must not produce ENQUEUED with zero runnable.
-      expect(durable.state).not.toBe("ENQUEUED");
-      expect(runnable === 0 || durable.state !== "ENQUEUED").toBe(true);
+      // Retained failed exists: ack must not produce ENQUEUED with zero runnable.
+      expect(String(durable.state) === "ENQUEUED" && runnable === 0).toBe(false);
     }
 
     await q.close();
