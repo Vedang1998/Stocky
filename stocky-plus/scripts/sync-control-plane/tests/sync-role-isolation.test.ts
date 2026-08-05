@@ -163,7 +163,7 @@ describe("test:sync-role-isolation", () => {
     }
   });
 
-  it("stocky_has_application_receipt owner is stocky_receipt_probe_owner when provisioned", async () => {
+  it("NEW-PR4-C08: stocky_has_application_receipt owner is restricted non-superuser probe role", async () => {
     const { PrismaClient } = await import("@prisma/client");
     const { Client } = await import("pg");
     const {
@@ -185,42 +185,39 @@ describe("test:sync-role-isolation", () => {
           AND p.proname = 'stocky_has_application_receipt'
           AND pg_get_function_identity_arguments(p.oid) = 'text, text'
       `;
-      if (fn.length === 0) {
-        // Soft-skip when function absent (pre-correction DB).
-        return;
-      }
+      expect(fn.length).toBe(1);
 
       const expected = defaultReceiptProbeOwnerRoleName();
       expect(expected).toBe(DEFAULT_RECEIPT_PROBE_OWNER_ROLE);
 
-      const roleExists = await prisma.$queryRaw<Array<{ exists: boolean }>>`
-        SELECT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${expected}) AS exists
-      `;
-      if (!roleExists[0]?.exists) {
-        const url =
-          process.env.DATABASE_MIGRATION_URL ||
-          process.env.TENANT_MAINTENANCE_DATABASE_URL ||
-          process.env.DATABASE_URL;
-        if (!url) {
-          // Soft-skip when we cannot provision without a maintenance URL.
-          return;
-        }
-        const client = new Client({ connectionString: url });
-        await client.connect();
-        try {
-          await provisionReceiptProbeOwner(client, {
-            apply: true,
-            controlPlaneRole: defaultControlPlaneRoleName(),
-            runtimeRole: defaultRuntimeRoleName(),
-            probeOwnerRole: expected,
-          });
-        } finally {
-          await client.end();
-        }
+      const url =
+        process.env.DATABASE_MIGRATION_URL ||
+        process.env.TENANT_MAINTENANCE_DATABASE_URL ||
+        process.env.DATABASE_URL;
+      expect(url).toBeTruthy();
+
+      const client = new Client({ connectionString: url! });
+      await client.connect();
+      try {
+        await provisionReceiptProbeOwner(client, {
+          apply: true,
+          controlPlaneRole: defaultControlPlaneRoleName(),
+          runtimeRole: defaultRuntimeRoleName(),
+          probeOwnerRole: expected,
+        });
+      } finally {
+        await client.end();
       }
 
-      const after = await prisma.$queryRaw<Array<{ owner: string }>>`
-        SELECT r.rolname AS owner
+      const after = await prisma.$queryRaw<
+        Array<{
+          owner: string;
+          rolsuper: boolean;
+          rolbypassrls: boolean;
+          rolcanlogin: boolean;
+        }>
+      >`
+        SELECT r.rolname AS owner, r.rolsuper, r.rolbypassrls, r.rolcanlogin
         FROM pg_proc p
         JOIN pg_namespace n ON n.oid = p.pronamespace
         JOIN pg_roles r ON r.oid = p.proowner
@@ -229,6 +226,28 @@ describe("test:sync-role-isolation", () => {
           AND pg_get_function_identity_arguments(p.oid) = 'text, text'
       `;
       expect(after[0]?.owner).toBe(expected);
+      expect(after[0]?.rolsuper).toBe(false);
+      expect(after[0]?.rolbypassrls).toBe(false);
+      expect(after[0]?.rolcanlogin).toBe(false);
+
+      // Runtime must not EXECUTE; control-plane may EXECUTE after provision.
+      const grants = await prisma.$queryRaw<
+        Array<{ runtime_exec: boolean; public_exec: boolean }>
+      >`
+        SELECT
+          has_function_privilege(
+            ${defaultRuntimeRoleName()},
+            'stocky_has_application_receipt(text,text)',
+            'EXECUTE'
+          ) AS runtime_exec,
+          has_function_privilege(
+            'public',
+            'stocky_has_application_receipt(text,text)',
+            'EXECUTE'
+          ) AS public_exec
+      `;
+      expect(grants[0]?.runtime_exec).toBe(false);
+      expect(grants[0]?.public_exec).toBe(false);
     } finally {
       await prisma.$disconnect();
     }

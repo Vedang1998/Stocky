@@ -1874,9 +1874,21 @@ function createTenantDbFromClient(
   };
   const delegates = buildTenantDelegates(state);
 
-  const db: TenantDb = {
+  const db: TenantDb & {
+    $queryRaw?: Prisma.TransactionClient["$queryRaw"];
+  } = {
     authority,
     ...(delegates as Omit<TenantDb, "authority" | "$transaction">),
+    // F-PR4-01 / D-044: SyncApplicationReceipt insert uses INSERT … ON CONFLICT
+    // DO NOTHING via tagged $queryRaw so a lost race never aborts the tx (25P02).
+    // Only exposed inside an open tenant transaction.
+    ...(inTransaction
+      ? {
+          $queryRaw: (
+            client as Prisma.TransactionClient
+          ).$queryRaw.bind(client),
+        }
+      : {}),
     $transaction: async <T>(fn: (tx: TenantDb) => Promise<T>): Promise<T> => {
       if (inTransaction) {
         // Reuse current transaction; verify context matches authority.
@@ -1907,6 +1919,11 @@ function createTenantDbFromClient(
   return new Proxy(db, {
     get(target, prop, receiver) {
       if (typeof prop === "string" && UNSAFE_CLIENT_KEYS.has(prop)) {
+        const attached = Reflect.get(target, prop, receiver);
+        // Allow in-transaction $queryRaw escape for application-receipt inserts.
+        if (prop === "$queryRaw" && typeof attached === "function") {
+          return attached;
+        }
         throw new TenantAccessError(
           "raw_client_escape",
           `Access to ${prop} is forbidden on tenant-bound DB`,

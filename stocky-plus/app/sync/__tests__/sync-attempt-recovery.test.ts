@@ -1,6 +1,7 @@
 /**
  * F-PR4-04 — RUNNING recovery, heartbeat, single-active-attempt constraint.
  * NEW-PR4-C02 / NEW-PR4-C06 — poison isolation + completeAttemptFail dead-letter.
+ * D-044 NEW-PR4-C03 residual — concurrent reaper, receipt finalize, strategy paths.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
@@ -8,17 +9,24 @@ import { ingestAuthenticatedWebhook } from "../intake.server";
 import {
   claimAttempt,
   completeAttemptFail,
+  completeAttemptSuccess,
   recoverExpiredRunningAttempts,
   renewAttemptHeartbeat,
 } from "../lifecycle.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
-import { APPLICATION_OUTCOME_UNCERTAIN } from "../execution-strategy.server";
+import {
+  APPLICATION_OUTCOME_UNCERTAIN,
+  resolveApplicationKey,
+  webhookApplicationKey,
+} from "../execution-strategy.server";
+import { SyncControlPlaneError } from "../errors";
 import { transitionToEnqueuedForTests } from "./test-state-helpers";
 
 const SHOP = "pr4-attempt.myshopify.com";
 const SHOP_POISON = "pr4-attempt-poison.myshopify.com";
 const SHOP_VALID = "pr4-attempt-valid.myshopify.com";
+const SHOP_B = "pr4-attempt-shop-b.myshopify.com";
 
 describe("test:sync-attempt-recovery", () => {
   let prisma: PrismaClient;
@@ -48,12 +56,48 @@ describe("test:sync-attempt-recovery", () => {
     `);
     await prisma.shop.deleteMany({
       where: {
-        myshopifyDomain: { in: [SHOP, SHOP_POISON, SHOP_VALID] },
+        myshopifyDomain: { in: [SHOP, SHOP_POISON, SHOP_VALID, SHOP_B] },
       },
     });
     await prisma.shop.create({ data: { myshopifyDomain: SHOP } });
     await resetControlPlanePrismaForTests();
   });
+
+  async function expireRunningAttempt(
+    durableJobId: string,
+    attemptId: string,
+  ): Promise<void> {
+    const expired = new Date(Date.now() - 10_000);
+    await prisma.jobAttempt.update({
+      where: { id: attemptId },
+      data: { leaseExpiresAt: expired },
+    });
+    await prisma.durableJob.update({
+      where: { id: durableJobId },
+      data: { leaseExpiresAt: expired },
+    });
+  }
+
+  async function ingestAndClaim(webhookId: string, workerId: string) {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId,
+      apiVersion: "2026-07",
+      payload: {
+        id: Number(webhookId.replace(/\D/g, "").slice(-6) || "1"),
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
+    const claim = await claimAttempt({
+      durableJobId: ingested.job!.id,
+      shopId: ingested.job!.shopId,
+      workerId,
+      leaseMs: 1,
+    });
+    return { ingested, ...claim };
+  }
 
   it("database rejects two active attempts (partial unique)", async () => {
     const ingested = await ingestAuthenticatedWebhook({
@@ -360,5 +404,372 @@ describe("test:sync-attempt-recovery", () => {
     });
     expect(closed.finishedAt).not.toBeNull();
     expect(closed.outcome).toBe("NON_RETRYABLE_FAILURE");
+  });
+
+  it("NEW-PR4-C03: concurrent reapers cannot recover same unfinished attempt twice", async () => {
+    const { ingested, attempt } = await ingestAndClaim(
+      "wh-reaper-race",
+      "w-reaper-race",
+    );
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+
+    const [a, b] = await Promise.all([
+      recoverExpiredRunningAttempts({ limit: 10 }),
+      recoverExpiredRunningAttempts({ limit: 10 }),
+    ]);
+
+    const totalRecovered =
+      a.recovered + a.deadLettered + a.finalized;
+    const totalB = b.recovered + b.deadLettered + b.finalized;
+    // Exactly one reaper meaningfully transitions the attempt/job.
+    expect(totalRecovered + totalB).toBeGreaterThanOrEqual(1);
+    expect(Math.min(totalRecovered, totalB)).toBe(0);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).not.toBe("RUNNING");
+    const closed = await prisma.jobAttempt.findUniqueOrThrow({
+      where: { id: attempt.id },
+    });
+    expect(closed.finishedAt).not.toBeNull();
+  });
+
+  it("NEW-PR4-C03: stale worker completion after reaper is rejected", async () => {
+    const { ingested, attempt } = await ingestAndClaim(
+      "wh-stale-after-reaper",
+      "w-stale-reaper",
+    );
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+
+    const result = await recoverExpiredRunningAttempts({ limit: 5 });
+    expect(result.recovered + result.deadLettered + result.finalized).toBeGreaterThanOrEqual(
+      1,
+    );
+
+    await expect(
+      completeAttemptSuccess({
+        durableJobId: ingested.job!.id,
+        shopId: ingested.job!.shopId,
+        attemptId: attempt.id,
+        workerId: "w-stale-reaper",
+      }),
+    ).rejects.toBeInstanceOf(SyncControlPlaneError);
+  });
+
+  it("NEW-PR4-C03: receipt exists → reaper finalizes success", async () => {
+    const { ingested, attempt } = await ingestAndClaim(
+      "wh-receipt-finalize",
+      "w-receipt-fin",
+    );
+    const applicationKey = resolveApplicationKey({
+      jobType: ingested.job!.jobType,
+      webhookDeliveryId: ingested.delivery.id,
+      idempotencyKey: ingested.job!.idempotencyKey,
+    });
+    await prisma.syncApplicationReceipt.create({
+      data: {
+        shopId: ingested.job!.shopId,
+        applicationKey,
+        sourceJobType: ingested.job!.jobType,
+        rootDurableJobId: ingested.job!.id,
+        firstApplyingDurableJobId: ingested.job!.id,
+        payloadDigest: ingested.job!.payloadDigest,
+        applicationSchemaVersion: "sync-application-receipt-v1",
+        resultMetadata: { outcome: "applied" },
+      },
+    });
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+
+    const result = await recoverExpiredRunningAttempts({ limit: 5 });
+    expect(result.finalized).toBeGreaterThanOrEqual(1);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).toBe("SUCCEEDED");
+  });
+
+  it("NEW-PR4-C03: receipt absent → safe retry (RETRY_WAIT)", async () => {
+    const { ingested, attempt } = await ingestAndClaim(
+      "wh-no-receipt-retry",
+      "w-no-receipt",
+    );
+    expect(
+      await prisma.syncApplicationReceipt.count({
+        where: { shopId: ingested.job!.shopId },
+      }),
+    ).toBe(0);
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+
+    const result = await recoverExpiredRunningAttempts({ limit: 5 });
+    expect(result.recovered).toBeGreaterThanOrEqual(1);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).toBe("RETRY_WAIT");
+    expect(job.failureCode).toBe("lease_expired");
+  });
+
+  it("NEW-PR4-C03: uncertain strategy (NO_AUTOMATIC_RETRY) → dead-letter", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-uncertain-strategy",
+      apiVersion: "2026-07",
+      payload: {
+        id: 8801,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    await prisma.durableJob.update({
+      where: { id: ingested.job!.id },
+      data: {
+        executionStrategy: "NO_AUTOMATIC_RETRY",
+        jobType: "webhook:unsupported/custom",
+      },
+    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: ingested.job!.id,
+      shopId: ingested.job!.shopId,
+      workerId: "w-uncertain",
+      leaseMs: 1,
+    });
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+
+    const result = await recoverExpiredRunningAttempts({ limit: 5 });
+    expect(result.deadLettered).toBeGreaterThanOrEqual(1);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).toBe("DEAD_LETTERED");
+    expect(job.failureCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+  });
+
+  it("NEW-PR4-C03: max attempts → dead-letter on lease expiry", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-max-attempts",
+      apiVersion: "2026-07",
+      payload: {
+        id: 8802,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id, {
+      maxAttempts: 1,
+    });
+    // claimAttempt increments attemptCount to 1 (>= maxAttempts).
+    const { attempt } = await claimAttempt({
+      durableJobId: ingested.job!.id,
+      shopId: ingested.job!.shopId,
+      workerId: "w-max",
+      leaseMs: 1,
+    });
+    const afterClaim = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(afterClaim.attemptCount).toBeGreaterThanOrEqual(afterClaim.maxAttempts);
+
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+    const result = await recoverExpiredRunningAttempts({ limit: 5 });
+    expect(result.deadLettered).toBeGreaterThanOrEqual(1);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).toBe("DEAD_LETTERED");
+    expect(job.failureCode).toBe("max_attempts_exceeded");
+  });
+
+  it("NEW-PR4-C03: heartbeat renewed before recovery — not recovered", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-heartbeat-alive",
+      apiVersion: "2026-07",
+      payload: {
+        id: 8803,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: ingested.job!.id,
+      shopId: ingested.job!.shopId,
+      workerId: "w-hb-alive",
+      leaseMs: 60_000,
+    });
+
+    const renewed = await renewAttemptHeartbeat({
+      attemptId: attempt.id,
+      shopId: ingested.job!.shopId,
+      workerId: "w-hb-alive",
+      leaseMs: 120_000,
+    });
+    expect(renewed).toBeTruthy();
+    expect(renewed!.leaseExpiresAt!.getTime()).toBeGreaterThan(Date.now());
+
+    const result = await recoverExpiredRunningAttempts({
+      limit: 10,
+      now: new Date(),
+    });
+    expect(result.recovered + result.deadLettered + result.finalized).toBe(0);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).toBe("RUNNING");
+    const open = await prisma.jobAttempt.findUniqueOrThrow({
+      where: { id: attempt.id },
+    });
+    expect(open.finishedAt).toBeNull();
+  });
+
+  it("NEW-PR4-C03: poison row Shop A does not block Shop B recovery", async () => {
+    await prisma.shop.create({ data: { myshopifyDomain: SHOP_POISON } });
+    await prisma.shop.create({ data: { myshopifyDomain: SHOP_B } });
+
+    const poisonIngest = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP_POISON,
+      topic: "orders/create",
+      webhookId: "wh-poison-a-block",
+      apiVersion: "2026-07",
+      payload: {
+        id: 9101,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    const shopBIngest = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP_B,
+      topic: "orders/create",
+      webhookId: "wh-shop-b-ok",
+      apiVersion: "2026-07",
+      payload: {
+        id: 9102,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+
+    await prisma.durableJob.update({
+      where: { id: poisonIngest.job!.id },
+      data: { webhookDeliveryId: null },
+    });
+
+    await transitionToEnqueuedForTests(prisma, poisonIngest.job!.id);
+    await transitionToEnqueuedForTests(prisma, shopBIngest.job!.id);
+
+    const poisonClaim = await claimAttempt({
+      durableJobId: poisonIngest.job!.id,
+      shopId: poisonIngest.job!.shopId,
+      workerId: "w-poison-a",
+      leaseMs: 1,
+    });
+    const shopBClaim = await claimAttempt({
+      durableJobId: shopBIngest.job!.id,
+      shopId: shopBIngest.job!.shopId,
+      workerId: "w-shop-b",
+      leaseMs: 1,
+    });
+
+    await expireRunningAttempt(poisonIngest.job!.id, poisonClaim.attempt.id);
+    await expireRunningAttempt(shopBIngest.job!.id, shopBClaim.attempt.id);
+
+    const result = await recoverExpiredRunningAttempts({ limit: 10 });
+    expect(result.isolatedFailures).toBe(0);
+
+    const poisonJob = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: poisonIngest.job!.id },
+    });
+    const shopBJob = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: shopBIngest.job!.id },
+    });
+    expect(poisonJob.state).toBe("DEAD_LETTERED");
+    expect(poisonJob.failureCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+    expect(["RETRY_WAIT", "SUCCEEDED", "DEAD_LETTERED"]).toContain(
+      shopBJob.state,
+    );
+    expect(shopBJob.state).not.toBe("RUNNING");
+    expect(result.deadLettered).toBeGreaterThanOrEqual(1);
+    expect(result.recovered + result.finalized).toBeGreaterThanOrEqual(1);
+  });
+
+  it("NEW-PR4-C03: no unfinished attempt remains without recoverable durable state", async () => {
+    const { ingested, attempt } = await ingestAndClaim(
+      "wh-no-orphan-attempt",
+      "w-orphan",
+    );
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+    await recoverExpiredRunningAttempts({ limit: 5 });
+
+    const openAttempts = await prisma.jobAttempt.findMany({
+      where: { durableJobId: ingested.job!.id, finishedAt: null },
+    });
+    expect(openAttempts).toHaveLength(0);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(["RETRY_WAIT", "SUCCEEDED", "DEAD_LETTERED"]).toContain(job.state);
+    expect(job.state).not.toBe("RUNNING");
+  });
+
+  it("NEW-PR4-C03: malformed application identity isolation (null delivery)", async () => {
+    const ingested = await ingestAuthenticatedWebhook({
+      verifiedShop: SHOP,
+      topic: "orders/create",
+      webhookId: "wh-malformed-identity",
+      apiVersion: "2026-07",
+      payload: {
+        id: 9200,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    await prisma.durableJob.update({
+      where: { id: ingested.job!.id },
+      data: { webhookDeliveryId: null },
+    });
+    expect(
+      resolveApplicationKey({
+        jobType: ingested.job!.jobType,
+        webhookDeliveryId: ingested.delivery.id,
+        idempotencyKey: ingested.job!.idempotencyKey,
+      }),
+    ).toBe(webhookApplicationKey(ingested.delivery.id));
+
+    await transitionToEnqueuedForTests(prisma, ingested.job!.id);
+    const { attempt } = await claimAttempt({
+      durableJobId: ingested.job!.id,
+      shopId: ingested.job!.shopId,
+      workerId: "w-malformed",
+      leaseMs: 1,
+    });
+    await expireRunningAttempt(ingested.job!.id, attempt.id);
+
+    const result = await recoverExpiredRunningAttempts({ limit: 5 });
+    expect(result.deadLettered).toBeGreaterThanOrEqual(1);
+
+    const job = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: ingested.job!.id },
+    });
+    expect(job.state).toBe("DEAD_LETTERED");
+    expect(job.failureCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+
+    const dl = await prisma.deadLetter.findFirst({
+      where: { durableJobId: ingested.job!.id },
+    });
+    expect(dl?.terminalReason).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+
+    const issue = await prisma.dataIssue.findFirst({
+      where: {
+        shopId: ingested.job!.shopId,
+        reasonCode: APPLICATION_OUTCOME_UNCERTAIN,
+      },
+    });
+    expect(issue).toBeTruthy();
   });
 });

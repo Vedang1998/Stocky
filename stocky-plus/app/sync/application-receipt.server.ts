@@ -5,13 +5,22 @@
  * Concurrent conflict uses INSERT … ON CONFLICT DO NOTHING RETURNING so a
  * failed unique insert never leaves the transaction aborted (25P02).
  */
-import type { Prisma, SyncApplicationReceipt } from "@prisma/client";
+import type { SyncApplicationReceipt } from "@prisma/client";
 import type { TenantDb } from "../tenant/tenant-db.server";
 import { SyncControlPlaneError } from "./errors";
 import {
   APPLICATION_ALREADY_APPLIED,
   APPLICATION_DIGEST_CONFLICT,
+  APPLICATION_OUTCOME_UNCERTAIN,
 } from "./execution-strategy.server";
+
+/** TenantDb may expose tagged $queryRaw only inside an open transaction. */
+type TenantDbWithQueryRaw = TenantDb & {
+  $queryRaw: (
+    strings: TemplateStringsArray,
+    ...values: unknown[]
+  ) => Promise<Array<{ id: string }>>;
+};
 
 export const APPLICATION_SCHEMA_VERSION = "sync-application-receipt-v1" as const;
 
@@ -80,7 +89,14 @@ export async function applyWithApplicationReceipt<T>(
 
   const schemaVersion =
     input.applicationSchemaVersion ?? APPLICATION_SCHEMA_VERSION;
-  const inserted = await db.$queryRaw<Array<{ id: string }>>`
+  const queryRaw = (db as TenantDbWithQueryRaw).$queryRaw;
+  if (typeof queryRaw !== "function") {
+    throw new SyncControlPlaneError(
+      APPLICATION_OUTCOME_UNCERTAIN,
+      "SyncApplicationReceipt insert requires in-transaction $queryRaw",
+    );
+  }
+  const inserted = await queryRaw`
     INSERT INTO "SyncApplicationReceipt" (
       id,
       "shopId",

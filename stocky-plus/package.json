@@ -44,6 +44,7 @@
     "test:sync-dispatch-recovery": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-dispatch-recovery.test.ts",
     "test:sync-uninstall": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-uninstall.test.ts",
     "test:sync-attempt-recovery": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-attempt-recovery.test.ts",
+    "test:sync-envelope-fail-closed": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-envelope-fail-closed.test.ts",
     "test:sync-role-isolation": "vitest run --config vitest.sync-integration.config.ts scripts/sync-control-plane/tests/sync-role-isolation.test.ts",
     "test:sync-inventory-audit": "vitest run --config vitest.sync-integration.config.ts scripts/sync-control-plane/tests/sync-inventory-audit.test.ts",
     "test:sync-performance": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-performance.test.ts",
