@@ -17,7 +17,6 @@ import {
   type TenantJobContext,
 } from "../../tenant/job-envelope.server";
 import {
-  parseTenantJobEnvelopeV2,
   resolveTenantJobContextV2,
   TENANT_JOB_ENVELOPE_V2_VERSION,
 } from "../../sync/envelope-v2.server";
@@ -515,7 +514,6 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
               ? err.code
               : "non_retryable_processor_error",
           failureSummary: message,
-          deadLetter: true,
         });
       }
       throw err;
@@ -524,7 +522,8 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
   }
 
   if (envelope.schemaVersion === TENANT_JOB_ENVELOPE_V2_VERSION) {
-    // In-flight v2 compatibility — still use application receipts when durable.
+    // NEW-PR4-C04: v2 may execute only with durable identity sufficient for
+    // the same application receipt as v3. Missing webhookDeliveryId → fail closed.
     const durableJobId =
       job.data.durableJobId ??
       (typeof envelope.durableJobId === "string" ? envelope.durableJobId : null);
@@ -572,33 +571,44 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     });
 
     try {
+      if (!durable.webhookDeliveryId) {
+        await completeAttemptFail({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          errorCode: APPLICATION_OUTCOME_UNCERTAIN,
+          failureSummary:
+            "v2 webhook missing webhookDeliveryId — refuse merchant write outside receipt",
+        });
+        throw new SyncControlPlaneError(
+          APPLICATION_OUTCOME_UNCERTAIN,
+          "v2 webhook missing webhookDeliveryId",
+        );
+      }
+
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
-      if (durable.webhookDeliveryId) {
-        const applicationKey = resolveApplicationKey({
-          jobType: durable.jobType,
-          webhookDeliveryId: durable.webhookDeliveryId,
-          idempotencyKey: durable.idempotencyKey,
-        });
-        await ctx.db.$transaction(async (tx) => {
-          await applyWithApplicationReceipt(
-            tx,
-            {
-              applicationKey,
-              sourceJobType: durable.jobType,
-              rootDurableJobId: durable.causationId ?? durable.id,
-              applyingDurableJobId: durable.id,
-              payloadDigest: durable.payloadDigest,
-            },
-            async (tdb) => {
-              await runLegacyWebhookHandler(topic, tdb, handlerPayload);
-              return { applied: true as const };
-            },
-          );
-        });
-      } else {
-        await runLegacyWebhookHandler(topic, ctx.db, handlerPayload);
-      }
+      const applicationKey = resolveApplicationKey({
+        jobType: durable.jobType,
+        webhookDeliveryId: durable.webhookDeliveryId,
+        idempotencyKey: durable.idempotencyKey,
+      });
+      await ctx.db.$transaction(async (tx) => {
+        await applyWithApplicationReceipt(
+          tx,
+          {
+            applicationKey,
+            sourceJobType: durable.jobType,
+            rootDurableJobId: durable.causationId ?? durable.id,
+            applyingDurableJobId: durable.id,
+            payloadDigest: durable.payloadDigest,
+          },
+          async (tdb) => {
+            await runLegacyWebhookHandler(topic, tdb, handlerPayload);
+            return { applied: true as const };
+          },
+        );
+      });
       await completeAttemptSuccess({
         durableJobId: durable.id,
         shopId: durable.shopId,
@@ -606,6 +616,12 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
         workerId,
       });
     } catch (err) {
+      if (
+        err instanceof SyncControlPlaneError &&
+        err.code === APPLICATION_OUTCOME_UNCERTAIN
+      ) {
+        throw err;
+      }
       const message = err instanceof Error ? err.message : String(err);
       const retryable =
         !(err instanceof SyncControlPlaneError) &&
@@ -619,7 +635,10 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           errorCode: "processor_error",
           failureSummary: message,
         });
-      } else {
+      } else if (
+        !(err instanceof SyncControlPlaneError) ||
+        err.code !== APPLICATION_ALREADY_APPLIED
+      ) {
         await completeAttemptFail({
           durableJobId: durable.id,
           shopId: durable.shopId,
@@ -629,7 +648,6 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
               ? err.code
               : "non_retryable_processor_error",
           failureSummary: message,
-          deadLetter: true,
         });
       }
       throw err;
@@ -637,26 +655,19 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     return;
   }
 
-  // v1 compatibility window (narrow).
+  // NEW-PR4-C04: v1 must not call merchant-domain handlers. Fail closed.
   const v1Schema = (envelope as { schemaVersion?: string }).schemaVersion;
-  if (v1Schema !== TENANT_JOB_ENVELOPE_VERSION) {
-    try {
-      parseTenantJobEnvelopeV2(envelope);
-    } catch {
-      /* fall through */
-    }
-    throw new TenantAuthorityError(
-      "unknown_envelope_version",
-      `Unsupported envelope version: ${String(v1Schema)}`,
+  if (v1Schema === TENANT_JOB_ENVELOPE_VERSION) {
+    throw new SyncControlPlaneError(
+      "legacy_envelope_unsupported",
+      "tenant-job-envelope-v1 cannot apply merchant writes; drain or migrate queues before enabling processing",
     );
   }
 
-  const { db, tenant } = await requireJobContext(envelope, {
-    payloadShop,
-    expectedJobNameOrTopic: topic,
-  });
-  await assertShopProcessingEnabled(tenant.shopId);
-  await runLegacyWebhookHandler(topic, db, payload);
+  throw new TenantAuthorityError(
+    "unknown_envelope_version",
+    `Unsupported envelope version: ${String(v1Schema)}`,
+  );
 }
 
 export async function processCronJob(job: Job) {

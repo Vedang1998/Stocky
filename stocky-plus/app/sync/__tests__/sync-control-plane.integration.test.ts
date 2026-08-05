@@ -363,7 +363,6 @@ describe("sync control-plane integration", () => {
       attemptId: a1.attempt.id,
       errorCode: "fatal",
       failureSummary: "fatal",
-      deadLetter: true,
     });
     const dl = await prisma.deadLetter.findFirstOrThrow({
       where: { durableJobId: r.job!.id },
@@ -411,7 +410,6 @@ describe("sync control-plane integration", () => {
       attemptId: a1.attempt.id,
       errorCode: "fatal",
       failureSummary: "fatal",
-      deadLetter: true,
     });
     const dl = await prisma.deadLetter.findFirstOrThrow({
       where: { durableJobId: r.job!.id },

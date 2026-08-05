@@ -8,7 +8,7 @@ import { SyncControlPlaneError } from "./errors";
 import {
   APPLICATION_OUTCOME_UNCERTAIN,
   executionStrategyForJobType,
-  resolveApplicationKey,
+  tryResolveApplicationKey,
 } from "./execution-strategy.server";
 import { assertTransition } from "./state-machine.server";
 
@@ -334,47 +334,21 @@ export async function completeAttemptFail(input: {
   attemptId: string;
   errorCode: string;
   failureSummary: string;
-  deadLetter?: boolean;
 }): Promise<DurableJob> {
+  // NEW-PR4-C06: non-retryable failure always enters the durable dead-letter path
+  // in one transaction. No caller-controlled deadLetter bypass.
   const prisma = getControlPlanePrisma();
   return prisma.$transaction(async (tx) => {
     const job = await lockDurableJob(tx, input.durableJobId, input.shopId);
     if (!job) {
       throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
     }
-
-    const shouldDeadLetter =
-      input.deadLetter === true || job.attemptCount >= job.maxAttempts;
-
-    if (shouldDeadLetter) {
-      return completeAttemptDeadLetterInTx(tx, {
-        job,
-        attemptId: input.attemptId,
-        terminalReason: input.errorCode,
-        errorCode: input.errorCode,
-        failureSummary: input.failureSummary,
-      });
-    }
-
-    assertTransition(job.state, "FAILED");
-    await tx.jobAttempt.update({
-      where: { id: input.attemptId },
-      data: {
-        finishedAt: new Date(),
-        outcome: "NON_RETRYABLE_FAILURE",
-        errorCode: input.errorCode,
-        failureSummary: input.failureSummary.slice(0, 512),
-        leaseExpiresAt: null,
-      },
-    });
-
     return completeAttemptDeadLetterInTx(tx, {
-      job: { ...job, state: "FAILED" },
+      job,
       attemptId: input.attemptId,
       terminalReason: input.errorCode,
       errorCode: input.errorCode,
       failureSummary: input.failureSummary,
-      skipAttemptUpdate: true,
     });
   });
 }
@@ -523,24 +497,32 @@ async function completeAttemptDeadLetterInTx(
 }
 
 /**
- * Recover expired RUNNING attempts (F-PR4-04).
+ * Recover expired RUNNING attempts (F-PR4-04 / NEW-PR4-C02).
  *
+ * One malformed attempt must never abort recovery for other jobs/shops.
  * Atomic application jobs:
  *   receipt present → finalize SUCCEEDED without reapplying
  *   receipt absent → prior tenant txn did not commit; retry or dead-letter
+ * Unresolvable application identity → dead-letter with application_outcome_uncertain
  * Rebuildable: retry after strategy allows
  * Uncertain / NO_AUTOMATIC_RETRY: dead-letter with application_outcome_uncertain
  */
 export async function recoverExpiredRunningAttempts(options?: {
   limit?: number;
   now?: Date;
-}): Promise<{ recovered: number; deadLettered: number; finalized: number }> {
+}): Promise<{
+  recovered: number;
+  deadLettered: number;
+  finalized: number;
+  isolatedFailures: number;
+}> {
   const prisma = getControlPlanePrisma();
   const now = options?.now ?? new Date();
   const limit = options?.limit ?? 100;
   let recovered = 0;
   let deadLettered = 0;
   let finalized = 0;
+  let isolatedFailures = 0;
 
   const expired = await prisma.jobAttempt.findMany({
     where: {
@@ -552,137 +534,193 @@ export async function recoverExpiredRunningAttempts(options?: {
   });
 
   for (const attempt of expired) {
-    const outcome = await prisma.$transaction(async (tx) => {
-      const job = await lockDurableJob(tx, attempt.durableJobId, attempt.shopId);
-      if (!job || job.state !== "RUNNING") {
-        await tx.jobAttempt.updateMany({
+    try {
+      const outcome = await prisma.$transaction(async (tx) => {
+        const job = await lockDurableJob(tx, attempt.durableJobId, attempt.shopId);
+        if (!job || job.state !== "RUNNING") {
+          await tx.jobAttempt.updateMany({
+            where: { id: attempt.id, finishedAt: null },
+            data: {
+              finishedAt: now,
+              outcome: "LEASE_EXPIRED",
+              errorCode: "lease_expired",
+              failureSummary: "Attempt lease expired after job left RUNNING",
+              leaseExpiresAt: null,
+            },
+          });
+          return "noop" as const;
+        }
+
+        // Concurrent reaper claim: only one updater wins.
+        const closed = await tx.jobAttempt.updateMany({
           where: { id: attempt.id, finishedAt: null },
           data: {
             finishedAt: now,
             outcome: "LEASE_EXPIRED",
             errorCode: "lease_expired",
-            failureSummary: "Attempt lease expired after job left RUNNING",
+            failureSummary: "Worker lease expired — attempt abandoned",
             leaseExpiresAt: null,
           },
         });
-        return "noop" as const;
-      }
+        if (closed.count === 0) return "noop" as const;
 
-      const closed = await tx.jobAttempt.updateMany({
-        where: { id: attempt.id, finishedAt: null },
-        data: {
-          finishedAt: now,
-          outcome: "LEASE_EXPIRED",
-          errorCode: "lease_expired",
-          failureSummary: "Worker lease expired — attempt abandoned",
-          leaseExpiresAt: null,
-        },
-      });
-      if (closed.count === 0) return "noop" as const;
+        const strategy =
+          job.executionStrategy ?? executionStrategyForJobType(job.jobType);
 
-      const strategy =
-        job.executionStrategy ?? executionStrategyForJobType(job.jobType);
+        if (strategy === "ATOMIC_APPLICATION_RECEIPT") {
+          const applicationKey = tryResolveApplicationKey({
+            jobType: job.jobType,
+            webhookDeliveryId: job.webhookDeliveryId,
+            idempotencyKey: job.idempotencyKey,
+          });
 
-      if (strategy === "ATOMIC_APPLICATION_RECEIPT") {
-        const applicationKey = resolveApplicationKey({
-          jobType: job.jobType,
-          webhookDeliveryId: job.webhookDeliveryId,
-          idempotencyKey: job.idempotencyKey,
-        });
-        const receiptRows = await tx.$queryRawUnsafe<
-          Array<{ has_receipt: boolean }>
-        >(
-          `SELECT stocky_has_application_receipt($1::text, $2::text) AS has_receipt`,
-          job.shopId,
-          applicationKey,
-        );
-        if (receiptRows[0]?.has_receipt === true) {
-          const rows = await tx.$queryRaw<DurableJob[]>`
-            UPDATE "DurableJob"
-            SET
-              state = 'SUCCEEDED',
-              "completedAt" = ${now},
-              "leaseOwner" = NULL,
-              "leaseExpiresAt" = NULL,
-              "failureCode" = NULL,
-              "failureSummary" = NULL,
-              "updatedAt" = ${now}
-            WHERE id = ${job.id}
-              AND state = 'RUNNING'
-            RETURNING *
-          `;
-          if (rows.length === 0) return "noop" as const;
-          if (attempt.jobDispatchId) {
-            await tx.jobDispatch.updateMany({
-              where: { id: attempt.jobDispatchId, shopId: job.shopId },
-              data: { state: "COMPLETED", completedAt: now },
+          if (applicationKey == null) {
+            await tx.$executeRaw`
+              UPDATE "DurableJob" SET state = 'FAILED', "updatedAt" = ${now}
+              WHERE id = ${job.id} AND state = 'RUNNING'
+            `;
+            await completeAttemptDeadLetterInTx(tx, {
+              job: { ...job, state: "FAILED" },
+              attemptId: attempt.id,
+              terminalReason: APPLICATION_OUTCOME_UNCERTAIN,
+              errorCode: APPLICATION_OUTCOME_UNCERTAIN,
+              failureSummary:
+                "Expired RUNNING webhook attempt lacks webhookDeliveryId — application identity unresolvable",
+              skipAttemptUpdate: true,
             });
-          }
-          if (job.webhookDeliveryId) {
-            await tx.webhookDelivery.updateMany({
-              where: { id: job.webhookDeliveryId, shopId: job.shopId },
-              data: { state: "COMPLETED", completedAt: now },
+            await tx.dataIssue.create({
+              data: {
+                shopId: job.shopId,
+                reasonCode: APPLICATION_OUTCOME_UNCERTAIN,
+                severity: "ERROR",
+                redactedEvidence: {
+                  durableJobId: job.id,
+                  attemptId: attempt.id,
+                  jobType: job.jobType,
+                  cause: "webhook_application_key_requires_delivery",
+                },
+              },
             });
+            return "dead_lettered" as const;
           }
-          return "finalized" as const;
+
+          const receiptRows = await tx.$queryRawUnsafe<
+            Array<{ has_receipt: boolean }>
+          >(
+            `SELECT stocky_has_application_receipt($1::text, $2::text) AS has_receipt`,
+            job.shopId,
+            applicationKey,
+          );
+          if (receiptRows[0]?.has_receipt === true) {
+            const rows = await tx.$queryRaw<DurableJob[]>`
+              UPDATE "DurableJob"
+              SET
+                state = 'SUCCEEDED',
+                "completedAt" = ${now},
+                "leaseOwner" = NULL,
+                "leaseExpiresAt" = NULL,
+                "failureCode" = NULL,
+                "failureSummary" = NULL,
+                "updatedAt" = ${now}
+              WHERE id = ${job.id}
+                AND state = 'RUNNING'
+              RETURNING *
+            `;
+            if (rows.length === 0) return "noop" as const;
+            if (attempt.jobDispatchId) {
+              await tx.jobDispatch.updateMany({
+                where: { id: attempt.jobDispatchId, shopId: job.shopId },
+                data: { state: "COMPLETED", completedAt: now },
+              });
+            }
+            if (job.webhookDeliveryId) {
+              await tx.webhookDelivery.updateMany({
+                where: { id: job.webhookDeliveryId, shopId: job.shopId },
+                data: { state: "COMPLETED", completedAt: now },
+              });
+            }
+            return "finalized" as const;
+          }
         }
-      }
 
-      if (strategy === "NO_AUTOMATIC_RETRY") {
-        await tx.$executeRaw`
-          UPDATE "DurableJob" SET state = 'FAILED', "updatedAt" = ${now}
-          WHERE id = ${job.id} AND state = 'RUNNING'
+        if (strategy === "NO_AUTOMATIC_RETRY") {
+          await tx.$executeRaw`
+            UPDATE "DurableJob" SET state = 'FAILED', "updatedAt" = ${now}
+            WHERE id = ${job.id} AND state = 'RUNNING'
+          `;
+          await completeAttemptDeadLetterInTx(tx, {
+            job: { ...job, state: "FAILED" },
+            attemptId: attempt.id,
+            terminalReason: APPLICATION_OUTCOME_UNCERTAIN,
+            errorCode: APPLICATION_OUTCOME_UNCERTAIN,
+            failureSummary:
+              "Expired RUNNING attempt for non-retryable strategy — outcome uncertain",
+            skipAttemptUpdate: true,
+          });
+          return "dead_lettered" as const;
+        }
+
+        if (job.attemptCount >= job.maxAttempts) {
+          await tx.$executeRaw`
+            UPDATE "DurableJob" SET state = 'FAILED', "updatedAt" = ${now}
+            WHERE id = ${job.id} AND state = 'RUNNING'
+          `;
+          await completeAttemptDeadLetterInTx(tx, {
+            job: { ...job, state: "FAILED" },
+            attemptId: attempt.id,
+            terminalReason: "max_attempts_exceeded",
+            errorCode: "max_attempts_exceeded",
+            failureSummary: "Max attempts exceeded after lease expiry",
+            skipAttemptUpdate: true,
+          });
+          return "dead_lettered" as const;
+        }
+
+        const backoff = DEFAULT_BACKOFF_MS * 2 ** Math.max(0, job.attemptCount - 1);
+        const rows = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "DurableJob"
+          SET
+            state = 'RETRY_WAIT',
+            "nextEligibleAt" = ${new Date(now.getTime() + backoff)},
+            "leaseOwner" = NULL,
+            "leaseExpiresAt" = NULL,
+            "failureCode" = 'lease_expired',
+            "failureSummary" = 'Worker lease expired — retry scheduled',
+            "updatedAt" = ${now}
+          WHERE id = ${job.id}
+            AND state = 'RUNNING'
+          RETURNING id
         `;
-        await completeAttemptDeadLetterInTx(tx, {
-          job: { ...job, state: "FAILED" },
-          attemptId: attempt.id,
-          terminalReason: APPLICATION_OUTCOME_UNCERTAIN,
-          errorCode: APPLICATION_OUTCOME_UNCERTAIN,
-          failureSummary:
-            "Expired RUNNING attempt for non-retryable strategy — outcome uncertain",
-          skipAttemptUpdate: true,
+        return rows.length > 0 ? ("recovered" as const) : ("noop" as const);
+      });
+
+      if (outcome === "recovered") recovered += 1;
+      else if (outcome === "dead_lettered") deadLettered += 1;
+      else if (outcome === "finalized") finalized += 1;
+    } catch (err) {
+      isolatedFailures += 1;
+      console.error(
+        `recoverExpiredRunningAttempts isolated failure attempt=${attempt.id}:`,
+        err instanceof Error ? err.message : err,
+      );
+      try {
+        await prisma.dataIssue.create({
+          data: {
+            shopId: attempt.shopId,
+            reasonCode: "reaper_isolated_failure",
+            severity: "ERROR",
+            redactedEvidence: {
+              attemptId: attempt.id,
+              durableJobId: attempt.durableJobId,
+              error: err instanceof Error ? err.message.slice(0, 200) : "unknown",
+            },
+          },
         });
-        return "dead_lettered" as const;
+      } catch {
+        // Never let health recording abort the batch.
       }
-
-      if (job.attemptCount >= job.maxAttempts) {
-        await tx.$executeRaw`
-          UPDATE "DurableJob" SET state = 'FAILED', "updatedAt" = ${now}
-          WHERE id = ${job.id} AND state = 'RUNNING'
-        `;
-        await completeAttemptDeadLetterInTx(tx, {
-          job: { ...job, state: "FAILED" },
-          attemptId: attempt.id,
-          terminalReason: "max_attempts_exceeded",
-          errorCode: "max_attempts_exceeded",
-          failureSummary: "Max attempts exceeded after lease expiry",
-          skipAttemptUpdate: true,
-        });
-        return "dead_lettered" as const;
-      }
-
-      const backoff = DEFAULT_BACKOFF_MS * 2 ** Math.max(0, job.attemptCount - 1);
-      const rows = await tx.$queryRaw<Array<{ id: string }>>`
-        UPDATE "DurableJob"
-        SET
-          state = 'RETRY_WAIT',
-          "nextEligibleAt" = ${new Date(now.getTime() + backoff)},
-          "leaseOwner" = NULL,
-          "leaseExpiresAt" = NULL,
-          "failureCode" = 'lease_expired',
-          "failureSummary" = 'Worker lease expired — retry scheduled',
-          "updatedAt" = ${now}
-        WHERE id = ${job.id}
-          AND state = 'RUNNING'
-        RETURNING id
-      `;
-      return rows.length > 0 ? ("recovered" as const) : ("noop" as const);
-    });
-
-    if (outcome === "recovered") recovered += 1;
-    else if (outcome === "dead_lettered") deadLettered += 1;
-    else if (outcome === "finalized") finalized += 1;
+    }
   }
 
-  return { recovered, deadLettered, finalized };
+  return { recovered, deadLettered, finalized, isolatedFailures };
 }
