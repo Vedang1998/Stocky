@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import failOnZeroPassedNameFilter from "./scripts/vitest/fail-on-zero-passed-name-filter";
 
 export default defineConfig({
   test: {
@@ -12,5 +13,7 @@ export default defineConfig({
     testTimeout: 180_000,
     hookTimeout: 180_000,
     fileParallelism: false,
+    // P3-NEW-D047-01: -t filters that match nothing must not exit 0.
+    reporters: ["default", failOnZeroPassedNameFilter()],
   },
 });

@@ -5,8 +5,8 @@
 **Branch:** `phase-1/sync-control-plane`
 **Generator:** `scripts/sync-control-plane/inventory.ts` (deterministic)
 **Inventory version:** `phase1-pr4-sync-inventory-v2-correction`
-**Content digest:** `48e62809a4c80c40119638842b7cfa4be4d126c6c17f839e28a2d73261fb3317`
-**Surfaces:** 36
+**Content digest:** `87905b396b3a9ea359bc36b2fdf24e626a8353b00257091754bc097d857491b2`
+**Surfaces:** 37
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run sync:inventory`.
@@ -17,7 +17,7 @@
 | Kind | Count |
 |---|---|
 | control_plane_table | 11 |
-| dispatcher | 1 |
+| dispatcher | 2 |
 | merchant_table | 1 |
 | producer | 5 |
 | queue | 2 |
@@ -38,6 +38,7 @@
 | producer | `producer:abc-analysis-shop` | `app/jobs/queue.server.ts` | `enqueueAbcAnalysisForShop` | Per-shop ABC durable producer |
 | producer | `producer:weekly-abc-tick` | `app/jobs/queue.server.ts` | `scheduleAbcAnalysisCron` | Control-plane weekly tick (no tenant envelope) |
 | dispatcher | `dispatcher:pending-jobs` | `app/sync/dispatcher.server.ts` | `dispatchPendingJobs` | FOR UPDATE SKIP LOCKED claim + BullMQ enqueue |
+| dispatcher | `dispatcher:fair-claim-query` | `app/sync/fair-claim-query.server.ts` | `buildFairClaimLockedSelectSql` | D-047 production-owned bounded fair-claim SQL shared with EXPLAIN harness |
 | worker | `worker:webhook` | `app/jobs/workers/webhook-processor.ts` | `processWebhookJob` | Durable lifecycle wrapper + legacy handlers |
 | worker | `worker:cron` | `app/jobs/workers/webhook-processor.ts` | `processCronJob` | Durable lifecycle wrapper for cron jobs |
 | worker | `worker:entrypoint` | `app/jobs/workers/index.ts` | `main` | Starts workers + optional dispatcher loop |

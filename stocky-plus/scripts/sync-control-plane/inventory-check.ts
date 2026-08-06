@@ -149,6 +149,7 @@ function scanFile(abs: string): Finding[] {
   approvedControlPlaneImporters.add("app/sync/health.server.ts");
   approvedControlPlaneImporters.add("app/sync/intake.server.ts");
   approvedControlPlaneImporters.add("app/sync/dispatcher.server.ts");
+  approvedControlPlaneImporters.add("app/sync/fair-claim-query.server.ts");
   approvedControlPlaneImporters.add("app/sync/replay.server.ts");
   approvedControlPlaneImporters.add("app/jobs/workers/webhook-processor.ts");
   approvedControlPlaneImporters.add("app/jobs/queue.server.ts");

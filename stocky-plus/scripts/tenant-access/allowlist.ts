@@ -234,6 +234,7 @@ function syncControlPlaneExceptions(): AccessException[] {
     "app/sync/replay.server.ts",
     "app/sync/uninstall.server.ts",
     "app/sync/dispatcher.server.ts",
+    "app/sync/fair-claim-query.server.ts",
   ] as const;
   return files.map((path, i) => ({
     id: `EX-SYNC-${String(i + 1).padStart(3, "0")}`,

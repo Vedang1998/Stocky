@@ -83,6 +83,13 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     notes: "FOR UPDATE SKIP LOCKED claim + BullMQ enqueue",
   },
   {
+    kind: "dispatcher",
+    id: "dispatcher:fair-claim-query",
+    path: "app/sync/fair-claim-query.server.ts",
+    symbol: "buildFairClaimLockedSelectSql",
+    notes: "D-047 production-owned bounded fair-claim SQL shared with EXPLAIN harness",
+  },
+  {
     kind: "worker",
     id: "worker:webhook",
     path: "app/jobs/workers/webhook-processor.ts",

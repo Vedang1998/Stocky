@@ -1,7 +1,8 @@
 /**
  * Fail closed when a Vitest name filter (`-t` / testNamePattern) matches
  * zero passing tests. Vitest otherwise exits 0 with all tests skipped
- * (P3-D046-01). Scoped to sync-integration config only.
+ * (P3-D046-01 / P3-NEW-D047-01). Wired into sync-integration and migrations
+ * configs; activates only when a testNamePattern is present.
  */
 import type { File, Reporter, Task, Vitest } from "vitest";
 

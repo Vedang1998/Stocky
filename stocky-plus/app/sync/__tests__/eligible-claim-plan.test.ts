@@ -1,5 +1,5 @@
 /**
- * Plan-shape regression fixtures for F-PR4-11 (P2-D046-01).
+ * Plan-shape regression fixtures for operational fair-claim (D-047 / F-PR4-11).
  * Pure string assertions — no DB / planner nondeterminism.
  */
 import { describe, expect, it } from "vitest";
@@ -8,71 +8,95 @@ import {
   assertEligibleClaimPlanShape,
 } from "./eligible-claim-plan";
 
-describe("eligible-claim-plan shape (F-PR4-11)", () => {
-  it("accepts Index Only Scan on DurableJob_eligible_pending_idx without Sort", () => {
+const BOUNDS = { maxCandidateRows: 100 };
+
+describe("eligible-claim-plan shape (F-PR4-11 / D-047)", () => {
+  it("accepts bounded shop-claim Index Only Scan with LockRows", () => {
     const plan = `
-Limit  (cost=0.42..8.03 rows=50 width=29) (actual time=0.016..0.031 rows=50 loops=1)
-  Buffers: shared hit=17
-  ->  Index Only Scan using "DurableJob_eligible_pending_idx" on "DurableJob"  (cost=0.42..7615.79 rows=50000 width=29) (actual time=0.016..0.028 rows=50 loops=1)
-        Index Cond: ("nextEligibleAt" <= now())
-        Heap Fetches: 50
-        Buffers: shared hit=17
-Execution Time: 0.041 ms
+CTE Scan on locked  (actual time=0.315..0.327 rows=10 loops=1)
+  Buffers: shared hit=117
+  CTE locked
+    ->  Limit  (actual time=0.313..0.321 rows=10 loops=1)
+          ->  LockRows  (actual time=0.313..0.318 rows=10 loops=1)
+                ->  Sort  (actual time=0.303..0.304 rows=10 loops=1)
+                      Sort Key: d."nextEligibleAt", d."createdAt", d.id
+                      Sort Method: quicksort  Memory: 27kB
+                      ->  Index Scan using "DurableJob_pkey" on "DurableJob" d
+          InitPlan
+            ->  Nested Loop
+                  ->  Limit
+                        ->  Sort  (actual time=0.176..0.177 rows=5 loops=1)
+                              Sort Method: quicksort  Memory: 25kB
+                  ->  Limit
+                        ->  Index Only Scan using "DurableJob_shop_claim_pending_idx" on "DurableJob"
+                              Index Cond: (("shopId" = s.id) AND ("nextEligibleAt" <= now()))
+Execution Time: 0.434 ms
 `;
-    expect(() => assertEligibleClaimPlanShape(plan)).not.toThrow();
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).not.toThrow();
   });
 
-  it("accepts Index Scan on DurableJob_eligible_pending_idx without Sort", () => {
+  it("accepts Index Scan on DurableJob_shop_claim_retry_wait_idx", () => {
     const plan = `
 Limit
-  ->  Index Scan using "DurableJob_eligible_pending_idx" on "DurableJob"
-        Index Cond: ("nextEligibleAt" <= now())
+  ->  LockRows
+        ->  Nested Loop
+              ->  Index Scan using "DurableJob_shop_claim_retry_wait_idx" on "DurableJob"
 `;
-    expect(() => assertEligibleClaimPlanShape(plan)).not.toThrow();
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).not.toThrow();
   });
 
-  it("rejects shop-leading eligible index with top-N heapsort (stale-stats CI plan)", () => {
+  it("rejects Seq Scan of DurableJob (legacy ROW_NUMBER plan)", () => {
     const plan = `
-Limit  (cost=8.31..8.32 rows=1 width=42)
-  ->  Sort  (cost=8.31..8.32 rows=1 width=42)
-        Sort Key: "nextEligibleAt", "createdAt", id
-        Sort Method: top-N heapsort  Memory: 25kB
-        ->  Index Scan using "DurableJob_shop_eligible_pending_idx" on "DurableJob"  (cost=0.29..8.30 rows=1 width=42) (actual time=0.031..21.611 rows=50000 loops=1)
-              Index Cond: ("nextEligibleAt" <= now())
+Limit  (actual time=96.442..96.445 rows=10 loops=1)
+  ->  Sort  (actual time=96.441..96.443 rows=10 loops=1)
+        ->  WindowAgg  (actual time=90.075..96.423 rows=10 loops=1)
+              ->  Sort  (actual time=90.054..92.784 rows=45000 loops=1)
+                    Sort Method: quicksort  Memory: 12435kB
+                    ->  Seq Scan on "DurableJob"  (actual time=0.006..9.374 rows=45000 loops=1)
 `;
-    expect(() => assertEligibleClaimPlanShape(plan)).toThrow(EligibleClaimPlanShapeError);
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(
+      EligibleClaimPlanShapeError,
+    );
   });
 
-  it("rejects state composite index with Incremental Sort (no-ANALYZE local plan)", () => {
-    const plan = `
-Limit
-  ->  Incremental Sort
-        Sort Key: "nextEligibleAt", "createdAt", id
-        Full-sort Groups: 1  Sort Method: quicksort  Average Memory: 29kB  Peak Memory: 29kB
-        ->  Index Scan using "DurableJob_state_nextEligibleAt_createdAt_idx" on "DurableJob"
-              Index Cond: ((state = 'PENDING'::"DurableJobState") AND ("nextEligibleAt" <= now()))
-`;
-    expect(() => assertEligibleClaimPlanShape(plan)).toThrow(EligibleClaimPlanShapeError);
-  });
-
-  it("rejects Seq Scan even when index name is absent", () => {
+  it("rejects WindowAgg over the eligible backlog", () => {
     const plan = `
 Limit
-  ->  Sort
-        Sort Method: top-N heapsort  Memory: 28kB
-        ->  Seq Scan on "DurableJob"
-              Filter: ((state = 'PENDING'::"DurableJobState") AND ("nextEligibleAt" <= now()))
+  ->  WindowAgg
+        ->  Index Scan using "DurableJob_shop_claim_pending_idx" on "DurableJob"
+  LockRows
 `;
-    expect(() => assertEligibleClaimPlanShape(plan)).toThrow(/Seq Scan|eligible_pending/);
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(/WindowAgg/);
   });
 
-  it("rejects external sort", () => {
+  it("rejects external disk sort", () => {
     const plan = `
 Limit
-  ->  Sort
-        Sort Method: external merge  Disk: 1024kB
-        ->  Index Scan using "DurableJob_eligible_pending_idx" on "DurableJob"
+  ->  LockRows
+        ->  Sort
+              Sort Method: external merge  Disk: 2816kB
+              ->  Index Only Scan using "DurableJob_shop_claim_pending_idx" on "DurableJob"
 `;
-    expect(() => assertEligibleClaimPlanShape(plan)).toThrow(/external sort|Sort/);
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(/external/);
+  });
+
+  it("rejects Sort whose actual rows exceed the SQL candidate cap", () => {
+    const plan = `
+Limit
+  ->  LockRows
+        ->  Sort  (cost=100..200 rows=45000 width=50) (actual time=90.054..92.784 rows=45000 loops=1)
+              Sort Method: quicksort  Memory: 12435kB
+              ->  Index Only Scan using "DurableJob_shop_claim_pending_idx" on "DurableJob"
+`;
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(/unbounded Sort/);
+  });
+
+  it("rejects plans that never use a shop-claim index", () => {
+    const plan = `
+Limit
+  ->  LockRows
+        ->  Index Only Scan using "DurableJob_eligible_pending_idx" on "DurableJob"
+`;
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(/shop-claim/);
   });
 });
