@@ -28,6 +28,7 @@ import {
   inspectQueueDispatchPresence,
   type QueueDispatchPresence,
 } from "./queue-presence.server";
+import { buildFairClaimLockedSelectSql } from "./fair-claim-query.server";
 import type { Queue } from "bullmq";
 
 export const DEFAULT_DISPATCH_BATCH_SIZE = 50;
@@ -145,8 +146,9 @@ async function recoverExpiredDispatchLeases(
 }
 
 /**
- * Fair claim: one round-robin pass selecting up to maxPerShop per shop,
- * using index-supported per-state queries (F-PR4-11 / F-PR4-13).
+ * Fair claim: SQL-capped per-shop LATERAL selection (PENDING + RETRY_WAIT)
+ * with FOR UPDATE SKIP LOCKED on the bounded candidate set
+ * (F-PR4-11 / F-PR4-13 / D-047). Uses production-owned fair-claim-query SQL.
  */
 async function claimBatchFair(
   prisma: ReturnType<typeof getControlPlanePrisma>,
@@ -159,48 +161,14 @@ async function claimBatchFair(
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
   return prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<ClaimedJobRow[]>`
-      WITH eligible AS (
-        SELECT
-          id, "shopId", "jobType", source, "queueName",
-          "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
-          "correlationId", "causationId", state,
-          "executionStrategy"::text AS "executionStrategy",
-          "activeDispatchSequence",
-          "nextEligibleAt", "createdAt",
-          ROW_NUMBER() OVER (
-            PARTITION BY "shopId"
-            ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
-          ) AS shop_rank
-        FROM "DurableJob"
-        WHERE state IN ('PENDING', 'RETRY_WAIT')
-          AND "nextEligibleAt" <= ${now}
-      )
-      SELECT
-        id, "shopId", "jobType", source, "queueName",
-        "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
-        "correlationId", "causationId", state,
-        "executionStrategy", "activeDispatchSequence"
-      FROM eligible
-      WHERE shop_rank <= ${maxPerShop}
-      ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
-      LIMIT ${batchSize}
-    `;
+    const rows = await tx.$queryRaw<ClaimedJobRow[]>(
+      buildFairClaimLockedSelectSql({ now, batchSize, maxPerShop }),
+    );
 
     if (rows.length === 0) return [];
 
-    const ids = rows.map((r) => r.id);
-    const locked = await tx.$queryRaw<Array<{ id: string }>>`
-      SELECT id FROM "DurableJob"
-      WHERE id = ANY(${ids})
-        AND state IN ('PENDING', 'RETRY_WAIT')
-      FOR UPDATE SKIP LOCKED
-    `;
-    const lockedIds = new Set(locked.map((r) => r.id));
-
     const claimed: ClaimedJobRow[] = [];
     for (const row of rows) {
-      if (!lockedIds.has(row.id)) continue;
       assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
       const updated = await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE "DurableJob"
