@@ -87,7 +87,7 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** After exact-head CI on the P2-D046-01 follow-up tip succeeds, return to ChatGPT for a **focused** independent Claude review of P2-D046-01 and P3-D046-01 only. Draft PR #20 remains draft — do not merge.
+**Next action:** Live tip `dd5c61e58e9aea6f74996c6b0e01b6a4ccd3dfe2` pushed; awaiting exact-head CI on tip. After exact-head CI on the P2-D046-01 follow-up tip succeeds, return to ChatGPT for a **focused** independent Claude review of P2-D046-01 and P3-D046-01 only. Draft PR #20 remains draft — do not merge.
 
 ## Current truth
 
