@@ -99,4 +99,19 @@ Limit
 `;
     expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(/shop-claim/);
   });
+
+  it("rejects eligible_* index with shopId Filter (planner trap)", () => {
+    const plan = `
+Limit
+  ->  LockRows
+        ->  Index Only Scan using "DurableJob_shop_claim_retry_wait_idx" on "DurableJob"
+        ->  Index Scan using "DurableJob_eligible_pending_idx" on "DurableJob"
+              Index Cond: ("nextEligibleAt" <= now())
+              Filter: ("shopId" = ss."shopId")
+              Rows Removed by Filter: 20181
+`;
+    expect(() => assertEligibleClaimPlanShape(plan, BOUNDS)).toThrow(
+      /eligible_\*|shopId Filter/,
+    );
+  });
 });

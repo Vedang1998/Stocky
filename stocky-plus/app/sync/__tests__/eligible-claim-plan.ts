@@ -68,6 +68,17 @@ export function assertEligibleClaimPlanShape(
       'expected shop-claim Index Scan using "DurableJob_shop_claim_pending_idx" or "DurableJob_shop_claim_retry_wait_idx"',
     );
   }
+  // Global eligible_* + shopId Filter is the planner trap D-047 measured — reject it.
+  if (
+    /Index (?:Only )?Scan using "DurableJob_eligible_(?:pending|retry_wait)_idx"/i.test(
+      planText,
+    ) &&
+    /Filter:\s*\("shopId"/i.test(planText)
+  ) {
+    throw new EligibleClaimPlanShapeError(
+      "prohibited DurableJob_eligible_*_idx with shopId Filter — use shop-claim indexes",
+    );
+  }
   if (!/LockRows|FOR UPDATE/i.test(planText)) {
     throw new EligibleClaimPlanShapeError(
       "expected LockRows / FOR UPDATE SKIP LOCKED on the operational claim path",

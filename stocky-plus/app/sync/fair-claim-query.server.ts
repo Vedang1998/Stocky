@@ -44,9 +44,10 @@ export function maxFairClaimCandidateRows(
  * Locked fair-claim SELECT — identical text for runtime claim and EXPLAIN harness.
  * Parameters are Prisma-bound (no string interpolation of values).
  *
- * Index-covered id probes (shopId, nextEligibleAt, createdAt, id) prefer
- * DurableJob_shop_claim_{pending,retry_wait}_idx over Seq Scan / global eligible
- * indexes when selecting LIMIT-bounded per-shop rows.
+ * Per-shop predicates use `"shopId" >= $id AND "shopId" <= $id` (not bare `=`)
+ * so PostgreSQL selects DurableJob_shop_claim_{pending,retry_wait}_idx Index Only
+ * Scans. Equality alone competes with DurableJob_eligible_*_idx and can plan as a
+ * global nextEligibleAt scan + shopId Filter (full-eligible walk on empty shops).
  */
 export function buildFairClaimLockedSelectSql(
   params: FairClaimQueryParams,
@@ -60,7 +61,7 @@ WITH shop_seed AS MATERIALIZED (
   FROM "Shop" s
   WHERE (
       SELECT j.id FROM "DurableJob" j
-      WHERE j."shopId" = s.id
+      WHERE j."shopId" >= s.id AND j."shopId" <= s.id
         AND j.state = 'PENDING'
         AND j."nextEligibleAt" <= ${now}
       ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
@@ -68,7 +69,7 @@ WITH shop_seed AS MATERIALIZED (
     ) IS NOT NULL
     OR (
       SELECT j.id FROM "DurableJob" j
-      WHERE j."shopId" = s.id
+      WHERE j."shopId" >= s.id AND j."shopId" <= s.id
         AND j.state = 'RETRY_WAIT'
         AND j."nextEligibleAt" <= ${now}
       ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
@@ -77,7 +78,7 @@ WITH shop_seed AS MATERIALIZED (
   ORDER BY LEAST(
     (
       SELECT j."nextEligibleAt" FROM "DurableJob" j
-      WHERE j."shopId" = s.id
+      WHERE j."shopId" >= s.id AND j."shopId" <= s.id
         AND j.state = 'PENDING'
         AND j."nextEligibleAt" <= ${now}
       ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
@@ -85,7 +86,7 @@ WITH shop_seed AS MATERIALIZED (
     ),
     (
       SELECT j."nextEligibleAt" FROM "DurableJob" j
-      WHERE j."shopId" = s.id
+      WHERE j."shopId" >= s.id AND j."shopId" <= s.id
         AND j.state = 'RETRY_WAIT'
         AND j."nextEligibleAt" <= ${now}
       ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
@@ -102,7 +103,7 @@ candidates AS (
       (
         SELECT id, "nextEligibleAt", "createdAt"
         FROM "DurableJob"
-        WHERE "shopId" = ss."shopId"
+        WHERE "shopId" >= ss."shopId" AND "shopId" <= ss."shopId"
           AND state = 'PENDING'
           AND "nextEligibleAt" <= ${now}
         ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
@@ -112,7 +113,7 @@ candidates AS (
       (
         SELECT id, "nextEligibleAt", "createdAt"
         FROM "DurableJob"
-        WHERE "shopId" = ss."shopId"
+        WHERE "shopId" >= ss."shopId" AND "shopId" <= ss."shopId"
           AND state = 'RETRY_WAIT'
           AND "nextEligibleAt" <= ${now}
         ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
