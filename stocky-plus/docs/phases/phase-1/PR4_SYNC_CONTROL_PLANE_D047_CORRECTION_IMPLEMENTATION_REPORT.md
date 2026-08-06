@@ -13,8 +13,8 @@
 | Required starting PR head | `b76fa2b63cb18cf2717a9269b7740decf0576bea` |
 | Independent focused review commit (cherry-picked) | `8050e278ec8396345b842a653c5559243454432b` |
 | Cherry-pick on branch | see Git history after starting head |
-| Live final PR tip (this report authoring) | `f5eeec62d703b916022540804b6bf92d5064e38d` |
-| Exact-head CI on tip | **Not obtained by agent** — `gh workflow run` returns HTTP 403; agent push did not create a PR check suite on tip. Latest green PR CI remains run `31126856745` on superseded head `b76fa2b…`. In-progress push CI `31129655828` is on cherry-pick-only head `06b58ba…` (not tip). Human must re-run / dispatch CI on tip. |
+| Live final PR tip (this report authoring) | `99dec7979bd006b327fed710ca7a745fc5dbcc18` |
+| Exact-head CI on tip | **Not obtained by agent** — `gh workflow run` returns HTTP 403; agent push check-suite creation is unreliable. Latest green PR CI remains run `31126856745` on superseded head `b76fa2b…`. Human must re-run / dispatch CI on tip `99dec79…`. |
 
 Immutable reports (do not edit):
 
