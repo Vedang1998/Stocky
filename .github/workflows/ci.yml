@@ -403,22 +403,34 @@ jobs:
         run: npm run test:sync-exactly-once -- -t "digest mismatch dead-letters conflict"
 
       - name: "NEW-CLAUDE-D045-02: v3 worker verified-after-rollback"
-        run: npm run test:sync-exactly-once -- -t "NEW-CLAUDE-D045-02: v3 worker verified-after-rollback"
+        run: >-
+          npm run test:sync-exactly-once --
+          -t "NEW-CLAUDE-D045-02: v3 worker verified-after-rollback"
 
       - name: "NEW-CLAUDE-D045-02: v2 worker verified-after-rollback"
-        run: npm run test:sync-exactly-once -- -t "NEW-CLAUDE-D045-02: v2 worker verified-after-rollback"
+        run: >-
+          npm run test:sync-exactly-once --
+          -t "NEW-CLAUDE-D045-02: v2 worker verified-after-rollback"
 
       - name: "NEW-CLAUDE-D045-02: worker digest-conflict dead-letter"
-        run: npm run test:sync-exactly-once -- -t "NEW-CLAUDE-D045-02: worker digest-conflict dead-letter"
+        run: >-
+          npm run test:sync-exactly-once --
+          -t "NEW-CLAUDE-D045-02: worker digest-conflict dead-letter"
 
       - name: "NEW-CLAUDE-D045-02: worker uncertain-outcome dead-letter"
-        run: npm run test:sync-exactly-once -- -t "NEW-CLAUDE-D045-02: worker uncertain-outcome dead-letter"
+        run: >-
+          npm run test:sync-exactly-once --
+          -t "NEW-CLAUDE-D045-02: worker uncertain-outcome dead-letter"
 
       - name: "NEW-CLAUDE-D045-02: RepeatableRead transaction option"
-        run: npm run test:sync-exactly-once -- -t "NEW-CLAUDE-D045-02: RepeatableRead transaction option"
+        run: >-
+          npm run test:sync-exactly-once --
+          -t "NEW-CLAUDE-D045-02: RepeatableRead transaction option"
 
       - name: "NEW-CLAUDE-D045-01: queue classification seam absent"
-        run: npm run test:sync-final-correction -- -t "production queue-presence exports no classification seam"
+        run: >-
+          npm run test:sync-final-correction --
+          -t "production queue-presence exports no classification seam"
 
       - name: "NEW-PR4-SC02: production ignores Redis test timeout"
         run: npm run test:sync-final-correction -- -t "production ignores Redis test timeout"
