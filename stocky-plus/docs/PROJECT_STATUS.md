@@ -1,22 +1,38 @@
 # Project Status
 
 **Updated:** 2026-08-06
-**Current stage:** Phase 1 PR 4 D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — Synchronization Control Plane
+**Current stage:** Phase 1 PR 4 D-046 FOLLOW-UP CORRECTIONS IMPLEMENTED — PENDING FOCUSED INDEPENDENT VERIFICATION — Synchronization Control Plane
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION; Phase 1 itself remains IN PROGRESS
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 D-046 FOLLOW-UP CORRECTIONS IMPLEMENTED — PENDING FOCUSED INDEPENDENT VERIFICATION; Phase 1 itself remains IN PROGRESS
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — not accepted
+**Phase 1 PR 4:** D-046 FOLLOW-UP CORRECTIONS IMPLEMENTED — PENDING FOCUSED INDEPENDENT VERIFICATION — not accepted
 **Phase 1:** IN PROGRESS
 **PR 5:** BLOCKED until PR 4 independently reviewed, accepted, and merged
 
-## Phase 1 PR 4 D-046 review-correction authorization
+## Phase 1 PR 4 D-046 follow-up (active)
+
+| Field | Value |
+|---|---|
+| Reviewed tip (Claude D-046) | `f8673b062eee59a6db2a053b2c20aca7ce756a0b` |
+| Immutable D-046 review report | `3a5ae17b18d6e482df8e355f6f18e77f8681a3fe` — verdict `CORRECTIONS REQUIRED` |
+| NEW-CLAUDE-D045-01…04 | **Independently VERIFIED — do not reopen** |
+| Blocking finding | **P2-D046-01** — F-PR4-11 harness planner nondeterminism / over-broad plan regex |
+| Also in-scope | **P3-D046-01** — CI `-t` vacuous success (narrow guard) |
+| Non-blocking (untouched) | P3-D046-02, P3-D046-03 |
+| Status after Cursor follow-up | `PR 4 D-046 FOLLOW-UP CORRECTIONS IMPLEMENTED — PENDING FOCUSED INDEPENDENT VERIFICATION` |
+| Next independent review | **Focused** on P2-D046-01 + P3-D046-01 only — not a full D-046 re-review |
+| Production | NOT AUTHORIZED |
+| Inventory-write flags | DEFAULT OFF |
+| PR 5 | BLOCKED |
+
+## Phase 1 PR 4 D-046 review-correction authorization (context)
 
 | Field | Value |
 |---|---|
@@ -26,12 +42,8 @@
 | Reviewed D-045 implementation | `c1c855494cefdca16d6d6571ebe8210a0cb94faf` |
 | Immutable D-045 review-report / D-046 starting head | `ef452bb9e6c9e4dd48ce7d6dfbe9e9cf0e7738f2` |
 | Exact-head CI for reviewed D-045 implementation | run `31064898219`, job `92500473785`, success |
-| Correction scope | NEW-CLAUDE-D045-01…04 |
-| Status after Cursor work | `PR 4 D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` |
-| Immutable reports | Original + first + second + final correction reviews — do not edit |
-| Production | NOT AUTHORIZED |
-| Inventory-write flags | DEFAULT OFF |
-| PR 5 | BLOCKED |
+| Original correction scope | NEW-CLAUDE-D045-01…04 — **verified** |
+| Immutable reports | Original + first + second + final + D-046 reviews — do not edit |
 
 ## Phase 1 PR 4 final-correction context (D-045 — superseded for active next action)
 
@@ -57,15 +69,15 @@
 | Decisions | **D-040** (technical acceptance) / **D-041** (merge closure) |
 | Closure sync PR | [#19](https://github.com/Vedang1998/Stocky/pull/19) — CLOSED AND SQUASH-MERGED as `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
 
-## Gate disposition (post D-046)
+## Gate disposition (post D-046 follow-up)
 
 **F-016 / R-022:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION (PR 3)
 **Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION (PR 3)
 **Q-003:** OPEN — Decision target `2026-07` (D-042); exact-head webhook + GraphQL validation required before closure; F-PR4-18 residual remains
-**R-031 / R-032 / R-033:** OPEN until independent PR 4 D-046 review / acceptance
-**R-039 / R-099 / R-102 / R-104 / R-107 / R-109 / R-112:** OPEN — D-046 corrections pending independent verification
-**R-115 / R-116 / R-117 / R-118:** OPEN — D-046 NEW-CLAUDE-D045 findings pending independent verification
-**R-100 / R-101 / R-103 / R-105 / R-106 / R-108 / R-110 / R-111 / R-113 / R-114:** OPEN — pending independent D-046 review (permanent RISK_REGISTER definitions)
+**R-031 / R-032 / R-033:** OPEN until independent PR 4 D-046 acceptance
+**R-115 / R-116 / R-117 / R-118:** OPEN — NEW-CLAUDE-D045 findings independently verified; remain open until D-046 closure
+**R-119:** OPEN — P2-D046-01 F-PR4-11 planner harness defect (follow-up correction pending focused verification)
+**R-100 / R-101 / R-103 / R-105 / R-106 / R-108 / R-110 / R-111 / R-113 / R-114:** OPEN — pending independent D-046 acceptance (permanent RISK_REGISTER definitions)
 **R-095..R-098:** OPEN — accepted nonblocking PR 3 residuals (do not modify in PR 4)
 **R-028 / R-029:** OPEN operational gates
 **Production inventory writes:** UNAPPROVED
@@ -75,20 +87,8 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Green exact-head CI was observed on `f0a2d98590feaf80749eee2fdd0c84d678168a72` (PR run `31108092343`, job `92638409788`; push run `31108094421`). After this status-sync commit, re-confirm exact-head CI on the live tip, then return to ChatGPT for focused independent Claude Code D-046 correction review. Draft PR #20 remains draft — do not merge.
-
-## F-PR4-11 exact-head CI failure (cc89d385) — corrected
-
-| Field | Value |
-|---|---|
-| Failed tip | `cc89d3854d1be305486a9574ec3a5656f9e7db63` |
-| Failed run / job | `31098541431` / `92606271330` |
-| Gate | `npm run test:sync-performance` (`SYNC_PERF_JOB_COUNT=50000`) |
-| Cause | Harness regex omitted valid index `DurableJob_shop_eligible_pending_idx` while plan remained Index Scan (no Seq Scan / external sort) |
-| Correction commits | `f3557aac…` (regex) + `ea99c7b9…` (inventory line refresh) + docs |
-| Green CI observed | `f0a2d98590feaf80749eee2fdd0c84d678168a72` — PR `31108092343` / job `92638409788` success |
-| Classification | Deterministic test/harness defect (planner may choose either F-PR4-11 eligible-pending index) |
+**Next action:** After exact-head CI on the P2-D046-01 follow-up tip succeeds, return to ChatGPT for a **focused** independent Claude review of P2-D046-01 and P3-D046-01 only. Draft PR #20 remains draft — do not merge.
 
 ## Current truth
 
-Phase 1 PR 4 remains unaccepted under D-046. F-PR4-11 harness correction has green exact-head CI evidence; re-confirm CI after this status sync before independent Claude review handoff. Draft PR #20 remains OPEN, DRAFT, UNMERGED.
+Phase 1 PR 4 remains unaccepted. NEW-CLAUDE-D045-01…04 are verified. Closure is blocked on the P2-D046-01 F-PR4-11 harness follow-up until focused independent verification. Draft PR #20 remains OPEN, DRAFT, UNMERGED.

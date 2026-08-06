@@ -1,7 +1,7 @@
 # Phase 1 PR 4 — D-046 Correction Implementation Report
 
 **Decision:** D-046 — PHASE 1 PR 4 REVIEW CORRECTIONS REQUIRED  
-**Status after Cursor work:** `PR 4 D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`  
+**Status after Cursor work:** `PR 4 D-046 FOLLOW-UP CORRECTIONS IMPLEMENTED — PENDING FOCUSED INDEPENDENT VERIFICATION`  
 **Branch:** `phase-1/sync-control-plane`  
 **PR:** #20 — OPEN, DRAFT, UNMERGED
 
@@ -14,19 +14,19 @@
 | Immutable D-045 review-report / D-046 starting head | `ef452bb9e6c9e4dd48ce7d6dfbe9e9cf0e7738f2` |
 | D-046 decision/backlog commit | `0adff84ef332e0732a1bb9c3c65f255677223da4` |
 | D-046 runtime/test correction commit | `24b3891842902a306a63f5069dd163ccb615fc22` |
-| Documentation / status commit | recorded after this report lands (see Git history; not a self-referential tip) |
 | Failed exact-head CI tip (perf gate) | `cc89d3854d1be305486a9574ec3a5656f9e7db63` — run `31098541431`, job `92606271330` |
-| F-PR4-11 harness correction | `f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` — accept `DurableJob_shop_eligible_pending_idx` |
-| Inventory line refresh | `ea99c7b9535ba9640190678d6468aaa246a68620` |
-| Green CI observed (pre-status sync) | tip `f0a2d98590feaf80749eee2fdd0c84d678168a72` — PR run `31108092343` / job `92638409788` success; push `31108094421` success |
-| Live final PR tip / exact-head CI | Authoritative only from GitHub after any later tip; re-verify after this status sync |
+| Prior F-PR4-11 regex-only harness tip | `f8673b062eee59a6db2a053b2c20aca7ce756a0b` (Claude reviewed) |
+| Immutable D-046 review-report tip | `3a5ae17b18d6e482df8e355f6f18e77f8681a3fe` |
+| P2-D046-01 / P3-D046-01 follow-up | see Git history after review tip (not a self-referential tip) |
+| Live final PR tip / exact-head CI | Authoritative only from GitHub after green exact-head CI |
 
-Immutable reports (unchanged):
+Immutable reports (do not edit):
 
 - `PR4_SYNC_CONTROL_PLANE_REVIEW_REPORT.md`
 - `PR4_SYNC_CONTROL_PLANE_CORRECTION_REVIEW_REPORT.md`
 - `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_REVIEW_REPORT.md`
 - `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_REVIEW_REPORT.md`
+- `PR4_SYNC_CONTROL_PLANE_D046_CORRECTION_REVIEW_REPORT.md`
 
 ## Finding disposition (Cursor side only)
 
@@ -36,6 +36,33 @@ Immutable reports (unchanged):
 | NEW-CLAUDE-D045-02 | P2 | Added `sync-d046-worker-finalize.test.ts` driving real `processWebhookJob` for v2 and v3 through catch/finalization. Outcome matrix: verified-after-rollback / digest-conflict / uncertain for both versions. Observes `Prisma.TransactionIsolationLevel.RepeatableRead` on the real verification transaction. Envelope owner shim now forwards transaction options. CI gates renamed to truthful worker/isolation names. | `sync-d046-worker-finalize.test.ts`; `ci.yml`; `package.json` | NEW-CLAUDE-D045-02 gates |
 | NEW-CLAUDE-D045-03 | P3 | Corrected D-045 implementation report identity table to distinguish `10a9154…` / `7b908e0…` / `c1c8554…` / `ef452bb…`. | `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_IMPLEMENTATION_REPORT.md` | documentation |
 | NEW-CLAUDE-D045-04 | P3 | `terminalizeStrandedEnqueuedJob` persists `"attemptCount" = nextAttemptCount` on `ENQUEUED → FAILED` for NO_AUTOMATIC_RETRY, budget-exhausted, no-active-dispatch, and terminal/missing-dispatch paths. Architecture + reports updated. | `dispatcher.server.ts`; architecture; tests | NO_AUTOMATIC_RETRY N→N+1; budget maxAttempts-1→maxAttempts; forced-fail rollback; concurrent reaper |
+
+**Independent verification (Claude at `f8673b06…`):** NEW-CLAUDE-D045-01…04 **VERIFIED**. Do not reopen.
+
+## Follow-up disposition (P2-D046-01 / P3-D046-01)
+
+| ID | Sev | Exact correction | Primary files | Tests / gates |
+|---|:---:|---|---|---|
+| P2-D046-01 | P2 | After 50k seed, `ANALYZE "DurableJob"`. Assert Index/Index Only Scan on `DurableJob_eligible_pending_idx` with **no Sort / Incremental Sort / external sort / Seq Scan**; reject shop-leading eligible index. Pure fixture regressions for CI shop plan + local Incremental Sort plan. **No** runtime dispatcher change; **no** threshold weakening; **no** retries/skips/`enable_*` planner forcing. | `eligible-claim-plan.ts`; `sync-performance.test.ts`; `eligible-claim-plan.test.ts` | `test:sync-performance` (7 tests: 1 integration + 6 shape) |
+| P3-D046-01 | P3 | Sync-integration Vitest reporter fails when `testNamePattern` matches zero passing tests (`process.exitCode=1`). | `scripts/vitest/fail-on-zero-passed-name-filter.ts`; `vitest.sync-integration.config.ts` | `-t zzz-no-such` → exit 1; matching `-t` still passes |
+
+### Planner variance evidence (reviewed-head reproduction)
+
+Indexes (migration `20260804210000_sync_control_plane_correction`):
+
+- `DurableJob_eligible_pending_idx` — `("nextEligibleAt","createdAt",id) WHERE state='PENDING'` (**intended ordered claim path**)
+- `DurableJob_shop_eligible_pending_idx` — `("shopId","nextEligibleAt","createdAt") WHERE state='PENDING'` (shop-leading; requires re-sort for global ORDER BY)
+
+Observed after 50k bulk insert **without** `ANALYZE` (this environment):  
+`Incremental Sort` + `Index Scan using "DurableJob_state_nextEligibleAt_createdAt_idx"` (~50k rows scanned, ~2k buffers).  
+CI failure tip previously chose `Index Scan using "DurableJob_shop_eligible_pending_idx"` + top-N heapsort.
+
+Observed **after** `ANALYZE "DurableJob"`:  
+`Limit → Index Only Scan using "DurableJob_eligible_pending_idx"` — **no Sort**, ~50 rows from index, ~4–17 shared buffers, sub-millisecond execution.
+
+### P3-D046-02 / P3-D046-03
+
+Non-blocking — untouched.
 
 ## Queue-seam replacement architecture
 
