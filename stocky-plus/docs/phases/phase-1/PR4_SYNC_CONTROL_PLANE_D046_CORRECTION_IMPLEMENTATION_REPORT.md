@@ -15,6 +15,8 @@
 | D-046 decision/backlog commit | `0adff84ef332e0732a1bb9c3c65f255677223da4` |
 | D-046 runtime/test correction commit | `24b3891842902a306a63f5069dd163ccb615fc22` |
 | Documentation / status commit | recorded after this report lands (see Git history; not a self-referential tip) |
+| Failed exact-head CI tip (perf gate) | `cc89d3854d1be305486a9574ec3a5656f9e7db63` — run `31098541431`, job `92606271330` |
+| F-PR4-11 harness correction | `f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` — accept `DurableJob_shop_eligible_pending_idx` |
 | Live final PR tip / exact-head CI | Authoritative only in GitHub PR #20 body after green CI |
 
 Immutable reports (unchanged):
@@ -98,6 +100,23 @@ No new production test bypass was added.
 | tenant:access:audit / inventory checks / sync:inventory:check / enforcement inventory | ok after EX-SYNC-TEST-013 + inventory refresh |
 
 Exact-head CI `head_sha`, run ID, and job ID are authoritative only from GitHub after the final tip is green. Do not treat local green as acceptance.
+
+## Exact-head CI failure — F-PR4-11/13 plan-name assertion (post D-046)
+
+| Field | Evidence |
+|---|---|
+| Failed tip | `cc89d3854d1be305486a9574ec3a5656f9e7db63` |
+| Failed run / job | `31098541431` / `92606271330` |
+| Failing step / command | Sync dispatch performance/fairness (F-PR4-11/13) / `SYNC_PERF_JOB_COUNT=50000 npm run test:sync-performance` |
+| Failing test | `eligible claim plan uses index at scale (no Seq Scan + external sort)` |
+| Assertion | `/DurableJob_eligible_pending\|DurableJob_.*nextEligibleAt/i` |
+| Measured plan | `Index Scan using "DurableJob_shop_eligible_pending_idx"`; in-memory `top-N heapsort`; **no** `Seq Scan on "DurableJob"`; **no** `Sort Method: external` |
+| Classification | **Deterministic test/harness defect** (with environment-sensitive planner index choice among valid F-PR4-11 indexes). Not a production dispatcher regression; not a weakened threshold; not a flake excused by a single green rerun. |
+| Same-job oscillation | Broader sync suite earlier in job `92606271330` passed the same test (~4587 ms) when the planner picked a regex-matching index; dedicated gate later failed on `shop_eligible_pending_idx`. |
+| Correction | Extend allowed index-name regex to include `DurableJob_shop_eligible_pending_idx` (committed in migration `20260804210000_sync_control_plane_correction`). Retain Index Scan requirement and Seq Scan / external-sort bans. |
+| Local stability | `SYNC_PERF_JOB_COUNT=50000 npm run test:sync-performance` ×5 → **1/1 passed** each; CI plan snippet: old regex false / new regex true; `test:sync-integration` **175** passed; lint / typecheck / build exit 0. |
+
+Do **not** request independent Claude review until fresh exact-head CI on the correction tip succeeds with zero failures and zero material skips.
 
 ## Safety
 

@@ -75,8 +75,19 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Return to ChatGPT for exact-head verification and a focused independent Claude Code D-046 correction review. Status: `PR 4 D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`. Draft PR #20 remains draft — do not merge.
+**Next action:** Wait for fresh exact-head CI on the F-PR4-11 harness correction tip (`f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` or later tip after docs sync). Do **not** request independent Claude D-046 review until that CI succeeds with zero failures and zero material skips. Draft PR #20 remains draft — do not merge.
+
+## F-PR4-11 exact-head CI failure (cc89d385)
+
+| Field | Value |
+|---|---|
+| Failed tip | `cc89d3854d1be305486a9574ec3a5656f9e7db63` |
+| Failed run / job | `31098541431` / `92606271330` |
+| Gate | `npm run test:sync-performance` (`SYNC_PERF_JOB_COUNT=50000`) |
+| Cause | Harness regex omitted valid index `DurableJob_shop_eligible_pending_idx` while plan remained Index Scan (no Seq Scan / external sort) |
+| Correction commit | `f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` |
+| Classification | Deterministic test/harness defect (planner may choose either F-PR4-11 eligible-pending index) |
 
 ## Current truth
 
-Phase 1 PR 4 remains unaccepted under D-046. Independent review of the D-046 correction tip is required before any ChatGPT technical acceptance or merge authorization.
+Phase 1 PR 4 remains unaccepted under D-046. Fresh exact-head CI must succeed on the harness correction tip before independent Claude review. Draft PR #20 remains OPEN, DRAFT, UNMERGED.
