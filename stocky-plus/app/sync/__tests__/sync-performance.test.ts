@@ -94,8 +94,11 @@ describe("test:sync-performance", () => {
       );
       const planText = plan.map((r) => r["QUERY PLAN"]).join("\n");
       expect(planText).toMatch(/Index Scan|Bitmap Index Scan|Index Only Scan/i);
+      // F-PR4-11 ships both global and shop-scoped eligible-pending partial
+      // indexes. Postgres may choose either (or the schema state/nextEligibleAt
+      // index) depending on stats; reject only when no eligible index appears.
       expect(planText).toMatch(
-        /DurableJob_eligible_pending|DurableJob_.*nextEligibleAt/i,
+        /DurableJob_eligible_pending|DurableJob_shop_eligible_pending|DurableJob_.*nextEligibleAt/i,
       );
       expect(planText).not.toMatch(/Seq Scan on "DurableJob"/i);
       expect(planText).not.toMatch(/Sort Method: external/i);
