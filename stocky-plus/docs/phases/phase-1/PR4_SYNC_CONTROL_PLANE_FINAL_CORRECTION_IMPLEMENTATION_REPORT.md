@@ -1,11 +1,11 @@
 # Phase 1 PR 4 — Synchronization Control Plane Final Correction Implementation Report
 
-**Status:** `FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`  
-**Authority:** D-045  
-**PR:** #20 — OPEN, DRAFT, UNMERGED  
-**Branch:** `phase-1/sync-control-plane`  
-**PR 5:** BLOCKED  
-**Production / inventory writes:** UNAUTHORIZED; flags default OFF  
+**Status:** `FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
+**Authority:** D-045
+**PR:** #20 — OPEN, DRAFT, UNMERGED
+**Branch:** `phase-1/sync-control-plane`
+**PR 5:** BLOCKED
+**Production / inventory writes:** UNAUTHORIZED; flags default OFF
 
 ```text
 D-045 — PHASE 1 PR 4 FINAL CORRECTIONS REQUIRED.
@@ -114,9 +114,9 @@ Do not close findings or risks on Cursor evidence alone.
 
 ## D-045 Mechanical Completion — Production Test Hook Removal
 
-**Authority:** D-045 (no new decision number)  
-**Starting head:** `01030436c440cef6228d432798ac4dd0be5851ab`  
-**Prior verified exact-head CI:** run `31057886205`, job `92479281401`, success  
+**Authority:** D-045 (no new decision number)
+**Starting head:** `01030436c440cef6228d432798ac4dd0be5851ab`
+**Prior verified exact-head CI:** run `31057886205`, job `92479281401`, success
 
 ### Why the runtime hook violated the approved brief
 
@@ -157,3 +157,49 @@ FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
 ### Safety confirmation
 
 No production migration, role change, queue execution, webhook replay, merchant data, ownership repair, or inventory mutation. Inventory-write flags remain OFF. No PR 5 work. No secrets. No force-push. PR #20 remains OPEN, DRAFT, UNMERGED.
+
+## D-045 Mechanical Completion 2 — Dead-Letter Transition Test Hook Removal
+
+**Authority:** D-045 (no new decision number)
+**Starting head:** `2cce2511ff760e77cec2c5ccfb28fc03d0a1028f`
+**Prior verified exact-head CI:** run `31061206183`, job `92489367554`, success
+
+### Exact hook removed
+
+From `app/sync/dispatcher.server.ts`:
+
+- `forceDeadLetterTransitionFailForTests` mutable global
+- `__setForceDeadLetterTransitionFailForTests` production export
+- ternary that substituted `[]` for the real `FAILED → DEAD_LETTERED` `$queryRaw`
+
+Production now **always** executes the real SQL update and validates via pure `requireExactlyOneTransitionRow`.
+
+### Safe test replacement
+
+1. **Pure helper** — `requireExactlyOneTransitionRow(rows)` unit-tested for 0 / 1 / many rows (does not control SQL execution).
+2. **Test-local Prisma interception** — `withForcedEmptyDeadLetterTransition` in `sync-final-correction.test.ts` only wraps the control-plane `$transaction` client so the final `DEAD_LETTERED` `$queryRaw` returns `[]`. Restored in `finally`. Production modules never import or know about it.
+3. **Integration assertions** — forced empty RETURNING → throw → full rollback → job remains `ENQUEUED` (not `FAILED`) → zero OPEN dead letters → `deadLettered` counter stays 0.
+4. **Normal path** — still reaches `DEAD_LETTERED` and increments the counter.
+5. **Export/source guards** — fail if `__setForceDeadLetterTransitionFailForTests` / `forceDeadLetterTransitionFailForTests` return.
+
+### Production-seam audit (`9d43ec9…` → tip)
+
+| Seam | Predates D-045? | Changes runtime? | Production-reachable? | Disposition |
+|---|---|---|---|---|
+| Receipt `__setForceMissingWinner…` | No (D-045 then removed in MC1) | Was yes | Was yes | **REMOVED** (MC1) |
+| Dispatcher `__setForceDeadLetter…` | No (introduced D-045 SC05) | Yes | Yes | **REMOVED** (this MC2) |
+| Queue `__setQueueStateClassificationSeamForTests` | **Yes** (present at `9d43ec9…` / D-044) | Yes when set | Setter exported from runtime module | **Flag for Claude** — not altered in this focused correction |
+| `resolveTestRedisFastFailMs` / `STOCKY_TEST_*` | D-045 SC02 hardened pre-existing timeout | Timeout only when `NODE_ENV===test` | Env ignored outside test | Intentional D-045 hardening; not a business-path bypass |
+| `STOCKY_TEST_REDIS_FAST_FAIL` in `queue.server` | Pre-existing; D-045 gated to `NODE_ENV===test` | Connection fast-fail in test | Ignored outside test | Intentional D-045 hardening |
+
+### Test evidence / final identity
+
+Local focused suites and exact-head CI are recorded in the ChatGPT handoff / PR body (not a tip-identity commit). Status remains:
+
+```text
+FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
+```
+
+### Safety confirmation
+
+No production migration, role change, queue execution, webhook replay, merchant data, ownership repair, or inventory mutation. Inventory-write flags remain OFF. No PR 5 work. No secrets. No amend/rebase/force-push. PR #20 remains OPEN, DRAFT, UNMERGED.

@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `0d9c30a896d5b002a6549e34b50676f6cfc4187bd413933a4481d17442e54466`
+**Content digest:** `133cc6aa4efdad8870455dbea2a8402a670f41d939e0f70b06582a5c6bb78c77`
 **Scanned files:** 234
 **Findings:** 1247
 **Converted paths:** 447
@@ -458,8 +458,8 @@ All 19 approved merchant-owned models must appear below.
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 1910 / `prisma.salesDailyAggregate.findFirstOrThrow` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | allowlist EX-SYNC-TEST-002 | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 1937 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | allowlist EX-SYNC-TEST-002 | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 2012 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | allowlist EX-SYNC-TEST-002 | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
-| `app/sync/__tests__/sync-final-correction.test.ts` | 45 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-012 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
-| `app/sync/__tests__/sync-final-correction.test.ts` | 61 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-012 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
+| `app/sync/__tests__/sync-final-correction.test.ts` | 119 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-012 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
+| `app/sync/__tests__/sync-final-correction.test.ts` | 133 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-012 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
 | `app/sync/__tests__/sync-intake-corrections.test.ts` | 26 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-006 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-006 | PR 4 D-043 intake correction disposable harness |
 | `app/sync/__tests__/sync-intake-corrections.test.ts` | 35 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-006 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-006 | PR 4 D-043 intake correction disposable harness |
 | `app/sync/__tests__/sync-performance.test.ts` | 24 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-007 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-007 | PR 4 D-043 F-PR4-11/13 performance disposable harness |
@@ -480,8 +480,8 @@ All 19 approved merchant-owned models must appear below.
 | `app/sync/dispatcher.server.ts` | 161 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
 | `app/sync/dispatcher.server.ts` | 731 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
 | `app/sync/dispatcher.server.ts` | 786 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
-| `app/sync/dispatcher.server.ts` | 1037 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
-| `app/sync/dispatcher.server.ts` | 1184 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
+| `app/sync/dispatcher.server.ts` | 1035 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
+| `app/sync/dispatcher.server.ts` | 1182 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
 | `app/sync/intake.server.ts` | 136 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
 | `app/sync/intake.server.ts` | 193 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
 | `app/sync/intake.server.ts` | 259 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
@@ -1555,6 +1555,6 @@ All 19 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "0d9c30a896d5b002a6549e34b50676f6cfc4187bd413933a4481d17442e54466"
+  "contentDigest": "133cc6aa4efdad8870455dbea2a8402a670f41d939e0f70b06582a5c6bb78c77"
 }
 ```

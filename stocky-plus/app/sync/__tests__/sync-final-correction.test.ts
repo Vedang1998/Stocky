@@ -2,11 +2,16 @@
  * D-045 NEW-PR4-SC02…SC06 / SC08 reliability corrections.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { PrismaClient } from "@prisma/client";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { PrismaClient, type Prisma } from "@prisma/client";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { ingestAuthenticatedWebhook } from "../intake.server";
-import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
+import {
+  getControlPlanePrisma,
+  resetControlPlanePrismaForTests,
+} from "../control-plane-db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
 import {
   WEBHOOK_QUEUE,
@@ -14,11 +19,12 @@ import {
   resetQueueClientsForTests,
 } from "../../jobs/queue.server";
 import {
-  __setForceDeadLetterTransitionFailForTests,
   dispatchPendingJobs,
   recoverStrandedEnqueuedJobs,
+  requireExactlyOneTransitionRow,
   INDETERMINATE_DATA_ISSUE_COOLDOWN_MS,
 } from "../dispatcher.server";
+import * as dispatcherModule from "../dispatcher.server";
 import {
   RUNNABLE_BULLMQ_STATES,
   resolveTestRedisFastFailMs,
@@ -26,9 +32,77 @@ import {
   __setQueueStateClassificationSeamForTests,
 } from "../queue-presence.server";
 import { renewAttemptHeartbeat } from "../lifecycle.server";
+import { SyncControlPlaneError } from "../errors";
 import { transitionToEnqueuedForTests } from "./test-state-helpers";
 
 const SHOP = "pr4-final-corr.myshopify.com";
+
+/**
+ * Test-local only: intercept the control-plane `$transaction` client so the
+ * final FAILED→DEAD_LETTERED `$queryRaw` returns zero rows. Production code
+ * never sees this interception.
+ */
+async function withForcedEmptyDeadLetterTransition<T>(
+  run: () => Promise<T>,
+): Promise<T> {
+  const cp = getControlPlanePrisma();
+  const originalTransaction = cp.$transaction.bind(cp);
+
+  // Overload-safe assignment for the disposable test client only.
+  (cp as { $transaction: typeof cp.$transaction }).$transaction = ((
+    arg: unknown,
+    options?: unknown,
+  ) => {
+    if (typeof arg !== "function") {
+      return (
+        originalTransaction as (a: unknown, o?: unknown) => Promise<unknown>
+      )(arg, options);
+    }
+    return originalTransaction(
+      async (tx: Prisma.TransactionClient) => {
+        const proxied = new Proxy(tx, {
+          get(target, prop, receiver) {
+            if (prop === "$queryRaw") {
+              const orig = (
+                Reflect.get(target, prop, target) as (
+                  strings: TemplateStringsArray,
+                  ...values: unknown[]
+                ) => Promise<unknown>
+              ).bind(target);
+              return (
+                strings: TemplateStringsArray,
+                ...values: unknown[]
+              ) => {
+                const sql = Array.isArray(strings)
+                  ? strings.join("?")
+                  : String(strings);
+                if (sql.includes("DEAD_LETTERED")) {
+                  return Promise.resolve([]);
+                }
+                return orig(strings, ...values);
+              };
+            }
+            const value = Reflect.get(target, prop, receiver);
+            return typeof value === "function"
+              ? (value as (...args: unknown[]) => unknown).bind(target)
+              : value;
+          },
+        });
+        return (arg as (tx: Prisma.TransactionClient) => Promise<unknown>)(
+          proxied as Prisma.TransactionClient,
+        );
+      },
+      options as never,
+    );
+  }) as typeof cp.$transaction;
+
+  try {
+    return await run();
+  } finally {
+    (cp as { $transaction: typeof cp.$transaction }).$transaction =
+      originalTransaction;
+  }
+}
 
 describe("test:sync-final-correction (D-045)", () => {
   let prisma: PrismaClient;
@@ -48,7 +122,6 @@ describe("test:sync-final-correction (D-045)", () => {
   });
 
   afterAll(async () => {
-    __setForceDeadLetterTransitionFailForTests(false);
     __setQueueStateClassificationSeamForTests(null);
     await resetControlPlanePrismaForTests();
     await prisma.$disconnect();
@@ -56,7 +129,6 @@ describe("test:sync-final-correction (D-045)", () => {
   });
 
   beforeEach(async () => {
-    __setForceDeadLetterTransitionFailForTests(false);
     __setQueueStateClassificationSeamForTests(null);
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
@@ -356,6 +428,14 @@ describe("test:sync-final-correction (D-045)", () => {
     ).toBeNull();
   });
 
+  it("NEW-PR4-SC05: requireExactlyOneTransitionRow validates RETURNING rows", () => {
+    expect(requireExactlyOneTransitionRow([{ id: "only" }])).toBe("only");
+    expect(() => requireExactlyOneTransitionRow([])).toThrow(SyncControlPlaneError);
+    expect(() =>
+      requireExactlyOneTransitionRow([{ id: "a" }, { id: "b" }]),
+    ).toThrow(/FAILED→DEAD_LETTERED/);
+  });
+
   it("NEW-PR4-SC05: terminal transition result required — forced fail rolls back", async () => {
     const ingested = await ingestAuthenticatedWebhook({
       verifiedShop: SHOP,
@@ -384,11 +464,13 @@ describe("test:sync-final-correction (D-045)", () => {
     if (qj) await qj.remove();
     await q.close();
 
-    __setForceDeadLetterTransitionFailForTests(true);
-    const result = await recoverStrandedEnqueuedJobs({
-      olderThanMs: 60_000,
-      limit: 10,
-    });
+    // Test-local Prisma interception only — production always runs real SQL.
+    const result = await withForcedEmptyDeadLetterTransition(() =>
+      recoverStrandedEnqueuedJobs({
+        olderThanMs: 60_000,
+        limit: 10,
+      }),
+    );
     expect(result.deadLettered).toBe(0);
     expect(result.isolatedFailures).toBeGreaterThanOrEqual(1);
 
@@ -467,6 +549,32 @@ describe("test:sync-final-correction (D-045)", () => {
         (k) => k.includes("ForTests") || k.startsWith("__set"),
       ),
     ).toEqual([]);
+  });
+
+  it("NEW-PR4-SC05: dispatcher exports no dead-letter transition test setter", () => {
+    expect(dispatcherModule).not.toHaveProperty(
+      "__setForceDeadLetterTransitionFailForTests",
+    );
+    expect(
+      Object.keys(dispatcherModule).filter(
+        (k) =>
+          k.includes("ForceDeadLetter") ||
+          k.includes("forceDeadLetter") ||
+          (k.includes("ForTests") && k.includes("DeadLetter")),
+      ),
+    ).toEqual([]);
+
+    const source = readFileSync(
+      join(process.cwd(), "app/sync/dispatcher.server.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/__setForceDeadLetterTransitionFailForTests/);
+    expect(source).not.toMatch(/forceDeadLetterTransitionFailForTests/);
+    // Production must always run the real FAILED→DEAD_LETTERED SQL.
+    expect(source).toMatch(/state = 'DEAD_LETTERED'/);
+    expect(source).not.toMatch(
+      /forceDeadLetterTransitionFailForTests\s*\?\s*\[\s*\]/,
+    );
   });
 
   it("NEW-PR4-SC08: stranded recovery budget increments attemptCount once", async () => {

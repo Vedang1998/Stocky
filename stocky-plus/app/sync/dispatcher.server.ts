@@ -829,13 +829,18 @@ async function ackEnqueued(
  * (NO_AUTOMATIC_RETRY or attempt limit exhausted).
  * Dead letter may have finalAttemptId = NULL (no active attempt).
  */
-/** Test-only seam: force FAILED→DEAD_LETTERED to return zero rows (NEW-PR4-SC05). */
-let forceDeadLetterTransitionFailForTests = false;
-
-export function __setForceDeadLetterTransitionFailForTests(
-  value: boolean,
-): void {
-  forceDeadLetterTransitionFailForTests = value;
+/**
+ * Require exactly one RETURNING row from a durable-job transition UPDATE.
+ * Pure validation only — does not control whether SQL executes (NEW-PR4-SC05).
+ */
+export function requireExactlyOneTransitionRow(
+  rows: ReadonlyArray<{ id: string }>,
+  message = "FAILED→DEAD_LETTERED transition did not return exactly one row",
+): string {
+  if (rows.length !== 1) {
+    throw new SyncControlPlaneError("illegal_job_transition", message);
+  }
+  return rows[0].id;
 }
 
 async function terminalizeStrandedEnqueuedJob(
@@ -923,10 +928,8 @@ async function terminalizeStrandedEnqueuedJob(
     });
   }
 
-  // NEW-PR4-SC05: require exactly one FAILED → DEAD_LETTERED row.
-  const deadLetteredRows = forceDeadLetterTransitionFailForTests
-    ? ([] as Array<{ id: string }>)
-    : await tx.$queryRaw<Array<{ id: string }>>`
+  // NEW-PR4-SC05: always execute the real FAILED → DEAD_LETTERED update.
+  const deadLetteredRows = await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE "DurableJob"
     SET
       state = 'DEAD_LETTERED',
@@ -941,12 +944,7 @@ async function terminalizeStrandedEnqueuedJob(
       AND state = 'FAILED'
     RETURNING id
   `;
-  if (deadLetteredRows.length !== 1) {
-    throw new SyncControlPlaneError(
-      "illegal_job_transition",
-      "FAILED→DEAD_LETTERED transition did not return exactly one row",
-    );
-  }
+  requireExactlyOneTransitionRow(deadLetteredRows);
 
   await tx.dataIssue.create({
     data: {
