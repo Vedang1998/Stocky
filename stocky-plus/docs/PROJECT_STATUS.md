@@ -75,9 +75,9 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Wait for fresh exact-head CI on the F-PR4-11 harness correction tip (`f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` or later tip after docs sync). Do **not** request independent Claude D-046 review until that CI succeeds with zero failures and zero material skips. Draft PR #20 remains draft — do not merge.
+**Next action:** Green exact-head CI was observed on `f0a2d98590feaf80749eee2fdd0c84d678168a72` (PR run `31108092343`, job `92638409788`; push run `31108094421`). After this status-sync commit, re-confirm exact-head CI on the live tip, then return to ChatGPT for focused independent Claude Code D-046 correction review. Draft PR #20 remains draft — do not merge.
 
-## F-PR4-11 exact-head CI failure (cc89d385)
+## F-PR4-11 exact-head CI failure (cc89d385) — corrected
 
 | Field | Value |
 |---|---|
@@ -85,9 +85,10 @@
 | Failed run / job | `31098541431` / `92606271330` |
 | Gate | `npm run test:sync-performance` (`SYNC_PERF_JOB_COUNT=50000`) |
 | Cause | Harness regex omitted valid index `DurableJob_shop_eligible_pending_idx` while plan remained Index Scan (no Seq Scan / external sort) |
-| Correction commit | `f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` |
+| Correction commits | `f3557aac…` (regex) + `ea99c7b9…` (inventory line refresh) + docs |
+| Green CI observed | `f0a2d98590feaf80749eee2fdd0c84d678168a72` — PR `31108092343` / job `92638409788` success |
 | Classification | Deterministic test/harness defect (planner may choose either F-PR4-11 eligible-pending index) |
 
 ## Current truth
 
-Phase 1 PR 4 remains unaccepted under D-046. Fresh exact-head CI must succeed on the harness correction tip before independent Claude review. Draft PR #20 remains OPEN, DRAFT, UNMERGED.
+Phase 1 PR 4 remains unaccepted under D-046. F-PR4-11 harness correction has green exact-head CI evidence; re-confirm CI after this status sync before independent Claude review handoff. Draft PR #20 remains OPEN, DRAFT, UNMERGED.

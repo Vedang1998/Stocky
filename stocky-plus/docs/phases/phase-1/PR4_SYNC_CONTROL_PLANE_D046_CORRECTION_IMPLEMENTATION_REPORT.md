@@ -17,7 +17,9 @@
 | Documentation / status commit | recorded after this report lands (see Git history; not a self-referential tip) |
 | Failed exact-head CI tip (perf gate) | `cc89d3854d1be305486a9574ec3a5656f9e7db63` — run `31098541431`, job `92606271330` |
 | F-PR4-11 harness correction | `f3557aacd3b8575cedfe0f793f8e6a2a838f9aff` — accept `DurableJob_shop_eligible_pending_idx` |
-| Live final PR tip / exact-head CI | Authoritative only in GitHub PR #20 body after green CI |
+| Inventory line refresh | `ea99c7b9535ba9640190678d6468aaa246a68620` |
+| Green CI observed (pre-status sync) | tip `f0a2d98590feaf80749eee2fdd0c84d678168a72` — PR run `31108092343` / job `92638409788` success; push `31108094421` success |
+| Live final PR tip / exact-head CI | Authoritative only from GitHub after any later tip; re-verify after this status sync |
 
 Immutable reports (unchanged):
 
