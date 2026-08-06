@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `133cc6aa4efdad8870455dbea2a8402a670f41d939e0f70b06582a5c6bb78c77`
-**Scanned files:** 234
-**Findings:** 1247
-**Converted paths:** 447
-**Approved exception findings:** 800
+**Content digest:** `01c73f1620c232d2c73b6c8477811983508c11b79d26f3b999da7baf62176be1`
+**Scanned files:** 235
+**Findings:** 1262
+**Converted paths:** 448
+**Approved exception findings:** 814
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,25 +21,25 @@ All 19 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 517 |
-| PurchaseOrder | 229 |
-| ShopifyVariantCache | 188 |
-| InventorySnapshot | 156 |
-| VariantAbcClass | 142 |
-| ForecastOverride | 141 |
-| SalesDailyAggregate | 195 |
-| ShopSettings | 171 |
-| TransferOrder | 147 |
-| Stocktake | 144 |
-| BomComponent | 143 |
-| LowStockAlert | 138 |
-| SyncApplicationReceipt | 155 |
-| SupplierSkuMapping | 205 |
-| VolumePriceTier | 134 |
-| LeadTimeSnapshot | 157 |
-| POLineItem | 156 |
-| TransferLineItem | 140 |
-| StocktakeLineItem | 140 |
+| Supplier | 518 |
+| PurchaseOrder | 230 |
+| ShopifyVariantCache | 189 |
+| InventorySnapshot | 157 |
+| VariantAbcClass | 143 |
+| ForecastOverride | 142 |
+| SalesDailyAggregate | 206 |
+| ShopSettings | 172 |
+| TransferOrder | 148 |
+| Stocktake | 145 |
+| BomComponent | 144 |
+| LowStockAlert | 139 |
+| SyncApplicationReceipt | 158 |
+| SupplierSkuMapping | 206 |
+| VolumePriceTier | 135 |
+| LeadTimeSnapshot | 158 |
+| POLineItem | 157 |
+| TransferLineItem | 141 |
+| StocktakeLineItem | 141 |
 
 ## Counts by execution category
 
@@ -51,7 +51,7 @@ All 19 approved merchant-owned models must appear below.
 | script | 50 |
 | service | 34 |
 | tenant_infra | 5 |
-| test | 1034 |
+| test | 1049 |
 | worker | 12 |
 
 ## Approved exceptions
@@ -75,6 +75,7 @@ All 19 approved merchant-owned models must appear below.
 | EX-SYNC-TEST-010 | `scripts/sync-control-plane/tests/sync-inventory-audit.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 correction suite requires disposable fixtures |
 | EX-SYNC-TEST-011 | `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 second-correction suite requires disposable fixtures |
 | EX-SYNC-TEST-012 | `app/sync/__tests__/sync-final-correction.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 final-correction suite requires disposable fixtures |
+| EX-SYNC-TEST-013 | `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 D-046 worker-finalize suite requires disposable fixtures |
 | EX-SYNC-001 | `app/sync/control-plane-db.server.ts` | pr4_sync_control_plane | yes | phase-1-pr4-sync-control-plane | Retained while durable sync control-plane remains the DB system of record for intake/dispatch |
 | EX-SYNC-002 | `app/sync/intake.server.ts` | pr4_sync_control_plane | yes | phase-1-pr4-sync-control-plane | Retained while durable sync control-plane remains the DB system of record for intake/dispatch |
 | EX-SYNC-003 | `app/sync/lifecycle.server.ts` | pr4_sync_control_plane | yes | phase-1-pr4-sync-control-plane | Retained while durable sync control-plane remains the DB system of record for intake/dispatch |
@@ -338,26 +339,41 @@ All 19 approved merchant-owned models must appear below.
 | `app/sync/__tests__/sync-attempt-recovery.test.ts` | 499 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-005 | migration_tests | approved exception | allowlist EX-SYNC-TEST-005 | EX-SYNC-TEST-005 | PR 4 D-043 F-PR4-04 attempt recovery disposable harness |
 | `app/sync/__tests__/sync-control-plane.integration.test.ts` | 77 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-001 | PR 4 sync control-plane disposable PostgreSQL/Redis integration harness |
 | `app/sync/__tests__/sync-control-plane.integration.test.ts` | 92 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-001 | PR 4 sync control-plane disposable PostgreSQL/Redis integration harness |
-| `app/sync/__tests__/sync-dispatch-recovery.test.ts` | 162 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-003 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-003 | PR 4 D-043 F-PR4-02 dispatch recovery disposable harness |
-| `app/sync/__tests__/sync-dispatch-recovery.test.ts` | 169 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-003 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-003 | PR 4 D-043 F-PR4-02 dispatch recovery disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 59 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-011 | — |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 76 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-011 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 85 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 100 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 132 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 138 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 176 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 204 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 221 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 254 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 257 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 303 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 316 / `tdb.salesDailyAggregate.create` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 333 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 350 / `prisma.syncApplicationReceipt.findMany` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 359 / `prisma.salesDailyAggregate.findFirstOrThrow` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 420 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
-| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 423 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 89 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 145 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-013 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 189 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 307 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 324 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 349 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 362 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 387 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 397 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 409 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 421 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 433 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 439 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 458 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 461 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-dispatch-recovery.test.ts` | 177 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-003 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-003 | PR 4 D-043 F-PR4-02 dispatch recovery disposable harness |
+| `app/sync/__tests__/sync-dispatch-recovery.test.ts` | 183 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-003 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-003 | PR 4 D-043 F-PR4-02 dispatch recovery disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 66 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-011 | — |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 85 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-011 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 94 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 109 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 141 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 147 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 185 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 213 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 230 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 263 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 266 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 312 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 325 / `tdb.salesDailyAggregate.create` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 342 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 359 / `prisma.syncApplicationReceipt.findMany` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 368 / `prisma.salesDailyAggregate.findFirstOrThrow` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 429 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
+| `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 432 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | allowlist EX-SYNC-TEST-011 | EX-SYNC-TEST-011 | PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 71 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 110 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-002 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 119 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
@@ -458,8 +474,8 @@ All 19 approved merchant-owned models must appear below.
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 1910 / `prisma.salesDailyAggregate.findFirstOrThrow` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | allowlist EX-SYNC-TEST-002 | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 1937 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | allowlist EX-SYNC-TEST-002 | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
 | `app/sync/__tests__/sync-exactly-once.test.ts` | 2012 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-002 | migration_tests | approved exception | allowlist EX-SYNC-TEST-002 | EX-SYNC-TEST-002 | PR 4 D-043 F-PR4-01 exactly-once disposable harness |
-| `app/sync/__tests__/sync-final-correction.test.ts` | 119 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-012 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
-| `app/sync/__tests__/sync-final-correction.test.ts` | 133 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-012 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
+| `app/sync/__tests__/sync-final-correction.test.ts` | 135 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-012 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
+| `app/sync/__tests__/sync-final-correction.test.ts` | 147 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-012 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-012 | PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness |
 | `app/sync/__tests__/sync-intake-corrections.test.ts` | 26 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-006 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-006 | PR 4 D-043 intake correction disposable harness |
 | `app/sync/__tests__/sync-intake-corrections.test.ts` | 35 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-006 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-006 | PR 4 D-043 intake correction disposable harness |
 | `app/sync/__tests__/sync-performance.test.ts` | 24 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-007 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-007 | PR 4 D-043 F-PR4-11/13 performance disposable harness |
@@ -480,8 +496,8 @@ All 19 approved merchant-owned models must appear below.
 | `app/sync/dispatcher.server.ts` | 161 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
 | `app/sync/dispatcher.server.ts` | 731 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
 | `app/sync/dispatcher.server.ts` | 786 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
-| `app/sync/dispatcher.server.ts` | 1035 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
-| `app/sync/dispatcher.server.ts` | 1182 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
+| `app/sync/dispatcher.server.ts` | 1040 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
+| `app/sync/dispatcher.server.ts` | 1188 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-006 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-006 | — |
 | `app/sync/intake.server.ts` | 136 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
 | `app/sync/intake.server.ts` | 193 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
 | `app/sync/intake.server.ts` | 259 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
@@ -1451,8 +1467,8 @@ All 19 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 234,
-  "findings": 1247,
+  "scannedFiles": 235,
+  "findings": 1262,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1503,6 +1519,7 @@ All 19 approved merchant-owned models must appear below.
     "EX-SYNC-TEST-009",
     "EX-SYNC-TEST-011",
     "EX-SYNC-TEST-012",
+    "EX-SYNC-TEST-013",
     "EX-TDB-001",
     "EX-TEST-001",
     "EX-TEST-002",
@@ -1555,6 +1572,6 @@ All 19 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "133cc6aa4efdad8870455dbea2a8402a670f41d939e0f70b06582a5c6bb78c77"
+  "contentDigest": "01c73f1620c232d2c73b6c8477811983508c11b79d26f3b999da7baf62176be1"
 }
 ```

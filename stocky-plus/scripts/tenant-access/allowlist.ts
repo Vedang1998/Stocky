@@ -496,6 +496,24 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Retain while PR 4 final-correction suite requires disposable fixtures",
   },
+  {
+    id: "EX-SYNC-TEST-013",
+    path: "app/sync/__tests__/sync-d046-worker-finalize.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "createTenantDb test-local owner shim forwarding transaction options",
+      "SyncApplicationReceipt / SalesDailyAggregate / DurableJob / JobAttempt / DeadLetter fixture assertions",
+      "JobDispatch fixture for v3 envelope identity",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 D-046 worker-finalize suite requires disposable fixtures",
+  },
   ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),

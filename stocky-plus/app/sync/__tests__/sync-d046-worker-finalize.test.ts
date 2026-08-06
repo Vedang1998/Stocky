@@ -2,15 +2,17 @@
  * NEW-CLAUDE-D045-02 / D-046 — genuine v2/v3 processWebhookJob catch/finalization evidence.
  *
  * Drives the real worker catch branches (not finalizeApplicationAfterRollback alone).
- * Test-local mocking of applyWithApplicationReceipt is used solely to throw documented
- * post-rollback error codes; no production hook is added.
+ * Test-local mocking:
+ * - applyWithApplicationReceipt — solely to throw documented post-rollback error codes
+ * - createTenantDb — owner Prisma TenantDb shim (same disposable pattern as
+ *   sync-exactly-once / envelope-fail-closed) that forwards transaction options so
+ *   RepeatableRead is exercised; no production hook
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma, PrismaClient } from "@prisma/client";
 import type { Job } from "bullmq";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
-import { resetPrismaSingletonForTests } from "../../db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
 import {
   createTenantJobEnvelopeV2,
@@ -31,13 +33,18 @@ import {
   resolveApplicationKey,
 } from "../execution-strategy.server";
 import { SyncControlPlaneError } from "../errors";
+import type { TenantDb } from "../../tenant/tenant-db.server";
 
-const { applyMock, originalApply } = vi.hoisted(() => {
+const { applyMock, originalApply, ownerPrismaHolder } = vi.hoisted(() => {
   const applyMock = vi.fn();
   return {
     applyMock,
-    // Filled in by the mock factory with the real implementation.
-    originalApply: { current: null as null | ((...args: never[]) => Promise<unknown>) },
+    originalApply: {
+      current: null as null | ((...args: never[]) => Promise<unknown>),
+    },
+    ownerPrismaHolder: {
+      current: null as null | PrismaClient,
+    },
   };
 });
 
@@ -54,6 +61,52 @@ vi.mock("../application-receipt.server", async (importOriginal) => {
     ...actual,
     applyWithApplicationReceipt: (...args: unknown[]) =>
       applyMock(...(args as never[])),
+  };
+});
+
+vi.mock("../../tenant/tenant-db.server", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../tenant/tenant-db.server")>();
+
+  function ownerTenantShim(
+    prisma: PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect">,
+    authority: { shopId: string; myshopifyDomain: string },
+  ): TenantDb {
+    const client = prisma as PrismaClient;
+    return {
+      authority,
+      syncApplicationReceipt: client.syncApplicationReceipt,
+      salesDailyAggregate: client.salesDailyAggregate,
+      $queryRaw: client.$queryRaw.bind(client),
+      $transaction: async <T>(
+        fn: (db: TenantDb) => Promise<T>,
+        options?: {
+          maxWait?: number;
+          timeout?: number;
+          isolationLevel?: Prisma.TransactionIsolationLevel;
+        },
+      ) =>
+        client.$transaction(
+          async (tx) =>
+            fn(
+              ownerTenantShim(tx as unknown as PrismaClient, authority),
+            ),
+          options,
+        ),
+    } as unknown as TenantDb;
+  }
+
+  return {
+    ...actual,
+    createTenantDb: (authority: {
+      shopId: string;
+      myshopifyDomain: string;
+    }) => {
+      if (!ownerPrismaHolder.current) {
+        throw new Error("owner Prisma not initialized for TenantDb shim");
+      }
+      return ownerTenantShim(ownerPrismaHolder.current, authority);
+    },
   };
 });
 
@@ -77,9 +130,10 @@ function fakeJob(
 describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
   let prisma: PrismaClient;
   let shopId: string;
-  const isolationObservations: Array<Prisma.TransactionIsolationLevel | undefined> =
-    [];
-  let transactionSpy: ReturnType<typeof vi.spyOn> | undefined;
+  const isolationObservations: Array<
+    Prisma.TransactionIsolationLevel | undefined
+  > = [];
+  let restoreTransactionSpy: (() => void) | undefined;
 
   beforeAll(async () => {
     process.env.STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK = "1";
@@ -88,37 +142,37 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       "test-only-tenant-job-envelope-secret-32b!!";
     resetTenantJobEnvelopeSecretCache();
     await resetControlPlanePrismaForTests();
-    // Runtime TenantDb (createTenantDb) uses the verified runtime singleton.
-    await resetPrismaSingletonForTests();
     prisma = new PrismaClient();
+    ownerPrismaHolder.current = prisma;
 
     const original = PrismaClient.prototype.$transaction;
-    transactionSpy = vi
-      .spyOn(PrismaClient.prototype, "$transaction")
-      .mockImplementation(function (
-        this: PrismaClient,
-        arg: unknown,
-        options?: {
-          isolationLevel?: Prisma.TransactionIsolationLevel;
-          maxWait?: number;
-          timeout?: number;
-        },
-      ) {
-        if (typeof arg === "function" && options?.isolationLevel != null) {
-          isolationObservations.push(options.isolationLevel);
-        }
-        return (
-          original as (
-            this: PrismaClient,
-            a: unknown,
-            o?: unknown,
-          ) => Promise<unknown>
-        ).call(this, arg, options);
-      });
+    const spy = vi.spyOn(PrismaClient.prototype, "$transaction");
+    spy.mockImplementation(function (
+      this: PrismaClient,
+      arg: unknown,
+      options?: {
+        isolationLevel?: Prisma.TransactionIsolationLevel;
+        maxWait?: number;
+        timeout?: number;
+      },
+    ) {
+      if (typeof arg === "function" && options?.isolationLevel != null) {
+        isolationObservations.push(options.isolationLevel);
+      }
+      return (
+        original as (
+          this: PrismaClient,
+          a: unknown,
+          o?: unknown,
+        ) => Promise<unknown>
+      ).call(this, arg, options) as Promise<unknown>;
+    } as typeof original);
+    restoreTransactionSpy = () => spy.mockRestore();
   });
 
   afterAll(async () => {
-    transactionSpy?.mockRestore();
+    restoreTransactionSpy?.();
+    ownerPrismaHolder.current = null;
     await resetControlPlanePrismaForTests();
     await prisma.$disconnect();
   });
@@ -344,7 +398,6 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       where: { shopId },
     });
 
-    // Real apply path throws DIGEST_CONFLICT on mismatched existing receipt.
     await processWebhookJob(buildV3Job(job, dispatch));
 
     const durable = await prisma.durableJob.findUniqueOrThrow({

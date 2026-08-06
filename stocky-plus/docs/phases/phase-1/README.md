@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — D-045 — not accepted
-**Next authorized action:** Return to ChatGPT for exact-head verification and a focused independent Claude Code D-045 correction review
+**Phase 1 PR 4:** D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — not accepted
+**Next authorized action:** Return to ChatGPT for exact-head verification and a focused independent Claude Code D-046 correction review
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
-**ChatGPT decisions:** D-025..D-044; **D-045 — Phase 1 PR 4 final corrections required**
+**ChatGPT decisions:** D-025..D-045; **D-046 — Phase 1 PR 4 review corrections required**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -22,13 +22,14 @@
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
-- PR 4 is **FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** under D-045 on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
-- After Cursor handoff language: `FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
+- PR 4 is **D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- After Cursor handoff language: `PR 4 D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
 - First-cycle correction artifacts: `PR4_SYNC_CONTROL_PLANE_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md`.
 - Second-correction artifacts: `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_REVIEW_REPORT.md` (immutable).
-- Final-correction artifacts: `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_IMPLEMENTATION_REPORT.md`.
-- Immutable reports: original review; first correction-review; second-correction review — do not edit.
-- Identity labels: `b73a22f…` = reviewed runtime/test head; `9d43ec9…` = review-report / D-045 start; `71bb576…` = documentation + test-fixture synchronization (not documentation-only).
+- Final-correction artifacts: `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_FINAL_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-046 artifacts: `PR4_SYNC_CONTROL_PLANE_D046_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D046_CORRECTION_IMPLEMENTATION_REPORT.md`.
+- Immutable reports: original review; first correction-review; second-correction review; final-correction review — do not edit.
+- Identity labels: `c1c8554…` = reviewed D-045 implementation; `ef452bb…` = D-045 review-report / D-046 start; D-046 runtime/test correction = see implementation report.
 - PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
 - Do **not** begin PR 5 in this PR.
@@ -52,7 +53,7 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 4 | **FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** (D-045; PR #20 draft) |
+| PR 4 | **D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** (PR #20 draft) |
 
 ### PR 3 correction-history identities (preserved)
 
