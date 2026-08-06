@@ -111,3 +111,49 @@ independent Claude Code D-045 correction review.
 
 Status remains **FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION**.
 Do not close findings or risks on Cursor evidence alone.
+
+## D-045 Mechanical Completion — Production Test Hook Removal
+
+**Authority:** D-045 (no new decision number)  
+**Starting head:** `01030436c440cef6228d432798ac4dd0be5851ab`  
+**Prior verified exact-head CI:** run `31057886205`, job `92479281401`, success  
+
+### Why the runtime hook violated the approved brief
+
+`application-receipt.server.ts` exported `__setForceMissingWinnerAfterConflictForTests` and gated production control flow on mutable module globals (`testForceMissingWinnerAfterConflict`, `testForceSkipInitialReceiptRead`). That introduced a production-reachable test bypass solely to force the no-readable-winner branch, violating:
+
+```text
+No production test hook may be introduced merely to force the branch.
+```
+
+Independent review is not authorized while that hook remains.
+
+### Exact files changed
+
+- `app/sync/application-receipt.server.ts` — removed all test globals/setters/conditionals; added pure `classifyReceiptVerification` and `classifyConflictWinnerReceipt`; production always performs initial receipt lookup, merchant writes only when absent, `ON CONFLICT DO NOTHING RETURNING`, then normal winner read + classification
+- `app/sync/__tests__/sync-exactly-once.test.ts` — replaced hook-based test with pure classification + module-export/source static guards
+- `app/sync/__tests__/sync-final-correction.test.ts` — export-guard regression
+- this implementation report
+
+No migration. Independent review reports unchanged.
+
+### Replacement test architecture
+
+1. **Finalization tests** — existing `finalizeApplicationAfterRollback` paths for matching / missing / digest conflict / verification failure (controlled TenantDb double for query failure).
+2. **Pure classification** — `classifyConflictWinnerReceipt(null)` proves `outcome_uncertain`; `classifyReceiptVerification` covers verified / missing / digest_conflict without mutating runtime.
+3. **Real PostgreSQL race** — retained concurrent winner/loser tests for one merchant effect, no `25P02`, post-rollback convergence.
+4. **Module-export / source static guard** — fails if `__setForceMissingWinnerAfterConflictForTests` or `testForce*` returns to the production module.
+
+No `NODE_ENV` guard, env var, mutable global, production-exported setter, or caller bypass was introduced as a replacement.
+
+### Test evidence / final identity
+
+Recorded after local validation and exact-head CI in the PR #20 body (not a tip-identity commit). Status remains:
+
+```text
+FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
+```
+
+### Safety confirmation
+
+No production migration, role change, queue execution, webhook replay, merchant data, ownership repair, or inventory mutation. Inventory-write flags remain OFF. No PR 5 work. No secrets. No force-push. PR #20 remains OPEN, DRAFT, UNMERGED.

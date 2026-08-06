@@ -457,6 +457,18 @@ describe("test:sync-final-correction (D-045)", () => {
     expect(RUNNABLE_BULLMQ_STATES).not.toContain("paused");
   });
 
+  it("NEW-PR4-SC01: production receipt module exports no mutable test setter", async () => {
+    const mod = await import("../application-receipt.server");
+    expect(mod).not.toHaveProperty(
+      "__setForceMissingWinnerAfterConflictForTests",
+    );
+    expect(
+      Object.keys(mod).filter(
+        (k) => k.includes("ForTests") || k.startsWith("__set"),
+      ),
+    ).toEqual([]);
+  });
+
   it("NEW-PR4-SC08: stranded recovery budget increments attemptCount once", async () => {
     const ingested = await ingestAuthenticatedWebhook({
       verifiedShop: SHOP,

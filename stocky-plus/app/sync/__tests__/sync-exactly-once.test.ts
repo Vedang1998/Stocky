@@ -10,8 +10,9 @@ import { PrismaClient } from "@prisma/client";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import {
-  __setForceMissingWinnerAfterConflictForTests,
   applyWithApplicationReceipt,
+  classifyConflictWinnerReceipt,
+  classifyReceiptVerification,
   verifyApplicationReceiptAfterRollback,
 } from "../application-receipt.server";
 import { finalizeApplicationAfterRollback } from "../application-finalize.server";
@@ -35,7 +36,9 @@ import {
   transitionRetryWaitToEnqueuedForTests,
   transitionToEnqueuedForTests,
 } from "./test-state-helpers";
-const SHOP = "pr4-exactly-once.myshopify.com";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import * as applicationReceiptModule from "../application-receipt.server";const SHOP = "pr4-exactly-once.myshopify.com";
 
 function ownerTenantShim(
   prisma: PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect">,
@@ -1726,42 +1729,74 @@ describe("test:sync-exactly-once", () => {
     }
   });
 
-  it("NEW-PR4-SC01: conflict without readable winner emits APPLICATION_OUTCOME_UNCERTAIN", async () => {
-    const applicationKey = "webhook-delivery:sc01-no-winner";
-    const digest = "a".repeat(64);
-    const db = ownerTenantShim(prisma, shopId);
-    await prisma.syncApplicationReceipt.create({
-      data: {
-        shopId,
-        applicationKey,
-        sourceJobType: "webhook:orders/create",
-        rootDurableJobId: "root-no-winner",
-        firstApplyingDurableJobId: "job-winner",
-        payloadDigest: digest,
-        applicationSchemaVersion: "sync-application-receipt-v1",
-      },
+  it("NEW-PR4-SC01: conflict without readable winner classifies APPLICATION_OUTCOME_UNCERTAIN", () => {
+    // Pure classification — no production mutable test hook.
+    expect(classifyConflictWinnerReceipt(null, "a".repeat(64))).toEqual({
+      kind: "outcome_uncertain",
     });
+    expect(
+      classifyConflictWinnerReceipt(undefined, "a".repeat(64)),
+    ).toEqual({ kind: "outcome_uncertain" });
+    expect(
+      classifyConflictWinnerReceipt(
+        { payloadDigest: "a".repeat(64) },
+        "a".repeat(64),
+      ),
+    ).toEqual({ kind: "already_applied" });
+    expect(
+      classifyConflictWinnerReceipt(
+        { payloadDigest: "b".repeat(64) },
+        "a".repeat(64),
+      ),
+    ).toEqual({ kind: "digest_conflict" });
+  });
 
-    __setForceMissingWinnerAfterConflictForTests(true);
-    try {
-      await expect(
-        db.$transaction(async (tx) =>
-          applyWithApplicationReceipt(
-            tx,
-            {
-              applicationKey,
-              sourceJobType: "webhook:orders/create",
-              rootDurableJobId: "root-no-winner",
-              applyingDurableJobId: "job-loser",
-              payloadDigest: digest,
-            },
-            async () => true,
-          ),
-        ),
-      ).rejects.toMatchObject({ code: APPLICATION_OUTCOME_UNCERTAIN });
-    } finally {
-      __setForceMissingWinnerAfterConflictForTests(false);
-    }
+  it("NEW-PR4-SC01: classifyReceiptVerification is deterministic and side-effect-free", () => {
+    expect(
+      classifyReceiptVerification(null, "c".repeat(64)),
+    ).toEqual({ status: "missing" });
+    expect(
+      classifyReceiptVerification(
+        { id: "r1", payloadDigest: "d".repeat(64) },
+        "c".repeat(64),
+      ),
+    ).toEqual({ status: "digest_conflict", actualDigest: "d".repeat(64) });
+    expect(
+      classifyReceiptVerification(
+        { id: "r2", payloadDigest: "c".repeat(64) },
+        "c".repeat(64),
+      ),
+    ).toEqual({
+      status: "verified",
+      receiptId: "r2",
+      payloadDigest: "c".repeat(64),
+    });
+  });
+
+  it("NEW-PR4-SC01: production receipt module exports no test setter", () => {
+    expect(applicationReceiptModule).not.toHaveProperty(
+      "__setForceMissingWinnerAfterConflictForTests",
+    );
+    const testExports = Object.keys(applicationReceiptModule).filter(
+      (k) =>
+        k.includes("ForTests") ||
+        k.startsWith("__set") ||
+        k.includes("testForce"),
+    );
+    expect(testExports).toEqual([]);
+
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "app/sync/application-receipt.server.ts",
+      ),
+      "utf8",
+    );
+    expect(source).not.toMatch(
+      /__setForceMissingWinnerAfterConflictForTests/,
+    );
+    expect(source).not.toMatch(/testForceMissingWinnerAfterConflict/);
+    expect(source).not.toMatch(/testForceSkipInitialReceiptRead/);
   });
 
   it("NEW-PR4-SC01: finalize with matching receipt → already_applied_verified_after_rollback", async () => {
