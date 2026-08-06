@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, "phase-1/**"]
   pull_request:
+  # Allow operators to re-run exact-head CI when agent push tokens do not
+  # create github-actions check suites (observed after 2026-08-06T14:28Z).
+  workflow_dispatch:
 
 permissions:
   contents: read
