@@ -13,7 +13,8 @@
 | Required starting PR head | `b76fa2b63cb18cf2717a9269b7740decf0576bea` |
 | Independent focused review commit (cherry-picked) | `8050e278ec8396345b842a653c5559243454432b` |
 | Cherry-pick on branch | see Git history after starting head |
-| Live final PR tip / exact-head CI | Authoritative only from GitHub after green exact-head CI |
+| Live final PR tip (this report authoring) | `f5eeec62d703b916022540804b6bf92d5064e38d` |
+| Exact-head CI on tip | **Not obtained by agent** — `gh workflow run` returns HTTP 403; agent push did not create a PR check suite on tip. Latest green PR CI remains run `31126856745` on superseded head `b76fa2b…`. In-progress push CI `31129655828` is on cherry-pick-only head `06b58ba…` (not tip). Human must re-run / dispatch CI on tip. |
 
 Immutable reports (do not edit):
 
@@ -90,31 +91,43 @@ Limit  (actual time=96.442..96.445 rows=10)
 Execution Time: 96.479 ms
 ```
 
-### After (bounded shop-lateral path)
+### After (bounded shop-lateral path — shopId range predicates)
+
+Measured on disposable PostgreSQL 16 after ANALYZE, ≥50,000 DurableJob rows,
+mixed PENDING/RETRY_WAIT/future, empty shops present, default `work_mem`:
 
 ```
-CTE Scan on locked  (actual time≈0.16..0.17 rows=10)
-  Buffers: shared hit≈130
-  ->  LockRows
-        ->  Sort  (actual rows=10; quicksort Memory: 27kB)  -- bounded candidates only
-              ->  Index Scan pkey
-  InitPlan / Nested Loop
-    -> MATERIALIZED shop_seed (Sort of ≤ shopCap shops)
-    -> LATERAL Index Only Scan using "DurableJob_shop_claim_pending_idx"
-    -> LATERAL Index Only Scan using "DurableJob_shop_claim_retry_wait_idx"
-Execution Time: ≈0.2–0.4 ms
+CTE Scan on locked  (actual time=0.223..0.232 rows=10)
+  Buffers: shared hit=227
+  CTE shop_seed
+    -> Limit/Sort of ≤ shopCap shops (quicksort Memory: 25kB)
+    -> Seq Scan on "Shop" (not DurableJob)
+    -> Index Only Scan using "DurableJob_shop_claim_pending_idx"
+    -> Index Only Scan using "DurableJob_shop_claim_retry_wait_idx"
+  CTE locked
+    -> Nested Loop + LATERAL Index Only Scan shop_claim_*
+    -> LockRows
+    -> Sort (actual rows=10; quicksort Memory: 25kB)
+    -> Index Scan "DurableJob_pkey"
+Execution Time: ≈0.28 ms
 ```
+
+Load-bearing predicate shape: `"shopId" >= $id AND "shopId" <= $id` (not bare
+`=`), which selects shop-claim indexes. Bare equality competed with
+`DurableJob_eligible_pending_idx` and planned as global nextEligibleAt scan +
+shopId Filter (~51k buffers when empty shops were present).
 
 | Metric | Before | After |
 |---|---|---|
-| Scan type on DurableJob | Seq Scan | Index Only Scan (shop_claim_*) |
-| Rows examined (eligible) | ~45,000 | bounded (≤ shopCap×maxPerShop probes) |
-| Sort input | 45,000 | 10 (candidates) / 5 (shops) |
-| Sort method | in-memory quicksort 12MB (would spill under low work_mem) | quicksort 25–27kB |
-| Buffers (shared hit) | ~2001 | ~130 |
-| Execution time | ~96 ms | ~0.2–0.4 ms |
+| Scan type on DurableJob | Seq Scan | Index Only Scan (`shop_claim_*`) |
+| Rows examined (eligible) | ~45,000 | bounded per-shop LIMIT probes |
+| Sort input | 45,000 | ≤ shopCap shops / ≤ candidates |
+| Sort method | quicksort ~12MB | quicksort ~25kB |
+| Buffers (shared hit) | ~2001 | ~227 (with empty shops) |
+| Execution time | ~96 ms | ~0.28 ms |
 | WindowAgg | yes | no |
 | LockRows / SKIP LOCKED | separate follow-up | in production statement |
+| Index selected for PENDING | none (seq) | `DurableJob_shop_claim_pending_idx` |
 
 ## P3-NEW-D047-01
 
