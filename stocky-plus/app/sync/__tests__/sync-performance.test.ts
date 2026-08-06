@@ -9,6 +9,7 @@ import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.ser
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
 import { WEBHOOK_QUEUE } from "../../jobs/queue.server";
+import { assertEligibleClaimPlanShape } from "./eligible-claim-plan";
 
 describe("test:sync-performance", () => {
   let prisma: PrismaClient;
@@ -49,7 +50,7 @@ describe("test:sync-performance", () => {
     await resetControlPlanePrismaForTests();
   });
 
-  it("eligible claim plan uses index at scale (no Seq Scan + external sort)", async () => {
+  it("eligible claim plan uses eligible_pending index at scale (no Seq Scan / Sort)", async () => {
     // Seed ≥50k PENDING jobs across shops (F-PR4-11/13). Override with SYNC_PERF_JOB_COUNT.
     const SCALE = Number(process.env.SYNC_PERF_JOB_COUNT ?? "50000");
     const shops: string[] = [];
@@ -81,6 +82,10 @@ describe("test:sync-performance", () => {
       `);
     }
 
+    // P2-D046-01: bulk insert leaves planner stats stale/absent; without ANALYZE
+    // Postgres may choose shop-leading or state-composite indexes and re-sort.
+    await prisma.$executeRawUnsafe(`ANALYZE "DurableJob"`);
+
     // Raise work_mem so ordered index plans are not forced to external sort on
     // disposable CI with default low work_mem (not a production SLA claim).
     await prisma.$executeRawUnsafe(`SET work_mem = '64MB'`);
@@ -93,15 +98,7 @@ describe("test:sync-performance", () => {
          LIMIT 50`,
       );
       const planText = plan.map((r) => r["QUERY PLAN"]).join("\n");
-      expect(planText).toMatch(/Index Scan|Bitmap Index Scan|Index Only Scan/i);
-      // F-PR4-11 ships both global and shop-scoped eligible-pending partial
-      // indexes. Postgres may choose either (or the schema state/nextEligibleAt
-      // index) depending on stats; reject only when no eligible index appears.
-      expect(planText).toMatch(
-        /DurableJob_eligible_pending|DurableJob_shop_eligible_pending|DurableJob_.*nextEligibleAt/i,
-      );
-      expect(planText).not.toMatch(/Seq Scan on "DurableJob"/i);
-      expect(planText).not.toMatch(/Sort Method: external/i);
+      assertEligibleClaimPlanShape(planText);
     } finally {
       await prisma.$executeRawUnsafe(`RESET work_mem`);
     }
