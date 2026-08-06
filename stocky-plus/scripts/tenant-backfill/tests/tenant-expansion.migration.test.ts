@@ -40,6 +40,7 @@ const ALL_MIGRATION_NAMES = [
   "20260805120000_sync_control_plane_second_correction",
   "20260805130000_sync_control_plane_receipt_probe_revoke",
   "20260805140000_sync_control_plane_enqueued_failed",
+  "20260806220000_sync_control_plane_d047_fair_claim_indexes",
 ] as const;
 
 /**
@@ -286,6 +287,7 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     "20260805120000_sync_control_plane_second_correction",
     "20260805130000_sync_control_plane_receipt_probe_revoke",
     "20260805140000_sync_control_plane_enqueued_failed",
+    "20260806220000_sync_control_plane_d047_fair_claim_indexes",
   ] as const;
 
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -378,6 +380,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260805120000_sync_control_plane_second_correction",
         "20260805130000_sync_control_plane_receipt_probe_revoke",
         "20260805140000_sync_control_plane_enqueued_failed",
+        "20260806220000_sync_control_plane_d047_fair_claim_indexes",
         "migration_lock.toml",
       ]),
     );
@@ -407,6 +410,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain(
         "20260805140000_sync_control_plane_enqueued_failed",
       );
+      expect(initOut).not.toContain(
+        "20260806220000_sync_control_plane_d047_fair_claim_indexes",
+      );
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -421,6 +427,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260805140000_sync_control_plane_enqueued_failed",
+      );
+      expect(restOut).toContain(
+        "20260806220000_sync_control_plane_d047_fair_claim_indexes",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
@@ -460,6 +469,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260805140000_sync_control_plane_enqueued_failed",
+      );
+      expect(restOut).toContain(
+        "20260806220000_sync_control_plane_d047_fair_claim_indexes",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
