@@ -2,9 +2,9 @@
  * F-PR4-02 — JobDispatch retry identity and ack-loss recovery.
  * NEW-PR4-C01 — runnable-presence ack gate + stranded ENQUEUED recovery.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { Queue, Worker } from "bullmq";
+import { Job, Queue, Worker } from "bullmq";
 import IORedis from "ioredis";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import {
@@ -25,11 +25,26 @@ import {
   resetQueueClientsForTests,
 } from "../../jobs/queue.server";
 import {
-  __setQueueStateClassificationSeamForTests,
+  classifyQueueState,
   inspectQueueDispatchPresence,
 } from "../queue-presence.server";
 import { APPLICATION_OUTCOME_UNCERTAIN } from "../execution-strategy.server";
 import { DURABLE_JOB_TRANSITION_PAIRS } from "../state-machine.server";
+
+/** Test-local only: force Job.getState() to an unreachable future BullMQ value. */
+async function withForcedQueueGetState<T>(
+  queueState: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const spy = vi
+    .spyOn(Job.prototype, "getState")
+    .mockResolvedValue(queueState as never);
+  try {
+    return await run();
+  } finally {
+    spy.mockRestore();
+  }
+}
 
 const SHOP = "pr4-dispatch.myshopify.com";
 
@@ -165,7 +180,6 @@ describe("test:sync-dispatch-recovery", () => {
   });
 
   beforeEach(async () => {
-    __setQueueStateClassificationSeamForTests(null);
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
@@ -182,10 +196,24 @@ describe("test:sync-dispatch-recovery", () => {
   });
 
   afterAll(async () => {
-    __setQueueStateClassificationSeamForTests(null);
     await resetControlPlanePrismaForTests();
     await prisma.$disconnect();
     await redis.quit();
+  });
+
+  it("NEW-CLAUDE-D045-01: classifyQueueState maps future unsupported state to UNKNOWN_STATE", () => {
+    expect(classifyQueueState("future-bullmq-state-x")).toEqual({
+      status: "UNKNOWN_STATE",
+      queueState: "future-bullmq-state-x",
+    });
+    expect(classifyQueueState("waiting")).toEqual({
+      status: "RUNNABLE_EXISTING",
+      queueState: "waiting",
+    });
+    expect(classifyQueueState("failed")).toEqual({
+      status: "TERMINAL_EXISTING",
+      queueState: "failed",
+    });
   });
 
   it("retry while failed BullMQ job retained uses new dispatch sequence (F-PR4-02)", async () => {
@@ -733,11 +761,6 @@ describe("test:sync-dispatch-recovery", () => {
     const { jobId, shopId, dispatch } = await enqueueStrandedWebhook("wh-c01-unk-seq");
     await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
 
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-bullmq-state-x",
-    }));
-
     await prisma.$executeRaw`
       UPDATE "DurableJob"
       SET
@@ -749,24 +772,26 @@ describe("test:sync-dispatch-recovery", () => {
     `;
 
     const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
-    const result = await enqueueWithDispatch(
-      {
-        id: claimed.id,
-        shopId,
-        jobType: claimed.jobType,
-        source: claimed.source,
-        queueName: claimed.queueName,
-        payloadSchemaVersion: claimed.payloadSchemaVersion,
-        sanitizedPayload: claimed.sanitizedPayload,
-        payloadDigest: claimed.payloadDigest,
-        correlationId: claimed.correlationId,
-        causationId: claimed.causationId,
-        state: claimed.state,
-        executionStrategy: claimed.executionStrategy,
-        activeDispatchSequence: claimed.activeDispatchSequence,
-      },
-      { ...dispatch, state: "PENDING_ENQUEUE" },
-      { workerId: "dispatcher:unk-seq" },
+    const result = await withForcedQueueGetState("future-bullmq-state-x", () =>
+      enqueueWithDispatch(
+        {
+          id: claimed.id,
+          shopId,
+          jobType: claimed.jobType,
+          source: claimed.source,
+          queueName: claimed.queueName,
+          payloadSchemaVersion: claimed.payloadSchemaVersion,
+          sanitizedPayload: claimed.sanitizedPayload,
+          payloadDigest: claimed.payloadDigest,
+          correlationId: claimed.correlationId,
+          causationId: claimed.causationId,
+          state: claimed.state,
+          executionStrategy: claimed.executionStrategy,
+          activeDispatchSequence: claimed.activeDispatchSequence,
+        },
+        { ...dispatch, state: "PENDING_ENQUEUE" },
+        { workerId: "dispatcher:unk-seq" },
+      ),
     );
 
     expect(result.outcome).toBe("queue_state_unknown");
@@ -787,10 +812,6 @@ describe("test:sync-dispatch-recovery", () => {
   it("NEW-PR4-C01: existing unknown queue state is not marked FAILED or SUPERSEDED", async () => {
     const { jobId, shopId, dispatch } = await enqueueStrandedWebhook("wh-c01-unk-mark");
     await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-bullmq-state-y",
-    }));
     await prisma.$executeRaw`
       UPDATE "DurableJob"
       SET state = 'DISPATCH_LEASED', "leaseOwner" = 'dispatcher:unk-mark',
@@ -798,24 +819,26 @@ describe("test:sync-dispatch-recovery", () => {
       WHERE id = ${jobId} AND state = 'PENDING'
     `;
     const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
-    const result = await enqueueWithDispatch(
-      {
-        id: claimed.id,
-        shopId,
-        jobType: claimed.jobType,
-        source: claimed.source,
-        queueName: claimed.queueName,
-        payloadSchemaVersion: claimed.payloadSchemaVersion,
-        sanitizedPayload: claimed.sanitizedPayload,
-        payloadDigest: claimed.payloadDigest,
-        correlationId: claimed.correlationId,
-        causationId: claimed.causationId,
-        state: claimed.state,
-        executionStrategy: claimed.executionStrategy,
-        activeDispatchSequence: claimed.activeDispatchSequence,
-      },
-      { ...dispatch, state: "PENDING_ENQUEUE" },
-      { workerId: "dispatcher:unk-mark" },
+    const result = await withForcedQueueGetState("future-bullmq-state-y", () =>
+      enqueueWithDispatch(
+        {
+          id: claimed.id,
+          shopId,
+          jobType: claimed.jobType,
+          source: claimed.source,
+          queueName: claimed.queueName,
+          payloadSchemaVersion: claimed.payloadSchemaVersion,
+          sanitizedPayload: claimed.sanitizedPayload,
+          payloadDigest: claimed.payloadDigest,
+          correlationId: claimed.correlationId,
+          causationId: claimed.causationId,
+          state: claimed.state,
+          executionStrategy: claimed.executionStrategy,
+          activeDispatchSequence: claimed.activeDispatchSequence,
+        },
+        { ...dispatch, state: "PENDING_ENQUEUE" },
+        { workerId: "dispatcher:unk-mark" },
+      ),
     );
     expect(result.outcome).toBe("queue_state_unknown");
     const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
@@ -830,13 +853,11 @@ describe("test:sync-dispatch-recovery", () => {
       where: { durableJobId: jobId, dispatchSequence: 1 },
     });
     await resetToPendingWithPendingEnqueue(prisma, jobId, dispatch.id);
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-bullmq-state-z",
-    }));
 
     const before = await prisma.jobDispatch.count({ where: { durableJobId: jobId } });
-    const result = await dispatchPendingJobs({ batchSize: 10 });
+    const result = await withForcedQueueGetState("future-bullmq-state-z", () =>
+      dispatchPendingJobs({ batchSize: 10 }),
+    );
     expect(result.enqueued).toBe(0);
 
     const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
@@ -882,44 +903,33 @@ describe("test:sync-dispatch-recovery", () => {
       },
     });
 
-    // Classify as MISSING on inspect, then UNKNOWN after add (job exists in Redis).
-    let call = 0;
-    __setQueueStateClassificationSeamForTests((state) => {
-      call += 1;
-      // First classifyExisting after getJob may not run if MISSING.
-      // After add, classifyAfterQueueAdd → classifyExistingQueueJob.
-      if (call >= 1 && state) {
-        return { status: "UNKNOWN_STATE", queueState: "future-post-add-state" };
-      }
-      return null;
-    });
-
-    // Ensure no pre-existing Redis job so path is MISSING → add → unknown.
+    // Ensure no pre-existing Redis job so path is MISSING → add → unknown getState.
     const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
     const existing = await q.getJob(queueJobId);
     if (existing) await existing.remove();
 
-    // Override: force inspect to MISSING by removing job; after add force unknown via seam.
-    // Seam applies only when a job object exists (classifyExistingQueueJob).
     const claimed = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
-    const result = await enqueueWithDispatch(
-      {
-        id: claimed.id,
-        shopId,
-        jobType: claimed.jobType,
-        source: claimed.source,
-        queueName: claimed.queueName,
-        payloadSchemaVersion: claimed.payloadSchemaVersion,
-        sanitizedPayload: claimed.sanitizedPayload,
-        payloadDigest: claimed.payloadDigest,
-        correlationId: claimed.correlationId,
-        causationId: claimed.causationId,
-        state: claimed.state,
-        executionStrategy: claimed.executionStrategy,
-        activeDispatchSequence: claimed.activeDispatchSequence,
-      },
-      dispatch,
-      { workerId: "dispatcher:post-add" },
+    // After add, classifyExistingQueueJob calls getState — force an unreachable future state.
+    const result = await withForcedQueueGetState("future-post-add-state", () =>
+      enqueueWithDispatch(
+        {
+          id: claimed.id,
+          shopId,
+          jobType: claimed.jobType,
+          source: claimed.source,
+          queueName: claimed.queueName,
+          payloadSchemaVersion: claimed.payloadSchemaVersion,
+          sanitizedPayload: claimed.sanitizedPayload,
+          payloadDigest: claimed.payloadDigest,
+          correlationId: claimed.correlationId,
+          causationId: claimed.causationId,
+          state: claimed.state,
+          executionStrategy: claimed.executionStrategy,
+          activeDispatchSequence: claimed.activeDispatchSequence,
+        },
+        dispatch,
+        { workerId: "dispatcher:post-add" },
+      ),
     );
 
     expect(result.outcome).toBe("queue_state_unknown");
@@ -1083,18 +1093,14 @@ describe("test:sync-dispatch-recovery", () => {
     if (qjB) await qjB.remove();
     await q.close();
 
-    // Shop A: leave Redis job present → UNKNOWN via seam.
-    // Shop B: confirmed missing → RETRY_WAIT (seam only applies when Job exists).
-    __setQueueStateClassificationSeamForTests((state) =>
-      state
-        ? { status: "UNKNOWN_STATE" as const, queueState: "future-shop-a" }
-        : null,
+    // Shop A: leave Redis job present → UNKNOWN via getState spy.
+    // Shop B: confirmed missing → RETRY_WAIT (getState not called when Job missing).
+    const result = await withForcedQueueGetState("future-shop-a", () =>
+      recoverStrandedEnqueuedJobs({
+        olderThanMs: 60_000,
+        limit: 20,
+      }),
     );
-
-    const result = await recoverStrandedEnqueuedJobs({
-      olderThanMs: 60_000,
-      limit: 20,
-    });
     expect(result.indeterminate).toBeGreaterThanOrEqual(1);
     expect(result.recovered).toBeGreaterThanOrEqual(1);
 
@@ -1106,14 +1112,15 @@ describe("test:sync-dispatch-recovery", () => {
 
   it("NEW-PR4-C01: unknown state in the stranded reaper leaves the job unchanged", async () => {
     const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-strand-unk");
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-stranded",
-    }));
-    const result = await recoverStrandedEnqueuedJobs({
-      olderThanMs: 60_000,
-      limit: 10,
-    });
+    const beforeAttempts = (
+      await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } })
+    ).attemptCount;
+    const result = await withForcedQueueGetState("future-stranded", () =>
+      recoverStrandedEnqueuedJobs({
+        olderThanMs: 60_000,
+        limit: 10,
+      }),
+    );
     expect(result.indeterminate).toBeGreaterThanOrEqual(1);
     expect(result.recovered).toBe(0);
     expect(result.deadLettered).toBe(0);
@@ -1121,6 +1128,7 @@ describe("test:sync-dispatch-recovery", () => {
     const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
     const d = await prisma.jobDispatch.findUniqueOrThrow({ where: { id: dispatch.id } });
     expect(durable.state).toBe("ENQUEUED");
+    expect(durable.attemptCount).toBe(beforeAttempts);
     expect(d.state).toBe("ENQUEUED");
     expect(d.dispatchSequence).toBe(1);
   });
@@ -1166,7 +1174,7 @@ describe("test:sync-dispatch-recovery", () => {
     const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-no-retry");
     await prisma.durableJob.update({
       where: { id: jobId },
-      data: { executionStrategy: "NO_AUTOMATIC_RETRY" },
+      data: { executionStrategy: "NO_AUTOMATIC_RETRY", attemptCount: 2 },
     });
     const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
     const qj = await q.getJob(dispatch.queueJobId);
@@ -1183,6 +1191,8 @@ describe("test:sync-dispatch-recovery", () => {
     const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
     expect(durable.state).toBe("DEAD_LETTERED");
     expect(durable.failureCode).toBe(APPLICATION_OUTCOME_UNCERTAIN);
+    // NEW-CLAUDE-D045-04: consumed opportunity persisted on dead-letter path.
+    expect(durable.attemptCount).toBe(3);
 
     const dls = await prisma.deadLetter.findMany({ where: { durableJobId: jobId } });
     expect(dls).toHaveLength(1);
@@ -1201,7 +1211,7 @@ describe("test:sync-dispatch-recovery", () => {
     const { jobId, dispatch } = await enqueueStrandedWebhook("wh-c01-max-att");
     await prisma.durableJob.update({
       where: { id: jobId },
-      data: { attemptCount: 3, maxAttempts: 3 },
+      data: { attemptCount: 2, maxAttempts: 3 },
     });
     const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
     const qj = await q.getJob(dispatch.queueJobId);
@@ -1218,12 +1228,41 @@ describe("test:sync-dispatch-recovery", () => {
     const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
     expect(durable.state).toBe("DEAD_LETTERED");
     expect(durable.failureCode).toBe("max_attempts_exceeded");
+    // NEW-CLAUDE-D045-04: budget-exhausted dead-letter persists maxAttempts.
+    expect(durable.attemptCount).toBe(3);
 
     const dls = await prisma.deadLetter.findMany({ where: { durableJobId: jobId } });
     expect(dls).toHaveLength(1);
     expect(dls[0].finalAttemptId).toBeNull();
     expect(dls[0].terminalReason).toBe("max_attempts_exceeded");
     expect(dls[0].resolutionState).toBe("OPEN");
+  });
+
+  it("NEW-CLAUDE-D045-04: concurrent reapers consume attempt opportunity once on dead-letter", async () => {
+    const { jobId, dispatch } = await enqueueStrandedWebhook("wh-d045-04-concurrent");
+    await prisma.durableJob.update({
+      where: { id: jobId },
+      data: { executionStrategy: "NO_AUTOMATIC_RETRY", attemptCount: 4 },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const qj = await q.getJob(dispatch.queueJobId);
+    if (qj) await qj.remove();
+    await q.close();
+
+    const [r1, r2] = await Promise.all([
+      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+    ]);
+    expect(r1.deadLettered + r2.deadLettered).toBe(1);
+
+    const durable = await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } });
+    expect(durable.state).toBe("DEAD_LETTERED");
+    expect(durable.attemptCount).toBe(5);
+    expect(
+      await prisma.deadLetter.count({
+        where: { durableJobId: jobId, resolutionState: "OPEN" },
+      }),
+    ).toBe(1);
   });
 
   it("NEW-PR4-C01: dead letter allows finalAttemptId NULL and exactly one OPEN", async () => {
@@ -1329,16 +1368,14 @@ describe("test:sync-dispatch-recovery", () => {
     if (qjB) await qjB.remove();
     await q.close();
 
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-block-test",
-    }));
-    // B is MISSING — seam only applies when a Job object exists (classifyExisting).
+    // B is MISSING — getState spy only applies when a Job object exists.
     // So A (still in Redis as waiting) → UNKNOWN; B (removed) → MISSING → recover.
-    const result = await recoverStrandedEnqueuedJobs({
-      olderThanMs: 60_000,
-      limit: 20,
-    });
+    const result = await withForcedQueueGetState("future-block-test", () =>
+      recoverStrandedEnqueuedJobs({
+        olderThanMs: 60_000,
+        limit: 20,
+      }),
+    );
     expect(result.indeterminate).toBeGreaterThanOrEqual(1);
     expect(result.recovered).toBeGreaterThanOrEqual(1);
 

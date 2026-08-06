@@ -1,11 +1,11 @@
 /**
  * D-045 NEW-PR4-SC02…SC06 / SC08 reliability corrections.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PrismaClient, type Prisma } from "@prisma/client";
-import { Queue } from "bullmq";
+import { Job, Queue } from "bullmq";
 import IORedis from "ioredis";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import {
@@ -29,13 +29,29 @@ import {
   RUNNABLE_BULLMQ_STATES,
   resolveTestRedisFastFailMs,
   inspectQueueDispatchPresence,
-  __setQueueStateClassificationSeamForTests,
+  classifyQueueState,
 } from "../queue-presence.server";
+import * as queuePresenceModule from "../queue-presence.server";
 import { renewAttemptHeartbeat } from "../lifecycle.server";
 import { SyncControlPlaneError } from "../errors";
 import { transitionToEnqueuedForTests } from "./test-state-helpers";
 
 const SHOP = "pr4-final-corr.myshopify.com";
+
+/** Test-local only: force Job.getState() to an unreachable future BullMQ value. */
+async function withForcedQueueGetState<T>(
+  queueState: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const spy = vi
+    .spyOn(Job.prototype, "getState")
+    .mockResolvedValue(queueState as never);
+  try {
+    return await run();
+  } finally {
+    spy.mockRestore();
+  }
+}
 
 /**
  * Test-local only: intercept the control-plane `$transaction` client so the
@@ -122,14 +138,12 @@ describe("test:sync-final-correction (D-045)", () => {
   });
 
   afterAll(async () => {
-    __setQueueStateClassificationSeamForTests(null);
     await resetControlPlanePrismaForTests();
     await prisma.$disconnect();
     await redis.quit();
   });
 
   beforeEach(async () => {
-    __setQueueStateClassificationSeamForTests(null);
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
@@ -224,13 +238,10 @@ describe("test:sync-final-correction (D-045)", () => {
       where: { id: ingested.job!.id },
       data: { enqueuedAt: new Date(Date.now() - 10 * 60_000) },
     });
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-sc03",
-    }));
-
-    await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
-    await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
+    await withForcedQueueGetState("future-sc03", async () => {
+      await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
+      await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
+    });
     const issues = await prisma.dataIssue.findMany({
       where: {
         shopId: ingested.job!.shopId,
@@ -267,14 +278,12 @@ describe("test:sync-final-correction (D-045)", () => {
       where: { id: ingested.job!.id },
       data: { enqueuedAt: new Date(Date.now() - 10 * 60_000) },
     });
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-sc03-c",
-    }));
-    await Promise.all([
-      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
-      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
-    ]);
+    await withForcedQueueGetState("future-sc03-c", () =>
+      Promise.all([
+        recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+        recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+      ]),
+    );
     expect(
       await prisma.dataIssue.count({
         where: {
@@ -454,6 +463,7 @@ describe("test:sync-final-correction (D-045)", () => {
       data: {
         enqueuedAt: new Date(Date.now() - 10 * 60_000),
         executionStrategy: "NO_AUTOMATIC_RETRY",
+        attemptCount: 7,
       },
     });
     const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
@@ -479,6 +489,8 @@ describe("test:sync-final-correction (D-045)", () => {
     });
     expect(durable.state).toBe("ENQUEUED");
     expect(durable.state).not.toBe("FAILED");
+    // NEW-CLAUDE-D045-04: rolled-back terminalize must not persist attemptCount.
+    expect(durable.attemptCount).toBe(7);
     expect(
       await prisma.deadLetter.count({ where: { durableJobId: jobId } }),
     ).toBe(0);
@@ -537,6 +549,30 @@ describe("test:sync-final-correction (D-045)", () => {
       "waiting-children",
     ]);
     expect(RUNNABLE_BULLMQ_STATES).not.toContain("paused");
+  });
+
+  it("NEW-CLAUDE-D045-01: classifyQueueState is pure and fail-closed for future states", () => {
+    expect(classifyQueueState("waiting").status).toBe("RUNNABLE_EXISTING");
+    expect(classifyQueueState("completed").status).toBe("TERMINAL_EXISTING");
+    expect(classifyQueueState("future-unsupported-x")).toEqual({
+      status: "UNKNOWN_STATE",
+      queueState: "future-unsupported-x",
+    });
+  });
+
+  it("NEW-CLAUDE-D045-01: production queue-presence exports no classification seam", () => {
+    expect(queuePresenceModule).not.toHaveProperty(
+      "__setQueueStateClassificationSeamForTests",
+    );
+    expect(Object.keys(queuePresenceModule)).not.toContain(
+      "__setQueueStateClassificationSeamForTests",
+    );
+    const source = readFileSync(
+      join(process.cwd(), "app/sync/queue-presence.server.ts"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/testStateClassificationSeam/);
+    expect(source).not.toMatch(/__setQueueStateClassificationSeamForTests/);
   });
 
   it("NEW-PR4-SC01: production receipt module exports no mutable test setter", async () => {
@@ -638,11 +674,9 @@ describe("test:sync-final-correction (D-045)", () => {
         attemptCount: 1,
       },
     });
-    __setQueueStateClassificationSeamForTests(() => ({
-      status: "UNKNOWN_STATE",
-      queueState: "future-sc08",
-    }));
-    await recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 });
+    await withForcedQueueGetState("future-sc08", () =>
+      recoverStrandedEnqueuedJobs({ olderThanMs: 60_000, limit: 10 }),
+    );
     expect(
       (await prisma.durableJob.findUniqueOrThrow({ where: { id: jobId } }))
         .attemptCount,
@@ -688,5 +722,7 @@ describe("test:sync-final-correction (D-045)", () => {
     });
     expect(durable.state).toBe("DEAD_LETTERED");
     expect(durable.failureCode).toBe("max_attempts_exceeded");
+    // NEW-CLAUDE-D045-04: starting maxAttempts-1 → final maxAttempts.
+    expect(durable.attemptCount).toBe(3);
   });
 });

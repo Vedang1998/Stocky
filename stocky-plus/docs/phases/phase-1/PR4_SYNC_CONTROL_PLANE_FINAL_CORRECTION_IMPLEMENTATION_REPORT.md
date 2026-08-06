@@ -27,7 +27,10 @@ This report records Cursor final-correction work only. It does **not** claim acc
 | Independent second-correction review-report commit / D-045 starting head | `9d43ec9fce7a37b3b336972bbb41a4b0f34e83cd` |
 | SC01 correction commit | `59f14feac8b5758f08e13ce63750737019d2ed9d` |
 | SC02–SC06 / SC08 correction commit | `10a9154ee368674b68836065f9c164be5dbb0b19` |
-| Final runtime/test head | `10a9154ee368674b68836065f9c164be5dbb0b19` |
+| Primary D-045 runtime/test head before mechanical completions | `10a9154ee368674b68836065f9c164be5dbb0b19` |
+| Receipt-hook removal runtime/test head (mechanical completion 1) | `7b908e05765263eb429ef9d6c9e487e349f44acf` |
+| Dead-letter-hook removal runtime/test head / reviewed implementation | `c1c855494cefdca16d6d6571ebe8210a0cb94faf` |
+| Independent D-045 review-report commit | `ef452bb9e6c9e4dd48ce7d6dfbe9e9cf0e7738f2` |
 | Documentation / status commit | recorded after this report lands (see Git history; not a self-referential tip) |
 | Live final PR tip / exact-head CI | Authoritative only in GitHub PR #20 body after green CI |
 
@@ -60,10 +63,11 @@ Every NEW-PR4-SC01…SC08 finding: **IMPLEMENTED — PENDING INDEPENDENT VERIFIC
 
 ```text
 attemptCount represents consumed durable processing opportunities,
-including a confirmed missing/terminal dispatch that requires redispatch.
+including a confirmed missing/terminal dispatch that requires redispatch
+and the same opportunity when the job is dead-lettered instead of retried.
 ```
 
-Confirmed stranded recovery is not free. `nextAttemptCount = attemptCount + 1`; if `>= maxAttempts` then `ENQUEUED → FAILED → DEAD_LETTERED` with `terminalReason = max_attempts_exceeded`; else `ENQUEUED → RETRY_WAIT` with atomic increment. No increment for runnable, queue unavailable, unknown state, missing `activeDispatchSequence`, noop, failed transaction, or evidence-only observation.
+Confirmed stranded recovery is not free. `nextAttemptCount = attemptCount + 1`; if `>= maxAttempts` then `ENQUEUED → FAILED → DEAD_LETTERED` with `terminalReason = max_attempts_exceeded` and `attemptCount = nextAttemptCount` persisted on the `ENQUEUED → FAILED` update (NEW-CLAUDE-D045-04); else `ENQUEUED → RETRY_WAIT` with atomic increment. `NO_AUTOMATIC_RETRY` dead-letter paths persist the same increment. No increment for runnable, queue unavailable, unknown state, missing `activeDispatchSequence`, noop, failed transaction, or evidence-only observation.
 
 ## Focused test evidence (local / disposable — not acceptance)
 

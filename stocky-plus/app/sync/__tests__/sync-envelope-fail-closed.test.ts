@@ -55,9 +55,18 @@ function ownerTenantShim(
     syncApplicationReceipt: client.syncApplicationReceipt,
     salesDailyAggregate: client.salesDailyAggregate,
     $queryRaw: client.$queryRaw.bind(client),
-    $transaction: async <T>(fn: (db: TenantDb) => Promise<T>) =>
-      client.$transaction(async (tx) =>
-        fn(ownerTenantShim(tx as unknown as PrismaClient, shopId)),
+    "$transaction": async <T>(
+      fn: (db: TenantDb) => Promise<T>,
+      options?: {
+        maxWait?: number;
+        timeout?: number;
+        isolationLevel?: import("@prisma/client").Prisma.TransactionIsolationLevel;
+      },
+    ) =>
+      client.$transaction(
+        async (tx) =>
+          fn(ownerTenantShim(tx as unknown as PrismaClient, shopId)),
+        options,
       ),
   } as unknown as TenantDb;
 }

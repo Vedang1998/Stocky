@@ -40,7 +40,7 @@
     "sync:roles:provision": "tsx scripts/sync-control-plane/cli.ts provision",
     "sync:roles:verify": "tsx scripts/sync-control-plane/cli.ts verify",
     "test:sync-integration": "vitest run --config vitest.sync-integration.config.ts",
-    "test:sync-exactly-once": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-exactly-once.test.ts",
+    "test:sync-exactly-once": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-exactly-once.test.ts app/sync/__tests__/sync-d046-worker-finalize.test.ts",
     "test:sync-dispatch-recovery": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-dispatch-recovery.test.ts",
     "test:sync-uninstall": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-uninstall.test.ts",
     "test:sync-attempt-recovery": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-attempt-recovery.test.ts",

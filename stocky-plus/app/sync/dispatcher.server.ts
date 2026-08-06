@@ -853,6 +853,8 @@ async function terminalizeStrandedEnqueuedJob(
     failureSummary: string;
     now: Date;
     presenceStatus?: string;
+    /** Consumed opportunity count to persist on ENQUEUED→FAILED (NEW-CLAUDE-D045-04). */
+    nextAttemptCount: number;
   },
 ): Promise<"dead_lettered" | "noop"> {
   const { job, now } = input;
@@ -894,10 +896,12 @@ async function terminalizeStrandedEnqueuedJob(
     });
   }
 
+  // NEW-CLAUDE-D045-04: persist consumed opportunity on the dead-letter path.
   const failed = await tx.$queryRaw<Array<{ id: string }>>`
     UPDATE "DurableJob"
     SET
       state = 'FAILED',
+      "attemptCount" = ${input.nextAttemptCount},
       "failureCode" = ${input.terminalReason},
       "failureSummary" = ${input.failureSummary.slice(0, 512)},
       "leaseOwner" = NULL,
@@ -964,9 +968,10 @@ async function terminalizeStrandedEnqueuedJob(
 }
 
 /**
- * Attempt-budget semantics (NEW-PR4-SC08 / D-045):
+ * Attempt-budget semantics (NEW-PR4-SC08 / D-045 / NEW-CLAUDE-D045-04):
  * attemptCount represents consumed durable processing opportunities,
- * including a confirmed missing/terminal dispatch that requires redispatch.
+ * including a confirmed missing/terminal dispatch that requires redispatch
+ * and the same opportunity when the job is dead-lettered instead of retried.
  */
 function shouldDeadLetterStranded(job: DurableJob): {
   deadLetter: boolean;
@@ -1072,6 +1077,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
                 "ENQUEUED with no active JobDispatch; non-retryable or exhausted",
               now,
               presenceStatus: "NO_ACTIVE_DISPATCH",
+              nextAttemptCount: decision.nextAttemptCount,
             });
             return result === "dead_lettered"
               ? ("dead_lettered" as const)
@@ -1193,6 +1199,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
                 : "ENQUEUED without Redis dispatch; non-retryable or exhausted",
             now,
             presenceStatus: presence.status,
+            nextAttemptCount: decision.nextAttemptCount,
           });
         }
 

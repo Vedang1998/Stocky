@@ -2,7 +2,7 @@
 
 > **D-043 correction cycle:** Architecture extended by additive migration `20260804210000_sync_control_plane_correction` (`SyncApplicationReceipt`, `JobDispatch`, attempt leases, control-plane RLS, transition trigger, envelope v3, fair windowed claim). Status: CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION. See `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md`.
 
-> **D-045 final correction:** Post-rollback SyncApplicationReceipt verification (Repeatable Read) is required before any `APPLICATION_ALREADY_APPLIED` path may finalize `SUCCEEDED`. v2 and v3 share `finalizeApplicationAfterRollback`. Confirmed stranded Redis recovery consumes the durable `attemptCount` budget (see Attempt-budget semantics). BullMQ runnable allowlist for pinned 5.81.2 excludes `paused`. Status: FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION.
+> **D-045 final correction:** Post-rollback SyncApplicationReceipt verification (Repeatable Read) is required before any `APPLICATION_ALREADY_APPLIED` path may finalize `SUCCEEDED`. v2 and v3 share `finalizeApplicationAfterRollback`. Confirmed stranded Redis recovery consumes the durable `attemptCount` budget (see Attempt-budget semantics), including dead-letter paths (NEW-CLAUDE-D045-04). BullMQ runnable allowlist for pinned 5.81.2 excludes `paused`. Queue classification is a pure `classifyQueueState` with no production test seam (NEW-CLAUDE-D045-01). Status: see PROJECT_STATUS / D-046.
 
 
 **Phase:** 1  
@@ -267,13 +267,14 @@ Conflict with no readable winner must emit `APPLICATION_OUTCOME_UNCERTAIN`, not
 `APPLICATION_ALREADY_APPLIED`. v1 remains fail-closed and must not access
 merchant handlers.
 
-## Attempt-budget semantics for stranded recovery (D-045 / NEW-PR4-SC08)
+## Attempt-budget semantics for stranded recovery (D-045 / NEW-PR4-SC08 / NEW-CLAUDE-D045-04)
 
 For PR 4:
 
 ```text
 attemptCount represents consumed durable processing opportunities,
-including a confirmed missing/terminal dispatch that requires redispatch.
+including a confirmed missing/terminal dispatch that requires redispatch
+and the same opportunity when the job is dead-lettered instead of retried.
 ```
 
 A confirmed stranded Redis recovery is not free and must not retry forever.
@@ -282,8 +283,12 @@ For retryable stranded recovery:
 
 1. `nextAttemptCount = attemptCount + 1`
 2. If `nextAttemptCount >= maxAttempts`: `ENQUEUED → FAILED → DEAD_LETTERED`
-   with `terminalReason = max_attempts_exceeded`
+   with `terminalReason = max_attempts_exceeded` and
+   `attemptCount = nextAttemptCount` persisted on the `ENQUEUED → FAILED` update
 3. Otherwise: `ENQUEUED → RETRY_WAIT` with `attemptCount = nextAttemptCount`
+
+`NO_AUTOMATIC_RETRY` stranded recovery also persists `attemptCount = nextAttemptCount`
+on the same `ENQUEUED → FAILED` update before `FAILED → DEAD_LETTERED`.
 
 Do **not** increment for runnable dispatch, queue unavailable, unknown state,
 missing `activeDispatchSequence`, another reaper’s no-op, failed transaction,

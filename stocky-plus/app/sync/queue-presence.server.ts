@@ -1,5 +1,5 @@
 /**
- * BullMQ queue-dispatch presence classification (NEW-PR4-C01 / D-044 / D-045).
+ * BullMQ queue-dispatch presence classification (NEW-PR4-C01 / D-044 / D-045 / D-046).
  *
  * `getJob()` returning an object is NOT equivalent to a runnable dispatch.
  * Only the committed runnable-state allowlist may lead to ENQUEUED.
@@ -42,27 +42,28 @@ export type QueueDispatchPresence =
   | { status: "QUEUE_UNAVAILABLE"; reason: string }
   | { status: "UNKNOWN_STATE"; queueState: string };
 
-/**
- * Narrow test-only seam for unsupported future BullMQ states that the pinned
- * BullMQ version cannot naturally produce. Production never sets this.
- * Must not replace terminal / missing / retained / outage integration tests.
- */
-let testStateClassificationSeam:
-  | ((queueState: string) => QueueDispatchPresence | null)
-  | null = null;
-
-export function __setQueueStateClassificationSeamForTests(
-  seam: ((queueState: string) => QueueDispatchPresence | null) | null,
-): void {
-  testStateClassificationSeam = seam;
-}
-
 export function isRunnableBullmqState(state: string): boolean {
   return RUNNABLE_SET.has(state);
 }
 
 export function isTerminalBullmqState(state: string): boolean {
   return TERMINAL_SET.has(state);
+}
+
+/**
+ * Pure queue-state classifier (NEW-CLAUDE-D045-01 / D-046).
+ *
+ * No mutable state, no environment dependence, no caller override.
+ * Unsupported / future BullMQ values classify as UNKNOWN_STATE.
+ */
+export function classifyQueueState(queueState: string): QueueDispatchPresence {
+  if (isRunnableBullmqState(queueState)) {
+    return { status: "RUNNABLE_EXISTING", queueState };
+  }
+  if (isTerminalBullmqState(queueState)) {
+    return { status: "TERMINAL_EXISTING", queueState };
+  }
+  return { status: "UNKNOWN_STATE", queueState };
 }
 
 /**
@@ -90,6 +91,7 @@ export function resolveTestRedisFastFailMs(
 /**
  * Classify an existing BullMQ job object by its live state.
  * Never treats mere object existence as runnable.
+ * Never consults a test override (NEW-CLAUDE-D045-01).
  */
 export async function classifyExistingQueueJob(
   job: Job,
@@ -104,18 +106,7 @@ export async function classifyExistingQueueJob(
     };
   }
 
-  if (testStateClassificationSeam) {
-    const overridden = testStateClassificationSeam(queueState);
-    if (overridden) return overridden;
-  }
-
-  if (isRunnableBullmqState(queueState)) {
-    return { status: "RUNNABLE_EXISTING", queueState };
-  }
-  if (isTerminalBullmqState(queueState)) {
-    return { status: "TERMINAL_EXISTING", queueState };
-  }
-  return { status: "UNKNOWN_STATE", queueState };
+  return classifyQueueState(queueState);
 }
 
 /**
