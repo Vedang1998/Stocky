@@ -113,7 +113,7 @@ Exact-head CI `head_sha`, run ID, and job ID are authoritative only from GitHub 
 | Measured plan | `Index Scan using "DurableJob_shop_eligible_pending_idx"`; in-memory `top-N heapsort`; **no** `Seq Scan on "DurableJob"`; **no** `Sort Method: external` |
 | Classification | **Deterministic test/harness defect** (with environment-sensitive planner index choice among valid F-PR4-11 indexes). Not a production dispatcher regression; not a weakened threshold; not a flake excused by a single green rerun. |
 | Same-job oscillation | Broader sync suite earlier in job `92606271330` passed the same test (~4587 ms) when the planner picked a regex-matching index; dedicated gate later failed on `shop_eligible_pending_idx`. |
-| Correction | Extend allowed index-name regex to include `DurableJob_shop_eligible_pending_idx` (committed in migration `20260804210000_sync_control_plane_correction`). Retain Index Scan requirement and Seq Scan / external-sort bans. |
+| Correction | Extend allowed index-name regex to include `DurableJob_shop_eligible_pending_idx` (committed in migration `20260804210000_sync_control_plane_correction`). Retain Index Scan requirement and Seq Scan / external-sort bans. Refresh `PR2_TENANT_ACCESS_INVENTORY.md` line anchors after the harness edit (required by `tenant:access:inventory:check`). |
 | Local stability | `SYNC_PERF_JOB_COUNT=50000 npm run test:sync-performance` ×5 → **1/1 passed** each; CI plan snippet: old regex false / new regex true; `test:sync-integration` **175** passed; lint / typecheck / build exit 0. |
 
 Do **not** request independent Claude review until fresh exact-head CI on the correction tip succeeds with zero failures and zero material skips.
