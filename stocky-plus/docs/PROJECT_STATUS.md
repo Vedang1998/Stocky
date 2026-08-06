@@ -87,7 +87,7 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Live tip `dd5c61e58e9aea6f74996c6b0e01b6a4ccd3dfe2` pushed; awaiting exact-head CI on tip. After exact-head CI on the P2-D046-01 follow-up tip succeeds, return to ChatGPT for a **focused** independent Claude review of P2-D046-01 and P3-D046-01 only. Draft PR #20 remains draft — do not merge.
+**Next action:** Live tip `c262710e4579188b5b9b34805def7667d9e7047d` is pushed, but GitHub Actions has **not queued** for tips `dd5c61e…` / `c262710…` (no `github-actions` check suite; last CI remains on `f8673b06…`). Classify as CI trigger infrastructure gap for the agent push token — not a test failure. ChatGPT/user should manually re-run workflow `CI` on the live tip from the Actions UI. After exact-head CI succeeds, request a **focused** independent Claude review of P2-D046-01 and P3-D046-01 only. Draft PR #20 remains draft — do not merge.
 
 ## Current truth
 
