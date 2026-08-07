@@ -504,7 +504,7 @@ describe("test:sync-performance", () => {
         "enqueuedAt" = NULL,
         "activeDispatchSequence" = NULL,
         "updatedAt" = NOW()
-      WHERE state IN ('DISPATCH_LEASED', 'ENQUEUED', 'PENDING_ENQUEUE')
+      WHERE state IN ('DISPATCH_LEASED', 'ENQUEUED')
     `);
     await prisma.$executeRawUnsafe(`
       UPDATE "DispatchReadyShop" SET "lastServedAt" = NULL
