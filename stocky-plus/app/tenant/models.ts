@@ -16,6 +16,7 @@ export const DIRECT_MERCHANT_MODELS = [
   "Stocktake",
   "BomComponent",
   "LowStockAlert",
+  "SyncApplicationReceipt",
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -60,6 +61,7 @@ export const MERCHANT_DELEGATE_NAMES = {
   Stocktake: "stocktake",
   BomComponent: "bomComponent",
   LowStockAlert: "lowStockAlert",
+  SyncApplicationReceipt: "syncApplicationReceipt",
   SupplierSkuMapping: "supplierSkuMapping",
   VolumePriceTier: "volumePriceTier",
   LeadTimeSnapshot: "leadTimeSnapshot",

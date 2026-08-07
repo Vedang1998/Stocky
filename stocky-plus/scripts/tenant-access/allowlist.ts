@@ -10,6 +10,7 @@ export type ExceptionCategory =
   | "pr1_maintenance_backfill"
   | "pr1_compatibility_indexes"
   | "pr3_database_enforcement"
+  | "pr4_sync_control_plane"
   | "migration_tests"
   | "dev_seed";
 
@@ -225,6 +226,43 @@ function testExceptions(): AccessException[] {
   }));
 }
 
+function syncControlPlaneExceptions(): AccessException[] {
+  const files = [
+    "app/sync/control-plane-db.server.ts",
+    "app/sync/intake.server.ts",
+    "app/sync/lifecycle.server.ts",
+    "app/sync/replay.server.ts",
+    "app/sync/uninstall.server.ts",
+    "app/sync/dispatcher.server.ts",
+    "app/sync/fair-claim-query.server.ts",
+  ] as const;
+  return files.map((path, i) => ({
+    id: `EX-SYNC-${String(i + 1).padStart(3, "0")}`,
+    path,
+    category: "pr4_sync_control_plane" as const,
+    reason:
+      "Phase 1 PR 4 durable sync control-plane uses dedicated control-plane Prisma + $transaction (not merchant TenantDb)",
+    permittedModelsOrOperations: [
+      "WebhookDelivery",
+      "DurableJob",
+      "JobAttempt",
+      "DeadLetter",
+      "JobReplay",
+      "SyncRun",
+      "SyncCursor",
+      "ReconciliationRun",
+      "DataIssue",
+      "SyncHealth",
+      "Shop lifecycle fields",
+      "PrismaClient via DATABASE_CONTROL_PLANE_URL only",
+    ],
+    productionRuntime: "yes" as const,
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retained while durable sync control-plane remains the DB system of record for intake/dispatch",
+  }));
+}
+
 export const ACCESS_EXCEPTIONS: AccessException[] = [
   {
     id: "EX-RAW-002",
@@ -258,7 +296,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     category: "tenant_bound_access",
     reason: "Tenant-bound DB contract wraps raw client; never returns it to callers",
     permittedModelsOrOperations: [
-      "All 18 merchant-owned models via scoped delegates",
+      "All 19 merchant-owned models via scoped delegates",
     ],
     productionRuntime: "yes",
     owner: "phase-1-pr2-tenant-access",
@@ -291,6 +329,226 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Replace with tenant-bound seed helper before any shared staging seed",
   },
+  {
+    id: "EX-SYNC-TEST-001",
+    path: "app/sync/__tests__/sync-control-plane.integration.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 sync control-plane disposable PostgreSQL/Redis integration harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "Shop / Session fixture setup",
+      "Control-plane table exercise",
+      "Restricted-role grant verification via raw SQL",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 sync-integration suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-002",
+    path: "app/sync/__tests__/sync-exactly-once.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-01 exactly-once disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "SyncApplicationReceipt / SalesDailyAggregate fixture assertions",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-003",
+    path: "app/sync/__tests__/sync-dispatch-recovery.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-02 dispatch recovery disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-004",
+    path: "app/sync/__tests__/sync-uninstall.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-03 uninstall disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-005",
+    path: "app/sync/__tests__/sync-attempt-recovery.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-04 attempt recovery disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-006",
+    path: "app/sync/__tests__/sync-intake-corrections.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 intake correction disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-007",
+    path: "app/sync/__tests__/sync-performance.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-11/13 performance disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "Bulk seed / EXPLAIN via raw SQL",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-008",
+    path: "app/sync/__tests__/test-state-helpers.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 legal DurableJob transition helpers for tests",
+    permittedModelsOrOperations: ["PrismaClient updates / raw SQL transitions"],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-009",
+    path: "scripts/sync-control-plane/tests/sync-role-isolation.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-06 role isolation disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for RLS/trigger assertions",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-010",
+    path: "scripts/sync-control-plane/tests/sync-inventory-audit.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-043 F-PR4-07 inventory scanner negative fixtures",
+    permittedModelsOrOperations: ["Planted scanner fixtures"],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-011",
+    path: "app/sync/__tests__/sync-envelope-fail-closed.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-044 NEW-PR4-C04 envelope fail-closed disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "SyncApplicationReceipt / SalesDailyAggregate fixture assertions",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 second-correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-012",
+    path: "app/sync/__tests__/sync-final-correction.test.ts",
+    category: "migration_tests",
+    reason: "PR 4 D-045 NEW-PR4-SC02…SC08 final-correction disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "BullMQ Queue construct/obliterate for presence and stranded tests",
+      "TRUNCATE via raw SQL in beforeEach",
+      "DurableJob / JobAttempt / DataIssue / SyncHealth fixture assertions",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 final-correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-013",
+    path: "app/sync/__tests__/sync-d046-worker-finalize.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "createTenantDb test-local owner shim forwarding transaction options",
+      "SyncApplicationReceipt / SalesDailyAggregate / DurableJob / JobAttempt / DeadLetter fixture assertions",
+      "JobDispatch fixture for v3 envelope identity",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 D-046 worker-finalize suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-014",
+    path: "app/sync/__tests__/dispatch-ready-shop.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 D-048 DispatchReadyShop readiness lifecycle disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "DispatchReadyShop / DurableJob readiness trigger assertions via raw SQL",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 D-048 readiness suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-015",
+    path: "app/sync/__tests__/d049-readiness-corrections.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "DispatchReadyShop / DurableJob readiness race and heal assertions via raw SQL",
+      "pg Client multi-writer deadlock probe (disposable)",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 D-049 readiness suite requires disposable fixtures",
+  },
+  ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),
   ...enforcementExceptions(),

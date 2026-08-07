@@ -305,6 +305,7 @@ export async function runAbcAnalysis(
         },
         create: {
           shop,
+          shopId: db.authority.shopId,
           shopifyVariantId: c.variantId,
           locationId,
           metric,

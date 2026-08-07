@@ -84,6 +84,7 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
         "StocktakeLineItem",
         "Supplier",
         "SupplierSkuMapping",
+        "SyncApplicationReceipt",
         "TransferLineItem",
         "TransferOrder",
         "VariantAbcClass",

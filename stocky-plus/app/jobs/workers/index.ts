@@ -4,6 +4,7 @@ import {
   scheduleAbcAnalysisCron,
 } from "../queue.server";
 import { processCronJob, processWebhookJob } from "./webhook-processor";
+import { dispatchPendingJobs } from "../../sync/dispatcher.server";
 
 async function main() {
   console.log("Starting Stocky++ workers...");
@@ -24,6 +25,20 @@ async function main() {
   });
 
   await scheduleAbcAnalysisCron();
+
+  // Optional dispatcher loop — DB is source of truth; Redis delivery is secondary.
+  const dispatcherIntervalMs = Number(
+    process.env.STOCKY_DISPATCHER_INTERVAL_MS ?? "5000",
+  );
+  if (dispatcherIntervalMs > 0) {
+    setInterval(() => {
+      void dispatchPendingJobs().catch((err) => {
+        console.warn("dispatcher loop error:", err);
+      });
+    }, dispatcherIntervalMs);
+    console.log(`Dispatcher loop every ${dispatcherIntervalMs}ms`);
+  }
+
   console.log("Workers running. Press Ctrl+C to stop.");
 }
 
@@ -31,3 +46,5 @@ main().catch((err) => {
   console.error("Worker startup failed:", err);
   process.exit(1);
 });
+
+export { main };

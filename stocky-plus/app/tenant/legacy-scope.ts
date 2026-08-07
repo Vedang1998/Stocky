@@ -46,7 +46,13 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   Stocktake: "Stocktake",
   BomComponent: "BomComponent",
   LowStockAlert: "LowStockAlert",
+  SyncApplicationReceipt: "SyncApplicationReceipt",
 };
+
+/** Direct models without a legacy `shop` column — shopId-only scope. */
+const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
+  "SyncApplicationReceipt",
+]);
 
 /**
  * Versioned bound on distinct null-ownership legacy representations
@@ -314,6 +320,9 @@ export async function resolveMatchingRawLegacyShops(
   authority: TenantAuthority,
   memo?: TenantScopeMemo,
 ): Promise<string[]> {
+  if (DIRECT_NO_LEGACY_SHOP.has(model)) {
+    return [];
+  }
   const cacheKey = model;
   if (memo?.legacyRawByModel.has(cacheKey)) {
     return memo.legacyRawByModel.get(cacheKey)!;
@@ -420,6 +429,9 @@ export async function resolveDirectTenantScopeWhere(
   authority: TenantAuthority,
   memo?: TenantScopeMemo,
 ): Promise<Record<string, unknown>> {
+  if (DIRECT_NO_LEGACY_SHOP.has(model)) {
+    return { shopId: authority.shopId };
+  }
   const matching = await resolveMatchingRawLegacyShops(
     client,
     model,

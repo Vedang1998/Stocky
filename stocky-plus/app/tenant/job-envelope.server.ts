@@ -39,6 +39,7 @@ export const TENANT_JOB_SOURCES = [
   "webhook:orders/cancelled",
   "webhook:refunds/create",
   "webhook:inventory_levels/update",
+  "webhook:app/uninstalled",
 ] as const;
 
 export type TenantJobSource = (typeof TENANT_JOB_SOURCES)[number];
@@ -54,6 +55,7 @@ export const JOB_SOURCE_BY_NAME: Record<string, TenantJobSource> = {
   "orders/cancelled": "webhook:orders/cancelled",
   "refunds/create": "webhook:refunds/create",
   "inventory_levels/update": "webhook:inventory_levels/update",
+  "app/uninstalled": "webhook:app/uninstalled",
 };
 
 export type TenantJobEnvelopeV1 = Readonly<{
@@ -220,6 +222,10 @@ export function createTenantJobEnvelope(
  * Parse and cryptographically verify an envelope.
  * Order: shape → version → fields → domain → source → timestamp → age → signature.
  * Canonical Shop lookup happens in resolveTenantJobContext after this.
+ *
+ * New dispatches use tenant-job-envelope-v3 (see app/sync/envelope-v3.server.ts).
+ * This function remains v1-only; use parseTenantJobEnvelopeAny for workers that
+ * must accept both during the compatibility window.
  */
 export function parseTenantJobEnvelope(
   raw: unknown,
@@ -342,7 +348,7 @@ export function parseTenantJobEnvelope(
 }
 
 export function assertSourceMatchesJob(
-  envelope: TenantJobEnvelopeV1,
+  envelope: { source: TenantJobSource },
   jobNameOrTopic: string,
 ): void {
   const expected = JOB_SOURCE_BY_NAME[jobNameOrTopic];

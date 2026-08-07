@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** NOT STARTED
-**Next authorized implementation unit:** documentation-only PR 3 closure synchronization, then return to ChatGPT for a fresh repository review and separate PR 4 authorization
-**Active implementation branch:** NONE
-**Active implementation PR:** NONE
-**Current main SHA:** `deef5d7c7881fb128121b8ff82fd0b2282fbee0b`
-**ChatGPT decisions:** D-025..D-039; **D-040 — Phase 1 PR 3 technically accepted**; **D-041 — Phase 1 PR 3 merge closure**
+**Phase 1 PR 4:** D-049 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — not accepted
+**Next authorized action:** Return to ChatGPT with D-049 evidence for independent verification (do not ask Claude to review from this Cursor turn)
+**Active implementation branch:** `phase-1/sync-control-plane`
+**Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
+**Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
+**ChatGPT decisions:** D-025..D-048; **D-049 — Phase 1 PR 4 monotonic fail-safe readiness + nextDispatchAt scheduling**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -21,9 +21,19 @@
 - PR 1 is **MERGED AND CLOSED**.
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
-- PR 4 is **NOT STARTED** and requires a separate ChatGPT authorization after this closure PR is merged.
+- PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
+- PR 4 is **D-049 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- D-048 independent review: `CORRECTIONS REQUIRED` (immutable report).
+- After Cursor handoff language: `PR 4 D-049 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
+- D-047 artifacts: `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-048 artifacts: `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-049 artifacts: `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_IMPLEMENTATION_REPORT.md`.
+- Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047 — do not edit.
+- Identity labels: `cc1ff7e…` = D-048 starting head; `0cf08771…` = D-047 review cherry-pick source; D-048 runtime/test = see implementation report / Git history.
+- PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
-- Do **not** authorize PR 4 in this documentation PR.
+- Do **not** begin PR 5 in this PR.
+- **Q-003:** OPEN — target `2026-07`; F-PR4-18 residual; live schema validation still required.
 
 ## Immutable PR 3 (#15) merge evidence
 
@@ -44,7 +54,7 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 4 | **NOT STARTED** |
+| PR 4 | **D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** (PR #20 draft) |
 
 ### PR 3 correction-history identities (preserved)
 
@@ -85,10 +95,12 @@
 ## Gate disposition
 
 - **Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION — PR 3 MERGED AND INDEPENDENTLY VERIFIED. Closure does **not** authorize production activation, backfill, ownership repair, deployment, or inventory writes.
+- **Q-003:** OPEN — target `2026-07`; F-PR4-18 residual; live schema validation still required.
 - **R-022 / R-024..R-027 / R-080..R-084 / R-086..R-094:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION — independently verified and merged.
 - **R-085:** CLOSED FOR PR 3 IMPLEMENTATION — populated disposable evidence independently verified; production/staging rehearsal remains open under R-028/R-029.
 - **R-028 / R-029:** remain OPEN operational gates.
 - **R-095..R-098:** accepted nonblocking PR 3 residuals — see `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md`.
+- **R-039 / R-099 / R-102 / R-104 / R-107 / R-109 / R-112:** OPEN — D-044 second corrections pending independent verification.
 - **R-014 / R-013 / R-062 / R-079:** remain open as previously tracked.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
 
@@ -124,11 +136,20 @@
 28. `PR3_DATABASE_ENFORCEMENT_THIRD_CORRECTION_REVIEW_REPORT.md` — authoritative `READY FOR CHATGPT PR 3 ACCEPTANCE` (verbatim; do not modify)
 29. `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted nonblocking P3 residuals R-095..R-098
 30. `PR3_DATABASE_ENFORCEMENT_MERGE_CLOSURE.md` — concise merge-closure identities
+31. `PR4_SYNC_CONTROL_PLANE_ARCHITECTURE.md` — PR 4 architecture (D-042)
+32. `PR4_SYNC_CONTROL_PLANE_INVENTORY.md` — mechanically generated; do not edit by hand
+33. `PR4_SYNC_CONTROL_PLANE_IMPLEMENTATION_REPORT.md` — Cursor implementation evidence (pending independent verification)
+34. `PR4_SYNC_CONTROL_PLANE_REVIEW_REPORT.md` — original independent review `NOT READY` (verbatim; do not modify)
+35. `PR4_SYNC_CONTROL_PLANE_CORRECTION_BACKLOG.md` — D-043 first-correction backlog
+36. `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md` — D-043 first-correction Cursor evidence
+37. `PR4_SYNC_CONTROL_PLANE_CORRECTION_REVIEW_REPORT.md` — first correction-review `NOT READY` (verbatim; do not modify)
+38. `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_BACKLOG.md` — D-044 second-correction backlog
+39. `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_IMPLEMENTATION_REPORT.md` — D-044 Cursor second-correction evidence (pending independent verification)
 
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024..D-041)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-044)
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`

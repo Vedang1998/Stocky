@@ -10,6 +10,7 @@ import {
   CONTROL_TABLES,
   IMMUTABILITY_TRIGGER_FN,
   MERCHANT_SQL_TABLES,
+  PLATFORM_CONTROL_PLANE_SQL_TABLES,
   TENANT_CONTEXT_HELPER_FN,
   TENANT_CONTEXT_VERSION_FN,
 } from "./manifest";
@@ -19,6 +20,11 @@ import {
   defaultRuntimeRoleName,
 } from "./connection";
 import { verifyRlsOnly } from "./verify";
+import {
+  defaultControlPlaneRoleName,
+  provisionControlPlaneRole,
+} from "../sync-control-plane/roles";
+export { defaultControlPlaneRoleName, provisionControlPlaneRole };
 
 const ALLOWED_TABLE_PRIVS = new Set([
   "SELECT",
@@ -45,12 +51,24 @@ function assertSafeRoleName(name: string): string {
 const APPROVED_RUNTIME_EXECUTABLE_FUNCTIONS = new Set([
   `${TENANT_CONTEXT_HELPER_FN}()`,
   `${TENANT_CONTEXT_VERSION_FN}()`,
+  // Checked via proname() form in collectFunctionPrivilegeFailures.
+  "stocky_shop_processing_enabled()",
 ]);
 
 const APPROVED_APPLICATION_FUNCTIONS = new Set([
   TENANT_CONTEXT_HELPER_FN,
   TENANT_CONTEXT_VERSION_FN,
   IMMUTABILITY_TRIGGER_FN,
+  "stocky_shop_processing_enabled",
+  "stocky_durable_job_transition_guard",
+  "stocky_has_application_receipt",
+  "stocky_dispatch_ready_shop_maintain",
+  "stocky_dispatch_ready_shop_sync_enabled",
+]);
+
+/** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
+const APPROVED_SECURITY_DEFINER_FUNCTIONS = new Set([
+  "stocky_has_application_receipt",
 ]);
 
 type DefaultAclObjType = "r" | "S" | "f";
@@ -306,7 +324,7 @@ export async function collectFunctionPrivilegeFailures(
       failures.push(`unexpected_function:${fn.signature}:owner:${fn.owner}`);
       continue;
     }
-    if (fn.prosecdef) {
+    if (fn.prosecdef && !APPROVED_SECURITY_DEFINER_FUNCTIONS.has(fn.proname)) {
       failures.push(`unapproved_security_definer:${fn.signature}`);
     }
     const searchPath = (fn.proconfig ?? []).find((c) =>
@@ -841,6 +859,37 @@ export async function provisionRoles(
       revokesApplied.push(t.sqlTable);
     }
 
+    // Platform control-plane tables: runtime must have no DML (dispatcher uses control-plane role).
+    for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
+      const exists = await client.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = $1`,
+        [table],
+      );
+      if ((exists.rowCount ?? 0) === 0) continue;
+      await client.query(
+        `REVOKE ALL ON TABLE ${quoteIdent(table)} FROM ${quoteIdent(runtimeRole)}`,
+      );
+      revokesApplied.push(`control_plane:${table}`);
+    }
+
+    // Provision stocky_control_plane role when password available.
+    try {
+      const cp = await provisionControlPlaneRole(client, {
+        apply: true,
+        password: process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD,
+      });
+      if (cp.ok) {
+        grantsApplied.push(...cp.grantsApplied);
+      } else {
+        // Soft: control-plane role optional until tables exist / password set.
+        detectedDrift.push(...cp.errors);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      detectedDrift.push(`control_plane_role:${message.split("\n")[0]}`);
+    }
+
     // _prisma_migrations — revoke if present
     const prismaMig = await client.query(
       `SELECT 1 FROM information_schema.tables
@@ -1307,6 +1356,22 @@ export async function verifyRoles(
     );
     if (priv.rows[0]?.has) {
       failures.push(`runtime_can_select_control:${t.sqlTable}`);
+    }
+  }
+
+  for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
+    const exists = await client.query(
+      `SELECT 1 FROM information_schema.tables
+       WHERE table_schema = 'public' AND table_name = $1`,
+      [table],
+    );
+    if ((exists.rowCount ?? 0) === 0) continue;
+    const priv = await client.query<{ has: boolean }>(
+      `SELECT has_table_privilege($1, format('%I.%I', 'public', $2::text), 'SELECT') AS has`,
+      [runtimeRole, table],
+    );
+    if (priv.rows[0]?.has) {
+      failures.push(`runtime_can_select_control_plane:${table}`);
     }
   }
   const prismaMig = await client.query(

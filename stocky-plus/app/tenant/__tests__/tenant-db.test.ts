@@ -79,9 +79,9 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.$disconnect();
   });
 
-  it("registers all 18 merchant models", () => {
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(18);
-    expect(DIRECT_MERCHANT_MODELS).toHaveLength(12);
+  it("registers all 19 merchant models", () => {
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(19);
+    expect(DIRECT_MERCHANT_MODELS).toHaveLength(13);
     expect(CHILD_MERCHANT_MODELS).toHaveLength(6);
   });
 
