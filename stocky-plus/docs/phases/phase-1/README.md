@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** D-048 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — not accepted
-**Next authorized action:** Return to ChatGPT with D-048 evidence for independent verification (do not ask Claude to review from this Cursor turn)
+**Phase 1 PR 4:** D-049 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — not accepted
+**Next authorized action:** Return to ChatGPT with D-049 evidence for independent verification (do not ask Claude to review from this Cursor turn)
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
-**ChatGPT decisions:** D-025..D-047; **D-048 — Phase 1 PR 4 DispatchReadyShop fair-dispatch architecture corrections**
+**ChatGPT decisions:** D-025..D-048; **D-049 — Phase 1 PR 4 monotonic fail-safe readiness + nextDispatchAt scheduling**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -22,10 +22,12 @@
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
-- PR 4 is **D-048 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
-- After Cursor handoff language: `PR 4 D-048 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
+- PR 4 is **D-049 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- D-048 independent review: `CORRECTIONS REQUIRED` (immutable report).
+- After Cursor handoff language: `PR 4 D-049 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
 - D-047 artifacts: `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_REVIEW_REPORT.md` (immutable).
-- D-048 artifacts: `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_IMPLEMENTATION_REPORT.md`.
+- D-048 artifacts: `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-049 artifacts: `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_IMPLEMENTATION_REPORT.md`.
 - Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047 — do not edit.
 - Identity labels: `cc1ff7e…` = D-048 starting head; `0cf08771…` = D-047 review cherry-pick source; D-048 runtime/test = see implementation report / Git history.
 - PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.

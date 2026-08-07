@@ -192,7 +192,11 @@ async function captureBackendCancel(): Promise<CapturedFault> {
     const pid = await sleeper.query<{ pid: number }>(
       `SELECT pg_backend_pid() AS pid`,
     );
+    // F-D048-06: attach a rejection observer immediately when the cancellable
+    // promise is created. A late-only await/catch races the backend cancel and
+    // can surface as an unhandled rejection under Vitest (exact-head push flake).
     const sleeping = sleeper.query(`SELECT pg_sleep(10)`);
+    sleeping.catch(() => undefined);
     await new Promise((resolve) => setTimeout(resolve, 100));
     const cancel = await canceller.query<{ cancelled: boolean }>(
       `SELECT pg_cancel_backend($1) AS cancelled`,

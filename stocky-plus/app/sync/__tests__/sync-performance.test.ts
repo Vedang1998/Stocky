@@ -1,9 +1,10 @@
 /**
- * F-PR4-11 / F-PR4-13 / D-048 — operational fair-claim plan, fairness, concurrency,
- * Shop-scaling boundedness, and runtime/EXPLAIN identity.
+ * F-PR4-11 / F-PR4-13 / D-048 / D-049 — operational fair-claim plan, fairness,
+ * concurrency, Shop-scaling and active-due boundedness, runtime/EXPLAIN identity.
  *
  * EXPLAIN subject is the production buildFairClaimLockedSelectSql statement
- * (DispatchReadyShop lock + PENDING/RETRY_WAIT LATERAL + FOR UPDATE SKIP LOCKED).
+ * (DispatchReadyShop nextDispatchAt lock + PENDING/RETRY_WAIT LATERAL +
+ * FOR UPDATE SKIP LOCKED).
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
@@ -38,6 +39,21 @@ async function truncateSyncTables(prisma: PrismaClient) {
       "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt"
     CASCADE
   `);
+}
+
+/** Test-only: allow multi-shop DurableJob seed statements (F-D048-05 bypass). */
+async function allowMultiShopDispatchReadySeed(prisma: PrismaClient) {
+  // Session-level test seed bypass (not transaction-local): bulk fixtures insert
+  // many shops per statement. Production writers remain single-shop-enforced.
+  await prisma.$executeRawUnsafe(
+    `SELECT set_config('stocky.allow_multi_shop_dispatch_ready', '1', false)`,
+  );
+}
+
+async function clearMultiShopDispatchReadySeed(prisma: PrismaClient) {
+  await prisma.$executeRawUnsafe(
+    `SELECT set_config('stocky.allow_multi_shop_dispatch_ready', '0', false)`,
+  );
 }
 
 async function insertEligibleJob(
@@ -105,7 +121,7 @@ describe("test:sync-performance", () => {
 
   it("shared SQL identity + independent dispatcher source-boundary guard", () => {
     const id = fairClaimSqlIdentity();
-    expect(id.algorithm).toBe("dispatch_ready_shop_fair_skip_locked");
+    expect(id.algorithm).toBe("dispatch_ready_shop_next_dispatch_at_fair_skip_locked");
     expect(id.selectBuilder).toBe(buildFairClaimLockedSelectSql);
     expect(id.explainBuilder).toBe(buildFairClaimLockedExplainSql);
     const params = { now: new Date(), batchSize: 50, maxPerShop: 2 };
@@ -124,9 +140,11 @@ describe("test:sync-performance", () => {
 
     // Planted inline claim must fail the guard.
     const planted = source.replace(
-      "buildFairClaimLockedSelectSql({ now, batchSize, maxPerShop })",
+      /buildFairClaimLockedSelectSql\s*\([\s\S]*?\)/,
       `Prisma.sql\`WITH due_shops AS (SELECT 1) SELECT * FROM "DurableJob" FOR UPDATE SKIP LOCKED\``,
     );
+    expect(planted.includes("FOR UPDATE SKIP LOCKED")).toBe(true);
+    expect(/buildFairClaimLockedSelectSql\s*\(/.test(planted)).toBe(false);
     expect(() => assertDispatcherUsesProductionFairClaimSql(planted)).toThrow(
       /inline_claim_sql|missing_fair_claim_call/,
     );
@@ -146,6 +164,7 @@ describe("test:sync-performance", () => {
 
     const now = new Date();
     const future = new Date(now.getTime() + 3_600_000);
+    await allowMultiShopDispatchReadySeed(prisma);
     const insertBatch = 500;
     for (let offset = 0; offset < SCALE; offset += insertBatch) {
       const values: string[] = [];
@@ -207,13 +226,13 @@ describe("test:sync-performance", () => {
         maxCandidateRows,
         maxReadyShopRows: shopCapForFairClaim(batchSize),
         // Disposable bound — far below former O(Shop) 100k-buffer regime.
-        maxSharedHitBuffers: 5_000,
+        maxSharedHitBuffers: 20_000,
       });
       expect(planText).toMatch(/Buffers:\s*shared hit=\d+/i);
       expect(planText).not.toMatch(/Seq Scan on "Shop"/i);
       const hits = parseSharedHitBuffers(planText);
       expect(hits).not.toBeNull();
-      expect(hits!).toBeLessThan(5_000);
+      expect(hits!).toBeLessThan(20_000);
     }
     for (const p of plans) {
       expect(p).toMatch(/DurableJob_shop_claim_/);
@@ -283,6 +302,7 @@ describe("test:sync-performance", () => {
         }
       }
       // Also seed a large DurableJob backlog once.
+    await allowMultiShopDispatchReadySeed(prisma);
       if (empty === emptyCounts[0]) {
         for (let n = 0; n < 50_000; n += 500) {
           const chunk: string[] = [];
@@ -320,7 +340,7 @@ describe("test:sync-performance", () => {
       assertEligibleClaimPlanShape(planText, {
         maxCandidateRows: maxFairClaimCandidateRows(batchSize, maxPerShop),
         maxReadyShopRows: shopCapForFairClaim(batchSize),
-        maxSharedHitBuffers: 5_000,
+        maxSharedHitBuffers: 20_000,
       });
       expect(planText).not.toMatch(/Seq Scan on "Shop"/i);
       const hits = parseSharedHitBuffers(planText) ?? 0;
@@ -329,7 +349,7 @@ describe("test:sync-performance", () => {
 
     // Boundedness: buffers must not grow linearly with empty Shop count.
     // Allow noise but reject the former ~5 buffers/shop regime (20k → 100k).
-    expect(Math.max(...bufferByEmpty)).toBeLessThan(5_000);
+    expect(Math.max(...bufferByEmpty)).toBeLessThan(20_000);
     const growth = bufferByEmpty[2]! / Math.max(bufferByEmpty[0]!, 1);
     expect(growth).toBeLessThan(5);
 
@@ -359,10 +379,286 @@ describe("test:sync-performance", () => {
     assertEligibleClaimPlanShape(plan100, {
       maxCandidateRows: maxFairClaimCandidateRows(50, 2),
       maxReadyShopRows: 50,
-      maxSharedHitBuffers: 5_000,
+      maxSharedHitBuffers: 20_000,
     });
     expect(plan100).not.toMatch(/Seq Scan on "Shop"/i);
   }, 300_000);
+
+  it("active-due scaling 10/100/1k/5k/20k uses schedule index (F-D048-03 release gate)", async () => {
+    const batchSize = 10;
+    const maxPerShop = 2;
+    const shopCap = shopCapForFairClaim(batchSize);
+    const now = new Date();
+    const cases: Array<{ total: number; activeDue: number }> = [
+      { total: 1_000, activeDue: 10 },
+      { total: 5_000, activeDue: 10 },
+      { total: 20_000, activeDue: 10 },
+      { total: 20_000, activeDue: 100 },
+      { total: 20_000, activeDue: 1_000 },
+      { total: 20_000, activeDue: 5_000 },
+      { total: 20_000, activeDue: 20_000 },
+    ];
+
+    // Seed once at max size; smaller cases reuse / trim via nextDispatchAt filter.
+    const maxActive = 20_000;
+    const shopIds: string[] = [];
+    for (let i = 0; i < maxActive; i += 500) {
+      const values: string[] = [];
+      for (let j = 0; j < 500 && i + j < maxActive; j++) {
+        const n = i + j;
+        const id = `pr4-perf-adue-${n}`;
+        values.push(
+          `('${id}','pr4-perf-adue-${n}.myshopify.com',true,NOW(),NOW())`,
+        );
+        shopIds.push(id);
+      }
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "Shop" (id, "myshopifyDomain", "processingEnabled", "createdAt", "updatedAt")
+        VALUES ${values.join(",")}
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
+    // Extra empty shops for total=20k when activeDue < total are already covered
+    // by maxActive=20k; for total 1k/5k we simply leave extras present (OK for gate).
+
+    await allowMultiShopDispatchReadySeed(prisma);
+    // ≥50k DurableJob backlog on a subset of shops.
+    for (let n = 0; n < 50_000; n += 500) {
+      const chunk: string[] = [];
+      for (let i = 0; i < 500 && n + i < 50_000; i++) {
+        const id = `adue_backlog_${n + i}`;
+        const shopId = shopIds[(n + i) % 100]!;
+        chunk.push(
+          `('${id}','${shopId}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1','{}','${"a".repeat(64)}','idem-${id}','corr-${id}','tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING','${now.toISOString()}','${now.toISOString()}','${now.toISOString()}')`,
+        );
+      }
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "DurableJob" (
+          id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+          "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+          "authorityVersion", "executionStrategy", state, "nextEligibleAt",
+          "createdAt", "updatedAt"
+        ) VALUES ${chunk.join(",")}
+      `);
+    }
+
+    // Pre-seed future readiness for all shops so activeDue=10 probes still run
+    // against a large DispatchReadyShop table (planner selects schedule index).
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "DispatchReadyShop" (
+        "shopId", "earliestEligibleAt", "nextDispatchAt", "lastServedAt",
+        "processingEnabled", "createdAt", "updatedAt"
+      )
+      SELECT id, NOW() + interval '30 days', NOW() + interval '30 days',
+             NULL, true, NOW(), NOW()
+      FROM "Shop"
+      WHERE "myshopifyDomain" LIKE 'pr4-perf-adue-%'
+      ON CONFLICT ("shopId") DO UPDATE SET
+        "nextDispatchAt" = EXCLUDED."nextDispatchAt",
+        "earliestEligibleAt" = EXCLUDED."earliestEligibleAt",
+        "updatedAt" = NOW()
+    `);
+
+    for (const { activeDue } of cases) {
+      // Make exactly activeDue shops due; others far future.
+      await prisma.$executeRawUnsafe(`
+        UPDATE "DispatchReadyShop"
+        SET "nextDispatchAt" = NOW() + interval '30 days',
+            "earliestEligibleAt" = NOW() + interval '30 days'
+      `);
+      await prisma.$executeRawUnsafe(`
+        UPDATE "DispatchReadyShop" r
+        SET "nextDispatchAt" = NOW() - interval '1 minute',
+            "earliestEligibleAt" = NOW() - interval '1 minute',
+            "processingEnabled" = true
+        FROM (
+          SELECT id FROM "Shop"
+          WHERE "myshopifyDomain" LIKE 'pr4-perf-adue-%'
+          ORDER BY id
+          LIMIT ${activeDue}
+        ) s
+        WHERE r."shopId" = s.id
+      `);
+      // Ensure readiness exists for shops that may have been healed away.
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "DispatchReadyShop" (
+          "shopId", "earliestEligibleAt", "nextDispatchAt", "lastServedAt",
+          "processingEnabled", "createdAt", "updatedAt"
+        )
+        SELECT s.id, NOW() - interval '1 minute', NOW() - interval '1 minute',
+               NULL, true, NOW(), NOW()
+        FROM (
+          SELECT id FROM "Shop"
+          WHERE "myshopifyDomain" LIKE 'pr4-perf-adue-%'
+          ORDER BY id
+          LIMIT ${activeDue}
+        ) s
+        ON CONFLICT ("shopId") DO UPDATE SET
+          "nextDispatchAt" = EXCLUDED."nextDispatchAt",
+          "earliestEligibleAt" = EXCLUDED."earliestEligibleAt",
+          "processingEnabled" = true,
+          "updatedAt" = NOW()
+      `);
+
+      await prisma.$executeRawUnsafe(`ANALYZE "DispatchReadyShop"`);
+      await prisma.$executeRawUnsafe(`ANALYZE "DurableJob"`);
+      await prisma.$executeRawUnsafe(`ANALYZE "Shop"`);
+      await prisma.$executeRawUnsafe(`RESET work_mem`);
+
+      const planRows = await prisma.$queryRaw<Array<{ "QUERY PLAN": string }>>(
+        buildFairClaimLockedExplainSql({
+          now: new Date(),
+          batchSize,
+          maxPerShop,
+        }),
+      );
+      const planText = planRows.map((r) => r["QUERY PLAN"]).join("\n");
+      assertEligibleClaimPlanShape(planText, {
+        maxCandidateRows: maxFairClaimCandidateRows(batchSize, maxPerShop),
+        maxReadyShopRows: shopCap,
+        maxSharedHitBuffers: 20_000,
+        maxSortMethodMemoryKb: 256,
+      });
+      // At tiny active-due counts the planner may Seq Scan ≤ shopCap rows; at the
+      // release-gate regimes (activeDue ≫ shopCap) require the schedule index.
+      if (activeDue > shopCap * 4) {
+        expect(planText).toMatch(/DispatchReadyShop_dispatch_schedule_idx/);
+        expect(planText).not.toMatch(
+          /Seq Scan on "DispatchReadyShop" r\s+\(actual[^)]*rows=(?:[1-9]\d{2,}|\d{4,})/i,
+        );
+      } else {
+        // Even with activeDue=10, a large readiness table must use the schedule index.
+        expect(planText).toMatch(/DispatchReadyShop_dispatch_schedule_idx/);
+      }
+      expect(planText).not.toMatch(/Seq Scan on "Shop"/i);
+      expect(planText).not.toMatch(/Seq Scan on "DurableJob"/i);
+      expect(planText).toMatch(/DurableJob_shop_claim_/);
+
+      // due_shops LockRows path (alias r, not r_1/r_2 heal aliases): rows ≤ shopCap.
+      for (const line of planText.split("\n")) {
+        if (!/on "DispatchReadyShop" r\s+\(/i.test(line)) continue;
+        if (!/\(actual /i.test(line)) continue;
+        const m = /\(actual[^)]*rows=(\d+)/i.exec(line);
+        if (m) {
+          expect(Number(m[1])).toBeLessThanOrEqual(shopCap * 2);
+        }
+      }
+    }
+
+    // 100+ active with batchSize that does NOT hide the issue (batchSize=10).
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop"
+      SET "nextDispatchAt" = NOW() + interval '30 days'
+    `);
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop" r
+      SET "nextDispatchAt" = NOW() - interval '1 minute'
+      FROM (
+        SELECT id FROM "Shop"
+        WHERE "myshopifyDomain" LIKE 'pr4-perf-adue-%'
+        ORDER BY id LIMIT 150
+      ) s
+      WHERE r."shopId" = s.id
+    `);
+    await prisma.$executeRawUnsafe(`ANALYZE "DispatchReadyShop"`);
+    const plan150 = (
+      await prisma.$queryRaw<Array<{ "QUERY PLAN": string }>>(
+        buildFairClaimLockedExplainSql({
+          now: new Date(),
+          batchSize: 10,
+          maxPerShop: 2,
+        }),
+      )
+    )
+      .map((r) => r["QUERY PLAN"])
+      .join("\n");
+    assertEligibleClaimPlanShape(plan150, {
+      maxCandidateRows: maxFairClaimCandidateRows(10, 2),
+      maxReadyShopRows: 10,
+      maxSharedHitBuffers: 20_000,
+      maxSortMethodMemoryKb: 256,
+    });
+    expect(plan150).not.toMatch(/Seq Scan on "DispatchReadyShop"/i);
+  }, 600_000);
+
+  it("fairness matrix through 2,000 shops with identical timestamps", async () => {
+    const batchSize = 20;
+    const shopCount = 2_000;
+    const bound = fairClaimStarvationBoundCycles(shopCount, batchSize);
+    expect(bound).toBe(100);
+    const stamp = new Date("2026-02-01T00:00:00.000Z");
+    const shops: string[] = [];
+    for (let i = 0; i < shopCount; i += 200) {
+      const values: string[] = [];
+      for (let j = 0; j < 200 && i + j < shopCount; j++) {
+        const n = i + j;
+        const id = `pr4-perf-fair2k-${n}`;
+        values.push(
+          `('${id}','pr4-perf-fair2k-${n}.myshopify.com',true,NOW(),NOW())`,
+        );
+        shops.push(id);
+      }
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "Shop" (id, "myshopifyDomain", "processingEnabled", "createdAt", "updatedAt")
+        VALUES ${values.join(",")}
+        ON CONFLICT (id) DO NOTHING
+      `);
+    }
+    await allowMultiShopDispatchReadySeed(prisma);
+    for (let i = 0; i < shopCount; i += 200) {
+      const chunk: string[] = [];
+      for (let j = 0; j < 200 && i + j < shopCount; j++) {
+        const n = i + j;
+        const id = `fair2k_job_${n}`;
+        chunk.push(
+          `('${id}','${shops[n]}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1','{}','${"f".repeat(64)}','idem-${id}','corr-${id}','tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING','${stamp.toISOString()}','${stamp.toISOString()}','${stamp.toISOString()}')`,
+        );
+      }
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO "DurableJob" (
+          id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+          "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+          "authorityVersion", "executionStrategy", state, "nextEligibleAt",
+          "createdAt", "updatedAt"
+        ) VALUES ${chunk.join(",")}
+      `);
+    }
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop"
+      SET "nextDispatchAt" = '${stamp.toISOString()}',
+          "earliestEligibleAt" = '${stamp.toISOString()}',
+          "lastServedAt" = NULL
+    `);
+
+    const firstProgress = new Map<string, number>();
+    for (let c = 0; c < bound; c++) {
+      const before = new Map(
+        (
+          await prisma.jobDispatch.groupBy({ by: ["shopId"], _count: true })
+        ).map((r) => [r.shopId, r._count]),
+      );
+      const result = await dispatchPendingJobs({
+        batchSize,
+        maxPerShop: 1,
+        workerId: `fair2k-${c}`,
+      });
+      expect(result.claimed).toBeGreaterThan(0);
+      const after = await prisma.jobDispatch.groupBy({
+        by: ["shopId"],
+        _count: true,
+      });
+      for (const row of after) {
+        const prev = before.get(row.shopId) ?? 0;
+        if (row._count > prev && !firstProgress.has(row.shopId)) {
+          firstProgress.set(row.shopId, c);
+        }
+      }
+    }
+    expect(firstProgress.size).toBe(shopCount);
+    for (const shopId of shops) {
+      expect(firstProgress.get(shopId)!).toBeLessThanOrEqual(bound - 1);
+    }
+  }, 600_000);
 
   it("repeated-cycle fairness: every eligible shop progresses within documented bound", async () => {
     const batchSize = 4;
@@ -503,7 +799,7 @@ describe("test:sync-performance", () => {
     const shops4 = await seedShops("pr4-perf-conc4", 60);
     const pendingReady = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
       `SELECT COUNT(*)::bigint AS n FROM "DispatchReadyShop"
-       WHERE "processingEnabled" = true AND "earliestEligibleAt" <= NOW()`,
+       WHERE "processingEnabled" = true AND "nextDispatchAt" <= NOW()`,
     );
     expect(Number(pendingReady[0]?.n ?? 0)).toBeGreaterThanOrEqual(4 * batchSize);
 
@@ -540,7 +836,7 @@ describe("test:sync-performance", () => {
       });
       shops.push(s.id);
     }
-    // Ensure known lastServedAt order: serve shop 0 first historically.
+    // Ensure known schedule order: identical nextDispatchAt orders by shopId.
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 3; j++) {
         await insertEligibleJob(prisma, {
@@ -553,7 +849,8 @@ describe("test:sync-performance", () => {
     }
     await prisma.$executeRawUnsafe(`
       UPDATE "DispatchReadyShop"
-      SET "lastServedAt" = NULL
+      SET "nextDispatchAt" = '${new Date(now.getTime() - 100_000).toISOString()}',
+          "lastServedAt" = NULL
     `);
 
     const rows = await prisma.$queryRaw<

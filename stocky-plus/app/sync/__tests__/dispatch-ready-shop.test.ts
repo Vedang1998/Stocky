@@ -127,6 +127,7 @@ describe("DispatchReadyShop readiness lifecycle (D-048)", () => {
       where: { shopId: shop.id },
     });
     expect(ready?.earliestEligibleAt.getTime()).toBe(future.getTime());
+    expect(ready?.nextDispatchAt.getTime()).toBe(future.getTime());
     const before = await prisma.$queryRaw<Array<{ id: string }>>(
       buildFairClaimLockedSelectSql({
         now: new Date(),

@@ -71,12 +71,17 @@ model Shop {
   dispatchReadyShop   DispatchReadyShop?
 }
 
-/// Per-shop dispatch readiness / fairness cursor (D-048).
-/// Exactly one row per shop with PENDING/RETRY_WAIT work (including future-due).
-/// Selection is indexed on earliestEligibleAt + lastServedAt — never scans Shop.
+/// Per-shop dispatch readiness / fairness cursor (D-048 / D-049).
+/// Exactly one row per shop with PENDING/RETRY_WAIT work (including future-due),
+/// plus fail-safe false-positive rows reconciled at claim time.
+/// Selection is indexed on nextDispatchAt — never scans Shop / never sorts the
+/// full active-due population (D-049 / F-D048-03).
 model DispatchReadyShop {
   shopId             String   @id
+  /// Monotonic earliest-eligible hint (LEAST on arrival; may be stale-early).
   earliestEligibleAt DateTime
+  /// Persisted scheduling key: WHERE nextDispatchAt <= now ORDER BY nextDispatchAt, shopId.
+  nextDispatchAt     DateTime
   lastServedAt       DateTime?
   /// Denormalized from Shop so claim SQL never Seq Scans Shop (D-048 / R12).
   processingEnabled  Boolean  @default(true)
@@ -85,7 +90,7 @@ model DispatchReadyShop {
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
-  @@index([processingEnabled, earliestEligibleAt, lastServedAt, shopId], map: "DispatchReadyShop_due_fairness_idx")
+  @@index([processingEnabled, nextDispatchAt, shopId], map: "DispatchReadyShop_dispatch_schedule_idx")
 }
 
 // ─── Tenant backfill control (Phase 1 PR 1) ──────────────────────────────────

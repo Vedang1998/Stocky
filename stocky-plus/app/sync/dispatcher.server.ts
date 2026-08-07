@@ -28,7 +28,10 @@ import {
   inspectQueueDispatchPresence,
   type QueueDispatchPresence,
 } from "./queue-presence.server";
-import { buildFairClaimLockedSelectSql } from "./fair-claim-query.server";
+import {
+  FAIR_CLAIM_MAX_REFILL_ROUNDS,
+  buildFairClaimLockedSelectSql,
+} from "./fair-claim-query.server";
 import type { Queue } from "bullmq";
 
 export const DEFAULT_DISPATCH_BATCH_SIZE = 50;
@@ -146,9 +149,14 @@ async function recoverExpiredDispatchLeases(
 }
 
 /**
- * Fair claim: DispatchReadyShop readiness lock + per-shop LATERAL selection
- * (PENDING + RETRY_WAIT) with FOR UPDATE SKIP LOCKED
- * (F-PR4-11 / F-PR4-13 / D-048). Uses production-owned fair-claim-query SQL.
+ * Fair claim: DispatchReadyShop nextDispatchAt lock + ground-truth reconcile +
+ * per-shop LATERAL selection (PENDING + RETRY_WAIT) with FOR UPDATE SKIP LOCKED
+ * (F-PR4-11 / F-PR4-13 / D-048 / D-049). Uses production-owned fair-claim-query SQL.
+ *
+ * Bounded refill: each round locks ≤ shopCap readiness rows and may heal stale
+ * false positives. Additional rounds run only while claimed < batchSize and a
+ * prior round observed locked/healed shops without filling — capped at
+ * FAIR_CLAIM_MAX_REFILL_ROUNDS. Max jobs returned = batchSize.
  */
 async function claimBatchFair(
   prisma: ReturnType<typeof getControlPlanePrisma>,
@@ -161,29 +169,62 @@ async function claimBatchFair(
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
   return prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<ClaimedJobRow[]>(
-      buildFairClaimLockedSelectSql({ now, batchSize, maxPerShop }),
-    );
-
-    if (rows.length === 0) return [];
-
     const claimed: ClaimedJobRow[] = [];
-    for (const row of rows) {
-      assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
-      const updated = await tx.$queryRaw<Array<{ id: string }>>`
-        UPDATE "DurableJob"
-        SET
-          state = 'DISPATCH_LEASED',
-          "leaseOwner" = ${workerId},
-          "leaseExpiresAt" = ${leaseExpiresAt},
-          "updatedAt" = ${now}
-        WHERE id = ${row.id}
-          AND state = CAST(${row.state} AS "DurableJobState")
-        RETURNING id
-      `;
-      if (updated.length === 0) continue;
-      claimed.push({ ...row, state: "DISPATCH_LEASED" });
+    const claimedIds = new Set<string>();
+
+    for (let round = 0; round < FAIR_CLAIM_MAX_REFILL_ROUNDS; round++) {
+      const remaining = batchSize - claimed.length;
+      if (remaining <= 0) break;
+
+      const rows = await tx.$queryRaw<ClaimedJobRow[]>(
+        buildFairClaimLockedSelectSql({
+          now,
+          batchSize: remaining,
+          maxPerShop,
+        }),
+      );
+
+      if (rows.length === 0) {
+        // Reconciliation may have healed/rescheduled the locked window without
+        // returning jobs. Continue bounded refill only while unlocked due shops remain.
+        const moreDue = await tx.$queryRaw<Array<{ ok: number }>>`
+          SELECT 1 AS ok
+          FROM "DispatchReadyShop"
+          WHERE "processingEnabled" = true
+            AND "nextDispatchAt" <= ${now}
+          LIMIT 1
+        `;
+        if (moreDue.length === 0) break;
+        continue;
+      }
+
+      let leasedThisRound = 0;
+      for (const row of rows) {
+        if (claimedIds.has(row.id)) continue;
+        assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
+        const updated = await tx.$queryRaw<Array<{ id: string }>>`
+          UPDATE "DurableJob"
+          SET
+            state = 'DISPATCH_LEASED',
+            "leaseOwner" = ${workerId},
+            "leaseExpiresAt" = ${leaseExpiresAt},
+            "updatedAt" = ${now}
+          WHERE id = ${row.id}
+            AND state = CAST(${row.state} AS "DurableJobState")
+          RETURNING id
+        `;
+        if (updated.length === 0) continue;
+        claimedIds.add(row.id);
+        claimed.push({ ...row, state: "DISPATCH_LEASED" });
+        leasedThisRound += 1;
+        if (claimed.length >= batchSize) break;
+      }
+
+      // If this round locked readiness but leased nothing, reconciliation may
+      // have healed stale rows — continue bounded refill while capacity remains.
+      if (leasedThisRound === 0 && claimed.length >= batchSize) break;
     }
+
     return claimed;
   });
 }

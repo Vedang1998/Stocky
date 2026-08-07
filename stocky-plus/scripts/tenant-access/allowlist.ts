@@ -531,6 +531,23 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Retain while PR 4 D-048 readiness suite requires disposable fixtures",
   },
+  {
+    id: "EX-SYNC-TEST-015",
+    path: "app/sync/__tests__/d049-readiness-corrections.test.ts",
+    category: "migration_tests",
+    reason:
+      "PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "DispatchReadyShop / DurableJob readiness race and heal assertions via raw SQL",
+      "pg Client multi-writer deadlock probe (disposable)",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while PR 4 D-049 readiness suite requires disposable fixtures",
+  },
   ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),

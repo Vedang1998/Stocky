@@ -806,7 +806,7 @@ export const PLATFORM_CONTROL_PLANE_TABLES: readonly NonMerchantTableSpec[] = [
     bootstrapExemption: false,
     expectedRuntimePrivileges: [],
     notes:
-      "D-048 per-shop dispatch readiness / fairness cursor — control-plane DML only",
+      "D-048/D-049 per-shop dispatch readiness / nextDispatchAt scheduling cursor — control-plane DML only",
   },
 ] as const;
 
