@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `fa68fcf1e056299d709ba889d2e481e58c2bfa2fc8d43bdfb35f8e252d201d35`
+**Content digest:** `8574fa74784e0d75d91e49d90ee333788c4cc2401101efd45924f79bb4f4e5ee`
 **Scanned files:** 246
 **Findings:** 1339
 **Converted paths:** 448
@@ -649,7 +649,7 @@ All 19 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/helpers.ts` | 111 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/helpers.ts` | 112 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/helpers.ts` | 113 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/helpers.ts` | 131 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/helpers.ts` | 134 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-TEST-001 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/job-envelope.test.ts` | 36 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-004 | migration_tests | approved exception | allowlist EX-TEST-004 | EX-TEST-004 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/job-envelope.test.ts` | 97 / `ctx.db.supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/job-envelope.test.ts` | 281 / `prisma.supplier.count` | test | Supplier | direct prisma delegate | approved exception EX-TEST-004 | migration_tests | approved exception | allowlist EX-TEST-004 | EX-TEST-004 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1654,6 +1654,6 @@ All 19 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "fa68fcf1e056299d709ba889d2e481e58c2bfa2fc8d43bdfb35f8e252d201d35"
+  "contentDigest": "8574fa74784e0d75d91e49d90ee333788c4cc2401101efd45924f79bb4f4e5ee"
 }
 ```

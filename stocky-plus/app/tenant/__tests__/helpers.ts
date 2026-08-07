@@ -128,10 +128,14 @@ export async function wipeSyncControlPlaneTables(
   prisma: PrismaClient,
 ): Promise<void> {
   // Control-plane FKs to Shop are ON DELETE RESTRICT — clear them before shop.deleteMany.
+  // DispatchReadyShop must be included: D-049 fail-safe readiness intentionally leaves
+  // readiness rows when DurableJob rows are truncated/deleted, so omitting it blocks
+  // shop.deleteMany via DispatchReadyShop_shopId_fkey (tenant queue/Redis CI).
   await prisma.$executeRawUnsafe(`
     TRUNCATE TABLE
       "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
-      "JobReplay", "DeadLetter", "JobAttempt", "WebhookDelivery", "DurableJob"
+      "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
+      "DurableJob", "DispatchReadyShop"
     CASCADE
   `);
 }
