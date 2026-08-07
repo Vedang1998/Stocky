@@ -418,7 +418,7 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
   });
 
   it("adversarial multi-writer deadlock class is gone or guarded", async () => {
-    const shops = [];
+    const shops: Array<{ id: string }> = [];
     for (let i = 0; i < 6; i++) {
       shops.push(await createShop(`dl-${i}`));
     }

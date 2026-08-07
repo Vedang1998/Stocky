@@ -166,12 +166,26 @@ describe("DispatchReadyShop readiness lifecycle (D-048)", () => {
       UPDATE "DurableJob" SET state = 'CANCELLED', "cancelledAt" = NOW()
       WHERE id = 'ready_empty'
     `).catch(() => undefined);
-    // Force heal: delete job eligibility
+    // Force heal: delete job eligibility — D-049 trigger leaves fail-safe stale
+    // readiness (false positive). Production claim reconciliation removes it.
     await prisma.$executeRawUnsafe(`DELETE FROM "DurableJob" WHERE id = 'ready_empty'`);
-    const row = await prisma.dispatchReadyShop.findUnique({
+    const stale = await prisma.dispatchReadyShop.findUnique({
       where: { shopId: shop.id },
     });
-    expect(row).toBeNull();
+    // Stale early hint is acceptable; must not permanently consume capacity.
+    if (stale != null) {
+      const healed = await prisma.$queryRaw<Array<{ id: string }>>(
+        buildFairClaimLockedSelectSql({
+          now: new Date(),
+          batchSize: 5,
+          maxPerShop: 1,
+        }),
+      );
+      expect(healed.length).toBe(0);
+      expect(
+        await prisma.dispatchReadyShop.findUnique({ where: { shopId: shop.id } }),
+      ).toBeNull();
+    }
   });
 
   it("7. disabled shops do not consume readiness slots", async () => {

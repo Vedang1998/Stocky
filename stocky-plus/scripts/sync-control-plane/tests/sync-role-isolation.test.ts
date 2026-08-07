@@ -117,6 +117,11 @@ describe("test:sync-role-isolation", () => {
         `,
       ).rejects.toThrow(/illegal_job_transition/);
       await prisma.durableJob.delete({ where: { id: job.id } });
+      // D-049 fail-safe: deleting DurableJob does not clear readiness; remove
+      // explicitly before Shop delete (FK RESTRICT).
+      await prisma.dispatchReadyShop
+        .delete({ where: { shopId: shop.id } })
+        .catch(() => undefined);
       await prisma.shop.delete({ where: { id: shop.id } });
     } finally {
       await prisma.$disconnect();

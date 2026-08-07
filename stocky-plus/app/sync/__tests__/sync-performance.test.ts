@@ -50,12 +50,6 @@ async function allowMultiShopDispatchReadySeed(prisma: PrismaClient) {
   );
 }
 
-async function clearMultiShopDispatchReadySeed(prisma: PrismaClient) {
-  await prisma.$executeRawUnsafe(
-    `SELECT set_config('stocky.allow_multi_shop_dispatch_ready', '0', false)`,
-  );
-}
-
 async function insertEligibleJob(
   prisma: PrismaClient,
   input: {
