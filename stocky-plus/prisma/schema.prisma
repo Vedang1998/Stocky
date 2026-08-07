@@ -85,7 +85,7 @@ model DispatchReadyShop {
 
   shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
-  @@index([processingEnabled, earliestEligibleAt, lastServedAt, shopId])
+  @@index([processingEnabled, earliestEligibleAt, lastServedAt, shopId], map: "DispatchReadyShop_due_fairness_idx")
 }
 
 // ─── Tenant backfill control (Phase 1 PR 1) ──────────────────────────────────

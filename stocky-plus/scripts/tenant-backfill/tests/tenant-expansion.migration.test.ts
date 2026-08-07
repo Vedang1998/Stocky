@@ -41,12 +41,14 @@ const ALL_MIGRATION_NAMES = [
   "20260805130000_sync_control_plane_receipt_probe_revoke",
   "20260805140000_sync_control_plane_enqueued_failed",
   "20260806220000_sync_control_plane_d047_fair_claim_indexes",
+  "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
 ] as const;
 
 /**
  * Control-plane tables that receive stocky_control_plane policies when that
  * role already exists (see 20260804210000_sync_control_plane_correction).
  * SyncApplicationReceipt is intentionally omitted — merchant-domain only.
+ * DispatchReadyShop is added by D-048 with the same role-conditional pattern.
  */
 const CONTROL_PLANE_POLICY_TABLES = [
   "WebhookDelivery",
@@ -60,6 +62,7 @@ const CONTROL_PLANE_POLICY_TABLES = [
   "DataIssue",
   "SyncHealth",
   "JobDispatch",
+  "DispatchReadyShop",
 ] as const;
 
 function listMigrationDirEntries(): string[] {
@@ -288,6 +291,7 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     "20260805130000_sync_control_plane_receipt_probe_revoke",
     "20260805140000_sync_control_plane_enqueued_failed",
     "20260806220000_sync_control_plane_d047_fair_claim_indexes",
+    "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
   ] as const;
 
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -370,7 +374,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
-  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates eleven control-plane policies", async () => {
+  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates twelve control-plane policies", async () => {
     const beforeDir = listMigrationDirEntries();
     expect(beforeDir).toEqual(
       expect.arrayContaining([
@@ -381,6 +385,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260805130000_sync_control_plane_receipt_probe_revoke",
         "20260805140000_sync_control_plane_enqueued_failed",
         "20260806220000_sync_control_plane_d047_fair_claim_indexes",
+        "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
         "migration_lock.toml",
       ]),
     );
@@ -413,6 +418,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain(
         "20260806220000_sync_control_plane_d047_fair_claim_indexes",
       );
+      expect(initOut).not.toContain(
+        "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
+      );
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -430,6 +438,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260806220000_sync_control_plane_d047_fair_claim_indexes",
+      );
+      expect(restOut).toContain(
+        "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
@@ -472,6 +483,9 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260806220000_sync_control_plane_d047_fair_claim_indexes",
+      );
+      expect(restOut).toContain(
+        "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
@@ -593,6 +607,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(rls.map((r) => r.relname)).toEqual([
       "DataIssue",
       "DeadLetter",
+      "DispatchReadyShop",
       "DurableJob",
       "JobAttempt",
       "JobDispatch",
