@@ -453,12 +453,13 @@ describe("test:sync-performance", () => {
   it("concurrent 2-way and 4-way dispatch refill aggregate capacity", async () => {
     const shops: string[] = [];
     const now = new Date();
-    for (let i = 0; i < 20; i++) {
+    // Enough shops for 4 × batchSize disjoint readiness windows.
+    for (let i = 0; i < 48; i++) {
       const s = await prisma.shop.create({
         data: { myshopifyDomain: `pr4-perf-conc-${i}.myshopify.com` },
       });
       shops.push(s.id);
-      for (let j = 0; j < 10; j++) {
+      for (let j = 0; j < 6; j++) {
         await insertEligibleJob(prisma, {
           id: `conc2_${i}_${j}`,
           shopId: s.id,
@@ -484,19 +485,19 @@ describe("test:sync-performance", () => {
     ]);
     const twoTotal = two[0]!.claimed + two[1]!.claimed;
     expect(twoTotal).toBeGreaterThanOrEqual(
-      Math.min(200, 2 * batchSize) - 2,
+      Math.min(shops.length * maxPerShop, 2 * batchSize) - 2,
     );
     expect(two.every((r) => r.claimed > 0)).toBe(true);
 
-    // Reset jobs to eligible for 4-way by truncating dispatches and reclaiming
-    // leased rows back to PENDING via lease expiry path.
     await prisma.$executeRawUnsafe(`
       UPDATE "DurableJob"
       SET state = 'PENDING', "leaseOwner" = NULL, "leaseExpiresAt" = NULL
       WHERE state = 'DISPATCH_LEASED'
     `);
     await prisma.jobDispatch.deleteMany({});
-    // Re-seed readiness after state bounce (trigger maintains).
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop" SET "lastServedAt" = NULL
+    `);
     await prisma.$executeRawUnsafe(`ANALYZE "DispatchReadyShop"`);
 
     const four = await Promise.all(
@@ -509,12 +510,10 @@ describe("test:sync-performance", () => {
       ),
     );
     const fourTotal = four.reduce((a, r) => a + r.claimed, 0);
-    const expectedMin = Math.min(200, 4 * batchSize) - 4;
+    const expectedMin = Math.min(shops.length * maxPerShop, 4 * batchSize) - 4;
     expect(fourTotal).toBeGreaterThanOrEqual(expectedMin);
-    // At most one dispatcher may underfill when remaining shops < shopCap;
-    // aggregate must still approach N×batchSize when eligible work remains.
     const zeroCount = four.filter((r) => r.claimed === 0).length;
-    expect(zeroCount).toBeLessThanOrEqual(1);
+    expect(zeroCount).toBe(0);
 
     const dispatches = await prisma.jobDispatch.findMany({
       select: { durableJobId: true },

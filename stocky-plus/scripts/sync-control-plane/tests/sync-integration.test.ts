@@ -14,6 +14,7 @@ describe("sync inventory manifest", () => {
       [
         "DeadLetter",
         "DataIssue",
+        "DispatchReadyShop",
         "DurableJob",
         "JobAttempt",
         "JobDispatch",

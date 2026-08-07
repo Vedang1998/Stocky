@@ -617,7 +617,7 @@ describe("test:sync-dispatch-recovery", () => {
     await q.close();
   });
 
-  it("NEW-PR4-C01: shop disabled before enqueue does not ack ENQUEUED", async () => {
+  it("NEW-PR4-C01 / D-048: shop disabled before claim is excluded (no ENQUEUED ack)", async () => {
     const ingested = await ingestAuthenticatedWebhook({
       verifiedShop: SHOP,
       topic: "orders/create",
@@ -641,14 +641,21 @@ describe("test:sync-dispatch-recovery", () => {
     });
 
     const result = await dispatchPendingJobs({ batchSize: 10 });
-    expect(result.shopDisabled).toBeGreaterThanOrEqual(1);
+    // D-048 R12: disabled shops are excluded from DispatchReadyShop selection
+    // before capacity is allocated (defense-in-depth recheck retained for races).
+    expect(result.claimed).toBe(0);
     expect(result.enqueued).toBe(0);
+    expect(result.shopDisabled).toBe(0);
+
+    const ready = await prisma.dispatchReadyShop.findUnique({
+      where: { shopId },
+    });
+    expect(ready?.processingEnabled).toBe(false);
 
     const durable = await prisma.durableJob.findUniqueOrThrow({
       where: { id: jobId },
     });
-    expect(durable.state).not.toBe("ENQUEUED");
-    expect(["PENDING", "CANCELLED"]).toContain(durable.state);
+    expect(durable.state).toBe("PENDING");
   });
 
   it("NEW-PR4-C01: waiting/delayed/active existing jobs are acknowledged", async () => {
