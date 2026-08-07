@@ -451,26 +451,31 @@ describe("test:sync-performance", () => {
   }, 300_000);
 
   it("concurrent 2-way and 4-way dispatch refill aggregate capacity", async () => {
-    const shops: string[] = [];
-    const now = new Date();
-    // Enough shops for 4 × batchSize disjoint readiness windows (+ margin).
-    for (let i = 0; i < 60; i++) {
-      const s = await prisma.shop.create({
-        data: { myshopifyDomain: `pr4-perf-conc-${i}.myshopify.com` },
-      });
-      shops.push(s.id);
-      for (let j = 0; j < 6; j++) {
-        await insertEligibleJob(prisma, {
-          id: `conc2_${i}_${j}`,
-          shopId: s.id,
-          nextEligibleAt: new Date(now.getTime() - (i * 10 + j) * 1000),
-        });
-      }
-    }
-    await prisma.$executeRawUnsafe(`ANALYZE "DispatchReadyShop"`);
-
     const batchSize = 10;
     const maxPerShop = 2;
+    const now = new Date();
+
+    async function seedShops(prefix: string, count: number): Promise<string[]> {
+      const shops: string[] = [];
+      for (let i = 0; i < count; i++) {
+        const s = await prisma.shop.create({
+          data: { myshopifyDomain: `${prefix}-${i}.myshopify.com` },
+        });
+        shops.push(s.id);
+        for (let j = 0; j < 6; j++) {
+          await insertEligibleJob(prisma, {
+            id: `${prefix}_${i}_${j}`,
+            shopId: s.id,
+            nextEligibleAt: new Date(now.getTime() - (i * 10 + j) * 1000),
+          });
+        }
+      }
+      await prisma.$executeRawUnsafe(`ANALYZE "DispatchReadyShop"`);
+      return shops;
+    }
+
+    // --- 2-way wave (dedicated shops) ---
+    const shops2 = await seedShops("pr4-perf-conc2", 30);
     const two = await Promise.all([
       dispatchPendingJobs({
         batchSize,
@@ -484,33 +489,18 @@ describe("test:sync-performance", () => {
       }),
     ]);
     const twoTotal = two[0]!.claimed + two[1]!.claimed;
-    const twoCap = Math.min(shops.length * maxPerShop, 2 * batchSize);
+    const twoCap = Math.min(shops2.length * maxPerShop, 2 * batchSize);
     expect(twoTotal).toBeGreaterThanOrEqual(twoCap);
     expect(two.every((r) => r.claimed > 0)).toBe(true);
 
-    // Restore all previously claimed work (ENQUEUED and DISPATCH_LEASED) so the
-    // 4-way wave starts with a full eligible backlog — not only lease leftovers.
+    // --- 4-way wave on a fresh eligible set (no illegal ENQUEUED→PENDING) ---
+    await truncateSyncTables(prisma);
     const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
     await q.obliterate({ force: true }).catch(() => undefined);
     await q.close();
-    await prisma.jobAttempt.deleteMany({});
-    await prisma.jobDispatch.deleteMany({});
-    await prisma.$executeRawUnsafe(`
-      UPDATE "DurableJob"
-      SET
-        state = 'PENDING',
-        "leaseOwner" = NULL,
-        "leaseExpiresAt" = NULL,
-        "enqueuedAt" = NULL,
-        "activeDispatchSequence" = NULL,
-        "updatedAt" = NOW()
-      WHERE state IN ('DISPATCH_LEASED', 'ENQUEUED')
-    `);
-    await prisma.$executeRawUnsafe(`
-      UPDATE "DispatchReadyShop" SET "lastServedAt" = NULL
-    `);
-    await prisma.$executeRawUnsafe(`ANALYZE "DispatchReadyShop"`);
+    await resetControlPlanePrismaForTests();
 
+    const shops4 = await seedShops("pr4-perf-conc4", 60);
     const pendingReady = await prisma.$queryRawUnsafe<Array<{ n: bigint }>>(
       `SELECT COUNT(*)::bigint AS n FROM "DispatchReadyShop"
        WHERE "processingEnabled" = true AND "earliestEligibleAt" <= NOW()`,
@@ -527,12 +517,11 @@ describe("test:sync-performance", () => {
       ),
     );
     const fourTotal = four.reduce((a, r) => a + r.claimed, 0);
-    const fourCap = Math.min(shops.length * maxPerShop, 4 * batchSize);
+    const fourCap = Math.min(shops4.length * maxPerShop, 4 * batchSize);
     // Aggregate refill: with unlocked eligible shops remaining, N dispatchers
-    // reach N × batchSize (here 40) without a zero-claim underfill.
+    // reach N × batchSize without a zero-claim underfill.
     expect(fourTotal).toBeGreaterThanOrEqual(fourCap);
-    const zeroCount = four.filter((r) => r.claimed === 0).length;
-    expect(zeroCount).toBe(0);
+    expect(four.filter((r) => r.claimed === 0)).toHaveLength(0);
     expect(four.every((r) => r.claimed > 0)).toBe(true);
 
     const dispatches = await prisma.jobDispatch.findMany({
