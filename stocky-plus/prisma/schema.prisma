@@ -68,6 +68,24 @@ model Shop {
   dataIssues          DataIssue[]
   syncHealth          SyncHealth[]
   syncApplicationReceipts SyncApplicationReceipt[]
+  dispatchReadyShop   DispatchReadyShop?
+}
+
+/// Per-shop dispatch readiness / fairness cursor (D-048).
+/// Exactly one row per shop with PENDING/RETRY_WAIT work (including future-due).
+/// Selection is indexed on earliestEligibleAt + lastServedAt — never scans Shop.
+model DispatchReadyShop {
+  shopId             String   @id
+  earliestEligibleAt DateTime
+  lastServedAt       DateTime?
+  /// Denormalized from Shop so claim SQL never Seq Scans Shop (D-048 / R12).
+  processingEnabled  Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
+
+  @@index([processingEnabled, earliestEligibleAt, lastServedAt, shopId])
 }
 
 // ─── Tenant backfill control (Phase 1 PR 1) ──────────────────────────────────

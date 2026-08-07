@@ -184,7 +184,7 @@ describe("test:sync-dispatch-recovery", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt"
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt"
       CASCADE
     `);
     await prisma.shop.deleteMany({ where: { myshopifyDomain: SHOP } });

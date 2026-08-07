@@ -148,7 +148,7 @@ describe("test:sync-final-correction (D-045)", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt"
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt"
       CASCADE
     `);
     await prisma.shop.deleteMany({ where: { myshopifyDomain: SHOP } });

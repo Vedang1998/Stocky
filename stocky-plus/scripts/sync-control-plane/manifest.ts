@@ -3,7 +3,7 @@
  * CI fails when producers/queues/workers/webhooks/replay paths drift.
  */
 
-export const SYNC_INVENTORY_VERSION = "phase1-pr4-sync-inventory-v2-correction";
+export const SYNC_INVENTORY_VERSION = "phase1-pr4-sync-inventory-v3-d048";
 
 export type SyncSurfaceKind =
   | "producer"
@@ -87,7 +87,8 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     id: "dispatcher:fair-claim-query",
     path: "app/sync/fair-claim-query.server.ts",
     symbol: "buildFairClaimLockedSelectSql",
-    notes: "D-047 production-owned bounded fair-claim SQL shared with EXPLAIN harness",
+    notes:
+      "D-048 production-owned DispatchReadyShop fair-claim SQL shared with EXPLAIN harness",
   },
   {
     kind: "worker",
@@ -277,6 +278,14 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "prisma/schema.prisma",
     symbol: "JobDispatch",
     notes: "platform_control_plane — append-only dispatch identity (D-043)",
+  },
+  {
+    kind: "control_plane_table",
+    id: "table:DispatchReadyShop",
+    path: "prisma/schema.prisma",
+    symbol: "DispatchReadyShop",
+    notes:
+      "platform_control_plane — D-048 dispatch readiness / fairness cursor",
   },
   {
     kind: "merchant_table",

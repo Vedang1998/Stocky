@@ -4,9 +4,9 @@
 **Work unit:** PR 4 — Synchronization control plane
 **Branch:** `phase-1/sync-control-plane`
 **Generator:** `scripts/sync-control-plane/inventory.ts` (deterministic)
-**Inventory version:** `phase1-pr4-sync-inventory-v2-correction`
-**Content digest:** `87905b396b3a9ea359bc36b2fdf24e626a8353b00257091754bc097d857491b2`
-**Surfaces:** 37
+**Inventory version:** `phase1-pr4-sync-inventory-v3-d048`
+**Content digest:** `f2dd54634cf8c2be905308cd6072c4532da84739f1fe6c36bc2a320a56d5db10`
+**Surfaces:** 38
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run sync:inventory`.
@@ -16,7 +16,7 @@
 
 | Kind | Count |
 |---|---|
-| control_plane_table | 11 |
+| control_plane_table | 12 |
 | dispatcher | 2 |
 | merchant_table | 1 |
 | producer | 5 |
@@ -38,7 +38,7 @@
 | producer | `producer:abc-analysis-shop` | `app/jobs/queue.server.ts` | `enqueueAbcAnalysisForShop` | Per-shop ABC durable producer |
 | producer | `producer:weekly-abc-tick` | `app/jobs/queue.server.ts` | `scheduleAbcAnalysisCron` | Control-plane weekly tick (no tenant envelope) |
 | dispatcher | `dispatcher:pending-jobs` | `app/sync/dispatcher.server.ts` | `dispatchPendingJobs` | FOR UPDATE SKIP LOCKED claim + BullMQ enqueue |
-| dispatcher | `dispatcher:fair-claim-query` | `app/sync/fair-claim-query.server.ts` | `buildFairClaimLockedSelectSql` | D-047 production-owned bounded fair-claim SQL shared with EXPLAIN harness |
+| dispatcher | `dispatcher:fair-claim-query` | `app/sync/fair-claim-query.server.ts` | `buildFairClaimLockedSelectSql` | D-048 production-owned DispatchReadyShop fair-claim SQL shared with EXPLAIN harness |
 | worker | `worker:webhook` | `app/jobs/workers/webhook-processor.ts` | `processWebhookJob` | Durable lifecycle wrapper + legacy handlers |
 | worker | `worker:cron` | `app/jobs/workers/webhook-processor.ts` | `processCronJob` | Durable lifecycle wrapper for cron jobs |
 | worker | `worker:entrypoint` | `app/jobs/workers/index.ts` | `main` | Starts workers + optional dispatcher loop |
@@ -66,6 +66,7 @@
 | control_plane_table | `table:DataIssue` | `prisma/schema.prisma` | `DataIssue` | platform_control_plane |
 | control_plane_table | `table:SyncHealth` | `prisma/schema.prisma` | `SyncHealth` | platform_control_plane |
 | control_plane_table | `table:JobDispatch` | `prisma/schema.prisma` | `JobDispatch` | platform_control_plane — append-only dispatch identity (D-043) |
+| control_plane_table | `table:DispatchReadyShop` | `prisma/schema.prisma` | `DispatchReadyShop` | platform_control_plane — D-048 dispatch readiness / fairness cursor |
 | merchant_table | `table:SyncApplicationReceipt` | `prisma/schema.prisma` | `SyncApplicationReceipt` | merchant_domain — exactly-once application receipt (F-PR4-01) |
 
 ## Completeness rules

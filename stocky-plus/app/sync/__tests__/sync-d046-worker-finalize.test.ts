@@ -190,7 +190,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
         "BomComponent"
       CASCADE
     `);

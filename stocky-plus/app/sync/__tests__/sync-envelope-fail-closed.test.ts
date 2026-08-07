@@ -95,7 +95,7 @@ describe("test:sync-envelope-fail-closed", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
         "BomComponent"
       CASCADE
     `);

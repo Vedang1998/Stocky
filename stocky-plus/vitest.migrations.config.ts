@@ -9,9 +9,12 @@ export default defineConfig({
       "scripts/tenant-indexes/tests/**/*.test.ts",
       // PR3 correction adversarial suites + original migration tests
       "scripts/tenant-enforcement/tests/**/*.test.ts",
-      // P3-NEW-D047-01 skip/todo name-filter probes
-      "scripts/vitest/migrations-name-filter-probes.test.ts",
+      // D-048 claim-index concurrent rollout tests
+      "scripts/sync-control-plane/tests/claim-indexes*.test.ts",
+      // Reporter unit regression (P3-D047-R11) — no skip/todo probes here
+      "scripts/vitest/fail-on-zero-passed-name-filter.test.ts",
     ],
+    // Probes live in vitest.migrations-name-filter-probes.config.ts (P3-D047-R10).
     testTimeout: 180_000,
     hookTimeout: 180_000,
     fileParallelism: false,

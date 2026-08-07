@@ -39,7 +39,7 @@ describe("test:sync-uninstall", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt", "Session"
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "Session"
       CASCADE
     `);
     await prisma.shop.deleteMany({ where: { myshopifyDomain: SHOP } });

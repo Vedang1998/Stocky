@@ -62,6 +62,8 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   "stocky_shop_processing_enabled",
   "stocky_durable_job_transition_guard",
   "stocky_has_application_receipt",
+  "stocky_dispatch_ready_shop_maintain",
+  "stocky_dispatch_ready_shop_sync_enabled",
 ]);
 
 /** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */

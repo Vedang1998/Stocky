@@ -795,6 +795,19 @@ export const PLATFORM_CONTROL_PLANE_TABLES: readonly NonMerchantTableSpec[] = [
     notes:
       "Append-only dispatch identity (PR4 correction); control-plane RLS via sync correction migration",
   },
+  {
+    prismaModel: "DispatchReadyShop",
+    sqlTable: "DispatchReadyShop",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes:
+      "D-048 per-shop dispatch readiness / fairness cursor — control-plane DML only",
+  },
 ] as const;
 
 /** SQL table names for control-plane privilege grants. */

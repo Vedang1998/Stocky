@@ -146,9 +146,9 @@ async function recoverExpiredDispatchLeases(
 }
 
 /**
- * Fair claim: SQL-capped per-shop LATERAL selection (PENDING + RETRY_WAIT)
- * with FOR UPDATE SKIP LOCKED on the bounded candidate set
- * (F-PR4-11 / F-PR4-13 / D-047). Uses production-owned fair-claim-query SQL.
+ * Fair claim: DispatchReadyShop readiness lock + per-shop LATERAL selection
+ * (PENDING + RETRY_WAIT) with FOR UPDATE SKIP LOCKED
+ * (F-PR4-11 / F-PR4-13 / D-048). Uses production-owned fair-claim-query SQL.
  */
 async function claimBatchFair(
   prisma: ReturnType<typeof getControlPlanePrisma>,

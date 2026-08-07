@@ -120,7 +120,7 @@ describe("test:sync-exactly-once", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
         "BomComponent", "VariantAbcClass", "ShopifyVariantCache", "InventorySnapshot"
       CASCADE
     `);

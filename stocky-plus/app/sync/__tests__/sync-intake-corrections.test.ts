@@ -36,7 +36,7 @@ describe("sync intake corrections (F-PR4-08/12/18/19/20)", () => {
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
-        "DurableJob", "SyncApplicationReceipt"
+        "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt"
       CASCADE
     `);
     await prisma.shop.deleteMany({ where: { myshopifyDomain: SHOP } });
