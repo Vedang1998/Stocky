@@ -30,15 +30,18 @@ describe("failOnZeroPassedNameFilter reporter (P3-D047-R11)", () => {
     const reporter = failOnZeroPassedNameFilter();
     const previous = process.exitCode;
     process.exitCode = undefined;
-    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const errorSpy = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
 
     reporter.onInit?.({
       config: { testNamePattern: /nonexistent-filter/ },
     } as Vitest);
 
-    reporter.onFinished?.([
-      makeFile([makeSuite([makeTest("skip"), makeTest("skip")])]),
-    ]);
+    reporter.onFinished?.(
+      [makeFile([makeSuite([makeTest("skip"), makeTest("skip")])])],
+      [],
+    );
 
     expect(process.exitCode).toBe(1);
     expect(errorSpy).toHaveBeenCalled();
@@ -55,7 +58,7 @@ describe("failOnZeroPassedNameFilter reporter (P3-D047-R11)", () => {
       config: { testNamePattern: undefined },
     } as Vitest);
 
-    reporter.onFinished?.([makeFile([makeSuite([makeTest("skip")])])]);
+    reporter.onFinished?.([makeFile([makeSuite([makeTest("skip")])])], []);
     expect(process.exitCode).toBeUndefined();
     process.exitCode = previous;
   });
@@ -69,11 +72,14 @@ describe("failOnZeroPassedNameFilter reporter (P3-D047-R11)", () => {
       config: { testNamePattern: /nested/ },
     } as Vitest);
 
-    reporter.onFinished?.([
-      makeFile([
-        makeSuite([makeSuite([makeTest("pass")]), makeTest("skip")]),
-      ]),
-    ]);
+    reporter.onFinished?.(
+      [
+        makeFile([
+          makeSuite([makeSuite([makeTest("pass")]), makeTest("skip")]),
+        ]),
+      ],
+      [],
+    );
     expect(process.exitCode).toBeUndefined();
     process.exitCode = previous;
   });
@@ -83,7 +89,7 @@ describe("failOnZeroPassedNameFilter reporter (P3-D047-R11)", () => {
     const previous = process.exitCode;
     process.exitCode = undefined;
     // onInit never called — simulates broken reporter wiring
-    reporter.onFinished?.([makeFile([makeTest("skip")])]);
+    reporter.onFinished?.([makeFile([makeTest("skip")])], []);
     // Without pattern, guard is inert (full-suite mode).
     expect(process.exitCode).toBeUndefined();
     process.exitCode = previous;

@@ -53,7 +53,6 @@ describe("DispatchReadyShop readiness lifecycle (D-048)", () => {
     state: "PENDING" | "RETRY_WAIT",
     nextEligibleAt: Date,
   ) {
-    const now = new Date();
     await prisma.$executeRawUnsafe(`
       INSERT INTO "DurableJob" (
         id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
