@@ -5,7 +5,7 @@
 **PR:** #20 — OPEN, DRAFT, UNMERGED  
 **Starting head:** `cc1ff7e7a088f130372e7ead3bc2e679aee952fd`  
 **Authorized merge base:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`  
-**Immutable D-047 review cherry-pick:** `0cf08771e1e43d02bc9d9bded2a92109b9997c6e` (byte-identical)  
+**Immutable D-047 review cherry-pick:** `0cf08771e1e43d02bc9d9bded2a92109b9997c6e` → branch commit `5683001` (byte-identical)  
 **Status:** `PR 4 D-048 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
 
 ## Architecture selected
@@ -38,12 +38,12 @@ Maintenance: `stocky_dispatch_ready_shop_maintain` on DurableJob; `stocky_dispat
 | Index | Purpose | Rollout |
 |---|---|---|
 | `DurableJob_shop_claim_{pending,retry_wait}_idx` | Per-shop LATERAL claim (D-047; unchanged migration) | Concurrent pre-create via `sync:claim-indexes:apply`; migration IF NOT EXISTS no-op |
-| `DispatchReadyShop_due_fairness_idx` | `(processingEnabled, earliestEligibleAt, lastServedAt, shopId)` | Created with empty table in D-048 migration |
+| `DispatchReadyShop_due_fairness_idx` | `(processingEnabled, earliestEligibleAt, lastServedAt, shopId)` | Created with empty table in D-048 migration; Prisma `map:` matches name |
 | `DurableJob_shop_eligible_*` / `DurableJob_eligible_*` | **Retained** (P3-D047-R08) — not dropped | Deferred; write cost accepted pending separate review |
 
 ## Planner-workaround disposition (P3-D047-R09)
 
-Range-pair `"shopId" >= ss.shopId AND "shopId" <= ss.shopId` **retained**. Equality still plans as `DurableJob_eligible_*` + shopId Filter under PG 16. Documented residual; equality-regression comparison retained in `test:sync-performance`. Not a PostgreSQL optimization contract.
+Range-pair `"shopId" >= ss.shopId AND "shopId" <= ss.shopId` **retained**. Equality still plans as `DurableJob_eligible_*` + shopId Filter under PG 16. Documented residual; equality-regression comparison retained in `test:sync-performance`. Not a PostgreSQL optimization contract. Tracked as **R-122**.
 
 ## P3 dispositions R05–R13
 
@@ -65,6 +65,33 @@ Range-pair `"shopId" >= ss.shopId AND "shopId" <= ss.shopId` **retained**. Equal
 
 Historical `20260806220000_…d047_fair_claim_indexes` **not edited**.
 
+## Local validation evidence (PG16 + Redis)
+
+| Command | Result |
+|---|---|
+| `npm run test:migrations` | **226 passed**, 0 skipped/todo, exit 0 |
+| 13-case name-filter matrix | all PASS (probes isolated) |
+| `npm run test:sync-performance` ×5 | **29 passed** each, exit 0 |
+| `npm run test:sync-dispatch-recovery` | **29 passed**, exit 0 |
+| `npm run test:sync-integration` | **206 passed**, exit 0 |
+| claim-indexes concurrent rollout | **3 passed** (in migrations + sync-integration) |
+| reporter unit tests | **4 passed** |
+| `sync:inventory:check` | ok, surfaces=38 |
+| `tenant:access:inventory:check` | fresh (EX-SYNC-TEST-014 added) |
+| `tenant:access:audit` | ok, 0 violations |
+| `tenant:enforcement:inventory:check` | fresh |
+| `tenant:indexes:verify` (after apply) | ok |
+| `sync:claim-indexes:verify` | ok, indexes=2 |
+| `sync:roles:verify` | ok |
+| lint / typecheck / build / graphql-codegen / prisma validate+generate | exit 0 |
+| `git diff --check` | exit 0 |
+
+Shop-scaling gate (inside `test:sync-performance`): 10 active / 1k·5k·20k empty shops + ≥50k DurableJob backlog; plan asserts no `Seq Scan on "Shop"`, readiness rows ≤ shopCap, shared-hit buffers &lt; 5_000, growth &lt; 5× across empty-shop scales; plus 100+ active / 20k total probe.
+
+Fairness bound: `ceil(A / shopCap)` with `shopCap = batchSize`; repeated-cycle test covers A &gt; batchSize, A &gt; 2×batchSize, greedy arrival, RETRY_WAIT-only, disabled exclusion.
+
+Concurrency: 2-way and 4-way waves on fresh fixtures; aggregate claims ≥ `N × batchSize` with zero underfill; no duplicate JobDispatch identities.
+
 ## Safety
 
 - Inventory-write flags DEFAULT OFF
@@ -73,7 +100,8 @@ Historical `20260806220000_…d047_fair_claim_indexes` **not edited**.
 - Q-003 / F-PR4-18 remain OPEN
 - PR 5 BLOCKED
 - Immutable D-047 review report unchanged after cherry-pick
+- R-119 / R-120 preserved OPEN; R-121 / R-122 added OPEN
 
-## Evidence
+## Evidence tip
 
-Filled from executed commands in the Cursor D-048 turn (see final return packet for exact counts/SHAs/CI). Exact-head CI obtained after tip push.
+Filled from executed commands in the Cursor D-048 turn. Exact-head CI recorded after final tip push (see return packet).
