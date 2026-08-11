@@ -62,8 +62,11 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   "stocky_shop_processing_enabled",
   "stocky_durable_job_transition_guard",
   "stocky_has_application_receipt",
-  "stocky_dispatch_ready_shop_maintain",
-  "stocky_dispatch_ready_shop_sync_enabled",
+  // D-050 statement-level readiness maintenance (replaces D-049 row-level pair).
+  "stocky_dispatch_ready_shop_monotonic_upsert",
+  "stocky_dispatch_ready_shop_maintain_insert_stmt",
+  "stocky_dispatch_ready_shop_maintain_update_stmt",
+  "stocky_dispatch_ready_shop_sync_enabled_stmt",
 ]);
 
 /** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
