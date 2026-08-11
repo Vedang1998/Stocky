@@ -71,9 +71,10 @@ model Shop {
   dispatchReadyShop   DispatchReadyShop?
 }
 
-/// Per-shop dispatch readiness / fairness cursor (D-048 / D-049).
+/// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
 /// Exactly one row per shop with PENDING/RETRY_WAIT work (including future-due),
-/// plus fail-safe false-positive rows reconciled at claim time.
+/// plus fail-safe false-positive rows reconciled at claim time via D-050
+/// fresh-snapshot reconciliation (scheduler lock → candidates → lease → reconcile).
 /// Selection is indexed on nextDispatchAt — never scans Shop / never sorts the
 /// full active-due population (D-049 / F-D048-03).
 model DispatchReadyShop {

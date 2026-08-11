@@ -1,13 +1,16 @@
 /**
- * D-049 adversarial readiness / reconciliation / immutability / deadlock tests.
+ * D-049 / D-050 adversarial readiness / reconciliation / immutability / deadlock tests.
  * F-D048-01…06 acceptance evidence (Cursor) — findings remain open pending review.
+ * D-050: heal/reconcile runs via executeFairClaimLockAndReconcileRound (fresh snapshot),
+ * not inside buildFairClaimLockedSelectSql.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { Client } from "pg";
 import {
-  buildFairClaimLockedSelectSql,
+  executeFairClaimLockAndReconcileRound,
   fairClaimStarvationBoundCycles,
+  URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS,
 } from "../fair-claim-query.server";
 import { dispatchPendingJobs } from "../dispatcher.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
@@ -22,6 +25,8 @@ type DriftRow = {
 };
 
 async function driftReport(prisma: PrismaClient): Promise<DriftRow> {
+  // due_work_hidden uses interval '1 second' — equals
+  // URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS (approved anti-reset maximum delay).
   const rows = await prisma.$queryRaw<DriftRow[]>`
     WITH eligible AS (
       SELECT j."shopId", MIN(j."nextEligibleAt") AS actual_earliest
@@ -117,6 +122,7 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
   }
 
   it("drift/invariant query reports missing/late/stale/mismatch zeros on healthy state", async () => {
+    expect(URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS).toBe(1_000);
     const shop = await createShop("drift-ok");
     await insertJob(shop.id, "d049_drift_ok", "PENDING", new Date());
     const report = await driftReport(prisma);
@@ -221,7 +227,9 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
           falseNegatives += 1;
         } else if (
           actualEarliest.getTime() <= Date.now() &&
-          ready.nextDispatchAt.getTime() > Date.now() + 1_000
+          // URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS — approved anti-reset max
+          ready.nextDispatchAt.getTime() >
+            Date.now() + URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS
         ) {
           // Due work hidden behind a far-future schedule (not a 1ms fairness floor).
           falseNegatives += 1;
@@ -295,16 +303,16 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
       `);
     }
 
-    // Production claim path (same SQL builder) — healing documented as same invocation.
-    const claimed = await prisma.$queryRaw<Array<{ shopId: string }>>(
-      buildFairClaimLockedSelectSql({
+    // D-050 production lock + fresh-snapshot reconcile (A/B/D) — heals in-round.
+    const claimed = await prisma.$transaction((tx) =>
+      executeFairClaimLockAndReconcileRound(tx, {
         now: new Date(),
         batchSize: 20,
         maxPerShop: 1,
       }),
     );
 
-    // Empty stale removed in same invocation.
+    // Empty stale removed in same invocation (reconcile DELETE).
     expect(
       await prisma.dispatchReadyShop.findUnique({
         where: { shopId: staleEmpty.id },
@@ -338,8 +346,8 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     expect(legitClaimed || legitStillDue || legitReady == null).toBe(true);
 
     // Second invocation must fill remaining capacity after stale heal.
-    const claimed2 = await prisma.$queryRaw<Array<{ shopId: string }>>(
-      buildFairClaimLockedSelectSql({
+    const claimed2 = await prisma.$transaction((tx) =>
+      executeFairClaimLockAndReconcileRound(tx, {
         now: new Date(),
         batchSize: 20,
         maxPerShop: 1,
@@ -380,34 +388,12 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     `);
   });
 
-  it("multi-shop writer in one transaction fails closed (F-D048-05 B)", async () => {
+  it("multi-shop writer in one transaction succeeds via statement-level triggers (D-050)", async () => {
     const s1 = await createShop("dead-1");
     const s2 = await createShop("dead-2");
-    await expect(
-      prisma.$transaction(async (tx) => {
-        await insertJob(s1.id, "d049_ms_1", "PENDING", new Date(), tx);
-        await insertJob(s2.id, "d049_ms_2", "PENDING", new Date(), tx);
-      }),
-    ).rejects.toThrow(/single_shop_dispatch_ready_tx/i);
-
-    // Opposite order also fails.
-    await expect(
-      prisma.$transaction(async (tx) => {
-        await insertJob(s2.id, "d049_ms_3", "PENDING", new Date(), tx);
-        await insertJob(s1.id, "d049_ms_4", "PENDING", new Date(), tx);
-      }),
-    ).rejects.toThrow(/single_shop_dispatch_ready_tx/i);
-  });
-
-  it("admin bypass GUC allows intentional multi-shop maintenance", async () => {
-    const s1 = await createShop("admin-1");
-    const s2 = await createShop("admin-2");
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRawUnsafe(
-        `SELECT set_config('stocky.allow_multi_shop_dispatch_ready', '1', true)`,
-      );
-      await insertJob(s1.id, "d049_admin_1", "PENDING", new Date(), tx);
-      await insertJob(s2.id, "d049_admin_2", "PENDING", new Date(), tx);
+      await insertJob(s1.id, "d049_ms_1", "PENDING", new Date(), tx);
+      await insertJob(s2.id, "d049_ms_2", "PENDING", new Date(), tx);
     });
     expect(
       await prisma.dispatchReadyShop.findUnique({ where: { shopId: s1.id } }),
@@ -415,9 +401,20 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     expect(
       await prisma.dispatchReadyShop.findUnique({ where: { shopId: s2.id } }),
     ).not.toBeNull();
+
+    // Opposite shop order also succeeds (no single_shop_dispatch_ready_tx).
+    await prisma.$transaction(async (tx) => {
+      await insertJob(s2.id, "d049_ms_3", "PENDING", new Date(), tx);
+      await insertJob(s1.id, "d049_ms_4", "PENDING", new Date(), tx);
+    });
+    expect(
+      await prisma.durableJob.count({
+        where: { id: { in: ["d049_ms_3", "d049_ms_4"] } },
+      }),
+    ).toBe(2);
   });
 
-  it("adversarial multi-writer deadlock class is gone or guarded", async () => {
+  it("adversarial multi-writer multi-shop stress: zero 40P01 deadlocks (D-050)", async () => {
     const shops: Array<{ id: string }> = [];
     for (let i = 0; i < 6; i++) {
       shops.push(await createShop(`dl-${i}`));
@@ -428,7 +425,6 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     if (!url) throw new Error("DATABASE_URL required");
 
     let deadlocks = 0;
-    let guarded = 0;
     let ok = 0;
     const writers = 4;
     const durationMs = 8_000;
@@ -472,7 +468,6 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
             await client.query("ROLLBACK").catch(() => undefined);
             const msg = e instanceof Error ? e.message : String(e);
             if (/40P01|deadlock detected/i.test(msg)) deadlocks += 1;
-            else if (/single_shop_dispatch_ready_tx/i.test(msg)) guarded += 1;
             else throw e;
           }
         }
@@ -482,9 +477,9 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     }
 
     await Promise.all(Array.from({ length: writers }, (_, i) => writer(i)));
-    // Either structurally prevented (guarded > 0, deadlocks == 0) or zero deadlocks.
+    // Statement-level triggers: multi-shop writers succeed; zero deadlocks.
     expect(deadlocks).toBe(0);
-    expect(guarded + ok).toBeGreaterThan(0);
+    expect(ok).toBeGreaterThan(0);
   }, 60_000);
 
   it("equal-timestamp fairness still respects documented starvation bound", async () => {

@@ -88,7 +88,7 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "app/sync/fair-claim-query.server.ts",
     symbol: "buildFairClaimLockedSelectSql",
     notes:
-      "D-048/D-049 production-owned DispatchReadyShop fair-claim SQL shared with EXPLAIN harness",
+      "D-050 split claim: buildFairClaimSchedulerLockSql + buildFairClaimJobCandidateSql + buildFairClaimReadinessReconcileSql (fresh-snapshot reconcile); buildFairClaimLockedSelectSql remains compatibility claim SELECT (no heal) shared with EXPLAIN harness",
   },
   {
     kind: "worker",
