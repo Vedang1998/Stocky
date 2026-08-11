@@ -928,9 +928,10 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
       );
     });
     // Isolation remains READ COMMITTED (default) — not REPEATABLE READ.
-    const iso = await prisma.$queryRaw<Array<{ level: string }>>`
-      SHOW transaction_isolation
-    `;
-    expect(iso[0]!.level.toLowerCase()).toMatch(/read committed/);
+    const iso = await prisma.$queryRawUnsafe<Array<Record<string, string>>>(
+      `SHOW transaction_isolation`,
+    );
+    const level = Object.values(iso[0] ?? {})[0] ?? "";
+    expect(String(level).toLowerCase()).toMatch(/read committed/);
   });
 });

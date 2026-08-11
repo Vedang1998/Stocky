@@ -181,6 +181,12 @@ AS $$
 DECLARE
   rec record;
 BEGIN
+  -- Same readiness-maintain advisory lock as DurableJob upserts so bulk
+  -- Shop.processingEnabled updates cannot deadlock with job writers.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
+  );
+
   FOR rec IN
     SELECT n.id AS shop_id, n."processingEnabled" AS enabled
     FROM new_rows n
