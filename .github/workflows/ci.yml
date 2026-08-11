@@ -23,7 +23,10 @@ jobs:
   validate:
     name: Lint, typecheck, test, build, Prisma, GraphQL
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # D-050 adversarial race/deadlock/fairness suites + full migration chain
+    # exceed the prior 45m wall on GitHub-hosted runners (observed cancel at
+    # ~45m during final test:migrations on tip 314981e).
+    timeout-minutes: 70
 
     services:
       postgres:
