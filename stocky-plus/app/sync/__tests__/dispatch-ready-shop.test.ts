@@ -1,9 +1,14 @@
 /**
- * D-048 readiness-state lifecycle matrix for DispatchReadyShop.
+ * D-048 / D-050 readiness-state lifecycle matrix for DispatchReadyShop.
+ * Empty-work heal uses executeFairClaimLockAndReconcileRound (fresh-snapshot
+ * reconcile); claim-only checks may use buildFairClaimLockedSelectSql.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
-import { buildFairClaimLockedSelectSql } from "../fair-claim-query.server";
+import {
+  buildFairClaimLockedSelectSql,
+  executeFairClaimLockAndReconcileRound,
+} from "../fair-claim-query.server";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import { resetTenantJobEnvelopeSecretCache } from "../../tenant/job-envelope.server";
 
@@ -149,8 +154,8 @@ describe("DispatchReadyShop readiness lifecycle (D-048)", () => {
   it("6. shops with no remaining eligible work stop consuming capacity", async () => {
     const shop = await createShop("empty");
     await insertJob(shop.id, "ready_empty", "PENDING", new Date());
-    await prisma.$queryRaw(
-      buildFairClaimLockedSelectSql({
+    await prisma.$transaction((tx) =>
+      executeFairClaimLockAndReconcileRound(tx, {
         now: new Date(),
         batchSize: 5,
         maxPerShop: 1,
@@ -167,15 +172,15 @@ describe("DispatchReadyShop readiness lifecycle (D-048)", () => {
       WHERE id = 'ready_empty'
     `).catch(() => undefined);
     // Force heal: delete job eligibility — D-049 trigger leaves fail-safe stale
-    // readiness (false positive). Production claim reconciliation removes it.
+    // readiness (false positive). D-050 fresh-snapshot reconcile removes it.
     await prisma.$executeRawUnsafe(`DELETE FROM "DurableJob" WHERE id = 'ready_empty'`);
     const stale = await prisma.dispatchReadyShop.findUnique({
       where: { shopId: shop.id },
     });
     // Stale early hint is acceptable; must not permanently consume capacity.
     if (stale != null) {
-      const healed = await prisma.$queryRaw<Array<{ id: string }>>(
-        buildFairClaimLockedSelectSql({
+      const healed = await prisma.$transaction((tx) =>
+        executeFairClaimLockAndReconcileRound(tx, {
           now: new Date(),
           batchSize: 5,
           maxPerShop: 1,

@@ -1,10 +1,14 @@
 /**
- * F-PR4-11 / F-PR4-13 / D-048 / D-049 — operational fair-claim plan, fairness,
- * concurrency, Shop-scaling and active-due boundedness, runtime/EXPLAIN identity.
+ * F-PR4-11 / F-PR4-13 / D-048 / D-049 / D-050 — operational fair-claim plan,
+ * fairness, concurrency, Shop-scaling and active-due boundedness, runtime/EXPLAIN
+ * identity.
  *
- * EXPLAIN subject is the production buildFairClaimLockedSelectSql statement
- * (DispatchReadyShop nextDispatchAt lock + PENDING/RETRY_WAIT LATERAL +
- * FOR UPDATE SKIP LOCKED).
+ * D-050 splits claim into scheduler lock → job candidates → lease → fresh-snapshot
+ * reconcile. EXPLAIN subject remains buildFairClaimLockedSelectSql (compatibility
+ * claim path without reconcile) — plan shape still valid for lock/candidate bounds.
+ *
+ * Boundedness: rows returned/locked ≤ shopCap; under SKIP LOCKED contention the
+ * physical index walk may examine lockedPrefix + shopCap.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
@@ -23,8 +27,11 @@ import {
 } from "./eligible-claim-plan";
 import {
   assertDispatcherUsesProductionFairClaimSql,
+  buildFairClaimJobCandidateSql,
   buildFairClaimLockedExplainSql,
   buildFairClaimLockedSelectSql,
+  buildFairClaimReadinessReconcileSql,
+  buildFairClaimSchedulerLockSql,
   fairClaimSqlIdentity,
   fairClaimStarvationBoundCycles,
   maxFairClaimCandidateRows,
@@ -39,15 +46,6 @@ async function truncateSyncTables(prisma: PrismaClient) {
       "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt"
     CASCADE
   `);
-}
-
-/** Test-only: allow multi-shop DurableJob seed statements (F-D048-05 bypass). */
-async function allowMultiShopDispatchReadySeed(prisma: PrismaClient) {
-  // Session-level test seed bypass (not transaction-local): bulk fixtures insert
-  // many shops per statement. Production writers remain single-shop-enforced.
-  await prisma.$executeRawUnsafe(
-    `SELECT set_config('stocky.allow_multi_shop_dispatch_ready', '1', false)`,
-  );
 }
 
 async function insertEligibleJob(
@@ -115,9 +113,14 @@ describe("test:sync-performance", () => {
 
   it("shared SQL identity + independent dispatcher source-boundary guard", () => {
     const id = fairClaimSqlIdentity();
-    expect(id.algorithm).toBe("dispatch_ready_shop_next_dispatch_at_fair_skip_locked");
+    expect(id.algorithm).toBe(
+      "dispatch_ready_shop_split_claim_fresh_reconcile_d050",
+    );
     expect(id.selectBuilder).toBe(buildFairClaimLockedSelectSql);
     expect(id.explainBuilder).toBe(buildFairClaimLockedExplainSql);
+    expect(id.schedulerBuilder).toBe(buildFairClaimSchedulerLockSql);
+    expect(id.candidateBuilder).toBe(buildFairClaimJobCandidateSql);
+    expect(id.reconcileBuilder).toBe(buildFairClaimReadinessReconcileSql);
     const params = { now: new Date(), batchSize: 50, maxPerShop: 2 };
     const selectSql = buildFairClaimLockedSelectSql(params);
     const explainSql = buildFairClaimLockedExplainSql(params);
@@ -132,15 +135,15 @@ describe("test:sync-performance", () => {
     const source = readFileSync(dispatcherPath, "utf8");
     expect(() => assertDispatcherUsesProductionFairClaimSql(source)).not.toThrow();
 
-    // Planted inline claim must fail the guard.
+    // Planted inline claim must fail the guard (scheduler call replaced).
     const planted = source.replace(
-      /buildFairClaimLockedSelectSql\s*\([\s\S]*?\)/,
+      /buildFairClaimSchedulerLockSql\s*\([\s\S]*?\)/,
       `Prisma.sql\`WITH due_shops AS (SELECT 1) SELECT * FROM "DurableJob" FOR UPDATE SKIP LOCKED\``,
     );
     expect(planted.includes("FOR UPDATE SKIP LOCKED")).toBe(true);
-    expect(/buildFairClaimLockedSelectSql\s*\(/.test(planted)).toBe(false);
+    expect(/buildFairClaimSchedulerLockSql\s*\(/.test(planted)).toBe(false);
     expect(() => assertDispatcherUsesProductionFairClaimSql(planted)).toThrow(
-      /inline_claim_sql|missing_fair_claim_call/,
+      /inline_claim_sql|missing_scheduler_call|missing_candidate_call|missing_reconcile_call/,
     );
   });
 
@@ -158,7 +161,6 @@ describe("test:sync-performance", () => {
 
     const now = new Date();
     const future = new Date(now.getTime() + 3_600_000);
-    await allowMultiShopDispatchReadySeed(prisma);
     const insertBatch = 500;
     for (let offset = 0; offset < SCALE; offset += insertBatch) {
       const values: string[] = [];
@@ -254,7 +256,7 @@ describe("test:sync-performance", () => {
     expect(elapsed).toBeLessThan(30_000);
   }, 180_000);
 
-  it("Shop scaling: readiness rows examined stay bounded as total Shop grows", async () => {
+  it("Shop scaling: readiness rows returned/locked stay bounded as total Shop grows", async () => {
     const active = 10;
     const batchSize = 10;
     const maxPerShop = 2;
@@ -295,8 +297,7 @@ describe("test:sync-performance", () => {
           values.length = 0;
         }
       }
-      // Also seed a large DurableJob backlog once.
-    await allowMultiShopDispatchReadySeed(prisma);
+      // Also seed a large DurableJob backlog once (multi-shop inserts OK under D-050).
       if (empty === emptyCounts[0]) {
         for (let n = 0; n < 50_000; n += 500) {
           const chunk: string[] = [];
@@ -415,8 +416,7 @@ describe("test:sync-performance", () => {
     // Extra empty shops for total=20k when activeDue < total are already covered
     // by maxActive=20k; for total 1k/5k we simply leave extras present (OK for gate).
 
-    await allowMultiShopDispatchReadySeed(prisma);
-    // ≥50k DurableJob backlog on a subset of shops.
+    // ≥50k DurableJob backlog on a subset of shops (multi-shop bulk seed native).
     for (let n = 0; n < 50_000; n += 500) {
       const chunk: string[] = [];
       for (let i = 0; i < 500 && n + i < 50_000; i++) {
@@ -528,7 +528,8 @@ describe("test:sync-performance", () => {
       expect(planText).not.toMatch(/Seq Scan on "DurableJob"/i);
       expect(planText).toMatch(/DurableJob_shop_claim_/);
 
-      // due_shops LockRows path (alias r, not r_1/r_2 heal aliases): rows ≤ shopCap.
+      // due_shops LockRows: rows returned/locked ≤ shopCap; under SKIP LOCKED
+      // contention physical walk may be lockedPrefix+shopCap (allow small slack).
       for (const line of planText.split("\n")) {
         if (!/on "DispatchReadyShop" r\s+\(/i.test(line)) continue;
         if (!/\(actual /i.test(line)) continue;
@@ -598,7 +599,6 @@ describe("test:sync-performance", () => {
         ON CONFLICT (id) DO NOTHING
       `);
     }
-    await allowMultiShopDispatchReadySeed(prisma);
     for (let i = 0; i < shopCount; i += 200) {
       const chunk: string[] = [];
       for (let j = 0; j < 200 && i + j < shopCount; j++) {
