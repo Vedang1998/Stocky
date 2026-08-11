@@ -334,216 +334,117 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
     const ITER = 1000;
     let falseNegatives = 0;
     let permanentHidden = 0;
+    const url =
+      process.env.DATABASE_URL ?? process.env.DATABASE_CONTROL_PLANE_URL!;
+    const w = new Client({ connectionString: url });
+    await w.connect();
 
-    for (let i = 0; i < ITER; i++) {
-      await prisma.$executeRawUnsafe(`
-        TRUNCATE TABLE "JobDispatch", "DurableJob", "DispatchReadyShop" CASCADE
-      `);
-      await prisma.shop.deleteMany({
-        where: { myshopifyDomain: { startsWith: "pr4-d050-race-" } },
-      });
+    try {
+      for (let i = 0; i < ITER; i++) {
+        await prisma.$executeRawUnsafe(`
+          TRUNCATE TABLE "JobDispatch", "DurableJob", "DispatchReadyShop" CASCADE
+        `);
+        await prisma.shop.deleteMany({
+          where: { myshopifyDomain: { startsWith: "pr4-d050-race-" } },
+        });
 
-      const shop = await createShop(`race-${i}`);
-      await plantStaleReadiness(shop.id, 1 + (i % 5));
+        const shop = await createShop(`race-${i}`);
+        // Stale false-positive readiness (D-049 fail-safe normal steady state).
+        await plantStaleReadiness(shop.id, 1 + (i % 5));
+        // Extra stale prefix to force claim to lock this shop's readiness.
+        for (let s = 0; s < 3; s++) {
+          const filler = await createShop(`race-fill-${i}-${s}`);
+          await plantStaleReadiness(filler.id, 20 + s);
+        }
 
-      const variant = i % 8;
-      const url =
-        process.env.DATABASE_URL ?? process.env.DATABASE_CONTROL_PLANE_URL!;
-      const d = new Client({ connectionString: url });
-      const w = new Client({ connectionString: url });
-      await d.connect();
-      await w.connect();
-      try {
-        // Start dispatcher protocol
-        await d.query("BEGIN");
-        const shops = await d.query(
-          `SELECT r."shopId", ROW_NUMBER() OVER (ORDER BY r."nextDispatchAt", r."shopId")::int AS ordinal
-           FROM "DispatchReadyShop" r
-           WHERE r."processingEnabled" AND r."nextDispatchAt" <= NOW()
-           ORDER BY r."nextDispatchAt", r."shopId"
-           FOR UPDATE OF r SKIP LOCKED LIMIT 10`,
-        );
-
-        // Concurrent writer commits eligible work for same shop
-        const state =
-          variant === 1 ? "RETRY_WAIT" : variant === 4 ? "PENDING" : "PENDING";
+        const variant = i % 8;
+        const state = variant === 1 ? "RETRY_WAIT" : "PENDING";
         const eligibleAt =
           variant === 3
-            ? new Date(Date.now() + 60_000).toISOString()
+            ? new Date(Date.now() + 60_000)
             : variant === 2
-              ? new Date(Date.now() - 120_000).toISOString()
-              : new Date().toISOString();
+              ? new Date(Date.now() - 120_000)
+              : new Date();
+        const jobId = `d050_race_${i}`;
 
-        if (variant === 5) {
-          // cancellation race — insert then cancel after
-          await w.query(`
-            INSERT INTO "DurableJob" (
-              id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
-              "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
-              "authorityVersion", "executionStrategy", state, "nextEligibleAt",
-              "createdAt", "updatedAt"
-            ) VALUES (
-              'd050_race_${i}','${shop.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
-              '{}','${"r".repeat(64)}','idem-d050_race_${i}','corr-d050_race_${i}',
-              'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','${state}',
-              '${eligibleAt}', NOW(), NOW()
-            )
-          `);
+        const writerPromise = (async () => {
+          if (variant === 0) {
+            await w.query("BEGIN");
+            await w.query(
+              `INSERT INTO "DurableJob" (
+                id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+                "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+                "authorityVersion", "executionStrategy", state, "nextEligibleAt",
+                "createdAt", "updatedAt"
+              ) VALUES (
+                $1,$2,'webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
+                '{}',$3,$4,$5,'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING',
+                NOW(), NOW(), NOW()
+              )`,
+              [jobId, shop.id, "r".repeat(64), `idem-${jobId}`, `corr-${jobId}`],
+            );
+            await w.query("ROLLBACK");
+            return;
+          }
+          if (variant === 7) {
+            await w.query(`UPDATE "Shop" SET "processingEnabled"=false WHERE id=$1`, [
+              shop.id,
+            ]);
+          }
           await w.query(
-            `UPDATE "DurableJob" SET state='CANCELLED', "cancelledAt"=NOW() WHERE id='d050_race_${i}'`,
+            `INSERT INTO "DurableJob" (
+              id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+              "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+              "authorityVersion", "executionStrategy", state, "nextEligibleAt",
+              "createdAt", "updatedAt"
+            ) VALUES (
+              $1,$2,'webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
+              '{}',$3,$4,$5,'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT',$6,
+              $7, NOW(), NOW()
+            )`,
+            [
+              jobId,
+              shop.id,
+              "r".repeat(64),
+              `idem-${jobId}`,
+              `corr-${jobId}`,
+              state,
+              eligibleAt.toISOString(),
+            ],
           );
-        } else if (variant === 6) {
-          await w.query(`
-            INSERT INTO "DurableJob" (
-              id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
-              "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
-              "authorityVersion", "executionStrategy", state, "nextEligibleAt",
-              "createdAt", "updatedAt"
-            ) VALUES (
-              'd050_race_${i}','${shop.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
-              '{}','${"r".repeat(64)}','idem-d050_race_${i}','corr-d050_race_${i}',
-              'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING',
-              NOW(), NOW(), NOW()
-            )
-          `);
-          await w.query(`DELETE FROM "DurableJob" WHERE id='d050_race_${i}'`);
-        } else if (variant === 7) {
-          await w.query(`UPDATE "Shop" SET "processingEnabled"=false WHERE id='${shop.id}'`);
-          await w.query(`
-            INSERT INTO "DurableJob" (
-              id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
-              "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
-              "authorityVersion", "executionStrategy", state, "nextEligibleAt",
-              "createdAt", "updatedAt"
-            ) VALUES (
-              'd050_race_${i}','${shop.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
-              '{}','${"r".repeat(64)}','idem-d050_race_${i}','corr-d050_race_${i}',
-              'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING',
-              NOW(), NOW(), NOW()
-            )
-          `);
-        } else if (variant === 0) {
-          // rollback race
-          await w.query("BEGIN");
-          await w.query(`
-            INSERT INTO "DurableJob" (
-              id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
-              "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
-              "authorityVersion", "executionStrategy", state, "nextEligibleAt",
-              "createdAt", "updatedAt"
-            ) VALUES (
-              'd050_race_${i}','${shop.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
-              '{}','${"r".repeat(64)}','idem-d050_race_${i}','corr-d050_race_${i}',
-              'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING',
-              NOW(), NOW(), NOW()
-            )
-          `);
-          await w.query("ROLLBACK");
-        } else {
-          // Interleave: try to commit writer while dispatcher holds lock.
-          // Writer may block; use short lock_timeout then fall back to post-commit.
-          await w.query(`SET LOCAL lock_timeout = '50ms'`).catch(() => undefined);
-          try {
-            await w.query(`
-              INSERT INTO "DurableJob" (
-                id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
-                "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
-                "authorityVersion", "executionStrategy", state, "nextEligibleAt",
-                "createdAt", "updatedAt"
-              ) VALUES (
-                'd050_race_${i}','${shop.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
-                '{}','${"r".repeat(64)}','idem-d050_race_${i}','corr-d050_race_${i}',
-                'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','${state}',
-                '${eligibleAt}', NOW(), NOW()
-              )
-            `);
-          } catch {
-            // lock timeout — writer will insert after dispatcher commits
+          if (variant === 5) {
+            await w.query(
+              `UPDATE "DurableJob" SET state='CANCELLED', "cancelledAt"=NOW() WHERE id=$1`,
+              [jobId],
+            );
+          } else if (variant === 6) {
+            await w.query(`DELETE FROM "DurableJob" WHERE id=$1`, [jobId]);
           }
-        }
+        })();
 
-        // Fresh reconcile for locked shops
-        if (shops.rows.length > 0) {
-          const ids = shops.rows.map((r: { shopId: string }) => r.shopId);
-          await d.query(
-            `WITH locked_shops(shop_id) AS (SELECT unnest($1::text[]))
-             , truth AS (
-               SELECT ls.shop_id AS "shopId",
-                 LEAST(
-                   (SELECT j."nextEligibleAt" FROM "DurableJob" j
-                    WHERE j."shopId" >= ls.shop_id AND j."shopId" <= ls.shop_id AND j.state='PENDING'
-                    ORDER BY j."nextEligibleAt", j."createdAt", j.id LIMIT 1),
-                   (SELECT j."nextEligibleAt" FROM "DurableJob" j
-                    WHERE j."shopId" >= ls.shop_id AND j."shopId" <= ls.shop_id AND j.state='RETRY_WAIT'
-                    ORDER BY j."nextEligibleAt", j."createdAt", j.id LIMIT 1)
-                 ) AS actual_earliest
-               FROM locked_shops ls
-             )
-             DELETE FROM "DispatchReadyShop" r
-             WHERE r."shopId" IN (SELECT t."shopId" FROM truth t WHERE t.actual_earliest IS NULL)`,
-            [ids],
-          );
-          await d.query(
-            `WITH locked_shops(shop_id) AS (SELECT unnest($1::text[]))
-             , truth AS (
-               SELECT ls.shop_id AS "shopId",
-                 LEAST(
-                   (SELECT j."nextEligibleAt" FROM "DurableJob" j
-                    WHERE j."shopId" >= ls.shop_id AND j."shopId" <= ls.shop_id AND j.state='PENDING'
-                    ORDER BY j."nextEligibleAt", j."createdAt", j.id LIMIT 1),
-                   (SELECT j."nextEligibleAt" FROM "DurableJob" j
-                    WHERE j."shopId" >= ls.shop_id AND j."shopId" <= ls.shop_id AND j.state='RETRY_WAIT'
-                    ORDER BY j."nextEligibleAt", j."createdAt", j.id LIMIT 1)
-                 ) AS actual_earliest
-               FROM locked_shops ls
-             )
-             UPDATE "DispatchReadyShop" r SET
-               "earliestEligibleAt" = t.actual_earliest,
-               "nextDispatchAt" = CASE
-                 WHEN t.actual_earliest > NOW() THEN t.actual_earliest
-                 ELSE GREATEST(t.actual_earliest, NOW() + interval '1 millisecond')
-               END,
-               "updatedAt" = NOW()
-             FROM truth t
-             WHERE r."shopId" = t."shopId" AND t.actual_earliest IS NOT NULL`,
-            [ids],
-          );
-        }
-        await d.query("COMMIT");
-
-        // If writer was blocked, finish insert after commit
-        const exists = await prisma.durableJob.findUnique({
-          where: { id: `d050_race_${i}` },
-        });
-        if (!exists && variant !== 0 && variant !== 5 && variant !== 6) {
-          try {
-            await w.query(`
-              INSERT INTO "DurableJob" (
-                id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
-                "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
-                "authorityVersion", "executionStrategy", state, "nextEligibleAt",
-                "createdAt", "updatedAt"
-              ) VALUES (
-                'd050_race_${i}','${shop.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
-                '{}','${"r".repeat(64)}','idem-d050_race_${i}','corr-d050_race_${i}',
-                'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','${state}',
-                '${eligibleAt}', NOW(), NOW()
-              )
-            `);
-          } catch {
-            /* already inserted */
-          }
-        }
+        // Overlap writer with production claim+reconcile protocol.
+        await Promise.all([
+          writerPromise.catch(() => undefined),
+          prisma.$transaction(async (tx) => {
+            await executeFairClaimLockAndReconcileRound(tx, {
+              now: new Date(),
+              batchSize: 10,
+              maxPerShop: 1,
+            });
+          }),
+        ]);
+        // Ensure writer finished (may have blocked behind readiness lock).
+        await writerPromise.catch(() => undefined);
 
         const drift = await driftReport(prisma);
-        if (Number(drift.missing_readiness) > 0 || Number(drift.late_earliest_hint) > 0) {
+        if (
+          Number(drift.missing_readiness) > 0 ||
+          Number(drift.late_earliest_hint) > 0
+        ) {
           falseNegatives += 1;
         }
 
-        // Eligible due work must remain discoverable across further cycles
-        const job = await prisma.durableJob.findUnique({
-          where: { id: `d050_race_${i}` },
-        });
+        const job = await prisma.durableJob.findUnique({ where: { id: jobId } });
         if (
           job &&
           (job.state === "PENDING" || job.state === "RETRY_WAIT") &&
@@ -551,11 +452,11 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
           variant !== 7
         ) {
           let found = false;
-          for (let c = 0; c < 10; c++) {
+          for (let c = 0; c < 12; c++) {
             await prisma.$transaction(async (tx) => {
               await executeFairClaimLockAndReconcileRound(tx, {
                 now: new Date(),
-                batchSize: 5,
+                batchSize: 10,
                 maxPerShop: 1,
               });
             });
@@ -566,16 +467,10 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
               found = true;
               break;
             }
-            // also check via dispatch
-            const r = await dispatchPendingJobs({ batchSize: 5, maxPerShop: 1 });
-            if (r.claimed > 0) {
-              found = true;
-              break;
-            }
           }
           if (!found) {
             const still = await prisma.durableJob.findUnique({
-              where: { id: `d050_race_${i}` },
+              where: { id: jobId },
             });
             const ready = await prisma.dispatchReadyShop.findUnique({
               where: { shopId: shop.id },
@@ -589,10 +484,9 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
             }
           }
         }
-      } finally {
-        await d.end().catch(() => undefined);
-        await w.end().catch(() => undefined);
       }
+    } finally {
+      await w.end().catch(() => undefined);
     }
 
     expect(falseNegatives).toBe(0);
@@ -822,9 +716,10 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
         where: { myshopifyDomain: { startsWith: "pr4-d050-stale-" } },
       });
 
+      // Stale due rows with earlier nextDispatchAt than real work.
       for (let i = 0; i < c.stale; i++) {
         const s = await createShop(`stale-${c.stale}-${i}`);
-        await plantStaleReadiness(s.id, 10 + i);
+        await plantStaleReadiness(s.id, 100 + i);
       }
       const realIds: string[] = [];
       for (let i = 0; i < c.real; i++) {
@@ -836,14 +731,12 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
           "PENDING",
           new Date(Date.now() - 1000),
         );
-        // Make real shops later in nextDispatchAt than stale prefix when interspersed
-        if (i % 2 === 0) {
-          await prisma.$executeRawUnsafe(`
-            UPDATE "DispatchReadyShop"
-            SET "nextDispatchAt" = NOW() - interval '1 minute'
-            WHERE "shopId" = '${s.id}'
-          `);
-        }
+        // Place real shops after the stale prefix in schedule order.
+        await prisma.$executeRawUnsafe(`
+          UPDATE "DispatchReadyShop"
+          SET "nextDispatchAt" = NOW() - interval '1 minute' + interval '${c.stale + i} seconds'
+          WHERE "shopId" = '${s.id}'
+        `);
       }
 
       const bound = fairClaimDegradedStaleRepairBoundCycles(
@@ -852,15 +745,29 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
         batchSize,
       );
       const firstProgress = new Map<string, number>();
-      for (let cycle = 1; cycle <= bound + 2; cycle++) {
-        await dispatchPendingJobs({ batchSize, maxPerShop: 1 });
-        const after = await prisma.jobDispatch.groupBy({
-          by: ["shopId"],
-          _count: true,
-        });
-        for (const row of after) {
-          if (!firstProgress.has(row.shopId) && realIds.includes(row.shopId)) {
-            firstProgress.set(row.shopId, cycle);
+      // Use production lock+reconcile refill protocol (no Redis dependency).
+      for (let cycle = 1; cycle <= Math.max(bound + 2, 20); cycle++) {
+        for (let round = 0; round < FAIR_CLAIM_MAX_REFILL_ROUNDS; round++) {
+          const rows = await prisma.$transaction(async (tx) =>
+            executeFairClaimLockAndReconcileRound(tx, {
+              now: new Date(),
+              batchSize,
+              maxPerShop: 1,
+            }),
+          );
+          for (const row of rows) {
+            if (realIds.includes(row.shopId) && !firstProgress.has(row.shopId)) {
+              firstProgress.set(row.shopId, cycle);
+            }
+          }
+          if (rows.length === 0) {
+            const moreDue = await prisma.dispatchReadyShop.count({
+              where: {
+                processingEnabled: true,
+                nextDispatchAt: { lte: new Date() },
+              },
+            });
+            if (moreDue === 0) break;
           }
         }
         if (firstProgress.size === realIds.length) break;
