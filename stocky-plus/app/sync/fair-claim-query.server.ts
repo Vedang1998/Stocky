@@ -1,47 +1,31 @@
 /**
- * Production-owned fair-claim candidate selection + locking SQL
- * (D-048 / D-049 / F-PR4-11 / F-PR4-13).
+ * Production-owned fair-claim SQL builders (D-048 / D-049 / D-050 /
+ * F-PR4-11 / F-PR4-13 / F-CLAUDE-D049-01…06).
  *
- * Single Prisma.sql definition used by:
- * 1. claimBatchFair at runtime; and
- * 2. the EXPLAIN (ANALYZE, BUFFERS) performance harness.
+ * D-050 splits the former single claim+reconcile statement into:
+ *   A. Scheduler lock — due DispatchReadyShop FOR UPDATE SKIP LOCKED LIMIT shopCap
+ *   B. Job-candidate lock — PENDING/RETRY_WAIT FOR UPDATE SKIP LOCKED for those shops
+ *   C. Lease CAS (dispatcher) — DISPATCH_LEASED
+ *   D. Fresh-snapshot readiness reconciliation — ONLY place that deletes /
+ *      reschedules / advances readiness non-monotonically
  *
- * Algorithm (D-049 DispatchReadyShop scheduling key):
- * - Lock a bounded set of due, processing-enabled shops from DispatchReadyShop
- *   WHERE nextDispatchAt <= now ORDER BY nextDispatchAt, shopId
- *   FOR UPDATE SKIP LOCKED LIMIT shopCap.
- * - Index leading order matches the predicate/order
- *   (processingEnabled, nextDispatchAt, shopId) so PostgreSQL can stop after
- *   the bounded window — no active-due Seq Scan / Bitmap walk / fairness Sort.
- * - Reconcile each locked shop against DurableJob ground truth (bounded
- *   shop-scoped index access):
- *     * no eligible work → DELETE readiness (one path; never UPDATE+DELETE);
- *     * actual earliest future → reschedule nextDispatchAt to that time;
- *     * actual earliest due → claim candidates and advance
- *       nextDispatchAt = GREATEST(actual, now + 1ms) (strict fairness).
- * - Per-shop LATERAL picks (PENDING ∪ RETRY_WAIT) capped at maxPerShop via
- *   shop-claim indexes (range-pair predicate retained — R-122).
- * - Prefer first-round (shop_slot=1) across selected shops before second slots.
- * - FOR UPDATE SKIP LOCKED on DurableJob, final LIMIT batchSize.
+ * A/B/C/D run in one READ COMMITTED transaction. D is a later statement so it
+ * obtains a fresh statement snapshot while readiness row locks from A are held.
  *
- * Boundedness (per claim SQL invocation / refill round):
- * - Scheduling rows examined ≤ shopCap (SQL LIMIT + matching schedule index).
- * - Candidate DurableJob rows ≤ shopCap × maxPerShop (SQL LIMIT).
- * - Independent of total Shop count, total DurableJob backlog, and active-due
- *   population size.
+ * Boundedness (per scheduler/candidate invocation / refill round):
+ * - Scheduler rows RETURNED/LOCKED ≤ shopCap.
+ * - Under SKIP LOCKED contention, physical index walk may examine
+ *   lockedPrefix + shopCap (truthful bound; F-CLAUDE-D049-04).
+ * - Candidate DurableJob rows ≤ shopCap × maxPerShop.
  *
- * Refill (claimBatchFair):
- * - Up to FAIR_CLAIM_MAX_REFILL_ROUNDS rounds when reconciliation removes or
- *   reschedules stale rows and unlocked due shops remain.
- * - Max shops locked per dispatch invocation =
- *   shopCap × FAIR_CLAIM_MAX_REFILL_ROUNDS.
- * - Max jobs returned per invocation = batchSize.
+ * Healthy-state starvation bound (F-PR4-13):
+ *   ceil(activeEligibleShops / shopCap)
+ * Degraded stale-contaminated bound (F-CLAUDE-D049-06):
+ *   ceil(staleDueRows / repairCapacity) + ceil(activeEligibleShops / shopCap)
+ *   where repairCapacity = FAIR_CLAIM_MAX_REFILL_ROUNDS × shopCap
  *
- * Eventual-progress invariant (documented):
- * A continuously eligible, processing-enabled shop receives a service
- * opportunity within ceil(activeEligibleShops / shopCap) successful dispatch
- * cycles when capacity exists (shopCap = batchSize). Served shops move
- * nextDispatchAt strictly after the dispatch cutoff so ties cannot re-win.
+ * Approved urgent-arrival anti-reset maximum delay: 1 second
+ * (URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS). Fairness floor after service: +1ms.
  */
 import { Prisma } from "@prisma/client";
 import { readFileSync } from "node:fs";
@@ -52,6 +36,13 @@ export type FairClaimQueryParams = {
   now: Date;
   batchSize: number;
   maxPerShop: number;
+};
+
+export type FairClaimSchedulerShop = {
+  shopId: string;
+  nextDispatchAt: Date;
+  earliestEligibleAt: Date;
+  ordinal: number;
 };
 
 /** SQL-enforced shop discovery cap — enough to fill a batch at 1 job/shop. */
@@ -79,6 +70,19 @@ export function maxFairClaimCandidateRows(
  */
 export const FAIR_CLAIM_MAX_REFILL_ROUNDS = 8;
 
+/** Strict fairness floor after a service opportunity (ms past cutoff). */
+export const FAIRNESS_FLOOR_OFFSET_MS = 1;
+
+/**
+ * Approved maximum delay (ms) that the urgent-arrival anti-reset policy may
+ * leave a due arrival behind a future nextDispatchAt before pulling it earlier.
+ * Documented D-050 scheduling tradeoff (F-CLAUDE-D049-05).
+ */
+export const URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS = 1_000;
+
+/** Default bounded expired-lease recovery batch size (D-050). */
+export const DEFAULT_EXPIRED_LEASE_RECOVERY_LIMIT = 100;
+
 /** Max shops locked across all refill rounds of one dispatch invocation. */
 export function maxFairClaimShopsLockedPerInvocation(
   batchSize: number,
@@ -87,8 +91,9 @@ export function maxFairClaimShopsLockedPerInvocation(
 }
 
 /**
- * Starvation bound: cycles until every continuously eligible shop has had a
- * service opportunity under nextDispatchAt rotation with strict forward movement.
+ * Healthy-state starvation bound: cycles until every continuously eligible shop
+ * has had a service opportunity under nextDispatchAt rotation (F-PR4-13).
+ * Does NOT apply to a queue contaminated with stale false-positive readiness.
  */
 export function fairClaimStarvationBoundCycles(
   activeEligibleShops: number,
@@ -102,96 +107,126 @@ export function fairClaimStarvationBoundCycles(
 }
 
 /**
- * Locked fair-claim SELECT — identical text for runtime claim and EXPLAIN harness.
- * Parameters are Prisma-bound (no string interpolation of values).
- *
- * Per-shop DurableJob predicates retain the D-047 range-pair
- * (`"shopId" >= $id AND "shopId" <= $id`) so PostgreSQL selects
- * DurableJob_shop_claim_* Index Only Scans. Bare equality still competes with
- * DurableJob_eligible_*_idx (P3-D047-R09 / R-122 residual — documented, CI-gated,
- * not a PostgreSQL contract). Selection itself is driven from DispatchReadyShop,
- * never from a Shop Seq Scan.
+ * Degraded-state repair + service bound when stale due readiness precedes real
+ * work (F-CLAUDE-D049-06). Repair capacity per invocation = R × shopCap.
  */
-export function buildFairClaimLockedSelectSql(
-  params: FairClaimQueryParams,
-): Prisma.Sql {
-  const shopCap = shopCapForFairClaim(params.batchSize);
-  const { now, batchSize, maxPerShop } = params;
-  // Strict fairness: served continuously-eligible shops move at least 1ms past cutoff.
-  const fairnessFloor = new Date(now.getTime() + 1);
+export function fairClaimDegradedStaleRepairBoundCycles(
+  staleDueRows: number,
+  activeEligibleShops: number,
+  batchSize: number,
+  refillRounds: number = FAIR_CLAIM_MAX_REFILL_ROUNDS,
+): number {
+  if (!Number.isInteger(staleDueRows) || staleDueRows < 0) {
+    throw new Error("fair_claim_stale_rows_invalid");
+  }
+  if (!Number.isInteger(refillRounds) || refillRounds < 1) {
+    throw new Error("fair_claim_refill_rounds_invalid");
+  }
+  const shopCap = shopCapForFairClaim(batchSize);
+  const repairCapacity = refillRounds * shopCap;
+  const repairCycles =
+    staleDueRows === 0 ? 0 : Math.ceil(staleDueRows / repairCapacity);
+  return (
+    repairCycles + fairClaimStarvationBoundCycles(activeEligibleShops, batchSize)
+  );
+}
+
+/**
+ * Truthful SKIP LOCKED contention bound: physical index tuples visited may be
+ * lockedPrefix + shopCap; rows returned/locked remain ≤ shopCap.
+ */
+export function fairClaimLockedPrefixExaminedBound(
+  lockedPrefix: number,
+  shopCap: number,
+): number {
+  if (!Number.isInteger(lockedPrefix) || lockedPrefix < 0) {
+    throw new Error("fair_claim_locked_prefix_invalid");
+  }
+  if (!Number.isInteger(shopCap) || shopCap < 1) {
+    throw new Error("fair_claim_shop_cap_invalid");
+  }
+  return lockedPrefix + shopCap;
+}
+
+/**
+ * A. Production scheduler statement — locks due readiness only.
+ * Does NOT delete, reschedule, recompute earliest, or heal.
+ */
+export function buildFairClaimSchedulerLockSql(params: {
+  now: Date;
+  shopCap: number;
+}): Prisma.Sql {
+  const { now, shopCap } = params;
+  if (!Number.isInteger(shopCap) || shopCap < 1) {
+    throw new Error("fair_claim_shop_cap_invalid");
+  }
+  return Prisma.sql`
+SELECT
+  r."shopId",
+  r."nextDispatchAt",
+  r."earliestEligibleAt",
+  ROW_NUMBER() OVER (
+    ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
+  )::int AS ordinal
+FROM "DispatchReadyShop" r
+WHERE r."processingEnabled" = true
+  AND r."nextDispatchAt" <= ${now}
+ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
+FOR UPDATE OF r SKIP LOCKED
+LIMIT ${shopCap}
+`;
+}
+
+/**
+ * B. Production job-candidate statement — locks DurableJob for already-locked
+ * ordered shops. No shop re-discovery. Parameterized VALUES ordinal relation.
+ */
+export function buildFairClaimJobCandidateSql(params: {
+  now: Date;
+  batchSize: number;
+  maxPerShop: number;
+  shops: Array<{ shopId: string; ordinal: number }>;
+}): Prisma.Sql {
+  const { now, batchSize, maxPerShop, shops } = params;
+  if (shops.length === 0) {
+    // Empty VALUES is invalid SQL — return a no-row sentinel.
+    return Prisma.sql`
+SELECT
+  NULL::text AS id,
+  NULL::text AS "shopId",
+  NULL::text AS "jobType",
+  NULL::text AS source,
+  NULL::text AS "queueName",
+  NULL::text AS "payloadSchemaVersion",
+  NULL::jsonb AS "sanitizedPayload",
+  NULL::text AS "payloadDigest",
+  NULL::text AS "correlationId",
+  NULL::text AS "causationId",
+  NULL::"DurableJobState" AS state,
+  NULL::text AS "executionStrategy",
+  NULL::int AS "activeDispatchSequence"
+WHERE false
+`;
+  }
+
+  const shopValues = Prisma.join(
+    shops.map(
+      (s) => Prisma.sql`(${s.shopId}::text, ${s.ordinal}::int)`,
+    ),
+  );
 
   return Prisma.sql`
-WITH due_shops AS MATERIALIZED (
-  SELECT r."shopId"
-  FROM "DispatchReadyShop" r
-  WHERE r."processingEnabled" = true
-    AND r."nextDispatchAt" <= ${now}
-  ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
-  FOR UPDATE OF r SKIP LOCKED
-  LIMIT ${shopCap}
-),
-truth AS (
-  SELECT
-    d."shopId",
-    LEAST(
-      (
-        SELECT j."nextEligibleAt"
-        FROM "DurableJob" j
-        WHERE j."shopId" >= d."shopId" AND j."shopId" <= d."shopId"
-          AND j.state = 'PENDING'
-        ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
-        LIMIT 1
-      ),
-      (
-        SELECT j."nextEligibleAt"
-        FROM "DurableJob" j
-        WHERE j."shopId" >= d."shopId" AND j."shopId" <= d."shopId"
-          AND j.state = 'RETRY_WAIT'
-        ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
-        LIMIT 1
-      )
-    ) AS actual_earliest
-  FROM due_shops d
-),
-heal_empty AS (
-  DELETE FROM "DispatchReadyShop" r
-  WHERE r."shopId" IN (
-    SELECT t."shopId" FROM truth t WHERE t.actual_earliest IS NULL
-  )
-  RETURNING r."shopId"
-),
-reschedule_future AS (
-  UPDATE "DispatchReadyShop" r
-  SET
-    "earliestEligibleAt" = t.actual_earliest,
-    "nextDispatchAt" = t.actual_earliest,
-    "updatedAt" = ${now}
-  FROM truth t
-  WHERE r."shopId" = t."shopId"
-    AND t.actual_earliest IS NOT NULL
-    AND t.actual_earliest > ${now}
-  RETURNING r."shopId"
-),
-served AS (
-  UPDATE "DispatchReadyShop" r
-  SET
-    "earliestEligibleAt" = t.actual_earliest,
-    "nextDispatchAt" = GREATEST(t.actual_earliest, ${fairnessFloor}::timestamp(3)),
-    "lastServedAt" = ${now},
-    "updatedAt" = ${now}
-  FROM truth t
-  WHERE r."shopId" = t."shopId"
-    AND t.actual_earliest IS NOT NULL
-    AND t.actual_earliest <= ${now}
-  RETURNING r."shopId"
+WITH locked_shops(shop_id, shop_ord) AS (
+  VALUES ${shopValues}
 ),
 candidates AS (
   SELECT
     x.id,
     x."nextEligibleAt",
     x."createdAt",
+    ls.shop_ord,
     x.shop_slot
-  FROM served ss
+  FROM locked_shops ls
   CROSS JOIN LATERAL (
     SELECT
       id,
@@ -204,7 +239,7 @@ candidates AS (
       (
         SELECT id, "nextEligibleAt", "createdAt"
         FROM "DurableJob"
-        WHERE "shopId" >= ss."shopId" AND "shopId" <= ss."shopId"
+        WHERE "shopId" >= ls.shop_id AND "shopId" <= ls.shop_id
           AND state = 'PENDING'
           AND "nextEligibleAt" <= ${now}
         ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
@@ -214,7 +249,7 @@ candidates AS (
       (
         SELECT id, "nextEligibleAt", "createdAt"
         FROM "DurableJob"
-        WHERE "shopId" >= ss."shopId" AND "shopId" <= ss."shopId"
+        WHERE "shopId" >= ls.shop_id AND "shopId" <= ls.shop_id
           AND state = 'RETRY_WAIT'
           AND "nextEligibleAt" <= ${now}
         ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
@@ -226,9 +261,9 @@ candidates AS (
   ) x
 ),
 ordered_candidates AS (
-  SELECT id, "nextEligibleAt", "createdAt", shop_slot
+  SELECT id, "nextEligibleAt", "createdAt", shop_ord, shop_slot
   FROM candidates
-  ORDER BY shop_slot ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+  ORDER BY shop_slot ASC, shop_ord ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
   LIMIT ${batchSize}
 ),
 locked AS (
@@ -239,12 +274,13 @@ locked AS (
     d."executionStrategy"::text AS "executionStrategy",
     d."activeDispatchSequence",
     oc.shop_slot,
+    oc.shop_ord,
     oc."nextEligibleAt" AS claim_next_eligible_at,
     oc."createdAt" AS claim_created_at
   FROM ordered_candidates oc
   INNER JOIN "DurableJob" d ON d.id = oc.id
   WHERE d.state IN ('PENDING', 'RETRY_WAIT')
-  ORDER BY oc.shop_slot ASC, oc."nextEligibleAt" ASC, oc."createdAt" ASC, oc.id ASC
+  ORDER BY oc.shop_slot ASC, oc.shop_ord ASC, oc."nextEligibleAt" ASC, oc."createdAt" ASC, oc.id ASC
   FOR UPDATE OF d SKIP LOCKED
 )
 SELECT
@@ -253,11 +289,258 @@ SELECT
   "correlationId", "causationId", state,
   "executionStrategy", "activeDispatchSequence"
 FROM locked
-ORDER BY shop_slot ASC, claim_next_eligible_at ASC, claim_created_at ASC, id ASC
+ORDER BY shop_slot ASC, shop_ord ASC, claim_next_eligible_at ASC, claim_created_at ASC, id ASC
 `;
 }
 
-/** EXPLAIN wrapper over the identical production SELECT (no test-only SQL branch). */
+/**
+ * D. Fresh-snapshot readiness reconciliation for already-locked shops.
+ * ONLY place that performs non-monotonic readiness correction (delete /
+ * future reschedule / fairness advance). Must run as a later statement in the
+ * same READ COMMITTED transaction after scheduler/claim so it sees a fresh
+ * snapshot of DurableJob truth.
+ */
+export function buildFairClaimReadinessReconcileSql(params: {
+  now: Date;
+  shopIds: string[];
+}): Prisma.Sql {
+  const { now, shopIds } = params;
+  const fairnessFloor = new Date(now.getTime() + FAIRNESS_FLOOR_OFFSET_MS);
+
+  if (shopIds.length === 0) {
+    return Prisma.sql`SELECT NULL::text AS "shopId", NULL::text AS action WHERE false`;
+  }
+
+  const shopValues = Prisma.join(shopIds.map((id) => Prisma.sql`(${id}::text)`));
+
+  return Prisma.sql`
+WITH locked_shops(shop_id) AS (
+  VALUES ${shopValues}
+),
+truth AS (
+  SELECT
+    ls.shop_id AS "shopId",
+    LEAST(
+      (
+        SELECT j."nextEligibleAt"
+        FROM "DurableJob" j
+        WHERE j."shopId" >= ls.shop_id AND j."shopId" <= ls.shop_id
+          AND j.state = 'PENDING'
+        ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
+        LIMIT 1
+      ),
+      (
+        SELECT j."nextEligibleAt"
+        FROM "DurableJob" j
+        WHERE j."shopId" >= ls.shop_id AND j."shopId" <= ls.shop_id
+          AND j.state = 'RETRY_WAIT'
+        ORDER BY j."shopId" ASC, j."nextEligibleAt" ASC, j."createdAt" ASC, j.id ASC
+        LIMIT 1
+      )
+    ) AS actual_earliest
+  FROM locked_shops ls
+),
+heal_empty AS (
+  DELETE FROM "DispatchReadyShop" r
+  WHERE r."shopId" IN (
+    SELECT t."shopId" FROM truth t WHERE t.actual_earliest IS NULL
+  )
+  RETURNING r."shopId", 'deleted'::text AS action
+),
+reschedule_future AS (
+  UPDATE "DispatchReadyShop" r
+  SET
+    "earliestEligibleAt" = t.actual_earliest,
+    "nextDispatchAt" = t.actual_earliest,
+    "updatedAt" = ${now}
+  FROM truth t
+  WHERE r."shopId" = t."shopId"
+    AND t.actual_earliest IS NOT NULL
+    AND t.actual_earliest > ${now}
+  RETURNING r."shopId", 'rescheduled_future'::text AS action
+),
+served AS (
+  UPDATE "DispatchReadyShop" r
+  SET
+    "earliestEligibleAt" = t.actual_earliest,
+    "nextDispatchAt" = GREATEST(t.actual_earliest, ${fairnessFloor}::timestamp(3)),
+    "lastServedAt" = ${now},
+    "updatedAt" = ${now}
+  FROM truth t
+  WHERE r."shopId" = t."shopId"
+    AND t.actual_earliest IS NOT NULL
+    AND t.actual_earliest <= ${now}
+  RETURNING r."shopId", 'served'::text AS action
+)
+SELECT "shopId", action FROM heal_empty
+UNION ALL
+SELECT "shopId", action FROM reschedule_future
+UNION ALL
+SELECT "shopId", action FROM served
+`;
+}
+
+/**
+ * Bounded expired-lease recovery select+update (D-050 / F-CLAUDE-D049-02).
+ * Deterministic ORDER BY + FOR UPDATE SKIP LOCKED + LIMIT so concurrent
+ * dispatchers recover without duplicates and no single merchant blocks the
+ * platform. Statement-level readiness maintenance processes all affected shops.
+ */
+export function buildExpiredDispatchLeaseRecoverySql(params: {
+  now: Date;
+  limit: number;
+}): Prisma.Sql {
+  const { now, limit } = params;
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new Error("expired_lease_recovery_limit_invalid");
+  }
+  return Prisma.sql`
+WITH expired AS (
+  SELECT d.id
+  FROM "DurableJob" d
+  WHERE d.state = 'DISPATCH_LEASED'
+    AND d."leaseExpiresAt" IS NOT NULL
+    AND d."leaseExpiresAt" < ${now}
+  ORDER BY d."leaseExpiresAt" ASC, d.id ASC
+  FOR UPDATE OF d SKIP LOCKED
+  LIMIT ${limit}
+)
+UPDATE "DurableJob" j
+SET
+  state = 'PENDING',
+  "leaseOwner" = NULL,
+  "leaseExpiresAt" = NULL,
+  "updatedAt" = ${now}
+FROM expired e
+WHERE j.id = e.id
+RETURNING j.id, j."shopId"
+`;
+}
+
+/** EXPLAIN wrapper for the scheduler lock statement. */
+export function buildFairClaimSchedulerExplainSql(params: {
+  now: Date;
+  shopCap: number;
+}): Prisma.Sql {
+  return Prisma.sql`
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+${buildFairClaimSchedulerLockSql(params)}
+`;
+}
+
+/** EXPLAIN wrapper for the job-candidate statement. */
+export function buildFairClaimJobCandidateExplainSql(params: {
+  now: Date;
+  batchSize: number;
+  maxPerShop: number;
+  shops: Array<{ shopId: string; ordinal: number }>;
+}): Prisma.Sql {
+  return Prisma.sql`
+EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+${buildFairClaimJobCandidateSql(params)}
+`;
+}
+
+/**
+ * @deprecated D-050 split — prefer scheduler + candidate builders.
+ * Compatibility alias used by older plan harness call sites that still expect
+ * a single EXPLAIN subject covering readiness lock + job candidates.
+ * Intentionally excludes reconciliation (separate fresh-snapshot statement).
+ */
+export function buildFairClaimLockedSelectSql(
+  params: FairClaimQueryParams,
+): Prisma.Sql {
+  const shopCap = shopCapForFairClaim(params.batchSize);
+  const { now, batchSize, maxPerShop } = params;
+  return Prisma.sql`
+WITH due_shops AS MATERIALIZED (
+  SELECT
+    r."shopId",
+    ROW_NUMBER() OVER (
+      ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
+    )::int AS ordinal
+  FROM "DispatchReadyShop" r
+  WHERE r."processingEnabled" = true
+    AND r."nextDispatchAt" <= ${now}
+  ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
+  FOR UPDATE OF r SKIP LOCKED
+  LIMIT ${shopCap}
+),
+candidates AS (
+  SELECT
+    x.id,
+    x."nextEligibleAt",
+    x."createdAt",
+    ds.ordinal AS shop_ord,
+    x.shop_slot
+  FROM due_shops ds
+  CROSS JOIN LATERAL (
+    SELECT
+      id,
+      "nextEligibleAt",
+      "createdAt",
+      ROW_NUMBER() OVER (
+        ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+      ) AS shop_slot
+    FROM (
+      (
+        SELECT id, "nextEligibleAt", "createdAt"
+        FROM "DurableJob"
+        WHERE "shopId" >= ds."shopId" AND "shopId" <= ds."shopId"
+          AND state = 'PENDING'
+          AND "nextEligibleAt" <= ${now}
+        ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+        LIMIT ${maxPerShop}
+      )
+      UNION ALL
+      (
+        SELECT id, "nextEligibleAt", "createdAt"
+        FROM "DurableJob"
+        WHERE "shopId" >= ds."shopId" AND "shopId" <= ds."shopId"
+          AND state = 'RETRY_WAIT'
+          AND "nextEligibleAt" <= ${now}
+        ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+        LIMIT ${maxPerShop}
+      )
+    ) merged
+    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+    LIMIT ${maxPerShop}
+  ) x
+),
+ordered_candidates AS (
+  SELECT id, "nextEligibleAt", "createdAt", shop_ord, shop_slot
+  FROM candidates
+  ORDER BY shop_slot ASC, shop_ord ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+  LIMIT ${batchSize}
+),
+locked AS (
+  SELECT
+    d.id, d."shopId", d."jobType", d.source, d."queueName",
+    d."payloadSchemaVersion", d."sanitizedPayload", d."payloadDigest",
+    d."correlationId", d."causationId", d.state,
+    d."executionStrategy"::text AS "executionStrategy",
+    d."activeDispatchSequence",
+    oc.shop_slot,
+    oc.shop_ord,
+    oc."nextEligibleAt" AS claim_next_eligible_at,
+    oc."createdAt" AS claim_created_at
+  FROM ordered_candidates oc
+  INNER JOIN "DurableJob" d ON d.id = oc.id
+  WHERE d.state IN ('PENDING', 'RETRY_WAIT')
+  ORDER BY oc.shop_slot ASC, oc.shop_ord ASC, oc."nextEligibleAt" ASC, oc."createdAt" ASC, oc.id ASC
+  FOR UPDATE OF d SKIP LOCKED
+)
+SELECT
+  id, "shopId", "jobType", source, "queueName",
+  "payloadSchemaVersion", "sanitizedPayload", "payloadDigest",
+  "correlationId", "causationId", state,
+  "executionStrategy", "activeDispatchSequence"
+FROM locked
+ORDER BY shop_slot ASC, shop_ord ASC, claim_next_eligible_at ASC, claim_created_at ASC, id ASC
+`;
+}
+
+/** EXPLAIN wrapper over the compatibility claim SELECT (no reconcile). */
 export function buildFairClaimLockedExplainSql(
   params: FairClaimQueryParams,
 ): Prisma.Sql {
@@ -267,31 +550,101 @@ ${buildFairClaimLockedSelectSql(params)}
 `;
 }
 
-/**
- * Stable identity fingerprint of the production claim SQL shape.
- * Used by tests to prove runtime and harness share one builder (no duplicated text).
- */
 export function fairClaimSqlIdentity(): {
   module: string;
   selectBuilder: typeof buildFairClaimLockedSelectSql;
   explainBuilder: typeof buildFairClaimLockedExplainSql;
-  algorithm: "dispatch_ready_shop_next_dispatch_at_fair_skip_locked";
+  schedulerBuilder: typeof buildFairClaimSchedulerLockSql;
+  candidateBuilder: typeof buildFairClaimJobCandidateSql;
+  reconcileBuilder: typeof buildFairClaimReadinessReconcileSql;
+  algorithm: "dispatch_ready_shop_split_claim_fresh_reconcile_d050";
 } {
   return {
     module: "app/sync/fair-claim-query.server.ts",
     selectBuilder: buildFairClaimLockedSelectSql,
     explainBuilder: buildFairClaimLockedExplainSql,
-    algorithm: "dispatch_ready_shop_next_dispatch_at_fair_skip_locked",
+    schedulerBuilder: buildFairClaimSchedulerLockSql,
+    candidateBuilder: buildFairClaimJobCandidateSql,
+    reconcileBuilder: buildFairClaimReadinessReconcileSql,
+    algorithm: "dispatch_ready_shop_split_claim_fresh_reconcile_d050",
   };
 }
 
-/** Absolute module path string expected in dispatcher import (source-boundary guard). */
+/**
+ * One fair-claim lock + fresh-snapshot reconcile round (no lease).
+ * Used by lifecycle/heal tests and mirrors dispatcher steps A/B/D.
+ */
+export async function executeFairClaimLockAndReconcileRound<TClient extends {
+  $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
+}>(
+  tx: TClient,
+  params: FairClaimQueryParams,
+): Promise<
+  Array<{
+    id: string;
+    shopId: string;
+    jobType: string;
+    source: string;
+    queueName: string;
+    payloadSchemaVersion: string;
+    sanitizedPayload: Prisma.JsonValue;
+    payloadDigest: string;
+    correlationId: string;
+    causationId: string | null;
+    state: string;
+    executionStrategy: string;
+    activeDispatchSequence: number | null;
+  }>
+> {
+  const shopCap = shopCapForFairClaim(params.batchSize);
+  const lockedShops = await tx.$queryRaw<FairClaimSchedulerShop[]>(
+    buildFairClaimSchedulerLockSql({ now: params.now, shopCap }),
+  );
+  if (lockedShops.length === 0) return [];
+
+  const rows = await tx.$queryRaw<
+    Array<{
+      id: string;
+      shopId: string;
+      jobType: string;
+      source: string;
+      queueName: string;
+      payloadSchemaVersion: string;
+      sanitizedPayload: Prisma.JsonValue;
+      payloadDigest: string;
+      correlationId: string;
+      causationId: string | null;
+      state: string;
+      executionStrategy: string;
+      activeDispatchSequence: number | null;
+    }>
+  >(
+    buildFairClaimJobCandidateSql({
+      now: params.now,
+      batchSize: params.batchSize,
+      maxPerShop: params.maxPerShop,
+      shops: lockedShops.map((s) => ({
+        shopId: s.shopId,
+        ordinal: Number(s.ordinal),
+      })),
+    }),
+  );
+
+  await tx.$queryRaw(
+    buildFairClaimReadinessReconcileSql({
+      now: params.now,
+      shopIds: lockedShops.map((s) => s.shopId),
+    }),
+  );
+
+  return rows;
+}
+
 export const FAIR_CLAIM_QUERY_MODULE_PATH = "./fair-claim-query.server";
 
 /**
- * Independent source-boundary guard: dispatcher.server.ts must import and call
- * buildFairClaimLockedSelectSql, and must not embed a second claim SELECT body.
- * Reads the dispatcher source from disk — not a self-referential builder===builder check.
+ * Independent source-boundary guard: dispatcher must import and call the D-050
+ * split builders (scheduler + candidate + reconcile), not embed inline claim SQL.
  */
 export function assertDispatcherUsesProductionFairClaimSql(
   dispatcherSource?: string,
@@ -308,32 +661,40 @@ export function assertDispatcherUsesProductionFairClaimSql(
       "dispatcher_missing_fair_claim_import: expected import from fair-claim-query.server",
     );
   }
-  if (!/buildFairClaimLockedSelectSql\s*\(/.test(source)) {
+  if (!/buildFairClaimSchedulerLockSql\s*\(/.test(source)) {
     throw new Error(
-      "dispatcher_missing_fair_claim_call: claimBatchFair must call buildFairClaimLockedSelectSql",
+      "dispatcher_missing_scheduler_call: claimBatchFair must call buildFairClaimSchedulerLockSql",
     );
   }
-  // Detect a future inline raw claim that bypasses the production builder.
+  if (!/buildFairClaimJobCandidateSql\s*\(/.test(source)) {
+    throw new Error(
+      "dispatcher_missing_candidate_call: claimBatchFair must call buildFairClaimJobCandidateSql",
+    );
+  }
+  if (!/buildFairClaimReadinessReconcileSql\s*\(/.test(source)) {
+    throw new Error(
+      "dispatcher_missing_reconcile_call: claimBatchFair must call buildFairClaimReadinessReconcileSql",
+    );
+  }
+  const withoutBuilderCalls = source
+    .replace(/buildFairClaimSchedulerLockSql\s*\(\s*\{[^}]*\}\s*\)/g, "BUILDER()")
+    .replace(/buildFairClaimJobCandidateSql\s*\(\s*\{[\s\S]*?\}\s*\)/g, "BUILDER()")
+    .replace(
+      /buildFairClaimReadinessReconcileSql\s*\(\s*\{[^}]*\}\s*\)/g,
+      "BUILDER()",
+    )
+    .replace(
+      /buildExpiredDispatchLeaseRecoverySql\s*\(\s*\{[^}]*\}\s*\)/g,
+      "BUILDER()",
+    )
+    .replace(/buildFairClaimLockedSelectSql\s*\(\s*\{[^}]*\}\s*\)/g, "BUILDER()");
   if (
-    /\$queryRaw[\s\S]{0,200}WITH\s+due_shops|\$queryRaw[\s\S]{0,200}WITH\s+shop_seed|\$queryRaw[\s\S]{0,400}FOR UPDATE[\s\S]{0,80}SKIP LOCKED/.test(
-      source.replace(
-        /buildFairClaimLockedSelectSql\s*\([^)]*\)/g,
-        "buildFairClaimLockedSelectSql(/*ok*/)",
-      ),
+    /\$queryRaw(?:Unsafe)?(?:<[^>]+>)?\s*(?:`|\(\s*`)[\s\S]*?\bWITH\b[\s\S]*?\bFOR UPDATE\b[\s\S]*?\bSKIP LOCKED\b/.test(
+      withoutBuilderCalls,
     )
   ) {
-    const withoutBuilderCall = source.replace(
-      /buildFairClaimLockedSelectSql\s*\(\s*\{[^}]*\}\s*\)/g,
-      "BUILDER_CALL()",
+    throw new Error(
+      "dispatcher_inline_claim_sql: claim SQL must use production fair-claim builders only",
     );
-    if (
-      /\$queryRaw(?:Unsafe)?(?:<[^>]+>)?\s*(?:`|\(\s*`)[\s\S]*?\bWITH\b[\s\S]*?\bFOR UPDATE\b[\s\S]*?\bSKIP LOCKED\b/.test(
-        withoutBuilderCall,
-      )
-    ) {
-      throw new Error(
-        "dispatcher_inline_claim_sql: claim SQL must use buildFairClaimLockedSelectSql only",
-      );
-    }
   }
 }

@@ -29,8 +29,14 @@ import {
   type QueueDispatchPresence,
 } from "./queue-presence.server";
 import {
+  DEFAULT_EXPIRED_LEASE_RECOVERY_LIMIT,
   FAIR_CLAIM_MAX_REFILL_ROUNDS,
-  buildFairClaimLockedSelectSql,
+  buildExpiredDispatchLeaseRecoverySql,
+  buildFairClaimJobCandidateSql,
+  buildFairClaimReadinessReconcileSql,
+  buildFairClaimSchedulerLockSql,
+  shopCapForFairClaim,
+  type FairClaimSchedulerShop,
 } from "./fair-claim-query.server";
 import type { Queue } from "bullmq";
 
@@ -132,31 +138,27 @@ function resolveQueue(job: ClaimedJobRow): Queue {
 async function recoverExpiredDispatchLeases(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   now: Date,
+  limit: number = DEFAULT_EXPIRED_LEASE_RECOVERY_LIMIT,
 ): Promise<number> {
-  // CAS: DISPATCH_LEASED → PENDING only when lease expired.
-  const result = await prisma.$executeRaw`
-    UPDATE "DurableJob"
-    SET
-      state = 'PENDING',
-      "leaseOwner" = NULL,
-      "leaseExpiresAt" = NULL,
-      "updatedAt" = ${now}
-    WHERE state = 'DISPATCH_LEASED'
-      AND "leaseExpiresAt" IS NOT NULL
-      AND "leaseExpiresAt" < ${now}
-  `;
-  return Number(result);
+  // Bounded deterministic recovery: FOR UPDATE SKIP LOCKED + LIMIT.
+  // Statement-level readiness triggers process all affected shops safely
+  // (D-050 / F-CLAUDE-D049-02). Concurrent dispatchers do not duplicate.
+  const recovered = await prisma.$queryRaw<Array<{ id: string; shopId: string }>>(
+    buildExpiredDispatchLeaseRecoverySql({ now, limit }),
+  );
+  return recovered.length;
 }
 
 /**
- * Fair claim: DispatchReadyShop nextDispatchAt lock + ground-truth reconcile +
- * per-shop LATERAL selection (PENDING + RETRY_WAIT) with FOR UPDATE SKIP LOCKED
- * (F-PR4-11 / F-PR4-13 / D-048 / D-049). Uses production-owned fair-claim-query SQL.
+ * Fair claim (D-050 split protocol, READ COMMITTED):
+ *   A. Lock due DispatchReadyShop rows (scheduler) — no reconcile.
+ *   B. Lock PENDING/RETRY_WAIT candidates for those shops.
+ *   C. Lease CAS → DISPATCH_LEASED.
+ *   D. Fresh-snapshot readiness reconciliation (only non-monotonic correction).
  *
- * Bounded refill: each round locks ≤ shopCap readiness rows and may heal stale
- * false positives. Additional rounds run only while claimed < batchSize and a
- * prior round observed locked/healed shops without filling — capped at
- * FAIR_CLAIM_MAX_REFILL_ROUNDS. Max jobs returned = batchSize.
+ * Bounded refill: each round locks ≤ shopCap readiness rows; reconciliation may
+ * heal stale false positives. Additional rounds while claimed < batchSize and
+ * unlocked due shops remain — capped at FAIR_CLAIM_MAX_REFILL_ROUNDS.
  */
 async function claimBatchFair(
   prisma: ReturnType<typeof getControlPlanePrisma>,
@@ -176,27 +178,26 @@ async function claimBatchFair(
       const remaining = batchSize - claimed.length;
       if (remaining <= 0) break;
 
+      const shopCap = shopCapForFairClaim(remaining);
+      const lockedShops = await tx.$queryRaw<FairClaimSchedulerShop[]>(
+        buildFairClaimSchedulerLockSql({ now, shopCap }),
+      );
+
+      if (lockedShops.length === 0) {
+        break;
+      }
+
       const rows = await tx.$queryRaw<ClaimedJobRow[]>(
-        buildFairClaimLockedSelectSql({
+        buildFairClaimJobCandidateSql({
           now,
           batchSize: remaining,
           maxPerShop,
+          shops: lockedShops.map((s) => ({
+            shopId: s.shopId,
+            ordinal: Number(s.ordinal),
+          })),
         }),
       );
-
-      if (rows.length === 0) {
-        // Reconciliation may have healed/rescheduled the locked window without
-        // returning jobs. Continue bounded refill only while unlocked due shops remain.
-        const moreDue = await tx.$queryRaw<Array<{ ok: number }>>`
-          SELECT 1 AS ok
-          FROM "DispatchReadyShop"
-          WHERE "processingEnabled" = true
-            AND "nextDispatchAt" <= ${now}
-          LIMIT 1
-        `;
-        if (moreDue.length === 0) break;
-        continue;
-      }
 
       let leasedThisRound = 0;
       for (const row of rows) {
@@ -220,9 +221,27 @@ async function claimBatchFair(
         if (claimed.length >= batchSize) break;
       }
 
+      // D. Fresh-snapshot reconciliation while readiness locks still held.
+      await tx.$queryRaw(
+        buildFairClaimReadinessReconcileSql({
+          now,
+          shopIds: lockedShops.map((s) => s.shopId),
+        }),
+      );
+
       // If this round locked readiness but leased nothing, reconciliation may
       // have healed stale rows — continue bounded refill while capacity remains.
-      if (leasedThisRound === 0 && claimed.length >= batchSize) break;
+      if (leasedThisRound === 0) {
+        const moreDue = await tx.$queryRaw<Array<{ ok: number }>>`
+          SELECT 1 AS ok
+          FROM "DispatchReadyShop"
+          WHERE "processingEnabled" = true
+            AND "nextDispatchAt" <= ${now}
+          LIMIT 1
+        `;
+        if (moreDue.length === 0) break;
+        continue;
+      }
     }
 
     return claimed;
