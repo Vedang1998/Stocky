@@ -160,20 +160,30 @@ export function buildFairClaimSchedulerLockSql(params: {
   if (!Number.isInteger(shopCap) || shopCap < 1) {
     throw new Error("fair_claim_shop_cap_invalid");
   }
+  // FOR UPDATE cannot appear in the same SELECT level as window functions
+  // (PostgreSQL 0A000). Lock in a MATERIALIZED CTE, then assign ordinals.
   return Prisma.sql`
+WITH due AS MATERIALIZED (
+  SELECT
+    r."shopId",
+    r."nextDispatchAt",
+    r."earliestEligibleAt"
+  FROM "DispatchReadyShop" r
+  WHERE r."processingEnabled" = true
+    AND r."nextDispatchAt" <= ${now}
+  ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
+  FOR UPDATE OF r SKIP LOCKED
+  LIMIT ${shopCap}
+)
 SELECT
-  r."shopId",
-  r."nextDispatchAt",
-  r."earliestEligibleAt",
+  d."shopId",
+  d."nextDispatchAt",
+  d."earliestEligibleAt",
   ROW_NUMBER() OVER (
-    ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
+    ORDER BY d."nextDispatchAt" ASC, d."shopId" ASC
   )::int AS ordinal
-FROM "DispatchReadyShop" r
-WHERE r."processingEnabled" = true
-  AND r."nextDispatchAt" <= ${now}
-ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
-FOR UPDATE OF r SKIP LOCKED
-LIMIT ${shopCap}
+FROM due d
+ORDER BY d."nextDispatchAt" ASC, d."shopId" ASC
 `;
 }
 
@@ -456,15 +466,21 @@ export function buildFairClaimLockedSelectSql(
 WITH due_shops AS MATERIALIZED (
   SELECT
     r."shopId",
-    ROW_NUMBER() OVER (
-      ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
-    )::int AS ordinal
+    r."nextDispatchAt"
   FROM "DispatchReadyShop" r
   WHERE r."processingEnabled" = true
     AND r."nextDispatchAt" <= ${now}
   ORDER BY r."nextDispatchAt" ASC, r."shopId" ASC
   FOR UPDATE OF r SKIP LOCKED
   LIMIT ${shopCap}
+),
+due_shops_ord AS (
+  SELECT
+    "shopId",
+    ROW_NUMBER() OVER (
+      ORDER BY "nextDispatchAt" ASC, "shopId" ASC
+    )::int AS ordinal
+  FROM due_shops
 ),
 candidates AS (
   SELECT
@@ -473,7 +489,7 @@ candidates AS (
     x."createdAt",
     ds.ordinal AS shop_ord,
     x.shop_slot
-  FROM due_shops ds
+  FROM due_shops_ord ds
   CROSS JOIN LATERAL (
     SELECT
       id,

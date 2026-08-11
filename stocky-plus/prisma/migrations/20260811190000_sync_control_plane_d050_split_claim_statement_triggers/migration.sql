@@ -7,7 +7,8 @@
 -- (stocky.allow_multi_shop_dispatch_ready / stocky.dispatch_ready_shop_tx).
 -- Multi-shop DurableJob / Shop statements are supported via AFTER STATEMENT
 -- transition-table triggers that upsert readiness in deterministic shopId ASC
--- lock order.
+-- order. A transaction-scoped advisory lock serializes readiness upserts to
+-- eliminate opposite-order multi-statement deadlocks without custom GUC.
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 1) Shared monotonic upsert helper (shopId ASC caller responsibility)
@@ -22,6 +23,11 @@ AS $$
 DECLARE
   shop_enabled boolean;
 BEGIN
+  -- Structural deadlock freedom (D-050): serialize readiness upserts per txn.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
+  );
+
   SELECT s."processingEnabled" INTO shop_enabled
   FROM public."Shop" s WHERE s.id = target_shop;
   IF shop_enabled IS NULL THEN
@@ -71,7 +77,7 @@ $$;
 REVOKE ALL ON FUNCTION stocky_dispatch_ready_shop_monotonic_upsert(text, timestamp(3)) FROM PUBLIC;
 
 COMMENT ON FUNCTION stocky_dispatch_ready_shop_monotonic_upsert(text, timestamp(3)) IS
-  'D-050: monotonic LEAST readiness upsert for one shop; caller must invoke in shopId ASC order';
+  'D-050: monotonic LEAST readiness upsert; advisory xact lock + shopId ASC callers';
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- 2) Statement-level DurableJob INSERT maintenance
@@ -91,7 +97,7 @@ BEGIN
     GROUP BY n."shopId"
     ORDER BY n."shopId" ASC
   LOOP
-    PERFORM stocky_dispatch_ready_shop_monotonic_upsert(rec.shop_id, rec.hint_at);
+    PERFORM public.stocky_dispatch_ready_shop_monotonic_upsert(rec.shop_id, rec.hint_at);
   END LOOP;
   RETURN NULL;
 END;
@@ -141,7 +147,7 @@ BEGIN
     GROUP BY n."shopId"
     ORDER BY n."shopId" ASC
   LOOP
-    PERFORM stocky_dispatch_ready_shop_monotonic_upsert(rec.shop_id, rec.hint_at);
+    PERFORM public.stocky_dispatch_ready_shop_monotonic_upsert(rec.shop_id, rec.hint_at);
   END LOOP;
   RETURN NULL;
 END;
