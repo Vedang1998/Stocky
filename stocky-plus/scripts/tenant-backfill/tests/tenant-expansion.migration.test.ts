@@ -43,6 +43,7 @@ const ALL_MIGRATION_NAMES = [
   "20260806220000_sync_control_plane_d047_fair_claim_indexes",
   "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
   "20260807150000_sync_control_plane_d049_dispatch_schedule",
+  "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
 ] as const;
 
 /**
@@ -294,6 +295,7 @@ function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
     "20260806220000_sync_control_plane_d047_fair_claim_indexes",
     "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
     "20260807150000_sync_control_plane_d049_dispatch_schedule",
+    "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
   ] as const;
 
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -389,6 +391,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260806220000_sync_control_plane_d047_fair_claim_indexes",
         "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+        "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
         "migration_lock.toml",
       ]),
     );
@@ -426,6 +429,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(initOut).not.toContain(
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+        "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
       );
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
@@ -450,6 +454,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+        "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
@@ -498,6 +503,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+        "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
       );
 
       await assertMigrationRecordedExactlyOnce(prisma);
