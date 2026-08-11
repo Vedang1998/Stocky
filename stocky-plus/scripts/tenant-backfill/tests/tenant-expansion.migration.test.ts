@@ -429,6 +429,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(initOut).not.toContain(
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+      );
+      expect(initOut).not.toContain(
         "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
       );
 
@@ -454,6 +456,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+      );
+      expect(restOut).toContain(
         "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
       );
 
@@ -503,6 +507,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       );
       expect(restOut).toContain(
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
+      );
+      expect(restOut).toContain(
         "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
       );
 
