@@ -110,9 +110,12 @@ Do **not** treat Cursor evidence as finding closure.
 
 | Field | Value |
 |---|---|
-| Tip SHA at docs sync | _fill after green CI on live PR tip_ |
-| PUSH run / job / conclusion | _TBD_ |
-| PR run / job / conclusion | _TBD_ |
+| Tip SHA | `50dcac90a3e5ea14070be544bb489204c5fe9b76` |
+| PUSH run | `31538650458` — job `93935723648` — **success** — skipped steps **0** |
+| PR run | `31538654788` — job `93935742400` — **success** — skipped steps **0** |
+| Superseded failed/cancelled on earlier D-050 tips | PUSH `31528361295` (42501 nested upsert), `31531416199` (typecheck), `31534235713` (inventory stale), `31534591645` (45m timeout cancel); matching PR runs likewise superseded |
+
+CI job timeout raised to 70m on this tip so the expanded D-050 adversarial + full migration chain can finish without material skips.
 
 ## Final status
 
