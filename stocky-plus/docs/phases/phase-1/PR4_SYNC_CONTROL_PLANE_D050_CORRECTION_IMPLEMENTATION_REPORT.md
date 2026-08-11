@@ -31,12 +31,25 @@ D-050 splits the former single claim+reconcile statement into:
 
 Additional platform changes:
 
-- Statement-level transition-table triggers; callers upsert in `shopId ASC` order.
-- Transaction-scoped advisory lock (`pg_advisory_xact_lock`) serializes readiness upserts.
+- Statement-level transition-table triggers; readiness upserts run **inline** in
+  trigger bodies (shopId ASC). No nested helper callable from trigger context —
+  `REVOKE ALL … FROM PUBLIC` plus `stocky_control_plane` / `stocky_runtime`
+  writers must not require EXECUTE on a separate upsert function (CI tip
+  `ecf4d1a…` failed with `42501 permission denied for function
+  stocky_dispatch_ready_shop_monotonic_upsert`; corrected by inlining).
+- Transaction-scoped advisory lock (`pg_advisory_xact_lock`) serializes readiness
+  upserts **only when readiness work exists** (inside statement-trigger loops).
+  Non-eligible DurableJob UPDATEs such as lease CAS must not acquire the lock
+  while the dispatcher already holds `DispatchReadyShop` row locks.
 - Custom GUC single-shop correctness boundary **removed**.
 - Bounded expired-lease recovery with `FOR UPDATE SKIP LOCKED` (no GUC abort path).
 
 **PostgreSQL transition-table note:** PostgreSQL forbids transition tables on triggers with column lists (`ERROR 0A000`). D-050 uses `AFTER UPDATE` **without** a column list and filters relevant rows inside the trigger function.
+
+**Privilege note:** PostgreSQL does not require EXECUTE to *fire* a trigger
+function, but does require EXECUTE for functions the trigger body calls.
+Inlining matches the D-049 privilege model without expanding SECURITY DEFINER
+or granting runtime EXECUTE on readiness helpers.
 
 ## Scheduling / fairness contracts
 
@@ -69,14 +82,40 @@ Additional platform changes:
 - Inventory-write flags: **OFF** / DEFAULT OFF
 - No production deployment, backfill, ownership repair, or inventory mutation
 
-## CI / test evidence (placeholders — fill later)
+## CI / test evidence (Cursor — pending independent verification)
 
-| Check | Status |
+Do **not** treat Cursor evidence as finding closure.
+
+### Local (disposable PostgreSQL 16.14 + Redis 7)
+
+| Check | Result |
 |---|---|
-| Exact-head CI run / job / conclusion | _TBD — tests still running; fill after exact-head CI completes_ |
-| Focused D-050 adversarial suite (`d050-corrections`) | _TBD — tests still running_ |
-| Sync-integration / fair-claim plan gates | _TBD — tests still running_ |
-| Observed test counts | _TBD_ |
-| Implementation tip SHA at CI | _TBD — record after CI on the live PR tip_ |
+| `prisma validate` / `prisma generate` | passed |
+| `prisma migrate deploy` (twice, tip includes D-050) | passed — 16 migrations; second apply no-op |
+| `test:sync-performance` (includes d049 + d050 + dispatch-ready + eligible-plan + sync-performance) | **53 passed** |
+| `d050-corrections.test.ts` | **11 passed** (incl. ≥1000 claim-vs-insert races; 25s multi-shop deadlock; expired-lease 1/2/100 shops; stale fairness matrix) |
+| `d049-readiness-corrections.test.ts` | **7 passed** |
+| `test:sync-dispatch-recovery` | **29 passed** |
+| `lint` | passed |
+| `tsc --noEmit` | passed |
+| `build` | passed |
+| `graphql-codegen` | passed |
+| `sync:inventory:check` | passed |
+| `tenant:access:inventory:check` | passed |
+| `tenant:access:audit` | passed (`tenant_access_audit_ok`, 0 violations after EX-SYNC-TEST-016) |
+| `tenant:enforcement:inventory:check` | passed |
+| `git diff --check` | clean |
+
+### Exact-head CI
+
+| Field | Value |
+|---|---|
+| Tip SHA at docs sync | _fill after green CI on live PR tip_ |
+| PUSH run / job / conclusion | _TBD_ |
+| PR run / job / conclusion | _TBD_ |
+
+## Final status
+
+`D-050 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
 
 PR #20 remains **OPEN, DRAFT, UNMERGED**. Status after Cursor work: `D-050 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`.

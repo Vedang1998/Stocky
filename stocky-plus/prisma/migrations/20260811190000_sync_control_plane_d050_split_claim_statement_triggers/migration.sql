@@ -9,78 +9,15 @@
 -- transition-table triggers that upsert readiness in deterministic shopId ASC
 -- order. A transaction-scoped advisory lock serializes readiness upserts to
 -- eliminate opposite-order multi-statement deadlocks without custom GUC.
+--
+-- Privilege model (matches D-049): trigger bodies perform maintenance INLINE.
+-- Nested helper calls are forbidden here — REVOKE ALL … FROM PUBLIC plus
+-- stocky_runtime writers would otherwise hit 42501 on nested EXECUTE
+-- (PostgreSQL does not require EXECUTE to fire a trigger function, but DOES
+-- require EXECUTE for functions the trigger body calls).
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 1) Shared monotonic upsert helper (shopId ASC caller responsibility)
--- ═══════════════════════════════════════════════════════════════════════════
-CREATE OR REPLACE FUNCTION stocky_dispatch_ready_shop_monotonic_upsert(
-  target_shop text,
-  hint_at timestamp(3)
-) RETURNS void
-LANGUAGE plpgsql
-SET search_path = pg_catalog, pg_temp
-AS $$
-DECLARE
-  shop_enabled boolean;
-BEGIN
-  -- Structural deadlock freedom (D-050): serialize readiness upserts per txn.
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
-  );
-
-  SELECT s."processingEnabled" INTO shop_enabled
-  FROM public."Shop" s WHERE s.id = target_shop;
-  IF shop_enabled IS NULL THEN
-    shop_enabled := false;
-  END IF;
-
-  INSERT INTO public."DispatchReadyShop" (
-    "shopId",
-    "earliestEligibleAt",
-    "nextDispatchAt",
-    "lastServedAt",
-    "processingEnabled",
-    "createdAt",
-    "updatedAt"
-  ) VALUES (
-    target_shop,
-    hint_at,
-    hint_at,
-    NULL,
-    shop_enabled,
-    CURRENT_TIMESTAMP,
-    CURRENT_TIMESTAMP
-  )
-  ON CONFLICT ("shopId") DO UPDATE SET
-    "earliestEligibleAt" = LEAST(
-      public."DispatchReadyShop"."earliestEligibleAt",
-      EXCLUDED."earliestEligibleAt"
-    ),
-    -- Scheduling key: create/pull-earlier only for future-eligibility windows.
-    -- Urgent-arrival anti-reset: never delay a due arrival beyond the approved
-    -- 1-second maximum (D-050 / F-CLAUDE-D049-05 contract).
-    "nextDispatchAt" = CASE
-      WHEN public."DispatchReadyShop"."earliestEligibleAt" > clock_timestamp()
-           AND EXCLUDED."nextDispatchAt" < public."DispatchReadyShop"."nextDispatchAt"
-      THEN EXCLUDED."nextDispatchAt"
-      WHEN EXCLUDED."nextDispatchAt" <= clock_timestamp()
-           AND public."DispatchReadyShop"."nextDispatchAt"
-               > clock_timestamp() + interval '1 second'
-      THEN EXCLUDED."nextDispatchAt"
-      ELSE public."DispatchReadyShop"."nextDispatchAt"
-    END,
-    "processingEnabled" = EXCLUDED."processingEnabled",
-    "updatedAt" = CURRENT_TIMESTAMP;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION stocky_dispatch_ready_shop_monotonic_upsert(text, timestamp(3)) FROM PUBLIC;
-
-COMMENT ON FUNCTION stocky_dispatch_ready_shop_monotonic_upsert(text, timestamp(3)) IS
-  'D-050: monotonic LEAST readiness upsert; advisory xact lock + shopId ASC callers';
-
--- ═══════════════════════════════════════════════════════════════════════════
--- 2) Statement-level DurableJob INSERT maintenance
+-- 1) Statement-level DurableJob INSERT maintenance (inline upsert)
 -- ═══════════════════════════════════════════════════════════════════════════
 CREATE OR REPLACE FUNCTION stocky_dispatch_ready_shop_maintain_insert_stmt()
 RETURNS trigger
@@ -89,7 +26,13 @@ SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   rec record;
+  shop_enabled boolean;
 BEGIN
+  -- Advisory lock is taken ONLY when readiness work exists (inside the loop).
+  -- Lease CAS / non-eligible DurableJob UPDATEs must not acquire it while the
+  -- dispatcher already holds DispatchReadyShop row locks — that deadlocks with
+  -- Shop.processingEnabled statement triggers that lock ReadyShop after the
+  -- advisory (observed under D-050 processingEnabled bulk + dispatch stress).
   FOR rec IN
     SELECT n."shopId" AS shop_id, MIN(n."nextEligibleAt") AS hint_at
     FROM new_rows n
@@ -97,7 +40,53 @@ BEGIN
     GROUP BY n."shopId"
     ORDER BY n."shopId" ASC
   LOOP
-    PERFORM public.stocky_dispatch_ready_shop_monotonic_upsert(rec.shop_id, rec.hint_at);
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
+    );
+
+    SELECT s."processingEnabled" INTO shop_enabled
+    FROM public."Shop" s WHERE s.id = rec.shop_id;
+    IF shop_enabled IS NULL THEN
+      shop_enabled := false;
+    END IF;
+
+    INSERT INTO public."DispatchReadyShop" (
+      "shopId",
+      "earliestEligibleAt",
+      "nextDispatchAt",
+      "lastServedAt",
+      "processingEnabled",
+      "createdAt",
+      "updatedAt"
+    ) VALUES (
+      rec.shop_id,
+      rec.hint_at,
+      rec.hint_at,
+      NULL,
+      shop_enabled,
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    )
+    ON CONFLICT ("shopId") DO UPDATE SET
+      "earliestEligibleAt" = LEAST(
+        public."DispatchReadyShop"."earliestEligibleAt",
+        EXCLUDED."earliestEligibleAt"
+      ),
+      -- Scheduling key: create/pull-earlier only for future-eligibility windows.
+      -- Urgent-arrival anti-reset: never delay a due arrival beyond the approved
+      -- 1-second maximum (D-050 / F-CLAUDE-D049-05 contract).
+      "nextDispatchAt" = CASE
+        WHEN public."DispatchReadyShop"."earliestEligibleAt" > clock_timestamp()
+             AND EXCLUDED."nextDispatchAt" < public."DispatchReadyShop"."nextDispatchAt"
+        THEN EXCLUDED."nextDispatchAt"
+        WHEN EXCLUDED."nextDispatchAt" <= clock_timestamp()
+             AND public."DispatchReadyShop"."nextDispatchAt"
+                 > clock_timestamp() + interval '1 second'
+        THEN EXCLUDED."nextDispatchAt"
+        ELSE public."DispatchReadyShop"."nextDispatchAt"
+      END,
+      "processingEnabled" = EXCLUDED."processingEnabled",
+      "updatedAt" = CURRENT_TIMESTAMP;
   END LOOP;
   RETURN NULL;
 END;
@@ -114,10 +103,10 @@ CREATE TRIGGER stocky_dispatch_ready_shop_maintain_insert_stmt_trg
 REVOKE ALL ON FUNCTION stocky_dispatch_ready_shop_maintain_insert_stmt() FROM PUBLIC;
 
 COMMENT ON FUNCTION stocky_dispatch_ready_shop_maintain_insert_stmt() IS
-  'D-050: statement-level monotonic readiness upsert on DurableJob INSERT (shopId ASC)';
+  'D-050: statement-level monotonic readiness upsert on DurableJob INSERT (shopId ASC, inline)';
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 3) Statement-level DurableJob UPDATE (state / nextEligibleAt) maintenance
+-- 2) Statement-level DurableJob UPDATE (state / nextEligibleAt) maintenance
 -- ═══════════════════════════════════════════════════════════════════════════
 CREATE OR REPLACE FUNCTION stocky_dispatch_ready_shop_maintain_update_stmt()
 RETURNS trigger
@@ -126,11 +115,13 @@ SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   rec record;
+  shop_enabled boolean;
 BEGIN
   -- Eligible arrivals / earlier schedules only. Terminal/removal/later
   -- transitions do not move readiness later (fail-safe false positives).
   -- Filter replaces UPDATE OF state, nextEligibleAt (incompatible with
   -- transition tables on PostgreSQL).
+  -- Advisory lock only inside the work loop (see INSERT trigger comment).
   FOR rec IN
     SELECT n."shopId" AS shop_id, MIN(n."nextEligibleAt") AS hint_at
     FROM new_rows n
@@ -147,7 +138,50 @@ BEGIN
     GROUP BY n."shopId"
     ORDER BY n."shopId" ASC
   LOOP
-    PERFORM public.stocky_dispatch_ready_shop_monotonic_upsert(rec.shop_id, rec.hint_at);
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
+    );
+
+    SELECT s."processingEnabled" INTO shop_enabled
+    FROM public."Shop" s WHERE s.id = rec.shop_id;
+    IF shop_enabled IS NULL THEN
+      shop_enabled := false;
+    END IF;
+
+    INSERT INTO public."DispatchReadyShop" (
+      "shopId",
+      "earliestEligibleAt",
+      "nextDispatchAt",
+      "lastServedAt",
+      "processingEnabled",
+      "createdAt",
+      "updatedAt"
+    ) VALUES (
+      rec.shop_id,
+      rec.hint_at,
+      rec.hint_at,
+      NULL,
+      shop_enabled,
+      CURRENT_TIMESTAMP,
+      CURRENT_TIMESTAMP
+    )
+    ON CONFLICT ("shopId") DO UPDATE SET
+      "earliestEligibleAt" = LEAST(
+        public."DispatchReadyShop"."earliestEligibleAt",
+        EXCLUDED."earliestEligibleAt"
+      ),
+      "nextDispatchAt" = CASE
+        WHEN public."DispatchReadyShop"."earliestEligibleAt" > clock_timestamp()
+             AND EXCLUDED."nextDispatchAt" < public."DispatchReadyShop"."nextDispatchAt"
+        THEN EXCLUDED."nextDispatchAt"
+        WHEN EXCLUDED."nextDispatchAt" <= clock_timestamp()
+             AND public."DispatchReadyShop"."nextDispatchAt"
+                 > clock_timestamp() + interval '1 second'
+        THEN EXCLUDED."nextDispatchAt"
+        ELSE public."DispatchReadyShop"."nextDispatchAt"
+      END,
+      "processingEnabled" = EXCLUDED."processingEnabled",
+      "updatedAt" = CURRENT_TIMESTAMP;
   END LOOP;
   RETURN NULL;
 END;
@@ -165,13 +199,16 @@ CREATE TRIGGER stocky_dispatch_ready_shop_maintain_update_stmt_trg
 REVOKE ALL ON FUNCTION stocky_dispatch_ready_shop_maintain_update_stmt() FROM PUBLIC;
 
 COMMENT ON FUNCTION stocky_dispatch_ready_shop_maintain_update_stmt() IS
-  'D-050: statement-level monotonic readiness upsert on DurableJob UPDATE (shopId ASC)';
+  'D-050: statement-level monotonic readiness upsert on DurableJob UPDATE (shopId ASC, inline)';
 
 -- Drop obsolete row-level maintain function (replaced by statement triggers).
 DROP FUNCTION IF EXISTS stocky_dispatch_ready_shop_maintain() CASCADE;
 
+-- Drop any prior D-050 nested helper (privilege-unsafe under runtime writers).
+DROP FUNCTION IF EXISTS stocky_dispatch_ready_shop_monotonic_upsert(text, timestamp(3));
+
 -- ═══════════════════════════════════════════════════════════════════════════
--- 4) Statement-level Shop.processingEnabled sync (deterministic shopId order)
+-- 3) Statement-level Shop.processingEnabled sync (deterministic shopId order)
 -- ═══════════════════════════════════════════════════════════════════════════
 CREATE OR REPLACE FUNCTION stocky_dispatch_ready_shop_sync_enabled_stmt()
 RETURNS trigger
@@ -183,10 +220,8 @@ DECLARE
 BEGIN
   -- Same readiness-maintain advisory lock as DurableJob upserts so bulk
   -- Shop.processingEnabled updates cannot deadlock with job writers.
-  PERFORM pg_advisory_xact_lock(
-    hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
-  );
-
+  -- Taken inside the loop so no-op statements (no processingEnabled change)
+  -- do not serialize against unrelated dispatch work.
   FOR rec IN
     SELECT n.id AS shop_id, n."processingEnabled" AS enabled
     FROM new_rows n
@@ -194,6 +229,10 @@ BEGIN
     WHERE o."processingEnabled" IS DISTINCT FROM n."processingEnabled"
     ORDER BY n.id ASC
   LOOP
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended('stocky_dispatch_ready_shop_maintain', 0)
+    );
+
     UPDATE public."DispatchReadyShop"
     SET
       "processingEnabled" = rec.enabled,
@@ -221,12 +260,12 @@ COMMENT ON FUNCTION stocky_dispatch_ready_shop_sync_enabled_stmt() IS
   'D-050: statement-level processingEnabled denormalization in shopId ASC order';
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 5) Preserve DurableJob.shopId immutability + transition guard (unchanged)
+-- 4) Preserve DurableJob.shopId immutability + transition guard (unchanged)
 -- ═══════════════════════════════════════════════════════════════════════════
 -- stocky_durable_job_transition_guard remains from D-049; no rewrite required.
 
 -- ═══════════════════════════════════════════════════════════════════════════
--- 6) Fail-safe repair: recreate missing readiness for currently eligible work
+-- 5) Fail-safe repair: recreate missing readiness for currently eligible work
 -- ═══════════════════════════════════════════════════════════════════════════
 INSERT INTO "DispatchReadyShop" (
   "shopId",

@@ -63,7 +63,8 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   "stocky_durable_job_transition_guard",
   "stocky_has_application_receipt",
   // D-050 statement-level readiness maintenance (replaces D-049 row-level pair).
-  "stocky_dispatch_ready_shop_monotonic_upsert",
+  // Bodies are INLINE (no nested helper) so stocky_runtime writers do not need
+  // EXECUTE on a separate upsert function — see D-050 migration comment.
   "stocky_dispatch_ready_shop_maintain_insert_stmt",
   "stocky_dispatch_ready_shop_maintain_update_stmt",
   "stocky_dispatch_ready_shop_sync_enabled_stmt",
