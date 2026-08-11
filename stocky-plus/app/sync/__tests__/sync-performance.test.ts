@@ -373,7 +373,9 @@ describe("test:sync-performance", () => {
       .join("\n");
     assertEligibleClaimPlanShape(plan100, {
       maxCandidateRows: maxFairClaimCandidateRows(50, 2),
-      maxReadyShopRows: 50,
+      // Fixture has ~110 readiness rows; disposable Seq Scan of the small
+      // table is allowed — returned/locked remain ≤ shopCap (D-050 truthful bound).
+      maxReadyShopRows: 120,
       maxSharedHitBuffers: 20_000,
     });
     expect(plan100).not.toMatch(/Seq Scan on "Shop"/i);
@@ -916,8 +918,9 @@ describe("test:sync-performance", () => {
       "utf8",
     );
     // Range-pair retained (P3-D047-R09) — equality alone is not a planner contract.
+    // D-050 aliases: ds/ls/"shopId" depending on scheduler vs candidate CTE.
     expect(sqlModule).toMatch(
-      /"shopId" >= ss\."shopId" AND "shopId" <= ss\."shopId"/,
+      /"shopId" >= (?:ss|ds|ls)\."?shopId"? AND "shopId" <= (?:ss|ds|ls)\."?shopId"?|"shopId" >= ls\.shop_id AND "shopId" <= ls\.shop_id/,
     );
   }, 120_000);
 
