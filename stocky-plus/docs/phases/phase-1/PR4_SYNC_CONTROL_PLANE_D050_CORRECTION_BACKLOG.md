@@ -1,13 +1,13 @@
 # Phase 1 PR 4 — D-050 Correction Backlog
 
-**Decision:** D-050 — Phase 1 PR 4 split claim/reconcile snapshots + statement-level readiness  
-**Authorized starting reviewed head (D-049 implementation):** `2b177152ed06c01a36025fbfc4f6a1f1eaa30969`  
-**Authorized main / merge base:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`  
-**Immutable D-049 review:** `30955f844967e79523d543d245a4b58b70cbdc66` → incorporated blob `aa713ad37147e8b9ca1eadfdc60c1c0f50a7ec8f`  
-**Review verdict:** `CORRECTIONS REQUIRED`  
-**Status after Cursor work:** `D-050 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
+**Decision:** D-050 — Phase 1 PR 4 split claim/reconcile snapshots + statement-level readiness
+**Authorized starting reviewed head (D-049 implementation):** `2b177152ed06c01a36025fbfc4f6a1f1eaa30969`
+**Authorized main / merge base:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
+**Immutable D-049 review:** `30955f844967e79523d543d245a4b58b70cbdc66` → incorporated blob `aa713ad37147e8b9ca1eadfdc60c1c0f50a7ec8f`
+**Review verdict:** `APPROVE D-050 CORRECTION CLOSURE` (independent review `2e1fc3995614baf28d3fba1be59163d0be95096c`, blob `8247d8aea868818b8e904d196fee1a80fad283f5`)
+**Status after independent review:** `D-050 CORRECTION CLOSURE — APPROVED` for the two P1s D-050 was created to repair. **Not PR 4 acceptance.** D-051 corrections required (F-CLAUDE-D050-01/02/03).
 
-Do **not** mark any finding closed on Cursor evidence. PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 remain **OPEN**. R-119…R-124 remain **OPEN**. R-121 continues to record that the false-negative risk **materialized**.
+Do **not** mark any finding closed on Cursor evidence. PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 remain **OPEN**. R-122 and R-123 remain **OPEN**. R-119, R-120, R-121, R-124, R-125, R-126 are closed on D-050 independent evidence; their regression gates remain mandatory during D-051.
 
 ## Accidental post-review metadata incident
 
@@ -40,9 +40,10 @@ Cleanup commit deleted that file without history rewrite. Zero application/runti
 
 ## Risks
 
-- **R-119…R-124** remain OPEN.
-- **R-121** OPEN — MATERIALIZED false-negative risk; D-050 addresses claim/reconcile race pending independent verification.
-- New risks for D-049 P1 regressions tracked as **R-125** (claim/reconcile snapshot FN) and **R-126** (expired-lease / GUC platform abort) until independently verified closed.
+- **R-119, R-120, R-121, R-124, R-125, R-126:** CLOSED on D-050 independent evidence; regression gates remain mandatory during D-051.
+- **R-121** historical: MATERIALIZED as F-D048-01 / F-CLAUDE-D049-01; no longer reproducible on the independently reviewed D-050 protocol (1,000/1,000 races, zero permanent false negatives).
+- **R-122, R-123:** remain OPEN.
+- Forwarded to D-051: F-CLAUDE-D050-01 (R-127), F-CLAUDE-D050-02 (backlog only), F-CLAUDE-D050-03 (R-128).
 
 ## Non-goals
 
