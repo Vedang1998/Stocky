@@ -53,7 +53,7 @@
     "test:sync-final-correction": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-final-correction.test.ts",
     "test:sync-role-isolation": "vitest run --config vitest.sync-integration.config.ts scripts/sync-control-plane/tests/sync-role-isolation.test.ts",
     "test:sync-inventory-audit": "vitest run --config vitest.sync-integration.config.ts scripts/sync-control-plane/tests/sync-inventory-audit.test.ts",
-    "test:sync-performance": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-performance.test.ts app/sync/__tests__/eligible-claim-plan.test.ts app/sync/__tests__/dispatch-ready-shop.test.ts app/sync/__tests__/d049-readiness-corrections.test.ts app/sync/__tests__/d050-corrections.test.ts",
+    "test:sync-performance": "vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-performance.test.ts app/sync/__tests__/eligible-claim-plan.test.ts app/sync/__tests__/dispatch-ready-shop.test.ts app/sync/__tests__/d049-readiness-corrections.test.ts app/sync/__tests__/d050-corrections.test.ts app/sync/__tests__/d051-corrections.test.ts",
     "tenant:enforcement:inventory": "tsx scripts/tenant-enforcement/inventory.ts",
     "tenant:enforcement:inventory:check": "tsx scripts/tenant-enforcement/inventory-check.ts",
     "tenant:enforcement:preflight": "tsx scripts/tenant-enforcement/cli.ts preflight",

@@ -170,42 +170,103 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
   });
 
   it("urgent-arrival anti-reset contract is exactly 1s (independent of impl drift)", async () => {
-    // Contract constants — fail if implementation widens beyond approved bound.
+    // Independent literals — do not derive expected constants from production
+    // values under test (F-CLAUDE-D050-03B). Fail if implementation drifts.
     const APPROVED_MAX_DELAY_MS = 1000;
     const APPROVED_FAIRNESS_FLOOR_MS = 1;
     expect(URGENT_ARRIVAL_ANTI_RESET_MAX_DELAY_MS).toBe(APPROVED_MAX_DELAY_MS);
     expect(FAIRNESS_FLOOR_OFFSET_MS).toBe(APPROVED_FAIRNESS_FLOOR_MS);
 
-    const shop = await createShop("anti-reset");
-    const due = new Date(Date.now() - 5_000);
-    await insertJob(shop.id, "d050_anti_reset", "PENDING", due);
-    // Advance nextDispatchAt into the future beyond fairness floor but within
-    // and beyond the approved anti-reset window.
-    await prisma.$executeRawUnsafe(`
-      UPDATE "DispatchReadyShop"
-      SET "nextDispatchAt" = NOW() + interval '500 milliseconds'
-      WHERE "shopId" = '${shop.id}'
-    `);
-    // New due arrival hint via earlier nextEligibleAt on a second job — pull
-    // should occur when nextDispatchAt is > now + 1s.
-    await prisma.$executeRawUnsafe(`
-      UPDATE "DispatchReadyShop"
-      SET "nextDispatchAt" = NOW() + interval '2 seconds'
-      WHERE "shopId" = '${shop.id}'
-    `);
+    // Case 1: nextDispatchAt ≈ +500 ms. Due arrival must NOT reset fairness;
+    // remaining delay stays within the approved 1,000 ms maximum.
+    const shop500 = await createShop("anti-reset-500");
     await insertJob(
-      shop.id,
-      "d050_anti_reset_2",
+      shop500.id,
+      "d050_anti_reset_500_seed",
+      "PENDING",
+      new Date(Date.now() - 5_000),
+    );
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop"
+      SET "nextDispatchAt" = clock_timestamp() + interval '500 milliseconds'
+      WHERE "shopId" = '${shop500.id}'
+    `);
+    const before500 = await prisma.dispatchReadyShop.findUniqueOrThrow({
+      where: { shopId: shop500.id },
+    });
+    await insertJob(
+      shop500.id,
+      "d050_anti_reset_500_due",
       "PENDING",
       new Date(Date.now() - 1_000),
     );
-    const ready = await prisma.dispatchReadyShop.findUnique({
-      where: { shopId: shop.id },
+    const after500 = await prisma.dispatchReadyShop.findUniqueOrThrow({
+      where: { shopId: shop500.id },
     });
-    expect(ready).not.toBeNull();
-    // After due arrival with nextDispatchAt > now+1s, upsert must pull earlier.
-    expect(ready!.nextDispatchAt.getTime()).toBeLessThanOrEqual(
+    expect(after500.nextDispatchAt.getTime()).toBe(
+      before500.nextDispatchAt.getTime(),
+    );
+    const delay500Ms = after500.nextDispatchAt.getTime() - Date.now();
+    expect(delay500Ms).toBeLessThanOrEqual(APPROVED_MAX_DELAY_MS);
+    expect(delay500Ms).toBeGreaterThan(0);
+
+    // Case 2: nextDispatchAt > +1,000 ms. Due arrival must pull earlier.
+    const shop2s = await createShop("anti-reset-2s");
+    await insertJob(
+      shop2s.id,
+      "d050_anti_reset_2s_seed",
+      "PENDING",
+      new Date(Date.now() - 5_000),
+    );
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop"
+      SET "nextDispatchAt" = clock_timestamp() + interval '2 seconds'
+      WHERE "shopId" = '${shop2s.id}'
+    `);
+    await insertJob(
+      shop2s.id,
+      "d050_anti_reset_2s_due",
+      "PENDING",
+      new Date(Date.now() - 1_000),
+    );
+    const after2s = await prisma.dispatchReadyShop.findUniqueOrThrow({
+      where: { shopId: shop2s.id },
+    });
+    expect(after2s.nextDispatchAt.getTime()).toBeLessThanOrEqual(
       Date.now() + 50,
+    );
+
+    // Case 3: boundary near exactly 1,000 ms — must not exceed approved max;
+    // exact 1s is not pulled earlier (`>` not `>=` vs now+1s).
+    const shop1s = await createShop("anti-reset-1000");
+    await insertJob(
+      shop1s.id,
+      "d050_anti_reset_1000_seed",
+      "PENDING",
+      new Date(Date.now() - 5_000),
+    );
+    await prisma.$executeRawUnsafe(`
+      UPDATE "DispatchReadyShop"
+      SET "nextDispatchAt" = clock_timestamp() + interval '1000 milliseconds'
+      WHERE "shopId" = '${shop1s.id}'
+    `);
+    const before1s = await prisma.dispatchReadyShop.findUniqueOrThrow({
+      where: { shopId: shop1s.id },
+    });
+    await insertJob(
+      shop1s.id,
+      "d050_anti_reset_1000_due",
+      "PENDING",
+      new Date(Date.now() - 1_000),
+    );
+    const after1s = await prisma.dispatchReadyShop.findUniqueOrThrow({
+      where: { shopId: shop1s.id },
+    });
+    expect(after1s.nextDispatchAt.getTime()).toBe(
+      before1s.nextDispatchAt.getTime(),
+    );
+    expect(after1s.nextDispatchAt.getTime() - Date.now()).toBeLessThanOrEqual(
+      APPROVED_MAX_DELAY_MS,
     );
   });
 
@@ -590,6 +651,8 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
     const url =
       process.env.DATABASE_URL ?? process.env.DATABASE_CONTROL_PLANE_URL!;
     let deadlocks = 0;
+    let lockOrderFails = 0;
+    let otherErrors = 0;
     let ok = 0;
     const writers = 4;
     const durationMs = 25_000;
@@ -602,6 +665,9 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
       try {
         await client.query(`SET deadlock_timeout = '200ms'`).catch(() => undefined);
         while (Date.now() - started < durationMs) {
+          // Even writers: shopId ASC across statements (lock-order invariant allows).
+          // Odd writers: DESC — D-051 fail-closes with P0001 rather than 40P01.
+          // Runtime writers never use this DESC multi-statement shape.
           const order =
             id % 2 === 0
               ? [shops[0]!, shops[1]!, shops[2]!]
@@ -636,6 +702,8 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
             await client.query("ROLLBACK").catch(() => undefined);
             const msg = e instanceof Error ? e.message : String(e);
             if (/40P01|deadlock/i.test(msg)) deadlocks += 1;
+            else if (/stocky_dispatch_ready_lock_order/.test(msg)) lockOrderFails += 1;
+            else otherErrors += 1;
           }
         }
       } finally {
@@ -646,6 +714,8 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
     await Promise.all(Array.from({ length: writers }, (_, i) => writer(i)));
     expect(ok).toBeGreaterThan(0);
     expect(deadlocks).toBe(0);
+    expect(otherErrors).toBe(0);
+    expect(lockOrderFails).toBeGreaterThan(0);
   }, 90_000);
 
   it("processingEnabled bulk update + dispatch: zero deadlocks", async () => {
@@ -739,11 +809,23 @@ describe("D-050 corrections (F-CLAUDE-D049-01…06)", () => {
         `);
       }
 
-      const bound = fairClaimDegradedStaleRepairBoundCycles(
-        c.stale,
-        c.real,
-        batchSize,
-      );
+      // Independent expected formula (F-CLAUDE-D050-03A). Do not derive the
+      // cycle bound by calling fairClaimDegradedStaleRepairBoundCycles — that
+      // would compare production behavior to the same helper under test.
+      const INDEPENDENT_REFILL_ROUNDS = 8;
+      const independentShopCap = batchSize;
+      const independentRepairCapacity =
+        INDEPENDENT_REFILL_ROUNDS * independentShopCap;
+      const independentRepairCycles =
+        c.stale === 0
+          ? 0
+          : Math.ceil(c.stale / independentRepairCapacity);
+      const independentServiceCycles =
+        c.real === 0 ? 0 : Math.ceil(c.real / independentShopCap);
+      const bound = independentRepairCycles + independentServiceCycles;
+      expect(
+        fairClaimDegradedStaleRepairBoundCycles(c.stale, c.real, batchSize),
+      ).toBe(bound);
       const firstProgress = new Map<string, number>();
       // Use production lock+reconcile refill protocol (no Redis dependency).
       for (let cycle = 1; cycle <= Math.max(bound + 2, 20); cycle++) {
