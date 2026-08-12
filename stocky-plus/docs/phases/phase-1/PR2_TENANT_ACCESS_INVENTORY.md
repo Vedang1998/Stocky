@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `5f070aa792ff23e532b1f80462fbc5da38016a9c8bf189576dbb5e0a706e27ba`
+**Content digest:** `c2fdda72ffa438caaa276783394e1b561f946740004475cf5c5ca74326634d82`
 **Scanned files:** 248
-**Findings:** 1386
+**Findings:** 1387
 **Converted paths:** 448
-**Approved exception findings:** 938
+**Approved exception findings:** 939
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,25 +21,25 @@ All 19 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 623 |
-| PurchaseOrder | 335 |
-| ShopifyVariantCache | 294 |
-| InventorySnapshot | 262 |
-| VariantAbcClass | 248 |
-| ForecastOverride | 247 |
-| SalesDailyAggregate | 311 |
-| ShopSettings | 277 |
-| TransferOrder | 253 |
-| Stocktake | 250 |
-| BomComponent | 249 |
-| LowStockAlert | 244 |
-| SyncApplicationReceipt | 263 |
-| SupplierSkuMapping | 311 |
-| VolumePriceTier | 240 |
-| LeadTimeSnapshot | 263 |
-| POLineItem | 262 |
-| TransferLineItem | 246 |
-| StocktakeLineItem | 246 |
+| Supplier | 624 |
+| PurchaseOrder | 336 |
+| ShopifyVariantCache | 295 |
+| InventorySnapshot | 263 |
+| VariantAbcClass | 249 |
+| ForecastOverride | 248 |
+| SalesDailyAggregate | 312 |
+| ShopSettings | 278 |
+| TransferOrder | 254 |
+| Stocktake | 251 |
+| BomComponent | 250 |
+| LowStockAlert | 245 |
+| SyncApplicationReceipt | 264 |
+| SupplierSkuMapping | 312 |
+| VolumePriceTier | 241 |
+| LeadTimeSnapshot | 264 |
+| POLineItem | 263 |
+| TransferLineItem | 247 |
+| StocktakeLineItem | 247 |
 
 ## Counts by execution category
 
@@ -51,7 +51,7 @@ All 19 approved merchant-owned models must appear below.
 | script | 50 |
 | service | 34 |
 | tenant_infra | 5 |
-| test | 1166 |
+| test | 1167 |
 | worker | 12 |
 
 ## Approved exceptions
@@ -353,9 +353,10 @@ All 19 approved merchant-owned models must appear below.
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 349 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-015 | — |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 371 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 386 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
-| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 394 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-015 | — |
-| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 406 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-015 | — |
-| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 496 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
+| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 397 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
+| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 419 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-015 | — |
+| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 427 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-015 | — |
+| `app/sync/__tests__/d049-readiness-corrections.test.ts` | 521 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
 | `app/sync/__tests__/d050-corrections.test.ts` | 71 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-016 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-016 | PR 4 D-050 split claim/reconcile, statement-trigger, expired-lease, fairness disposable harness |
 | `app/sync/__tests__/d050-corrections.test.ts` | 80 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-016 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-016 | PR 4 D-050 split claim/reconcile, statement-trigger, expired-lease, fairness disposable harness |
 | `app/sync/__tests__/d050-corrections.test.ts` | 107 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-016 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-016 | PR 4 D-050 split claim/reconcile, statement-trigger, expired-lease, fairness disposable harness |
@@ -1597,7 +1598,7 @@ All 19 approved merchant-owned models must appear below.
 ```json
 {
   "scannedFiles": 248,
-  "findings": 1386,
+  "findings": 1387,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1706,6 +1707,6 @@ All 19 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "5f070aa792ff23e532b1f80462fbc5da38016a9c8bf189576dbb5e0a706e27ba"
+  "contentDigest": "c2fdda72ffa438caaa276783394e1b561f946740004475cf5c5ca74326634d82"
 }
 ```

@@ -388,30 +388,51 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     `);
   });
 
-  it("multi-shop writer in one transaction succeeds via statement-level triggers (D-050)", async () => {
+  it("single-statement multi-shop writer succeeds; opposite-order multi-statement fails closed (D-051)", async () => {
     const s1 = await createShop("dead-1");
     const s2 = await createShop("dead-2");
-    await prisma.$transaction(async (tx) => {
-      await insertJob(s1.id, "d049_ms_1", "PENDING", new Date(), tx);
-      await insertJob(s2.id, "d049_ms_2", "PENDING", new Date(), tx);
-    });
+    const [lo, hi] = [s1, s2].sort((a, b) => (a.id < b.id ? -1 : 1));
+
+    // Legitimate runtime shape: one SQL statement, any VALUES order.
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "DurableJob" (
+        id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+        "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+        "authorityVersion", "executionStrategy", state, "nextEligibleAt",
+        "createdAt", "updatedAt"
+      ) VALUES
+        ('d049_ms_hi','${hi.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
+         '{}','${"e".repeat(64)}','idem-d049_ms_hi','corr-d049_ms_hi',
+         'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING', NOW(), NOW(), NOW()),
+        ('d049_ms_lo','${lo.id}','webhook:orders/create','webhook:orders/create','stocky-webhooks','v1',
+         '{}','${"e".repeat(64)}','idem-d049_ms_lo','corr-d049_ms_lo',
+         'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','PENDING', NOW(), NOW(), NOW())
+    `);
     expect(
-      await prisma.dispatchReadyShop.findUnique({ where: { shopId: s1.id } }),
+      await prisma.dispatchReadyShop.findUnique({ where: { shopId: lo.id } }),
     ).not.toBeNull();
     expect(
-      await prisma.dispatchReadyShop.findUnique({ where: { shopId: s2.id } }),
+      await prisma.dispatchReadyShop.findUnique({ where: { shopId: hi.id } }),
     ).not.toBeNull();
 
-    // Opposite shop order also succeeds (no single_shop_dispatch_ready_tx).
+    // Sequential ASC across statements is allowed by the lock-order register.
     await prisma.$transaction(async (tx) => {
-      await insertJob(s2.id, "d049_ms_3", "PENDING", new Date(), tx);
-      await insertJob(s1.id, "d049_ms_4", "PENDING", new Date(), tx);
+      await insertJob(lo.id, "d049_ms_asc_lo", "PENDING", new Date(), tx);
+      await insertJob(hi.id, "d049_ms_asc_hi", "PENDING", new Date(), tx);
     });
-    expect(
-      await prisma.durableJob.count({
-        where: { id: { in: ["d049_ms_3", "d049_ms_4"] } },
-      }),
-    ).toBe(2);
+
+    // Sequential DESC is not a supported runtime writer; fail closed (not 40P01).
+    let orderErr = "";
+    try {
+      await prisma.$transaction(async (tx) => {
+        await insertJob(hi.id, "d049_ms_desc_hi", "PENDING", new Date(), tx);
+        await insertJob(lo.id, "d049_ms_desc_lo", "PENDING", new Date(), tx);
+      });
+    } catch (e: unknown) {
+      orderErr = e instanceof Error ? e.message : String(e);
+    }
+    expect(orderErr).toMatch(/stocky_dispatch_ready_lock_order/);
+    expect(orderErr).not.toMatch(/40P01|deadlock/i);
   });
 
   it("adversarial multi-writer multi-shop stress: zero 40P01 deadlocks (D-050)", async () => {
@@ -425,6 +446,8 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     if (!url) throw new Error("DATABASE_URL required");
 
     let deadlocks = 0;
+    let lockOrderFails = 0;
+    let otherErrors = 0;
     let ok = 0;
     const writers = 4;
     const durationMs = 8_000;
@@ -468,7 +491,8 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
             await client.query("ROLLBACK").catch(() => undefined);
             const msg = e instanceof Error ? e.message : String(e);
             if (/40P01|deadlock detected/i.test(msg)) deadlocks += 1;
-            else throw e;
+            else if (/stocky_dispatch_ready_lock_order/.test(msg)) lockOrderFails += 1;
+            else otherErrors += 1;
           }
         }
       } finally {
@@ -477,9 +501,10 @@ describe("D-049 readiness concurrency / heal / immutability", () => {
     }
 
     await Promise.all(Array.from({ length: writers }, (_, i) => writer(i)));
-    // Statement-level triggers: multi-shop writers succeed; zero deadlocks.
     expect(deadlocks).toBe(0);
+    expect(otherErrors).toBe(0);
     expect(ok).toBeGreaterThan(0);
+    expect(lockOrderFails).toBeGreaterThan(0);
   }, 60_000);
 
   it("equal-timestamp fairness still respects documented starvation bound", async () => {
