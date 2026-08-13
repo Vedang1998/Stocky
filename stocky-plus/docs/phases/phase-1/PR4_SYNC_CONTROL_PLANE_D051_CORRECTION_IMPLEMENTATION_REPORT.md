@@ -4,19 +4,26 @@
 **Authorized starting reviewed D-050 head:** `62f4cff0ec2c0ec9542959fb65be29b26997e603`
 **Authorized main / merge base:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **D-051 runtime/test implementation head:** `05bcb88c213be8823e840c8233b98d46236ff644` (`fix(test): align D-049 multi-shop writers with D-051 lock order`; runtime migration in `d94f5d2`)
+**Independently reviewed D-051 head:** `938e9981dc5f4e551e0cebd37250ae7a40507575`
 **Immutable D-050 review incorporation:** cherry-pick `2e1fc3995614baf28d3fba1be59163d0be95096c` → local commit `747cf35159460d6fa6248089d9736fbf3c61101e` → blob `8247d8aea868818b8e904d196fee1a80fad283f5` — `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
-**Status:** `D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
+**Immutable D-051 review incorporation:** cherry-pick `3ad2dfbfe64b84addd3fcff14f62b424ea10eea0` then `c44b3c57db1aafeb4a5e21e4e451cc5e72d02abd` → local commits `768a1d2994ea38a3c49e2ea20c44e63228f6f58c` then `dd0f9e7626680e463978c192ff148d455e422fab` → blob `d17df5900b26740a32e4408618166abce2495f3a` — `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
+**Status:** `D-051 CORRECTION CLOSURE — APPROVED` (independent / ChatGPT verdict). **Not PR 4 acceptance.** Next gate: **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW**.
 
-D-050 correction closure is **APPROVED** for the two P1 defects it was created to repair. That approval is **not** PR 4 acceptance. Do **not** mark D-051 findings closed on Cursor evidence. PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 remain **OPEN**.
+D-050 correction closure remains **APPROVED** for the two P1 defects it was created to repair. D-051 correction closure is **APPROVED** and is also **not** PR 4 acceptance. PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 remain **OPEN**.
+
+> **Post-independent-review clarification (supersedes Cursor-era “enforcement” wording below; does not rewrite executed test evidence):** Independent review (blob `d17df590…`) established that deadlock freedom for the current codebase rests on the audited **runtime transaction-shape invariant**, not on `stocky.ready_lock_max_shop`. That GUC can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is therefore **defense-in-depth**, not a security or correctness enforcement boundary (F-CLAUDE-D051-01). Cursor did not know this finding before independent review. Executable D-051 runtime/test behavior is unchanged by this clarification.
 
 ## Findings in scope
 
-| ID | Severity | Disposition after Cursor work |
+| ID | Severity | Disposition after independent review / ChatGPT closure |
 |---|---|---|
-| F-CLAUDE-D050-01 | P2 | Implemented (per-shop advisory + fail-closed lock-order) — pending independent verification |
-| F-CLAUDE-D050-02 | P3 | D-050 implementation-report identity corrected to `62f4cff…` / PUSH `31542495663` / PR `31542499135` — those runs do **not** cover D-051 |
-| F-CLAUDE-D050-03A | P3 | Independent stale-fairness formula/literals |
-| F-CLAUDE-D050-03B | P3 | Distinct +500 ms / >1,000 ms / 1,000 ms anti-reset cases |
+| F-CLAUDE-D050-01 | P2 | **CLOSED** on D-051 independent evidence (R-127 CLOSED). Per-shop advisory; global convoy removed. |
+| F-CLAUDE-D050-02 | P3 | **CLOSED** on D-051 independent evidence. D-050 identity `62f4cff…` / PUSH `31542495663` / PR `31542499135` — those runs do **not** cover D-051 |
+| F-CLAUDE-D050-03A | P3 | **CLOSED** on D-051 independent evidence (R-128 CLOSED). Independent stale-fairness formula/literals; mutation-proven. |
+| F-CLAUDE-D050-03B | P3 | **CLOSED** on D-051 independent evidence (R-128 CLOSED). Distinct +500 ms / >1,000 ms / 1,000 ms anti-reset cases. |
+| F-CLAUDE-D051-01 | P3 | Residual on R-123 — GUC is defense-in-depth, not enforcement. Architectural wording corrected in the D-051 closure sync. |
+| F-CLAUDE-D051-02 | P3 | Residual on R-123 — no static guard yet. **Not implemented in this synchronization.** |
+| F-CLAUDE-D051-03 | P3 | Accepted non-blocking pre-existing overlap/harness flake. R-124 not reopened. |
 
 ## Root cause of the global convoy (F-CLAUDE-D050-01)
 
@@ -58,7 +65,9 @@ acquired in `shopId ASC` inside each statement-trigger loop. Bodies remain INLIN
 
 Transaction-wide deadlock freedom is **not** claimed from `ORDER BY shopId ASC` inside a single statement alone. Opposite-order multi-statement transactions (T1: B then A; T2: A then B) can ABBA on per-shop xact locks and `DispatchReadyShop` row locks.
 
-**Enforcement:** before locking shop S, if transaction-local `stocky.ready_lock_max_shop` ( `set_config(..., is_local=true)` ) is a shopId **greater than** S, RAISE `P0001` with message prefix `stocky_dispatch_ready_lock_order`. This is **not** the removed D-049 multi-shop-allowance GUC. Single-statement multi-shop writers still succeed because the trigger sorts ASC. Opposite-order multi-statement acquisition fails closed instead of waiting into `40P01`.
+**Enforcement (Cursor-era wording, preserved as historical):** before locking shop S, if transaction-local `stocky.ready_lock_max_shop` ( `set_config(..., is_local=true)` ) is a shopId **greater than** S, RAISE `P0001` with message prefix `stocky_dispatch_ready_lock_order`. This is **not** the removed D-049 multi-shop-allowance GUC. Single-statement multi-shop writers still succeed because the trigger sorts ASC. Opposite-order multi-statement acquisition fails closed instead of waiting into `40P01`.
+
+> **Post-independent-review superseding note (F-CLAUDE-D051-01):** the paragraph above overstates the GUC as enforcement. Independent review proved `stocky_control_plane` can `SET LOCAL` / `set_config` the register to empty and then acquire a lower-shop lock with no `P0001`. **Correctness basis:** the audited runtime transaction-shape invariant (supported writers are single-shop or single-statement multi-shop). **Defense-in-depth:** `stocky.ready_lock_max_shop` can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is not a security or correctness enforcement boundary. F-CLAUDE-D051-02 (missing static guard) is an accepted P3 residual on R-123 and is **not** implemented here.
 
 No bounded SQLSTATE retry is part of this architecture. Structural deadlocks are refused rather than normalized.
 
@@ -88,7 +97,9 @@ Inspected: `app/sync/intake.server.ts`, `replay.server.ts`, `lifecycle.server.ts
 | `enqueueWithDispatch` return-to-PENDING | **separate** from claim | 1× UPDATE → PENDING | 1 shop | 1 shop | advisory(shop) → ReadyShop |
 | `dispatchPendingJobs` overall | recoverExpired **then** claim **then** per-job enqueue | recover: 1 multi-shop statement; claim: no maintain advisory; enqueue: 1 shop | recover: many in one statement | recover and claim are **separate** transactions | ASC inside recovery trigger |
 
-`ORDER BY shopId ASC` inside each individual statement does **not** by itself prove transaction-wide deadlock freedom. The audit shows the dangerous ABBA pattern is **not** a supported runtime writer. The fail-closed lock-order register enforces that invariant if a future/raw multi-statement writer appears.
+`ORDER BY shopId ASC` inside each individual statement does **not** by itself prove transaction-wide deadlock freedom. The audit shows the dangerous ABBA pattern is **not** a supported runtime writer. Independent review verified that matrix.
+
+> **Post-independent-review superseding note:** Cursor-era text that the fail-closed lock-order register “enforces” the invariant is superseded. The register is defense-in-depth only (F-CLAUDE-D051-01). There is not yet a static guard preventing a future multi-shop / multi-statement readiness writer (F-CLAUDE-D051-02); that residual stays on R-123 and is not implemented in this synchronization.
 
 ## Migration
 
@@ -176,10 +187,10 @@ CI contract uses deterministic cross-shop non-blocking plus a qualitative gate t
 
 | ID | Disposition |
 |---|---|
-| R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. Regression gates remain mandatory during D-051. |
-| R-122, R-123 | **OPEN** |
-| R-127 | **OPEN** — F-CLAUDE-D050-01 (this cycle) |
-| R-128 | **OPEN** — F-CLAUDE-D050-03 (this cycle) |
+| R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. Regression gates remain mandatory. |
+| R-122, R-123 | **OPEN**. R-123 tracks F-CLAUDE-D051-01/02 until PR 4 acceptance. |
+| R-127 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-01) |
+| R-128 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-03) |
 | R-115…R-118, R-031/R-032/R-033 | **OPEN** until normal PR 4 closure |
 
 ## Local validation (disposable PostgreSQL 16.14 + Redis 7; this Cursor session)
@@ -234,6 +245,8 @@ A documentation-only commit after `05bcb88…` is **not** covered by those runs.
 
 ## Final status
 
-`D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
+`D-051 CORRECTION CLOSURE — APPROVED`
+
+This approval is **not** PR 4 acceptance. Next gate: **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW**.
 
 PR #20 remains **OPEN, DRAFT, UNMERGED**.

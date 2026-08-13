@@ -4,15 +4,17 @@
 
 > **D-045 final correction:** Post-rollback SyncApplicationReceipt verification (Repeatable Read) is required before any `APPLICATION_ALREADY_APPLIED` path may finalize `SUCCEEDED`. v2 and v3 share `finalizeApplicationAfterRollback`. Confirmed stranded Redis recovery consumes the durable `attemptCount` budget (see Attempt-budget semantics), including dead-letter paths (NEW-CLAUDE-D045-04). BullMQ runnable allowlist for pinned 5.81.2 excludes `paused`. Queue classification is a pure `classifyQueueState` with no production test seam (NEW-CLAUDE-D045-01). Status: see PROJECT_STATUS / D-046.
 
+> **D-051 readiness lock scope:** Additive migration `20260812230000_sync_control_plane_d051_readiness_lock_scope` replaces the D-050 global readiness advisory mutex with per-shop `pg_advisory_xact_lock(hashtextextended('stocky_dispatch_ready_shop_maintain:' || shop_id, 0))` in shopId ASC. **Correctness basis:** the audited runtime transaction-shape invariant — a supported runtime transaction does not take readiness advisory locks for different shops in separate statements in a dangerous order. **Defense-in-depth:** `stocky.ready_lock_max_shop` can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is **not** a security or correctness enforcement boundary (F-CLAUDE-D051-01). Status: `D-051 CORRECTION CLOSURE — APPROVED` (not PR 4 acceptance). See `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable blob `d17df590…`).
+
 
 **Phase:** 1  
 **Work unit:** PR 4 — Synchronization control plane  
 **Branch:** `phase-1/sync-control-plane`  
 **Authorized starting main:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`  
-**Decision:** D-042; final corrections D-045  
-**Shopify Admin API target:** `2026-07` (`ApiVersion.July26`)  
-**Production execution:** NOT AUTHORIZED  
-**Status:** FINAL CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION
+**Decision:** D-042; final corrections D-045; D-051 correction closure approved (not PR 4 acceptance)
+**Shopify Admin API target:** `2026-07` (`ApiVersion.July26`)
+**Production execution:** NOT AUTHORIZED
+**Status:** D-051 CORRECTION CLOSURE — APPROVED — PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW
 
 ## Purpose
 
@@ -293,6 +295,56 @@ on the same `ENQUEUED → FAILED` update before `FAILED → DEAD_LETTERED`.
 Do **not** increment for runnable dispatch, queue unavailable, unknown state,
 missing `activeDispatchSequence`, another reaper’s no-op, failed transaction,
 or evidence-only observation. The increment and state transition must be atomic.
+
+## Readiness maintain locks (D-051)
+
+D-051 removed the D-050 global readiness advisory mutex. Readiness-changing
+statement triggers take a **per-shop** transaction-scoped advisory lock:
+
+```text
+pg_advisory_xact_lock(
+  hashtextextended('stocky_dispatch_ready_shop_maintain:' || shop_id, 0)
+)
+```
+
+acquired in `shopId` ASC inside each statement-trigger loop. Trigger bodies
+remain inline (no nested helper). Dispatcher claim does **not** take these
+advisory locks (`FOR UPDATE SKIP LOCKED` on `DispatchReadyShop` only).
+
+### Correctness basis — transaction-shape invariant
+
+A supported runtime transaction must not take readiness advisory locks for
+**different shops in separate statements** in a dangerous (descending) order.
+
+Current independently audited writers are:
+
+- single-shop readiness transactions; or
+- single-statement multi-shop writers (expired-lease recovery, bulk
+  `processingEnabled`, multi-row INSERT/UPDATE), iterated shopId ASC.
+
+`claimBatchFair` / dispatcher claim may touch many shops but does not take the
+readiness-maintain advisory lock.
+
+This invariant is the deadlock-freedom **correctness boundary** independently
+verified by the D-051 review (blob `d17df590…` at head `938e998…`).
+`ORDER BY shopId ASC` inside one statement is not by itself a transaction-wide
+deadlock proof.
+
+### Defense-in-depth — `stocky.ready_lock_max_shop`
+
+The transaction-local register `stocky.ready_lock_max_shop`
+(`set_config(..., is_local=true)`) can fail closed (`P0001` /
+`stocky_dispatch_ready_lock_order`) for ordinary descending multi-statement
+acquisition. It is **bypassable and clearable** by the `stocky_control_plane`
+role. It is therefore **not** a security boundary and **not** a correctness
+enforcement boundary (F-CLAUDE-D051-01).
+
+Do not describe this GUC as database enforcement. Do not revert to the removed
+D-049 multi-shop-allowance GUC.
+
+F-CLAUDE-D051-02 (P3, tracked on R-123): there is not yet a static guard
+preventing a future multi-shop / multi-statement readiness writer. That guard
+is out of scope for D-051 closure synchronization and is not implemented here.
 
 ## Explicit non-goals
 

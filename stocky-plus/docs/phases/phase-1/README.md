@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — not accepted
-**Next authorized action:** Return to ChatGPT with D-051 evidence for independent verification (do not ask Claude to review from this Cursor turn; do not start Claude)
+**Phase 1 PR 4:** D-051 CORRECTION CLOSURE — APPROVED — not accepted
+**Next authorized action:** ChatGPT may authorize cumulative independent PR 4 acceptance review (do not start Claude from this Cursor turn)
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
-**ChatGPT decisions:** D-025..D-050; **D-051 — Phase 1 PR 4 per-shop readiness lock scope (close global convoy)**
+**ChatGPT decisions:** D-025..D-050; **D-051 CORRECTION CLOSURE — APPROVED** (not PR 4 acceptance)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -22,23 +22,25 @@
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
-- PR 4 is **D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED).
+- PR 4 is **D-051 CORRECTION CLOSURE — APPROVED** on `phase-1/sync-control-plane` (PR #20 OPEN, DRAFT, UNMERGED). That is **not** PR 4 acceptance.
 - D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
 - D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
-- After Cursor handoff language: `D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` — not accepted, not ready, not merged.
+- D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
+- Next gate: **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW**.
 - D-047 artifacts: `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-048 artifacts: `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-049 artifacts: `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-050 artifacts: `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable).
-- D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`.
-- Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050 — do not edit.
-- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head (exact-head PUSH `31651548233` / PR `31651551006`). A later documentation-only commit is not covered by those runs.
+- D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable).
+- Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050; D-051 — do not edit.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob.
 - PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
 - Do **not** begin PR 5 in this PR.
 - **Q-003:** OPEN — target `2026-07`; F-PR4-18 residual; live schema validation still required.
-- **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** CLOSED on D-050 independent evidence; regression gates remain mandatory during D-051.
-- **R-122 / R-123:** OPEN. **R-127 / R-128:** OPEN pending D-051 independent verification.
+- **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** CLOSED on D-050 independent evidence; regression gates remain mandatory.
+- **R-127 / R-128:** CLOSED on D-051 independent evidence; regression gates remain mandatory.
+- **R-122 / R-123:** OPEN. R-123 tracks non-blocking residuals F-CLAUDE-D051-01 and F-CLAUDE-D051-02. F-CLAUDE-D051-03 is an accepted non-blocking pre-existing overlap/harness flake; R-124 is not reopened.
 
 ## Immutable PR 3 (#15) merge evidence
 

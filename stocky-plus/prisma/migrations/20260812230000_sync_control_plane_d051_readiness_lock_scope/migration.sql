@@ -14,21 +14,24 @@
 -- no longer share a lock.
 --
 -- Transaction-wide deadlock freedom:
--- * Runtime writers never issue readiness-changing statements for different
---   shops in separate statements of one transaction (D-051 transaction-shape
---   audit). Multi-shop writers are single-statement (expired-lease recovery,
+-- * CORRECTNESS BASIS: the currently audited runtime transaction-shape
+--   invariant prevents a supported runtime transaction from taking readiness
+--   advisory locks for different shops in separate statements in a dangerous
+--   order. Multi-shop writers are single-statement (expired-lease recovery,
 --   bulk processingEnabled, multi-row INSERT/UPDATE) and the trigger iterates
---   shopId ASC.
+--   shopId ASC. Multi-statement readiness writers are single-shop.
 -- * ORDER BY shopId ASC inside one statement is not by itself a
 --   transaction-wide deadlock proof. Opposite-order multi-statement
 --   transactions (T1: B then A; T2: A then B) can still ABBA on per-shop
 --   xact locks / DispatchReadyShop row locks.
--- * Therefore each acquisition refuses to lock shop S when this transaction
---   already holds a maintain lock for some shop T > S, failing closed with
---   SQLSTATE P0001 / message prefix stocky_dispatch_ready_lock_order rather
---   than waiting into 40P01. The register is transaction-local
---   (set_config is_local=true). It is NOT a user-settable multi-shop
---   allowance GUC (F-CLAUDE-D049-03 stays closed).
+-- * DEFENSE-IN-DEPTH: transaction-local stocky.ready_lock_max_shop
+--   (set_config is_local=true) can fail closed for ordinary descending
+--   acquisition with SQLSTATE P0001 / message prefix
+--   stocky_dispatch_ready_lock_order rather than waiting into 40P01.
+--   It is bypassable/clearable by stocky_control_plane and is therefore
+--   NOT a security or correctness enforcement boundary (F-CLAUDE-D051-01).
+--   It is NOT a user-settable multi-shop allowance GUC
+--   (F-CLAUDE-D049-03 stays closed).
 -- * Dispatcher claim does not take these advisory locks (SKIP LOCKED on
 --   jobs; ReadyShop row locks only). Lock order vs writers remains
 --   DurableJob → advisory(shop) → ReadyShop for writers, ReadyShop-only

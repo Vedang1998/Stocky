@@ -6,7 +6,7 @@
 **Immutable D-049 review incorporation:** cherry-pick `30955f844967e79523d543d245a4b58b70cbdc66` → blob `aa713ad37147e8b9ca1eadfdc60c1c0f50a7ec8f` / SHA256 `5fd063181dde9e87b32f39f621813045827df905806309e61c393bc96e446bd0` — immutable; never edited
 **Independently reviewed D-050 implementation head:** `62f4cff0ec2c0ec9542959fb65be29b26997e603`
 **Immutable D-050 review:** cherry-pick `2e1fc3995614baf28d3fba1be59163d0be95096c` → blob `8247d8aea868818b8e904d196fee1a80fad283f5` — `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
-**Status:** `D-050 CORRECTION CLOSURE — APPROVED` (independent verdict). Not PR 4 acceptance. D-051 corrections required.
+**Status:** `D-050 CORRECTION CLOSURE — APPROVED` (independent verdict). Not PR 4 acceptance. Subsequent D-051 correction closure is also **APPROVED** (independent review blob `d17df590…` at head `938e998…`); that remains **not** PR 4 acceptance.
 
 Do **not** mark findings closed on Cursor evidence. Independent verification is required before any finding or risk closure claim.
 
@@ -71,11 +71,11 @@ or granting runtime EXECUTE on readiness helpers.
 
 | ID | Disposition |
 |---|---|
-| R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. Historical evidence preserved. Regression gates remain mandatory during D-051. |
+| R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. Historical evidence preserved. Regression gates remain mandatory. |
 | R-121 historical | MATERIALIZED as F-D048-01 / F-CLAUDE-D049-01; independently not reproducible on `62f4cff…` (1,000/1,000 races, zero permanent false negatives) |
 | R-122, R-123 | **OPEN** |
-| R-127 | **OPEN** — F-CLAUDE-D050-01 global convoy (D-051) |
-| R-128 | **OPEN** — F-CLAUDE-D050-03 contract-test independence (D-051) |
+| R-127 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-01) |
+| R-128 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-03) |
 
 ## Safety
 
@@ -128,6 +128,6 @@ These exact-head runs cover **D-050 only**. They do not cover D-051.
 
 ## Final status
 
-`D-050 CORRECTION CLOSURE — APPROVED` (independent review of `62f4cff…`). Not PR 4 accepted. D-051 corrections required / implemented on a later head — pending independent verification.
+`D-050 CORRECTION CLOSURE — APPROVED` (independent review of `62f4cff…`). Not PR 4 accepted. Subsequent D-051 correction closure is also **APPROVED** (independent review blob `d17df590…` at head `938e998…`); that remains **not** PR 4 acceptance.
 
 PR #20 remains **OPEN, DRAFT, UNMERGED**.
