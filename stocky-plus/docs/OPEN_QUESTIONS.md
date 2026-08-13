@@ -4,7 +4,7 @@
 |---|---|---|---|---|---|
 | Q-001 | What is the public App Store name and brand system? | F-131; listing, billing handles, support | Product (ChatGPT) | Before any store listing / Phase 6 | Open |
 | Q-002 | Confirm Partner Dashboard distribution for the linked app (public vs custom) and whether separate prod/dev/staging apps exist | F-002; deploy strategy; D-019 | Product + Partner account holder | Before any Phase 1 deployment work | **Open — evidence still required** |
-| Q-003 | Which Shopify Admin API version is the project pin after GraphQL ops are fixed? | Invalid inventoryLevel / transfer complete ops on 2025-10; D-023 requires validation before sync implementation | Product + Cursor | Before first Phase 1 sync implementation merge | **Open — Decision target: 2026-07 (D-042). Implementation closure requires exact-head webhook and GraphQL validation.** |
+| Q-003 | Which Shopify Admin API version is the project pin after GraphQL ops are fixed? | Invalid inventoryLevel / transfer complete ops on 2025-10; D-023 requires validation before sync implementation | Product + Cursor | Before first Phase 1 sync implementation merge | **CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION** (D-052). Target `2026-07` independently verified at accepted head `eb757119…`. Does **not** authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes. |
 | Q-004 | Incoming inventory: app-PO only until native API, or dual-source with badges immediately? | Forecast accuracy; community pain S26 | Product | Phase 2 worksheet | Open |
 | Q-005 | Cost authority default for pilots (Shopify cost vs app average vs landed)? | Onboarding step 6; F-106 | Product + pilot merchant | Phase 4 | Open |
 | Q-006 | Trial length and development test-plan commercial terms | Entitlement design; D-020 | Product | Future billing/entitlement work (not Phase 1 implementation) | **Open — recommended decision recorded; not implemented** |
@@ -25,6 +25,29 @@ Keep **open** until the Partner account holder provides evidence of:
 * linked Shopify CLI configuration.
 
 Intended production distribution remains public App Store (D-019), pending that evidence. No deployment is authorized by Phase 1 planning alone.
+
+## Q-003 — closed for PR 4 repository implementation
+
+**Status:** `CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION` (D-052)
+
+**F-PR4-18:** `CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION` (D-052)
+
+Approved pin remains **`2026-07`** (`ApiVersion.July26`). Closure basis, independently verified at accepted implementation head `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3` by cumulative review commit `ca7998486e2bfff6c03e75a18a7e81d6ab19bfd0` (immutable report blob `c9fca9b2effba5de3418e4523185beb3d92bc79e`):
+
+* 2026-07 exact-head target/config agreement (`shopify.app.toml` webhooks `api_version`, `app/shopify.server.ts`, `.graphqlrc.ts`);
+* independent live-schema GraphQL codegen succeeded;
+* a deliberately invalid GraphQL document correctly failed the gate;
+* webhook API-version handling independently verified (unsupported/missing version durable quarantine, no processing job);
+* no inventory mutation introduced.
+
+**Q-003 / F-PR4-18 closure does not imply:**
+
+* production deployment approval;
+* Partner Dashboard validation (Q-002 remains **OPEN**);
+* production API-health validation;
+* production-write authorization.
+
+Those remain separate gates. F-CLAUDE-PR4ACC-02 (2025-10 inbound adapter retirement) is an accepted nonblocking future-maintenance residual and must be re-evaluated no later than that version’s Shopify retirement window. The adapter is **not** removed in this PR.
 
 ## Q-006 — recommended decision (not implemented)
 

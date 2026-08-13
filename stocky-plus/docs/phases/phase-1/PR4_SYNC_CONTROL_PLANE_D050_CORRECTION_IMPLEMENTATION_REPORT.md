@@ -6,7 +6,7 @@
 **Immutable D-049 review incorporation:** cherry-pick `30955f844967e79523d543d245a4b58b70cbdc66` → blob `aa713ad37147e8b9ca1eadfdc60c1c0f50a7ec8f` / SHA256 `5fd063181dde9e87b32f39f621813045827df905806309e61c393bc96e446bd0` — immutable; never edited
 **Independently reviewed D-050 implementation head:** `62f4cff0ec2c0ec9542959fb65be29b26997e603`
 **Immutable D-050 review:** cherry-pick `2e1fc3995614baf28d3fba1be59163d0be95096c` → blob `8247d8aea868818b8e904d196fee1a80fad283f5` — `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
-**Status:** `D-050 CORRECTION CLOSURE — APPROVED` (independent verdict). Not PR 4 acceptance. Subsequent D-051 correction closure is also **APPROVED** (independent review blob `d17df590…` at head `938e998…`); that remains **not** PR 4 acceptance.
+**Status:** `D-050 CORRECTION CLOSURE — APPROVED` (independent verdict). Not PR 4 acceptance. Subsequent D-051 correction closure is also **APPROVED** (independent review blob `d17df590…` at head `938e998…`); that remains **not** PR 4 acceptance. Subsequent **D-052** accepts PR 4 repository implementation at `eb757119…` (merge not authorized).
 
 Do **not** mark findings closed on Cursor evidence. Independent verification is required before any finding or risk closure claim.
 
@@ -73,14 +73,14 @@ or granting runtime EXECUTE on readiness helpers.
 |---|---|
 | R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. Historical evidence preserved. Regression gates remain mandatory. |
 | R-121 historical | MATERIALIZED as F-D048-01 / F-CLAUDE-D049-01; independently not reproducible on `62f4cff…` (1,000/1,000 races, zero permanent false negatives) |
-| R-122, R-123 | **OPEN** |
+| R-122, R-123 | Subsequent **D-052 ACCEPTED NONBLOCKING RESIDUALS** |
 | R-127 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-01) |
 | R-128 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-03) |
 
 ## Safety
 
-- **Q-003:** OPEN
-- **F-PR4-18:** OPEN
+- **Q-003:** OPEN at D-050/D-051 handoff; subsequent **D-052 CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION**
+- **F-PR4-18:** OPEN at D-050/D-051 handoff; subsequent **D-052 CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION**
 - **PR 5:** BLOCKED
 - Inventory-write flags: **OFF** / DEFAULT OFF
 - No production deployment, backfill, ownership repair, or inventory mutation

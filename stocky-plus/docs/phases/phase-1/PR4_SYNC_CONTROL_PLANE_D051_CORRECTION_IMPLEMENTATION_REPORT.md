@@ -7,9 +7,9 @@
 **Independently reviewed D-051 head:** `938e9981dc5f4e551e0cebd37250ae7a40507575`
 **Immutable D-050 review incorporation:** cherry-pick `2e1fc3995614baf28d3fba1be59163d0be95096c` → local commit `747cf35159460d6fa6248089d9736fbf3c61101e` → blob `8247d8aea868818b8e904d196fee1a80fad283f5` — `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
 **Immutable D-051 review incorporation:** cherry-pick `3ad2dfbfe64b84addd3fcff14f62b424ea10eea0` then `c44b3c57db1aafeb4a5e21e4e451cc5e72d02abd` → local commits `768a1d2994ea38a3c49e2ea20c44e63228f6f58c` then `dd0f9e7626680e463978c192ff148d455e422fab` → blob `d17df5900b26740a32e4408618166abce2495f3a` — `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
-**Status:** `D-051 CORRECTION CLOSURE — APPROVED` (independent / ChatGPT verdict). **Not PR 4 acceptance.** Next gate: **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW**.
+**Status:** `D-051 CORRECTION CLOSURE — APPROVED` (independent / ChatGPT verdict). **Not PR 4 acceptance.** Subsequent **D-052:** PR 4 repository implementation **ACCEPTED** at `eb757119…` (merge not authorized).
 
-D-050 correction closure remains **APPROVED** for the two P1 defects it was created to repair. D-051 correction closure is **APPROVED** and is also **not** PR 4 acceptance. PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 remain **OPEN**.
+D-050 correction closure remains **APPROVED** for the two P1 defects it was created to repair. D-051 correction closure is **APPROVED** and is also **not** PR 4 acceptance. Subsequent D-052 accepts the PR 4 repository implementation without rewriting this D-051 evidence. PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 are **CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION** under D-052.
 
 > **Post-independent-review clarification (supersedes Cursor-era “enforcement” wording below; does not rewrite executed test evidence):** Independent review (blob `d17df590…`) established that deadlock freedom for the current codebase rests on the audited **runtime transaction-shape invariant**, not on `stocky.ready_lock_max_shop`. That GUC can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is therefore **defense-in-depth**, not a security or correctness enforcement boundary (F-CLAUDE-D051-01). Cursor did not know this finding before independent review. Executable D-051 runtime/test behavior is unchanged by this clarification.
 
@@ -176,8 +176,8 @@ CI contract uses deterministic cross-shop non-blocking plus a qualitative gate t
 
 ## Safety
 
-- **Q-003:** OPEN
-- **F-PR4-18:** OPEN
+- **Q-003:** OPEN at D-051 handoff; subsequent **D-052 CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION**
+- **F-PR4-18:** OPEN at D-051 handoff; subsequent **D-052 CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION**
 - **PR 5:** BLOCKED
 - Inventory-write flags: **OFF** / DEFAULT OFF
 - No production deployment, backfill, ownership repair, or inventory mutation
@@ -187,11 +187,11 @@ CI contract uses deterministic cross-shop non-blocking plus a qualitative gate t
 
 | ID | Disposition |
 |---|---|
-| R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. Regression gates remain mandatory. |
-| R-122, R-123 | **OPEN**. R-123 tracks F-CLAUDE-D051-01/02 until PR 4 acceptance. |
-| R-127 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-01) |
-| R-128 | **CLOSED** on D-051 independent evidence (F-CLAUDE-D050-03) |
-| R-115…R-118, R-031/R-032/R-033 | **OPEN** until normal PR 4 closure |
+| R-119, R-120, R-121, R-124, R-125, R-126 | **CLOSED** on D-050 independent evidence. D-052 confirms PR 4 repository-implementation closure (R-124 not reopened). Regression gates remain mandatory. |
+| R-122, R-123 | Subsequent **D-052 ACCEPTED NONBLOCKING RESIDUALS**. R-123 tracks F-CLAUDE-D051-01/02 and F-CLAUDE-PR4ACC-03. |
+| R-127 | **CLOSED — no regression** (D-052; previously CLOSED on D-051 independent evidence for F-CLAUDE-D050-01) |
+| R-128 | **CLOSED — no regression** (D-052; previously CLOSED on D-051 independent evidence for F-CLAUDE-D050-03) |
+| R-115…R-118, R-031/R-032/R-033 | Subsequent **D-052 CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION** |
 
 ## Local validation (disposable PostgreSQL 16.14 + Redis 7; this Cursor session)
 
@@ -247,6 +247,6 @@ A documentation-only commit after `05bcb88…` is **not** covered by those runs.
 
 `D-051 CORRECTION CLOSURE — APPROVED`
 
-This approval is **not** PR 4 acceptance. Next gate: **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW**.
+This D-051 approval is **not** PR 4 acceptance. Subsequent **D-052** accepts PR 4 repository implementation at `eb757119…`. Merge remains **NOT AUTHORIZED**. Next gate: **PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION**.
 
 PR #20 remains **OPEN, DRAFT, UNMERGED**.

@@ -5,9 +5,9 @@
 **Authorized main / merge base:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **Immutable D-049 review:** `30955f844967e79523d543d245a4b58b70cbdc66` → incorporated blob `aa713ad37147e8b9ca1eadfdc60c1c0f50a7ec8f`
 **Review verdict:** `APPROVE D-050 CORRECTION CLOSURE` (independent review `2e1fc3995614baf28d3fba1be59163d0be95096c`, blob `8247d8aea868818b8e904d196fee1a80fad283f5`)
-**Status after independent review:** `D-050 CORRECTION CLOSURE — APPROVED` for the two P1s D-050 was created to repair. **Not PR 4 acceptance.** Subsequent D-051 correction closure is also **APPROVED** (review blob `d17df590…`); that is still **not** PR 4 acceptance.
+**Status after independent review:** `D-050 CORRECTION CLOSURE — APPROVED` for the two P1s D-050 was created to repair. **Not PR 4 acceptance.** Subsequent D-051 correction closure is also **APPROVED** (review blob `d17df590…`); that is still **not** PR 4 acceptance. Subsequent **D-052** accepts PR 4 repository implementation at `eb757119…` (merge not authorized).
 
-PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Q-003 and F-PR4-18 remain **OPEN**. R-122 and R-123 remain **OPEN**. R-119, R-120, R-121, R-124, R-125, R-126 are closed on D-050 independent evidence. R-127 and R-128 are closed on D-051 independent evidence.
+PR #20 remains **OPEN, DRAFT, UNMERGED**. PR 5 remains **BLOCKED**. Inventory-write flags remain **OFF**. Subsequent D-052 closes Q-003 / F-PR4-18 for PR 4 repository implementation and records R-122 / R-123 as accepted nonblocking residuals. D-050-era remaining-open language below is historical.
 
 ## Accidental post-review metadata incident
 

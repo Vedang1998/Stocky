@@ -4,17 +4,19 @@
 
 > **D-045 final correction:** Post-rollback SyncApplicationReceipt verification (Repeatable Read) is required before any `APPLICATION_ALREADY_APPLIED` path may finalize `SUCCEEDED`. v2 and v3 share `finalizeApplicationAfterRollback`. Confirmed stranded Redis recovery consumes the durable `attemptCount` budget (see Attempt-budget semantics), including dead-letter paths (NEW-CLAUDE-D045-04). BullMQ runnable allowlist for pinned 5.81.2 excludes `paused`. Queue classification is a pure `classifyQueueState` with no production test seam (NEW-CLAUDE-D045-01). Status: see PROJECT_STATUS / D-046.
 
-> **D-051 readiness lock scope:** Additive migration `20260812230000_sync_control_plane_d051_readiness_lock_scope` replaces the D-050 global readiness advisory mutex with per-shop `pg_advisory_xact_lock(hashtextextended('stocky_dispatch_ready_shop_maintain:' || shop_id, 0))` in shopId ASC. **Correctness basis:** the audited runtime transaction-shape invariant — a supported runtime transaction does not take readiness advisory locks for different shops in separate statements in a dangerous order. **Defense-in-depth:** `stocky.ready_lock_max_shop` can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is **not** a security or correctness enforcement boundary (F-CLAUDE-D051-01). Status: `D-051 CORRECTION CLOSURE — APPROVED` (not PR 4 acceptance). See `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable blob `d17df590…`).
+> **D-051 readiness lock scope:** Additive migration `20260812230000_sync_control_plane_d051_readiness_lock_scope` replaces the D-050 global readiness advisory mutex with per-shop `pg_advisory_xact_lock(hashtextextended('stocky_dispatch_ready_shop_maintain:' || shop_id, 0))` in shopId ASC. **Correctness basis:** the audited runtime transaction-shape invariant — a supported runtime transaction does not take readiness advisory locks for different shops in separate statements in a dangerous order. **Defense-in-depth:** `stocky.ready_lock_max_shop` can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is **not** a security or correctness enforcement boundary (F-CLAUDE-D051-01). Status: `D-051 CORRECTION CLOSURE — APPROVED`; subsequent **D-052** accepts PR 4 repository implementation without changing this architectural truth. See `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable blob `d17df590…`) and `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`).
+
+> **D-052 acceptance status:** Phase 1 PR 4 repository implementation **ACCEPTED** at `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3`. Independent verdict `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`, blob `c9fca9b2…`). Findings P0 0 / P1 0 / P2 0 / P3 4. Merge remains **NOT AUTHORIZED**. PR #20 remains OPEN, DRAFT, UNMERGED. PR 5 remains BLOCKED. Production execution unauthorized. Inventory-write flags DEFAULT OFF. D-051 architectural truth is unchanged.
 
 
 **Phase:** 1  
 **Work unit:** PR 4 — Synchronization control plane  
 **Branch:** `phase-1/sync-control-plane`  
 **Authorized starting main:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`  
-**Decision:** D-042; final corrections D-045; D-051 correction closure approved (not PR 4 acceptance)
+**Decision:** D-042; final corrections D-045; D-051 correction closure approved; **D-052 PR 4 repository implementation ACCEPTED** (merge not authorized)
 **Shopify Admin API target:** `2026-07` (`ApiVersion.July26`)
 **Production execution:** NOT AUTHORIZED
-**Status:** D-051 CORRECTION CLOSURE — APPROVED — PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW
+**Status:** D-052 PR 4 REPOSITORY IMPLEMENTATION ACCEPTED — PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION
 
 ## Purpose
 
@@ -344,7 +346,8 @@ D-049 multi-shop-allowance GUC.
 
 F-CLAUDE-D051-02 (P3, tracked on R-123): there is not yet a static guard
 preventing a future multi-shop / multi-statement readiness writer. That guard
-is out of scope for D-051 closure synchronization and is not implemented here.
+is out of scope for D-051 closure synchronization and is **not** implemented
+under D-052 (F-CLAUDE-PR4ACC-03 accepted nonblocking future-maintenance residual).
 
 ## Explicit non-goals
 

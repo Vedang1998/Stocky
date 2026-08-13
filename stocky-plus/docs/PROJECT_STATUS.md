@@ -1,68 +1,101 @@
 # Project Status
 
 **Updated:** 2026-08-13
-**Current stage:** Phase 1 PR 4 D-051 CORRECTION CLOSURE — APPROVED — PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW — Synchronization Control Plane
+**Current stage:** Phase 1 PR 4 REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION — Synchronization Control Plane
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 D-051 CORRECTION CLOSURE — APPROVED — not accepted
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — not merged
 **Active implementation branch:** `phase-1/sync-control-plane`
 **Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** D-051 CORRECTION CLOSURE — APPROVED — not accepted
+**Phase 1 PR 4:** REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — merge NOT AUTHORIZED
 **Phase 1:** IN PROGRESS
-**PR 5:** BLOCKED until PR 4 independently reviewed, accepted, and merged
+**PR 5:** BLOCKED until PR 4 is actually merged
 
-## Phase 1 PR 4 D-051 (active)
+## Phase 1 PR 4 D-052 (active)
+
+| Field | Value |
+|---|---|
+| Decision | **D-052 — Phase 1 PR 4 repository implementation accepted** |
+| ChatGPT disposition | **ACCEPT PR 4 REPOSITORY IMPLEMENTATION** |
+| Accepted implementation head | `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3` |
+| Merge base / `origin/main` | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
+| Cumulative independent review commit | `ca7998486e2bfff6c03e75a18a7e81d6ab19bfd0` |
+| Immutable cumulative review-report blob | `c9fca9b2effba5de3418e4523185beb3d92bc79e` — `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (never edit) |
+| Independent verdict | `READY FOR CHATGPT PR 4 ACCEPTANCE` |
+| Findings | P0 0 / P1 0 / P2 0 / P3 4 |
+| PR #20 | OPEN, DRAFT, UNMERGED |
+| Merge | **NOT AUTHORIZED** pending this synchronization + exact-head CI + ChatGPT merge-authorization verification + explicit user authorization |
+| Next gate | **PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION** |
+| PR 5 | BLOCKED until actual PR 4 merge |
+| Production | NOT AUTHORIZED |
+| Inventory-write flags | DEFAULT OFF |
+
+This D-052 record is technical acceptance of the reviewed PR 4 repository implementation. It is **not** merge authorization. Do **not** state that PR 4 is merged, closed, or that Phase 1 is complete. Do **not** start PR 5. Do **not** create D-053 or another runtime correction cycle.
+
+## Phase 1 PR 4 D-051 (historical correction closure)
 
 | Field | Value |
 |---|---|
 | Decision | **D-051 — Phase 1 PR 4 per-shop readiness lock scope (close global convoy)** |
-| D-051 CORRECTION CLOSURE | **APPROVED**. **Not PR 4 acceptance.** |
+| D-051 CORRECTION CLOSURE | **APPROVED**. **Not PR 4 acceptance** (acceptance is D-052). |
 | Independently reviewed head | `938e9981dc5f4e551e0cebd37250ae7a40507575` |
 | D-051 runtime/test implementation head | `05bcb88c213be8823e840c8233b98d46236ff644` |
 | Independent review commits (source) | `3ad2dfbfe64b84addd3fcff14f62b424ea10eea0` then `c44b3c57db1aafeb4a5e21e4e451cc5e72d02abd` |
 | Incorporation on this branch | `768a1d2994ea38a3c49e2ea20c44e63228f6f58c` then `dd0f9e7626680e463978c192ff148d455e422fab` |
 | Final independent review report/blob | `d17df5900b26740a32e4408618166abce2495f3a` — `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation) |
 | Independent / ChatGPT verdict | `APPROVE D-051 CORRECTION CLOSURE` |
-| Next gate | **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW** |
 | In-scope findings closed | **F-CLAUDE-D050-01, F-CLAUDE-D050-02, F-CLAUDE-D050-03A/B** |
 | Migration | `20260812230000_sync_control_plane_d051_readiness_lock_scope` (additive; D-050 migration not edited) |
-| Production | NOT AUTHORIZED |
-| Inventory-write flags | DEFAULT OFF |
-| PR 5 | BLOCKED |
 
-This D-051 closure/control-record synchronization is **not** a new D-052 runtime correction cycle and is **not** PR 4 acceptance.
+D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctness basis** is the audited runtime transaction-shape invariant; `stocky.ready_lock_max_shop` is **defense-in-depth** only.
 
-## Gate disposition (post D-051 closure)
+## Gate disposition (post D-052)
 
 **F-016 / R-022:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION (PR 3)
 **Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION (PR 3)
-**Q-003:** OPEN — Decision target `2026-07` (D-042); exact-head webhook + GraphQL validation required before closure; F-PR4-18 residual remains
-**F-PR4-18:** OPEN
-**R-031 / R-032 / R-033:** OPEN until independent PR 4 acceptance
-**R-115 / R-116 / R-117 / R-118:** OPEN — NEW-CLAUDE-D045 findings independently verified; remain open until PR 4 closure
-**R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** CLOSED on D-050 independent evidence; regression gates remain mandatory
-**R-122:** OPEN — range-pair planner residual (P3-D047-R09)
-**R-123:** OPEN — multi-shop readiness lock-order / deadlock residual. D-051 independent review: deadlock freedom rests on the audited transaction-shape invariant, not on `stocky.ready_lock_max_shop`. Non-blocking residuals **F-CLAUDE-D051-01** and **F-CLAUDE-D051-02** tracked here. Do not close on this synchronization.
-**R-127:** CLOSED on D-051 independent evidence (F-CLAUDE-D050-01). Regression gates remain mandatory.
-**R-128:** CLOSED on D-051 independent evidence (F-CLAUDE-D050-03). Regression gates remain mandatory.
-**F-CLAUDE-D050-01 / F-CLAUDE-D050-02 / F-CLAUDE-D050-03A/B:** CLOSED
-**F-CLAUDE-D051-01:** P3 residual on R-123 — `stocky.ready_lock_max_shop` is bypassable by `stocky_control_plane` and must be described as **defense-in-depth**, not enforcement
-**F-CLAUDE-D051-02:** P3 residual on R-123 — current correctness relies on the independently verified transaction-shape invariant; there is not yet a static guard preventing future multi-shop / multi-statement readiness writers. Do **not** implement that guard in this synchronization.
-**F-CLAUDE-D051-03:** P3 accepted non-blocking pre-existing overlap/harness flake. Do **not** reopen R-124.
+**Q-002:** OPEN — Partner Dashboard / environment-separation evidence still required
+**Q-003:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does **not** authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
+**Q-008:** OPEN — legal review still required before production privacy policy
+**F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
+**R-095 / R-096 / R-097 / R-098:** OPEN — accepted nonblocking PR 3 residuals; production-rehearsal / rollout-evidence gates
+**R-031 / R-032 / R-033 / R-039:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-099 through R-121:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-122:** ACCEPTED NONBLOCKING RESIDUAL (D-052)
+**R-123:** ACCEPTED NONBLOCKING RESIDUAL (D-052). Correctness basis = audited runtime transaction-shape invariant. `stocky.ready_lock_max_shop` = defense-in-depth only. F-CLAUDE-D051-01 accepted P3 characterization. F-CLAUDE-D051-02 / F-CLAUDE-PR4ACC-03 future-maintenance risk. No static writer-shape guard in this synchronization.
+**R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
+**R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
+**R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
+**F-CLAUDE-PR4ACC-01:** P3 — REQUIRED MERGE-HYGIENE ACTION (stale PR #20 body; refresh before merge; not a runtime correction)
+**F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in this PR)
+**F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
+**F-CLAUDE-PR4ACC-04:** P3 — ACCEPTED NONBLOCKING OUT-OF-SCOPE TOOLING DEBT (do not reopen R-124)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
-**PR 5:** BLOCKED
+**PR 5:** BLOCKED until actual PR 4 merge
 **No production deployment**
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Return to ChatGPT to authorize cumulative independent PR 4 acceptance review. Draft PR #20 remains draft — do not merge. Do not start Claude from this Cursor turn. Do not start PR 5. Do not create D-052 for this synchronization.
+**Next action:** Obtain green exact-head PUSH and PR CI on the synchronized head, then return to ChatGPT for PR 4 merge-authorization verification. Draft PR #20 remains draft — do not merge. Do not start PR 5. Do not create D-053.
 
 ## Current truth
 
-Phase 1 PR 4 remains unaccepted. D-050 independent review recorded `APPROVE D-050 CORRECTION CLOSURE` for its two P1s. D-051 independent review recorded `APPROVE D-051 CORRECTION CLOSURE` at independently reviewed head `938e998…` / runtime-test head `05bcb88…` / review blob `d17df590…`. ChatGPT approved that D-051 correction closure. That approval is **not** PR 4 acceptance. The next gate is **PENDING CUMULATIVE INDEPENDENT PR 4 ACCEPTANCE REVIEW**. Draft PR #20 remains OPEN, DRAFT, UNMERGED.
+- Phase 0 remains CLOSED.
+- Phase 1 planning remains APPROVED AND MERGED; implementation authority EFFECTIVE.
+- Phase 1 itself remains **IN PROGRESS**.
+- PR 1, PR 2, and PR 3 remain MERGED AND CLOSED.
+- Phase 1 PR 4 repository implementation is **ACCEPTED** under **D-052** at accepted implementation head `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3`.
+- Independent cumulative verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
+- PR [#20](https://github.com/Vedang1998/Stocky/pull/20) remains **OPEN, DRAFT, UNMERGED**.
+- Merge remains **NOT AUTHORIZED**. Next gate: **PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION**.
+- PR 5 remains **BLOCKED** until PR 4 is actually merged.
+- Production remains unauthorized. No deployment, backfill, ownership repair, or inventory mutation is authorized.
+- Every inventory-write flag remains **DEFAULT OFF**.
+- Do **not** state that PR 4 is merged, closed, Phase 1 complete, PR 5 started, or production ready.
