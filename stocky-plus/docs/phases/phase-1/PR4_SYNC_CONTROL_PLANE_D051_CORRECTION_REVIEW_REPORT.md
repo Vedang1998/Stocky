@@ -95,14 +95,15 @@ No production database, queue, credential, merchant data, or webhook replay was 
 | `npm run tenant:access:inventory:check` | 0 | fresh |
 | `npm run tenant:access:audit` | 0 | `tenant_access_audit_ok` |
 | `npm run tenant:enforcement:inventory:check` | 0 | fresh |
-| `npm run test:sync-performance` (×5) | 0 | **6 files / 64 tests passed**; repeated ×5, see §22.1 |
+| `npm run test:sync-performance` (×5) | 0 ×5 | **6 files / 64 tests passed** on every one of the five runs |
 | `npm run test:sync-integration` | 0 | **20 files / 241 tests passed** |
-| `npm run test:sync-exactly-once` | 0 | passed (see §22.1) |
-| `npm run test:sync-dispatch-recovery` | 0 | passed (see §22.1) |
+| `npm run test:sync-exactly-once` | 1 → **0** | first standalone run hit the §22.1 grant-wipe artifact; after re-provision **42 / 42 passed** |
+| `npm run test:sync-dispatch-recovery` | 1 → **0** | same artifact; after re-provision **29 / 29 passed** |
 | `npm run test:vitest-reporters` | 0 | **4 tests passed** |
 | `npm run test:migrations-name-filter-probes` | 0 | 1 skipped / 1 todo (by design) |
-| `npm run test:migrations` (full) | 0 | see §22.1 |
+| `npm run test:migrations` (full) | **1** | 47/49 files, 224 passed / **2 failed** — both reviewer-environment, diagnosed and re-run to green in §22.2 |
 | F-F03 exact failing command × 5 | 0 ×5 | 1 passed / 12 skipped each run |
+| Full CI provisioning sequence on a clean DB (15 steps) | 0 ×15 | all pass end-to-end — see §22.3 |
 | `git diff --check` | 0 | clean |
 
 Independent reviewer probes (raw `pg` clients, not the project's own tests) were additionally executed for sections A–N below. Cursor's return packet was not accepted as proof for any conclusion in this report.
@@ -504,12 +505,50 @@ No accepted finding is reopened. No regression evidence was found in any D-045/D
 |---|---|
 | `test:vitest-reporters` | **4 tests passed**, exit 0 |
 | `test:migrations-name-filter-probes` | 1 skipped / 1 todo (by design), exit 0 |
-| `test:migrations` (full) | _recorded in §22.2_ |
-| `test:sync-exactly-once` (standalone) | _recorded in §22.2_ |
-| `test:sync-dispatch-recovery` (standalone) | _recorded in §22.2_ |
-| `test:sync-performance` ×5 | _recorded in §22.2_ |
+| `test:migrations` (full) | 47 / 49 files, **224 passed / 2 failed** — both failures reviewer-environment artifacts, proven in §22.2 |
+| `test:sync-exactly-once` (standalone, after re-provision) | **42 / 42 passed**, exit 0 |
+| `test:sync-dispatch-recovery` (standalone, after re-provision) | **29 / 29 passed**, exit 0 |
+| `test:sync-performance` ×5 | **64 / 64 passed on all five runs**, exit 0 each |
 
 **Run-order artifact (reviewer environment, not a product defect).** On their first standalone invocation, `test:sync-exactly-once` and `test:sync-dispatch-recovery` failed with 58 × `permission denied for table Shop`. Cause: the F-F03 test (§21) calls `resetPublicSchema` and re-runs `prisma migrate deploy`, which drops the schema and with it the grants created by `tenant:roles:provision` / `tenant:enforcement:apply` / `sync:roles:provision`. Both suites had already passed inside the full `test:sync-integration` run (§22) performed before F-F03. The roles were re-provisioned and both suites re-run; results in §22.2. This is an ordering artifact of running a schema-resetting migration test ahead of role-dependent suites in one database, and CI does not exhibit it because it provisions roles before the test phases and runs `test:migrations` last.
+
+### 22.2 The two `test:migrations` failures — both reviewer-environment, both proven
+
+`test:migrations` reported 224 passed / 2 failed. I did not accept either as environmental on inspection alone; each was diagnosed to a mechanism and then re-run to green.
+
+**(1) `tenant-expansion.migration.test.ts > NEW-PR4-C07 role-absent`**
+
+Failure: `2BP01 — role "stocky_control_plane" cannot be dropped because some objects depend on it. DETAIL: 24 objects in database stocky_fresh2`.
+
+The test exercises the role-absent path by dropping `stocky_control_plane`. PostgreSQL roles are **cluster-wide**, so the drop fails while any database in the cluster holds dependent objects. `stocky_fresh2` is the *second fresh database this reviewer created* to satisfy the "second fresh migration chain" evidence requirement (§3); it had 24 dependent objects. Its companion case, `NEW-PR4-C07 role-present`, passed in the same run.
+
+**Proof:** after `DROP DATABASE stocky_fresh2`, the test group re-ran **3 passed / 4 skipped, exit 0**, including `NEW-PR4-C07 role-absent`. CI is unaffected because it provisions exactly one database.
+
+**(2) `connected-identity.test.ts > rejects semantically equivalent privileged URLs`**
+
+Failure: `expected [Function] to throw an error`.
+
+The test constructs variants of the privileged URL that should each normalize to the same semantic identity, including `migration.replace(":5432", "")` guarded by `migration.includes("5432")`. This reviewer's disposable cluster runs on port **54329** to avoid colliding with any system PostgreSQL. `"54329".includes("5432")` is **true**, so the guard fires and the replacement produces `postgresql://stocky:stocky@127.0.0.19/stocky_plus_ci` — host `127.0.0.19`, a genuinely *different* endpoint. `resolveRuntimeDatabaseUrl` correctly does **not** reject it, and the assertion fails. Under CI's port 5432 the same replacement yields `postgresql://stocky:stocky@localhost/stocky_plus_ci` — same host and database, correctly rejected.
+
+**Proof:** re-run with a CI-shaped port, `rejects semantically equivalent privileged URLs` **passes**.
+
+Neither failure touches `DurableJob`, `DispatchReadyShop`, the readiness triggers, or any surface D-051 modifies. Both are artifacts of this reviewer's cluster topology, not of the reviewed head.
+
+### 22.3 Full CI provisioning sequence on a clean database
+
+During the re-provisioning described in §22.1, `tenant:enforcement:apply` returned exit 1 with `preflight_failed: … missing_pr1_composite_index: Supplier_shopId_id_key`. Rather than assume this was environmental, the complete CI provisioning and verification sequence was executed in CI order against a **freshly created database**:
+
+| Step | Exit | Step | Exit |
+|---|---|---|---|
+| `prisma migrate deploy` | 0 | `tenant:enforcement:apply --apply` | **0** |
+| `tenant:indexes:apply --apply` | 0 | `tenant:roles:verify` | **0** |
+| `tenant:indexes:verify` | 0 | `tenant:rls:verify` | **0** |
+| `tenant:schema:drift` | 0 | `tenant:immutability:verify` | **0** |
+| `tenant:enforcement:inventory:check` | 0 | `tenant:enforcement:verify` | **0** |
+| `tenant:roles:provision --apply` | 0 | `tenant:enforcement:drift` | **0** |
+| `tenant:enforcement:preflight` | 0 | `sync:roles:provision` / `sync:roles:verify` | **0** / **0** |
+
+**All fifteen steps pass end-to-end.** The earlier exit 1 was caused by this session having run three schema-resetting migration suites (F-F03, `test:migrations`, and the `NEW-PR4-C07` re-run) against the same database; each performs `resetPublicSchema` + `prisma migrate deploy`, which drops the PR 1 compatibility indexes, RLS policies, and grants that `tenant:enforcement:apply`'s preflight requires. Partial re-provisioning followed by a further schema-resetting test cannot restore that state. This is a reviewer sequencing artifact with **no bearing on the reviewed head**; PR 3 enforcement machinery is outside D-051's diff entirely.
 
 ---
 
