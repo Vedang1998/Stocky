@@ -3,6 +3,7 @@
 **Decision:** D-051 — Phase 1 PR 4 per-shop readiness lock scope (close global convoy)
 **Authorized starting reviewed D-050 head:** `62f4cff0ec2c0ec9542959fb65be29b26997e603`
 **Authorized main / merge base:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
+**D-051 runtime/test implementation head:** `05bcb88c213be8823e840c8233b98d46236ff644` (`fix(test): align D-049 multi-shop writers with D-051 lock order`; runtime migration in `d94f5d2`)
 **Immutable D-050 review incorporation:** cherry-pick `2e1fc3995614baf28d3fba1be59163d0be95096c` → local commit `747cf35159460d6fa6248089d9736fbf3c61101e` → blob `8247d8aea868818b8e904d196fee1a80fad283f5` — `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation)
 **Status:** `D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION`
 
@@ -181,9 +182,55 @@ CI contract uses deterministic cross-shop non-blocking plus a qualitative gate t
 | R-128 | **OPEN** — F-CLAUDE-D050-03 (this cycle) |
 | R-115…R-118, R-031/R-032/R-033 | **OPEN** until normal PR 4 closure |
 
+## Local validation (disposable PostgreSQL 16.14 + Redis 7; this Cursor session)
+
+Do **not** treat Cursor evidence as finding closure. Commands ran on `05bcb88c213be8823e840c8233b98d46236ff644` unless noted.
+
+| Check | Result |
+|---|---|
+| `npx prisma generate` / `npx prisma validate` | passed (Prisma Client v6.19.3; schema valid) |
+| `git diff --check` | clean |
+| `tenant:roles:provision --apply` / `tenant:roles:verify` | passed (`ok:true`; runtime role created) |
+| `sync:roles:provision --apply` / `sync:roles:verify` | passed (`ok:true`) |
+| `test:sync-integration` | **241 passed** / 20 files / exit 0 (153s) — CI-equivalent `SHOPIFY_APP_URL` + role passwords |
+| `test:sync-exactly-once` | **42 passed** / 2 files / exit 0 |
+| `test:sync-envelope-fail-closed` | **6 passed** / exit 0 |
+| `test:sync-role-isolation` | **9 passed** / exit 0 |
+| D-045 `-t` gates (v3/v2 rollback, digest-conflict, uncertain, RepeatableRead, queue-seam) | each **nonzero passed** / exit 0 |
+| `test:migrations` | **226 passed** / 49 files / exit 0 (327s) |
+| NEW-PR4-C07 role-present / role-absent `-t` | **1 passed** each / exit 0 |
+| `test:migrations-name-filter-probes` (no `-t`) | exit 0 (1 skipped / 1 todo) |
+| name-filter `-t "skip-only probe"` / `-t "todo-only probe"` | **exit 1** as required (`[ci-guard] … refusing vacuous success`) |
+| `test:vitest-reporters` | **4 passed** / exit 0 |
+| `test:sync-performance` (privileged `DATABASE_URL`; `D051_FULL_BENCH` unset) | **64 passed** / 6 files / exit 0 (130.51s) |
+| `d051-corrections.test.ts` | **11 passed** (cross-shop non-blocking ×4, same-shop serialization, global-key probe, single-statement multi-shop, opposite-order fail-closed, HOL, bench 1/2/4/10, expired-lease 1/2/100) |
+| `d050-corrections.test.ts` | **11 passed** (incl. ≥1000 claim-vs-insert 35950ms; 25s deadlock 25047ms; expired-lease 1/2/100; independent stale-fairness / anti-reset cases) |
+| `d049-readiness-corrections.test.ts` | **7 passed** (incl. lock-order fail-closed; 8s adversarial stress; 0×40P01) |
+| `test:sync-dispatch-recovery` | **29 passed** / exit 0 |
+| `lint` / `typecheck` / `graphql-codegen` / `build` | passed |
+| `sync:inventory:check` / `tenant:access:inventory:check` / `tenant:access:audit` / `tenant:enforcement:inventory:check` | passed |
+
+`test:sync-performance` with `DATABASE_RUNTIME_URL` set after `test:migrations` on the same disposable database produced **6 failed / 58 passed** (`42501 permission denied for table DurableJob` on `recoverExpiredDispatchLeases`). That is post-migration grant/RLS contamination of the restricted role on the shared local DB, not a D-051 product regression: the same suite is **64 passed** on privileged `DATABASE_URL`, and exact-head GitHub CI (which provisions roles on a fresh database) succeeded. `d051-corrections.test.ts` still **11 passed** in the contaminated run because those tests use direct `pg` clients on `DATABASE_URL`.
+
+HOL wall time **1110 ms** of which **1000 ms** is the post-completion hold; primary proof is shop B completing while T1 remained `idle in transaction`.
+
+CI-mode bench (1/2/4/10, 750 ms bursts) on this session: intake 4984 → 13113 tps; recovery 1238 → 3607 tps; `advisoryWaitSamples=0`; intake `advisoryGrantedMax` 1→10 (not a single global lock). Full 1…100 table above is from the earlier `D051_FULL_BENCH=1` run recorded in this file.
+
 ## Exact-head CI
 
-Recorded after push of the final D-051 head. D-050 runs `31542495663` / `31542499135` cover **D-050 only** and do not cover D-051.
+D-050 runs `31542495663` / `31542499135` cover **D-050 only** (`62f4cff…`) and do **not** cover D-051.
+
+### Runtime/test implementation head `05bcb88c213be8823e840c8233b98d46236ff644`
+
+| Field | Value |
+|---|---|
+| Exact-head PUSH CI | run `31651548233` — job `94296810645` — **success** — `head_sha` = `05bcb88…` — GitHub Actions skipped steps **0** |
+| Exact-head PR CI | run `31651551006` — job `94296824298` — **success** — `head_sha` = `05bcb88…` — GitHub Actions skipped steps **0** |
+| PUSH URL | https://github.com/Vedang1998/Stocky/actions/runs/31651548233 |
+| PR URL | https://github.com/Vedang1998/Stocky/actions/runs/31651551006 |
+| Superseded cancelled (cancel-in-progress) | PUSH `31650948914` (`267bcab…`); PR `31650951938` (`267bcab…`); PUSH `31649319386` / PR `31649322127` (`747cf35…`) |
+
+A documentation-only commit after `05bcb88…` is **not** covered by those runs. Exact-head CI for the live PR tip must be obtained again and reported in the Cursor return to ChatGPT. Do not treat the `05bcb88…` runs as covering later commits (F-CLAUDE-D050-02 lesson).
 
 ## Final status
 

@@ -1,6 +1,6 @@
 # Project Status
 
-**Updated:** 2026-08-12
+**Updated:** 2026-08-13
 **Current stage:** Phase 1 PR 4 D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION — Synchronization Control Plane
 **Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **Phase 0 status:** CLOSED
@@ -27,6 +27,8 @@
 | D-050 review verdict | `APPROVE D-050 CORRECTION CLOSURE` |
 | In-scope findings | **F-CLAUDE-D050-01, F-CLAUDE-D050-02, F-CLAUDE-D050-03A/B** |
 | Migration | `20260812230000_sync_control_plane_d051_readiness_lock_scope` (additive; D-050 migration not edited) |
+| D-051 runtime/test implementation head | `05bcb88c213be8823e840c8233b98d46236ff644` |
+| Exact-head CI on `05bcb88…` | PUSH `31651548233` / job `94296810645` **success**; PR `31651551006` / job `94296824298` **success**; skipped GitHub steps **0**. Those runs do not cover later documentation-only commits. |
 | Status after Cursor work | `D-051 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION` |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
@@ -53,7 +55,7 @@
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Return evidence to ChatGPT for independent verification after exact-head CI completes. Draft PR #20 remains draft — do not merge. Do not start Claude review from the Cursor turn.
+**Next action:** Return evidence to ChatGPT for independent verification. Draft PR #20 remains draft — do not merge. Do not start Claude review from the Cursor turn.
 
 ## Current truth
 

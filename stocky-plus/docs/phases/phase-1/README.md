@@ -32,7 +32,7 @@
 - D-050 artifacts: `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`.
 - Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050 — do not edit.
-- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; D-051 runtime/test = see D-051 implementation report / Git history.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head (exact-head PUSH `31651548233` / PR `31651551006`). A later documentation-only commit is not covered by those runs.
 - PR 5 remains **BLOCKED** until PR 4 is independently reviewed, accepted, and merged.
 - Do **not** state that Phase 1 is complete.
 - Do **not** begin PR 5 in this PR.
