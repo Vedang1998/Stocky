@@ -76,11 +76,14 @@ const APP_ROOT = path.resolve(
   "../..",
 );
 
-const DELEGATE_TO_MODEL = Object.fromEntries(
-  Object.entries(MERCHANT_DELEGATE_NAMES).map(([model, delegate]) => [
-    delegate,
-    model,
-  ]),
+const DELEGATE_TO_MODEL: Record<string, string> = Object.assign(
+  Object.create(null),
+  Object.fromEntries(
+    Object.entries(MERCHANT_DELEGATE_NAMES).map(([model, delegate]) => [
+      delegate,
+      model,
+    ]),
+  ),
 );
 
 const RAW_SQL_METHODS = [
@@ -650,6 +653,7 @@ function collectFindings(
           exception!.category === "pr1_maintenance_backfill" ||
           exception!.category === "pr1_compatibility_indexes" ||
           exception!.category === "pr3_database_enforcement" ||
+          exception!.category === "pr4_sync_control_plane" ||
           exception!.category === "migration_tests" ||
           exception!.category === "dev_seed");
       // Exact construction module or exception paths
@@ -660,6 +664,7 @@ function collectFindings(
           (exception.category === "pr1_maintenance_backfill" ||
             exception.category === "pr1_compatibility_indexes" ||
             exception.category === "pr3_database_enforcement" ||
+            exception.category === "pr4_sync_control_plane" ||
             exception.category === "dev_seed" ||
             exception.category === "migration_tests" ||
             exception.category === "raw_prisma_construction"));
@@ -701,6 +706,7 @@ function collectFindings(
           (exception!.category === "pr1_maintenance_backfill" ||
             exception!.category === "pr1_compatibility_indexes" ||
             exception!.category === "pr3_database_enforcement" ||
+            exception!.category === "pr4_sync_control_plane" ||
             exception!.category === "tenant_bound_access" ||
             exception!.category === "raw_prisma_construction" ||
             exception!.category === "migration_tests");
@@ -1386,7 +1392,7 @@ export function scanRepository(options?: {
     ),
   ].sort();
 
-  // Ensure inventory conceptually covers all 18 models even if a model has no call site yet
+  // Ensure inventory conceptually covers all 19 models even if a model has no call site yet
   for (const model of MERCHANT_OWNED_MODELS) {
     if (!modelsCovered.includes(model)) {
       // synthetic coverage marker from model registry (not a violation)

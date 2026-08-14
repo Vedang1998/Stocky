@@ -4,11 +4,11 @@
 **Work unit:** PR 3 — Database enforcement
 **Branch:** `phase-1/tenant-enforcement`
 **Generator:** `scripts/tenant-enforcement/inventory.ts` (deterministic)
-**Content digest:** `bf054868d2d7f3ea`
-**Merchant-owned tables:** 18
+**Content digest:** `2cf43869fca4ada0`
+**Merchant-owned tables:** 19
 **Bootstrap tables:** 2
 **Control/maintenance tables:** 4
-**Composite parent keys:** 18
+**Composite parent keys:** 19
 **Composite foreign keys:** 8
 
 > This file is mechanically generated. Do not edit by hand.
@@ -55,6 +55,7 @@
 | Stocktake | `Stocktake` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | StocktakeLineItem | — | `Stocktake_shopId_id_key` (PR1) | `Stocktake_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_Stocktake_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | BomComponent | `BomComponent` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | — | — | compatibility shopId idx only | `BomComponent_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_BomComponent_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | LowStockAlert | `LowStockAlert` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | — | — | compatibility shopId idx only | `LowStockAlert_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_LowStockAlert_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| SyncApplicationReceipt | `SyncApplicationReceipt` | nullable in Prisma (DB NOT NULL after enforcement) | — | — | — | — | `SyncApplicationReceipt_shopId_id_key` (PR1) | `SyncApplicationReceipt_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_SyncApplicationReceipt_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | SupplierSkuMapping | `SupplierSkuMapping` | nullable in Prisma (DB NOT NULL after enforcement) | — | Supplier | — | — | compatibility shopId idx only | `SupplierSkuMapping_shopId_id_key` | `SupplierSkuMapping_shopId_supplierId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_SupplierSkuMapping_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | VolumePriceTier | `VolumePriceTier` | nullable in Prisma (DB NOT NULL after enforcement) | — | Supplier | — | — | compatibility shopId idx only | `VolumePriceTier_shopId_id_key` | `VolumePriceTier_shopId_supplierId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_VolumePriceTier_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | LeadTimeSnapshot | `LeadTimeSnapshot` | nullable in Prisma (DB NOT NULL after enforcement) | — | Supplier | — | PurchaseOrder | compatibility shopId idx only | `LeadTimeSnapshot_shopId_id_key` | `LeadTimeSnapshot_shopId_supplierId_fkey`, `LeadTimeSnapshot_shopId_purchaseOrderId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_LeadTimeSnapshot_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
@@ -78,6 +79,7 @@
 | `Stocktake_shopId_id_key` | `Stocktake` | (shopId, id) |
 | `BomComponent_shopId_id_key` | `BomComponent` | (shopId, id) |
 | `LowStockAlert_shopId_id_key` | `LowStockAlert` | (shopId, id) |
+| `SyncApplicationReceipt_shopId_id_key` | `SyncApplicationReceipt` | (shopId, id) |
 | `SupplierSkuMapping_shopId_id_key` | `SupplierSkuMapping` | (shopId, id) |
 | `VolumePriceTier_shopId_id_key` | `VolumePriceTier` | (shopId, id) |
 | `LeadTimeSnapshot_shopId_id_key` | `LeadTimeSnapshot` | (shopId, id) |
@@ -114,6 +116,7 @@
 | `Stocktake` | `Stocktake_shopId_not_null` | `Stocktake_shopId_fkey_shop` | `Stocktake_shopId_id_key` | `Stocktake_tenant_select`, `Stocktake_tenant_insert`, `Stocktake_tenant_update`, `Stocktake_tenant_delete` | `trg_Stocktake_shopId_immutable` |
 | `BomComponent` | `BomComponent_shopId_not_null` | `BomComponent_shopId_fkey_shop` | `BomComponent_shopId_id_key` | `BomComponent_tenant_select`, `BomComponent_tenant_insert`, `BomComponent_tenant_update`, `BomComponent_tenant_delete` | `trg_BomComponent_shopId_immutable` |
 | `LowStockAlert` | `LowStockAlert_shopId_not_null` | `LowStockAlert_shopId_fkey_shop` | `LowStockAlert_shopId_id_key` | `LowStockAlert_tenant_select`, `LowStockAlert_tenant_insert`, `LowStockAlert_tenant_update`, `LowStockAlert_tenant_delete` | `trg_LowStockAlert_shopId_immutable` |
+| `SyncApplicationReceipt` | `SyncApplicationReceipt_shopId_not_null` | `SyncApplicationReceipt_shopId_fkey_shop` | `SyncApplicationReceipt_shopId_id_key` | `SyncApplicationReceipt_tenant_select`, `SyncApplicationReceipt_tenant_insert`, `SyncApplicationReceipt_tenant_update`, `SyncApplicationReceipt_tenant_delete` | `trg_SyncApplicationReceipt_shopId_immutable` |
 | `SupplierSkuMapping` | `SupplierSkuMapping_shopId_not_null` | `SupplierSkuMapping_shopId_fkey_shop` | `SupplierSkuMapping_shopId_id_key` | `SupplierSkuMapping_tenant_select`, `SupplierSkuMapping_tenant_insert`, `SupplierSkuMapping_tenant_update`, `SupplierSkuMapping_tenant_delete` | `trg_SupplierSkuMapping_shopId_immutable` |
 | `VolumePriceTier` | `VolumePriceTier_shopId_not_null` | `VolumePriceTier_shopId_fkey_shop` | `VolumePriceTier_shopId_id_key` | `VolumePriceTier_tenant_select`, `VolumePriceTier_tenant_insert`, `VolumePriceTier_tenant_update`, `VolumePriceTier_tenant_delete` | `trg_VolumePriceTier_shopId_immutable` |
 | `LeadTimeSnapshot` | `LeadTimeSnapshot_shopId_not_null` | `LeadTimeSnapshot_shopId_fkey_shop` | `LeadTimeSnapshot_shopId_id_key` | `LeadTimeSnapshot_tenant_select`, `LeadTimeSnapshot_tenant_insert`, `LeadTimeSnapshot_tenant_update`, `LeadTimeSnapshot_tenant_delete` | `trg_LeadTimeSnapshot_shopId_immutable` |
@@ -123,4 +126,4 @@
 
 ## Schema verification note
 
-Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **18**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.
+Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **19**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.

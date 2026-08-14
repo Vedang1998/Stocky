@@ -6,12 +6,12 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** NOT STARTED
-**Next authorized implementation unit:** documentation-only PR 3 closure synchronization, then return to ChatGPT for a fresh repository review and separate PR 4 authorization
-**Active implementation branch:** NONE
-**Active implementation PR:** NONE
-**Current main SHA:** `deef5d7c7881fb128121b8ff82fd0b2282fbee0b`
-**ChatGPT decisions:** D-025..D-039; **D-040 — Phase 1 PR 3 technically accepted**; **D-041 — Phase 1 PR 3 merge closure**
+**Phase 1 PR 4:** REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — merge NOT AUTHORIZED
+**Next authorized action:** PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION
+**Active implementation branch:** `phase-1/sync-control-plane`
+**Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
+**Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
+**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED** (merge not authorized)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -21,9 +21,30 @@
 - PR 1 is **MERGED AND CLOSED**.
 - PR 2 is **MERGED AND CLOSED** (PR #13; D-034 / D-035).
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
-- PR 4 is **NOT STARTED** and requires a separate ChatGPT authorization after this closure PR is merged.
+- PR #19 documentation merge-closure sync is **MERGED** as current main `e69bc53…`.
+- PR 4 repository implementation is **ACCEPTED** under **D-052** at accepted implementation head `eb757119…`. Independent verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
+- PR #20 remains **OPEN, DRAFT, UNMERGED**. Merge remains **NOT AUTHORIZED**.
+- Next gate: **PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION**.
+- D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
+- D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
+- D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
+- D-047 artifacts: `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D047_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-048 artifacts: `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D048_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-049 artifacts: `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D049_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-050 artifacts: `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D050_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable).
+- D-052 artifacts: `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`); `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`.
+- Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050; D-051; cumulative acceptance review — do not edit.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob.
+- PR 5 remains **BLOCKED** until PR 4 is actually merged.
 - Do **not** state that Phase 1 is complete.
-- Do **not** authorize PR 4 in this documentation PR.
+- Do **not** begin PR 5 in this PR.
+- **Q-003 / F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does not authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
+- **R-031 / R-032 / R-033 / R-039 / R-099 through R-121 / R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052).
+- **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** previously CLOSED on D-050 independent evidence; D-052 confirms repository-implementation closure / no R-124 reopen.
+- **R-127 / R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence).
+- **R-122 / R-123:** ACCEPTED NONBLOCKING RESIDUALS (D-052). R-123: transaction-shape invariant = correctness basis; `stocky.ready_lock_max_shop` = defense-in-depth only; F-CLAUDE-D051-01 accepted P3 characterization; F-CLAUDE-D051-02 / F-CLAUDE-PR4ACC-03 future-maintenance; no static writer-shape guard in this task.
+- **F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04:** accepted nonblocking out-of-scope F-F03 harness load sensitivity; do **not** reopen R-124.
 
 ## Immutable PR 3 (#15) merge evidence
 
@@ -44,7 +65,7 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 4 | **NOT STARTED** |
+| PR 4 | **D-046 CORRECTIONS IMPLEMENTED — PENDING INDEPENDENT VERIFICATION** (PR #20 draft) |
 
 ### PR 3 correction-history identities (preserved)
 
@@ -85,10 +106,16 @@
 ## Gate disposition
 
 - **Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION — PR 3 MERGED AND INDEPENDENTLY VERIFIED. Closure does **not** authorize production activation, backfill, ownership repair, deployment, or inventory writes.
+- **Q-003 / F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does **not** authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
+- **Q-002 / Q-008:** remain OPEN production/release gates.
 - **R-022 / R-024..R-027 / R-080..R-084 / R-086..R-094:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION — independently verified and merged.
 - **R-085:** CLOSED FOR PR 3 IMPLEMENTATION — populated disposable evidence independently verified; production/staging rehearsal remains open under R-028/R-029.
 - **R-028 / R-029:** remain OPEN operational gates.
 - **R-095..R-098:** accepted nonblocking PR 3 residuals — see `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md`.
+- **R-031 / R-032 / R-033 / R-039 / R-099..R-121 / R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052).
+- **R-122 / R-123:** ACCEPTED NONBLOCKING RESIDUALS — see `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`.
+- **R-124:** CLOSED — not reopened (F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is distinct F-F03 tooling debt).
+- **R-127 / R-128:** CLOSED — no regression (D-052).
 - **R-014 / R-013 / R-062 / R-079:** remain open as previously tracked.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
 
@@ -124,11 +151,22 @@
 28. `PR3_DATABASE_ENFORCEMENT_THIRD_CORRECTION_REVIEW_REPORT.md` — authoritative `READY FOR CHATGPT PR 3 ACCEPTANCE` (verbatim; do not modify)
 29. `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted nonblocking P3 residuals R-095..R-098
 30. `PR3_DATABASE_ENFORCEMENT_MERGE_CLOSURE.md` — concise merge-closure identities
+31. `PR4_SYNC_CONTROL_PLANE_ARCHITECTURE.md` — PR 4 architecture (D-042)
+32. `PR4_SYNC_CONTROL_PLANE_INVENTORY.md` — mechanically generated; do not edit by hand
+33. `PR4_SYNC_CONTROL_PLANE_IMPLEMENTATION_REPORT.md` — Cursor implementation evidence (pending independent verification)
+34. `PR4_SYNC_CONTROL_PLANE_REVIEW_REPORT.md` — original independent review `NOT READY` (verbatim; do not modify)
+35. `PR4_SYNC_CONTROL_PLANE_CORRECTION_BACKLOG.md` — D-043 first-correction backlog
+36. `PR4_SYNC_CONTROL_PLANE_CORRECTION_IMPLEMENTATION_REPORT.md` — D-043 first-correction Cursor evidence
+37. `PR4_SYNC_CONTROL_PLANE_CORRECTION_REVIEW_REPORT.md` — first correction-review `NOT READY` (verbatim; do not modify)
+38. `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_BACKLOG.md` — D-044 second-correction backlog
+39. `PR4_SYNC_CONTROL_PLANE_SECOND_CORRECTION_IMPLEMENTATION_REPORT.md` — D-044 Cursor second-correction evidence (pending independent verification)
+40. `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` — cumulative independent review `READY FOR CHATGPT PR 4 ACCEPTANCE` (verbatim; do not modify; blob `c9fca9b2…`)
+41. `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md` — D-052 accepted nonblocking residuals
 
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024..D-041)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-052)
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`

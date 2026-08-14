@@ -81,7 +81,8 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         CREATE POLICY "Supplier_tenant_update" ON "Supplier"
           FOR UPDATE TO stocky_runtime
           USING ("shopId" IS NOT NULL AND "shopId" = stocky_current_tenant_id()
-            AND stocky_current_tenant_context_version() = 'phase1-db-tenant-context-v1');
+            AND stocky_current_tenant_context_version() = 'phase1-db-tenant-context-v1'
+            AND stocky_shop_processing_enabled("shopId"));
       `);
       const rls = await verifyRlsOnly(client);
       expect(rls.ok).toBe(false);
@@ -100,7 +101,8 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         CREATE POLICY "Supplier_tenant_select" ON "Supplier"
           FOR SELECT TO PUBLIC
           USING ("shopId" IS NOT NULL AND "shopId" = stocky_current_tenant_id()
-            AND stocky_current_tenant_context_version() = 'phase1-db-tenant-context-v1');
+            AND stocky_current_tenant_context_version() = 'phase1-db-tenant-context-v1'
+            AND stocky_shop_processing_enabled("shopId"));
       `);
       const rls = await verifyRlsOnly(client);
       expect(rls.ok).toBe(false);
@@ -135,7 +137,8 @@ describe("PR3 RLS / composite / trigger definition drift", () => {
         CREATE POLICY "Supplier_tenant_select" ON "Supplier"
           FOR SELECT TO stocky_runtime
           USING ("shopId" IS NOT NULL AND "shopId" = stocky_current_tenant_id()
-            AND stocky_current_tenant_context_version() = 'wrong-version');
+            AND stocky_current_tenant_context_version() = 'wrong-version'
+            AND stocky_shop_processing_enabled("shopId"));
       `);
       const rls = await verifyRlsOnly(client);
       expect(rls.ok).toBe(false);

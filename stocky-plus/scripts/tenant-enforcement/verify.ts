@@ -27,6 +27,17 @@ import {
   normalizeCatalogExpr,
 } from "./catalog-expect";
 
+/**
+ * D-044 / NEW-PR4-C08: SyncApplicationReceipt may carry an additional SELECT
+ * policy for stocky_receipt_probe_owner only. The SECURITY DEFINER probe binds
+ * both shopId and applicationKey in fixed SQL; this policy must not be treated
+ * as tenant-runtime drift.
+ */
+const APPROVED_EXTRA_RLS_POLICIES: Readonly<Record<string, readonly string[]>> =
+  {
+    SyncApplicationReceipt: ["stocky_receipt_probe_select"],
+  };
+
 export type VerifyIssue = {
   code: string;
   table?: string;
@@ -268,7 +279,10 @@ async function checkPolicies(
   }
 
   for (const row of res.rows) {
-    const allowed = expected.map((c) => rlsPolicyName(table, c));
+    const allowed = [
+      ...expected.map((c) => rlsPolicyName(table, c)),
+      ...(APPROVED_EXTRA_RLS_POLICIES[table] ?? []),
+    ];
     if (!allowed.includes(row.polname)) {
       issues.push({
         code: row.permissive

@@ -56,6 +56,21 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION stocky_shop_processing_enabled(p_shop_id text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+PARALLEL SAFE
+SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT COALESCE(
+    (SELECT s."processingEnabled" FROM public."Shop" s WHERE s."id" = p_shop_id),
+    false
+  );
+$$;
+
+REVOKE ALL ON FUNCTION stocky_shop_processing_enabled(text) FROM PUBLIC;
+
 REVOKE ALL ON FUNCTION ${TENANT_CONTEXT_HELPER_FN}() FROM PUBLIC;
 REVOKE ALL ON FUNCTION ${TENANT_CONTEXT_VERSION_FN}() FROM PUBLIC;
 REVOKE ALL ON FUNCTION ${IMMUTABILITY_TRIGGER_FN}() FROM PUBLIC;
@@ -67,6 +82,7 @@ export function grantHelpersToRuntimeSql(runtimeRole: string): string {
   return `
 GRANT EXECUTE ON FUNCTION ${TENANT_CONTEXT_HELPER_FN}() TO ${role};
 GRANT EXECUTE ON FUNCTION ${TENANT_CONTEXT_VERSION_FN}() TO ${role};
+GRANT EXECUTE ON FUNCTION stocky_shop_processing_enabled(text) TO ${role};
 `.trim();
 }
 
@@ -81,7 +97,7 @@ ALTER TABLE ${t} FORCE ROW LEVEL SECURITY;
 export function rlsPoliciesSql(table: string, runtimeRole: string): string {
   const t = quoteIdent(table);
   const role = quoteIdent(runtimeRole);
-  const pred = `${quoteIdent("shopId")} IS NOT NULL AND ${quoteIdent("shopId")} = ${TENANT_CONTEXT_HELPER_FN}() AND ${TENANT_CONTEXT_VERSION_FN}() = '${ENFORCEMENT_CONTEXT_VERSION}'`;
+  const pred = `${quoteIdent("shopId")} IS NOT NULL AND ${quoteIdent("shopId")} = ${TENANT_CONTEXT_HELPER_FN}() AND ${TENANT_CONTEXT_VERSION_FN}() = '${ENFORCEMENT_CONTEXT_VERSION}' AND stocky_shop_processing_enabled(${quoteIdent("shopId")})`;
 
   const drop = (cmd: string) =>
     `DROP POLICY IF EXISTS ${quoteIdent(rlsPolicyName(table, cmd as "select"))} ON ${t};`;

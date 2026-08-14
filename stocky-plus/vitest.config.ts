@@ -5,6 +5,12 @@ export default defineConfig({
     environment: "node",
     include: ["app/**/*.test.ts"],
     // Tenant-access PostgreSQL integration tests run under vitest.tenant-access.config.ts
-    exclude: ["app/tenant/**/*.test.ts", "**/node_modules/**"],
+    // Sync control-plane integration tests run under vitest.sync-integration.config.ts
+    // (fileParallelism: false — must not share disposable DB with default unit suite).
+    exclude: [
+      "app/tenant/**/*.test.ts",
+      "app/sync/__tests__/**/*.test.ts",
+      "**/node_modules/**",
+    ],
   },
 });

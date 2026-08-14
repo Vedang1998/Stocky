@@ -1,162 +1,101 @@
 # Project Status
 
-**Updated:** 2026-08-04
-**Current stage:** Phase 1 PR 3 MERGED AND CLOSED — documentation-only closure sync in progress; PR 4 NOT STARTED
-**Current main SHA:** `deef5d7c7881fb128121b8ff82fd0b2282fbee0b`
+**Updated:** 2026-08-13
+**Current stage:** Phase 1 PR 4 REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION — Synchronization Control Plane
+**Current main SHA:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; Phase 1 itself remains IN PROGRESS
-**Active implementation branch:** NONE
-**Active implementation PR:** NONE
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — not merged
+**Active implementation branch:** `phase-1/sync-control-plane`
+**Active implementation PR:** #20 — OPEN, DRAFT, UNMERGED
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
+**Phase 1 PR 4:** REPOSITORY IMPLEMENTATION ACCEPTED (D-052) — merge NOT AUTHORIZED
 **Phase 1:** IN PROGRESS
-**PR 4:** NOT STARTED — PENDING SEPARATE CHATGPT AUTHORIZATION AFTER THIS CLOSURE PR
+**PR 5:** BLOCKED until PR 4 is actually merged
 
-## Phase 1 PR 3 (#15) merge evidence (immutable)
-
-| Field | Value |
-|---|---|
-| PR | [#15](https://github.com/Vedang1998/Stocky/pull/15) — CLOSED AND SQUASH-MERGED |
-| Accepted runtime/test implementation | `01dbb6fd97b38864894069dd3ee30524a236e764` |
-| Authoritative independent review | `a51f03bc33397692bf5901ce4e78b862fc84de9d` |
-| Independent verdict | `READY FOR CHATGPT PR 3 ACCEPTANCE` — P0:0 P1:0 P2:0 P3:4 accepted nonblocking |
-| Live synthetic merge parents (reviewed) | `d58a897fdad96eb1dec70d0029dcc34ed9f1dd86` + `01dbb6fd97b38864894069dd3ee30524a236e764` |
-| Final synchronized pre-merge PR head | `c88c9a74c50912cb79cd59b4bd7cbb08c2351157` |
-| Final exact-head CI | workflow `CI`, run `30922984027`, job `92038054067`, conclusion `success`, `head_sha` = final PR head |
-| Squash merge SHA | `deef5d7c7881fb128121b8ff82fd0b2282fbee0b` |
-| Merge timestamp | `2026-08-04T15:39:20Z` |
-| Decisions | **D-040** (technical acceptance) / **D-041** (merge closure) |
-
-### PR 3 correction-history identities (preserved)
-
-| Identity | SHA / note |
-|---|---|
-| Original independently reviewed implementation head | `57016ed4b685c8958ad49d821f4afd9ea9894a9b` — `NOT READY — CORRECTIONS REQUIRED` |
-| Original review-report / first-correction start | `ebcd0263ee726829f517d729abe601c7416a0952` |
-| Pre-correction actual last runtime/test head | `0ee3ae027d746b9696c990dfbc59976f4ef56ae7` (corrects false `aeeecc2…` claim) |
-| First correction runtime/test tip | `01cced426e8cbdfebb8580c20bfc4f2041713c59` |
-| First correction handoff reviewed by Claude | `cb9d04ebe1a99df2f8b4db0188efd20049c59633` |
-| Second review-report / second-correction start | `7865e30cf6ab7a57aa0025f170f861c2a1233b28` — `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:2 P2:6 P3:9) |
-| Second-correction independently reviewed implementation head | `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b` |
-| Second correction review-report / third-correction start | `440a93eaf2d87a9b8cf2c7390740d79be6453d05` — `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:1 P2:3 P3:4) |
-| Pre-third-correction runtime/test head | `24cc4d8a85374de8151c8de3d87f3a9cad7d6e9b` (corrects false `046a3b1…` claim — F-NEW-03) |
-| Accepted runtime/test implementation (D-040) | `01dbb6fd97b38864894069dd3ee30524a236e764` |
-| Independent third-correction review-report only | `a51f03bc33397692bf5901ce4e78b862fc84de9d` |
-| Final synchronized PR head (governance sync on main files) | `c88c9a74c50912cb79cd59b4bd7cbb08c2351157` |
-| Squash merge | `deef5d7c7881fb128121b8ff82fd0b2282fbee0b` |
-| Historical first-correction CI-green tip (not final) | `030753460ad6b4e228c4acd65f29bd77b241318d` (run `30828120871`, job `91734905661`, success) |
-
-**Claude PR 3 original review:** `NOT READY — CORRECTIONS REQUIRED` at `57016ed…` (preserved verbatim)
-**Claude PR 3 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `cb9d04e…` (report `7865e30…`; preserved verbatim)
-**Claude PR 3 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `24cc4d8…` (report `440a93e…`; preserved verbatim)
-**Claude PR 3 third correction review:** `READY FOR CHATGPT PR 3 ACCEPTANCE` at `01dbb6f…` (report `a51f03…`; preserved verbatim) — P0:0 P1:0 P2:0 P3:4 accepted/nonblocking
-**ChatGPT decisions:** D-025..D-039; **D-040 — Phase 1 PR 3 technically accepted**; **D-041 — Phase 1 PR 3 merge closure**
-
-## Phase 1 PR 2 (#13) merge evidence (immutable)
+## Phase 1 PR 4 D-052 (active)
 
 | Field | Value |
 |---|---|
-| Authorized head | `5fc98192d2ca350de358316d9383e39103b98c80` |
-| Squash merge SHA | `e9c4f87eb28ce0e957a8cbd159719586892f8b98` |
-| Merge timestamp | `2026-08-03T01:38:59Z` |
-| Accepted implementation head | `70f4a80aab2366108a71fd80320b0f824bfe0cce` |
-| Authoritative independent review | `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd` |
-| Final pre-merge CI | run `30776644228`, job `91573286240`, success, `head_sha` = authorized head |
-| Decision | D-034 / D-035 |
+| Decision | **D-052 — Phase 1 PR 4 repository implementation accepted** |
+| ChatGPT disposition | **ACCEPT PR 4 REPOSITORY IMPLEMENTATION** |
+| Accepted implementation head | `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3` |
+| Merge base / `origin/main` | `e69bc53d91db75472b0d0998bf1b74ee6246adb1` |
+| Cumulative independent review commit | `ca7998486e2bfff6c03e75a18a7e81d6ab19bfd0` |
+| Immutable cumulative review-report blob | `c9fca9b2effba5de3418e4523185beb3d92bc79e` — `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (never edit) |
+| Independent verdict | `READY FOR CHATGPT PR 4 ACCEPTANCE` |
+| Findings | P0 0 / P1 0 / P2 0 / P3 4 |
+| PR #20 | OPEN, DRAFT, UNMERGED |
+| Merge | **NOT AUTHORIZED** pending this synchronization + exact-head CI + ChatGPT merge-authorization verification + explicit user authorization |
+| Next gate | **PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION** |
+| PR 5 | BLOCKED until actual PR 4 merge |
+| Production | NOT AUTHORIZED |
+| Inventory-write flags | DEFAULT OFF |
 
-**PR 2 original independently reviewed head:** `6f9ca22c069a46003b6944ff56c888ff91e95cdc`
-**PR 2 first corrected head reviewed:** `e6a9a06a8a399bbfb17687399c59582f1712f442`
-**PR 2 second corrected head reviewed:** `99d7a2bb73e77f62bd4ed0029961b40ab04a08e0`
-**PR 2 third-cycle runtime/test implementation head:** `d7058294af7eb3d8f287f48cd0657a74475892e7`
-**PR 2 third-cycle reviewed handoff head:** `fec8500095197798be183d08b3dd004632adba80`
-**PR 2 third independent review report-only commit:** `000e53cdae6cd39b690fc8107d7d3f4f4791adf1`
-**PR 2 fourth-cycle runtime/test implementation head:** `21aba6660e71fa5af558d81499190ee8eb0e645e`
-**PR 2 fourth-cycle reviewed handoff head:** `93e8044aea3958e8efe36f774e7d99ae6a0dd687`
-**PR 2 fourth independent review report-only commit:** `6a73be7d23fd3bcbe19ebc30f65440e2c641093b`
-**PR 2 fourth-cycle intermediate green tip (not final handoff):** `ba5eee16f4121ffb128133102e55fbd35397665c` (run `30762725271`, job `91536046005`, success)
-**PR 2 fifth-cycle runtime/test tip label:** `5a69783c18208e89ee70623058966c5e5a0ec6b1` (inventory-refresh tip; last commit that touched runtime/test code is `0366658255ecbbd5e09168cbf43fbf135e2a2b33`)
-**PR 2 fifth-cycle actual final runtime/test commit:** `0366658255ecbbd5e09168cbf43fbf135e2a2b33`
-**PR 2 fifth-cycle reviewed implementation/handoff head:** `70f4a80aab2366108a71fd80320b0f824bfe0cce`
-**PR 2 fifth-cycle intermediate documented green tip (not final handoff):** `96c1029f143ba5e4a52094eef58ec29bf7b339ea` (run `30772826351`, job `91562852894`, success)
-**PR 2 first fifth-review report-only commit:** `7fcff5e14ae99aebae46496c7fadf138bca7166a` (Kelvin-sign cell later corrected; do not erase)
-**PR 2 authoritative corrected fifth-review report commit:** `ff3f9f6a6e9b57cde7df248553694a857b5bc6dd`
-**Accepted PR 2 implementation/handoff head (D-034):** `70f4a80aab2366108a71fd80320b0f824bfe0cce`
-**Claude PR 2 original review:** `NOT READY — CORRECTIONS REQUIRED` (preserved verbatim)
-**Claude PR 2 first correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `e6a9a06…` (report commit `b5fbd2b…`; preserved verbatim)
-**Claude PR 2 second correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `99d7a2bb…` (report commit `fed21a48…`; preserved verbatim) — P0:0 P1:3 P2:3 P3:4; no cross-tenant read/write reproduced
-**Claude PR 2 third correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `fec8500…` (report commit `000e53c…`; preserved verbatim) — P0:0 P1:0 P2:3 P3:4; no cross-tenant read/write reproduced
-**Claude PR 2 fourth correction review:** `NOT READY — FURTHER CORRECTIONS REQUIRED` at `93e8044…` (report commit `6a73be7…`; preserved verbatim) — P0:0 P1:1 P2:0 P3:4; no cross-tenant read/write reproduced
-**Claude PR 2 fifth correction review:** `READY FOR CHATGPT PR 2 ACCEPTANCE` at `70f4a80…` (first report `7fcff5e…`; authoritative corrected report `ff3f9f6…`; preserved verbatim) — P0:0 P1:0 P2:0 P3:3 accepted/nonblocking
-**PR 2 third-cycle intermediate green documentation tip (not final reviewed head):** `bab5fe90cfd81a1f0351d9f6d6db709378b2b25e` (run `30736171401`, job `91465255400`, success)
-**PR 2 third-cycle reviewed handoff CI:** run `30736427413`, job `91465920750`, conclusion `success`, `head_sha` = `fec8500095197798be183d08b3dd004632adba80`
-**PR 2 fourth-cycle reviewed handoff CI:** run `30763065246`, job `91536946610`, conclusion `success`, `head_sha` = `93e8044aea3958e8efe36f774e7d99ae6a0dd687`
-**PR 2 fifth-cycle reviewed handoff CI:** run `30773194142`, job `91563836345`, conclusion `success`, `head_sha` = `70f4a80aab2366108a71fd80320b0f824bfe0cce`
-**Third-cycle correction range commit count:** `fed21a48…`..`fec8500…` = **11** (prior prompt expected 12 was incorrect; merge base exact; no history rewrite)
+This D-052 record is technical acceptance of the reviewed PR 4 repository implementation. It is **not** merge authorization. Do **not** state that PR 4 is merged, closed, or that Phase 1 is complete. Do **not** start PR 5. Do **not** create D-053 or another runtime correction cycle.
 
-## Phase 1 PR 1 (#11) merge evidence (immutable)
+## Phase 1 PR 4 D-051 (historical correction closure)
 
 | Field | Value |
 |---|---|
-| Authorized head | `6e5b024254615f3259aeb8d8252305d86bd63777` |
-| Squash merge SHA | `44a24f3387c1dae0351490367c06bef10f333425` |
-| Merge timestamp | `2026-07-31T22:19:49Z` |
-| Pre-merge CI | run `30643441951`, job `91198830409`, success |
-| Decision | D-025 / D-026 |
+| Decision | **D-051 — Phase 1 PR 4 per-shop readiness lock scope (close global convoy)** |
+| D-051 CORRECTION CLOSURE | **APPROVED**. **Not PR 4 acceptance** (acceptance is D-052). |
+| Independently reviewed head | `938e9981dc5f4e551e0cebd37250ae7a40507575` |
+| D-051 runtime/test implementation head | `05bcb88c213be8823e840c8233b98d46236ff644` |
+| Independent review commits (source) | `3ad2dfbfe64b84addd3fcff14f62b424ea10eea0` then `c44b3c57db1aafeb4a5e21e4e451cc5e72d02abd` |
+| Incorporation on this branch | `768a1d2994ea38a3c49e2ea20c44e63228f6f58c` then `dd0f9e7626680e463978c192ff148d455e422fab` |
+| Final independent review report/blob | `d17df5900b26740a32e4408618166abce2495f3a` — `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable; never edited after incorporation) |
+| Independent / ChatGPT verdict | `APPROVE D-051 CORRECTION CLOSURE` |
+| In-scope findings closed | **F-CLAUDE-D050-01, F-CLAUDE-D050-02, F-CLAUDE-D050-03A/B** |
+| Migration | `20260812230000_sync_control_plane_d051_readiness_lock_scope` (additive; D-050 migration not edited) |
 
-**PR #12:** CLOSED AND SQUASH-MERGED — Phase 1 PR 1 merge-closure status sync on main as `04289d61f605414597ac85f47830a3c9d2f9e33d`
-**PR #14:** CLOSED AND SQUASH-MERGED — Phase 1 PR 2 merge-closure status sync on main as `00fb925721ad374b3ff976652ec99dbf655ebb11`
-**Independently reviewed implementation head (PR 1):** `28e77178602ca486e5138ca2f80e8947d8e113c0`
-**Documentation finalization / authorized merge head (PR 1):** `6e5b024254615f3259aeb8d8252305d86bd63777`
-**Claude PR 1 original review:** `NOT READY` at `7aabb095806716697bfea2783379351b15e1cda2`
-**Claude PR 1 correction review:** `NOT READY` at `fb04345f129b8664566c5947f2ad75f57102269b` (preserved verbatim)
-**Claude PR 1 follow-up review:** `NOT READY` at `aa5f425f446d79ff1bc24ac17a5944cdb8072159` (preserved verbatim)
-**Claude PR 1 capable-local review:** `READY FOR CHATGPT PR 1 ACCEPTANCE` at `28e77178602ca486e5138ca2f80e8947d8e113c0` (preserved verbatim)
-**Prior R9 evidence at `fb04345f…`:** REJECTED AND SUPERSEDED
+D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctness basis** is the audited runtime transaction-shape invariant; `stocky.ready_lock_max_shop` is **defense-in-depth** only.
 
-## Gate disposition (post PR 3 merge)
+## Gate disposition (post D-052)
 
-**F-016 / R-022:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION — independently verified at `01dbb6f…` / report `a51f03…` / merge `deef5d7…` (D-040 / D-041). Production rollout evidence remains separately gated (R-028 / R-029).
-**Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION — PR 3 MERGED AND INDEPENDENTLY VERIFIED (does **not** authorize production activation, backfill, ownership repair, deployment, or inventory writes).
-**R-024 / R-025 / R-026 / R-027:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION — independently verified and merged.
-**R-080..R-084 / R-086..R-094:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION — independently verified and merged.
-**R-085:** CLOSED FOR PR 3 IMPLEMENTATION — populated disposable evidence independently verified. Production/staging rehearsal evidence remains open under R-028/R-029 and the rollout plan.
+**F-016 / R-022:** CLOSED FOR PHASE 1 REPOSITORY IMPLEMENTATION (PR 3)
+**Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION (PR 3)
+**Q-002:** OPEN — Partner Dashboard / environment-separation evidence still required
+**Q-003:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does **not** authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
+**Q-008:** OPEN — legal review still required before production privacy policy
+**F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
 **R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
-**R-013 / R-062:** OPEN (dependency hardening)
-**R-014:** OPEN P1 IMPLEMENTATION GATE
-**R-079:** OPEN — accepted PR 2 reliability residual (serializable upsert retry exhaustion; no integrity impact)
-**Accepted P3 residuals (PR 2):** P3-A focused-test omissions independently covered; P3-B concurrent upsert retry exhaustion (R-079); P3-C head identity (`70f4a80…`, not `96c1029…`)
-**Accepted P3 residuals (PR 3):** P3-e (R-095), P3-f (R-096), P3-g (R-097), P3-h (R-098) — see `PR3_DATABASE_ENFORCEMENT_ACCEPTED_RESIDUAL_BACKLOG.md`
+**R-095 / R-096 / R-097 / R-098:** OPEN — accepted nonblocking PR 3 residuals; production-rehearsal / rollout-evidence gates
+**R-031 / R-032 / R-033 / R-039:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-099 through R-121:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
+**R-122:** ACCEPTED NONBLOCKING RESIDUAL (D-052)
+**R-123:** ACCEPTED NONBLOCKING RESIDUAL (D-052). Correctness basis = audited runtime transaction-shape invariant. `stocky.ready_lock_max_shop` = defense-in-depth only. F-CLAUDE-D051-01 accepted P3 characterization. F-CLAUDE-D051-02 / F-CLAUDE-PR4ACC-03 future-maintenance risk. No static writer-shape guard in this synchronization.
+**R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
+**R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
+**R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
+**F-CLAUDE-PR4ACC-01:** P3 — REQUIRED MERGE-HYGIENE ACTION (stale PR #20 body; refresh before merge; not a runtime correction)
+**F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in this PR)
+**F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
+**F-CLAUDE-PR4ACC-04:** P3 — ACCEPTED NONBLOCKING OUT-OF-SCOPE TOOLING DEBT (do not reopen R-124)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
-**PR 1:** MERGED AND CLOSED
-**PR 2:** MERGED AND CLOSED
-**PR 3:** MERGED AND CLOSED
-**PR 4:** NOT STARTED — PENDING SEPARATE CHATGPT AUTHORIZATION AFTER THIS CLOSURE PR
-**Redis history disposition:** Accepted repository-history hygiene residual — synthetic `dump.rdb` blob `cae7715f893091a413923b54488f74c59a71e058` (843 bytes; introduced `45d9d90`, deleted `20659dd`) remains reachable; no credentials/PII/merchant data; no secret rotation or history rewrite required; `*.rdb` ignored going forward
+**PR 5:** BLOCKED until actual PR 4 merge
 **No production deployment**
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**RLS:** Repository enforcement tooling and disposable/CI fixtures merged — production RLS activation NOT AUTHORIZED
-**Next action:** Complete and merge this documentation-only PR 3 closure synchronization. After closure, return to ChatGPT for a fresh repository review and the separate PR 4 authorization decision.
+**Next action:** Obtain green exact-head PUSH and PR CI on the synchronized head, then return to ChatGPT for PR 4 merge-authorization verification. Draft PR #20 remains draft — do not merge. Do not start PR 5. Do not create D-053.
 
 ## Current truth
 
 - Phase 0 remains CLOSED.
 - Phase 1 planning remains APPROVED AND MERGED; implementation authority EFFECTIVE.
-- Phase 1 itself remains IN PROGRESS.
-- PR [#15](https://github.com/Vedang1998/Stocky/pull/15) was **CLOSED AND SQUASH-MERGED** at final synchronized head `c88c9a74c50912cb79cd59b4bd7cbb08c2351157` as squash SHA `deef5d7c7881fb128121b8ff82fd0b2282fbee0b` (`2026-08-04T15:39:20Z`). Current main SHA is that squash merge.
-- Accepted PR 3 runtime/test implementation remains `01dbb6f…`. Authoritative independent review remains `a51f03…`. Final pre-merge exact-head CI run `30922984027`, job `92038054067`, success.
-- PR [#13](https://github.com/Vedang1998/Stocky/pull/13) remains CLOSED AND SQUASH-MERGED (`e9c4f87…`).
-- PR [#12](https://github.com/Vedang1998/Stocky/pull/12) / [#14](https://github.com/Vedang1998/Stocky/pull/14) remain the PR 1 / PR 2 documentation merge-closure syncs.
-- PR [#11](https://github.com/Vedang1998/Stocky/pull/11) remains CLOSED AND SQUASH-MERGED (`44a24f3…`).
-- Phase 1 PR 3 database enforcement is **TECHNICALLY ACCEPTED AND MERGED** (D-040 / D-041).
-- Q-011 is **closed for Phase 1 implementation**. Closure does **not** authorize production activation, production backfill, ownership repair, deployment, or inventory writes.
-- R-022 / R-024..R-027 / R-080..R-094 are closed for Phase 1 repository implementation; R-085 closed for populated disposable evidence only.
-- R-028 / R-029 remain open operational gates. Accepted PR 3 residuals R-095..R-098 remain open for production-rehearsal maintenance.
-- No production deployment, production backfill, ownership repair, or inventory mutation occurred.
-- Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
-- PR 4 is **NOT STARTED** and requires a separate ChatGPT authorization after this closure PR is merged.
+- Phase 1 itself remains **IN PROGRESS**.
+- PR 1, PR 2, and PR 3 remain MERGED AND CLOSED.
+- Phase 1 PR 4 repository implementation is **ACCEPTED** under **D-052** at accepted implementation head `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3`.
+- Independent cumulative verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
+- PR [#20](https://github.com/Vedang1998/Stocky/pull/20) remains **OPEN, DRAFT, UNMERGED**.
+- Merge remains **NOT AUTHORIZED**. Next gate: **PRE-MERGE CONTROL SYNC / EXACT-HEAD CI / CHATGPT MERGE AUTHORIZATION**.
+- PR 5 remains **BLOCKED** until PR 4 is actually merged.
+- Production remains unauthorized. No deployment, backfill, ownership repair, or inventory mutation is authorized.
+- Every inventory-write flag remains **DEFAULT OFF**.
+- Do **not** state that PR 4 is merged, closed, Phase 1 complete, PR 5 started, or production ready.
