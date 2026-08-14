@@ -643,5 +643,6 @@ None of these decisions are implemented merely because they are approved. Invent
 6. **Merchant impact:** None in production. No production or merchant-data change is authorized.
 7. **Technical impact:** Documentation only. Proposed future implementation branch name `phase-1/catalog-location-inventory-facts` is **not created** by this decision.
 8. **Migration:** None authorized.
-9. **Risks:** Record PR 5 planning risks R-129 through R-142. Do not close R-010, R-014, R-028, R-029, R-034, R-095..R-098, or Q-002/Q-004 by planning approval. Preserve R-122/R-123 as accepted PR 4 residuals.
+9. **Risks:** Record PR 5 planning risks R-129 through R-147. Do not close R-010, R-014, R-028, R-029, R-034, R-095..R-098, or Q-002/Q-004 by planning approval. Preserve R-122/R-123 as accepted PR 4 residuals.
 10. **Final:** **PHASE 1 PR 5 PLANNING AUTHORIZED.** **PR 5 IMPLEMENTATION IS NOT AUTHORIZED.** **PRODUCTION EXECUTION IS NOT AUTHORIZED.** **INVENTORY WRITES REMAIN UNAPPROVED AND ALL INVENTORY-WRITE FLAGS REMAIN DEFAULT OFF.** **D-052 REMAINS PR 4 TECHNICAL-ACCEPTANCE AUTHORITY.**
+11. **Planning correction (same D-053 — do not create D-054):** After the initial planning packet, ChatGPT required documentation-only corrections for canonical source-ordering / full-sync fence, bounded absence tombstones, visible compatibility-projection recovery, JSONL resume without assuming HTTP Range, and scale-aware reconcile freshness. These remain planning rules only. Implementation is still **NOT AUTHORIZED**.
