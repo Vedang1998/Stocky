@@ -5,7 +5,7 @@
 | Q-001 | What is the public App Store name and brand system? | F-131; listing, billing handles, support | Product (ChatGPT) | Before any store listing / Phase 6 | Open |
 | Q-002 | Confirm Partner Dashboard distribution for the linked app (public vs custom) and whether separate prod/dev/staging apps exist | F-002; deploy strategy; D-019 | Product + Partner account holder | Before any Phase 1 deployment work | **Open — evidence still required** |
 | Q-003 | Which Shopify Admin API version is the project pin after GraphQL ops are fixed? | Invalid inventoryLevel / transfer complete ops on 2025-10; D-023 requires validation before sync implementation | Product + Cursor | Before first Phase 1 sync implementation merge | **CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION** (D-052). Target `2026-07` independently verified at accepted head `eb757119…`. PR #20 squash-merged as `f618103…`. Does **not** authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes. |
-| Q-004 | Incoming inventory: app-PO only until native API, or dual-source with badges immediately? | Forecast accuracy; community pain S26 | Product | Phase 2 worksheet | Open |
+| Q-004 | Incoming inventory: app-PO only until native API, or dual-source with badges immediately? | Forecast accuracy; community pain S26 | Product | Phase 2 worksheet | **Open — PR 5 planning clarification only (D-053): persist Shopify `incoming` as its own quantity state. Do not combine with app-owned PO incoming. Forecast policy remains Phase 2. Not closed.** |
 | Q-005 | Cost authority default for pilots (Shopify cost vs app average vs landed)? | Onboarding step 6; F-106 | Product + pilot merchant | Phase 4 | Open |
 | Q-006 | Trial length and development test-plan commercial terms | Entitlement design; D-020 | Product | Future billing/entitlement work (not Phase 1 implementation) | **Open — recommended decision recorded; not implemented** |
 | Q-007 | Are Essentials $29 / Growth $79 / Pro $149 still the pilot hypotheses? | Billing adapter; must not hardcode forever | Product | Pilot validation | Open |
@@ -48,6 +48,19 @@ Approved pin remains **`2026-07`** (`ApiVersion.July26`). Closure basis, indepen
 * production-write authorization.
 
 Those remain separate gates. F-CLAUDE-PR4ACC-02 (2025-10 inbound adapter retirement) is an accepted nonblocking future-maintenance residual and must be re-evaluated no later than that version’s Shopify retirement window. The adapter is **not** removed in this PR.
+
+## Q-004 — incoming-inventory forecast policy (unchanged; PR 5 clarification)
+
+**Status:** **OPEN** — Phase 2 worksheet. D-053 does **not** close Q-004.
+
+PR 5 planning records only this boundary:
+
+* Shopify `incoming` is a first-class canonical inventory-state fact (distinct from `available`, `on_hand`, and `committed`).
+* PR 5 must **not** define how Shopify `incoming` combines with app-owned purchase-order incoming for forecasting.
+* PR 5 must **not** invent an app-initiated inventory event ledger.
+* Dual-source badges, native Admin PO incoming integration, and forecast subtraction policy remain Phase 2 product decisions.
+
+Do **not** treat PR 5 planning or a later PR 5 implementation as Q-004 closure.
 
 ## Q-006 — recommended decision (not implemented)
 
