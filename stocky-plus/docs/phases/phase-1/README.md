@@ -6,12 +6,9 @@
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
-**Phase 1 PR 4:** MERGED — CLOSURE PR PENDING
-**Next authorized action:** documentation-only PR 4 closure PR acceptance / merge
-**Active documentation branch:** `phase-1/pr4-closure`
-**Active documentation PR:** [#22](https://github.com/Vedang1998/Stocky/pull/22) — OPEN, DRAFT, UNMERGED
-**Current main SHA:** `f618103c64d0b17c25b7b48f49555f661e40e22d`
-**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; PR #20 MERGED — CLOSURE PR PENDING
+**Phase 1 PR 4:** FORMALLY CLOSED
+**Next authorized action:** PR 5 requires a separate ChatGPT product-owner brief/authorization; PR 5 is NOT STARTED
+**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR 4 FORMALLY CLOSED
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -23,9 +20,10 @@
 - PR 3 is **MERGED AND CLOSED** (PR #15; D-040 / D-041).
 - PR #19 documentation merge-closure sync remains historical main `e69bc53…` (PR 4 merge base).
 - PR [#20](https://github.com/Vedang1998/Stocky/pull/20) is **CLOSED and MERGED**. Squash merge `f618103c64d0b17c25b7b48f49555f661e40e22d` at `2026-08-14T00:08:05Z`.
+- PR [#22](https://github.com/Vedang1998/Stocky/pull/22) is **CLOSED and MERGED**. Accepted closure head `b99039f9c34fb12e74d804a3df748cbfdb435313`. Squash merge `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` at `2026-08-14T04:01:29Z`.
 - PR 4 repository implementation remains **ACCEPTED** under **D-052** at accepted implementation head `eb757119…`. Independent verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
-- Phase 1 PR 4 is **MERGED — CLOSURE PR PENDING**. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
-- Next gate: **PR 4 CLOSURE PR ACCEPTANCE / MERGE**.
+- Phase 1 PR 4 is **FORMALLY CLOSED**. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
+- Next gate: **PR 5 NOT STARTED** — separate ChatGPT product-owner brief/authorization required.
 - D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
 - D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
 - D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
@@ -36,11 +34,11 @@
 - D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-052 artifacts: `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`); `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`; `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
 - Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050; D-051; cumulative acceptance review — do not edit.
-- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main.
-- PR 5 remains **BLOCKED** until this closure PR is accepted and merged.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main.
+- PR 5 is **NOT STARTED** and requires a separate ChatGPT product-owner brief/authorization.
 - Do **not** state that Phase 1 is complete.
-- Do **not** begin PR 5 in this PR.
-- Do **not** state that PR 5 is authorized merely because PR #20 merged.
+- Do **not** begin PR 5.
+- Do **not** state that PR 5 is authorized merely because PR #20 or PR #22 merged.
 - **Q-003 / F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does not authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
 - **R-031 / R-032 / R-033 / R-039 / R-099 through R-121 / R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052).
 - **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** previously CLOSED on D-050 independent evidence; D-052 confirms repository-implementation closure / no R-124 reopen.
@@ -73,7 +71,30 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 5 | **BLOCKED** until this closure PR is accepted and merged |
+| PR 5 | **NOT STARTED** — separate ChatGPT product-owner brief/authorization required |
+
+## Immutable PR 4 closure (#22) merge evidence
+
+| Field | Value |
+|---|---|
+| PR | [#22](https://github.com/Vedang1998/Stocky/pull/22) — closed and merged |
+| Accepted closure head | `b99039f9c34fb12e74d804a3df748cbfdb435313` |
+| Previous main | `f618103c64d0b17c25b7b48f49555f661e40e22d` |
+| Squash merge | `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` |
+| Merge timestamp | `2026-08-14T04:01:29Z` |
+| Pre-merge PUSH CI | run `31759152810`, job `94641644713`, success |
+| Pre-merge PR CI | run `31759155002`, job `94641685609`, success |
+| Post-merge main CI | run `31768571828`, job `94669500249`, success |
+| Decision | D-052 remains technical-acceptance authority; no D-053 |
+| Closure report | `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md` |
+| Production / merchant data | **No production or merchant data was accessed** |
+| Deployment | **No deployment occurred** |
+| Production backfill | **No production backfill occurred** |
+| Ownership repair | **No ownership repair occurred** |
+| Inventory mutation | **No inventory mutation occurred** |
+| Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
+| PR 4 | **FORMALLY CLOSED** |
+| PR 5 | **NOT STARTED** — separate ChatGPT product-owner brief/authorization required |
 
 ## Immutable PR 3 (#15) merge evidence
 
@@ -94,7 +115,7 @@
 | Ownership repair | **No ownership repair occurred** |
 | Inventory mutation | **No inventory mutation occurred** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
-| PR 4 (at PR 3 closure) | Historical next-unit note only; live PR 4 status is MERGED — CLOSURE PR PENDING |
+| PR 4 (at PR 3 closure) | Historical next-unit note only; live PR 4 status is FORMALLY CLOSED |
 
 ### PR 3 correction-history identities (preserved)
 
