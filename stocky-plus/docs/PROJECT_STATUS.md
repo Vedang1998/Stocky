@@ -100,7 +100,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
 **R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
 **R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
-**R-129 through R-147:** OPEN — PR 5 planning risks (D-053); do not treat as implementation-closed
+**R-129 through R-151:** OPEN — PR 5 planning risks (D-053); do not treat as implementation-closed
 **F-CLAUDE-PR4ACC-01:** P3 — **RESOLVED BY PR BODY UPDATE** before squash merge (not a runtime correction)
 **F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in PR 4)
 **F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
@@ -113,7 +113,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Complete ChatGPT PR 5 **planning correction** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (source-ordering fence, absence tombstones, projection recovery, JSONL resume, reconcile freshness). Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054.
+**Next action:** Complete ChatGPT PR 5 **planning correction 2** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (clock-domain split, delete/disconnect existence check, presence marker vs stale-attribute no-op, nullable-version fallback). Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054.
 
 ## Current truth
 
