@@ -163,15 +163,16 @@ Shared lineage columns (every canonical fact). **Do not collapse these into one 
 | `existenceState` | **B — authoritative existence** | `LIVE` \| `ABSENT`. Canonical existence, not a Shopify timestamp. |
 | `existenceKind` | B | How existence was last confirmed: `LIVE_REFETCH` \| `LIVE_FULL_SYNC_PRESENT` \| `ABSENT_CONFIRMED_QUERY`. `ABSENT_FULL_SYNC_SWEEP` is **not** approved. |
 | `existenceObservedAt` | B (app clock) | When **this app finished** an authoritative Shopify existence check (response in hand). Observation-completion time, **not** commit time. Same clock domain as `SyncRun.fenceAt` (app time) but **not** the apply-decision key. **Not** webhook arrival time. **Not** Shopify `updatedAt`. |
-| `existenceObservationGen` | B (app-issued monotonic) | From platform sequence `stocky_catalog_observation_gen_seq` (not `Shop`). Allocated **immediately after** the Shopify response completes and **before** waiting on the identity-row apply lock. Orders **observation completion**, not commit/lock order. Full-sync presence / null-version bulk attributes use **`SyncRun.fenceGeneration`** (one value allocated and committed before `bulkOperationRunQuery`), not a new gen per JSONL line. |
+| `existenceRequestGen` | B (app-issued monotonic, interval start) | From platform sequence `stocky_catalog_observation_gen_seq` (not `Shop`). Allocated with `SELECT nextval('stocky_catalog_observation_gen_seq')` **before** issuing the direct Shopify network request that produced the last **unambiguous** existence observation. Together with `existenceResponseGen` this is `[observationRequestGen, observationResponseGen]`. These generations order **app request lifecycle only**. They do **not** claim Shopify mutation order or snapshot time. Full-sync presence / null-version bulk attributes use **`SyncRun.fenceGeneration`** (one value allocated and committed before `bulkOperationRunQuery`), not a new gen per JSONL line. |
+| `existenceResponseGen` | B (app-issued monotonic, interval end) | Allocated with `SELECT nextval('stocky_catalog_observation_gen_seq')` **after** that direct request completed with an authoritative usable response and **before** entering the tenant fact transaction / identity lock. Do **not** use `existenceResponseGen` alone to order concurrent overlapping observations. |
 | `signalReceivedAt` | **C — signal observation** | Webhook/control arrival time at this app. Lineage / causation / diagnostics only. **Not** proof the signalled state is still current. **Not** a Shopify mutation timestamp. |
 | `lastSignalTopic` / `lastSignalDeliveryId` | C | Optional signal lineage. Official `X-Shopify-Webhook-Id` may be stored as delivery id. |
 | `lastSignalTriggeredAt` | C | Optional copy of official `X-Shopify-Triggered-At` (Shopify webhook publication time). Still clock C — **not** resource `updatedAt`, **not** existence confirmation, **not** comparable to clock A as one sequence. |
 | `lastSeenFullSyncRunId` | Epoch presence | Full-sync `SyncRun.id` that **observed this GID as present** in that epoch’s extraction. Advances **even when attributes no-op**. Distinct from `lastSyncRunId`. |
-| `attributeObservationGen` | Fallback only | Same platform sequence as existence gens (`stocky_catalog_observation_gen_seq`). Used **only when Shopify `updatedAt` is null**. Direct refetch allocates after response completion, before identity-lock wait. Full-sync null-version rows use `fenceGeneration`. Never unrestricted last-writer-wins. |
+| `attributeRequestGen` / `attributeResponseGen` | Fallback only | Same platform sequence as existence gens (`stocky_catalog_observation_gen_seq`). Used **only when Shopify `updatedAt` is null**. Direct refetch uses the same `[observationRequestGen, observationResponseGen]` interval — not `attributeResponseGen` alone as Shopify freshness. Full-sync null-version rows may use committed `fenceGeneration` as the conservative bulk epoch marker and **must not** override a newer direct observation under the existing fence rules. Never unrestricted last-writer-wins. |
 | `attributeFreshnessState` | Merchant-durable honesty | `ORDERED` when a non-null Shopify `updatedAt` is stored for the applied attributes; `DEGRADED` when the applied attributes rest on the null-version fallback. Source of truth for degraded-attribute visibility; `DataIssue` is derived. |
 | `compatibilityProjectionState` | Merchant-durable honesty | Compatibility projection health (`HEALTHY` / `DEGRADED`) on the merchant side. `SyncHealth` / `DataIssue` are derived projections. |
-| `existenceDiagnosticState` | Merchant-durable honesty | Stale-signal, existence-check-failed, terminal-revival-conflict, and related diagnostics that must survive a crash before control-plane `DataIssue` write. |
+| `existenceDiagnosticState` | Merchant-durable honesty | Stale-signal, existence-check-failed, terminal-revival-conflict, concurrent-existence-observation-conflict (`CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT`), and related diagnostics that must survive a crash before control-plane `DataIssue` write. |
 | `absenceNominationState` | Merchant-durable nomination | `NONE` \| `CANDIDATE` \| `CIRCUIT_BREAKER_HELD`. Candidates are **not** tombstones. |
 | `absenceCandidateEpochId` / `absenceCandidateGeneration` | Candidate evidence | Durable epoch/generation that nominated the row. Confirmation still required. |
 | `ingestBatchId` | Two-phase checkpoint | Merchant-durable batch evidence committed with facts. Control-plane `jsonlCommittedLineOrdinal` acknowledges **after** this commit. |
@@ -182,7 +183,7 @@ Shared lineage columns (every canonical fact). **Do not collapse these into one 
 | `deletionSource` | Lineage | `WEBHOOK` \| `CONFIRMED_QUERY` \| `DISCONNECT` \| null. Full-sync omission is **not** a deletion source. |
 | `shopifyLegacyResourceId` | Identity join | REST numeric id when needed to join webhook payloads |
 
-Inventory quantity states additionally persist **per-name** `quantity` + nullable `InventoryQuantity.updatedAt` + per-name `quantityAttributeGen` fallback. An older `available` must not overwrite a newer `available`; other names are independent.
+Inventory quantity states additionally persist **per-name** `quantity` + nullable `InventoryQuantity.updatedAt` + per-name `quantityRequestGen` / `quantityResponseGen` fallback interval. An older `available` must not overwrite a newer `available`; other names are independent. Overlapping null-version quantity conflicts must not last-writer-wins.
 
 ### 6.A Product — `ShopifyProductFact`
 
@@ -366,7 +367,7 @@ Keep **three distinct concepts**. Do **not** collapse them into one
 | Clock | Field(s) | What it measures | What it may decide |
 |---|---|---|---|
 | **A. Shopify attribute version** | Resource `shopifyUpdatedAt`; per-name `InventoryQuantity.updatedAt` | Shopify’s own resource / quantity mutation time | Whether **attributes / quantity values** are newer than the stored fact **of the same Shopify version type** |
-| **B. Authoritative existence observation** | `existenceState`, `existenceKind`, `existenceObservedAt`, `existenceObservationGen` | When **this app completed** an authoritative Shopify check that the GID / relationship currently existed or currently did not exist. Generation is allocated **immediately after** that response completes, **before** waiting on the identity-row apply lock | LIVE vs TOMBSTONED / disconnected existence. Comparable only to other **app-issued** existence observations and to `SyncRun.fenceGeneration` |
+| **B. Authoritative existence observation** | `existenceState`, `existenceKind`, `existenceObservedAt`, `existenceRequestGen`, `existenceResponseGen` | The last **unambiguous** app-issued `[observationRequestGen, observationResponseGen]` interval for an authoritative Shopify existence check. `observationRequestGen` is allocated **before** the Shopify network request. `observationResponseGen` is allocated **after** an authoritative usable response and **before** the identity-row apply lock. Generations order **app request lifecycle only**, not Shopify mutation order or snapshot time. Overlapping intervals with conflicting LIVE/ABSENT results must not resolve from `observationResponseGen` alone | LIVE vs TOMBSTONED / disconnected existence. Comparable only to other **app-issued** existence observation **intervals** and to `SyncRun.fenceGeneration`. A direct observation started after a fence iff `observationRequestGen > fenceGeneration` |
 | **C. Signal observation** | `signalReceivedAt`, `lastSignalTopic`, `lastSignalDeliveryId`, optional `lastSignalTriggeredAt` | When a webhook/control payload **arrived** at this app (and, optionally, when Shopify published it) | Lineage, causation, diagnostics. **Not** proof the signalled state is still current. **Not** a Shopify resource mutation timestamp |
 
 `appliedAt` / `lastRefreshedAt` / `deletedAt` remain **observability only**.
@@ -380,7 +381,8 @@ timestamps.
 - Durable-job `updatedAt` as a substitute for Shopify `updatedAt`.
 - Webhook `receivedAt` / `X-Shopify-Triggered-At` as a synthetic Shopify `updatedAt`.
 - Any comparison of clock A to clock B or clock C.
-- Commit / lock-acquisition order as a substitute for observation-completion order.
+- Commit / lock-acquisition order as a substitute for non-overlapping observation-interval order.
+- `observationResponseGen` / `existenceResponseGen` alone as proof that one concurrent Shopify observation was later than another.
 
 **Hard rule — no cross-clock comparison**
 
@@ -421,35 +423,86 @@ data.
 | Identity / key | **Never** part of a unique key, foreign key, or merchant identity |
 | Monotonicity | Globally monotonic `bigint`. Comparisons of two generations remain **within one shop / identity**. Cross-shop numeric comparison is meaningless and forbidden as an apply rule |
 | Gaps | Explicitly harmless. A crash, rollback, or failed `SyncRun` persist **burns** a value |
-| Reuse | **Never.** A fence generation may never be reused. A burned value is not recycled |
+| Reuse | **Never.** A fence generation may never be reused. A burned value is not recycled. Sequence is explicitly **NO CYCLE** so `nextval` cannot wrap |
 | Primitive | `SELECT nextval('stocky_catalog_observation_gen_seq');` Exact Prisma/migration syntax may later differ; the semantic contract is fixed |
-| Owner | Migration / schema owner. Runtime **must not** own the sequence (`excess_sequence_ownership` remains a verifier failure) |
-| Privileges | Narrow `GRANT USAGE, SELECT, UPDATE` on **this named sequence only** to `stocky_runtime` **and** `stocky_control_plane`. **No** table DML on `SyncRun` to runtime. **No** merchant-fact DML to control-plane. **No** `GRANT … ON SEQUENCES` (schema-wide). **No** PUBLIC grants |
-| Verifier | Named allowlist for this one sequence. Keep F-PR3C-05 against PUBLIC, blanket `ON SEQUENCES`, `evil_seq`, and runtime ownership. This is **not** a table-privilege bypass of R-102 / R-137 |
+| Owner | Migration / schema owner **only**. `stocky_runtime` and `stocky_control_plane` **must not** own the sequence (`excess_sequence_ownership` remains a verifier failure) |
+| Privileges | **USAGE only** on **this named sequence only** to `stocky_runtime` **and** `stocky_control_plane`. **No SELECT. No UPDATE. No ownership.** **No** table DML on `SyncRun` to runtime. **No** merchant-fact DML to control-plane. **No** schema-wide `GRANT … ON SEQUENCES`. **No** PUBLIC privilege |
+| `setval` | Application roles **must be unable** to call `setval()` successfully. Official PostgreSQL: `setval` requires **UPDATE** (https://www.postgresql.org/docs/18/functions-sequence.html, accessed 2026-08-14). Granting UPDATE would permit resetting sequence state and therefore generation reuse |
+| Cycle | Explicit `NO CYCLE` (https://www.postgresql.org/docs/18/sql-createsequence.html, accessed 2026-08-14). If the limit is reached, further `nextval` errors instead of wrapping |
+| Verifier | Named allowlist for this one sequence. Keep F-PR3C-05 against PUBLIC, blanket `ON SEQUENCES`, `evil_seq`, runtime/control-plane ownership, SELECT, UPDATE, and `setval`. This is **not** a table-privilege bypass of R-102 / R-137 |
 
 `nextval` is atomic and does not take a merchant or `Shop` row lock.
 Concurrent allocators never receive the same value. Allocation does **not**
 convoy on the tenant-root `Shop` row.
 
+Official PostgreSQL 18 sequence-function semantics
+(https://www.postgresql.org/docs/18/functions-sequence.html, accessed
+2026-08-14; PostgreSQL 18.6 docs dated August 13, 2026):
+
+- `nextval()` requires **USAGE or UPDATE**.
+- `setval()` requires **UPDATE**.
+- `currval` / `lastval` require USAGE or SELECT.
+- **SELECT is not needed** to allocate `nextval()`.
+- **UPDATE permits resetting sequence state** via `setval()` and therefore
+  must **not** be granted to application roles.
+
+Approved least privilege for `stocky_runtime` and `stocky_control_plane` is
+therefore **USAGE only**. That is sufficient for
+`SELECT nextval('stocky_catalog_observation_gen_seq')` and insufficient for
+`setval()`.
+
 **No PostgreSQL / merchant row lock may be held across Shopify HTTP /
-network I/O.**
+network I/O.** Concurrent observation ordering uses observation **intervals**,
+not a lock held across the Shopify request.
 
 ##### Direct authoritative Shopify refetch (runtime)
 
-1. Perform the Shopify network call with **no** merchant or control-plane
-   row lock held.
-2. When the authoritative response is in hand, **immediately** allocate
-   `SELECT nextval('stocky_catalog_observation_gen_seq')`.
-3. Capture `existenceObservedAt` / attribute observation time as the app
-   UTC instant of that completed observation.
-4. **Then** enter the tenant transaction and take the identity
-   `SELECT … FOR UPDATE`.
-5. Apply only if the incoming observation generation **wins** against the
-   committed generation.
+Every direct authoritative Shopify query uses an app-issued **observation
+interval** `[observationRequestGen, observationResponseGen]` (equivalents:
+`requestStartGen` / `responseEndGen`) from
+`stocky_catalog_observation_gen_seq`. Persist the last **unambiguous**
+existence interval as `existenceRequestGen` / `existenceResponseGen`.
 
-Do **not** allocate only after waiting for the identity lock. The
-generation must correspond to **observation completion order**, not later
-commit or lock-acquisition order.
+These generations order **app request lifecycle only**. They do **not**
+claim Shopify mutation ordering or snapshot time.
+
+Do **not** claim that allocating a generation immediately after Shopify
+response completion proves observation-completion order across concurrent
+workers. Example: Shopify response A arrives first; worker A is
+descheduled before end-generation allocation; response B arrives second
+and obtains the next end generation; worker A resumes and obtains a later
+end generation. The later end generation does **not** prove A's Shopify
+observation was later.
+
+**Required algorithm:**
+
+1. **BEFORE** issuing the Shopify network request: allocate
+   `requestStartGen = SELECT nextval('stocky_catalog_observation_gen_seq')`.
+   Persist merchant-durable **in-flight observation** evidence for this
+   identity (the start generation) in a **short** tenant transaction, then
+   **release all row locks**. This is not a network lock.
+2. Perform the Shopify request. Hold **NO** merchant/control-plane row lock
+   across network I/O.
+3. If the request completes with an authoritative usable response:
+   allocate
+   `responseEndGen = SELECT nextval('stocky_catalog_observation_gen_seq')`.
+   Capture `existenceObservedAt` as the app UTC instant the usable response
+   was in hand (observability; **not** the concurrent-apply key).
+4. **Then** enter the tenant fact transaction and take the identity
+   `SELECT … FOR UPDATE`.
+5. Apply using the interval rules in §6.F.3. Clear in-flight evidence as
+   part of apply or abandon.
+
+A failed, timed-out, or throttled request:
+
+- may burn `requestStartGen`;
+- creates **no** authoritative fact observation;
+- **cannot** cause deletion;
+- must clear in-flight evidence;
+- burned generation is harmless.
+
+Do **not** allocate the end generation only after waiting for the identity
+lock. Do **not** treat `responseEndGen` alone as observation order.
 
 ##### Full-sync fence (control-plane)
 
@@ -458,12 +511,20 @@ commit or lock-acquisition order.
 3. **COMMIT** that control-plane transaction.
 4. **Only then** call `bulkOperationRunQuery` / start location pagination.
 
+Do **not** introduce a network lock. No row lock is held across Shopify I/O.
+
 A failure after step 1/2 may burn a generation. That is **safe**.
 A fence generation may **never** be reused.
 
 JSONL / page lines of that run reuse `SyncRun.fenceGeneration` for
 `LIVE_FULL_SYNC_PRESENT` and for null-version bulk attribute observations.
-They do **not** allocate a new generation per line.
+They do **not** allocate a new generation per line. Full-sync null-version
+rows may continue to use the committed `fenceGeneration` as the
+conservative bulk epoch marker, provided they cannot override a newer
+direct observation under the existing fence rules.
+
+A direct observation started after the fence iff
+`observationRequestGen > fenceGeneration`.
 
 #### 6.F.3 Authoritative existence observation (clock B)
 
@@ -495,35 +556,92 @@ A COMPLETED bulk run may establish **PRESENCE** and may nominate
 **ABSENCE CANDIDATES**. It must **not** by itself write canonical
 `ABSENT` / tombstones. See §6.F.10.
 
-`existenceObservedAt` + `existenceObservationGen` represent **app
-authoritative-observation completion ordering**, not commit ordering.
+`existenceObservedAt` plus the last **unambiguous** interval
+`[existenceRequestGen, existenceResponseGen]` represent **app request
+lifecycle**, not commit ordering, and **not** Shopify mutation order.
 
-- `existenceObservedAt` is the app UTC time when that Shopify check
-  **completed** (response in hand), **not** webhook `receivedAt`, **not**
-  lock-wait end, **not** commit time.
-- `existenceObservationGen` is the sequence value allocated
-  **immediately after** that completion and **before** waiting on the
-  identity-row apply.
+- `existenceObservedAt` is the app UTC time when that Shopify check’s
+  usable response was **in hand**, **not** webhook `receivedAt`, **not**
+  lock-wait end, **not** commit time. It is observability, not the
+  concurrent-apply key.
+- `existenceRequestGen` is allocated **before** issuing that Shopify
+  network request.
+- `existenceResponseGen` is allocated **after** an authoritative usable
+  response and **before** waiting on the identity-row apply.
+- These values do **not** claim Shopify snapshot time.
 
-A larger generation means a **later completed app observation**. It does
-**not** mean a later Shopify `updatedAt`. An older observation generation
-**cannot** overwrite a newer committed generation merely because it
-obtains the row lock later.
+**Do not** treat a larger `existenceResponseGen` as proof of a later
+Shopify observation across concurrent workers.
 
-**LIVE vs TOMBSTONED** is decided only by clock B:
+##### Overlapping observation intervals (same identity)
 
-- `existenceState = LIVE` while the latest **committed** existence
+Two direct authoritative observations overlap when their generation
+intervals overlap.
+
+Closed-interval overlap:
+
+`A.observationRequestGen <= B.observationResponseGen`
+**and**
+`B.observationRequestGen <= A.observationResponseGen`.
+
+An observation that has allocated `observationRequestGen` but has not yet
+committed `observationResponseGen` (in-flight, including a burned/failed
+request until its in-flight evidence is cleared) is treated as unresolved
+and overlapping any other interval that intersects
+`[observationRequestGen, +∞)` until it completes or is abandoned.
+
+**If observations are NON-OVERLAPPING:**
+
+- the observation whose `observationRequestGen` is after the prior
+  observation’s `observationResponseGen` is the later app-issued
+  authoritative check;
+- existence ordering **may** use that fact.
+
+**If observations OVERLAP and their EXISTENCE results conflict**
+(LIVE vs ABSENT, or ABSENT vs LIVE):
+
+- do **not** choose LIVE vs ABSENT from `observationResponseGen` alone;
+- preserve the last unambiguous canonical existence state;
+- persist merchant-durable `CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT`
+  (or equivalent);
+- derive/reconcile `DataIssue`;
+- enqueue/bound a fresh authoritative refetch **after both observations
+  have completed**;
+- that subsequent **non-overlapping** check resolves the conflict.
+
+Examples: overlapping LIVE vs ABSENT → conflict + recheck. Overlapping
+ABSENT vs LIVE → conflict + recheck.
+
+**If overlapping observations agree on existence:**
+
+- they may converge idempotently on that existence state;
+- attributes still follow clock A.
+
+For terminal deletion: an overlapping LIVE/ABSENT conflict **must never**
+bypass the already-required terminal-revival safeguards in §6.F.7.
+
+For InventoryLevel reconnectable relationships: the same overlapping-conflict
+rule applies **before** changing LIVE/ABSENT.
+
+**LIVE vs TOMBSTONED** is decided only by clock B, using the last
+**unambiguous** non-overlapping existence observation (or the preserved
+pre-conflict state while a conflict is unresolved):
+
+- `existenceState = LIVE` while the last unambiguous committed existence
   observation for that identity is a LIVE kind.
-- `existenceState = ABSENT` (tombstoned / disconnected) while the latest
-  committed existence observation is `ABSENT_CONFIRMED_QUERY`.
+- `existenceState = ABSENT` (tombstoned / disconnected) while the last
+  unambiguous committed existence observation is `ABSENT_CONFIRMED_QUERY`.
 - A webhook payload **alone** never writes ABSENT.
 - A bulk omission **alone** never writes ABSENT.
+- An overlapping conflicting observation **never** writes ABSENT or LIVE
+  from `observationResponseGen` order.
 
 Serialize apply per `(shopId, shopifyGid)` — or
 `(shopId, inventoryItemGid, locationGid)` for levels — with
 `SELECT … FOR UPDATE` inside the tenant transaction. This is row-level
 fact locking, **not** a dispatcher/readiness redesign. The lock is taken
-**after** Shopify I/O and **after** generation allocation.
+**after** Shopify I/O and **after** end-generation allocation. It is
+**not** held across Shopify network I/O.
 
 #### 6.F.4 Signal observation (clock C)
 
@@ -662,8 +780,8 @@ For a delete or inventory-level disconnect **signal**:
 2. Record clock-C signal lineage (`signalReceivedAt` = webhook received
    time). **Do not** use that timestamp as Shopify `updatedAt`.
 3. Perform the approved **authoritative existence check** when technically
-   possible (table in §6.F.3). **No row lock across that network call.**
-   Allocate generation immediately after the response.
+   possible (table in §6.F.3). Use the §6.F.2 observation-interval
+   algorithm. **No row lock across that network call.**
 4. If Shopify **currently returns the same identity live**:
    - **Do not** tombstone merely because a delayed signal arrived.
    - Record merchant-durable `existenceDiagnosticState =
@@ -673,15 +791,24 @@ For a delete or inventory-level disconnect **signal**:
      `CATALOG_STALE_DISCONNECT_SIGNAL`.
    - Apply or refetch live canonical **attributes** according to clock A.
    - Set existence to LIVE with `existenceKind = LIVE_REFETCH` and the
-     observation generation allocated after the live response — unless
-     the identity is a **terminal tombstone** under the revival rule
-     below.
+     observation interval `[observationRequestGen, observationResponseGen]`
+     **only if** the interval is non-overlapping with a conflicting
+     existence observation, or overlapping observations **agree** on LIVE —
+     unless the identity is a **terminal tombstone** under the revival
+     rule below. An overlapping LIVE/ABSENT conflict must never bypass
+     those terminal-revival safeguards.
 5. If Shopify **authoritatively reports** the identity absent /
    unqueryable (completed query, not a timeout):
-   - Tombstone / disconnect.
-   - Store `existenceKind = ABSENT_CONFIRMED_QUERY`, `existenceObservedAt`
-     = when that check completed, observation generation allocated after
-     that response.
+   - Tombstone / disconnect **only** when this observation is a
+     non-overlapping later check, or overlapping observations **agree**
+     on ABSENT. If it overlaps a LIVE existence observation, apply the
+     overlapping-conflict rule: preserve last unambiguous state; persist
+     `CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT`; refetch after both
+     complete. Do **not** tombstone from `observationResponseGen` alone.
+   - When ABSENT is unambiguous: store
+     `existenceKind = ABSENT_CONFIRMED_QUERY`, `existenceObservedAt`
+     = when that check’s usable response was in hand, and the observation
+     interval allocated per §6.F.2.
    - **Do not** store webhook `receivedAt` as the confirmation time.
 6. If the query is **ambiguous or transiently failed**:
    - **Do not** convert the failure into canonical deletion.
@@ -736,18 +863,29 @@ the confirmed absence observation, which shows the **same** GID /
 relationship **live**, is existence evidence that can supersede the
 tombstone — **subject to the terminal-revival rule** in §6.F.7.
 
-Compare **clock B to clock B** using observation generations:
+Compare **clock B to clock B** using observation **intervals**, not
+`observationResponseGen` alone:
 
 - Direct LIVE refetch may un-tombstone a **reconnectable** identity when
-  its `existenceObservationGen` is **greater than** the committed absence
-  observation’s generation.
+  the LIVE observation is **non-overlapping** after the committed absence
+  observation (`LIVE.observationRequestGen` **>** committed absence
+  `existenceResponseGen`) **and** terminal-revival does not apply.
+- If the LIVE observation **overlaps** the absence observation and the
+  existence results conflict: do **not** un-tombstone from
+  `observationResponseGen` order; preserve last unambiguous state;
+  persist `CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT`; refetch after both
+  complete. InventoryLevel reconnectable pairs follow this same
+  overlapping-conflict rule **before** changing LIVE/ABSENT.
 - Complete full-sync presence (`LIVE_FULL_SYNC_PRESENT` at
   `R.fenceGeneration`) may un-tombstone a **reconnectable** identity when
   `R.fenceGeneration` is **greater than** the committed absence
-  generation. For **terminal** GIDs, bulk presence after a confirmed
-  tombstone is **revival-conflict evidence**, not a silent LIVE restore.
+  `existenceResponseGen` **and** there is no unresolved overlapping LIVE
+  vs ABSENT conflict. For **terminal** GIDs, bulk presence after a
+  confirmed tombstone is **revival-conflict evidence**, not a silent LIVE
+  restore.
 - A late bulk row from an **older** run (`fenceGeneration` **less than or
-  equal to** the absence generation) **must not** resurrect.
+  equal to** the absence interval’s `existenceResponseGen`) **must not**
+  resurrect.
 
 **Attributes still obey clock A.** Un-tombstoning a row does **not**
 license applying stale Shopify attributes. A revival may restore LIVE with
@@ -770,35 +908,40 @@ Location / InventoryLevel, but incoming payloads can still omit the field.
 arrival order).
 
 When incoming and/or stored **Shopify attribute version is null**, use an
-**app-issued attribute observation generation** — planning names
-`attributeObservationGen` on resource facts and per-name
-`quantityAttributeGen` on inventory quantities — allocated from
-`stocky_catalog_observation_gen_seq` under the **same timing rule** as
-existence generations: immediately after the Shopify response completes,
-before waiting on the identity-row apply.
+**app-issued attribute observation interval** — planning names
+`attributeRequestGen` / `attributeResponseGen` on resource facts and
+per-name `quantityRequestGen` / `quantityResponseGen` on inventory
+quantities — allocated from `stocky_catalog_observation_gen_seq` under
+the **same interval rule** as existence observations (§6.F.2): start
+generation **before** the Shopify request; end generation **after** an
+authoritative usable response and **before** the identity-row apply.
+Do **not** claim `attributeResponseGen` / `quantityResponseGen` alone
+proves Shopify freshness.
 
-This generation:
+This interval:
 
-- orders **app-issued authoritative attribute observations**, **not**
-  Shopify mutations;
+- orders **app request lifecycle** for null-version attribute
+  observations, **not** Shopify mutations;
 - for complete full-sync JSONL rows with **null** Shopify `updatedAt`,
-  uses **`SyncRun.fenceGeneration`**, so a delayed bulk observation
-  **cannot** commit over a newer direct refetch that already advanced
-  `attributeObservationGen` / `quantityAttributeGen`;
+  uses **`SyncRun.fenceGeneration`** as the conservative bulk epoch
+  marker, so a delayed bulk observation **cannot** commit over a newer
+  direct refetch under the existing fence rules;
 - for a **direct authoritative refetch** with null Shopify `updatedAt`,
-  allocates a **new** generation **after the response** and **before**
-  the identity lock wait. That refetch **must be able to update the
-  fact** when its generation wins. Infinite no-op because both versions
-  are missing is **forbidden**;
+  uses the direct observation interval. That refetch **must be able to
+  update the fact** when the interval is a non-overlapping later check,
+  or when overlapping null-version observations carry **identical**
+  payloads. Infinite no-op because both versions are missing is
+  **forbidden**;
 - is **explicitly a fallback only**. As soon as a non-null Shopify
-  `updatedAt` arrives, clock A prefers that Shopify timestamp; the
-  fallback generation is retained for diagnostics but does not outrank a
-  real Shopify `updatedAt` on the other side of a comparison.
+  `updatedAt` arrives, clock A prefers that Shopify timestamp and takes
+  precedence according to the existing clock-A rules; the fallback
+  interval is retained for diagnostics but does not outrank a real
+  Shopify `updatedAt` on the other side of a comparison.
 
 **Commit rules (nullable path)**
 
 1. Incoming has Shopify `updatedAt`, stored has Shopify `updatedAt`:
-   clock A only (§6.F.5). Ignore fallback generations for the apply
+   clock A only (§6.F.5). Ignore fallback intervals for the apply
    decision.
 2. Incoming has Shopify `updatedAt`, stored does not: apply incoming
    (Shopify version **outranks** a stored null-version fallback).
@@ -808,17 +951,26 @@ This generation:
    authoritative versioned fact. Record merchant-durable
    `CATALOG_NULL_VERSION_OBSERVATION` diagnostic evidence if the incoming
    observation was expected to refresh the fact.
-4. Both lack Shopify `updatedAt`: apply incoming **only if** incoming
-   `attributeObservationGen` (or per-name `quantityAttributeGen`) **>**
-   stored generation. Older generations **cannot** commit over newer
-   generations merely because they obtain the lock later. Equal
-   generations: idempotent no-op.
+4. Both lack Shopify `updatedAt` and the observations are
+   **non-overlapping**: apply incoming **only if** incoming
+   `attributeRequestGen` is after the stored interval’s
+   `attributeResponseGen` (same for per-name quantity intervals). Equal
+   non-overlapping identical payloads: idempotent no-op.
+5. Both lack Shopify `updatedAt` and the observations **OVERLAP**:
+   - if payloads / quantity for that field are **identical**: idempotent
+     convergence is allowed;
+   - if they produce **different** attributes / quantity: **no**
+     last-writer-wins and **no** `attributeResponseGen` winner; preserve
+     the last unambiguous value; set `attributeFreshnessState = DEGRADED`
+     plus concurrent-observation-conflict evidence; perform a fresh
+     **non-overlapping** authoritative refetch.
 
 **Concurrent missing-version observations:** two in-flight refetches each
-allocate after their own Shopify response. They later serialize on
-`(shopId, identity)` `SELECT … FOR UPDATE`. The later lock holder sees
-the earlier commit and applies the `>` rule. The older generation cannot
-overwrite the newer.
+allocate a start generation before their Shopify request and an end
+generation after a usable response. They later serialize on
+`(shopId, identity)` `SELECT … FOR UPDATE`. Overlapping conflicting
+payloads must **not** resolve by end-generation or lock-acquisition
+order.
 
 **Degraded honesty:** when absolute Shopify source freshness cannot be
 established (null `updatedAt` on the applied fact), the row’s
@@ -829,11 +981,13 @@ Shopify `updatedAt` is stored. UI must not claim perfect ordering for that
 fact. This is **not** a silent success.
 
 **Inventory quantity names with nullable `InventoryQuantity.updatedAt`:**
-the same fallback applies per name via `quantityAttributeGen`. A direct
-authoritative quantity refetch with null `updatedAt` **must** be able to
-refresh that name when its generation wins. It **must not** enter an
-infinite no-op/refetch loop. A null-version bulk quantity **must not**
-overwrite a newer refetch of that name.
+the same fallback applies per name via `quantityRequestGen` /
+`quantityResponseGen`. A direct authoritative quantity refetch with null
+`updatedAt` **must** be able to refresh that name when its interval is a
+non-overlapping later check or overlapping identical payload. It **must
+not** enter an infinite no-op/refetch loop. A null-version bulk quantity
+**must not** overwrite a newer refetch of that name. Overlapping
+conflicting quantities: no last-writer-wins; DEGRADED + fresh refetch.
 
 #### 6.F.10 Full-sync absence is candidate + confirmation, not single-epoch authority
 
@@ -924,8 +1078,14 @@ Confirmation must be:
 unbounded one-query-per-row storm.
 
 A LIVE confirmation of a candidate **clears** the nomination and keeps
-LIVE. A null confirmation **may** tombstone that identity (terminal GIDs
+LIVE, subject to the overlapping-interval rule. A null confirmation
+**may** tombstone that identity only when the confirmation interval does
+**not** overlap an unresolved LIVE existence observation (terminal GIDs
 then follow §6.F.7). Query failure / timeout is **not** absence.
+
+The new direct-query interval rule applies to those **absence-confirmation
+queries** too. A bulk absence candidate **must not** tombstone while an
+overlapping direct LIVE existence observation is unresolved.
 
 ##### Candidate-nomination isolation (READ COMMITTED)
 
@@ -953,9 +1113,15 @@ SET absenceNominationState = 'CANDIDATE',
 WHERE shopId = :shopId
   AND lastSeenFullSyncRunId IS DISTINCT FROM :epochId
   AND existenceState = 'LIVE'
-  AND (existenceObservationGen IS NULL
-       OR existenceObservationGen <= :fenceGeneration)
+  AND (existenceRequestGen IS NULL
+       OR existenceRequestGen <= :fenceGeneration)
 ```
+
+A direct observation started after the fence iff
+`existenceRequestGen > fenceGeneration`. That row must survive nomination.
+The sweep **must not** tombstone. Confirmation still uses the interval
+rule: do not tombstone a candidate while an overlapping direct LIVE
+existence observation is unresolved.
 
 The sweep **does not** compare `shopifyUpdatedAt` or `shopifyCreatedAt`
 to `R.fenceAt`. `shopifyCreatedAt` is **not** an absence guard.
@@ -1035,30 +1201,31 @@ after reconciliation.
 #### 6.F.13 Adversarial races this PR’s tests must cover
 
 Implementation tests (when PR 5 implementation is authorized — **not
-now**) **must** include:
+now**) **must** include races **A–AD** (preserved) **and** **AE–AL**
+(correction 4):
 
 | Race | Setup | Required outcome |
 |---|---|---|
-| **A. Delayed bulk vs newer incremental attributes** | Incremental refetch writes Shopify `updatedAt = T+5` and `existenceObservationGen = G1`. Later, bulk row from run fenced at T0 arrives with Shopify `updatedAt = T+1`. | Canonical **attributes** stay at T+5. Bulk attributes no-op. GID still `lastSeenFullSyncRunId =` this epoch. Existence remains LIVE. |
-| **B. Full-sync omission vs post-fence create** | Bulk fenced at T0 does not contain GID X. After T0, Shopify creates X; incremental LIVE refetch writes X with `existenceObservationGen > R.fenceGeneration`. Candidate nomination runs. | X remains LIVE. X is **not** nominated (generation predicate). Do **not** implement this by comparing Shopify `createdAt`/`updatedAt` to `fenceAt`. |
-| **C. Confirmed absence vs late older bulk** | Absence confirmed at generation G2. Late bulk row from run with `fenceGeneration = G1 < G2` arrives. | Row stays ABSENT. Late bulk does not resurrect. Fence compared only to existence generations, never used as fake Shopify `updatedAt`. |
+| **A. Delayed bulk vs newer incremental attributes** | Incremental refetch writes Shopify `updatedAt = T+5` and a non-overlapping existence interval with `existenceRequestGen = G1`. Later, bulk row from run fenced at T0 arrives with Shopify `updatedAt = T+1`. | Canonical **attributes** stay at T+5. Bulk attributes no-op. GID still `lastSeenFullSyncRunId =` this epoch. Existence remains LIVE. |
+| **B. Full-sync omission vs post-fence create** | Bulk fenced at T0 does not contain GID X. After T0, Shopify creates X; incremental LIVE refetch writes X with `existenceRequestGen > R.fenceGeneration` (direct observation started after the fence). Candidate nomination runs. | X remains LIVE. X is **not** nominated (request-start generation predicate). Do **not** implement this by comparing Shopify `createdAt`/`updatedAt` to `fenceAt`. |
+| **C. Confirmed absence vs late older bulk** | Absence confirmed with unambiguous interval ending at G2. Late bulk row from run with `fenceGeneration = G1 < G2` arrives. | Row stays ABSENT. Late bulk does not resurrect. Fence compared only to existence intervals, never used as fake Shopify `updatedAt`. |
 | **D. `partialDataUrl` completeness** | Bulk `COMPLETED` with `partialDataUrl` set and `url` null or ignored. | No candidate nomination. No tombstone work. No completeness watermark. Diagnostic `DataIssue` opened. LIVE rows unchanged. |
 | **E. JSONL two-phase checkpoint crash** | Batch lines 101–200 commit on the runtime connection; process crashes before the control-plane checkpoint write. | Checkpoint **lags** facts and **never** leads. Resume re-streams from byte 0, idempotently recognizes ingest batch 101–200, then acknowledges `jsonlCommittedLineOrdinal`. Runtime cannot DML `SyncRun`. |
 | **F. Projection failure** | Canonical commit succeeds; projection throws. | Canonical row present. Merchant `compatibilityProjectionState = DEGRADED`. Reconciler projects `DataIssue`. Rebuild restores projection without rolling back canonical. |
 | **G. Mixed quantity names** | Stored `committed.updatedAt = T+3`. Incoming snapshot has newer `available` but older `committed`. | `available` may apply; `committed` must not rewind. |
 | **H. Delayed delete webhook after live refetch** | LIVE refetch confirms GID current. Later, delayed delete/disconnect webhook arrives. Authoritative re-check still returns live **or** is required before any tombstone. | Signal alone **must not** tombstone current live authority. Stale-signal merchant diagnostic + derived `DataIssue`. LIVE retained (or re-confirmed). Terminal revival does not apply to a still-LIVE row. |
-| **I. Confirmed absence after full-sync fence; late older bulk cannot resurrect** | Confirmation tombstones at generation ≥ fence. Older bulk row later arrives. | Existence stays ABSENT. See also Race C. |
-| **J. Live check after reconnectable tombstone** | Inventory-level row ABSENT via `ABSENT_CONFIRMED_QUERY`. Later LIVE refetch returns the same pair. Shopify `updatedAt` is **not** compared to local absence time. | Existence **may recover** (LIVE) because clock B shows a newer app observation. Attributes still follow clock A (may no-op). **Not** the terminal-GID path. |
+| **I. Confirmed absence after full-sync fence; late older bulk cannot resurrect** | Confirmation tombstones with unambiguous interval ending ≥ fence. Older bulk row later arrives. | Existence stays ABSENT. See also Race C. |
+| **J. Live check after reconnectable tombstone** | Inventory-level row ABSENT via `ABSENT_CONFIRMED_QUERY`. Later **non-overlapping** LIVE refetch returns the same pair (`LIVE.observationRequestGen` after absence `existenceResponseGen`). Shopify `updatedAt` is **not** compared to local absence time. | Existence **may recover** (LIVE) because clock B shows a later non-overlapping app-issued check. Attributes still follow clock A (may no-op). **Not** the terminal-GID path. Overlapping LIVE/ABSENT must not recover from `observationResponseGen` alone. |
 | **K. Full sync observes GID; stale attributes no-op; presence marker still advances** | Canonical X has Shopify `updatedAt` T-0.5 from delayed incremental. Bulk contains X with `updatedAt` T-2. | Attributes rejected. `lastSeenFullSyncRunId = epochId`. X is not an absence candidate. Bounded memory (column update, no in-process GID set). |
-| **L. Nullable Shopify `updatedAt`: authoritative refetch can update** | Stored fact has null `shopifyUpdatedAt`. Direct authoritative refetch also has null `updatedAt` but new `attributeObservationGen` allocated after its response. | Fact **updates**. No infinite no-op. `attributeFreshnessState = DEGRADED` until a real Shopify `updatedAt` exists. |
-| **M. Concurrent missing-version observations (observation order)** | Two null-`updatedAt` authoritative observations. Response A completes first (gen G1) but its DB write is delayed. Response B completes later (gen G2) and commits first. | When A obtains the lock, G1 **cannot** overwrite G2. Same for per-name `quantityAttributeGen`. |
+| **L. Nullable Shopify `updatedAt`: authoritative refetch can update** | Stored fact has null `shopifyUpdatedAt`. Direct authoritative refetch also has null `updatedAt` but a **non-overlapping** later attribute interval. | Fact **updates**. No infinite no-op. `attributeFreshnessState = DEGRADED` until a real Shopify `updatedAt` exists. |
+| **M. Concurrent missing-version observations (interval overlap)** | Two null-`updatedAt` authoritative observations with **overlapping** intervals and **different** payloads. Response A arrives first; A pauses before end-generation; B obtains end generation first. | **No** last-writer-wins. **No** `attributeResponseGen` winner. Preserve last unambiguous value. DEGRADED + concurrent-observation-conflict + fresh non-overlapping refetch. Same for per-name quantity intervals. |
 | **N. Failed authoritative delete/disconnect refetch** | Delete/disconnect signal received. Existence query times out / 5xx / throttled. | Query failure is **not** converted into canonical deletion. Retry / `CATALOG_EXISTENCE_CHECK_FAILED` / DEGRADED. Last confirmed existence retained. If no merchant txn ran, `JobAttempt` is primary evidence. |
 | **O. Partial/failed bulk still cannot nominate or tombstone** | `FAILED`, `CANCELED`, or `COMPLETED` with only `partialDataUrl`. | Candidates are not promoted. No tombstone work runs. |
 | **P. Sequence uniqueness** | Two concurrent allocators (`nextval`). | Never receive duplicate generations. |
 | **Q. Sequence crash gap** | Allocator `nextval` succeeds; process crashes before `SyncRun.fenceGeneration` persist or before fact apply. | Value is burned and **never reused**. |
 | **R. Zero Shop counter writes** | Bootstrap / authentication Shop row during catalog sync. | Shop row receives **zero** generation writes. `catalogObservationGen` does not exist. |
-| **S. No lock across Shopify I/O** | Direct refetch instrumentation. | No merchant or control-plane row lock is held across the Shopify HTTP request. Generation is allocated after the response, before identity-lock wait. |
-| **T. Observation order vs commit order (existence)** | Shopify response A (LIVE or ABSENT) completes first; its DB write is delayed. Response B completes later and commits first. A then obtains the lock. | A must **not** overwrite B. Repeat for LIVE and ABSENT existence. |
+| **S. No lock across Shopify I/O** | Direct refetch instrumentation. | No merchant or control-plane row lock is held across the Shopify HTTP request. Start generation is allocated **before** the request; end generation **after** a usable response; identity lock is taken **after** that. In-flight start evidence is committed then locks released before I/O. |
+| **T. Non-overlapping existence vs commit order** | Observation A fully completes (`requestStartGen` and `responseEndGen` allocated) before B starts. B then commits first. A later obtains the lock. | A must **not** overwrite B. B may supersede A on clock B because B is the later non-overlapping app-issued check. Repeat for LIVE and ABSENT existence. Do **not** use this race to claim end-generation order across overlapping workers. |
 | **U. Bulk omission is not absence** | Successful JSONL omits GID X; direct query still returns X live. | No tombstone. Candidate may exist; confirmation keeps LIVE. |
 | **V. Circuit breaker** | Candidate count or proportion exceeds the configured threshold. | **Zero** tombstones. LIVE preserved. Domain DEGRADED. Anomaly `DataIssue`. No HEALTHY deletion reconciliation. |
 | **W. Small candidate set + null confirmation** | Candidate set under threshold. Direct completed query returns null. | Tombstone allowed (`ABSENT_CONFIRMED_QUERY`). |
@@ -1068,7 +1235,15 @@ now**) **must** include:
 | **AA. READ COMMITTED candidate sweep** | Newer LIVE authoritative observation commits while the candidate sweep is attempting the same row. | Row remains LIVE / candidate predicate re-evaluates correctly. Sweep is not REPEATABLE READ / SERIALIZABLE. |
 | **AB. Terminal single-response non-revival** | Confirmed terminal deletion (`ABSENT_CONFIRMED_QUERY`). One transient later LIVE response. | Tombstone **retained**. `TERMINAL_IDENTITY_REVIVAL_CONFLICT`. No silent LIVE restore. |
 | **AC. Write-scanner negative fixture** | Plant `inventoryBulkToggleActivation` (or `inventoryDeactivate`) into a PR 5 fact adapter. | CI **fails**. Deny-by-default mutation detection (GraphQL AST / semantic inspection, R-110 precedent). No inventory mutation feature flag enabled. |
-| **AD. Sequence privilege allowlist** | Runtime and control-plane roles. | Each has **only** USAGE/SELECT/UPDATE on `stocky_catalog_observation_gen_seq`. PUBLIC has none. Schema-wide `ON SEQUENCES` fails verify. Runtime does not own the sequence. No table-privilege bypass. |
+| **AD. Sequence privilege allowlist** | Runtime and control-plane roles. | Each has **USAGE only** on `stocky_catalog_observation_gen_seq`. **No SELECT. No UPDATE.** PUBLIC has none. Schema-wide `ON SEQUENCES` fails verify. Runtime and control-plane do **not** own the sequence. No table-privilege bypass. |
+| **AE. Sequence privilege — USAGE only nextval** | Restricted `stocky_runtime` and `stocky_control_plane` with USAGE only (no SELECT, no UPDATE). | Runtime `nextval` succeeds. Control-plane `nextval` succeeds. |
+| **AF. setval denial** | Same roles attempt `setval` on `stocky_catalog_observation_gen_seq`. | Runtime `setval` fails. Control-plane `setval` fails. PUBLIC `nextval` fails. |
+| **AG. No-cycle verifier** | Sequence definition / wrap attempt. | Sequence is explicitly **NO CYCLE**. It cannot cycle or reuse generations. |
+| **AH. Response scheduling inversion** | Response A arrives first. A pauses **before** end-generation allocation. Response B arrives later and gets end generation first. A and B existence results **conflict**. | Conflicting A/B results must **NOT** resolve by end-generation order. Preserve last unambiguous state. Conflict evidence + fresh refetch. |
+| **AI. Non-overlapping observations** | A completes fully (start and end allocated). B starts afterward (`B.observationRequestGen` after `A.observationResponseGen`). | B may supersede A on clock B. |
+| **AJ. Overlapping LIVE vs ABSENT** | Two overlapping direct existence observations, LIVE vs ABSENT (and the reverse). | Preserve last unambiguous state. `CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT` + derived DataIssue + fresh refetch after both complete. No false tombstone/revival. Terminal-revival safeguards are not bypassed. |
+| **AK. Overlapping null-version quantity conflict** | Two overlapping null-`updatedAt` quantity observations with **different** values for the same name. | No last-writer-wins. Preserve last unambiguous value. DEGRADED + concurrent-observation-conflict + fresh non-overlapping refetch. |
+| **AL. Bulk absence candidate + overlapping LIVE direct check** | Candidate nominated from complete bulk omission. Direct LIVE existence observation overlaps the absence-confirmation interval. | No tombstone until an unambiguous authoritative confirmation (non-overlapping later check). Overlapping LIVE remains unresolved → candidate stays LIVE. |
 
 Tests **must** fail closed: a focused command that collects zero tests is
 a failed check (PR 4 CI pattern).
@@ -1218,7 +1393,7 @@ A domain watermark advances to “full sync succeeded” only when:
 1. BulkOperation `status=COMPLETED` (or locations pagination exhausted with no errors);
 2. JSONL/pages fully applied;
 3. checkpoints complete;
-4. absence **candidate nomination** for that domain ran against the **complete** epoch using `lastSeenFullSyncRunId` and `fenceGeneration` compared to `existenceObservationGen` (§6.F.10) — **never** an in-memory GID list, **never** Shopify `updatedAt` vs `fenceAt`, and **never** after partial/failed bulk;
+4. absence **candidate nomination** for that domain ran against the **complete** epoch using `lastSeenFullSyncRunId` and `fenceGeneration` compared to `existenceRequestGen` (§6.F.10) — **never** an in-memory GID list, **never** Shopify `updatedAt` vs `fenceAt`, and **never** after partial/failed bulk;
 5. the blast-radius circuit breaker either allowed bounded confirmation or aborted **all** tombstones and marked the domain DEGRADED — a tripped breaker is **not** `HEALTHY` deletion reconciliation;
 6. every tombstone actually written was produced only by `ABSENT_CONFIRMED_QUERY`, never by bulk omission alone;
 7. `SyncRun.status=SUCCEEDED` only when the domain’s presence application and (if breaker-open) confirmation policy completed without claiming false deletion success.
@@ -1247,7 +1422,7 @@ PR 5 must:
 
 - page with cursors until `hasNextPage` is false (or a validated complete bulk locations query);
 - persist every location GID for the shop;
-- nominate locations present in canonical facts but absent from a **complete** location sync as **absence candidates** using the §6.F.10 predicate (a location with `existenceObservationGen > fenceGeneration` must survive; a location **observed** in this epoch must keep its presence marker even if attributes no-op). Tombstone a location only after `location(id:)` confirmed absence, subject to the circuit breaker. Deleted Location GIDs are terminal after confirmation;
+- nominate locations present in canonical facts but absent from a **complete** location sync as **absence candidates** using the §6.F.10 predicate (a location with `existenceRequestGen > fenceGeneration` must survive; a location **observed** in this epoch must keep its presence marker even if attributes no-op). Tombstone a location only after `location(id:)` confirmed absence, subject to the circuit breaker and the overlapping LIVE-observation rule. Deleted Location GIDs are terminal after confirmation;
 - treat `locations/deactivate` as inactive (`isActive=false` via live refetch), not as deletion;
 - treat `locations/delete` as a **signal**: authoritative `location(id:)` check; tombstone only on confirmed absence; delayed delete must not tombstone a location Shopify currently returns as live.
 
@@ -1412,9 +1587,9 @@ Every new merchant-domain table must comply with accepted PR 1–3 architecture:
 
 **Do not weaken RLS to simplify bulk ingest.** Batched writes still run inside transaction-local tenant context. Control-plane `SyncRun` / `DataIssue` / `SyncHealth` rows remain `platform_control_plane` as in PR 4 (`expectedRuntimePrivileges: []`); fact tables are `merchant_domain`. Runtime remains denied DML on `SyncRun`. Control-plane does not write merchant facts.
 
-**`stocky_catalog_observation_gen_seq` classification:** platform synchronization infrastructure — **not** merchant data, **not** a `Shop` column, **not** a tenant table, **not** bootstrap, **not** merchant-domain RLS, **not** a key or merchant identity. Globally monotonic; comparisons stay within a shop/identity; gaps are harmless; values are never reused. Narrow `USAGE, SELECT, UPDATE` on **this named sequence only** for `stocky_runtime` and `stocky_control_plane`. Sequence owner remains the migration role. Named-allowlist verifier; keep F-PR3C-05 against PUBLIC, blanket `ON SEQUENCES`, and runtime ownership. **Do not** grant table privileges to bypass PR 1–4 / R-102 / R-137.
+**`stocky_catalog_observation_gen_seq` classification:** platform synchronization infrastructure — **not** merchant data, **not** a `Shop` column, **not** a tenant table, **not** bootstrap, **not** merchant-domain RLS, **not** a key or merchant identity. Globally monotonic; comparisons stay within a shop/identity; gaps are harmless; values are never reused. Sequence is explicitly **NO CYCLE**. **USAGE only** on **this named sequence only** for `stocky_runtime` and `stocky_control_plane`. **No SELECT. No UPDATE. No ownership. No PUBLIC privilege. No schema-wide `GRANT … ON SEQUENCES`.** Application roles must be unable to call `setval()` successfully. Official PostgreSQL 18: `nextval` requires USAGE or UPDATE; `setval` requires UPDATE; SELECT is not required for `nextval` (https://www.postgresql.org/docs/18/functions-sequence.html, accessed 2026-08-14). Sequence owner remains the migration/schema role. Named-allowlist verifier; keep F-PR3C-05 against PUBLIC, blanket `ON SEQUENCES`, SELECT, UPDATE, `setval`, and runtime/control-plane ownership. **Do not** grant table privileges to bypass PR 1–4 / R-102 / R-137.
 
-Required tenancy / privilege tests: cross-shop fact denial unchanged; bootstrap Shop row receives zero generation writes; architecture audit still fails on bootstrap merchant access; sequence uniqueness and crash-gap; runtime/control-plane have only the required sequence privileges; runtime cannot DML `SyncRun`.
+Required tenancy / privilege tests: cross-shop fact denial unchanged; bootstrap Shop row receives zero generation writes; architecture audit still fails on bootstrap merchant access; sequence uniqueness, crash-gap, **NO CYCLE**, USAGE-only `nextval` for both application roles, `setval` denial for both application roles, PUBLIC `nextval` denial, no SELECT, no UPDATE, no application-role ownership, no schema-wide sequence grant; runtime cannot DML `SyncRun`.
 
 New tables should be Prisma-non-null `shopId` (no legacy `shop` column required). They still need `(shopId, id)` uniqueness and enforcement inventory entries. InventoryLevel unique identity is `(shopId, inventoryItemGid, locationGid)`.
 
@@ -1478,7 +1653,7 @@ Implementation (when authorized) must add **positive, negative, bypass, and part
 - Missing tenant context default-deny.
 - Bypass: raw SQL / wrong-shop `shopId` insert denied.
 - InventoryLevel unique `(shopId, inventoryItemGid, locationGid)` enforced; a second level GID for the same pair cannot insert a second row.
-- `stocky_catalog_observation_gen_seq` named-allowlist privileges only; PUBLIC none; runtime does not own the sequence; no schema-wide `ON SEQUENCES`.
+- `stocky_catalog_observation_gen_seq` **USAGE only** on the named sequence for `stocky_runtime` and `stocky_control_plane`; **no SELECT**; **no UPDATE**; PUBLIC none; neither application role owns the sequence; no schema-wide `ON SEQUENCES`; sequence is **NO CYCLE**; runtime and control-plane `nextval` succeed; runtime and control-plane `setval` fail; PUBLIC `nextval` fails (Races AE–AG / AD).
 - Bootstrap Shop row receives zero generation writes.
 - Runtime role denied DML on `SyncRun` / `DataIssue` / `SyncHealth` (PR 4 regression + PR 5 ingest path).
 
@@ -1504,7 +1679,7 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 
 - Replay of the same full sync converges (no duplicate GIDs; tombstones stable) **under §6.F** (not last-writer-wins; presence marker independent of attribute no-op).
 - Interrupted batch resumes/retries safely from the **line checkpoint**; re-stream from byte 0 without HTTP Range.
-- Duplicate / out-of-order incremental signals converge to the **newer Shopify attribute version** (clock A) and the **later completed app existence observation** (clock B), not the later commit or lock-acquisition order.
+- Duplicate / out-of-order incremental signals converge to the **newer Shopify attribute version** (clock A) and the last **unambiguous** non-overlapping app-issued existence observation (clock B). Overlapping conflicting existence must not resolve by `observationResponseGen` or lock-acquisition order.
 - Failed bulk + `partialDataUrl` does **not** advance a success watermark and **does not** nominate candidates or run tombstones.
 - Expired result URL starts a new bulk op (new fence generation; never reused) and does not fake success.
 
@@ -1512,18 +1687,18 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 
 1. Old full-sync row cannot overwrite a newer webhook refetch (clock A identity-row `updatedAt`).
 2. Race A: delayed bulk vs newer incremental attributes — bulk attributes no-op; presence marker still advances.
-3. Race B: post-fence create with newer `existenceObservationGen` is not nominated and is not tombstoned (existence evidence, not Shopify `updatedAt` vs `fenceAt`).
-4. Race C: confirmed absence vs late older bulk (`fenceGeneration` older than absence gen) — no resurrection.
+3. Race B: post-fence create with `existenceRequestGen > fenceGeneration` is not nominated and is not tombstoned (existence interval evidence, not Shopify `updatedAt` vs `fenceAt`).
+4. Race C: confirmed absence vs late older bulk (`fenceGeneration` older than absence interval end) — no resurrection.
 5. Per-state inventory: stale `available` (or any named state) cannot overwrite a newer per-name `updatedAt`.
 6. Equal `updatedAt` with differing attributes → no-op + merchant diagnostic + derived `DataIssue` + refetch.
 7. Failed/partial bulk never nominates candidates or performs tombstones (Race O / D).
 8. Delayed delete/disconnect webhook after a current live refetch: signal alone must not tombstone (Race H).
-9. Reconnectable pair: authoritative live check after a prior disconnect tombstone may recover even when Shopify `updatedAt` is not comparable to local tombstone time (Race J).
+9. Reconnectable pair: a **non-overlapping** authoritative live check after a prior disconnect tombstone may recover even when Shopify `updatedAt` is not comparable to local tombstone time (Race J). Overlapping LIVE/ABSENT must not recover from end-generation order (Race AJ).
 10. Full sync **observes** a GID whose stale attributes no-op: epoch marker still advances; it is not an absence candidate (Race K).
 11. Nullable Shopify `updatedAt`: current authoritative refetch can eventually update the fact (Race L). No infinite no-op.
-12. Two concurrent missing-version observations: older observation generation cannot overwrite newer even if it obtains the lock later (Race M).
+12. Two concurrent missing-version observations: overlapping conflicting payloads must not last-writer-wins or resolve by `attributeResponseGen` (Race M / AK). Identical overlapping payloads may converge idempotently.
 13. Failed authoritative delete/disconnect refetch: query failure is not converted into canonical deletion (Race N).
-14. Races P–AD in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation-before-lock, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival, write-scanner fixture).
+14. Races P–AL in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE).
 
 ### D2. Checkpoint crash boundaries (mandatory)
 
@@ -1563,7 +1738,7 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 - `incoming` and `committed` remain distinct.
 - `reserved`, `damaged`, `safety_stock`, `quality_control` persisted.
 - Missed-webhook-state scenario: change only a non-`available` quantity with **no** `inventory_levels/update` (official: `committed` / `reserved` / `damaged` / `safety_stock` / `quality_control` do not trigger webhooks); reconcile/refetch corrects canonical facts.
-- Per-name `updatedAt` fence: stale reconcile cannot move a quantity backward. Nullable per-name `updatedAt` uses `quantityAttributeGen` fallback (§6.F.9); no infinite no-op.
+- Per-name `updatedAt` fence: stale reconcile cannot move a quantity backward. Nullable per-name `updatedAt` uses `quantityRequestGen` / `quantityResponseGen` fallback (§6.F.9); no infinite no-op; overlapping conflicting quantities must not last-writer-wins.
 
 ### G. Control-plane regression
 
@@ -1645,6 +1820,8 @@ Observed on planning base `de1bb193…` (read-only inspection; not changed by th
 | Product deletion irreversible | https://shopify.dev/docs/api/admin-graphql/2026-07/mutations/productDelete |
 | InventoryItem.inventoryLevel(locationId) nullable | https://shopify.dev/docs/api/admin-graphql/2026-07/objects/InventoryItem |
 | inventoryLevel(id:) | https://shopify.dev/docs/api/admin-graphql/2026-07/queries/inventoryLevel |
+| PostgreSQL 18 `nextval` / `setval` privileges | https://www.postgresql.org/docs/18/functions-sequence.html (accessed 2026-08-14; PostgreSQL 18.6 docs dated August 13, 2026). `nextval` requires USAGE or UPDATE; `setval` requires UPDATE; SELECT is not required for `nextval`. |
+| PostgreSQL 18 `CREATE SEQUENCE` `NO CYCLE` | https://www.postgresql.org/docs/18/sql-createsequence.html (accessed 2026-08-14). `NO CYCLE` is the default; wrapping is forbidden when specified/defaulted. |
 
 API target remains **2026-07**. This planning task does not bump versions.
 
