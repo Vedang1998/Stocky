@@ -6,18 +6,19 @@
 
 > **D-051 readiness lock scope:** Additive migration `20260812230000_sync_control_plane_d051_readiness_lock_scope` replaces the D-050 global readiness advisory mutex with per-shop `pg_advisory_xact_lock(hashtextextended('stocky_dispatch_ready_shop_maintain:' || shop_id, 0))` in shopId ASC. **Correctness basis:** the audited runtime transaction-shape invariant — a supported runtime transaction does not take readiness advisory locks for different shops in separate statements in a dangerous order. **Defense-in-depth:** `stocky.ready_lock_max_shop` can fail closed for ordinary descending acquisition but is bypassable/clearable by `stocky_control_plane` and is **not** a security or correctness enforcement boundary (F-CLAUDE-D051-01). Status: `D-051 CORRECTION CLOSURE — APPROVED`; subsequent **D-052** accepts PR 4 repository implementation without changing this architectural truth. See `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable blob `d17df590…`) and `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`).
 
-> **D-052 acceptance status:** Phase 1 PR 4 repository implementation **ACCEPTED** at `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3`. Independent verdict `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`, blob `c9fca9b2…`). Findings P0 0 / P1 0 / P2 0 / P3 4. PR #20 is **CLOSED and MERGED** (squash `f618103c64d0b17c25b7b48f49555f661e40e22d` at `2026-08-14T00:08:05Z`). Phase 1 PR 4 is **MERGED — CLOSURE PR PENDING**. PR 5 remains BLOCKED until the documentation-only closure PR is accepted and merged. Production execution unauthorized. Inventory-write flags DEFAULT OFF. D-051 architectural truth is unchanged. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
+> **D-052 acceptance status:** Phase 1 PR 4 repository implementation **ACCEPTED** at `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3`. Independent verdict `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`, blob `c9fca9b2…`). Findings P0 0 / P1 0 / P2 0 / P3 4. PR #20 is **CLOSED and MERGED** (squash `f618103c64d0b17c25b7b48f49555f661e40e22d` at `2026-08-14T00:08:05Z`). PR #22 is **CLOSED and MERGED** (accepted closure head `b99039f9c34fb12e74d804a3df748cbfdb435313`; squash `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` at `2026-08-14T04:01:29Z`). Phase 1 PR 4 is **FORMALLY CLOSED**. PR 5 is **NOT STARTED** and requires a separate ChatGPT product-owner brief/authorization. Production execution unauthorized. Inventory-write flags DEFAULT OFF. D-051 architectural truth is unchanged. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
 
 
 **Phase:** 1  
 **Work unit:** PR 4 — Synchronization control plane  
-**Branch:** `phase-1/sync-control-plane` (merged); closure branch `phase-1/pr4-closure`
+**Branch:** `phase-1/sync-control-plane` (merged as PR #20); `phase-1/pr4-closure` (merged as PR #22)
 **Authorized starting main:** `e69bc53d91db75472b0d0998bf1b74ee6246adb1`
-**Squash merge:** `f618103c64d0b17c25b7b48f49555f661e40e22d`
-**Decision:** D-042; final corrections D-045; D-051 correction closure approved; **D-052 PR 4 repository implementation ACCEPTED**; PR #20 MERGED — CLOSURE PR PENDING
+**PR #20 squash merge:** `f618103c64d0b17c25b7b48f49555f661e40e22d`
+**PR #22 squash merge:** `99d48db22ad0d114f2ea43028fd35b4bc1806ac1`
+**Decision:** D-042; final corrections D-045; D-051 correction closure approved; **D-052 PR 4 repository implementation ACCEPTED**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR 4 FORMALLY CLOSED
 **Shopify Admin API target:** `2026-07` (`ApiVersion.July26`)
 **Production execution:** NOT AUTHORIZED
-**Status:** D-052 PR 4 MERGED — CLOSURE PR PENDING
+**Status:** D-052 PR 4 FORMALLY CLOSED
 
 ## Purpose
 
