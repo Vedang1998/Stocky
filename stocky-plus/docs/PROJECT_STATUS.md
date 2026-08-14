@@ -8,7 +8,7 @@
 **Phase 1 implementation authority:** EFFECTIVE
 **Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 MERGED — CLOSURE PR PENDING
 **Active documentation branch:** `phase-1/pr4-closure`
-**Active documentation PR:** this documentation-only closure PR — OPEN, DRAFT, UNMERGED
+**Active documentation PR:** [#22](https://github.com/Vedang1998/Stocky/pull/22) — OPEN, DRAFT, UNMERGED
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED

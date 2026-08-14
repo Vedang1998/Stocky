@@ -9,7 +9,7 @@
 **Phase 1 PR 4:** MERGED — CLOSURE PR PENDING
 **Next authorized action:** documentation-only PR 4 closure PR acceptance / merge
 **Active documentation branch:** `phase-1/pr4-closure`
-**Active documentation PR:** this documentation-only closure PR — OPEN, DRAFT, UNMERGED
+**Active documentation PR:** [#22](https://github.com/Vedang1998/Stocky/pull/22) — OPEN, DRAFT, UNMERGED
 **Current main SHA:** `f618103c64d0b17c25b7b48f49555f661e40e22d`
 **ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; PR #20 MERGED — CLOSURE PR PENDING
 **Production inventory writes:** UNAPPROVED

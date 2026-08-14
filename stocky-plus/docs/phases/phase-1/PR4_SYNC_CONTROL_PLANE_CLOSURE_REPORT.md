@@ -1,6 +1,7 @@
 # Phase 1 PR 4 — Merge Closure
 
 **Status:** `PHASE 1 PR 4 MERGED — CLOSURE PR PENDING`
+**Closure PR:** [#22](https://github.com/Vedang1998/Stocky/pull/22) — OPEN, DRAFT, UNMERGED
 **Phase 1:** `IN PROGRESS`
 **PR 5:** `BLOCKED` until this documentation-only closure PR is accepted and merged
 
