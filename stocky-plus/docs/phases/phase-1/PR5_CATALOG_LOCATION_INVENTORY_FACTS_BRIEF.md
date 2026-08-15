@@ -348,10 +348,10 @@ It **MUST** support **multiple simultaneous** observations for the same canonica
 | Canonical resource identity | Product / Variant / InventoryItem / Location: `(resourceKind, shopifyGid)`. InventoryLevel: `(resourceKind, inventoryItemGid, locationGid)`. Same identity keys as the canonical fact tables |
 | `observationRequestGen` | Platform sequence value allocated **before** the Shopify request. **Not** merchant identity |
 | `observationResponseGen` | Null while resultless. Set only after an authoritative usable response is in hand and **before** the fenced apply, when that path runs |
-| `leaseExpiresAt` | Finite UTC deadline. Required on every **ACTIVE** unresolved observation. See §6.F.2.1 |
+| `leaseExpiresAt` | Absolute PostgreSQL `timestamptz` (or equivalent) deadline. Required on every **ACTIVE** unresolved observation. Computed **in the database** as `clock_timestamp() + validated_bounded_lease_interval`. The application may supply only the already-validated finite duration. See §6.F.2.1 |
 | `lifecycleState` | `ACTIVE` \| `COMPLETED` \| `ABANDONED` |
 | Durable-job / job-attempt lineage | Optional **opaque** correlation strings (job id / attempt id / correlation id). Lineage / diagnostics only. **No FK** to control-plane tables |
-| `createdAt` / `updatedAt` | App timestamps. Observability only. **Not** an ordering key and **not** the liveness boundary (`leaseExpiresAt` is) |
+| `createdAt` / `updatedAt` | App timestamps. Observability only. **Not** an ordering key, **not** the lease clock, and **not** the liveness boundary (`leaseExpiresAt` evaluated against PostgreSQL `clock_timestamp()` is) |
 
 Physical cleanup / reaping of `COMPLETED` / `ABANDONED` rows is **maintenance**. It is **not** the correctness boundary.
 
@@ -359,12 +359,17 @@ Physical cleanup / reaping of `COMPLETED` / `ABANDONED` rows is **maintenance**.
 
 This section is the **planning-correction 3** addendum (same D-053), as
 further amended by **planning-correction 4** (USAGE-only sequence;
-app-issued observation intervals) and **planning-correction 5** (durable
+app-issued observation intervals), **planning-correction 5** (durable
 multi-row in-flight evidence, finite lease, logical abandonment,
-late-worker fencing, and non-overlapping terminal-revival confirmations).
+late-worker fencing, and non-overlapping terminal-revival confirmations),
+and **planning-correction 6** (PostgreSQL `clock_timestamp()` as the sole
+authoritative lease clock; exact `<` / `>=` expiry boundary; post-lock
+fact fence; missing-row fail-closed; all-active-blocker predicate;
+Races AM / AO / AP / AQ / AR).
 It does not authorize implementation. It does not introduce D-054. It does
 not change D-052. It replaces the Correction-2 Shop-counter / single-epoch
-absence-sweep architecture with the rules below.
+absence-sweep architecture with the rules below. It does **not** redesign
+the accepted Correction-5 architecture.
 
 PR 4 workers interleave. `catalog-sync` runs on `stocky-cron`
 (`REBUILDABLE_IDEMPOTENT`); resource webhooks run on `stocky-webhooks`
@@ -420,7 +425,8 @@ timestamps.
 - Any comparison of clock A to clock B or clock C.
 - Commit / lock-acquisition order as a substitute for non-overlapping observation-interval order.
 - `observationResponseGen` / `existenceResponseGen` alone as proof that one concurrent Shopify observation was later than another.
-- Wall-clock `leaseExpiresAt` / observation-lease time as Shopify mutation order, existence ordering, attribute ordering, or a replacement for `requestGen` / `responseGen`. The lease is **only** a liveness / recovery mechanism.
+- PostgreSQL `clock_timestamp()` / `leaseExpiresAt` / observation-lease time as Shopify mutation order, existence ordering, attribute ordering, resource freshness, or a replacement for `requestGen` / `responseGen`. The lease is **only** a liveness / recovery / fencing mechanism. It is **not** a Shopify clock.
+- Application / node / container clocks (`Date.now()`, `new Date()`, process uptime, worker-local timers, container/VM clock, response-arrival wall time, a timestamp supplied by another worker) as the lease-validity decision. Those clocks may be used for logs / observability only.
 
 **Hard rule — no cross-clock comparison**
 
@@ -436,6 +442,9 @@ timestamps.
   Shopify timestamp).
 - Existence decisions use clock B only.
 - Clock C never decides canonical existence or attribute freshness.
+- Do **not** invent a comparison between an application-node clock and
+  PostgreSQL lease time as a correctness rule. Lease validity is decided
+  only by PostgreSQL `clock_timestamp()` against `leaseExpiresAt`.
 
 Official Shopify recommends using `X-Shopify-Triggered-At` or payload
 `updated_at` to *organize* webhook deliveries. PR 5 **records**
@@ -520,7 +529,11 @@ observation was later.
    `CatalogObservationInFlight` row for this observation token (not a
    single mutable slot): `shopId`, canonical identity, unique observation
    token, `observationRequestGen`, `lifecycleState = ACTIVE`, finite
-   `leaseExpiresAt`, opaque job/attempt lineage if useful, timestamps.
+   `leaseExpiresAt` computed **by PostgreSQL** as
+   `clock_timestamp() + validated_bounded_lease_interval` (the application
+   may supply only that already-validated finite duration; it **MUST NOT**
+   supply the absolute “current time” or compute the absolute deadline
+   from its own clock), opaque job/attempt lineage if useful, timestamps.
    **COMMIT**, then **release all row locks**. This is not a network lock.
 2. Perform the Shopify request. Hold **NO** merchant/control-plane row lock
    across network I/O. An earlier ACTIVE unexpired resultless observation
@@ -531,13 +544,20 @@ observation was later.
    Capture `existenceObservedAt` as the app UTC instant the usable response
    was in hand (observability; **not** the concurrent-apply key).
 4. **Then** enter the tenant fact transaction and take the identity
-   `SELECT … FOR UPDATE`. In that **same** tenant transaction, **fence**
-   this observation token (§6.F.2.1): it must still be the expected
-   observation, `ACTIVE`, not `ABANDONED`, and not expired.
+   `SELECT … FOR UPDATE`. After the required canonical-identity /
+   observation locking is established, the **final** guarded fact
+   decision in that **same** tenant transaction **MUST** re-evaluate
+   PostgreSQL `clock_timestamp() < leaseExpiresAt` (§6.F.2.1). Do **not**
+   cache a `dbNow` before a lock wait and reuse it afterward. Do **not**
+   treat response arrival, `responseGen` allocation, transaction start,
+   or statement start as reserved validity.
 5. Apply using the interval / blocker / conflict rules in §6.F.3.
    Complete or clear **that exact** observation atomically with the fact
    decision. A blocked later response is discarded for canonical
-   application and is **not** replayed later as if it were fresh.
+   application and is **not** replayed later as if it were fresh. If the
+   lease has crossed the deadline by that final decision, fact application
+   is denied; `responseGen` may remain burned; the payload is discarded
+   for canonical application; a bounded fresh retry / refetch is required.
 
 ##### Graceful completion / failure / hard crash
 
@@ -545,7 +565,9 @@ observation was later.
 
 - allocate `responseEndGen`;
 - enter the tenant fact transaction;
-- validate observation token + ACTIVE unexpired lease;
+- after identity / observation locking, re-evaluate the observation-token
+  fence using PostgreSQL `clock_timestamp() < leaseExpiresAt` (ACTIVE,
+  not `ABANDONED`, exactly one matching row);
 - apply interval / blocker / conflict rules;
 - mark **that exact** observation `COMPLETED` (or equivalently clear it)
   atomically with the fact decision.
@@ -561,7 +583,8 @@ observation was later.
 evidence commits and before apply:
 
 - the originating worker does not run graceful cleanup;
-- **lease expiry produces logical abandonment automatically**;
+- **lease expiry produces logical abandonment automatically** when
+  PostgreSQL `clock_timestamp() >= leaseExpiresAt`;
 - there is **no** permanent identity freeze.
 
 Do **not** allocate the end generation only after waiting for the identity
@@ -569,8 +592,11 @@ lock. Do **not** treat `responseEndGen` alone as observation order.
 
 #### 6.F.2.1 Finite lease, logical abandonment, blocking, and late-worker fencing
 
-**Planning correction 5** (same D-053 — F-CLAUDE-PR5C4-01). Implementation
-is still **NOT AUTHORIZED**.
+**Planning correction 5** (same D-053 — F-CLAUDE-PR5C4-01), as further
+specified by **planning correction 6** (same D-053 —
+F-CLAUDE-PR5C5-01 / 02 / 03 / 04). Implementation is still
+**NOT AUTHORIZED**. Correction 6 does **not** redesign the accepted
+Correction-5 architecture.
 
 ##### Finite lease is the liveness boundary
 
@@ -597,28 +623,128 @@ contract **must** require:
 Configuration validation must reject missing, non-positive, unbounded, or
 greater-than-maximum timeout / margin / lease values.
 
-Wall-clock lease time is **ONLY** a liveness / recovery mechanism. It is
-**NOT**:
+PostgreSQL `clock_timestamp()` / `leaseExpiresAt` is **ONLY** a liveness /
+recovery / fencing mechanism. It is **NOT**:
 
 - Shopify mutation order;
 - existence ordering;
 - attribute ordering;
-- a replacement for `requestGen` / `responseGen`.
+- resource freshness;
+- a replacement for `requestGen` / `responseGen`;
+- a Shopify clock;
+- a monotonic business clock.
 
-##### Explicit blocking semantics
+##### Authoritative lease clock (F-CLAUDE-PR5C5-01)
+
+PostgreSQL **database time** is the **SOLE** authoritative clock for
+observation-lease **creation** and **expiry**.
+
+Application / node / container clocks **MUST NOT** decide lease validity.
+
+Specifically **prohibit** using for lease correctness:
+
+- `Date.now()`;
+- `new Date()`;
+- process uptime;
+- worker-local timers;
+- the container / VM clock;
+- response-arrival wall time;
+- a timestamp supplied by another worker.
+
+Those clocks **may** be used for logs / observability only.
+
+The authoritative PostgreSQL primitive is `clock_timestamp()`.
+
+Official PostgreSQL 18 current-date/time semantics
+(https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT,
+accessed 2026-08-15; PostgreSQL 18.6 docs dated August 13, 2026):
+
+- `CURRENT_TIMESTAMP` / `now()` / `transaction_timestamp()` return the
+  **transaction-start** time and therefore can become stale while a
+  transaction waits;
+- `statement_timestamp()` returns **statement-start** time (the time of
+  receipt of the latest command message from the client) and can likewise
+  predate a wait occurring within that statement;
+- `clock_timestamp()` returns actual PostgreSQL server time when
+  evaluated and **changes even within a single SQL statement**.
+
+Do **not** use lease time as Shopify ordering or resource freshness. It
+remains liveness / fencing only.
+
+##### Lease creation
+
+When inserting `CatalogObservationInFlight` in the short tenant
+transaction, the **ABSOLUTE** `leaseExpiresAt` **MUST** be computed by
+PostgreSQL from PostgreSQL time.
+
+Conceptually:
+
+`leaseExpiresAt = clock_timestamp() + validated_bounded_lease_interval`
+
+The application may supply the already-validated finite lease
+**DURATION**. The application **MUST NOT** supply the absolute “current
+time” or compute the absolute deadline from its own clock.
+
+Persist `leaseExpiresAt` as `timestamptz` / equivalent absolute database
+timestamp.
+
+##### Exact expiry semantics
+
+Define the boundary exactly. Every lease-dependent decision **MUST** use
+this same rule:
+
+- an ACTIVE lease is **valid** iff
+  `clock_timestamp() < leaseExpiresAt`;
+- the lease is **expired** iff
+  `clock_timestamp() >= leaseExpiresAt`.
+
+Therefore **at exact equality** (`clock_timestamp() == leaseExpiresAt`)
+the observation is **EXPIRED**.
+
+There is **no** `<=` / `>` ambiguity. Do **not** let different paths
+implement different boundary operators.
+
+This same rule applies to:
+
+- active-blocker determination;
+- logical abandonment;
+- stale-worker fencing;
+- cleanup eligibility;
+- absence-confirmation blocking;
+- any other PR5 lease predicate.
+
+##### Explicit blocking semantics — all active blockers (F-CLAUDE-PR5C5-03)
+
+Blocker evaluation is **existential** across **ALL** relevant in-flight
+observations for that canonical identity.
 
 An **ACTIVE, UNEXPIRED, resultless** direct observation participates as an
 unresolved interval:
 
 `[observationRequestGen, +∞)`
 
-and **prevents an overlapping later observation from MUTATING canonical
-existence state** while that blocker remains active.
+Canonical existence mutation is **prohibited** if **ANY** overlapping
+observation is:
+
+- `ACTIVE`;
+- **UNEXPIRED** according to PostgreSQL `clock_timestamp()`
+  (`clock_timestamp() < leaseExpiresAt`);
+- **RESULTLESS**.
+
+The system **must not**:
+
+- check only the oldest row;
+- check only the newest row;
+- check only one arbitrary row;
+- release a held response because only one of several blockers expired.
+
+Expiry / abandonment of observation A does **not** unblock an observation
+if observation B still satisfies the blocking predicate.
 
 It does **NOT** prevent the later Shopify request from being issued.
 
-If a later request obtains a usable response while an earlier unexpired
-resultless observation still overlaps it:
+If a later request obtains a usable response while **any** earlier
+unexpired resultless observation still overlaps it:
 
 - preserve canonical existence;
 - do **not** tombstone;
@@ -626,19 +752,21 @@ resultless observation still overlaps it:
 - do **not** treat `responseEndGen` as winner;
 - do **not** later replay that held response as if it were fresh;
 - use the accepted PR 4 durable retry / refetch lifecycle to obtain a
-  **fresh** authoritative observation after the blocker settles.
+  **fresh** authoritative observation after **all** blockers settle.
 
 The retry / refetch must remain **bounded** and **auditable**. The blocked
 later observation is completed / abandoned **without** becoming an
 authoritative completed interval. Its request generation remains burned.
+Held responses remain discarded rather than replayed as fresh.
 
 ##### Logical abandonment at lease expiry
 
 This is the correctness boundary.
 
-Once an ACTIVE resultless observation’s lease has expired, it is
-**LOGICALLY ABANDONED** for correctness purposes even if a cleanup worker
-has not physically rewritten or deleted its row yet.
+Once an ACTIVE resultless observation’s lease has expired according to
+PostgreSQL `clock_timestamp() >= leaseExpiresAt`, it is **LOGICALLY
+ABANDONED** for correctness purposes even if a cleanup worker has not
+physically rewritten or deleted its row yet.
 
 Therefore an expired resultless observation:
 
@@ -657,18 +785,55 @@ identity forever.
 Physical cleanup / reaping is **maintenance**. Physical cleanup **MUST
 NOT** be the correctness boundary.
 
-##### Late-worker fencing
+##### Late-worker fencing — fact-application time (F-CLAUDE-PR5C5-01 / 04)
 
 Closing or ignoring a stale row is insufficient unless a late original
 worker is fenced.
 
-The tenant fact-application transaction must **atomically** prove that the
-observation token being applied:
+The **critical validity decision occurs at FACT APPLICATION TIME**.
 
-- is still the expected observation;
-- is `ACTIVE`;
-- has not been `ABANDONED`;
-- has not expired (`leaseExpiresAt` still in the future).
+A response arriving before expiry does **NOT** reserve validity.
+A `responseGen` allocated before expiry does **NOT** reserve validity.
+Transaction start before expiry does **NOT** reserve validity.
+Statement start before expiry does **NOT** reserve validity.
+
+After the required canonical-identity / observation locking is
+established, the final guarded fact decision **MUST** re-evaluate
+PostgreSQL:
+
+`clock_timestamp() < leaseExpiresAt`
+
+inside the same tenant fact transaction.
+
+Do **not** cache `dbNow` before a lock wait and reuse it afterward.
+Do **not** use `CURRENT_TIMESTAMP` / `now()` / `transaction_timestamp()`
+as the post-lock fence time because they freeze at transaction start.
+Do **not** rely solely on `statement_timestamp()` for a statement that
+may wait before the fact decision.
+
+The implementation contract **must** make the final guarded write /
+fact-decision predicate observe **actual PostgreSQL time after relevant
+lock waiting**. Canonical fact mutation and observation completion remain
+atomic in that tenant transaction.
+
+The fence requires **EXACTLY ONE** matching observation row for:
+
+- `shopId`;
+- canonical identity;
+- expected observation token;
+
+and that row must satisfy:
+
+- `ACTIVE`;
+- not `ABANDONED`;
+- `clock_timestamp() < leaseExpiresAt`.
+
+If the lease has crossed the deadline by that final decision:
+
+- fact application is denied;
+- `responseGen` may remain burned;
+- the response payload is discarded for canonical application;
+- a bounded fresh retry / refetch is required.
 
 If its lease expired or another recovery path abandoned it:
 
@@ -689,6 +854,45 @@ It **MUST NOT**:
 
 A stale worker must not be able to flip `ABANDONED` / expired evidence
 back to `ACTIVE` in order to apply.
+
+##### Missing observation row — fail closed (F-CLAUDE-PR5C5-02)
+
+If **zero** matching rows exist — including because physical cleanup
+already deleted the row — the fence **FAILS CLOSED**.
+
+Zero rows **MUST NOT** be interpreted as:
+
+- already completed successfully;
+- safe to continue;
+- implicitly unexpired;
+- permission to mutate the canonical fact.
+
+No canonical existence / attribute mutation occurs.
+
+A stale worker **must not** recreate the missing observation row in
+order to apply its old response.
+
+More than one row for the same exact token is a constraint /
+data-integrity failure and must also fail closed.
+
+##### Database clock discontinuities
+
+Do **not** claim `clock_timestamp()` is a Shopify clock or a monotonic
+business clock. Its sole role is a common database-authoritative
+lease / fencing clock.
+
+All workers use the database’s value, so application-node clock skew
+cannot produce one worker treating a lease expired while another passes
+the stale fence from its own local clock.
+
+If database wall time moves **forward**, stale work must fail the same
+database-time fence.
+
+A database-time **backward** adjustment may delay liveness but **MUST
+NOT** permit an application-node clock to override the database lease
+decision.
+
+Do **not** invent cross-clock comparisons.
 
 ##### Role boundary
 
@@ -788,15 +992,20 @@ Closed-interval overlap:
 **and**
 `B.observationRequestGen <= A.observationResponseGen`.
 
-**ACTIVE unexpired resultless observations (correction 5):**
+**ACTIVE unexpired resultless observations (correction 5 / 6):**
 
 An **ACTIVE, UNEXPIRED, resultless** direct observation participates as an
 unresolved interval `[observationRequestGen, +∞)` and **blocks overlapping
 later observations from mutating canonical existence** while it remains
-active. It does **not** prevent the later Shopify request from being
-issued. See §6.F.2.1.
+active. **UNEXPIRED** means PostgreSQL
+`clock_timestamp() < leaseExpiresAt`. The predicate is **existential
+across all** such overlapping observations for that identity: expiry of
+one blocker does **not** release a later observation while another still
+satisfies the blocking predicate. It does **not** prevent the later
+Shopify request from being issued. See §6.F.2.1.
 
-Once that observation’s lease has expired, it is **logically abandoned**
+Once that observation’s lease has expired
+(`clock_timestamp() >= leaseExpiresAt`), it is **logically abandoned**
 even if the row has not yet been rewritten. Expired / `ABANDONED`
 **resultless** observations:
 
@@ -1210,6 +1419,8 @@ They later serialize on `(shopId, identity)` `SELECT … FOR UPDATE`.
 Overlapping conflicting payloads must **not** resolve by end-generation
 or lock-acquisition order. A late worker whose token is expired or
 abandoned **must not** update null-version attributes (§6.F.2.1 fencing).
+Expiry is PostgreSQL `clock_timestamp() >= leaseExpiresAt`. A missing
+in-flight row for that token fails the fence closed.
 
 **Degraded honesty:** when absolute Shopify source freshness cannot be
 established (null `updatedAt` on the applied fact), the row’s
@@ -1319,17 +1530,20 @@ unbounded one-query-per-row storm.
 A LIVE confirmation of a candidate **clears** the nomination and keeps
 LIVE, subject to the overlapping-interval rule. A null confirmation
 **may** tombstone that identity only when the confirmation interval does
-**not** overlap an unresolved **ACTIVE unexpired resultless** observation
-or an unresolved overlapping LIVE existence observation (terminal GIDs
-then follow §6.F.7). Query failure / timeout is **not** absence. Expired /
+**not** overlap **any** unresolved **ACTIVE unexpired resultless**
+observation (`clock_timestamp() < leaseExpiresAt`) or an unresolved
+overlapping LIVE existence observation (terminal GIDs then follow
+§6.F.7). Query failure / timeout is **not** absence. Expired /
 abandoned resultless observations do **not** block confirmation.
+Expiry of one blocker does **not** unblock confirmation while another
+overlapping ACTIVE unexpired resultless observation remains.
 
 The new direct-query interval rule applies to those **absence-confirmation
-queries** too. A bulk absence candidate **must not** tombstone while an
-overlapping **ACTIVE, UNEXPIRED, resultless** direct observation, or an
-overlapping **completed LIVE** existence observation, remains unresolved
-under §6.F.2.1 / §6.F.3. An expired / abandoned resultless observation
-does **not** keep the candidate blocked.
+queries** too. A bulk absence candidate **must not** tombstone while
+**any** overlapping **ACTIVE, UNEXPIRED, resultless** direct observation,
+or an overlapping **completed LIVE** existence observation, remains
+unresolved under §6.F.2.1 / §6.F.3. An expired / abandoned resultless
+observation does **not** keep the candidate blocked.
 
 ##### Candidate-nomination isolation (READ COMMITTED)
 
@@ -1448,7 +1662,8 @@ after reconciliation.
 
 Implementation tests (when PR 5 implementation is authorized — **not
 now**) **must** include races **A–AD** (preserved), **AE–AL**
-(correction 4), **and AM–AN** (correction 5). Race **AB** is extended by
+(correction 4), **AM–AN** (correction 5), **and AO–AR** (correction 6).
+Race **AM** is extended by correction 6. Race **AB** is extended by
 correction 5:
 
 | Race | Setup | Required outcome |
@@ -1491,8 +1706,12 @@ correction 5:
 | **AJ. Overlapping LIVE vs ABSENT** | Two overlapping direct existence observations, LIVE vs ABSENT (and the reverse). | Preserve last unambiguous state. `CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT` + derived DataIssue + fresh refetch after both complete. No false tombstone/revival. Terminal-revival safeguards are not bypassed. |
 | **AK. Overlapping null-version quantity conflict** | Two overlapping null-`updatedAt` quantity observations with **different** values for the same name. | No last-writer-wins. Preserve last unambiguous value. DEGRADED + concurrent-observation-conflict + fresh non-overlapping refetch. |
 | **AL. Bulk absence candidate + overlapping LIVE direct check** | Candidate nominated from complete bulk omission. Direct LIVE existence observation overlaps the absence-confirmation interval. | No tombstone until an unambiguous authoritative confirmation (non-overlapping later check). Overlapping LIVE remains unresolved → candidate stays LIVE. |
-| **AM. Hard crash / orphaned in-flight observation** | Worker A allocates `requestGen`, commits **ACTIVE** `CatalogObservationInFlight` evidence, then **hard-crashes** before `responseGen` / fact application. **No graceful cleanup** runs. | No tombstone or revival occurs from A. While A’s lease is still active, overlapping later evidence **cannot mutate canonical existence**. After the finite deadline A is **logically abandoned** even if the row is not yet rewritten. A no longer blocks future observations. A’s `requestGen` is never reused. A fresh authoritative observation can subsequently change existence state normally. |
+| **AM. Hard crash / orphaned in-flight observation** | Worker A allocates `requestGen`, commits **ACTIVE** `CatalogObservationInFlight` evidence, then **hard-crashes** before `responseGen` / fact application. **No graceful cleanup** runs. The lease crossing **must** be established using PostgreSQL-authoritative time (`clock_timestamp()`), **not** an application fake clock or local timer. | No tombstone or revival occurs from A. While A’s lease is still active (`clock_timestamp() < leaseExpiresAt`), overlapping later evidence **cannot mutate canonical existence**. After the finite deadline (`clock_timestamp() >= leaseExpiresAt`) A is **logically abandoned** even if the row is not yet rewritten. A no longer blocks future observations. A’s `requestGen` is never reused. A fresh authoritative observation can subsequently change existence state normally. Exact boundary: `dbClock < leaseExpiresAt` ⇒ still active; `dbClock >= leaseExpiresAt` ⇒ logically abandoned. |
 | **AN. Late response after abandonment** | A starts and commits ACTIVE evidence. A’s lease expires / becomes logically abandoned. B performs a later valid fresh observation. A’s old request finally returns and attempts fact application. | A fails the observation-token / active-lease fence. A cannot mutate canonical existence or attributes. A cannot clear B’s evidence. A cannot tombstone or revive. No response-end LWW occurs. B / fresh evidence remains authoritative under the normal interval rules. |
+| **AO. Application-node clock skew / authoritative DB clock** | Worker A’s application clock is deliberately far **ahead**. Worker B’s application clock is deliberately far **behind**. Both operate against the **same** PostgreSQL lease record. PostgreSQL `clock_timestamp()` remains authoritative. Include exact equality: `clock_timestamp() == leaseExpiresAt` ⇒ expired. | `leaseExpiresAt` is computed from database time, not either node clock. Both workers make the **same** lease-validity decision for the same DB instant. An application clock cannot prematurely abandon. An application clock cannot extend validity. The final stale-worker fence uses PostgreSQL time. No canonical fact divergence from node-clock skew. |
+| **AP. Physically missing in-flight row** | A starts an observation. Its row later becomes eligible for physical cleanup and is **removed**. Old A worker resumes with its old token / response. | Exact-token fence returns no valid row. Zero rows **fail closed**. A cannot recreate the row in order to apply. No LIVE / ABSENT write. No attribute update. No tombstone / revival. No clearing of newer evidence. Burned generations remain harmless. |
+| **AQ. Multiple blockers / partial expiry** | A and B are both **ACTIVE**, unexpired, resultless, and overlap C. C obtains a usable response. A reaches lease expiry. B remains ACTIVE and unexpired (`clock_timestamp() < B.leaseExpiresAt`). | C remains blocked by B. Expiry of A alone cannot release C. Held C response is **not** replayed later. After **all** blockers settle, recovery obtains a **fresh** observation. No tombstone / revival or stale canonical mutation. |
+| **AR. Response before expiry / apply after expiry** | 1. A starts and receives an authoritative usable Shopify response while `clock_timestamp() < leaseExpiresAt`. 2. A allocates `responseGen`. 3. A waits on the canonical identity lock or is otherwise paused. 4. PostgreSQL authoritative time reaches `clock_timestamp() >= leaseExpiresAt`. 5. A finally reaches the fact-application fence. | Fence fails because validity is evaluated at **fact decision time**. Response-arrival-before-expiry is irrelevant. `responseGen`-before-expiry is irrelevant. Transaction-start-before-expiry is irrelevant. No LIVE / ABSENT mutation. No null-version attribute mutation. No tombstone / revival. No clearing newer evidence. Burned `responseGen` is the only residue. Bounded fresh retry / refetch is required. |
 
 Tests **must** fail closed: a focused command that collects zero tests is
 a failed check (PR 4 CI pattern).
@@ -1909,6 +2128,7 @@ Implementation (when authorized) must add **positive, negative, bypass, and part
 - Runtime role denied DML on `SyncRun` / `DataIssue` / `SyncHealth` (PR 4 regression + PR 5 ingest path).
 - Control-plane role denied DML on canonical fact tables and `CatalogObservationInFlight`.
 - `CatalogObservationInFlight` is merchant-domain: cross-shop denial; multiple simultaneous ACTIVE rows for one identity permitted; `observationRequestGen` is not merchant identity.
+- Observation-lease `leaseExpiresAt` is computed in PostgreSQL from `clock_timestamp()` plus the validated duration; application-node clocks cannot decide validity (Race AO).
 
 ### B. GraphQL
 
@@ -1951,7 +2171,7 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 11. Nullable Shopify `updatedAt`: current authoritative refetch can eventually update the fact (Race L). No infinite no-op.
 12. Two concurrent missing-version observations: overlapping conflicting payloads must not last-writer-wins or resolve by `attributeResponseGen` (Race M / AK). Identical overlapping payloads may converge idempotently.
 13. Failed authoritative delete/disconnect refetch: query failure is not converted into canonical deletion (Race N).
-14. Races P–AN in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival including non-overlapping two-confirmation revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE, hard-crash orphaned in-flight observation, late response after abandonment).
+14. Races P–AR in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival including non-overlapping two-confirmation revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE, hard-crash orphaned in-flight observation with PostgreSQL-authoritative lease boundary, late response after abandonment, application-node clock skew, physically missing in-flight row, multiple blockers / partial expiry, response-before-expiry / apply-after-expiry).
 
 ### D2. Checkpoint crash boundaries (mandatory)
 
@@ -1984,8 +2204,12 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 - Inventory-level connect / update / disconnect: disconnect is reconnectable; delayed disconnect must not drop a currently connected level.
 - Bulk ingest → disconnect payload with item/location only → reconnect/refetch = exactly one canonical pair row (Race X).
 - One transient LIVE response after confirmed **terminal** deletion does not revive (Race AB). Two overlapping LIVE responses do not satisfy the two-confirmation revival threshold (Race AB extension).
-- Hard-crash orphaned in-flight observation: finite lease logically abandons; no permanent freeze; no stale apply (Race AM).
+- Hard-crash orphaned in-flight observation: PostgreSQL-authoritative finite lease logically abandons at `clock_timestamp() >= leaseExpiresAt`; no permanent freeze; no stale apply (Race AM).
 - Late Shopify response after logical abandonment fails the observation-token / active-lease fence (Race AN).
+- Application-node clock skew cannot decide lease validity; PostgreSQL `clock_timestamp()` is authoritative for both workers (Race AO). Exact equality `clock_timestamp() == leaseExpiresAt` is expired.
+- Physically missing in-flight row fails the exact-token fence closed; stale worker cannot recreate the row to apply (Race AP).
+- Multiple ACTIVE unexpired resultless blockers: expiry of one does not release a held later response while another remains (Race AQ).
+- Response obtained before expiry and applied after expiry fails the post-lock fact fence; burned `responseGen` is the only residue (Race AR).
 
 ### F. Inventory-state truth
 
@@ -2077,6 +2301,7 @@ Observed on planning base `de1bb193…` (read-only inspection; not changed by th
 | inventoryLevel(id:) | https://shopify.dev/docs/api/admin-graphql/2026-07/queries/inventoryLevel |
 | PostgreSQL 18 `nextval` / `setval` privileges | https://www.postgresql.org/docs/18/functions-sequence.html (accessed 2026-08-14; PostgreSQL 18.6 docs dated August 13, 2026). `nextval` requires USAGE or UPDATE; `setval` requires UPDATE; SELECT is not required for `nextval`. |
 | PostgreSQL 18 `CREATE SEQUENCE` `NO CYCLE` | https://www.postgresql.org/docs/18/sql-createsequence.html (accessed 2026-08-14). `NO CYCLE` is the default; wrapping is forbidden when specified/defaulted. |
+| PostgreSQL 18 current date/time (`clock_timestamp` / `statement_timestamp` / `transaction_timestamp` / `CURRENT_TIMESTAMP` / `now()`) | https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT (accessed 2026-08-15; PostgreSQL 18.6 docs dated August 13, 2026). `CURRENT_TIMESTAMP` / `now()` / `transaction_timestamp()` are transaction-start values. `statement_timestamp()` is statement-start time. `clock_timestamp()` returns actual server time when evaluated and changes during statement execution. |
 
 API target remains **2026-07**. This planning task does not bump versions.
 
