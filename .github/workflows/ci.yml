@@ -2,31 +2,83 @@ name: CI
 
 on:
   push:
-    branches: [main, "phase-1/**"]
+    branches: [main]
   pull_request:
+    branches: [main]
   # Allow operators to re-run exact-head CI when agent push tokens do not
   # create github-actions check suites (observed after 2026-08-06T14:28Z).
+  # workflow_dispatch is the explicit full-CI escape hatch.
   workflow_dispatch:
 
 permissions:
   contents: read
 
-defaults:
-  run:
-    working-directory: stocky-plus
-
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
+  classify:
+    name: Classify change set
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      full_ci: ${{ steps.classify.outputs.full_ci }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classification self-test
+        working-directory: ${{ github.workspace }}
+        run: bash .github/scripts/classify-ci-change-set.test.sh
+
+      - name: Classify change set
+        id: classify
+        working-directory: ${{ github.workspace }}
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          COMPARE_HEAD: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          echo "event_name=${EVENT_NAME}"
+          echo "pr_base_sha=${PR_BASE_SHA:-}"
+          echo "pr_head_sha=${PR_HEAD_SHA:-}"
+          echo "push_before=${PUSH_BEFORE:-}"
+          echo "compare_head=${COMPARE_HEAD:-}"
+          case "${EVENT_NAME}" in
+            workflow_dispatch)
+              bash .github/scripts/classify-ci-change-set.sh --force-full
+              ;;
+            pull_request)
+              bash .github/scripts/classify-ci-change-set.sh --from-git "${PR_BASE_SHA}" "${PR_HEAD_SHA}"
+              ;;
+            push)
+              bash .github/scripts/classify-ci-change-set.sh --from-git "${PUSH_BEFORE}" "${COMPARE_HEAD}"
+              ;;
+            *)
+              echo "unknown event_name=${EVENT_NAME}; fail-closed to full CI" >&2
+              bash .github/scripts/classify-ci-change-set.sh --force-full
+              ;;
+          esac
+
   validate:
     name: Lint, typecheck, test, build, Prisma, GraphQL
+    needs: classify
+    if: ${{ needs.classify.outputs.full_ci == 'true' }}
     runs-on: ubuntu-latest
     # D-050 adversarial race/deadlock/fairness suites + full migration chain
     # exceed the prior 45m wall on GitHub-hosted runners (observed cancel at
     # ~45m during final test:migrations on tip 314981e).
     timeout-minutes: 70
+    defaults:
+      run:
+        working-directory: stocky-plus
 
     services:
       postgres:
@@ -632,3 +684,41 @@ jobs:
       # Requires outbound HTTPS to shopify.dev to fetch the Admin GraphQL schema.
       - name: GraphQL codegen / schema validation
         run: npm run graphql-codegen
+
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [classify, validate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Evaluate CI gate
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify.result }}
+          VALIDATE_RESULT: ${{ needs.validate.result }}
+          FULL_CI: ${{ needs.classify.outputs.full_ci }}
+          DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
+        run: |
+          set -euo pipefail
+          echo "classify_result=${CLASSIFY_RESULT}"
+          echo "validate_result=${VALIDATE_RESULT}"
+          echo "full_ci=${FULL_CI}"
+          echo "docs_only=${DOCS_ONLY}"
+          if [ "${CLASSIFY_RESULT}" != "success" ]; then
+            echo "CI Gate FAIL: classify did not succeed"
+            exit 1
+          fi
+          if [ "${FULL_CI}" = "true" ]; then
+            if [ "${VALIDATE_RESULT}" != "success" ]; then
+              echo "CI Gate FAIL: full CI required but validate result is ${VALIDATE_RESULT}"
+              exit 1
+            fi
+            echo "CI Gate SUCCESS: full validate succeeded"
+            exit 0
+          fi
+          if [ "${DOCS_ONLY}" = "true" ]; then
+            echo "CI Gate SUCCESS: docs-only classify succeeded"
+            exit 0
+          fi
+          echo "CI Gate FAIL: indeterminate classification (fail-closed)"
+          exit 1

@@ -169,6 +169,19 @@ A completion report must distinguish:
 
 For material checks, record the command, exit status, environment, commit SHA, and relevant output.
 
+## CI evidence policy
+
+Durable detail: `stocky-plus/docs/CI_POLICY.md`.
+
+1. For an open pull request, the exact-head `pull_request` CI/gate is the authoritative automatic evidence. A second push-triggered exact-head run is not required.
+2. Feature/tooling branch pushes do not run the full CI workflow. Only `main` pushes receive post-merge push CI.
+3. Docs-only exact-head evidence is the lightweight classification / docs-integrity gate. A change is docs-only only when there is at least one changed path and every changed path is `stocky-plus/docs/**` or `AGENTS.md`.
+4. A full PostgreSQL / Redis / migration / tenant-security suite is not required for a provably docs-only diff.
+5. Any unknown, mixed, empty, or non-doc path fails closed to full CI. `.github/**`, application, schema, scripts, lockfiles, Shopify/GraphQL/test config, and mixed docs+runtime diffs are full CI.
+6. `workflow_dispatch` remains the explicit full-CI escape hatch.
+
+This policy reduces redundant Actions consumption. It does not weaken runtime, security, or migration coverage for actual code changes.
+
 ## Product-rule changes
 
 When an approved product rule needs to change, document:
