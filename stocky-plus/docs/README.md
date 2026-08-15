@@ -31,7 +31,8 @@ Reusable copies are under `phases/_templates/`.
 - `PROJECT_STATUS.md` — current phase, active work, blockers, and next action;
 - `DECISIONS.md` — approved decisions and changes to product rules;
 - `OPEN_QUESTIONS.md` — unresolved product or technical questions;
-- `RISK_REGISTER.md` — active risks and owners.
+- `RISK_REGISTER.md` — active risks and owners;
+- `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules.
 
 Open `PROJECT_STATUS.md` first whenever the project feels confusing.
 
