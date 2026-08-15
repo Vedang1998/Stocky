@@ -64,6 +64,7 @@ D-052 remains technical acceptance of the reviewed PR 4 repository implementatio
 | PR #24 | OPEN / DRAFT / UNMERGED (`phase-1/pr5-planning`) |
 | Planning correction 5 | Documentation-only close of F-CLAUDE-PR5C4-01 / F-CLAUDE-PR5C4-02; implementation still **NOT AUTHORIZED** |
 | Planning correction 6 | Documentation-only close of F-CLAUDE-PR5C5-01 / 02 / 03 / 04 (authoritative PostgreSQL lease clock); implementation still **NOT AUTHORIZED** |
+| Planning correction 7 | Documentation-only durable `ACTIVE -> ABANDONED` fencing when expiry is relied upon to permit successor canonical mutation; implementation still **NOT AUTHORIZED** |
 
 D-053 is **not** a PR 4 correction, acceptance, or closure decision. Runtime, schema, migration, test, package, Shopify configuration, GraphQL, feature-flag, and CI workflow changes remain unauthorized until ChatGPT separately authorizes implementation after this planning unit is reviewed, accepted, and merged.
 
@@ -116,7 +117,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Complete ChatGPT PR 5 **planning correction 6** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (PostgreSQL `clock_timestamp()` as sole authoritative lease clock; exact `<` / `>=` expiry boundary; post-lock fact fence; missing-row fail-closed; all-active-blocker predicate; Race AM extension; Races AO / AP / AQ / AR). The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), and `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`) remain unmodified historical evidence. Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054. Do **not** edit any immutable review report.
+**Next action:** Complete ChatGPT PR 5 **planning correction 7** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (durable `ACTIVE -> ABANDONED` fencing when expiry is relied upon to permit successor canonical mutation; lease invalidity vs durable abandonment; successor apply algorithm; CASE 1 / CASE 2 backward-clock semantics; Race AS; Race AQ extension). The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), and `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`) remain unmodified historical evidence. There is no Correction-6 independent review artifact yet; do **not** create one in this correction. Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054. Do **not** edit any immutable review report.
 
 ## Current truth
 
@@ -136,4 +137,4 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Every inventory-write flag remains **DEFAULT OFF**.
 - Do **not** state that Phase 1 is complete, that PR 5 implementation has started, or that production is ready.
 - Do **not** state that PR 5 implementation is authorized merely because PR #20, PR #22, or PR #23 merged, or because D-053 exists.
-- PR [#24](https://github.com/Vedang1998/Stocky/pull/24) remains **OPEN, DRAFT, UNMERGED** on `phase-1/pr5-planning`. Correction 6 is documentation-only (F-CLAUDE-PR5C5-01 / 02 / 03 / 04). Correction implemented — pending independent verification. Implementation remains **NOT STARTED** and **NOT AUTHORIZED**.
+- PR [#24](https://github.com/Vedang1998/Stocky/pull/24) remains **OPEN, DRAFT, UNMERGED** on `phase-1/pr5-planning`. Correction 7 is documentation-only (durable `ACTIVE -> ABANDONED` fencing when expiry is relied upon to permit successor canonical mutation). Correction implemented — pending independent verification. Implementation remains **NOT STARTED** and **NOT AUTHORIZED**.
