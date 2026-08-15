@@ -1,6 +1,6 @@
 # Project Status
 
-**Updated:** 2026-08-14
+**Updated:** 2026-08-15
 **Current stage:** Phase 1 PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
@@ -61,6 +61,8 @@ D-052 remains technical acceptance of the reviewed PR 4 repository implementatio
 | Implementation branch | **Not created** (proposed later name `phase-1/catalog-location-inventory-facts`) |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
+| PR #24 | OPEN / DRAFT / UNMERGED (`phase-1/pr5-planning`) |
+| Planning correction 5 | Documentation-only close of F-CLAUDE-PR5C4-01 / F-CLAUDE-PR5C4-02; implementation still **NOT AUTHORIZED** |
 
 D-053 is **not** a PR 4 correction, acceptance, or closure decision. Runtime, schema, migration, test, package, Shopify configuration, GraphQL, feature-flag, and CI workflow changes remain unauthorized until ChatGPT separately authorizes implementation after this planning unit is reviewed, accepted, and merged.
 
@@ -100,7 +102,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
 **R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
 **R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
-**R-129 through R-158:** OPEN — PR 5 planning risks (D-053); do not treat as implementation-closed
+**R-129 through R-159:** OPEN — PR 5 planning risks (D-053); do not treat as implementation-closed
 **F-CLAUDE-PR4ACC-01:** P3 — **RESOLVED BY PR BODY UPDATE** before squash merge (not a runtime correction)
 **F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in PR 4)
 **F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
@@ -113,7 +115,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Complete ChatGPT PR 5 **planning correction 4** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (sequence USAGE-only / `setval` denial / NO CYCLE; observation intervals; overlapping existence and null-version conflict; full-sync absence-confirmation overlap). The immutable Claude report `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`) remains unmodified historical evidence. Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054. Do **not** edit the immutable review report.
+**Next action:** Complete ChatGPT PR 5 **planning correction 5** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (durable multi-row `CatalogObservationInFlight` evidence; finite lease / logical abandonment; late-worker fencing; Race AM / AN; non-overlapping terminal-revival confirmations). The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`) and `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`) remain unmodified historical evidence. Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054. Do **not** edit either immutable review report.
 
 ## Current truth
 
@@ -133,3 +135,4 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Every inventory-write flag remains **DEFAULT OFF**.
 - Do **not** state that Phase 1 is complete, that PR 5 implementation has started, or that production is ready.
 - Do **not** state that PR 5 implementation is authorized merely because PR #20, PR #22, or PR #23 merged, or because D-053 exists.
+- PR [#24](https://github.com/Vedang1998/Stocky/pull/24) remains **OPEN, DRAFT, UNMERGED** on `phase-1/pr5-planning`. Correction 5 is documentation-only (F-CLAUDE-PR5C4-01 / F-CLAUDE-PR5C4-02). Correction implemented — pending independent verification. Implementation remains **NOT STARTED** and **NOT AUTHORIZED**.
