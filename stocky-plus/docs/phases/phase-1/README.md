@@ -7,8 +7,8 @@
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
 **Phase 1 PR 4:** FORMALLY CLOSED
-**Next authorized action:** PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED (D-053)
-**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning authorization**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR 5 implementation NOT STARTED
+**Next authorized action:** PR 5 IMPLEMENTATION-ENTRY IN PROGRESS — D-054 CONDITIONAL / NOT EFFECTIVE; runtime NOT AUTHORIZED
+**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (CONDITIONAL / NOT EFFECTIVE)**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR 5 implementation NOT STARTED / NOT AUTHORIZED YET
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -23,7 +23,7 @@
 - PR [#22](https://github.com/Vedang1998/Stocky/pull/22) is **CLOSED and MERGED**. Accepted closure head `b99039f9c34fb12e74d804a3df748cbfdb435313`. Squash merge `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` at `2026-08-14T04:01:29Z`.
 - PR 4 repository implementation remains **ACCEPTED** under **D-052** at accepted implementation head `eb757119…`. Independent verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
 - Phase 1 PR 4 is **FORMALLY CLOSED**. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
-- Next gate: **PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED** (D-053). Planning correction 8: universal transaction-scoped `pg_advisory_xact_lock` canonical-identity serialization anchor; first-insert serialization; no durable response-bearing ACTIVE; planned ACTIVE⇒responseGen NULL invariant; deterministic multi-identity / observation-row lock order; Races AT / AU / AV; D1.14 P–AV. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Do **not** create D-054. Do **not** edit the immutable review reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), or `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`).
+- Next gate: **PR 5 IMPLEMENTATION-ENTRY IN PROGRESS** — D-054 **CONDITIONAL / NOT EFFECTIVE**. Planning (D-053 / PR #24) is **ACCEPTED AND MERGED**. Implementation-entry closes F-CLAUDE-PR5C8-01 / F-CLAUDE-PR5C8-02 and records Accelerated Safe Delivery v1. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Canonical governance: `../../ACCELERATED_SAFE_DELIVERY.md`. Do **not** mark D-054 effective. Do **not** create D-055. Do **not** create `phase-1/catalog-location-inventory-facts`. Do **not** edit the immutable review reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`), or `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` (blob `0d322db…`).
 - D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
 - D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
 - D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
@@ -34,13 +34,14 @@
 - D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-052 artifacts: `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`); `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`; `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
 - Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050; D-051; cumulative acceptance review — do not edit.
-- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main; `de1bb193…` = PR #23 squash merge / PR 5 planning base.
-- PR 5 **planning** is **IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED** (D-053).
-- PR 5 **implementation** is **NOT STARTED** and **NOT AUTHORIZED**.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main; `de1bb193…` = PR #23 squash merge / historical PR 5 planning base; `edabd8de…` = PR #24 squash merge / current main; `1691933e…` = PR 5 planning review head before squash; `0d322db…` = final immutable PR 5 planning review blob.
+- PR 5 **planning** is **ACCEPTED AND MERGED** (D-053 / PR #24).
+- **D-054** is **CONDITIONAL / NOT EFFECTIVE**.
+- PR 5 **implementation** is **NOT STARTED** and **NOT AUTHORIZED YET**.
 - Do **not** state that Phase 1 is complete.
 - Do **not** begin PR 5 runtime implementation.
 - Do **not** create the implementation branch.
-- Do **not** state that PR 5 implementation is authorized merely because PR #20, PR #22, or PR #23 merged, or because D-053 exists.
+- Do **not** state that PR 5 implementation is authorized merely because PR #20, PR #22, PR #23, or PR #24 merged, or because D-053 or a D-054 heading exists.
 - **Q-003 / F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does not authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
 - **R-031 / R-032 / R-033 / R-039 / R-099 through R-121 / R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052).
 - **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** previously CLOSED on D-050 independent evidence; D-052 confirms repository-implementation closure / no R-124 reopen.
@@ -186,7 +187,8 @@
 - **R-122 / R-123:** ACCEPTED NONBLOCKING RESIDUALS — see `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`.
 - **R-124:** CLOSED — not reopened (F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is distinct F-F03 tooling debt).
 - **R-127 / R-128:** CLOSED — no regression (D-052).
-- **R-129 through R-160:** OPEN — PR 5 planning risks (D-053); not implementation-closed.
+- **R-129 through R-160:** OPEN — PR 5 planning / implementation-entry risks (D-053 / D-054 conditional); not implementation-closed.
+- **R-161:** OPEN — PR 5 implementation entry (advisory-lock capacity). Do **not** close in this docs PR.
 - **R-014 / R-013 / R-010 / R-062 / R-079:** remain open as previously tracked. R-010 is not closed by PR 5 planning.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
 
@@ -234,12 +236,40 @@
 40. `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` — cumulative independent review `READY FOR CHATGPT PR 4 ACCEPTANCE` (verbatim; do not modify; blob `c9fca9b2…`)
 41. `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md` — D-052 accepted nonblocking residuals
 42. `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md` — post-merge closure identities
-43. `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` — D-053 PR 5 planning packet (implementation not authorized)
+43. `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` — D-053 planning packet + D-054 implementation-entry contract (runtime not authorized)
+44. `PR5_PLANNING_INDEPENDENT_REVIEW.md` — immutable (blob `f6e62fe…`)
+45. `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` — immutable (blob `e645c81…`)
+46. `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` — immutable (blob `c465b7d…`)
+47. `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` — immutable (blob `b1c4265…`)
+48. `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` — immutable final planning review `APPROVE PR5 PLANNING` (blob `0d322db…`; never edit)
+49. `../../ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model
+
+## Immutable PR 5 planning (#24) merge evidence
+
+| Field | Value |
+|---|---|
+| PR | [#24](https://github.com/Vedang1998/Stocky/pull/24) — closed and merged |
+| Decision | D-053 planning accepted and merged |
+| Planning review head before squash | `1691933ec126eed44de81162e8492fb7f0bfae0c` |
+| Immutable review-report blob | `0d322db701f5f27b89bc4069e6fb1f3d751d15a3` |
+| Independent verdict | `APPROVE PR5 PLANNING` |
+| Residual findings | F-CLAUDE-PR5C8-01 P2; F-CLAUDE-PR5C8-02 P3 |
+| Squash merge / current main | `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e` |
+| Merge timestamp | `2026-08-16T16:49:46Z` |
+| Post-merge main CI | run `31959761072`, event `push`, **SUCCESS** |
+| Classify job | `95195836526` SUCCESS |
+| CI Gate job | `95195850559` SUCCESS |
+| Heavy job | `95195850790` SKIPPED |
+| Implementation | **NOT STARTED / NOT AUTHORIZED YET** |
+| D-054 | **CONDITIONAL / NOT EFFECTIVE** |
+| Implementation branch | **Absent** |
+| Production / inventory writes | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
 
 ## Related documents
 
 - Live status: `../../PROJECT_STATUS.md`
-- Decisions: `../../DECISIONS.md` (includes D-024..D-053)
+- Decisions: `../../DECISIONS.md` (includes D-024..D-054; D-054 is CONDITIONAL)
+- Accelerated Safe Delivery: `../../ACCELERATED_SAFE_DELIVERY.md`
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`
