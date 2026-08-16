@@ -291,15 +291,17 @@ Live PR head after the trailing-whitespace classify fix is recorded in git after
 
 ## 36–39. Exact-head CI
 
-Superseded failed exact-head run on `f958ce5c47796b3862c8e8220edf979a575551fb`:
+Superseded failed exact-head runs (do not treat as current-head evidence):
 
-- run `31968529979`, event `pull_request`
-- Classify `95217270790` FAILURE because `git diff --check` found trailing whitespace in this report
-- Heavy / validate SKIPPED
-- CI Gate `95217288179` FAILURE (`classify_result=failure`)
-- Classification before the whitespace gate: `docs_only=false`, `full_ci=true`, `classification_reason=non_docs_or_unknown_path`
+| Run | Head | Event | Result |
+|---|---|---|---|
+| `31968046370` | `a04fa51eb94fb6ac6337a4e1e76c18480c65b33a` | `pull_request` | Classify SUCCESS; Heavy `95216111747` FAILURE at `tenant:schema:drift` (optional InventoryItem→Variant FK existed in SQL without a Prisma relation; existing control-plane Shop FKs were also rewritten to `onUpdate: NoAction`); CI Gate FAILURE |
+| `31968529979` | `f958ce5c47796b3862c8e8220edf979a575551fb` | `pull_request` | Classify `95217270790` FAILURE (`git diff --check` trailing whitespace in this report); Heavy SKIPPED; CI Gate FAILURE. Classification before the whitespace gate: `docs_only=false`, `full_ci=true` |
+| `31968565003` | `7644a183c776da01545dfacc666ec7fececa3278` | `pull_request` | Classify SUCCESS; Heavy in progress / superseded by the drift correction |
 
-A later exact-head `pull_request` run on the whitespace-fixed head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
+Correction now in schema: restore pre-existing control-plane Shop FK `onUpdate` defaults, and model the optional InventoryItem→Variant composite FK in Prisma (`onDelete: NoAction`, `onUpdate: NoAction`) so `tenant:schema:drift` is empty after migrate + compatibility indexes. Local `npm run tenant:schema:drift` after that correction: `tenant_prisma_schema_drift_ok`.
+
+A later exact-head `pull_request` run on the drift-corrected head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
 
 ## 40–44. Risk status
 

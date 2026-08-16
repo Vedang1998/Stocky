@@ -96,7 +96,7 @@ model DispatchReadyShop {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
   @@index([processingEnabled, nextDispatchAt, shopId], map: "DispatchReadyShop_dispatch_schedule_idx")
 }
@@ -870,7 +870,7 @@ model SyncApplicationReceipt {
   resultMetadata            Json?
   createdAt                 DateTime @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
   @@unique([shopId, applicationKey])
   @@unique([shopId, id])
@@ -965,7 +965,7 @@ model SyncCursor {
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
   @@unique([shopId, syncDomain])
   @@unique([shopId, id])
@@ -1030,7 +1030,7 @@ model SyncHealth {
   updatedAt   DateTime       @updatedAt
   createdAt   DateTime       @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
 
   @@unique([shopId, syncDomain])
   @@unique([shopId, id])
@@ -1233,6 +1233,7 @@ model ShopifyVariantFact {
 
   shop    Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   product ShopifyProductFact @relation(fields: [shopId, shopifyProductGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+  inventoryItems ShopifyInventoryItemFact[]
 
   @@unique([shopId, id])
   @@unique([shopId, shopifyGid])
@@ -1290,6 +1291,7 @@ model ShopifyInventoryItemFact {
   updatedAt                    DateTime                            @updatedAt
 
   shop            Shop                         @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  variant         ShopifyVariantFact?          @relation(fields: [shopId, shopifyVariantGid], references: [shopId, shopifyGid], onDelete: NoAction, onUpdate: NoAction)
   inventoryLevels ShopifyInventoryLevelFact[]
 
   @@unique([shopId, id])
