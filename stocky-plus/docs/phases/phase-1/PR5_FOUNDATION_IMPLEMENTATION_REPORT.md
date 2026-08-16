@@ -54,6 +54,7 @@ Runtime / schema / enforcement:
 - `stocky-plus/scripts/tenant-enforcement/inventory.ts`
 - `stocky-plus/scripts/tenant-enforcement/tests/pr5-catalog-fact-foundation.test.ts`
 - `stocky-plus/scripts/tenant-enforcement/tests/sequence-privilege.test.ts`
+- `stocky-plus/scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` (required: this existing CI fixture hardcodes the post-init parking list and a historical “zero composite FKs” assertion; the new foundation migration must be parked during init-only deploy, and the five approved PR5 composite identity FKs must be the exact remaining set)
 
 Mechanical TenantDb / inventory registration (required so new merchant-domain models participate in the existing PR2/PR3 architecture; not a TenantDb redesign):
 
@@ -283,7 +284,8 @@ Environment: disposable PostgreSQL 16.14, Redis PONG, Node v22.14.0. Local `DATA
 
 Runtime/test implementation commit: `a04fa51eb94fb6ac6337a4e1e76c18480c65b33a`.
 Documentation commit that first included this report: `f958ce5c47796b3862c8e8220edf979a575551fb`.
-Live PR head after the trailing-whitespace classify fix is recorded in git after this commit.
+Prisma relation / drift correction: `e15d2de002ccb2fd0fe7e6d1412d77bf7c196f3b`.
+Live PR head after the tenant-expansion parking/composite-FK fixture correction is the commit that includes this paragraph; do not treat that SHA as known before the commit exists.
 
 ## 35. Draft PR number / URL
 
@@ -291,17 +293,18 @@ Live PR head after the trailing-whitespace classify fix is recorded in git after
 
 ## 36–39. Exact-head CI
 
-Superseded failed exact-head runs (do not treat as current-head evidence):
+Superseded failed / cancelled exact-head runs (do not treat as current-head evidence):
 
 | Run | Head | Event | Result |
 |---|---|---|---|
 | `31968046370` | `a04fa51eb94fb6ac6337a4e1e76c18480c65b33a` | `pull_request` | Classify SUCCESS; Heavy `95216111747` FAILURE at `tenant:schema:drift` (optional InventoryItem→Variant FK existed in SQL without a Prisma relation; existing control-plane Shop FKs were also rewritten to `onUpdate: NoAction`); CI Gate FAILURE |
 | `31968529979` | `f958ce5c47796b3862c8e8220edf979a575551fb` | `pull_request` | Classify `95217270790` FAILURE (`git diff --check` trailing whitespace in this report); Heavy SKIPPED; CI Gate FAILURE. Classification before the whitespace gate: `docs_only=false`, `full_ci=true` |
-| `31968565003` | `7644a183c776da01545dfacc666ec7fececa3278` | `pull_request` | Classify SUCCESS; Heavy in progress / superseded by the drift correction |
+| `31968565003` | `7644a183c776da01545dfacc666ec7fececa3278` | `pull_request` | Classify SUCCESS; Heavy cancelled when the drift correction was pushed |
+| `31968723550` | `e15d2de002ccb2fd0fe7e6d1412d77bf7c196f3b` | `pull_request` | Classify `95217750470` SUCCESS (`docs_only=false`, `full_ci=true`); Heavy `95217772251` FAILURE at `npm run test:migrations` — 5 failures in `tenant-expansion.migration.test.ts` because the unparked PR5 migration ran during init-only deploy (`relation "SyncRun" does not exist`) and the historical “zero composite FKs” assertion saw the five approved PR5 identity FKs; CI Gate `95224284974` FAILURE |
 
-Correction now in schema: restore pre-existing control-plane Shop FK `onUpdate` defaults, and model the optional InventoryItem→Variant composite FK in Prisma (`onDelete: NoAction`, `onUpdate: NoAction`) so `tenant:schema:drift` is empty after migrate + compatibility indexes. Local `npm run tenant:schema:drift` after that correction: `tenant_prisma_schema_drift_ok`.
+Correction now in the tenant-expansion fixture: `ALL_MIGRATION_NAMES` / init-only parking include `20260816193000_pr5_catalog_fact_foundation`; the composite-FK assertion expects exactly the five approved PR5 canonical identity FKs and no others.
 
-A later exact-head `pull_request` run on the drift-corrected head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
+A later exact-head `pull_request` run on the parking-fixture correction head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
 
 ## 40–44. Risk status
 
