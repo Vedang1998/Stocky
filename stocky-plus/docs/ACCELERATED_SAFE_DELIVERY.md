@@ -1,9 +1,9 @@
 # Accelerated Safe Delivery v1
 
-**Status:** Permanent repository governance from Phase 1 PR 5 implementation onward  
-**Authority:** ChatGPT product-owner decision recorded with D-054  
-**Applies to:** ChatGPT, Cursor, and Claude Code  
-**This document is canonical.** Agent prompts carry concise mandatory summaries and must link here. Do not copy this entire document into every agent file.
+- **Status:** Permanent repository governance from Phase 1 PR 5 implementation onward
+- **Authority:** ChatGPT product-owner decision recorded with D-054
+- **Applies to:** ChatGPT, Cursor, and Claude Code
+- **This document is canonical.** Agent prompts carry concise mandatory summaries and must link here. Do not copy this entire document into every agent file.
 
 This operating model changes **calendar execution**, not acceptance standards.
 
