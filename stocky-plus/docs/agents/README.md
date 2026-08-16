@@ -10,6 +10,16 @@ The repository root contains:
 - `CLAUDE.md` — Claude Code-specific independent-review memory;
 - `.cursor/rules/` — smaller Cursor rules split by responsibility so critical instructions load reliably.
 
+Permanent multi-agent delivery model:
+
+- `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`
+
+That document is canonical from Phase 1 PR 5 implementation onward. Agent files here carry concise mandatory summaries only. Do not copy the entire document into every prompt.
+
+Cursor: parallel lanes exist only when ChatGPT defines them; one branch / chat / objective per lane; exclusive file ownership; do not start adjacent runtime work on your own; one-level-ahead planning only when expressly authorized; shared foundations freeze before dependent lanes.
+
+Claude: early exhaustive red-team review for new Tier-A architecture; try to discover the whole material finding set in one pass; final exact-head review remains mandatory; independent review cannot be replaced by another Cursor lane.
+
 ## ChatGPT Project
 
 Copy the complete contents of:

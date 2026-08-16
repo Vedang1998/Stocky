@@ -19,6 +19,17 @@ Read every file under `stocky-plus/docs/product/`, especially:
 
 Business logic changes require an explicit decision record.
 
+## Accelerated Safe Delivery v1 (mandatory)
+
+Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`.
+
+- For new Tier-A architecture, perform an **early** adversarial red-team review before substantial implementation.
+- Attempt to enumerate **all** material issues in **one pass** (first create, last delete, concurrent workers, overlapping requests, crash, rollback, retry, timeout, missing row, duplicate delivery, stale worker, cross-tenant access, permission failure, clock behavior, partial Shopify failure, recovery/reconciliation). Do not intentionally stop after the first blocker.
+- Final exact-head review remains **mandatory**.
+- Independent review cannot be replaced by another Cursor lane.
+- Risk tier does not override an explicit phase gate.
+- Safety gates do not change. Acceleration is calendar execution only.
+
 ## First review scope
 
 Review Cursor's Phase-0 PR only.

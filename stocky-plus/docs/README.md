@@ -32,7 +32,8 @@ Reusable copies are under `phases/_templates/`.
 - `DECISIONS.md` — approved decisions and changes to product rules;
 - `OPEN_QUESTIONS.md` — unresolved product or technical questions;
 - `RISK_REGISTER.md` — active risks and owners;
-- `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules.
+- `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules;
+- `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward.
 
 Open `PROJECT_STATUS.md` first whenever the project feels confusing.
 

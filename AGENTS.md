@@ -134,6 +134,30 @@ Receiving, adjustment, stocktake, cost-sync, and transfer writes require:
 
 A workflow must not be marked complete when Shopify writes failed.
 
+## Accelerated Safe Delivery v1
+
+Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`.
+
+This is the permanent operating model for ChatGPT, Cursor, and Claude Code from Phase 1 PR 5 implementation onward. It changes calendar execution, not acceptance standards.
+
+Mandatory rules:
+
+- Safety gates do not change (tenancy/RLS, authorization, additive migrations, money, inventory-write safety, Shopify authority, reconciliation, exact-head CI, independent review, feature flags, kill switches, production authorization).
+- Parallelize work, not uncertainty. Shared schema/interfaces/security/transaction primitives freeze before dependent runtime lanes start.
+- Planning/research may proceed one dependency level ahead only when expressly authorized. Planning ahead is not implementation authorization. Future-phase runtime, migrations, Shopify configuration, and production actions remain forbidden.
+- ChatGPT may authorize up to 2–4 parallel Cursor lanes after shared contracts are frozen. Each lane has one branch, one chat, one objective, exclusive file ownership, exact base SHA, own tests, and own PR. One writer per branch/PR.
+- Foundation first: land schema, migration, interfaces, transaction/identity primitives, and security boundaries before widening downstream lanes.
+- Use small focused PRs. Do not implement an entire phase in one huge PR.
+- Risk tiers: Tier A (auth, tenancy, migrations, identity, deletion, concurrency, money, forecast, inventory writes, reconciliation, billing, AI spend, security) requires architecture contract, independent Claude review, exact-head full CI, and adversarial races where relevant. Risk tier does not override an explicit phase gate.
+- Claude performs early exhaustive red-team review for new Tier-A architecture and tries to find the whole material finding set in one pass. Final exact-head review remains mandatory.
+- ChatGPT issues one consolidated correction package where practical.
+- GitHub is the durable handoff. Chat summaries are convenience only.
+- Do not delete tests to go faster. CI sharding requires its own tooling review and must preserve the CI Gate.
+
+Cursor must not invent parallel lanes or start adjacent runtime work on its own.
+
+Claude independent review cannot be replaced by another Cursor lane.
+
 ## Delivery workflow
 
 For substantial work:

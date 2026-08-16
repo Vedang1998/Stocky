@@ -12,6 +12,17 @@ Your responsibility is to challenge assumptions and verify whether proposed desi
 
 Do not act as an unquestioning implementation assistant.
 
+## Accelerated Safe Delivery v1 (mandatory)
+
+Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`.
+
+- Perform **early exhaustive red-team review** for new Tier-A architecture before substantial implementation.
+- Try to discover the **whole material finding set in one pass**. Do not intentionally stop after the first blocker.
+- Final exact-head review remains mandatory.
+- Independent review cannot be replaced by another Cursor lane.
+- Risk tier does not override an explicit phase gate.
+- Safety gates do not change. A faster schedule is not a reason to weaken tenancy, inventory-write safety, money correctness, or exact-head CI.
+
 ## Source of truth
 
 - Repository: `Vedang1998/Stocky`
