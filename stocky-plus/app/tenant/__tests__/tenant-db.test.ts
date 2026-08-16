@@ -51,6 +51,13 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.variantAbcClass.deleteMany();
     await prisma.inventorySnapshot.deleteMany();
     await prisma.shopifyVariantCache.deleteMany();
+    await prisma.catalogObservationInFlight.deleteMany();
+    await prisma.shopifyProductCollectionMembership.deleteMany();
+    await prisma.shopifyInventoryLevelFact.deleteMany();
+    await prisma.shopifyInventoryItemFact.deleteMany();
+    await prisma.shopifyVariantFact.deleteMany();
+    await prisma.shopifyProductFact.deleteMany();
+    await prisma.shopifyLocationFact.deleteMany();
     await prisma.purchaseOrder.deleteMany();
     await prisma.supplier.deleteMany();
     await prisma.shop.deleteMany();
@@ -79,9 +86,9 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.$disconnect();
   });
 
-  it("registers all 19 merchant models", () => {
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(19);
-    expect(DIRECT_MERCHANT_MODELS).toHaveLength(13);
+  it("registers all 26 merchant models", () => {
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(26);
+    expect(DIRECT_MERCHANT_MODELS).toHaveLength(20);
     expect(CHILD_MERCHANT_MODELS).toHaveLength(6);
   });
 

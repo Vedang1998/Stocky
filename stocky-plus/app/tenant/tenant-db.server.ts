@@ -1846,6 +1846,13 @@ export type TenantDb = {
   bomComponent: TenantModelDelegate;
   lowStockAlert: TenantModelDelegate;
   syncApplicationReceipt: TenantModelDelegate;
+  shopifyProductFact: TenantModelDelegate;
+  shopifyProductCollectionMembership: TenantModelDelegate;
+  shopifyVariantFact: TenantModelDelegate;
+  shopifyInventoryItemFact: TenantModelDelegate;
+  shopifyLocationFact: TenantModelDelegate;
+  shopifyInventoryLevelFact: TenantModelDelegate;
+  catalogObservationInFlight: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
   volumePriceTier: TenantModelDelegate;
   leadTimeSnapshot: TenantModelDelegate;

@@ -69,6 +69,13 @@ model Shop {
   syncHealth          SyncHealth[]
   syncApplicationReceipts SyncApplicationReceipt[]
   dispatchReadyShop   DispatchReadyShop?
+  shopifyProductFacts ShopifyProductFact[]
+  shopifyVariantFacts ShopifyVariantFact[]
+  shopifyInventoryItemFacts ShopifyInventoryItemFact[]
+  shopifyLocationFacts ShopifyLocationFact[]
+  shopifyInventoryLevelFacts ShopifyInventoryLevelFact[]
+  catalogObservationsInFlight CatalogObservationInFlight[]
+  shopifyProductCollectionMemberships ShopifyProductCollectionMembership[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -89,7 +96,7 @@ model DispatchReadyShop {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@index([processingEnabled, nextDispatchAt, shopId], map: "DispatchReadyShop_dispatch_schedule_idx")
 }
@@ -863,7 +870,7 @@ model SyncApplicationReceipt {
   resultMetadata            Json?
   createdAt                 DateTime @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([shopId, applicationKey])
   @@unique([shopId, id])
@@ -934,6 +941,10 @@ model SyncRun {
   partialFailure       Boolean       @default(false)
   errorCode            String?       @db.VarChar(64)
   failureSummary       String?       @db.VarChar(512)
+  /// PR5-F1 full-sync fence: platform sequence generation committed before Shopify I/O.
+  /// Persist as PostgreSQL bigint / Prisma BigInt — never a JavaScript Number.
+  fenceGeneration      BigInt?
+  fenceAt              DateTime?
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
@@ -943,6 +954,7 @@ model SyncRun {
   @@unique([shopId, id])
   @@index([shopId, syncDomain, createdAt])
   @@index([shopId, status, createdAt])
+  @@index([shopId, fenceGeneration])
 }
 
 model SyncCursor {
@@ -953,7 +965,7 @@ model SyncCursor {
   updatedAt   DateTime @updatedAt
   createdAt   DateTime @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([shopId, syncDomain])
   @@unique([shopId, id])
@@ -1018,9 +1030,444 @@ model SyncHealth {
   updatedAt   DateTime       @updatedAt
   createdAt   DateTime       @default(now())
 
-  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict)
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
 
   @@unique([shopId, syncDomain])
   @@unique([shopId, id])
   @@index([shopId, state])
+}
+
+// ─── Phase 1 PR5-F1: canonical catalog / location / inventory facts ──────────
+// Shared lineage clocks A/B/C are distinct columns. Do not collapse them.
+// New merchant-domain tables: non-null shopId, no legacy shop string,
+// no nullable-shopId expand/backfill. RLS/immutability via PR 3 enforcement.
+
+enum CatalogExistenceState {
+  LIVE
+  ABSENT
+}
+
+enum CatalogExistenceKind {
+  LIVE_REFETCH
+  LIVE_FULL_SYNC_PRESENT
+  ABSENT_CONFIRMED_QUERY
+}
+
+enum CatalogAttributeFreshnessState {
+  ORDERED
+  DEGRADED
+}
+
+enum CatalogCompatibilityProjectionState {
+  HEALTHY
+  DEGRADED
+}
+
+enum CatalogAbsenceNominationState {
+  NONE
+  CANDIDATE
+  CIRCUIT_BREAKER_HELD
+}
+
+enum CatalogObservationLifecycleState {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum CatalogResourceKind {
+  Product
+  ProductVariant
+  InventoryItem
+  Location
+  InventoryLevel
+}
+
+enum CatalogSourceKind {
+  FULL_SYNC
+  INCREMENTAL_REFETCH
+  DELETE_WEBHOOK
+  DISCONNECT_WEBHOOK
+  RECONCILE
+}
+
+enum CatalogDeletionSource {
+  WEBHOOK
+  CONFIRMED_QUERY
+  DISCONNECT
+}
+
+enum CatalogUnitCostAccess {
+  PRESENT
+  NULL
+  OMITTED_NO_PERMISSION
+  QUERY_ERROR_ISOLATED
+}
+
+enum ShopifyProductStatus {
+  ACTIVE
+  ARCHIVED
+  DRAFT
+  UNLISTED
+}
+
+model ShopifyProductFact {
+  id                           String                              @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                              @db.VarChar(256)
+  title                        String
+  handle                       String
+  vendor                       String?
+  productType                  String?
+  tags                         String[]
+  status                       ShopifyProductStatus
+  featuredMediaUrl             String?
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  existenceState               CatalogExistenceState
+  existenceKind                CatalogExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt
+  existenceResponseGen         BigInt
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                             @db.VarChar(128)
+  lastSignalDeliveryId         String?                             @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  existenceDiagnosticState     String?                             @db.VarChar(128)
+  absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
+  absenceCandidateEpochId      String?
+  absenceCandidateGeneration   BigInt?
+  ingestBatchId                String?
+  lastSeenAt                   DateTime?
+  lastRefreshedAt              DateTime?
+  appliedAt                    DateTime?
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  sourceKind                   CatalogSourceKind
+  deletedAt                    DateTime?
+  deletionSource               CatalogDeletionSource?
+  shopifyLegacyResourceId      String?                             @db.VarChar(64)
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
+
+  shop                   Shop                                 @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  variants               ShopifyVariantFact[]
+  collectionMemberships  ShopifyProductCollectionMembership[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, existenceState])
+  @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, handle])
+  @@index([shopId, vendor])
+}
+
+model ShopifyProductCollectionMembership {
+  id                      String   @id @default(cuid())
+  shopId                  String
+  shopifyProductGid       String   @db.VarChar(256)
+  shopifyCollectionGid    String   @db.VarChar(256)
+  collectionTitleSnapshot String
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  shop    Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  product ShopifyProductFact @relation(fields: [shopId, shopifyProductGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyProductGid, shopifyCollectionGid])
+  @@index([shopId, shopifyCollectionGid])
+}
+
+model ShopifyVariantFact {
+  id                           String                              @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                              @db.VarChar(256)
+  shopifyProductGid            String                              @db.VarChar(256)
+  title                        String
+  displayName                  String?
+  selectedOptions              Json
+  sku                          String?
+  barcode                      String?
+  priceAmount                  Decimal                             @db.Decimal(20, 6)
+  compareAtPriceAmount         Decimal?                            @db.Decimal(20, 6)
+  currencyCode                 String                              @db.VarChar(8)
+  position                     Int?
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  existenceState               CatalogExistenceState
+  existenceKind                CatalogExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt
+  existenceResponseGen         BigInt
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                             @db.VarChar(128)
+  lastSignalDeliveryId         String?                             @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  existenceDiagnosticState     String?                             @db.VarChar(128)
+  absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
+  absenceCandidateEpochId      String?
+  absenceCandidateGeneration   BigInt?
+  ingestBatchId                String?
+  lastSeenAt                   DateTime?
+  lastRefreshedAt              DateTime?
+  appliedAt                    DateTime?
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  sourceKind                   CatalogSourceKind
+  deletedAt                    DateTime?
+  deletionSource               CatalogDeletionSource?
+  shopifyLegacyResourceId      String?                             @db.VarChar(64)
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
+
+  shop    Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  product ShopifyProductFact @relation(fields: [shopId, shopifyProductGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyProductGid])
+  @@index([shopId, existenceState])
+  @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, sku])
+  @@index([shopId, barcode])
+}
+
+model ShopifyInventoryItemFact {
+  id                           String                              @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                              @db.VarChar(256)
+  shopifyVariantGid            String?                             @db.VarChar(256)
+  sku                          String?
+  tracked                      Boolean
+  requiresShipping             Boolean
+  weightValue                  Decimal?                            @db.Decimal(20, 6)
+  weightUnit                   String?                             @db.VarChar(32)
+  unitCostAmount               Decimal?                            @db.Decimal(20, 6)
+  unitCostCurrencyCode         String?                             @db.VarChar(8)
+  unitCostAccess               CatalogUnitCostAccess
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  existenceState               CatalogExistenceState
+  existenceKind                CatalogExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt
+  existenceResponseGen         BigInt
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                             @db.VarChar(128)
+  lastSignalDeliveryId         String?                             @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  existenceDiagnosticState     String?                             @db.VarChar(128)
+  absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
+  absenceCandidateEpochId      String?
+  absenceCandidateGeneration   BigInt?
+  ingestBatchId                String?
+  lastSeenAt                   DateTime?
+  lastRefreshedAt              DateTime?
+  appliedAt                    DateTime?
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  sourceKind                   CatalogSourceKind
+  deletedAt                    DateTime?
+  deletionSource               CatalogDeletionSource?
+  shopifyLegacyResourceId      String?                             @db.VarChar(64)
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
+
+  shop            Shop                         @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  inventoryLevels ShopifyInventoryLevelFact[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyVariantGid])
+  @@index([shopId, existenceState])
+  @@index([shopId, lastSeenFullSyncRunId])
+}
+
+model ShopifyLocationFact {
+  id                           String                              @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                              @db.VarChar(256)
+  name                         String
+  isActive                     Boolean
+  deactivatedAt                DateTime?
+  fulfillsOnlineOrders         Boolean
+  shipsInventory               Boolean
+  isFulfillmentService         Boolean
+  hasActiveInventory           Boolean
+  address1                     String?
+  city                         String?
+  provinceCode                 String?                             @db.VarChar(16)
+  countryCode                  String?                             @db.VarChar(8)
+  zip                          String?
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  existenceState               CatalogExistenceState
+  existenceKind                CatalogExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt
+  existenceResponseGen         BigInt
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                             @db.VarChar(128)
+  lastSignalDeliveryId         String?                             @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  existenceDiagnosticState     String?                             @db.VarChar(128)
+  absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
+  absenceCandidateEpochId      String?
+  absenceCandidateGeneration   BigInt?
+  ingestBatchId                String?
+  lastSeenAt                   DateTime?
+  lastRefreshedAt              DateTime?
+  appliedAt                    DateTime?
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  sourceKind                   CatalogSourceKind
+  deletedAt                    DateTime?
+  deletionSource               CatalogDeletionSource?
+  shopifyLegacyResourceId      String?                             @db.VarChar(64)
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
+
+  shop            Shop                        @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  inventoryLevels ShopifyInventoryLevelFact[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, existenceState])
+  @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, isActive])
+}
+
+model ShopifyInventoryLevelFact {
+  id                           String                              @id @default(cuid())
+  shopId                       String
+  inventoryItemGid             String                              @db.VarChar(256)
+  locationGid                  String                              @db.VarChar(256)
+  shopifyInventoryLevelGid     String?                             @db.VarChar(256)
+  isActive                     Boolean                             @default(true)
+  availableQuantity            Int?
+  availableQuantityUpdatedAt   DateTime?
+  availableQuantityRequestGen  BigInt?
+  availableQuantityResponseGen BigInt?
+  onHandQuantity               Int?
+  onHandQuantityUpdatedAt      DateTime?
+  onHandQuantityRequestGen     BigInt?
+  onHandQuantityResponseGen    BigInt?
+  incomingQuantity             Int?
+  incomingQuantityUpdatedAt    DateTime?
+  incomingQuantityRequestGen   BigInt?
+  incomingQuantityResponseGen  BigInt?
+  committedQuantity            Int?
+  committedQuantityUpdatedAt   DateTime?
+  committedQuantityRequestGen  BigInt?
+  committedQuantityResponseGen BigInt?
+  reservedQuantity             Int?
+  reservedQuantityUpdatedAt    DateTime?
+  reservedQuantityRequestGen   BigInt?
+  reservedQuantityResponseGen  BigInt?
+  damagedQuantity              Int?
+  damagedQuantityUpdatedAt     DateTime?
+  damagedQuantityRequestGen    BigInt?
+  damagedQuantityResponseGen   BigInt?
+  safetyStockQuantity          Int?
+  safetyStockQuantityUpdatedAt DateTime?
+  safetyStockQuantityRequestGen BigInt?
+  safetyStockQuantityResponseGen BigInt?
+  qualityControlQuantity       Int?
+  qualityControlQuantityUpdatedAt DateTime?
+  qualityControlQuantityRequestGen BigInt?
+  qualityControlQuantityResponseGen BigInt?
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  existenceState               CatalogExistenceState
+  existenceKind                CatalogExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt
+  existenceResponseGen         BigInt
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                             @db.VarChar(128)
+  lastSignalDeliveryId         String?                             @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  existenceDiagnosticState     String?                             @db.VarChar(128)
+  absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
+  absenceCandidateEpochId      String?
+  absenceCandidateGeneration   BigInt?
+  ingestBatchId                String?
+  lastSeenAt                   DateTime?
+  lastRefreshedAt              DateTime?
+  appliedAt                    DateTime?
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  sourceKind                   CatalogSourceKind
+  deletedAt                    DateTime?
+  deletionSource               CatalogDeletionSource?
+  shopifyLegacyResourceId      String?                             @db.VarChar(64)
+  createdAt                    DateTime                            @default(now())
+  updatedAt                    DateTime                            @updatedAt
+
+  shop          Shop                     @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  inventoryItem ShopifyInventoryItemFact @relation(fields: [shopId, inventoryItemGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+  location      ShopifyLocationFact      @relation(fields: [shopId, locationGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, inventoryItemGid, locationGid])
+  @@index([shopId, locationGid])
+  @@index([shopId, inventoryItemGid])
+  @@index([shopId, existenceState])
+  @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, shopifyInventoryLevelGid])
+}
+
+model CatalogObservationInFlight {
+  id                     String                            @id @default(cuid())
+  shopId                 String
+  resourceKind           CatalogResourceKind
+  shopifyGid             String?                           @db.VarChar(256)
+  inventoryItemGid       String?                           @db.VarChar(256)
+  locationGid            String?                           @db.VarChar(256)
+  observationRequestGen  BigInt
+  observationResponseGen BigInt?
+  /// Application supplies only a validated finite duration. PostgreSQL
+  /// overwrites leaseExpiresAt with clock_timestamp() + duration on INSERT.
+  leaseDurationMs        Int
+  leaseExpiresAt         DateTime                            @db.Timestamptz(3)
+  lifecycleState         CatalogObservationLifecycleState
+  durableJobId           String?
+  jobAttemptId           String?
+  correlationId          String?
+  createdAt              DateTime                          @default(now())
+  updatedAt              DateTime                          @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@index([shopId, resourceKind, shopifyGid, lifecycleState])
+  @@index([shopId, resourceKind, inventoryItemGid, locationGid, lifecycleState])
+  @@index([shopId, leaseExpiresAt, lifecycleState])
+  @@index([shopId, observationRequestGen])
 }

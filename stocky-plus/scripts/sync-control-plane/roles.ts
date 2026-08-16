@@ -4,7 +4,11 @@
  * No merchant-domain DML. No migration privileges. NOINHERIT. No BYPASSRLS.
  */
 import type { Client } from "pg";
-import { PLATFORM_CONTROL_PLANE_SQL_TABLES } from "../tenant-enforcement/manifest";
+import {
+  CATALOG_OBSERVATION_GEN_SEQ,
+  MERCHANT_SQL_TABLES,
+  PLATFORM_CONTROL_PLANE_SQL_TABLES,
+} from "../tenant-enforcement/manifest";
 import { quoteIdent } from "../tenant-enforcement/sql";
 
 export const DEFAULT_CONTROL_PLANE_ROLE = "stocky_control_plane";
@@ -96,14 +100,7 @@ export async function provisionControlPlaneRole(
   }
 
   if (options.apply) {
-    for (const table of [
-      "Supplier",
-      "PurchaseOrder",
-      "SalesDailyAggregate",
-      "ShopSettings",
-      "SyncApplicationReceipt",
-      "Session",
-    ]) {
+    for (const table of [...MERCHANT_SQL_TABLES, "Session"]) {
       await client.query(
         `REVOKE ALL ON TABLE ${quoteIdent(table)} FROM ${quoteIdent(role)}`,
       ).catch(() => undefined);
@@ -134,6 +131,25 @@ export async function provisionControlPlaneRole(
       `GRANT UPDATE (${cols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
     );
     grantsApplied.push("Shop:column-lifecycle");
+
+    const seqExists = await client.query(
+      `SELECT 1 FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relkind = 'S' AND c.relname = $1`,
+      [CATALOG_OBSERVATION_GEN_SEQ],
+    );
+    if ((seqExists.rowCount ?? 0) > 0) {
+      await client.query(
+        `REVOKE ALL ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} FROM PUBLIC`,
+      );
+      await client.query(
+        `GRANT USAGE ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} TO ${quoteIdent(role)}`,
+      );
+      await client.query(
+        `REVOKE SELECT, UPDATE ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} FROM ${quoteIdent(role)}`,
+      );
+      grantsApplied.push(`${CATALOG_OBSERVATION_GEN_SEQ}:USAGE`);
+    }
 
     // NEW-PR4-C08: provision least-privilege probe owner and transfer function ownership
     // before granting EXECUTE to stocky_control_plane.
@@ -328,14 +344,7 @@ export async function verifyControlPlaneRole(
   }
 
   // Merchant-domain tables: no DML for control-plane.
-  for (const table of [
-    "Supplier",
-    "PurchaseOrder",
-    "SalesDailyAggregate",
-    "ShopSettings",
-    "SyncApplicationReceipt",
-    "Session",
-  ]) {
+  for (const table of [...MERCHANT_SQL_TABLES, "Session"]) {
     const exists = await client.query(
       `SELECT 1 FROM information_schema.tables
        WHERE table_schema = 'public' AND table_name = $1`,
@@ -366,6 +375,44 @@ export async function verifyControlPlaneRole(
   );
   if ((membership.rowCount ?? 0) > 0) {
     errors.push("runtime_is_member_of_control_plane");
+  }
+
+  const seq = await client.query(
+    `SELECT 1 FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public' AND c.relkind = 'S' AND c.relname = $1`,
+    [CATALOG_OBSERVATION_GEN_SEQ],
+  );
+  if ((seq.rowCount ?? 0) > 0) {
+    const owner = await client.query<{ owner: string }>(
+      `SELECT r.rolname AS owner
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_roles r ON r.oid = c.relowner
+       WHERE n.nspname = 'public' AND c.relname = $1 AND c.relkind = 'S'`,
+      [CATALOG_OBSERVATION_GEN_SEQ],
+    );
+    if (owner.rows[0]?.owner === role) {
+      errors.push(`control_plane_owns_sequence:${CATALOG_OBSERVATION_GEN_SEQ}`);
+    }
+    const usage = await client.query<{ has: boolean }>(
+      `SELECT has_sequence_privilege($1, format('%I.%I', 'public', $2::text), 'USAGE') AS has`,
+      [role, CATALOG_OBSERVATION_GEN_SEQ],
+    );
+    if (usage.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_sequence_usage:${CATALOG_OBSERVATION_GEN_SEQ}`);
+    }
+    for (const priv of ["SELECT", "UPDATE"] as const) {
+      const has = await client.query<{ has: boolean }>(
+        `SELECT has_sequence_privilege($1, format('%I.%I', 'public', $2::text), $3) AS has`,
+        [role, CATALOG_OBSERVATION_GEN_SEQ, priv],
+      );
+      if (has.rows[0]?.has) {
+        errors.push(
+          `control_plane_sequence_privilege:${CATALOG_OBSERVATION_GEN_SEQ}:${priv}`,
+        );
+      }
+    }
   }
 
   // Schema CREATE
@@ -487,13 +534,8 @@ export async function provisionReceiptProbeOwner(
   }
 
   // Revoke any accidental merchant-table access from probe owner.
-  for (const table of [
-    "Supplier",
-    "PurchaseOrder",
-    "Session",
-    "ShopSettings",
-    "SalesDailyAggregate",
-  ]) {
+  for (const table of [...MERCHANT_SQL_TABLES, "Session"]) {
+    if (table === "SyncApplicationReceipt") continue;
     await client
       .query(`REVOKE ALL ON TABLE ${quoteIdent(table)} FROM ${quoteIdent(owner)}`)
       .catch(() => undefined);

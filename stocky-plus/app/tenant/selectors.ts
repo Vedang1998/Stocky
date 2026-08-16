@@ -160,6 +160,85 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       },
     ],
   },
+  ShopifyProductFact: {
+    model: "ShopifyProductFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyProductCollectionMembership: {
+    model: "ShopifyProductCollectionMembership",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyProductGid_shopifyCollectionGid",
+        fields: ["shopId", "shopifyProductGid", "shopifyCollectionGid"],
+      },
+    ],
+  },
+  ShopifyVariantFact: {
+    model: "ShopifyVariantFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyInventoryItemFact: {
+    model: "ShopifyInventoryItemFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyLocationFact: {
+    model: "ShopifyLocationFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyInventoryLevelFact: {
+    model: "ShopifyInventoryLevelFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_inventoryItemGid_locationGid",
+        fields: ["shopId", "inventoryItemGid", "locationGid"],
+      },
+    ],
+  },
+  CatalogObservationInFlight: {
+    model: "CatalogObservationInFlight",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [

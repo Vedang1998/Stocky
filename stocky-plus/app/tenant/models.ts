@@ -17,6 +17,13 @@ export const DIRECT_MERCHANT_MODELS = [
   "BomComponent",
   "LowStockAlert",
   "SyncApplicationReceipt",
+  "ShopifyProductFact",
+  "ShopifyProductCollectionMembership",
+  "ShopifyVariantFact",
+  "ShopifyInventoryItemFact",
+  "ShopifyLocationFact",
+  "ShopifyInventoryLevelFact",
+  "CatalogObservationInFlight",
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -62,6 +69,13 @@ export const MERCHANT_DELEGATE_NAMES = {
   BomComponent: "bomComponent",
   LowStockAlert: "lowStockAlert",
   SyncApplicationReceipt: "syncApplicationReceipt",
+  ShopifyProductFact: "shopifyProductFact",
+  ShopifyProductCollectionMembership: "shopifyProductCollectionMembership",
+  ShopifyVariantFact: "shopifyVariantFact",
+  ShopifyInventoryItemFact: "shopifyInventoryItemFact",
+  ShopifyLocationFact: "shopifyLocationFact",
+  ShopifyInventoryLevelFact: "shopifyInventoryLevelFact",
+  CatalogObservationInFlight: "catalogObservationInFlight",
   SupplierSkuMapping: "supplierSkuMapping",
   VolumePriceTier: "volumePriceTier",
   LeadTimeSnapshot: "leadTimeSnapshot",

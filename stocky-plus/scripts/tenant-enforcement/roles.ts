@@ -3,10 +3,15 @@
  *
  * Exact privilege allowlist + recursive membership checks (F-PR3-05/09/10/11).
  * Merchant DML grants are withheld until RLS is verified (F-PR3-02).
+ * Sequences: no runtime/PUBLIC privileges except USAGE on
+ * stocky_catalog_observation_gen_seq (PR5-F1). UPDATE/setval is never granted.
  */
 import type { Client } from "pg";
 import {
   BOOTSTRAP_TABLES,
+  CATALOG_OBSERVATION_GEN_SEQ,
+  CATALOG_OBSERVATION_LIFECYCLE_GUARD_FN,
+  CATALOG_OBSERVATION_SET_LEASE_FN,
   CONTROL_TABLES,
   IMMUTABILITY_TRIGGER_FN,
   MERCHANT_SQL_TABLES,
@@ -68,6 +73,8 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   "stocky_dispatch_ready_shop_maintain_insert_stmt",
   "stocky_dispatch_ready_shop_maintain_update_stmt",
   "stocky_dispatch_ready_shop_sync_enabled_stmt",
+  CATALOG_OBSERVATION_LIFECYCLE_GUARD_FN,
+  CATALOG_OBSERVATION_SET_LEASE_FN,
 ]);
 
 /** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
@@ -434,12 +441,26 @@ export async function verifyFutureFunctionDefaultsWithProbe(
 
 /**
  * Inspect all public-schema sequences for runtime/PUBLIC privileges (F-PR3C-05).
+ *
+ * PR5-F1 allowlist: stocky_runtime and stocky_control_plane may hold USAGE only
+ * on stocky_catalog_observation_gen_seq. SELECT, UPDATE, ownership, PUBLIC, and
+ * every other sequence remain forbidden (setval/reset/reuse denied).
  */
 export async function collectSequencePrivilegeFailures(
   client: Client,
   runtimeRole: string,
 ): Promise<string[]> {
   const failures: string[] = [];
+  const controlPlaneRole = defaultControlPlaneRoleName();
+  const controlPlaneExists = await client.query(
+    `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+    [controlPlaneRole],
+  );
+  const usageRoles = [runtimeRole];
+  if ((controlPlaneExists.rowCount ?? 0) > 0) {
+    usageRoles.push(controlPlaneRole);
+  }
+
   const seqs = await client.query<{
     seqname: string;
     owner: string;
@@ -451,21 +472,29 @@ export async function collectSequencePrivilegeFailures(
      WHERE n.nspname = 'public' AND c.relkind = 'S'`,
   );
 
+  const catalogSeqPresent = seqs.rows.some(
+    (seq) => seq.seqname === CATALOG_OBSERVATION_GEN_SEQ,
+  );
+
   for (const seq of seqs.rows) {
-    if (seq.owner === runtimeRole) {
+    if (usageRoles.includes(seq.owner)) {
       failures.push(
         `excess_sequence_ownership:${seq.seqname}:owner:${seq.owner}:public`,
       );
     }
     for (const priv of SEQUENCE_PRIVS) {
-      const runtimeHas = await client.query<{ has: boolean }>(
-        `SELECT has_sequence_privilege($1, format('%I.%I', 'public', $2::text), $3) AS has`,
-        [runtimeRole, seq.seqname, priv],
-      );
-      if (runtimeHas.rows[0]?.has) {
-        failures.push(
-          `excess_sequence_priv:${seq.seqname}:${runtimeRole}:${priv}:${seq.owner}:public`,
+      for (const role of usageRoles) {
+        const roleHas = await client.query<{ has: boolean }>(
+          `SELECT has_sequence_privilege($1, format('%I.%I', 'public', $2::text), $3) AS has`,
+          [role, seq.seqname, priv],
         );
+        const allowedUsage =
+          seq.seqname === CATALOG_OBSERVATION_GEN_SEQ && priv === "USAGE";
+        if (roleHas.rows[0]?.has && !allowedUsage) {
+          failures.push(
+            `excess_sequence_priv:${seq.seqname}:${role}:${priv}:${seq.owner}:public`,
+          );
+        }
       }
       const publicHas = await client.query<{ has: boolean }>(
         `SELECT has_sequence_privilege('public', format('%I.%I', 'public', $1::text), $2) AS has`,
@@ -478,6 +507,21 @@ export async function collectSequencePrivilegeFailures(
       }
     }
   }
+
+  if (catalogSeqPresent) {
+    for (const role of usageRoles) {
+      const usage = await client.query<{ has: boolean }>(
+        `SELECT has_sequence_privilege($1, format('%I.%I', 'public', $2::text), 'USAGE') AS has`,
+        [role, CATALOG_OBSERVATION_GEN_SEQ],
+      );
+      if (!usage.rows[0]?.has) {
+        failures.push(
+          `missing_sequence_usage:${CATALOG_OBSERVATION_GEN_SEQ}:${role}`,
+        );
+      }
+    }
+  }
+
   return [...new Set(failures)];
 }
 
@@ -1059,6 +1103,42 @@ export async function provisionRoles(
       } else {
         grantsApplied.push(...(await grantMerchantDml(client, runtimeRole)));
         merchantDmlGranted = true;
+      }
+    }
+  }
+
+  if (options.apply) {
+    const seqExists = await client.query(
+      `SELECT 1 FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public' AND c.relkind = 'S' AND c.relname = $1`,
+      [CATALOG_OBSERVATION_GEN_SEQ],
+    );
+    if ((seqExists.rowCount ?? 0) > 0) {
+      await client.query(
+        `REVOKE ALL ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} FROM PUBLIC`,
+      );
+      await client.query(
+        `GRANT USAGE ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} TO ${quoteIdent(runtimeRole)}`,
+      );
+      await client.query(
+        `REVOKE SELECT, UPDATE ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} FROM ${quoteIdent(runtimeRole)}`,
+      );
+      grantsApplied.push(`${CATALOG_OBSERVATION_GEN_SEQ}:USAGE:${runtimeRole}`);
+
+      const cpRole = defaultControlPlaneRoleName();
+      const cpExists = await client.query(
+        `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+        [cpRole],
+      );
+      if ((cpExists.rowCount ?? 0) > 0) {
+        await client.query(
+          `GRANT USAGE ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} TO ${quoteIdent(cpRole)}`,
+        );
+        await client.query(
+          `REVOKE SELECT, UPDATE ON SEQUENCE ${quoteIdent(CATALOG_OBSERVATION_GEN_SEQ)} FROM ${quoteIdent(cpRole)}`,
+        );
+        grantsApplied.push(`${CATALOG_OBSERVATION_GEN_SEQ}:USAGE:${cpRole}`);
       }
     }
   }

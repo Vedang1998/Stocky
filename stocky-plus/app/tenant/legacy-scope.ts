@@ -47,11 +47,25 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   BomComponent: "BomComponent",
   LowStockAlert: "LowStockAlert",
   SyncApplicationReceipt: "SyncApplicationReceipt",
+  ShopifyProductFact: "ShopifyProductFact",
+  ShopifyProductCollectionMembership: "ShopifyProductCollectionMembership",
+  ShopifyVariantFact: "ShopifyVariantFact",
+  ShopifyInventoryItemFact: "ShopifyInventoryItemFact",
+  ShopifyLocationFact: "ShopifyLocationFact",
+  ShopifyInventoryLevelFact: "ShopifyInventoryLevelFact",
+  CatalogObservationInFlight: "CatalogObservationInFlight",
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
 const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "SyncApplicationReceipt",
+  "ShopifyProductFact",
+  "ShopifyProductCollectionMembership",
+  "ShopifyVariantFact",
+  "ShopifyInventoryItemFact",
+  "ShopifyLocationFact",
+  "ShopifyInventoryLevelFact",
+  "CatalogObservationInFlight",
 ]);
 
 /**
@@ -574,6 +588,9 @@ export function tenantScopeWhereSync(
   authority: TenantAuthority,
 ): Record<string, unknown> {
   if (DIRECT_MODEL_SET.has(model)) {
+    if (DIRECT_NO_LEGACY_SHOP.has(model as DirectMerchantModel)) {
+      return { shopId: authority.shopId };
+    }
     return directTenantScopeWhereSync(authority);
   }
   if (CHILD_MODEL_SET.has(model)) {
@@ -596,6 +613,9 @@ export function nestedBulkScalarScopeWhere(
   matchingRawLegacyRepresentations?: string[],
 ): Record<string, unknown> {
   if (DIRECT_MODEL_SET.has(model)) {
+    if (DIRECT_NO_LEGACY_SHOP.has(model as DirectMerchantModel)) {
+      return { shopId: authority.shopId };
+    }
     return buildDirectTenantScopeWhere(
       authority,
       matchingRawLegacyRepresentations ??

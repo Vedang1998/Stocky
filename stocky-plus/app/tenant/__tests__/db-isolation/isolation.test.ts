@@ -130,7 +130,7 @@ describe("PR3 database isolation — missing context + RLS matrix", () => {
     try {
       const rls = await verifyRlsOnly(client);
       expect(rls.ok).toBe(true);
-      expect(MERCHANT_SQL_TABLES).toHaveLength(19);
+      expect(MERCHANT_SQL_TABLES).toHaveLength(26);
       const full = await verifyEnforcement(client);
       expect(full.ok).toBe(true);
     } finally {
@@ -560,8 +560,8 @@ describe("PR3 database isolation — bootstrap boundary", () => {
 });
 
 describe("PR3 merchant model count", () => {
-  it("covers all 19 merchant-owned models", () => {
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(19);
-    expect(MERCHANT_SQL_TABLES).toHaveLength(19);
+  it("covers all 26 merchant-owned models", () => {
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(26);
+    expect(MERCHANT_SQL_TABLES).toHaveLength(26);
   });
 });

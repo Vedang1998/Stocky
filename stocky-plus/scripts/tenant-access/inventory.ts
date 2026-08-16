@@ -77,7 +77,7 @@ const md = `# PR 2 — Tenant Access Inventory
 
 ## Merchant model coverage
 
-All 19 approved merchant-owned models must appear below.
+All ${MERCHANT_OWNED_MODELS.length} approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
