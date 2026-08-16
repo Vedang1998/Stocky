@@ -1,11 +1,11 @@
 # Phase 1 PR5-F1 — Foundation Implementation Report
 
-**Slice:** PR5-F1 shared canonical fact foundation  
-**Branch:** `phase-1/catalog-location-inventory-facts`  
-**Draft PR:** [#27](https://github.com/Vedang1998/Stocky/pull/27)  
-**Authority:** D-054 **EFFECTIVE**  
-**Production:** NOT AUTHORIZED  
-**Inventory-write flags:** DEFAULT OFF  
+**Slice:** PR5-F1 shared canonical fact foundation
+**Branch:** `phase-1/catalog-location-inventory-facts`
+**Draft PR:** [#27](https://github.com/Vedang1998/Stocky/pull/27)
+**Authority:** D-054 **EFFECTIVE**
+**Production:** NOT AUTHORIZED
+**Inventory-write flags:** DEFAULT OFF
 
 This report records the foundation-only implementation. It does **not** claim PR 5 is complete. No later PR5 runtime lane started.
 
@@ -281,7 +281,9 @@ Environment: disposable PostgreSQL 16.14, Redis PONG, Node v22.14.0. Local `DATA
 
 ## 34. Exact implementation head SHA
 
-Recorded at commit time in the live PR / git history. First runtime commit: `a04fa51eb94fb6ac6337a4e1e76c18480c65b33a`. Documentation / report commit follows this file.
+Runtime/test implementation commit: `a04fa51eb94fb6ac6337a4e1e76c18480c65b33a`.
+Documentation commit that first included this report: `f958ce5c47796b3862c8e8220edf979a575551fb`.
+Live PR head after the trailing-whitespace classify fix is recorded in git after this commit.
 
 ## 35. Draft PR number / URL
 
@@ -289,7 +291,15 @@ Recorded at commit time in the live PR / git history. First runtime commit: `a04
 
 ## 36–39. Exact-head CI
 
-Pending the documentation commit that includes this report. Expected classification: `docs_only=false`, `full_ci=true`. Heavy validation must run. CI Gate must succeed only after full validation. This section will be completed from live GitHub evidence after exact-head `pull_request` CI finishes.
+Superseded failed exact-head run on `f958ce5c47796b3862c8e8220edf979a575551fb`:
+
+- run `31968529979`, event `pull_request`
+- Classify `95217270790` FAILURE because `git diff --check` found trailing whitespace in this report
+- Heavy / validate SKIPPED
+- CI Gate `95217288179` FAILURE (`classify_result=failure`)
+- Classification before the whitespace gate: `docs_only=false`, `full_ci=true`, `classification_reason=non_docs_or_unknown_path`
+
+A later exact-head `pull_request` run on the whitespace-fixed head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
 
 ## 40–44. Risk status
 
