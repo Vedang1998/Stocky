@@ -1,18 +1,21 @@
 # Phase 1 PR 5 Brief — Catalog, Location, and Inventory Facts
 
-**Status:** `PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED`
+**Status:** `PR 5 PLANNING ACCEPTED AND MERGED — IMPLEMENTATION-ENTRY IN PROGRESS — RUNTIME NOT AUTHORIZED`
 **Product owner:** ChatGPT
-**Planning decision:** D-053 — Phase 1 PR 5 planning authorization
-**Implementation owner (when later authorized):** Cursor
+**Planning decision:** D-053 — Phase 1 PR 5 planning authorization (**ACCEPTED AND MERGED**)
+**Implementation-entry decision:** D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (**CONDITIONAL / NOT EFFECTIVE**)
+**Implementation owner (when D-054 becomes EFFECTIVE):** Cursor
 **Independent reviewer (when requested):** Claude Code
-**Planning base:** `origin/main` `de1bb193a43ef87cf59acafeac4c5748e62d423d`
-**Dependency:** Phase 1 PR 4 FORMALLY CLOSED (PR #23 squash merge is the planning base)
+**Planning merge / current `origin/main`:** `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e`
+**Planning review head before squash:** `1691933ec126eed44de81162e8492fb7f0bfae0c`
+**Final immutable planning review blob:** `0d322db701f5f27b89bc4069e6fb1f3d751d15a3`
+**Dependency:** Phase 1 PR 4 FORMALLY CLOSED; PR #24 / D-053 planning CLOSED / MERGED
 **Shopify Admin API target:** `2026-07` (`ApiVersion.July26`) — do not change
 **Production execution:** NOT AUTHORIZED
 **Inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
-This document is the implementation-grade product-owner planning packet for Phase 1 PR 5. It authorizes **planning and documentation only**. It does **not** authorize runtime implementation, schema/migration work, Shopify configuration changes, GraphQL document changes, feature-flag changes, production access, or PR 6.
+This document is the implementation-grade product-owner planning packet for Phase 1 PR 5, now amended by the **implementation-entry contract** that closes **F-CLAUDE-PR5C8-01** and **F-CLAUDE-PR5C8-02**. D-053 planning is **ACCEPTED AND MERGED**. D-054 exists as a **CONDITIONAL** heading only. It is **NOT EFFECTIVE** merely because this heading exists. This document still does **not** authorize runtime implementation, schema/migration work, Shopify configuration changes, GraphQL document changes, feature-flag changes, production access, the implementation branch, or PR 6.
 
 Historical `stocky-plus/docs/PHASE_1_TECHNICAL_PLAN.md` is **not** implementation authority. This brief does **not** import that plan’s deferred receipt, cost-ledger, entitlement, billing, AI, or app-initiated inventory-event-ledger scope.
 
@@ -25,15 +28,22 @@ Official Shopify facts below were read from `shopify.dev` Admin GraphQL / REST `
 | Field | Value |
 |---|---|
 | Product owner | ChatGPT |
-| Planning decision | **D-053 — Phase 1 PR 5 planning authorization** |
-| D-053 scope | Planning / documentation unit only |
-| Implementation | **NOT AUTHORIZED** |
-| Planning base SHA | `de1bb193a43ef87cf59acafeac4c5748e62d423d` |
-| PR #23 | CLOSED / MERGED; squash merge equals the planning base SHA |
-| Post-merge main CI at that SHA | run `31802835318`, job `94774629793`, conclusion `success` |
+| Planning decision | **D-053 — Phase 1 PR 5 planning authorization** — **ACCEPTED AND MERGED** |
+| Implementation-entry decision | **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1** — **CONDITIONAL / NOT EFFECTIVE** |
+| D-053 scope | Planning / documentation unit — now merged |
+| Implementation | **NOT STARTED / NOT AUTHORIZED YET** until D-054 activation condition 9 completes |
+| Planning historical base SHA | `de1bb193a43ef87cf59acafeac4c5748e62d423d` (PR #23) |
+| PR #23 | CLOSED / MERGED; historical planning base |
+| PR #24 | **CLOSED / MERGED** |
+| PR #24 squash merge / current `origin/main` | `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e` |
+| Planning review head before squash | `1691933ec126eed44de81162e8492fb7f0bfae0c` |
+| Final immutable planning review | `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` blob `0d322db701f5f27b89bc4069e6fb1f3d751d15a3` |
+| Independent planning verdict | `APPROVE PR5 PLANNING` |
+| Post-merge main CI at `edabd8de…` | run `31959761072`, event `push`, **SUCCESS** (Classify `95195836526` SUCCESS; CI Gate `95195850559` SUCCESS; Heavy `95195850790` SKIPPED) |
 | PR 4 technical authority | **D-052 remains** — PR 4 repository implementation accepted and formally closed |
 | D-053 vs D-052 | D-053 is **not** a PR 4 correction, acceptance, or closure decision |
 | Phase 1 | **IN PROGRESS** |
+| PR 5 planning | **ACCEPTED AND MERGED** |
 | PR 5 runtime | **NOT STARTED** |
 | Proposed future implementation branch (not created) | `phase-1/catalog-location-inventory-facts` |
 | Production execution | Unauthorized |
@@ -41,13 +51,21 @@ Official Shopify facts below were read from `shopify.dev` Admin GraphQL / REST `
 | Shopify mutation | None in PR 5 |
 | Inventory-write flags | `FEATURE_STOCKTAKE_INVENTORY_WRITES`, `FEATURE_ADJUSTMENT_WRITES`, `FEATURE_RECEIPT_WRITES`, `FEATURE_COST_SYNC`, `FEATURE_TRANSFER_WRITES` remain **DEFAULT OFF** |
 
-PR 5 runtime implementation remains **NOT STARTED** and **NOT AUTHORIZED** until all of the following are true:
+PR 5 runtime implementation remains **NOT STARTED** and **NOT AUTHORIZED** until **D-054** becomes **EFFECTIVE**. D-054 becomes EFFECTIVE only if **all** of the following are true:
 
-1. this planning PR is reviewed;
-2. independent plan review is completed if requested by ChatGPT;
-3. ChatGPT accepts the final PR 5 brief;
-4. this planning PR is merged;
-5. ChatGPT separately authorizes implementation.
+1. PR #24 / D-053 planning is merged.
+2. Post-merge main CI at `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e` is successful.
+3. F-CLAUDE-PR5C8-01 is resolved in this implementation-entry contract.
+4. F-CLAUDE-PR5C8-02 is resolved in this implementation-entry contract.
+5. Accelerated Safe Delivery v1 governance is durably recorded.
+6. Claude independently reviews the exact implementation-entry PR head and returns the required approval verdict with no blocking P0/P1/P2.
+7. ChatGPT explicitly authorizes merge.
+8. This implementation-entry PR is squash-merged to `main`.
+9. Post-merge main CI succeeds.
+
+Only after condition 9 may `phase-1/catalog-location-inventory-facts` be created and PR 5 runtime implementation begin.
+
+D-054 does **not** authorize production, merchant production data, enabling inventory-write flags, Shopify inventory mutations, Phase 2 runtime, or PR 6 runtime before its own authority.
 
 Repository acceptance of a later PR 5 implementation PR will **not** mean Phase 1 is complete. PR 6 cannot begin until PR 5 implementation is independently reviewed, accepted, merged, and closure-synchronized.
 
@@ -384,14 +402,25 @@ and **planning-correction 8** (universal transaction-scoped
 `pg_advisory_xact_lock` canonical-identity serialization anchor;
 no durable response-bearing `ACTIVE` row; deterministic multi-identity
 and observation-row lock order; Races AT / AU / AV; D1.14 range
-P–AV).
-It does not authorize implementation. It does not introduce D-054. It does
-not change D-052. It replaces the Correction-2 Shop-counter / single-epoch
-absence-sweep architecture with the rules below. It does **not** redesign
-the accepted Correction-5 / Correction-6 / Correction-7 observation-
-interval, lease, clock, deletion, bulk-ingest, or tenant architecture
-beyond what F-CLAUDE-PR5C7-01 / 02 / 03 / 04 require. PostgreSQL
-`clock_timestamp()` remains the sole lease clock.
+P–AV),
+and the **implementation-entry contract** (same accepted advisory-lock
+architecture; close **F-CLAUDE-PR5C8-01** advisory-lock capacity /
+shared-lock-table operating envelope; close **F-CLAUDE-PR5C8-02**
+pinned lock-key encoding + known-answer vectors; Race **AW**; D1.14
+range P–AW).
+It does not authorize implementation. D-054 is recorded as
+**CONDITIONAL / NOT EFFECTIVE** and does not become effective merely
+because the heading exists. It does not change D-052. It replaces the
+Correction-2 Shop-counter / single-epoch absence-sweep architecture
+with the rules below. It does **not** redesign the accepted
+Correction-5 / Correction-6 / Correction-7 / Correction-8 observation-
+interval, lease, clock, deletion, bulk-ingest, tenant, or exact-identity
+advisory-lock architecture beyond what F-CLAUDE-PR5C8-01 / 02 require.
+PostgreSQL `clock_timestamp()` remains the sole lease clock.
+`pg_advisory_xact_lock(key1, key2)` remains the transaction-scoped
+canonical identity anchor. Do **not** switch to session-level locks.
+Do **not** remove identity serialization. Do **not** permit an
+unanchored fallback.
 
 PR 4 workers interleave. `catalog-sync` runs on `stocky-cron`
 (`REBUILDABLE_IDEMPOTENT`); resource webhooks run on `stocky-webhooks`
@@ -1260,54 +1289,67 @@ Covered writers include:
 - background merchant-domain abandonment that changes correctness
   state.
 
-##### Canonical lock-key encoding and derivation
+##### Canonical lock-key encoding and derivation (implementation-entry pin — F-CLAUDE-PR5C8-02)
 
-Define one **versioned** deterministic lock-key contract.
+Close **F-CLAUDE-PR5C8-02** by pinning the exact lock-key encoding.
+There is **one** canonical encoding. The earlier planning sketch that
+used a 4-byte binary length prefix and screaming-snake `resourceKind`
+literals is **superseded**. Implementation must use this contract only.
 
-**Preimage fields (canonical identity):**
+Canonical encoding version:
 
-- Product / Variant / InventoryItem / Location:
-  `(shopId, resourceKind, shopifyGid)`
-- InventoryLevel:
-  `(shopId, resourceKind, inventoryItemGid, locationGid)`
+`stocky-pr5-canonical-lock-v1`
 
-**Unambiguous encoding.** Do **not** concatenate fields with a bare
-delimiter. Use **length-prefixing** so field concatenation cannot
-collide from delimiter ambiguity.
+Each component is UTF-8 encoded.
 
-Canonical preimage, UTF-8, field order fixed:
+Each component is encoded **exactly** as:
 
-1. contract version label, exactly `stocky-pr5-canonical-lock-v1`
-2. `shopId` (canonical string form of the internal shop id)
-3. `resourceKind` (`PRODUCT` | `VARIANT` | `INVENTORY_ITEM` |
-   `LOCATION` | `INVENTORY_LEVEL`)
-4. remaining identity fields in the order above (`shopifyGid`, or
-   `inventoryItemGid` then `locationGid`)
+`<decimal UTF-8 byte length>:<UTF-8 bytes>`
 
-Each field is encoded as:
+Components are concatenated with **NO** additional separator.
 
-- 4-byte big-endian unsigned length of the UTF-8 field bytes;
-- those UTF-8 field bytes.
+The **byte length**, not JavaScript string length, is authoritative.
 
-No extra separators. Implementation must use this field order and
-length-prefixing (or an explicitly equivalent canonical encoding that
-is collision-free under concatenation). Changing the version label
-creates a **new** lock namespace.
+- No trimming.
+- No lowercasing.
+- No Unicode normalization.
+- No Shopify-domain normalization.
 
-**Derivation:**
+`shopId` **MUST** use the exact stored canonical `Shop.id` string
+bytes. `Shop.id` is the internal Prisma `String` / `cuid()` identity
+(`prisma/schema.prisma` `model Shop { id String @id @default(cuid()) }`).
+Do **not** encode `myshopifyDomain`. Do **not** invent a numeric,
+hyphenated, or case-normalized rendering.
 
-1. `digest = SHA-256(preimage)`
-2. take the first 8 digest bytes
-3. interpret bytes `[0..3]` as a signed 32-bit integer `key1`
-   (big-endian two’s complement)
-4. interpret bytes `[4..7]` as a signed 32-bit integer `key2`
-   (big-endian two’s complement)
+`resourceKind` values are **EXACT** case-sensitive literals:
+
+- `Product`
+- `ProductVariant`
+- `InventoryItem`
+- `Location`
+- `InventoryLevel`
+
+Identity component order:
+
+- **Product:** version, `shopId`, `Product`, `shopifyProductGid`
+- **ProductVariant:** version, `shopId`, `ProductVariant`, `shopifyVariantGid`
+- **InventoryItem:** version, `shopId`, `InventoryItem`, `shopifyInventoryItemGid`
+- **Location:** version, `shopId`, `Location`, `shopifyLocationGid`
+- **InventoryLevel:** version, `shopId`, `InventoryLevel`, `inventoryItemGid`, `locationGid`
+
+Then:
+
+1. `digest = SHA-256(canonical preimage)`
+2. take digest bytes `0..7`
+3. bytes `0..3`: signed 32-bit big-endian two’s-complement `key1`
+4. bytes `4..7`: signed 32-bit big-endian two’s-complement `key2`
 5. call `pg_advisory_xact_lock(key1, key2)`
 
-Do **not** pack those eight bytes into a JavaScript `Number` / float
-and then pass a 64-bit key. Bind `key1` and `key2` as 32-bit integers
-(or equivalent exact integer types). Signed 32-bit values are valid
-PostgreSQL `integer` keys.
+Never convert the first eight bytes into a JavaScript `Number`.
+Bind `key1` and `key2` as exact 32-bit integers. Signed 32-bit values
+are valid PostgreSQL `integer` keys.
+
+Changing the version label creates a **new** lock namespace.
 
 The advisory key is **transient locking metadata**. It is **not**
 merchant identity and **not** persistent fact identity.
@@ -1316,6 +1358,83 @@ merchant identity and **not** persistent fact identity.
 hash-collide may **OVER-SERIALIZE**. That is **safe**. A collision
 **MUST NOT** cause under-serialization of the same identity. Same
 identity always produces the same `(key1, key2)`.
+
+Implementation later **must** have **one** canonical key-derivation
+function. No duplicated hand-written derivation in call sites.
+
+###### Mandatory known-answer vectors
+
+Runtime unit tests **must** reproduce these vectors verbatim. Cursor
+independently reproduced them with a disposable Node `crypto` script
+on 2026-08-16 before recording them. Do **not** change a vector if a
+later implementation fails to match; fix the implementation.
+
+**VECTOR 1 — Product**
+
+Components:
+
+- `stocky-pr5-canonical-lock-v1`
+- `cm1234567890abcdefghijk`
+- `Product`
+- `gid://shopify/Product/1234567890`
+
+Canonical preimage:
+
+`28:stocky-pr5-canonical-lock-v123:cm1234567890abcdefghijk7:Product32:gid://shopify/Product/1234567890`
+
+SHA-256:
+
+`872f7a6ab5d396d0738736ef15c37065e2bf6fba6f7480dd8f517fe487d799c1`
+
+Expected:
+
+- `key1 = -2026931606`
+- `key2 = -1244424496`
+
+**VECTOR 2 — ProductVariant**
+
+Components:
+
+- `stocky-pr5-canonical-lock-v1`
+- `cm1234567890abcdefghijk`
+- `ProductVariant`
+- `gid://shopify/ProductVariant/9876543210`
+
+Canonical preimage:
+
+`28:stocky-pr5-canonical-lock-v123:cm1234567890abcdefghijk14:ProductVariant39:gid://shopify/ProductVariant/9876543210`
+
+SHA-256:
+
+`74825407ef1400f9b02bf51b778b04cf20c765605c541131e4a6a84701d92e7e`
+
+Expected:
+
+- `key1 = 1954698247`
+- `key2 = -283901703`
+
+**VECTOR 3 — InventoryLevel**
+
+Components:
+
+- `stocky-pr5-canonical-lock-v1`
+- `cm1234567890abcdefghijk`
+- `InventoryLevel`
+- `gid://shopify/InventoryItem/1111111111`
+- `gid://shopify/Location/2222222222`
+
+Canonical preimage:
+
+`28:stocky-pr5-canonical-lock-v123:cm1234567890abcdefghijk14:InventoryLevel38:gid://shopify/InventoryItem/111111111133:gid://shopify/Location/2222222222`
+
+SHA-256:
+
+`3c8acc13010dc2cc5e30275b4c581f156acb07eb914e3f59e8bf5e80a9cb0713`
+
+Expected:
+
+- `key1 = 1015729171`
+- `key2 = 17679052`
 
 ##### Lock acquisition order inside a tenant transaction
 
@@ -1390,6 +1509,170 @@ PostgreSQL detects remaining deadlocks and aborts one transaction
 are the same tenant transaction, an aborted transaction leaves no
 half-applied takeover state. Deterministic order is required to avoid
 that abort noise.
+
+##### Advisory-lock capacity / shared-lock-table envelope (implementation-entry — F-CLAUDE-PR5C8-01)
+
+Close **F-CLAUDE-PR5C8-01** without redesigning the accepted
+exact-identity advisory-lock architecture.
+
+Keep `pg_advisory_xact_lock(key1, key2)` as the transaction-scoped
+canonical identity anchor.
+
+- Do **not** switch to session-level locks.
+- Do **not** remove identity serialization.
+- Do **not** permit an unanchored fallback.
+
+Define a **separate** canonical-apply transaction batch limit from the
+existing JSONL ingestion / read batch.
+
+The JSONL reader may still consume larger bounded chunks, but a single
+canonical fact transaction **must not** automatically acquire one
+advisory lock for every parsed row.
+
+**Initial implementation default / hypothesis** (not merchant-visible
+product truth):
+
+`canonical identities per canonical fact transaction = 32`
+
+It **MUST** be configurable **downward**.
+
+Increasing it requires capacity evidence.
+
+The implementation must read or otherwise verify the intended
+PostgreSQL deployment settings:
+
+- `max_locks_per_transaction`
+- `max_connections`
+- `max_prepared_transactions`
+
+Official PostgreSQL 18 (accessed 2026-08-16; docs dated August 13,
+2026):
+
+- Lock management
+  (https://www.postgresql.org/docs/18/runtime-config-locks.html):
+  the shared lock table has space for `max_locks_per_transaction`
+  objects per server process or prepared transaction. This parameter
+  limits the **average** number of object locks used by each
+  transaction; **individual transactions can lock more objects** as
+  long as the locks of all transactions fit in the lock table. Default
+  **64**. This is **not** a literal hard limit of 64 locks for one
+  transaction. The parameter can only be set at server start.
+- Explicit locking §13.3.5
+  (https://www.postgresql.org/docs/18/explicit-locking.html):
+  advisory locks may be session-level or transaction-level.
+  Session-level locks do not honor transaction rollback.
+  Transaction-level locks are released automatically at transaction
+  end. Both advisory locks and regular locks are stored in a shared
+  memory pool sized by `max_locks_per_transaction` and
+  `max_connections`. Exhausting that pool prevents the server from
+  granting locks.
+- Advisory-lock functions §9.28.10
+  (https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS):
+  `pg_advisory_xact_lock(key1 integer, key2 integer)` obtains an
+  exclusive transaction-level advisory lock, waiting if necessary.
+- Connections
+  (https://www.postgresql.org/docs/18/runtime-config-connection.html):
+  `max_connections` is the maximum number of concurrent connections
+  (typical default 100) and can only be set at server start.
+- Resource consumption
+  (https://www.postgresql.org/docs/18/runtime-config-resource.html):
+  `max_prepared_transactions` is the maximum number of transactions
+  that can be in the prepared state simultaneously (default 0) and can
+  only be set at server start.
+
+Planning capacity estimate:
+
+```text
+shared_lock_object_budget =
+  max_locks_per_transaction
+  * (max_connections + max_prepared_transactions)
+```
+
+This estimate is **not** a guarantee that every slot is available to
+PR 5. Other database lockable objects share the lock table.
+
+Require **both** conservative conditions before a configured
+multi-identity batch is accepted:
+
+**A.**
+
+```text
+canonicalLocksPerTransaction
+  <= floor(max_locks_per_transaction / 2)
+```
+
+**B.**
+
+```text
+canonicalLocksPerTransaction
+  * configuredWorstCaseConcurrentCanonicalTransactions
+  <= floor(shared_lock_object_budget * 0.25)
+```
+
+The 25% ceiling is a conservative PR 5 budget reserving at least 75%
+of the estimated shared lock-object table for the rest of
+PostgreSQL / application activity.
+
+If actual deployment settings make the initial 32-identity value
+unsafe: **automatically reduce** the effective PR 5 batch cap before
+processing.
+
+- Never increase PostgreSQL server settings automatically.
+- Never alter `max_locks_per_transaction` at runtime.
+- Never require a database restart from application code.
+
+###### Canonical apply concurrency
+
+Define an explicit bounded configuration for the **worst-case**
+simultaneous PR 5 canonical multi-identity fact transactions.
+
+Initial implementation hypothesis:
+
+`4` concurrent canonical multi-identity fact transactions.
+
+This must include all relevant PR 5 bulk / reconciliation worker
+concurrency that can hold multiple identity advisory locks.
+
+Direct one-identity observations also consume advisory-lock capacity
+and must be included in load tests / capacity evidence even if they
+use a separate request path.
+
+Do **not** claim the arithmetic alone proves production safety.
+
+The deployment / test gate must exercise the real intended PostgreSQL
+configuration and concurrency envelope.
+
+###### Lock-capacity failure behavior
+
+When a bounded multi-identity transaction cannot acquire required
+advisory locks because shared lock resources are exhausted:
+
+**FAIL CLOSED.**
+
+Required behavior:
+
+1. abort the transaction;
+2. commit no canonical fact changes from that transaction;
+3. commit no half-applied abandonment fencing;
+4. release transaction-level advisory locks through rollback;
+5. retry only with a bounded exponential / backoff policy;
+6. reduce the canonical identity sub-batch, e.g. halve it;
+7. never split one canonical identity’s fact decision across
+   transactions;
+8. never fall back to an unanchored write;
+9. stop at one identity;
+10. if one-identity anchored work still cannot proceed after bounded
+    retries, fail the job / mark the applicable sync state degraded
+    according to existing PR 4 / PR 5 failure semantics.
+
+Do **not** loop indefinitely.
+
+Do **not** silently drop identities.
+
+Do **not** alter Shopify truth.
+
+Planning risk **R-161** remains **OPEN** until runtime implementation
+and independent tests pass.
 
 #### 6.F.2.3 No durable response-bearing ACTIVE state (planning correction 8 — F-CLAUDE-PR5C7-02)
 
@@ -2236,7 +2519,8 @@ after reconciliation.
 Implementation tests (when PR 5 implementation is authorized — **not
 now**) **must** include races **A–AD** (preserved), **AE–AL**
 (correction 4), **AM–AN** (correction 5), **AO–AR** (correction 6),
-**AS** (correction 7), **and AT–AV** (correction 8). Race **AM** is
+**AS** (correction 7), **AT–AV** (correction 8), **and AW**
+(implementation-entry). Race **AM** is
 extended by correction 6 and further by correction 7. Race **AQ** is
 extended by correction 7. Race **AB** is extended by correction 5:
 
@@ -2290,6 +2574,7 @@ extended by correction 7. Race **AB** is extended by correction 5:
 | **AT. Concurrent first canonical application of a nonexistent identity** | No canonical fact row exists. **AT-1 direct vs direct:** A and B direct observations overlap; both obtain usable authoritative responses; payloads / existence evidence differ or conflict; both attempt first canonical application concurrently. **AT-2 null-version attributes:** no canonical row; two overlapping observations carry different null-`updatedAt` attribute or quantity values. **AT-3 initial bulk JSONL vs direct refetch:** no canonical row; bulk / JSONL first application and webhook-driven direct refetch race. **AT-4 active blocker:** no canonical row; an ACTIVE unexpired resultless direct observation exists; another transaction acquires the advisory identity anchor and attempts first canonical mutation. | **AT-1:** both use the same canonical advisory identity anchor; only one fact transaction evaluates the identity at a time; the second transaction re-reads state / evidence after obtaining the anchor; exactly zero or one canonical row results as dictated by existing conflict rules — **never** duplicate rows; conflicting overlap cannot become response-end or commit-order LWW; if existing rules require preserving no unambiguous canonical fact and refetching, that result; **no** `ON CONFLICT DO UPDATE` blind overwrite; conflict / degraded / refetch evidence is preserved where required. **AT-2:** no last-writer-wins; advisory serialization does not bypass interval conflict rules; DEGRADED / conflict / refetch behavior follows §6.F.9. **AT-3:** both use the same identity anchor; full-sync fence / direct-observation ordering rules are re-evaluated after lock acquisition; bulk cannot blindly overwrite a newer / conflicting direct observation; exactly one coherent canonical result or conflict / refetch state remains. **AT-4:** absence of a canonical row does **not** bypass blocker logic; mutation remains blocked under the existing rule. |
 | **AU. No response-bearing ACTIVE row** | 1. A commits ACTIVE resultless observation evidence. 2. Shopify response arrives. 3. A allocates `responseGen`. 4. `responseGen` remains in-process only. 5. A pauses before entering / applying the tenant fact transaction. 6. Verify the persisted row still has `ACTIVE` and `observationResponseGen = NULL`. 7. Lease expires. 8. B durably fences A `ACTIVE -> ABANDONED` and applies valid newer evidence. 9. Database wall clock later moves backward. 10. A resumes with the old response payload and its in-process `responseGen`. **Crash variant:** A terminates after `responseGen` allocation. | A remains `ABANDONED`; A cannot persist its old `responseGen`; A cannot restore `ACTIVE`; A cannot write LIVE/ABSENT; A cannot update null-version attributes; A cannot tombstone/revive; A cannot clear B; B remains authoritative; only the allocated sequence value was burned. The database constraint rejects any attempted commit of `ACTIVE` + `observationResponseGen != NULL`. Crash variant: the DB row remains `ACTIVE` / resultless until graceful recovery or expiry takeover. |
 | **AV. Deterministic canonical lock ordering** | Two bounded transactions process canonical identities X and Y but receive them in opposite input orders. Also include observation-row locking within one identity and a hash-key collision case. | Both normalize advisory locks into the same ascending `(key1, key2)` order; no AB/BA lock-order deadlock; same-identity operations remain serialized; hash-key collision causes **only** over-serialization; observation-row locks occur only after the canonical anchor and in deterministic `observationRequestGen` / token order; no half-applied canonical state. |
+| **AW. Advisory lock capacity / concurrent bulk apply** | Disposable PostgreSQL configured with the intended `max_locks_per_transaction` envelope. Concurrent canonical multi-identity transactions at the configured batch / concurrency ceiling, while direct one-identity work also occurs. Include an intentionally unsafe configured envelope and a lock-resource exhaustion case. | Configured unsafe envelope is rejected or reduced before processing. Safe configured envelope proceeds. Lock-resource failure aborts the whole affected transaction. No half-applied canonical state. No half-applied `ACTIVE -> ABANDONED` transitions. Transaction advisory locks do not survive rollback / commit. Bounded retry uses a smaller sub-batch. No unanchored fallback exists. One identity is never split across transactions. Repeated failure ends in explicit degraded / failure state. No infinite retry. No inventory mutation. Known-answer vectors 1–3 must also be reproduced by the single canonical key-derivation function. |
 
 Tests **must** fail closed: a focused command that collects zero tests is
 a failed check (PR 4 CI pattern).
@@ -2298,14 +2583,14 @@ a failed check (PR 4 CI pattern).
 
 This section does **not**:
 
-- authorize PR 5 implementation;
-- create D-054;
+- authorize PR 5 runtime implementation;
+- mark D-054 **EFFECTIVE** (the heading exists as **CONDITIONAL** only);
 - change D-052 / PR 4 control-plane semantics;
 - add Shopify write mutations;
 - couple forecast/ABC into the applicator;
 - close Q-002, Q-004, R-028, R-029, or R-095..R-098;
 - close R-102 or R-137;
-- close R-157, R-158, R-159, or R-160;
+- close R-157, R-158, R-159, R-160, or R-161;
 - grant `stocky_control_plane` DML on merchant fact or in-flight tables.
 
 ---
@@ -2413,7 +2698,7 @@ Required implementation properties:
 - **No** one GraphQL call per row.
 - **No** one database transaction per row as the steady-state pattern.
 - Bounded memory: O(batch size), not O(catalog). Re-stream skip of already-committed lines must not buffer those lines.
-- Batch upserts (planning ceiling: see tests; start at ≤500 rows / transaction, configurable).
+- JSONL **read** batch and canonical-**apply** transaction batch are **separate**. The JSONL reader may still consume larger bounded chunks (historical planning ceiling ≤500 parsed rows remains a reader/memory bound, configurable). A single canonical fact transaction must **not** automatically acquire one advisory lock for every parsed row. Canonical identities per canonical fact transaction default to **32** (engineering hypothesis; configurable downward; increase requires capacity evidence; see §6.F.2.2 F-CLAUDE-PR5C8-01).
 - Apply each identity through the **canonical apply algorithm** under the §6.F.2.2 advisory identity anchor (plus secondary `SELECT … FOR UPDATE` when the row exists), using §6.F clock-A attribute freshness, clock-B existence, and epoch **presence marker** (not last-writer-wins). Presence (`lastSeenFullSyncRunId`) advances even when attributes no-op. Uniqueness on `(shopId, shopifyGid)` or `(shopId, inventoryItemGid, locationGid)` is a safety net, **not** the apply algorithm. **Do not** treat `INSERT … ON CONFLICT DO UPDATE` as a correctness path that blindly overwrites existence or attribute columns. A unique conflict despite the advisory anchor **must** fail closed / retry the full apply algorithm.
 - **Line/batch checkpoint is two-phase application progress** (§6.F.11). Merchant facts commit with `ingestBatchId`. Control-plane `jsonlCommittedLineOrdinal` (1-based last fully acknowledged JSONL line) advances **afterwards**, on the control-plane connection. Runtime is denied DML on `SyncRun`. No transaction spans the two roles.
 - Checkpoint **must never** advance past a batch whose fact transaction did not commit. Checkpoint **may lag** facts. On resume, an orphan committed batch (facts present, checkpoint behind) is identified/replayed **idempotently** and then acknowledged **without skipping uncommitted lines**.
@@ -2749,7 +3034,7 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 11. Nullable Shopify `updatedAt`: current authoritative refetch can eventually update the fact (Race L). No infinite no-op.
 12. Two concurrent missing-version observations: overlapping conflicting payloads must not last-writer-wins or resolve by `attributeResponseGen` (Race M / AK). Identical overlapping payloads may converge idempotently.
 13. Failed authoritative delete/disconnect refetch: query failure is not converted into canonical deletion (Race N).
-14. Races P–AV in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival including non-overlapping two-confirmation revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE, hard-crash orphaned in-flight observation with PostgreSQL-authoritative lease boundary, late response after abandonment, application-node clock skew, physically missing in-flight row, multiple blockers / partial expiry, response-before-expiry / apply-after-expiry, database clock rollback after expiry takeover, concurrent first canonical application of a nonexistent identity, no response-bearing ACTIVE row / in-process responseGen pause, deterministic canonical lock ordering).
+14. Races P–AW in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival including non-overlapping two-confirmation revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE, hard-crash orphaned in-flight observation with PostgreSQL-authoritative lease boundary, late response after abandonment, application-node clock skew, physically missing in-flight row, multiple blockers / partial expiry, response-before-expiry / apply-after-expiry, database clock rollback after expiry takeover, concurrent first canonical application of a nonexistent identity, no response-bearing ACTIVE row / in-process responseGen pause, deterministic canonical lock ordering, advisory-lock capacity / concurrent bulk apply).
 
 ### D2. Checkpoint crash boundaries (mandatory)
 
@@ -2792,6 +3077,7 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 - Concurrent first canonical application of a nonexistent identity: both writers use the same advisory identity anchor; the second re-reads after lock; exactly zero or one canonical row; no response-end / commit-order LWW; no `ON CONFLICT DO UPDATE` blind overwrite; null-version overlap follows §6.F.9; bulk vs direct re-evaluates fence rules after lock; an ACTIVE unexpired resultless blocker still blocks first insert (Race AT).
 - ResponseGen allocated then paused before the fenced transaction: persisted row remains ACTIVE + `observationResponseGen` NULL; successor may durably abandon after expiry; resume cannot persist the old responseGen, restore ACTIVE, or mutate canonical state; constraint rejects ACTIVE + non-null responseGen (Race AU).
 - Two bounded multi-identity transactions with opposite input order acquire advisory locks in the same ascending `(key1, key2)` order; no AB/BA deadlock; hash collision over-serializes only; observation-row locks follow the canonical anchor in requestGen/token order (Race AV).
+- Advisory-lock capacity / concurrent bulk apply: unsafe envelope rejected or reduced; safe envelope proceeds; lock-resource failure aborts the whole transaction; no half-applied canonical or abandonment state; no leaked transaction advisory locks; bounded retry uses a smaller sub-batch; no unanchored fallback; one identity never split; repeated failure is explicit degraded / failure; no infinite retry; no inventory mutation (Race AW). Known-answer lock-key vectors 1–3 must match the single derivation function.
 
 ### F. Inventory-state truth
 
@@ -2886,19 +3172,41 @@ Observed on planning base `de1bb193…` (read-only inspection; not changed by th
 | PostgreSQL 18 current date/time (`clock_timestamp` / `statement_timestamp` / `transaction_timestamp` / `CURRENT_TIMESTAMP` / `now()`) | https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT (accessed 2026-08-15; PostgreSQL 18.6 docs dated August 13, 2026). `CURRENT_TIMESTAMP` / `now()` / `transaction_timestamp()` are transaction-start values. `statement_timestamp()` is statement-start time. `clock_timestamp()` returns actual server time when evaluated and changes during statement execution. |
 | PostgreSQL 18 explicit locking (`SELECT … FOR UPDATE` / advisory locks) | https://www.postgresql.org/docs/18/explicit-locking.html (accessed 2026-08-16; PostgreSQL 18.6 docs dated August 13, 2026). `FOR UPDATE` locks retrieved rows (Section 13.3.2). Advisory locks are session-level or transaction-level (Section 13.3.5): session-level locks do not honor transaction rollback; transaction-level locks release at transaction end. Consistent multi-object lock order is the documented deadlock defense (Section 13.3.4). |
 | PostgreSQL 18 advisory-lock functions | https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS (Section 9.28.10, accessed 2026-08-16). `pg_advisory_xact_lock(key1 integer, key2 integer)` is exclusive transaction-level. `pg_advisory_lock` is exclusive session-level and is **not** this contract. Keys may be one 64-bit value or two 32-bit values (those key spaces do not overlap). |
+| PostgreSQL 18 lock management (`max_locks_per_transaction`) | https://www.postgresql.org/docs/18/runtime-config-locks.html (Section 19.12, accessed 2026-08-16; PostgreSQL 18.6 docs dated August 13, 2026). Shared lock table has space for `max_locks_per_transaction` objects per server process or prepared transaction. The parameter limits the **average** number of object locks; individual transactions may exceed it if shared capacity remains. Default 64. Server-start only. **Not** a hard per-transaction cap of 64. |
+| PostgreSQL 18 `max_connections` | https://www.postgresql.org/docs/18/runtime-config-connection.html (Section 19.3, accessed 2026-08-16). Maximum concurrent connections; typical default 100; server-start only. |
+| PostgreSQL 18 `max_prepared_transactions` | https://www.postgresql.org/docs/18/runtime-config-resource.html (Section 19.4, accessed 2026-08-16). Maximum simultaneous prepared transactions; default 0; server-start only. |
 
 API target remains **2026-07**. This planning task does not bump versions.
 
 ---
 
-## 20. Implementation authorization (explicitly withheld)
+## 20. Implementation authorization (D-054 CONDITIONAL — not effective)
 
-When ChatGPT later authorizes implementation, the approved unit is a **new** branch from then-current `main`, proposed name `phase-1/catalog-location-inventory-facts`, covering only this brief.
+**D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1.**
 
-Until then:
+D-054 is **CONDITIONAL** while the implementation-entry PR is open. It is **NOT EFFECTIVE** merely because the heading exists.
+
+D-054 becomes **EFFECTIVE** only if **all** of the following are true:
+
+1. PR #24 / D-053 planning is merged.
+2. Post-merge main CI at `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e` is successful.
+3. F-CLAUDE-PR5C8-01 is resolved in this implementation-entry contract.
+4. F-CLAUDE-PR5C8-02 is resolved in this implementation-entry contract.
+5. Accelerated Safe Delivery v1 governance is durably recorded.
+6. Claude independently reviews the exact implementation-entry PR head and returns the required approval verdict with no blocking P0/P1/P2.
+7. ChatGPT explicitly authorizes merge.
+8. This implementation-entry PR is squash-merged to `main`.
+9. Post-merge main CI succeeds.
+
+Only after condition 9 may `phase-1/catalog-location-inventory-facts` be created and PR 5 runtime implementation begin.
+
+Until D-054 is EFFECTIVE:
 
 - do not create the implementation branch;
-- do not modify `app/`, Prisma schema/migrations, scripts, tests, package manifests, CI, Shopify config, GraphQL documents, or feature flags as part of D-053;
-- do not merge this planning PR without explicit user authorization after ChatGPT acceptance.
+- do not modify `app/`, Prisma schema/migrations, scripts, tests, package manifests, CI, Shopify config, GraphQL documents, or feature flags;
+- do not mark D-054 effective;
+- do not merge this implementation-entry PR without explicit user authorization after ChatGPT acceptance.
 
-**PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED.**
+D-054 does **not** authorize production, merchant production data, enabling inventory-write flags, Shopify inventory mutations, Phase 2 runtime, or PR 6 runtime before its own authority.
+
+**PR 5 PLANNING ACCEPTED AND MERGED — IMPLEMENTATION NOT STARTED / NOT AUTHORIZED YET.**
