@@ -301,10 +301,11 @@ Superseded failed / cancelled exact-head runs (do not treat as current-head evid
 | `31968529979` | `f958ce5c47796b3862c8e8220edf979a575551fb` | `pull_request` | Classify `95217270790` FAILURE (`git diff --check` trailing whitespace in this report); Heavy SKIPPED; CI Gate FAILURE. Classification before the whitespace gate: `docs_only=false`, `full_ci=true` |
 | `31968565003` | `7644a183c776da01545dfacc666ec7fececa3278` | `pull_request` | Classify SUCCESS; Heavy cancelled when the drift correction was pushed |
 | `31968723550` | `e15d2de002ccb2fd0fe7e6d1412d77bf7c196f3b` | `pull_request` | Classify `95217750470` SUCCESS (`docs_only=false`, `full_ci=true`); Heavy `95217772251` FAILURE at `npm run test:migrations` — 5 failures in `tenant-expansion.migration.test.ts` because the unparked PR5 migration ran during init-only deploy (`relation "SyncRun" does not exist`) and the historical “zero composite FKs” assertion saw the five approved PR5 identity FKs; CI Gate `95224284974` FAILURE |
+| `31971590179` | `422c2466580ec3a95fd22a259c37566b9f5cc45a` | `pull_request` | Classify `95224776545` SUCCESS; Heavy `95224796914` FAILURE at `tenant:enforcement:preflight` (`tenant:access:inventory:check_failed_exit_1`) because parking-fixture line-number shifts stale `PR2_TENANT_ACCESS_INVENTORY.md`; CI Gate `95225144534` FAILURE |
 
-Correction now in the tenant-expansion fixture: `ALL_MIGRATION_NAMES` / init-only parking include `20260816193000_pr5_catalog_fact_foundation`; the composite-FK assertion expects exactly the five approved PR5 canonical identity FKs and no others.
+Correction now in the tenant-expansion fixture: `ALL_MIGRATION_NAMES` / init-only parking include `20260816193000_pr5_catalog_fact_foundation`; the composite-FK assertion expects exactly the five approved PR5 canonical identity FKs and no others. Regenerated `PR2_TENANT_ACCESS_INVENTORY.md` after those line-number shifts (findings still 1394, violations 0, digest `e1f118bee2c5fcf1ad5efdd24d69110e6373faa99d4ab5a39aba7ed92fb6ce31`). Local `npm run tenant:access:inventory:check` after regeneration: exit 0.
 
-A later exact-head `pull_request` run on the parking-fixture correction head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
+A later exact-head `pull_request` run on the inventory-freshness correction head is required. Expected classification remains `docs_only=false`, `full_ci=true`. Heavy must run. CI Gate must succeed only after full validation.
 
 ## 40–44. Risk status
 
