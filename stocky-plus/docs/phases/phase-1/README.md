@@ -23,7 +23,7 @@
 - PR [#22](https://github.com/Vedang1998/Stocky/pull/22) is **CLOSED and MERGED**. Accepted closure head `b99039f9c34fb12e74d804a3df748cbfdb435313`. Squash merge `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` at `2026-08-14T04:01:29Z`.
 - PR 4 repository implementation remains **ACCEPTED** under **D-052** at accepted implementation head `eb757119…`. Independent verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
 - Phase 1 PR 4 is **FORMALLY CLOSED**. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
-- Next gate: **PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED** (D-053). Planning correction 7: durable `ACTIVE -> ABANDONED` fencing when expiry is relied upon to permit successor canonical mutation; lease invalidity vs durable abandonment; successor apply algorithm; CASE 1 / CASE 2 backward-clock semantics; Race AS; Race AQ extension. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Do **not** create D-054. Do **not** edit the immutable review reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), or `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`). Do **not** create a Correction-6 independent review artifact in this correction.
+- Next gate: **PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED** (D-053). Planning correction 8: universal transaction-scoped `pg_advisory_xact_lock` canonical-identity serialization anchor; first-insert serialization; no durable response-bearing ACTIVE; planned ACTIVE⇒responseGen NULL invariant; deterministic multi-identity / observation-row lock order; Races AT / AU / AV; D1.14 P–AV. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Do **not** create D-054. Do **not** edit the immutable review reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), or `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`).
 - D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
 - D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
 - D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
@@ -186,7 +186,7 @@
 - **R-122 / R-123:** ACCEPTED NONBLOCKING RESIDUALS — see `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`.
 - **R-124:** CLOSED — not reopened (F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is distinct F-F03 tooling debt).
 - **R-127 / R-128:** CLOSED — no regression (D-052).
-- **R-129 through R-159:** OPEN — PR 5 planning risks (D-053); not implementation-closed.
+- **R-129 through R-160:** OPEN — PR 5 planning risks (D-053); not implementation-closed.
 - **R-014 / R-013 / R-010 / R-062 / R-079:** remain open as previously tracked. R-010 is not closed by PR 5 planning.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
 

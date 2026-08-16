@@ -164,7 +164,7 @@ Shared lineage columns (every canonical fact). **Do not collapse these into one 
 | `existenceKind` | B | How existence was last confirmed: `LIVE_REFETCH` \| `LIVE_FULL_SYNC_PRESENT` \| `ABSENT_CONFIRMED_QUERY`. `ABSENT_FULL_SYNC_SWEEP` is **not** approved. |
 | `existenceObservedAt` | B (app clock) | When **this app finished** an authoritative Shopify existence check (response in hand). Observation-completion time, **not** commit time. Same clock domain as `SyncRun.fenceAt` (app time) but **not** the apply-decision key. **Not** webhook arrival time. **Not** Shopify `updatedAt`. |
 | `existenceRequestGen` | B (app-issued monotonic, interval start) | From platform sequence `stocky_catalog_observation_gen_seq` (not `Shop`). Allocated with `SELECT nextval('stocky_catalog_observation_gen_seq')` **before** issuing the direct Shopify network request that produced the last **unambiguous** existence observation. Together with `existenceResponseGen` this is `[observationRequestGen, observationResponseGen]`. These generations order **app request lifecycle only**. They do **not** claim Shopify mutation order or snapshot time. Full-sync presence / null-version bulk attributes use **`SyncRun.fenceGeneration`** (one value allocated and committed before `bulkOperationRunQuery`), not a new gen per JSONL line. |
-| `existenceResponseGen` | B (app-issued monotonic, interval end) | Allocated with `SELECT nextval('stocky_catalog_observation_gen_seq')` **after** that direct request completed with an authoritative usable response and **before** entering the tenant fact transaction / identity lock. Do **not** use `existenceResponseGen` alone to order concurrent overlapping observations. |
+| `existenceResponseGen` | B (app-issued monotonic, interval end) | Allocated with `SELECT nextval('stocky_catalog_observation_gen_seq')` **after** that direct request completed with an authoritative usable response and **before** entering the tenant fact transaction / identity lock. Persist that value on the in-flight row **only atomically** when the observation leaves `ACTIVE` (§6.F.2.3). Do **not** use `existenceResponseGen` alone to order concurrent overlapping observations. |
 | `signalReceivedAt` | **C — signal observation** | Webhook/control arrival time at this app. Lineage / causation / diagnostics only. **Not** proof the signalled state is still current. **Not** a Shopify mutation timestamp. |
 | `lastSignalTopic` / `lastSignalDeliveryId` | C | Optional signal lineage. Official `X-Shopify-Webhook-Id` may be stored as delivery id. |
 | `lastSignalTriggeredAt` | C | Optional copy of official `X-Shopify-Triggered-At` (Shopify webhook publication time). Still clock C — **not** resource `updatedAt`, **not** existence confirmation, **not** comparable to clock A as one sequence. |
@@ -347,13 +347,24 @@ It **MUST** support **multiple simultaneous** observations for the same canonica
 | `id` / observation token | Unique observation identity within the shop (`@@unique([shopId, id])`). Generated at insert. **This** is the expected-observation token used by late-worker fencing |
 | Canonical resource identity | Product / Variant / InventoryItem / Location: `(resourceKind, shopifyGid)`. InventoryLevel: `(resourceKind, inventoryItemGid, locationGid)`. Same identity keys as the canonical fact tables |
 | `observationRequestGen` | Platform sequence value allocated **before** the Shopify request. **Not** merchant identity |
-| `observationResponseGen` | Null while resultless. Set only after an authoritative usable response is in hand and **before** the fenced apply, when that path runs |
+| `observationResponseGen` | Null while resultless **and while `ACTIVE`**. Allocate with `SELECT nextval('stocky_catalog_observation_gen_seq')` **after** an authoritative usable response is in hand and **before** the tenant fact transaction (Correction 4 preserved). Keep the allocated value **in process only**. Persist it **only atomically** inside the fenced tenant fact transaction when this row **leaves `ACTIVE`**, together with the corresponding canonical / diagnostic decision. There must **never** be a committed row with `lifecycleState = ACTIVE` **and** `observationResponseGen IS NOT NULL`. See §6.F.2.3 |
 | `leaseExpiresAt` | Absolute PostgreSQL `timestamptz` (or equivalent) deadline. Required on every **ACTIVE** unresolved observation. Computed **in the database** as `clock_timestamp() + validated_bounded_lease_interval`. The application may supply only the already-validated finite duration. See §6.F.2.1 |
 | `lifecycleState` | `ACTIVE` \| `COMPLETED` \| `ABANDONED` |
 | Durable-job / job-attempt lineage | Optional **opaque** correlation strings (job id / attempt id / correlation id). Lineage / diagnostics only. **No FK** to control-plane tables |
 | `createdAt` / `updatedAt` | App timestamps. Observability only. **Not** an ordering key, **not** the lease clock, and **not** the liveness boundary (`leaseExpiresAt` evaluated against PostgreSQL `clock_timestamp()` is) |
 
 Physical `DELETE` / reaping of `COMPLETED` / `ABANDONED` rows is **maintenance**. Physical deletion is **not** the correctness boundary. The durable lifecycle transition `ACTIVE -> ABANDONED`, when expiry is relied upon to permit a successor canonical mutation, **is** part of the correctness / fencing boundary. Do **not** conflate lifecycle abandonment with physical row deletion. See §6.F.2.1.
+
+**Planned database invariant (implementation-grade data-model contract; no migration in this planning PR):**
+
+- `ACTIVE` ⇒ `observationResponseGen IS NULL`
+- `COMPLETED` ⇒ `observationResponseGen IS NOT NULL`
+- `ABANDONED` may have `observationResponseGen IS NULL` (timeout / crash / no usable completed response), or non-null **only** when a usable response existed but was discarded / abandoned **atomically** while the row left `ACTIVE`
+
+The implementation **MUST** enforce the equivalent of
+`ACTIVE => observationResponseGen IS NULL` (and the `COMPLETED`
+non-null rule) with a database constraint. Do **not** create that
+migration in this planning PR. See §6.F.2.3.
 
 ### 6.F Clock domains, existence, and apply-path contract
 
@@ -368,11 +379,18 @@ fact fence; missing-row fail-closed; all-active-blocker predicate;
 Races AM / AO / AP / AQ / AR),
 and **planning-correction 7** (durable `ACTIVE -> ABANDONED` fencing
 when expiry is relied upon to permit a successor canonical mutation;
-lease invalidity vs durable abandonment; Race AS; Race AQ extension).
+lease invalidity vs durable abandonment; Race AS; Race AQ extension),
+and **planning-correction 8** (universal transaction-scoped
+`pg_advisory_xact_lock` canonical-identity serialization anchor;
+no durable response-bearing `ACTIVE` row; deterministic multi-identity
+and observation-row lock order; Races AT / AU / AV; D1.14 range
+P–AV).
 It does not authorize implementation. It does not introduce D-054. It does
 not change D-052. It replaces the Correction-2 Shop-counter / single-epoch
 absence-sweep architecture with the rules below. It does **not** redesign
-the accepted Correction-5 / Correction-6 architecture. PostgreSQL
+the accepted Correction-5 / Correction-6 / Correction-7 observation-
+interval, lease, clock, deletion, bulk-ingest, or tenant architecture
+beyond what F-CLAUDE-PR5C7-01 / 02 / 03 / 04 require. PostgreSQL
 `clock_timestamp()` remains the sole lease clock.
 
 PR 4 workers interleave. `catalog-sync` runs on `stocky-cron`
@@ -413,7 +431,7 @@ Keep **three distinct concepts**. Do **not** collapse them into one
 | Clock | Field(s) | What it measures | What it may decide |
 |---|---|---|---|
 | **A. Shopify attribute version** | Resource `shopifyUpdatedAt`; per-name `InventoryQuantity.updatedAt` | Shopify’s own resource / quantity mutation time | Whether **attributes / quantity values** are newer than the stored fact **of the same Shopify version type** |
-| **B. Authoritative existence observation** | `existenceState`, `existenceKind`, `existenceObservedAt`, `existenceRequestGen`, `existenceResponseGen` | The last **unambiguous** app-issued `[observationRequestGen, observationResponseGen]` interval for an authoritative Shopify existence check. `observationRequestGen` is allocated **before** the Shopify network request. `observationResponseGen` is allocated **after** an authoritative usable response and **before** the identity-row apply lock. Generations order **app request lifecycle only**, not Shopify mutation order or snapshot time. Overlapping intervals with conflicting LIVE/ABSENT results must not resolve from `observationResponseGen` alone | LIVE vs TOMBSTONED / disconnected existence. Comparable only to other **app-issued** existence observation **intervals** and to `SyncRun.fenceGeneration`. A direct observation started after a fence iff `observationRequestGen > fenceGeneration` |
+| **B. Authoritative existence observation** | `existenceState`, `existenceKind`, `existenceObservedAt`, `existenceRequestGen`, `existenceResponseGen` | The last **unambiguous** app-issued `[observationRequestGen, observationResponseGen]` interval for an authoritative Shopify existence check. `observationRequestGen` is allocated **before** the Shopify network request. `observationResponseGen` is allocated **after** an authoritative usable response and **before** the tenant fact transaction (Correction 4), kept **in process** until the observation leaves `ACTIVE`, and persisted only atomically with that lifecycle transition (§6.F.2.3). Generations order **app request lifecycle only**, not Shopify mutation order or snapshot time. Overlapping intervals with conflicting LIVE/ABSENT results must not resolve from `observationResponseGen` alone | LIVE vs TOMBSTONED / disconnected existence. Comparable only to other **app-issued** existence observation **intervals** and to `SyncRun.fenceGeneration`. A direct observation started after a fence iff `observationRequestGen > fenceGeneration` |
 | **C. Signal observation** | `signalReceivedAt`, `lastSignalTopic`, `lastSignalDeliveryId`, optional `lastSignalTriggeredAt` | When a webhook/control payload **arrived** at this app (and, optionally, when Shopify published it) | Lineage, causation, diagnostics. **Not** proof the signalled state is still current. **Not** a Shopify resource mutation timestamp |
 
 `appliedAt` / `lastRefreshedAt` / `deletedAt` remain **observability only**.
@@ -502,9 +520,10 @@ therefore **USAGE only**. That is sufficient for
 `SELECT nextval('stocky_catalog_observation_gen_seq')` and insufficient for
 `setval()`.
 
-**No PostgreSQL / merchant row lock may be held across Shopify HTTP /
-network I/O.** Concurrent observation ordering uses observation **intervals**,
-not a lock held across the Shopify request.
+**No PostgreSQL / merchant row lock and no advisory identity lock may
+be held across Shopify HTTP / network I/O.** Concurrent observation
+ordering uses observation **intervals**, not a lock held across the
+Shopify request.
 
 ##### Direct authoritative Shopify refetch (runtime)
 
@@ -538,7 +557,9 @@ observation was later.
    may supply only that already-validated finite duration; it **MUST NOT**
    supply the absolute “current time” or compute the absolute deadline
    from its own clock), opaque job/attempt lineage if useful, timestamps.
-   **COMMIT**, then **release all row locks**. This is not a network lock.
+   **COMMIT**, then **release all row locks**. This is not a network lock
+   and must not acquire the canonical advisory identity lock for the
+   Shopify request itself.
 2. Perform the Shopify request. Hold **NO** merchant/control-plane row lock
    across network I/O. An earlier ACTIVE unexpired resultless observation
    does **not** prevent this later request from being **issued**.
@@ -547,39 +568,56 @@ observation was later.
    `responseEndGen = SELECT nextval('stocky_catalog_observation_gen_seq')`.
    Capture `existenceObservedAt` as the app UTC instant the usable response
    was in hand (observability; **not** the concurrent-apply key).
-4. **Then** enter the tenant fact transaction and take the identity
-   `SELECT … FOR UPDATE`. After the required canonical-identity /
-   observation locking is established, the **final** guarded fact
-   decision in that **same** tenant transaction **MUST** re-evaluate
-   PostgreSQL `clock_timestamp() < leaseExpiresAt` (§6.F.2.1). Do **not**
-   cache a `dbNow` before a lock wait and reuse it afterward. Do **not**
-   treat response arrival, `responseGen` allocation, transaction start,
-   or statement start as reserved validity.
+   Keep `responseEndGen` and the response payload **IN PROCESS ONLY**.
+   Do **not** issue a separate database update that persists
+   `observationResponseGen` while `CatalogObservationInFlight` remains
+   `ACTIVE` (§6.F.2.3).
+4. **Then** enter the tenant fact transaction. Establish tenant/RLS
+   context. Acquire the **canonical transaction-scoped advisory identity
+   lock** (`pg_advisory_xact_lock`, §6.F.2.2) — this is the PRIMARY
+   serialization boundary, including when no canonical row exists.
+   If the canonical fact row exists, `SELECT … FOR UPDATE` may then lock
+   it (SECONDARY). Then lock/read relevant `CatalogObservationInFlight`
+   rows in the deterministic order in §6.F.2.2. After the required
+   canonical-identity / observation locking is established, the
+   **final** guarded fact decision in that **same** tenant transaction
+   **MUST** re-evaluate PostgreSQL `clock_timestamp() < leaseExpiresAt`
+   (§6.F.2.1). Do **not** cache a `dbNow` before a lock wait and reuse
+   it afterward. Do **not** treat response arrival, `responseGen`
+   allocation, transaction start, or statement start as reserved
+   validity.
 5. Apply using the interval / blocker / conflict rules in §6.F.3,
    including the Correction-7 successor apply algorithm when this
    transaction relies on expiry of overlapping ACTIVE resultless
    observations to proceed: durably fence those exact rows
    `ACTIVE -> ABANDONED` in this same tenant / identity-lock transaction,
-   then re-evaluate remaining blockers. Complete or clear **that exact**
-   observation atomically with the fact decision. A blocked later
-   response is discarded for canonical application and is **not**
-   replayed later as if it were fresh. If the lease has crossed the
-   deadline by that final decision, fact application is denied;
-   `responseGen` may remain burned; the payload is discarded for
-   canonical application; a bounded fresh retry / refetch is required.
+   then re-evaluate remaining blockers. Persist
+   `observationResponseGen` **only atomically** with this observation
+   leaving `ACTIVE` and with the corresponding canonical / diagnostic
+   decision (§6.F.2.3). Complete or abandon **that exact** observation
+   atomically with the fact decision. A blocked later response is
+   discarded for canonical application and is **not** replayed later as
+   if it were fresh. If the lease has crossed the deadline by that
+   final decision, fact application is denied; `responseGen` may remain
+   burned; the payload is discarded for canonical application; a
+   bounded fresh retry / refetch is required.
 
 ##### Graceful completion / failure / hard crash
 
 **Usable response + valid active lease:**
 
-- allocate `responseEndGen`;
+- allocate `responseEndGen` and keep it **in process only**;
 - enter the tenant fact transaction;
+- acquire the canonical advisory identity anchor, then any secondary
+  row locks (§6.F.2.2);
 - after identity / observation locking, re-evaluate the observation-token
   fence using PostgreSQL `clock_timestamp() < leaseExpiresAt` (ACTIVE,
   not `ABANDONED`, exactly one matching row);
 - apply interval / blocker / conflict rules;
-- mark **that exact** observation `COMPLETED` (or equivalently clear it)
-  atomically with the fact decision.
+- persist `observationResponseGen` **atomically** with marking **that
+  exact** observation `COMPLETED` (or equivalently transitioning it out
+  of `ACTIVE`) and with the fact / diagnostic decision. There is no
+  committed `ACTIVE` + non-null `observationResponseGen` window.
 
 **Graceful timeout / throttle / error** (originating worker still live):
 
@@ -608,12 +646,17 @@ lock. Do **not** treat `responseEndGen` alone as observation order.
 
 **Planning correction 5** (same D-053 — F-CLAUDE-PR5C4-01), as further
 specified by **planning correction 6** (same D-053 —
-F-CLAUDE-PR5C5-01 / 02 / 03 / 04) and **planning correction 7**
+F-CLAUDE-PR5C5-01 / 02 / 03 / 04), **planning correction 7**
 (same D-053 — durable `ACTIVE -> ABANDONED` fencing when expiry is
-relied upon to permit a successor canonical mutation). Implementation
-is still **NOT AUTHORIZED**. Correction 7 does **not** redesign the
-accepted Correction-5 / Correction-6 architecture. PostgreSQL
-`clock_timestamp()` remains the sole lease clock.
+relied upon to permit a successor canonical mutation), and
+**planning correction 8** (same D-053 — universal advisory identity
+anchor and no durable response-bearing `ACTIVE` row). Implementation
+is still **NOT AUTHORIZED**. Correction 8 does **not** redesign the
+accepted Correction-5 / Correction-6 / Correction-7 architecture.
+PostgreSQL `clock_timestamp()` remains the sole lease clock. Every
+durably `ACTIVE` row is resultless (§6.F.2.3), so the Correction-7
+`ACTIVE + expired + resultless` abandonment predicate remains
+coherent.
 
 ##### Finite lease is the liveness boundary
 
@@ -796,6 +839,23 @@ That is a **wall-clock** source. Official PostgreSQL 18 does **not**
 document `clock_timestamp()` as a monotonic business clock. Do **not**
 claim `clock_timestamp()` itself is monotonic.
 
+**Correction-8 interaction (F-CLAUDE-PR5C7-02):** every durably
+`ACTIVE` row is resultless. `observationResponseGen` is allocated after
+a usable response (Correction 4) but is **not** persisted while the row
+remains `ACTIVE` (§6.F.2.3). Therefore the Correction-7 predicate
+remains coherent: `ACTIVE + expired + resultless` can be durably fenced
+`ACTIVE -> ABANDONED` by a successor in the same tenant / identity
+transaction. Database wall-clock rollback can **never** expose a
+committed response-bearing `ACTIVE` row, because that state is
+forbidden. Do **not** weaken:
+
+- PostgreSQL `clock_timestamp()` lease authority;
+- the exact `<` / `>=` boundary;
+- durable abandonment;
+- missing-row fail closed;
+- all-blocker re-evaluation;
+- Race AS.
+
 Distinguish:
 
 1. **Lease invalidity** — an original observation is **not valid to
@@ -871,13 +931,23 @@ to unblock canonical mutation.
 
 ##### Successor apply algorithm (planning correction 7)
 
-Under the canonical identity lock:
+Under the canonical identity lock — meaning the **transaction-scoped
+advisory identity anchor** in §6.F.2.2, which exists whether or not a
+canonical fact row already exists; `SELECT … FOR UPDATE` is secondary:
 
+0. Tenant/RLS context is already established. Acquire
+   `pg_advisory_xact_lock` for this canonical identity. If the
+   canonical fact row exists, `SELECT … FOR UPDATE` that row. Then
+   lock / read relevant `CatalogObservationInFlight` rows in
+   **ascending** `observationRequestGen`, ties broken by observation
+   token. Canonical advisory identity lock **before** observation-row
+   locks. No code path may invent a reverse order.
 1. Obtain PostgreSQL actual time **only** through `clock_timestamp()`.
 2. Identify **ALL** overlapping ACTIVE resultless observations.
 3. For every blocker whose `clock_timestamp() >= leaseExpiresAt`,
    atomically transition that exact row `ACTIVE -> ABANDONED` using
-   the conditional predicate above.
+   the conditional predicate above, in that same deterministic
+   observation-row order.
 4. Re-evaluate blockers.
 5. If **ANY** overlapping ACTIVE resultless row still satisfies
    `clock_timestamp() < leaseExpiresAt`, canonical existence mutation
@@ -886,7 +956,7 @@ Under the canonical identity lock:
    continue through the existing interval / conflict / fact rules.
 7. The successor’s canonical fact mutation and the abandonment fencing
    it relies upon **MUST** be in the same tenant transaction /
-   identity-lock boundary.
+   identity-lock boundary (the advisory identity anchor).
 
 If that transaction rolls back:
 
@@ -1099,7 +1169,8 @@ Opaque job / attempt identifiers may be stored as lineage only.
 3. **COMMIT** that control-plane transaction.
 4. **Only then** call `bulkOperationRunQuery` / start location pagination.
 
-Do **not** introduce a network lock. No row lock is held across Shopify I/O.
+Do **not** introduce a network lock. No row lock and no advisory
+identity lock is held across Shopify I/O.
 
 A failure after step 1/2 may burn a generation. That is **safe**.
 A fence generation may **never** be reused.
@@ -1113,6 +1184,292 @@ direct observation under the existing fence rules.
 
 A direct observation started after the fence iff
 `observationRequestGen > fenceGeneration`.
+
+#### 6.F.2.2 Universal canonical-identity serialization anchor (planning correction 8 — F-CLAUDE-PR5C7-01 / F-CLAUDE-PR5C7-03)
+
+Close **F-CLAUDE-PR5C7-01** by making the serialization boundary
+**independent of whether a canonical fact row already exists**.
+
+Official PostgreSQL 18 explicit locking
+(https://www.postgresql.org/docs/18/explicit-locking.html, accessed
+2026-08-16; PostgreSQL 18.6 docs dated August 13, 2026):
+
+- `SELECT … FOR UPDATE` locks **the rows retrieved** by that statement
+  (Section 13.3.2). A row that does not exist cannot be locked this
+  way. This brief remains READ COMMITTED for candidate sweeps (Race AA;
+  §6.F.10 forbids `REPEATABLE READ` / `SERIALIZABLE` for the sweep),
+  so predicate / gap locking is not the PR 5 serialization primitive.
+- Advisory locks have **session-level** and **transaction-level**
+  acquisition (Section 13.3.5). Session-level locks do **not** honor
+  transaction semantics: a session-level lock acquired in a transaction
+  that later rolls back is **still held**. Transaction-level locks are
+  released automatically at transaction end and have no explicit unlock.
+
+Official PostgreSQL 18 advisory-lock functions
+(https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS,
+Section 9.28.10, accessed 2026-08-16):
+
+- `pg_advisory_xact_lock(key1 integer, key2 integer)` obtains an
+  exclusive **transaction-level** advisory lock, waiting if necessary.
+- `pg_advisory_lock(...)` obtains an exclusive **session-level**
+  advisory lock. **Do not** use session-level `pg_advisory_lock` for
+  this contract.
+- Resources may be identified by one 64-bit key **or** two 32-bit keys;
+  those two key spaces do not overlap. This contract uses the **two
+  32-bit integer** form so a 64-bit key is never converted through
+  JavaScript `Number` / IEEE-754 float.
+
+##### Primary primitive
+
+Every canonical fact-application transaction **MUST** first acquire an
+exclusive, transaction-scoped PostgreSQL advisory lock:
+
+```sql
+SELECT pg_advisory_xact_lock(key1, key2);
+```
+
+for the exact canonical merchant identity.
+
+This advisory lock is the **PRIMARY** canonical-identity serialization
+boundary for **ALL** PR 5 canonical apply paths. It applies whether the
+canonical fact row:
+
+- already exists;
+- does not yet exist;
+- was tombstoned;
+- is being first-created during initial sync;
+- is an InventoryLevel pair.
+
+Existing `SELECT … FOR UPDATE` on the canonical fact row remains
+**useful** when that row exists, but it is **SECONDARY**. It is **no
+longer** the serialization primitive that correctness depends on.
+
+The lock **MUST** be transaction-scoped. **No** advisory lock may be
+held across Shopify network I/O. **No** canonical writer may bypass
+the identity anchor.
+
+Covered writers include:
+
+- direct authoritative refetch;
+- delete / disconnect confirmation;
+- reconciliation;
+- full-sync / JSONL application;
+- InventoryLevel pair application;
+- first insert;
+- successor takeover / abandonment fencing;
+- background merchant-domain abandonment that changes correctness
+  state.
+
+##### Canonical lock-key encoding and derivation
+
+Define one **versioned** deterministic lock-key contract.
+
+**Preimage fields (canonical identity):**
+
+- Product / Variant / InventoryItem / Location:
+  `(shopId, resourceKind, shopifyGid)`
+- InventoryLevel:
+  `(shopId, resourceKind, inventoryItemGid, locationGid)`
+
+**Unambiguous encoding.** Do **not** concatenate fields with a bare
+delimiter. Use **length-prefixing** so field concatenation cannot
+collide from delimiter ambiguity.
+
+Canonical preimage, UTF-8, field order fixed:
+
+1. contract version label, exactly `stocky-pr5-canonical-lock-v1`
+2. `shopId` (canonical string form of the internal shop id)
+3. `resourceKind` (`PRODUCT` | `VARIANT` | `INVENTORY_ITEM` |
+   `LOCATION` | `INVENTORY_LEVEL`)
+4. remaining identity fields in the order above (`shopifyGid`, or
+   `inventoryItemGid` then `locationGid`)
+
+Each field is encoded as:
+
+- 4-byte big-endian unsigned length of the UTF-8 field bytes;
+- those UTF-8 field bytes.
+
+No extra separators. Implementation must use this field order and
+length-prefixing (or an explicitly equivalent canonical encoding that
+is collision-free under concatenation). Changing the version label
+creates a **new** lock namespace.
+
+**Derivation:**
+
+1. `digest = SHA-256(preimage)`
+2. take the first 8 digest bytes
+3. interpret bytes `[0..3]` as a signed 32-bit integer `key1`
+   (big-endian two’s complement)
+4. interpret bytes `[4..7]` as a signed 32-bit integer `key2`
+   (big-endian two’s complement)
+5. call `pg_advisory_xact_lock(key1, key2)`
+
+Do **not** pack those eight bytes into a JavaScript `Number` / float
+and then pass a 64-bit key. Bind `key1` and `key2` as 32-bit integers
+(or equivalent exact integer types). Signed 32-bit values are valid
+PostgreSQL `integer` keys.
+
+The advisory key is **transient locking metadata**. It is **not**
+merchant identity and **not** persistent fact identity.
+
+**Collisions:** different canonical identities that happen to
+hash-collide may **OVER-SERIALIZE**. That is **safe**. A collision
+**MUST NOT** cause under-serialization of the same identity. Same
+identity always produces the same `(key1, key2)`.
+
+##### Lock acquisition order inside a tenant transaction
+
+1. Tenant / RLS context established.
+2. Acquire the canonical transaction-scoped advisory identity lock.
+3. If the canonical fact row exists, `SELECT … FOR UPDATE` may then
+   lock it.
+4. Lock / read relevant `CatalogObservationInFlight` rows.
+5. Evaluate blocker / interval / lease / conflict rules.
+6. Apply the canonical fact decision.
+7. Complete / abandon the exact observation as required.
+8. Commit.
+
+After acquiring the advisory anchor, **re-read** canonical state and
+all relevant in-flight / blocker evidence **before** deciding.
+
+##### First insert (no canonical row)
+
+When the canonical fact does **not** exist, the advisory identity lock
+still serializes all competing transactions **BEFORE** they evaluate
+the apply decision.
+
+Only after acquiring the anchor and re-reading evidence may the
+transaction decide whether to:
+
+- insert;
+- preserve no canonical row;
+- record conflict / degraded evidence;
+- refetch;
+- or perform another already-approved result.
+
+Do **NOT** treat `INSERT … ON CONFLICT DO UPDATE` as a substitute for
+the apply algorithm.
+
+A unique-constraint conflict that occurs **despite** the required
+advisory anchor is evidence of:
+
+- a lock-contract bypass;
+- a key-derivation mismatch;
+- or another architecture defect.
+
+It **MUST** fail closed / retry through the **full** canonical apply
+algorithm (interval, blocker, conflict, and first-insert rules). It
+**MUST NOT** blindly overwrite existence or attribute columns.
+
+##### Batch / multi-identity lock order (F-CLAUDE-PR5C7-03)
+
+If one bounded JSONL / fact transaction applies **multiple** canonical
+identities:
+
+- compute **all** advisory lock key pairs first;
+- **deduplicate** identical advisory keys before acquisition;
+- acquire them in deterministic **ascending** `(key1, key2)` order;
+- after lock acquisition, process identities deterministically.
+
+For observation rows **within one canonical identity**, lock / fence
+in **ascending** `observationRequestGen`, ties broken by observation
+token.
+
+The canonical advisory identity lock is acquired **BEFORE**
+observation-row locks.
+
+Background recovery / fencing follows the **same** ordering rules.
+
+No code path may invent its own reverse ordering.
+
+Hash-key collisions may cause extra serialization **only**. They must
+not create a reverse lock order or a half-applied canonical state.
+
+PostgreSQL detects remaining deadlocks and aborts one transaction
+(Section 13.3.4). Because canonical mutation and abandonment fencing
+are the same tenant transaction, an aborted transaction leaves no
+half-applied takeover state. Deterministic order is required to avoid
+that abort noise.
+
+#### 6.F.2.3 No durable response-bearing ACTIVE state (planning correction 8 — F-CLAUDE-PR5C7-02)
+
+Close **F-CLAUDE-PR5C7-02** using the **SAFE CONTRACT**:
+`observationResponseGen` is **NOT** durably persisted before the
+fenced tenant fact transaction.
+
+**Required lifecycle:**
+
+1. Shopify usable response arrives.
+2. Allocate
+   `responseGen = SELECT nextval('stocky_catalog_observation_gen_seq')`.
+   This remains **AFTER** usable response and **BEFORE** canonical
+   fact application, preserving Correction 4. Do **not** move
+   allocation to after the identity-lock wait.
+3. Keep `responseGen` and the response payload **IN PROCESS ONLY**.
+4. Do **NOT** issue a separate database update that persists
+   `responseGen` while `CatalogObservationInFlight` remains `ACTIVE`.
+5. Enter the tenant fact transaction.
+6. Acquire the canonical advisory identity anchor (§6.F.2.2).
+7. Lock / re-read the canonical fact (if present) and the exact
+   observation row.
+8. Perform final lease / lifecycle / blocker / interval / conflict
+   evaluation.
+9. Persist `responseGen` **only atomically** with the observation
+   leaving `ACTIVE` and with the corresponding canonical /
+   diagnostic decision.
+
+There must **never** be a committed database state:
+
+`lifecycleState = ACTIVE` **AND** `observationResponseGen IS NOT NULL`
+
+**Planned schema invariant** (do **not** create a migration in this
+planning PR):
+
+- `ACTIVE` ⇒ `observationResponseGen IS NULL`
+- `COMPLETED` ⇒ `observationResponseGen IS NOT NULL`
+- `ABANDONED` may be NULL when there was no usable completed
+  response, or non-null only when a usable response existed but was
+  discarded / abandoned atomically while the row left `ACTIVE`
+
+**Crash / pause semantics**
+
+Crash / pause after `responseGen` allocation but **BEFORE** the fact
+transaction:
+
+- `responseGen` is burned;
+- it is **not** persisted;
+- `CatalogObservationInFlight` remains `ACTIVE` + resultless;
+- therefore existing blocker / lease / abandonment rules still cover
+  it;
+- a successor may later durably `ACTIVE -> ABANDONED` after expiry;
+- a stale worker **cannot** create `ACTIVE` + persisted `responseGen`
+  on resume.
+
+Crash **inside** the fact transaction:
+
+- transaction rollback leaves the observation `ACTIVE` +
+  `observationResponseGen` NULL;
+- canonical mutation and lifecycle transition do not partially
+  commit.
+
+Successful / completed observation:
+
+- `responseGen` persistence;
+- `COMPLETED` transition;
+- canonical fact or conflict / diagnostic decision
+
+occur **atomically** under the canonical advisory identity anchor.
+
+Blocked / discarded response:
+
+- **never** replay the old response as fresh;
+- transition the exact observation out of `ACTIVE` atomically
+  according to the existing abandonment / conflict rules;
+- bounded fresh refetch remains required where already specified.
+
+With this invariant, every durably `ACTIVE` row is resultless, so
+Correction 7 remains coherent (see §6.F.2.1 Correction-8
+interaction).
 
 #### 6.F.3 Authoritative existence observation (clock B)
 
@@ -1155,7 +1512,9 @@ lifecycle**, not commit ordering, and **not** Shopify mutation order.
 - `existenceRequestGen` is allocated **before** issuing that Shopify
   network request.
 - `existenceResponseGen` is allocated **after** an authoritative usable
-  response and **before** waiting on the identity-row apply.
+  response and **before** entering the tenant fact transaction. It is
+  kept in process until persisted atomically when the observation leaves
+  `ACTIVE` (§6.F.2.3).
 - These values do **not** claim Shopify snapshot time.
 
 **Do not** treat a larger `existenceResponseGen` as proof of a later
@@ -1259,11 +1618,18 @@ pre-conflict state while a conflict is unresolved):
   from `observationResponseGen` order.
 
 Serialize apply per `(shopId, shopifyGid)` — or
-`(shopId, inventoryItemGid, locationGid)` for levels — with
-`SELECT … FOR UPDATE` inside the tenant transaction. This is row-level
-fact locking, **not** a dispatcher/readiness redesign. The lock is taken
-**after** Shopify I/O and **after** end-generation allocation. It is
-**not** held across Shopify network I/O.
+`(shopId, inventoryItemGid, locationGid)` for levels — with the
+**canonical transaction-scoped advisory identity lock**
+(`pg_advisory_xact_lock`, §6.F.2.2) inside the tenant transaction.
+That advisory lock is the **PRIMARY** serialization boundary and
+applies whether or not a canonical fact row exists. If the canonical
+row exists, `SELECT … FOR UPDATE` may then lock it as a **SECONDARY**
+row lock. This is identity serialization, **not** a
+dispatcher/readiness redesign. The lock is taken **after** Shopify I/O
+and **after** end-generation allocation. It is **not** held across
+Shopify network I/O. First insert of a nonexistent identity uses the
+same advisory anchor and **must not** substitute
+`INSERT … ON CONFLICT DO UPDATE` for the apply algorithm.
 
 #### 6.F.4 Signal observation (clock C)
 
@@ -1295,8 +1661,13 @@ Shopify `updatedAt`.
 For product, variant, inventory item, location, and inventory-level
 **attributes**, incoming observation `I` vs stored row `S`:
 
-1. If `S` does not exist: insert attributes from `I`; set
+1. If `S` does not exist: insert attributes from `I` **only after**
+   the canonical advisory identity lock is held and canonical /
+   in-flight evidence has been re-read (§6.F.2.2 first insert); set
    `shopifyUpdatedAt = I.shopifyUpdatedAt` when Shopify provided it.
+   Overlapping conflicting first-insert evidence follows §6.F.3 /
+   §6.F.9 — **not** last-writer-wins and **not**
+   `ON CONFLICT DO UPDATE` overwrite.
 2. If both have non-null `shopifyUpdatedAt` and
    `I.shopifyUpdatedAt > S.shopifyUpdatedAt`: apply attributes; advance
    `shopifyUpdatedAt`.
@@ -1364,10 +1735,17 @@ Stale-attribute rejection **must not** treat the GID as absent. Absence
 existence evidence, **not** at whether attributes were applied.
 
 The JSONL applicator, for each in-scope identity line, in one
-`(shopId, identity)` **merchant** transaction:
+`(shopId, identity)` **merchant** transaction — or, when a bounded
+batch transaction applies **multiple** identities, under the
+§6.F.2.2 multi-identity lock order:
 
-1. `SELECT … FOR UPDATE` (after Shopify I/O and after any direct-refetch
-   generation allocation; bulk lines use the already-committed fence).
+1. Acquire the canonical `pg_advisory_xact_lock` identity anchor
+   (§6.F.2.2; for a bounded multi-identity batch, acquire **all**
+   advisory keys first in ascending `(key1, key2)` order). If the
+   canonical fact row exists, `SELECT … FOR UPDATE` that row
+   (SECONDARY). After Shopify I/O and after any direct-refetch
+   generation allocation; bulk lines use the already-committed fence.
+   Do **not** hold the advisory lock across Shopify I/O.
 2. Persist signal/lineage as appropriate.
 3. If this line is from complete epoch `R`: set
    `lastSeenFullSyncRunId = R.epochId` (presence marker).
@@ -1545,7 +1923,9 @@ per-name `quantityRequestGen` / `quantityResponseGen` on inventory
 quantities — allocated from `stocky_catalog_observation_gen_seq` under
 the **same interval rule** as existence observations (§6.F.2): start
 generation **before** the Shopify request; end generation **after** an
-authoritative usable response and **before** the identity-row apply.
+authoritative usable response and **before** the tenant fact
+transaction, kept in process until persisted atomically when the
+observation leaves `ACTIVE` (§6.F.2.3).
 Do **not** claim `attributeResponseGen` / `quantityResponseGen` alone
 proves Shopify freshness.
 
@@ -1600,7 +1980,8 @@ This interval:
 allocate a start generation before their Shopify request and an end
 generation after a usable response. Each occupies its **own**
 `CatalogObservationInFlight` row with its own token and finite lease.
-They later serialize on `(shopId, identity)` `SELECT … FOR UPDATE`.
+They later serialize on the canonical advisory identity anchor
+(§6.F.2.2); `SELECT … FOR UPDATE` is secondary when a row exists.
 Overlapping conflicting payloads must **not** resolve by end-generation
 or lock-acquisition order. A late worker whose token is expired or
 abandoned **must not** update null-version attributes (§6.F.2.1 fencing).
@@ -1855,9 +2236,9 @@ after reconciliation.
 Implementation tests (when PR 5 implementation is authorized — **not
 now**) **must** include races **A–AD** (preserved), **AE–AL**
 (correction 4), **AM–AN** (correction 5), **AO–AR** (correction 6),
-**and AS** (correction 7). Race **AM** is extended by correction 6 and
-further by correction 7. Race **AQ** is extended by correction 7.
-Race **AB** is extended by correction 5:
+**AS** (correction 7), **and AT–AV** (correction 8). Race **AM** is
+extended by correction 6 and further by correction 7. Race **AQ** is
+extended by correction 7. Race **AB** is extended by correction 5:
 
 | Race | Setup | Required outcome |
 |---|---|---|
@@ -1879,7 +2260,7 @@ Race **AB** is extended by correction 5:
 | **P. Sequence uniqueness** | Two concurrent allocators (`nextval`). | Never receive duplicate generations. |
 | **Q. Sequence crash gap** | Allocator `nextval` succeeds; process crashes before `SyncRun.fenceGeneration` persist or before fact apply. | Value is burned and **never reused**. |
 | **R. Zero Shop counter writes** | Bootstrap / authentication Shop row during catalog sync. | Shop row receives **zero** generation writes. `catalogObservationGen` does not exist. |
-| **S. No lock across Shopify I/O** | Direct refetch instrumentation. | No merchant or control-plane row lock is held across the Shopify HTTP request. Start generation is allocated **before** the request; end generation **after** a usable response; identity lock is taken **after** that. A new `CatalogObservationInFlight` row (token + finite lease) is committed then locks released before I/O. |
+| **S. No lock across Shopify I/O** | Direct refetch instrumentation. | No merchant or control-plane row lock **and no advisory identity lock** is held across the Shopify HTTP request. Start generation is allocated **before** the request; end generation **after** a usable response and kept in-process; the canonical `pg_advisory_xact_lock` identity anchor is taken **after** that, inside the tenant fact transaction. A new `CatalogObservationInFlight` row (token + finite lease) is committed then locks released before I/O. |
 | **T. Non-overlapping existence vs commit order** | Observation A fully completes (`requestStartGen` and `responseEndGen` allocated) before B starts. B then commits first. A later obtains the lock. | A must **not** overwrite B. B may supersede A on clock B because B is the later non-overlapping app-issued check. Repeat for LIVE and ABSENT existence. Do **not** use this race to claim end-generation order across overlapping workers. |
 | **U. Bulk omission is not absence** | Successful JSONL omits GID X; direct query still returns X live. | No tombstone. Candidate may exist; confirmation keeps LIVE. |
 | **V. Circuit breaker** | Candidate count or proportion exceeds the configured threshold. | **Zero** tombstones. LIVE preserved. Domain DEGRADED. Anomaly `DataIssue`. No HEALTHY deletion reconciliation. |
@@ -1906,6 +2287,9 @@ Race **AB** is extended by correction 5:
 | **AQ. Multiple blockers / partial expiry** | A and B are both **ACTIVE**, unexpired, resultless, and overlap C. C obtains a usable response. A reaches lease expiry. B remains ACTIVE and unexpired (`clock_timestamp() < B.leaseExpiresAt`). C’s transaction may durably mark A `ABANDONED` using the exact-token / expiry predicate. | C remains blocked by B. Durable abandonment of A alone cannot release C. Held C response is **not** replayed later as fresh. Only after **every** expired blocker being relied upon is durably `ABANDONED` **and** no ACTIVE / unexpired blocker remains may a **fresh** successor observation proceed. No tombstone / revival or stale canonical mutation. |
 | **AR. Response before expiry / apply after expiry** | 1. A starts and receives an authoritative usable Shopify response while `clock_timestamp() < leaseExpiresAt`. 2. A allocates `responseGen`. 3. A waits on the canonical identity lock or is otherwise paused. 4. PostgreSQL authoritative time reaches `clock_timestamp() >= leaseExpiresAt`. 5. A finally reaches the fact-application fence. | Fence fails because validity is evaluated at **fact decision time**. Response-arrival-before-expiry is irrelevant. `responseGen`-before-expiry is irrelevant. Transaction-start-before-expiry is irrelevant. No LIVE / ABSENT mutation. No null-version attribute mutation. No tombstone / revival. No clearing newer evidence. Burned `responseGen` is the only residue. Bounded fresh retry / refetch is required. |
 | **AS. Database clock rollback after expiry takeover** | 1. A creates an ACTIVE resultless observation. 2. PostgreSQL `clock_timestamp()` reaches `>= A.leaseExpiresAt`. 3. B acquires the canonical identity boundary and wants to proceed. 4. In B’s same tenant transaction, B conditionally transitions A `ACTIVE -> ABANDONED` using the exact token and database-expiry predicate. 5. B applies valid newer canonical evidence. 6. Transaction commits. 7. PostgreSQL wall clock is then moved backward so that `clock_timestamp() < A.leaseExpiresAt` would now be true if time alone were checked. 8. Old A resumes and attempts application. Also include rollback: B’s transaction fails / rolls back before canonical mutation commits. | After commit: A remains `ABANDONED`; A cannot become `ACTIVE` again; A fails its exact-token lifecycle fence; clock rollback does not restore A’s validity; A cannot write LIVE/ABSENT; A cannot update null-version attributes; A cannot tombstone/revive; A cannot clear B/newer evidence; B’s committed canonical state remains authoritative; no application-node clock participates. Rollback case: the `ACTIVE -> ABANDONED` transitions made by B’s transaction roll back with it. No half-applied takeover state. |
+| **AT. Concurrent first canonical application of a nonexistent identity** | No canonical fact row exists. **AT-1 direct vs direct:** A and B direct observations overlap; both obtain usable authoritative responses; payloads / existence evidence differ or conflict; both attempt first canonical application concurrently. **AT-2 null-version attributes:** no canonical row; two overlapping observations carry different null-`updatedAt` attribute or quantity values. **AT-3 initial bulk JSONL vs direct refetch:** no canonical row; bulk / JSONL first application and webhook-driven direct refetch race. **AT-4 active blocker:** no canonical row; an ACTIVE unexpired resultless direct observation exists; another transaction acquires the advisory identity anchor and attempts first canonical mutation. | **AT-1:** both use the same canonical advisory identity anchor; only one fact transaction evaluates the identity at a time; the second transaction re-reads state / evidence after obtaining the anchor; exactly zero or one canonical row results as dictated by existing conflict rules — **never** duplicate rows; conflicting overlap cannot become response-end or commit-order LWW; if existing rules require preserving no unambiguous canonical fact and refetching, that result; **no** `ON CONFLICT DO UPDATE` blind overwrite; conflict / degraded / refetch evidence is preserved where required. **AT-2:** no last-writer-wins; advisory serialization does not bypass interval conflict rules; DEGRADED / conflict / refetch behavior follows §6.F.9. **AT-3:** both use the same identity anchor; full-sync fence / direct-observation ordering rules are re-evaluated after lock acquisition; bulk cannot blindly overwrite a newer / conflicting direct observation; exactly one coherent canonical result or conflict / refetch state remains. **AT-4:** absence of a canonical row does **not** bypass blocker logic; mutation remains blocked under the existing rule. |
+| **AU. No response-bearing ACTIVE row** | 1. A commits ACTIVE resultless observation evidence. 2. Shopify response arrives. 3. A allocates `responseGen`. 4. `responseGen` remains in-process only. 5. A pauses before entering / applying the tenant fact transaction. 6. Verify the persisted row still has `ACTIVE` and `observationResponseGen = NULL`. 7. Lease expires. 8. B durably fences A `ACTIVE -> ABANDONED` and applies valid newer evidence. 9. Database wall clock later moves backward. 10. A resumes with the old response payload and its in-process `responseGen`. **Crash variant:** A terminates after `responseGen` allocation. | A remains `ABANDONED`; A cannot persist its old `responseGen`; A cannot restore `ACTIVE`; A cannot write LIVE/ABSENT; A cannot update null-version attributes; A cannot tombstone/revive; A cannot clear B; B remains authoritative; only the allocated sequence value was burned. The database constraint rejects any attempted commit of `ACTIVE` + `observationResponseGen != NULL`. Crash variant: the DB row remains `ACTIVE` / resultless until graceful recovery or expiry takeover. |
+| **AV. Deterministic canonical lock ordering** | Two bounded transactions process canonical identities X and Y but receive them in opposite input orders. Also include observation-row locking within one identity and a hash-key collision case. | Both normalize advisory locks into the same ascending `(key1, key2)` order; no AB/BA lock-order deadlock; same-identity operations remain serialized; hash-key collision causes **only** over-serialization; observation-row locks occur only after the canonical anchor and in deterministic `observationRequestGen` / token order; no half-applied canonical state. |
 
 Tests **must** fail closed: a focused command that collects zero tests is
 a failed check (PR 4 CI pattern).
@@ -1921,7 +2305,7 @@ This section does **not**:
 - couple forecast/ABC into the applicator;
 - close Q-002, Q-004, R-028, R-029, or R-095..R-098;
 - close R-102 or R-137;
-- close R-157, R-158, or R-159;
+- close R-157, R-158, R-159, or R-160;
 - grant `stocky_control_plane` DML on merchant fact or in-flight tables.
 
 ---
@@ -2030,10 +2414,10 @@ Required implementation properties:
 - **No** one database transaction per row as the steady-state pattern.
 - Bounded memory: O(batch size), not O(catalog). Re-stream skip of already-committed lines must not buffer those lines.
 - Batch upserts (planning ceiling: see tests; start at ≤500 rows / transaction, configurable).
-- Idempotent upsert on `(shopId, shopifyGid)` for GID identities, or `(shopId, inventoryItemGid, locationGid)` for levels, **plus** §6.F clock-A attribute freshness, clock-B existence, and epoch **presence marker** (not last-writer-wins). Presence (`lastSeenFullSyncRunId`) advances even when attributes no-op.
+- Apply each identity through the **canonical apply algorithm** under the §6.F.2.2 advisory identity anchor (plus secondary `SELECT … FOR UPDATE` when the row exists), using §6.F clock-A attribute freshness, clock-B existence, and epoch **presence marker** (not last-writer-wins). Presence (`lastSeenFullSyncRunId`) advances even when attributes no-op. Uniqueness on `(shopId, shopifyGid)` or `(shopId, inventoryItemGid, locationGid)` is a safety net, **not** the apply algorithm. **Do not** treat `INSERT … ON CONFLICT DO UPDATE` as a correctness path that blindly overwrites existence or attribute columns. A unique conflict despite the advisory anchor **must** fail closed / retry the full apply algorithm.
 - **Line/batch checkpoint is two-phase application progress** (§6.F.11). Merchant facts commit with `ingestBatchId`. Control-plane `jsonlCommittedLineOrdinal` (1-based last fully acknowledged JSONL line) advances **afterwards**, on the control-plane connection. Runtime is denied DML on `SyncRun`. No transaction spans the two roles.
 - Checkpoint **must never** advance past a batch whose fact transaction did not commit. Checkpoint **may lag** facts. On resume, an orphan committed batch (facts present, checkpoint behind) is identified/replayed **idempotently** and then acknowledged **without skipping uncommitted lines**.
-- Restart without Range: if the same BulkOperation is still `COMPLETED` and `url` unexpired, re-stream from byte 0; already-committed ingest batches are idempotent §6.F upserts (attribute no-op + presence marker remains set) then acknowledged; lines after the checkpoint are applied. Repeated records converge by identity key + clock-A / clock-B / presence-marker rules.
+- Restart without Range: if the same BulkOperation is still `COMPLETED` and `url` unexpired, re-stream from byte 0; already-committed ingest batches are idempotent §6.F applies (attribute no-op + presence marker remains set) then acknowledged; lines after the checkpoint are applied. Repeated records converge by identity key + clock-A / clock-B / presence-marker rules.
 - If the URL is expired: start a **new** BulkOperation; **never** convert the old run to `SUCCEEDED`. Allocate a **new** fence generation; never reuse the burned/old fence.
 - Crash boundaries that must be tested: (1) kill before batch commit — replay applies the batch; (2) kill after merchant batch commit and before control-plane checkpoint acknowledgement — resume must not skip those rows and must not require runtime DML on `SyncRun`; (3) re-stream from start without Range; (4) expired URL.
 
@@ -2365,7 +2749,7 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 11. Nullable Shopify `updatedAt`: current authoritative refetch can eventually update the fact (Race L). No infinite no-op.
 12. Two concurrent missing-version observations: overlapping conflicting payloads must not last-writer-wins or resolve by `attributeResponseGen` (Race M / AK). Identical overlapping payloads may converge idempotently.
 13. Failed authoritative delete/disconnect refetch: query failure is not converted into canonical deletion (Race N).
-14. Races P–AR in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival including non-overlapping two-confirmation revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE, hard-crash orphaned in-flight observation with PostgreSQL-authoritative lease boundary, late response after abandonment, application-node clock skew, physically missing in-flight row, multiple blockers / partial expiry, response-before-expiry / apply-after-expiry).
+14. Races P–AV in §6.F.13 (sequence uniqueness/crash gap, zero Shop writes, no lock across Shopify I/O, observation interval before/after Shopify I/O, bulk omission + live confirmation, circuit breaker, pair uniqueness, two-phase checkpoint, diagnostic reconciler, READ COMMITTED sweep, terminal non-revival including non-overlapping two-confirmation revival, write-scanner fixture, USAGE-only nextval, setval denial, NO CYCLE, response scheduling inversion, non-overlapping supersede, overlapping LIVE/ABSENT conflict, overlapping null-version quantity conflict, bulk candidate + overlapping LIVE, hard-crash orphaned in-flight observation with PostgreSQL-authoritative lease boundary, late response after abandonment, application-node clock skew, physically missing in-flight row, multiple blockers / partial expiry, response-before-expiry / apply-after-expiry, database clock rollback after expiry takeover, concurrent first canonical application of a nonexistent identity, no response-bearing ACTIVE row / in-process responseGen pause, deterministic canonical lock ordering).
 
 ### D2. Checkpoint crash boundaries (mandatory)
 
@@ -2405,6 +2789,9 @@ Full R-034 certification (50k variants / 15 locations / 750k states, p95) remain
 - Multiple ACTIVE unexpired resultless blockers: expiry of one, even when durably `ABANDONED` by the successor transaction, does not release a held later response while another remains ACTIVE / unexpired; held C is never replayed as fresh (Race AQ).
 - Response obtained before expiry and applied after expiry fails the post-lock fact fence; burned `responseGen` is the only residue (Race AR).
 - Database clock rollback after expiry takeover: after B durably fences A `ACTIVE -> ABANDONED` and commits newer canonical evidence, later wall-clock rollback cannot restore A; A remains `ABANDONED` and cannot write LIVE/ABSENT, update null-version attributes, tombstone/revive, or clear B; rollback of B undoes both mutation and abandonment (Race AS).
+- Concurrent first canonical application of a nonexistent identity: both writers use the same advisory identity anchor; the second re-reads after lock; exactly zero or one canonical row; no response-end / commit-order LWW; no `ON CONFLICT DO UPDATE` blind overwrite; null-version overlap follows §6.F.9; bulk vs direct re-evaluates fence rules after lock; an ACTIVE unexpired resultless blocker still blocks first insert (Race AT).
+- ResponseGen allocated then paused before the fenced transaction: persisted row remains ACTIVE + `observationResponseGen` NULL; successor may durably abandon after expiry; resume cannot persist the old responseGen, restore ACTIVE, or mutate canonical state; constraint rejects ACTIVE + non-null responseGen (Race AU).
+- Two bounded multi-identity transactions with opposite input order acquire advisory locks in the same ascending `(key1, key2)` order; no AB/BA deadlock; hash collision over-serializes only; observation-row locks follow the canonical anchor in requestGen/token order (Race AV).
 
 ### F. Inventory-state truth
 
@@ -2497,6 +2884,8 @@ Observed on planning base `de1bb193…` (read-only inspection; not changed by th
 | PostgreSQL 18 `nextval` / `setval` privileges | https://www.postgresql.org/docs/18/functions-sequence.html (accessed 2026-08-14; PostgreSQL 18.6 docs dated August 13, 2026). `nextval` requires USAGE or UPDATE; `setval` requires UPDATE; SELECT is not required for `nextval`. |
 | PostgreSQL 18 `CREATE SEQUENCE` `NO CYCLE` | https://www.postgresql.org/docs/18/sql-createsequence.html (accessed 2026-08-14). `NO CYCLE` is the default; wrapping is forbidden when specified/defaulted. |
 | PostgreSQL 18 current date/time (`clock_timestamp` / `statement_timestamp` / `transaction_timestamp` / `CURRENT_TIMESTAMP` / `now()`) | https://www.postgresql.org/docs/18/functions-datetime.html#FUNCTIONS-DATETIME-CURRENT (accessed 2026-08-15; PostgreSQL 18.6 docs dated August 13, 2026). `CURRENT_TIMESTAMP` / `now()` / `transaction_timestamp()` are transaction-start values. `statement_timestamp()` is statement-start time. `clock_timestamp()` returns actual server time when evaluated and changes during statement execution. |
+| PostgreSQL 18 explicit locking (`SELECT … FOR UPDATE` / advisory locks) | https://www.postgresql.org/docs/18/explicit-locking.html (accessed 2026-08-16; PostgreSQL 18.6 docs dated August 13, 2026). `FOR UPDATE` locks retrieved rows (Section 13.3.2). Advisory locks are session-level or transaction-level (Section 13.3.5): session-level locks do not honor transaction rollback; transaction-level locks release at transaction end. Consistent multi-object lock order is the documented deadlock defense (Section 13.3.4). |
+| PostgreSQL 18 advisory-lock functions | https://www.postgresql.org/docs/18/functions-admin.html#FUNCTIONS-ADVISORY-LOCKS (Section 9.28.10, accessed 2026-08-16). `pg_advisory_xact_lock(key1 integer, key2 integer)` is exclusive transaction-level. `pg_advisory_lock` is exclusive session-level and is **not** this contract. Keys may be one 64-bit value or two 32-bit values (those key spaces do not overlap). |
 
 API target remains **2026-07**. This planning task does not bump versions.
 
