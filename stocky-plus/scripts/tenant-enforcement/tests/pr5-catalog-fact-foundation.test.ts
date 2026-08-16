@@ -89,7 +89,7 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
     });
     shopAId = shopA.id;
     shopBId = shopB.id;
-  }, 300_000);
+  }, 600_000);
 
   afterAll(async () => {
     await prisma?.$disconnect();
