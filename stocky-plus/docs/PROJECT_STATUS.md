@@ -1,7 +1,7 @@
 # Project Status
 
-**Updated:** 2026-08-14
-**Current stage:** Phase 1 PR 4 FORMALLY CLOSED — Synchronization Control Plane
+**Updated:** 2026-08-16
+**Current stage:** Phase 1 PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
@@ -11,13 +11,14 @@
 **Phase 1 PR 3:** MERGED AND CLOSED
 **Phase 1 PR 4:** FORMALLY CLOSED
 **Phase 1:** IN PROGRESS
-**PR 5:** NOT STARTED — requires a separate ChatGPT product-owner brief/authorization
+**PR 5 planning:** IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED (D-053)
+**PR 5 implementation:** NOT STARTED — NOT AUTHORIZED
 
 ## Phase 1 PR 4 D-052 (active — technical acceptance + post-merge identity)
 
 | Field | Value |
 |---|---|
-| Decision | **D-052 — Phase 1 PR 4 repository implementation accepted** (technical-acceptance authority; post-merge and formal-close identity recorded here, not a new D-053) |
+| Decision | **D-052 — Phase 1 PR 4 repository implementation accepted** (PR 4 technical-acceptance authority; post-merge and formal-close identity recorded here. Later **D-053** is PR 5 planning only and does not alter D-052.) |
 | ChatGPT disposition | **ACCEPT PR 4 REPOSITORY IMPLEMENTATION** |
 | PR #20 | CLOSED / MERGED |
 | PR #22 | CLOSED / MERGED |
@@ -37,12 +38,36 @@
 | Post-merge main CI (PR #20) | run `31756319986`, job `94632696479`, success at `f618103…` |
 | Post-merge main CI (PR #22) | run `31768571828`, job `94669500249`, success at `99d48db…` |
 | Closure report | `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md` |
-| Next gate | **PR 5 NOT STARTED** — separate ChatGPT product-owner brief/authorization required |
-| PR 5 | NOT STARTED |
+| Next gate | **PR 5 PLANNING IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED** (D-053). D-052 remains PR 4 technical-acceptance authority. |
+| PR 5 planning | IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED |
+| PR 5 implementation | NOT STARTED — NOT AUTHORIZED |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
-D-052 remains technical acceptance of the reviewed PR 4 repository implementation. PR #20 is **CLOSED / MERGED**. PR #22 is **CLOSED / MERGED**. Phase 1 PR 4 is **FORMALLY CLOSED**. Do **not** state that Phase 1 is complete. Do **not** start PR 5. Do **not** create D-053 or another runtime correction cycle.
+D-052 remains technical acceptance of the reviewed PR 4 repository implementation. PR #20 is **CLOSED / MERGED**. PR #22 is **CLOSED / MERGED**. PR #23 is **CLOSED / MERGED**. Phase 1 PR 4 is **FORMALLY CLOSED**. Do **not** state that Phase 1 is complete. Do **not** start PR 5 runtime implementation.
+
+## Phase 1 PR 5 D-053 (active — planning authorization only)
+
+| Field | Value |
+|---|---|
+| Decision | **D-053 — Phase 1 PR 5 planning authorization** |
+| Scope | Documentation / planning packet only |
+| ChatGPT disposition | Authorize PR 5 **planning**; do **not** authorize implementation |
+| Planning base / `origin/main` | `de1bb193a43ef87cf59acafeac4c5748e62d423d` |
+| PR #23 | CLOSED / MERGED — squash merge equals the planning base SHA (`Record Phase 1 PR 4 formal close`) |
+| Post-merge main CI (PR #23) | run `31802835318`, job `94774629793`, success at `de1bb193…` |
+| Primary brief | `phases/phase-1/PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` |
+| Implementation | **NOT AUTHORIZED** |
+| Implementation branch | **Not created** (proposed later name `phase-1/catalog-location-inventory-facts`) |
+| Production | NOT AUTHORIZED |
+| Inventory-write flags | DEFAULT OFF |
+| PR #24 | OPEN / DRAFT / UNMERGED (`phase-1/pr5-planning`) |
+| Planning correction 5 | Documentation-only close of F-CLAUDE-PR5C4-01 / F-CLAUDE-PR5C4-02; implementation still **NOT AUTHORIZED** |
+| Planning correction 6 | Documentation-only close of F-CLAUDE-PR5C5-01 / 02 / 03 / 04 (authoritative PostgreSQL lease clock); implementation still **NOT AUTHORIZED** |
+| Planning correction 7 | Documentation-only durable `ACTIVE -> ABANDONED` fencing when expiry is relied upon to permit successor canonical mutation; implementation still **NOT AUTHORIZED** |
+| Planning correction 8 | Documentation-only close of F-CLAUDE-PR5C7-01 / 02 / 03 / 04 (universal `pg_advisory_xact_lock` identity anchor; no durable response-bearing ACTIVE; deterministic lock order; Races AT / AU / AV; D1.14 P–AV); implementation still **NOT AUTHORIZED** |
+
+D-053 is **not** a PR 4 correction, acceptance, or closure decision. Runtime, schema, migration, test, package, Shopify configuration, GraphQL, feature-flag, and CI workflow changes remain unauthorized until ChatGPT separately authorizes implementation after this planning unit is reviewed, accepted, and merged.
 
 ## Phase 1 PR 4 D-051 (historical correction closure)
 
@@ -67,6 +92,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **Q-011:** CLOSED FOR PHASE 1 IMPLEMENTATION (PR 3)
 **Q-002:** OPEN — Partner Dashboard / environment-separation evidence still required
 **Q-003:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does **not** authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
+**Q-004:** OPEN — Phase 2 incoming-inventory forecast policy. PR 5 planning stores Shopify `incoming` separately and does **not** close Q-004.
 **Q-008:** OPEN — legal review still required before production privacy policy
 **F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052)
 **R-028 / R-029:** OPEN as operational backfill / enforcement-transition risks
@@ -79,18 +105,20 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
 **R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
 **R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
+**R-129 through R-160:** OPEN — PR 5 planning risks (D-053); do not treat as implementation-closed
 **F-CLAUDE-PR4ACC-01:** P3 — **RESOLVED BY PR BODY UPDATE** before squash merge (not a runtime correction)
 **F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in PR 4)
 **F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
 **F-CLAUDE-PR4ACC-04:** P3 — ACCEPTED NONBLOCKING OUT-OF-SCOPE TOOLING DEBT (do not reopen R-124)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
-**PR 5:** NOT STARTED — requires a separate ChatGPT product-owner brief/authorization
+**PR 5 planning:** IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED (D-053)
+**PR 5 implementation:** NOT STARTED — NOT AUTHORIZED
 **No production deployment**
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** PR 5 is NOT STARTED and requires a separate ChatGPT product-owner brief/authorization. Do not start PR 5. Do not create D-053.
+**Next action:** Complete ChatGPT PR 5 **planning correction 8** review of `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` (universal transaction-scoped `pg_advisory_xact_lock` canonical-identity serialization anchor; first-insert serialization; no durable response-bearing ACTIVE; planned ACTIVE⇒responseGen NULL invariant; deterministic multi-identity / observation-row lock order; Races AT / AU / AV; D1.14 P–AV). The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), and `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`) remain unmodified historical evidence. Do **not** begin PR 5 runtime implementation. Do **not** create the implementation branch. Do **not** create D-054. Do **not** edit any immutable review report.
 
 ## Current truth
 
@@ -103,8 +131,11 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Phase 1 PR 4 repository implementation remains **ACCEPTED** under **D-052** at accepted implementation head `eb757119a6b97b29c3c4e89f9cef7ecb8cd760f3`. Final synchronized PR #20 head was `04522c59f8ef453ea698cde917fa1dde3b644887`.
 - Independent cumulative verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
 - Phase 1 PR 4 is **FORMALLY CLOSED**.
-- PR 5 is **NOT STARTED** and requires a separate ChatGPT product-owner brief/authorization.
+- PR [#23](https://github.com/Vedang1998/Stocky/pull/23) is **CLOSED and MERGED**. Squash merge `de1bb193a43ef87cf59acafeac4c5748e62d423d` at `2026-08-14T13:01:18Z`. Post-merge main CI run `31802835318`, job `94774629793`, success.
+- **D-053** authorizes Phase 1 PR 5 **planning only**. PR 5 planning status is **IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED**.
+- PR 5 **implementation** is **NOT STARTED** and **NOT AUTHORIZED**.
 - Production remains unauthorized. No deployment, backfill, ownership repair, or inventory mutation is authorized.
 - Every inventory-write flag remains **DEFAULT OFF**.
-- Do **not** state that Phase 1 is complete, that PR 5 has started, or that production is ready.
-- Do **not** state that PR 5 is authorized merely because PR #20 or PR #22 merged.
+- Do **not** state that Phase 1 is complete, that PR 5 implementation has started, or that production is ready.
+- Do **not** state that PR 5 implementation is authorized merely because PR #20, PR #22, or PR #23 merged, or because D-053 exists.
+- PR [#24](https://github.com/Vedang1998/Stocky/pull/24) remains **OPEN, DRAFT, UNMERGED** on `phase-1/pr5-planning`. Correction 8 is documentation-only (universal `pg_advisory_xact_lock` canonical-identity serialization anchor; no durable response-bearing ACTIVE; deterministic lock order; Races AT / AU / AV). Correction implemented — pending independent verification. Implementation remains **NOT STARTED** and **NOT AUTHORIZED**.
