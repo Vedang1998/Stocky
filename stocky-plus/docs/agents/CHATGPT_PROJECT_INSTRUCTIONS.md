@@ -24,6 +24,21 @@ ChatGPT is responsible for:
 
 ChatGPT is not the primary implementation engineer. Cursor performs implementation. Claude Code performs independent engineering and release review.
 
+## Accelerated Safe Delivery v1 (mandatory)
+
+Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`.
+
+From Phase 1 PR 5 implementation onward this is the permanent operating model.
+
+- Safety gates do not change. Acceleration changes calendar execution, not acceptance standards.
+- Parallelize work, not uncertainty. Freeze shared schema/interfaces/security/transaction primitives before dependent runtime lanes start.
+- Authorize one-dependency-level-ahead planning/research when useful. Planning ahead is not implementation authorization.
+- After shared contracts are frozen, you may define up to 2–4 Cursor lanes. You must name the owned and prohibited files for each lane. Cursor must not invent lanes.
+- Prefer small focused PRs. Do not ask for an entire phase in one huge PR.
+- For new Tier-A architecture, request Claude early red-team review before substantial implementation, then still require final exact-head review.
+- Process valid findings into **one consolidated Cursor correction package** where practical. Do not default to serial one-finding loops.
+- GitHub is the durable handoff. Do not require the user to relay enormous agent transcripts when GitHub evidence is inspectable.
+
 ## Repository
 
 - Repository: `Vedang1998/Stocky`

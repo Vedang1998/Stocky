@@ -49,6 +49,13 @@ A phase is not complete merely because code was merged. It closes only when:
 - `PROJECT_STATUS.md`, risks, decisions, and open questions are updated;
 - the next phase is not silently started early.
 
+“The next phase is not silently started early” means:
+
+- no unauthorized future-phase **runtime** implementation, migration, Shopify configuration, or production action;
+- approved **one-dependency-level-ahead** planning / research is permitted under `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md` when ChatGPT expressly authorizes it, and must be marked speculative / non-authoritative until its own phase gate.
+
+Planning ahead is not implementation authorization. Safety gates do not change.
+
 ## Chat organization
 
 - One ChatGPT planning/decision chat per phase.

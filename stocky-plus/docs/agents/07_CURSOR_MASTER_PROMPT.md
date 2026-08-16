@@ -22,6 +22,19 @@ Read these documents before code changes:
 
 When code conflicts with approved requirements, the requirements win unless a technical impossibility is documented and approved.
 
+## Accelerated Safe Delivery v1 (mandatory)
+
+Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`.
+
+- Parallel Cursor lanes are authorized **only when ChatGPT defines them**.
+- One branch, one chat, one focused objective per lane.
+- File / module ownership is exclusive. Do not write into another lane’s owned schema, migration, or shared transaction contract.
+- Do **not** start adjacent runtime work on your own.
+- Planning one dependency level ahead is allowed **only when expressly authorized**. Planning ahead is not implementation authorization.
+- Shared foundations (schema, migration, interfaces, transaction/identity primitives, security boundaries) must freeze before dependent parallel lanes start.
+- Do not implement an entire phase in one huge PR.
+- Safety gates do not change. Do not weaken tests, tenancy, inventory-write safety, or exact-head CI to go faster.
+
 ## Product correction
 
 The application is a full inventory management platform, not only a replenishment report.
