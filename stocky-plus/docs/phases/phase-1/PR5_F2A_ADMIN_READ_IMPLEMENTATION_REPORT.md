@@ -20,10 +20,11 @@ This report records the PR5-F2A admin-read implementation. It does **not** claim
 |---|---|
 | Exact authorized base / `origin/main` | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
 | Runtime/test implementation head | `56039fb91a6586976c1a64b5c78d588195546fbf` |
+| Draft PR | https://github.com/Vedang1998/Stocky/pull/29 (draft, targeting `main`) |
 | Working tree before start | clean on `main` at the authorized base |
 | API target | Shopify Admin GraphQL **2026-07** (`ApiVersion.July26`); not bumped |
 
-The documentation commit that adds this file is a later commit on the same branch. Live PR head is recorded after push / PR open. Do **not** treat this report as independent review.
+Live PR head is the latest commit on `cursor/pr5-f2a-admin-read-3ff2`. Do **not** treat this report as independent review.
 
 ---
 
@@ -91,6 +92,12 @@ Runtime:
 Documentation:
 
 - `stocky-plus/docs/phases/phase-1/PR5_F2A_ADMIN_READ_IMPLEMENTATION_REPORT.md` (this file)
+
+Required shared-file refresh (CI gate, not product behavior):
+
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md`
+
+Exact-head run `32079298106` failed at `tenant:enforcement:preflight` with `tenant:access:inventory:check_failed_exit_1`. Cause: 22 new `app/lib/catalog-facts/admin-read/**` TypeScript files raised the scanner's `scannedFiles` count from 258 to 280. Findings remained 1408, violations remained 0, content digest remained `4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5`. Regenerated with `npm run tenant:access:inventory`. No Prisma/schema change. No new tenant-access exceptions. No merchant-access findings in admin-read.
 
 No `prisma/schema.prisma` change. No migration. No `.env`. No production/merchant data.
 
@@ -237,7 +244,24 @@ exit 0 after `react-router typegen` (full `npm run typecheck` also used during d
 
 `git diff --check` on the working tree: clean.
 
-Full `npm test` / `npm run lint` / `npm run build` / exact-head PR CI: recorded after push in the live PR / a follow-up note in this report if a later docs commit is required. This file does not claim CI green until the exact-head run is observed.
+Full local suite on runtime head `0a6cb39a9712d159e74a363624399aa474951ea0` (also the previous live PR head):
+
+| Command | Exit | Observed |
+|---|---|---|
+| `npm run lint` | 0 | eslint cache run of the app |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| `npx vitest run app/lib/catalog-facts --reporter=verbose` | 0 | **10 files, 48 tests passed** |
+| `npm test` | 0 | **16 files, 104 tests passed** |
+| `npm run build` | 0 | client + SSR production build |
+| `npm run graphql-codegen` | 0 | Admin **2026-07** schema load + document generate |
+| `git diff --check` | 0 | clean |
+
+Exact-head automatic PR CI:
+
+| Run | Head | Event | Result |
+|---|---|---|---|
+| `32079298106` | `0a6cb39a9712d159e74a363624399aa474951ea0` | `pull_request` | **FAILURE (superseded)** — classify SUCCESS, `full_ci=true`, `docs_only=false`; validate failed at Tenant enforcement preflight (`tenant:access:inventory:check_failed_exit_1`); CI Gate FAIL |
+| successor run | live PR head after inventory refresh | `pull_request` | pending observation; this file does not claim CI green until that exact-head run is observed |
 
 ---
 
