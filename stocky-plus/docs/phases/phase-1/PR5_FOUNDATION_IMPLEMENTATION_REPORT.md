@@ -426,3 +426,33 @@ Environment: disposable PostgreSQL 16.14, Redis PONG, Node v22.14.0. Commands us
 | `git diff --check` | clean |
 
 Exact-head CI for the correction head is recorded only after that run completes; this paragraph does not invent a future SHA.
+
+---
+
+## Foundation closeout (post-merge)
+
+This section is appended after ChatGPT technical acceptance, explicit user merge authorization, squash merge, and post-merge main CI. It does **not** rewrite earlier implementation history.
+
+| Field | Value |
+|---|---|
+| Accepted final review-record head | `56c764d00f8350cf22e8b37acf5c61a5b5757e7b` |
+| Initial independent review | `PR5_FOUNDATION_INDEPENDENT_REVIEW.md` — commit `1f561cff9c35f667b37792e75c42be6390d7bb25`, blob `7161c481baf597d54bf57e745f9c06d8812d7468` (never edit) |
+| Correction independent re-review | `PR5_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` — commit `56c764d00f8350cf22e8b37acf5c61a5b5757e7b`, blob `4b73536057fdb43e8f470385fd58b786c522edbe` (never edit) |
+| Independent correction verdict | `APPROVE PR5-F1 FOUNDATION CORRECTION` |
+| Final findings | P0 0 / P1 0 / P2 0 / P3 4 |
+| ChatGPT technical acceptance | **ACCEPT PR5-F1 FOUNDATION** |
+| User merge authorization | Explicit squash-merge authorization for PR #27 |
+| PR #27 | **CLOSED / MERGED** |
+| Squash merge / current `origin/main` | `7827e535415c9acbacfbbb4bdedff08be6650d5c` |
+| Merge timestamp | `2026-08-17T13:48:17Z` |
+| Pre-merge exact-head PR CI | run `31988065401`, event `pull_request`, head `56c764d0…`, **SUCCESS** |
+| Post-merge main CI | run `32036740386`, event `push`, head `7827e535…`, **SUCCESS** (Classify `95408642308`; Full Heavy `95408670595`; CI Gate `95417341718`) |
+| Foundation state | **ACCEPTED / MERGED / FROZEN** |
+| Closure report | `PR5_FOUNDATION_CLOSURE_REPORT.md` |
+| PR 5 overall | **IN PROGRESS** |
+| Phase 1 | **IN PROGRESS** |
+| Downstream PR5 lanes | **NOT STARTED** |
+| Production | **NOT AUTHORIZED** |
+| Inventory-write flags | **DEFAULT OFF** |
+
+The shared schema / tenant / identity / transaction contracts are frozen for consumption by separately authorized downstream PR5 lanes. This report does **not** start those lanes. Do **not** create D-055. Do **not** state PR 5 is complete.
