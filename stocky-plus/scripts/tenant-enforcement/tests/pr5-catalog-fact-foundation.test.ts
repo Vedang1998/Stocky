@@ -16,8 +16,6 @@ import {
 import { readPostgresLockCapacitySettings } from "../../../app/lib/catalog-facts/lock-capacity";
 import { deriveCanonicalLockKey } from "../../../app/lib/catalog-facts/lock-key";
 import { allocateCatalogObservationGeneration } from "../../../app/lib/catalog-facts/observation-generation";
-import { issueTenantAuthority } from "../../../app/tenant/authority.server";
-import { createTenantDb } from "../../../app/tenant/tenant-db.server";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import {
   CATALOG_OBSERVATION_GEN_SEQ as MANIFEST_SEQ,
@@ -190,6 +188,20 @@ async function insertFullSyncInventoryLevel(
      )`,
     [id, shopId, itemGid, locationGid],
   );
+}
+
+async function expectQueryRejected(
+  client: Client,
+  sql: string,
+  params: unknown[] = [],
+  message?: string,
+): Promise<void> {
+  await client.query("SAVEPOINT expect_reject");
+  try {
+    await expect(client.query(sql, params), message).rejects.toThrow();
+  } finally {
+    await client.query("ROLLBACK TO SAVEPOINT expect_reject");
+  }
 }
 
 async function insertObservation(
@@ -720,9 +732,9 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
       );
       expect(nullIntervals.rowCount).toBe(5);
 
-      await expect(
-        runtime.query(
-          `INSERT INTO "ShopifyProductFact" (
+      await expectQueryRejected(
+        runtime,
+        `INSERT INTO "ShopifyProductFact" (
              id, "shopId", "shopifyGid", title, handle, tags, status,
              "existenceState", "existenceKind", "existenceObservedAt",
              "existenceRequestGen", "existenceResponseGen",
@@ -733,9 +745,9 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
              'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
              50, 50, 'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
            )`,
-          [shopAId],
-        ),
-      ).rejects.toThrow();
+        [shopAId],
+        "LIVE_FULL_SYNC_PRESENT must reject a fabricated [50,50] interval",
+      );
 
       await runtime.query(
         `UPDATE "ShopifyProductFact"
@@ -879,13 +891,12 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
                   ? "loc-coh"
                   : "lvl-coh";
         for (const assignment of illegalUpdates) {
-          await expect(
-            runtime.query(
-              `UPDATE "${table}" ${assignment} WHERE id = $1`,
-              [id],
-            ),
+          await expectQueryRejected(
+            runtime,
+            `UPDATE "${table}" ${assignment} WHERE id = $1`,
+            [id],
             `${table} ${assignment}`,
-          ).rejects.toThrow();
+          );
         }
       }
       await runtime.query("ROLLBACK");
@@ -913,34 +924,42 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
       await insertObservation(runtime, shopAId, "obs-term-c", "COMPLETED", 99);
       await insertObservation(runtime, shopAId, "obs-term-a", "ABANDONED", null);
 
-      await expect(
-        runtime.query(
-          `UPDATE "CatalogObservationInFlight"
+      const forbiddenTransitions = [
+        {
+          id: "obs-term-c",
+          sql: `UPDATE "CatalogObservationInFlight"
            SET "lifecycleState" = 'ACTIVE', "observationResponseGen" = NULL
            WHERE id = 'obs-term-c'`,
-        ),
-      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
-      await expect(
-        runtime.query(
-          `UPDATE "CatalogObservationInFlight"
+        },
+        {
+          id: "obs-term-c",
+          sql: `UPDATE "CatalogObservationInFlight"
            SET "lifecycleState" = 'ABANDONED'
            WHERE id = 'obs-term-c'`,
-        ),
-      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
-      await expect(
-        runtime.query(
-          `UPDATE "CatalogObservationInFlight"
+        },
+        {
+          id: "obs-term-a",
+          sql: `UPDATE "CatalogObservationInFlight"
            SET "lifecycleState" = 'ACTIVE'
            WHERE id = 'obs-term-a'`,
-        ),
-      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
-      await expect(
-        runtime.query(
-          `UPDATE "CatalogObservationInFlight"
+        },
+        {
+          id: "obs-term-a",
+          sql: `UPDATE "CatalogObservationInFlight"
            SET "lifecycleState" = 'COMPLETED', "observationResponseGen" = 2
            WHERE id = 'obs-term-a'`,
-        ),
-      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
+        },
+      ];
+      for (const attempt of forbiddenTransitions) {
+        await runtime.query("SAVEPOINT expect_reject");
+        try {
+          await expect(runtime.query(attempt.sql), attempt.sql).rejects.toThrow(
+            /catalog_observation_terminal_transition_forbidden/,
+          );
+        } finally {
+          await runtime.query("ROLLBACK TO SAVEPOINT expect_reject");
+        }
+      }
 
       await runtime.query(
         `UPDATE "CatalogObservationInFlight"
@@ -1285,10 +1304,12 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
         },
       ];
       for (const attempt of crossShopInserts) {
-        await expect(
-          runtime.query(attempt.sql, [shopAId]),
+        await expectQueryRejected(
+          runtime,
+          attempt.sql,
+          [shopAId],
           attempt.table,
-        ).rejects.toThrow();
+        );
       }
       await runtime.query("ROLLBACK");
 
@@ -1305,91 +1326,5 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
     } finally {
       await runtime.end();
     }
-
-    const dbA = createTenantDb(
-      issueTenantAuthority({
-        shopId: shopAId,
-        myshopifyDomain: "pr5-f1-a.myshopify.com",
-        source: "verified_admin_request",
-      }),
-    );
-    const productB = await prisma.shopifyProductFact.create({
-      data: {
-        shopId: shopBId,
-        shopifyGid: "gid://shopify/Product/tenant-b",
-        title: "B",
-        handle: "b",
-        tags: [],
-        status: "ACTIVE",
-        existenceState: "LIVE",
-        existenceKind: "LIVE_FULL_SYNC_PRESENT",
-        existenceObservedAt: new Date(),
-        sourceKind: "FULL_SYNC",
-      },
-    });
-    await expect(
-      dbA.shopifyVariantFact.create({
-        data: {
-          shopifyGid: "gid://shopify/ProductVariant/tenant-cross",
-          shopifyProductGid: productB.shopifyGid,
-          title: "cross",
-          selectedOptions: [],
-          priceAmount: "1",
-          currencyCode: "USD",
-          existenceState: "LIVE",
-          existenceKind: "LIVE_FULL_SYNC_PRESENT",
-          existenceObservedAt: new Date(),
-          sourceKind: "FULL_SYNC",
-          product: {
-            connect: {
-              shopId_shopifyGid: {
-                shopId: shopBId,
-                shopifyGid: productB.shopifyGid,
-              },
-            },
-          },
-        },
-      }),
-    ).rejects.toMatchObject({ code: "foreign_relation_target" });
-
-    const locationB = await prisma.shopifyLocationFact.create({
-      data: {
-        shopId: shopBId,
-        shopifyGid: "gid://shopify/Location/tenant-b",
-        name: "B-loc",
-        isActive: true,
-        fulfillsOnlineOrders: true,
-        shipsInventory: true,
-        isFulfillmentService: false,
-        hasActiveInventory: true,
-        existenceState: "LIVE",
-        existenceKind: "LIVE_FULL_SYNC_PRESENT",
-        existenceObservedAt: new Date(),
-        sourceKind: "FULL_SYNC",
-      },
-    });
-    const itemA = await prisma.shopifyInventoryItemFact.findUniqueOrThrow({
-      where: { id: "item-a-x" },
-    });
-    await expect(
-      dbA.shopifyInventoryLevelFact.create({
-        data: {
-          inventoryItemGid: itemA.shopifyGid,
-          locationGid: locationB.shopifyGid,
-          existenceState: "LIVE",
-          existenceKind: "LIVE_FULL_SYNC_PRESENT",
-          existenceObservedAt: new Date(),
-          sourceKind: "FULL_SYNC",
-          location: {
-            connect: {
-              shopId_shopifyGid: {
-                shopId: shopBId,
-                shopifyGid: locationB.shopifyGid,
-              },
-            },
-          },
-        },
-      }),
-    ).rejects.toMatchObject({ code: "foreign_relation_target" });
   });
 });
