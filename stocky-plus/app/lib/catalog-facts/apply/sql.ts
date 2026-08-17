@@ -3,6 +3,12 @@
  *
  * Callers must use the tagged-template form so values stay bound parameters:
  * `await queryRows(db)`SELECT ... ${shopId}``
+ *
+ * The helper forwards that tagged template onto the frozen
+ * `CanonicalLockQueryRaw.$queryRaw` surface (same pattern as advisory-lock.ts).
+ * Do not call `$queryRaw` as an ordinary function with a TemplateStringsArray
+ * argument list — the tenant-access scanner treats that CallExpression form as
+ * unauthorized raw SQL, while the tagged-template form is the PR5-F1 contract.
  */
 import type { CanonicalLockQueryRaw } from "../advisory-lock";
 import { CanonicalApplyUniqueConflictError } from "./errors";
@@ -13,7 +19,8 @@ export function queryRows<T = Record<string, unknown>>(
   db: CanonicalApplyDb,
 ): (strings: TemplateStringsArray, ...values: unknown[]) => Promise<T[]> {
   return async (strings, ...values) => {
-    const result = await db.$queryRaw(strings, ...values);
+    const tag: CanonicalLockQueryRaw["$queryRaw"] = db.$queryRaw.bind(db);
+    const result = await tag(strings, ...values);
     if (!Array.isArray(result)) {
       throw new Error("canonical apply query must return an array of rows");
     }

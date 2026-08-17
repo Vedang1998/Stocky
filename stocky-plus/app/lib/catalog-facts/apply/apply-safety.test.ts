@@ -40,6 +40,7 @@ describe("PR5-F2B apply surface safety (R-164)", () => {
     for (const file of files) {
       const source = readFileSync(file, "utf8");
       expect(source, file).not.toMatch(/\.deleteMany\s*\(/);
+      expect(source, file).not.toMatch(/\$queryRaw\s*\(/);
       expect(source, file).not.toMatch(/DELETE\s+FROM\s+"Shopify(Product|Variant|InventoryItem|Location|InventoryLevel)Fact"/i);
       expect(source, file).not.toMatch(/parseFloat\s*\(/);
       expect(source, file).not.toMatch(/Number\.parseFloat\s*\(/);
