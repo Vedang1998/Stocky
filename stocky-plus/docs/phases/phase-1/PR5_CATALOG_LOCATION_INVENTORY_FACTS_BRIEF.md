@@ -1,6 +1,6 @@
 # Phase 1 PR 5 Brief — Catalog, Location, and Inventory Facts
 
-**Status:** `PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION IN PROGRESS`
+**Status:** `PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS`
 **Product owner:** ChatGPT
 **Planning decision:** D-053 — Phase 1 PR 5 planning authorization (**ACCEPTED AND MERGED**)
 **Implementation-entry decision:** D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (**EFFECTIVE**)
@@ -20,7 +20,7 @@
 **Inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
-This document is the implementation-grade product-owner planning packet for Phase 1 PR 5, now amended by the **implementation-entry contract** that closes **F-CLAUDE-PR5C8-01** and **F-CLAUDE-PR5C8-02**. D-053 planning is **ACCEPTED AND MERGED**. D-054 is **EFFECTIVE** after PR #26 squash-merge and successful post-merge main CI (condition 9). Live implementation status is **STARTED — PR5-F1 FOUNDATION IN PROGRESS**. This document does **not** authorize production, merchant production data, inventory-write flags, Shopify inventory mutations, later PR5 runtime lanes from this foundation slice, or PR 6. Product rules in later sections are unchanged.
+This document is the implementation-grade product-owner planning packet for Phase 1 PR 5, now amended by the **implementation-entry contract** that closes **F-CLAUDE-PR5C8-01** and **F-CLAUDE-PR5C8-02**. D-053 planning is **ACCEPTED AND MERGED**. D-054 is **EFFECTIVE** after PR #26 squash-merge and successful post-merge main CI (condition 9). Live implementation status is **STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS**. This document does **not** authorize production, merchant production data, inventory-write flags, Shopify inventory mutations, later PR5 runtime lanes from this foundation slice, or PR 6. Product rules in later sections are unchanged.
 
 Historical `stocky-plus/docs/PHASE_1_TECHNICAL_PLAN.md` is **not** implementation authority. This brief does **not** import that plan’s deferred receipt, cost-ledger, entitlement, billing, AI, or app-initiated inventory-event-ledger scope.
 
@@ -419,9 +419,10 @@ architecture; close **F-CLAUDE-PR5C8-01** advisory-lock capacity /
 shared-lock-table operating envelope; close **F-CLAUDE-PR5C8-02**
 pinned lock-key encoding + known-answer vectors; Race **AW**; D1.14
 range P–AW).
-It does not authorize implementation. D-054 is recorded as
-**CONDITIONAL / NOT EFFECTIVE** and does not become effective merely
-because the heading exists. It does not change D-052. It replaces the
+D-054 is **EFFECTIVE**. Current live work is **PR5-F1 foundation
+corrections in progress**. Production remains **NOT AUTHORIZED**.
+Inventory-write flags remain **DEFAULT OFF**. This section does not
+change D-052. It replaces the
 Correction-2 Shop-counter / single-epoch absence-sweep architecture
 with the rules below. It does **not** redesign the accepted
 Correction-5 / Correction-6 / Correction-7 / Correction-8 observation-
@@ -2594,8 +2595,10 @@ a failed check (PR 4 CI pattern).
 
 This section does **not**:
 
-- authorize PR 5 runtime implementation;
-- mark D-054 **EFFECTIVE** (the heading exists as **CONDITIONAL** only);
+- authorize production, merchant production data, inventory-write flags,
+  Shopify inventory mutations, later PR5 runtime lanes, or PR 6;
+- reopen D-054 (it is **EFFECTIVE**; PR5-F1 foundation corrections are
+  in progress);
 - change D-052 / PR 4 control-plane semantics;
 - add Shopify write mutations;
 - couple forecast/ABC into the applicator;
@@ -3191,7 +3194,7 @@ API target remains **2026-07**. This planning task does not bump versions.
 
 ---
 
-## 20. Implementation authorization (D-054 CONDITIONAL — not effective)
+## 20. Implementation authorization (D-054 EFFECTIVE)
 
 **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1.**
 

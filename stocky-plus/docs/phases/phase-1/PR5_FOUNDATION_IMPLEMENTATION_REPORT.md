@@ -333,3 +333,62 @@ Out of scope and not started: Shopify extraction, GraphQL, bulk JSONL, webhook f
 ## 47. Confirmation that no later PR5 runtime lane started
 
 Confirmed. This slice freezes schema, tenancy, identity, observation lifecycle, advisory-lock, generation, and capacity primitives only.
+
+---
+
+## Independent Review Correction Pass
+
+**Reviewed runtime head:** `7cea26ca1199326a600eed2662af5959c47d6bc5`
+**Immutable review commit:** `1f561cff9c35f667b37792e75c42be6390d7bb25`
+**Immutable review blob:** `7161c481baf597d54bf57e745f9c06d8812d7468`
+**Review verdict:** CORRECTIONS REQUIRED (P0=0, P1=1, P2=2, P3=7)
+**This pass:** F-CLAUDE-PR5F1-01 through F-CLAUDE-PR5F1-10
+**Production:** NOT AUTHORIZED
+**Inventory-write flags:** DEFAULT OFF
+**R-157..R-161:** remain **OPEN**
+
+The immutable review artifact was not edited. A later Claude re-review must create a new artifact.
+
+### F-CLAUDE-PR5F1-01 — P1 — resolved (option a)
+
+`existenceRequestGen` / `existenceResponseGen` are nullable `BigInt` on all five canonical fact models. They store only a direct authoritative Shopify existence-observation interval. `LIVE_FULL_SYNC_PRESENT` requires both NULL. Full-sync fence evidence remains `SyncRun.fenceGeneration` + `lastSeenFullSyncRunId`. The unmerged foundation migration was corrected in place. No `[fenceGeneration, fenceGeneration]` interval is invented.
+
+### F-CLAUDE-PR5F1-02 — P2 — resolved
+
+`stocky_catalog_observation_lifecycle_guard` now rejects any lifecycleState change out of `COMPLETED` or `ABANDONED`. Allowed: `ACTIVE -> ACTIVE|COMPLETED|ABANDONED`. Terminal rows may receive unrelated column updates. A retry is a new observation token.
+
+### F-CLAUDE-PR5F1-03 — P2 — resolved
+
+`acquireCanonicalIdentityAdvisoryLock` reads the current transaction `lock_timeout`, sets the advisory bound, acquires `pg_advisory_xact_lock`, and restores the prior value on success. On timeout it throws `CanonicalAdvisoryLockTimeoutError` and does not restore (the transaction is aborted).
+
+### F-CLAUDE-PR5F1-04 — P3 — resolved
+
+The aborted-transaction / rollback contract is documented on `advisory-lock.ts` and in this section. `isLockTimeoutError` is no longer exported; only `CanonicalAdvisoryLockTimeoutError` is public.
+
+### F-CLAUDE-PR5F1-05 — P3 — resolved
+
+If condition A or B cannot accommodate one identity, `evaluateCanonicalLockCapacity` throws `CanonicalLockCapacityInsufficientError`. Input floors: `maxLocksPerTransaction >= 1`, `maxConnections >= 1`, `maxPreparedTransactions >= 0`, requested batch >= 1, concurrency >= 1. Existing 64/100/0, 32/100/0, 16/100/0, 64/5/0 and 64/63 examples are unchanged. R-161 remains OPEN.
+
+### F-CLAUDE-PR5F1-06 — P3 — resolved
+
+Database `*_existence_evidence_coherence_check` constraints on all five fact tables implement the product-owner state/kind/interval/tombstone matrix. TypeScript is not the guard.
+
+### F-CLAUDE-PR5F1-07 — P3 — resolved
+
+Live brief wording that still said D-054 was CONDITIONAL / NOT EFFECTIVE was updated to: D-054 EFFECTIVE; PR5-F1 foundation corrections in progress; production NOT AUTHORIZED; inventory writes DEFAULT OFF. Historical D-054 meaning is unchanged. The immutable review was not edited.
+
+### F-CLAUDE-PR5F1-08 — P3 — resolved
+
+`foundation-safety.test.ts` enumerates production `*.ts` files under `app/lib/catalog-facts/` from the filesystem and excludes `*.test.ts` only.
+
+### F-CLAUDE-PR5F1-09 — P3 — resolved
+
+`readPostgresLockCapacitySettings` parses settings as safe integers and rejects missing / non-numeric values. A disposable-PostgreSQL test reads the live GUCs. Invalid-parse unit tests cover NaN/missing paths.
+
+### F-CLAUDE-PR5F1-10 — P3 — resolved
+
+Restricted `stocky_runtime` clients exercise cross-shop SELECT/INSERT/UPDATE denial on all seven new merchant tables. TenantDb nested `Variant -> Product` and `InventoryLevel -> Location` connects of foreign-shop targets are denied as `foreign_relation_target`.
+
+### Local validation for this pass
+
+Recorded after the correction commands execute. Exact-head CI for the correction head is recorded only after that run completes; this paragraph does not invent a future SHA.
