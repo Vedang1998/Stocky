@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `e1f118bee2c5fcf1ad5efdd24d69110e6373faa99d4ab5a39aba7ed92fb6ce31`
+**Content digest:** `4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5`
 **Scanned files:** 258
-**Findings:** 1394
-**Converted paths:** 448
-**Approved exception findings:** 946
+**Findings:** 1408
+**Converted paths:** 450
+**Approved exception findings:** 958
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -34,13 +34,13 @@ All 26 approved merchant-owned models must appear below.
 | BomComponent | 250 |
 | LowStockAlert | 245 |
 | SyncApplicationReceipt | 264 |
-| ShopifyProductFact | 233 |
-| ShopifyProductCollectionMembership | 233 |
-| ShopifyVariantFact | 233 |
-| ShopifyInventoryItemFact | 233 |
-| ShopifyLocationFact | 233 |
-| ShopifyInventoryLevelFact | 233 |
-| CatalogObservationInFlight | 233 |
+| ShopifyProductFact | 236 |
+| ShopifyProductCollectionMembership | 234 |
+| ShopifyVariantFact | 236 |
+| ShopifyInventoryItemFact | 235 |
+| ShopifyLocationFact | 235 |
+| ShopifyInventoryLevelFact | 235 |
+| CatalogObservationInFlight | 234 |
 | SupplierSkuMapping | 312 |
 | VolumePriceTier | 241 |
 | LeadTimeSnapshot | 264 |
@@ -58,7 +58,7 @@ All 26 approved merchant-owned models must appear below.
 | script | 50 |
 | service | 34 |
 | tenant_infra | 5 |
-| test | 1174 |
+| test | 1188 |
 | worker | 12 |
 
 ## Approved exceptions
@@ -1014,31 +1014,45 @@ All 26 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/nested-selector-auth.test.ts` | 572 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/nested-selector-auth.test.ts` | 584 / `prisma.supplierSkuMapping.findUnique` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-009 | migration_tests | approved exception | allowlist EX-TEST-009 | EX-TEST-009 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/nested-selector-auth.test.ts` | 589 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 26 / `prisma.pOLineItem.deleteMany` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 27 / `prisma.purchaseOrder.deleteMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 28 / `prisma.supplierSkuMapping.deleteMany` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 29 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 51 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 63 / `dbA().supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 73 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 76 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 87 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 95 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 98 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 109 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 127 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 130 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 138 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 149 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 161 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 164 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 173 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 188 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 191 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 200 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 212 / `dbA().supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/nested-writes.test.ts` | 229 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/nested-writes.test.ts` | 233 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 26 / `prisma.shopifyInventoryLevelFact.deleteMany` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 27 / `prisma.shopifyInventoryItemFact.deleteMany` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 28 / `prisma.shopifyVariantFact.deleteMany` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 29 / `prisma.shopifyProductCollectionMembership.deleteMany` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 30 / `prisma.shopifyProductFact.deleteMany` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 31 / `prisma.shopifyLocationFact.deleteMany` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 32 / `prisma.catalogObservationInFlight.deleteMany` | test | CatalogObservationInFlight | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 33 / `prisma.pOLineItem.deleteMany` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 34 / `prisma.purchaseOrder.deleteMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 35 / `prisma.supplierSkuMapping.deleteMany` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 36 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 58 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 70 / `dbA().supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 80 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 83 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 94 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 102 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 105 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 116 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 134 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 137 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 145 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 156 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 168 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 171 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 180 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 195 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 198 / `prisma.supplierSkuMapping.create` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 207 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 219 / `dbA().supplier.create` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 236 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 251 / `dbA().shopifyVariantFact.create` | test | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 272 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 286 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 301 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 315 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 332 / `dbA().shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/nested-writes.test.ts` | 349 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-TEST-008 | migration_tests | approved exception | allowlist EX-TEST-008 | EX-TEST-008 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/nested-writes.test.ts` | 353 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/normalization-consistency.test.ts` | 38 / `prisma.pOLineItem.deleteMany` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-020 | migration_tests | approved exception | allowlist EX-TEST-020 | EX-TEST-020 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/normalization-consistency.test.ts` | 39 / `prisma.purchaseOrder.deleteMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-020 | migration_tests | approved exception | allowlist EX-TEST-020 | EX-TEST-020 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/normalization-consistency.test.ts` | 40 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-020 | migration_tests | approved exception | allowlist EX-TEST-020 | EX-TEST-020 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1612,7 +1626,7 @@ All 26 approved merchant-owned models must appear below.
 ```json
 {
   "scannedFiles": 258,
-  "findings": 1394,
+  "findings": 1408,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1728,6 +1742,6 @@ All 26 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "e1f118bee2c5fcf1ad5efdd24d69110e6373faa99d4ab5a39aba7ed92fb6ce31"
+  "contentDigest": "4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5"
 }
 ```
