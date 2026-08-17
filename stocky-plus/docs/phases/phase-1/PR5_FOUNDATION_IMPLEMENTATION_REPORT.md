@@ -387,8 +387,42 @@ Live brief wording that still said D-054 was CONDITIONAL / NOT EFFECTIVE was upd
 
 ### F-CLAUDE-PR5F1-10 — P3 — resolved
 
-Restricted `stocky_runtime` clients exercise cross-shop SELECT/INSERT/UPDATE denial on all seven new merchant tables. TenantDb nested `Variant -> Product` and `InventoryLevel -> Location` connects of foreign-shop targets are denied as `foreign_relation_target`.
+Restricted `stocky_runtime` clients exercise cross-shop SELECT/INSERT/UPDATE denial on all seven new merchant tables. TenantDb nested `Variant -> Product` and `InventoryLevel -> Location` connects of foreign-shop targets are denied as `foreign_relation_target` in the existing allowlisted nested-write suite.
 
 ### Local validation for this pass
 
-Recorded after the correction commands execute. Exact-head CI for the correction head is recorded only after that run completes; this paragraph does not invent a future SHA.
+Environment: disposable PostgreSQL 16.14, Redis PONG, Node v22.14.0. Commands used a fresh database `stocky_plus_pr5_f1_corr` so the corrected unmerged foundation migration was applied from files rather than skipped as already-applied.
+
+| Command | Result |
+|---|---|
+| `npx prisma generate` | executed, passed (Prisma Client 6.19.3) |
+| `npx prisma validate` | executed, passed |
+| `npx prisma migrate deploy` on fresh `stocky_plus_pr5_f1_corr` | executed, applied 18 migrations including `20260816193000_pr5_catalog_fact_foundation` |
+| nullable existence columns | 5 tables × 2 columns `is_nullable=YES` |
+| existence coherence CHECKs | 5 named `*_existence_evidence_coherence_check` constraints present |
+| `npm run tenant:indexes:apply -- --apply` | exit 0 |
+| `npm run tenant:indexes:verify` | exit 0 |
+| `npm run tenant:schema:drift` | exit 0 |
+| `npm run tenant:enforcement:inventory:check` | exit 0 |
+| `npm run tenant:access:inventory` then `:check` | exit 0; findings 1408; violations 0; digest `4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5` |
+| `npm run tenant:roles:provision -- --apply` | exit 0 |
+| `npm run tenant:enforcement:preflight` | exit 0, 26 merchant tables |
+| `npm run tenant:enforcement:apply -- --apply` | exit 0 |
+| `npm run tenant:roles:verify` | exit 0 |
+| `npm run tenant:rls:verify` | exit 0 |
+| `npm run tenant:immutability:verify` | exit 0 |
+| `npm run tenant:enforcement:verify` | exit 0 |
+| `npm run tenant:enforcement:drift` | exit 0 |
+| `npx vitest run app/lib/catalog-facts/*.test.ts` | 3 files, **15** tests passed (lock-key vectors 1–4 included) |
+| `npx vitest run --config vitest.migrations.config.ts` PR5 foundation + sequence-privilege | 2 files, **21** tests passed |
+| `npm run test:tenant-access -- app/tenant/__tests__/nested-writes.test.ts` | 1 file, **10** tests passed including two PR5 foreign-relation denials |
+| `npm run test:enforcement-definition-drift` | 1 file, **11** tests passed |
+| `npm run test:db-isolation` | 2 files, **19** tests passed |
+| `npm run test:tenant-access` | 34 files, **290** tests passed |
+| `npm run test:migrations -- tenant-expansion.migration.test.ts` | 6 passed; role-absent DROP ROLE blocked locally by cluster-global `stocky_control_plane` dependents in `stocky_plus` / `stocky_plus_ci` (known multi-DB local limitation; CI single-DB remains the proof) |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm run build` | exit 0 |
+| `git diff --check` | clean |
+
+Exact-head CI for the correction head is recorded only after that run completes; this paragraph does not invent a future SHA.
