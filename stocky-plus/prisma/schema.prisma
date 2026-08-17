@@ -1127,8 +1127,8 @@ model ShopifyProductFact {
   existenceState               CatalogExistenceState
   existenceKind                CatalogExistenceKind
   existenceObservedAt          DateTime
-  existenceRequestGen          BigInt
-  existenceResponseGen         BigInt
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
   signalReceivedAt             DateTime?
   lastSignalTopic              String?                             @db.VarChar(128)
   lastSignalDeliveryId         String?                             @db.VarChar(128)
@@ -1203,8 +1203,8 @@ model ShopifyVariantFact {
   existenceState               CatalogExistenceState
   existenceKind                CatalogExistenceKind
   existenceObservedAt          DateTime
-  existenceRequestGen          BigInt
-  existenceResponseGen         BigInt
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
   signalReceivedAt             DateTime?
   lastSignalTopic              String?                             @db.VarChar(128)
   lastSignalDeliveryId         String?                             @db.VarChar(128)
@@ -1262,8 +1262,8 @@ model ShopifyInventoryItemFact {
   existenceState               CatalogExistenceState
   existenceKind                CatalogExistenceKind
   existenceObservedAt          DateTime
-  existenceRequestGen          BigInt
-  existenceResponseGen         BigInt
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
   signalReceivedAt             DateTime?
   lastSignalTopic              String?                             @db.VarChar(128)
   lastSignalDeliveryId         String?                             @db.VarChar(128)
@@ -1322,8 +1322,8 @@ model ShopifyLocationFact {
   existenceState               CatalogExistenceState
   existenceKind                CatalogExistenceKind
   existenceObservedAt          DateTime
-  existenceRequestGen          BigInt
-  existenceResponseGen         BigInt
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
   signalReceivedAt             DateTime?
   lastSignalTopic              String?                             @db.VarChar(128)
   lastSignalDeliveryId         String?                             @db.VarChar(128)
@@ -1404,8 +1404,8 @@ model ShopifyInventoryLevelFact {
   existenceState               CatalogExistenceState
   existenceKind                CatalogExistenceKind
   existenceObservedAt          DateTime
-  existenceRequestGen          BigInt
-  existenceResponseGen         BigInt
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
   signalReceivedAt             DateTime?
   lastSignalTopic              String?                             @db.VarChar(128)
   lastSignalDeliveryId         String?                             @db.VarChar(128)

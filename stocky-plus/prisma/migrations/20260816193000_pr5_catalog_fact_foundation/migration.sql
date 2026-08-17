@@ -67,8 +67,8 @@ CREATE TABLE "ShopifyProductFact" (
     "existenceState" "CatalogExistenceState" NOT NULL,
     "existenceKind" "CatalogExistenceKind" NOT NULL,
     "existenceObservedAt" TIMESTAMP(3) NOT NULL,
-    "existenceRequestGen" BIGINT NOT NULL,
-    "existenceResponseGen" BIGINT NOT NULL,
+    "existenceRequestGen" BIGINT,
+    "existenceResponseGen" BIGINT,
     "signalReceivedAt" TIMESTAMP(3),
     "lastSignalTopic" VARCHAR(128),
     "lastSignalDeliveryId" VARCHAR(128),
@@ -131,8 +131,8 @@ CREATE TABLE "ShopifyVariantFact" (
     "existenceState" "CatalogExistenceState" NOT NULL,
     "existenceKind" "CatalogExistenceKind" NOT NULL,
     "existenceObservedAt" TIMESTAMP(3) NOT NULL,
-    "existenceRequestGen" BIGINT NOT NULL,
-    "existenceResponseGen" BIGINT NOT NULL,
+    "existenceRequestGen" BIGINT,
+    "existenceResponseGen" BIGINT,
     "signalReceivedAt" TIMESTAMP(3),
     "lastSignalTopic" VARCHAR(128),
     "lastSignalDeliveryId" VARCHAR(128),
@@ -181,8 +181,8 @@ CREATE TABLE "ShopifyInventoryItemFact" (
     "existenceState" "CatalogExistenceState" NOT NULL,
     "existenceKind" "CatalogExistenceKind" NOT NULL,
     "existenceObservedAt" TIMESTAMP(3) NOT NULL,
-    "existenceRequestGen" BIGINT NOT NULL,
-    "existenceResponseGen" BIGINT NOT NULL,
+    "existenceRequestGen" BIGINT,
+    "existenceResponseGen" BIGINT,
     "signalReceivedAt" TIMESTAMP(3),
     "lastSignalTopic" VARCHAR(128),
     "lastSignalDeliveryId" VARCHAR(128),
@@ -234,8 +234,8 @@ CREATE TABLE "ShopifyLocationFact" (
     "existenceState" "CatalogExistenceState" NOT NULL,
     "existenceKind" "CatalogExistenceKind" NOT NULL,
     "existenceObservedAt" TIMESTAMP(3) NOT NULL,
-    "existenceRequestGen" BIGINT NOT NULL,
-    "existenceResponseGen" BIGINT NOT NULL,
+    "existenceRequestGen" BIGINT,
+    "existenceResponseGen" BIGINT,
     "signalReceivedAt" TIMESTAMP(3),
     "lastSignalTopic" VARCHAR(128),
     "lastSignalDeliveryId" VARCHAR(128),
@@ -310,8 +310,8 @@ CREATE TABLE "ShopifyInventoryLevelFact" (
     "existenceState" "CatalogExistenceState" NOT NULL,
     "existenceKind" "CatalogExistenceKind" NOT NULL,
     "existenceObservedAt" TIMESTAMP(3) NOT NULL,
-    "existenceRequestGen" BIGINT NOT NULL,
-    "existenceResponseGen" BIGINT NOT NULL,
+    "existenceRequestGen" BIGINT,
+    "existenceResponseGen" BIGINT,
     "signalReceivedAt" TIMESTAMP(3),
     "lastSignalTopic" VARCHAR(128),
     "lastSignalDeliveryId" VARCHAR(128),
@@ -521,40 +521,163 @@ ALTER TABLE "ShopifyInventoryItemFact"
   REFERENCES "ShopifyVariantFact" ("shopId", "shopifyGid")
   ON DELETE NO ACTION ON UPDATE NO ACTION;
 
--- Existence / tombstone honesty
+-- Existence-evidence coherence (F-CLAUDE-PR5F1-01 / F-CLAUDE-PR5F1-06).
+-- existenceRequestGen / existenceResponseGen are a direct Shopify
+-- observation interval only. LIVE_FULL_SYNC_PRESENT carries NULL/NULL;
+-- full-sync fence evidence lives on SyncRun.fenceGeneration.
 ALTER TABLE "ShopifyProductFact"
-  ADD CONSTRAINT "ShopifyProductFact_existence_deletedAt_check"
+  ADD CONSTRAINT "ShopifyProductFact_existence_evidence_coherence_check"
   CHECK (
-    ("existenceState" = 'LIVE' AND "deletedAt" IS NULL)
-    OR ("existenceState" = 'ABSENT')
+    (
+      "existenceKind" = 'LIVE_FULL_SYNC_PRESENT'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NULL
+      AND "existenceResponseGen" IS NULL
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'LIVE_REFETCH'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'ABSENT_CONFIRMED_QUERY'
+      AND "existenceState" = 'ABSENT'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NOT NULL
+      AND "deletionSource" IS NOT NULL
+    )
   );
 
 ALTER TABLE "ShopifyVariantFact"
-  ADD CONSTRAINT "ShopifyVariantFact_existence_deletedAt_check"
+  ADD CONSTRAINT "ShopifyVariantFact_existence_evidence_coherence_check"
   CHECK (
-    ("existenceState" = 'LIVE' AND "deletedAt" IS NULL)
-    OR ("existenceState" = 'ABSENT')
+    (
+      "existenceKind" = 'LIVE_FULL_SYNC_PRESENT'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NULL
+      AND "existenceResponseGen" IS NULL
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'LIVE_REFETCH'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'ABSENT_CONFIRMED_QUERY'
+      AND "existenceState" = 'ABSENT'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NOT NULL
+      AND "deletionSource" IS NOT NULL
+    )
   );
 
 ALTER TABLE "ShopifyInventoryItemFact"
-  ADD CONSTRAINT "ShopifyInventoryItemFact_existence_deletedAt_check"
+  ADD CONSTRAINT "ShopifyInventoryItemFact_existence_evidence_coherence_check"
   CHECK (
-    ("existenceState" = 'LIVE' AND "deletedAt" IS NULL)
-    OR ("existenceState" = 'ABSENT')
+    (
+      "existenceKind" = 'LIVE_FULL_SYNC_PRESENT'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NULL
+      AND "existenceResponseGen" IS NULL
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'LIVE_REFETCH'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'ABSENT_CONFIRMED_QUERY'
+      AND "existenceState" = 'ABSENT'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NOT NULL
+      AND "deletionSource" IS NOT NULL
+    )
   );
 
 ALTER TABLE "ShopifyLocationFact"
-  ADD CONSTRAINT "ShopifyLocationFact_existence_deletedAt_check"
+  ADD CONSTRAINT "ShopifyLocationFact_existence_evidence_coherence_check"
   CHECK (
-    ("existenceState" = 'LIVE' AND "deletedAt" IS NULL)
-    OR ("existenceState" = 'ABSENT')
+    (
+      "existenceKind" = 'LIVE_FULL_SYNC_PRESENT'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NULL
+      AND "existenceResponseGen" IS NULL
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'LIVE_REFETCH'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'ABSENT_CONFIRMED_QUERY'
+      AND "existenceState" = 'ABSENT'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NOT NULL
+      AND "deletionSource" IS NOT NULL
+    )
   );
 
 ALTER TABLE "ShopifyInventoryLevelFact"
-  ADD CONSTRAINT "ShopifyInventoryLevelFact_existence_deletedAt_check"
+  ADD CONSTRAINT "ShopifyInventoryLevelFact_existence_evidence_coherence_check"
   CHECK (
-    ("existenceState" = 'LIVE' AND "deletedAt" IS NULL)
-    OR ("existenceState" = 'ABSENT')
+    (
+      "existenceKind" = 'LIVE_FULL_SYNC_PRESENT'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NULL
+      AND "existenceResponseGen" IS NULL
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'LIVE_REFETCH'
+      AND "existenceState" = 'LIVE'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NULL
+      AND "deletionSource" IS NULL
+    )
+    OR (
+      "existenceKind" = 'ABSENT_CONFIRMED_QUERY'
+      AND "existenceState" = 'ABSENT'
+      AND "existenceRequestGen" IS NOT NULL
+      AND "existenceResponseGen" IS NOT NULL
+      AND "existenceRequestGen" < "existenceResponseGen"
+      AND "deletedAt" IS NOT NULL
+      AND "deletionSource" IS NOT NULL
+    )
   );
 
 
@@ -596,8 +719,11 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
-  IF OLD."lifecycleState" = 'ABANDONED' AND NEW."lifecycleState" = 'ACTIVE' THEN
-    RAISE EXCEPTION 'catalog_observation_abandoned_reactivation_forbidden'
+  -- Terminal states are one-way. Unrelated column updates may keep the
+  -- current terminal lifecycleState. A retry is a new observation token.
+  IF OLD."lifecycleState" IN ('COMPLETED', 'ABANDONED')
+     AND NEW."lifecycleState" IS DISTINCT FROM OLD."lifecycleState" THEN
+    RAISE EXCEPTION 'catalog_observation_terminal_transition_forbidden'
       USING ERRCODE = '23514';
   END IF;
   RETURN NEW;
