@@ -40,7 +40,11 @@ Allowed-path implementation:
 - `stocky-plus/scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts`
 - `stocky-plus/docs/phases/phase-1/PR5_F2B_CANONICAL_APPLICATOR_IMPLEMENTATION_REPORT.md` (this report)
 
-**Not changed:** Prisma schema, foundation migration, feature flags, webhook handlers, GraphQL, JSONL, SyncRun checkpoints, compatibility projection, legacy caches, forecast/ABC, inventory-write flags.
+Shared-file mechanical exception (required for `tenant:access:inventory:check`):
+
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` — new `app/lib/catalog-facts/apply/**` and focused test files raised `scannedFiles` from 258 to 270. Findings stayed 1408, violations stayed 0, content digest unchanged (`4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5`).
+
+**Not changed:** Prisma schema, foundation migration, feature flags, webhook handlers, GraphQL, JSONL, SyncRun checkpoints, compatibility projection, legacy caches, forecast/ABC, inventory-write flags. `allowlist.ts` was not modified.
 
 ## 5. What the applicator does
 
@@ -84,6 +88,10 @@ Environment: disposable PostgreSQL **16.14** (`stocky` / `stocky_plus` on localh
 | `npm test -- app/lib/catalog-facts` | 0 | **34** passed / 5 files |
 | `npm test` | 0 | **90** passed / 11 files |
 | `npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts` | 0 | **19** passed / 1 file |
+| Post-scanner-fix `npm run tenant:access:audit` | 0 | `scannedFiles: 270`, `findings: 1408`, `violations: 0` |
+| Post-scanner-fix `npx vitest run scripts/tenant-access/architecture-audit.test.ts --config vitest.tenant-access.config.ts` | 0 | **25** passed / 1 file |
+| Post-scanner-fix `npm test -- app/lib/catalog-facts` | 0 | **34** passed / 5 files |
+| Post-scanner-fix focused PG tests (`first-inserts a Product` / `fails closed on a missing observation token`) | 0 | **2** passed / 17 skipped |
 | `npm run build` | 0 | executed and passed (`react-router build`) |
 | Full `npm run test:migrations` (entire tenant-enforcement corpus) | — | **not executed locally**; required on exact-head full CI |
 | `npm run lint` (repo-wide) | — | **not executed**; focused eslint on changed paths passed |
