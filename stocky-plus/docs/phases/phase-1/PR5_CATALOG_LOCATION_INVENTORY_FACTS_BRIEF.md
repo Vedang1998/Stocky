@@ -1,6 +1,6 @@
 # Phase 1 PR 5 Brief — Catalog, Location, and Inventory Facts
 
-**Status:** `PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS`
+**Status:** `PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN`
 **Product owner:** ChatGPT
 **Planning decision:** D-053 — Phase 1 PR 5 planning authorization (**ACCEPTED AND MERGED**)
 **Implementation-entry decision:** D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (**EFFECTIVE**)
@@ -11,16 +11,20 @@
 **Final immutable planning review blob:** `0d322db701f5f27b89bc4069e6fb1f3d751d15a3`
 **PR #26:** CLOSED / MERGED
 **PR26 accepted review-record head:** `7171c2cbbdff15ae0d92aa6850a1ae12804db3f4`
-**PR26 squash merge / current `origin/main`:** `ae1b428039152efc6b4a46107e1bcca5eb17586a`
+**PR26 squash merge:** `ae1b428039152efc6b4a46107e1bcca5eb17586a`
 **PR26 post-merge main CI:** run `31966584542` SUCCESS
-**Dependency:** Phase 1 PR 4 FORMALLY CLOSED; PR #24 / D-053 planning CLOSED / MERGED; PR #26 / D-054 implementation-entry CLOSED / MERGED
-**Implementation branch:** `phase-1/catalog-location-inventory-facts`
+**PR #27:** CLOSED / MERGED
+**PR27 accepted review-record head:** `56c764d00f8350cf22e8b37acf5c61a5b5757e7b`
+**PR27 squash merge / current `origin/main`:** `7827e535415c9acbacfbbb4bdedff08be6650d5c`
+**PR27 post-merge main CI:** run `32036740386` SUCCESS
+**Dependency:** Phase 1 PR 4 FORMALLY CLOSED; PR #24 / D-053 planning CLOSED / MERGED; PR #26 / D-054 implementation-entry CLOSED / MERGED; PR #27 / PR5-F1 foundation CLOSED / MERGED / FROZEN
+**Historical implementation branch:** `phase-1/catalog-location-inventory-facts` (merged via PR #27)
 **Shopify Admin API target:** `2026-07` (`ApiVersion.July26`) — do not change
 **Production execution:** NOT AUTHORIZED
 **Inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
-This document is the implementation-grade product-owner planning packet for Phase 1 PR 5, now amended by the **implementation-entry contract** that closes **F-CLAUDE-PR5C8-01** and **F-CLAUDE-PR5C8-02**. D-053 planning is **ACCEPTED AND MERGED**. D-054 is **EFFECTIVE** after PR #26 squash-merge and successful post-merge main CI (condition 9). Live implementation status is **STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS**. This document does **not** authorize production, merchant production data, inventory-write flags, Shopify inventory mutations, later PR5 runtime lanes from this foundation slice, or PR 6. Product rules in later sections are unchanged.
+This document is the implementation-grade product-owner planning packet for Phase 1 PR 5, now amended by the **implementation-entry contract** that closes **F-CLAUDE-PR5C8-01** and **F-CLAUDE-PR5C8-02**. D-053 planning is **ACCEPTED AND MERGED**. D-054 is **EFFECTIVE** after PR #26 squash-merge and successful post-merge main CI (condition 9). Live implementation status is **PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN**. Downstream PR5 implementation is **NOT YET STARTED** in this closeout; it is eligible for product-owner-defined parallel lanes after this closeout. This document does **not** authorize production, merchant production data, inventory-write flags, Shopify inventory mutations, later PR5 runtime lanes from this closeout, or PR 6. Product rules in later sections are unchanged.
 
 Historical `stocky-plus/docs/PHASE_1_TECHNICAL_PLAN.md` is **not** implementation authority. This brief does **not** import that plan’s deferred receipt, cost-ledger, entitlement, billing, AI, or app-initiated inventory-event-ledger scope.
 
@@ -36,15 +40,19 @@ Official Shopify facts below were read from `shopify.dev` Admin GraphQL / REST `
 | Planning decision | **D-053 — Phase 1 PR 5 planning authorization** — **ACCEPTED AND MERGED** |
 | Implementation-entry decision | **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1** — **EFFECTIVE** |
 | D-053 scope | Planning / documentation unit — now merged |
-| Implementation | **STARTED — PR5-F1 FOUNDATION IN PROGRESS** |
+| Implementation | **STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN** |
 | Planning historical base SHA | `de1bb193a43ef87cf59acafeac4c5748e62d423d` (PR #23) |
 | PR #23 | CLOSED / MERGED; historical planning base |
 | PR #24 | **CLOSED / MERGED** |
 | PR #24 squash merge | `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e` |
 | PR #26 | **CLOSED / MERGED** |
 | PR26 accepted review-record head | `7171c2cbbdff15ae0d92aa6850a1ae12804db3f4` |
-| PR26 squash merge / current `origin/main` | `ae1b428039152efc6b4a46107e1bcca5eb17586a` |
+| PR26 squash merge | `ae1b428039152efc6b4a46107e1bcca5eb17586a` |
 | PR26 post-merge main CI | run `31966584542`, event `push`, **SUCCESS** (Classify `95212558793` SUCCESS; CI Gate `95212578956` SUCCESS; Heavy `95212579347` SKIPPED) |
+| PR #27 | **CLOSED / MERGED** |
+| PR27 accepted review-record head | `56c764d00f8350cf22e8b37acf5c61a5b5757e7b` |
+| PR27 squash merge / current `origin/main` | `7827e535415c9acbacfbbb4bdedff08be6650d5c` |
+| PR27 post-merge main CI | run `32036740386`, event `push`, **SUCCESS** (Classify `95408642308` SUCCESS; Full Heavy `95408670595` SUCCESS; CI Gate `95417341718` SUCCESS) |
 | Planning review head before squash | `1691933ec126eed44de81162e8492fb7f0bfae0c` |
 | Final immutable planning review | `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` blob `0d322db701f5f27b89bc4069e6fb1f3d751d15a3` |
 | Independent planning verdict | `APPROVE PR5 PLANNING` |
@@ -53,14 +61,14 @@ Official Shopify facts below were read from `shopify.dev` Admin GraphQL / REST `
 | D-053 vs D-052 | D-053 is **not** a PR 4 correction, acceptance, or closure decision |
 | Phase 1 | **IN PROGRESS** |
 | PR 5 planning | **ACCEPTED AND MERGED** |
-| PR 5 runtime | **STARTED — PR5-F1 FOUNDATION IN PROGRESS** |
-| Implementation branch | `phase-1/catalog-location-inventory-facts` |
+| PR 5 runtime | **STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN**; downstream lanes **NOT YET STARTED** |
+| Historical implementation branch | `phase-1/catalog-location-inventory-facts` (merged via PR #27) |
 | Production execution | Unauthorized |
 | Production backfill / ownership repair / deployment | Unauthorized |
 | Shopify mutation | None in PR 5 |
 | Inventory-write flags | `FEATURE_STOCKTAKE_INVENTORY_WRITES`, `FEATURE_ADJUSTMENT_WRITES`, `FEATURE_RECEIPT_WRITES`, `FEATURE_COST_SYNC`, `FEATURE_TRANSFER_WRITES` remain **DEFAULT OFF** |
 
-PR 5 runtime implementation is **AUTHORIZED** because **D-054** is **EFFECTIVE**. The nine activation conditions below are the historical gate; condition 9 is now satisfied. Current slice: **PR5-F1 foundation only**. Do **not** state PR 5 is complete.
+PR 5 runtime implementation is **AUTHORIZED** because **D-054** is **EFFECTIVE**. The nine activation conditions below are the historical gate; condition 9 is now satisfied. Current slice: **PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN**. Downstream PR5 implementation is **NOT YET STARTED** in this closeout; eligible for product-owner-defined parallel lanes after this closeout. Do **not** state PR 5 is complete.
 
 D-054 became EFFECTIVE only after **all** of the following were true:
 
@@ -74,7 +82,7 @@ D-054 became EFFECTIVE only after **all** of the following were true:
 8. This implementation-entry PR is squash-merged to `main`.
 9. Post-merge main CI succeeds.
 
-Condition 9 is satisfied. `phase-1/catalog-location-inventory-facts` exists and PR5-F1 foundation implementation is in progress.
+Condition 9 is satisfied. PR [#27](https://github.com/Vedang1998/Stocky/pull/27) is **CLOSED / MERGED**. The PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**. Downstream PR5 implementation is **NOT YET STARTED**.
 
 D-054 does **not** authorize production, merchant production data, enabling inventory-write flags, Shopify inventory mutations, Phase 2 runtime, or PR 6 runtime before its own authority.
 
@@ -419,8 +427,11 @@ architecture; close **F-CLAUDE-PR5C8-01** advisory-lock capacity /
 shared-lock-table operating envelope; close **F-CLAUDE-PR5C8-02**
 pinned lock-key encoding + known-answer vectors; Race **AW**; D1.14
 range P–AW).
-D-054 is **EFFECTIVE**. Current live work is **PR5-F1 foundation
-corrections in progress**. Production remains **NOT AUTHORIZED**.
+D-054 is **EFFECTIVE**. Current live work is **PR5-F1 FOUNDATION
+ACCEPTED / MERGED / FROZEN**. Downstream PR5 implementation is
+**NOT YET STARTED** in this closeout; eligible for
+product-owner-defined parallel lanes after this closeout.
+Production remains **NOT AUTHORIZED**.
 Inventory-write flags remain **DEFAULT OFF**. This section does not
 change D-052. It replaces the
 Correction-2 Shop-counter / single-epoch absence-sweep architecture
@@ -2597,8 +2608,8 @@ This section does **not**:
 
 - authorize production, merchant production data, inventory-write flags,
   Shopify inventory mutations, later PR5 runtime lanes, or PR 6;
-- reopen D-054 (it is **EFFECTIVE**; PR5-F1 foundation corrections are
-  in progress);
+- reopen D-054 (it is **EFFECTIVE**; PR5-F1 foundation is
+  **ACCEPTED / MERGED / FROZEN**);
 - change D-052 / PR 4 control-plane semantics;
 - add Shopify write mutations;
 - couple forecast/ABC into the applicator;
@@ -3200,8 +3211,10 @@ API target remains **2026-07**. This planning task does not bump versions.
 
 D-054 is **EFFECTIVE**. PR #26 is **CLOSED / MERGED**. Accepted review-record head `7171c2cbbdff15ae0d92aa6850a1ae12804db3f4`. Squash merge `ae1b428039152efc6b4a46107e1bcca5eb17586a`. Post-merge main CI run `31966584542` **SUCCESS**. Condition 9 is satisfied.
 
-The nine activation conditions remain the historical gate. Current authorized work is **PR5-F1 foundation only**.
+PR #27 is **CLOSED / MERGED**. Accepted review-record head `56c764d00f8350cf22e8b37acf5c61a5b5757e7b`. Squash merge `7827e535415c9acbacfbbb4bdedff08be6650d5c`. Post-merge main CI run `32036740386` **SUCCESS**.
+
+The nine activation conditions remain the historical gate. Current authorized work is **PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN**. Downstream PR5 implementation is **NOT YET STARTED** in this closeout; eligible for product-owner-defined parallel lanes after this closeout.
 
 D-054 does **not** authorize production, merchant production data, enabling inventory-write flags, Shopify inventory mutations, Phase 2 runtime, or PR 6 runtime before its own authority. Do **not** create D-055. Do **not** state PR 5 is complete.
 
-**PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION IN PROGRESS.**
+**PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN.**

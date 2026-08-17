@@ -7,7 +7,9 @@
 
 This operating model changes **calendar execution**, not acceptance standards.
 
-D-054 is **CONDITIONAL** while the implementation-entry PR is open. Recording this document does **not** authorize PR 5 runtime implementation, production, inventory writes, or any later phase.
+**Current authority:** D-054 is **EFFECTIVE**. Implementation-entry PR [#26](https://github.com/Vedang1998/Stocky/pull/26) merged previously. The PR5-F1 foundation is now **ACCEPTED / MERGED / FROZEN** after PR [#27](https://github.com/Vedang1998/Stocky/pull/27). Parallel PR5 runtime lanes may begin only when ChatGPT separately defines them under this operating model. D-054 does **not** authorize production, merchant production data, inventory-write flags, or Shopify inventory mutations.
+
+**Historical (implementation-entry PR, while open):** D-054 was **CONDITIONAL** while the implementation-entry PR was open. Recording this document did **not** by itself authorize PR 5 runtime implementation, production, inventory writes, or any later phase.
 
 ---
 
