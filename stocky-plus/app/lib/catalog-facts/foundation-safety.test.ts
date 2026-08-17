@@ -6,10 +6,19 @@ import { featureFlags } from "../feature-flags.server";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 
-function productionCatalogFactModules(): string[] {
-  return readdirSync(DIR)
-    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-    .sort();
+function productionCatalogFactModules(dir = DIR): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...productionCatalogFactModules(full));
+      continue;
+    }
+    if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+      out.push(path.relative(DIR, full));
+    }
+  }
+  return out.sort();
 }
 
 describe("PR5-F1 foundation safety", () => {
@@ -31,6 +40,8 @@ describe("PR5-F1 foundation safety", () => {
       expect(source, file).not.toMatch(/graphql-request|admin\.shopify/);
       expect(source, file).not.toMatch(/inventoryAdjustQuantities/);
       expect(source, file).not.toMatch(/bulkOperationRunQuery/);
+      expect(source, file).not.toMatch(/inventoryBulkToggleActivation/);
+      expect(source, file).not.toMatch(/inventoryDeactivate/);
     }
   });
 

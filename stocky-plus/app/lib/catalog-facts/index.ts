@@ -38,3 +38,28 @@ export {
   type CanonicalLockKey,
 } from "./lock-key";
 export { allocateCatalogObservationGeneration } from "./observation-generation";
+export {
+  applyCanonicalFacts,
+  applyCanonicalFactsWithRetry,
+  CANONICAL_APPLY_PHYSICAL_DELETE_OPERATIONS,
+  denyCanonicalFactPhysicalDelete,
+  type CanonicalApplyDb,
+} from "./apply/index";
+export {
+  CanonicalApplyAbandonedTokenError,
+  CanonicalApplyBatchExceedsCapacityError,
+  CanonicalApplyError,
+  CanonicalApplyExistenceKindError,
+  CanonicalApplyLeaseInvalidError,
+  CanonicalApplyMissingTokenError,
+  CanonicalApplyMoneyError,
+  CanonicalApplyPhysicalDeleteError,
+  CanonicalApplyUniqueConflictError,
+} from "./apply/errors";
+export type {
+  CanonicalApplyBatchInput,
+  CanonicalApplyBatchResult,
+  CanonicalObservation,
+  DirectCanonicalObservation,
+  FullSyncCanonicalObservation,
+} from "./apply/types";

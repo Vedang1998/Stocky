@@ -1,0 +1,85 @@
+/**
+ * Canonical apply errors. Callers MUST ROLLBACK the tenant transaction
+ * after any of these (the PostgreSQL transaction may already be aborted
+ * for lock-timeout).
+ */
+
+export class CanonicalApplyError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "CanonicalApplyError";
+    this.code = code;
+  }
+}
+
+export class CanonicalApplyMissingTokenError extends CanonicalApplyError {
+  constructor(message = "Canonical apply missing observation token fails closed") {
+    super("canonical_apply_missing_token", message);
+    this.name = "CanonicalApplyMissingTokenError";
+  }
+}
+
+export class CanonicalApplyLeaseInvalidError extends CanonicalApplyError {
+  constructor(message = "Observation lease is invalid at the fact fence") {
+    super("canonical_apply_lease_invalid", message);
+    this.name = "CanonicalApplyLeaseInvalidError";
+  }
+}
+
+export class CanonicalApplyAbandonedTokenError extends CanonicalApplyError {
+  constructor(message = "Abandoned observation token cannot apply") {
+    super("canonical_apply_abandoned_token", message);
+    this.name = "CanonicalApplyAbandonedTokenError";
+  }
+}
+
+export class CanonicalApplyExistenceKindError extends CanonicalApplyError {
+  constructor(kind: string) {
+    super(
+      "canonical_apply_existence_kind_forbidden",
+      `Existence kind ${kind} is not an approved applicator input`,
+    );
+    this.name = "CanonicalApplyExistenceKindError";
+  }
+}
+
+export class CanonicalApplyBatchExceedsCapacityError extends CanonicalApplyError {
+  readonly effectiveCanonicalIdentitiesPerTransaction: number;
+  readonly requested: number;
+
+  constructor(requested: number, effective: number) {
+    super(
+      "canonical_apply_batch_exceeds_capacity",
+      `Canonical apply batch of ${requested} identities exceeds effective cap ${effective}`,
+    );
+    this.name = "CanonicalApplyBatchExceedsCapacityError";
+    this.effectiveCanonicalIdentitiesPerTransaction = effective;
+    this.requested = requested;
+  }
+}
+
+export class CanonicalApplyUniqueConflictError extends CanonicalApplyError {
+  constructor(message = "Unique conflict despite advisory anchor; retry full apply") {
+    super("canonical_apply_unique_conflict", message);
+    this.name = "CanonicalApplyUniqueConflictError";
+  }
+}
+
+export class CanonicalApplyMoneyError extends CanonicalApplyError {
+  constructor(message: string) {
+    super("canonical_apply_money_unsafe", message);
+    this.name = "CanonicalApplyMoneyError";
+  }
+}
+
+export class CanonicalApplyPhysicalDeleteError extends CanonicalApplyError {
+  constructor() {
+    super(
+      "canonical_apply_physical_delete_forbidden",
+      "Canonical apply APIs provide no physical-delete operation (R-164)",
+    );
+    this.name = "CanonicalApplyPhysicalDeleteError";
+  }
+}
