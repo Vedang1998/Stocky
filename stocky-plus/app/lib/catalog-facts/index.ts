@@ -15,10 +15,10 @@ export {
   acquireCanonicalIdentityAdvisoryLock,
   CanonicalAdvisoryLockTenantError,
   CanonicalAdvisoryLockTimeoutError,
-  isLockTimeoutError,
   type CanonicalLockQueryRaw,
 } from "./advisory-lock";
 export {
+  CanonicalLockCapacityInsufficientError,
   evaluateCanonicalLockCapacity,
   readPostgresLockCapacitySettings,
   type LockCapacityEvaluation,
