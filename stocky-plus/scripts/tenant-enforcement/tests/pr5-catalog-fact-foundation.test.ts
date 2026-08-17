@@ -13,8 +13,11 @@ import {
   CATALOG_OBSERVATION_GEN_SEQ,
   CATALOG_OBSERVATION_MAX_LEASE_DURATION_MS,
 } from "../../../app/lib/catalog-facts/constants";
+import { readPostgresLockCapacitySettings } from "../../../app/lib/catalog-facts/lock-capacity";
 import { deriveCanonicalLockKey } from "../../../app/lib/catalog-facts/lock-key";
 import { allocateCatalogObservationGeneration } from "../../../app/lib/catalog-facts/observation-generation";
+import { issueTenantAuthority } from "../../../app/tenant/authority.server";
+import { createTenantDb } from "../../../app/tenant/tenant-db.server";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import {
   CATALOG_OBSERVATION_GEN_SEQ as MANIFEST_SEQ,
@@ -72,6 +75,142 @@ async function controlPlaneClient(): Promise<Client> {
   const client = new Client({ connectionString: url });
   await client.connect();
   return client;
+}
+
+const EXISTENCE_FACT_TABLES = [
+  "ShopifyProductFact",
+  "ShopifyVariantFact",
+  "ShopifyInventoryItemFact",
+  "ShopifyLocationFact",
+  "ShopifyInventoryLevelFact",
+] as const;
+
+async function insertFullSyncProduct(
+  client: Client,
+  shopId: string,
+  id: string,
+  gid: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO "ShopifyProductFact" (
+       id, "shopId", "shopifyGid", title, handle, tags, status,
+       "existenceState", "existenceKind", "existenceObservedAt",
+       "sourceKind", "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, $3, 'title', 'handle', ARRAY[]::text[], 'ACTIVE',
+       'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+       'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+     )`,
+    [id, shopId, gid],
+  );
+}
+
+async function insertFullSyncVariant(
+  client: Client,
+  shopId: string,
+  id: string,
+  gid: string,
+  productGid: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO "ShopifyVariantFact" (
+       id, "shopId", "shopifyGid", "shopifyProductGid", title,
+       "selectedOptions", "priceAmount", "currencyCode",
+       "existenceState", "existenceKind", "existenceObservedAt",
+       "sourceKind", "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, $3, $4, 'variant', '{}'::jsonb, 1.00, 'USD',
+       'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+       'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+     )`,
+    [id, shopId, gid, productGid],
+  );
+}
+
+async function insertFullSyncInventoryItem(
+  client: Client,
+  shopId: string,
+  id: string,
+  gid: string,
+  variantGid: string | null,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO "ShopifyInventoryItemFact" (
+       id, "shopId", "shopifyGid", "shopifyVariantGid", tracked,
+       "requiresShipping", "unitCostAccess",
+       "existenceState", "existenceKind", "existenceObservedAt",
+       "sourceKind", "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, $3, $4, true, true, 'NULL',
+       'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+       'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+     )`,
+    [id, shopId, gid, variantGid],
+  );
+}
+
+async function insertFullSyncLocation(
+  client: Client,
+  shopId: string,
+  id: string,
+  gid: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO "ShopifyLocationFact" (
+       id, "shopId", "shopifyGid", name, "isActive",
+       "fulfillsOnlineOrders", "shipsInventory", "isFulfillmentService",
+       "hasActiveInventory",
+       "existenceState", "existenceKind", "existenceObservedAt",
+       "sourceKind", "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, $3, 'loc', true, true, true, false, true,
+       'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+       'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+     )`,
+    [id, shopId, gid],
+  );
+}
+
+async function insertFullSyncInventoryLevel(
+  client: Client,
+  shopId: string,
+  id: string,
+  itemGid: string,
+  locationGid: string,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO "ShopifyInventoryLevelFact" (
+       id, "shopId", "inventoryItemGid", "locationGid",
+       "existenceState", "existenceKind", "existenceObservedAt",
+       "sourceKind", "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, $3, $4,
+       'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+       'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+     )`,
+    [id, shopId, itemGid, locationGid],
+  );
+}
+
+async function insertObservation(
+  client: Client,
+  shopId: string,
+  id: string,
+  lifecycleState: "ACTIVE" | "COMPLETED" | "ABANDONED",
+  responseGen: number | null,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO "CatalogObservationInFlight" (
+       id, "shopId", "resourceKind", "shopifyGid",
+       "observationRequestGen", "observationResponseGen",
+       "leaseDurationMs", "leaseExpiresAt",
+       "lifecycleState", "createdAt", "updatedAt"
+     ) VALUES (
+       $1, $2, 'Product', $3, 1, $4, 1000, TIMESTAMPTZ '1970-01-01',
+       $5, CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+     )`,
+    [id, shopId, `gid://shopify/Product/${id}`, responseGen, lifecycleState],
+  );
 }
 
 describe.sequential("PR5-F1 catalog fact foundation", () => {
@@ -350,7 +489,7 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
            SET "lifecycleState" = 'ACTIVE'
            WHERE id = 'obs-lease'`,
         ),
-      ).rejects.toThrow(/catalog_observation_abandoned_reactivation_forbidden/);
+      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
       await runtime.query("ROLLBACK");
     } finally {
       await runtime.end();
@@ -521,5 +660,736 @@ describe.sequential("PR5-F1 catalog fact foundation", () => {
     } finally {
       await runtime.end();
     }
+  });
+
+  it("represents full-sync-only first create and later direct LIVE/ABSENT (F-CLAUDE-PR5F1-01)", async () => {
+    const runtime = await getRuntimeClient();
+    try {
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+
+      await insertFullSyncProduct(
+        runtime,
+        shopAId,
+        "prod-full-1",
+        "gid://shopify/Product/full-1",
+      );
+      await insertFullSyncVariant(
+        runtime,
+        shopAId,
+        "var-full-1",
+        "gid://shopify/ProductVariant/full-1",
+        "gid://shopify/Product/full-1",
+      );
+      await insertFullSyncInventoryItem(
+        runtime,
+        shopAId,
+        "item-full-1",
+        "gid://shopify/InventoryItem/full-1",
+        "gid://shopify/ProductVariant/full-1",
+      );
+      await insertFullSyncLocation(
+        runtime,
+        shopAId,
+        "loc-full-1",
+        "gid://shopify/Location/full-1",
+      );
+      await insertFullSyncInventoryLevel(
+        runtime,
+        shopAId,
+        "lvl-full-1",
+        "gid://shopify/InventoryItem/full-1",
+        "gid://shopify/Location/full-1",
+      );
+
+      const nullIntervals = await runtime.query<{ table_name: string }>(
+        `SELECT 'ShopifyProductFact' AS table_name FROM "ShopifyProductFact"
+           WHERE id = 'prod-full-1' AND "existenceRequestGen" IS NULL AND "existenceResponseGen" IS NULL
+         UNION ALL
+         SELECT 'ShopifyVariantFact' FROM "ShopifyVariantFact"
+           WHERE id = 'var-full-1' AND "existenceRequestGen" IS NULL AND "existenceResponseGen" IS NULL
+         UNION ALL
+         SELECT 'ShopifyInventoryItemFact' FROM "ShopifyInventoryItemFact"
+           WHERE id = 'item-full-1' AND "existenceRequestGen" IS NULL AND "existenceResponseGen" IS NULL
+         UNION ALL
+         SELECT 'ShopifyLocationFact' FROM "ShopifyLocationFact"
+           WHERE id = 'loc-full-1' AND "existenceRequestGen" IS NULL AND "existenceResponseGen" IS NULL
+         UNION ALL
+         SELECT 'ShopifyInventoryLevelFact' FROM "ShopifyInventoryLevelFact"
+           WHERE id = 'lvl-full-1' AND "existenceRequestGen" IS NULL AND "existenceResponseGen" IS NULL`,
+      );
+      expect(nullIntervals.rowCount).toBe(5);
+
+      await expect(
+        runtime.query(
+          `INSERT INTO "ShopifyProductFact" (
+             id, "shopId", "shopifyGid", title, handle, tags, status,
+             "existenceState", "existenceKind", "existenceObservedAt",
+             "existenceRequestGen", "existenceResponseGen",
+             "sourceKind", "createdAt", "updatedAt"
+           ) VALUES (
+             'prod-fake-interval', $1, 'gid://shopify/Product/fake-interval',
+             't', 'h', ARRAY[]::text[], 'ACTIVE',
+             'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+             50, 50, 'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+          [shopAId],
+        ),
+      ).rejects.toThrow();
+
+      await runtime.query(
+        `UPDATE "ShopifyProductFact"
+         SET "existenceKind" = 'LIVE_REFETCH',
+             "existenceRequestGen" = 10,
+             "existenceResponseGen" = 11,
+             "sourceKind" = 'INCREMENTAL_REFETCH'
+         WHERE id = 'prod-full-1'`,
+      );
+      const live = await runtime.query<{
+        existenceKind: string;
+        existenceRequestGen: string;
+      }>(
+        `SELECT "existenceKind", "existenceRequestGen"::text
+         FROM "ShopifyProductFact" WHERE id = 'prod-full-1'`,
+      );
+      expect(live.rows[0]?.existenceKind).toBe("LIVE_REFETCH");
+      expect(live.rows[0]?.existenceRequestGen).toBe("10");
+
+      await runtime.query(
+        `UPDATE "ShopifyProductFact"
+         SET "existenceState" = 'ABSENT',
+             "existenceKind" = 'ABSENT_CONFIRMED_QUERY',
+             "existenceRequestGen" = 20,
+             "existenceResponseGen" = 21,
+             "deletedAt" = CLOCK_TIMESTAMP(),
+             "deletionSource" = 'CONFIRMED_QUERY',
+             "sourceKind" = 'RECONCILE'
+         WHERE id = 'prod-full-1'`,
+      );
+      const absent = await runtime.query<{ existenceState: string }>(
+        `SELECT "existenceState" FROM "ShopifyProductFact" WHERE id = 'prod-full-1'`,
+      );
+      expect(absent.rows[0]?.existenceState).toBe("ABSENT");
+
+      const nominated = await runtime.query(
+        `SELECT id FROM "ShopifyVariantFact"
+         WHERE "existenceRequestGen" IS NULL
+            OR "existenceRequestGen" <= 50`,
+      );
+      expect(nominated.rows.map((row) => row.id)).toContain("var-full-1");
+
+      await runtime.query(
+        `INSERT INTO "ShopifyProductFact" (
+           id, "shopId", "shopifyGid", title, handle, tags, status,
+           "existenceState", "existenceKind", "existenceObservedAt",
+           "existenceRequestGen", "existenceResponseGen",
+           "sourceKind", "createdAt", "updatedAt"
+         ) VALUES (
+           'prod-post-fence', $1, 'gid://shopify/Product/post-fence',
+           't', 'h', ARRAY[]::text[], 'ACTIVE',
+           'LIVE', 'LIVE_REFETCH', CLOCK_TIMESTAMP(),
+           80, 81, 'INCREMENTAL_REFETCH', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+         )`,
+        [shopAId],
+      );
+      const protectedRows = await runtime.query(
+        `SELECT id FROM "ShopifyProductFact"
+         WHERE "existenceRequestGen" > 50`,
+      );
+      expect(protectedRows.rows.map((row) => row.id)).toContain(
+        "prod-post-fence",
+      );
+      const nominatedProducts = await runtime.query(
+        `SELECT id FROM "ShopifyProductFact"
+         WHERE "existenceRequestGen" IS NULL
+            OR "existenceRequestGen" <= 50`,
+      );
+      expect(nominatedProducts.rows.map((row) => row.id)).not.toContain(
+        "prod-post-fence",
+      );
+
+      await runtime.query("COMMIT");
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("enforces existence-evidence coherence on all five fact tables (F-CLAUDE-PR5F1-06)", async () => {
+    const runtime = await getRuntimeClient();
+    try {
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+      await insertFullSyncProduct(
+        runtime,
+        shopAId,
+        "prod-coh",
+        "gid://shopify/Product/coh",
+      );
+      await insertFullSyncVariant(
+        runtime,
+        shopAId,
+        "var-coh",
+        "gid://shopify/ProductVariant/coh",
+        "gid://shopify/Product/coh",
+      );
+      await insertFullSyncInventoryItem(
+        runtime,
+        shopAId,
+        "item-coh",
+        "gid://shopify/InventoryItem/coh",
+        null,
+      );
+      await insertFullSyncLocation(
+        runtime,
+        shopAId,
+        "loc-coh",
+        "gid://shopify/Location/coh",
+      );
+      await insertFullSyncInventoryLevel(
+        runtime,
+        shopAId,
+        "lvl-coh",
+        "gid://shopify/InventoryItem/coh",
+        "gid://shopify/Location/coh",
+      );
+
+      const illegalUpdates = [
+        `SET "existenceRequestGen" = 1, "existenceResponseGen" = 2`,
+        `SET "existenceState" = 'ABSENT'`,
+        `SET "existenceKind" = 'LIVE_REFETCH'`,
+        `SET "existenceKind" = 'ABSENT_CONFIRMED_QUERY', "existenceState" = 'ABSENT', "existenceRequestGen" = 1, "existenceResponseGen" = 2, "deletedAt" = CLOCK_TIMESTAMP()`,
+        `SET "existenceKind" = 'LIVE_REFETCH', "existenceRequestGen" = 5, "existenceResponseGen" = 5`,
+        `SET "existenceKind" = 'LIVE_REFETCH', "existenceRequestGen" = 9, "existenceResponseGen" = 1`,
+        `SET "existenceKind" = 'LIVE_REFETCH', "existenceRequestGen" = 1, "existenceResponseGen" = 2, "deletedAt" = CLOCK_TIMESTAMP()`,
+        `SET "existenceKind" = 'ABSENT_CONFIRMED_QUERY', "existenceState" = 'ABSENT', "existenceRequestGen" = 9, "existenceResponseGen" = 1, "deletedAt" = CLOCK_TIMESTAMP(), "deletionSource" = 'CONFIRMED_QUERY'`,
+        `SET "existenceKind" = 'ABSENT_CONFIRMED_QUERY', "existenceState" = 'ABSENT', "existenceRequestGen" = 1, "existenceResponseGen" = 2, "deletionSource" = 'CONFIRMED_QUERY'`,
+        `SET "existenceKind" = 'ABSENT_CONFIRMED_QUERY', "existenceState" = 'LIVE', "existenceRequestGen" = 1, "existenceResponseGen" = 2, "deletedAt" = CLOCK_TIMESTAMP(), "deletionSource" = 'CONFIRMED_QUERY'`,
+        `SET "deletedAt" = CLOCK_TIMESTAMP()`,
+      ];
+
+      for (const table of EXISTENCE_FACT_TABLES) {
+        const id =
+          table === "ShopifyProductFact"
+            ? "prod-coh"
+            : table === "ShopifyVariantFact"
+              ? "var-coh"
+              : table === "ShopifyInventoryItemFact"
+                ? "item-coh"
+                : table === "ShopifyLocationFact"
+                  ? "loc-coh"
+                  : "lvl-coh";
+        for (const assignment of illegalUpdates) {
+          await expect(
+            runtime.query(
+              `UPDATE "${table}" ${assignment} WHERE id = $1`,
+              [id],
+            ),
+            `${table} ${assignment}`,
+          ).rejects.toThrow();
+        }
+      }
+      await runtime.query("ROLLBACK");
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("forbids every terminal observation lifecycle transition (F-CLAUDE-PR5F1-02)", async () => {
+    const runtime = await getRuntimeClient();
+    try {
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+      await insertObservation(runtime, shopAId, "obs-term-active", "ACTIVE", null);
+      await runtime.query(
+        `UPDATE "CatalogObservationInFlight"
+         SET "lifecycleState" = 'COMPLETED', "observationResponseGen" = 7
+         WHERE id = 'obs-term-active'`,
+      );
+      const completed = await runtime.query<{ lifecycleState: string }>(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-term-active'`,
+      );
+      expect(completed.rows[0]?.lifecycleState).toBe("COMPLETED");
+
+      await insertObservation(runtime, shopAId, "obs-term-c", "COMPLETED", 99);
+      await insertObservation(runtime, shopAId, "obs-term-a", "ABANDONED", null);
+
+      await expect(
+        runtime.query(
+          `UPDATE "CatalogObservationInFlight"
+           SET "lifecycleState" = 'ACTIVE', "observationResponseGen" = NULL
+           WHERE id = 'obs-term-c'`,
+        ),
+      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
+      await expect(
+        runtime.query(
+          `UPDATE "CatalogObservationInFlight"
+           SET "lifecycleState" = 'ABANDONED'
+           WHERE id = 'obs-term-c'`,
+        ),
+      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
+      await expect(
+        runtime.query(
+          `UPDATE "CatalogObservationInFlight"
+           SET "lifecycleState" = 'ACTIVE'
+           WHERE id = 'obs-term-a'`,
+        ),
+      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
+      await expect(
+        runtime.query(
+          `UPDATE "CatalogObservationInFlight"
+           SET "lifecycleState" = 'COMPLETED', "observationResponseGen" = 2
+           WHERE id = 'obs-term-a'`,
+        ),
+      ).rejects.toThrow(/catalog_observation_terminal_transition_forbidden/);
+
+      await runtime.query(
+        `UPDATE "CatalogObservationInFlight"
+         SET "correlationId" = 'safe'
+         WHERE id = 'obs-term-c'`,
+      );
+      const kept = await runtime.query<{ lifecycleState: string }>(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-term-c'`,
+      );
+      expect(kept.rows[0]?.lifecycleState).toBe("COMPLETED");
+      await runtime.query("ROLLBACK");
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("restores caller lock_timeout after successful advisory acquisition (F-CLAUDE-PR5F1-03)", async () => {
+    const identity = {
+      shopId: shopAId,
+      resourceKind: "Product" as const,
+      shopifyGid: "gid://shopify/Product/lock-restore",
+    };
+    const runtime = await getRuntimeClient();
+    try {
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+      await runtime.query(`SELECT set_config('lock_timeout', '30s', true)`);
+      await acquireCanonicalIdentityAdvisoryLock(asQueryRaw(runtime), identity, {
+        timeoutMs: 800,
+      });
+      const afterThirty = await runtime.query<{ lock_timeout: string }>(
+        `SHOW lock_timeout`,
+      );
+      expect(afterThirty.rows[0]?.lock_timeout).toBe("30s");
+      await runtime.query("ROLLBACK");
+
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+      await runtime.query(`SELECT set_config('lock_timeout', '0', true)`);
+      await acquireCanonicalIdentityAdvisoryLock(asQueryRaw(runtime), identity, {
+        timeoutMs: 800,
+      });
+      const afterZero = await runtime.query<{ lock_timeout: string }>(
+        `SHOW lock_timeout`,
+      );
+      expect(afterZero.rows[0]?.lock_timeout).toBe("0");
+      await runtime.query("COMMIT");
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("aborts the transaction on advisory timeout and does not leak lock_timeout (F-CLAUDE-PR5F1-03/04)", async () => {
+    const identity = {
+      shopId: shopAId,
+      resourceKind: "Product" as const,
+      shopifyGid: "gid://shopify/Product/lock-abort",
+    };
+    const holder = await getRuntimeClient();
+    const waiter = await getRuntimeClient();
+    try {
+      await holder.query("BEGIN");
+      await setTenant(holder, shopAId);
+      await acquireCanonicalIdentityAdvisoryLock(asQueryRaw(holder), identity, {
+        timeoutMs: 800,
+      });
+
+      await waiter.query("BEGIN");
+      await setTenant(waiter, shopAId);
+      await waiter.query(`SELECT set_config('lock_timeout', '30s', true)`);
+      await expect(
+        acquireCanonicalIdentityAdvisoryLock(asQueryRaw(waiter), identity, {
+          timeoutMs: 800,
+        }),
+      ).rejects.toBeInstanceOf(CanonicalAdvisoryLockTimeoutError);
+
+      await expect(waiter.query(`SELECT 1`)).rejects.toThrow(
+        /current transaction is aborted|25P02/i,
+      );
+      await waiter.query("ROLLBACK");
+
+      const leaked = await waiter.query<{ lock_timeout: string }>(
+        `SHOW lock_timeout`,
+      );
+      expect(leaked.rows[0]?.lock_timeout).toBe("0");
+
+      await waiter.query("BEGIN");
+      await setTenant(waiter, shopAId);
+      await holder.query("ROLLBACK");
+      const retry = await acquireCanonicalIdentityAdvisoryLock(
+        asQueryRaw(waiter),
+        identity,
+        { timeoutMs: 800 },
+      );
+      expect(retry.key1).toBe(deriveCanonicalLockKey(identity).key1);
+      await waiter.query("COMMIT");
+    } finally {
+      await holder.query("ROLLBACK").catch(() => undefined);
+      await waiter.query("ROLLBACK").catch(() => undefined);
+      await holder.end();
+      await waiter.end();
+    }
+  });
+
+  it("does not bound later row locks to the advisory acquisition timeout (F-CLAUDE-PR5F1-03)", async () => {
+    const identity = {
+      shopId: shopAId,
+      resourceKind: "Product" as const,
+      shopifyGid: "gid://shopify/Product/row-lock-bound",
+    };
+    const applier = await getRuntimeClient();
+    const holder = await getRuntimeClient();
+    try {
+      await applier.query("BEGIN");
+      await setTenant(applier, shopAId);
+      await insertFullSyncProduct(
+        applier,
+        shopAId,
+        "prod-row-lock",
+        identity.shopifyGid,
+      );
+      await applier.query("COMMIT");
+
+      await holder.query("BEGIN");
+      await setTenant(holder, shopAId);
+      await holder.query(
+        `SELECT id FROM "ShopifyProductFact" WHERE id = 'prod-row-lock' FOR UPDATE`,
+      );
+
+      await applier.query("BEGIN");
+      await setTenant(applier, shopAId);
+      await applier.query(`SELECT set_config('lock_timeout', '30s', true)`);
+      await acquireCanonicalIdentityAdvisoryLock(asQueryRaw(applier), identity, {
+        timeoutMs: 800,
+      });
+      const restored = await applier.query<{ lock_timeout: string }>(
+        `SHOW lock_timeout`,
+      );
+      expect(restored.rows[0]?.lock_timeout).toBe("30s");
+
+      const rowLock = applier.query(
+        `SELECT id FROM "ShopifyProductFact" WHERE id = 'prod-row-lock' FOR UPDATE`,
+      );
+      let settled = false;
+      void rowLock.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      expect(settled).toBe(false);
+
+      await holder.query("ROLLBACK");
+      await expect(rowLock).resolves.toMatchObject({ rowCount: 1 });
+      await applier.query("ROLLBACK");
+    } finally {
+      await holder.query("ROLLBACK").catch(() => undefined);
+      await applier.query("ROLLBACK").catch(() => undefined);
+      await holder.end();
+      await applier.end();
+    }
+  });
+
+  it("reads PostgreSQL lock capacity settings as safe integers (F-CLAUDE-PR5F1-09)", async () => {
+    const migration = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      const settings = await readPostgresLockCapacitySettings({
+        query: async (sql) => {
+          const result = await migration.query(sql);
+          return { rows: result.rows as Array<Record<string, string>> };
+        },
+      });
+      expect(Number.isSafeInteger(settings.maxLocksPerTransaction)).toBe(true);
+      expect(Number.isSafeInteger(settings.maxConnections)).toBe(true);
+      expect(Number.isSafeInteger(settings.maxPreparedTransactions)).toBe(true);
+      expect(settings.maxLocksPerTransaction).toBeGreaterThanOrEqual(1);
+      expect(settings.maxConnections).toBeGreaterThanOrEqual(1);
+      expect(settings.maxPreparedTransactions).toBeGreaterThanOrEqual(0);
+    } finally {
+      await migration.end();
+    }
+  });
+
+  it("denies cross-shop writes on every new fact table and nested relations (F-CLAUDE-PR5F1-10)", async () => {
+    const runtime = await getRuntimeClient();
+    try {
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+      await insertFullSyncProduct(
+        runtime,
+        shopAId,
+        "prod-a-x",
+        "gid://shopify/Product/a-x",
+      );
+      await insertFullSyncVariant(
+        runtime,
+        shopAId,
+        "var-a-x",
+        "gid://shopify/ProductVariant/a-x",
+        "gid://shopify/Product/a-x",
+      );
+      await insertFullSyncInventoryItem(
+        runtime,
+        shopAId,
+        "item-a-x",
+        "gid://shopify/InventoryItem/a-x",
+        "gid://shopify/ProductVariant/a-x",
+      );
+      await insertFullSyncLocation(
+        runtime,
+        shopAId,
+        "loc-a-x",
+        "gid://shopify/Location/a-x",
+      );
+      await insertFullSyncInventoryLevel(
+        runtime,
+        shopAId,
+        "lvl-a-x",
+        "gid://shopify/InventoryItem/a-x",
+        "gid://shopify/Location/a-x",
+      );
+      await runtime.query(
+        `INSERT INTO "ShopifyProductCollectionMembership" (
+           id, "shopId", "shopifyProductGid", "shopifyCollectionGid",
+           "collectionTitleSnapshot", "createdAt", "updatedAt"
+         ) VALUES (
+           'mem-a-x', $1, 'gid://shopify/Product/a-x',
+           'gid://shopify/Collection/a-x', 'c', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+         )`,
+        [shopAId],
+      );
+      await insertObservation(runtime, shopAId, "obs-a-x", "ACTIVE", null);
+      await runtime.query("COMMIT");
+
+      const tables = [
+        "ShopifyProductFact",
+        "ShopifyProductCollectionMembership",
+        "ShopifyVariantFact",
+        "ShopifyInventoryItemFact",
+        "ShopifyLocationFact",
+        "ShopifyInventoryLevelFact",
+        "CatalogObservationInFlight",
+      ] as const;
+
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopBId);
+      for (const table of tables) {
+        const selected = await runtime.query(`SELECT id FROM "${table}"`);
+        expect(selected.rowCount, table).toBe(0);
+      }
+      const crossShopInserts: Array<{ table: string; sql: string }> = [
+        {
+          table: "ShopifyProductFact",
+          sql: `INSERT INTO "ShopifyProductFact" (
+             id, "shopId", "shopifyGid", title, handle, tags, status,
+             "existenceState", "existenceKind", "existenceObservedAt",
+             "sourceKind", "createdAt", "updatedAt"
+           ) VALUES (
+             'prod-cross', $1, 'gid://shopify/Product/cross',
+             't', 'h', ARRAY[]::text[], 'ACTIVE',
+             'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+             'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+        {
+          table: "ShopifyProductCollectionMembership",
+          sql: `INSERT INTO "ShopifyProductCollectionMembership" (
+             id, "shopId", "shopifyProductGid", "shopifyCollectionGid",
+             "collectionTitleSnapshot", "createdAt", "updatedAt"
+           ) VALUES (
+             'mem-cross', $1, 'gid://shopify/Product/a-x',
+             'gid://shopify/Collection/cross', 'c', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+        {
+          table: "ShopifyVariantFact",
+          sql: `INSERT INTO "ShopifyVariantFact" (
+             id, "shopId", "shopifyGid", "shopifyProductGid", title,
+             "selectedOptions", "priceAmount", "currencyCode",
+             "existenceState", "existenceKind", "existenceObservedAt",
+             "sourceKind", "createdAt", "updatedAt"
+           ) VALUES (
+             'var-cross', $1, 'gid://shopify/ProductVariant/cross',
+             'gid://shopify/Product/a-x', 'v', '{}'::jsonb, 1.00, 'USD',
+             'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+             'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+        {
+          table: "ShopifyInventoryItemFact",
+          sql: `INSERT INTO "ShopifyInventoryItemFact" (
+             id, "shopId", "shopifyGid", tracked, "requiresShipping",
+             "unitCostAccess", "existenceState", "existenceKind",
+             "existenceObservedAt", "sourceKind", "createdAt", "updatedAt"
+           ) VALUES (
+             'item-cross', $1, 'gid://shopify/InventoryItem/cross',
+             true, true, 'NULL', 'LIVE', 'LIVE_FULL_SYNC_PRESENT',
+             CLOCK_TIMESTAMP(), 'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+        {
+          table: "ShopifyLocationFact",
+          sql: `INSERT INTO "ShopifyLocationFact" (
+             id, "shopId", "shopifyGid", name, "isActive",
+             "fulfillsOnlineOrders", "shipsInventory", "isFulfillmentService",
+             "hasActiveInventory", "existenceState", "existenceKind",
+             "existenceObservedAt", "sourceKind", "createdAt", "updatedAt"
+           ) VALUES (
+             'loc-cross', $1, 'gid://shopify/Location/cross', 'loc', true,
+             true, true, false, true, 'LIVE', 'LIVE_FULL_SYNC_PRESENT',
+             CLOCK_TIMESTAMP(), 'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+        {
+          table: "ShopifyInventoryLevelFact",
+          sql: `INSERT INTO "ShopifyInventoryLevelFact" (
+             id, "shopId", "inventoryItemGid", "locationGid",
+             "existenceState", "existenceKind", "existenceObservedAt",
+             "sourceKind", "createdAt", "updatedAt"
+           ) VALUES (
+             'lvl-cross', $1, 'gid://shopify/InventoryItem/a-x',
+             'gid://shopify/Location/a-x', 'LIVE', 'LIVE_FULL_SYNC_PRESENT',
+             CLOCK_TIMESTAMP(), 'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+        {
+          table: "CatalogObservationInFlight",
+          sql: `INSERT INTO "CatalogObservationInFlight" (
+             id, "shopId", "resourceKind", "shopifyGid",
+             "observationRequestGen", "leaseDurationMs", "leaseExpiresAt",
+             "lifecycleState", "createdAt", "updatedAt"
+           ) VALUES (
+             'obs-cross-f10', $1, 'Product', 'gid://shopify/Product/cross-obs',
+             1, 1000, TIMESTAMPTZ '1970-01-01',
+             'ACTIVE', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+           )`,
+        },
+      ];
+      for (const attempt of crossShopInserts) {
+        await expect(
+          runtime.query(attempt.sql, [shopAId]),
+          attempt.table,
+        ).rejects.toThrow();
+      }
+      await runtime.query("ROLLBACK");
+
+      await runtime.query("BEGIN");
+      await setTenant(runtime, shopAId);
+      for (const table of tables) {
+        const updated = await runtime.query(
+          `UPDATE "${table}" SET "updatedAt" = CLOCK_TIMESTAMP() WHERE "shopId" = $1`,
+          [shopBId],
+        );
+        expect(updated.rowCount, table).toBe(0);
+      }
+      await runtime.query("ROLLBACK");
+    } finally {
+      await runtime.end();
+    }
+
+    const dbA = createTenantDb(
+      issueTenantAuthority({
+        shopId: shopAId,
+        myshopifyDomain: "pr5-f1-a.myshopify.com",
+        source: "verified_admin_request",
+      }),
+    );
+    const productB = await prisma.shopifyProductFact.create({
+      data: {
+        shopId: shopBId,
+        shopifyGid: "gid://shopify/Product/tenant-b",
+        title: "B",
+        handle: "b",
+        tags: [],
+        status: "ACTIVE",
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    await expect(
+      dbA.shopifyVariantFact.create({
+        data: {
+          shopifyGid: "gid://shopify/ProductVariant/tenant-cross",
+          shopifyProductGid: productB.shopifyGid,
+          title: "cross",
+          selectedOptions: [],
+          priceAmount: "1",
+          currencyCode: "USD",
+          existenceState: "LIVE",
+          existenceKind: "LIVE_FULL_SYNC_PRESENT",
+          existenceObservedAt: new Date(),
+          sourceKind: "FULL_SYNC",
+          product: {
+            connect: {
+              shopId_shopifyGid: {
+                shopId: shopBId,
+                shopifyGid: productB.shopifyGid,
+              },
+            },
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "foreign_relation_target" });
+
+    const locationB = await prisma.shopifyLocationFact.create({
+      data: {
+        shopId: shopBId,
+        shopifyGid: "gid://shopify/Location/tenant-b",
+        name: "B-loc",
+        isActive: true,
+        fulfillsOnlineOrders: true,
+        shipsInventory: true,
+        isFulfillmentService: false,
+        hasActiveInventory: true,
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    const itemA = await prisma.shopifyInventoryItemFact.findUniqueOrThrow({
+      where: { id: "item-a-x" },
+    });
+    await expect(
+      dbA.shopifyInventoryLevelFact.create({
+        data: {
+          inventoryItemGid: itemA.shopifyGid,
+          locationGid: locationB.shopifyGid,
+          existenceState: "LIVE",
+          existenceKind: "LIVE_FULL_SYNC_PRESENT",
+          existenceObservedAt: new Date(),
+          sourceKind: "FULL_SYNC",
+          location: {
+            connect: {
+              shopId_shopifyGid: {
+                shopId: shopBId,
+                shopifyGid: locationB.shopifyGid,
+              },
+            },
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "foreign_relation_target" });
   });
 });
