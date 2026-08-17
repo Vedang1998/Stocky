@@ -57,4 +57,44 @@ describe.sequential("sequence privilege enforcement", () => {
       await client.end();
     }
   });
+
+  it("allows USAGE-only on catalog observation sequence and rejects UPDATE/setval drift", async () => {
+    const client = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      const clean = await verifyRoles(client);
+      expect(clean.ok).toBe(true);
+      expect(
+        clean.failures.some((failure) =>
+          failure.includes("stocky_catalog_observation_gen_seq"),
+        ),
+      ).toBe(false);
+
+      await client.query(
+        `GRANT UPDATE ON SEQUENCE public.stocky_catalog_observation_gen_seq TO stocky_runtime`,
+      );
+      const drifted = await verifyRoles(client);
+      expect(drifted.ok).toBe(false);
+      expect(
+        drifted.failures.some((failure) =>
+          failure.startsWith(
+            "excess_sequence_priv:stocky_catalog_observation_gen_seq:stocky_runtime:UPDATE:",
+          ),
+        ),
+      ).toBe(true);
+
+      await client.query(
+        `REVOKE UPDATE ON SEQUENCE public.stocky_catalog_observation_gen_seq FROM stocky_runtime`,
+      );
+      expect((await verifyRoles(client)).ok).toBe(true);
+    } finally {
+      await client
+        .query(
+          `REVOKE UPDATE ON SEQUENCE public.stocky_catalog_observation_gen_seq FROM stocky_runtime`,
+        )
+        .catch(() => undefined);
+      await client.end();
+    }
+  });
 });

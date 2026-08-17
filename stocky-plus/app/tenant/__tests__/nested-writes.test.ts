@@ -23,6 +23,13 @@ describe("nested write ownership validation (C-05)", () => {
   });
 
   beforeEach(async () => {
+    await prisma.shopifyInventoryLevelFact.deleteMany();
+    await prisma.shopifyInventoryItemFact.deleteMany();
+    await prisma.shopifyVariantFact.deleteMany();
+    await prisma.shopifyProductCollectionMembership.deleteMany();
+    await prisma.shopifyProductFact.deleteMany();
+    await prisma.shopifyLocationFact.deleteMany();
+    await prisma.catalogObservationInFlight.deleteMany();
     await prisma.pOLineItem.deleteMany();
     await prisma.purchaseOrder.deleteMany();
     await prisma.supplierSkuMapping.deleteMany();
@@ -223,6 +230,119 @@ describe("nested write ownership validation (C-05)", () => {
     });
     expect(row.skuMappings).toHaveLength(1);
     expect(row.skuMappings[0].shopId).toBe(shopAId);
+  });
+
+  it("PR5 Variant -> Product foreign connect is denied (F-CLAUDE-PR5F1-10)", async () => {
+    const productB = await prisma.shopifyProductFact.create({
+      data: {
+        shopId: shopBId,
+        shopifyGid: "gid://shopify/Product/pr5-nested-b",
+        title: "B",
+        handle: "pr5-nested-b",
+        tags: [],
+        status: "ACTIVE",
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    await expect(
+      dbA().shopifyVariantFact.create({
+        data: {
+          shopifyGid: "gid://shopify/ProductVariant/pr5-nested-cross",
+          shopifyProductGid: productB.shopifyGid,
+          title: "cross",
+          selectedOptions: [],
+          priceAmount: "1",
+          currencyCode: "USD",
+          existenceState: "LIVE",
+          existenceKind: "LIVE_FULL_SYNC_PRESENT",
+          existenceObservedAt: new Date(),
+          sourceKind: "FULL_SYNC",
+          product: {
+            connect: { id: productB.id },
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "foreign_relation_target" });
+  });
+
+  it("PR5 InventoryLevel -> Location foreign connect is denied (F-CLAUDE-PR5F1-10)", async () => {
+    const productA = await prisma.shopifyProductFact.create({
+      data: {
+        shopId: shopAId,
+        shopifyGid: "gid://shopify/Product/pr5-level-a",
+        title: "A",
+        handle: "pr5-level-a",
+        tags: [],
+        status: "ACTIVE",
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    const variantA = await prisma.shopifyVariantFact.create({
+      data: {
+        shopId: shopAId,
+        shopifyGid: "gid://shopify/ProductVariant/pr5-level-a",
+        shopifyProductGid: productA.shopifyGid,
+        title: "A",
+        selectedOptions: {},
+        priceAmount: "1",
+        currencyCode: "USD",
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    const itemA = await prisma.shopifyInventoryItemFact.create({
+      data: {
+        shopId: shopAId,
+        shopifyGid: "gid://shopify/InventoryItem/pr5-level-a",
+        shopifyVariantGid: variantA.shopifyGid,
+        tracked: true,
+        requiresShipping: true,
+        unitCostAccess: "NULL",
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    const locationB = await prisma.shopifyLocationFact.create({
+      data: {
+        shopId: shopBId,
+        shopifyGid: "gid://shopify/Location/pr5-level-b",
+        name: "B-loc",
+        isActive: true,
+        fulfillsOnlineOrders: true,
+        shipsInventory: true,
+        isFulfillmentService: false,
+        hasActiveInventory: true,
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date(),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    await expect(
+      dbA().shopifyInventoryLevelFact.create({
+        data: {
+          inventoryItemGid: itemA.shopifyGid,
+          locationGid: locationB.shopifyGid,
+          existenceState: "LIVE",
+          existenceKind: "LIVE_FULL_SYNC_PRESENT",
+          existenceObservedAt: new Date(),
+          sourceKind: "FULL_SYNC",
+          location: {
+            connect: { id: locationB.id },
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "foreign_relation_target" });
   });
 
   it("unknown nested relation operation fails closed", async () => {

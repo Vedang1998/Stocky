@@ -45,7 +45,10 @@ const ALL_MIGRATION_NAMES = [
   "20260807150000_sync_control_plane_d049_dispatch_schedule",
   "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
   "20260812230000_sync_control_plane_d051_readiness_lock_scope",
+  "20260816193000_pr5_catalog_fact_foundation",
 ] as const;
+
+const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
 
 /**
  * Control-plane tables that receive stocky_control_plane policies when that
@@ -281,28 +284,9 @@ async function applyCompatibilityIndexes() {
  * before tenant_expansion creates Shop.
  */
 function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
-  const afterInit = [
-    "20260730160000_tenant_expansion",
-    "20260730160100_tenant_compatibility_indexes",
-    "20260730210000_tenant_backfill_correction",
-    "20260730220000_tenant_ownership_issue_detection",
-    "20260803120000_tenant_enforcement_helpers",
-    "20260804180000_sync_control_plane",
-    "20260804210000_sync_control_plane_correction",
-    "20260804220000_sync_control_plane_correction_defaults",
-    "20260805120000_sync_control_plane_second_correction",
-    "20260805130000_sync_control_plane_receipt_probe_revoke",
-    "20260805140000_sync_control_plane_enqueued_failed",
-    "20260806220000_sync_control_plane_d047_fair_claim_indexes",
-    "20260807010000_sync_control_plane_d048_dispatch_ready_shop",
-    "20260807150000_sync_control_plane_d049_dispatch_schedule",
-    "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
-    "20260812230000_sync_control_plane_d051_readiness_lock_scope",
-  ] as const;
-
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
   mkdirSync(parked, { recursive: true });
-  const parkedPaths = afterInit.map((name) => ({
+  const parkedPaths = AFTER_INIT_MIGRATION_NAMES.map((name) => ({
     name,
     src: join(MIGRATIONS_DIR, name),
     dest: join(parked, name),
@@ -377,6 +361,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(restOut).toContain(
       "20260804220000_sync_control_plane_correction_defaults",
     );
+    expect(initOut).not.toContain("20260816193000_pr5_catalog_fact_foundation");
+    expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
@@ -395,6 +381,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260807150000_sync_control_plane_d049_dispatch_schedule",
         "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
+        "20260816193000_pr5_catalog_fact_foundation",
         "migration_lock.toml",
       ]),
     );
@@ -439,6 +426,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain(
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
       );
+      expect(initOut).not.toContain("20260816193000_pr5_catalog_fact_foundation");
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -469,6 +457,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain(
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
       );
+      expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -523,6 +512,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain(
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
       );
+      expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -562,7 +552,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(existsSync(join(APP_ROOT, ".tmp-parked-migrations"))).toBe(false);
   }, 180_000);
 
-  it("preserves legacy shop, Session shape, nullable shopId, indexes; PR4 control-plane RLS only; no composite FKs; flags OFF", async () => {
+  it("preserves legacy shop, Session shape, nullable shopId, indexes; PR4 control-plane RLS only; PR5 composite FKs only on canonical facts; flags OFF", async () => {
     await resetPublicSchema(prisma);
     migrateDeploy();
     await applyCompatibilityIndexes();
@@ -684,9 +674,18 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       Array<{ conname: string }>
     >(
       `SELECT conname FROM pg_constraint
-       WHERE contype = 'f' AND array_length(conkey, 1) > 1`,
+       WHERE contype = 'f' AND array_length(conkey, 1) > 1
+       ORDER BY conname`,
     );
-    expect(compositeFks.length).toBe(0);
+    // PR1–PR4 left zero composite FKs. PR5-F1 adds tenant-leading identity FKs
+    // on canonical fact tables only. Legacy merchant tables stay free of them.
+    expect(compositeFks.map((row) => row.conname)).toEqual([
+      "ShopifyInventoryItemFact_shopId_shopifyVariantGid_fkey",
+      "ShopifyInventoryLevelFact_shopId_inventoryItemGid_fkey",
+      "ShopifyInventoryLevelFact_shopId_locationGid_fkey",
+      "ShopifyProductCollectionMembership_shopId_shopifyProductGi_fkey",
+      "ShopifyVariantFact_shopId_shopifyProductGid_fkey",
+    ]);
 
     delete process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES;
     delete process.env.FEATURE_ADJUSTMENT_WRITES;

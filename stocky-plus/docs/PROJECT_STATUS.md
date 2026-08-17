@@ -1,7 +1,7 @@
 # Project Status
 
-**Updated:** 2026-08-16
-**Current stage:** Phase 1 PR 5 PLANNING ACCEPTED AND MERGED — IMPLEMENTATION-ENTRY IN PROGRESS — RUNTIME NOT AUTHORIZED
+**Updated:** 2026-08-17
+**Current stage:** Phase 1 PR 5 IMPLEMENTATION STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
@@ -12,7 +12,9 @@
 **Phase 1 PR 4:** FORMALLY CLOSED
 **Phase 1:** IN PROGRESS
 **PR 5 planning:** ACCEPTED AND MERGED (D-053 / PR #24)
-**PR 5 implementation:** NOT STARTED / NOT AUTHORIZED YET — D-054 CONDITIONAL / NOT EFFECTIVE
+**PR 5 implementation-entry:** ACCEPTED AND MERGED (D-054 / PR #26)
+**PR 5 implementation:** STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS
+**D-054:** EFFECTIVE
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -40,13 +42,13 @@
 | Post-merge main CI (PR #20) | run `31756319986`, job `94632696479`, success at `f618103…` |
 | Post-merge main CI (PR #22) | run `31768571828`, job `94669500249`, success at `99d48db…` |
 | Closure report | `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md` |
-| Next gate | **PR 5 IMPLEMENTATION-ENTRY IN PROGRESS** — D-054 **CONDITIONAL / NOT EFFECTIVE**. D-052 remains PR 4 technical-acceptance authority. D-053 remains PR 5 planning-acceptance authority. |
+| Next gate | **PR5-F1 FOUNDATION IN PROGRESS** — D-054 **EFFECTIVE**. D-052 remains PR 4 technical-acceptance authority. D-053 remains PR 5 planning-acceptance authority. |
 | PR 5 planning | ACCEPTED AND MERGED |
-| PR 5 implementation | NOT STARTED / NOT AUTHORIZED YET |
+| PR 5 implementation | STARTED — PR5-F1 FOUNDATION IN PROGRESS |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
-D-052 remains technical acceptance of the reviewed PR 4 repository implementation. PR #20 is **CLOSED / MERGED**. PR #22 is **CLOSED / MERGED**. PR #23 is **CLOSED / MERGED**. PR #24 is **CLOSED / MERGED**. Phase 1 PR 4 is **FORMALLY CLOSED**. Do **not** state that Phase 1 is complete. Do **not** start PR 5 runtime implementation. Do **not** mark D-054 effective while the implementation-entry PR is open.
+D-052 remains technical acceptance of the reviewed PR 4 repository implementation. PR #20 is **CLOSED / MERGED**. PR #22 is **CLOSED / MERGED**. PR #23 is **CLOSED / MERGED**. PR #24 is **CLOSED / MERGED**. PR #26 is **CLOSED / MERGED**. Phase 1 PR 4 is **FORMALLY CLOSED**. Do **not** state that Phase 1 is complete. Do **not** state that PR 5 is complete. Production remains unauthorized.
 
 ## Phase 1 PR 5 D-053 (planning accepted and merged)
 
@@ -65,29 +67,38 @@ D-052 remains technical acceptance of the reviewed PR 4 repository implementatio
 | Residual findings | **F-CLAUDE-PR5C8-01** P2; **F-CLAUDE-PR5C8-02** P3 — resolved in the implementation-entry contract; not runtime-closed |
 | Post-merge main CI (PR #24) | run `31959761072`, event `push`, head `edabd8de…`, **SUCCESS** (Classify `95195836526` SUCCESS; CI Gate `95195850559` SUCCESS; Heavy `95195850790` SKIPPED) |
 | Primary brief | `phases/phase-1/PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` |
-| Implementation | **NOT STARTED / NOT AUTHORIZED YET** |
-| Implementation branch | **Not created** (proposed later name `phase-1/catalog-location-inventory-facts`) |
+| Implementation | STARTED — PR5-F1 FOUNDATION IN PROGRESS (authorized by later **D-054 EFFECTIVE**) |
+| Implementation branch | `phase-1/catalog-location-inventory-facts` |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
-D-053 is **not** a PR 4 correction, acceptance, or closure decision. Planning is **ACCEPTED AND MERGED**. Runtime implementation remains unauthorized until **D-054** activation conditions complete.
+D-053 is **not** a PR 4 correction, acceptance, or closure decision. Planning is **ACCEPTED AND MERGED**. D-054 condition 9 later completed; see the D-054 EFFECTIVE record below.
 
-## Phase 1 PR 5 D-054 (conditional — not effective)
+## Phase 1 PR 5 D-054 (EFFECTIVE)
 
 | Field | Value |
 |---|---|
 | Decision | **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1** |
 | Exact wording | Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1. |
-| Status | **CONDITIONAL / NOT EFFECTIVE** — the heading is not authority |
+| Status | **EFFECTIVE** |
 | Canonical governance | `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md` |
-| F-CLAUDE-PR5C8-01 | Resolved in the implementation-entry contract (capacity envelope; Race AW). **R-161 OPEN.** |
+| PR #26 | **CLOSED / MERGED** |
+| PR26 accepted review-record head | `7171c2cbbdff15ae0d92aa6850a1ae12804db3f4` |
+| PR26 squash merge / current `origin/main` | `ae1b428039152efc6b4a46107e1bcca5eb17586a` |
+| PR26 post-merge main CI | run `31966584542`, event `push`, head `ae1b4280…`, **SUCCESS** |
+| Classify job | `95212558793` SUCCESS |
+| CI Gate job | `95212578956` SUCCESS |
+| Heavy job | `95212579347` SKIPPED because PR26 was docs-only |
+| Condition 9 | Satisfied. D-054 is therefore **EFFECTIVE**. |
+| F-CLAUDE-PR5C8-01 | Resolved in the implementation-entry contract (capacity envelope; Race AW). **R-161 remains OPEN.** |
 | F-CLAUDE-PR5C8-02 | Resolved in the implementation-entry contract (pinned encoding + known-answer vectors). **R-160 remains OPEN.** |
-| Implementation | **NOT STARTED / NOT AUTHORIZED YET** |
-| Implementation branch | **Absent** — create only after D-054 condition 9 |
+| Implementation | **STARTED — PR5-F1 FOUNDATION IN PROGRESS** |
+| Implementation branch | `phase-1/catalog-location-inventory-facts` |
+| Foundation report | `phases/phase-1/PR5_FOUNDATION_IMPLEMENTATION_REPORT.md` |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
-D-054 becomes **EFFECTIVE** only after independent approval of this implementation-entry PR, ChatGPT merge authorization, squash-merge to `main`, and successful post-merge main CI. Do **not** mark it effective while this PR is open. Do **not** create D-055.
+D-054 is **EFFECTIVE**. PR 5 runtime implementation is authorized for the approved foundation slice only. Do **not** create D-055. Do **not** state PR 5 is complete. Do **not** close Phase 1. Production, merchant production data, Shopify inventory mutations, and inventory-write flags remain unauthorized / **DEFAULT OFF**.
 
 ## Phase 1 PR 4 D-051 (historical correction closure)
 
@@ -125,8 +136,8 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
 **R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
 **R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
-**R-129 through R-160:** OPEN — PR 5 planning / implementation-entry risks (D-053 / D-054 conditional); do not treat as implementation-closed
-**R-161:** OPEN — PR 5 implementation entry (advisory-lock capacity / shared lock table); do **not** close in this docs PR
+**R-129 through R-160:** OPEN — PR 5 planning / implementation risks; foundation primitives do not close these risks
+**R-161:** OPEN — PR 5 lock-capacity / concurrency / deployment evidence still required; arithmetic evaluator alone does not close this risk
 **F-CLAUDE-PR4ACC-01:** P3 — **RESOLVED BY PR BODY UPDATE** before squash merge (not a runtime correction)
 **F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in PR 4)
 **F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
@@ -134,12 +145,14 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 5 planning:** ACCEPTED AND MERGED (D-053 / PR #24)
-**PR 5 implementation:** NOT STARTED / NOT AUTHORIZED YET — D-054 CONDITIONAL / NOT EFFECTIVE
+**PR 5 implementation-entry:** ACCEPTED AND MERGED (D-054 / PR #26)
+**PR 5 implementation:** STARTED — PR5-F1 FOUNDATION CORRECTIONS IN PROGRESS
+**D-054:** EFFECTIVE
 **No production deployment**
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Independent Claude review of the exact implementation-entry PR head. Do **not** mark D-054 effective. Do **not** begin PR 5 runtime implementation. Do **not** create `phase-1/catalog-location-inventory-facts`. Do **not** create D-055. Do **not** edit any immutable review report. The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`), and `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` (blob `0d322db…`) remain unmodified historical evidence.
+**Next action:** Complete PR5-F1 foundation, obtain exact-head full CI, then stop for ChatGPT / Claude Code independent foundation review. Do **not** begin Shopify ingestion or another runtime lane. Do **not** create D-055. Do **not** edit any immutable review report. The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`), and `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` (blob `0d322db…`) remain unmodified historical evidence.
 
 ## Current truth
 
@@ -155,9 +168,10 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - PR [#23](https://github.com/Vedang1998/Stocky/pull/23) is **CLOSED and MERGED**. Squash merge `de1bb193a43ef87cf59acafeac4c5748e62d423d` at `2026-08-14T13:01:18Z`. Post-merge main CI run `31802835318`, job `94774629793`, success.
 - PR [#24](https://github.com/Vedang1998/Stocky/pull/24) is **CLOSED and MERGED**. Squash merge `edabd8de1f1b25cc5f5f1026e34ddf69aa104f7e` at `2026-08-16T16:49:46Z`. Planning review head before squash `1691933ec126eed44de81162e8492fb7f0bfae0c`. Final immutable review blob `0d322db701f5f27b89bc4069e6fb1f3d751d15a3`. Independent verdict `APPROVE PR5 PLANNING`. Post-merge main CI run `31959761072` **SUCCESS**.
 - **D-053** planning is **ACCEPTED AND MERGED**.
-- **D-054** is **CONDITIONAL / NOT EFFECTIVE**. It does not authorize runtime implementation merely because the heading exists.
-- PR 5 **implementation** is **NOT STARTED** and **NOT AUTHORIZED YET**.
+- PR [#26](https://github.com/Vedang1998/Stocky/pull/26) is **CLOSED and MERGED**. Accepted review-record head `7171c2cbbdff15ae0d92aa6850a1ae12804db3f4`. Squash merge `ae1b428039152efc6b4a46107e1bcca5eb17586a`. Post-merge main CI run `31966584542` **SUCCESS**.
+- **D-054** is **EFFECTIVE**. Condition 9 is satisfied.
+- PR 5 **implementation** is **STARTED — PR5-F1 FOUNDATION IN PROGRESS** on `phase-1/catalog-location-inventory-facts`.
 - Production remains unauthorized. No deployment, backfill, ownership repair, or inventory mutation is authorized.
 - Every inventory-write flag remains **DEFAULT OFF**.
-- Do **not** state that Phase 1 is complete, that PR 5 implementation has started, or that production is ready.
-- Do **not** state that PR 5 implementation is authorized merely because PR #20, PR #22, PR #23, or PR #24 merged, or because D-053 or a D-054 heading exists.
+- Do **not** state that Phase 1 is complete, that PR 5 is complete, or that production is ready.
+- Do **not** create D-055. Do **not** begin a later PR5 runtime lane from this foundation slice.

@@ -71,6 +71,7 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
     expect(Object.keys(MODEL_UNIQUE_SELECTORS).sort()).toEqual(
       [
         "BomComponent",
+        "CatalogObservationInFlight",
         "ForecastOverride",
         "InventorySnapshot",
         "LeadTimeSnapshot",
@@ -79,7 +80,13 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
         "PurchaseOrder",
         "SalesDailyAggregate",
         "ShopSettings",
+        "ShopifyInventoryItemFact",
+        "ShopifyInventoryLevelFact",
+        "ShopifyLocationFact",
+        "ShopifyProductCollectionMembership",
+        "ShopifyProductFact",
         "ShopifyVariantCache",
+        "ShopifyVariantFact",
         "Stocktake",
         "StocktakeLineItem",
         "Supplier",
