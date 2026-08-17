@@ -548,6 +548,9 @@ jobs:
           STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
           DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_ci_only@localhost:5432/stocky_plus_ci
 
+      - name: PR5-F2C compatibility projection TenantDb tests
+        run: npm run test:pr5-f2c-projection-db
+
       - name: Tenant access PostgreSQL tests
         run: npm run test:tenant-access -- app/tenant/__tests__/nullable-ownership.test.ts app/tenant/__tests__/tenant-db.test.ts app/tenant/__tests__/bootstrap.test.ts
 
@@ -662,6 +665,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: PR5-F2C compatibility projection unit tests
+        run: npm run test:pr5-f2c-projection
 
       - name: Unit tests
         run: npm test

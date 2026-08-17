@@ -7,8 +7,14 @@ import { featureFlags } from "../feature-flags.server";
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 
 function productionCatalogFactModules(): string[] {
-  return readdirSync(DIR)
-    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+  return readdirSync(DIR, { recursive: true })
+    .map((name) => (typeof name === "string" ? name : String(name)))
+    .filter(
+      (name) =>
+        name.endsWith(".ts") &&
+        !name.endsWith(".test.ts") &&
+        !name.includes(".test."),
+    )
     .sort();
 }
 
