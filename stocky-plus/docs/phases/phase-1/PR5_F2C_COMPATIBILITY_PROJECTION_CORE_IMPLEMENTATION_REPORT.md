@@ -23,6 +23,7 @@ Exact-head GitHub Actions CI is recorded from the live `pull_request` workflow a
 | `origin/main` at branch creation | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
 | Branch created from that SHA | `cursor/pr5-f2c-compat-projection-core-7c2d` |
 | Runtime / test implementation commit | `4c346fc418e1fea7f4113e1e9b2337dd7a371aa9` |
+| Lane-isolation revert commit | `4a7ca8a78ce33cae9a501cfa472f8fd4cf19196d` |
 
 Working tree was clean on the authorized SHA before implementation. No schema or migration files changed.
 
@@ -131,15 +132,18 @@ Shop rebuild cursor:
 
 ## 4. Files changed
 
-Runtime / tests / CI / tenant-access registration (commit `4c346fc418e1fea7f4113e1e9b2337dd7a371aa9`):
+Runtime / tests / tenant-access registration (commit `4c346fc418e1fea7f4113e1e9b2337dd7a371aa9`):
 
 - `stocky-plus/app/lib/catalog-facts/compatibility-projection/**` (new isolated module + unit tests)
-- `stocky-plus/app/lib/catalog-facts/foundation-safety.test.ts` (recursive module scan so nested F2C files are included; does **not** close R-163)
 - `stocky-plus/app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` (`issueTenantAuthority` is restricted to `app/tenant/`)
-- `stocky-plus/scripts/tenant-access/allowlist.ts` (append-only new EX-TEST path)
+- `stocky-plus/scripts/tenant-access/allowlist.ts` (append-only new EX-TEST path; see §10)
 - `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (regenerated; 0 violations)
-- `stocky-plus/package.json` (`test:pr5-f2c-projection`, `test:pr5-f2c-projection-db`, both `--passWithNoTests=false`)
-- `.github/workflows/ci.yml` (focused TenantDb step before other tenant tests; focused unit step before aggregate `npm test`)
+
+Lane-isolation revert (commit `4a7ca8a78ce33cae9a501cfa472f8fd4cf19196d`) restored these shared files to authorized base `5129707ee684e66cadcf96b976e16eb57385a7cb`:
+
+- `.github/workflows/ci.yml`
+- `stocky-plus/package.json`
+- `stocky-plus/app/lib/catalog-facts/foundation-safety.test.ts`
 
 This documentation file is a subsequent commit and is not part of the runtime implementation SHA above.
 
@@ -181,7 +185,7 @@ Focused commands executed on the implementation worktree (disposable PostgreSQL 
 | `npm run tenant:access:inventory` then `:check` | findings **1485**, violations **0**, inventory fresh |
 | `git diff --check` | clean |
 
-Full `npm run typecheck`, `npm test`, `npm run build`, and exact-head PR CI are recorded after this documentation commit is pushed. A command is evidence only for the exact code and environment on which it ran.
+The `test:pr5-f2c-projection*` package scripts were later removed in the lane-isolation correction. Post-correction commands and results are in §10. A command is evidence only for the exact code and environment on which it ran.
 
 ---
 
@@ -225,6 +229,87 @@ R-142, R-145, and R-156 remain **OPEN**. This core supplies the rebuildable proj
 
 ## 9. Handoff
 
-READY FOR CHATGPT PR5-F2C REVIEW after exact-head PR CI is green on the live draft PR head.
+Lane-isolation correction is recorded in §10. Independent Claude review waits for ChatGPT authorization after corrected exact-head full CI is green.
 
 Do not merge. Do not mark ready. Do not integrate with F2B.
+
+---
+
+## 10. Lane-isolation / merge-hygiene correction
+
+**Why:** Accelerated Safe Delivery requires non-overlapping lane ownership. The original F2C implementation also changed shared files that F2A / CI baseline own.
+
+**Starting identity for this correction:** live PR head `16594e55843b270c5ddd9bc70af729d44029b540` (exact-head CI run `32079925288` SUCCESS). That run is **superseded** as live-head evidence after this correction.
+
+### 10.1 Shared files reverted
+
+Restored byte-identical to `5129707ee684e66cadcf96b976e16eb57385a7cb` (blob hashes match):
+
+| File | Base blob | After revert |
+|---|---|---|
+| `.github/workflows/ci.yml` | `16ab27b20b27a2747e84ce819b7726f78b983b0f` | identical |
+| `stocky-plus/package.json` | `a68e16ba94dcd7f4d16b6d5238c5a85f4d2ab945` | identical |
+| `stocky-plus/app/lib/catalog-facts/foundation-safety.test.ts` | `62690c1231a73bc86c71074bfb61ed6796492973` | identical |
+
+No lane-specific permanent CI steps remain. No F2C npm script names remain. F2A retains global recursive/semantic PR5 read-boundary safety work (R-163). F2C safety stays in `app/lib/catalog-facts/compatibility-projection/safety.test.ts`.
+
+### 10.2 Allowlist entry disposition
+
+**Kept** the one TEST_FILES line:
+
+`app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts`
+
+This is **not** a production/runtime allowlist widening. The entry is category `migration_tests`, `productionRuntime: "no"`, append-only as `EX-TEST-035` (existing EX-TEST ids are not shifted).
+
+Evidence it is technically necessary:
+
+- The focused TenantDb file uses fixture `prisma.*` merchant-delegate calls (cleanup, seed, assertion reads). The scanner treats `receiver === "prisma"` as unrestricted access unless that exact path is a TEST_FILES exception.
+- Temporary removal of the line: `npm run tenant:access:audit` → **65 violations**, all in `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts`, first `prisma.lowStockAlert.deleteMany` at line 35 (`MUST use TenantDb`).
+- Restoring the line: `npm run tenant:access:audit` → **0 violations**, `EX-TEST-035` used.
+
+No other allowlist category was broadened.
+
+### 10.3 PR2 inventory regeneration
+
+After the final file set (shared-file reverts + retained TEST_FILES line):
+
+| Command | Result |
+|---|---|
+| `npm run tenant:access:inventory` | findings **1485**, violations **0** |
+| `npm run tenant:access:inventory:check` | inventory fresh |
+
+The generated markdown had **no content diff** versus the previous F2C inventory commit (scanner truth already matched). File kept as required by current scanner truth.
+
+### 10.4 Focused tests after cleanup (no package scripts)
+
+Commands run directly:
+
+```
+npx vitest run --passWithNoTests=false \
+  app/lib/catalog-facts/compatibility-projection
+```
+
+4 files, **23** tests passed.
+
+```
+npx vitest run --passWithNoTests=false \
+  --config vitest.tenant-access.config.ts \
+  app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts
+```
+
+1 file, **14** tests passed.
+
+Also executed on the reverted worktree:
+
+| Command | Result |
+|---|---|
+| `npx vitest run app/lib/catalog-facts/foundation-safety.test.ts` | 1 file, **3** tests passed (base non-recursive scan) |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 13 files, **94** tests passed |
+| `npm run build` | exit 0 |
+| `git diff --check` | clean |
+
+Projection behavior was not redesigned. Canonical facts remain untouched; `compatibilityProjectionState` is still not written; F2B is still not integrated.
+
+Exact-head corrected CI is recorded from the live `pull_request` workflow after this documentation commit is pushed. This paragraph does not invent a future SHA.
