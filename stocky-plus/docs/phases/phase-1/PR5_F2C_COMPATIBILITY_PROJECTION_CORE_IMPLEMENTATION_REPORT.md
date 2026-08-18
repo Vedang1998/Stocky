@@ -24,6 +24,7 @@ Exact-head GitHub Actions CI is recorded from the live `pull_request` workflow a
 | Branch created from that SHA | `cursor/pr5-f2c-compat-projection-core-7c2d` |
 | Runtime / test implementation commit | `4c346fc418e1fea7f4113e1e9b2337dd7a371aa9` |
 | Lane-isolation revert commit | `4a7ca8a78ce33cae9a501cfa472f8fd4cf19196d` |
+| Semantic-contract runtime/tests commit | `4acebccdd904ca53906109036b4577f60f9ab330` |
 
 Working tree was clean on the authorized SHA before implementation. No schema or migration files changed.
 
@@ -59,7 +60,9 @@ Result contract always includes:
 
 - `canonicalFactsUnchanged: true`
 - `canonicalCompatibilityProjectionStateWrite: "omitted_by_f2c_lane"`
-- `recommendedCanonicalProjectionState: "HEALTHY" | "DEGRADED"` for the later integration lane
+- `canonicalHealthDecision: "deferred_to_integration"`
+
+This core does **not** expose `recommendedCanonicalProjectionState` or any other HEALTHY/DEGRADED recommendation. `status: "SUCCEEDED"` means only that this invocation's requested work completed. It is not merchant-global health, not proof a partial page is globally current, and not certification of shop-rebuild convergence.
 
 ---
 
@@ -97,7 +100,7 @@ A tombstoned product does **not** supply live title or image for a still-`LIVE` 
 
 Otherwise today's snapshot is written as `0`. A tombstone, disconnect, or non-live parent must not masquerade as live available quantity.
 
-If the inventory item has no `shopifyVariantGid`, snapshot mapping is skipped (the current webhook also cannot resolve a variant and returns early).
+If a canonical InventoryLevel exists but its InventoryItem has no known `shopifyVariantGid`, mapping **fails closed** with `canonical_variant_link_missing` (retryable). The core does not skip the level, does not invent a variant relationship from SKU/barcode/title, and does not use legacy cache as identity authority. A later authoritative canonical refetch may establish the missing relationship; retry then repairs the derived snapshot.
 
 Historical snapshot rows are not rewritten except for the today-zero neutralization on variant tombstone.
 
@@ -117,11 +120,17 @@ projectCompatibilityFromCanonicalFacts({
 
 | Status | Meaning | Retryable |
 |---|---|---|
-| `SUCCEEDED` | processed identities/page; `hasMore` / `cursor` / `remainingIdentities` describe continuation | `false` for the completed page |
-| `FAILED` | explicit `failure.code` / `failure.message`; remaining work is in the result | DB/write failures `true`; invalid limit / malformed cursor / weight overflow `false` |
+| `SUCCEEDED` | this invocation's requested identities/page completed; `hasMore` / `cursor` / `remainingIdentities` describe continuation only | `false` for the completed page |
+| `FAILED` | explicit `failure.code` / `failure.message`; remaining work is in the result | DB/write failures and `canonical_variant_link_missing` `true`; invalid limit / malformed cursor / weight overflow `false` |
 | `DENIED_PROCESSING_DISABLED` | `processingEnabled !== true`; no TenantDb open; no merchant writes | `false` |
 
-This core does **not** read `Shop` / control-plane. The future F2B/worker caller must pass the live `processingEnabled` flag. Missing canonical identity is `retryable: true` (`canonical_variant_missing` / `canonical_inventory_level_missing`) so a later retry can wait for the applicator.
+This core does **not** read `Shop` / control-plane. The future F2B/worker caller must pass the live `processingEnabled` flag. Missing canonical identity is `retryable: true` (`canonical_variant_missing` / `canonical_inventory_level_missing` / `canonical_variant_link_missing`) so a later retry can wait for the applicator.
+
+`shop_rebuild` in this isolated core is a **bounded replay/projection FROM canonical rows** (variants by GID, then inventory levels by item+location). It is **not**:
+
+- proof of complete merchant compatibility convergence;
+- authority to delete a legacy row merely because no canonical counterpart was found;
+- authority to mark `compatibilityProjectionState` HEALTHY.
 
 Shop rebuild cursor:
 
@@ -172,6 +181,11 @@ Required scenarios and where they live:
 | `processingEnabled=false` fail-closed | unit (no TenantDb) + DB (no cache rows) |
 | Invalid batch limit | unit `invalid_batch_limit`, non-retryable |
 | Legacy consumer field characterization | `legacy-consumer-characterization.test.ts` (does **not** migrate consumers) |
+| No HEALTHY recommendation, including `hasMore=true` | unit request contract + DB `does not authorize merchant health when a bounded shop_rebuild page has hasMore=true` |
+| Missing `shopifyVariantGid` fail-closed | unit mapping throw `canonical_variant_link_missing`; DB stale snapshot + repair-on-retry |
+| Failed middle identity preserves canonical facts | DB `preserves already committed canonical facts and resumes from the failed identity` |
+| Orphan legacy row is not canonical evidence | DB `does not treat an orphan legacy row as canonical authority or delete it during shop_rebuild` |
+| Completed bounded page still does not persist/authorize durable health | DB final `shop_rebuild` page `hasMore=false` still `deferred_to_integration` |
 
 Focused commands executed on the implementation worktree (disposable PostgreSQL 16.14 + Redis; inventory-write flags false; `STOCKY_RUNTIME_ROLE=stocky_runtime`):
 
@@ -206,11 +220,12 @@ R-142, R-145, and R-156 remain **OPEN**. This core supplies the rebuildable proj
 
 1. F2B accepted canonical writer contract, then a **separate** integration lane that:
    - runs this core after canonical apply commits;
-   - persists `recommendedCanonicalProjectionState` onto canonical facts;
+   - owns the durable `compatibilityProjectionState` transition and must **not** mark HEALTHY until it has sufficient evidence that the projection matches canonical facts under the accepted synchronization/fence contract;
+   - must not treat F2C `status: "SUCCEEDED"` (including `hasMore=true` or a final bounded page) as permission to set HEALTHY;
    - must not fold projection into the canonical transaction.
 2. Caller-supplied live `processingEnabled` from the worker/uninstall control plane.
 3. R-145 / R-156 diagnostic reconciler (`DataIssue` `COMPATIBILITY_PROJECTION_FAILED`, dual SyncHealth).
-4. R-142 later cleanup of duplicate legacy authority; not PR 5.
+4. R-142 later cleanup of duplicate legacy authority; not PR 5. **Mandatory downstream gate:** before PR5 compatibility projection can be accepted as complete, the integration lane must reconcile orphan legacy projection rows only after canonical-domain completeness is proven from an accepted full-sync/fence contract. This core does not close R-142 and does not delete orphans.
 5. Consumer migration off `ShopifyVariantCache` / `InventorySnapshot`; not this lane.
 6. No PR 6, no production, no inventory-write enablement.
 
@@ -229,7 +244,7 @@ R-142, R-145, and R-156 remain **OPEN**. This core supplies the rebuildable proj
 
 ## 9. Handoff
 
-Lane-isolation correction is recorded in §10. Independent Claude review waits for ChatGPT authorization after corrected exact-head full CI is green.
+Lane-isolation correction is recorded in §10 and remains accepted. Semantic-contract correction is recorded in §11. Independent Claude review waits for ChatGPT authorization after corrected exact-head full CI is green.
 
 Do not merge. Do not mark ready. Do not integrate with F2B.
 
@@ -313,3 +328,109 @@ Also executed on the reverted worktree:
 Projection behavior was not redesigned. Canonical facts remain untouched; `compatibilityProjectionState` is still not written; F2B is still not integrated.
 
 Exact-head corrected CI is recorded from the live `pull_request` workflow after this documentation commit is pushed. This paragraph does not invent a future SHA.
+
+---
+
+## 11. Semantic-contract correction
+
+**Why:** A successful processing batch is not proof that the complete compatibility projection matches canonical facts. This isolated core also cannot prove a multi-page rebuild observed one stable canonical snapshot. Silently skipping an InventoryLevel whose InventoryItem has `shopifyVariantGid = null` can leave a stale legacy snapshot in place while returning `SUCCEEDED`.
+
+**Starting identity for this correction:** live PR head `115733879add7bbab33a7776d8e2a90c782fed04` (exact-head CI run `32092407749` SUCCESS; Heavy `95577094611`; CI Gate `95586900048`). That run is **superseded** as live-head evidence after this correction. Lane-isolation remains accepted and was not revisited.
+
+### 11.1 Correction A — core must not decide merchant health
+
+Removed `recommendedCanonicalProjectionState` from the public result contract. It is not replaced with another HEALTHY/DEGRADED recommendation.
+
+Added `canonicalHealthDecision` whose only value is `"deferred_to_integration"`. Durable write remains `"omitted_by_f2c_lane"`.
+
+`status: "SUCCEEDED"` means only that the requested work for **this invocation** completed successfully.
+
+Mandatory falsification: bounded `shop_rebuild` with `hasMore=true` contains no HEALTHY recommendation and no health-transition authorization.
+
+### 11.2 Correction B — unknown variant link must not silently succeed
+
+`mapInventoryLevelToLegacySnapshot` now throws `CompatibilityProjectionError` `canonical_variant_link_missing` (retryable) identifying the InventoryLevel `{ inventoryItemGid, locationGid }`.
+
+The caller no longer counts an unprojectable level as processed. Canonical facts are unchanged. Unrelated legacy rows are not modified. SKU/barcode/title/legacy cache are not used as identity.
+
+PostgreSQL sequence: LIVE level + LIVE InventoryItem with `shopifyVariantGid = null` + today's stale `InventorySnapshot` → `FAILED` / retryable / level identity / fingerprint unchanged / snapshot still stale / no fabricated variant GID. Establishing the canonical variant relationship and retrying repairs today's snapshot to the canonical quantity.
+
+### 11.3 Correction C — limit of `shop_rebuild`
+
+Frozen as a bounded replay FROM canonical rows. It does not prove every pre-existing legacy `ShopifyVariantCache` / `InventorySnapshot` has a canonical counterpart. This core does not delete orphans (no proven complete canonical full-sync epoch).
+
+Regression: an orphan cache/snapshot with no canonical counterpart survives `shop_rebuild`, is not treated as canonical authority, and does not authorize global health.
+
+R-142 remains **OPEN**. Downstream integration must reconcile orphan legacy projection rows only after canonical-domain completeness is proven from an accepted full-sync/fence contract.
+
+### 11.4 Correction D — concurrency / health boundary
+
+No F2B advisory locks, no shared canonical/applicator transaction, no canonical writes, no `compatibilityProjectionState` writes were added.
+
+F2C output is a projection execution result only. Later F2B/worker integration owns the durable health transition and must not mark HEALTHY until it has sufficient evidence that the projection matches canonical facts under the accepted synchronization/fence contract. That avoids falsely certifying a multi-page rebuild that raced a newer canonical commit.
+
+### 11.5 Additional falsification executed
+
+1. `hasMore=true` cannot authorize health.
+2. Failed middle identity preserves already committed canonical facts; `remainingIdentities[0]` is the failed identity.
+3. Retry starts from the failed/unprocessed identity and repairs the snapshot after the variant link is established.
+4. Missing variant relationship never fabricates identity from SKU/barcode/title.
+5. Canonical tombstone still zeros today's known legacy snapshots (existing DB test retained).
+6. Cross-shop isolation remains intact (existing DB test retained).
+7. A stale orphan legacy row does not become canonical evidence and is not deleted.
+8. Successful final bounded page still does not persist or authorize merchant durable health.
+
+Multiple-LIVE-InventoryItem selection was **not** redesigned in this correction. Lexicographically first LIVE GID remains. No separate integrity rule was invented here.
+
+### 11.6 Files in this correction
+
+Runtime / tests (commit `4acebccdd904ca53906109036b4577f60f9ab330`):
+
+- `stocky-plus/app/lib/catalog-facts/compatibility-projection/**`
+- `stocky-plus/app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts`
+
+Scanner-truth inventory regeneration (this documentation commit; still **0** violations):
+
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (findings **1508**; approved exception findings **1046**; extra `prisma.*` lines from the expanded EX-TEST-035 file plus `project.ts` line-number drift)
+
+This report file is included in the same documentation commit and does not embed that commit's unknown future SHA.
+
+Allowlist was **not** broadened. Shared files remain byte-identical to authorized base `5129707ee684e66cadcf96b976e16eb57385a7cb`:
+
+| File | Blob |
+|---|---|
+| `.github/workflows/ci.yml` | `16ab27b20b27a2747e84ce819b7726f78b983b0f` |
+| `stocky-plus/package.json` | `a68e16ba94dcd7f4d16b6d5238c5a85f4d2ab945` |
+| `stocky-plus/app/lib/catalog-facts/foundation-safety.test.ts` | `62690c1231a73bc86c71074bfb61ed6796492973` |
+
+### 11.7 Local evidence on `4acebccdd904ca53906109036b4577f60f9ab330`
+
+Environment: disposable PostgreSQL 16.14 + Redis PONG; Node v22.14.0; `STOCKY_RUNTIME_ROLE=stocky_runtime`; inventory-write flags unset (default off).
+
+```
+npx vitest run --passWithNoTests=false \
+  app/lib/catalog-facts/compatibility-projection
+```
+
+4 files, **24** tests passed.
+
+```
+npx vitest run --passWithNoTests=false \
+  --config vitest.tenant-access.config.ts \
+  app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts
+```
+
+1 file, **18** tests passed.
+
+| Command | Result |
+|---|---|
+| `npx vitest run app/lib/catalog-facts/foundation-safety.test.ts` | 1 file, **3** tests passed |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 13 files, **95** tests passed |
+| `npm run build` | exit 0 |
+| `npm run tenant:access:inventory` | findings **1508**, violations **0** |
+| `npm run tenant:access:inventory:check` | inventory fresh |
+| `git diff --check` | clean |
+
+Exact-head `pull_request` CI for the live head after this documentation commit is the authoritative automatic evidence. This paragraph does not invent a future SHA.
