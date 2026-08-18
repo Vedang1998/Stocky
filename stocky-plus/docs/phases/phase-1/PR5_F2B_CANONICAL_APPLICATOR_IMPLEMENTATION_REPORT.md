@@ -3,7 +3,7 @@
 **Slice:** PR5-F2B canonical merchant-fact applicator
 **Branch:** `cursor/pr5-f2b-canonical-applicator-055c`
 **Authority:** D-054 **EFFECTIVE**; PR5-F1 foundation **FROZEN**
-**Status:** Second pre-independent-review correction package complete — pending ChatGPT correction review. Do not ask Claude from this lane.
+**Status:** Third pre-independent-review correction package complete — pending ChatGPT correction review. Do not ask Claude from this lane.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
@@ -336,3 +336,123 @@ Do **not** close risks from this lane.
 | R-164 | **Implemented** — pending independent review |
 
 Exact-head `pull_request` CI for this second package is recorded after this documentation commit is pushed. This report does not embed an unknown future SHA or run id.
+
+---
+
+## 15. Third pre-independent-review correction package
+
+This package does **not** reopen the accepted first or second correction packages. It fixes one P1 defect: full-sync fence-vs-direct-observation ordering.
+
+Third-correction starting identity: PR head `0c7af8168d7a52c29c3fc03f8ede74c2d3cc9eb8` on `cursor/pr5-f2b-canonical-applicator-055c` (PR #31 OPEN / DRAFT / unmerged). Authorized base remained `5129707ee684e66cadcf96b976e16eb57385a7cb`. No schema or F1 migration changes.
+
+### 15.1 Distinction from the accepted prior packages
+
+| Package | Head recorded here | Scope |
+|---|---|---|
+| First (accepted) | runtime/test `bf399edc106742758031a7fd366871d265057f26`; docs `06d6feb87a9c5444557d3c8e086ea807a86549b0` | Request-generation binding; unique-conflict fresh `begin()`; relationship GID equality; unseen-ABSENT preserve-no-row; foundation-safety revert; R-162; R-164 |
+| Second (accepted for this lane) | runtime/test `65530433e7250ae5f8dca12d4d82f95dff4dec70`; inventory `7201adcc99614628655829af6b4dba0c16e84a81`; docs `0c7af8168d7a52c29c3fc03f8ede74c2d3cc9eb8` | First-insert overlap fail-closed; exact DECIMAL(20,6) equality; first-LIVE attribute contract |
+| Third (this pass) | runtime `acf073adb9521aab107af8851c45f915a26fab28`; tests `f6ddf00ce7351b45e0755b91ab52d0235f07b42f` plus spanning-test / inventory / this report on the same CI-producing head | Full-sync fence marker vs direct Clock-B interval |
+
+A later documentation-only commit on the same branch must not be treated as this correction’s runtime head. This report does not embed its own commit SHA.
+
+Preserved first- and second-package behavior (regression-tested on disposable PostgreSQL in this pass):
+
+- durable token + exact persisted request generation
+- unique conflict escapes the aborted transaction; fresh `begin()`; no `ON CONFLICT DO UPDATE`
+- ProductVariant `shopifyProductGid` and InventoryItem `shopifyVariantGid` participate in equality
+- unseen ABSENT preserves no canonical row
+- first-insert overlapping completed evidence fail-closed
+- exact DECIMAL equality and significant > DECIMAL(20,6) fail-closed
+- complete first-LIVE attributes; no synthetic business defaults
+- R-162 `Number.isSafeInteger` fail-closed (unit)
+- R-164 ordinary apply APIs still export no physical-delete operation
+- `foundation-safety.test.ts` remains byte-identical to `5129707ee684e66cadcf96b976e16eb57385a7cb`
+
+### 15.2 Direct interval vs full-sync fence separation
+
+Deleted `observationInterval()`. New named helpers:
+
+- `directObservationInterval()` — Clock B `[observationRequestGen, observationResponseGen]`
+- `fullSyncFenceGeneration()` — `{ kind: "full_sync_fence", fenceGeneration }`
+- `fullSyncAttributeMarker()` — `{ kind: "full_sync_attribute_marker", fenceGeneration }`
+- `nullableFallbackIntervalFromFullSyncMarker()` — point representation used **only** by nullable Clock A / per-name quantity fallback
+
+Existence/fencing APIs no longer receive a synthetic `[F,F]` as if it were a direct request interval.
+
+`LIVE_FULL_SYNC_PRESENT` still persists `existenceRequestGen = NULL` and `existenceResponseGen = NULL`. Fence evidence remains `SyncRun.fenceGeneration` / `lastSeenFullSyncRunId`.
+
+Completed direct vs fence F:
+
+- safely earlier only when `direct.observationResponseGen < F`
+- `requestGen > F` is later
+- `requestGen <= F` and `responseGen >= F` spans/overlaps F
+- any completed direct with `responseGen >= F` is not safely earlier
+
+When no canonical row exists, not-safely-earlier completed evidence fail-closes (conflict / refetch-required). Absence of a fact row is not agreement.
+
+ACTIVE, unexpired, resultless directs for that identity block full-sync existence mutation whether they started before, around, or after F. Unexpired later directs are not abandoned to let older bulk proceed. Expired ACTIVE resultless rows may be durably `ACTIVE → ABANDONED` in the same tenant transaction using PostgreSQL `clock_timestamp()`; rollback restores them. Lease time is never compared to `fenceGeneration`.
+
+Existing LIVE: full-sync may still advance `lastSeenFullSyncRunId` when existence/attributes cannot mutate.
+
+Reconnectable ABSENT InventoryLevel: still requires `F >` stored absence `existenceResponseGen`, **and** no unresolved or newer/conflicting direct evidence.
+
+Terminal GIDs: full-sync presence after tombstone remains `TERMINAL_IDENTITY_REVIVAL_CONFLICT`. Two-confirmation revival is unchanged.
+
+### 15.3 Third-correction local validation (executed)
+
+Environment: disposable PostgreSQL **16.14** (`stocky` / `stocky_plus` on localhost:5432), Redis 7, Node v22.14.0 for this agent. Inventory-write flags were not changed. Shopify network I/O was not performed.
+
+| Command | Exit | Result |
+|---|---|---|
+| `npx tsc --noEmit` | 0 | executed and passed |
+| `npm run typecheck` | 0 | executed and passed |
+| `npm run lint` | 0 | executed and passed |
+| `git diff --check` | 0 | executed and passed |
+| `npm test -- app/lib/catalog-facts` | 0 | **51** passed / 7 files |
+| `npm test` | 0 | **107** passed / 13 files |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts` | 0 | **59** passed / 1 file |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 274`, `findings: 1408`, `violations: 0` |
+| `npm run tenant:access:inventory` / `:check` | 0 | mechanical regen; content digest unchanged `4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5` |
+| `npx vitest run scripts/tenant-access/architecture-audit.test.ts --config vitest.tenant-access.config.ts` | 0 | **25** passed / 1 file |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+| `npm run build` | 0 | executed and passed (`react-router build`) |
+| `git diff 5129707ee684e66cadcf96b976e16eb57385a7cb -- app/lib/catalog-facts/foundation-safety.test.ts` | 0 | empty (byte-identical to authorized base) |
+| Full `npm run test:migrations` (entire tenant-enforcement corpus) | — | **not executed locally**; required on exact-head full CI |
+
+### 15.4 PostgreSQL proofs in this pass (59)
+
+Prior-package regressions remained green, including: request-generation mismatch; unique-conflict 25P02 + fresh begin; relationship equality; unseen ABSENT preserve-no-row; overlapping first-insert fail-closed; DECIMAL equality / scale fail-closed; first-LIVE validation; Race AT concurrent first insert 0-or-1; R-164 surface.
+
+New / fence-correction proofs:
+
+1. Full-sync first insert persists `LIVE_FULL_SYNC_PRESENT` with `existenceRequestGen=NULL`, `existenceResponseGen=NULL` (F1 coherence). Attribute fallback stores fence as the named bulk epoch marker only.
+2. Race AT-3: fence F; later completed direct ABSENT leaves zero rows; late bulk LIVE at F does not first-insert; conflict / `CONCURRENT_EXISTENCE_OBSERVATION_CONFLICT`.
+3. Completed direct spanning F: no first insert; conflict.
+4. Completed direct entirely earlier (`responseGen < F`): later full-sync LIVE with complete attributes first-inserts NULL/NULL.
+5. ACTIVE unexpired direct started after F: no first insert; observation remains ACTIVE.
+6. ACTIVE unexpired direct started before F: same blocked existence mutation.
+7. Expired ACTIVE: same-transaction durable `ABANDONED` and first-insert proceeds; ROLLBACK restores `ACTIVE` and zero fact rows.
+8. Existing LIVE + newer direct: `lastSeenFullSyncRunId` advances; stale bulk attributes do not win; existence gens remain the direct interval.
+9. Reconnectable ABSENT InventoryLevel: newer completed direct blocks older full-sync reconnect; stays ABSENT.
+10. Same InventoryLevel with only safely-earlier directs: later valid fence reconnects when `F >` absence `existenceResponseGen`; existence gens become NULL/NULL.
+11. Terminal Product tombstone: bulk remains `TERMINAL_IDENTITY_REVIVAL_CONFLICT`; row stays ABSENT.
+12. Nullable-version attributes: older full-sync fence marker does not overwrite a newer direct null-`updatedAt` title; presence still advances.
+13. Nullable quantity: older full-sync fence marker does not overwrite a newer direct null-`updatedAt` available quantity; presence still advances.
+
+### 15.5 Risk status after this third package
+
+Do **not** close risks from this lane.
+
+| Risk | Status |
+|---|---|
+| R-157 | **OPEN** |
+| R-158 | **OPEN** pending independent review |
+| R-159 | **OPEN** pending independent review |
+| R-160 | **OPEN** pending independent review |
+| R-161 | **OPEN** — production/deployment capacity evidence still outstanding |
+| R-162 | **Implemented** — pending independent review |
+| R-164 | **Implemented** — pending independent review |
+
+Exact-head `pull_request` CI for this third package is recorded after this CI-producing head is pushed. This report does not embed an unknown future SHA or run id.
+
+Run [`32100216617`](https://github.com/Vedang1998/Stocky/actions/runs/32100216617) SUCCESS on `0c7af8168d7a52c29c3fc03f8ede74c2d3cc9eb8` is **superseded**. Run [`32138453022`](https://github.com/Vedang1998/Stocky/actions/runs/32138453022) on pre-final `f6ddf00…` is **superseded** by the CI-producing head that includes this section.

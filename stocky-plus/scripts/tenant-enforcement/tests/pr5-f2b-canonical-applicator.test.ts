@@ -3851,13 +3851,14 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
         requestGen: req,
         leaseMs: 60_000,
       });
+      const fence = await allocateCatalogObservationGeneration(db);
       const resp = await allocateCatalogObservationGeneration(db);
+      expect(req <= fence && resp >= fence).toBe(true);
+      expect(resp > req).toBe(true);
       await applyCanonicalFacts(db, {
         shopId: shopAId,
         observations: [productAbsent(shopAId, "obs-fs-span", gid, req, resp)],
       });
-      const fence = req + 1n;
-      expect(fence < resp).toBe(true);
       const bulk = await applyCanonicalFacts(db, {
         shopId: shopAId,
         observations: [
