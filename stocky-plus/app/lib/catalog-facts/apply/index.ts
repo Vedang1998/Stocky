@@ -14,7 +14,12 @@ import {
   orderCanonicalLockKeysForAcquisition,
   type CanonicalLockIdentity,
 } from "../lock-key";
-import { decideAttributeClock, decideQuantityClock, type GenerationInterval } from "./clocks";
+import {
+  decideAttributeClock,
+  decideQuantityClock,
+  nullableFallbackIntervalFromFullSyncMarker,
+  type GenerationInterval,
+} from "./clocks";
 import {
   CanonicalApplyBatchExceedsCapacityError,
   CanonicalApplyError,
@@ -28,15 +33,23 @@ import {
 } from "./errors";
 import { decideExistence } from "./existence";
 import {
+  directObservationInterval,
+  fullSyncAttributeMarker,
+  fullSyncFenceGeneration,
+} from "./observation-evidence";
+import {
   validateFirstLiveAttributes,
   validateObservationNumericColumns,
 } from "./first-live";
 import {
   abandonExpiredBlockers,
+  abandonExpiredFullSyncBlockers,
   abandonOwnExpiredObservation,
   completeObservation,
   fenceDirectObservation,
   loadActiveUnexpiredBlockers,
+  loadActiveUnexpiredBlockersForFullSync,
+  loadCompletedDirectsNotSafelyEarlierThanFence,
   loadCompletedOverlappingIntervals,
   lockObservationRows,
 } from "./fencing";
@@ -87,17 +100,23 @@ export function denyCanonicalFactPhysicalDelete(): never {
   throw new CanonicalApplyPhysicalDeleteError();
 }
 
-function observationInterval(observation: CanonicalObservation): GenerationInterval {
-  if (observation.observationKind === "full_sync") {
-    return {
-      requestGen: observation.fenceGeneration,
-      responseGen: observation.fenceGeneration,
-    };
+function compareObservations(a: CanonicalObservation, b: CanonicalObservation): number {
+  const aGen =
+    a.observationKind === "full_sync"
+      ? a.fenceGeneration
+      : a.observationRequestGen;
+  const bGen =
+    b.observationKind === "full_sync"
+      ? b.fenceGeneration
+      : b.observationRequestGen;
+  if (aGen !== bGen) {
+    return aGen < bGen ? -1 : 1;
   }
-  return {
-    requestGen: observation.observationRequestGen,
-    responseGen: observation.observationResponseGen,
-  };
+  const aToken =
+    a.observationKind === "direct" ? a.observationToken : `full_sync:${a.epochId}`;
+  const bToken =
+    b.observationKind === "direct" ? b.observationToken : `full_sync:${b.epochId}`;
+  return aToken < bToken ? -1 : aToken > bToken ? 1 : 0;
 }
 
 function validateObservation(observation: CanonicalObservation): void {
@@ -128,19 +147,6 @@ function validateObservation(observation: CanonicalObservation): void {
       );
     }
   }
-}
-
-function compareObservations(a: CanonicalObservation, b: CanonicalObservation): number {
-  const aInterval = observationInterval(a);
-  const bInterval = observationInterval(b);
-  if (aInterval.requestGen !== bInterval.requestGen) {
-    return aInterval.requestGen < bInterval.requestGen ? -1 : 1;
-  }
-  const aToken =
-    a.observationKind === "direct" ? a.observationToken : `full_sync:${a.epochId}`;
-  const bToken =
-    b.observationKind === "direct" ? b.observationToken : `full_sync:${b.epochId}`;
-  return aToken < bToken ? -1 : aToken > bToken ? 1 : 0;
 }
 
 async function requireTenant(db: CanonicalApplyDb, shopId: string): Promise<void> {
@@ -452,7 +458,20 @@ async function applyOneObservation(
 }> {
   validateObservation(observation);
   const identity = observation.identity;
-  const interval = observationInterval(observation);
+  const directInterval: GenerationInterval | null =
+    observation.observationKind === "direct"
+      ? directObservationInterval(observation)
+      : null;
+  const fence =
+    observation.observationKind === "full_sync"
+      ? fullSyncFenceGeneration(observation)
+      : null;
+  const attributeFallbackInterval: GenerationInterval =
+    observation.observationKind === "direct"
+      ? directObservationInterval(observation)
+      : nullableFallbackIntervalFromFullSyncMarker(
+          fullSyncAttributeMarker(observation),
+        );
   const token =
     observation.observationKind === "direct" ? observation.observationToken : null;
   const abandoned: string[] = [];
@@ -495,9 +514,21 @@ async function applyOneObservation(
   }
 
   const lockedRows = await lockObservationRows(db, identity.shopId, identity);
-  abandoned.push(
-    ...(await abandonExpiredBlockers(db, identity.shopId, lockedRows, token, interval)),
-  );
+  if (observation.observationKind === "direct" && directInterval) {
+    abandoned.push(
+      ...(await abandonExpiredBlockers(
+        db,
+        identity.shopId,
+        lockedRows,
+        token,
+        directInterval,
+      )),
+    );
+  } else {
+    abandoned.push(
+      ...(await abandonExpiredFullSyncBlockers(db, identity.shopId, lockedRows)),
+    );
+  }
 
   let existenceMutated = false;
   let factId: string | null = null;
@@ -511,21 +542,36 @@ async function applyOneObservation(
     diagnostic: null,
   };
 
-  const blockers = await loadActiveUnexpiredBlockers(
-    db,
-    identity.shopId,
-    identity,
-    token,
-    interval,
-  );
+  const blockers =
+    observation.observationKind === "direct" && directInterval
+      ? await loadActiveUnexpiredBlockers(
+          db,
+          identity.shopId,
+          identity,
+          token,
+          directInterval,
+        )
+      : await loadActiveUnexpiredBlockersForFullSync(db, identity.shopId, identity);
   existenceBlocked = blockers.length > 0;
-  const overlappingCompleted = await loadCompletedOverlappingIntervals(
-    db,
-    identity.shopId,
-    identity,
-    token,
-    interval,
-  );
+  const overlappingCompleted =
+    observation.observationKind === "direct" && directInterval
+      ? await loadCompletedOverlappingIntervals(
+          db,
+          identity.shopId,
+          identity,
+          token,
+          directInterval,
+        )
+      : [];
+  const completedDirectNotSafelyEarlierThanFence =
+    observation.observationKind === "full_sync" && fence
+      ? await loadCompletedDirectsNotSafelyEarlierThanFence(
+          db,
+          identity.shopId,
+          identity,
+          fence.fenceGeneration,
+        )
+      : [];
   let fact = await lockAndReadFact(db, identity);
   existenceDecision = decideExistence({
     identity,
@@ -540,12 +586,15 @@ async function applyOneObservation(
         }
       : null,
     incomingKind: observation.existenceKind,
-    incomingInterval: interval,
+    incomingInterval: directInterval,
     incomingShopifyCreatedAt: observation.shopifyCreatedAt ?? null,
     existenceBlocked,
     overlappingCompleted,
-    fenceGeneration:
-      observation.observationKind === "full_sync" ? observation.fenceGeneration : null,
+    fenceGeneration: fence?.fenceGeneration ?? null,
+    completedDirectNotSafelyEarlierThanFence:
+      observation.observationKind === "full_sync"
+        ? completedDirectNotSafelyEarlierThanFence
+        : undefined,
   });
 
   existenceMutated = false;
@@ -556,7 +605,8 @@ async function applyOneObservation(
     const write: ExistenceWrite = {
       state: existenceDecision.nextState,
       kind: existenceDecision.nextKind,
-      interval: observation.existenceKind === "LIVE_FULL_SYNC_PRESENT" ? null : interval,
+      interval:
+        observation.existenceKind === "LIVE_FULL_SYNC_PRESENT" ? null : directInterval,
       observedAt: observation.existenceObservedAt,
       diagnostic,
       deletionSource: existenceDecision.deletionSource,
@@ -574,7 +624,14 @@ async function applyOneObservation(
       const presence =
         observation.observationKind === "full_sync" ? observation.epochId : null;
       try {
-        factId = await insertFact(db, observation, write, interval, freshness, presence);
+        factId = await insertFact(
+          db,
+          observation,
+          write,
+          attributeFallbackInterval,
+          freshness,
+          presence,
+        );
       } catch (error) {
         if (error instanceof CanonicalApplyIncompleteFirstLiveError) {
           return rejectUsableObservation(db, observation, abandoned, {
@@ -631,13 +688,23 @@ async function applyOneObservation(
         existenceMutated,
       });
     }
-    const attrResult = await applyAttributes(db, observation, fact, interval);
+    const attrResult = await applyAttributes(
+      db,
+      observation,
+      fact,
+      attributeFallbackInterval,
+    );
     attributesApplied = attrResult.applied;
     if (attrResult.diagnostic) {
       diagnostic = preserveRevivalDiagnostic(fact.existenceDiagnosticState, attrResult.diagnostic);
     }
     fact = (await lockAndReadFact(db, identity)) ?? fact;
-    const qtyApplied = await applyQuantities(db, observation, fact, interval);
+    const qtyApplied = await applyQuantities(
+      db,
+      observation,
+      fact,
+      attributeFallbackInterval,
+    );
     attributesApplied = attributesApplied || qtyApplied;
   }
 

@@ -8,6 +8,36 @@ export type GenerationInterval = {
   responseGen: bigint;
 };
 
+/**
+ * Conservative bulk epoch marker for null-version Clock A / quantity fallback.
+ * This is NOT a direct Clock-B existence interval. Do not pass it to existence
+ * overlap APIs. Persistence of existenceRequestGen / existenceResponseGen stays
+ * NULL/NULL for LIVE_FULL_SYNC_PRESENT.
+ */
+export type FullSyncAttributeMarker = {
+  readonly kind: "full_sync_attribute_marker";
+  readonly fenceGeneration: bigint;
+};
+
+export type FullSyncFenceGeneration = {
+  readonly kind: "full_sync_fence";
+  readonly fenceGeneration: bigint;
+};
+
+/**
+ * Point representation used only by the nullable attribute/quantity fallback.
+ * Equal request/response gens here are a bulk epoch marker, not a fabricated
+ * direct [fence, fence] existence interval.
+ */
+export function nullableFallbackIntervalFromFullSyncMarker(
+  marker: FullSyncAttributeMarker,
+): GenerationInterval {
+  return {
+    requestGen: marker.fenceGeneration,
+    responseGen: marker.fenceGeneration,
+  };
+}
+
 export function intervalsOverlap(
   a: GenerationInterval,
   b: GenerationInterval,

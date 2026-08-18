@@ -155,6 +155,23 @@ export async function fenceDirectObservation(
   return mapped;
 }
 
+async function abandonExpiredResultlessRow(
+  db: CanonicalApplyDb,
+  shopId: string,
+  rowId: string,
+): Promise<string | null> {
+  const updated = await queryRows<{ id: string }>(db)`UPDATE "CatalogObservationInFlight"
+     SET "lifecycleState" = 'ABANDONED',
+         "updatedAt" = clock_timestamp()
+     WHERE "shopId" = ${shopId}
+       AND id = ${rowId}
+       AND "lifecycleState" = 'ACTIVE'
+       AND "observationResponseGen" IS NULL
+       AND clock_timestamp() >= "leaseExpiresAt"
+     RETURNING id`;
+  return updated[0]?.id ? String(updated[0].id) : null;
+}
+
 export async function abandonExpiredBlockers(
   db: CanonicalApplyDb,
   shopId: string,
@@ -170,16 +187,28 @@ export async function abandonExpiredBlockers(
     const overlaps =
       row.observationRequestGen <= currentInterval.responseGen;
     if (!overlaps) continue;
-    const updated = await queryRows<{ id: string }>(db)`UPDATE "CatalogObservationInFlight"
-       SET "lifecycleState" = 'ABANDONED',
-           "updatedAt" = clock_timestamp()
-       WHERE "shopId" = ${shopId}
-         AND id = ${row.id}
-         AND "lifecycleState" = 'ACTIVE'
-         AND "observationResponseGen" IS NULL
-         AND clock_timestamp() >= "leaseExpiresAt"
-       RETURNING id`;
-    if (updated[0]?.id) abandoned.push(String(updated[0].id));
+    const abandonedId = await abandonExpiredResultlessRow(db, shopId, row.id);
+    if (abandonedId) abandoned.push(abandonedId);
+  }
+  return abandoned;
+}
+
+/**
+ * Full-sync existence mutation may rely on expiry of any ACTIVE resultless
+ * direct for the identity, including later-than-fence requests. Do not compare
+ * lease time to fenceGeneration. Do not abandon unexpired later directs.
+ */
+export async function abandonExpiredFullSyncBlockers(
+  db: CanonicalApplyDb,
+  shopId: string,
+  rows: ObservationRow[],
+): Promise<string[]> {
+  const abandoned: string[] = [];
+  for (const row of rows) {
+    if (row.lifecycleState !== "ACTIVE") continue;
+    if (row.observationResponseGen != null) continue;
+    const abandonedId = await abandonExpiredResultlessRow(db, shopId, row.id);
+    if (abandonedId) abandoned.push(abandonedId);
   }
   return abandoned;
 }
@@ -226,6 +255,46 @@ export async function loadActiveUnexpiredBlockers(
   }));
 }
 
+/**
+ * Any ACTIVE, unexpired, resultless direct for this identity blocks full-sync
+ * existence mutation, including requests that started before, around, or after F.
+ */
+export async function loadActiveUnexpiredBlockersForFullSync(
+  db: CanonicalApplyDb,
+  shopId: string,
+  identity: CanonicalFactIdentity,
+): Promise<ObservationRow[]> {
+  const pred = identityPredicate(identity);
+  const rows = await queryRows<{
+    id: string;
+    lifecycleState: string;
+    observationRequestGen: unknown;
+    observationResponseGen: unknown;
+    leaseExpiresAt: unknown;
+  }>(db)`SELECT id, "lifecycleState", "observationRequestGen", "observationResponseGen", "leaseExpiresAt"
+     FROM "CatalogObservationInFlight"
+     WHERE "shopId" = ${shopId}
+       AND "resourceKind" = ${pred.kind}::"CatalogResourceKind"
+       AND (
+         (${pred.kind} <> 'InventoryLevel' AND "shopifyGid" = ${pred.gid})
+         OR (${pred.kind} = 'InventoryLevel' AND "inventoryItemGid" = ${pred.item} AND "locationGid" = ${pred.location})
+       )
+       AND "lifecycleState" = 'ACTIVE'
+       AND "observationResponseGen" IS NULL
+       AND clock_timestamp() < "leaseExpiresAt"
+     ORDER BY "observationRequestGen" ASC, id ASC`;
+  return rows.map((row) => ({
+    id: String(row.id),
+    lifecycleState: String(row.lifecycleState),
+    observationRequestGen: asBigInt(row.observationRequestGen, "observationRequestGen"),
+    observationResponseGen: asBigIntOrNull(
+      row.observationResponseGen,
+      "observationResponseGen",
+    ),
+    leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
+  }));
+}
+
 export async function loadCompletedOverlappingIntervals(
   db: CanonicalApplyDb,
   shopId: string,
@@ -250,6 +319,37 @@ export async function loadCompletedOverlappingIntervals(
        AND (${currentToken}::text IS NULL OR id <> ${currentToken})
        AND "observationRequestGen" <= ${currentInterval.responseGen.toString()}::bigint
        AND ${currentInterval.requestGen.toString()}::bigint <= "observationResponseGen"`;
+  return rows.map((row) => ({
+    requestGen: asBigInt(row.observationRequestGen, "observationRequestGen"),
+    responseGen: asBigInt(row.observationResponseGen, "observationResponseGen"),
+  }));
+}
+
+/**
+ * Completed directs with responseGen >= F are not safely earlier than the
+ * bulk fence (spanning/overlapping F, or started after F).
+ */
+export async function loadCompletedDirectsNotSafelyEarlierThanFence(
+  db: CanonicalApplyDb,
+  shopId: string,
+  identity: CanonicalFactIdentity,
+  fenceGeneration: bigint,
+): Promise<Array<{ requestGen: bigint; responseGen: bigint }>> {
+  const pred = identityPredicate(identity);
+  const rows = await queryRows<{
+    observationRequestGen: unknown;
+    observationResponseGen: unknown;
+  }>(db)`SELECT "observationRequestGen", "observationResponseGen"
+     FROM "CatalogObservationInFlight"
+     WHERE "shopId" = ${shopId}
+       AND "resourceKind" = ${pred.kind}::"CatalogResourceKind"
+       AND (
+         (${pred.kind} <> 'InventoryLevel' AND "shopifyGid" = ${pred.gid})
+         OR (${pred.kind} = 'InventoryLevel' AND "inventoryItemGid" = ${pred.item} AND "locationGid" = ${pred.location})
+       )
+       AND "lifecycleState" = 'COMPLETED'
+       AND "observationResponseGen" IS NOT NULL
+       AND "observationResponseGen" >= ${fenceGeneration.toString()}::bigint`;
   return rows.map((row) => ({
     requestGen: asBigInt(row.observationRequestGen, "observationRequestGen"),
     responseGen: asBigInt(row.observationResponseGen, "observationResponseGen"),

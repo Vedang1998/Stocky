@@ -77,22 +77,109 @@ function incomingIsLive(kind: ApprovedExistenceKind): boolean {
   return kind === "LIVE_REFETCH" || kind === "LIVE_FULL_SYNC_PRESENT";
 }
 
+function decideFullSyncExistence(input: {
+  identity: CanonicalFactIdentity;
+  stored: StoredExistence | null;
+  fenceGeneration: bigint;
+  completedDirectNotSafelyEarlierThanFence: readonly GenerationInterval[];
+}): ExistenceDecision {
+  const { stored, identity } = input;
+  const terminal = isTerminalResource(identity.resourceKind);
+  const notSafelyEarlier = input.completedDirectNotSafelyEarlierThanFence;
+
+  if (!stored) {
+    if (notSafelyEarlier.length > 0) {
+      return {
+        mutate: false,
+        reason: "full_sync_first_insert_direct_conflict",
+        diagnostic: DIAGNOSTIC.CONCURRENT_EXISTENCE,
+      };
+    }
+    return {
+      mutate: true,
+      nextState: "LIVE",
+      nextKind: "LIVE_FULL_SYNC_PRESENT",
+      reason: "first_insert_live",
+      diagnostic: null,
+      deletionSource: null,
+    };
+  }
+
+  if (stored.existenceState === "LIVE") {
+    return { mutate: false, reason: "presence_keep_live", diagnostic: null };
+  }
+
+  if (terminal) {
+    return {
+      mutate: false,
+      reason: "terminal_bulk_revival_conflict",
+      diagnostic: DIAGNOSTIC.TERMINAL_REVIVAL,
+    };
+  }
+
+  const fenceAfterAbsence =
+    stored.existenceResponseGen != null &&
+    input.fenceGeneration > stored.existenceResponseGen;
+  if (!fenceAfterAbsence) {
+    return { mutate: false, reason: "full_sync_cannot_resurrect", diagnostic: null };
+  }
+  if (notSafelyEarlier.length > 0) {
+    return {
+      mutate: false,
+      reason: "full_sync_reconnect_direct_conflict",
+      diagnostic: DIAGNOSTIC.CONCURRENT_EXISTENCE,
+    };
+  }
+  return {
+    mutate: true,
+    nextState: "LIVE",
+    nextKind: "LIVE_FULL_SYNC_PRESENT",
+    reason: "level_reconnect_full_sync",
+    diagnostic: null,
+    deletionSource: null,
+  };
+}
+
 export function decideExistence(input: {
   identity: CanonicalFactIdentity;
   stored: StoredExistence | null;
   incomingKind: ApprovedExistenceKind;
-  incomingInterval: GenerationInterval;
+  incomingInterval: GenerationInterval | null;
   incomingShopifyCreatedAt?: Date | null;
   existenceBlocked: boolean;
   overlappingCompleted: GenerationInterval[];
   fenceGeneration?: bigint | null;
+  completedDirectNotSafelyEarlierThanFence?: readonly GenerationInterval[];
 }): ExistenceDecision {
-  const { stored, incomingKind, incomingInterval, identity } = input;
+  const { stored, incomingKind, identity } = input;
   const incomingLive = incomingIsLive(incomingKind);
   const terminal = isTerminalResource(identity.resourceKind);
 
   if (input.existenceBlocked) {
     return { mutate: false, reason: "active_blocker", diagnostic: null };
+  }
+
+  if (incomingKind === "LIVE_FULL_SYNC_PRESENT") {
+    if (input.fenceGeneration == null) {
+      throw new Error("full-sync existence decision requires fenceGeneration");
+    }
+    if (input.completedDirectNotSafelyEarlierThanFence == null) {
+      throw new Error(
+        "full-sync existence decision requires completedDirectNotSafelyEarlierThanFence",
+      );
+    }
+    return decideFullSyncExistence({
+      identity,
+      stored,
+      fenceGeneration: input.fenceGeneration,
+      completedDirectNotSafelyEarlierThanFence:
+        input.completedDirectNotSafelyEarlierThanFence,
+    });
+  }
+
+  const incomingInterval = input.incomingInterval;
+  if (incomingInterval == null) {
+    throw new Error("direct existence decision requires a direct observation interval");
   }
 
   const extraOverlap = input.overlappingCompleted.some((interval) =>
@@ -135,10 +222,6 @@ export function decideExistence(input: {
 
   const storedInterval = storedExistenceInterval(stored);
   const storedLive = stored.existenceState === "LIVE";
-
-  if (incomingKind === "LIVE_FULL_SYNC_PRESENT" && storedLive) {
-    return { mutate: false, reason: "presence_keep_live", diagnostic: null };
-  }
 
   if (storedInterval && intervalsOverlap(storedInterval, incomingInterval)) {
     if (storedLive === incomingLive) {
@@ -198,36 +281,9 @@ export function decideExistence(input: {
     };
   }
 
-  // Stored ABSENT.
+  // Stored ABSENT. Full-sync presence never reaches this direct-interval path.
   if (!incomingLive) {
     return { mutate: false, reason: "already_absent", diagnostic: null };
-  }
-
-  if (incomingKind === "LIVE_FULL_SYNC_PRESENT") {
-    const fence = input.fenceGeneration;
-    if (
-      !terminal &&
-      fence != null &&
-      stored.existenceResponseGen != null &&
-      fence > stored.existenceResponseGen
-    ) {
-      return {
-        mutate: true,
-        nextState: "LIVE",
-        nextKind: "LIVE_FULL_SYNC_PRESENT",
-        reason: "level_reconnect_full_sync",
-        diagnostic: null,
-        deletionSource: null,
-      };
-    }
-    if (terminal) {
-      return {
-        mutate: false,
-        reason: "terminal_bulk_revival_conflict",
-        diagnostic: DIAGNOSTIC.TERMINAL_REVIVAL,
-      };
-    }
-    return { mutate: false, reason: "full_sync_cannot_resurrect", diagnostic: null };
   }
 
   if (storedInterval && !isNonOverlappingLater(incomingInterval, storedInterval)) {
