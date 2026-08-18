@@ -295,3 +295,203 @@ Other PR 5 risks (R-157..R-162, R-164, applicator, JSONL, webhooks) are **out of
 Return to ChatGPT for PR5-F2A review after exact-head full PR CI is green.
 
 Do **not** merge. Do **not** mark ready. Do **not** start F3.
+
+---
+
+## 16. Independent review and correction package
+
+**Correction status:** Correction implemented — pending independent verification
+
+This section is appended after the immutable Claude review. It does **not** rewrite the history above. It does **not** close R-132, R-134, R-136, R-138, or R-163. It does **not** claim ChatGPT acceptance.
+
+| Field | Value |
+|---|---|
+| Independent review artifact | `stocky-plus/docs/phases/phase-1/PR5_F2A_ADMIN_READ_INDEPENDENT_REVIEW.md` (**not edited**) |
+| Review commit | `a831b5f78529fd1d9d7a12ed119efc97bb4dd04f` |
+| Review blob | `81bc0678ea9041b6567c02c8fe5655752fc53441` (re-hashed after correction; unchanged) |
+| Reviewed implementation head | `8329ae7936a489203faef12347bc1a4290df2d5b` |
+| Review-artifact / live PR head at correction start | `a831b5f78529fd1d9d7a12ed119efc97bb4dd04f` |
+| Authorized base | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Independent verdict | `CORRECTIONS REQUIRED` — P0 0 / P1 1 / P2 2 / P3 5 |
+| Post-review exact-head CI | run `32093188541`, event `pull_request`, head `a831b5f7…`, SUCCESS (historical; superseded by this correction head) |
+| PR #29 | remains OPEN / DRAFT / UNMERGED |
+
+### Reproduction of NEW-CLAUDE-PR5F2A-01 before correction
+
+Against committed Admin 2026-07 introspection (`app/types/admin-2026-07.schema.json`, 6,978,270 bytes) using graphql-js `validate` on the pre-correction constants:
+
+| Constant | Observed |
+|---|---|
+| `CATALOG_BULK_QUERY_WITH_UNIT_COST` | **13 errors**, all `Cannot query field "<x>" on type "ProductConnection"` |
+| `CATALOG_BULK_QUERY_NO_UNIT_COST` | **13 errors**, same class |
+| `INVENTORY_LEVEL_BULK_QUERY` | **2 errors**: `Cannot query field "id" on type "InventoryItemConnection"`; `Cannot query field "inventoryLevels" on type "InventoryItemConnection"` |
+
+This matches the independent review.
+
+### Schema-gate distinction (required by NEW-CLAUDE-PR5F2A-02)
+
+1. **`#graphql` / graphql-codegen.** Tagged Admin QUERY documents in `documents.ts` remain the codegen path. `npm run graphql-codegen` exit 0 is evidence for those tagged documents only. Bulk inner query strings stay untagged.
+2. **Untagged bulk inner queries.** `CANONICAL_BULK_QUERY_DOCUMENTS` are validated by graphql-js `validate` against Admin 2026-07 in `bulk-query-schema.ts` / `bulk-query-schema.test.ts`, with Shopify bulk pagination arguments (`first` / `after` / `last` / `before`) treated as optional. This is real schema validation, not field-name counting. Heavy `npm test` executes this gate. `.github/workflows/ci.yml` was not changed.
+
+---
+
+## 17. Finding-by-finding correction
+
+### NEW-CLAUDE-PR5F2A-01 — P1 — invalid bulk documents
+
+**Correction:** All three inner bulk queries now traverse connections with `edges { node { … } }`. Approved catalog fields, with-unitCost vs no-unitCost, and all eight quantity names are preserved. `INVENTORY_LEVEL_BULK_QUERY` now selects authoritative `item { id }` (plus existing `location { id }`) so inventory-level identity does not depend on JSONL `__parentId`. Official bulk limits remain 3 catalog connections / depth 2 and 2 inventory-level connections / depth 2. The comment that claimed `first` had to be omitted for schema validation was corrected: official bulk guidance treats `first` as optional and ignored; these documents omit it because bulk operations ignore pagination arguments, not because schema validation forbids it.
+
+**Tests:** `bulk-query-schema.test.ts` (schema-valid + invalid fixture); `documents.test.ts` connection-count/depth (renamed so it does not claim schema validation).
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue / ChatGPT disposition:** Approved brief §8.2 still uses shorthand `products { variants { … } collections { id title } }` without `edges { node }`. That shorthand is **not executable Admin 2026-07**. This implementation did **not** edit the approved brief. Request an erratum if ChatGPT wants §8.2 to show the executable traversal. F2B should consume `item { id }` / `location { id }` from the inventory-level bulk JSONL and must not treat `__parentId` as the sole identity.
+
+### NEW-CLAUDE-PR5F2A-02 — P2 — bulk schema gate missing
+
+**Correction:** Dedicated graphql-js schema gate over `CANONICAL_BULK_QUERY_DOCUMENTS` plus a deliberately invalid missing-traversal fixture that must fail. Connection-count/depth tests retained under a title that claims only what they prove.
+
+**Tests:** `bulk-query-schema.test.ts`; renamed `documents.test.ts` depth/count test.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue:** None for this lane. Codegen still does not cover untagged bulk strings; the new test does.
+
+### NEW-CLAUDE-PR5F2A-03 — P2 — collection pagination fail-open
+
+**Correction:** Shared `paginateCursorConnection` primitive used by `readAllLocations` and `readProductCollectionMemberships`. Missing connection, empty page + `hasNextPage`, null edge, id-less node, repeated `endCursor`, `hasNextPage` without `endCursor`, duplicate GID, and explicit page bound all fail closed. 251 memberships / page size 250 exhaust two pages.
+
+**Tests:** `collections.test.ts` ( >250 + every malformed-page shape); existing `locations.test.ts` >50 regression.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue:** None.
+
+### NEW-CLAUDE-PR5F2A-04 — P3 — malformed quantity disappears
+
+**Correction:** Name classification precedes quantity validation. Unexpected names always enter `unexpectedNames`. Malformed quantities enter non-persisted `malformedQuantityNames`. A malformed approved name is not listed as genuinely absent.
+
+**Tests:** unexpected+malformed; approved+malformed vs absent; eight valid names unchanged.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue:** `malformedQuantityNames` is a read-boundary diagnostic, not a persisted canonical enum.
+
+### NEW-CLAUDE-PR5F2A-05 — P3 — silent type coercion
+
+**Correction:** `optionalFiniteNumber` for `Weight.value` (`Float!`); `optionalBoolean` for `isActive`. String `"false"` no longer becomes `true`. Invalid weight no longer becomes `NaN`. Exact money / unsigned ID protections unchanged.
+
+**Tests:** non-finite weight; `isActive: "false"`; unsigned `legacyResourceId` `"9007199254740993"`; variant money strings.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue:** None.
+
+### NEW-CLAUDE-PR5F2A-06 — P3 — inventory-level pair cross-check
+
+**Correction:** `readInventoryLevelByPair` fails closed with `InventoryLevelIdentityMismatchError` when Shopify returns an item and/or location GID that differs from the requested pair. Missing response identity still uses the approved fallback.
+
+**Tests:** exact match; item mismatch; location mismatch; both mismatch; omitted response identity fallback.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue / F2B invariant:** Downstream F2B/bulk callers must not key results by the requested pair unless this cross-check has succeeded. Do not replace the requested pair with response IDs and continue. This PR does not modify F2B.
+
+### NEW-CLAUDE-PR5F2A-07 — P3 — scanner extraction blind spots
+
+**Correction:** Compiler-API visitor now inspects `TemplateExpression`. GraphQL-shaped interpolations fail closed as `unreviewable_graphql`. Leading GraphQL `#` comment lines are stripped before document detection. Import denial is rule-derived deny-by-default: `@shopify/*`, `app/services/**` / `/services/` paths, and Shopify write helper modules (`shopify-sync.server`, `shopify-gql.server`, `shopify.server`). Exact reviewed exception list is empty. Recursive nested-file coverage preserved.
+
+**Tests:** interpolated mutation; comment-prefixed mutation; `inventory-write.server` import not on the old two-name list; `@shopify/shopify-api` import; valid nested QUERY still passes; planted `inventoryBulkToggleActivation`; `productVariantsBulkUpdate` pre-network rejection.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue:** None approved `@shopify/*` exceptions exist in this lane.
+
+### NEW-CLAUDE-PR5F2A-08 — P3 — unitCost preflight classification
+
+**Correction:** `DENIED` requires `extensions.code === "ACCESS_DENIED"` **and** a GraphQL path whose last segment is `unitCost`. Path-less messages mentioning `unitCost` are not `DENIED`. Non-persisted `failureKind` is `GRAPHQL` / `TRANSPORT` / `MAPPING_INTEGRITY`. Approved `unitCostAccess` contract is unchanged. Permission denial still does not abort the catalog pipeline.
+
+**Tests:** structured ACCESS_DENIED on unitCost → DENIED; path-less access-denied message → not DENIED; unrelated ACCESS_DENIED path → not unitCost DENIED; unrelated GraphQL error; network TRANSPORT; numeric amount MAPPING_INTEGRITY; allowed+value; allowed+null.
+
+**Disposition:** Corrected in this pass. Pending independent re-review.
+
+**Residue:** `failureKind` is not a persisted canonical enum.
+
+---
+
+## 18. Correction evidence (local)
+
+Focused catalog-facts suite after correction:
+
+```text
+npx vitest run app/lib/catalog-facts --reporter=verbose
+```
+
+**12 files, 78 tests passed**, including bulk schema gate, >250 collection traversal, collection malformed pages, quantity diagnostics, mapper strict types, pair identity, scanner falsifications, structured unitCost denial, location >50, eight quantities, nullable `updatedAt`, money/unsigned ID, `bulkOperation(id:)`, and `partialDataUrl`.
+
+Required local commands on the correction working tree (pre-commit):
+
+| Command | Exit | Observed |
+|---|---|---|
+| `npm run lint` | 0 | eslint of the app |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| `npm test` | 0 | **18 files, 134 tests passed** (was 16 / 104 on the reviewed head) |
+| `npm run build` | 0 | client + SSR production build |
+| `npm run graphql-codegen` | 0 | tagged Admin **2026-07** documents; does **not** cover untagged bulk strings |
+| focused graphql-js `validate` of the three bulk constants | 0 errors | against `app/types/admin-2026-07.schema.json` |
+| invalid bulk fixture | rejected | `Cannot query field "id" on type "ProductConnection"` |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 284`, `findings: 1408`, `violations: 0` |
+| `npm run tenant:access:inventory` | 0 | regenerated; content digest still `4670755f…` |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` |
+| `git diff --check` | 0 | clean |
+
+Exact-head automatic PR CI for this correction head is recorded after push. This file does not claim that CI green until that run is observed.
+
+`.github/workflows/ci.yml` was **not** modified. The bulk schema test runs inside Heavy `npm test`.
+
+---
+
+## 19. Preserved review-proven behavior
+
+Not regressed in this correction:
+
+- R-132 non-abort unitCost preflight (DENIED/UNAVAILABLE still choose `no-unitCost` and do not throw)
+- R-134 `bulkOperation(id:)` + `currentBulkOperation` AST forbid
+- R-136 location pagination >50 fail-closed
+- R-138 pre-network AST query-only enforcement (including unexpected `productVariantsBulkUpdate`)
+- R-163 recursive directory traversal
+- `partialDataUrl` is not canonical success
+- no `currentBulkOperation`
+- no `bulkOperationRunQuery` submission
+- all eight approved inventory quantity names
+- nullable `InventoryQuantity.updatedAt`
+- exact decimal money strings
+- unsigned ID strings beyond JS safe integer
+- per-item unitCost currency provenance
+- API target 2026-07
+- `FEATURE_COST_SYNC` DEFAULT OFF
+- inventory-write flags DEFAULT OFF
+- no Shopify mutations
+- no canonical/database writes
+
+---
+
+## 20. Risks after correction
+
+Do **not** mark any risk CLOSED. They remain pending independent correction re-review / ChatGPT disposition.
+
+| Risk | After this correction |
+|---|---|
+| R-132 | Preflight still non-aborting; DENIED now requires structured GraphQL evidence. Still OPEN. |
+| R-134 | Unchanged `bulkOperation(id:)` contract. Still OPEN. |
+| R-136 | Location pagination preserved; collections now share the same fail-closed primitive. Still OPEN. |
+| R-138 | AST deny-by-default preserved; scanner extraction/import denial strengthened. Still OPEN. |
+| R-163 | Recursive enumeration preserved. Still OPEN. |
+
+---
+
+## 21. Next action after this correction
+
+Return to ChatGPT / Claude independent **correction re-review** after exact-head full PR CI is green on the correction head.
+
+Do **not** merge. Do **not** mark ready. Do **not** start F3. Do **not** create D-055.
