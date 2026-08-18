@@ -706,7 +706,7 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
 
   it("keeps an ABANDONED token invalid even if the lease would later look valid (Race AS)", async () => {
     const gid = "gid://shopify/Product/abandoned-rollback";
-    await withTenant(async (client, db) => {
+    const durableReq = await withTenant(async (client, db) => {
       const req = await allocateCatalogObservationGeneration(db);
       await insertObservation(client, {
         id: "obs-as",
@@ -716,6 +716,7 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
         requestGen: req,
         leaseMs: 1,
       });
+      return req;
     });
     await withTenant(async (client) => {
       await client.query("SELECT pg_sleep(0.05)");
@@ -731,7 +732,7 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
         return applyCanonicalFacts(db, {
           shopId: shopAId,
           observations: [
-            productLive(shopAId, "obs-as", gid, 1n, resp, {
+            productLive(shopAId, "obs-as", gid, durableReq, resp, {
               title: "nope",
               handle: "nope",
             }),
@@ -801,6 +802,25 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
   it("terminal revival requires two non-overlapping LIVE confirmations", async () => {
     const gid = "gid://shopify/Product/revival";
     await withTenant(async (client, db) => {
+      const reqLive = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rev-live",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: reqLive,
+        leaseMs: 60_000,
+      });
+      const respLive = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-rev-live", gid, reqLive, respLive, {
+            title: "Original",
+            handle: "original",
+          }),
+        ],
+      });
       const reqAbs = await allocateCatalogObservationGeneration(db);
       await insertObservation(client, {
         id: "obs-rev-abs",
@@ -819,6 +839,11 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
         existenceKind: "ABSENT_CONFIRMED_QUERY",
       };
       await applyCanonicalFacts(db, { shopId: shopAId, observations: [absent] });
+      const tombstoned = await client.query(
+        `SELECT "existenceState" FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(tombstoned.rows[0].existenceState).toBe("ABSENT");
     });
 
     await withTenant(async (client, db) => {
@@ -987,6 +1012,50 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
                   };
         await applyCanonicalFacts(db, { shopId: shopAId, observations: [observation] });
       }
+
+      const reqLive0 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-lvl-live-0",
+        shopId: shopAId,
+        resourceKind: "InventoryLevel",
+        inventoryItemGid: itemGid,
+        locationGid: locGid,
+        requestGen: reqLive0,
+        leaseMs: 60_000,
+      });
+      const respLive0 = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          {
+            observationKind: "direct",
+            observationToken: "obs-lvl-live-0",
+            observationRequestGen: reqLive0,
+            observationResponseGen: respLive0,
+            identity: {
+              shopId: shopAId,
+              resourceKind: "InventoryLevel",
+              inventoryItemGid: itemGid,
+              locationGid: locGid,
+            },
+            existenceKind: "LIVE_REFETCH",
+            existenceObservedAt: new Date(),
+            sourceKind: "INCREMENTAL_REFETCH",
+            attributes: {
+              isActive: true,
+              quantities: [
+                { name: "available", quantity: 3, shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z") },
+              ],
+            },
+          },
+        ],
+      });
+      const seeded = await client.query(
+        `SELECT "existenceState" FROM "ShopifyInventoryLevelFact"
+         WHERE "inventoryItemGid" = $1 AND "locationGid" = $2`,
+        [itemGid, locGid],
+      );
+      expect(seeded.rows[0].existenceState).toBe("LIVE");
 
       const reqAbs = await allocateCatalogObservationGeneration(db);
       await insertObservation(client, {
@@ -1707,7 +1776,14 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
       });
       return req;
     });
-    const resp = await withTenant(async (_c, db) => allocateCatalogObservationGeneration(db));
+    const resp = await withTenant(async (_c, db) => {
+      const wrongReq = durableReq + 1n;
+      let generated = await allocateCatalogObservationGeneration(db);
+      while (generated <= wrongReq) {
+        generated = await allocateCatalogObservationGeneration(db);
+      }
+      return generated;
+    });
     await expect(
       withTenant(async (_c, db) =>
         completeObservation(
