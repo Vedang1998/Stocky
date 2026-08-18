@@ -100,9 +100,12 @@ export function decideExistence(input: {
   );
 
   if (!stored) {
-    // A completed overlapping observation that did not insert cannot freeze
-    // first LIVE insert. ABSENT first insert still fails closed on overlap.
-    if (extraOverlap && !incomingLive) {
+    // CatalogObservationInFlight does not persist LIVE/ABSENT result truth.
+    // A completed overlapping interval that left no row may be authoritative
+    // ABSENT, a blocked/conflicting LIVE, or another preserve-no-row outcome.
+    // Do not infer agreement from the missing fact row. Fail closed for both
+    // incoming LIVE and ABSENT until a later non-overlapping observation.
+    if (extraOverlap) {
       return {
         mutate: false,
         reason: "first_insert_overlapping_completed",

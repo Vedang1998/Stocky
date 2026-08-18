@@ -92,3 +92,31 @@ export class CanonicalApplyPhysicalDeleteError extends CanonicalApplyError {
     this.name = "CanonicalApplyPhysicalDeleteError";
   }
 }
+
+export class CanonicalApplyNumericScaleError extends CanonicalApplyError {
+  readonly field: string;
+
+  constructor(field: string, value?: string) {
+    super(
+      "canonical_apply_numeric_scale_unrepresentable",
+      value
+        ? `${field} is not exactly representable on DECIMAL(20,6) without rounding (${value})`
+        : `${field} is not exactly representable on DECIMAL(20,6) without rounding`,
+    );
+    this.name = "CanonicalApplyNumericScaleError";
+    this.field = field;
+  }
+}
+
+export class CanonicalApplyIncompleteFirstLiveError extends CanonicalApplyError {
+  readonly missing: readonly string[];
+
+  constructor(missing: readonly string[]) {
+    super(
+      "canonical_apply_incomplete_first_live",
+      `First LIVE canonical insert lacks required authoritative attributes: ${missing.join(", ")}`,
+    );
+    this.name = "CanonicalApplyIncompleteFirstLiveError";
+    this.missing = missing;
+  }
+}

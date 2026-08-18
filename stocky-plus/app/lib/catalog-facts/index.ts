@@ -56,6 +56,8 @@ export {
   CanonicalApplyPhysicalDeleteError,
   CanonicalApplyRequestGenerationMismatchError,
   CanonicalApplyUniqueConflictError,
+  CanonicalApplyNumericScaleError,
+  CanonicalApplyIncompleteFirstLiveError,
 } from "./apply/errors";
 export type {
   CanonicalApplyBatchInput,

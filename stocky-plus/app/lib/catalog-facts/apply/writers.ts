@@ -2,7 +2,9 @@
  * Canonical fact writers. INSERT and UPDATE only — never DELETE/deleteMany.
  */
 import type { GenerationInterval } from "./clocks";
-import { exactMoneyText, exactMoneyTextOrNull } from "./money";
+import { CanonicalApplyIncompleteFirstLiveError } from "./errors";
+import { validateFirstLiveAttributes } from "./first-live";
+import { assertFrozenNumericColumn, exactNumericEqual, frozenNumericTextOrNull } from "./money";
 import {
   asBigIntOrNull,
   asBool,
@@ -246,9 +248,22 @@ export async function insertFact(
   const attrReq = attributeInterval.requestGen.toString();
   const attrResp = attributeInterval.responseGen.toString();
 
+  const firstLive = validateFirstLiveAttributes(observation);
+  if (!firstLive.ok) {
+    throw firstLive.error;
+  }
+
   try {
     if (identity.resourceKind === "Product") {
-      const attrs = (observation.attributes ?? {}) as ProductAttributes;
+      const attrs = observation.attributes as ProductAttributes;
+      if (
+        attrs.title == null ||
+        attrs.handle == null ||
+        attrs.status == null ||
+        !Array.isArray(attrs.tags)
+      ) {
+        throw new CanonicalApplyIncompleteFirstLiveError(["title", "handle", "tags", "status"]);
+      }
       await queryRows(db)`INSERT INTO "ShopifyProductFact" (
            id, "shopId", "shopifyGid", title, handle, vendor, "productType", tags, status,
            "featuredMediaUrl", "shopifyCreatedAt", "shopifyUpdatedAt",
@@ -260,10 +275,10 @@ export async function insertFact(
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
          ) VALUES (
            ${id}, ${identity.shopId}, ${identity.shopifyGid},
-           ${attrs.title ?? ""}, ${attrs.handle ?? ""}, ${attrs.vendor ?? null},
+           ${attrs.title}, ${attrs.handle}, ${attrs.vendor ?? null},
            ${attrs.productType ?? null},
-           ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(attrs.tags ?? [])}::jsonb)),
-           ${attrs.status ?? "ACTIVE"}::"ShopifyProductStatus",
+           ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(attrs.tags)}::jsonb)),
+           ${attrs.status}::"ShopifyProductStatus",
            ${attrs.featuredMediaUrl ?? null}, ${createdAt}, ${updatedAt},
            ${existence.state}::"CatalogExistenceState",
            ${existence.kind}::"CatalogExistenceKind",
@@ -280,7 +295,7 @@ export async function insertFact(
       return id;
     }
     if (identity.resourceKind === "ProductVariant") {
-      const attrs = (observation.attributes ?? {}) as VariantAttributes;
+      const attrs = observation.attributes as VariantAttributes;
       await queryRows(db)`INSERT INTO "ShopifyVariantFact" (
            id, "shopId", "shopifyGid", "shopifyProductGid", title, "displayName",
            "selectedOptions", sku, barcode, "priceAmount", "compareAtPriceAmount",
@@ -293,12 +308,12 @@ export async function insertFact(
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
          ) VALUES (
            ${id}, ${identity.shopId}, ${identity.shopifyGid}, ${attrs.shopifyProductGid},
-           ${attrs.title ?? ""}, ${attrs.displayName ?? null},
-           ${JSON.stringify(attrs.selectedOptions ?? {})}::jsonb,
+           ${attrs.title}, ${attrs.displayName ?? null},
+           ${JSON.stringify(attrs.selectedOptions)}::jsonb,
            ${attrs.sku ?? null}, ${attrs.barcode ?? null},
-           ${exactMoneyText(attrs.priceAmount, "priceAmount")}::decimal(20,6),
-           ${exactMoneyTextOrNull(attrs.compareAtPriceAmount ?? null, "compareAtPriceAmount")}::decimal(20,6),
-           ${attrs.currencyCode ?? "USD"}, ${attrs.position ?? null},
+           ${assertFrozenNumericColumn(attrs.priceAmount, "priceAmount")}::decimal(20,6),
+           ${frozenNumericTextOrNull(attrs.compareAtPriceAmount ?? null, "compareAtPriceAmount")}::decimal(20,6),
+           ${attrs.currencyCode}, ${attrs.position ?? null},
            ${createdAt}, ${updatedAt},
            ${existence.state}::"CatalogExistenceState",
            ${existence.kind}::"CatalogExistenceKind",
@@ -315,7 +330,7 @@ export async function insertFact(
       return id;
     }
     if (identity.resourceKind === "InventoryItem") {
-      const attrs = (observation.attributes ?? {}) as InventoryItemAttributes;
+      const attrs = observation.attributes as InventoryItemAttributes;
       await queryRows(db)`INSERT INTO "ShopifyInventoryItemFact" (
            id, "shopId", "shopifyGid", "shopifyVariantGid", sku, tracked,
            "requiresShipping", "weightValue", "weightUnit", "unitCostAmount",
@@ -329,12 +344,12 @@ export async function insertFact(
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
          ) VALUES (
            ${id}, ${identity.shopId}, ${identity.shopifyGid}, ${attrs.shopifyVariantGid ?? null},
-           ${attrs.sku ?? null}, ${attrs.tracked ?? true}, ${attrs.requiresShipping ?? true},
-           ${exactMoneyTextOrNull(attrs.weightValue ?? null, "weightValue")}::decimal(20,6),
+           ${attrs.sku ?? null}, ${attrs.tracked}, ${attrs.requiresShipping},
+           ${frozenNumericTextOrNull(attrs.weightValue ?? null, "weightValue")}::decimal(20,6),
            ${attrs.weightUnit ?? null},
-           ${exactMoneyTextOrNull(attrs.unitCostAmount ?? null, "unitCostAmount")}::decimal(20,6),
+           ${frozenNumericTextOrNull(attrs.unitCostAmount ?? null, "unitCostAmount")}::decimal(20,6),
            ${attrs.unitCostCurrencyCode ?? null},
-           ${attrs.unitCostAccess ?? "NULL"}::"CatalogUnitCostAccess",
+           ${attrs.unitCostAccess}::"CatalogUnitCostAccess",
            ${createdAt}, ${updatedAt},
            ${existence.state}::"CatalogExistenceState",
            ${existence.kind}::"CatalogExistenceKind",
@@ -351,7 +366,7 @@ export async function insertFact(
       return id;
     }
     if (identity.resourceKind === "Location") {
-      const attrs = (observation.attributes ?? {}) as LocationAttributes;
+      const attrs = observation.attributes as LocationAttributes;
       await queryRows(db)`INSERT INTO "ShopifyLocationFact" (
            id, "shopId", "shopifyGid", name, "isActive", "deactivatedAt",
            "fulfillsOnlineOrders", "shipsInventory", "isFulfillmentService",
@@ -364,10 +379,10 @@ export async function insertFact(
            "deletedAt", "deletionSource", "shopifyLegacyResourceId",
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
          ) VALUES (
-           ${id}, ${identity.shopId}, ${identity.shopifyGid}, ${attrs.name ?? ""},
-           ${attrs.isActive ?? true}, ${attrs.deactivatedAt ?? null},
-           ${attrs.fulfillsOnlineOrders ?? true}, ${attrs.shipsInventory ?? true},
-           ${attrs.isFulfillmentService ?? false}, ${attrs.hasActiveInventory ?? true},
+           ${id}, ${identity.shopId}, ${identity.shopifyGid}, ${attrs.name},
+           ${attrs.isActive}, ${attrs.deactivatedAt ?? null},
+           ${attrs.fulfillsOnlineOrders}, ${attrs.shipsInventory},
+           ${attrs.isFulfillmentService}, ${attrs.hasActiveInventory},
            ${attrs.address1 ?? null}, ${attrs.city ?? null}, ${attrs.provinceCode ?? null},
            ${attrs.countryCode ?? null}, ${attrs.zip ?? null},
            ${createdAt}, ${updatedAt},
@@ -388,7 +403,7 @@ export async function insertFact(
     if (identity.resourceKind !== "InventoryLevel") {
       throw new Error("unsupported canonical identity");
     }
-    const attrs = (observation.attributes ?? {}) as InventoryLevelAttributes;
+    const attrs = observation.attributes as InventoryLevelAttributes;
     await queryRows(db)`INSERT INTO "ShopifyInventoryLevelFact" (
          id, "shopId", "inventoryItemGid", "locationGid", "shopifyInventoryLevelGid",
          "isActive", "shopifyCreatedAt", "shopifyUpdatedAt",
@@ -400,7 +415,7 @@ export async function insertFact(
          "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
        ) VALUES (
          ${id}, ${identity.shopId}, ${identity.inventoryItemGid}, ${identity.locationGid},
-         ${attrs.shopifyInventoryLevelGid ?? null}, ${attrs.isActive ?? true},
+         ${attrs.shopifyInventoryLevelGid ?? null}, ${attrs.isActive},
          ${createdAt}, ${updatedAt},
          ${existence.state}::"CatalogExistenceState",
          ${existence.kind}::"CatalogExistenceKind",
@@ -753,8 +768,8 @@ export async function updateVariantAttributes(
          "selectedOptions" = ${JSON.stringify(attrs.selectedOptions ?? {})}::jsonb,
          sku = ${attrs.sku ?? null},
          barcode = ${attrs.barcode ?? null},
-         "priceAmount" = ${exactMoneyText(attrs.priceAmount, "priceAmount")}::decimal(20,6),
-         "compareAtPriceAmount" = ${exactMoneyTextOrNull(attrs.compareAtPriceAmount ?? null, "compareAtPriceAmount")}::decimal(20,6),
+         "priceAmount" = ${assertFrozenNumericColumn(attrs.priceAmount, "priceAmount")}::decimal(20,6),
+         "compareAtPriceAmount" = ${frozenNumericTextOrNull(attrs.compareAtPriceAmount ?? null, "compareAtPriceAmount")}::decimal(20,6),
          "currencyCode" = ${attrs.currencyCode},
          position = ${attrs.position ?? null},
          "shopifyProductGid" = ${attrs.shopifyProductGid},
@@ -781,9 +796,9 @@ export async function updateInventoryItemAttributes(
      SET sku = ${attrs.sku ?? null},
          tracked = ${attrs.tracked},
          "requiresShipping" = ${attrs.requiresShipping},
-         "weightValue" = ${exactMoneyTextOrNull(attrs.weightValue ?? null, "weightValue")}::decimal(20,6),
+         "weightValue" = ${frozenNumericTextOrNull(attrs.weightValue ?? null, "weightValue")}::decimal(20,6),
          "weightUnit" = ${attrs.weightUnit ?? null},
-         "unitCostAmount" = ${exactMoneyTextOrNull(attrs.unitCostAmount ?? null, "unitCostAmount")}::decimal(20,6),
+         "unitCostAmount" = ${frozenNumericTextOrNull(attrs.unitCostAmount ?? null, "unitCostAmount")}::decimal(20,6),
          "unitCostCurrencyCode" = ${attrs.unitCostCurrencyCode ?? null},
          "unitCostAccess" = ${attrs.unitCostAccess}::"CatalogUnitCostAccess",
          "shopifyVariantGid" = ${attrs.shopifyVariantGid ?? null},
@@ -947,8 +962,12 @@ export function variantAttributesEqual(
       JSON.stringify(attrs.selectedOptions ?? {}) &&
     (stored.sku ?? null) === (attrs.sku ?? null) &&
     (stored.barcode ?? null) === (attrs.barcode ?? null) &&
-    (stored.priceAmount ?? null) === attrs.priceAmount &&
-    (stored.compareAtPriceAmount ?? null) === (attrs.compareAtPriceAmount ?? null) &&
+    exactNumericEqual(stored.priceAmount ?? null, attrs.priceAmount, "priceAmount") &&
+    exactNumericEqual(
+      stored.compareAtPriceAmount ?? null,
+      attrs.compareAtPriceAmount ?? null,
+      "compareAtPriceAmount",
+    ) &&
     stored.currencyCode === attrs.currencyCode &&
     (stored.position ?? null) === (attrs.position ?? null)
   );
@@ -963,9 +982,13 @@ export function inventoryItemAttributesEqual(
     (stored.sku ?? null) === (attrs.sku ?? null) &&
     stored.tracked === attrs.tracked &&
     stored.requiresShipping === attrs.requiresShipping &&
-    (stored.weightValue ?? null) === (attrs.weightValue ?? null) &&
+    exactNumericEqual(stored.weightValue ?? null, attrs.weightValue ?? null, "weightValue") &&
     (stored.weightUnit ?? null) === (attrs.weightUnit ?? null) &&
-    (stored.unitCostAmount ?? null) === (attrs.unitCostAmount ?? null) &&
+    exactNumericEqual(
+      stored.unitCostAmount ?? null,
+      attrs.unitCostAmount ?? null,
+      "unitCostAmount",
+    ) &&
     (stored.unitCostCurrencyCode ?? null) === (attrs.unitCostCurrencyCode ?? null) &&
     stored.unitCostAccess === attrs.unitCostAccess
   );

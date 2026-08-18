@@ -19,11 +19,18 @@ import {
   CanonicalApplyBatchExceedsCapacityError,
   CanonicalApplyError,
   CanonicalApplyExistenceKindError,
+  CanonicalApplyIncompleteFirstLiveError,
   CanonicalApplyLeaseInvalidError,
   CanonicalApplyMissingTokenError,
+  CanonicalApplyMoneyError,
+  CanonicalApplyNumericScaleError,
   CanonicalApplyPhysicalDeleteError,
 } from "./errors";
 import { decideExistence } from "./existence";
+import {
+  validateFirstLiveAttributes,
+  validateObservationNumericColumns,
+} from "./first-live";
 import {
   abandonExpiredBlockers,
   abandonOwnExpiredObservation,
@@ -220,6 +227,40 @@ function storedIntervalFromFact(fact: FactSnapshot | null): GenerationInterval |
   return {
     requestGen: fact.attributeRequestGen,
     responseGen: fact.attributeResponseGen,
+  };
+}
+
+async function rejectUsableObservation(
+  db: CanonicalApplyDb,
+  observation: CanonicalObservation,
+  abandoned: string[],
+  failure: { error: CanonicalApplyError; diagnostic: string },
+  extras?: { factId: string | null; existenceMutated: boolean },
+): Promise<{
+  result: CanonicalApplyObservationResult;
+  abandoned: string[];
+}> {
+  if (observation.observationKind === "full_sync") {
+    throw failure.error;
+  }
+  await completeObservation(
+    db,
+    observation.identity.shopId,
+    observation.observationToken,
+    observation.observationRequestGen,
+    observation.observationResponseGen,
+  );
+  return {
+    abandoned,
+    result: {
+      identity: observation.identity,
+      outcome: "rejected",
+      existenceMutated: extras?.existenceMutated ?? false,
+      attributesApplied: false,
+      presenceUpdated: false,
+      diagnosticState: failure.diagnostic,
+      factId: extras?.factId ?? null,
+    },
   };
 }
 
@@ -522,11 +563,45 @@ async function applyOneObservation(
       shopifyCreatedAt: observation.shopifyCreatedAt ?? null,
     };
     if (!fact) {
+      if (existenceDecision.nextState === "LIVE") {
+        const firstLive = validateFirstLiveAttributes(observation);
+        if (!firstLive.ok) {
+          return rejectUsableObservation(db, observation, abandoned, firstLive);
+        }
+      }
       const freshness =
         observation.shopifyUpdatedAt == null ? "DEGRADED" : "ORDERED";
       const presence =
         observation.observationKind === "full_sync" ? observation.epochId : null;
-      factId = await insertFact(db, observation, write, interval, freshness, presence);
+      try {
+        factId = await insertFact(db, observation, write, interval, freshness, presence);
+      } catch (error) {
+        if (error instanceof CanonicalApplyIncompleteFirstLiveError) {
+          return rejectUsableObservation(db, observation, abandoned, {
+            ok: false,
+            kind: "incomplete",
+            missing: [...error.missing],
+            diagnostic: DIAGNOSTIC.INCOMPLETE_FIRST_LIVE,
+            error,
+          });
+        }
+        if (error instanceof CanonicalApplyNumericScaleError) {
+          return rejectUsableObservation(db, observation, abandoned, {
+            ok: false,
+            kind: "numeric_scale",
+            field: error.field,
+            diagnostic: DIAGNOSTIC.NUMERIC_SCALE,
+            error,
+          });
+        }
+        if (error instanceof CanonicalApplyMoneyError) {
+          return rejectUsableObservation(db, observation, abandoned, {
+            error,
+            diagnostic: DIAGNOSTIC.NUMERIC_SCALE,
+          });
+        }
+        throw error;
+      }
       fact = await lockAndReadFact(db, identity);
       existenceMutated = true;
     } else {
@@ -555,6 +630,13 @@ async function applyOneObservation(
     fact.existenceState === "LIVE" &&
     incomingLive;
   if (allowAttributes && fact) {
+    const numericCheck = validateObservationNumericColumns(observation);
+    if (!numericCheck.ok) {
+      return rejectUsableObservation(db, observation, abandoned, numericCheck, {
+        factId: fact.id,
+        existenceMutated,
+      });
+    }
     const attrResult = await applyAttributes(db, observation, fact, interval);
     attributesApplied = attrResult.applied;
     if (attrResult.diagnostic) {
