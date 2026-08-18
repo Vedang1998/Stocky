@@ -5,8 +5,8 @@ import {
   isNonOverlappingLater,
 } from "./clocks";
 import { decideExistence, encodeRevivalConfirmation, parseRevivalConfirmation } from "./existence";
-import { exactMoneyText, exactMoneyTextOrNull } from "./money";
-import { CanonicalApplyMoneyError } from "./errors";
+import { exactMoneyText, exactMoneyTextOrNull, exactNumericEqual, assertFrozenNumericColumn, canonicalizeExactDecimalText, isExactlyRepresentableAsDecimal20_6 } from "./money";
+import { CanonicalApplyMoneyError, CanonicalApplyNumericScaleError } from "./errors";
 import { DIAGNOSTIC, type CanonicalFactIdentity } from "./types";
 import {
   inventoryItemAttributesEqual,
@@ -202,7 +202,7 @@ describe("PR5-F2B existence / revival", () => {
     }
   });
 
-  it("still first-inserts LIVE when a completed overlapping observation left no row", () => {
+  it("fails closed on first insert when a completed overlapping observation left no row", () => {
     const live = decideExistence({
       identity,
       stored: null,
@@ -211,8 +211,9 @@ describe("PR5-F2B existence / revival", () => {
       existenceBlocked: false,
       overlappingCompleted: [{ requestGen: 1n, responseGen: 3n }],
     });
-    expect(live.mutate).toBe(true);
-    if (live.mutate) expect(live.nextState).toBe("LIVE");
+    expect(live.mutate).toBe(false);
+    expect(live.reason).toBe("first_insert_overlapping_completed");
+    expect(live.diagnostic).toBe(DIAGNOSTIC.CONCURRENT_EXISTENCE);
 
     const absentOverlap = decideExistence({
       identity,
@@ -223,7 +224,24 @@ describe("PR5-F2B existence / revival", () => {
       overlappingCompleted: [{ requestGen: 1n, responseGen: 3n }],
     });
     expect(absentOverlap.mutate).toBe(false);
+    expect(absentOverlap.reason).toBe("first_insert_overlapping_completed");
     expect(absentOverlap.diagnostic).toBe(DIAGNOSTIC.CONCURRENT_EXISTENCE);
+  });
+
+  it("allows first LIVE insert only when the incoming interval does not overlap completed evidence", () => {
+    const later = decideExistence({
+      identity,
+      stored: null,
+      incomingKind: "LIVE_REFETCH",
+      incomingInterval: { requestGen: 10n, responseGen: 11n },
+      existenceBlocked: false,
+      overlappingCompleted: [{ requestGen: 1n, responseGen: 3n }],
+    });
+    expect(later.mutate).toBe(true);
+    if (later.mutate) {
+      expect(later.nextState).toBe("LIVE");
+      expect(later.reason).toBe("first_insert_live");
+    }
   });
 
   it("blocks existence mutation while an ACTIVE unexpired blocker remains", () => {
@@ -351,6 +369,36 @@ describe("PR5-F2B exact money", () => {
       CanonicalApplyMoneyError,
     );
   });
+
+  it("treats scale-equivalent NUMERIC text as equal and null as distinct", () => {
+    expect(exactNumericEqual("19.99", "19.990000", "priceAmount")).toBe(true);
+    expect(exactNumericEqual("0.1", "0.100000", "priceAmount")).toBe(true);
+    expect(exactNumericEqual("12.5", "12.50", "compareAtPriceAmount")).toBe(true);
+    expect(exactNumericEqual("12.5", "12.500000", "unitCostAmount")).toBe(true);
+    expect(exactNumericEqual("1.250000", "1.25", "weightValue")).toBe(true);
+    expect(exactNumericEqual(null, null, "priceAmount")).toBe(true);
+    expect(exactNumericEqual(null, "19.99", "priceAmount")).toBe(false);
+    expect(exactNumericEqual("19.99", null, "priceAmount")).toBe(false);
+    expect(exactNumericEqual("19.99", "19.98", "priceAmount")).toBe(false);
+    expect(exactNumericEqual("0", "-0", "priceAmount")).toBe(true);
+    expect(exactNumericEqual("0.0", "-0.000000", "priceAmount")).toBe(true);
+    expect(exactNumericEqual("-1.50", "-1.500000", "priceAmount")).toBe(true);
+    expect(exactNumericEqual("-1.50", "1.50", "priceAmount")).toBe(false);
+    expect(canonicalizeExactDecimalText("19.990000")).toBe("19.99");
+  });
+
+  it("fail-closes significant precision beyond DECIMAL(20,6) and accepts exact scale", () => {
+    expect(isExactlyRepresentableAsDecimal20_6("19.123456")).toBe(true);
+    expect(isExactlyRepresentableAsDecimal20_6("0.000001")).toBe(true);
+    expect(isExactlyRepresentableAsDecimal20_6("19.123456000")).toBe(true);
+    expect(isExactlyRepresentableAsDecimal20_6("19.1234567")).toBe(false);
+    expect(isExactlyRepresentableAsDecimal20_6("0.0000001")).toBe(false);
+    expect(assertFrozenNumericColumn("19.9900000", "priceAmount")).toBe("19.9900000");
+    expect(() => assertFrozenNumericColumn("19.9900001", "priceAmount")).toThrow(
+      CanonicalApplyNumericScaleError,
+    );
+    expect(() => exactMoneyText(0.1, "priceAmount")).toThrow(CanonicalApplyMoneyError);
+  });
 });
 
 describe("PR5-F2B relationship identity is part of attribute equality", () => {
@@ -401,6 +449,15 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
     });
     expect(sameParent).toBe(true);
     expect(otherParent).toBe(false);
+
+    const scaleEquivalent = variantAttributesEqual(stored, {
+      shopifyProductGid: "gid://shopify/Product/parent-a",
+      title: "V",
+      selectedOptions: {},
+      priceAmount: "10",
+      currencyCode: "USD",
+    });
+    expect(scaleEquivalent).toBe(true);
   });
 
   it("treats InventoryItem rows with a different shopifyVariantGid as not equal", () => {
@@ -419,5 +476,18 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
     });
     expect(sameVariant).toBe(true);
     expect(otherVariant).toBe(false);
+
+    const scaleEquivalent = inventoryItemAttributesEqual(
+      snapshot({ weightValue: "1.250000", unitCostAmount: "3.100000" }),
+      {
+        shopifyVariantGid: "gid://shopify/ProductVariant/v-a",
+        tracked: true,
+        requiresShipping: true,
+        unitCostAccess: "NULL",
+        weightValue: "1.25",
+        unitCostAmount: "3.10",
+      },
+    );
+    expect(scaleEquivalent).toBe(true);
   });
 });
