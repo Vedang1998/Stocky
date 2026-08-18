@@ -50,6 +50,12 @@ function asQueryRaw(client: Client): CanonicalApplyDb {
   };
 }
 
+function forwardQueryRaw(
+  inner: CanonicalApplyDb,
+): CanonicalApplyDb["$queryRaw"] {
+  return inner.$queryRaw.bind(inner);
+}
+
 async function setTenant(client: Client, shopId: string): Promise<void> {
   await client.query(`SELECT set_config('stocky.current_shop_id', $1, true)`, [
     shopId,
@@ -1928,7 +1934,7 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
             hideProductFactSelect = false;
             return [];
           }
-          return inner.$queryRaw(strings, ...values);
+          return forwardQueryRaw(inner)(strings, ...values);
         },
       };
       await expect(
@@ -2023,7 +2029,7 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
             ) {
               return [];
             }
-            return inner.$queryRaw(strings, ...values);
+            return forwardQueryRaw(inner)(strings, ...values);
           },
         };
         try {
