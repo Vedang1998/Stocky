@@ -16,6 +16,7 @@ export {
   type ProductRead,
   type ProductVariantRead,
   type UnitCostAccess,
+  type UnitCostPreflightFailureKind,
   type UnitCostPreflightResult,
 } from "./types";
 export {
@@ -41,6 +42,8 @@ export {
 } from "./execute";
 export { readAllLocations, LocationPaginationError } from "./locations";
 export {
+  CollectionPaginationError,
+  InventoryLevelIdentityMismatchError,
   readInventoryItem,
   readInventoryLevelById,
   readInventoryLevelByPair,

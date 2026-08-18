@@ -57,7 +57,7 @@ describe("PR5-F2A GraphQL documents", () => {
     }
   });
 
-  it("accepts bulk query documents as QUERY operations within official connection limits", () => {
+  it("counts bulk connection field names and nested connection depth (not schema validation)", () => {
     for (const document of CANONICAL_BULK_QUERY_DOCUMENTS) {
       expect(() => assertCanonicalReadDocument(document)).not.toThrow();
       expect(document).not.toContain("currentBulkOperation");

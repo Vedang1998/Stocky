@@ -6,157 +6,205 @@
  * will pass to bulkOperationRunQuery.
  *
  * Do not wrap them in bulkOperationRunQuery here (that is a mutation).
- * Do not tag them with `#graphql` — standalone Admin schema validation
- * requires `first` on connections, which bulk queries omit by design.
+ *
+ * These strings are not `#graphql`-tagged. graphql-codegen covers tagged
+ * Admin QUERY documents in `documents.ts`. Untagged bulk inner queries are
+ * validated by the dedicated Admin 2026-07 schema gate
+ * (`bulk-query-schema.ts` / `bulk-query-schema.test.ts`) using graphql-js
+ * `validate`, with Shopify bulk pagination arguments treated as optional.
+ *
+ * Official bulk guidance: `first` is optional and ignored if present. It is
+ * not required for schema validity and is omitted here because bulk
+ * operations ignore pagination arguments. Connection types MUST be
+ * traversed with `edges { node { … } }`. Top-level `node` / `nodes` fields
+ * are forbidden.
  *
  * Official bulk limits: one top-level connection, ≤5 connections, ≤2 nested
  * connection levels, groupObjects remains false at submit time (later lane).
+ *
+ * Keep these as no-substitution template literals so the canonical-read
+ * scanner can statically review them.
  */
 
 export const CATALOG_BULK_QUERY_WITH_UNIT_COST = `{
   products {
-    id
-    legacyResourceId
-    title
-    handle
-    vendor
-    productType
-    tags
-    status
-    featuredMedia {
-      preview {
-        image {
-          url
-        }
-      }
-    }
-    createdAt
-    updatedAt
-    variants {
-      id
-      legacyResourceId
-      title
-      displayName
-      sku
-      barcode
-      position
-      price
-      compareAtPrice
-      selectedOptions {
-        name
-        value
-      }
-      createdAt
-      updatedAt
-      inventoryItem {
+    edges {
+      node {
         id
-        sku
-        tracked
-        requiresShipping
-        measurement {
-          weight {
-            value
-            unit
+        legacyResourceId
+        title
+        handle
+        vendor
+        productType
+        tags
+        status
+        featuredMedia {
+          preview {
+            image {
+              url
+            }
           }
-        }
-        unitCost {
-          amount
-          currencyCode
         }
         createdAt
         updatedAt
+        variants {
+          edges {
+            node {
+              id
+              legacyResourceId
+              title
+              displayName
+              sku
+              barcode
+              position
+              price
+              compareAtPrice
+              selectedOptions {
+                name
+                value
+              }
+              createdAt
+              updatedAt
+              inventoryItem {
+                id
+                sku
+                tracked
+                requiresShipping
+                measurement {
+                  weight {
+                    value
+                    unit
+                  }
+                }
+                createdAt
+                updatedAt
+                unitCost {
+                  amount
+                  currencyCode
+                }
+              }
+            }
+          }
+        }
+        collections {
+          edges {
+            node {
+              id
+              title
+            }
+          }
+        }
       }
-    }
-    collections {
-      id
-      title
     }
   }
 }`;
 
 export const CATALOG_BULK_QUERY_NO_UNIT_COST = `{
   products {
-    id
-    legacyResourceId
-    title
-    handle
-    vendor
-    productType
-    tags
-    status
-    featuredMedia {
-      preview {
-        image {
-          url
-        }
-      }
-    }
-    createdAt
-    updatedAt
-    variants {
-      id
-      legacyResourceId
-      title
-      displayName
-      sku
-      barcode
-      position
-      price
-      compareAtPrice
-      selectedOptions {
-        name
-        value
-      }
-      createdAt
-      updatedAt
-      inventoryItem {
+    edges {
+      node {
         id
-        sku
-        tracked
-        requiresShipping
-        measurement {
-          weight {
-            value
-            unit
+        legacyResourceId
+        title
+        handle
+        vendor
+        productType
+        tags
+        status
+        featuredMedia {
+          preview {
+            image {
+              url
+            }
           }
         }
         createdAt
         updatedAt
+        variants {
+          edges {
+            node {
+              id
+              legacyResourceId
+              title
+              displayName
+              sku
+              barcode
+              position
+              price
+              compareAtPrice
+              selectedOptions {
+                name
+                value
+              }
+              createdAt
+              updatedAt
+              inventoryItem {
+                id
+                sku
+                tracked
+                requiresShipping
+                measurement {
+                  weight {
+                    value
+                    unit
+                  }
+                }
+                createdAt
+                updatedAt
+              }
+            }
+          }
+        }
+        collections {
+          edges {
+            node {
+              id
+              title
+            }
+          }
+        }
       }
-    }
-    collections {
-      id
-      title
     }
   }
 }`;
 
 export const INVENTORY_LEVEL_BULK_QUERY = `{
   inventoryItems {
-    id
-    inventoryLevels(includeInactive: true) {
-      id
-      isActive
-      createdAt
-      updatedAt
-      location {
+    edges {
+      node {
         id
-      }
-      quantities(
-        names: [
-          "available"
-          "on_hand"
-          "incoming"
-          "committed"
-          "reserved"
-          "damaged"
-          "safety_stock"
-          "quality_control"
-        ]
-      ) {
-        name
-        quantity
-        updatedAt
+        inventoryLevels(includeInactive: true) {
+          edges {
+            node {
+              id
+              isActive
+              createdAt
+              updatedAt
+              location {
+                id
+              }
+              item {
+                id
+              }
+              quantities(
+                names: [
+                  "available"
+                  "on_hand"
+                  "incoming"
+                  "committed"
+                  "reserved"
+                  "damaged"
+                  "safety_stock"
+                  "quality_control"
+                ]
+              ) {
+                name
+                quantity
+                updatedAt
+              }
+            }
+          }
+        }
       }
     }
   }

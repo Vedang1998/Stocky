@@ -16,6 +16,7 @@ describe("PR5-F2A inventory quantities", () => {
     const mapped = mapInventoryQuantities(EIGHT_QUANTITIES);
     expect(mapped.missingApprovedNames).toEqual([]);
     expect(mapped.unexpectedNames).toEqual([]);
+    expect(mapped.malformedQuantityNames).toEqual([]);
     for (const name of APPROVED_INVENTORY_QUANTITY_NAMES) {
       expect(mapped.byName[name]?.name).toBe(name);
       expect(mapped.byName[name]?.quantity).toBeGreaterThan(0);
@@ -37,6 +38,7 @@ describe("PR5-F2A inventory quantities", () => {
     ]);
     expect(mapped.missingApprovedNames).toEqual([]);
     expect(mapped.unexpectedNames).toEqual(["future_state"]);
+    expect(mapped.malformedQuantityNames).toEqual([]);
     expect(mapped.byName.available?.quantity).toBe(1);
   });
 
@@ -48,6 +50,39 @@ describe("PR5-F2A inventory quantities", () => {
     expect(mapped.missingApprovedNames).toContain("on_hand");
     expect(mapped.missingApprovedNames).toContain("incoming");
     expect(mapped.byName.on_hand).toBeUndefined();
+    expect(mapped.malformedQuantityNames).toEqual([]);
+  });
+
+  it("records an unexpected name even when its quantity is malformed", () => {
+    const mapped = mapInventoryQuantities([
+      { name: "rogue_name", quantity: "12", updatedAt: null },
+    ]);
+    expect(mapped.unexpectedNames).toEqual(["rogue_name"]);
+    expect(mapped.malformedQuantityNames).toEqual(["rogue_name"]);
+    expect(mapped.byName.available).toBeUndefined();
+  });
+
+  it("distinguishes a malformed approved quantity from a genuinely absent name", () => {
+    const mapped = mapInventoryQuantities([
+      { name: "available", quantity: 5.5, updatedAt: null },
+    ]);
+    expect(mapped.malformedQuantityNames).toEqual(["available"]);
+    expect(mapped.byName.available).toBeUndefined();
+    expect(mapped.missingApprovedNames).not.toContain("available");
+    expect(mapped.missingApprovedNames).toContain("on_hand");
+  });
+
+  it("keeps eight valid names unchanged when a malformed unexpected name is also present", () => {
+    const mapped = mapInventoryQuantities([
+      ...EIGHT_QUANTITIES,
+      { name: "rogue_name", quantity: "12", updatedAt: null },
+    ]);
+    expect(mapped.missingApprovedNames).toEqual([]);
+    expect(mapped.unexpectedNames).toEqual(["rogue_name"]);
+    expect(mapped.malformedQuantityNames).toEqual(["rogue_name"]);
+    for (const name of APPROVED_INVENTORY_QUANTITY_NAMES) {
+      expect(mapped.byName[name]?.quantity).toBeGreaterThan(0);
+    }
   });
 
   it("queries all eight names on the inventory-level pair helper", async () => {

@@ -10,7 +10,11 @@ import {
   CanonicalReadGraphQLSyntaxError,
   CanonicalReadMutationRejectedError,
 } from "./safety/graphql-ast";
-import { scanCatalogFactsProductionModules } from "./safety/scan";
+import {
+  extractGraphQLDocumentsFromTypeScript,
+  looksLikeGraphQLDocument,
+  scanCatalogFactsProductionModules,
+} from "./safety/scan";
 import { createMockAdmin } from "./__tests__/mock-admin";
 
 const PLANTED_MUTATION = `#graphql
@@ -96,6 +100,23 @@ describe("PR5-F2A GraphQL AST mutation safety (R-138)", () => {
     ).rejects.toBeInstanceOf(CanonicalReadMutationRejectedError);
     expect(admin.calls).toEqual([]);
   });
+
+  it("rejects an unexpected productVariantsBulkUpdate mutation before any Admin call", async () => {
+    const document = `#graphql
+      mutation UnexpectedProductVariantsBulkUpdate {
+        productVariantsBulkUpdate(productId: "gid://shopify/Product/1", variants: []) {
+          product { id }
+        }
+      }
+    `;
+    const admin = createMockAdmin(() => {
+      throw new Error("Admin client must not be called for mutations");
+    });
+    await expect(executeAdminReadQuery(admin, document)).rejects.toBeInstanceOf(
+      CanonicalReadMutationRejectedError,
+    );
+    expect(admin.calls).toEqual([]);
+  });
 });
 
 describe("PR5-F2A recursive production-module scan (R-163)", () => {
@@ -147,6 +168,148 @@ describe("PR5-F2A recursive production-module scan (R-163)", () => {
             finding.detail.includes("inventoryBulkToggleActivation"),
         ),
       ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed on interpolated GraphQL mutations and comment-prefixed mutations", () => {
+    const interpolatedSource = [
+      "export const planted = `#graphql",
+      "  mutation InterpolatedInventoryDeactivate {",
+      '    ${"inventoryDeactivate"} {',
+      "      inventoryItem { id }",
+      "    }",
+      "  }",
+      "`;",
+      "",
+    ].join("\n");
+    const extractedInterpolated =
+      extractGraphQLDocumentsFromTypeScript(interpolatedSource);
+    expect(extractedInterpolated.documents).toEqual([]);
+    expect(extractedInterpolated.unreviewable.length).toBeGreaterThan(0);
+
+    const commentPrefixed = `
+# leading GraphQL comment
+mutation CommentPrefixedInventoryDeactivate {
+  inventoryDeactivate(inventoryItemId: "gid://shopify/InventoryItem/1") {
+    inventoryItem { id }
+  }
+}
+`;
+    expect(looksLikeGraphQLDocument(commentPrefixed)).toBe(true);
+    const extractedComment = extractGraphQLDocumentsFromTypeScript(
+      `export const planted = \`${commentPrefixed}\`;\n`,
+    );
+    expect(extractedComment.documents.length).toBe(1);
+    expect(() =>
+      assertCanonicalReadDocument(extractedComment.documents[0]!),
+    ).toThrow(CanonicalReadMutationRejectedError);
+
+    const validQuery = `#graphql
+      query StillAllowedProduct {
+        product(id: "gid://shopify/Product/1") { id }
+      }
+    `;
+    const extractedValid = extractGraphQLDocumentsFromTypeScript(
+      `export const planted = \`${validQuery}\`;\n`,
+    );
+    expect(extractedValid.unreviewable).toEqual([]);
+    expect(extractedValid.documents.length).toBe(1);
+    expect(() =>
+      assertCanonicalReadDocument(extractedValid.documents[0]!),
+    ).not.toThrow();
+  });
+
+  it("rejects a Shopify write-service import not on the old two-name list", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-service-import-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-write-import.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `import { writeInventory } from "../../../../../services/inventory-write.server";\nexport const n = writeInventory;\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.relativeFiles.some((file) =>
+          file.includes("admin-read/safety/nested/deeper/planted-write-import.ts"),
+        ),
+      ).toBe(true);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "forbidden_import" &&
+            finding.detail.includes("inventory-write.server"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a direct @shopify package import in the canonical read boundary", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-shopify-import-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-shopify-import.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `import { shopifyApi } from "@shopify/shopify-api";\nexport const n = shopifyApi;\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "forbidden_import" &&
+            finding.detail.includes("@shopify/shopify-api"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("still accepts a valid nested QUERY fixture", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-valid-query-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-valid-query.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `export const planted = \`#graphql
+  query PlantedValidProduct {
+    product(id: "gid://shopify/Product/1") { id }
+  }
+\`;\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(result.findings).toEqual([]);
+      expect(result.graphqlDocumentCount).toBeGreaterThan(0);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

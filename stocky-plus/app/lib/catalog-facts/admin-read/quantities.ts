@@ -12,6 +12,10 @@ export function isApprovedInventoryQuantityName(
   return APPROVED_INVENTORY_QUANTITY_NAME_SET.has(name);
 }
 
+function isIntegerQuantity(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value);
+}
+
 export function mapInventoryQuantities(
   raw: ReadonlyArray<{
     name?: unknown;
@@ -21,30 +25,34 @@ export function mapInventoryQuantities(
 ): InventoryQuantitiesRead {
   const byName: InventoryQuantitiesRead["byName"] = {};
   const unexpectedNames: string[] = [];
+  const malformedQuantityNames: string[] = [];
 
   for (const row of raw ?? []) {
     if (typeof row.name !== "string" || row.name === "") continue;
-    const quantity =
-      typeof row.quantity === "number" && Number.isInteger(row.quantity)
-        ? row.quantity
-        : null;
-    if (quantity == null) continue;
+
+    if (!isApprovedInventoryQuantityName(row.name)) {
+      unexpectedNames.push(row.name);
+    }
+
+    if (!isIntegerQuantity(row.quantity)) {
+      malformedQuantityNames.push(row.name);
+      continue;
+    }
+
     const updatedAt = row.updatedAt == null ? null : String(row.updatedAt);
     const mapped: InventoryQuantityRead = {
       name: row.name,
-      quantity,
+      quantity: row.quantity,
       updatedAt,
     };
     if (isApprovedInventoryQuantityName(row.name)) {
       byName[row.name] = mapped;
-    } else {
-      unexpectedNames.push(row.name);
     }
   }
 
   const missingApprovedNames = APPROVED_INVENTORY_QUANTITY_NAMES.filter(
-    (name) => byName[name] == undefined,
+    (name) => byName[name] == undefined && !malformedQuantityNames.includes(name),
   );
 
-  return { byName, missingApprovedNames, unexpectedNames };
+  return { byName, missingApprovedNames, unexpectedNames, malformedQuantityNames };
 }

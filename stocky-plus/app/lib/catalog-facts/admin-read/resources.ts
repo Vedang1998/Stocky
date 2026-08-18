@@ -10,7 +10,9 @@ import {
   INVENTORY_QUANTITY_NAMES_ARGUMENT,
 } from "./documents";
 import {
+  optionalBoolean,
   optionalDecimalString,
+  optionalFiniteNumber,
   optionalIsoTimestamp,
   optionalLegacyResourceId,
   optionalString,
@@ -23,16 +25,53 @@ import {
 import { executeAdminReadQuery } from "./execute";
 import { mapLocationNode } from "./locations";
 import { mapInventoryQuantities } from "./quantities";
+import {
+  CollectionPaginationError,
+  paginateCursorConnection,
+} from "./cursor-pagination";
 import type {
-  AdminGraphQLResponse,
   CatalogAdminReadClient,
   InventoryItemRead,
   InventoryLevelRead,
+  InventoryLevelPairIdentity,
   LocationRead,
   ProductCollectionMembershipRead,
   ProductRead,
   ProductVariantRead,
 } from "./types";
+
+export { CollectionPaginationError } from "./cursor-pagination";
+
+export class InventoryLevelIdentityMismatchError extends Error {
+  readonly code = "INVENTORY_LEVEL_IDENTITY_MISMATCH" as const;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "InventoryLevelIdentityMismatchError";
+  }
+}
+
+function responseIdentityString(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+function assertInventoryLevelPairMatchesRequest(
+  requested: InventoryLevelPairIdentity,
+  node: InventoryLevelNode,
+): void {
+  const responseItemGid = responseIdentityString(node.item?.id);
+  const responseLocationGid = responseIdentityString(node.location?.id);
+  if (responseItemGid && responseItemGid !== requested.inventoryItemGid) {
+    throw new InventoryLevelIdentityMismatchError(
+      `inventoryLevel item identity ${responseItemGid} does not match requested ${requested.inventoryItemGid}`,
+    );
+  }
+  if (responseLocationGid && responseLocationGid !== requested.locationGid) {
+    throw new InventoryLevelIdentityMismatchError(
+      `inventoryLevel location identity ${responseLocationGid} does not match requested ${requested.locationGid}`,
+    );
+  }
+}
 
 type ProductNode = {
   id?: unknown;
@@ -161,7 +200,10 @@ export function mapInventoryItemNode(
       node.requiresShipping,
       "inventoryItem.requiresShipping",
     ),
-    weightValue: weight?.value == null ? null : Number(weight.value),
+    weightValue: optionalFiniteNumber(
+      weight?.value,
+      "inventoryItem.measurement.weight.value",
+    ),
     weightUnit: optionalString(weight?.unit),
     variantGid: optionalString(variantGid),
     unitCostAmount: unitCostSelected
@@ -197,7 +239,7 @@ export function mapInventoryLevelNode(
   return {
     shopifyLevelGid: optionalString(node.id),
     identity: { inventoryItemGid, locationGid },
-    isActive: node.isActive == null ? null : Boolean(node.isActive),
+    isActive: optionalBoolean(node.isActive, "inventoryLevel.isActive"),
     shopifyCreatedAt: optionalIsoTimestamp(node.createdAt),
     shopifyUpdatedAt: optionalIsoTimestamp(node.updatedAt),
     quantities: mapInventoryQuantities(node.quantities),
@@ -220,66 +262,39 @@ export async function readProduct(
 export async function readProductCollectionMemberships(
   admin: CatalogAdminReadClient,
   productId: string,
+  options?: { pageSize?: number },
 ): Promise<ProductCollectionMembershipRead[]> {
-  const memberships: ProductCollectionMembershipRead[] = [];
-  const seen = new Set<string>();
-  let after: string | null = null;
-  const seenCursors = new Set<string>();
-  let hasMore = true;
+  const pageSize = options?.pageSize ?? 250;
 
-  while (hasMore) {
-    const result: AdminGraphQLResponse<{
-      product?: {
-        collections?: {
-          pageInfo?: { hasNextPage?: unknown; endCursor?: unknown };
-          edges?: Array<{
-            node?: { id?: unknown; title?: unknown } | null;
-          } | null>;
+  return paginateCursorConnection({
+    noun: "collection",
+    connectionName: "collections",
+    pageSize,
+    createError: (message) => new CollectionPaginationError(message),
+    fetchConnection: async (after) => {
+      const result = await executeAdminReadQuery<{
+        product?: {
+          collections?: {
+            pageInfo?: { hasNextPage?: unknown; endCursor?: unknown };
+            edges?: Array<{
+              node?: { id?: unknown; title?: unknown } | null;
+            } | null>;
+          } | null;
         } | null;
-      } | null;
-    }> = await executeAdminReadQuery(admin, CATALOG_FACT_PRODUCT_COLLECTIONS_QUERY, {
-      id: productId,
-      first: 250,
-      after,
-    });
-
-    const connection = result.data?.product?.collections;
-    if (!connection) return memberships;
-
-    for (const edge of connection.edges ?? []) {
-      const node = edge?.node;
-      if (!node?.id) continue;
-      const collectionGid = requireNonEmptyString(node.id, "collection.id");
-      if (seen.has(collectionGid)) {
-        throw new Error(`duplicate collection GID ${collectionGid}`);
-      }
-      seen.add(collectionGid);
-      memberships.push({
-        collectionGid,
-        title: requireString(node.title, "collection.title"),
+      }>(admin, CATALOG_FACT_PRODUCT_COLLECTIONS_QUERY, {
+        id: productId,
+        first: pageSize,
+        after,
       });
-    }
-
-    const hasNextPage = Boolean(connection.pageInfo?.hasNextPage);
-    if (!hasNextPage) {
-      hasMore = false;
-      continue;
-    }
-    const endCursor =
-      connection.pageInfo?.endCursor == null
-        ? null
-        : String(connection.pageInfo.endCursor);
-    if (!endCursor) {
-      throw new Error("collections hasNextPage without endCursor");
-    }
-    if (seenCursors.has(endCursor)) {
-      throw new Error(`duplicate collections endCursor ${endCursor}`);
-    }
-    seenCursors.add(endCursor);
-    after = endCursor;
-  }
-
-  return memberships;
+      return result.data?.product?.collections;
+    },
+    mapNode: (node) => ({
+      collectionGid: requireNonEmptyString(node.id, "collection.id"),
+      title: requireString(node.title, "collection.title"),
+    }),
+    identityOf: (mapped) => mapped.collectionGid,
+    nodeIdentity: (node) => node.id,
+  });
 }
 
 export async function readProductVariant(
@@ -340,6 +355,7 @@ export async function readInventoryLevelByPair(
   });
   const level = result.data?.inventoryItem?.inventoryLevel;
   if (!level) return null;
+  assertInventoryLevelPairMatchesRequest(identity, level);
   return mapInventoryLevelNode(level, {
     inventoryItemGid: identity.inventoryItemGid,
     locationGid: identity.locationGid,

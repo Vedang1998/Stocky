@@ -72,6 +72,11 @@ export type InventoryQuantitiesRead = {
   byName: Partial<Record<ApprovedInventoryQuantityName, InventoryQuantityRead>>;
   missingApprovedNames: ApprovedInventoryQuantityName[];
   unexpectedNames: string[];
+  /**
+   * Non-persisted read-boundary diagnostic. Names whose quantity value was
+   * present but not a JSON integer. Distinct from a genuinely absent name.
+   */
+  malformedQuantityNames: string[];
 };
 
 export type LocationRead = {
@@ -158,6 +163,16 @@ export type UnitCostAccess =
 
 export type UnitCostPreflightDecision = "ALLOWED" | "DENIED" | "UNAVAILABLE";
 
+/**
+ * Non-persisted preflight diagnostic. Not a canonical/database enum.
+ * Distinguishes GraphQL errors, transport/network failures, and mapping
+ * integrity failures without changing the approved unitCostAccess contract.
+ */
+export type UnitCostPreflightFailureKind =
+  | "GRAPHQL"
+  | "TRANSPORT"
+  | "MAPPING_INTEGRITY";
+
 export type CatalogBulkQueryShape = "with-unitCost" | "no-unitCost";
 
 export type UnitCostPreflightResult = {
@@ -167,6 +182,8 @@ export type UnitCostPreflightResult = {
   /** Exact source amount when present; never coerced through Number. */
   unitCostAmount: string | null;
   unitCostCurrencyCode: string | null;
+  /** Non-persisted diagnostic; null when the preflight succeeded. */
+  failureKind: UnitCostPreflightFailureKind | null;
 };
 
 export type BulkOperationGid = string & {

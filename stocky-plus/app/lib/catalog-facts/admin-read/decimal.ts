@@ -57,10 +57,21 @@ export function requireBoolean(value: unknown, field: string): boolean {
   return value;
 }
 
-export function optionalBoolean(value: unknown): boolean | null {
+export function optionalBoolean(value: unknown, field = "expected boolean or null"): boolean | null {
   if (value == null) return null;
   if (typeof value === "boolean") return value;
-  throw new Error("expected boolean or null");
+  throw new Error(`${field} must be a boolean or null`);
+}
+
+export function optionalFiniteNumber(
+  value: unknown,
+  field: string,
+): number | null {
+  if (value == null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be a finite number from Shopify JSON`);
+  }
+  return value;
 }
 
 export function requireIsoTimestamp(value: unknown, field: string): string {

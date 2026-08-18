@@ -4,6 +4,10 @@
  * Performed before choosing a catalog bulk document. Permission denial or
  * unavailability must not abort the catalog read pipeline. FEATURE_COST_SYNC
  * is not consulted and is not enabled here.
+ *
+ * DENIED requires structured GraphQL evidence: extensions.code ACCESS_DENIED
+ * and a GraphQL path attributable to unitCost. Message text is secondary
+ * diagnostic only and must not produce DENIED.
  */
 
 import {
@@ -17,21 +21,31 @@ import type {
   AdminGraphQLError,
   CatalogAdminReadClient,
   CatalogBulkQueryShape,
+  UnitCostPreflightFailureKind,
   UnitCostPreflightResult,
 } from "./types";
 
-function errorTouchesUnitCost(error: AdminGraphQLError): boolean {
-  const path = error.path ?? [];
-  if (path.some((segment) => segment === "unitCost")) return true;
-  return /unitCost/i.test(error.message);
+function errorPathTouchesUnitCost(error: AdminGraphQLError): boolean {
+  const path = error.path;
+  if (!Array.isArray(path) || path.length === 0) return false;
+  return path[path.length - 1] === "unitCost";
 }
 
-function isAccessDenied(error: AdminGraphQLError): boolean {
-  const code = error.extensions?.code;
-  if (typeof code === "string" && code.toUpperCase() === "ACCESS_DENIED") {
-    return true;
-  }
-  return /access denied/i.test(error.message);
+function isStructuredAccessDenied(error: AdminGraphQLError): boolean {
+  return error.extensions?.code === "ACCESS_DENIED";
+}
+
+function unavailable(
+  failureKind: UnitCostPreflightFailureKind,
+): UnitCostPreflightResult {
+  return {
+    decision: "UNAVAILABLE",
+    unitCostAccess: "QUERY_ERROR_ISOLATED",
+    catalogBulkQueryShape: "no-unitCost",
+    unitCostAmount: null,
+    unitCostCurrencyCode: null,
+    failureKind,
+  };
 }
 
 export function chooseCatalogBulkQuery(
@@ -53,8 +67,18 @@ export async function preflightUnitCostCapability(
   admin: CatalogAdminReadClient,
   probeInventoryItemGid: string,
 ): Promise<UnitCostPreflightResult> {
+  let response: Awaited<
+    ReturnType<
+      typeof executeAdminReadQuery<{
+        inventoryItem?: {
+          id?: unknown;
+          unitCost?: { amount?: unknown; currencyCode?: unknown } | null;
+        } | null;
+      }>
+    >
+  >;
   try {
-    const response = await executeAdminReadQuery<{
+    response = await executeAdminReadQuery<{
       inventoryItem?: {
         id?: unknown;
         unitCost?: { amount?: unknown; currencyCode?: unknown } | null;
@@ -65,31 +89,33 @@ export async function preflightUnitCostCapability(
       { id: probeInventoryItemGid },
       { allowFieldErrors: true },
     );
-
-    const errors = response.errors ?? [];
-    const denied = errors.filter(
-      (error) => isAccessDenied(error) && errorTouchesUnitCost(error),
-    );
-    if (denied.length > 0) {
-      return {
-        decision: "DENIED",
-        unitCostAccess: "OMITTED_NO_PERMISSION",
-        catalogBulkQueryShape: "no-unitCost",
-        unitCostAmount: null,
-        unitCostCurrencyCode: null,
-      };
+  } catch (error) {
+    if (error instanceof CanonicalAdminReadError && error.graphqlErrors.length > 0) {
+      return unavailable("GRAPHQL");
     }
+    return unavailable("TRANSPORT");
+  }
 
-    if (errors.length > 0 || !response.data?.inventoryItem) {
-      return {
-        decision: "UNAVAILABLE",
-        unitCostAccess: "QUERY_ERROR_ISOLATED",
-        catalogBulkQueryShape: "no-unitCost",
-        unitCostAmount: null,
-        unitCostCurrencyCode: null,
-      };
-    }
+  const errors = response.errors ?? [];
+  const denied = errors.filter(
+    (error) => isStructuredAccessDenied(error) && errorPathTouchesUnitCost(error),
+  );
+  if (denied.length > 0) {
+    return {
+      decision: "DENIED",
+      unitCostAccess: "OMITTED_NO_PERMISSION",
+      catalogBulkQueryShape: "no-unitCost",
+      unitCostAmount: null,
+      unitCostCurrencyCode: null,
+      failureKind: "GRAPHQL",
+    };
+  }
 
+  if (errors.length > 0 || !response.data?.inventoryItem) {
+    return unavailable("GRAPHQL");
+  }
+
+  try {
     const unitCost = response.data.inventoryItem.unitCost ?? null;
     if (unitCost == null) {
       return {
@@ -98,6 +124,7 @@ export async function preflightUnitCostCapability(
         catalogBulkQueryShape: "with-unitCost",
         unitCostAmount: null,
         unitCostCurrencyCode: null,
+        failureKind: null,
       };
     }
 
@@ -110,23 +137,9 @@ export async function preflightUnitCostCapability(
         "inventoryItem.unitCost.amount",
       ),
       unitCostCurrencyCode: optionalString(unitCost.currencyCode),
+      failureKind: null,
     };
-  } catch (error) {
-    if (error instanceof CanonicalAdminReadError) {
-      return {
-        decision: "UNAVAILABLE",
-        unitCostAccess: "QUERY_ERROR_ISOLATED",
-        catalogBulkQueryShape: "no-unitCost",
-        unitCostAmount: null,
-        unitCostCurrencyCode: null,
-      };
-    }
-    return {
-      decision: "UNAVAILABLE",
-      unitCostAccess: "QUERY_ERROR_ISOLATED",
-      catalogBulkQueryShape: "no-unitCost",
-      unitCostAmount: null,
-      unitCostCurrencyCode: null,
-    };
+  } catch {
+    return unavailable("MAPPING_INTEGRITY");
   }
 }
