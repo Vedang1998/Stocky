@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `9770a6438cb3c39217aed848a9cf3a957cc6b2687cae9b16e9297d2f5eabd553`
+**Content digest:** `c8fedbede44af57b2aa6ed59022e221e7b7b7c8ae2ea17a63cbc2d688cba7b83`
 **Scanned files:** 271
-**Findings:** 1508
+**Findings:** 1526
 **Converted paths:** 462
-**Approved exception findings:** 1046
+**Approved exception findings:** 1064
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -24,7 +24,7 @@ All 26 approved merchant-owned models must appear below.
 | Supplier | 624 |
 | PurchaseOrder | 336 |
 | ShopifyVariantCache | 329 |
-| InventorySnapshot | 286 |
+| InventorySnapshot | 297 |
 | VariantAbcClass | 251 |
 | ForecastOverride | 250 |
 | SalesDailyAggregate | 312 |
@@ -37,9 +37,9 @@ All 26 approved merchant-owned models must appear below.
 | ShopifyProductFact | 239 |
 | ShopifyProductCollectionMembership | 235 |
 | ShopifyVariantFact | 249 |
-| ShopifyInventoryItemFact | 242 |
-| ShopifyLocationFact | 237 |
-| ShopifyInventoryLevelFact | 244 |
+| ShopifyInventoryItemFact | 243 |
+| ShopifyLocationFact | 239 |
+| ShopifyInventoryLevelFact | 248 |
 | CatalogObservationInFlight | 235 |
 | SupplierSkuMapping | 312 |
 | VolumePriceTier | 241 |
@@ -58,7 +58,7 @@ All 26 approved merchant-owned models must appear below.
 | script | 50 |
 | service | 34 |
 | tenant_infra | 5 |
-| test | 1276 |
+| test | 1294 |
 | worker | 12 |
 
 ## Approved exceptions
@@ -1233,17 +1233,35 @@ All 26 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 894 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 905 / `prisma.shopifyVariantCache.findFirst` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 910 / `prisma.shopifyVariantFact.findFirst` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 939 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 954 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 971 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 987 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1003 / `prisma.shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1024 / `prisma.shopifyVariantFact.update` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1043 / `prisma.shopifyInventoryLevelFact.update` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1066 / `prisma.shopifyVariantFact.findFirst` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1069 / `prisma.shopifyProductFact.findFirst` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1072 / `prisma.shopifyInventoryItemFact.findFirst` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1075 / `prisma.shopifyInventoryLevelFact.findFirst` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 918 / `prisma.inventorySnapshot.create` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 928 / `prisma.shopifyInventoryLevelFact.update` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 969 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 980 / `prisma.shopifyInventoryLevelFact.update` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1011 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1025 / `prisma.shopifyInventoryLevelFact.update` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1055 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1069 / `prisma.shopifyInventoryLevelFact.update` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1099 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1113 / `prisma.inventorySnapshot.create` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1144 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1158 / `prisma.inventorySnapshot.create` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1189 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1203 / `prisma.inventorySnapshot.create` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1234 / `prisma.inventorySnapshot.findFirst` | test | InventorySnapshot | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1269 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1284 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1301 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1317 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1333 / `prisma.shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1354 / `prisma.shopifyVariantFact.update` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1373 / `prisma.shopifyInventoryLevelFact.update` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1397 / `prisma.shopifyLocationFact.update` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1415 / `prisma.shopifyInventoryItemFact.update` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1432 / `prisma.shopifyVariantFact.findFirst` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1435 / `prisma.shopifyProductFact.findFirst` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1438 / `prisma.shopifyInventoryItemFact.findFirst` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1441 / `prisma.shopifyInventoryLevelFact.findFirst` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 1447 / `prisma.shopifyLocationFact.findFirst` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/queue-redis.test.ts` | 50 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-015 | migration_tests | approved exception | allowlist EX-TEST-015 | EX-TEST-015 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/relation-isolation.test.ts` | 26 / `prisma.stocktakeLineItem.deleteMany` | test | StocktakeLineItem | direct prisma delegate | approved exception EX-TEST-007 | migration_tests | approved exception | allowlist EX-TEST-007 | EX-TEST-007 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/relation-isolation.test.ts` | 27 / `prisma.transferLineItem.deleteMany` | test | TransferLineItem | direct prisma delegate | approved exception EX-TEST-007 | migration_tests | approved exception | allowlist EX-TEST-007 | EX-TEST-007 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1727,7 +1745,7 @@ All 26 approved merchant-owned models must appear below.
 ```json
 {
   "scannedFiles": 271,
-  "findings": 1508,
+  "findings": 1526,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -1844,6 +1862,6 @@ All 26 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "9770a6438cb3c39217aed848a9cf3a957cc6b2687cae9b16e9297d2f5eabd553"
+  "contentDigest": "c8fedbede44af57b2aa6ed59022e221e7b7b7c8ae2ea17a63cbc2d688cba7b83"
 }
 ```

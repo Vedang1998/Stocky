@@ -96,13 +96,24 @@ A tombstoned product does **not** supply live title or image for a still-`LIVE` 
 | `shopifyVariantId` | `ShopifyInventoryItemFact.shopifyVariantGid` |
 | `locationId` | `ShopifyInventoryLevelFact.locationGid` (GID form, same as the webhook writer) |
 | `snapshotDate` | process-local start of calendar day (`setHours(0,0,0,0)`), matching `webhook-processor` |
-| `quantityAvailable` | canonical `availableQuantity ?? 0` only when the level, location, item, **and** variant are all `LIVE` |
+| `quantityAvailable` | canonical `availableQuantity` copied exactly when the level, location, item, **and** variant are all known `LIVE` |
 
-Otherwise today's snapshot is written as `0`. A tombstone, disconnect, or non-live parent must not masquerade as live available quantity.
+Mapping first resolves the legacy variant GID with the accepted `requireKnownVariantGid` contract (`canonical_variant_link_missing`, retryable). It does not invent a variant relationship from SKU/barcode/title/legacy cache.
 
-If a canonical InventoryLevel exists but its InventoryItem has no known `shopifyVariantGid`, mapping **fails closed** with `canonical_variant_link_missing` (retryable). The core does not skip the level, does not invent a variant relationship from SKU/barcode/title, and does not use legacy cache as identity authority. A later authoritative canonical refetch may establish the missing relationship; retry then repairs the derived snapshot.
+Quantity then distinguishes **explicit non-live evidence** from **unknown canonical state**:
+
+- Explicit `ABSENT` on the InventoryLevel, linked InventoryItem, linked Location, or linked ProductVariant may project today's snapshot as `0`.
+- A LIVE InventoryLevel with `availableQuantity === null` **fails closed** (`canonical_available_quantity_missing`, retryable). Null/unknown is not Shopify zero.
+- A LIVE InventoryLevel whose Location relation/state is missing/unknown rather than explicitly `ABSENT` **fails closed** (`canonical_location_state_missing`, retryable).
+- A LIVE InventoryLevel whose ProductVariant existence is missing/unknown rather than explicitly `ABSENT` **fails closed** (`canonical_variant_state_missing`, retryable).
+- Canonical `availableQuantity = 0` is authoritative zero and projects `0`.
+- Negative canonical `availableQuantity` is copied exactly. Canonical `Int?`, Shopify Admin GraphQL `InventoryQuantity.quantity` (`Int!`, 2026-07), and legacy `InventorySnapshot.quantityAvailable Int` all permit signed integers; F2C does not clamp to zero.
+
+Failed unknown-inventory projection leaves the stale legacy `InventorySnapshot` unchanged, does not fabricate zero or variant identity, does not write canonical facts or `compatibilityProjectionState`, and does not recommend HEALTHY/DEGRADED. Retry after authoritative canonical data becomes available repairs the derived snapshot. The stale snapshot is never used as authority.
 
 Historical snapshot rows are not rewritten except for the today-zero neutralization on variant tombstone.
+
+The prior unsafe `availableQuantity ?? 0` collapse is recorded in §12. It is no longer current mapping behavior.
 
 ### 3.3 Request / result contract
 
@@ -121,7 +132,7 @@ projectCompatibilityFromCanonicalFacts({
 | Status | Meaning | Retryable |
 |---|---|---|
 | `SUCCEEDED` | this invocation's requested identities/page completed; `hasMore` / `cursor` / `remainingIdentities` describe continuation only | `false` for the completed page |
-| `FAILED` | explicit `failure.code` / `failure.message`; remaining work is in the result | DB/write failures and `canonical_variant_link_missing` `true`; invalid limit / malformed cursor / weight overflow `false` |
+| `FAILED` | explicit `failure.code` / `failure.message`; remaining work is in the result | DB/write failures, `canonical_variant_link_missing`, `canonical_available_quantity_missing`, `canonical_location_state_missing`, and `canonical_variant_state_missing` `true`; invalid limit / malformed cursor / weight overflow `false` |
 | `DENIED_PROCESSING_DISABLED` | `processingEnabled !== true`; no TenantDb open; no merchant writes | `false` |
 
 This core does **not** read `Shop` / control-plane. The future F2B/worker caller must pass the live `processingEnabled` flag. Missing canonical identity is `retryable: true` (`canonical_variant_missing` / `canonical_inventory_level_missing` / `canonical_variant_link_missing`) so a later retry can wait for the applicator.
@@ -183,6 +194,10 @@ Required scenarios and where they live:
 | Legacy consumer field characterization | `legacy-consumer-characterization.test.ts` (does **not** migrate consumers) |
 | No HEALTHY recommendation, including `hasMore=true` | unit request contract + DB `does not authorize merchant health when a bounded shop_rebuild page has hasMore=true` |
 | Missing `shopifyVariantGid` fail-closed | unit mapping throw `canonical_variant_link_missing`; DB stale snapshot + repair-on-retry |
+| Unknown LIVE `availableQuantity` is not zero | unit `canonical_available_quantity_missing`; DB stale `99` preserved, retry after `17` repairs |
+| True zero vs unknown | unit + DB `availableQuantity = 0` succeeds with snapshot `0` |
+| Negative available copied exactly | unit + DB `availableQuantity = -2` succeeds with snapshot `-2` |
+| Unknown location/variant state fail-closed | unit `canonical_location_state_missing` / `canonical_variant_state_missing`; explicit ABSENT still zeros |
 | Failed middle identity preserves canonical facts | DB `preserves already committed canonical facts and resumes from the failed identity` |
 | Orphan legacy row is not canonical evidence | DB `does not treat an orphan legacy row as canonical authority or delete it during shop_rebuild` |
 | Completed bounded page still does not persist/authorize durable health | DB final `shop_rebuild` page `hasMore=false` still `deferred_to_integration` |
@@ -244,9 +259,9 @@ R-142, R-145, and R-156 remain **OPEN**. This core supplies the rebuildable proj
 
 ## 9. Handoff
 
-Lane-isolation correction is recorded in §10 and remains accepted. Semantic-contract correction is recorded in §11. Independent Claude review waits for ChatGPT authorization after corrected exact-head full CI is green.
+Lane-isolation correction is recorded in §10 and remains accepted. Semantic-contract correction is recorded in §11 and remains accepted. The final pre-independent-review inventory-integrity correction is recorded in §12. Independent Claude review waits for ChatGPT authorization after corrected exact-head full CI is green.
 
-Do not merge. Do not mark ready. Do not integrate with F2B.
+Do not merge. Do not mark ready. Do not integrate with F2B. Do not invoke Claude from this lane.
 
 ---
 
@@ -432,5 +447,118 @@ npx vitest run --passWithNoTests=false \
 | `npm run tenant:access:inventory` | findings **1508**, violations **0** |
 | `npm run tenant:access:inventory:check` | inventory fresh |
 | `git diff --check` | clean |
+
+Exact-head `pull_request` CI for the live head after this documentation commit is the authoritative automatic evidence. This paragraph does not invent a future SHA.
+
+---
+
+## 12. Final pre-independent-review inventory-integrity correction
+
+**Why:** The accepted semantic-contract correction stopped silent skip of a missing variant GID. It did **not** stop the mapper from treating unknown canonical inventory quantity as Shopify zero.
+
+**Prior unsafe behavior (on live head `f47d8d19382a00e36714f5eb33773fbd5b40aa3f`):**
+
+```
+if level/item/location/variant are all LIVE:
+    return level.availableQuantity ?? 0
+otherwise:
+    return 0
+```
+
+That collapsed two materially different states:
+
+- **A.** explicit canonical evidence that the relationship/resource is non-LIVE (`existenceState === ABSENT`);
+- **B.** missing/unknown canonical evidence (`availableQuantity === null`, missing Location relation/state, missing ProductVariant existence).
+
+Only A may safely project zero. B must fail closed. Null/unknown canonical data is not Shopify zero. Shopify remains authoritative. The stale legacy `InventorySnapshot` is not authority.
+
+**Starting identity for this correction:** live PR head `f47d8d19382a00e36714f5eb33773fbd5b40aa3f` (exact-head CI run `32098232803` SUCCESS; Heavy `95593674653`; CI Gate `95603192955`). That run is **superseded** as live-head evidence after this correction. Lane-isolation (§10) and semantic-contract (§11) remain accepted and were not reopened.
+
+### 12.1 Corrected distinction
+
+1. Resolve the target legacy variant GID with `requireKnownVariantGid` (unchanged). Missing GID remains `canonical_variant_link_missing` / retryable / InventoryLevel pair identity. SKU/barcode/title/legacy-cache inference remains forbidden.
+2. If authoritative canonical evidence is explicitly `ABSENT` for the level, linked item, linked location, or linked variant, project today's snapshot as `0`.
+3. If the InventoryLevel is LIVE but `availableQuantity` is not a known integer, throw `canonical_available_quantity_missing` (retryable).
+4. If the InventoryLevel is LIVE and Location existence is missing/unknown rather than explicitly `ABSENT`, throw `canonical_location_state_missing` (retryable).
+5. If the InventoryLevel is LIVE and ProductVariant existence is missing/unknown rather than explicitly `ABSENT`, throw `canonical_variant_state_missing` (retryable).
+6. If the LIVE graph is fully known, copy `availableQuantity` exactly, including `0` and negatives. Do not clamp.
+
+Required FK `ShopifyInventoryLevelFact.location` (`onDelete: Restrict`) prevents a persisted InventoryLevel row with no Location row, so unknown-location PostgreSQL evidence is not representable under current schema. Mapper-level `location: null` covers that unknown state. Explicit Location `ABSENT` is representable and projects zero.
+
+Required/nullable FK `ShopifyInventoryItemFact.variant` prevents a persisted known `shopifyVariantGid` that does not reference a variant row. Mapper-level `variantExistenceState: null` with a known item GID covers unknown variant existence. Explicit Variant `ABSENT` is representable and projects zero.
+
+No extra persisted state was created.
+
+### 12.2 Preserved accepted contracts
+
+- No `recommendedCanonicalProjectionState`.
+- No HEALTHY/DEGRADED recommendation.
+- `canonicalHealthDecision` remains only `deferred_to_integration`.
+- `status: "SUCCEEDED"` means invocation completion only.
+- `shop_rebuild` remains bounded replay FROM canonical rows; orphan legacy rows are not deleted and are not canonical evidence.
+- Canonical facts remain authoritative and are not written by this lane.
+- `compatibilityProjectionState` is not written by this lane.
+- Lexicographically-first LIVE InventoryItem selection, legacy weight scale/rounding, orphan cleanup, and multi-page synchronization/fence contract were **not** redesigned.
+
+### 12.3 Files in this correction
+
+Runtime / tests (commit `2159614bda106bb36e343ff50cda9297f6fb5704`):
+
+- `stocky-plus/app/lib/catalog-facts/compatibility-projection/**`
+- `stocky-plus/app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts`
+
+Scanner-truth inventory regeneration (this documentation commit; still **0** violations):
+
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (findings **1526**; approved exception findings **1064**; extra `prisma.*` lines from the expanded EX-TEST-035 file)
+
+This report file is included in the same documentation commit and does not embed that commit's unknown future SHA.
+
+Allowlist was **not** broadened. Shared files remain byte-identical to authorized base `5129707ee684e66cadcf96b976e16eb57385a7cb`:
+
+| File | Blob |
+|---|---|
+| `.github/workflows/ci.yml` | `16ab27b20b27a2747e84ce819b7726f78b983b0f` |
+| `stocky-plus/package.json` | `a68e16ba94dcd7f4d16b6d5238c5a85f4d2ab945` |
+| `stocky-plus/app/lib/catalog-facts/foundation-safety.test.ts` | `62690c1231a73bc86c71074bfb61ed6796492973` |
+
+### 12.4 Local evidence on `2159614bda106bb36e343ff50cda9297f6fb5704`
+
+Environment: disposable PostgreSQL 16.14 (Ubuntu 16.14-0ubuntu0.24.04.1) + Redis PONG; Node v22.14.0; `STOCKY_RUNTIME_ROLE=stocky_runtime`; inventory-write flags `false` (default off).
+
+```
+npx vitest run --passWithNoTests=false \
+  app/lib/catalog-facts/compatibility-projection
+```
+
+4 files, **36** tests passed.
+
+```
+npx vitest run --passWithNoTests=false \
+  --config vitest.tenant-access.config.ts \
+  app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts
+```
+
+1 file, **24** tests passed.
+
+| Command | Result |
+|---|---|
+| `npx vitest run app/lib/catalog-facts/foundation-safety.test.ts` | 1 file, **3** tests passed |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 13 files, **107** tests passed |
+| `npm run build` | exit 0 |
+| `npm run tenant:access:inventory` | findings **1526**, violations **0** |
+| `npm run tenant:access:inventory:check` | inventory fresh |
+| `git diff --check` | clean |
+
+PostgreSQL proofs on that runtime SHA:
+
+- LIVE + `availableQuantity = null` + today's snapshot `99` → `FAILED` / `canonical_available_quantity_missing` / retryable / level-pair identity / snapshot stays `99` / fingerprint unchanged / no health recommendation. Setting canonical available to `17` and retrying → `SUCCEEDED` / snapshot `17` / fingerprint otherwise unchanged.
+- LIVE + `availableQuantity = 0` → `SUCCEEDED` / snapshot `0`.
+- LIVE + `availableQuantity = -2` → `SUCCEEDED` / snapshot `-2` (not clamped).
+- Explicit Location / Variant / Item `ABSENT` still project snapshot `0`. Existing level-ABSENT disconnect test remains.
+- `canonical_variant_link_missing` sequence remains: stale snapshot unrepaired until the canonical variant link is established.
+
+Mapper-level proofs (same SHA): missing Location relation and unknown `variantExistenceState` fail retryably rather than writing zero; explicit `ABSENT` still zeros.
 
 Exact-head `pull_request` CI for the live head after this documentation commit is the authoritative automatic evidence. This paragraph does not invent a future SHA.
