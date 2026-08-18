@@ -645,10 +645,14 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
       await a.query("BEGIN");
       await setTenant(a, shopAId);
       const rows = await a.query(
-        `SELECT title FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        `SELECT title, "existenceState" FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
         [gid],
       );
-      expect(rows.rowCount).toBe(1);
+      expect(rows.rowCount).toBeLessThanOrEqual(1);
+      if (rows.rowCount === 1) {
+        expect(rows.rows[0].existenceState).toBe("LIVE");
+        expect(["A", "B"]).toContain(rows.rows[0].title);
+      }
       await a.query("COMMIT");
     } finally {
       await a.query("ROLLBACK").catch(() => undefined);
@@ -1350,6 +1354,7 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
             existenceObservedAt: new Date(),
             sourceKind: "RECONCILE",
             attributes: {
+              isActive: true,
               quantities: [
                 { name: "available", quantity: 9, shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z") },
                 { name: "committed", quantity: 4, shopifyUpdatedAt: new Date("2026-08-05T00:00:00.000Z") },

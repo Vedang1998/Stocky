@@ -578,20 +578,14 @@ async function applyOneObservation(
       } catch (error) {
         if (error instanceof CanonicalApplyIncompleteFirstLiveError) {
           return rejectUsableObservation(db, observation, abandoned, {
-            ok: false,
-            kind: "incomplete",
-            missing: [...error.missing],
-            diagnostic: DIAGNOSTIC.INCOMPLETE_FIRST_LIVE,
             error,
+            diagnostic: DIAGNOSTIC.INCOMPLETE_FIRST_LIVE,
           });
         }
         if (error instanceof CanonicalApplyNumericScaleError) {
           return rejectUsableObservation(db, observation, abandoned, {
-            ok: false,
-            kind: "numeric_scale",
-            field: error.field,
-            diagnostic: DIAGNOSTIC.NUMERIC_SCALE,
             error,
+            diagnostic: DIAGNOSTIC.NUMERIC_SCALE,
           });
         }
         if (error instanceof CanonicalApplyMoneyError) {
