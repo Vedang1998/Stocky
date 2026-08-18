@@ -88,19 +88,33 @@ function liveAvailableQuantity(
   if (level.location?.existenceState !== "LIVE") return null;
   if (level.inventoryItem?.existenceState !== "LIVE") return null;
   if (level.variantExistenceState !== "LIVE") return null;
-  const variantGid = level.inventoryItem.shopifyVariantGid;
-  if (!variantGid) return null;
   return level.availableQuantity ?? 0;
+}
+
+function requireKnownVariantGid(level: CanonicalInventoryLevelRead): string {
+  const variantGid = level.inventoryItem?.shopifyVariantGid;
+  if (variantGid == null || variantGid.length === 0) {
+    throw new CompatibilityProjectionError(
+      "canonical_variant_link_missing",
+      "Canonical InventoryItem has no known shopifyVariantGid; F2C cannot invent a variant relationship from SKU, barcode, title, or legacy cache",
+      {
+        retryable: true,
+        identity: {
+          kind: "InventoryLevel",
+          inventoryItemGid: level.inventoryItemGid,
+          locationGid: level.locationGid,
+        },
+      },
+    );
+  }
+  return variantGid;
 }
 
 export function mapInventoryLevelToLegacySnapshot(
   level: CanonicalInventoryLevelRead,
   now: Date,
-): SnapshotProjectionPlan | null {
-  const variantGid = level.inventoryItem?.shopifyVariantGid;
-  if (!variantGid) {
-    return null;
-  }
+): SnapshotProjectionPlan {
+  const variantGid = requireKnownVariantGid(level);
 
   const liveQty = liveAvailableQuantity(level);
   const fields: LegacySnapshotFields = {

@@ -1,5 +1,6 @@
 import { createTenantDb } from "../../../tenant/tenant-db.server";
 import {
+  CANONICAL_HEALTH_DECISION,
   CANONICAL_PROJECTION_STATE_WRITE,
   COMPATIBILITY_PROJECTION_DEFAULT_BATCH_SIZE,
   COMPATIBILITY_PROJECTION_MAX_BATCH_SIZE,
@@ -48,7 +49,6 @@ export async function projectCompatibilityFromCanonicalFacts(
     return buildResult({
       status: "DENIED_PROCESSING_DISABLED",
       retryable: false,
-      recommendedCanonicalProjectionState: "DEGRADED",
       remainingIdentities:
         request.mode === "identities" ? [...request.identities] : [],
       cursor: request.mode === "shop_rebuild" ? request.cursor ?? null : null,
@@ -160,7 +160,6 @@ async function projectIdentities(input: {
   return buildResult({
     status: "SUCCEEDED",
     retryable: false,
-    recommendedCanonicalProjectionState: "HEALTHY",
     processedVariantCount,
     processedInventoryLevelCount,
     skippedTombstoneCount,
@@ -169,6 +168,11 @@ async function projectIdentities(input: {
   });
 }
 
+/**
+ * Bounded replay FROM canonical rows. This is not proof of complete merchant
+ * compatibility convergence, not authority to delete an orphan legacy row,
+ * and not authority to mark `compatibilityProjectionState` HEALTHY.
+ */
 async function projectShopRebuild(input: {
   db: ReturnType<typeof createTenantDb>;
   writer: LegacyCompatibilityWriter;
@@ -228,7 +232,6 @@ async function projectShopRebuild(input: {
         return buildResult({
           status: "SUCCEEDED",
           retryable: false,
-          recommendedCanonicalProjectionState: "HEALTHY",
           processedVariantCount,
           processedInventoryLevelCount,
           skippedTombstoneCount,
@@ -251,7 +254,6 @@ async function projectShopRebuild(input: {
         return buildResult({
           status: "SUCCEEDED",
           retryable: false,
-          recommendedCanonicalProjectionState: "HEALTHY",
           processedVariantCount,
           processedInventoryLevelCount,
           skippedTombstoneCount,
@@ -272,9 +274,7 @@ async function projectShopRebuild(input: {
     for (const raw of levels) {
       const level = coerceLevel(raw);
       const plan = mapInventoryLevelToLegacySnapshot(level, input.now);
-      if (plan) {
-        await input.writer.applySnapshotPlan(plan);
-      }
+      await input.writer.applySnapshotPlan(plan);
       processedInventoryLevelCount += 1;
       remaining -= 1;
       afterItemGid = level.inventoryItemGid;
@@ -297,7 +297,6 @@ async function projectShopRebuild(input: {
     return buildResult({
       status: "SUCCEEDED",
       retryable: false,
-      recommendedCanonicalProjectionState: "HEALTHY",
       processedVariantCount,
       processedInventoryLevelCount,
       skippedTombstoneCount,
@@ -378,9 +377,7 @@ async function projectOneIdentity(
   }
   const level = coerceLevel(raw);
   const plan = mapInventoryLevelToLegacySnapshot(level, now);
-  if (plan) {
-    await writer.applySnapshotPlan(plan);
-  }
+  await writer.applySnapshotPlan(plan);
   return {
     skippedTombstoneCount: level.existenceState === "ABSENT" ? 1 : 0,
   };
@@ -571,7 +568,6 @@ function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {
 function buildResult(input: {
   status: CompatibilityProjectionResult["status"];
   retryable: boolean;
-  recommendedCanonicalProjectionState: CompatibilityProjectionResult["recommendedCanonicalProjectionState"];
   processedVariantCount?: number;
   processedInventoryLevelCount?: number;
   skippedTombstoneCount?: number;
@@ -585,7 +581,7 @@ function buildResult(input: {
     retryable: input.retryable,
     canonicalFactsUnchanged: true,
     canonicalCompatibilityProjectionStateWrite: CANONICAL_PROJECTION_STATE_WRITE,
-    recommendedCanonicalProjectionState: input.recommendedCanonicalProjectionState,
+    canonicalHealthDecision: CANONICAL_HEALTH_DECISION,
     processedVariantCount: input.processedVariantCount ?? 0,
     processedInventoryLevelCount: input.processedInventoryLevelCount ?? 0,
     skippedTombstoneCount: input.skippedTombstoneCount ?? 0,
@@ -611,7 +607,6 @@ function failureResult(
   return buildResult({
     status: "FAILED",
     retryable: failure.retryable,
-    recommendedCanonicalProjectionState: "DEGRADED",
     processedVariantCount: extras?.processedVariantCount,
     processedInventoryLevelCount: extras?.processedInventoryLevelCount,
     skippedTombstoneCount: extras?.skippedTombstoneCount,

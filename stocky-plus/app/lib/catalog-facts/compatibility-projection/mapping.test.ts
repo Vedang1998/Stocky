@@ -156,7 +156,7 @@ describe("compatibility projection mapping", () => {
       liveLevel({ existenceState: "ABSENT", availableQuantity: 44 }),
       NOW,
     );
-    expect(plan?.fields.quantityAvailable).toBe(0);
+    expect(plan.fields.quantityAvailable).toBe(0);
   });
 
   it("does not present available quantity when the variant is tombstoned", () => {
@@ -164,17 +164,43 @@ describe("compatibility projection mapping", () => {
       liveLevel({ variantExistenceState: "ABSENT", availableQuantity: 9 }),
       NOW,
     );
-    expect(plan?.fields.quantityAvailable).toBe(0);
+    expect(plan.fields.quantityAvailable).toBe(0);
   });
 
-  it("skips snapshot mapping when the inventory item has no variant GID", () => {
-    const plan = mapInventoryLevelToLegacySnapshot(
-      liveLevel({
-        inventoryItem: liveItem({ shopifyVariantGid: null }),
-      }),
-      NOW,
+  it("fails closed when the inventory item has no known shopifyVariantGid", () => {
+    const level = liveLevel({
+      inventoryItem: liveItem({ shopifyVariantGid: null }),
+    });
+    expect(() => mapInventoryLevelToLegacySnapshot(level, NOW)).toThrow(
+      CompatibilityProjectionError,
     );
-    expect(plan).toBeNull();
+    try {
+      mapInventoryLevelToLegacySnapshot(level, NOW);
+    } catch (error) {
+      expect(error).toBeInstanceOf(CompatibilityProjectionError);
+      const typed = error as CompatibilityProjectionError;
+      expect(typed.code).toBe("canonical_variant_link_missing");
+      expect(typed.retryable).toBe(true);
+      expect(typed.identity).toEqual({
+        kind: "InventoryLevel",
+        inventoryItemGid: "gid://shopify/InventoryItem/1",
+        locationGid: "gid://shopify/Location/1",
+      });
+    }
+  });
+
+  it("does not invent a variant GID from SKU, barcode, or title", () => {
+    expect(() =>
+      mapInventoryLevelToLegacySnapshot(
+        liveLevel({
+          inventoryItem: liveItem({
+            shopifyVariantGid: null,
+            shopifyGid: "gid://shopify/InventoryItem/sku-trap",
+          }),
+        }),
+        NOW,
+      ),
+    ).toThrow(CompatibilityProjectionError);
   });
 
   it("fails closed when canonical weight overflows DECIMAL(10, 4)", () => {

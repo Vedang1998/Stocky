@@ -56,6 +56,7 @@ describe("PR5-F2C compatibility projection safety", () => {
       expect(source, file).not.toMatch(/catalogObservationInFlight\.(create|update|upsert|delete)/);
       expect(source, file).not.toMatch(/compatibilityProjectionState\s*:/);
       expect(source, file).not.toMatch(/compatibilityProjectionState\s*=/);
+      expect(source, file).not.toMatch(/recommendedCanonicalProjectionState/);
     }
   });
 

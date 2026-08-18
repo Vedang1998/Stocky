@@ -14,3 +14,12 @@ export const COMPATIBILITY_PROJECTION_MAX_BATCH_SIZE = 100;
 export const LEGACY_WEIGHT_MAX_ABS = "1000000";
 
 export const CANONICAL_PROJECTION_STATE_WRITE = "omitted_by_f2c_lane" as const;
+
+/**
+ * F2C core never decides merchant-durable compatibility health.
+ * `status: "SUCCEEDED"` means only that this invocation's requested work
+ * completed. Later F2B/worker integration owns `compatibilityProjectionState`
+ * and must not mark HEALTHY until the projection matches canonical facts
+ * under an accepted synchronization/fence contract.
+ */
+export const CANONICAL_HEALTH_DECISION = "deferred_to_integration" as const;

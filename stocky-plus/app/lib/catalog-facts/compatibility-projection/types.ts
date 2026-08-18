@@ -1,13 +1,14 @@
 import type { Prisma } from "@prisma/client";
 import type { TenantAuthority } from "../../../tenant/authority.server";
-import type { CANONICAL_PROJECTION_STATE_WRITE } from "./constants";
+import type {
+  CANONICAL_HEALTH_DECISION,
+  CANONICAL_PROJECTION_STATE_WRITE,
+} from "./constants";
 
 export type CompatibilityProjectionStatus =
   | "SUCCEEDED"
   | "FAILED"
   | "DENIED_PROCESSING_DISABLED";
-
-export type RecommendedCompatibilityProjectionState = "HEALTHY" | "DEGRADED";
 
 export type CompatibilityProjectionIdentity =
   | { kind: "ProductVariant"; shopifyGid: string }
@@ -38,7 +39,14 @@ export type CompatibilityProjectionResult = {
   /** This lane never writes canonical fact rows or projection-state columns. */
   canonicalFactsUnchanged: true;
   canonicalCompatibilityProjectionStateWrite: typeof CANONICAL_PROJECTION_STATE_WRITE;
-  recommendedCanonicalProjectionState: RecommendedCompatibilityProjectionState;
+  /**
+   * Always `deferred_to_integration`. F2C does not recommend HEALTHY or
+   * DEGRADED and does not authorize a health-state write.
+   * `status: "SUCCEEDED"` means only that this invocation's requested work
+   * completed; it is not merchant-global health, not proof a partial page is
+   * globally current, and not certification of shop-rebuild convergence.
+   */
+  canonicalHealthDecision: typeof CANONICAL_HEALTH_DECISION;
   processedVariantCount: number;
   processedInventoryLevelCount: number;
   skippedTombstoneCount: number;
@@ -60,7 +68,17 @@ export type CompatibilityProjectionRequest = {
   writer?: LegacyCompatibilityWriter;
 } & (
   | { mode: "identities"; identities: CompatibilityProjectionIdentity[] }
-  | { mode: "shop_rebuild"; cursor?: ShopRebuildCursor | null }
+  | {
+      /**
+       * Bounded replay/projection FROM canonical rows (variants by GID, then
+       * inventory levels by item+location). It is not proof of complete
+       * merchant compatibility convergence, not authority to delete a legacy
+       * row merely because no canonical counterpart was found, and not
+       * authority to mark `compatibilityProjectionState` HEALTHY.
+       */
+      mode: "shop_rebuild";
+      cursor?: ShopRebuildCursor | null;
+    }
 );
 
 export type LegacyVariantCacheFields = {

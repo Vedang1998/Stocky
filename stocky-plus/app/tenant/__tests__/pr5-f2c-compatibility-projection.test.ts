@@ -4,9 +4,11 @@ import { Prisma } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
 import { createTenantDb } from "../tenant-db.server";
 import {
+  CANONICAL_HEALTH_DECISION,
   CANONICAL_PROJECTION_STATE_WRITE,
   createTenantDbLegacyWriter,
   projectCompatibilityFromCanonicalFacts,
+  type CompatibilityProjectionResult,
   type LegacyCompatibilityWriter,
 } from "../../lib/catalog-facts/compatibility-projection";
 import { legacySnapshotDate } from "../../lib/catalog-facts/compatibility-projection/snapshot-date";
@@ -20,6 +22,20 @@ import {
 
 const NOW = new Date("2026-08-17T15:30:00.000Z");
 const TODAY = legacySnapshotDate(NOW);
+
+function assertNoMerchantHealthAuthorization(
+  result: CompatibilityProjectionResult,
+) {
+  expect(result).not.toHaveProperty("recommendedCanonicalProjectionState");
+  expect(result.canonicalHealthDecision).toBe(CANONICAL_HEALTH_DECISION);
+  expect(result.canonicalHealthDecision).toBe("deferred_to_integration");
+  expect(result.canonicalCompatibilityProjectionStateWrite).toBe(
+    CANONICAL_PROJECTION_STATE_WRITE,
+  );
+  const json = JSON.stringify(result);
+  expect(json).not.toMatch(/"HEALTHY"/);
+  expect(json).not.toMatch(/recommendedCanonicalProjectionState/);
+}
 
 describe("PR5-F2C compatibility projection TenantDb core", () => {
   let prisma: PrismaClient;
@@ -83,10 +99,7 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
 
     expect(result.status).toBe("SUCCEEDED");
     expect(result.canonicalFactsUnchanged).toBe(true);
-    expect(result.canonicalCompatibilityProjectionStateWrite).toBe(
-      CANONICAL_PROJECTION_STATE_WRITE,
-    );
-    expect(result.recommendedCanonicalProjectionState).toBe("HEALTHY");
+    assertNoMerchantHealthAuthorization(result);
     expect(result.processedVariantCount).toBe(1);
 
     const cache = await prisma.shopifyVariantCache.findFirst({
@@ -328,11 +341,8 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
 
     expect(result.status).toBe("FAILED");
     expect(result.retryable).toBe(true);
-    expect(result.recommendedCanonicalProjectionState).toBe("DEGRADED");
+    assertNoMerchantHealthAuthorization(result);
     expect(result.canonicalFactsUnchanged).toBe(true);
-    expect(result.canonicalCompatibilityProjectionStateWrite).toBe(
-      CANONICAL_PROJECTION_STATE_WRITE,
-    );
     expect(result.failure?.code).toBe("projection_write_failed");
     expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
     expect(await prisma.shopifyVariantCache.count({ where: { shopId: shopAId } })).toBe(0);
@@ -395,6 +405,7 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
     expect(page1.hasMore).toBe(true);
     expect(page1.processedVariantCount).toBe(2);
     expect(page1.cursor?.phase).toBe("variants");
+    assertNoMerchantHealthAuthorization(page1);
 
     const page2 = await projectCompatibilityFromCanonicalFacts({
       authority: authorityA(),
@@ -409,6 +420,7 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
 
     let cursor = page2.cursor;
     let hasMore = page2.hasMore;
+    let lastPage = page2;
     let guard = 0;
     while (hasMore && guard < 10) {
       const page = await projectCompatibilityFromCanonicalFacts({
@@ -420,11 +432,14 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
         cursor,
       });
       expect(page.status).toBe("SUCCEEDED");
+      lastPage = page;
       cursor = page.cursor;
       hasMore = page.hasMore;
       guard += 1;
     }
     expect(hasMore).toBe(false);
+    expect(lastPage.hasMore).toBe(false);
+    assertNoMerchantHealthAuthorization(lastPage);
     expect(await prisma.shopifyVariantCache.count({ where: { shopId: shopAId } })).toBe(3);
     expect(
       await prisma.inventorySnapshot.count({
@@ -571,7 +586,7 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
     });
     expect(result.status).toBe("DENIED_PROCESSING_DISABLED");
     expect(result.retryable).toBe(false);
-    expect(result.recommendedCanonicalProjectionState).toBe("DEGRADED");
+    assertNoMerchantHealthAuthorization(result);
     expect(await prisma.shopifyVariantCache.count({ where: { shopId: shopAId } })).toBe(0);
   });
 
@@ -592,6 +607,310 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
         where: { shopId: shopAId },
       }),
     ).not.toBeNull();
+  });
+
+  it("does not authorize merchant health when a bounded shop_rebuild page has hasMore=true", async () => {
+    await seedLiveGraph(prisma, shopAId, "h1");
+    await seedLiveGraph(prisma, shopAId, "h2");
+
+    const page = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      limit: 1,
+      mode: "shop_rebuild",
+    });
+    expect(page.status).toBe("SUCCEEDED");
+    expect(page.hasMore).toBe(true);
+    expect(page.cursor).not.toBeNull();
+    assertNoMerchantHealthAuthorization(page);
+    expect(page.canonicalFactsUnchanged).toBe(true);
+  });
+
+  it("fails closed when a live inventory level has no known shopifyVariantGid and leaves stale snapshots unrepaired until retry", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "link");
+    const unrelatedVariantGid = "gid://shopify/ProductVariant/unrelated-legacy";
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: unrelatedVariantGid,
+        title: "UNRELATED",
+        sku: "DO-NOT-USE-AS-IDENTITY",
+      },
+    });
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 99,
+      },
+    });
+    await prisma.shopifyInventoryItemFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: seeded.itemGid },
+      },
+      data: {
+        shopifyVariantGid: null,
+        sku: "FABRICATE-ME",
+      },
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(true);
+    expect(failed.failure?.code).toBe("canonical_variant_link_missing");
+    expect(failed.failure?.retryable).toBe(true);
+    expect(failed.failure?.identity).toEqual({
+      kind: "InventoryLevel",
+      inventoryItemGid: seeded.itemGid,
+      locationGid: seeded.locationGid,
+    });
+    expect(failed.processedInventoryLevelCount).toBe(0);
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(99);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: unrelatedVariantGid },
+      }),
+    ).toMatchObject({ title: "UNRELATED" });
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: "FABRICATE-ME" },
+      }),
+    ).toBeNull();
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: "SKU-link" },
+      }),
+    ).toBeNull();
+    expect(
+      await prisma.inventorySnapshot.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: "FABRICATE-ME" },
+      }),
+    ).toBeNull();
+
+    await prisma.shopifyInventoryItemFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: seeded.itemGid },
+      },
+      data: { shopifyVariantGid: seeded.variantGid },
+    });
+    const afterLink = await canonicalFingerprint(prisma, seeded);
+
+    const repaired = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(repaired.status).toBe("SUCCEEDED");
+    expect(repaired.processedInventoryLevelCount).toBe(1);
+    assertNoMerchantHealthAuthorization(repaired);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(afterLink);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(17);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: unrelatedVariantGid },
+      }),
+    ).toMatchObject({ title: "UNRELATED" });
+  });
+
+  it("preserves already committed canonical facts and resumes from the failed identity", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "mid");
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 41,
+      },
+    });
+    await prisma.shopifyInventoryItemFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: seeded.itemGid },
+      },
+      data: { shopifyVariantGid: null },
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        { kind: "ProductVariant", shopifyGid: seeded.variantGid },
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(true);
+    expect(failed.processedVariantCount).toBe(1);
+    expect(failed.processedInventoryLevelCount).toBe(0);
+    expect(failed.remainingIdentities[0]).toEqual({
+      kind: "InventoryLevel",
+      inventoryItemGid: seeded.itemGid,
+      locationGid: seeded.locationGid,
+    });
+    expect(failed.failure?.code).toBe("canonical_variant_link_missing");
+    expect(failed.failure?.identity).toEqual(failed.remainingIdentities[0]);
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.shopifyVariantCache.findFirst({
+          where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+        })
+      )?.title,
+    ).toBe("Widget — Blue");
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: { shopId: shopAId, snapshotDate: TODAY },
+        })
+      )?.quantityAvailable,
+    ).toBe(41);
+
+    await prisma.shopifyInventoryItemFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: seeded.itemGid },
+      },
+      data: { shopifyVariantGid: seeded.variantGid },
+    });
+
+    const repaired = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: failed.remainingIdentities,
+    });
+    expect(repaired.status).toBe("SUCCEEDED");
+    expect(repaired.hasMore).toBe(false);
+    assertNoMerchantHealthAuthorization(repaired);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: { shopId: shopAId, snapshotDate: TODAY },
+        })
+      )?.quantityAvailable,
+    ).toBe(17);
+  });
+
+  it("does not treat an orphan legacy row as canonical authority or delete it during shop_rebuild", async () => {
+    const orphanVariantGid = "gid://shopify/ProductVariant/orphan-legacy";
+    const orphanLocationGid = "gid://shopify/Location/orphan-legacy";
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: orphanVariantGid,
+        title: "ORPHAN CACHE",
+        sku: "ORPHAN-SKU",
+      },
+    });
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: orphanVariantGid,
+        locationId: orphanLocationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 77,
+      },
+    });
+    const live = await seedLiveGraph(prisma, shopAId, "canon");
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "shop_rebuild",
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.hasMore).toBe(false);
+    assertNoMerchantHealthAuthorization(result);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: orphanVariantGid },
+      }),
+    ).toMatchObject({ title: "ORPHAN CACHE", sku: "ORPHAN-SKU" });
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: orphanVariantGid,
+            locationId: orphanLocationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(77);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: live.variantGid },
+      }),
+    ).not.toBeNull();
+    expect(
+      await prisma.shopifyVariantFact.findFirst({
+        where: { shopId: shopAId, shopifyGid: orphanVariantGid },
+      }),
+    ).toBeNull();
   });
 });
 
@@ -773,6 +1092,7 @@ async function canonicalFingerprint(
       compatibilityProjectionState: product?.compatibilityProjectionState,
     },
     item: {
+      shopifyVariantGid: item?.shopifyVariantGid ?? null,
       updatedAt: item?.updatedAt.toISOString(),
       compatibilityProjectionState: item?.compatibilityProjectionState,
     },
