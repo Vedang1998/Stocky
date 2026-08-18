@@ -73,6 +73,28 @@ function liveLevel(
   };
 }
 
+function expectInventoryMappingFailure(
+  level: CanonicalInventoryLevelRead,
+  code: string,
+) {
+  expect(() => mapInventoryLevelToLegacySnapshot(level, NOW)).toThrow(
+    CompatibilityProjectionError,
+  );
+  try {
+    mapInventoryLevelToLegacySnapshot(level, NOW);
+  } catch (error) {
+    expect(error).toBeInstanceOf(CompatibilityProjectionError);
+    const typed = error as CompatibilityProjectionError;
+    expect(typed.code).toBe(code);
+    expect(typed.retryable).toBe(true);
+    expect(typed.identity).toEqual({
+      kind: "InventoryLevel",
+      inventoryItemGid: level.inventoryItemGid,
+      locationGid: level.locationGid,
+    });
+  }
+}
+
 describe("compatibility projection mapping", () => {
   it("maps a live canonical variant onto the legacy cache fields", () => {
     const plan = mapVariantToLegacyCache(liveVariant(), NOW);
@@ -151,9 +173,85 @@ describe("compatibility projection mapping", () => {
     });
   });
 
+  it("projects canonical availableQuantity 0 as true zero, not unknown", () => {
+    const plan = mapInventoryLevelToLegacySnapshot(
+      liveLevel({ availableQuantity: 0 }),
+      NOW,
+    );
+    expect(plan.fields.quantityAvailable).toBe(0);
+  });
+
+  it("copies negative canonical availableQuantity exactly and does not clamp to zero", () => {
+    const plan = mapInventoryLevelToLegacySnapshot(
+      liveLevel({ availableQuantity: -2 }),
+      NOW,
+    );
+    expect(plan.fields.quantityAvailable).toBe(-2);
+  });
+
+  it("fails closed when a LIVE level has unknown availableQuantity", () => {
+    expectInventoryMappingFailure(
+      liveLevel({ availableQuantity: null }),
+      "canonical_available_quantity_missing",
+    );
+  });
+
+  it("fails closed when a LIVE level is missing Location state rather than explicit ABSENT", () => {
+    expectInventoryMappingFailure(
+      liveLevel({ location: null, availableQuantity: 17 }),
+      "canonical_location_state_missing",
+    );
+  });
+
+  it("does not collapse missing Location state into unknown availableQuantity", () => {
+    expectInventoryMappingFailure(
+      liveLevel({ location: null, availableQuantity: null }),
+      "canonical_location_state_missing",
+    );
+  });
+
+  it("fails closed when a LIVE level has unknown variant existence rather than explicit ABSENT", () => {
+    expectInventoryMappingFailure(
+      liveLevel({ variantExistenceState: null, availableQuantity: 17 }),
+      "canonical_variant_state_missing",
+    );
+  });
+
+  it("does not collapse unknown variant existence into unknown availableQuantity", () => {
+    expectInventoryMappingFailure(
+      liveLevel({ variantExistenceState: null, availableQuantity: null }),
+      "canonical_variant_state_missing",
+    );
+  });
+
   it("does not present a tombstoned level as live available quantity", () => {
     const plan = mapInventoryLevelToLegacySnapshot(
       liveLevel({ existenceState: "ABSENT", availableQuantity: 44 }),
+      NOW,
+    );
+    expect(plan.fields.quantityAvailable).toBe(0);
+  });
+
+  it("projects zero when a LIVE level has an explicitly ABSENT location", () => {
+    const plan = mapInventoryLevelToLegacySnapshot(
+      liveLevel({
+        location: {
+          shopifyGid: "gid://shopify/Location/1",
+          existenceState: "ABSENT",
+        },
+        availableQuantity: 9,
+      }),
+      NOW,
+    );
+    expect(plan.fields.quantityAvailable).toBe(0);
+  });
+
+  it("projects zero when a LIVE level has an explicitly ABSENT inventory item with known variant identity", () => {
+    const plan = mapInventoryLevelToLegacySnapshot(
+      liveLevel({
+        inventoryItem: liveItem({ existenceState: "ABSENT" }),
+        availableQuantity: 9,
+      }),
       NOW,
     );
     expect(plan.fields.quantityAvailable).toBe(0);
@@ -167,26 +265,19 @@ describe("compatibility projection mapping", () => {
     expect(plan.fields.quantityAvailable).toBe(0);
   });
 
+  it("still projects zero for an ABSENT level whose availableQuantity is also null", () => {
+    const plan = mapInventoryLevelToLegacySnapshot(
+      liveLevel({ existenceState: "ABSENT", availableQuantity: null }),
+      NOW,
+    );
+    expect(plan.fields.quantityAvailable).toBe(0);
+  });
+
   it("fails closed when the inventory item has no known shopifyVariantGid", () => {
     const level = liveLevel({
       inventoryItem: liveItem({ shopifyVariantGid: null }),
     });
-    expect(() => mapInventoryLevelToLegacySnapshot(level, NOW)).toThrow(
-      CompatibilityProjectionError,
-    );
-    try {
-      mapInventoryLevelToLegacySnapshot(level, NOW);
-    } catch (error) {
-      expect(error).toBeInstanceOf(CompatibilityProjectionError);
-      const typed = error as CompatibilityProjectionError;
-      expect(typed.code).toBe("canonical_variant_link_missing");
-      expect(typed.retryable).toBe(true);
-      expect(typed.identity).toEqual({
-        kind: "InventoryLevel",
-        inventoryItemGid: "gid://shopify/InventoryItem/1",
-        locationGid: "gid://shopify/Location/1",
-      });
-    }
+    expectInventoryMappingFailure(level, "canonical_variant_link_missing");
   });
 
   it("does not invent a variant GID from SKU, barcode, or title", () => {
@@ -201,6 +292,18 @@ describe("compatibility projection mapping", () => {
         NOW,
       ),
     ).toThrow(CompatibilityProjectionError);
+  });
+
+  it("does not treat an ABSENT item without a variant GID as projectable zero", () => {
+    expectInventoryMappingFailure(
+      liveLevel({
+        inventoryItem: liveItem({
+          existenceState: "ABSENT",
+          shopifyVariantGid: null,
+        }),
+      }),
+      "canonical_variant_link_missing",
+    );
   });
 
   it("fails closed when canonical weight overflows DECIMAL(10, 4)", () => {

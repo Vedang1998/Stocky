@@ -912,6 +912,336 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
       }),
     ).toBeNull();
   });
+
+  it("fails closed when LIVE availableQuantity is null, preserves the stale snapshot, and repairs after canonical available is known", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "null-qty");
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 99,
+      },
+    });
+    await prisma.shopifyInventoryLevelFact.update({
+      where: {
+        shopId_inventoryItemGid_locationGid: {
+          shopId: shopAId,
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      },
+      data: { availableQuantity: null },
+    });
+    const beforeUnknown = await canonicalFingerprint(prisma, seeded);
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(true);
+    expect(failed.failure?.code).toBe("canonical_available_quantity_missing");
+    expect(failed.failure?.retryable).toBe(true);
+    expect(failed.failure?.identity).toEqual({
+      kind: "InventoryLevel",
+      inventoryItemGid: seeded.itemGid,
+      locationGid: seeded.locationGid,
+    });
+    expect(failed.processedInventoryLevelCount).toBe(0);
+    assertNoMerchantHealthAuthorization(failed);
+    expect(failed.canonicalFactsUnchanged).toBe(true);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(beforeUnknown);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(99);
+
+    await prisma.shopifyInventoryLevelFact.update({
+      where: {
+        shopId_inventoryItemGid_locationGid: {
+          shopId: shopAId,
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      },
+      data: { availableQuantity: 17 },
+    });
+    const afterKnown = await canonicalFingerprint(prisma, seeded);
+
+    const repaired = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(repaired.status).toBe("SUCCEEDED");
+    expect(repaired.processedInventoryLevelCount).toBe(1);
+    assertNoMerchantHealthAuthorization(repaired);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(afterKnown);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(17);
+  });
+
+  it("projects canonical availableQuantity 0 as true zero", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "zero-qty");
+    await prisma.shopifyInventoryLevelFact.update({
+      where: {
+        shopId_inventoryItemGid_locationGid: {
+          shopId: shopAId,
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      },
+      data: { availableQuantity: 0 },
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    assertNoMerchantHealthAuthorization(result);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(0);
+  });
+
+  it("copies negative canonical availableQuantity exactly and does not clamp to zero", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "neg-qty");
+    await prisma.shopifyInventoryLevelFact.update({
+      where: {
+        shopId_inventoryItemGid_locationGid: {
+          shopId: shopAId,
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      },
+      data: { availableQuantity: -2 },
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    assertNoMerchantHealthAuthorization(result);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(-2);
+  });
+
+  it("projects zero when the linked location is explicitly ABSENT", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "loc-abs");
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 12,
+      },
+    });
+    await tombstoneLocation(prisma, shopAId, seeded.locationGid);
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    assertNoMerchantHealthAuthorization(result);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(0);
+  });
+
+  it("projects zero when the linked variant is explicitly ABSENT", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "var-abs");
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 12,
+      },
+    });
+    await tombstoneVariant(prisma, shopAId, seeded.variantGid);
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    assertNoMerchantHealthAuthorization(result);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(0);
+  });
+
+  it("projects zero when the linked inventory item is explicitly ABSENT with a known variant GID", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "item-abs");
+    await prisma.inventorySnapshot.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+        quantityAvailable: 12,
+      },
+    });
+    await tombstoneItem(prisma, shopAId, seeded.itemGid);
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    assertNoMerchantHealthAuthorization(result);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      (
+        await prisma.inventorySnapshot.findFirst({
+          where: {
+            shopId: shopAId,
+            shopifyVariantId: seeded.variantGid,
+            locationId: seeded.locationGid,
+            snapshotDate: TODAY,
+          },
+        })
+      )?.quantityAvailable,
+    ).toBe(0);
+  });
 });
 
 function throwingWriter(message: string): LegacyCompatibilityWriter {
@@ -1059,6 +1389,42 @@ async function tombstoneLevel(
   });
 }
 
+async function tombstoneLocation(
+  prisma: PrismaClient,
+  shopId: string,
+  locationGid: string,
+) {
+  await prisma.shopifyLocationFact.update({
+    where: { shopId_shopifyGid: { shopId, shopifyGid: locationGid } },
+    data: {
+      existenceState: "ABSENT",
+      existenceKind: "ABSENT_CONFIRMED_QUERY",
+      existenceRequestGen: 30n,
+      existenceResponseGen: 31n,
+      deletedAt: new Date("2026-08-17T14:00:00.000Z"),
+      deletionSource: "CONFIRMED_QUERY",
+    },
+  });
+}
+
+async function tombstoneItem(
+  prisma: PrismaClient,
+  shopId: string,
+  itemGid: string,
+) {
+  await prisma.shopifyInventoryItemFact.update({
+    where: { shopId_shopifyGid: { shopId, shopifyGid: itemGid } },
+    data: {
+      existenceState: "ABSENT",
+      existenceKind: "ABSENT_CONFIRMED_QUERY",
+      existenceRequestGen: 40n,
+      existenceResponseGen: 41n,
+      deletedAt: new Date("2026-08-17T14:00:00.000Z"),
+      deletionSource: "CONFIRMED_QUERY",
+    },
+  });
+}
+
 async function canonicalFingerprint(
   prisma: PrismaClient,
   seeded: { variantGid: string; itemGid: string; locationGid: string; productGid: string },
@@ -1078,6 +1444,9 @@ async function canonicalFingerprint(
       locationGid: seeded.locationGid,
     },
   });
+  const location = await prisma.shopifyLocationFact.findFirst({
+    where: { shopifyGid: seeded.locationGid },
+  });
   return {
     variant: {
       title: variant?.title,
@@ -1095,6 +1464,12 @@ async function canonicalFingerprint(
       shopifyVariantGid: item?.shopifyVariantGid ?? null,
       updatedAt: item?.updatedAt.toISOString(),
       compatibilityProjectionState: item?.compatibilityProjectionState,
+      existenceState: item?.existenceState,
+    },
+    location: {
+      updatedAt: location?.updatedAt.toISOString(),
+      compatibilityProjectionState: location?.compatibilityProjectionState,
+      existenceState: location?.existenceState,
     },
     level: {
       availableQuantity: level?.availableQuantity,

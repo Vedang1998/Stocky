@@ -158,5 +158,9 @@ export type CanonicalInventoryLevelRead = {
   existenceState: CanonicalExistenceState;
   inventoryItem: CanonicalInventoryItemRead | null;
   location: CanonicalLocationRead | null;
+  /**
+   * Nested canonical ProductVariant existence, or null when that relation is
+   * not currently known. Null is not ABSENT.
+   */
   variantExistenceState: CanonicalExistenceState | null;
 };

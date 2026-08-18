@@ -76,4 +76,13 @@ describe("PR5-F2C compatibility projection safety", () => {
       expect(source, file).not.toMatch(/shopifyGraphQL|unauthenticated|AdminGraphQLClient/);
     }
   });
+
+  it("does not collapse unknown canonical availableQuantity into Shopify zero", () => {
+    const source = readFileSync(path.join(DIR, "mapping.ts"), "utf8");
+    expect(source).not.toMatch(/availableQuantity\s*\?\?\s*0/);
+    expect(source).toMatch(/canonical_available_quantity_missing/);
+    expect(source).toMatch(/canonical_location_state_missing/);
+    expect(source).toMatch(/canonical_variant_state_missing/);
+    expect(source).toMatch(/canonical_variant_link_missing/);
+  });
 });
