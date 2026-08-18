@@ -76,4 +76,24 @@ describe("PR5-F2B apply surface safety (R-164)", () => {
       expect(source, file).not.toMatch(/@shopify/);
     }
   });
+
+  it("does not masquerade a full-sync fence as a direct existence interval", () => {
+    const files = walkTs(DIR);
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      expect(source, file).not.toMatch(/function observationInterval\s*\(/);
+      expect(source, file).not.toMatch(/requestGen:\s*observation\.fenceGeneration/);
+      expect(source, file).not.toMatch(/responseGen:\s*observation\.fenceGeneration/);
+    }
+    const index = readFileSync(path.join(DIR, "index.ts"), "utf8");
+    expect(index).toMatch(/directObservationInterval/);
+    expect(index).toMatch(/fullSyncFenceGeneration/);
+    expect(index).toMatch(/fullSyncAttributeMarker/);
+    expect(index).toMatch(/nullableFallbackIntervalFromFullSyncMarker/);
+    expect(index).toMatch(/loadCompletedDirectsNotSafelyEarlierThanFence/);
+    expect(index).toMatch(/loadActiveUnexpiredBlockersForFullSync/);
+    const evidence = readFileSync(path.join(DIR, "observation-evidence.ts"), "utf8");
+    expect(evidence).toMatch(/kind: "full_sync_fence"/);
+    expect(evidence).toMatch(/kind: "full_sync_attribute_marker"/);
+  });
 });

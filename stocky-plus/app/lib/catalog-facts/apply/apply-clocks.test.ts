@@ -353,6 +353,138 @@ describe("PR5-F2B existence / revival", () => {
       responseGen: 11n,
     });
   });
+
+  it("does not treat a full-sync fence as a direct [F,F] existence interval", () => {
+    const laterDirect = [{ requestGen: 20n, responseGen: 21n }];
+    const spanningDirect = [{ requestGen: 5n, responseGen: 15n }];
+    const earlierDirect = [{ requestGen: 1n, responseGen: 3n }];
+
+    const laterConflict = decideExistence({
+      identity,
+      stored: null,
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: { requestGen: 10n, responseGen: 10n },
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: laterDirect,
+    });
+    expect(laterConflict.mutate).toBe(false);
+    expect(laterConflict.reason).toBe("full_sync_first_insert_direct_conflict");
+    expect(laterConflict.diagnostic).toBe(DIAGNOSTIC.CONCURRENT_EXISTENCE);
+
+    const spanningConflict = decideExistence({
+      identity,
+      stored: null,
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: { requestGen: 10n, responseGen: 10n },
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: spanningDirect,
+    });
+    expect(spanningConflict.mutate).toBe(false);
+    expect(spanningConflict.reason).toBe("full_sync_first_insert_direct_conflict");
+
+    const earlierOk = decideExistence({
+      identity,
+      stored: null,
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: null,
+      existenceBlocked: false,
+      overlappingCompleted: earlierDirect,
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: [],
+    });
+    expect(earlierOk.mutate).toBe(true);
+    if (earlierOk.mutate) {
+      expect(earlierOk.nextKind).toBe("LIVE_FULL_SYNC_PRESENT");
+      expect(earlierOk.reason).toBe("first_insert_live");
+    }
+  });
+
+  it("keeps existing LIVE presence-only and still blocks reconnect on newer direct evidence", () => {
+    const keepLive = decideExistence({
+      identity,
+      stored: {
+        existenceState: "LIVE",
+        existenceKind: "LIVE_REFETCH",
+        existenceRequestGen: 20n,
+        existenceResponseGen: 21n,
+        shopifyCreatedAt: null,
+        existenceDiagnosticState: null,
+      },
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: null,
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: [{ requestGen: 20n, responseGen: 21n }],
+    });
+    expect(keepLive.mutate).toBe(false);
+    expect(keepLive.reason).toBe("presence_keep_live");
+
+    const reconnectBlocked = decideExistence({
+      identity: level,
+      stored: {
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        existenceRequestGen: 1n,
+        existenceResponseGen: 2n,
+        shopifyCreatedAt: null,
+        existenceDiagnosticState: null,
+      },
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: null,
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: [{ requestGen: 20n, responseGen: 21n }],
+    });
+    expect(reconnectBlocked.mutate).toBe(false);
+    expect(reconnectBlocked.reason).toBe("full_sync_reconnect_direct_conflict");
+
+    const reconnectOk = decideExistence({
+      identity: level,
+      stored: {
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        existenceRequestGen: 1n,
+        existenceResponseGen: 2n,
+        shopifyCreatedAt: null,
+        existenceDiagnosticState: null,
+      },
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: null,
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: [],
+    });
+    expect(reconnectOk.mutate).toBe(true);
+    if (reconnectOk.mutate) expect(reconnectOk.reason).toBe("level_reconnect_full_sync");
+
+    const terminalBulk = decideExistence({
+      identity,
+      stored: {
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        existenceRequestGen: 1n,
+        existenceResponseGen: 2n,
+        shopifyCreatedAt: new Date("2026-01-01T00:00:00.000Z"),
+        existenceDiagnosticState: null,
+      },
+      incomingKind: "LIVE_FULL_SYNC_PRESENT",
+      incomingInterval: null,
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      fenceGeneration: 10n,
+      completedDirectNotSafelyEarlierThanFence: [],
+    });
+    expect(terminalBulk.mutate).toBe(false);
+    expect(terminalBulk.reason).toBe("terminal_bulk_revival_conflict");
+    expect(terminalBulk.diagnostic).toBe(DIAGNOSTIC.TERMINAL_REVIVAL);
+  });
 });
 
 describe("PR5-F2B exact money", () => {
