@@ -23,8 +23,6 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:pr5-f2c-projection": "vitest run --passWithNoTests=false app/lib/catalog-facts/compatibility-projection",
-    "test:pr5-f2c-projection-db": "vitest run --passWithNoTests=false --config vitest.tenant-access.config.ts app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
     "test:migrations": "vitest run --config vitest.migrations.config.ts",
     "test:migrations-name-filter-probes": "vitest run --config vitest.migrations-name-filter-probes.config.ts",
     "test:vitest-reporters": "vitest run --config vitest.reporters.config.ts",
