@@ -6,15 +6,20 @@ import type { PrismaClient } from "@prisma/client";
 import { Client } from "pg";
 import {
   applyCanonicalFacts,
+  applyCanonicalFactsWithRetry,
   CANONICAL_APPLY_PHYSICAL_DELETE_OPERATIONS,
   denyCanonicalFactPhysicalDelete,
 } from "../../../app/lib/catalog-facts/apply";
 import {
   CanonicalApplyBatchExceedsCapacityError,
+  CanonicalApplyError,
   CanonicalApplyMissingTokenError,
   CanonicalApplyPhysicalDeleteError,
+  CanonicalApplyRequestGenerationMismatchError,
+  CanonicalApplyUniqueConflictError,
 } from "../../../app/lib/catalog-facts/apply/errors";
 import type { CanonicalApplyDb } from "../../../app/lib/catalog-facts/apply/sql";
+import { completeObservation } from "../../../app/lib/catalog-facts/apply/fencing";
 import { acquireCanonicalIdentityAdvisoryLock } from "../../../app/lib/catalog-facts/advisory-lock";
 import { deriveCanonicalLockKey } from "../../../app/lib/catalog-facts/lock-key";
 import { allocateCatalogObservationGeneration } from "../../../app/lib/catalog-facts/observation-generation";
@@ -118,6 +123,103 @@ function productLive(
       status: "ACTIVE",
       tags: [],
     },
+  };
+}
+
+function productAbsent(
+  shopId: string,
+  token: string,
+  gid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "Product", shopifyGid: gid },
+    existenceKind: "ABSENT_CONFIRMED_QUERY",
+    existenceObservedAt: new Date("2026-08-17T00:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
+  };
+}
+
+function variantLive(
+  shopId: string,
+  token: string,
+  gid: string,
+  productGid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+  attrs: { title?: string; updatedAt?: Date | null } = {},
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "ProductVariant", shopifyGid: gid },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T00:00:00.000Z"),
+    shopifyUpdatedAt:
+      attrs.updatedAt === undefined ? new Date("2026-08-01T00:00:00.000Z") : attrs.updatedAt,
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: {
+      shopifyProductGid: productGid,
+      title: attrs.title ?? "V",
+      selectedOptions: {},
+      priceAmount: "10.000000",
+      currencyCode: "USD",
+    },
+  };
+}
+
+function itemLive(
+  shopId: string,
+  token: string,
+  gid: string,
+  variantGid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+  attrs: { updatedAt?: Date | null } = {},
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "InventoryItem", shopifyGid: gid },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T00:00:00.000Z"),
+    shopifyUpdatedAt:
+      attrs.updatedAt === undefined ? new Date("2026-08-01T00:00:00.000Z") : attrs.updatedAt,
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: {
+      shopifyVariantGid: variantGid,
+      tracked: true,
+      requiresShipping: true,
+      unitCostAccess: "NULL",
+    },
+  };
+}
+
+function resourceAbsent(
+  shopId: string,
+  token: string,
+  identity: DirectCanonicalObservation["identity"],
+  requestGen: bigint,
+  responseGen: bigint,
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity,
+    existenceKind: "ABSENT_CONFIRMED_QUERY",
+    existenceObservedAt: new Date("2026-08-17T00:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
   };
 }
 
@@ -1407,5 +1509,1121 @@ describe("PR5-F2B canonical applicator PostgreSQL races", () => {
       await holder.end();
       await waiter.end();
     }
+  });
+
+  it("denies a valid ACTIVE token when the caller requestGen does not match the durable row", async () => {
+    const gid = "gid://shopify/Product/req-mismatch";
+    const durableReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-req-mismatch",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    const wrongReq = durableReq + 1n;
+    const resp = await withTenant(async (_c, db) => {
+      let generated = await allocateCatalogObservationGeneration(db);
+      while (generated <= wrongReq) {
+        generated = await allocateCatalogObservationGeneration(db);
+      }
+      return generated;
+    });
+    await expect(
+      withTenant(async (_c, db) =>
+        applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [
+            productLive(shopAId, "obs-req-mismatch", gid, wrongReq, resp, {
+              title: "Mismatch",
+              handle: "mismatch",
+            }),
+          ],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(CanonicalApplyRequestGenerationMismatchError);
+    await withTenant(async (client) => {
+      const fact = await client.query(
+        `SELECT 1 FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(fact.rowCount).toBe(0);
+      const obs = await client.query(
+        `SELECT "lifecycleState", "observationRequestGen", "observationResponseGen"
+         FROM "CatalogObservationInFlight" WHERE id = 'obs-req-mismatch'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("ACTIVE");
+      expect(obs.rows[0].observationRequestGen).toBe(String(durableReq));
+      expect(obs.rows[0].observationResponseGen).toBeNull();
+    });
+  });
+
+  it("does not let a fabricated earlier requestGen rewrite overlap ordering", async () => {
+    const gid = "gid://shopify/Product/req-earlier";
+    const liveReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-req-earlier-live",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-req-earlier-live", gid, req, resp, {
+            title: "Live",
+            handle: "req-earlier",
+          }),
+        ],
+      });
+      return req;
+    });
+    const durableReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-req-earlier",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    expect(durableReq).toBeGreaterThan(liveReq);
+    const fabricatedEarlier = liveReq;
+    const resp = await withTenant(async (_c, db) => allocateCatalogObservationGeneration(db));
+    await expect(
+      withTenant(async (_c, db) =>
+        applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [
+            productAbsent(shopAId, "obs-req-earlier", gid, fabricatedEarlier, resp),
+          ],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(CanonicalApplyRequestGenerationMismatchError);
+    await withTenant(async (client) => {
+      const fact = await client.query(
+        `SELECT "existenceState", title FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(fact.rows[0].existenceState).toBe("LIVE");
+      expect(fact.rows[0].title).toBe("Live");
+      const obs = await client.query(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-req-earlier'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("ACTIVE");
+    });
+  });
+
+  it("does not let a fabricated later requestGen bypass blocker semantics", async () => {
+    const gid = "gid://shopify/Product/req-later";
+    const liveReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-req-later-live",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-req-later-live", gid, req, resp, {
+            title: "Live",
+            handle: "req-later",
+          }),
+        ],
+      });
+      return req;
+    });
+    const durableReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-req-later",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    expect(durableReq).toBeGreaterThan(liveReq);
+    const fabricatedLater = durableReq + 50n;
+    const resp = await withTenant(async (_c, db) => {
+      let generated = await allocateCatalogObservationGeneration(db);
+      while (generated <= fabricatedLater) {
+        generated = await allocateCatalogObservationGeneration(db);
+      }
+      return generated;
+    });
+    await expect(
+      withTenant(async (_c, db) =>
+        applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [
+            productAbsent(shopAId, "obs-req-later", gid, fabricatedLater, resp),
+          ],
+        }),
+      ),
+    ).rejects.toBeInstanceOf(CanonicalApplyRequestGenerationMismatchError);
+    await withTenant(async (client) => {
+      const fact = await client.query(
+        `SELECT "existenceState" FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(fact.rows[0].existenceState).toBe("LIVE");
+      const obs = await client.query(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-req-later'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("ACTIVE");
+    });
+  });
+
+  it("fails completion when the expected requestGen does not match the durable row", async () => {
+    const gid = "gid://shopify/Product/complete-wrong-req";
+    const durableReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-complete-wrong-req",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    const resp = await withTenant(async (_c, db) => allocateCatalogObservationGeneration(db));
+    await expect(
+      withTenant(async (_c, db) =>
+        completeObservation(
+          db,
+          shopAId,
+          "obs-complete-wrong-req",
+          durableReq + 1n,
+          resp,
+        ),
+      ),
+    ).rejects.toThrow(/completion fence failed/);
+    await withTenant(async (client) => {
+      const obs = await client.query(
+        `SELECT "lifecycleState", "observationResponseGen"
+         FROM "CatalogObservationInFlight" WHERE id = 'obs-complete-wrong-req'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("ACTIVE");
+      expect(obs.rows[0].observationResponseGen).toBeNull();
+    });
+  });
+
+  it("fails completion when responseGen is not strictly greater than the durable requestGen", async () => {
+    const gid = "gid://shopify/Product/complete-resp";
+    const durableReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-complete-resp",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    await expect(
+      withTenant(async (_c, db) =>
+        completeObservation(
+          db,
+          shopAId,
+          "obs-complete-resp",
+          durableReq,
+          durableReq,
+        ),
+      ),
+    ).rejects.toBeInstanceOf(CanonicalApplyError);
+    await withTenant(async (client) => {
+      const obs = await client.query(
+        `SELECT "lifecycleState", "observationResponseGen"
+         FROM "CatalogObservationInFlight" WHERE id = 'obs-complete-resp'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("ACTIVE");
+      expect(obs.rows[0].observationResponseGen).toBeNull();
+    });
+  });
+
+  it("applies the ordinary matched-token happy path", async () => {
+    const gid = "gid://shopify/Product/happy";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-happy",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const result = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-happy", gid, req, resp, { title: "Happy", handle: "happy" }),
+        ],
+      });
+      expect(result.results[0]?.outcome).toBe("applied");
+    });
+    await withTenant(async (client) => {
+      const fact = await client.query(
+        `SELECT title FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(fact.rows[0].title).toBe("Happy");
+      const obs = await client.query(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-happy'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("COMPLETED");
+    });
+  });
+
+  it("does not retry a unique violation inside the aborted transaction and does not mask 25P02", async () => {
+    const gid = "gid://shopify/Product/uc-same-txn";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-uc-seed",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-uc-seed", gid, req, resp, {
+            title: "Original",
+            handle: "uc-same",
+          }),
+        ],
+      });
+    });
+    const applyReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-uc-same",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    const applyResp = await withTenant(async (_c, db) => allocateCatalogObservationGeneration(db));
+    const client = await getRuntimeClient();
+    let statementsAfterConflict = 0;
+    try {
+      await client.query("BEGIN");
+      await setTenant(client, shopAId);
+      const inner = asQueryRaw(client);
+      let hideProductFactSelect = true;
+      const db: CanonicalApplyDb = {
+        $queryRaw: async (strings, ...values) => {
+          const sql = Array.from(strings).join(" ");
+          if (
+            hideProductFactSelect &&
+            sql.includes("ShopifyProductFact") &&
+            sql.includes("FOR UPDATE")
+          ) {
+            hideProductFactSelect = false;
+            return [];
+          }
+          return inner.$queryRaw(strings, ...values);
+        },
+      };
+      await expect(
+        applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [
+            productLive(shopAId, "obs-uc-same", gid, applyReq, applyResp, {
+              title: "Conflict",
+              handle: "uc-same",
+            }),
+          ],
+        }),
+      ).rejects.toBeInstanceOf(CanonicalApplyUniqueConflictError);
+      try {
+        statementsAfterConflict += 1;
+        await client.query("SELECT 1");
+        throw new Error("expected aborted-transaction 25P02 after unique conflict");
+      } catch (error) {
+        expect((error as { code?: string }).code).toBe("25P02");
+      }
+      await client.query("ROLLBACK");
+    } finally {
+      await client.end();
+    }
+    expect(statementsAfterConflict).toBe(1);
+    await withTenant(async (c) => {
+      const fact = await c.query(
+        `SELECT title FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(fact.rows[0].title).toBe("Original");
+      const obs = await c.query(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-uc-same'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("ACTIVE");
+    });
+  });
+
+  it("retries unique conflict in a fresh transaction after full rollback", async () => {
+    const gid = "gid://shopify/Product/uc-retry";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-uc-retry-seed",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-uc-retry-seed", gid, req, resp, {
+            title: "Original",
+            handle: "uc-retry",
+            updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+    });
+    const applyReq = await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-uc-retry",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: gid,
+        requestGen: req,
+        leaseMs: 60_000,
+      });
+      return req;
+    });
+    const applyResp = await withTenant(async (_c, db) => allocateCatalogObservationGeneration(db));
+    let beginCount = 0;
+    let hideProductFactSelect = true;
+    const begin = async <T>(work: (db: CanonicalApplyDb) => Promise<T>): Promise<T> => {
+      beginCount += 1;
+      const client = await getRuntimeClient();
+      try {
+        await client.query("BEGIN");
+        await setTenant(client, shopAId);
+        const inner = asQueryRaw(client);
+        const db: CanonicalApplyDb = {
+          $queryRaw: async (strings, ...values) => {
+            const sql = Array.from(strings).join(" ");
+            if (
+              hideProductFactSelect &&
+              sql.includes("ShopifyProductFact") &&
+              sql.includes("FOR UPDATE")
+            ) {
+              return [];
+            }
+            return inner.$queryRaw(strings, ...values);
+          },
+        };
+        try {
+          const result = await work(db);
+          await client.query("COMMIT");
+          return result;
+        } catch (error) {
+          await client.query("ROLLBACK");
+          hideProductFactSelect = false;
+          throw error;
+        }
+      } finally {
+        await client.end();
+      }
+    };
+    const result = await applyCanonicalFactsWithRetry(begin, {
+      shopId: shopAId,
+      observations: [
+        productLive(shopAId, "obs-uc-retry", gid, applyReq, applyResp, {
+          title: "Retry",
+          handle: "uc-retry",
+          updatedAt: new Date("2026-02-01T00:00:00.000Z"),
+        }),
+      ],
+    });
+    expect(beginCount).toBe(2);
+    expect(result.results[0]?.outcome).toBe("applied");
+    await withTenant(async (client) => {
+      const fact = await client.query(
+        `SELECT title FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(fact.rows[0].title).toBe("Retry");
+      const obs = await client.query(
+        `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = 'obs-uc-retry'`,
+      );
+      expect(obs.rows[0].lifecycleState).toBe("COMPLETED");
+    });
+  });
+
+  it("preserves ProductVariant shopifyProductGid on equal Shopify updatedAt", async () => {
+    const productA = "gid://shopify/Product/rel-va";
+    const productB = "gid://shopify/Product/rel-vb";
+    const variantGid = "gid://shopify/ProductVariant/rel-v";
+    await withTenant(async (client, db) => {
+      const reqA = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-va",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: productA,
+        requestGen: reqA,
+        leaseMs: 60_000,
+      });
+      const respA = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-rel-va", productA, reqA, respA, {
+            title: "PA",
+            handle: "rel-va",
+          }),
+        ],
+      });
+      const reqB = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-vb",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: productB,
+        requestGen: reqB,
+        leaseMs: 60_000,
+      });
+      const respB = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-rel-vb", productB, reqB, respB, {
+            title: "PB",
+            handle: "rel-vb",
+          }),
+        ],
+      });
+      const reqV = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-v1",
+        shopId: shopAId,
+        resourceKind: "ProductVariant",
+        shopifyGid: variantGid,
+        requestGen: reqV,
+        leaseMs: 60_000,
+      });
+      const respV = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          variantLive(shopAId, "obs-rel-v1", variantGid, productA, reqV, respV, {
+            updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-v2",
+        shopId: shopAId,
+        resourceKind: "ProductVariant",
+        shopifyGid: variantGid,
+        requestGen: req2,
+        leaseMs: 60_000,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const second = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          variantLive(shopAId, "obs-rel-v2", variantGid, productB, req2, resp2, {
+            updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+      expect(second.results[0]?.attributesApplied).toBe(false);
+      expect(String(second.results[0]?.diagnosticState)).toContain("EQUAL_VERSION_CONFLICT");
+      const row = await client.query(
+        `SELECT "shopifyProductGid", "existenceDiagnosticState" FROM "ShopifyVariantFact" WHERE "shopifyGid" = $1`,
+        [variantGid],
+      );
+      expect(row.rows[0].shopifyProductGid).toBe(productA);
+      expect(String(row.rows[0].existenceDiagnosticState)).toContain("EQUAL_VERSION_CONFLICT");
+    });
+  });
+
+  it("applies a newer ProductVariant shopifyProductGid through tenant composite FK", async () => {
+    const productA = "gid://shopify/Product/rel-va2";
+    const productB = "gid://shopify/Product/rel-vb2";
+    const variantGid = "gid://shopify/ProductVariant/rel-v2";
+    await withTenant(async (client, db) => {
+      for (const [token, gid, handle] of [
+        ["obs-rel-va2", productA, "rel-va2"],
+        ["obs-rel-vb2", productB, "rel-vb2"],
+      ] as const) {
+        const req = await allocateCatalogObservationGeneration(db);
+        await insertObservation(client, {
+          id: token,
+          shopId: shopAId,
+          resourceKind: "Product",
+          shopifyGid: gid,
+          requestGen: req,
+          leaseMs: 60_000,
+        });
+        const resp = await allocateCatalogObservationGeneration(db);
+        await applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [
+            productLive(shopAId, token, gid, req, resp, { title: handle, handle }),
+          ],
+        });
+      }
+      const reqV = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-v2a",
+        shopId: shopAId,
+        resourceKind: "ProductVariant",
+        shopifyGid: variantGid,
+        requestGen: reqV,
+        leaseMs: 60_000,
+      });
+      const respV = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          variantLive(shopAId, "obs-rel-v2a", variantGid, productA, reqV, respV, {
+            updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-v2b",
+        shopId: shopAId,
+        resourceKind: "ProductVariant",
+        shopifyGid: variantGid,
+        requestGen: req2,
+        leaseMs: 60_000,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const second = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          variantLive(shopAId, "obs-rel-v2b", variantGid, productB, req2, resp2, {
+            updatedAt: new Date("2026-08-02T00:00:00.000Z"),
+          }),
+        ],
+      });
+      expect(second.results[0]?.attributesApplied).toBe(true);
+      const row = await client.query(
+        `SELECT "shopifyProductGid" FROM "ShopifyVariantFact" WHERE "shopifyGid" = $1`,
+        [variantGid],
+      );
+      expect(row.rows[0].shopifyProductGid).toBe(productB);
+    });
+  });
+
+  it("records concurrent attribute conflict for overlapping null-version ProductVariant parent GIDs", async () => {
+    const productA = "gid://shopify/Product/rel-va3";
+    const productB = "gid://shopify/Product/rel-vb3";
+    const variantGid = "gid://shopify/ProductVariant/rel-v3";
+    await withTenant(async (client, db) => {
+      for (const [token, gid, handle] of [
+        ["obs-rel-va3", productA, "rel-va3"],
+        ["obs-rel-vb3", productB, "rel-vb3"],
+      ] as const) {
+        const req = await allocateCatalogObservationGeneration(db);
+        await insertObservation(client, {
+          id: token,
+          shopId: shopAId,
+          resourceKind: "Product",
+          shopifyGid: gid,
+          requestGen: req,
+          leaseMs: 60_000,
+        });
+        const resp = await allocateCatalogObservationGeneration(db);
+        await applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [
+            productLive(shopAId, token, gid, req, resp, { title: handle, handle }),
+          ],
+        });
+      }
+      const req1 = await allocateCatalogObservationGeneration(db);
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-v3a",
+        shopId: shopAId,
+        resourceKind: "ProductVariant",
+        shopifyGid: variantGid,
+        requestGen: req1,
+        leaseMs: 60_000,
+      });
+      await insertObservation(client, {
+        id: "obs-rel-v3b",
+        shopId: shopAId,
+        resourceKind: "ProductVariant",
+        shopifyGid: variantGid,
+        requestGen: req2,
+        leaseMs: 60_000,
+      });
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          variantLive(shopAId, "obs-rel-v3a", variantGid, productA, req1, resp1, {
+            updatedAt: null,
+          }),
+        ],
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const second = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          variantLive(shopAId, "obs-rel-v3b", variantGid, productB, req2, resp2, {
+            updatedAt: null,
+          }),
+        ],
+      });
+      expect(second.results[0]?.attributesApplied).toBe(false);
+      expect(String(second.results[0]?.diagnosticState)).toContain(
+        "CONCURRENT_ATTRIBUTE_OBSERVATION_CONFLICT",
+      );
+      const row = await client.query(
+        `SELECT "shopifyProductGid", "existenceDiagnosticState" FROM "ShopifyVariantFact" WHERE "shopifyGid" = $1`,
+        [variantGid],
+      );
+      expect(row.rows[0].shopifyProductGid).toBe(productA);
+      expect(String(row.rows[0].existenceDiagnosticState)).toContain(
+        "CONCURRENT_ATTRIBUTE_OBSERVATION_CONFLICT",
+      );
+    });
+  });
+
+  it("preserves InventoryItem shopifyVariantGid on equal Shopify updatedAt", async () => {
+    const productGid = "gid://shopify/Product/rel-ia";
+    const variantA = "gid://shopify/ProductVariant/rel-ia";
+    const variantB = "gid://shopify/ProductVariant/rel-ib";
+    const itemGid = "gid://shopify/InventoryItem/rel-i";
+    await withTenant(async (client, db) => {
+      const reqP = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-ia-p",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: productGid,
+        requestGen: reqP,
+        leaseMs: 60_000,
+      });
+      const respP = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-rel-ia-p", productGid, reqP, respP, {
+            title: "IA",
+            handle: "rel-ia",
+          }),
+        ],
+      });
+      for (const [token, gid] of [
+        ["obs-rel-ia-va", variantA],
+        ["obs-rel-ia-vb", variantB],
+      ] as const) {
+        const req = await allocateCatalogObservationGeneration(db);
+        await insertObservation(client, {
+          id: token,
+          shopId: shopAId,
+          resourceKind: "ProductVariant",
+          shopifyGid: gid,
+          requestGen: req,
+          leaseMs: 60_000,
+        });
+        const resp = await allocateCatalogObservationGeneration(db);
+        await applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [variantLive(shopAId, token, gid, productGid, req, resp)],
+        });
+      }
+      const reqI = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-i1",
+        shopId: shopAId,
+        resourceKind: "InventoryItem",
+        shopifyGid: itemGid,
+        requestGen: reqI,
+        leaseMs: 60_000,
+      });
+      const respI = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          itemLive(shopAId, "obs-rel-i1", itemGid, variantA, reqI, respI, {
+            updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-i2",
+        shopId: shopAId,
+        resourceKind: "InventoryItem",
+        shopifyGid: itemGid,
+        requestGen: req2,
+        leaseMs: 60_000,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const second = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          itemLive(shopAId, "obs-rel-i2", itemGid, variantB, req2, resp2, {
+            updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+      expect(second.results[0]?.attributesApplied).toBe(false);
+      expect(String(second.results[0]?.diagnosticState)).toContain("EQUAL_VERSION_CONFLICT");
+      const row = await client.query(
+        `SELECT "shopifyVariantGid", "existenceDiagnosticState" FROM "ShopifyInventoryItemFact" WHERE "shopifyGid" = $1`,
+        [itemGid],
+      );
+      expect(row.rows[0].shopifyVariantGid).toBe(variantA);
+    });
+  });
+
+  it("applies a newer InventoryItem shopifyVariantGid through tenant composite FK", async () => {
+    const productGid = "gid://shopify/Product/rel-ia2";
+    const variantA = "gid://shopify/ProductVariant/rel-ia2";
+    const variantB = "gid://shopify/ProductVariant/rel-ib2";
+    const itemGid = "gid://shopify/InventoryItem/rel-i2";
+    await withTenant(async (client, db) => {
+      const reqP = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-ia2-p",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: productGid,
+        requestGen: reqP,
+        leaseMs: 60_000,
+      });
+      const respP = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-rel-ia2-p", productGid, reqP, respP, {
+            title: "IA2",
+            handle: "rel-ia2",
+          }),
+        ],
+      });
+      for (const [token, gid] of [
+        ["obs-rel-ia2-va", variantA],
+        ["obs-rel-ia2-vb", variantB],
+      ] as const) {
+        const req = await allocateCatalogObservationGeneration(db);
+        await insertObservation(client, {
+          id: token,
+          shopId: shopAId,
+          resourceKind: "ProductVariant",
+          shopifyGid: gid,
+          requestGen: req,
+          leaseMs: 60_000,
+        });
+        const resp = await allocateCatalogObservationGeneration(db);
+        await applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [variantLive(shopAId, token, gid, productGid, req, resp)],
+        });
+      }
+      const reqI = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-i2a",
+        shopId: shopAId,
+        resourceKind: "InventoryItem",
+        shopifyGid: itemGid,
+        requestGen: reqI,
+        leaseMs: 60_000,
+      });
+      const respI = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          itemLive(shopAId, "obs-rel-i2a", itemGid, variantA, reqI, respI, {
+            updatedAt: new Date("2026-08-01T00:00:00.000Z"),
+          }),
+        ],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-i2b",
+        shopId: shopAId,
+        resourceKind: "InventoryItem",
+        shopifyGid: itemGid,
+        requestGen: req2,
+        leaseMs: 60_000,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const second = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          itemLive(shopAId, "obs-rel-i2b", itemGid, variantB, req2, resp2, {
+            updatedAt: new Date("2026-08-02T00:00:00.000Z"),
+          }),
+        ],
+      });
+      expect(second.results[0]?.attributesApplied).toBe(true);
+      const row = await client.query(
+        `SELECT "shopifyVariantGid" FROM "ShopifyInventoryItemFact" WHERE "shopifyGid" = $1`,
+        [itemGid],
+      );
+      expect(row.rows[0].shopifyVariantGid).toBe(variantB);
+    });
+  });
+
+  it("records concurrent attribute conflict for overlapping null-version InventoryItem variant GIDs", async () => {
+    const productGid = "gid://shopify/Product/rel-ia3";
+    const variantA = "gid://shopify/ProductVariant/rel-ia3";
+    const variantB = "gid://shopify/ProductVariant/rel-ib3";
+    const itemGid = "gid://shopify/InventoryItem/rel-i3";
+    await withTenant(async (client, db) => {
+      const reqP = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-ia3-p",
+        shopId: shopAId,
+        resourceKind: "Product",
+        shopifyGid: productGid,
+        requestGen: reqP,
+        leaseMs: 60_000,
+      });
+      const respP = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          productLive(shopAId, "obs-rel-ia3-p", productGid, reqP, respP, {
+            title: "IA3",
+            handle: "rel-ia3",
+          }),
+        ],
+      });
+      for (const [token, gid] of [
+        ["obs-rel-ia3-va", variantA],
+        ["obs-rel-ia3-vb", variantB],
+      ] as const) {
+        const req = await allocateCatalogObservationGeneration(db);
+        await insertObservation(client, {
+          id: token,
+          shopId: shopAId,
+          resourceKind: "ProductVariant",
+          shopifyGid: gid,
+          requestGen: req,
+          leaseMs: 60_000,
+        });
+        const resp = await allocateCatalogObservationGeneration(db);
+        await applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [variantLive(shopAId, token, gid, productGid, req, resp)],
+        });
+      }
+      const req1 = await allocateCatalogObservationGeneration(db);
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-rel-i3a",
+        shopId: shopAId,
+        resourceKind: "InventoryItem",
+        shopifyGid: itemGid,
+        requestGen: req1,
+        leaseMs: 60_000,
+      });
+      await insertObservation(client, {
+        id: "obs-rel-i3b",
+        shopId: shopAId,
+        resourceKind: "InventoryItem",
+        shopifyGid: itemGid,
+        requestGen: req2,
+        leaseMs: 60_000,
+      });
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          itemLive(shopAId, "obs-rel-i3a", itemGid, variantA, req1, resp1, {
+            updatedAt: null,
+          }),
+        ],
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const second = await applyCanonicalFacts(db, {
+        shopId: shopAId,
+        observations: [
+          itemLive(shopAId, "obs-rel-i3b", itemGid, variantB, req2, resp2, {
+            updatedAt: null,
+          }),
+        ],
+      });
+      expect(second.results[0]?.attributesApplied).toBe(false);
+      expect(String(second.results[0]?.diagnosticState)).toContain(
+        "CONCURRENT_ATTRIBUTE_OBSERVATION_CONFLICT",
+      );
+      const row = await client.query(
+        `SELECT "shopifyVariantGid" FROM "ShopifyInventoryItemFact" WHERE "shopifyGid" = $1`,
+        [itemGid],
+      );
+      expect(row.rows[0].shopifyVariantGid).toBe(variantA);
+    });
+  });
+
+  it("preserves no canonical row for unseen ABSENT on every resource kind", async () => {
+    const productGid = "gid://shopify/Product/unseen-abs";
+    const variantGid = "gid://shopify/ProductVariant/unseen-abs";
+    const itemGid = "gid://shopify/InventoryItem/unseen-abs";
+    const locationGid = "gid://shopify/Location/unseen-abs";
+    const levelItemGid = "gid://shopify/InventoryItem/unseen-abs-lvl";
+    const levelLocationGid = "gid://shopify/Location/unseen-abs-lvl";
+    await withTenant(async (client, db) => {
+      const cases: Array<{
+        token: string;
+        kind: string;
+        observation: DirectCanonicalObservation;
+        sql: string;
+        params: string[];
+      }> = [
+        {
+          token: "obs-unseen-abs-p",
+          kind: "Product",
+          observation: resourceAbsent(
+            shopAId,
+            "obs-unseen-abs-p",
+            { shopId: shopAId, resourceKind: "Product", shopifyGid: productGid },
+            0n,
+            1n,
+          ),
+          sql: `SELECT 1 FROM "ShopifyProductFact" WHERE "shopifyGid" = $1`,
+          params: [productGid],
+        },
+        {
+          token: "obs-unseen-abs-v",
+          kind: "ProductVariant",
+          observation: resourceAbsent(
+            shopAId,
+            "obs-unseen-abs-v",
+            { shopId: shopAId, resourceKind: "ProductVariant", shopifyGid: variantGid },
+            0n,
+            1n,
+          ),
+          sql: `SELECT 1 FROM "ShopifyVariantFact" WHERE "shopifyGid" = $1`,
+          params: [variantGid],
+        },
+        {
+          token: "obs-unseen-abs-i",
+          kind: "InventoryItem",
+          observation: resourceAbsent(
+            shopAId,
+            "obs-unseen-abs-i",
+            { shopId: shopAId, resourceKind: "InventoryItem", shopifyGid: itemGid },
+            0n,
+            1n,
+          ),
+          sql: `SELECT 1 FROM "ShopifyInventoryItemFact" WHERE "shopifyGid" = $1`,
+          params: [itemGid],
+        },
+        {
+          token: "obs-unseen-abs-l",
+          kind: "Location",
+          observation: resourceAbsent(
+            shopAId,
+            "obs-unseen-abs-l",
+            { shopId: shopAId, resourceKind: "Location", shopifyGid: locationGid },
+            0n,
+            1n,
+          ),
+          sql: `SELECT 1 FROM "ShopifyLocationFact" WHERE "shopifyGid" = $1`,
+          params: [locationGid],
+        },
+        {
+          token: "obs-unseen-abs-lvl",
+          kind: "InventoryLevel",
+          observation: resourceAbsent(
+            shopAId,
+            "obs-unseen-abs-lvl",
+            {
+              shopId: shopAId,
+              resourceKind: "InventoryLevel",
+              inventoryItemGid: levelItemGid,
+              locationGid: levelLocationGid,
+            },
+            0n,
+            1n,
+          ),
+          sql: `SELECT 1 FROM "ShopifyInventoryLevelFact" WHERE "inventoryItemGid" = $1 AND "locationGid" = $2`,
+          params: [levelItemGid, levelLocationGid],
+        },
+      ];
+      for (const testCase of cases) {
+        const req = await allocateCatalogObservationGeneration(db);
+        const resp = await allocateCatalogObservationGeneration(db);
+        await insertObservation(client, {
+          id: testCase.token,
+          shopId: shopAId,
+          resourceKind: testCase.kind,
+          shopifyGid:
+            testCase.observation.identity.resourceKind === "InventoryLevel"
+              ? undefined
+              : testCase.observation.identity.shopifyGid,
+          inventoryItemGid:
+            testCase.observation.identity.resourceKind === "InventoryLevel"
+              ? testCase.observation.identity.inventoryItemGid
+              : undefined,
+          locationGid:
+            testCase.observation.identity.resourceKind === "InventoryLevel"
+              ? testCase.observation.identity.locationGid
+              : undefined,
+          requestGen: req,
+          leaseMs: 60_000,
+        });
+        const observation: DirectCanonicalObservation = {
+          ...testCase.observation,
+          observationRequestGen: req,
+          observationResponseGen: resp,
+        };
+        const result = await applyCanonicalFacts(db, {
+          shopId: shopAId,
+          observations: [observation],
+        });
+        expect(result.results[0]?.outcome, testCase.kind).toBe("noop");
+        expect(result.results[0]?.existenceMutated, testCase.kind).toBe(false);
+        const rows = await client.query(testCase.sql, testCase.params);
+        expect(rows.rowCount, testCase.kind).toBe(0);
+        const obs = await client.query(
+          `SELECT "lifecycleState" FROM "CatalogObservationInFlight" WHERE id = $1`,
+          [testCase.token],
+        );
+        expect(obs.rows[0].lifecycleState, testCase.kind).toBe("COMPLETED");
+      }
+    });
   });
 });

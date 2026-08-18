@@ -35,6 +35,15 @@ export class CanonicalApplyAbandonedTokenError extends CanonicalApplyError {
   }
 }
 
+export class CanonicalApplyRequestGenerationMismatchError extends CanonicalApplyError {
+  constructor(
+    message = "Observation token does not bind to the supplied observationRequestGen",
+  ) {
+    super("canonical_apply_request_generation_mismatch", message);
+    this.name = "CanonicalApplyRequestGenerationMismatchError";
+  }
+}
+
 export class CanonicalApplyExistenceKindError extends CanonicalApplyError {
   constructor(kind: string) {
     super(

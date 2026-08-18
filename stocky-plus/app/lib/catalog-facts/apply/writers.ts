@@ -48,6 +48,7 @@ export type FactSnapshot = {
   status?: string | null;
   featuredMediaUrl?: string | null;
   shopifyProductGid?: string | null;
+  shopifyVariantGid?: string | null;
   displayName?: string | null;
   selectedOptions?: unknown;
   sku?: string | null;
@@ -128,6 +129,7 @@ function mapSnapshot(row: Record<string, unknown>): FactSnapshot {
     status: asString(row.status),
     featuredMediaUrl: asString(row.featuredMediaUrl),
     shopifyProductGid: asString(row.shopifyProductGid),
+    shopifyVariantGid: asString(row.shopifyVariantGid),
     displayName: asString(row.displayName),
     selectedOptions: row.selectedOptions,
     sku: asString(row.sku),
@@ -938,6 +940,7 @@ export function variantAttributesEqual(
   attrs: VariantAttributes,
 ): boolean {
   return (
+    (stored.shopifyProductGid ?? null) === attrs.shopifyProductGid &&
     stored.title === attrs.title &&
     (stored.displayName ?? null) === (attrs.displayName ?? null) &&
     JSON.stringify(stored.selectedOptions ?? {}) ===
@@ -956,6 +959,7 @@ export function inventoryItemAttributesEqual(
   attrs: InventoryItemAttributes,
 ): boolean {
   return (
+    (stored.shopifyVariantGid ?? null) === (attrs.shopifyVariantGid ?? null) &&
     (stored.sku ?? null) === (attrs.sku ?? null) &&
     stored.tracked === attrs.tracked &&
     stored.requiresShipping === attrs.requiresShipping &&

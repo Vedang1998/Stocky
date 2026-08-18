@@ -22,7 +22,6 @@ import {
   CanonicalApplyLeaseInvalidError,
   CanonicalApplyMissingTokenError,
   CanonicalApplyPhysicalDeleteError,
-  CanonicalApplyUniqueConflictError,
 } from "./errors";
 import { decideExistence } from "./existence";
 import {
@@ -421,13 +420,20 @@ async function applyOneObservation(
 
   if (observation.observationKind === "direct") {
     try {
-      await fenceDirectObservation(db, identity.shopId, token as string, identity);
+      await fenceDirectObservation(
+        db,
+        identity.shopId,
+        token as string,
+        identity,
+        observation.observationRequestGen,
+      );
     } catch (error) {
       if (error instanceof CanonicalApplyLeaseInvalidError) {
         await abandonOwnExpiredObservation(
           db,
           identity.shopId,
           token as string,
+          observation.observationRequestGen,
           observation.observationResponseGen,
         );
         return {
@@ -452,7 +458,6 @@ async function applyOneObservation(
     ...(await abandonExpiredBlockers(db, identity.shopId, lockedRows, token, interval)),
   );
 
-  const MAX_UNIQUE_RETRIES = 2;
   let existenceMutated = false;
   let factId: string | null = null;
   let diagnostic: string | null = null;
@@ -465,109 +470,99 @@ async function applyOneObservation(
     diagnostic: null,
   };
 
-  for (let attempt = 0; attempt <= MAX_UNIQUE_RETRIES; attempt += 1) {
-    try {
-      const blockers = await loadActiveUnexpiredBlockers(
-        db,
-        identity.shopId,
-        identity,
-        token,
-        interval,
-      );
-      existenceBlocked = blockers.length > 0;
-      const overlappingCompleted = await loadCompletedOverlappingIntervals(
-        db,
-        identity.shopId,
-        identity,
-        token,
-        interval,
-      );
-      let fact = await lockAndReadFact(db, identity);
-      existenceDecision = decideExistence({
-        identity,
-        stored: fact
-          ? {
-              existenceState: fact.existenceState,
-              existenceKind: fact.existenceKind,
-              existenceRequestGen: fact.existenceRequestGen,
-              existenceResponseGen: fact.existenceResponseGen,
-              shopifyCreatedAt: fact.shopifyCreatedAt,
-              existenceDiagnosticState: fact.existenceDiagnosticState,
-            }
-          : null,
-        incomingKind: observation.existenceKind,
-        incomingInterval: interval,
-        incomingShopifyCreatedAt: observation.shopifyCreatedAt ?? null,
-        existenceBlocked,
-        overlappingCompleted,
-        fenceGeneration:
-          observation.observationKind === "full_sync" ? observation.fenceGeneration : null,
-      });
-
-      existenceMutated = false;
-      factId = fact?.id ?? null;
-      diagnostic = existenceDecision.diagnostic;
-
-      if (existenceDecision.mutate) {
-        const write: ExistenceWrite = {
-          state: existenceDecision.nextState,
-          kind: existenceDecision.nextKind,
-          interval: observation.existenceKind === "LIVE_FULL_SYNC_PRESENT" ? null : interval,
-          observedAt: observation.existenceObservedAt,
-          diagnostic,
-          deletionSource: existenceDecision.deletionSource,
-          shopifyCreatedAt: observation.shopifyCreatedAt ?? null,
-        };
-        if (!fact) {
-          const freshness =
-            observation.shopifyUpdatedAt == null ? "DEGRADED" : "ORDERED";
-          const presence =
-            observation.observationKind === "full_sync" ? observation.epochId : null;
-          factId = await insertFact(db, observation, write, interval, freshness, presence);
-          fact = await lockAndReadFact(db, identity);
-          existenceMutated = true;
-        } else {
-          await updateExistence(db, identity, fact.id, write);
-          existenceMutated = true;
-          fact = await lockAndReadFact(db, identity);
+  const blockers = await loadActiveUnexpiredBlockers(
+    db,
+    identity.shopId,
+    identity,
+    token,
+    interval,
+  );
+  existenceBlocked = blockers.length > 0;
+  const overlappingCompleted = await loadCompletedOverlappingIntervals(
+    db,
+    identity.shopId,
+    identity,
+    token,
+    interval,
+  );
+  let fact = await lockAndReadFact(db, identity);
+  existenceDecision = decideExistence({
+    identity,
+    stored: fact
+      ? {
+          existenceState: fact.existenceState,
+          existenceKind: fact.existenceKind,
+          existenceRequestGen: fact.existenceRequestGen,
+          existenceResponseGen: fact.existenceResponseGen,
+          shopifyCreatedAt: fact.shopifyCreatedAt,
+          existenceDiagnosticState: fact.existenceDiagnosticState,
         }
-      } else if (fact && diagnostic) {
-        await updateDiagnostic(db, identity, fact.id, diagnostic);
-      }
+      : null,
+    incomingKind: observation.existenceKind,
+    incomingInterval: interval,
+    incomingShopifyCreatedAt: observation.shopifyCreatedAt ?? null,
+    existenceBlocked,
+    overlappingCompleted,
+    fenceGeneration:
+      observation.observationKind === "full_sync" ? observation.fenceGeneration : null,
+  });
 
-      presenceUpdated = false;
-      if (observation.observationKind === "full_sync" && fact) {
-        await updatePresenceMarker(db, identity, fact.id, observation.epochId);
-        presenceUpdated = true;
-        fact = (await lockAndReadFact(db, identity)) ?? fact;
-      }
+  existenceMutated = false;
+  factId = fact?.id ?? null;
+  diagnostic = existenceDecision.diagnostic;
 
-      attributesApplied = false;
-      const incomingLive =
-        observation.existenceKind === "LIVE_REFETCH" ||
-        observation.existenceKind === "LIVE_FULL_SYNC_PRESENT";
-      const allowAttributes =
-        fact != null &&
-        !existenceBlocked &&
-        fact.existenceState === "LIVE" &&
-        incomingLive;
-      if (allowAttributes && fact) {
-        const attrResult = await applyAttributes(db, observation, fact, interval);
-        attributesApplied = attrResult.applied;
-        if (attrResult.diagnostic) {
-          diagnostic = preserveRevivalDiagnostic(fact.existenceDiagnosticState, attrResult.diagnostic);
-        }
-        fact = (await lockAndReadFact(db, identity)) ?? fact;
-        const qtyApplied = await applyQuantities(db, observation, fact, interval);
-        attributesApplied = attributesApplied || qtyApplied;
-      }
-      break;
-    } catch (error) {
-      if (error instanceof CanonicalApplyUniqueConflictError && attempt < MAX_UNIQUE_RETRIES) {
-        continue;
-      }
-      throw error;
+  if (existenceDecision.mutate) {
+    const write: ExistenceWrite = {
+      state: existenceDecision.nextState,
+      kind: existenceDecision.nextKind,
+      interval: observation.existenceKind === "LIVE_FULL_SYNC_PRESENT" ? null : interval,
+      observedAt: observation.existenceObservedAt,
+      diagnostic,
+      deletionSource: existenceDecision.deletionSource,
+      shopifyCreatedAt: observation.shopifyCreatedAt ?? null,
+    };
+    if (!fact) {
+      const freshness =
+        observation.shopifyUpdatedAt == null ? "DEGRADED" : "ORDERED";
+      const presence =
+        observation.observationKind === "full_sync" ? observation.epochId : null;
+      factId = await insertFact(db, observation, write, interval, freshness, presence);
+      fact = await lockAndReadFact(db, identity);
+      existenceMutated = true;
+    } else {
+      await updateExistence(db, identity, fact.id, write);
+      existenceMutated = true;
+      fact = await lockAndReadFact(db, identity);
     }
+  } else if (fact && diagnostic) {
+    await updateDiagnostic(db, identity, fact.id, diagnostic);
+  }
+
+  presenceUpdated = false;
+  if (observation.observationKind === "full_sync" && fact) {
+    await updatePresenceMarker(db, identity, fact.id, observation.epochId);
+    presenceUpdated = true;
+    fact = (await lockAndReadFact(db, identity)) ?? fact;
+  }
+
+  attributesApplied = false;
+  const incomingLive =
+    observation.existenceKind === "LIVE_REFETCH" ||
+    observation.existenceKind === "LIVE_FULL_SYNC_PRESENT";
+  const allowAttributes =
+    fact != null &&
+    !existenceBlocked &&
+    fact.existenceState === "LIVE" &&
+    incomingLive;
+  if (allowAttributes && fact) {
+    const attrResult = await applyAttributes(db, observation, fact, interval);
+    attributesApplied = attrResult.applied;
+    if (attrResult.diagnostic) {
+      diagnostic = preserveRevivalDiagnostic(fact.existenceDiagnosticState, attrResult.diagnostic);
+    }
+    fact = (await lockAndReadFact(db, identity)) ?? fact;
+    const qtyApplied = await applyQuantities(db, observation, fact, interval);
+    attributesApplied = attributesApplied || qtyApplied;
   }
 
   if (observation.observationKind === "direct") {
@@ -575,6 +570,7 @@ async function applyOneObservation(
       db,
       identity.shopId,
       observation.observationToken,
+      observation.observationRequestGen,
       observation.observationResponseGen,
     );
   }
@@ -692,6 +688,12 @@ export async function applyCanonicalFacts(
   };
 }
 
+/**
+ * Retry unique-conflict / advisory-lock-timeout by rolling the caller
+ * transaction back and invoking `begin` again. `begin` MUST start a fresh
+ * PostgreSQL transaction. Do not retry inside an aborted transaction
+ * (SQLSTATE 25P02). No ON CONFLICT DO UPDATE. No savepoint recovery.
+ */
 export async function applyCanonicalFactsWithRetry(
   begin: (fn: (db: CanonicalApplyDb) => Promise<CanonicalApplyBatchResult>) => Promise<CanonicalApplyBatchResult>,
   input: CanonicalApplyBatchInput,

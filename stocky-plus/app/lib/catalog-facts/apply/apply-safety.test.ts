@@ -6,7 +6,11 @@ import {
   CANONICAL_APPLY_PHYSICAL_DELETE_OPERATIONS,
   denyCanonicalFactPhysicalDelete,
 } from "./index";
-import { CanonicalApplyPhysicalDeleteError } from "./errors";
+import {
+  CanonicalApplyLeaseInvalidError,
+  CanonicalApplyPhysicalDeleteError,
+  CanonicalApplyRequestGenerationMismatchError,
+} from "./errors";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,12 +37,33 @@ describe("PR5-F2B apply surface safety (R-164)", () => {
     );
   });
 
+  it("request-generation mismatch is a distinct fail-closed error", () => {
+    const error = new CanonicalApplyRequestGenerationMismatchError();
+    expect(error).not.toBeInstanceOf(CanonicalApplyLeaseInvalidError);
+    expect(error.code).toBe("canonical_apply_request_generation_mismatch");
+  });
+
+  it("binds durable observationRequestGen and does not retry unique conflicts in-process", () => {
+    const fencing = readFileSync(path.join(DIR, "fencing.ts"), "utf8");
+    expect(fencing).toMatch(/CanonicalApplyRequestGenerationMismatchError/);
+    expect(fencing).toMatch(/mapped\.observationRequestGen !== expectedRequestGen/);
+    expect(fencing).toMatch(
+      /AND "observationRequestGen" = \$\{expectedRequestGen\.toString\(\)\}::bigint/,
+    );
+    const index = readFileSync(path.join(DIR, "index.ts"), "utf8");
+    expect(index).not.toMatch(/CanonicalApplyUniqueConflictError/);
+    expect(index).toMatch(/MUST start a fresh[\s*]+PostgreSQL transaction/);
+    const writers = readFileSync(path.join(DIR, "writers.ts"), "utf8");
+    expect(writers).not.toMatch(/ON CONFLICT/);
+  });
+
   it("apply module source has no physical delete of canonical facts and no money Number arithmetic", () => {
     const files = walkTs(DIR);
     expect(files.length).toBeGreaterThan(0);
     expect(files.some((file) => file.endsWith(`${path.sep}index.ts`))).toBe(true);
     for (const file of files) {
       const source = readFileSync(file, "utf8");
+      expect(source, file).not.toMatch(/MAX_UNIQUE_RETRIES/);
       expect(source, file).not.toMatch(/\.deleteMany\s*\(/);
       expect(source, file).not.toMatch(/\$queryRaw\s*\(/);
       expect(source, file).not.toMatch(/DELETE\s+FROM\s+"Shopify(Product|Variant|InventoryItem|Location|InventoryLevel)Fact"/i);

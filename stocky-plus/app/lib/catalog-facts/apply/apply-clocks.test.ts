@@ -7,7 +7,12 @@ import {
 import { decideExistence, encodeRevivalConfirmation, parseRevivalConfirmation } from "./existence";
 import { exactMoneyText, exactMoneyTextOrNull } from "./money";
 import { CanonicalApplyMoneyError } from "./errors";
-import { DIAGNOSTIC } from "./types";
+import { DIAGNOSTIC, type CanonicalFactIdentity } from "./types";
+import {
+  inventoryItemAttributesEqual,
+  variantAttributesEqual,
+  type FactSnapshot,
+} from "./writers";
 
 describe("PR5-F2B clock A / nullable-version rules", () => {
   const later = { requestGen: 10n, responseGen: 12n };
@@ -139,7 +144,7 @@ describe("PR5-F2B existence / revival", () => {
     locationGid: "gid://shopify/Location/1",
   };
 
-  it("first-inserts LIVE and ABSENT when no blockers exist", () => {
+  it("first-inserts LIVE and preserves no row for unseen ABSENT", () => {
     const live = decideExistence({
       identity,
       stored: null,
@@ -159,8 +164,42 @@ describe("PR5-F2B existence / revival", () => {
       existenceBlocked: false,
       overlappingCompleted: [],
     });
-    expect(absent.mutate).toBe(true);
-    if (absent.mutate) expect(absent.nextState).toBe("ABSENT");
+    expect(absent.mutate).toBe(false);
+    expect(absent.reason).toBe("first_insert_absent_preserve_no_row");
+  });
+
+  it("preserves no canonical row for unseen ABSENT on every resource kind", () => {
+    const kinds: CanonicalFactIdentity[] = [
+      identity,
+      {
+        shopId: "shop",
+        resourceKind: "ProductVariant",
+        shopifyGid: "gid://shopify/ProductVariant/1",
+      },
+      {
+        shopId: "shop",
+        resourceKind: "InventoryItem",
+        shopifyGid: "gid://shopify/InventoryItem/1",
+      },
+      {
+        shopId: "shop",
+        resourceKind: "Location",
+        shopifyGid: "gid://shopify/Location/1",
+      },
+      level,
+    ];
+    for (const resource of kinds) {
+      const absent = decideExistence({
+        identity: resource,
+        stored: null,
+        incomingKind: "ABSENT_CONFIRMED_QUERY",
+        incomingInterval: { requestGen: 1n, responseGen: 2n },
+        existenceBlocked: false,
+        overlappingCompleted: [],
+      });
+      expect(absent.mutate, resource.resourceKind).toBe(false);
+      expect(absent.reason).toBe("first_insert_absent_preserve_no_row");
+    }
   });
 
   it("still first-inserts LIVE when a completed overlapping observation left no row", () => {
@@ -311,5 +350,74 @@ describe("PR5-F2B exact money", () => {
     expect(() => exactMoneyText("not-a-decimal", "priceAmount")).toThrow(
       CanonicalApplyMoneyError,
     );
+  });
+});
+
+describe("PR5-F2B relationship identity is part of attribute equality", () => {
+  function snapshot(overrides: Partial<FactSnapshot>): FactSnapshot {
+    return {
+      id: "cfa_test",
+      existenceState: "LIVE",
+      existenceKind: "LIVE_REFETCH",
+      existenceRequestGen: 1n,
+      existenceResponseGen: 2n,
+      existenceDiagnosticState: null,
+      shopifyCreatedAt: null,
+      shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      attributeRequestGen: 1n,
+      attributeResponseGen: 2n,
+      attributeFreshnessState: "ORDERED",
+      lastSeenFullSyncRunId: null,
+      title: "V",
+      selectedOptions: {},
+      priceAmount: "10.000000",
+      currencyCode: "USD",
+      shopifyProductGid: "gid://shopify/Product/parent-a",
+      shopifyVariantGid: "gid://shopify/ProductVariant/v-a",
+      tracked: true,
+      requiresShipping: true,
+      unitCostAccess: "NULL",
+      sku: null,
+      quantities: {},
+      ...overrides,
+    };
+  }
+
+  it("treats ProductVariant rows with a different shopifyProductGid as not equal", () => {
+    const stored = snapshot({});
+    const sameParent = variantAttributesEqual(stored, {
+      shopifyProductGid: "gid://shopify/Product/parent-a",
+      title: "V",
+      selectedOptions: {},
+      priceAmount: "10.000000",
+      currencyCode: "USD",
+    });
+    const otherParent = variantAttributesEqual(stored, {
+      shopifyProductGid: "gid://shopify/Product/parent-b",
+      title: "V",
+      selectedOptions: {},
+      priceAmount: "10.000000",
+      currencyCode: "USD",
+    });
+    expect(sameParent).toBe(true);
+    expect(otherParent).toBe(false);
+  });
+
+  it("treats InventoryItem rows with a different shopifyVariantGid as not equal", () => {
+    const stored = snapshot({});
+    const sameVariant = inventoryItemAttributesEqual(stored, {
+      shopifyVariantGid: "gid://shopify/ProductVariant/v-a",
+      tracked: true,
+      requiresShipping: true,
+      unitCostAccess: "NULL",
+    });
+    const otherVariant = inventoryItemAttributesEqual(stored, {
+      shopifyVariantGid: "gid://shopify/ProductVariant/v-b",
+      tracked: true,
+      requiresShipping: true,
+      unitCostAccess: "NULL",
+    });
+    expect(sameVariant).toBe(true);
+    expect(otherVariant).toBe(false);
   });
 });

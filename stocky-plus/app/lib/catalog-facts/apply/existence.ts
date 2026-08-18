@@ -119,14 +119,14 @@ export function decideExistence(input: {
         deletionSource: null,
       };
     }
+    // Unseen ABSENT_CONFIRMED_QUERY: preserve no canonical row. Frozen schema
+    // requires live business columns / parent FKs; fabricating those values to
+    // make a never-seen tombstone insertable is forbidden. Tombstone remains
+    // an UPDATE of an already-inserted fact.
     return {
-      mutate: true,
-      nextState: "ABSENT",
-      nextKind: "ABSENT_CONFIRMED_QUERY",
-      reason: "first_insert_absent",
+      mutate: false,
+      reason: "first_insert_absent_preserve_no_row",
       diagnostic: null,
-      deletionSource:
-        identity.resourceKind === "InventoryLevel" ? "DISCONNECT" : "CONFIRMED_QUERY",
     };
   }
 

@@ -4,8 +4,10 @@
  */
 import {
   CanonicalApplyAbandonedTokenError,
+  CanonicalApplyError,
   CanonicalApplyLeaseInvalidError,
   CanonicalApplyMissingTokenError,
+  CanonicalApplyRequestGenerationMismatchError,
 } from "./errors";
 import {
   asBigInt,
@@ -86,6 +88,7 @@ export async function fenceDirectObservation(
   shopId: string,
   token: string,
   identity: CanonicalFactIdentity,
+  expectedRequestGen: bigint,
 ): Promise<ObservationRow> {
   if (!token) {
     throw new CanonicalApplyMissingTokenError();
@@ -130,6 +133,9 @@ export async function fenceDirectObservation(
     ),
     leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
   };
+  if (mapped.observationRequestGen !== expectedRequestGen) {
+    throw new CanonicalApplyRequestGenerationMismatchError();
+  }
   if (mapped.lifecycleState === "ABANDONED") {
     throw new CanonicalApplyAbandonedTokenError();
   }
@@ -254,8 +260,15 @@ export async function completeObservation(
   db: CanonicalApplyDb,
   shopId: string,
   token: string,
+  expectedRequestGen: bigint,
   responseGen: bigint,
 ): Promise<void> {
+  if (responseGen <= expectedRequestGen) {
+    throw new CanonicalApplyError(
+      "canonical_apply_interval_invalid",
+      "observationResponseGen must be greater than the durable observationRequestGen",
+    );
+  }
   const rows = await queryRows<{ id: string }>(db)`UPDATE "CatalogObservationInFlight"
      SET "lifecycleState" = 'COMPLETED',
          "observationResponseGen" = ${responseGen.toString()}::bigint,
@@ -264,6 +277,8 @@ export async function completeObservation(
        AND id = ${token}
        AND "lifecycleState" = 'ACTIVE'
        AND "observationResponseGen" IS NULL
+       AND "observationRequestGen" = ${expectedRequestGen.toString()}::bigint
+       AND ${responseGen.toString()}::bigint > "observationRequestGen"
        AND clock_timestamp() < "leaseExpiresAt"
      RETURNING id`;
   if (rows.length !== 1) {
@@ -277,6 +292,7 @@ export async function abandonOwnExpiredObservation(
   db: CanonicalApplyDb,
   shopId: string,
   token: string,
+  expectedRequestGen: bigint,
   responseGen: bigint | null,
 ): Promise<void> {
   await queryRows(db)`UPDATE "CatalogObservationInFlight"
@@ -285,5 +301,6 @@ export async function abandonOwnExpiredObservation(
          "updatedAt" = clock_timestamp()
      WHERE "shopId" = ${shopId}
        AND id = ${token}
-       AND "lifecycleState" = 'ACTIVE'`;
+       AND "lifecycleState" = 'ACTIVE'
+       AND "observationRequestGen" = ${expectedRequestGen.toString()}::bigint`;
 }

@@ -54,6 +54,7 @@ export {
   CanonicalApplyMissingTokenError,
   CanonicalApplyMoneyError,
   CanonicalApplyPhysicalDeleteError,
+  CanonicalApplyRequestGenerationMismatchError,
   CanonicalApplyUniqueConflictError,
 } from "./apply/errors";
 export type {
