@@ -103,7 +103,9 @@ export const DIAGNOSTIC = {
   STALE_DELETE: "STALE_DELETE_SIGNAL",
   STALE_DISCONNECT: "STALE_DISCONNECT_SIGNAL",
   INCOMPLETE_FIRST_LIVE: "INCOMPLETE_FIRST_LIVE_ATTRIBUTES",
+  INCOMPLETE_AUTHORITATIVE: "INCOMPLETE_AUTHORITATIVE_ATTRIBUTES",
   NUMERIC_SCALE: "CANONICAL_NUMERIC_SCALE_UNREPRESENTABLE",
+  QUANTITY_DOMAIN: "CANONICAL_QUANTITY_DOMAIN_UNREPRESENTABLE",
 } as const;
 
 export type CatalogSourceKind =
@@ -124,51 +126,51 @@ export type QuantityObservation = {
 export type ProductAttributes = {
   title: string;
   handle: string;
-  vendor?: string | null;
-  productType?: string | null;
-  tags?: string[];
+  vendor: string | null;
+  productType: string | null;
+  tags: string[];
   status: "ACTIVE" | "ARCHIVED" | "DRAFT" | "UNLISTED";
-  featuredMediaUrl?: string | null;
+  featuredMediaUrl: string | null;
 };
 
 export type VariantAttributes = {
   shopifyProductGid: string;
   title: string;
-  displayName?: string | null;
+  displayName: string | null;
   selectedOptions: unknown;
-  sku?: string | null;
-  barcode?: string | null;
+  sku: string | null;
+  barcode: string | null;
   priceAmount: ExactMoney;
-  compareAtPriceAmount?: ExactMoney | null;
+  compareAtPriceAmount: ExactMoney | null;
   currencyCode: string;
-  position?: number | null;
+  position: number | null;
 };
 
 export type InventoryItemAttributes = {
-  shopifyVariantGid?: string | null;
-  sku?: string | null;
+  shopifyVariantGid: string | null;
+  sku: string | null;
   tracked: boolean;
   requiresShipping: boolean;
-  weightValue?: ExactMoney | null;
-  weightUnit?: string | null;
-  unitCostAmount?: ExactMoney | null;
-  unitCostCurrencyCode?: string | null;
+  weightValue: ExactMoney | null;
+  weightUnit: string | null;
+  unitCostAmount: ExactMoney | null;
+  unitCostCurrencyCode: string | null;
   unitCostAccess: "PRESENT" | "NULL" | "OMITTED_NO_PERMISSION" | "QUERY_ERROR_ISOLATED";
 };
 
 export type LocationAttributes = {
   name: string;
   isActive: boolean;
-  deactivatedAt?: Date | null;
+  deactivatedAt: Date | null;
   fulfillsOnlineOrders: boolean;
   shipsInventory: boolean;
   isFulfillmentService: boolean;
   hasActiveInventory: boolean;
-  address1?: string | null;
-  city?: string | null;
-  provinceCode?: string | null;
-  countryCode?: string | null;
-  zip?: string | null;
+  address1: string | null;
+  city: string | null;
+  provinceCode: string | null;
+  countryCode: string | null;
+  zip: string | null;
 };
 
 export type InventoryLevelAttributes = {

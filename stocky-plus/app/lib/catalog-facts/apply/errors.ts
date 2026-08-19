@@ -120,3 +120,31 @@ export class CanonicalApplyIncompleteFirstLiveError extends CanonicalApplyError 
     this.missing = missing;
   }
 }
+
+export class CanonicalApplyIncompleteAuthoritativeAttributesError extends CanonicalApplyError {
+  readonly missing: readonly string[];
+
+  constructor(missing: readonly string[]) {
+    super(
+      "canonical_apply_incomplete_authoritative_attributes",
+      `Authoritative resource attributes are incomplete: ${missing.join(", ")}`,
+    );
+    this.name = "CanonicalApplyIncompleteAuthoritativeAttributesError";
+    this.missing = missing;
+  }
+}
+
+export class CanonicalApplyQuantityDomainError extends CanonicalApplyError {
+  readonly field: string;
+
+  constructor(field: string, value?: unknown) {
+    super(
+      "canonical_apply_quantity_domain_unrepresentable",
+      value === undefined
+        ? `${field} is not a PostgreSQL integer quantity`
+        : `${field} is not a PostgreSQL integer quantity (${String(value)})`,
+    );
+    this.name = "CanonicalApplyQuantityDomainError";
+    this.field = field;
+  }
+}

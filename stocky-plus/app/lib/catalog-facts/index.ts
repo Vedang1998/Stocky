@@ -58,6 +58,8 @@ export {
   CanonicalApplyUniqueConflictError,
   CanonicalApplyNumericScaleError,
   CanonicalApplyIncompleteFirstLiveError,
+  CanonicalApplyIncompleteAuthoritativeAttributesError,
+  CanonicalApplyQuantityDomainError,
 } from "./apply/errors";
 export type {
   CanonicalApplyBatchInput,

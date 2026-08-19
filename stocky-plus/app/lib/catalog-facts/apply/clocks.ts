@@ -102,9 +102,12 @@ export function decideAttributeClock(input: AttributeClockInput): AttributeClock
   }
 
   if (incomingMs == null && storedMs != null) {
+    // Brief §6.F.9: incoming null-version against a stored versioned fact does
+    // not apply. Freshness becomes/remains DEGRADED because absolute freshness
+    // cannot be established. This is intentional, not a silent no-op.
     return {
       apply: false,
-      freshness: null,
+      freshness: "DEGRADED",
       diagnostic: "CATALOG_NULL_VERSION_OBSERVATION",
       reason: "incoming_null_stored_versioned",
     };

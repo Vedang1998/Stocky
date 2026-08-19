@@ -172,41 +172,66 @@ async function abandonExpiredResultlessRow(
   return updated[0]?.id ? String(updated[0].id) : null;
 }
 
-export async function abandonExpiredBlockers(
+/**
+ * Classify expired ACTIVE resultless rows that would block if they were still
+ * unexpired. Lease expiry uses PostgreSQL clock_timestamp() only.
+ *
+ * Direct: earlier-or-equal requestGen (same predicate as unexpired blockers).
+ * Full-sync: any ACTIVE resultless direct for the identity.
+ */
+export async function loadExpiredActiveResultlessBlockers(
   db: CanonicalApplyDb,
   shopId: string,
-  rows: ObservationRow[],
-  currentToken: string | null,
-  currentInterval: { requestGen: bigint; responseGen: bigint },
-): Promise<string[]> {
-  const abandoned: string[] = [];
-  for (const row of rows) {
-    if (row.id === currentToken) continue;
-    if (row.lifecycleState !== "ACTIVE") continue;
-    if (row.observationResponseGen != null) continue;
-    const overlaps =
-      row.observationRequestGen <= currentInterval.responseGen;
-    if (!overlaps) continue;
-    const abandonedId = await abandonExpiredResultlessRow(db, shopId, row.id);
-    if (abandonedId) abandoned.push(abandonedId);
-  }
-  return abandoned;
+  identity: CanonicalFactIdentity,
+  options: {
+    currentToken?: string | null;
+    maxRequestGen?: bigint | null;
+  } = {},
+): Promise<ObservationRow[]> {
+  const pred = identityPredicate(identity);
+  const currentToken = options.currentToken ?? null;
+  const maxRequestGen = options.maxRequestGen ?? null;
+  const rows = await queryRows<{
+    id: string;
+    lifecycleState: string;
+    observationRequestGen: unknown;
+    observationResponseGen: unknown;
+    leaseExpiresAt: unknown;
+  }>(db)`SELECT id, "lifecycleState", "observationRequestGen", "observationResponseGen", "leaseExpiresAt"
+     FROM "CatalogObservationInFlight"
+     WHERE "shopId" = ${shopId}
+       AND "resourceKind" = ${pred.kind}::"CatalogResourceKind"
+       AND (
+         (${pred.kind} <> 'InventoryLevel' AND "shopifyGid" = ${pred.gid})
+         OR (${pred.kind} = 'InventoryLevel' AND "inventoryItemGid" = ${pred.item} AND "locationGid" = ${pred.location})
+       )
+       AND "lifecycleState" = 'ACTIVE'
+       AND "observationResponseGen" IS NULL
+       AND clock_timestamp() >= "leaseExpiresAt"
+       AND (${currentToken}::text IS NULL OR id <> ${currentToken})
+       AND (${maxRequestGen == null ? null : maxRequestGen.toString()}::bigint IS NULL
+            OR "observationRequestGen" <= ${maxRequestGen == null ? null : maxRequestGen.toString()}::bigint)
+     ORDER BY "observationRequestGen" ASC, id ASC`;
+  return rows.map((row) => ({
+    id: String(row.id),
+    lifecycleState: String(row.lifecycleState),
+    observationRequestGen: asBigInt(row.observationRequestGen, "observationRequestGen"),
+    observationResponseGen: asBigIntOrNull(
+      row.observationResponseGen,
+      "observationResponseGen",
+    ),
+    leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
+  }));
 }
 
-/**
- * Full-sync existence mutation may rely on expiry of any ACTIVE resultless
- * direct for the identity, including later-than-fence requests. Do not compare
- * lease time to fenceGeneration. Do not abandon unexpired later directs.
- */
-export async function abandonExpiredFullSyncBlockers(
+/** Durable ACTIVE→ABANDONED for the exact expired rows a successor mutation relies on. */
+export async function abandonExpiredResultlessRows(
   db: CanonicalApplyDb,
   shopId: string,
   rows: ObservationRow[],
 ): Promise<string[]> {
   const abandoned: string[] = [];
   for (const row of rows) {
-    if (row.lifecycleState !== "ACTIVE") continue;
-    if (row.observationResponseGen != null) continue;
     const abandonedId = await abandonExpiredResultlessRow(db, shopId, row.id);
     if (abandonedId) abandoned.push(abandonedId);
   }
