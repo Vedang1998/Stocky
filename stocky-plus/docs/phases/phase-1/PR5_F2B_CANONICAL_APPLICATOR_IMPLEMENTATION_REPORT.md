@@ -3,7 +3,7 @@
 **Slice:** PR5-F2B canonical merchant-fact applicator
 **Branch:** `cursor/pr5-f2b-canonical-applicator-055c`
 **Authority:** D-054 **EFFECTIVE**; PR5-F1 foundation **FROZEN**
-**Status:** Third pre-independent-review correction package complete — pending ChatGPT correction review. Do not ask Claude from this lane.
+**Status:** First independent-review correction package implemented locally — pending exact-head full CI, then ChatGPT correction review. Do not ask Claude from this lane.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
@@ -456,3 +456,140 @@ Do **not** close risks from this lane.
 Exact-head `pull_request` CI for this third package is recorded after this CI-producing head is pushed. This report does not embed an unknown future SHA or run id.
 
 Run [`32100216617`](https://github.com/Vedang1998/Stocky/actions/runs/32100216617) SUCCESS on `0c7af8168d7a52c29c3fc03f8ede74c2d3cc9eb8` is **superseded**. Run [`32138453022`](https://github.com/Vedang1998/Stocky/actions/runs/32138453022) on pre-final `f6ddf00…` is **superseded** by the CI-producing head that includes this section.
+
+## 16. First independent-review correction package (NEW-CLAUDE-PR5F2B-01..11)
+
+Reviewed implementation head: `2abda4b13577355036683b6d92be852740530311`.
+
+First independent-review correction runtime: `3148e46b7df706551ba907609fe486c61d93d449`.
+
+First independent-review correction tests: `8674fd84fe06e6032e82213e0d75438f1a2628cf`.
+
+A later documentation commit on the same branch may exist; it must not be treated as a runtime change. This report does not embed its own commit SHA.
+
+Immutable Claude review artifact cherry-pick:
+
+- Source commit: `7407cdc327ed89b6a13c101e65675a5be3191c13` (`claude/pr5-f2b-applicator-tier-a-review-rk327c`)
+- Integrated commit: `35296cb00588da4965cf51bc40292b3f5136cd3a`
+- Path: `stocky-plus/docs/phases/phase-1/PR5_F2B_CANONICAL_APPLICATOR_INDEPENDENT_REVIEW.md`
+- Blob: `e3fe412180ddb6d5b79d9fa8c6d566e68433918a` (must remain byte-identical)
+
+That cherry-pick added only the review artifact. This package does not edit it.
+
+### 16.1 P2-01 / P2-02 — authoritative attribute completeness
+
+Omission is not a patch. When a Product, ProductVariant, InventoryItem, or Location observation supplies resource `attributes`, the payload must be a complete authoritative snapshot of every canonical field this lane owns, including nullable properties present as explicit `null`.
+
+- Missing property ≠ explicit null.
+- Incomplete snapshots do not mutate any resource attributes.
+- Direct observation on an **existing** fact: existence may still apply under Clock B; the attribute portion is rejected; the observation leaves `ACTIVE` (`COMPLETED`); the fact records `attributeFreshnessState = DEGRADED` and `INCOMPLETE_AUTHORITATIVE_ATTRIBUTES`. Attribute clocks (`shopifyUpdatedAt`, `attributeRequestGen`, `attributeResponseGen`) do not advance.
+- Full-sync incomplete canonical resource line: the merchant apply unit / transaction fails (`CanonicalApplyIncompleteAuthoritativeAttributesError` for existing rows; `CanonicalApplyIncompleteFirstLiveError` for first LIVE).
+- Existence-only observations (`attributes` absent) remain valid on existing rows.
+- InventoryLevel quantity-only payloads remain valid without pretending omitted resource attributes were observed.
+- `InventoryItem.shopifyVariantGid` omission cannot clear the stored relationship. Explicit `null` keeps the approved nullable schema semantics. No schema migration.
+
+Shared field-shape validator: `collectMissingAuthoritativeFields` / `validateResourceSnapshot` used by both first-LIVE (`INCOMPLETE_FIRST_LIVE_ATTRIBUTES`) and existing-row (`INCOMPLETE_AUTHORITATIVE_ATTRIBUTES`) paths.
+
+### 16.2 P2-03 — InventoryLevel Clock-A resource attributes
+
+`shopifyInventoryLevelGid` and `isActive` now follow the same Clock-A / nullable-fallback rules as other resource attributes via `inventoryLevelAttributesEqual`, `updateInventoryLevelAttributes`, and an InventoryLevel branch in `applyAttributes`. Quantities remain independent per-name clocks. Quantity-only observations skip resource Clock-A. A resource-level InventoryLevel attribute object is completeness-checked when `isActive` or `shopifyInventoryLevelGid` is present.
+
+PostgreSQL proofs: first LIVE `isActive=true`; newer `isActive=false` applies; stale does not rewind; equal-version same value is idempotent; equal-version different value conflicts; null-version vs stored versioned does not apply and records `CATALOG_NULL_VERSION_OBSERVATION` + `DEGRADED` without advancing the attribute interval; quantity-only does not null the stored GID.
+
+### 16.3 P2-04 — durable rejection evidence
+
+Existence and attributes are separate authority domains. A valid existence decision is not rolled back because resource attributes or numeric/quantity values are unusable.
+
+Claude's scenario is proven in PostgreSQL: existing `LIVE_FULL_SYNC_PRESENT` variant → direct `LIVE_REFETCH` + unrepresentable price scale → existence becomes `LIVE_REFETCH`; old price and `[50,50]` attribute interval remain; fact is `DEGRADED` with `CANONICAL_NUMERIC_SCALE_UNREPRESENTABLE`; observation `COMPLETED`. Incomplete authoritative attributes on an existing Product follow the same durable-rejection shape.
+
+`rejectUsableObservation` uses `preserveRevivalDiagnostic` so a terminal-revival diagnostic is not replaced incorrectly. Full-sync still fails the apply unit.
+
+### 16.4 P3-05 — empty batch
+
+After shop mismatch checks and tenant validation (`stocky.current_shop_id`), `observations: []` returns `{ results: [], identitiesLocked: 0, abandonedBlockerTokens: [] }` with no lock-capacity evaluation and no advisory lock acquisition.
+
+### 16.5 P3-06 — null-version freshness (intentional DEGRADED)
+
+Approved brief §6.F.9: incoming null-version against a stored versioned fact does not apply. Freshness becomes/remains `DEGRADED` and `CATALOG_NULL_VERSION_OBSERVATION` is persisted because absolute freshness cannot be established. Stored values and attribute clocks do not advance. This is conservative and intentional — not a silent no-op.
+
+### 16.6 P3-07 — semantic equality
+
+- `Product.tags`: sorted multiset compare; order does not create `EQUAL_VERSION_CONFLICT`; multiplicity is preserved (duplicates are not silently dropped).
+- `ProductVariant.selectedOptions`: array order remains meaningful; `{name,value}` object key order inside each element does not. Equality does not use `JSON.stringify` key order.
+
+### 16.7 P3-08 — first-LIVE semantic completeness
+
+Non-empty where identity/display semantics require it: `Product.title`, `Product.handle`, `ProductVariant.title`, `Location.name`, `currencyCode`, required relationship GIDs. `selectedOptions` must be a non-empty array of `{name,value}` items (`name` non-empty string, `value` string). `Product.tags = []` is legitimate. Empty placeholders are rejected; legitimate empty arrays are not globally forbidden.
+
+### 16.8 P3-09 — quantity domain
+
+`null` remains allowed. Otherwise the value must be a JavaScript safe exact integer in PostgreSQL / GraphQL Int (`-2147483648..2147483647`). Fractional, NaN, Infinity, and out-of-int32 values are rejected with `CanonicalApplyQuantityDomainError` / `CANONICAL_QUANTITY_DOMAIN_UNREPRESENTABLE` before the quantity UPDATE. Direct existing-row rejects get P2-04 `DEGRADED` / diagnostic behavior without advancing that quantity clock.
+
+### 16.9 P3-10 — frozen lock order
+
+Corrected in `applyOneObservation`:
+
+tenant / RLS → canonical advisory identity lock → canonical fact `SELECT ... FOR UPDATE` when the row exists (and the same `FOR UPDATE` read when missing, which is the missing-row probe) → observation rows in deterministic order → blocker / lease / clock decisions → fact writes → terminal observation completion → commit.
+
+The advisory lock remains the primary missing-row anchor. Source-order and PostgreSQL statement-order proofs exist.
+
+### 16.10 P3-11 — reliance-scoped abandonment
+
+Durable `ACTIVE → ABANDONED` runs only when the successor existence mutation would proceed **only because** those exact rows are expired under PostgreSQL `clock_timestamp()`.
+
+- Expired rows are logically ineligible to block.
+- If mutation relies on that expiry, those exact rows are abandoned in the same transaction, blockers are re-read, then the canonical mutation proceeds.
+- Rollback undoes both abandonment and successor mutation.
+- Full-sync noop / presence-marker work that did not rely on expiry does not abandon an expired row for cleanup.
+- An unexpired blocker still prevents mutation; the expired sibling stays `ACTIVE`.
+- No background reaper.
+
+### 16.11 Previous high-risk contracts preserved
+
+Request-generation binding; PostgreSQL clock lease authority; `ACTIVE =>` persisted `responseGen` NULL; durable `ABANDONED` irreversibility; fresh-transaction retry after unique conflict; no `ON CONFLICT DO UPDATE`; full-sync fence ≠ Clock-B interval; `LIVE_FULL_SYNC_PRESENT` existence gens NULL/NULL; Race AT first-insert serialization; unseen ABSENT preserve-no-row; terminal two-confirmation revival; InventoryLevel reconnect; exact `DECIMAL(20,6)`; eight independent quantity clocks; R-162 safe-integer evaluator; ordinary canonical no-physical-delete surface; cross-shop RLS; no network under advisory lock.
+
+`foundation-safety.test.ts` remains byte-identical to authorized `origin/main` `5129707ee684e66cadcf96b976e16eb57385a7cb`.
+
+### 16.12 First-correction local validation (executed)
+
+Environment: disposable PostgreSQL **16.14** (`stocky` / `stocky_plus` on localhost:5432), Redis 7, Node v22.22.2 for this agent. Inventory-write flags were not changed. Shopify network I/O was not performed.
+
+| Command | Exit | Result |
+|---|---|---|
+| `npx vitest run app/lib/catalog-facts` | 0 | **59** passed / 7 files |
+| `npm test` | 0 | **115** passed / 13 files |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts` | 0 | **72** passed / 1 file |
+| `npm run test:migrations -- …/pr5-f2b-canonical-applicator.test.ts …/pr5-catalog-fact-foundation.test.ts` | 0 | **91** passed / 2 files (F2B 72 + F1 19) |
+| `npm run lint` | 0 | executed and passed |
+| `npm run typecheck` | 0 | executed and passed |
+| `npm run build` | 0 | executed and passed (`react-router build`) |
+| `git diff --check` | 0 | executed and passed |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 274`, `findings: 1408`, `violations: 0` |
+| `npm run tenant:access:inventory:check` | 0 | fresh; no mechanical regen required |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+| `npx vitest run scripts/tenant-access/architecture-audit.test.ts --config vitest.tenant-access.config.ts` | 0 | **25** passed / 1 file |
+| independent review artifact blob | 0 | `e3fe412180ddb6d5b79d9fa8c6d566e68433918a` |
+| Full `npm run test:migrations` | 0 | **318** passed / 51 files |
+
+An earlier full-suite attempt in this agent was **316 passed / 2 failed** only because `DATABASE_CONTROL_PLANE_URL` was unset. Those two F1 tests then passed 19/19 with the URL; the complete corpus with that URL is 318/318.
+
+### 16.13 Risk status after this correction
+
+Do **not** close risks from this correction.
+
+| Risk | Status |
+|---|---|
+| R-157 | **OPEN** |
+| R-158 | **OPEN**, materially advanced |
+| R-159 | **OPEN**, materially advanced |
+| R-160 | **OPEN**, materially advanced |
+| R-161 | **OPEN** |
+| R-162 | technically satisfied by independent review; formal closure deferred to lane acceptance / merge synchronization |
+| R-163 | **OPEN** pending F2A independent acceptance / merge |
+| R-164 | **OPEN** even though the F2B ordinary-applicator gate passed |
+
+### 16.14 Next action
+
+After exact-head full CI is green: return to ChatGPT for PR5-F2B independent-review **correction** review. Do **not** merge. Do **not** mark the PR ready. Do **not** ask Claude. Do **not** start JSONL, webhook integration, F2C integration, or PR 6.
+
+Exact-head `pull_request` CI for this correction head is recorded after the single push. This report does not embed an unknown future SHA or run id.
