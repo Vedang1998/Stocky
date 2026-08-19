@@ -495,3 +495,168 @@ Do **not** mark any risk CLOSED. They remain pending independent correction re-r
 Return to ChatGPT / Claude independent **correction re-review** after exact-head full PR CI is green on the correction head.
 
 Do **not** merge. Do **not** mark ready. Do **not** start F3. Do **not** create D-055.
+
+---
+
+## 22. Second correction package (NEW-CLAUDE-PR5F2A-C01 through C06)
+
+**Correction status:** Correction implemented — pending independent verification
+
+This section is appended after the immutable Claude correction re-review. It does **not** rewrite the history above. It does **not** edit either Claude review artifact. It does **not** close R-016, R-132, R-134, R-136, R-138, or R-163. It does **not** claim ChatGPT acceptance.
+
+| Field | Value |
+|---|---|
+| Authorized base / `origin/main` | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Previously reviewed corrected implementation head | `4c437ce95309fdcc97e02c299af57c46c5fafe6a` |
+| Immutable first review | `PR5_F2A_ADMIN_READ_INDEPENDENT_REVIEW.md` blob `81bc0678ea9041b6567c02c8fe5655752fc53441` (**not edited**) |
+| Immutable correction re-review | `PR5_F2A_ADMIN_READ_CORRECTION_INDEPENDENT_REVIEW.md` |
+| Review commit cherry-picked | `f00315f31efe7ffe7dd0ae1a4672cdbf51df85e6` → branch commit `0e6972ce4062652317f20de6d6f6bb72e2beaaef` |
+| Review artifact blob | `d06fc9f603b8ec86efc1493babaa3973a73d3806` (re-hashed after cherry-pick; unchanged) |
+| Independent verdict | `CORRECTIONS REQUIRED` — P0 0 / P1 0 / P2 1 / P3 5 |
+| Runtime/test commits | `7f12de4165df380d4ebd97f7f32be544625e428e`, `6bdcd364e490b2605af6069eb43f83d5b3bd3e88` |
+| Inventory refresh | `67f891274503f251054a1242f9e77ea080943b41` |
+| PR #29 | kept CLOSED / DRAFT / UNMERGED while these commits were pushed; reopened once after this report |
+
+Language correction: the earlier reproduction in §16 described Admin 2026-07 introspection as a **committed** `app/types/admin-2026-07.schema.json`. That file is gitignored and is **materialized by `npm run graphql-codegen`**, not committed. This second package uses that generated local artifact and does not claim Shopify-network independence. **R-016 remains OPEN.**
+
+### NEW-CLAUDE-PR5F2A-C01 — P2 — schema source and CI order
+
+**Correction:** Heavy CI now runs the existing `npm run graphql-codegen` step **before** `npm test`. The step was moved, not duplicated. `loadGeneratedAdmin202607Schema()` reads only `app/types/admin-2026-07.schema.json`. Direct `fetch()` / shopify.dev proxy fallback is removed. Absence fails closed with an error that says the gate does not fetch shopify.dev. The schema-source assertion requires `source === "file"`.
+
+**Tests:** `bulk-query-schema.test.ts` absent-artifact fail-closed; `source === "file"`; loader source contains no `fetch(`. Independent `tsx` probe: parking the generated file throws, `fetch` call count 0, then restore loads `source: "file"`.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+**Residue:** R-016 remains OPEN. Codegen still depends on shopify.dev. This package only removed the extra unit-test network path.
+
+### NEW-CLAUDE-PR5F2A-C02 — P3 — specifiedRules
+
+**Correction:** Removed `bulkRelaxedProvidedRequiredArgumentsRule` and the `first`/`after`/`last`/`before` name-scoped relaxation. `validateBulkQueryAgainstAdminSchema` uses stock graphql-js `specifiedRules`. Future bulk documents that select a field whose `first` is schema-required (`Int!`) must supply `first`.
+
+**Tests:** `bulkQueryValidationRules === specifiedRules`; all three canonical documents have 0 errors under both the gate and direct `validate(..., specifiedRules)`; `{ shop { productTags { edges { node } } } }` still reports `first: Int!` required. Negative fixtures retained: collapsed traversal, missing `quantities(names:)`, bad field, mutation rejection.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+### NEW-CLAUDE-PR5F2A-C03 — P3 — pagination fail-closed
+
+**Correction:** `paginateCursorConnection` rejects missing `pageInfo`, non-object `pageInfo`, non-boolean `hasNextPage` (no `Boolean()` coercion), invalid `endCursor` type, `hasNextPage=true` without a usable `endCursor`, empty page + `hasNextPage`, repeated cursor, duplicate GID, and the existing page bound.
+
+**Tests:** missing `pageInfo` and malformed `hasNextPage` on both `readAllLocations` and `readProductCollectionMemberships`; locations also cover non-object `pageInfo` and non-string `endCursor`.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+### NEW-CLAUDE-PR5F2A-C04 — P3 — malformed quantity rows
+
+**Correction:** A quantity row whose `name` is non-string, empty, null, or otherwise not a non-empty string is recorded in non-persisted `malformedRows` (`reason: "malformed_name"`, `observedNameKind`) and is **not** coerced into a fake name string. `unexpectedNames` / `malformedQuantityNames` / `missingApprovedNames` remain for valid string names. `updatedAt` uses `optionalIsoTimestamp`.
+
+**Tests:** number / empty / null / object names produce `malformedRows` and empty name channels; numeric / object / `"not-a-date"` `updatedAt` throw.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+**Residue:** `malformedRows` is a read-boundary diagnostic, not a persisted canonical enum.
+
+### NEW-CLAUDE-PR5F2A-C05 — P3 — scanner import and syntax
+
+**Correction:** Forbidden-module inspection now covers `ImportDeclaration`, `ExportDeclaration` with a module specifier, dynamic `import(...)`, and statically resolvable `require(...)`. The import policy itself is unchanged. GraphQL-shaped static literals that fail `parse` become `syntax` findings. Bare tokens such as `"query"`, `"{"`, and `"#graphql"` are not treated as documents, so production scanner source does not false-positive. Interpolated templates remain `unreviewable_graphql`. Recursive directory scanning is preserved.
+
+**Tests:** `export … from "@shopify/..."`, `import("@shopify/...")`, `app/services/...` import, `require("~/services/...")`, malformed mutation-shaped GraphQL → `syntax`, valid nested QUERY still allowed.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+### NEW-CLAUDE-PR5F2A-C06 — P3 — DateTime and returned IDs
+
+**Correction:** `requireIsoTimestamp` / `optionalIsoTimestamp` validate Shopify DateTime / RFC3339 (calendar parts included) and return the original string unchanged. `readInventoryLevelById` and `readBulkOperationById` fail closed when the returned GID does not match the requested GID. The existing inventory-level pair identity check is unchanged.
+
+**Tests:** valid Z / offset / fractional timestamps unchanged; `"not-a-date"`, date-only, invalid calendar day, non-strings throw; inventory-level by-id mismatch; bulkOperation by-id mismatch; malformed bulk `createdAt`.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+---
+
+## 23. Second-correction local evidence
+
+Focused catalog-facts suite after the second package:
+
+```text
+npx vitest run app/lib/catalog-facts --reporter=verbose
+```
+
+**13 files, 104 tests passed**, exit 0.
+
+Required local commands (runtime/test state, generated schema present):
+
+| Command | Exit | Observed |
+|---|---|---|
+| `npm run graphql-codegen` | 0 | tagged Admin **2026-07** documents + generated `app/types/admin-2026-07.schema.json` (gitignored) |
+| `npm run lint` | 0 | eslint of the app |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| `npm test` | 0 | **19 files, 160 tests passed** |
+| `npx vitest run app/lib/catalog-facts` | 0 | **13 files, 104 tests passed** |
+| `npm run build` | 0 | client + SSR production build |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 285`, `findings: 1408`, `violations: 0` |
+| `npm run tenant:access:inventory` | 0 | regenerated; `scannedFiles` 284 → 285; findings 1408; digest still `4670755f…` |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` |
+| `git diff --check` | 0 | clean |
+
+Independent schema-gate proof (`tsx`, `fetch` wrapped): missing override path and parked generated file both throw `absent` / `does not fetch shopify.dev`; `fetch` call count **0**; restore loads `source: "file"`.
+
+Independent specifiedRules proof (`tsx`): all three `CANONICAL_BULK_QUERY_DOCUMENTS` members have **0** errors under stock `specifiedRules` and under the gate; `productTags` without `first` reports `first: Int!` required on both.
+
+Exact-head automatic `pull_request` CI is produced by reopening PR #29 after the final second-correction commit. This file is not rewritten after that run. CI identity is recorded on the PR body.
+
+---
+
+## 24. Shared-file scope for this second package
+
+Changed relative to the previously reviewed head `4c437ce…`, besides `admin-read/**` and this report:
+
+- `.github/workflows/ci.yml` — existing GraphQL codegen step moved before Unit tests; no second invocation; triggers / classifier / jobs / CI Gate / docs-only logic unchanged
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` — scanner refresh only (`scannedFiles` 284 → 285)
+- `stocky-plus/docs/phases/phase-1/PR5_F2A_ADMIN_READ_CORRECTION_INDEPENDENT_REVIEW.md` — cherry-picked immutable Claude artifact only
+
+No Prisma schema, migration, F2B/F2C, JSONL, workers, webhooks, compatibility projection, Shopify mutation, or inventory-write flag change.
+
+---
+
+## 25. Preserved review-proven behavior (re-checked locally)
+
+Not regressed in this second package:
+
+- three executable bulk documents under stock `specifiedRules`
+- all eight quantity names
+- unitCost with/no-cost separation
+- structured ACCESS_DENIED + unitCost path classification
+- >50 location pagination
+- >250 collection pagination
+- `bulkOperation(id:)`, never `currentBulkOperation`
+- `partialDataUrl` is not canonical success
+- exact Decimal strings
+- large `legacyResourceId` strings
+- query/mutation AST check before Admin network call
+- recursive production scanner
+- `FEATURE_COST_SYNC` DEFAULT OFF
+- no canonical writes
+- no Shopify mutations
+
+---
+
+## 26. Risks after the second correction
+
+Do **not** mark any risk CLOSED.
+
+| Risk | After this second correction |
+|---|---|
+| R-016 | Still OPEN. Codegen still fetches Admin schema from shopify.dev. This package only removed the extra unit-test network fallback. |
+| R-132 | Unchanged non-abort unitCost preflight. Still OPEN. |
+| R-134 | Unchanged `bulkOperation(id:)` contract plus returned-GID mismatch. Still OPEN. |
+| R-136 | Location pagination preserved; `pageInfo` now fail-closed. Still OPEN. |
+| R-138 | AST deny-by-default preserved; export/dynamic-import/require/syntax scan strengthened. Still OPEN. |
+| R-163 | Recursive enumeration preserved. Still OPEN. |
+
+---
+
+## 27. Next action after this second correction
+
+Return to ChatGPT for **PR5-F2A second correction review** after exact-head automatic full PR CI is green.
+
+Do **not** merge. Do **not** mark ready. Do **not** invoke Claude. Do **not** start F3. Do **not** create D-055.
