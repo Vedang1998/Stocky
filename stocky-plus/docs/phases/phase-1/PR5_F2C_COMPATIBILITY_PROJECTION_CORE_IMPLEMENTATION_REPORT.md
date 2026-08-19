@@ -3,7 +3,7 @@
 **Slice:** PR5-F2C compatibility-projection CORE
 **Branch:** `cursor/pr5-f2c-compat-projection-core-7c2d`
 **Authority:** D-054 **EFFECTIVE**; PR5-F1 **FROZEN**
-**Status:** Implementation complete — pending independent verification
+**Status:** Correction implemented — pending independent verification
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **PR 5 overall:** IN PROGRESS (this lane does **not** complete PR 5)
@@ -77,17 +77,17 @@ Canonical truth always wins. The projection is a rebuildable derived read model,
 | `shop` / `shopId` | TenantDb authority injection (`myshopifyDomain` / `shopId`) |
 | `shopifyVariantId` | `ShopifyVariantFact.shopifyGid` |
 | `shopifyProductId` | `ShopifyVariantFact.shopifyProductGid` |
-| `title` | `Product.title — Variant.title` when the product is `LIVE`; otherwise variant title only |
+| `title` | `Product.title — Variant.title` from the LIVE product relation. A LIVE variant whose product is missing or not LIVE fails closed (`canonical_product_not_live`) and does not overwrite an existing cache row |
 | `sku` | `ShopifyVariantFact.sku` |
 | `barcode` | `ShopifyVariantFact.barcode` |
-| `imageUrl` | `ShopifyProductFact.featuredMediaUrl` only when the product is `LIVE` |
-| `inventoryItemId` | lexicographically first `LIVE` inventory item GID |
+| `imageUrl` | `ShopifyProductFact.featuredMediaUrl` from the LIVE product relation; same `canonical_product_not_live` fail-closed path — F2C does not synthesize title/image or read legacy cache as authority |
+| `inventoryItemId` | exactly one LIVE `ShopifyInventoryItemFact.shopifyInventoryItemGid` linked to the variant. Zero LIVE items preserve `inventoryItemId: null`. More than one LIVE item fails closed (`canonical_multiple_live_inventory_items`) without selecting either GID |
 | `weight` | that item's `weightValue`, quantized to 4 decimal places; fail-closed if `abs >= 1000000` (`DECIMAL(10, 4)`) |
 | `weightUnit` | that item's `weightUnit` |
 
 `ABSENT` variant → **delete** the cache row and neutralize **today's** `InventorySnapshot.quantityAvailable` to `0` for every location that already has a snapshot for that variant. This keeps forecast `findFirst orderBy snapshotDate desc` from treating yesterday as live on-hand.
 
-A tombstoned product does **not** supply live title or image for a still-`LIVE` variant.
+A tombstoned or missing product does **not** supply live title or image for a still-`LIVE` variant. That path now fails closed (`canonical_product_not_live`) rather than writing a degraded cache row.
 
 ### 3.2 `InventorySnapshot` (today only; matches current inventory webhook)
 
@@ -132,10 +132,12 @@ projectCompatibilityFromCanonicalFacts({
 | Status | Meaning | Retryable |
 |---|---|---|
 | `SUCCEEDED` | this invocation's requested identities/page completed; `hasMore` / `cursor` / `remainingIdentities` describe continuation only | `false` for the completed page |
-| `FAILED` | explicit `failure.code` / `failure.message`; remaining work is in the result | DB/write failures, `canonical_variant_link_missing`, `canonical_available_quantity_missing`, `canonical_location_state_missing`, and `canonical_variant_state_missing` `true`; invalid limit / malformed cursor / weight overflow `false` |
+| `FAILED` | explicit `failure.code` / `failure.message`; remaining work is in the result | Only an explicit reviewed reason: missing canonical identity / unknown LIVE inventory (`canonical_variant_missing`, `canonical_inventory_level_missing`, `canonical_variant_link_missing`, `canonical_available_quantity_missing`, `canonical_location_state_missing`, `canonical_variant_state_missing`) and reviewed Prisma transients (`P1001`/`P1002`/`P1008`/`P1017`/`P2024`/`P2034` → `projection_transient_write_failed`). Invalid limit, malformed cursor, weight overflow, multiple LIVE inventory items, product not LIVE, malformed weight, Prisma validation/permanent request defects, and unclassified errors are `false`. Unknown errors do **not** default retryable |
 | `DENIED_PROCESSING_DISABLED` | `processingEnabled !== true`; no TenantDb open; no merchant writes | `false` |
 
-This core does **not** read `Shop` / control-plane. The future F2B/worker caller must pass the live `processingEnabled` flag. Missing canonical identity is `retryable: true` (`canonical_variant_missing` / `canonical_inventory_level_missing` / `canonical_variant_link_missing`) so a later retry can wait for the applicator.
+This core does **not** read `Shop` / control-plane. Caller-supplied `processingEnabled` is acceptable **only** for this isolated core (F2C-12 deferred). Later F2B/worker integration **must** read the LIVE authoritative control-plane `Shop.processingEnabled` immediately before projection work; a cached caller boolean is not sufficient for production. Missing canonical identity remains `retryable: true` so a later retry can wait for the applicator.
+
+Non-retryable projection failures during merchant work return `poisonHalt` (`halt_on_poison`). `cursor` / `remainingIdentities` still point at the poison identity so retry cannot falsely claim progress. `resumeAfterQuarantineCursor` is a **separate** field and is not safe to use until a later worker durably quarantines or repairs that identity. Validation failures before TenantDb (bad limit / malformed cursor) are non-retryable **without** `poisonHalt`.
 
 `shop_rebuild` in this isolated core is a **bounded replay/projection FROM canonical rows** (variants by GID, then inventory levels by item+location). It is **not**:
 
@@ -252,16 +254,18 @@ R-142, R-145, and R-156 remain **OPEN**. This core supplies the rebuildable proj
 - Phase 1 is **not** complete.
 - Compatibility projection is **not** wired to catalog-sync, webhooks, or F2B.
 - Buying Table / barcode / forecast surfaces are **not** claimed healthy in production.
-- R-142 / R-145 / R-156 are **not** closed.
+- R-142 / R-145 / R-156 / R-165 are **not** closed.
 - Independent Claude review has **not** run at the time this file was first written.
 
 ---
 
 ## 9. Handoff
 
-Lane-isolation correction is recorded in §10 and remains accepted. Semantic-contract correction is recorded in §11 and remains accepted. The final pre-independent-review inventory-integrity correction is recorded in §12. Independent Claude review waits for ChatGPT authorization after corrected exact-head full CI is green.
+Lane-isolation correction is recorded in §10 and remains accepted. Semantic-contract correction is recorded in §11 and remains accepted. The final pre-independent-review inventory-integrity correction is recorded in §12. Independent Claude review of implementation head `4bdb1dac97323f079554590d7ac15962b8227283` is recorded as immutable commit `2d8fd47844dec2abf5e0543260f1552272612384` (blob `5d2d109b9ea5edbe0516bbb7bed115b6f6c83ed7`). The first post-independent-review correction package is recorded in §13.
 
-Do not merge. Do not mark ready. Do not integrate with F2B. Do not invoke Claude from this lane.
+Cursor's next action after exact-head full CI is green is to STOP. Do not ask Claude. Do not merge. Do not mark ready. Do not integrate with F2B.
+
+This isolated core is not merchant-safe until F2B integration, `compatibilityProjectionState` HEALTHY/DEGRADED, and the later worker/scheduler exist. Later worker integration MUST durably quarantine or repair a poison identity before using any resume-after-poison mechanism.
 
 ---
 
@@ -395,7 +399,7 @@ F2C output is a projection execution result only. Later F2B/worker integration o
 7. A stale orphan legacy row does not become canonical evidence and is not deleted.
 8. Successful final bounded page still does not persist or authorize merchant durable health.
 
-Multiple-LIVE-InventoryItem selection was **not** redesigned in this correction. Lexicographically first LIVE GID remains. No separate integrity rule was invented here.
+Multiple-LIVE-InventoryItem selection was **not** redesigned in this semantic-contract correction. Lexicographically first LIVE GID remained at that time. The first post-independent-review package (§13 / F2C-01) replaced that behavior with fail-closed `canonical_multiple_live_inventory_items`.
 
 ### 11.6 Files in this correction
 
@@ -498,7 +502,7 @@ No extra persisted state was created.
 - `shop_rebuild` remains bounded replay FROM canonical rows; orphan legacy rows are not deleted and are not canonical evidence.
 - Canonical facts remain authoritative and are not written by this lane.
 - `compatibilityProjectionState` is not written by this lane.
-- Lexicographically-first LIVE InventoryItem selection, legacy weight scale/rounding, orphan cleanup, and multi-page synchronization/fence contract were **not** redesigned.
+- Lexicographically-first LIVE InventoryItem selection, legacy weight scale/rounding, orphan cleanup, and multi-page synchronization/fence contract were **not** redesigned in this inventory-integrity correction. F2C-01 / F2C-09 later changed product-owner resolution and weight rounding; see §13.
 
 ### 12.3 Files in this correction
 
@@ -562,3 +566,195 @@ PostgreSQL proofs on that runtime SHA:
 Mapper-level proofs (same SHA): missing Location relation and unknown `variantExistenceState` fail retryably rather than writing zero; explicit `ABSENT` still zeros.
 
 Exact-head `pull_request` CI for the live head after this documentation commit is the authoritative automatic evidence. This paragraph does not invent a future SHA.
+
+---
+
+## 13. First post-independent-review correction package
+
+**Status:** Correction implemented — pending independent verification.
+
+Independent review artifact (immutable; never edited):
+
+| Field | Value |
+|---|---|
+| Reviewed implementation head | `4bdb1dac97323f079554590d7ac15962b8227283` |
+| Independent review commit (retained on branch) | `2d8fd47844dec2abf5e0543260f1552272612384` |
+| Artifact path | `stocky-plus/docs/phases/phase-1/PR5_F2C_COMPATIBILITY_PROJECTION_INDEPENDENT_REVIEW.md` |
+| Artifact blob | `5d2d109b9ea5edbe0516bbb7bed115b6f6c83ed7` |
+| Claude verdict | CORRECTIONS REQUIRED — P0 0 / P1 1 / P2 6 / P3 6 |
+
+This section does not embed this documentation commit's SHA. Runtime/test and risk-register SHAs already on the branch:
+
+| Commit | Role |
+|---|---|
+| `9247be5e0b6448d1b7061c7c5a90306ea1f67263` | Runtime + unit/PostgreSQL tests for F2C-01..05, F2C-08..11, F2C-03/04, F2C-12/13 comments |
+| `cdc9b86ac5b42ad13d01b790c7951d956f4ab7b5` | F2C-06 / F2C-07 risk-register disposition (`R-165` added; `R-145` extended; `R-142` / `R-156` remain OPEN) |
+| `e620f08889af8006f619f90911c260753c76a06f` | Product-ABSENT PostgreSQL fixture existence-coherence fix |
+
+The branch was **not** reset to `4bdb1da`. Review commit `2d8fd47` remains an ancestor.
+
+### 13.1 F2C-01 — P1 product-owner resolution
+
+Frozen F1 schema was **not** modified. No migration and no partial unique index were added.
+
+`selectLiveInventoryItem`:
+
+- 0 LIVE InventoryItems → preserve `inventoryItemId: null`
+- 1 LIVE InventoryItem → use it
+- more than one LIVE InventoryItem → throw `canonical_multiple_live_inventory_items` (non-retryable), identifying the ProductVariant, selecting neither GID, mutating neither `ShopifyVariantCache` nor `InventorySnapshot` nor canonical facts
+
+The previous lexicographically-first-wins test was replaced. PostgreSQL proof: an existing correct legacy cache row (`inventoryItemId` = the original LIVE item, title/image/weight unchanged, `updatedAt` unchanged) remains unchanged when a second LIVE InventoryItem is linked. No Shopify write target is produced from the ambiguity. Ambiguity is non-retryable by this invocation unless the canonical graph is separately repaired.
+
+### 13.2 F2C-02 — P2 poison-row contract
+
+This isolated core remains halt-on-poison. That is now an explicit mechanical contract, not an accidental loop.
+
+Non-retryable failures during projection work return:
+
+```
+poisonHalt: {
+  contract: "halt_on_poison",
+  durableQuarantineRequired: true,
+  resumeAfterQuarantineCursor,
+  remainingIdentitiesAfterQuarantine,
+}
+```
+
+- Result status is `FAILED` / non-retryable.
+- Exact failure identity and code are returned whenever identity can be established.
+- `cursor` / `remainingIdentities` still point at the poison identity; retrying the same cursor does not claim progress.
+- `resumeAfterQuarantineCursor` is a **separate named field**. It is **not** the shop_rebuild retry cursor and is **not** safe to use until a later worker/integration durably records (quarantines or repairs) the poison identity.
+- If identity cannot be safely established from a malformed canonical row, fail closed without inventing one (`resumeAfterQuarantineCursor: null`).
+- F2C itself never silently advances past corruption.
+- Validation failures before TenantDb (bad limit / malformed cursor) stay non-retryable **without** `poisonHalt`.
+
+**Mandatory later worker/integration gate:** the integration MUST durably quarantine or repair the poison identity before using any resume-after-poison mechanism. This lane did **not** build the worker or DataIssue reconciler.
+
+### 13.3 F2C-03 / F2C-04 — cursor + error classification
+
+`normalizeRebuildCursor` validates every field:
+
+- Variants: `phase` exactly `"variants"`; `afterGid` absent or a non-empty string; no number/object/array coercion; extra keys invalid.
+- Inventory levels: `phase` exactly `"inventory_levels"`; `afterItemGid` and `afterLocationGid` both absent or both non-empty strings; a partial composite is invalid.
+- Malformed cursor → `invalid_rebuild_cursor`, `retryable=false`.
+- The previous partial-location fallback `?? ""` is gone. Cursor is validated before `createTenantDb`.
+
+`classifyProjectionFailure`:
+
+- `CompatibilityProjectionError` keeps its explicit retryable flag (constructor default **false**).
+- Prisma validation / permanent known-request (including `P2002`) → `projection_permanent_request_failed`, non-retryable.
+- Reviewed transients `P1001`/`P1002`/`P1008`/`P1017`/`P2024`/`P2034` → `projection_transient_write_failed`, retryable.
+- Unknown / programming errors → `projection_unclassified_failure`, non-retryable.
+- Unknown errors do **not** automatically become retryable.
+
+### 13.4 F2C-05 — product evidence
+
+A LIVE ProductVariant whose canonical product relation is missing or not LIVE fails closed with `canonical_product_not_live` (non-retryable). An existing good `ShopifyVariantCache` title/image is preserved (`updatedAt` unchanged). Legacy cache is not read as canonical authority. Title/image are not synthesized. Canonical facts remain unchanged. This remains part of the later merchant DEGRADED obligation.
+
+### 13.5 F2C-06 / F2C-07 — risk / integration disposition
+
+Webhook processor and forecasting engine were **not** modified (outside this lane). Findings are recorded in `RISK_REGISTER.md` (authorized shared-doc exception).
+
+**F2C-06 → R-165 (P2, OPEN):** legacy `inventory_levels/update` uses `available ?? 0` and can overwrite the same `InventorySnapshot` unique key that F2C leaves unchanged when availability is unknown. Required mitigation before end-to-end PR5 null-vs-zero integrity is claimed: remove/fence the legacy null→zero behavior; canonical truth wins; inventory health must not claim current when availability is unknown. **Not fixed in this lane.**
+
+**F2C-07 → R-145 extended (P1, remains OPEN):** no duplicate risk was created. Evidence now includes: preserved stale `InventorySnapshot` may be consumed by forecasting as current (`findFirst orderBy snapshotDate desc`, no freshness bound, `onHand?.quantityAvailable ?? 0`). F2C must not be wired as merchant-safe until `compatibilityProjectionState` DEGRADED/HEALTHY integration exists. Preserved stale is safer than fabricated zero, but must be visibly unhealthy.
+
+**R-142 and R-156 remain OPEN.** This package does not claim they are resolved.
+
+### 13.6 F2C-08 — bounded tombstone legacy writer
+
+Tombstone path no longer reads every historical snapshot row into application memory and no longer holds one transaction across an unbounded serial upsert loop.
+
+Architecture:
+
+- Distinct `locationId` values are selected in the database (`groupBy` + keyset `gt`, page size 32).
+- Bounded write chunks (32) each run in their own `$transaction`.
+- Today's zero is still written for every historical location associated with the tombstoned variant.
+- No hidden silent cap that drops locations. Stuck cursor / empty `locationId` / page overflow fail closed explicitly.
+- Idempotent retry remains safe. TenantDb tenant scoping remains intact.
+- No merchant-visible product limit was invented.
+
+Adversarial PostgreSQL proof: 40 distinct locations × 25 historical dates (1000 rows) plus cross-shop rows. Read cardinality equals distinct locations (40), not all historical rows. Write chunks ≤ 32. Every distinct historical location receives today's zero. Old snapshots remain untouched. Cross-shop rows remain untouched.
+
+### 13.7 F2C-09 / F2C-10 / F2C-11 — weight rounding and coerce
+
+- Rounding is explicit `toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP)` and does not depend on Decimal global rounding state.
+- Tests pin: `1.00004` rounds down; `1.00005` rounds half-up; exact four decimals; negative; null; boundary `999999.99995` overflows `DECIMAL(10,4)`; global `ROUND_DOWN` does not change the result.
+- `coerceCanonicalInventoryItem` requires `Prisma.Decimal.isDecimal` plus finite; a string/number/NaN weight raises `invalid_canonical_inventory_item` (non-retryable) **before** any legacy DB write.
+
+### 13.8 F2C-12 / F2C-13 — accepted deferred (not "fixed")
+
+**F2C-12:** Caller-supplied `processingEnabled` remains acceptable **only** for this isolated core. Mandatory later F2B/worker integration gate: the integration must read the LIVE authoritative control-plane `Shop.processingEnabled` immediately before projection work. A cached caller boolean is not sufficient for production. This core did **not** add control-plane reads.
+
+**F2C-13:** `snapshotDate` local-midnight behavior is intentionally legacy-compatible with the live webhook/forecast unique key. The timezone/calendar-day problem is pre-existing deferred compatibility debt. F2C does **not** claim it is solved.
+
+### 13.9 Files in this correction
+
+Runtime / tests (`9247be5e0b6448d1b7061c7c5a90306ea1f67263`, plus fixture fix `e620f08889af8006f619f90911c260753c76a06f`):
+
+- `stocky-plus/app/lib/catalog-facts/compatibility-projection/**`
+- `stocky-plus/app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts`
+
+Risk register (`cdc9b86ac5b42ad13d01b790c7951d956f4ab7b5`):
+
+- `stocky-plus/docs/RISK_REGISTER.md`
+
+Scanner-truth inventory regeneration (this documentation commit; still **0** violations):
+
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (findings **1546**; scanned files **275**; approved exception findings **1084**; extra `prisma.*` lines from the expanded EX-TEST-035 file)
+
+This report file is included in the same documentation commit and does not embed that commit's unknown future SHA.
+
+Allowlist was **not** broadened. `EX-TEST-035` remains test-only / `productionRuntime: "no"`. Shared files remain byte-identical to authorized base `5129707ee684e66cadcf96b976e16eb57385a7cb`:
+
+| File | Blob |
+|---|---|
+| `.github/workflows/ci.yml` | `16ab27b20b27a2747e84ce819b7726f78b983b0f` |
+| `stocky-plus/package.json` | `a68e16ba94dcd7f4d16b6d5238c5a85f4d2ab945` |
+| `stocky-plus/app/lib/catalog-facts/foundation-safety.test.ts` | `62690c1231a73bc86c71074bfb61ed6796492973` |
+
+Prisma schema and all F1 migrations remain base-identical. No F2B integration. No webhook/forecasting runtime correction. No `compatibilityProjectionState` writes. No canonical writes.
+
+### 13.10 Local evidence on `e620f08889af8006f619f90911c260753c76a06f`
+
+Environment: disposable PostgreSQL 16.14 + Redis PONG; Node v22.14.0; `STOCKY_RUNTIME_ROLE=stocky_runtime`; inventory-write flags `false` (default off).
+
+```
+npx vitest run --passWithNoTests=false \
+  app/lib/catalog-facts/compatibility-projection
+```
+
+7 files, **67** tests passed.
+
+```
+npx vitest run --passWithNoTests=false \
+  --config vitest.tenant-access.config.ts \
+  app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts
+```
+
+1 file, **28** tests passed.
+
+| Command | Result |
+|---|---|
+| `npx vitest run app/lib/catalog-facts/foundation-safety.test.ts` | 1 file, **3** tests passed |
+| `npx vitest run --config vitest.tenant-access.config.ts app/tenant/__tests__/relation-isolation.test.ts` | 1 file, **10** tests passed |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 16 files, **138** tests passed |
+| `npm run build` | exit 0 |
+| `npm run tenant:access:audit` | violations **0**, scannedFiles **275**, findings **1546**, `EX-TEST-035` still used |
+| `npm run tenant:access:inventory` | findings **1546**, violations **0** |
+| `npm run tenant:access:inventory:check` | inventory fresh |
+| `git diff --check` | clean |
+| Review artifact blob | still `5d2d109b9ea5edbe0516bbb7bed115b6f6c83ed7` |
+
+Preserved contracts on that SHA:
+
+- UNKNOWN `availableQuantity` fails closed; canonical zero stays zero; negatives preserved; explicit ABSENT may zero.
+- Missing variant link fails closed; no SKU/barcode/title/cache inference.
+- `canonicalHealthDecision` always `deferred_to_integration`; no recommended HEALTHY/DEGRADED; no `compatibilityProjectionState` writes; no canonical writes.
+- Canonical facts unchanged on projection failure.
+- Bounded page traversal; orphan rows not deleted from absence in traversal.
+- `processingEnabled=false` denial before TenantDb merchant work.
+
+Exact-head `pull_request` CI for the live head after this documentation commit is the authoritative automatic evidence. This paragraph does not invent a future SHA. After that CI is green: STOP. Do not ask Claude. Do not merge. Do not mark ready.
