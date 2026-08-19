@@ -68,6 +68,15 @@ export type InventoryQuantityRead = {
   updatedAt: string | null;
 };
 
+export type MalformedInventoryQuantityRow = {
+  /**
+   * Non-persisted diagnostic. A quantity row whose `name` was not a
+   * non-empty string. Does not invent a synthetic name.
+   */
+  reason: "malformed_name";
+  observedNameKind: string;
+};
+
 export type InventoryQuantitiesRead = {
   byName: Partial<Record<ApprovedInventoryQuantityName, InventoryQuantityRead>>;
   missingApprovedNames: ApprovedInventoryQuantityName[];
@@ -75,8 +84,14 @@ export type InventoryQuantitiesRead = {
   /**
    * Non-persisted read-boundary diagnostic. Names whose quantity value was
    * present but not a JSON integer. Distinct from a genuinely absent name.
+   * Only populated for valid non-empty string names.
    */
   malformedQuantityNames: string[];
+  /**
+   * Non-persisted diagnostic for rows whose name is null, empty, or not a
+   * string. Not a canonical/database field.
+   */
+  malformedRows: MalformedInventoryQuantityRow[];
 };
 
 export type LocationRead = {

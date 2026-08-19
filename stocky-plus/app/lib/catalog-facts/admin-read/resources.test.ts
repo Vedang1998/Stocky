@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   mapInventoryItemNode,
   mapInventoryLevelNode,
+  mapProductNode,
   readInventoryItem,
+  readInventoryLevelById,
   readInventoryLevelByPair,
   readProduct,
   readProductVariant,
@@ -246,5 +248,45 @@ describe("PR5-F2A inventory-level pair identity", () => {
     const admin = pairResponse(null, null);
     const level = await readInventoryLevelByPair(admin, requested);
     expect(level?.identity).toEqual(requested);
+  });
+});
+
+describe("PR5-F2A returned GID and DateTime fail-closed mapping", () => {
+  it("rejects a malformed product createdAt timestamp", () => {
+    expect(() =>
+      mapProductNode({
+        id: "gid://shopify/Product/1",
+        title: "Trail Bottle",
+        handle: "trail-bottle",
+        vendor: "Example",
+        productType: "Bottle",
+        tags: [],
+        status: "ACTIVE",
+        createdAt: "not-a-date",
+        updatedAt: "2026-01-02T00:00:00Z",
+      }),
+    ).toThrow(/product.createdAt must be a Shopify DateTime \/ RFC3339 timestamp/);
+  });
+
+  it("fails closed when readInventoryLevelById returns a different GID", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        inventoryLevel: {
+          id: "gid://shopify/InventoryLevel/999",
+          isActive: true,
+          createdAt: "2026-01-01T00:00:00Z",
+          updatedAt: "2026-01-02T00:00:00Z",
+          location: { id: "gid://shopify/Location/2" },
+          item: { id: "gid://shopify/InventoryItem/1" },
+          quantities: [],
+        },
+      },
+    }));
+    await expect(
+      readInventoryLevelById(admin, "gid://shopify/InventoryLevel/1"),
+    ).rejects.toBeInstanceOf(InventoryLevelIdentityMismatchError);
+    await expect(
+      readInventoryLevelById(admin, "gid://shopify/InventoryLevel/1"),
+    ).rejects.toThrow(/does not match requested/);
   });
 });

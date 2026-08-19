@@ -6,7 +6,7 @@
  */
 
 import { CATALOG_FACT_BULK_OPERATION_QUERY } from "./documents";
-import { optionalString, stringifyUnsignedCount } from "./decimal";
+import { optionalIsoTimestamp, optionalString, requireString, stringifyUnsignedCount } from "./decimal";
 import { executeAdminReadQuery } from "./execute";
 import type {
   BulkOperationGid,
@@ -97,16 +97,36 @@ export async function readBulkOperationById(
   const node = result.data?.bulkOperation;
   if (!node) return null;
 
+  if (node.id == null) {
+    throw new BulkOperationGidError(
+      "bulkOperation returned identity is missing",
+    );
+  }
+  if (typeof node.id !== "string") {
+    throw new BulkOperationGidError(
+      `bulkOperation returned identity type:${typeof node.id} does not match requested ${contract.gid}`,
+    );
+  }
+  const returnedGid = parseBulkOperationGid(node.id);
+  if (returnedGid !== contract.gid) {
+    throw new BulkOperationGidError(
+      `bulkOperation returned identity ${returnedGid} does not match requested ${contract.gid}`,
+    );
+  }
+
   const snapshot: BulkOperationSnapshot = {
-    id: parseBulkOperationGid(String(node.id)),
-    status: String(node.status ?? ""),
+    id: returnedGid,
+    status: requireString(node.status, "bulkOperation.status"),
     errorCode: optionalString(node.errorCode),
     objectCount: stringifyUnsignedCount(node.objectCount),
     rootObjectCount: stringifyUnsignedCount(node.rootObjectCount),
     url: optionalString(node.url),
     partialDataUrl: optionalString(node.partialDataUrl),
-    createdAt: optionalString(node.createdAt),
-    completedAt: optionalString(node.completedAt),
+    createdAt: optionalIsoTimestamp(node.createdAt, "bulkOperation.createdAt"),
+    completedAt: optionalIsoTimestamp(
+      node.completedAt,
+      "bulkOperation.completedAt",
+    ),
   };
   return classifyBulkOperationSnapshot(snapshot);
 }

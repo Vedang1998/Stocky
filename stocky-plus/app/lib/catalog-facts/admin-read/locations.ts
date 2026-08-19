@@ -54,7 +54,7 @@ export function mapLocationNode(node: LocationNode): LocationRead {
     legacyResourceId: optionalLegacyResourceId(node.legacyResourceId),
     name: requireNonEmptyString(node.name, "location.name"),
     isActive: requireBoolean(node.isActive, "location.isActive"),
-    deactivatedAt: optionalIsoTimestamp(node.deactivatedAt),
+    deactivatedAt: optionalIsoTimestamp(node.deactivatedAt, "location.deactivatedAt"),
     fulfillsOnlineOrders: requireBoolean(
       node.fulfillsOnlineOrders,
       "location.fulfillsOnlineOrders",

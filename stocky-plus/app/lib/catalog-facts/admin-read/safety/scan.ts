@@ -91,6 +91,7 @@ export function looksLikeGraphQLDocument(text: string): boolean {
 export type ExtractedGraphQLLiterals = {
   documents: string[];
   unreviewable: Array<{ preview: string; detail: string }>;
+  syntaxFailures: Array<{ preview: string; detail: string }>;
 };
 
 function templateExpressionStaticText(node: ts.TemplateExpression): string {
@@ -116,12 +117,18 @@ export function extractGraphQLDocumentsFromTypeScript(
   );
   const documents: string[] = [];
   const unreviewable: ExtractedGraphQLLiterals["unreviewable"] = [];
+  const syntaxFailures: ExtractedGraphQLLiterals["syntaxFailures"] = [];
 
   function considerStatic(text: string): void {
     if (!looksLikeGraphQLDocument(text)) return;
     try {
       parse(text);
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      syntaxFailures.push({
+        preview: text.trim().slice(0, 160),
+        detail: `GraphQL-shaped literal failed to parse: ${detail}`,
+      });
       return;
     }
     documents.push(text);
@@ -144,7 +151,7 @@ export function extractGraphQLDocumentsFromTypeScript(
   }
 
   visit(sf);
-  return { documents, unreviewable };
+  return { documents, unreviewable, syntaxFailures };
 }
 
 export function isForbiddenCanonicalReadImport(
@@ -180,6 +187,14 @@ export function isForbiddenCanonicalReadImport(
   return false;
 }
 
+function staticModuleSpecifier(node: ts.Node | undefined): string | null {
+  if (!node) return null;
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
+    return node.text;
+  }
+  return null;
+}
+
 function forbiddenImportSpecifiers(source: string, fileName: string): string[] {
   const sf = ts.createSourceFile(
     fileName,
@@ -191,14 +206,20 @@ function forbiddenImportSpecifiers(source: string, fileName: string): string[] {
   const specs: string[] = [];
 
   function visit(node: ts.Node): void {
-    if (
-      ts.isImportDeclaration(node) &&
-      node.moduleSpecifier &&
-      ts.isStringLiteral(node.moduleSpecifier)
-    ) {
-      const spec = node.moduleSpecifier.text;
-      if (isForbiddenCanonicalReadImport(spec, fileName)) {
+    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+      const spec = staticModuleSpecifier(node.moduleSpecifier);
+      if (spec !== null && isForbiddenCanonicalReadImport(spec, fileName)) {
         specs.push(spec);
+      }
+    } else if (ts.isCallExpression(node) && node.arguments.length > 0) {
+      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isRequire =
+        ts.isIdentifier(node.expression) && node.expression.text === "require";
+      if (isDynamicImport || isRequire) {
+        const spec = staticModuleSpecifier(node.arguments[0]);
+        if (spec !== null && isForbiddenCanonicalReadImport(spec, fileName)) {
+          specs.push(spec);
+        }
       }
     }
     ts.forEachChild(node, visit);
@@ -225,6 +246,14 @@ export function scanCatalogFactsProductionModules(
       findings.push({
         file: relative,
         kind: "unreviewable_graphql",
+        detail: `${item.detail}: ${item.preview}`,
+      });
+    }
+
+    for (const item of extracted.syntaxFailures) {
+      findings.push({
+        file: relative,
+        kind: "syntax",
         detail: `${item.detail}: ${item.preview}`,
       });
     }

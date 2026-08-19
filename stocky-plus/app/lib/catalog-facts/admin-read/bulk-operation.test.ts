@@ -85,4 +85,49 @@ describe("PR5-F2A bulkOperation(id:) contract", () => {
     });
     expect(classified.canonicalSuccessEligible).toBe(false);
   });
+
+  it("fails closed when bulkOperation(id:) returns a different GID", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        bulkOperation: {
+          id: "gid://shopify/BulkOperation/999",
+          status: "COMPLETED",
+          errorCode: null,
+          objectCount: "1",
+          rootObjectCount: "1",
+          url: "https://example.invalid/complete.jsonl",
+          partialDataUrl: null,
+          createdAt: "2026-08-17T00:00:00Z",
+          completedAt: "2026-08-17T00:01:00Z",
+        },
+      },
+    }));
+    await expect(
+      readBulkOperationById(admin, "gid://shopify/BulkOperation/720918"),
+    ).rejects.toBeInstanceOf(BulkOperationGidError);
+    await expect(
+      readBulkOperationById(admin, "gid://shopify/BulkOperation/720918"),
+    ).rejects.toThrow(/does not match requested/);
+  });
+
+  it("rejects a malformed bulkOperation createdAt timestamp", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        bulkOperation: {
+          id: "gid://shopify/BulkOperation/720918",
+          status: "COMPLETED",
+          errorCode: null,
+          objectCount: "1",
+          rootObjectCount: "1",
+          url: "https://example.invalid/complete.jsonl",
+          partialDataUrl: null,
+          createdAt: "not-a-date",
+          completedAt: null,
+        },
+      },
+    }));
+    await expect(
+      readBulkOperationById(admin, "gid://shopify/BulkOperation/720918"),
+    ).rejects.toThrow(/Shopify DateTime \/ RFC3339/);
+  });
 });

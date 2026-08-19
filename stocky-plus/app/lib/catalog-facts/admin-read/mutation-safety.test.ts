@@ -286,6 +286,163 @@ mutation CommentPrefixedInventoryDeactivate {
     }
   });
 
+  it("rejects export ... from a forbidden @shopify module", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-export-from-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-export-from.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `export { authenticate } from "@shopify/shopify-app-react-router/server";\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "forbidden_import" &&
+            finding.detail.includes("@shopify/shopify-app-react-router/server"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a dynamic import of a forbidden @shopify module", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-dynamic-import-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-dynamic-import.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `export async function load() {\n  const m = await import("@shopify/shopify-app-react-router/server");\n  return m;\n}\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "forbidden_import" &&
+            finding.detail.includes("@shopify/shopify-app-react-router/server"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an absolute application service import", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-abs-service-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-abs-service.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `import { writeInventory } from "app/services/inventory.server";\nexport const n = writeInventory;\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "forbidden_import" &&
+            finding.detail.includes("app/services/inventory.server"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a require() bypass of the service import boundary", () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-require-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-require.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `const write = require("~/services/inventory-write.server");\nexport const n = write;\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "forbidden_import" &&
+            finding.detail.includes("~/services/inventory-write.server"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records a syntax finding for malformed mutation-shaped GraphQL", () => {
+    const malformed = `mutation M { productUpdate(input: { } { id } }`;
+    const extracted = extractGraphQLDocumentsFromTypeScript(
+      `export const planted = \`${malformed}\`;\n`,
+    );
+    expect(extracted.documents).toEqual([]);
+    expect(extracted.syntaxFailures.length).toBeGreaterThan(0);
+
+    const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-syntax-"));
+    const nestedPlanted = path.join(
+      root,
+      "admin-read",
+      "safety",
+      "nested",
+      "deeper",
+      "planted-malformed-graphql.ts",
+    );
+    try {
+      mkdirSync(path.dirname(nestedPlanted), { recursive: true });
+      writeFileSync(
+        nestedPlanted,
+        `export const planted = \`${malformed}\`;\n`,
+        "utf8",
+      );
+      const result = scanCatalogFactsProductionModules(root);
+      expect(
+        result.findings.some(
+          (finding) =>
+            finding.kind === "syntax" &&
+            finding.detail.includes("failed to parse"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("still accepts a valid nested QUERY fixture", () => {
     const root = mkdtempSync(path.join(os.tmpdir(), "pr5-f2a-valid-query-"));
     const nestedPlanted = path.join(

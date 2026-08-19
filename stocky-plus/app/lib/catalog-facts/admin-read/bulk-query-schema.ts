@@ -3,79 +3,97 @@
  *
  * graphql-codegen covers `#graphql`-tagged Admin documents. These bulk
  * strings are untagged by design and must still be validated against the
- * committed Shopify Admin 2026-07 introspection schema using graphql-js
- * `validate`. This is not field-name counting.
+ * Admin 2026-07 schema artifact materialized by `npm run graphql-codegen`,
+ * using graphql-js `validate` with stock `specifiedRules`. This is not
+ * field-name counting and is not a live shopify.dev fetch.
  *
- * Shopify bulk operations treat connection pagination arguments
- * (`first` / `after` / `last` / `before`) as optional and ignored. The
- * default graphql-js required-argument rule is therefore relaxed for those
- * names only. Connection traversal, field existence, and all other
- * required arguments (for example `quantities(names:)`) remain enforced.
+ * Heavy CI runs `npm run graphql-codegen` before `npm test` so the local
+ * generated schema exists when this gate runs. The schema cache is
+ * gitignored; R-016 remains OPEN because codegen itself still needs the
+ * Shopify network. This module does not add a second network path.
+ *
+ * If a future bulk document selects a field whose `first` argument is
+ * schema-required (`Int!`), that document must supply `first` explicitly
+ * even if Shopify bulk execution later ignores pagination arguments.
  */
 
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  GraphQLError,
-  ProvidedRequiredArgumentsRule,
-  isRequiredArgument,
+  buildClientSchema,
   parse,
   specifiedRules,
   validate,
+  type GraphQLError,
   type GraphQLSchema,
-  type ValidationRule,
+  type IntrospectionQuery,
 } from "graphql";
 
-const BULK_OPTIONAL_PAGINATION_ARGS = new Set([
-  "first",
-  "after",
-  "last",
-  "before",
-]);
-
-export const bulkRelaxedProvidedRequiredArgumentsRule: ValidationRule = (
-  context,
-) => {
-  const directiveVisitor = ProvidedRequiredArgumentsRule(context);
-  return {
-    ...directiveVisitor,
-    Field: {
-      leave(fieldNode) {
-        const fieldDef = context.getFieldDef();
-        if (!fieldDef) {
-          return false;
-        }
-        const provided = new Set(
-          (fieldNode.arguments ?? []).map((arg) => arg.name.value),
-        );
-        for (const argDef of fieldDef.args) {
-          if (BULK_OPTIONAL_PAGINATION_ARGS.has(argDef.name)) {
-            continue;
-          }
-          if (!provided.has(argDef.name) && isRequiredArgument(argDef)) {
-            context.reportError(
-              new GraphQLError(
-                `Field "${fieldDef.name}" argument "${argDef.name}" of type "${String(argDef.type)}" is required, but it was not provided.`,
-                { nodes: fieldNode },
-              ),
-            );
-          }
-        }
-      },
-    },
-  };
-};
-
-export const bulkQueryValidationRules: ValidationRule[] = specifiedRules.map(
-  (rule) =>
-    rule === ProvidedRequiredArgumentsRule
-      ? bulkRelaxedProvidedRequiredArgumentsRule
-      : rule,
+export const ADMIN_2026_07_SCHEMA_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../../types/admin-2026-07.schema.json",
 );
+
+export const bulkQueryValidationRules = specifiedRules;
+
+function introspectionFromUnknown(parsed: unknown): IntrospectionQuery {
+  if (parsed && typeof parsed === "object" && "__schema" in parsed) {
+    return parsed as IntrospectionQuery;
+  }
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    "data" in parsed &&
+    parsed.data &&
+    typeof parsed.data === "object" &&
+    "__schema" in (parsed.data as object)
+  ) {
+    return parsed.data as IntrospectionQuery;
+  }
+  throw new Error(
+    "Admin 2026-07 schema JSON is not a GraphQL introspection result",
+  );
+}
+
+export function loadGeneratedAdmin202607Schema(
+  schemaPath = ADMIN_2026_07_SCHEMA_PATH,
+): {
+  schema: GraphQLSchema;
+  source: "file";
+  path: string;
+} {
+  if (!existsSync(schemaPath)) {
+    throw new Error(
+      `Admin 2026-07 schema artifact is absent at ${schemaPath}. ` +
+        "Materialize it with `npm run graphql-codegen` before tests. " +
+        "This gate reads only the generated local file and does not fetch shopify.dev.",
+    );
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(schemaPath, "utf8"));
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `Admin 2026-07 schema artifact at ${schemaPath} is unreadable: ${detail}. ` +
+        "This gate does not fetch shopify.dev.",
+    );
+  }
+
+  return {
+    source: "file",
+    path: schemaPath,
+    schema: buildClientSchema(introspectionFromUnknown(parsed)),
+  };
+}
 
 export function validateBulkQueryAgainstAdminSchema(
   schema: GraphQLSchema,
   document: string,
 ): readonly GraphQLError[] {
-  return validate(schema, parse(document), bulkQueryValidationRules);
+  return validate(schema, parse(document), specifiedRules);
 }
 
 export function assertBulkQuerySchemaValid(

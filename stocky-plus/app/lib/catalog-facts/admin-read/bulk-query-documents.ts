@@ -11,11 +11,14 @@
  * Admin QUERY documents in `documents.ts`. Untagged bulk inner queries are
  * validated by the dedicated Admin 2026-07 schema gate
  * (`bulk-query-schema.ts` / `bulk-query-schema.test.ts`) using graphql-js
- * `validate`, with Shopify bulk pagination arguments treated as optional.
+ * `validate` with stock `specifiedRules` against the schema artifact
+ * materialized by `npm run graphql-codegen`.
  *
- * Official bulk guidance: `first` is optional and ignored if present. It is
- * not required for schema validity and is omitted here because bulk
- * operations ignore pagination arguments. Connection types MUST be
+ * Official bulk guidance: `first` is optional and ignored if present on
+ * bulk-traversable connections. These documents omit pagination arguments
+ * because bulk operations ignore them. If a future document selects a field
+ * whose `first` is schema-required (`Int!`), that document must supply
+ * `first` even if bulk execution later ignores it. Connection types MUST be
  * traversed with `edges { node { … } }`. Top-level `node` / `nodes` fields
  * are forbidden.
  *

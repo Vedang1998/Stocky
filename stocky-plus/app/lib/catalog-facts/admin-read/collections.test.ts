@@ -198,4 +198,38 @@ describe("PR5-F2A collection membership pagination", () => {
       }),
     ).rejects.toThrow(/duplicate collection GID/);
   });
+
+  it("fails closed when pageInfo is missing", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        product: {
+          collections: {
+            edges: [{ node: collectionNode(1) }],
+          },
+        },
+      },
+    }));
+    await expect(
+      readProductCollectionMemberships(admin, "gid://shopify/Product/1"),
+    ).rejects.toThrow(/pageInfo is missing/);
+    await expect(
+      readProductCollectionMemberships(admin, "gid://shopify/Product/1"),
+    ).rejects.toBeInstanceOf(CollectionPaginationError);
+  });
+
+  it("fails closed when hasNextPage is not a boolean", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        product: {
+          collections: {
+            pageInfo: { hasNextPage: "false", endCursor: null },
+            edges: [{ node: collectionNode(1) }],
+          },
+        },
+      },
+    }));
+    await expect(
+      readProductCollectionMemberships(admin, "gid://shopify/Product/1"),
+    ).rejects.toThrow(/hasNextPage must be a boolean/);
+  });
 });

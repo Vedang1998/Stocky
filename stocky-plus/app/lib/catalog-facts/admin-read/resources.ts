@@ -55,6 +55,22 @@ function responseIdentityString(value: unknown): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
+function assertReturnedGidMatches(
+  requested: string,
+  returned: unknown,
+  createError: (message: string) => Error,
+  noun: string,
+): void {
+  if (returned == null) return;
+  const observed =
+    typeof returned === "string" ? returned : `type:${typeof returned}`;
+  if (returned !== requested) {
+    throw createError(
+      `${noun} returned identity ${observed} does not match requested ${requested}`,
+    );
+  }
+}
+
 function assertInventoryLevelPairMatchesRequest(
   requested: InventoryLevelPairIdentity,
   node: InventoryLevelNode,
@@ -240,8 +256,14 @@ export function mapInventoryLevelNode(
     shopifyLevelGid: optionalString(node.id),
     identity: { inventoryItemGid, locationGid },
     isActive: optionalBoolean(node.isActive, "inventoryLevel.isActive"),
-    shopifyCreatedAt: optionalIsoTimestamp(node.createdAt),
-    shopifyUpdatedAt: optionalIsoTimestamp(node.updatedAt),
+    shopifyCreatedAt: optionalIsoTimestamp(
+      node.createdAt,
+      "inventoryLevel.createdAt",
+    ),
+    shopifyUpdatedAt: optionalIsoTimestamp(
+      node.updatedAt,
+      "inventoryLevel.updatedAt",
+    ),
     quantities: mapInventoryQuantities(node.quantities),
   };
 }
@@ -373,7 +395,14 @@ export async function readInventoryLevelById(
     quantityNames: INVENTORY_QUANTITY_NAMES_ARGUMENT,
   });
   const level = result.data?.inventoryLevel;
-  return level ? mapInventoryLevelNode(level) : null;
+  if (!level) return null;
+  assertReturnedGidMatches(
+    id,
+    level.id,
+    (message) => new InventoryLevelIdentityMismatchError(message),
+    "inventoryLevel",
+  );
+  return mapInventoryLevelNode(level);
 }
 
 export async function readShopCurrencyCode(

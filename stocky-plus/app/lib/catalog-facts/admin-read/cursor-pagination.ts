@@ -31,6 +31,41 @@ export type CursorPageInfo = {
   endCursor?: unknown;
 };
 
+function readCursorPageInfo(
+  pageInfo: unknown,
+  connectionName: string,
+  createError: (message: string) => Error,
+): { hasNextPage: boolean; endCursor: string | null } {
+  if (pageInfo == null) {
+    throw createError(
+      `${connectionName} pageInfo is missing from Admin response`,
+    );
+  }
+  if (typeof pageInfo !== "object" || Array.isArray(pageInfo)) {
+    throw createError(`${connectionName} pageInfo is not an object`);
+  }
+
+  const record = pageInfo as { hasNextPage?: unknown; endCursor?: unknown };
+  if (typeof record.hasNextPage !== "boolean") {
+    throw createError(
+      `${connectionName} pageInfo.hasNextPage must be a boolean`,
+    );
+  }
+
+  if (record.endCursor == null) {
+    return { hasNextPage: record.hasNextPage, endCursor: null };
+  }
+  if (typeof record.endCursor !== "string") {
+    throw createError(
+      `${connectionName} pageInfo.endCursor must be a string or null`,
+    );
+  }
+  return {
+    hasNextPage: record.hasNextPage,
+    endCursor: record.endCursor === "" ? null : record.endCursor,
+  };
+}
+
 export type CursorEdge<TNode> = {
   node?: TNode | null;
 } | null;
@@ -87,10 +122,11 @@ export async function paginateCursorConnection<TNode, TMapped>(options: {
     }
 
     const edges = Array.isArray(connection.edges) ? connection.edges : [];
-    const pageInfo = connection.pageInfo ?? {};
-    const hasNextPage = Boolean(pageInfo.hasNextPage);
-    const endCursor =
-      pageInfo.endCursor == null ? null : String(pageInfo.endCursor);
+    const { hasNextPage, endCursor } = readCursorPageInfo(
+      connection.pageInfo,
+      options.connectionName,
+      options.createError,
+    );
 
     if (edges.length === 0 && hasNextPage) {
       throw options.createError(

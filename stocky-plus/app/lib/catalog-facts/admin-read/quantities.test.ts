@@ -17,6 +17,7 @@ describe("PR5-F2A inventory quantities", () => {
     expect(mapped.missingApprovedNames).toEqual([]);
     expect(mapped.unexpectedNames).toEqual([]);
     expect(mapped.malformedQuantityNames).toEqual([]);
+    expect(mapped.malformedRows).toEqual([]);
     for (const name of APPROVED_INVENTORY_QUANTITY_NAMES) {
       expect(mapped.byName[name]?.name).toBe(name);
       expect(mapped.byName[name]?.quantity).toBeGreaterThan(0);
@@ -39,6 +40,7 @@ describe("PR5-F2A inventory quantities", () => {
     expect(mapped.missingApprovedNames).toEqual([]);
     expect(mapped.unexpectedNames).toEqual(["future_state"]);
     expect(mapped.malformedQuantityNames).toEqual([]);
+    expect(mapped.malformedRows).toEqual([]);
     expect(mapped.byName.available?.quantity).toBe(1);
   });
 
@@ -51,6 +53,7 @@ describe("PR5-F2A inventory quantities", () => {
     expect(mapped.missingApprovedNames).toContain("incoming");
     expect(mapped.byName.on_hand).toBeUndefined();
     expect(mapped.malformedQuantityNames).toEqual([]);
+    expect(mapped.malformedRows).toEqual([]);
   });
 
   it("records an unexpected name even when its quantity is malformed", () => {
@@ -59,6 +62,7 @@ describe("PR5-F2A inventory quantities", () => {
     ]);
     expect(mapped.unexpectedNames).toEqual(["rogue_name"]);
     expect(mapped.malformedQuantityNames).toEqual(["rogue_name"]);
+    expect(mapped.malformedRows).toEqual([]);
     expect(mapped.byName.available).toBeUndefined();
   });
 
@@ -67,6 +71,7 @@ describe("PR5-F2A inventory quantities", () => {
       { name: "available", quantity: 5.5, updatedAt: null },
     ]);
     expect(mapped.malformedQuantityNames).toEqual(["available"]);
+    expect(mapped.malformedRows).toEqual([]);
     expect(mapped.byName.available).toBeUndefined();
     expect(mapped.missingApprovedNames).not.toContain("available");
     expect(mapped.missingApprovedNames).toContain("on_hand");
@@ -80,9 +85,47 @@ describe("PR5-F2A inventory quantities", () => {
     expect(mapped.missingApprovedNames).toEqual([]);
     expect(mapped.unexpectedNames).toEqual(["rogue_name"]);
     expect(mapped.malformedQuantityNames).toEqual(["rogue_name"]);
+    expect(mapped.malformedRows).toEqual([]);
     for (const name of APPROVED_INVENTORY_QUANTITY_NAMES) {
       expect(mapped.byName[name]?.quantity).toBeGreaterThan(0);
     }
+  });
+
+  it("records a dedicated malformed-row diagnostic for non-string or empty names", () => {
+    const mapped = mapInventoryQuantities([
+      { name: 12345, quantity: 7, updatedAt: null },
+      { name: "", quantity: 7, updatedAt: null },
+      { name: null, quantity: 7, updatedAt: null },
+      { name: { nested: true }, quantity: 7, updatedAt: null },
+    ]);
+    expect(mapped.byName).toEqual({});
+    expect(mapped.unexpectedNames).toEqual([]);
+    expect(mapped.malformedQuantityNames).toEqual([]);
+    expect(mapped.malformedRows).toEqual([
+      { reason: "malformed_name", observedNameKind: "number" },
+      { reason: "malformed_name", observedNameKind: "empty_string" },
+      { reason: "malformed_name", observedNameKind: "null" },
+      { reason: "malformed_name", observedNameKind: "object" },
+    ]);
+    expect(mapped.missingApprovedNames).toEqual([...APPROVED_INVENTORY_QUANTITY_NAMES]);
+  });
+
+  it("rejects a non-string quantity updatedAt instead of String() coercion", () => {
+    expect(() =>
+      mapInventoryQuantities([
+        { name: "available", quantity: 1, updatedAt: 20260101 },
+      ]),
+    ).toThrow(/inventoryQuantity.updatedAt must be a string/);
+    expect(() =>
+      mapInventoryQuantities([
+        { name: "available", quantity: 1, updatedAt: { iso: true } },
+      ]),
+    ).toThrow(/inventoryQuantity.updatedAt must be a string/);
+    expect(() =>
+      mapInventoryQuantities([
+        { name: "available", quantity: 1, updatedAt: "not-a-date" },
+      ]),
+    ).toThrow(/Shopify DateTime \/ RFC3339/);
   });
 
   it("queries all eight names on the inventory-level pair helper", async () => {

@@ -4,7 +4,9 @@ import {
   type ApprovedInventoryQuantityName,
   type InventoryQuantitiesRead,
   type InventoryQuantityRead,
+  type MalformedInventoryQuantityRow,
 } from "./types";
+import { optionalIsoTimestamp } from "./decimal";
 
 export function isApprovedInventoryQuantityName(
   name: string,
@@ -14,6 +16,13 @@ export function isApprovedInventoryQuantityName(
 
 function isIntegerQuantity(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value);
+}
+
+function observedNameKind(name: unknown): string {
+  if (name === null) return "null";
+  if (name === "") return "empty_string";
+  if (Array.isArray(name)) return "array";
+  return typeof name;
 }
 
 export function mapInventoryQuantities(
@@ -26,9 +35,16 @@ export function mapInventoryQuantities(
   const byName: InventoryQuantitiesRead["byName"] = {};
   const unexpectedNames: string[] = [];
   const malformedQuantityNames: string[] = [];
+  const malformedRows: MalformedInventoryQuantityRow[] = [];
 
   for (const row of raw ?? []) {
-    if (typeof row.name !== "string" || row.name === "") continue;
+    if (typeof row.name !== "string" || row.name === "") {
+      malformedRows.push({
+        reason: "malformed_name",
+        observedNameKind: observedNameKind(row.name),
+      });
+      continue;
+    }
 
     if (!isApprovedInventoryQuantityName(row.name)) {
       unexpectedNames.push(row.name);
@@ -39,7 +55,10 @@ export function mapInventoryQuantities(
       continue;
     }
 
-    const updatedAt = row.updatedAt == null ? null : String(row.updatedAt);
+    const updatedAt = optionalIsoTimestamp(
+      row.updatedAt,
+      "inventoryQuantity.updatedAt",
+    );
     const mapped: InventoryQuantityRead = {
       name: row.name,
       quantity: row.quantity,
@@ -54,5 +73,11 @@ export function mapInventoryQuantities(
     (name) => byName[name] == undefined && !malformedQuantityNames.includes(name),
   );
 
-  return { byName, missingApprovedNames, unexpectedNames, malformedQuantityNames };
+  return {
+    byName,
+    missingApprovedNames,
+    unexpectedNames,
+    malformedQuantityNames,
+    malformedRows,
+  };
 }

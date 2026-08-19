@@ -94,6 +94,64 @@ describe("PR5-F2A location pagination", () => {
     );
   });
 
+  it("fails closed when pageInfo is missing", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        locations: {
+          edges: [{ cursor: "c1", node: locationNode(1) }],
+        },
+      },
+    }));
+    await expect(readAllLocations(admin, { pageSize: 50 })).rejects.toThrow(
+      /pageInfo is missing/,
+    );
+    await expect(readAllLocations(admin, { pageSize: 50 })).rejects.toBeInstanceOf(
+      LocationPaginationError,
+    );
+  });
+
+  it("fails closed when hasNextPage is not a boolean", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        locations: {
+          pageInfo: { hasNextPage: "false", endCursor: null },
+          edges: [{ cursor: "c1", node: locationNode(1) }],
+        },
+      },
+    }));
+    await expect(readAllLocations(admin, { pageSize: 50 })).rejects.toThrow(
+      /hasNextPage must be a boolean/,
+    );
+  });
+
+  it("fails closed when pageInfo is not an object", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        locations: {
+          pageInfo: "yes",
+          edges: [{ cursor: "c1", node: locationNode(1) }],
+        },
+      },
+    }));
+    await expect(readAllLocations(admin, { pageSize: 50 })).rejects.toThrow(
+      /pageInfo is not an object/,
+    );
+  });
+
+  it("fails closed when endCursor has an invalid type", async () => {
+    const admin = createMockAdmin(() => ({
+      data: {
+        locations: {
+          pageInfo: { hasNextPage: true, endCursor: 123 },
+          edges: [{ cursor: "c1", node: locationNode(1) }],
+        },
+      },
+    }));
+    await expect(readAllLocations(admin, { pageSize: 50 })).rejects.toThrow(
+      /endCursor must be a string or null/,
+    );
+  });
+
   it("fails closed on duplicate location GIDs across pages", async () => {
     let page = 0;
     const admin = createMockAdmin(() => {
