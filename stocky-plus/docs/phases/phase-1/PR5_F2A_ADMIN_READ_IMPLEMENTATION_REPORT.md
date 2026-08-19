@@ -660,3 +660,131 @@ Do **not** mark any risk CLOSED.
 Return to ChatGPT for **PR5-F2A second correction review** after exact-head automatic full PR CI is green.
 
 Do **not** merge. Do **not** mark ready. Do **not** invoke Claude. Do **not** start F3. Do **not** create D-055.
+
+---
+
+## 28. S01 correction package (NEW-CLAUDE-PR5F2A-S01)
+
+**Correction status:** Correction implemented — pending independent verification
+
+This section is appended after the immutable Claude second-correction re-review. It does **not** rewrite the history above. It does **not** edit any Claude review artifact. It does **not** close R-016, R-132, R-134, R-136, R-138, or R-163. It does **not** claim ChatGPT acceptance. It does **not** implement Claude's five P3 hygiene findings.
+
+| Field | Value |
+|---|---|
+| Authorized base / `origin/main` | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Previously reviewed second-correction head | `febe08fb952eb463383524766f88e59381b74a00` |
+| Immutable first review | `PR5_F2A_ADMIN_READ_INDEPENDENT_REVIEW.md` blob `81bc0678ea9041b6567c02c8fe5655752fc53441` (**not edited**) |
+| Immutable correction re-review | `PR5_F2A_ADMIN_READ_CORRECTION_INDEPENDENT_REVIEW.md` blob `d06fc9f603b8ec86efc1493babaa3973a73d3806` (**not edited**) |
+| Immutable second-correction re-review | `PR5_F2A_ADMIN_READ_SECOND_CORRECTION_INDEPENDENT_REVIEW.md` |
+| Review commit cherry-picked | `62206a151b2c572569ea21e1124f2da335d24741` → branch commit `ea2a4475c47a127b4c6db6c41c8d303a73d7a97f` |
+| Review artifact blob | `acbd51277319d0737861355d1db5b5068a070747` (re-hashed after cherry-pick; unchanged) |
+| Independent verdict | `CORRECTIONS REQUIRED` — P0 0 / P1 0 / P2 1 / P3 5 |
+| Runtime/test commit | `418d13cbb7a2485b812fc8b28ee0440c614cdb2f` |
+| Tenant inventory | unchanged; `tenant:access:inventory:check` reported `tenant_access_inventory_fresh` |
+| PR #29 | kept CLOSED / DRAFT / UNMERGED while this package was finalized; reopened once after this report |
+
+### NEW-CLAUDE-PR5F2A-S01 — P2 — by-id InventoryLevel identity fail-open
+
+**Defect (independently reproduced before correction):** `assertReturnedGidMatches` returned early when `returned == null`. `readInventoryLevelById("gid://shopify/InventoryLevel/111")` against a non-null `inventoryLevel` object whose `id` was `null` or omitted mapped successfully as:
+
+```json
+{"shopifyLevelGid":null,"identity":{"inventoryItemGid":"gid://shopify/InventoryItem/OTHER","locationGid":"gid://shopify/Location/OTHER"}}
+```
+
+Focused resources tests then failed on the null and omitted cases (2 failed / 19 passed / 21 total) before the helper change.
+
+**Correction:** if a top-level `inventoryLevel` object is present, its `id` must be a non-empty string that exactly equals the requested id. Missing, null, empty, and non-string returned ids throw `InventoryLevelIdentityMismatchError`. A differing returned id continues to throw. The reader does not substitute the requested GID for the returned by-id identity. Top-level `inventoryLevel == null` remains authoritative absence and returns `null`.
+
+`readInventoryLevelByPair` is unchanged. Absent response item/location ids still use the approved requested-identity fallback.
+
+**Tests** in `resources.test.ts`:
+
+1. requested ID == returned ID → success (`shopifyLevelGid` equals the requested id)
+2. returned different GID → `InventoryLevelIdentityMismatchError`
+3. returned id `null` → `InventoryLevelIdentityMismatchError` (`returned identity is missing`)
+4. returned id omitted → `InventoryLevelIdentityMismatchError` (`returned identity is missing`)
+5. returned id empty → `InventoryLevelIdentityMismatchError`
+6. returned id non-string → `InventoryLevelIdentityMismatchError`
+7. top-level `inventoryLevel` null → `null`
+
+Pair-identity suite retained, including fallback when the response omits item and location ids.
+
+**Disposition:** Corrected in this pass. Pending independent verification.
+
+**Not in this package:** P3-1 through P3-5 from the immutable second-correction re-review remain nonblocking independent-review residuals. They are already recorded in that artifact. This package does not implement them.
+
+---
+
+## 29. S01 local evidence
+
+Focused resources suite **before** the helper change:
+
+```text
+npx vitest run app/lib/catalog-facts/admin-read/resources.test.ts --reporter=verbose
+```
+
+**2 failed / 19 passed / 21 total**, exit 1. Failures were null returned id and omitted returned id; both resolved a mapped level labelled with `InventoryItem/OTHER` and `Location/OTHER`.
+
+Focused resources suite **after** the helper change: **21 passed**, exit 0.
+
+Focused catalog-facts suite after S01:
+
+```text
+npx vitest run app/lib/catalog-facts --reporter=verbose
+```
+
+**13 files, 110 tests passed**, exit 0.
+
+Required local commands (runtime/test state, generated schema present):
+
+| Command | Exit | Observed |
+|---|---|---|
+| `npm run graphql-codegen` | 0 | tagged Admin **2026-07** documents + generated `app/types/admin-2026-07.schema.json` (gitignored) |
+| focused `resources.test.ts` | 0 | **21 tests passed** |
+| `npx vitest run app/lib/catalog-facts` | 0 | **13 files, 110 tests passed** |
+| `npm test` | 0 | **19 files, 166 tests passed** |
+| `npm run lint` | 0 | eslint of the app |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| `npm run build` | 0 | client + SSR production build |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 285`, `findings: 1408`, `violations: 0` |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` |
+| `git diff --check` | 0 | clean |
+
+Exact-head automatic `pull_request` CI is produced by reopening PR #29 after the final S01 commit. This file is not rewritten after that run. CI identity is recorded on the PR body.
+
+---
+
+## 30. Shared-file scope for this S01 package
+
+Changed relative to the previously reviewed head `febe08f…`, besides this report:
+
+- `stocky-plus/app/lib/catalog-facts/admin-read/resources.ts` — fail-closed by-id identity
+- `stocky-plus/app/lib/catalog-facts/admin-read/resources.test.ts` — S01 cases; pair suite unchanged
+- `stocky-plus/docs/phases/phase-1/PR5_F2A_ADMIN_READ_SECOND_CORRECTION_INDEPENDENT_REVIEW.md` — cherry-picked immutable Claude artifact only
+
+No Prisma schema, migration, F2B/F2C, JSONL, workers, webhooks, compatibility projection, Shopify mutation, package, CI workflow, or inventory-write flag change. Tenant inventory was not regenerated.
+
+---
+
+## 31. Risks after the S01 correction
+
+Do **not** mark any risk CLOSED.
+
+| Risk | After this S01 correction |
+|---|---|
+| R-016 | Still OPEN. |
+| R-132 | Still OPEN. |
+| R-134 | Still OPEN. |
+| R-136 | Still OPEN. |
+| R-138 | Still OPEN. |
+| R-163 | Recursive enumeration preserved. Still OPEN. Pending final F2A acceptance; not closed from this Cursor package. |
+
+Claude P3-1 through P3-5 remain nonblocking residuals in the immutable second-correction re-review.
+
+---
+
+## 32. Next action after this S01 correction
+
+Return to ChatGPT for **PR5-F2A S01 correction review** after exact-head automatic full PR CI is green.
+
+Do **not** merge. Do **not** mark ready. Do **not** invoke Claude. Do **not** start F3 / PR6. Do **not** create D-055.
