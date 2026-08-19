@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import {
   LEGACY_VARIANT_TITLE_SEPARATOR,
+  LEGACY_WEIGHT_DECIMAL_PLACES,
   LEGACY_WEIGHT_MAX_ABS,
 } from "./constants";
 import { CompatibilityProjectionError } from "./errors";
@@ -26,28 +27,66 @@ export function mapLegacyVariantTitle(
   return variantTitle;
 }
 
+/**
+ * Resolve the single LIVE InventoryItem for a ProductVariant.
+ *
+ * 0 LIVE items: return null (existing zero-live-item behavior).
+ * 1 LIVE item: return it.
+ * >1 LIVE items: fail closed. The frozen schema permits this graph; F2C must
+ * not pick a lexicographic GID or produce a Shopify write target from it.
+ */
 export function selectLiveInventoryItem(
   items: CanonicalInventoryItemRead[],
+  variantGid: string,
 ): CanonicalInventoryItemRead | null {
-  const live = items
-    .filter((item) => item.existenceState === "LIVE")
-    .sort((a, b) => a.shopifyGid.localeCompare(b.shopifyGid));
+  const live = items.filter((item) => item.existenceState === "LIVE");
+  if (live.length === 0) return null;
+  if (live.length > 1) {
+    throw new CompatibilityProjectionError(
+      "canonical_multiple_live_inventory_items",
+      `Canonical ProductVariant ${variantGid} has ${live.length} LIVE InventoryItems; F2C will not select either GID`,
+      {
+        retryable: false,
+        identity: { kind: "ProductVariant", shopifyGid: variantGid },
+      },
+    );
+  }
   return live[0] ?? null;
 }
 
 export function mapLegacyWeight(
   value: Prisma.Decimal | null,
+  identity?: { kind: "ProductVariant"; shopifyGid: string },
 ): Prisma.Decimal | null {
   if (value == null) return null;
-  const quantized = new Prisma.Decimal(value).toDecimalPlaces(4);
+  const quantized = new Prisma.Decimal(value).toDecimalPlaces(
+    LEGACY_WEIGHT_DECIMAL_PLACES,
+    Prisma.Decimal.ROUND_HALF_UP,
+  );
   if (quantized.abs().gte(LEGACY_WEIGHT_MAX_ABS)) {
     throw new CompatibilityProjectionError(
       "legacy_weight_overflow",
       `Canonical weight ${value.toString()} exceeds ShopifyVariantCache DECIMAL(10, 4)`,
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   return quantized;
+}
+
+function requireLiveProduct(
+  variant: CanonicalVariantRead,
+): CanonicalProductRead {
+  if (variant.product == null || variant.product.existenceState !== "LIVE") {
+    throw new CompatibilityProjectionError(
+      "canonical_product_not_live",
+      `Canonical ProductVariant ${variant.shopifyGid} cannot project title/image because its Product relation is missing or not LIVE; F2C will not overwrite a legacy cache row with degraded values`,
+      {
+        retryable: false,
+        identity: { kind: "ProductVariant", shopifyGid: variant.shopifyGid },
+      },
+    );
+  }
+  return variant.product;
 }
 
 export function mapVariantToLegacyCache(
@@ -62,9 +101,11 @@ export function mapVariantToLegacyCache(
     };
   }
 
-  const liveItem = selectLiveInventoryItem(variant.inventoryItems);
-  const product =
-    variant.product?.existenceState === "LIVE" ? variant.product : null;
+  const liveItem = selectLiveInventoryItem(
+    variant.inventoryItems,
+    variant.shopifyGid,
+  );
+  const product = requireLiveProduct(variant);
 
   const fields: LegacyVariantCacheFields = {
     shopifyVariantId: variant.shopifyGid,
@@ -72,9 +113,12 @@ export function mapVariantToLegacyCache(
     title: mapLegacyVariantTitle(variant.title, product),
     sku: variant.sku,
     barcode: variant.barcode,
-    imageUrl: product?.featuredMediaUrl ?? null,
+    imageUrl: product.featuredMediaUrl ?? null,
     inventoryItemId: liveItem?.shopifyGid ?? null,
-    weight: mapLegacyWeight(liveItem?.weightValue ?? null),
+    weight: mapLegacyWeight(liveItem?.weightValue ?? null, {
+      kind: "ProductVariant",
+      shopifyGid: variant.shopifyGid,
+    }),
     weightUnit: liveItem?.weightUnit ?? null,
   };
 

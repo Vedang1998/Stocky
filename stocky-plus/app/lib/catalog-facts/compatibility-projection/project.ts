@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { createTenantDb } from "../../../tenant/tenant-db.server";
 import {
   CANONICAL_HEALTH_DECISION,
@@ -5,7 +6,11 @@ import {
   COMPATIBILITY_PROJECTION_DEFAULT_BATCH_SIZE,
   COMPATIBILITY_PROJECTION_MAX_BATCH_SIZE,
 } from "./constants";
-import { CompatibilityProjectionError } from "./errors";
+import { normalizeRebuildCursor } from "./cursor";
+import {
+  classifyProjectionFailure,
+  CompatibilityProjectionError,
+} from "./errors";
 import {
   assertWriter,
   createTenantDbLegacyWriter,
@@ -25,6 +30,7 @@ import type {
   CompatibilityProjectionRequest,
   CompatibilityProjectionResult,
   LegacyCompatibilityWriter,
+  PoisonHaltDisposition,
   ShopRebuildCursor,
 } from "./types";
 
@@ -63,8 +69,12 @@ export async function projectCompatibilityFromCanonicalFacts(
   }
 
   let limit: number;
+  let rebuildCursor: ShopRebuildCursor | null = null;
   try {
     limit = resolveLimit(request.limit);
+    if (request.mode === "shop_rebuild") {
+      rebuildCursor = normalizeRebuildCursor(request.cursor ?? null);
+    }
   } catch (error) {
     return failureResult(error);
   }
@@ -93,7 +103,7 @@ export async function projectCompatibilityFromCanonicalFacts(
     writer,
     now,
     limit,
-    cursor: request.cursor ?? null,
+    cursor: rebuildCursor,
   });
 }
 
@@ -149,6 +159,7 @@ async function projectIdentities(input: {
         skippedTombstoneCount,
         remainingIdentities: queued,
         hasMore: queued.length > 0,
+        fallbackIdentity: identity,
       });
     }
   }
@@ -180,7 +191,7 @@ async function projectShopRebuild(input: {
   limit: number;
   cursor: ShopRebuildCursor | null;
 }): Promise<CompatibilityProjectionResult> {
-  let cursor = normalizeCursor(input.cursor);
+  let cursor = normalizeRebuildCursor(input.cursor);
   let processedVariantCount = 0;
   let processedInventoryLevelCount = 0;
   let skippedTombstoneCount = 0;
@@ -235,7 +246,7 @@ async function projectShopRebuild(input: {
           processedVariantCount,
           processedInventoryLevelCount,
           skippedTombstoneCount,
-          cursor: { phase: "variants", afterGid: afterVariantGid },
+          cursor: emitVariantsCursor(afterVariantGid),
           hasMore: true,
         });
       }
@@ -301,11 +312,7 @@ async function projectShopRebuild(input: {
       processedInventoryLevelCount,
       skippedTombstoneCount,
       cursor: moreLevels
-        ? {
-            phase: "inventory_levels",
-            afterItemGid,
-            afterLocationGid,
-          }
+        ? emitLevelsCursor(afterItemGid, afterLocationGid)
         : null,
       hasMore: moreLevels,
     });
@@ -316,12 +323,8 @@ async function projectShopRebuild(input: {
       skippedTombstoneCount,
       cursor:
         cursor.phase === "variants"
-          ? { phase: "variants", afterGid: afterVariantGid }
-          : {
-              phase: "inventory_levels",
-              afterItemGid,
-              afterLocationGid,
-            },
+          ? emitVariantsCursor(afterVariantGid)
+          : emitLevelsCursor(afterItemGid, afterLocationGid),
       hasMore: true,
     });
   }
@@ -383,52 +386,107 @@ async function projectOneIdentity(
   };
 }
 
+function emitVariantsCursor(afterGid?: string): ShopRebuildCursor {
+  return afterGid
+    ? { phase: "variants", afterGid }
+    : { phase: "variants" };
+}
+
+function emitLevelsCursor(
+  afterItemGid?: string,
+  afterLocationGid?: string,
+): ShopRebuildCursor {
+  if (afterItemGid && afterLocationGid) {
+    return {
+      phase: "inventory_levels",
+      afterItemGid,
+      afterLocationGid,
+    };
+  }
+  return { phase: "inventory_levels" };
+}
+
 function levelAfterWhere(
   afterItemGid: string | undefined,
   afterLocationGid: string | undefined,
 ): Record<string, unknown> {
-  if (!afterItemGid) return {};
+  if (afterItemGid == null && afterLocationGid == null) return {};
+  if (
+    typeof afterItemGid !== "string" ||
+    afterItemGid.length === 0 ||
+    typeof afterLocationGid !== "string" ||
+    afterLocationGid.length === 0
+  ) {
+    throw new CompatibilityProjectionError(
+      "invalid_rebuild_cursor",
+      "Compatibility projection rebuild cursor is malformed: inventory_levels keyset requires both afterItemGid and afterLocationGid as non-empty strings",
+      { retryable: false },
+    );
+  }
   return {
     OR: [
       { inventoryItemGid: { gt: afterItemGid } },
       {
         AND: [
           { inventoryItemGid: afterItemGid },
-          { locationGid: { gt: afterLocationGid ?? "" } },
+          { locationGid: { gt: afterLocationGid } },
         ],
       },
     ],
   };
 }
 
-function normalizeCursor(cursor: ShopRebuildCursor | null): ShopRebuildCursor {
-  if (cursor == null) return { phase: "variants" };
-  if (cursor.phase === "variants" || cursor.phase === "inventory_levels") {
-    return cursor;
+function productVariantIdentity(
+  gid: unknown,
+): CompatibilityProjectionIdentity | undefined {
+  if (typeof gid === "string" && gid.length > 0) {
+    return { kind: "ProductVariant", shopifyGid: gid };
   }
-  throw new CompatibilityProjectionError(
-    "invalid_rebuild_cursor",
-    "Compatibility projection rebuild cursor is malformed",
-    { retryable: false },
-  );
+  return undefined;
 }
 
-function coerceExistence(value: unknown, label: string): CanonicalExistenceState {
+function inventoryLevelIdentity(
+  inventoryItemGid: unknown,
+  locationGid: unknown,
+): CompatibilityProjectionIdentity | undefined {
+  if (
+    typeof inventoryItemGid === "string" &&
+    inventoryItemGid.length > 0 &&
+    typeof locationGid === "string" &&
+    locationGid.length > 0
+  ) {
+    return {
+      kind: "InventoryLevel",
+      inventoryItemGid,
+      locationGid,
+    };
+  }
+  return undefined;
+}
+
+function coerceExistence(
+  value: unknown,
+  label: string,
+  identity?: CompatibilityProjectionIdentity,
+): CanonicalExistenceState {
   if (value === "LIVE" || value === "ABSENT") return value;
   throw new CompatibilityProjectionError(
     "invalid_canonical_existence",
     `Canonical ${label} existenceState is not LIVE or ABSENT`,
-    { retryable: false },
+    { retryable: false, identity },
   );
 }
 
-function coerceProduct(raw: unknown): CanonicalProductRead | null {
+function coerceProduct(
+  raw: unknown,
+  identity?: CompatibilityProjectionIdentity,
+): CanonicalProductRead | null {
   if (raw == null) return null;
   if (typeof raw !== "object") {
     throw new CompatibilityProjectionError(
       "invalid_canonical_product",
       "Canonical product include was not an object",
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   const row = raw as Record<string, unknown>;
@@ -436,7 +494,7 @@ function coerceProduct(raw: unknown): CanonicalProductRead | null {
     throw new CompatibilityProjectionError(
       "invalid_canonical_product",
       "Canonical product is missing shopifyGid or title",
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   return {
@@ -444,16 +502,41 @@ function coerceProduct(raw: unknown): CanonicalProductRead | null {
     title: row.title,
     featuredMediaUrl:
       typeof row.featuredMediaUrl === "string" ? row.featuredMediaUrl : null,
-    existenceState: coerceExistence(row.existenceState, "product"),
+    existenceState: coerceExistence(row.existenceState, "product", identity),
   };
 }
 
-function coerceItem(raw: unknown): CanonicalInventoryItemRead {
+function coerceCanonicalWeight(
+  value: unknown,
+  identity?: CompatibilityProjectionIdentity,
+): Prisma.Decimal | null {
+  if (value == null) return null;
+  if (!Prisma.Decimal.isDecimal(value)) {
+    throw new CompatibilityProjectionError(
+      "invalid_canonical_inventory_item",
+      "Canonical inventory item weightValue is not a Prisma.Decimal",
+      { retryable: false, identity },
+    );
+  }
+  if (!value.isFinite()) {
+    throw new CompatibilityProjectionError(
+      "invalid_canonical_inventory_item",
+      "Canonical inventory item weightValue is not a finite decimal",
+      { retryable: false, identity },
+    );
+  }
+  return value;
+}
+
+function coerceItem(
+  raw: unknown,
+  identity?: CompatibilityProjectionIdentity,
+): CanonicalInventoryItemRead {
   if (typeof raw !== "object" || raw == null) {
     throw new CompatibilityProjectionError(
       "invalid_canonical_inventory_item",
       "Canonical inventory item was not an object",
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   const row = raw as Record<string, unknown>;
@@ -461,17 +544,27 @@ function coerceItem(raw: unknown): CanonicalInventoryItemRead {
     throw new CompatibilityProjectionError(
       "invalid_canonical_inventory_item",
       "Canonical inventory item is missing shopifyGid",
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   return {
     shopifyGid: row.shopifyGid,
     shopifyVariantGid:
       typeof row.shopifyVariantGid === "string" ? row.shopifyVariantGid : null,
-    weightValue: (row.weightValue as CanonicalInventoryItemRead["weightValue"]) ?? null,
+    weightValue: coerceCanonicalWeight(row.weightValue, identity),
     weightUnit: typeof row.weightUnit === "string" ? row.weightUnit : null,
-    existenceState: coerceExistence(row.existenceState, "inventory item"),
+    existenceState: coerceExistence(
+      row.existenceState,
+      "inventory item",
+      identity,
+    ),
   };
+}
+
+export function coerceCanonicalInventoryItem(
+  raw: unknown,
+): CanonicalInventoryItemRead {
+  return coerceItem(raw);
 }
 
 function coerceVariant(raw: unknown): CanonicalVariantRead {
@@ -483,6 +576,7 @@ function coerceVariant(raw: unknown): CanonicalVariantRead {
     );
   }
   const row = raw as Record<string, unknown>;
+  const identity = productVariantIdentity(row.shopifyGid);
   if (
     typeof row.shopifyGid !== "string" ||
     typeof row.shopifyProductGid !== "string" ||
@@ -491,7 +585,7 @@ function coerceVariant(raw: unknown): CanonicalVariantRead {
     throw new CompatibilityProjectionError(
       "invalid_canonical_variant",
       "Canonical variant is missing identity or title",
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   const items = Array.isArray(row.inventoryItems) ? row.inventoryItems : [];
@@ -501,9 +595,9 @@ function coerceVariant(raw: unknown): CanonicalVariantRead {
     title: row.title,
     sku: typeof row.sku === "string" ? row.sku : null,
     barcode: typeof row.barcode === "string" ? row.barcode : null,
-    existenceState: coerceExistence(row.existenceState, "variant"),
-    product: coerceProduct(row.product),
-    inventoryItems: items.map(coerceItem),
+    existenceState: coerceExistence(row.existenceState, "variant", identity),
+    product: coerceProduct(row.product, identity),
+    inventoryItems: items.map((item) => coerceItem(item, identity)),
   };
 }
 
@@ -516,6 +610,10 @@ function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {
     );
   }
   const row = raw as Record<string, unknown>;
+  const identity = inventoryLevelIdentity(
+    row.inventoryItemGid,
+    row.locationGid,
+  );
   if (
     typeof row.inventoryItemGid !== "string" ||
     typeof row.locationGid !== "string"
@@ -523,11 +621,11 @@ function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {
     throw new CompatibilityProjectionError(
       "invalid_canonical_inventory_level",
       "Canonical inventory level is missing pair identity",
-      { retryable: false },
+      { retryable: false, identity },
     );
   }
   const item =
-    row.inventoryItem == null ? null : coerceItem(row.inventoryItem);
+    row.inventoryItem == null ? null : coerceItem(row.inventoryItem, identity);
   const locationRaw = row.location;
   const location =
     locationRaw == null
@@ -541,6 +639,7 @@ function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {
           existenceState: coerceExistence(
             (locationRaw as { existenceState?: unknown }).existenceState,
             "location",
+            identity,
           ),
         };
   const nestedVariant = (row.inventoryItem as { variant?: unknown } | null)
@@ -551,6 +650,7 @@ function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {
       : coerceExistence(
           (nestedVariant as { existenceState?: unknown }).existenceState,
           "variant",
+          identity,
         );
 
   return {
@@ -558,10 +658,64 @@ function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {
     locationGid: row.locationGid,
     availableQuantity:
       typeof row.availableQuantity === "number" ? row.availableQuantity : null,
-    existenceState: coerceExistence(row.existenceState, "inventory level"),
+    existenceState: coerceExistence(
+      row.existenceState,
+      "inventory level",
+      identity,
+    ),
     inventoryItem: item,
     location,
     variantExistenceState,
+  };
+}
+
+function identitiesEqual(
+  left?: CompatibilityProjectionIdentity,
+  right?: CompatibilityProjectionIdentity,
+): boolean {
+  if (!left || !right || left.kind !== right.kind) return false;
+  if (left.kind === "ProductVariant" && right.kind === "ProductVariant") {
+    return left.shopifyGid === right.shopifyGid;
+  }
+  if (left.kind === "InventoryLevel" && right.kind === "InventoryLevel") {
+    return (
+      left.inventoryItemGid === right.inventoryItemGid &&
+      left.locationGid === right.locationGid
+    );
+  }
+  return false;
+}
+
+function resumeAfterQuarantineCursor(
+  identity?: CompatibilityProjectionIdentity,
+): ShopRebuildCursor | null {
+  if (identity?.kind === "ProductVariant") {
+    return { phase: "variants", afterGid: identity.shopifyGid };
+  }
+  if (identity?.kind === "InventoryLevel") {
+    return {
+      phase: "inventory_levels",
+      afterItemGid: identity.inventoryItemGid,
+      afterLocationGid: identity.locationGid,
+    };
+  }
+  return null;
+}
+
+function buildPoisonHalt(input: {
+  identity?: CompatibilityProjectionIdentity;
+  remainingIdentities?: CompatibilityProjectionIdentity[];
+}): PoisonHaltDisposition {
+  const remaining = input.remainingIdentities ?? [];
+  const remainingIdentitiesAfterQuarantine =
+    input.identity && identitiesEqual(remaining[0], input.identity)
+      ? remaining.slice(1)
+      : [];
+  return {
+    contract: "halt_on_poison",
+    durableQuarantineRequired: true,
+    resumeAfterQuarantineCursor: resumeAfterQuarantineCursor(input.identity),
+    remainingIdentitiesAfterQuarantine,
   };
 }
 
@@ -575,6 +729,7 @@ function buildResult(input: {
   cursor?: ShopRebuildCursor | null;
   hasMore: boolean;
   failure?: CompatibilityProjectionFailure;
+  poisonHalt?: PoisonHaltDisposition;
 }): CompatibilityProjectionResult {
   return {
     status: input.status,
@@ -589,6 +744,7 @@ function buildResult(input: {
     cursor: input.cursor ?? null,
     remainingIdentities: input.remainingIdentities ?? [],
     ...(input.failure ? { failure: input.failure } : {}),
+    ...(input.poisonHalt ? { poisonHalt: input.poisonHalt } : {}),
   };
 }
 
@@ -601,9 +757,21 @@ function failureResult(
     remainingIdentities?: CompatibilityProjectionIdentity[];
     cursor?: ShopRebuildCursor | null;
     hasMore?: boolean;
+    fallbackIdentity?: CompatibilityProjectionIdentity;
   },
 ): CompatibilityProjectionResult {
-  const failure = toFailure(error);
+  const classified = classifyProjectionFailure(error);
+  const identity = classified.identity ?? extras?.fallbackIdentity;
+  const failure: CompatibilityProjectionFailure = identity
+    ? { ...classified, identity }
+    : classified;
+  const poisonHalt =
+    failure.retryable || extras == null
+      ? undefined
+      : buildPoisonHalt({
+          identity: failure.identity,
+          remainingIdentities: extras.remainingIdentities,
+        });
   return buildResult({
     status: "FAILED",
     retryable: failure.retryable,
@@ -614,22 +782,6 @@ function failureResult(
     cursor: extras?.cursor,
     hasMore: extras?.hasMore ?? true,
     failure,
+    poisonHalt,
   });
-}
-
-function toFailure(error: unknown): CompatibilityProjectionFailure {
-  if (error instanceof CompatibilityProjectionError) {
-    return {
-      code: error.code,
-      message: error.message,
-      retryable: error.retryable,
-      identity: error.identity,
-    };
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  return {
-    code: "projection_write_failed",
-    message,
-    retryable: true,
-  };
 }

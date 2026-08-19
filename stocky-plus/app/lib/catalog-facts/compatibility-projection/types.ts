@@ -33,6 +33,22 @@ export type CompatibilityProjectionFailure = {
   identity?: CompatibilityProjectionIdentity;
 };
 
+/**
+ * Isolated-core halt-on-poison contract. Present only on non-retryable
+ * FAILED results. `cursor` / `remainingIdentities` still point at the poison
+ * identity so retry cannot falsely claim progress.
+ *
+ * `resumeAfterQuarantineCursor` is NOT the shop_rebuild retry cursor and is
+ * not safe to use until a later worker/integration durably records (quarantines
+ * or repairs) the poison identity. F2C itself never advances past corruption.
+ */
+export type PoisonHaltDisposition = {
+  contract: "halt_on_poison";
+  durableQuarantineRequired: true;
+  resumeAfterQuarantineCursor: ShopRebuildCursor | null;
+  remainingIdentitiesAfterQuarantine: CompatibilityProjectionIdentity[];
+};
+
 export type CompatibilityProjectionResult = {
   status: CompatibilityProjectionStatus;
   retryable: boolean;
@@ -54,13 +70,17 @@ export type CompatibilityProjectionResult = {
   cursor: ShopRebuildCursor | null;
   remainingIdentities: CompatibilityProjectionIdentity[];
   failure?: CompatibilityProjectionFailure;
+  poisonHalt?: PoisonHaltDisposition;
 };
 
 export type CompatibilityProjectionRequest = {
   authority: TenantAuthority;
   /**
-   * Caller-supplied uninstall/disable gate. This core does not read Shop
-   * (control-plane). Later F2B/worker integration must pass the live flag.
+   * Caller-supplied uninstall/disable gate. Acceptable ONLY for this isolated
+   * core. Later F2B/worker integration MUST read the LIVE authoritative
+   * control-plane `Shop.processingEnabled` immediately before projection work.
+   * A cached caller boolean is not sufficient for production. This core does
+   * not read Shop / control-plane.
    */
   processingEnabled: boolean;
   now?: Date;

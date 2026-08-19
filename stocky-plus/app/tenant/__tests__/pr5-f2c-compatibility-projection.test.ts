@@ -6,6 +6,8 @@ import { createTenantDb } from "../tenant-db.server";
 import {
   CANONICAL_HEALTH_DECISION,
   CANONICAL_PROJECTION_STATE_WRITE,
+  TOMBSTONE_DISTINCT_LOCATION_PAGE_SIZE,
+  TOMBSTONE_WRITE_CHUNK_SIZE,
   createTenantDbLegacyWriter,
   projectCompatibilityFromCanonicalFacts,
   type CompatibilityProjectionResult,
@@ -340,10 +342,13 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
     });
 
     expect(result.status).toBe("FAILED");
-    expect(result.retryable).toBe(true);
+    expect(result.retryable).toBe(false);
     assertNoMerchantHealthAuthorization(result);
     expect(result.canonicalFactsUnchanged).toBe(true);
-    expect(result.failure?.code).toBe("projection_write_failed");
+    expect(result.failure?.code).toBe("projection_unclassified_failure");
+    expect(result.failure?.retryable).toBe(false);
+    expect(result.poisonHalt?.contract).toBe("halt_on_poison");
+    expect(result.poisonHalt?.durableQuarantineRequired).toBe(true);
     expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
     expect(await prisma.shopifyVariantCache.count({ where: { shopId: shopAId } })).toBe(0);
   });
@@ -369,6 +374,9 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
       writer: throwingWriter("first attempt fails"),
     });
     expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(false);
+    expect(failed.failure?.code).toBe("projection_unclassified_failure");
+    expect(failed.poisonHalt?.durableQuarantineRequired).toBe(true);
     expect(
       (await prisma.shopifyVariantCache.findFirst({ where: { shopId: shopAId } }))
         ?.title,
@@ -1241,6 +1249,405 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
         })
       )?.quantityAvailable,
     ).toBe(0);
+  });
+
+  it("fails closed on multiple LIVE inventory items and leaves an existing correct cache row unchanged", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "multi-live");
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        shopifyProductId: seeded.productGid,
+        title: "Widget — Blue",
+        sku: "SKU-multi-live",
+        barcode: "BAR-multi-live",
+        imageUrl: "https://cdn.example/widget.jpg",
+        inventoryItemId: seeded.itemGid,
+        weight: new Prisma.Decimal("1.2500"),
+        weightUnit: "GRAMS",
+      },
+    });
+    const secondItemGid = "gid://shopify/InventoryItem/multi-live-other";
+    await prisma.shopifyInventoryItemFact.create({
+      data: {
+        shopId: shopAId,
+        shopifyGid: secondItemGid,
+        shopifyVariantGid: seeded.variantGid,
+        tracked: true,
+        requiresShipping: true,
+        weightValue: new Prisma.Decimal("9.000000"),
+        weightUnit: "KILOGRAMS",
+        unitCostAccess: "NULL",
+        existenceState: "LIVE",
+        existenceKind: "LIVE_FULL_SYNC_PRESENT",
+        existenceObservedAt: new Date("2026-08-17T12:00:00.000Z"),
+        sourceKind: "FULL_SYNC",
+      },
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+    const cacheBefore = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+    const identities = [
+      { kind: "ProductVariant" as const, shopifyGid: seeded.variantGid },
+      {
+        kind: "InventoryLevel" as const,
+        inventoryItemGid: seeded.itemGid,
+        locationGid: seeded.locationGid,
+      },
+    ];
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities,
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(false);
+    expect(failed.failure?.code).toBe("canonical_multiple_live_inventory_items");
+    expect(failed.failure?.retryable).toBe(false);
+    expect(failed.failure?.identity).toEqual({
+      kind: "ProductVariant",
+      shopifyGid: seeded.variantGid,
+    });
+    expect(failed.processedVariantCount).toBe(0);
+    expect(failed.remainingIdentities).toEqual(identities);
+    expect(failed.poisonHalt?.contract).toBe("halt_on_poison");
+    expect(failed.poisonHalt?.durableQuarantineRequired).toBe(true);
+    expect(failed.poisonHalt?.resumeAfterQuarantineCursor).toEqual({
+      phase: "variants",
+      afterGid: seeded.variantGid,
+    });
+    expect(failed.poisonHalt?.remainingIdentitiesAfterQuarantine).toEqual([
+      identities[1],
+    ]);
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+
+    const cacheAfter = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+    expect(cacheAfter).toMatchObject({
+      title: "Widget — Blue",
+      imageUrl: "https://cdn.example/widget.jpg",
+      inventoryItemId: seeded.itemGid,
+      sku: "SKU-multi-live",
+      weightUnit: "GRAMS",
+    });
+    expect(cacheAfter?.inventoryItemId).not.toBe(secondItemGid);
+    expect(cacheAfter?.updatedAt.toISOString()).toBe(
+      cacheBefore?.updatedAt.toISOString(),
+    );
+    expect(
+      cacheAfter?.weight &&
+        new Prisma.Decimal(cacheAfter.weight).equals("1.2500"),
+    ).toBe(true);
+  });
+
+  it("fails closed when a LIVE variant's product is not LIVE and preserves the populated cache row", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "prod-abs");
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        shopifyProductId: seeded.productGid,
+        title: "Widget — Blue",
+        sku: "SKU-prod-abs",
+        barcode: "BAR-prod-abs",
+        imageUrl: "https://cdn.example/widget.jpg",
+        inventoryItemId: seeded.itemGid,
+        weight: new Prisma.Decimal("1.2500"),
+        weightUnit: "GRAMS",
+      },
+    });
+    await prisma.shopifyProductFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: seeded.productGid },
+      },
+      data: {
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        title: "Deleted product",
+        featuredMediaUrl: null,
+      },
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+    const cacheBefore = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [{ kind: "ProductVariant", shopifyGid: seeded.variantGid }],
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(false);
+    expect(failed.failure?.code).toBe("canonical_product_not_live");
+    expect(failed.failure?.identity).toEqual({
+      kind: "ProductVariant",
+      shopifyGid: seeded.variantGid,
+    });
+    expect(failed.processedVariantCount).toBe(0);
+    expect(failed.poisonHalt?.durableQuarantineRequired).toBe(true);
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+
+    const cacheAfter = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+    expect(cacheAfter).toMatchObject({
+      title: "Widget — Blue",
+      imageUrl: "https://cdn.example/widget.jpg",
+      inventoryItemId: seeded.itemGid,
+    });
+    expect(cacheAfter?.updatedAt.toISOString()).toBe(
+      cacheBefore?.updatedAt.toISOString(),
+    );
+  });
+
+  it("halts shop_rebuild on a non-retryable poison row and does not claim progress on retry", async () => {
+    const poison = await seedLiveGraph(prisma, shopAId, "a-poison");
+    const healthy = await seedLiveGraph(prisma, shopAId, "b-ok");
+    await prisma.shopifyInventoryItemFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: poison.itemGid },
+      },
+      data: { weightValue: new Prisma.Decimal("1000000.0000") },
+    });
+    const beforePoison = await canonicalFingerprint(prisma, poison);
+    const beforeHealthy = await canonicalFingerprint(prisma, healthy);
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      limit: 10,
+      mode: "shop_rebuild",
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(false);
+    expect(failed.failure?.code).toBe("legacy_weight_overflow");
+    expect(failed.failure?.identity).toEqual({
+      kind: "ProductVariant",
+      shopifyGid: poison.variantGid,
+    });
+    expect(failed.processedVariantCount).toBe(0);
+    expect(failed.hasMore).toBe(true);
+    expect(failed.cursor).toEqual({ phase: "variants" });
+    expect(failed.poisonHalt).toEqual({
+      contract: "halt_on_poison",
+      durableQuarantineRequired: true,
+      resumeAfterQuarantineCursor: {
+        phase: "variants",
+        afterGid: poison.variantGid,
+      },
+      remainingIdentitiesAfterQuarantine: [],
+    });
+    expect(failed.poisonHalt?.resumeAfterQuarantineCursor).not.toEqual(
+      failed.cursor,
+    );
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, poison)).toEqual(beforePoison);
+    expect(await canonicalFingerprint(prisma, healthy)).toEqual(beforeHealthy);
+    expect(await prisma.shopifyVariantCache.count({ where: { shopId: shopAId } })).toBe(0);
+
+    const retried = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      limit: 10,
+      mode: "shop_rebuild",
+      cursor: failed.cursor,
+    });
+    expect(retried.status).toBe("FAILED");
+    expect(retried.retryable).toBe(false);
+    expect(retried.failure?.code).toBe("legacy_weight_overflow");
+    expect(retried.failure?.identity).toEqual(failed.failure?.identity);
+    expect(retried.processedVariantCount).toBe(0);
+    expect(retried.cursor).toEqual(failed.cursor);
+    expect(await prisma.shopifyVariantCache.count({ where: { shopId: shopAId } })).toBe(0);
+  });
+
+  it("pages distinct tombstone locations, zeros every historical location today, and leaves old/cross-shop rows untouched", async () => {
+    const seeded = await seedLiveGraph(prisma, shopAId, "tomb-bound");
+    const yesterday = new Date(TODAY.getTime() - 24 * 60 * 60 * 1000);
+    const locationCount = 40;
+    const datesPerLocation = 25;
+    const locationGids = Array.from(
+      { length: locationCount },
+      (_, index) =>
+        `gid://shopify/Location/tomb-bound-${String(index).padStart(3, "0")}`,
+    );
+    const historicalRows = locationGids.flatMap((locationId) =>
+      Array.from({ length: datesPerLocation }, (_, day) => ({
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId,
+        snapshotDate: new Date(yesterday.getTime() - day * 24 * 60 * 60 * 1000),
+        quantityAvailable: 7 + day,
+      })),
+    );
+    await prisma.inventorySnapshot.createMany({ data: historicalRows });
+    await prisma.inventorySnapshot.createMany({
+      data: [
+        {
+          shop: SHOP_B_DOMAIN,
+          shopId: shopBId,
+          shopifyVariantId: seeded.variantGid,
+          locationId: "gid://shopify/Location/other-shop",
+          snapshotDate: yesterday,
+          quantityAvailable: 88,
+        },
+        {
+          shop: SHOP_B_DOMAIN,
+          shopId: shopBId,
+          shopifyVariantId: seeded.variantGid,
+          locationId: locationGids[0]!,
+          snapshotDate: yesterday,
+          quantityAvailable: 77,
+        },
+      ],
+    });
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        title: "Still showing",
+      },
+    });
+    await tombstoneVariant(prisma, shopAId, seeded.variantGid);
+
+    const db = createTenantDb(authorityA());
+    const snapshotReadCardinalities: number[] = [];
+    const originalGroupBy = db.inventorySnapshot.groupBy.bind(
+      db.inventorySnapshot,
+    );
+    const originalFindMany = db.inventorySnapshot.findMany.bind(
+      db.inventorySnapshot,
+    );
+    db.inventorySnapshot.groupBy = async (args: Record<string, unknown>) => {
+      const result = (await originalGroupBy(args)) as Array<unknown>;
+      snapshotReadCardinalities.push(result.length);
+      expect(args.take).toBe(TOMBSTONE_DISTINCT_LOCATION_PAGE_SIZE);
+      expect(args.by).toEqual(["locationId"]);
+      return result;
+    };
+    db.inventorySnapshot.findMany = async (args: Record<string, unknown>) => {
+      const result = (await originalFindMany(args)) as Array<unknown>;
+      snapshotReadCardinalities.push(result.length);
+      return result;
+    };
+    const writeChunks: number[] = [];
+    const writer = createTenantDbLegacyWriter(db, {
+      tombstoneObserver: {
+        onDistinctLocationPage({ locationIds }) {
+          expect(locationIds.length).toBeLessThanOrEqual(
+            TOMBSTONE_DISTINCT_LOCATION_PAGE_SIZE,
+          );
+        },
+        onWriteChunk({ locationIds }) {
+          writeChunks.push(locationIds.length);
+          expect(locationIds.length).toBeLessThanOrEqual(
+            TOMBSTONE_WRITE_CHUNK_SIZE,
+          );
+        },
+      },
+    });
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [{ kind: "ProductVariant", shopifyGid: seeded.variantGid }],
+      writer,
+    });
+
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.skippedTombstoneCount).toBe(1);
+    const totalRowsRead = snapshotReadCardinalities.reduce(
+      (sum, count) => sum + count,
+      0,
+    );
+    expect(totalRowsRead).toBe(locationCount);
+    expect(totalRowsRead).toBeLessThan(historicalRows.length);
+    expect(
+      snapshotReadCardinalities.every(
+        (count) => count <= TOMBSTONE_DISTINCT_LOCATION_PAGE_SIZE,
+      ),
+    ).toBe(true);
+    expect(writeChunks.length).toBeGreaterThan(1);
+    expect(
+      writeChunks.every((count) => count <= TOMBSTONE_WRITE_CHUNK_SIZE),
+    ).toBe(true);
+    expect(writeChunks.reduce((sum, count) => sum + count, 0)).toBe(
+      locationCount,
+    );
+
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+      }),
+    ).toBeNull();
+
+    const todayRows = await prisma.inventorySnapshot.findMany({
+      where: {
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        snapshotDate: TODAY,
+      },
+    });
+    expect(todayRows).toHaveLength(locationCount);
+    expect(todayRows.every((row) => row.quantityAvailable === 0)).toBe(true);
+
+    expect(
+      await prisma.inventorySnapshot.count({
+        where: {
+          shopId: shopAId,
+          shopifyVariantId: seeded.variantGid,
+          snapshotDate: { not: TODAY },
+        },
+      }),
+    ).toBe(historicalRows.length);
+    const oldRow = await prisma.inventorySnapshot.findFirst({
+      where: {
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: locationGids[0]!,
+        snapshotDate: yesterday,
+      },
+    });
+    expect(oldRow?.quantityAvailable).toBe(7);
+
+    expect(
+      await prisma.inventorySnapshot.findFirst({
+        where: {
+          shopId: shopBId,
+          locationId: "gid://shopify/Location/other-shop",
+        },
+      }),
+    ).toMatchObject({ quantityAvailable: 88 });
+    expect(
+      await prisma.inventorySnapshot.findFirst({
+        where: {
+          shopId: shopBId,
+          locationId: locationGids[0]!,
+          snapshotDate: yesterday,
+        },
+      }),
+    ).toMatchObject({ quantityAvailable: 77 });
   });
 });
 

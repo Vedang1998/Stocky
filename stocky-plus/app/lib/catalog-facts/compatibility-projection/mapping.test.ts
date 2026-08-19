@@ -5,6 +5,7 @@ import { CompatibilityProjectionError } from "./errors";
 import {
   mapInventoryLevelToLegacySnapshot,
   mapLegacyVariantTitle,
+  mapLegacyWeight,
   mapVariantToLegacyCache,
   selectLiveInventoryItem,
 } from "./mapping";
@@ -95,6 +96,28 @@ function expectInventoryMappingFailure(
   }
 }
 
+function expectVariantMappingFailure(
+  variant: CanonicalVariantRead,
+  code: string,
+  retryable: boolean,
+) {
+  expect(() => mapVariantToLegacyCache(variant, NOW)).toThrow(
+    CompatibilityProjectionError,
+  );
+  try {
+    mapVariantToLegacyCache(variant, NOW);
+  } catch (error) {
+    expect(error).toBeInstanceOf(CompatibilityProjectionError);
+    const typed = error as CompatibilityProjectionError;
+    expect(typed.code).toBe(code);
+    expect(typed.retryable).toBe(retryable);
+    expect(typed.identity).toEqual({
+      kind: "ProductVariant",
+      shopifyGid: variant.shopifyGid,
+    });
+  }
+}
+
 describe("compatibility projection mapping", () => {
   it("maps a live canonical variant onto the legacy cache fields", () => {
     const plan = mapVariantToLegacyCache(liveVariant(), NOW);
@@ -118,8 +141,16 @@ describe("compatibility projection mapping", () => {
     expect(mapLegacyVariantTitle("Blue", null)).toBe("Blue");
   });
 
-  it("does not use a tombstoned product as live cache title or image", () => {
-    const plan = mapVariantToLegacyCache(
+  it("fails closed when a LIVE variant's product relation is missing", () => {
+    expectVariantMappingFailure(
+      liveVariant({ product: null }),
+      "canonical_product_not_live",
+      false,
+    );
+  });
+
+  it("fails closed when a LIVE variant's product is not LIVE instead of degrading title/image", () => {
+    expectVariantMappingFailure(
       liveVariant({
         product: {
           ...liveProduct(),
@@ -128,12 +159,9 @@ describe("compatibility projection mapping", () => {
           featuredMediaUrl: "https://cdn.example/gone.jpg",
         },
       }),
-      NOW,
+      "canonical_product_not_live",
+      false,
     );
-    expect(plan.action).toBe("upsert");
-    if (plan.action !== "upsert") return;
-    expect(plan.fields.title).toBe("Blue");
-    expect(plan.fields.imageUrl).toBeNull();
   });
 
   it("tombstones a non-live canonical variant instead of upserting cache", () => {
@@ -148,16 +176,83 @@ describe("compatibility projection mapping", () => {
     });
   });
 
-  it("selects the lexicographically first LIVE inventory item", () => {
-    const chosen = selectLiveInventoryItem([
-      liveItem({
-        shopifyGid: "gid://shopify/InventoryItem/9",
-        existenceState: "ABSENT",
+  it("fails closed when more than one LIVE inventory item is linked to a variant", () => {
+    expect(() =>
+      selectLiveInventoryItem(
+        [
+          liveItem({
+            shopifyGid: "gid://shopify/InventoryItem/9",
+            existenceState: "ABSENT",
+          }),
+          liveItem({ shopifyGid: "gid://shopify/InventoryItem/2" }),
+          liveItem({ shopifyGid: "gid://shopify/InventoryItem/1" }),
+        ],
+        "gid://shopify/ProductVariant/1",
+      ),
+    ).toThrow(CompatibilityProjectionError);
+    try {
+      selectLiveInventoryItem(
+        [
+          liveItem({ shopifyGid: "gid://shopify/InventoryItem/2" }),
+          liveItem({ shopifyGid: "gid://shopify/InventoryItem/1" }),
+        ],
+        "gid://shopify/ProductVariant/1",
+      );
+    } catch (error) {
+      expect(error).toBeInstanceOf(CompatibilityProjectionError);
+      const typed = error as CompatibilityProjectionError;
+      expect(typed.code).toBe("canonical_multiple_live_inventory_items");
+      expect(typed.retryable).toBe(false);
+      expect(typed.identity).toEqual({
+        kind: "ProductVariant",
+        shopifyGid: "gid://shopify/ProductVariant/1",
+      });
+    }
+  });
+
+  it("does not emit a Shopify write target from ambiguous LIVE inventory items", () => {
+    expectVariantMappingFailure(
+      liveVariant({
+        inventoryItems: [
+          liveItem({ shopifyGid: "gid://shopify/InventoryItem/2" }),
+          liveItem({ shopifyGid: "gid://shopify/InventoryItem/1" }),
+        ],
       }),
-      liveItem({ shopifyGid: "gid://shopify/InventoryItem/2" }),
-      liveItem({ shopifyGid: "gid://shopify/InventoryItem/1" }),
-    ]);
-    expect(chosen?.shopifyGid).toBe("gid://shopify/InventoryItem/1");
+      "canonical_multiple_live_inventory_items",
+      false,
+    );
+  });
+
+  it("uses the single LIVE inventory item and ignores ABSENT siblings", () => {
+    const chosen = selectLiveInventoryItem(
+      [
+        liveItem({
+          shopifyGid: "gid://shopify/InventoryItem/9",
+          existenceState: "ABSENT",
+        }),
+        liveItem({ shopifyGid: "gid://shopify/InventoryItem/2" }),
+      ],
+      "gid://shopify/ProductVariant/1",
+    );
+    expect(chosen?.shopifyGid).toBe("gid://shopify/InventoryItem/2");
+  });
+
+  it("preserves zero-LIVE-item behavior as a null inventoryItemId", () => {
+    const plan = mapVariantToLegacyCache(
+      liveVariant({
+        inventoryItems: [
+          liveItem({
+            shopifyGid: "gid://shopify/InventoryItem/9",
+            existenceState: "ABSENT",
+          }),
+        ],
+      }),
+      NOW,
+    );
+    expect(plan.action).toBe("upsert");
+    if (plan.action !== "upsert") return;
+    expect(plan.fields.inventoryItemId).toBeNull();
+    expect(plan.fields.weight).toBeNull();
   });
 
   it("maps live inventory quantities onto today's legacy snapshot", () => {
@@ -326,6 +421,80 @@ describe("compatibility projection mapping", () => {
         }),
         NOW,
       );
+    } catch (error) {
+      expect(error).toBeInstanceOf(CompatibilityProjectionError);
+      const typed = error as CompatibilityProjectionError;
+      expect(typed.code).toBe("legacy_weight_overflow");
+      expect(typed.retryable).toBe(false);
+      expect(typed.identity).toEqual({
+        kind: "ProductVariant",
+        shopifyGid: "gid://shopify/ProductVariant/1",
+      });
+    }
+  });
+
+  it("rounds weight down when the 5th decimal is below half", () => {
+    expect(
+      mapLegacyWeight(new Prisma.Decimal("1.00004"))?.equals(
+        new Prisma.Decimal("1.0000"),
+      ),
+    ).toBe(true);
+  });
+
+  it("rounds weight half away from zero with explicit ROUND_HALF_UP", () => {
+    expect(
+      mapLegacyWeight(new Prisma.Decimal("1.00005"))?.equals(
+        new Prisma.Decimal("1.0001"),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps exact four-decimal weights unchanged", () => {
+    expect(
+      mapLegacyWeight(new Prisma.Decimal("1.2500"))?.equals(
+        new Prisma.Decimal("1.2500"),
+      ),
+    ).toBe(true);
+  });
+
+  it("quantizes negative weights with ROUND_HALF_UP independently of global rounding", () => {
+    const previous = Prisma.Decimal.rounding;
+    try {
+      Prisma.Decimal.set({ rounding: Prisma.Decimal.ROUND_DOWN });
+      expect(
+        mapLegacyWeight(new Prisma.Decimal("-1.00005"))?.equals(
+          new Prisma.Decimal("-1.0001"),
+        ),
+      ).toBe(true);
+      expect(
+        mapLegacyWeight(new Prisma.Decimal("1.00005"))?.equals(
+          new Prisma.Decimal("1.0001"),
+        ),
+      ).toBe(true);
+    } finally {
+      Prisma.Decimal.set({ rounding: previous });
+    }
+  });
+
+  it("returns null weight for null canonical weightValue", () => {
+    expect(mapLegacyWeight(null)).toBeNull();
+    const plan = mapVariantToLegacyCache(
+      liveVariant({
+        inventoryItems: [liveItem({ weightValue: null, weightUnit: null })],
+      }),
+      NOW,
+    );
+    expect(plan.action).toBe("upsert");
+    if (plan.action !== "upsert") return;
+    expect(plan.fields.weight).toBeNull();
+  });
+
+  it("fails closed when rounding up crosses DECIMAL(10, 4) overflow", () => {
+    expect(() => mapLegacyWeight(new Prisma.Decimal("999999.99995"))).toThrow(
+      CompatibilityProjectionError,
+    );
+    try {
+      mapLegacyWeight(new Prisma.Decimal("999999.99995"));
     } catch (error) {
       expect(error).toBeInstanceOf(CompatibilityProjectionError);
       const typed = error as CompatibilityProjectionError;

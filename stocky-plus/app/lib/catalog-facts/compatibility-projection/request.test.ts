@@ -50,6 +50,38 @@ describe("compatibility projection request contract", () => {
     expect(result.status).toBe("FAILED");
     expect(result.retryable).toBe(false);
     expect(result.failure?.code).toBe("invalid_batch_limit");
+    expect(result.poisonHalt).toBeUndefined();
+    assertNoMerchantHealthAuthorization(result);
+  });
+
+  it("rejects a malformed rebuild cursor before opening TenantDb", async () => {
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: fakeAuthority,
+      processingEnabled: true,
+      mode: "shop_rebuild",
+      cursor: { phase: "variants", afterGid: 123 } as never,
+    });
+    expect(result.status).toBe("FAILED");
+    expect(result.retryable).toBe(false);
+    expect(result.failure?.code).toBe("invalid_rebuild_cursor");
+    expect(result.failure?.retryable).toBe(false);
+    expect(result.poisonHalt).toBeUndefined();
+    assertNoMerchantHealthAuthorization(result);
+  });
+
+  it("rejects a partial inventory_levels cursor as non-retryable", async () => {
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: fakeAuthority,
+      processingEnabled: true,
+      mode: "shop_rebuild",
+      cursor: {
+        phase: "inventory_levels",
+        afterItemGid: "gid://shopify/InventoryItem/1",
+      } as never,
+    });
+    expect(result.status).toBe("FAILED");
+    expect(result.retryable).toBe(false);
+    expect(result.failure?.code).toBe("invalid_rebuild_cursor");
     assertNoMerchantHealthAuthorization(result);
   });
 });

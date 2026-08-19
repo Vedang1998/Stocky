@@ -57,6 +57,7 @@ describe("PR5-F2C compatibility projection safety", () => {
       expect(source, file).not.toMatch(/compatibilityProjectionState\s*:/);
       expect(source, file).not.toMatch(/compatibilityProjectionState\s*=/);
       expect(source, file).not.toMatch(/recommendedCanonicalProjectionState/);
+      expect(source, file).not.toMatch(/availableQuantity\s*\?\?\s*0/);
     }
   });
 
@@ -84,5 +85,34 @@ describe("PR5-F2C compatibility projection safety", () => {
     expect(source).toMatch(/canonical_location_state_missing/);
     expect(source).toMatch(/canonical_variant_state_missing/);
     expect(source).toMatch(/canonical_variant_link_missing/);
+    expect(source).toMatch(/canonical_multiple_live_inventory_items/);
+    expect(source).toMatch(/canonical_product_not_live/);
+    expect(source).not.toMatch(/localeCompare/);
+  });
+
+  it("does not silently skip a poison row or treat unknown errors as retryable", () => {
+    const project = readFileSync(path.join(DIR, "project.ts"), "utf8");
+    expect(project).toMatch(/halt_on_poison/);
+    expect(project).toMatch(/durableQuarantineRequired/);
+    expect(project).toMatch(/resumeAfterQuarantineCursor/);
+    const errors = readFileSync(path.join(DIR, "errors.ts"), "utf8");
+    expect(errors).toMatch(/projection_unclassified_failure/);
+    expect(errors).toMatch(/retryable:\s*false/);
+  });
+
+  it("pins weight rounding to ROUND_HALF_UP and validates Decimal weight input", () => {
+    const mapping = readFileSync(path.join(DIR, "mapping.ts"), "utf8");
+    expect(mapping).toMatch(/Prisma\.Decimal\.ROUND_HALF_UP/);
+    expect(mapping).not.toMatch(/toDecimalPlaces\(4\)/);
+    const project = readFileSync(path.join(DIR, "project.ts"), "utf8");
+    expect(project).toMatch(/Prisma\.Decimal\.isDecimal/);
+  });
+
+  it("pages distinct tombstone locations instead of materializing every historical row", () => {
+    const writer = readFileSync(path.join(DIR, "legacy-writer.ts"), "utf8");
+    expect(writer).toMatch(/groupBy/);
+    expect(writer).toMatch(/TOMBSTONE_DISTINCT_LOCATION_PAGE_SIZE/);
+    expect(writer).toMatch(/TOMBSTONE_WRITE_CHUNK_SIZE/);
+    expect(writer).not.toMatch(/new Set\(locationRows/);
   });
 });

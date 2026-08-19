@@ -36,7 +36,8 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
   it("forecast onHand reads InventorySnapshot.quantityAvailable", () => {
     const source = readApp("services/forecasting.server.ts");
     expect(source).toMatch(/inventorySnapshot\.findFirst/);
-    expect(source).toMatch(/onHand\?\.quantityAvailable/);
+    expect(source).toMatch(/orderBy:\s*\{\s*snapshotDate:\s*"desc"\s*\}/);
+    expect(source).toMatch(/onHand\?\.quantityAvailable\s*\?\?\s*0/);
     expect(source).toMatch(/shopifyVariantCache\.findUnique/);
     expect(source).toMatch(/cache\?\.title/);
   });
@@ -55,7 +56,7 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
   it("current inventory webhook writes today's InventorySnapshot.quantityAvailable", () => {
     const source = readApp("jobs/workers/webhook-processor.ts");
     expect(source).toMatch(/inventorySnapshot\.upsert/);
-    expect(source).toMatch(/quantityAvailable:\s*inv\.available/);
+    expect(source).toMatch(/quantityAvailable:\s*inv\.available\s*\?\?\s*0/);
     expect(source).toMatch(/computeForecast/);
     expect(source).toMatch(/lowStockAlert\.create/);
   });
