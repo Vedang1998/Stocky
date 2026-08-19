@@ -1372,6 +1372,10 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
       data: {
         existenceState: "ABSENT",
         existenceKind: "ABSENT_CONFIRMED_QUERY",
+        existenceRequestGen: 50n,
+        existenceResponseGen: 51n,
+        deletedAt: new Date("2026-08-17T14:00:00.000Z"),
+        deletionSource: "CONFIRMED_QUERY",
         title: "Deleted product",
         featuredMediaUrl: null,
       },
