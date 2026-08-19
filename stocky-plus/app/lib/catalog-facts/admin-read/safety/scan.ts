@@ -81,11 +81,15 @@ function stripLeadingGraphQLCommentAndTagLines(text: string): string {
 export function looksLikeGraphQLDocument(text: string): boolean {
   const trimmed = text.trim();
   if (!trimmed) return false;
-  if (trimmed.includes("#graphql")) return true;
   const normalized = stripLeadingGraphQLCommentAndTagLines(trimmed);
   if (!normalized) return false;
-  if (/^(query|mutation|subscription|fragment)\b/.test(normalized)) return true;
-  return normalized.startsWith("{");
+  if (/^(query|mutation|subscription|fragment)\b/.test(normalized)) {
+    return normalized.includes("{");
+  }
+  if (normalized.startsWith("{")) {
+    return /\{[\s\S]*\S/.test(normalized);
+  }
+  return false;
 }
 
 export type ExtractedGraphQLLiterals = {

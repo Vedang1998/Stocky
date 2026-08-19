@@ -198,6 +198,9 @@ mutation CommentPrefixedInventoryDeactivate {
 }
 `;
     expect(looksLikeGraphQLDocument(commentPrefixed)).toBe(true);
+    expect(looksLikeGraphQLDocument("query")).toBe(false);
+    expect(looksLikeGraphQLDocument("{")).toBe(false);
+    expect(looksLikeGraphQLDocument("#graphql")).toBe(false);
     const extractedComment = extractGraphQLDocumentsFromTypeScript(
       `export const planted = \`${commentPrefixed}\`;\n`,
     );

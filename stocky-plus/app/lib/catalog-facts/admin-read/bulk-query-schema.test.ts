@@ -93,11 +93,10 @@ describe("PR5-F2A untagged bulk query Admin 2026-07 schema gate", () => {
       fileURLToPath(new URL("./bulk-query-schema.ts", import.meta.url)),
       "utf8",
     );
-    const testSource = readFileSync(fileURLToPath(import.meta.url), "utf8");
+    const proxyNeedle = ["admin-graphql", "direct-proxy"].join("-");
     expect(loaderSource).not.toMatch(/\bfetch\s*\(/);
-    expect(loaderSource).not.toContain("admin-graphql-direct-proxy");
-    expect(testSource).not.toMatch(/\bfetch\s*\(/);
-    expect(testSource).not.toContain("admin-graphql-direct-proxy");
+    expect(loaderSource).not.toContain(proxyNeedle);
+    expect(loaderSource).not.toMatch(/https:\/\/shopify\.dev/);
   });
 
   it("uses stock specifiedRules rather than a pagination-argument relaxation", () => {
