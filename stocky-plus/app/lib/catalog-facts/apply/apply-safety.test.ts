@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_APPLY_PHYSICAL_DELETE_OPERATIONS,
+  applyCanonicalFacts,
   denyCanonicalFactPhysicalDelete,
 } from "./index";
 import {
@@ -95,5 +96,46 @@ describe("PR5-F2B apply surface safety (R-164)", () => {
     const evidence = readFileSync(path.join(DIR, "observation-evidence.ts"), "utf8");
     expect(evidence).toMatch(/kind: "full_sync_fence"/);
     expect(evidence).toMatch(/kind: "full_sync_attribute_marker"/);
+  });
+
+  it("locks the canonical fact before observation rows inside applyOneObservation", () => {
+    const index = readFileSync(path.join(DIR, "index.ts"), "utf8");
+    const start = index.indexOf("async function applyOneObservation");
+    const end = index.indexOf("export async function applyCanonicalFacts");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const body = index.slice(start, end);
+    const factLock = body.indexOf("lockAndReadFact");
+    const observationLock = body.indexOf("lockObservationRows");
+    expect(factLock).toBeGreaterThan(-1);
+    expect(observationLock).toBeGreaterThan(-1);
+    expect(factLock).toBeLessThan(observationLock);
+    expect(body).toMatch(/reliesOnExpiry/);
+    expect(body).not.toMatch(/abandonExpiredFullSyncBlockers/);
+  });
+
+  it("returns an empty batch after tenant validation without capacity evaluation or locks", async () => {
+    const queries: string[] = [];
+    const db = {
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        const sql = strings.join("?");
+        queries.push(sql);
+        if (sql.includes("stocky.current_shop_id")) {
+          return [{ shop_id: "shop-empty" }];
+        }
+        throw new Error(`empty batch must not issue ${sql}`);
+      },
+    };
+    const result = await applyCanonicalFacts(db, {
+      shopId: "shop-empty",
+      observations: [],
+    });
+    expect(result).toEqual({
+      results: [],
+      identitiesLocked: 0,
+      abandonedBlockerTokens: [],
+    });
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toMatch(/stocky\.current_shop_id/);
   });
 });

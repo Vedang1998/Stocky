@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { CanonicalApplyIncompleteFirstLiveError } from "./errors";
-import { validateFirstLiveAttributes } from "./first-live";
+import {
+  CanonicalApplyIncompleteAuthoritativeAttributesError,
+  CanonicalApplyIncompleteFirstLiveError,
+  CanonicalApplyQuantityDomainError,
+} from "./errors";
+import {
+  validateExistingAuthoritativeAttributes,
+  validateFirstLiveAttributes,
+  validateObservationQuantityColumns,
+} from "./first-live";
 import { DIAGNOSTIC, type CanonicalObservation } from "./types";
 
 function baseDirect(
@@ -26,7 +34,15 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
       validateFirstLiveAttributes(
         baseDirect(
           { shopId: "s", resourceKind: "Product", shopifyGid: "gid://shopify/Product/1" },
-          { title: "T", handle: "h", tags: [], status: "ACTIVE" },
+          {
+            title: "T",
+            handle: "h",
+            vendor: null,
+            productType: null,
+            tags: [],
+            status: "ACTIVE",
+            featuredMediaUrl: null,
+          },
         ),
       ).ok,
     ).toBe(true);
@@ -37,9 +53,14 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
           {
             shopifyProductGid: "gid://shopify/Product/1",
             title: "V",
+            displayName: null,
             selectedOptions: [{ name: "Size", value: "M" }],
+            sku: null,
+            barcode: null,
             priceAmount: "19.99",
+            compareAtPriceAmount: null,
             currencyCode: "USD",
+            position: null,
           },
         ),
       ).ok,
@@ -48,7 +69,17 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
       validateFirstLiveAttributes(
         baseDirect(
           { shopId: "s", resourceKind: "InventoryItem", shopifyGid: "gid://shopify/InventoryItem/1" },
-          { tracked: false, requiresShipping: false, unitCostAccess: "NULL" },
+          {
+            shopifyVariantGid: null,
+            sku: null,
+            tracked: false,
+            requiresShipping: false,
+            weightValue: null,
+            weightUnit: null,
+            unitCostAmount: null,
+            unitCostCurrencyCode: null,
+            unitCostAccess: "NULL",
+          },
         ),
       ).ok,
     ).toBe(true);
@@ -59,10 +90,16 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
           {
             name: "L",
             isActive: false,
+            deactivatedAt: null,
             fulfillsOnlineOrders: false,
             shipsInventory: false,
             isFulfillmentService: true,
             hasActiveInventory: false,
+            address1: null,
+            city: null,
+            provinceCode: null,
+            countryCode: null,
+            zip: null,
           },
         ),
       ).ok,
@@ -76,7 +113,7 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
             inventoryItemGid: "gid://shopify/InventoryItem/1",
             locationGid: "gid://shopify/Location/1",
           },
-          { isActive: false },
+          { isActive: false, shopifyInventoryLevelGid: null },
         ),
       ).ok,
     ).toBe(true);
@@ -154,6 +191,7 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
     expect(level.ok).toBe(false);
     if (!level.ok && level.kind === "incomplete") {
       expect(level.missing).toContain("isActive");
+      expect(level.missing).toContain("shopifyInventoryLevelGid");
     }
   });
 
@@ -169,5 +207,243 @@ describe("PR5-F2B first-LIVE attribute contract", () => {
       sourceKind: "INCREMENTAL_REFETCH",
     };
     expect(validateFirstLiveAttributes(observation).ok).toBe(true);
+  });
+
+  it("rejects empty identity/display strings and invalid selectedOptions without rejecting empty tags", () => {
+    const title = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "Product", shopifyGid: "gid://shopify/Product/1" },
+        {
+          title: "",
+          handle: "h",
+          vendor: null,
+          productType: null,
+          tags: [],
+          status: "ACTIVE",
+          featuredMediaUrl: null,
+        },
+      ),
+    );
+    expect(title.ok).toBe(false);
+    if (!title.ok && title.kind === "incomplete") expect(title.missing).toContain("title");
+
+    const handle = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "Product", shopifyGid: "gid://shopify/Product/1" },
+        {
+          title: "T",
+          handle: "",
+          vendor: null,
+          productType: null,
+          tags: [],
+          status: "ACTIVE",
+          featuredMediaUrl: null,
+        },
+      ),
+    );
+    expect(handle.ok).toBe(false);
+    if (!handle.ok && handle.kind === "incomplete") expect(handle.missing).toContain("handle");
+
+    const locationName = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "Location", shopifyGid: "gid://shopify/Location/1" },
+        {
+          name: "",
+          isActive: true,
+          deactivatedAt: null,
+          fulfillsOnlineOrders: true,
+          shipsInventory: true,
+          isFulfillmentService: false,
+          hasActiveInventory: true,
+          address1: null,
+          city: null,
+          provinceCode: null,
+          countryCode: null,
+          zip: null,
+        },
+      ),
+    );
+    expect(locationName.ok).toBe(false);
+    if (!locationName.ok && locationName.kind === "incomplete") {
+      expect(locationName.missing).toContain("name");
+    }
+
+    const selectedObject = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "ProductVariant", shopifyGid: "gid://shopify/ProductVariant/1" },
+        {
+          shopifyProductGid: "gid://shopify/Product/1",
+          title: "V",
+          displayName: null,
+          selectedOptions: {},
+          sku: null,
+          barcode: null,
+          priceAmount: "1.00",
+          compareAtPriceAmount: null,
+          currencyCode: "USD",
+          position: null,
+        },
+      ),
+    );
+    expect(selectedObject.ok).toBe(false);
+    if (!selectedObject.ok && selectedObject.kind === "incomplete") {
+      expect(selectedObject.missing).toContain("selectedOptions");
+    }
+
+    const selectedEmpty = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "ProductVariant", shopifyGid: "gid://shopify/ProductVariant/1" },
+        {
+          shopifyProductGid: "gid://shopify/Product/1",
+          title: "V",
+          displayName: null,
+          selectedOptions: [],
+          sku: null,
+          barcode: null,
+          priceAmount: "1.00",
+          compareAtPriceAmount: null,
+          currencyCode: "USD",
+          position: null,
+        },
+      ),
+    );
+    expect(selectedEmpty.ok).toBe(false);
+    if (!selectedEmpty.ok && selectedEmpty.kind === "incomplete") {
+      expect(selectedEmpty.missing).toContain("selectedOptions");
+    }
+
+    const tagsEmpty = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "Product", shopifyGid: "gid://shopify/Product/1" },
+        {
+          title: "T",
+          handle: "h",
+          vendor: null,
+          productType: null,
+          tags: [],
+          status: "ACTIVE",
+          featuredMediaUrl: null,
+        },
+      ),
+    );
+    expect(tagsEmpty.ok).toBe(true);
+
+    const shopifyVariant = validateFirstLiveAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "ProductVariant", shopifyGid: "gid://shopify/ProductVariant/1" },
+        {
+          shopifyProductGid: "gid://shopify/Product/1",
+          title: "Default Title",
+          displayName: null,
+          selectedOptions: [{ name: "Title", value: "Default Title" }],
+          sku: null,
+          barcode: null,
+          priceAmount: "0.00",
+          compareAtPriceAmount: null,
+          currencyCode: "USD",
+          position: 1,
+        },
+      ),
+    );
+    expect(shopifyVariant.ok).toBe(true);
+  });
+
+  it("treats omitted existing-row attributes as incomplete without treating quantity-only InventoryLevel as a resource snapshot", () => {
+    const omittedVendor = validateExistingAuthoritativeAttributes(
+      baseDirect(
+        { shopId: "s", resourceKind: "Product", shopifyGid: "gid://shopify/Product/1" },
+        {
+          title: "T2",
+          handle: "h2",
+          tags: [],
+          status: "ACTIVE",
+        } as CanonicalObservation["attributes"],
+      ),
+    );
+    expect(omittedVendor.ok).toBe(false);
+    if (!omittedVendor.ok && omittedVendor.kind === "incomplete") {
+      expect(omittedVendor.diagnostic).toBe(DIAGNOSTIC.INCOMPLETE_AUTHORITATIVE);
+      expect(omittedVendor.error).toBeInstanceOf(
+        CanonicalApplyIncompleteAuthoritativeAttributesError,
+      );
+      expect(omittedVendor.missing).toContain("vendor");
+    }
+
+    const quantityOnly = validateExistingAuthoritativeAttributes(
+      baseDirect(
+        {
+          shopId: "s",
+          resourceKind: "InventoryLevel",
+          inventoryItemGid: "gid://shopify/InventoryItem/1",
+          locationGid: "gid://shopify/Location/1",
+        },
+        {
+          quantities: [{ name: "available", quantity: 1, shopifyUpdatedAt: null }],
+        },
+      ),
+    );
+    expect(quantityOnly.ok).toBe(true);
+
+    const existenceOnly = validateExistingAuthoritativeAttributes({
+      observationKind: "direct",
+      observationToken: "tok",
+      observationRequestGen: 1n,
+      observationResponseGen: 2n,
+      identity: { shopId: "s", resourceKind: "Product", shopifyGid: "gid://shopify/Product/1" },
+      existenceKind: "LIVE_REFETCH",
+      existenceObservedAt: new Date("2026-08-17T00:00:00.000Z"),
+      sourceKind: "INCREMENTAL_REFETCH",
+    });
+    expect(existenceOnly.ok).toBe(true);
+  });
+
+  it("rejects non-integer and out-of-range quantities before a writer can run", () => {
+    const identity = {
+      shopId: "s",
+      resourceKind: "InventoryLevel" as const,
+      inventoryItemGid: "gid://shopify/InventoryItem/1",
+      locationGid: "gid://shopify/Location/1",
+    };
+    const cases: Array<{ quantity: number; label: string }> = [
+      { quantity: 1.5, label: "fractional" },
+      { quantity: Number.NaN, label: "NaN" },
+      { quantity: Number.POSITIVE_INFINITY, label: "Infinity" },
+      { quantity: 2147483648, label: "above int32" },
+      { quantity: -2147483649, label: "below int32" },
+    ];
+    for (const testCase of cases) {
+      const result = validateObservationQuantityColumns(
+        baseDirect(identity, {
+          quantities: [{ name: "available", quantity: testCase.quantity, shopifyUpdatedAt: null }],
+        }),
+      );
+      expect(result.ok, testCase.label).toBe(false);
+      if (!result.ok && result.kind === "quantity_domain") {
+        expect(result.diagnostic).toBe(DIAGNOSTIC.QUANTITY_DOMAIN);
+        expect(result.error).toBeInstanceOf(CanonicalApplyQuantityDomainError);
+      }
+    }
+    expect(
+      validateObservationQuantityColumns(
+        baseDirect(identity, {
+          quantities: [{ name: "available", quantity: null, shopifyUpdatedAt: null }],
+        }),
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateObservationQuantityColumns(
+        baseDirect(identity, {
+          quantities: [{ name: "onHand", quantity: 2147483647, shopifyUpdatedAt: null }],
+        }),
+      ).ok,
+    ).toBe(true);
+    expect(
+      validateObservationQuantityColumns(
+        baseDirect(identity, {
+          isActive: true,
+          shopifyInventoryLevelGid: null,
+        }),
+      ).ok,
+    ).toBe(true);
   });
 });

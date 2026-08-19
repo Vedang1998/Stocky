@@ -10,6 +10,9 @@ import { CanonicalApplyMoneyError, CanonicalApplyNumericScaleError } from "./err
 import { DIAGNOSTIC, type CanonicalFactIdentity } from "./types";
 import {
   inventoryItemAttributesEqual,
+  inventoryLevelAttributesEqual,
+  productAttributesEqual,
+  selectedOptionsSemanticallyEqual,
   variantAttributesEqual,
   type FactSnapshot,
 } from "./writers";
@@ -92,6 +95,8 @@ describe("PR5-F2B clock A / nullable-version rules", () => {
     });
     expect(decision.apply).toBe(false);
     expect(decision.diagnostic).toBe("CATALOG_NULL_VERSION_OBSERVATION");
+    expect(decision.freshness).toBe("DEGRADED");
+    expect(decision.reason).toBe("incoming_null_stored_versioned");
   });
 
   it("applies a later non-overlapping null-version observation and forbids LWW on overlap conflict", () => {
@@ -549,15 +554,19 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
       attributeFreshnessState: "ORDERED",
       lastSeenFullSyncRunId: null,
       title: "V",
-      selectedOptions: {},
+      selectedOptions: [{ name: "Title", value: "Default Title" }],
       priceAmount: "10.000000",
+      compareAtPriceAmount: null,
       currencyCode: "USD",
+      displayName: null,
+      sku: null,
+      barcode: null,
+      position: null,
       shopifyProductGid: "gid://shopify/Product/parent-a",
       shopifyVariantGid: "gid://shopify/ProductVariant/v-a",
       tracked: true,
       requiresShipping: true,
       unitCostAccess: "NULL",
-      sku: null,
       quantities: {},
       ...overrides,
     };
@@ -568,16 +577,26 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
     const sameParent = variantAttributesEqual(stored, {
       shopifyProductGid: "gid://shopify/Product/parent-a",
       title: "V",
-      selectedOptions: {},
+      displayName: null,
+      selectedOptions: [{ name: "Title", value: "Default Title" }],
+      sku: null,
+      barcode: null,
       priceAmount: "10.000000",
+      compareAtPriceAmount: null,
       currencyCode: "USD",
+      position: null,
     });
     const otherParent = variantAttributesEqual(stored, {
       shopifyProductGid: "gid://shopify/Product/parent-b",
       title: "V",
-      selectedOptions: {},
+      displayName: null,
+      selectedOptions: [{ name: "Title", value: "Default Title" }],
+      sku: null,
+      barcode: null,
       priceAmount: "10.000000",
+      compareAtPriceAmount: null,
       currencyCode: "USD",
+      position: null,
     });
     expect(sameParent).toBe(true);
     expect(otherParent).toBe(false);
@@ -585,9 +604,14 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
     const scaleEquivalent = variantAttributesEqual(stored, {
       shopifyProductGid: "gid://shopify/Product/parent-a",
       title: "V",
-      selectedOptions: {},
+      displayName: null,
+      selectedOptions: [{ name: "Title", value: "Default Title" }],
+      sku: null,
+      barcode: null,
       priceAmount: "10",
+      compareAtPriceAmount: null,
       currencyCode: "USD",
+      position: null,
     });
     expect(scaleEquivalent).toBe(true);
   });
@@ -596,14 +620,24 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
     const stored = snapshot({});
     const sameVariant = inventoryItemAttributesEqual(stored, {
       shopifyVariantGid: "gid://shopify/ProductVariant/v-a",
+      sku: null,
       tracked: true,
       requiresShipping: true,
+      weightValue: null,
+      weightUnit: null,
+      unitCostAmount: null,
+      unitCostCurrencyCode: null,
       unitCostAccess: "NULL",
     });
     const otherVariant = inventoryItemAttributesEqual(stored, {
       shopifyVariantGid: "gid://shopify/ProductVariant/v-b",
+      sku: null,
       tracked: true,
       requiresShipping: true,
+      weightValue: null,
+      weightUnit: null,
+      unitCostAmount: null,
+      unitCostCurrencyCode: null,
       unitCostAccess: "NULL",
     });
     expect(sameVariant).toBe(true);
@@ -613,13 +647,154 @@ describe("PR5-F2B relationship identity is part of attribute equality", () => {
       snapshot({ weightValue: "1.250000", unitCostAmount: "3.100000" }),
       {
         shopifyVariantGid: "gid://shopify/ProductVariant/v-a",
+        sku: null,
         tracked: true,
         requiresShipping: true,
-        unitCostAccess: "NULL",
         weightValue: "1.25",
+        weightUnit: null,
         unitCostAmount: "3.10",
+        unitCostCurrencyCode: null,
+        unitCostAccess: "NULL",
       },
     );
     expect(scaleEquivalent).toBe(true);
+  });
+});
+
+describe("PR5-F2B semantic attribute equality", () => {
+  it("treats reordered Product tags as equal without silently deduplicating", () => {
+    const stored: FactSnapshot = {
+      id: "cfa_tags",
+      existenceState: "LIVE",
+      existenceKind: "LIVE_REFETCH",
+      existenceRequestGen: 1n,
+      existenceResponseGen: 2n,
+      existenceDiagnosticState: null,
+      shopifyCreatedAt: null,
+      shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      attributeRequestGen: 1n,
+      attributeResponseGen: 2n,
+      attributeFreshnessState: "ORDERED",
+      lastSeenFullSyncRunId: null,
+      title: "T",
+      handle: "h",
+      vendor: null,
+      productType: null,
+      tags: ["beta", "alpha", "alpha"],
+      status: "ACTIVE",
+      featuredMediaUrl: null,
+      quantities: {},
+    };
+    const reordered = productAttributesEqual(stored, {
+      title: "T",
+      handle: "h",
+      vendor: null,
+      productType: null,
+      tags: ["alpha", "beta", "alpha"],
+      status: "ACTIVE",
+      featuredMediaUrl: null,
+    });
+    const droppedDuplicate = productAttributesEqual(stored, {
+      title: "T",
+      handle: "h",
+      vendor: null,
+      productType: null,
+      tags: ["alpha", "beta"],
+      status: "ACTIVE",
+      featuredMediaUrl: null,
+    });
+    expect(reordered).toBe(true);
+    expect(droppedDuplicate).toBe(false);
+    const equalVersion = decideAttributeClock({
+      incomingUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      storedUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      incomingInterval: { requestGen: 10n, responseGen: 12n },
+      storedInterval: { requestGen: 1n, responseGen: 2n },
+      attributesEqual: reordered,
+    });
+    expect(equalVersion.apply).toBe(false);
+    expect(equalVersion.reason).toBe("equal_match");
+    expect(equalVersion.diagnostic).toBeNull();
+  });
+
+  it("treats selectedOptions object key order as irrelevant while preserving array order", () => {
+    const stored = [{ value: "M", name: "Size" }, { value: "Blue", name: "Color" }];
+    const reorderedKeys = [{ name: "Size", value: "M" }, { name: "Color", value: "Blue" }];
+    const reorderedArray = [{ name: "Color", value: "Blue" }, { name: "Size", value: "M" }];
+    expect(selectedOptionsSemanticallyEqual(stored, reorderedKeys)).toBe(true);
+    expect(selectedOptionsSemanticallyEqual(stored, reorderedArray)).toBe(false);
+
+    const snapshot: FactSnapshot = {
+      id: "cfa_opts",
+      existenceState: "LIVE",
+      existenceKind: "LIVE_REFETCH",
+      existenceRequestGen: 1n,
+      existenceResponseGen: 2n,
+      existenceDiagnosticState: null,
+      shopifyCreatedAt: null,
+      shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      attributeRequestGen: 1n,
+      attributeResponseGen: 2n,
+      attributeFreshnessState: "ORDERED",
+      lastSeenFullSyncRunId: null,
+      title: "V",
+      selectedOptions: stored,
+      priceAmount: "10.000000",
+      compareAtPriceAmount: null,
+      currencyCode: "USD",
+      displayName: null,
+      sku: null,
+      barcode: null,
+      position: null,
+      shopifyProductGid: "gid://shopify/Product/parent-a",
+      quantities: {},
+    };
+    expect(
+      variantAttributesEqual(snapshot, {
+        shopifyProductGid: "gid://shopify/Product/parent-a",
+        title: "V",
+        displayName: null,
+        selectedOptions: reorderedKeys,
+        sku: null,
+        barcode: null,
+        priceAmount: "10.000000",
+        compareAtPriceAmount: null,
+        currencyCode: "USD",
+        position: null,
+      }),
+    ).toBe(true);
+  });
+
+  it("compares InventoryLevel resource attributes independently of quantities", () => {
+    const stored: FactSnapshot = {
+      id: "cfa_lvl",
+      existenceState: "LIVE",
+      existenceKind: "LIVE_REFETCH",
+      existenceRequestGen: 1n,
+      existenceResponseGen: 2n,
+      existenceDiagnosticState: null,
+      shopifyCreatedAt: null,
+      shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+      attributeRequestGen: 1n,
+      attributeResponseGen: 2n,
+      attributeFreshnessState: "ORDERED",
+      lastSeenFullSyncRunId: null,
+      isActive: true,
+      shopifyInventoryLevelGid: "gid://shopify/InventoryLevel/1",
+      quantities: {},
+    };
+    expect(
+      inventoryLevelAttributesEqual(stored, {
+        isActive: true,
+        shopifyInventoryLevelGid: "gid://shopify/InventoryLevel/1",
+        quantities: [{ name: "available", quantity: 9, shopifyUpdatedAt: null }],
+      }),
+    ).toBe(true);
+    expect(
+      inventoryLevelAttributesEqual(stored, {
+        isActive: false,
+        shopifyInventoryLevelGid: "gid://shopify/InventoryLevel/1",
+      }),
+    ).toBe(false);
   });
 });
