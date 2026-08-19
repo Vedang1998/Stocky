@@ -588,7 +588,13 @@ function coerceVariant(raw: unknown): CanonicalVariantRead {
       { retryable: false, identity },
     );
   }
-  const items = Array.isArray(row.inventoryItems) ? row.inventoryItems : [];
+  if (!Array.isArray(row.inventoryItems)) {
+    throw new CompatibilityProjectionError(
+      "invalid_canonical_variant",
+      `Canonical ProductVariant ${row.shopifyGid} inventoryItems is not an array`,
+      { retryable: false, identity },
+    );
+  }
   return {
     shopifyGid: row.shopifyGid,
     shopifyProductGid: row.shopifyProductGid,
@@ -597,8 +603,14 @@ function coerceVariant(raw: unknown): CanonicalVariantRead {
     barcode: typeof row.barcode === "string" ? row.barcode : null,
     existenceState: coerceExistence(row.existenceState, "variant", identity),
     product: coerceProduct(row.product, identity),
-    inventoryItems: items.map((item) => coerceItem(item, identity)),
+    inventoryItems: row.inventoryItems.map((item) =>
+      coerceItem(item, identity),
+    ),
   };
+}
+
+export function coerceCanonicalVariant(raw: unknown): CanonicalVariantRead {
+  return coerceVariant(raw);
 }
 
 function coerceLevel(raw: unknown): CanonicalInventoryLevelRead {

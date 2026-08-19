@@ -90,6 +90,14 @@ describe("PR5-F2C compatibility projection safety", () => {
     expect(source).not.toMatch(/localeCompare/);
   });
 
+  it("does not reinterpret a non-array inventoryItems include as zero items", () => {
+    const project = readFileSync(path.join(DIR, "project.ts"), "utf8");
+    expect(project).toMatch(/inventoryItems is not an array/);
+    expect(project).not.toMatch(
+      /Array\.isArray\(row\.inventoryItems\) \? row\.inventoryItems : \[\]/,
+    );
+  });
+
   it("does not silently skip a poison row or treat unknown errors as retryable", () => {
     const project = readFileSync(path.join(DIR, "project.ts"), "utf8");
     expect(project).toMatch(/halt_on_poison/);

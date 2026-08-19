@@ -145,7 +145,7 @@ describe("compatibility projection mapping", () => {
     expectVariantMappingFailure(
       liveVariant({ product: null }),
       "canonical_product_not_live",
-      false,
+      true,
     );
   });
 
@@ -160,7 +160,7 @@ describe("compatibility projection mapping", () => {
         },
       }),
       "canonical_product_not_live",
-      false,
+      true,
     );
   });
 

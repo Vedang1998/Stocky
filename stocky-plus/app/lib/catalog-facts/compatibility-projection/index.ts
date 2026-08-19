@@ -25,6 +25,7 @@ export {
 } from "./mapping";
 export {
   coerceCanonicalInventoryItem,
+  coerceCanonicalVariant,
   projectCompatibilityFromCanonicalFacts,
 } from "./project";
 export { legacySnapshotDate } from "./snapshot-date";

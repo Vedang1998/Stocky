@@ -1394,14 +1394,15 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
     });
 
     expect(failed.status).toBe("FAILED");
-    expect(failed.retryable).toBe(false);
+    expect(failed.retryable).toBe(true);
     expect(failed.failure?.code).toBe("canonical_product_not_live");
+    expect(failed.failure?.retryable).toBe(true);
     expect(failed.failure?.identity).toEqual({
       kind: "ProductVariant",
       shopifyGid: seeded.variantGid,
     });
     expect(failed.processedVariantCount).toBe(0);
-    expect(failed.poisonHalt?.durableQuarantineRequired).toBe(true);
+    expect(failed.poisonHalt).toBeUndefined();
     assertNoMerchantHealthAuthorization(failed);
     expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
 
@@ -1416,6 +1417,114 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
     expect(cacheAfter?.updatedAt.toISOString()).toBe(
       cacheBefore?.updatedAt.toISOString(),
     );
+  });
+
+  it("retries shop_rebuild after a parent-ABSENT / variant-LIVE lag without poisonHalt", async () => {
+    const stuck = await seedLiveGraph(prisma, shopAId, "a-parent-abs");
+    const healthy = await seedLiveGraph(prisma, shopAId, "z-ok");
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: stuck.variantGid,
+        shopifyProductId: stuck.productGid,
+        title: "Widget — Blue",
+        sku: "SKU-a-parent-abs",
+        barcode: "BAR-a-parent-abs",
+        imageUrl: "https://cdn.example/widget.jpg",
+        inventoryItemId: stuck.itemGid,
+        weight: new Prisma.Decimal("1.2500"),
+        weightUnit: "GRAMS",
+      },
+    });
+    await prisma.shopifyProductFact.update({
+      where: {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: stuck.productGid },
+      },
+      data: {
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        existenceRequestGen: 50n,
+        existenceResponseGen: 51n,
+        deletedAt: new Date("2026-08-17T14:00:00.000Z"),
+        deletionSource: "CONFIRMED_QUERY",
+        title: "Deleted product",
+        featuredMediaUrl: null,
+      },
+    });
+    const beforeStuck = await canonicalFingerprint(prisma, stuck);
+    const beforeHealthy = await canonicalFingerprint(prisma, healthy);
+    const cacheBefore = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: stuck.variantGid },
+    });
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      limit: 10,
+      mode: "shop_rebuild",
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(true);
+    expect(failed.failure?.code).toBe("canonical_product_not_live");
+    expect(failed.failure?.retryable).toBe(true);
+    expect(failed.failure?.identity).toEqual({
+      kind: "ProductVariant",
+      shopifyGid: stuck.variantGid,
+    });
+    expect(failed.processedVariantCount).toBe(0);
+    expect(failed.poisonHalt).toBeUndefined();
+    expect(failed.cursor).toEqual({ phase: "variants" });
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, stuck)).toEqual(beforeStuck);
+    expect(await canonicalFingerprint(prisma, healthy)).toEqual(beforeHealthy);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: healthy.variantGid },
+      }),
+    ).toBeNull();
+    const cacheAfterFailure = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: stuck.variantGid },
+    });
+    expect(cacheAfterFailure).toMatchObject({
+      title: "Widget — Blue",
+      imageUrl: "https://cdn.example/widget.jpg",
+      inventoryItemId: stuck.itemGid,
+    });
+    expect(cacheAfterFailure?.updatedAt.toISOString()).toBe(
+      cacheBefore?.updatedAt.toISOString(),
+    );
+
+    await tombstoneVariant(prisma, shopAId, stuck.variantGid);
+    const retried = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      limit: 10,
+      mode: "shop_rebuild",
+      cursor: failed.cursor,
+    });
+
+    expect(retried.status).toBe("SUCCEEDED");
+    expect(retried.processedVariantCount).toBeGreaterThanOrEqual(2);
+    expect(retried.poisonHalt).toBeUndefined();
+    assertNoMerchantHealthAuthorization(retried);
+    expect(await canonicalFingerprint(prisma, healthy)).toEqual(beforeHealthy);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopId: shopAId, shopifyVariantId: stuck.variantGid },
+      }),
+    ).toBeNull();
+    const healthyCache = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: healthy.variantGid },
+    });
+    expect(healthyCache).toMatchObject({
+      title: "Widget — Blue",
+      imageUrl: "https://cdn.example/widget.jpg",
+      inventoryItemId: healthy.itemGid,
+    });
   });
 
   it("halts shop_rebuild on a non-retryable poison row and does not claim progress on retry", async () => {

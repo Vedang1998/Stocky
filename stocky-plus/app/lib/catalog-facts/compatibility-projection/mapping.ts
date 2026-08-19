@@ -73,6 +73,16 @@ export function mapLegacyWeight(
   return quantized;
 }
 
+/**
+ * LIVE variants require a LIVE product relation for title/image.
+ *
+ * Approved PR5 brief §10.3 product-delete can tombstone Product before linked
+ * variants complete refetch/absence. That parent-ABSENT / variant-LIVE graph
+ * is a retryable canonical lag, not permanent poison: fail closed, preserve
+ * the existing cache row, do not fabricate title/image, and do not emit
+ * poisonHalt / quarantine-resume authority. If the inconsistency persists,
+ * later worker bounded retry + DEGRADED health owns liveness.
+ */
 function requireLiveProduct(
   variant: CanonicalVariantRead,
 ): CanonicalProductRead {
@@ -81,7 +91,7 @@ function requireLiveProduct(
       "canonical_product_not_live",
       `Canonical ProductVariant ${variant.shopifyGid} cannot project title/image because its Product relation is missing or not LIVE; F2C will not overwrite a legacy cache row with degraded values`,
       {
-        retryable: false,
+        retryable: true,
         identity: { kind: "ProductVariant", shopifyGid: variant.shopifyGid },
       },
     );
