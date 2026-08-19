@@ -267,26 +267,90 @@ describe("PR5-F2A returned GID and DateTime fail-closed mapping", () => {
       }),
     ).toThrow(/product.createdAt must be a Shopify DateTime \/ RFC3339 timestamp/);
   });
+});
 
-  it("fails closed when readInventoryLevelById returns a different GID", async () => {
-    const admin = createMockAdmin(() => ({
-      data: {
-        inventoryLevel: {
-          id: "gid://shopify/InventoryLevel/999",
-          isActive: true,
-          createdAt: "2026-01-01T00:00:00Z",
-          updatedAt: "2026-01-02T00:00:00Z",
-          location: { id: "gid://shopify/Location/2" },
-          item: { id: "gid://shopify/InventoryItem/1" },
-          quantities: [],
-        },
-      },
+describe("PR5-F2A readInventoryLevelById identity (NEW-CLAUDE-PR5F2A-S01)", () => {
+  const requestedGid = "gid://shopify/InventoryLevel/111";
+  const otherItemGid = "gid://shopify/InventoryItem/OTHER";
+  const otherLocationGid = "gid://shopify/Location/OTHER";
+
+  function levelFields(id?: unknown, options?: { omitId?: boolean }) {
+    const node: Record<string, unknown> = {
+      isActive: true,
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-02T00:00:00Z",
+      location: { id: otherLocationGid },
+      item: { id: otherItemGid },
+      quantities: [],
+    };
+    if (!options?.omitId) {
+      node.id = id;
+    }
+    return node;
+  }
+
+  function byIdAdmin(inventoryLevel: Record<string, unknown> | null) {
+    return createMockAdmin(() => ({
+      data: { inventoryLevel },
     }));
-    await expect(
-      readInventoryLevelById(admin, "gid://shopify/InventoryLevel/1"),
-    ).rejects.toBeInstanceOf(InventoryLevelIdentityMismatchError);
-    await expect(
-      readInventoryLevelById(admin, "gid://shopify/InventoryLevel/1"),
-    ).rejects.toThrow(/does not match requested/);
+  }
+
+  it("succeeds when the returned InventoryLevel id equals the requested id", async () => {
+    const admin = byIdAdmin(levelFields(requestedGid));
+    const level = await readInventoryLevelById(admin, requestedGid);
+    expect(level?.shopifyLevelGid).toBe(requestedGid);
+    expect(level?.identity).toEqual({
+      inventoryItemGid: otherItemGid,
+      locationGid: otherLocationGid,
+    });
+  });
+
+  it("fails closed when the returned InventoryLevel GID differs", async () => {
+    const admin = byIdAdmin(levelFields("gid://shopify/InventoryLevel/999"));
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toBeInstanceOf(
+      InventoryLevelIdentityMismatchError,
+    );
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toThrow(
+      /does not match requested/,
+    );
+  });
+
+  it("fails closed when the returned InventoryLevel id is null", async () => {
+    const admin = byIdAdmin(levelFields(null));
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toBeInstanceOf(
+      InventoryLevelIdentityMismatchError,
+    );
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toThrow(
+      /returned identity is missing/,
+    );
+  });
+
+  it("fails closed when the returned InventoryLevel id is omitted", async () => {
+    const admin = byIdAdmin(levelFields(undefined, { omitId: true }));
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toBeInstanceOf(
+      InventoryLevelIdentityMismatchError,
+    );
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toThrow(
+      /returned identity is missing/,
+    );
+  });
+
+  it("fails closed when the returned InventoryLevel id is empty", async () => {
+    const admin = byIdAdmin(levelFields(""));
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toBeInstanceOf(
+      InventoryLevelIdentityMismatchError,
+    );
+  });
+
+  it("fails closed when the returned InventoryLevel id is a non-string", async () => {
+    const admin = byIdAdmin(levelFields(12345));
+    await expect(readInventoryLevelById(admin, requestedGid)).rejects.toBeInstanceOf(
+      InventoryLevelIdentityMismatchError,
+    );
+  });
+
+  it("returns null when the top-level inventoryLevel object is null", async () => {
+    const admin = byIdAdmin(null);
+    await expect(readInventoryLevelById(admin, requestedGid)).resolves.toBeNull();
   });
 });

@@ -61,12 +61,20 @@ function assertReturnedGidMatches(
   createError: (message: string) => Error,
   noun: string,
 ): void {
-  if (returned == null) return;
-  const observed =
-    typeof returned === "string" ? returned : `type:${typeof returned}`;
+  if (returned == null) {
+    throw createError(`${noun} returned identity is missing`);
+  }
+  if (typeof returned !== "string") {
+    throw createError(
+      `${noun} returned identity type:${typeof returned} does not match requested ${requested}`,
+    );
+  }
+  if (returned === "") {
+    throw createError(`${noun} returned identity is empty`);
+  }
   if (returned !== requested) {
     throw createError(
-      `${noun} returned identity ${observed} does not match requested ${requested}`,
+      `${noun} returned identity ${returned} does not match requested ${requested}`,
     );
   }
 }
