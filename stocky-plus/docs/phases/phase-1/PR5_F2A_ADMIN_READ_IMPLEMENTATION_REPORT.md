@@ -788,3 +788,46 @@ Claude P3-1 through P3-5 remain nonblocking residuals in the immutable second-co
 Return to ChatGPT for **PR5-F2A S01 correction review** after exact-head automatic full PR CI is green.
 
 Do **not** merge. Do **not** mark ready. Do **not** invoke Claude. Do **not** start F3 / PR6. Do **not** create D-055.
+
+---
+
+## 33. Final merge preparation
+
+**Status:** Merge preparation only. ChatGPT technically accepts PR5-F2A. Merge is **not** yet authorized.
+
+This section is appended after ChatGPT technical acceptance and the immutable final S01 independent review. It does **not** rewrite the history above. It does **not** edit any Claude review artifact. It does **not** change runtime, tests, schema, migrations, CI workflow, or package files. It does **not** edit `PROJECT_STATUS.md`, `DECISIONS.md`, or `RISK_REGISTER.md`. Those live-control records are updated **after** merge.
+
+| Field | Value |
+|---|---|
+| ChatGPT technical acceptance | **ACCEPT PR5-F2A ADMIN READ BOUNDARY** |
+| Accepted implementation head | `bfbe369f590e38f36de8165e366dd7e84449ecd7` |
+| Authorized base / `origin/main` at merge-prep start | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Immutable first review | `PR5_F2A_ADMIN_READ_INDEPENDENT_REVIEW.md` blob `81bc0678ea9041b6567c02c8fe5655752fc53441` (**not edited**) |
+| Immutable correction re-review | `PR5_F2A_ADMIN_READ_CORRECTION_INDEPENDENT_REVIEW.md` blob `d06fc9f603b8ec86efc1493babaa3973a73d3806` (**not edited**) |
+| Immutable second-correction re-review | `PR5_F2A_ADMIN_READ_SECOND_CORRECTION_INDEPENDENT_REVIEW.md` blob `acbd51277319d0737861355d1db5b5068a070747` (**not edited**) |
+| Immutable final S01 independent review | `PR5_F2A_ADMIN_READ_S01_INDEPENDENT_REVIEW.md` |
+| Review commit cherry-picked | `ad065f896a4cece7f0e433f7ed1e66c79decd2c4` → branch commit `ed58f850ecd8cfc5a4a087da36b87b0c555bcdbe` |
+| Final review artifact blob | `bba424c0dd8f3903bdffe79ffe803269b2dd2fd9` (re-hashed after cherry-pick; unchanged) |
+| Independent verdict | `APPROVE PR5-F2A ADMIN READ S01 CORRECTION` |
+| Final independent finding posture | P0 0 / P1 0 / P2 0 |
+| Implementation-head CI | run `32263496048`, event `pull_request`, head `bfbe369f…`, SUCCESS. That run is **not** evidence for the later review-record head. |
+| PR #29 | remains OPEN / DRAFT / UNMERGED. Merge is **not** performed in this package. |
+
+Accepted nonblocking P3 residuals remain recorded in the immutable review artifacts (P3-1 through P3-5 from earlier reviews; P3-6 from the final S01 review). They are not implemented here.
+
+Risk posture during merge preparation:
+
+| Risk | Merge-prep posture |
+|---|---|
+| R-016 | OPEN |
+| R-132 | OPEN |
+| R-134 | OPEN |
+| R-136 | OPEN |
+| R-138 | OPEN |
+| R-163 | OPEN. Eligible for formal closure only after merge / post-merge synchronization. Not closed in this package. |
+
+Production remains **unauthorized**. Inventory-write flags remain **DEFAULT OFF**. PR 5 remains **incomplete**. PR 6 remains **not started**. F2B / F2C / F3 are not begun.
+
+**MERGE NOT YET AUTHORIZED — awaiting explicit user authorization.**
+
+Do **not** merge. Do **not** mark ready. Do **not** modify `main`. Do **not** begin F2B or F2C refresh. Do **not** start PR 6.
