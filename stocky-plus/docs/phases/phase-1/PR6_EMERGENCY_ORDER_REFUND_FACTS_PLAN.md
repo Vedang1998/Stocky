@@ -1,17 +1,23 @@
 # Phase 1 PR 6 Emergency Plan — Order / Order-Line / Refund / Cancellation Facts
 
 **Status:** PLANNING ONLY — NOT IMPLEMENTATION AUTHORITY
-**Correction status:** CONSOLIDATED CORRECTION CANDIDATE after independent early Tier-A review — **not** independently re-approved
+**Correction status:** FINAL CONSOLIDATED PLANNING CORRECTION of NEW-CLAUDE-PR6PC-01 … 06 — **INDEPENDENT FINAL CORRECTION RE-REVIEW PENDING**
 **Product owner:** ChatGPT
 **Implementation owner (when later authorized):** Cursor
-**Independent reviewer:** Claude Code (early Tier-A review complete; correction re-review **not** claimed)
+**Independent reviewer:** Claude Code (early Tier-A review + correction re-review incorporated; **final correction re-review of this head is pending**; this packet does **not** claim independent correction approval)
 **Document type:** Emergency one-dependency-level-ahead architecture packet (corrected)
-**Authorized planning base / current `origin/main` at original authoring:** `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (PR5-F2A squash merge `#29`)
-**Reviewed planning head (pre-correction):** `76a8f339af3201d91ce8c6e8e47b1cf24b1f1d5b`
+**Authorized planning base / `origin/main` at original authoring:** `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (PR5-F2A squash merge `#29`)
+**Current observed `origin/main` (this correction pass; not merged into this branch):** `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` (PR5-F2B squash merge `#31`)
+**Reviewed planning head (pre-first-correction):** `76a8f339af3201d91ce8c6e8e47b1cf24b1f1d5b`
+**Reviewed corrected head (pre-this-pass):** `11d9cf6f9f759f2ebb1c467f06ea56af69672f9d`
 **Independent review commit:** `4fd81bae2c4c42732ffd573d8523965c4d2289fb`
-**Immutable review artifact:** `stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`
-**Immutable review blob (must remain exact):** `d72340c01dd9c662d0e8bb4aa8d43482940470d9`
-**Independent verdict on reviewed head:** `CORRECTIONS REQUIRED` — P0 1 / P1 8 / P2 9 / P3 6
+**Immutable original review artifact:** `stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`
+**Immutable original review blob (must remain exact):** `d72340c01dd9c662d0e8bb4aa8d43482940470d9`
+**Correction re-review commit:** `3260f1a468678ab373c1261d8ed8e8e6f6b6e258`
+**Immutable correction re-review artifact:** `stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`
+**Immutable correction re-review blob (must remain exact):** `fca2b260d03e3105782ed216f7773c53e6aef2a7`
+**Independent verdict on `11d9cf6…`:** `CORRECTIONS REQUIRED` — NEW-CLAUDE-PR6PC P1 1 / P2 1 / P3 4
+**Independent verdict on original `76a8f33…`:** `CORRECTIONS REQUIRED` — P0 1 / P1 8 / P2 9 / P3 6
 **Shopify Admin API target:** `2026-07` (`ApiVersion.July26`) — do not bump
 **Production execution:** NOT AUTHORIZED
 **Merchant production data:** NOT AUTHORIZED
@@ -29,7 +35,7 @@ Official Shopify facts were read from `shopify.dev` Admin GraphQL `2026-07` obje
 
 Historical `stocky-plus/docs/PHASE_1_TECHNICAL_PLAN.md` is **not** implementation authority. This plan does **not** import that document’s receipt, cost, entitlement, billing, or AI ledger items.
 
-The independent review artifact is **immutable**. Never edit it. This plan is the only document that may change to absorb corrections.
+Both independent review artifacts are **immutable**. Never edit them. This plan is the only document that may change to absorb corrections. This branch is **not** rebased onto current main in this pass; one final current-main synchronization happens only after PR 5 closes.
 
 ---
 
@@ -40,12 +46,15 @@ The independent review artifact is **immutable**. Never edit it. This plan is th
 | Original planning PR | [#34](https://github.com/Vedang1998/Stocky/pull/34) |
 | Original planning branch | `cursor/pr6-order-refund-planning-87c7` |
 | Original planning HEAD | `76a8f339af3201d91ce8c6e8e47b1cf24b1f1d5b` |
+| First-correction HEAD (re-reviewed) | `11d9cf6f9f759f2ebb1c467f06ea56af69672f9d` |
 | Review branch | `claude/pr6-order-refund-review-bhfbit` |
 | Review commit cherry-picked onto this branch | `4fd81bae2c4c42732ffd573d8523965c4d2289fb` |
-| Review blob | `d72340c01dd9c662d0e8bb4aa8d43482940470d9` |
-| Findings addressed | F-CLAUDE-PR6P-01 … F-CLAUDE-PR6P-24 (all 24) |
-| Correction-list items applied | §16 items 1 … 70, sections A … I |
-| This packet claims independent correction approval | **No** |
+| Original review blob | `d72340c01dd9c662d0e8bb4aa8d43482940470d9` |
+| Correction re-review commit cherry-picked | `3260f1a468678ab373c1261d8ed8e8e6f6b6e258` |
+| Correction re-review blob | `fca2b260d03e3105782ed216f7773c53e6aef2a7` |
+| Findings addressed | F-CLAUDE-PR6P-01 … F-CLAUDE-PR6P-24 (all 24) **and** NEW-CLAUDE-PR6PC-01 … 06 |
+| Correction-list items applied | original §16 items 1 … 70, plus PC-01 … PC-06 |
+| This packet claims independent correction approval | **No** — **INDEPENDENT FINAL CORRECTION RE-REVIEW PENDING** |
 | This packet authorizes PR 6 runtime | **No** |
 
 ---
@@ -122,7 +131,7 @@ Money from a refund affects **net-sales / revenue metrics only after** the relev
 
 Unit-return evidence remains **separate** from money settlement.
 
-Therefore **`order_transactions/create` is REQUIRED** so status transitions are observable (the topic fires when a transaction is created **or when its status is updated**).
+Therefore **`order_transactions/create` is REQUIRED** so status transitions are observable. The topic fires when a transaction is created **or when its status is updated**, **only** for statuses **`success`, `failure`, or `error`**. It does **not** fire for `PENDING`. PENDING transactions are observed through refund snapshots; do not expect a PENDING webhook. The SUCCESS transition PO-06 depends on **does** fire.
 
 Closes former **Q-PR6-07** as product policy and as the engineering subscription requirement.
 
@@ -168,8 +177,8 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 | **F-CLAUDE-PR6P-04** | P1 | **ACCEPTED AND INCORPORATED.** Frozen clock table §5.1. Children parent-versioned. All-or-nothing snapshot rejection. Gate `<` only; equal `updatedAt` re-applies. Bind `Refund.updatedAt` independently. Subscribe `order_transactions/create`. |
 | **F-CLAUDE-PR6P-05** | P1 | **ACCEPTED AND INCORPORATED.** Refund-line identity `@@unique([shopId, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal])`; nullable `shopifyGid` lineage. T46. |
 | **F-CLAUDE-PR6P-06** | P1 | **ACCEPTED AND INCORPORATED.** Valid Sale fragments with `__typename` + `ProductSale` / `GiftCardSale` / `TipSale` lineItem; add `ReturnAgreement`; persist `UnknownSale`; eligibility table frozen. T52. |
-| **F-CLAUDE-PR6P-07** | P1 | **ACCEPTED AND INCORPORATED (Option A).** One unit-event ledger = agreement sales discriminated by `SalesAgreement.reason ∈ {ORDER, ORDER_EDIT, REFUND, RETURN}`. Refund lines are money/restock/reconciliation **not** unit events. T47. |
-| **F-CLAUDE-PR6P-08** | P2 | **ACCEPTED AND INCORPORATED.** Drop `LineItem.priceAfterAllDiscountsBeforeTaxesSet`. Drop entire `Order.cancellation { }`. `refundableQuantity ≡ currentQuantity`. Never pass `first` on **any** array field. Persist `discountedUnitPriceAfterAllDiscountsSet` as **lineage unit price only** (includes refunded/removed quantities; never current-quantity money). T20 generic. |
+| **F-CLAUDE-PR6P-07** | P1 | **ACCEPTED AND INCORPORATED (Option A), then PC-01 sign convention.** One unit-event ledger = agreement sales. Refund lines are not unit events. Derived `refunded_units` / `removed_units` are **positive magnitudes** of valid **negative** eligible sales. T47 stores reversal `−1` and asserts `refunded_units = 1`. |
+| **F-CLAUDE-PR6P-08** | P2 | **ACCEPTED AND INCORPORATED, then PC-03 qualification.** Drop invalid fields; `refundableQuantity ≡ currentQuantity`. Forbid pagination args only on named **non-connection LIST** fields. Connection fields **must** paginate. |
 | **F-CLAUDE-PR6P-09** | P2 | **ACCEPTED AND INCORPORATED.** **Delete Bulk C.** Bulk A legal. Bulk B array legality is a **PR6-B gate** with costed per-order refund refetch fallback. Agreements via paginated `order(id:) { agreements { sales } }` for `edited=true` **or** refund-bearing orders; bound request count vs 1M-line envelope. T53. |
 | **F-CLAUDE-PR6P-10** | P2 | **ACCEPTED AND INCORPORATED.** Denormalize `orderProcessedAt`, `orderCancelledAt`, `orderTest`, `orderShopCurrencyCode` onto lines (order-applicator-written, invariant = parent). Real `@@index([shopId, variantGidAtSale, orderProcessedAt])`. Child `shopifyOrderGid` indexes. Agreement-sale indexes on `shopifyLineItemGid` / `happenedAt`. |
 | **F-CLAUDE-PR6P-11** | P1 | **ACCEPTED AND INCORPORATED.** Fail-apply whole snapshot (no “skip bag”). Merchant-durable `moneyDiagnosticState` / `unitDiagnosticState` / `historyWindowState`. `DataIssue` derived **only** by the reconciler (PR 5 Race Z). Runtime **cannot** DML `DataIssue`. |
@@ -178,14 +187,37 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 | **F-CLAUDE-PR6P-14** | P2 | **ACCEPTED AND INCORPORATED.** Worker dispatches on persisted `payloadSchemaVersion`. Mixed v1-after-v2-deploy must neither crash nor silently no-op. T51. |
 | **F-CLAUDE-PR6P-15** | P2 | **ACCEPTED AND INCORPORATED.** Completeness = exhaustive `updated_at` sweep. Sampled deep-diff is **drift detection only**. Sampling does **not** heal missed webhooks. |
 | **F-CLAUDE-PR6P-16** | P2 | **ACCEPTED AND INCORPORATED.** Lane graph `PR6-A → (PR6-B ∥ PR6-C) → PR6-D`. Types contract in PR6-A `app/lib/order-facts/types.ts` (types only). |
-| **F-CLAUDE-PR6P-17** | P2 | **ACCEPTED AND INCORPORATED.** `Shop.ianaTimezone` and `Shop.currencyCode` in PR6-A. |
-| **F-CLAUDE-PR6P-18** | P2 | **ACCEPTED AND INCORPORATED.** Unit identity `ordered − current − refunded` only over a **consistent snapshot pair** (or reconciler-only). Persist null `Sale.quantity`; never coerce to 0; never a unit event. Exchanges + `ADJUSTMENT` sales in §7.5. T54. |
+| **F-CLAUDE-PR6P-17** | P2 | **ACCEPTED AND INCORPORATED, then PC-04.** `Shop.ianaTimezone` and `Shop.currencyCode` in PR6-A. API fields are **non-null** in 2026-07; defensive transport handling is policy, not schema nullability. |
+| **F-CLAUDE-PR6P-18** | P2 | **ACCEPTED AND INCORPORATED, then PC-01.** Identity `ordered − current − refunded = removed` only on a **consistent valid-sign** snapshot pair. Null `Sale.quantity` persisted. T29/T54 must actually detect contradictory identities. |
 | **F-CLAUDE-PR6P-19** | P3 | **ACCEPTED AND INCORPORATED.** In-plan proposed sequential `R-###` / `Q-0##` table. **Do not** edit `RISK_REGISTER.md` or `OPEN_QUESTIONS.md` in this PR. |
 | **F-CLAUDE-PR6P-20** | P3 | **ACCEPTED AND INCORPORATED.** Single sale-fact identity: `(shopId, shopifyGid)` on `ShopifyOrderAgreementSaleFact` (`Sale.id` is `ID!`). `agreementGid` is a required FK column, not a second unique identity. |
 | **F-CLAUDE-PR6P-21** | P3 | **ACCEPTED AND INCORPORATED.** Expanded forbidden PII list. |
 | **F-CLAUDE-PR6P-22** | P3 | **ACCEPTED AND INCORPORATED.** Explicit nullability: `Refund.createdAt` nullable; `OrderTransaction.processedAt` nullable; `Sale.quantity` nullable; `RefundLineItem.id` nullable. |
 | **F-CLAUDE-PR6P-23** | P3 | **ACCEPTED AND INCORPORATED.** DIRECT vs CHILD assignments frozen. PR6-A owns `scripts/tenant-enforcement/roles.ts`. Catalog-named observation sequence reused with an explicit platform-infra note. |
-| **F-CLAUDE-PR6P-24** | P3 | **ACCEPTED AND INCORPORATED.** Always lock Order **and** Refund; acquire in ascending `(key1, key2)` after dedupe. `ReturnAgreement` fragment required. |
+| **F-CLAUDE-PR6P-24** | P3 | **ACCEPTED AND INCORPORATED, then PC-05.** §13 echoes §5.1: refund job = Order+Refund; order-only = Order unless the same apply includes refund snapshots. `ReturnAgreement` fragment required. |
+
+---
+
+## C2b. NEW-CLAUDE-PR6PC-01 … 06 dispositions
+
+| ID | Sev | Disposition |
+|---|---|---|
+| **NEW-CLAUDE-PR6PC-01** | P1 | **INCORPORATED.** Signed-sale convention frozen in §7.1 / §7.2 / §15 / T29 / T47 / T54 / T55. Magnitudes of valid negative reversals/removals. Never `abs()` unexpected signs. |
+| **NEW-CLAUDE-PR6PC-02** | P2 | **INCORPORATED.** Nested per-parent pagination: `OrderFactById` + `OrderAgreementSalesPage` + `RefundFactById` with distinct connection variables. Incomplete walk uses `OrderFactObservationInFlight` + `SNAPSHOT_PAGINATION_INCOMPLETE`. No partial canonical apply. T56/T57. |
+| **NEW-CLAUDE-PR6PC-03** | P3 | **INCORPORATED.** LIST-vs-connection rules qualified by owning type. T20 scoped to named non-connection LISTs. |
+| **NEW-CLAUDE-PR6PC-04** | P3 | **INCORPORATED.** `RefundLineItem.priceSet` and `Shop.ianaTimezone` are **non-null** in 2026-07. `priceSet` is a required refund-line bag. Timezone missing/malformed fails closed. |
+| **NEW-CLAUDE-PR6PC-05** | P3 | **INCORPORATED.** §13 reproduces §5.1 lock rule. No “Order+Refund always both” summary. |
+| **NEW-CLAUDE-PR6PC-06** | P3 | **INCORPORATED.** `order_transactions/create` fires only for `success` / `failure` / `error`. PENDING observed via refund snapshots. T36 aligned. |
+
+### C2c. Cross-reference — these sections must agree
+
+| Topic | Sections that must match |
+|---|---|
+| Signed unit formulas | §7.1, §7.2, §7.2.2, §15 unit row, T29, T47, T54, T55 |
+| Nested pagination | §4.2, §4.3, §4.5 request envelope, §5.8, §15 incomplete-pages row, T56, T57 |
+| LIST vs connection | §4.1, §4.2 forbidden, §4.3, T20 |
+| Locks | §5.1, §13 |
+| Transaction topic | §4.1(7), §7.4, §9.1, T36 |
 
 ---
 
@@ -199,18 +231,20 @@ Shopify order/refund facts → dated net units and shop-currency amounts → det
 
 This packet must make PR 6 implementable without another broad architecture discovery. Calendar dates are an operational target, not a correctness waiver.
 
-### 0.2 Inspected live state (2026-09-02)
+### 0.2 Inspected live state
 
 | Item | Evidence |
 |---|---|
-| `origin/main` | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` — `Phase 1 PR5-F2A — canonical Shopify admin read boundary (#29)` |
+| Original planning `origin/main` | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` — PR5-F2A squash `#29` (authoring / first-correction base) |
+| Current observed `origin/main` (this pass) | `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` — `Phase 1 PR5-F2B — canonical fact applicator (#31)` |
 | PR5-F1 | Merged / frozen (`#27`) |
 | PR5-F2A admin-read | Merged on main (`#29`) |
-| PR `#30` F2C compatibility projection | OPEN DRAFT, `CONFLICTING`, head `2d2e8801dd383a778c1237cec4ed068922859cf0` — **inspected only; not modified** |
-| PR `#31` F2B canonical applicator | OPEN DRAFT, `CONFLICTING`, head `1b72a4c95f0056783c6c3356bea18a572ca4d5ef` — **inspected only; not modified** |
+| PR `#31` F2B canonical applicator | **MERGED** 2026-09-02T10:32:09Z; squash/main SHA `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. Post-merge `push` run [`33619969867`](https://github.com/Vedang1998/Stocky/actions/runs/33619969867): event `push`, `head_sha` `0284b66…`, **conclusion SUCCESS** (Classify SUCCESS; Heavy SUCCESS; CI Gate SUCCESS). Inspected this pass; **not modified**. |
+| PR `#30` F2C compatibility projection | OPEN DRAFT, `CONFLICTING`, head `2d2e8801dd383a778c1237cec4ed068922859cf0` — **inspected only; not modified**. **Do not use PR #30 as a base.** |
 | Current order/refund webhooks | Signal-only intake: `orders/create`, `orders/cancelled`, `refunds/create` |
 | Current merchant application | Legacy `SalesDailyAggregate` via `parseFloat` in `app/jobs/workers/webhook-processor.ts` |
 | Current scopes | `read_orders` present; `read_all_orders` **absent**; `write_orders` **absent** (must stay absent) |
+| This planning branch vs current main | **Not rebased / not merged** in this pass. One final current-main sync only after PR 5 closes. Premise files (`schema.prisma`, `shopify.app.toml`, sanitizers, webhook processor, tenant models, registers) **unchanged** by `#31`; `#31` added `app/lib/catalog-facts/apply/**` plus lock-capacity R-162 guards. |
 
 ### 0.3 Hard gate before any PR 6 runtime lane
 
@@ -326,7 +360,7 @@ Not authorized in this planning PR and not authorized in later PR 6 runtime unle
 - marking Phase 1 complete;
 - production access, backfill, or merge;
 - illegal Bulk C (`orders { agreements { sales } }`);
-- passing `first` on array fields;
+- passing pagination args on named **non-connection LIST** fields (`Order.refunds`, `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, `Refund.duties`);
 - selecting `Order.cancellation` or `LineItem.priceAfterAllDiscountsBeforeTaxesSet`;
 - querying `Sale.lineItem` on the `Sale` interface.
 
@@ -343,7 +377,8 @@ API version is **Admin GraphQL 2026-07**. Documents follow F2A:
 - nested bulk connections: one top-level connection, ≤5 connections, ≤2 nested connection levels, `groupObjects` remains false at submit time;
 - traverse connections as `edges { node { … } }`;
 - `first` omitted on bulk-traversable **connections** (bulk ignores pagination args);
-- `first` **never** passed on **array** fields (`refunds`, `taxLines`, `transactions`, `discountAllocations`, `duties`).
+- pagination args **never** passed on named **non-connection LIST** fields (`Order.refunds`, `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, `Refund.duties`);
+- connection fields **must** use `first`/`after` (including `Refund.transactions`).
 
 No mutations.
 
@@ -374,10 +409,10 @@ Official notes that bind architecture:
 4. `LineItem.refundableQuantity` schema description is **identical** to `currentQuantity`. Treat `refundableQuantity ≡ currentQuantity`. No formula may depend on a difference.
 5. `MoneyBag.shopMoney` is shop currency; `presentmentMoney` is customer presentment currency.
 6. `MoneyV2.amount` is GraphQL `Decimal` (JSON string). Deprecated `Money` scalars must not be the write path.
-7. A `Refund` object does **not** guarantee money has been returned; transactions have their own status. `ORDER_TRANSACTIONS_CREATE` fires on create **or status update**.
+7. A `Refund` object does **not** guarantee money has been returned; transactions have their own status. `ORDER_TRANSACTIONS_CREATE` fires when a transaction is created **or its status is updated**, **only** for statuses **`success`, `failure`, or `error`**. It does **not** fire for `PENDING`. PENDING transactions are observed through refund snapshots. The SUCCESS transition PO-06 depends on **does** fire.
 8. Webhook delivery and ordering are **not** guaranteed; reconciliation jobs are required.
 9. `orders/edited` payload reports **what changed**, not the new full order; refetch the order by GID.
-10. `Order.refunds` is an **array** with optional `first` truncation, not a connection. Passing `first` can silently truncate. Production refetch must **not** pass `first` on any array field.
+10. `Order.refunds` is an **array** (non-connection LIST) with optional `first` truncation. `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, and `Refund.duties` are also non-connection LISTs. `Refund.transactions`, `Refund.refundLineItems`, `Refund.orderAdjustments`, `Refund.refundShippingLines`, `Order.lineItems`, `Order.agreements`, and `SalesAgreement.sales` are **connections** and **must** use `first`/`after`. Production refetch must **not** pass pagination args on named LIST fields.
 11. `LineItem.variant` and `LineItem.product` are nullable (deleted catalog identities).
 12. `Sale` does **not** expose `lineItem` on the interface. Only `ProductSale`, `GiftCardSale`, and `TipSale` do.
 13. `RefundLineItem.id` is **nullable** `ID`.
@@ -407,15 +442,10 @@ query OrderFactById(
   $agrFirst: Int!
   $agrAfter: String
   $saleFirst: Int!
-  $saleAfter: String
   $refundLineFirst: Int!
-  $refundLineAfter: String
   $adjFirst: Int!
-  $adjAfter: String
   $shipRefundFirst: Int!
-  $shipRefundAfter: String
   $txnFirst: Int!
-  $txnAfter: String
 ) {
   order(id: $id) {
     id
@@ -465,15 +495,15 @@ query OrderFactById(
       updatedAt
       processedAt
       totalRefundedSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
-      refundLineItems(first: $refundLineFirst, after: $refundLineAfter) {
+      refundLineItems(first: $refundLineFirst) {
         pageInfo { hasNextPage endCursor }
         edges { cursor node { ...RefundLineFactFields } }
       }
-      orderAdjustments(first: $adjFirst, after: $adjAfter) {
+      orderAdjustments(first: $adjFirst) {
         pageInfo { hasNextPage endCursor }
         edges { cursor node { ...OrderAdjustmentFactFields } }
       }
-      refundShippingLines(first: $shipRefundFirst, after: $shipRefundAfter) {
+      refundShippingLines(first: $shipRefundFirst) {
         pageInfo { hasNextPage endCursor }
         edges {
           cursor
@@ -485,7 +515,7 @@ query OrderFactById(
           }
         }
       }
-      transactions(first: $txnFirst, after: $txnAfter) {
+      transactions(first: $txnFirst) {
         pageInfo { hasNextPage endCursor }
         edges {
           cursor
@@ -501,6 +531,73 @@ query OrderFactById(
       }
     }
     agreements(first: $agrFirst, after: $agrAfter) {
+      pageInfo { hasNextPage endCursor }
+      edges {
+        cursor
+        node {
+          id
+          happenedAt
+          reason
+          ... on OrderAgreement { id happenedAt reason }
+          ... on OrderEditAgreement { id happenedAt reason }
+          ... on RefundAgreement { id happenedAt reason refund { id } }
+          ... on ReturnAgreement { id happenedAt reason }
+          sales(first: $saleFirst) {
+            pageInfo { hasNextPage endCursor }
+            edges {
+              cursor
+              node {
+                __typename
+                id
+                quantity
+                lineType
+                actionType
+                totalAmount { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
+                ... on ProductSale { lineItem { id } }
+                ... on GiftCardSale { lineItem { id } }
+                ... on TipSale { lineItem { id } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Forbidden in this document:**
+
+- `Order.cancellation { … }` — `OrderCancellation` has only `staffNote` (forbidden PII). Use `Order.cancelReason`.
+- `Sale.lineItem` on the interface.
+- pagination args on named non-connection LIST fields (`Order.refunds`, `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, `Refund.duties`).
+- a shared `$saleAfter` / `$refundLineAfter` / `$adjAfter` / `$shipRefundAfter` / `$txnAfter` on `OrderFactById` (nested per-parent continuation is a **different** document).
+
+`OrderFactById` is the **authoritative order snapshot document**. On that document:
+
+- paginate `lineItems` and `agreements` to completion;
+- **retain `agreements.edges.cursor`**;
+- request **only the first page** of `sales` per agreement (`sales(first: $saleFirst)` — no `$saleAfter`);
+- request **only the first page** of each refund child connection (no shared `after`).
+
+#### `OrderAgreementSalesPage` (mandatory continuation)
+
+Do **not** assume `SalesAgreement` can be fetched directly as a generic `Node`. Isolate **exactly one** agreement from the parent order and walk that agreement’s sales until `hasNextPage=false`.
+
+Conceptual inputs: `$orderId`, `$agreementAfter`, `$saleFirst`, `$saleAfter`.
+
+`$agreementAfter` is the cursor **immediately preceding** that agreement on `Order.agreements`. **`null` is valid for the first agreement.**
+
+```graphql
+query OrderAgreementSalesPage(
+  $orderId: ID!
+  $agreementAfter: String
+  $saleFirst: Int!
+  $saleAfter: String
+) {
+  order(id: $orderId) {
+    id
+    agreements(first: 1, after: $agreementAfter) {
       pageInfo { hasNextPage endCursor }
       edges {
         cursor
@@ -536,16 +633,26 @@ query OrderFactById(
 }
 ```
 
-**Forbidden in this document:**
-
-- `Order.cancellation { … }` — `OrderCancellation` has only `staffNote` (forbidden PII). Use `Order.cancelReason`.
-- `Sale.lineItem` on the interface.
-- `first` on `refunds` or any other array field.
+When any agreement on `OrderFactById` reports `sales.pageInfo.hasNextPage=true`, issue `OrderAgreementSalesPage` for that agreement and walk `$saleAfter` to exhaustion. Count each continuation call in the §4.5 envelope.
 
 #### `RefundFactById`
 
+**Mandatory continuation** whenever **any** refund child connection in `OrderFactById` is truncated (`hasNextPage=true`). A truncated refund embedded in an order response contributes **no** partial refund snapshot. Apply that refund only after the per-refund continuation is complete.
+
+Declare **separate** pagination pairs for each connection. Do **not** share one `$first`/`$after`.
+
 ```graphql
-query RefundFactById($id: ID!) {
+query RefundFactById(
+  $id: ID!
+  $refundLineFirst: Int!
+  $refundLineAfter: String
+  $adjFirst: Int!
+  $adjAfter: String
+  $shipRefundFirst: Int!
+  $shipRefundAfter: String
+  $txnFirst: Int!
+  $txnAfter: String
+) {
   refund(id: $id) {
     id
     legacyResourceId
@@ -554,15 +661,15 @@ query RefundFactById($id: ID!) {
     processedAt
     order { id }
     totalRefundedSet { shopMoney { amount currencyCode } presentmentMoney { amount currencyCode } }
-    refundLineItems(first: $first, after: $after) { ... }
-    orderAdjustments(first: $first, after: $after) { ... }
-    refundShippingLines(first: $first, after: $after) { ... }
-    transactions(first: $first, after: $after) { ... }
+    refundLineItems(first: $refundLineFirst, after: $refundLineAfter) { ... }
+    orderAdjustments(first: $adjFirst, after: $adjAfter) { ... }
+    refundShippingLines(first: $shipRefundFirst, after: $shipRefundAfter) { ... }
+    transactions(first: $txnFirst, after: $txnAfter) { ... }
   }
 }
 ```
 
-Webhook `refunds/create` supplies a refund REST id. Convert to `gid://shopify/Refund/{id}`, fetch refund, then fetch/apply the parent order **if the parent is inside the accessible window**. The refund query is not sufficient as the only apply input because line current quantities live on the order. If the parent is outside the window, record `REFUND_OUTSIDE_ACCESSIBLE_WINDOW` / `historyWindowState` and do **not** treat null parent as tombstone.
+Webhook `refunds/create` supplies a refund REST id. Convert to `gid://shopify/Refund/{id}`, fetch refund (complete children), then fetch/apply the parent order **if the parent is inside the accessible window**. The refund query is not sufficient as the only apply input because line current quantities live on the order. If the parent is outside the window, record `REFUND_OUTSIDE_ACCESSIBLE_WINDOW` / `historyWindowState` and do **not** treat null parent as tombstone.
 
 #### `OrderLineFactFields` (conceptual)
 
@@ -579,12 +686,21 @@ Required:
 
 **Do not select:** `priceAfterAllDiscountsBeforeTaxesSet` (does not exist); `customAttributes`; `staffMember`; `taxLines(first:)`; `discountAllocations(first:)`; `duties(first:)`. If tax/discount/duty arrays are selected at all, **omit `first`**.
 
-### 4.3 Pagination rules
+### 4.3 Pagination rules (nested per-parent walk — frozen)
 
-- Direct `order(id:)` **must** cursor-paginate `lineItems`, `agreements`, `sales`, `refundLineItems`, `orderAdjustments`, refund shipping lines, and refund transactions until `hasNextPage=false`.
-- No silent `first: 50` / `first: 250` cap. A page size may be 100–250 for **connection** transport, but the loop is mandatory.
-- **Never pass `first` on any array field** (`refunds`, `taxLines`, `transactions`, `discountAllocations`, `duties`). If `Order.refunds` is truncated because `first` was passed, that apply is invalid. T20 must be generic over array fields, not refunds-only.
-- Incomplete pagination is **not** a successful apply. Incomplete pagination yields **no child absence** and **no successful parent apply**.
+1. `OrderFactById` remains the authoritative order snapshot document.
+2. Direct `order(id:)` **must** cursor-paginate `lineItems` and `agreements` until `hasNextPage=false`. **Retain agreement edge cursors.**
+3. First-page `sales` / refund-child connections on `OrderFactById` are **not** a complete nested walk. Incomplete nested connections **must** continue:
+   - agreements/sales → `OrderAgreementSalesPage` (exactly one agreement per request; walk sales to `hasNextPage=false`);
+   - truncated refund children → `RefundFactById` with **per-connection** first/after pairs.
+4. Do **not** assume `SalesAgreement` is a generic `Node`.
+5. A truncated refund in an order response contributes **no** partial refund snapshot.
+6. Parent/child **canonical apply occurs only after every required connection for that snapshot is complete.**
+7. No silent `first: 50` / `first: 250` cap. A page size may be 100–250 for **connection** transport, but the loop is mandatory.
+8. **Never pass pagination args on named non-connection LIST fields:** `Order.refunds`, `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, `Refund.duties`. T20 asserts only those. If `Order.refunds` is truncated because `first` was passed, that apply is invalid.
+9. **Connection fields must paginate** with `first`/`after`: `Order.lineItems`, `Order.agreements`, `SalesAgreement.sales`, `Refund.refundLineItems`, `Refund.orderAdjustments`, `Refund.refundShippingLines`, **`Refund.transactions`**.
+10. Incomplete pagination is **not** a successful apply. Incomplete pagination yields **no child absence** and **no successful parent apply**.
+11. Durable incomplete-snapshot evidence lives on **`OrderFactObservationInFlight`**, outcome **`SNAPSHOT_PAGINATION_INCOMPLETE`**. Do **not** create or partially apply a canonical Order/Refund merely to persist the diagnostic. If continuation succeeds, complete the observation normally. If bounded retries / request budget end without a complete snapshot, persist the terminal non-success diagnostic on the observation and let `order-facts-reconcile` derive the corresponding `DataIssue`.
 
 ### 4.4 Incremental window / cursor
 
@@ -690,8 +806,10 @@ Bulk A must **not** select `priceAfterAllDiscountsBeforeTaxesSet` or `cancellati
 **Request-count bound vs 1,000,000-line envelope:**
 
 - Let `N_edit_or_refund` = count of orders in the accessible window with `edited=true` OR refund-bearing.
-- Each such order requires **one** fully paginated `order(id:)` agreement/sales walk (plus refund walk if Bulk B fails).
-- Engineering hypothesis to **prove in PR6-B**, not to invent later: if `N_edit_or_refund` would produce unbounded N+1 versus the Phase 1 “no N+1 Shopify requests” rule, PR6-B must (a) batch/limit concurrency, (b) record query-count assertions, and (c) fail the lane if the envelope cannot be met without silent truncation. Do **not** drop agreements to “save” requests — they are Monday-critical under Option A.
+- Each such order requires a fully paginated `OrderFactById` walk of `lineItems` + `agreements`.
+- **Count `OrderAgreementSalesPage` continuation calls explicitly** (one or more per agreement whose sales exceed the first page).
+- **Count `RefundFactById` continuation calls explicitly** (one complete per-refund walk whenever any refund child connection on the order response was truncated, **and** as the Bulk B fallback for refund-bearing orders).
+- Engineering hypothesis to **prove in PR6-B**, not to invent later: if `N_edit_or_refund` plus continuation calls would produce unbounded N+1 versus the Phase 1 “no N+1 Shopify requests” rule, PR6-B must (a) batch/limit concurrency, (b) record query-count assertions including continuation counts, and (c) fail the lane if the envelope cannot be met without silent truncation. Do **not** drop agreements to “save” requests — they are Monday-critical under Option A.
 
 Partial bulk JSONL is **not** a successful full sync (PR 5 rule reused). Two-phase ingest: persist JSONL line evidence on merchant facts, then acknowledge control-plane ordinal.
 
@@ -735,8 +853,8 @@ Logical names. Additive Prisma/SQL only. No edits to PR 5 catalog models except 
 
 | Column | Source | Nullability | Rule |
 |---|---|---|---|
-| `ianaTimezone` | Shopify Shop IANA timezone (Admin Shop resource; persist the exact string Shopify reports) | persist null if Shopify omits; **fail merchant metric bucketing** closed rather than using UTC/server local | Calendar-day boundaries for `net-units-order-date-v1` |
-| `currencyCode` | Shopify shop currency | persist Shopify value | Shop-level; **per-order** `ShopifyOrderFact.shopCurrencyCode` (`Order.currencyCode`) is what makes **historical** amounts survive a later shop currency change |
+| `ianaTimezone` | Shopify `Shop.ianaTimezone` — **`String!` in Admin 2026-07** (target Shopify fact is **non-null**) | Additive **nullable-first** Prisma column + backfill is allowed for PR6-A migration safety. That is **not** API nullability. Persist the exact IANA string Shopify reports. Missing or malformed **authoritative** input **fails closed**. **Never** substitute UTC or server local. Defensive transport/schema-drift handling is **policy**, not a schema property. | Calendar-day boundaries for `net-units-order-date-v1` |
+| `currencyCode` | Shopify `Shop.currencyCode` — **`CurrencyCode!` in 2026-07** | persist Shopify value | Shop-level; **per-order** `ShopifyOrderFact.shopCurrencyCode` (`Order.currencyCode`) is what makes **historical** amounts survive a later shop currency change |
 
 These are Shopify-authoritative facts, not product policy. They belong in PR6-A so Q-PR6-02/03 do not require a second migration.
 
@@ -755,7 +873,7 @@ Copy the PR 5 fact pattern; do not invent a second clock system. Do not invent a
 | OrderAdjustment | **NONE** | presence in parent **refund** snapshot | none | Parent-versioned |
 | SalesAgreement | `happenedAt` is **event time, immutable, not a version** | presence in `Order.agreements` | `orders/edited` | Parent-versioned by order snapshot |
 | Sale | **NONE** | presence in parent agreement | none | Parent-versioned |
-| OrderTransaction | **NONE** (`createdAt` immutable; `processedAt` nullable; `status` mutable) | presence in `Refund.transactions` | **`order_transactions/create`** (create **or** status update) | Refresh via refund snapshot apply **and** transaction-topic refetch of the parent refund; never treat `createdAt` as status version |
+| OrderTransaction | **NONE** (`createdAt` immutable; `processedAt` nullable; `status` mutable) | presence in `Refund.transactions` | **`order_transactions/create`** (create **or** status update, **only** for `success` / `failure` / `error`; **does not fire for `PENDING`**) | Refresh via refund snapshot apply **and** transaction-topic refetch of the parent refund when the topic fires. **PENDING** status is observed through refund snapshots, never through this webhook. Never treat `createdAt` as status version |
 
 **Parent-versioned children (frozen):**
 
@@ -926,7 +1044,7 @@ Needed for the frozen refund money identity in §6.6.
 
 `ShopifyOrderAgreementSaleFact` identity (**one definition only**): `(shopId, shopifyGid)` where `shopifyGid = Sale.id` (`ID!`). Required FK `shopifyAgreementGid` + `shopId`. CHILD.
 
-Columns: `quantity` (**nullable** — persist null, never coerce to 0, never a unit event), `lineType`, `actionType`, `saleTypename`, `shopifyLineItemGid` nullable, `totalAmount` MoneyBag.
+Columns: `quantity` (**nullable signed Int** — persist Shopify’s raw value including negatives; never coerce to 0; never `abs()`; null is never a unit event), `lineType`, `actionType`, `saleTypename`, `shopifyLineItemGid` nullable, `totalAmount` MoneyBag. Sign convention is frozen in §7.1.
 
 Indexes: `@@index([shopId, shopifyOrderGid])`, `@@index([shopId, shopifyLineItemGid])`, `@@index([shopId, happenedAt])` (store `happenedAt` denormalized from parent agreement on the sale row, agreement-applicator-written, invariant-tested — required so the unit ledger can be dated without a join that the Monday envelope cannot afford). **Backfill:** same transaction as agreement apply rewrites sale `happenedAt` from parent.
 
@@ -939,6 +1057,17 @@ Monday: persist order-level `currentShippingPriceSet`. Full `ShopifyOrderShippin
 ### 5.8 `OrderFactObservationInFlight`
 
 Same lifecycle contract as `CatalogObservationInFlight` (`ACTIVE` ⇒ `responseGen IS NULL`; `COMPLETED` ⇒ `responseGen NOT NULL`). Do not reuse the catalog table (domain isolation). Same lease helpers pattern; new SQL names.
+
+This table is the **durable incomplete-snapshot / fetch-failure evidence** for the order domain.
+
+**Named outcome `SNAPSHOT_PAGINATION_INCOMPLETE` (frozen):**
+
+- Persist on the in-flight observation when a required nested walk cannot be completed (agreement sales or refund child connections still `hasNextPage=true` after bounded retries / request budget).
+- Do **not** create or partially apply a canonical `ShopifyOrder` / `ShopifyRefund` merely to persist this diagnostic.
+- A truncated refund embedded in an order response contributes **no** partial refund snapshot.
+- If continuation later succeeds, **clear/complete** the observation normally (`COMPLETED`, `responseGen` set) and apply the complete snapshot under §5.1 clocks.
+- If the budget ends without a complete snapshot, persist the **terminal non-success** outcome on the observation. `order-facts-reconcile` derives the corresponding `DataIssue` from that observation. §15 must not say “none” for this failure.
+- This is a merchant-domain observation contract, not a `historyWindowState` sibling on a canonical row that was never applied.
 
 ### 5.9 What is explicitly not a fact table
 
@@ -1011,13 +1140,15 @@ Per-order `Order.currencyCode` (`shopCurrencyCode` on the fact) is what makes hi
 | Order | `originalTotalPriceSet`, `currentTotalPriceSet`, `currentSubtotalPriceSet`, `currentTotalDiscountsSet`, `currentTotalTaxSet`, `totalRefundedSet`, `netPaymentSet` |
 | Line | `originalTotalSet`, `originalUnitPriceSet`, `discountedTotalSet`, `totalDiscountSet` |
 | Refund | `totalRefundedSet` |
-| Refund line | `subtotalSet`, `totalTaxSet` |
+| Refund line | `subtotalSet`, `totalTaxSet`, **`priceSet`** (`MoneyBag!` in 2026-07; required refund-line MoneyBag lineage) |
 | Refund shipping line | `subtotalAmountSet`, `taxAmountSet` |
 | Order adjustment | `amountSet`, `taxAmountSet` |
 | Sale | `totalAmount` |
 | Order transaction | `amountSet` |
 
-**Optional (nullable schema / lineage):** `refundDiscrepancySet`, `cartDiscountAmountSet`, `currentCartDiscountAmountSet`, `currentShippingPriceSet`, `discountedUnitPriceAfterAllDiscountsSet`, `priceSet` on refund line. Missing optional bags do **not** fail-apply; present-but-invalid decimal still fail-applies the snapshot.
+**Optional (lineage / not required for fail-apply):** `refundDiscrepancySet`, `cartDiscountAmountSet`, `currentCartDiscountAmountSet`, `currentShippingPriceSet`, `discountedUnitPriceAfterAllDiscountsSet`. Missing optional bags do **not** fail-apply; present-but-invalid decimal still fail-applies the snapshot.
+
+`RefundLineItem.priceSet` is **`MoneyBag!` in 2026-07** and is a **required** refund-line bag (not optional). Treating a required bag as absent is fail-apply. Defensive transport/schema-drift handling is **policy**, not API nullability.
 
 ### 6.4 Arithmetic and precision
 
@@ -1068,16 +1199,64 @@ Shopify-reported amounts remain the stored truth. The identity is a **reconcilia
 
 Evaluated **only** over a **consistent snapshot pair** (same observation / same parent apply) **or** by the reconciler after both order and refund snapshots for that generation are complete. Never mix line quantities from observation *n* with refund lines from observation *n−k*.
 
-For each line:
+**Sole unit-event ledger:** `ShopifyOrderAgreementSaleFact`. Do **not** reintroduce refund-line units into the unit ledger.
+
+**Variant net units** for a line are the **sum of signed eligible `Sale.quantity`** (`ProductSale` / `PRODUCT`) dated per §7.2.2:
+
+```text
+net_units = Σ Sale.quantity
+            over eligible ProductSales on that line
+            with parent reason ∈ {ORDER, ORDER_EDIT, REFUND, RETURN}
+            and Sale.quantity IS NOT NULL
+```
+
+**Frozen sale-quantity sign convention (Shopify 2026-07):**
+
+| Parent `SalesAgreement.reason` | Eligible `Sale.quantity` | Meaning |
+|---|---|---|
+| `ORDER` | **positive** | original sale |
+| `ORDER_EDIT` **positive** | **positive** | true **addition** — **never** a removal |
+| `ORDER_EDIT` **negative** | **negative** | edit **removal** |
+| `REFUND` / `RETURN` reversal | **negative** | reversal of original sale units |
+
+Official 2026-07 `order` query example (pinned by T55): a `RETURN` `ProductSale` has `"quantity": -2` (and a negative `totalAmount`).
+
+**Never `abs()` and never otherwise coerce an unexpected sign.** Persist Shopify’s raw `Sale.quantity`. If a `REFUND`/`RETURN` sale has a **positive** quantity, or any other sign contradiction vs the table above, set `unitDiagnosticState=UNIT_SALE_SIGN_INCONSISTENT`. Derived magnitudes for **that inconsistent snapshot** must **not** be represented as trustworthy values.
+
+For each line, on a **consistent valid-sign** snapshot only:
 
 | Name | Definition | Source |
 |---|---|---|
 | `ordered_units` | Units ordered including later refunds and removals | `LineItem.quantity` |
 | `current_units` | Units remaining excluding refunded and removed | `LineItem.currentQuantity` |
-| `refunded_units` | Sum of **agreement-sale** quantities on that line where parent `reason ∈ {REFUND, RETURN}` and the sale is variant-unit eligible (`ProductSale` / `PRODUCT`) | **unit-event ledger** — **not** refund-line sum |
-| `removed_units` | Sum of **agreement-sale** quantities on that line where parent `reason = ORDER_EDIT` and quantity is negative (edit removals), or equivalently `ordered_units - current_units - refunded_units` **on a consistent snapshot** | derived; must be ≥ 0 when identity holds |
+| `refunded_units` | **Positive magnitude** of valid **negative** eligible REFUND/RETURN sale quantities | unit-event ledger — **not** refund-line sum |
+| `removed_units` | **Positive magnitude** of valid **negative** eligible ORDER_EDIT removal quantities. Positive ORDER_EDIT quantities are **additions, never removals**. | unit-event ledger |
 
-If `ordered_units - current_units - refunded_units` (ledger-based `refunded_units`) is `< 0` on a consistent snapshot pair, do not coerce. Set `unitDiagnosticState=LINE_UNIT_IDENTITY_INCONSISTENT`. Keep stored Shopify fields. T54: exchanges must **not** spuriously fire this when Shopify’s snapshot is internally consistent.
+Exact formulas (eligible = variant-unit `ProductSale` / `PRODUCT`; `Sale.quantity IS NOT NULL`):
+
+```text
+refunded_units
+  = −Σ (Sale.quantity of eligible ProductSales
+        whose parent reason ∈ {REFUND, RETURN}
+        and Sale.quantity < 0)
+
+removed_units
+  = −Σ (Sale.quantity of eligible ProductSales
+        whose parent reason = ORDER_EDIT
+        and Sale.quantity < 0)
+```
+
+**Identity (only on a consistent valid-sign snapshot):**
+
+```text
+ordered_units − current_units − refunded_units = removed_units
+```
+
+Do **not** evaluate this identity, and do **not** publish trustworthy derived magnitudes, when `unitDiagnosticState=UNIT_SALE_SIGN_INCONSISTENT`.
+
+If the identity fails on a consistent **valid-sign** snapshot pair, do not coerce. Set `unitDiagnosticState=LINE_UNIT_IDENTITY_INCONSISTENT`. Keep stored Shopify fields.
+
+T29 and T54 must **actually detect** contradictory unit identities (a broken identity must fire; a consistent exchange must not). T47: the underlying reversal sale stores **−1** **and** derived `refunded_units = 1`.
 
 Gift-card lines (`isGiftCard=true`) and `GiftCardSale` / `TipSale`: stored; **excluded from variant demand / replenishment / ABC** (PO-08).
 
@@ -1089,7 +1268,7 @@ Test orders (`orderTest=true`): stored; **excluded from every operational demand
 
 **Sole unit-event ledger:** `ShopifyOrderAgreementSaleFact` rows whose parent `SalesAgreement.reason` ∈ {`ORDER`, `ORDER_EDIT`, `REFUND`, `RETURN`} **and** whose concrete sale type is variant-unit eligible per §7.2.1.
 
-Refund-line facts remain stored as **money, restock, and reconciliation evidence** and are **not** unit events.
+Refund-line facts remain stored as **money, restock, and reconciliation evidence** and are **not** unit events. Do **not** reintroduce refund-line units into the unit ledger.
 
 `UNKNOWN` agreement reason: persist sales; **not** unit events until a later named policy; set `unitDiagnosticState` accordingly.
 
@@ -1112,14 +1291,15 @@ Facts retain original timestamps. **Metric dating:**
 
 | Event | Units | Metric calendar day (shop IANA timezone) |
 |---|---|---|
-| Original `reason=ORDER` ProductSale | `Sale.quantity` (typically positive) | original order `processedAt` |
-| Edit removal `reason=ORDER_EDIT` negative ProductSale | restates **original order** net demand | original order `processedAt` (not happenedAt) |
-| True edit **addition** `reason=ORDER_EDIT` positive ProductSale | `Sale.quantity` | agreement `happenedAt` |
-| Refund/return `reason ∈ {REFUND, RETURN}` ProductSale | restates **original order** net demand | original order `processedAt` (not refund day) |
+| Original `reason=ORDER` ProductSale | **positive** `Sale.quantity` | original order `processedAt` |
+| Edit removal `reason=ORDER_EDIT` **negative** ProductSale | restates **original order** net demand | original order `processedAt` (not happenedAt) |
+| True edit **addition** `reason=ORDER_EDIT` **positive** ProductSale | **positive** `Sale.quantity`; **never** a removal | agreement `happenedAt` |
+| Refund/return `reason ∈ {REFUND, RETURN}` ProductSale | **negative** reversal `Sale.quantity`; restates **original order** net demand | original order `processedAt` (not refund day) |
 | Refund line | **not a unit event** | n/a |
 | `Sale.quantity IS NULL` | persist; **never** a unit event | n/a |
+| Unexpected sign (e.g. REFUND/RETURN **positive**) | persist raw Shopify value; `UNIT_SALE_SIGN_INCONSISTENT`; derived magnitudes **not trustworthy** | n/a |
 
-T47: 3 ordered − 1 refunded ⇒ `refunded_units = 1`, **not** 2, with **both** agreement and refund facts present.
+T47: 3 ordered − 1 refunded ⇒ the reversal sale stores **−1** **and** derived `refunded_units = 1`, **not** 2, with **both** agreement and refund facts present. T55 pins Shopify’s documented RETURN example (`quantity: -2`).
 
 ### 7.3 Metric policy — frozen
 
@@ -1143,6 +1323,8 @@ Persist Shopify bags. Do not rename them into “net sales” in code until prop
 
 Refund **money** affects net-sales/revenue **only after** the relevant refund transaction is `SUCCESS`. Units follow §7.2 regardless of settlement.
 
+`order_transactions/create` fires only for `success` / `failure` / `error`. **PENDING** transactions are observed through **refund snapshots**; do **not** expect a PENDING webhook. T36 asserts that a PENDING transaction present on a refund snapshot is stored, money metrics exclude it until SUCCESS, and units follow the ledger.
+
 Order-level `currentTotalPriceSet` includes taxes and discounts after returns (official Order docs). That is **not** automatically “net sales.”
 
 ### 7.5 Scenario rules (apply behavior)
@@ -1156,7 +1338,7 @@ Order-level `currentTotalPriceSet` includes taxes and discounts after returns (o
 | Order edits | `edited=true`; agreements/sales upserted from **order** snapshot; line quantities replaced from refetch, not patched from webhook deltas |
 | Line removal | Line row remains; `currentQuantity=0` |
 | Quantity increase/decrease | New snapshot + agreement sales; additions dated `happenedAt`; removals restate original `processedAt` |
-| **Exchange** | Persist Shopify snapshots; do **not** emit spurious `LINE_UNIT_IDENTITY_INCONSISTENT` when ordered/current/refunded identity holds on a consistent pair (T54) |
+| **Exchange** | Persist Shopify snapshots; do **not** emit spurious `LINE_UNIT_IDENTITY_INCONSISTENT` when the valid-sign identity holds on a consistent pair (T54). T54 **must also** detect a contradictory identity when one is injected. |
 | **`SaleLineType.ADJUSTMENT` / `AdjustmentSale`** | Persist; **not** a unit event; money reconciliation only |
 | Cancel after payment | `cancelledAt` + `cancelReason`; refunds may exist; do not apply webhook line_items as deltas |
 | Refund after cancellation | Persist both; identity on consistent snapshot |
@@ -1215,7 +1397,9 @@ DataIssue / diagnostic codes (merchant column and/or reconciler-derived `DataIss
 - `REFUND_OUTSIDE_ACCESSIBLE_WINDOW`
 - `MONEY_CURRENCY_MISMATCH`
 - `REFUND_MONEY_UNBALANCED`
-- `LINE_UNIT_IDENTITY_INCONSISTENT`
+- `LINE_UNIT_IDENTITY_INCONSISTENT` — valid-sign identity failed on a consistent snapshot
+- `UNIT_SALE_SIGN_INCONSISTENT` — unexpected `Sale.quantity` sign vs §7.1; raw Shopify value preserved; derived magnitudes not trustworthy
+- `SNAPSHOT_PAGINATION_INCOMPLETE` — durable on `OrderFactObservationInFlight`; no partial canonical apply; reconciler derives `DataIssue`
 
 ---
 
@@ -1230,7 +1414,7 @@ DataIssue / diagnostic codes (merchant column and/or reconciler-derived `DataIss
 | `refunds/create` | `app/routes/webhooks.refunds.create.tsx` | same | same — **keep v1 sanitizer**; refetch refund **and** parent if accessible |
 | `orders/edited` | **not subscribed** | — | Monday-critical **signal**; **identity-only** sanitizer (new topic) |
 | `orders/delete` | **not subscribed** | — | Monday-critical **signal**; **identity-only**; fail-closed unknown shape |
-| `order_transactions/create` | **not subscribed** | — | Monday-critical for SUCCESS money (PO-06); identity-only; refetch refund (+ order if accessible) |
+| `order_transactions/create` | **not subscribed** | — | Monday-critical for SUCCESS money (PO-06); identity-only; refetch refund (+ order if accessible). Topic fires **only** for `success` / `failure` / `error`. **PENDING is not webhooked**; observe PENDING via refund snapshots (T36). |
 | `orders/updated` | **not subscribed** | — | Post-Monday latency; noisy |
 
 Intake already matches PR 4: authenticate, sanitize, `WebhookDelivery`, `DurableJob`, envelope v3, dispatcher kick.
@@ -1368,7 +1552,7 @@ Control-plane tables stay non-DML for runtime (`WebhookDelivery`, `DurableJob`, 
 |---|---|
 | `SyncApplicationReceipt` | Exactly-once merchant effect per webhook delivery application key |
 | GID / ordinal upsert | Idempotent snapshot replace |
-| Advisory lock `stocky-pr6-canonical-lock-v1` | Serialize; Order+Refund always both, ascending `(key1,key2)`, deduped |
+| Advisory lock `stocky-pr6-canonical-lock-v1` | Serialize per **§5.1** (do not invent a second rule): refund job = **Order + Refund**; order-only job = **Order only** unless the same apply includes refund snapshots (then include each Refund GID); **dedupe then ascending `(key1,key2)`**; **no Shopify I/O under advisory lock**. There is **no** “Order+Refund always both” rule. |
 | Observation intervals | Concurrent refetch safety |
 | `ON CONFLICT` | Must re-evaluate clocks, not blind overwrite (R-160) |
 | First insert | Universal exclusive lock **before** the row exists |
@@ -1383,6 +1567,14 @@ Required races (in addition to PR 5 analogs):
 - scope downgrade voids absence (T50).
 
 Do not hold advisory locks across Shopify I/O.
+
+**Lock rule (echo of §5.1 — these two sections must agree):**
+
+- Refund job = Order **and** Refund.
+- Order-only job = Order **only**, unless the same apply includes refund snapshots (then include each Refund GID).
+- Dedupe, then acquire in ascending `(key1, key2)`.
+- No Shopify I/O under advisory lock.
+- No contradictory “Order+Refund always both” summary.
 
 Lock timeout: reuse PR5 `5000ms` transaction-local `lock_timeout`; fail closed and retry.
 
@@ -1419,13 +1611,14 @@ Monday may query lines with `GROUP BY variantGidAtSale` over `orderProcessedAt` 
 | Failure | Merchant-durable writer | Reconciler `DataIssue` | Behavior |
 |---|---|---|---|
 | GraphQL throttle / 5xx / timeout | observation abandoned | none for absence | Retry bounded; not ABSENT |
-| Incomplete pages | no successful apply | none | Apply not successful; no child absence |
+| Incomplete pages / exhausted nested walk | `OrderFactObservationInFlight` outcome **`SNAPSHOT_PAGINATION_INCOMPLETE`** | `SNAPSHOT_PAGINATION_INCOMPLETE` derived by `order-facts-reconcile` | **No** successful parent/child canonical apply. **No** partial refund snapshot. **No** child absence. Visible terminal non-success after bounded retries / request budget. Continuation success clears/completes the observation normally (T56/T57). Replaces silent/`none`. |
 | Bulk partial | resume state | run not COMPLETE | Resume; not success |
 | Decimal parse fail / required bag invalid | no apply | optional after retry exhaustion | Fail-apply snapshot; no Number fallback |
 | GID mismatch | no apply | — | Fail closed |
 | Currency mismatch on required bag | no apply (`moneyDiagnosticState` only if a prior row exists and this observation is rejected) | `MONEY_CURRENCY_MISMATCH` | **Fail-apply entire snapshot** — not skip bag |
 | Refund money identity mismatch | persist Shopify fields + `moneyDiagnosticState=REFUND_MONEY_UNBALANCED` | `REFUND_MONEY_UNBALANCED` | T49 |
-| Unit identity `removed_units < 0` on consistent pair | persist Shopify fields + `unitDiagnosticState` | `LINE_UNIT_IDENTITY_INCONSISTENT` | No coerce |
+| Unit identity failed on a **consistent valid-sign** snapshot | persist Shopify fields + `unitDiagnosticState=LINE_UNIT_IDENTITY_INCONSISTENT` | `LINE_UNIT_IDENTITY_INCONSISTENT` | No coerce. Identity `ordered − current − refunded = removed` is evaluated **only** on valid-sign snapshots. |
+| Unexpected `Sale.quantity` sign | persist raw Shopify sale value + `unitDiagnosticState=UNIT_SALE_SIGN_INCONSISTENT` | `UNIT_SALE_SIGN_INCONSISTENT` | Never `abs()` / never coerce. Derived magnitudes for that snapshot are **not trustworthy**. |
 | Out-of-window null refetch | `existenceKind=INACCESSIBLE_HISTORY_WINDOW`; state preserved | `ORDER_EXISTENCE_UNVERIFIABLE_WINDOW` as needed | **No tombstone** |
 | Out-of-window refund/edit signal | `historyWindowState=REFUND_OUTSIDE_ACCESSIBLE_WINDOW` | same code | Retain parent |
 | Import truncated vs requested lookback | `historyWindowState=ORDER_HISTORY_WINDOW_TRUNCATED` | same | Honesty; not absence |
@@ -1530,7 +1723,7 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 | Must not touch | Prisma, migrations, apply, webhooks, catalog-facts files, `types.ts` contract (owned by A; B consumes) |
 | Dependencies | **PR6-A merged** (frozen types + this plan’s query shapes) |
 | Tier | **A** (identity + money parse) |
-| Tests | mutation reject; GID mismatch fail-closed; decimal string; DateTime no Date.parse rewrite; pagination completeness; bulk nesting/schema; **T20 generic array `first`**; T52 invalid Sale selection; T53 Bulk C rejected; MoneyBag mapping; Bulk B gate result recorded |
+| Tests | mutation reject; GID mismatch fail-closed; decimal string; DateTime no Date.parse rewrite; pagination completeness; bulk nesting/schema; **T20 named non-connection LIST `first`**; T52 invalid Sale selection; T53 Bulk C rejected; MoneyBag mapping; Bulk B gate result recorded; T56/T57 continuation |
 | Claude | **Required** |
 | Merge order | **2 (parallel with C)** |
 
@@ -1544,7 +1737,7 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 | Must not touch | admin-read documents, prisma schema, webhook routes, forecast, `app/types/**` |
 | Dependencies | **PR6-A merged** (tables + types). **Not** blocked on PR6-B merge |
 | Tier | **A** |
-| Tests | §19 apply/clock/money/unit cases including T41–T50, T54 |
+| Tests | §19 apply/clock/money/unit cases including T41–T50, T54–T57 |
 | Claude | **Required** |
 | Merge order | **2 (parallel with B)** |
 
@@ -1564,7 +1757,7 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 
 ### 17.3 File-ownership conflict watch
 
-`webhook-processor.ts`, `sanitize.server.ts`, `job-envelope.server.ts`, `schema.prisma` are single-writer files. Only the listed lane may edit them. PR 30/31 must not be used as a base.
+`webhook-processor.ts`, `sanitize.server.ts`, `job-envelope.server.ts`, `schema.prisma` are single-writer files. Only the listed lane may edit them. **Do not use PR #30 as a base.** PR **#31** is **merged** on `origin/main` as `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`; `app/lib/catalog-facts/apply/**` on main is the merged reference applicator pattern for PR6-C. This planning branch is **not** rebased onto current main in this pass.
 
 ---
 
@@ -1575,7 +1768,9 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 - [x] All 24 findings have explicit dispositions (this packet; ChatGPT still decides technical acceptance)
 - [x] All 70 correction-list items incorporated
 - [x] Product-owner decisions PO-01 … PO-09 frozen
-- [ ] Immutable review blob remains `d72340c01dd9c662d0e8bb4aa8d43482940470d9`
+- [x] NEW-CLAUDE-PR6PC-01 … 06 incorporated in contract text (this pass; independent final correction re-review pending)
+- [ ] Immutable original review blob remains `d72340c01dd9c662d0e8bb4aa8d43482940470d9`
+- [ ] Immutable correction re-review blob remains `fca2b260d03e3105782ed216f7773c53e6aef2a7`
 - [ ] Diff is docs-only under `stocky-plus/docs/**` (and `AGENTS.md` if it were touched — it is not)
 - [ ] No runtime/schema/migration/GraphQL/webhook/config changes
 - [ ] Draft PR open; not marked ready; not merged
@@ -1627,7 +1822,7 @@ Positive / negative / bypass / drift required for each important rule.
 | T17 | + | Test order | `test=true` stored; excluded from operational metrics |
 | T18 | + | Gift card / tip / custom line | Stored; excluded from variant demand |
 | T19 | + | Large order 300 lines | Complete pagination; no silent 250 cap |
-| T20 | − | `first` on **any** array field (`refunds`, `taxLines`, `transactions`, `discountAllocations`, `duties`) | Forbidden in production reader |
+| T20 | − | `first` on named **non-connection LIST** fields only: `Order.refunds`, `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, `Refund.duties` | Forbidden in production reader. **Must not** flag pagination on connections including **`Refund.transactions`**. |
 | T21 | + | Bulk JSONL two-phase | Resume after injected failure |
 | T22 | − | Bulk incomplete marked success | Fail |
 | T23 | + | Retry after DB rollback | Fresh refetch; no stale observation COMPLETE |
@@ -1636,14 +1831,14 @@ Positive / negative / bypass / drift required for each important rule.
 | T26 | bypass | `parseFloat` on apply path | Static/unit fail |
 | T27 | + | Presentment EUR / shop USD | Both stored; no FX conversion |
 | T28 | − | Sum mixed shop currencies in helper | Reject |
-| T29 | + | `removed_units < 0` on consistent snapshot | `LINE_UNIT_IDENTITY_INCONSISTENT` |
+| T29 | + | Injected contradictory unit identity on a **consistent valid-sign** snapshot | **Must detect**: `LINE_UNIT_IDENTITY_INCONSISTENT`. Must not pass on a broken system. |
 | T30 | + | Money via Number in fixture input | Reader reject |
 | T31 | drift | Fence vs later direct refetch | Direct wins per PR 5 fence rule |
 | T32 | + | Identity sanitizer drops email/address | Not in projection |
 | T33 | − | Webhook body applied as quantity delta | Forbidden on canonical path |
 | T34 | + | 60-day truncation of **import** | `ORDER_HISTORY_WINDOW_TRUNCATED` |
 | T35 | + | Advisory lock before first insert | No duplicate first-apply race |
-| T36 | + | Refund transaction pending | Facts stored; **money** metrics exclude until SUCCESS; **units** follow ledger |
+| T36 | + | Refund transaction **PENDING** present only on a refund snapshot (no `order_transactions/create` webhook) | Facts stored from the snapshot; **money** metrics exclude until SUCCESS; **units** follow ledger. Do **not** require a PENDING webhook. |
 | T37 | + | `orders/edited` signal refetches order | Snapshot matches Admin |
 | T38 | bypass | Raw SQL shopId reassignment | Denied |
 | T39 | + | Pagination boundary exactly one extra page | All lines present |
@@ -1654,16 +1849,19 @@ Positive / negative / bypass / drift required for each important rule.
 | T44 | − | Stale order response | Must **not** write its children |
 | T45 | + | Equal-`updatedAt` refetch | Repairs drifted children |
 | T46 | + | Refund line with null `id` | Ingests; idempotent |
-| T47 | + | 3 ordered − 1 refunded with **both** agreement and refund facts | `refunded_units = 1`, not 2 |
+| T47 | + | 3 ordered − 1 refunded with **both** agreement and refund facts | Underlying reversal sale stores **−1**; derived `refunded_units = 1`, **not** 2 |
 | T48 | − | One invalid required MoneyBag | Rejects **whole** snapshot (no partial row) |
 | T49 | + | Refund money-reconciliation identity | Balances; unbalanced ⇒ diagnostic / DataIssue via reconciler |
 | T50 | bypass | Scope downgrade | Voids prior absence authority |
 | T51 | + | v1-projected delivery executed after v2 deploy of other topics | Neither crash nor silent no-op |
 | T52 | − | `Sale` selection without inline fragments | Fails codegen |
 | T53 | − | Bulk C three-level document | Rejected by bulk schema gate |
-| T54 | + | Exchange scenario | Does **not** produce spurious `LINE_UNIT_IDENTITY_INCONSISTENT` |
+| T54 | + | Exchange scenario **and** injected contradictory identity | Does **not** produce spurious `LINE_UNIT_IDENTITY_INCONSISTENT` when the valid-sign identity holds; **does** detect a contradictory identity when one is injected |
+| T55 | + | Documented Shopify RETURN example (`actionType: RETURN`, `quantity: -2`) | Ledger stores **−2**; derived `refunded_units` magnitude **2** on a valid-sign snapshot |
+| T56 | + | Two refunds each exceeding one child page | Complete snapshot **eventually applies**; no partial refund rows from truncated embeds |
+| T57 | − | Exhausted / incomplete nested walk | `SNAPSHOT_PAGINATION_INCOMPLETE` on `OrderFactObservationInFlight`; **never** partially applied; reconciler `DataIssue` visible |
 
-Also required (clock races, not separate IDs): refund/order interleaving both directions; transaction pending→success with no parent bump; exact-boundary `windowDays` drift.
+Also required (clock races, not separate IDs): refund/order interleaving both directions; transaction pending→success with no parent bump **observed via refund snapshot** (topic does not fire for PENDING); exact-boundary `windowDays` drift.
 
 Known-answer money vectors (planning fixtures; not executable in this PR):
 
@@ -1731,7 +1929,7 @@ R-139 (catalog money) is not closed by PR 6 planning. R-016 still applies when P
 | **R-170** | P1 | R-PR6-06 | FK from order lines to current variant facts losing deleted-variant history |
 | **R-171** | P1 | R-PR6-07 | Mixing shop and presentment money in ABC |
 | **R-172** | P2 | R-PR6-08 | `orders/edited` / `orders/delete` / `order_transactions/create` not subscribed; Last-X stale or money SUCCESS unobservable |
-| **R-173** | P1 | R-PR6-09 | PR 30/31 conflicted applicator copied incorrectly into order apply (clock collapse) |
+| **R-173** | P1 | R-PR6-09 | Conflicted PR #30 applicator copied incorrectly into order apply (clock collapse). PR #31 is merged; use `app/lib/catalog-facts/apply/**` on main as the PR6-C pattern. |
 | **R-174** | P1 | R-PR6-10 | Bulk nesting invalid document submitted without schema gate |
 | **R-175** | **P0** | R-PR6-11 | Rolling 60-day access window causes mass false tombstoning; loss unrecoverable; terminal-revival never fires |
 | **R-176** | P1 | R-PR6-12 | `orders/delete` omitted so no sound deletion authority |
@@ -1753,7 +1951,7 @@ Operational target (Monday 2026-09-07) is **not** a commitment and does not over
 Dependency order only:
 
 1. ChatGPT accepts this **corrected** planning packet (this PR). Frozen PO decisions are already in the contract.
-2. PR 5 remaining runtime lanes independently reviewed, accepted, merged, closure-synced. **PR 6 runtime cannot start before this.** PR 30/31 are currently CONFLICTING with main — inspect only.
+2. PR 5 remaining runtime lanes independently reviewed, accepted, merged, closure-synced. **PR 6 runtime cannot start before this.** PR **#31** is **merged** (`0284b66c…`); inspect only. **Do not use PR #30 as a base** (still OPEN DRAFT, CONFLICTING). This planning branch is **not** rebased onto current main in this pass; one final current-main sync only after PR 5 closes.
 3. **PR6-A**.
 4. **PR6-B ∥ PR6-C**.
 5. **PR6-D**.
@@ -1785,16 +1983,18 @@ PR 6 facts replace the **source**. They do not rewrite forecast in this phase. T
 
 ## 24. PR 30 / PR 31 interface notes (read-only)
 
-Inspected 2026-09-02; **not modified**.
+Inspected 2026-09-02; **not modified**. This planning branch is **not** rebased onto current main.
 
 | PR | Lane | Interface PR 6 should reuse conceptually |
 |---|---|---|
-| `#31` F2B | `app/lib/catalog-facts/apply/**` | Clock A/B/C, observation evidence, money reject Number, first-insert lock |
-| `#30` F2C | `app/lib/catalog-facts/compatibility-projection/**` | Rebuildable projection **after** canonical commit; never HEALTHY-by-assertion over broken facts |
+| `#31` F2B | **MERGED** on `origin/main` as `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. `app/lib/catalog-facts/apply/**` on **main** | **Merged** reference applicator pattern for **PR6-C**: Clock A/B/C, observation evidence, money reject Number, first-insert lock. Copy contracts from this merged tree, not from a conflicted branch head. |
+| `#30` F2C | `app/lib/catalog-facts/compatibility-projection/**` | Rebuildable projection **after** canonical commit; never HEALTHY-by-assertion over broken facts. **Do not use PR #30 as a base.** |
 
-PR 6 must **not** import catalog apply writers or write `SalesDailyAggregate`. Copy **contracts** from the PR 5 brief (merged) rather than from conflicted branch heads.
+PR 6 must **not** import catalog apply writers or write `SalesDailyAggregate`.
 
 F2A on main (`app/lib/catalog-facts/admin-read/**`) is the read-boundary pattern to mirror under `order-facts/admin-read`.
+
+Post-merge main `push` run for `#31`: [`33619969867`](https://github.com/Vedang1998/Stocky/actions/runs/33619969867) — event `push`, `head_sha` `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`, **SUCCESS** (Classify SUCCESS; Heavy SUCCESS; CI Gate SUCCESS).
 
 ---
 
@@ -1825,7 +2025,7 @@ F2A on main (`app/lib/catalog-facts/admin-read/**`) is the read-boundary pattern
 | 21 | Drop invalid field; persist `discountedUnitPriceAfterAllDiscountsSet` as lineage only | Done |
 | 22 | Drop `Order.cancellation`; use `cancelReason` | Done |
 | 23 | `refundableQuantity ≡ currentQuantity` | Done |
-| 24 | Generic no-`first` on arrays; T20 | Done |
+| 24 | Named non-connection LIST no-`first`; T20 scoped by owning type | Done |
 | 25 | Delete Bulk C; paginated agreements; request bound | Done |
 | 26 | Bulk B PR6-B gate + costed fallback | Done |
 | 27 | Fail-apply; delete skip-bag | Done |
@@ -1835,7 +2035,7 @@ F2A on main (`app/lib/catalog-facts/admin-read/**`) is the read-boundary pattern
 | 31 | No division unit prices | Done |
 | 32 | `Order.currencyCode` survives shop currency change | Done |
 | 33 | One ledger Option A | Done |
-| 34 | T47 | Done |
+| 34 | T47 reversal stores −1 and `refunded_units = 1` | Done |
 | 35 | Ordinal refund-line identity; T46 | Done |
 | 36 | §7.5 exchanges + ADJUSTMENT | Done |
 | 37 | Consistent snapshot pair; null Sale.quantity | Done |
@@ -1859,6 +2059,12 @@ F2A on main (`app/lib/catalog-facts/admin-read/**`) is the read-boundary pattern
 | 55 | Q-PR6-07 requires transaction topic | Done |
 | 56 | Proposed R-165…R-184 / Q-012…Q-016 in-plan | Done |
 | 57–70 | T41–T54 | Done |
+| PC-01 | §7.1 / §7.2 signed magnitudes; T29/T47/T54/T55 | Done |
+| PC-02 | §4.2 / §4.3 / §4.5 / §5.8 / §15 nested walk; T56/T57 | Done |
+| PC-03 | LIST-vs-connection by owning type; T20 | Done |
+| PC-04 | `priceSet` required; `Shop.ianaTimezone` non-null API + fail-closed | Done |
+| PC-05 | §13 echoes §5.1 lock rule | Done |
+| PC-06 | Topic status restriction; T36 PENDING via refund snapshot | Done |
 
 ---
 
@@ -1879,6 +2085,9 @@ Recorded in the implementation report after git operations. Review blob verifica
 ```text
 git hash-object stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md
 # must equal d72340c01dd9c662d0e8bb4aa8d43482940470d9
+
+git hash-object stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md
+# must equal fca2b260d03e3105782ed216f7773c53e6aef2a7
 ```
 
 ### 26.3 Not executed
