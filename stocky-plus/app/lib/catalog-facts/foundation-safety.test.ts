@@ -1,16 +1,12 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { featureFlags } from "../feature-flags.server";
+import { listProductionTypeScriptModulesRecursive } from "./admin-read/safety/production-modules";
+import { assertCatalogFactsReadBoundarySafe } from "./admin-read/safety/scan";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
-
-function productionCatalogFactModules(): string[] {
-  return readdirSync(DIR)
-    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-    .sort();
-}
 
 describe("PR5-F1 foundation safety", () => {
   it("does not change inventory-write feature-flag defaults", () => {
@@ -21,17 +17,22 @@ describe("PR5-F1 foundation safety", () => {
     expect(featureFlags.transferWrites()).toBe(false);
   });
 
-  it("enumerates every production catalog-facts module for prohibited Shopify imports", () => {
-    const files = productionCatalogFactModules();
+  it("recursively enumerates nested production modules including admin-read/safety", () => {
+    const files = listProductionTypeScriptModulesRecursive(DIR);
     expect(files.length).toBeGreaterThan(0);
     expect(files.every((file) => !file.endsWith(".test.ts"))).toBe(true);
-    for (const file of files) {
-      const source = readFileSync(path.join(DIR, file), "utf8");
-      expect(source, file).not.toMatch(/@shopify/);
-      expect(source, file).not.toMatch(/graphql-request|admin\.shopify/);
-      expect(source, file).not.toMatch(/inventoryAdjustQuantities/);
-      expect(source, file).not.toMatch(/bulkOperationRunQuery/);
-    }
+    expect(
+      files.some((file) => file.includes(`${path.sep}admin-read${path.sep}`)),
+    ).toBe(true);
+    expect(
+      files.some((file) =>
+        file.includes(`${path.sep}admin-read${path.sep}safety${path.sep}scan.ts`),
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects Shopify mutations in catalog-facts by GraphQL AST (deny-by-default)", () => {
+    assertCatalogFactsReadBoundarySafe(DIR);
   });
 
   it("advisory lock module forbids session-level pg_advisory_lock", () => {
