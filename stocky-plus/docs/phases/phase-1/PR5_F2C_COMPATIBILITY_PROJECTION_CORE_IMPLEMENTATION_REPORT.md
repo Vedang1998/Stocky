@@ -3,7 +3,7 @@
 **Slice:** PR5-F2C compatibility-projection CORE
 **Branch:** `cursor/pr5-f2c-compat-projection-core-7c2d`
 **Authority:** D-054 **EFFECTIVE**; PR5-F1 **FROZEN**
-**Status:** Correction implemented — pending independent verification
+**Status:** Current-main merge-prep complete — pending exact-head CI and ChatGPT merge decision
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **PR 5 overall:** IN PROGRESS (this lane does **not** complete PR 5)
@@ -888,3 +888,155 @@ npx vitest run --passWithNoTests=false \
 | Correction-review artifact blob | still `816dc7fb46cc84c394d8914ac0198c9f110a1825` |
 
 Exact-head `pull_request` CI for the live head after this documentation commit is the authoritative automatic evidence. This paragraph does not invent a future SHA. After that CI is green: STOP. Do not ask Claude. Do not merge. Do not mark ready. Do not start F2B or PR 6.
+
+---
+
+## 15. Emergency current-main merge preparation (PR #31 / F2B on main)
+
+This section records a one-shot synchronization of the already technically accepted F2C core onto verified current main. It does **not** rewrite §§1–14. It does **not** redesign F2C. It does **not** start F3. It does **not** implement PR 6. It does **not** close R-142 / R-145 / R-156 / R-165. It does **not** claim PR 5 complete. F2C remains canonical-read-only and still does **not** write `compatibilityProjectionState`.
+
+### 15.1 Verified identities at start (no code change)
+
+| Field | Value |
+|---|---|
+| Expected / live `origin/main` | `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` |
+| F2B merge identity | PR #31 squash — `Phase 1 PR5-F2B — canonical fact applicator (#31)` |
+| Post-merge main CI | run `33619969867`, `event=push`, `head_sha=0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`, conclusion **SUCCESS** (Classify / Heavy / CI Gate SUCCESS) |
+| Accepted F2C implementation head | `2d2e8801dd383a778c1237cec4ed068922859cf0` |
+| Historical accepted base / old merge-base | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Final independent second-correction review branch | `claude/pr30-f2c-compat-review-u5tsr9` |
+| Final review source commit | `7015c6e83e1b6aebbb65eaf03f4da2cc0e1251f3` |
+| Review artifact path | `stocky-plus/docs/phases/phase-1/PR5_F2C_COMPATIBILITY_PROJECTION_SECOND_CORRECTION_INDEPENDENT_REVIEW.md` |
+| Immutable review blob | `d637a9ecf0f42c3ae62f87e0391abb0b80e2e2ad` |
+| Review verdict | `APPROVE PR5-F2C COMPATIBILITY PROJECTION SECOND CORRECTION` (P0=0 P1=0 P2=0 P3=3) |
+| PR #30 at start | OPEN / DRAFT / UNMERGED; `head.sha=2d2e8801…`; `base.sha=5129707e…` |
+
+`git fetch origin main` immediately before this write still resolved `origin/main` to `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. Schema and migrations remain identical between accepted F2C and current main (PR5-F1 frozen).
+
+### 15.2 Sync method (history preserved; no rebase; no force-push)
+
+1. Cherry-pick `-x` of review source `7015c6e83e1b6aebbb65eaf03f4da2cc0e1251f3` onto accepted head `2d2e8801…` → `1af129f9790cc666bc8c8b7fb05f713ff070befb`. The artifact file did not exist on the PR branch. Blob after cherry-pick remains `d637a9ecf0f42c3ae62f87e0391abb0b80e2e2ad` (byte-identical to the source commit). The artifact was not edited.
+2. `git merge origin/main --no-ff` → merge commit `b1d012dff90a11cea4d9728a946f13a853bb1f6f`.
+   - parent 1: `1af129f9790cc666bc8c8b7fb05f713ff070befb` (accepted F2C + review artifact)
+   - parent 2: `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` (current main)
+3. Ancestors of the merge commit: accepted F2C `2d2e8801…`, current main `0284b66c…`, review cherry-pick `1af129f…`.
+
+First-review artifact blob remains `5d2d109b9ea5edbe0516bbb7bed115b6f6c83ed7`. Correction-review artifact blob remains `816dc7fb46cc84c394d8914ac0198c9f110a1825`.
+
+### 15.3 Conflicts and resolutions
+
+| File | Kind | Resolution |
+|---|---|---|
+| `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` | Mechanical generated scanner inventory | Regenerated with `npm run tenant:access:inventory` during the merge commit. No F2A/F2B/F2C product or concurrency contract was rewritten. Merge-commit inventory: scanned files **318**, findings **1553**, approved exceptions **1091**, violations **0**, digest `0b0d847fc943d5e360d0a0c4dd3b02d031f2aa47b1c173dd9f77901cf01e25dc`. |
+
+No other files conflicted. No semantic incompatibility between accepted F2B fact application and F2C projection was observed in the merge. F2A remains the canonical Shopify Admin read boundary. F2B remains the canonical fact applicator. F2C remains projection FROM already-committed canonical facts into the legacy compatibility projection.
+
+### 15.4 Runtime changes caused only by current-main synchronization
+
+`git diff 2d2e8801dd383a778c1237cec4ed068922859cf0 b1d012dff90a11cea4d9728a946f13a853bb1f6f -- stocky-plus/app/lib/catalog-facts/compatibility-projection` is **empty**. Accepted F2C projection contracts were not redesigned.
+
+Current-main content that the merge brought into this branch (already merged on main; not authored here):
+
+- F2A `app/lib/catalog-facts/admin-read/**` (canonical Admin read boundary, recursive production-module mutation scan)
+- F2B `app/lib/catalog-facts/apply/**` (canonical fact applicator)
+- F2B PostgreSQL suite `scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts`
+- GraphQL codegen / `graphql` dependency already on main (`package.json`, CI `graphql-codegen` step)
+- F2A recursive `foundation-safety` / `mutation-safety` scan now enumerates nested F2C production modules as production TypeScript under `catalog-facts/`
+
+F2C still does not mutate canonical facts, does not join a caller canonical transaction, and does not write `compatibilityProjectionState`.
+
+### 15.5 Current-main F2B/F2C compatibility proof
+
+Six additional PostgreSQL tests in `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` apply current-main F2B `applyCanonicalFacts` (via `pg` `Client` + tagged-template `$queryRaw`, matching the F2B suite — Prisma `$queryRaw` cannot call `pg_advisory_xact_lock(bigint,bigint)`, SQLSTATE `42883`) and then project:
+
+1. F2B-applied LIVE graph → F2C cache/snapshot; canonical fingerprint unchanged; `available=17` not `onHand=9`.
+2. Committed F2B apply then parent-ABSENT → `canonical_product_not_live` retryable, **no** `poisonHalt`, cache preserved, fingerprint unchanged (canonical commit is not rolled back).
+3. Shop A F2B facts are not leaked into shop B projection.
+4. F2B LIVE InventoryLevel with omitted quantities (`availableQuantity` null) → `canonical_available_quantity_missing` retryable; no fabricated zero snapshot.
+5. F2B `CATALOG_NULL_VERSION_OBSERVATION` keeps the previously committed title; F2C projects that committed title and does not poison.
+6. F2B-applied variant with zero InventoryItems → Prisma include `[]` is valid; `inventoryItemId` null.
+
+Allowlist was **not** broadened. `EX-TEST-035` remains the F2C PostgreSQL file exception (`productionRuntime: no`). After the new tests, inventory was regenerated again: scanned files **318**, findings **1567**, approved exceptions **1105**, violations **0**, digest `16ab22976521bdad8a9a0b499c8860aafab92f11fc12a1744d4a37287c76fd7e`.
+
+### 15.6 Local evidence on the merge-prep working tree
+
+Environment: disposable PostgreSQL **16.15** Ubuntu; Redis PONG; Node v22.14.0; `DATABASE_URL` → `localhost:5432/stocky_plus`; test-only CI role passwords in shell env; inventory-write flags unset/false.
+
+CI-ordered migrate-only drift (after `DROP SCHEMA public CASCADE` + `prisma migrate deploy` + `tenant:indexes:apply --apply`):
+
+| Command | Result |
+|---|---|
+| `npx prisma validate` | schema valid |
+| `npx prisma migrate deploy` | 18 migrations applied, including `20260816193000_pr5_catalog_fact_foundation` |
+| `npm run tenant:indexes:apply -- --apply` | exit 0 |
+| `npm run tenant:indexes:verify` | `ok: true` |
+| `npm run tenant:schema:drift` | `tenant_prisma_schema_drift_ok` exit 0 |
+| `npx prisma migrate status` | 18 migrations, database schema up to date |
+
+Unflagged `tenant:schema:drift` after a later F2B enforcement-applied catalog is the documented post-enforcement divergence (CI runs drift **before** `tenant:enforcement:apply`). That is not F2C schema drift. F2C added no schema or migration files.
+
+Focused suites:
+
+```
+npx vitest run --passWithNoTests=false \
+  app/lib/catalog-facts/compatibility-projection
+```
+
+7 files, **70** tests passed.
+
+```
+npx vitest run --passWithNoTests=false \
+  app/lib/catalog-facts/foundation-safety.test.ts \
+  app/lib/catalog-facts/admin-read/mutation-safety.test.ts \
+  app/lib/catalog-facts/apply/apply-safety.test.ts
+```
+
+3 files, **28** tests passed (foundation scan is recursive and includes F2C production modules).
+
+```
+npx vitest run --passWithNoTests=false \
+  --config vitest.tenant-access.config.ts \
+  app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts \
+  app/tenant/__tests__/relation-isolation.test.ts
+```
+
+2 files, **45** tests passed (F2C PostgreSQL **35**, relation isolation **10**).
+
+```
+npx vitest run --passWithNoTests=false \
+  --config vitest.tenant-access.config.ts \
+  app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts \
+  -t "F2B"
+```
+
+**6** passed, 29 skipped.
+
+```
+npm run test:migrations -- \
+  scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts
+```
+
+1 file, **72** tests passed.
+
+| Command | Result |
+|---|---|
+| `npm run graphql-codegen` | exit 0 (outputs gitignored) |
+| `npm run lint` | exit 0 |
+| `npm run typecheck` | exit 0 |
+| `npm test` | 30 files, **280** tests passed |
+| `npm run build` | exit 0 |
+| `npm run tenant:access:audit` | violations **0**, scannedFiles **318**, findings **1567**, `EX-TEST-035` still used |
+| `npm run tenant:access:inventory:check` | inventory fresh |
+| `npm run tenant:enforcement:inventory:check` | inventory fresh |
+| `git diff --check` | clean |
+| Review artifact blob | still `d637a9ecf0f42c3ae62f87e0391abb0b80e2e2ad` |
+
+### 15.7 Final PR head / exact-head CI
+
+The merge-prep tests, regenerated inventory, and this section are committed after merge commit `b1d012dff90a11cea4d9728a946f13a853bb1f6f`. This paragraph does **not** embed those commits' unknown future SHAs.
+
+Exact-head `pull_request` CI on the live PR #30 head after the single push is the authoritative automatic evidence. Required: Classify SUCCESS, Heavy/full validation SUCCESS, CI Gate SUCCESS, `head_sha` equals the live PR head.
+
+PR #30 must remain OPEN / DRAFT / UNMERGED. Do not mark ready. Do not merge. Do not begin F3. Do not implement PR 6.
+
+R-142 / R-145 / R-156 / R-165 remain **OPEN**. Accepted P3 residuals NEW-CLAUDE-F2CC2-01 / F2CC2-02 / F2CC2-03 remain residual / informational. Independent review of the isolated core at `2d2e8801…` does not replace a current-main exact-head re-review of the post-merge SHA if ChatGPT requires one: F2C now sits beside merged F2B writers and the F2A recursive mutation scan.
