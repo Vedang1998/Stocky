@@ -1,8 +1,15 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { Prisma } from "@prisma/client";
+import { Client } from "pg";
 import { issueTenantAuthority } from "../authority.server";
 import { createTenantDb } from "../tenant-db.server";
+import {
+  applyCanonicalFacts,
+  allocateCatalogObservationGeneration,
+} from "../../lib/catalog-facts";
+import type { CanonicalApplyDb } from "../../lib/catalog-facts/apply/sql";
+import type { DirectCanonicalObservation } from "../../lib/catalog-facts/apply/types";
 import {
   CANONICAL_HEALTH_DECISION,
   CANONICAL_PROJECTION_STATE_WRITE,
@@ -1762,6 +1769,300 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
       }),
     ).toMatchObject({ quantityAvailable: 77 });
   });
+
+  it("projects F2B-applied LIVE facts without mutating or rolling back the canonical commit", async () => {
+    const seeded = await applyF2bLiveGraph(prisma, shopAId, "f2b-live");
+    const before = await canonicalFingerprint(prisma, seeded);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        { kind: "ProductVariant", shopifyGid: seeded.variantGid },
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.canonicalFactsUnchanged).toBe(true);
+    expect(result.poisonHalt).toBeUndefined();
+    assertNoMerchantHealthAuthorization(result);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(before.product.existenceKind).toBe("LIVE_REFETCH");
+    expect(before.level.shopifyInventoryLevelGid).toBe(seeded.levelGid);
+    expect(before.level.onHandQuantity).toBe(9);
+    expect(before.level.incomingQuantity).toBe(2);
+
+    const cache = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+    expect(cache).toMatchObject({
+      shop: SHOP_A_DOMAIN,
+      shopifyProductId: seeded.productGid,
+      title: "Widget — Blue",
+      sku: "SKU-f2b-live",
+      barcode: "BAR-f2b-live",
+      imageUrl: "https://cdn.example/widget.jpg",
+      inventoryItemId: seeded.itemGid,
+      weightUnit: "GRAMS",
+    });
+    expect(cache?.weight && new Prisma.Decimal(cache.weight).equals("1.25")).toBe(
+      true,
+    );
+    const snap = await prisma.inventorySnapshot.findFirst({
+      where: {
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        locationId: seeded.locationGid,
+        snapshotDate: TODAY,
+      },
+    });
+    expect(snap?.quantityAvailable).toBe(17);
+  });
+
+  it("does not roll back a committed F2B apply when parent-ABSENT lag fails closed as retryable", async () => {
+    const seeded = await applyF2bLiveGraph(prisma, shopAId, "f2b-parent-abs");
+    await prisma.shopifyVariantCache.create({
+      data: {
+        shop: SHOP_A_DOMAIN,
+        shopId: shopAId,
+        shopifyVariantId: seeded.variantGid,
+        shopifyProductId: seeded.productGid,
+        title: "Widget — Blue",
+        sku: "SKU-f2b-parent-abs",
+        barcode: "BAR-f2b-parent-abs",
+        imageUrl: "https://cdn.example/widget.jpg",
+        inventoryItemId: seeded.itemGid,
+        weight: new Prisma.Decimal("1.2500"),
+        weightUnit: "GRAMS",
+      },
+    });
+    await applyF2bDirect(
+      prisma,
+      shopAId,
+      `${seeded.prefix}-p-abs`,
+      "Product",
+      seeded.productGid,
+      productAbsentObs(
+        shopAId,
+        `${seeded.prefix}-p-abs`,
+        seeded.productGid,
+        await nextObservationGen(prisma),
+        await nextObservationGen(prisma),
+      ),
+    );
+    const before = await canonicalFingerprint(prisma, seeded);
+    expect(before.product.existenceState).toBe("ABSENT");
+    const cacheBefore = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [{ kind: "ProductVariant", shopifyGid: seeded.variantGid }],
+    });
+
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(true);
+    expect(failed.failure?.code).toBe("canonical_product_not_live");
+    expect(failed.poisonHalt).toBeUndefined();
+    expect(failed.canonicalFactsUnchanged).toBe(true);
+    assertNoMerchantHealthAuthorization(failed);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    const cacheAfter = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+    expect(cacheAfter?.title).toBe("Widget — Blue");
+    expect(cacheAfter?.updatedAt.toISOString()).toBe(
+      cacheBefore?.updatedAt.toISOString(),
+    );
+  });
+
+  it("does not leak F2B-applied shop A facts into shop B projection", async () => {
+    const seededA = await applyF2bLiveGraph(prisma, shopAId, "f2b-iso-a");
+    const seededB = await applyF2bLiveGraph(prisma, shopBId, "f2b-iso-b");
+    const beforeB = await canonicalFingerprint(prisma, seededB);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "shop_rebuild",
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.canonicalFactsUnchanged).toBe(true);
+    expect(await canonicalFingerprint(prisma, seededB)).toEqual(beforeB);
+    expect(
+      await prisma.shopifyVariantCache.count({ where: { shopId: shopBId } }),
+    ).toBe(0);
+    expect(
+      await prisma.inventorySnapshot.count({ where: { shopId: shopBId } }),
+    ).toBe(0);
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopifyVariantId: seededB.variantGid },
+      }),
+    ).toBeNull();
+    expect(
+      await prisma.shopifyVariantCache.findFirst({
+        where: { shopifyVariantId: seededA.variantGid },
+      }),
+    ).not.toBeNull();
+  });
+
+  it("fail-closes F2B LIVE inventory with unknown availableQuantity without fabricating zero", async () => {
+    const seeded = await applyF2bLiveGraph(prisma, shopAId, "f2b-null-qty", {
+      omitLevelQuantities: true,
+    });
+    const before = await canonicalFingerprint(prisma, seeded);
+    expect(before.level.availableQuantity).toBeNull();
+    expect(before.level.existenceState).toBe("LIVE");
+
+    const failed = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [
+        {
+          kind: "InventoryLevel",
+          inventoryItemGid: seeded.itemGid,
+          locationGid: seeded.locationGid,
+        },
+      ],
+    });
+    expect(failed.status).toBe("FAILED");
+    expect(failed.retryable).toBe(true);
+    expect(failed.failure?.code).toBe("canonical_available_quantity_missing");
+    expect(failed.poisonHalt).toBeUndefined();
+    expect(failed.canonicalFactsUnchanged).toBe(true);
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    expect(
+      await prisma.inventorySnapshot.findFirst({
+        where: {
+          shopId: shopAId,
+          shopifyVariantId: seeded.variantGid,
+          locationId: seeded.locationGid,
+        },
+      }),
+    ).toBeNull();
+  });
+
+  it("projects the previously committed F2B title after a null-version diagnostic and does not poison", async () => {
+    const seeded = await applyF2bLiveGraph(prisma, shopAId, "f2b-null-ver");
+    await applyF2bDirect(
+      prisma,
+      shopAId,
+      `${seeded.prefix}-p-null`,
+      "Product",
+      seeded.productGid,
+      productLiveObs(
+        shopAId,
+        `${seeded.prefix}-p-null`,
+        seeded.productGid,
+        await nextObservationGen(prisma),
+        await nextObservationGen(prisma),
+        {
+          title: "Unversioned",
+          handle: "unversioned",
+          featuredMediaUrl: "https://cdn.example/unversioned.jpg",
+          updatedAt: null,
+        },
+      ),
+    );
+    const before = await canonicalFingerprint(prisma, seeded);
+    expect(before.product.title).toBe("Widget");
+    expect(before.product.existenceDiagnosticState).toBe(
+      "CATALOG_NULL_VERSION_OBSERVATION",
+    );
+    expect(before.product.attributeFreshnessState).toBe("DEGRADED");
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [{ kind: "ProductVariant", shopifyGid: seeded.variantGid }],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    expect(result.poisonHalt).toBeUndefined();
+    expect(await canonicalFingerprint(prisma, seeded)).toEqual(before);
+    const cache = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: seeded.variantGid },
+    });
+    expect(cache?.title).toBe("Widget — Blue");
+    expect(cache?.imageUrl).toBe("https://cdn.example/widget.jpg");
+  });
+
+  it("treats an F2B-applied variant with zero InventoryItems as a valid empty include array", async () => {
+    const prefix = "f2b-empty-items";
+    const productGid = `gid://shopify/Product/${prefix}`;
+    const variantGid = `gid://shopify/ProductVariant/${prefix}`;
+    await applyF2bDirect(
+      prisma,
+      shopAId,
+      `${prefix}-p`,
+      "Product",
+      productGid,
+      productLiveObs(
+        shopAId,
+        `${prefix}-p`,
+        productGid,
+        await nextObservationGen(prisma),
+        await nextObservationGen(prisma),
+        {
+          title: "Widget",
+          handle: `widget-${prefix}`,
+          featuredMediaUrl: "https://cdn.example/widget.jpg",
+        },
+      ),
+    );
+    await applyF2bDirect(
+      prisma,
+      shopAId,
+      `${prefix}-v`,
+      "ProductVariant",
+      variantGid,
+      variantLiveObs(
+        shopAId,
+        `${prefix}-v`,
+        variantGid,
+        productGid,
+        await nextObservationGen(prisma),
+        await nextObservationGen(prisma),
+        { title: "Blue", sku: `SKU-${prefix}`, barcode: `BAR-${prefix}` },
+      ),
+    );
+    const included = await prisma.shopifyVariantFact.findUnique({
+      where: { shopId_shopifyGid: { shopId: shopAId, shopifyGid: variantGid } },
+      include: { inventoryItems: true, product: true },
+    });
+    expect(Array.isArray(included?.inventoryItems)).toBe(true);
+    expect(included?.inventoryItems).toEqual([]);
+
+    const result = await projectCompatibilityFromCanonicalFacts({
+      authority: authorityA(),
+      processingEnabled: true,
+      now: NOW,
+      mode: "identities",
+      identities: [{ kind: "ProductVariant", shopifyGid: variantGid }],
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    const cache = await prisma.shopifyVariantCache.findFirst({
+      where: { shopId: shopAId, shopifyVariantId: variantGid },
+    });
+    expect(cache?.inventoryItemId).toBeNull();
+    expect(cache?.title).toBe("Widget — Blue");
+  });
 });
 
 function throwingWriter(message: string): LegacyCompatibilityWriter {
@@ -1979,12 +2280,18 @@ async function canonicalFingerprint(
       title: product?.title,
       updatedAt: product?.updatedAt.toISOString(),
       compatibilityProjectionState: product?.compatibilityProjectionState,
+      existenceState: product?.existenceState,
+      existenceKind: product?.existenceKind,
+      existenceDiagnosticState: product?.existenceDiagnosticState,
+      attributeFreshnessState: product?.attributeFreshnessState,
+      featuredMediaUrl: product?.featuredMediaUrl ?? null,
     },
     item: {
       shopifyVariantGid: item?.shopifyVariantGid ?? null,
       updatedAt: item?.updatedAt.toISOString(),
       compatibilityProjectionState: item?.compatibilityProjectionState,
       existenceState: item?.existenceState,
+      existenceKind: item?.existenceKind,
     },
     location: {
       updatedAt: location?.updatedAt.toISOString(),
@@ -1996,6 +2303,449 @@ async function canonicalFingerprint(
       updatedAt: level?.updatedAt.toISOString(),
       compatibilityProjectionState: level?.compatibilityProjectionState,
       existenceState: level?.existenceState,
+      existenceKind: level?.existenceKind,
+      shopifyInventoryLevelGid: level?.shopifyInventoryLevelGid ?? null,
+      onHandQuantity: level?.onHandQuantity ?? null,
+      incomingQuantity: level?.incomingQuantity ?? null,
+      isActive: level?.isActive,
+      attributeFreshnessState: level?.attributeFreshnessState,
     },
+  };
+}
+
+async function nextObservationGen(prisma: PrismaClient): Promise<bigint> {
+  return allocateCatalogObservationGeneration(prisma);
+}
+
+async function insertDirectObservation(
+  prisma: PrismaClient,
+  args: {
+    id: string;
+    shopId: string;
+    resourceKind:
+      | "Product"
+      | "ProductVariant"
+      | "InventoryItem"
+      | "Location"
+      | "InventoryLevel";
+    shopifyGid?: string | null;
+    inventoryItemGid?: string | null;
+    locationGid?: string | null;
+    requestGen: bigint;
+  },
+): Promise<void> {
+  await prisma.catalogObservationInFlight.create({
+    data: {
+      id: args.id,
+      shopId: args.shopId,
+      resourceKind: args.resourceKind,
+      shopifyGid: args.shopifyGid ?? null,
+      inventoryItemGid: args.inventoryItemGid ?? null,
+      locationGid: args.locationGid ?? null,
+      observationRequestGen: args.requestGen,
+      leaseDurationMs: 60_000,
+      leaseExpiresAt: new Date("1970-01-01T00:00:00.000Z"),
+      lifecycleState: "ACTIVE",
+    },
+  });
+}
+
+async function applyF2bDirect(
+  prisma: PrismaClient,
+  shopId: string,
+  token: string,
+  resourceKind:
+    | "Product"
+    | "ProductVariant"
+    | "InventoryItem"
+    | "Location"
+    | "InventoryLevel",
+  shopifyGid: string | null,
+  observation: DirectCanonicalObservation,
+): Promise<void> {
+  await insertDirectObservation(prisma, {
+    id: token,
+    shopId,
+    resourceKind,
+    shopifyGid:
+      observation.identity.resourceKind === "InventoryLevel" ? null : shopifyGid,
+    inventoryItemGid:
+      observation.identity.resourceKind === "InventoryLevel"
+        ? observation.identity.inventoryItemGid
+        : null,
+    locationGid:
+      observation.identity.resourceKind === "InventoryLevel"
+        ? observation.identity.locationGid
+        : null,
+    requestGen: observation.observationRequestGen,
+  });
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL is required for F2B apply compatibility proof");
+  }
+  const client = new Client({ connectionString: url });
+  await client.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`SELECT set_config('stocky.current_shop_id', $1, true)`, [
+      shopId,
+    ]);
+    const result = await applyCanonicalFacts(asQueryRaw(client), {
+      shopId,
+      observations: [observation],
+    });
+    await client.query("COMMIT");
+    const outcome = result.results[0]?.outcome;
+    if (outcome === "rejected") {
+      throw new Error(
+        `F2B apply rejected ${token}: ${result.results[0]?.diagnosticState ?? "unknown"}`,
+      );
+    }
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+function asQueryRaw(client: Client): CanonicalApplyDb {
+  return {
+    async $queryRaw(strings, ...values) {
+      let text = "";
+      const params: unknown[] = [];
+      strings.forEach((part, i) => {
+        text += part;
+        if (i < values.length) {
+          params.push(values[i]);
+          text += `$${params.length}`;
+        }
+      });
+      const result = await client.query(text, params);
+      return result.rows;
+    },
+  };
+}
+
+function productLiveObs(
+  shopId: string,
+  token: string,
+  gid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+  attrs: {
+    title: string;
+    handle: string;
+    featuredMediaUrl?: string | null;
+    updatedAt?: Date | null;
+  },
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "Product", shopifyGid: gid },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T12:00:00.000Z"),
+    shopifyCreatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    shopifyUpdatedAt:
+      attrs.updatedAt === undefined
+        ? new Date("2026-08-01T00:00:00.000Z")
+        : attrs.updatedAt,
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: {
+      title: attrs.title,
+      handle: attrs.handle,
+      vendor: null,
+      productType: null,
+      tags: [],
+      status: "ACTIVE",
+      featuredMediaUrl: attrs.featuredMediaUrl ?? null,
+    },
+  };
+}
+
+function productAbsentObs(
+  shopId: string,
+  token: string,
+  gid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "Product", shopifyGid: gid },
+    existenceKind: "ABSENT_CONFIRMED_QUERY",
+    existenceObservedAt: new Date("2026-08-17T14:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
+  };
+}
+
+function variantLiveObs(
+  shopId: string,
+  token: string,
+  gid: string,
+  productGid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+  attrs: { title: string; sku: string; barcode: string },
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "ProductVariant", shopifyGid: gid },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T12:00:00.000Z"),
+    shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: {
+      shopifyProductGid: productGid,
+      title: attrs.title,
+      displayName: null,
+      selectedOptions: [{ name: "Title", value: attrs.title }],
+      sku: attrs.sku,
+      barcode: attrs.barcode,
+      priceAmount: "12.500000",
+      compareAtPriceAmount: null,
+      currencyCode: "USD",
+      position: null,
+    },
+  };
+}
+
+function itemLiveObs(
+  shopId: string,
+  token: string,
+  gid: string,
+  variantGid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "InventoryItem", shopifyGid: gid },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T12:00:00.000Z"),
+    shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: {
+      shopifyVariantGid: variantGid,
+      sku: null,
+      tracked: true,
+      requiresShipping: true,
+      weightValue: "1.250000",
+      weightUnit: "GRAMS",
+      unitCostAmount: null,
+      unitCostCurrencyCode: null,
+      unitCostAccess: "NULL",
+    },
+  };
+}
+
+function locationLiveObs(
+  shopId: string,
+  token: string,
+  gid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+  name: string,
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: { shopId, resourceKind: "Location", shopifyGid: gid },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T12:00:00.000Z"),
+    shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: {
+      name,
+      isActive: true,
+      deactivatedAt: null,
+      fulfillsOnlineOrders: true,
+      shipsInventory: true,
+      isFulfillmentService: false,
+      hasActiveInventory: true,
+      address1: null,
+      city: null,
+      provinceCode: null,
+      countryCode: null,
+      zip: null,
+    },
+  };
+}
+
+function levelLiveObs(
+  shopId: string,
+  token: string,
+  itemGid: string,
+  locationGid: string,
+  requestGen: bigint,
+  responseGen: bigint,
+  attrs: {
+    shopifyInventoryLevelGid: string;
+    omitQuantities?: boolean;
+  },
+): DirectCanonicalObservation {
+  return {
+    observationKind: "direct",
+    observationToken: token,
+    observationRequestGen: requestGen,
+    observationResponseGen: responseGen,
+    identity: {
+      shopId,
+      resourceKind: "InventoryLevel",
+      inventoryItemGid: itemGid,
+      locationGid,
+    },
+    existenceKind: "LIVE_REFETCH",
+    existenceObservedAt: new Date("2026-08-17T12:00:00.000Z"),
+    shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+    sourceKind: "INCREMENTAL_REFETCH",
+    attributes: attrs.omitQuantities
+      ? {
+          isActive: true,
+          shopifyInventoryLevelGid: attrs.shopifyInventoryLevelGid,
+        }
+      : {
+          isActive: true,
+          shopifyInventoryLevelGid: attrs.shopifyInventoryLevelGid,
+          quantities: [
+            {
+              name: "available",
+              quantity: 17,
+              shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+            },
+            {
+              name: "onHand",
+              quantity: 9,
+              shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+            },
+            {
+              name: "incoming",
+              quantity: 2,
+              shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+            },
+          ],
+        },
+  };
+}
+
+async function applyF2bLiveGraph(
+  prisma: PrismaClient,
+  shopId: string,
+  suffix: string,
+  options?: { omitLevelQuantities?: boolean },
+) {
+  const prefix = suffix;
+  const productGid = `gid://shopify/Product/${suffix}`;
+  const variantGid = `gid://shopify/ProductVariant/${suffix}`;
+  const itemGid = `gid://shopify/InventoryItem/${suffix}`;
+  const locationGid = `gid://shopify/Location/${suffix}`;
+  const levelGid = `gid://shopify/InventoryLevel/${suffix}`;
+
+  await applyF2bDirect(
+    prisma,
+    shopId,
+    `${prefix}-p`,
+    "Product",
+    productGid,
+    productLiveObs(
+      shopId,
+      `${prefix}-p`,
+      productGid,
+      await nextObservationGen(prisma),
+      await nextObservationGen(prisma),
+      {
+        title: "Widget",
+        handle: `widget-${suffix}`,
+        featuredMediaUrl: "https://cdn.example/widget.jpg",
+      },
+    ),
+  );
+  await applyF2bDirect(
+    prisma,
+    shopId,
+    `${prefix}-v`,
+    "ProductVariant",
+    variantGid,
+    variantLiveObs(
+      shopId,
+      `${prefix}-v`,
+      variantGid,
+      productGid,
+      await nextObservationGen(prisma),
+      await nextObservationGen(prisma),
+      { title: "Blue", sku: `SKU-${suffix}`, barcode: `BAR-${suffix}` },
+    ),
+  );
+  await applyF2bDirect(
+    prisma,
+    shopId,
+    `${prefix}-i`,
+    "InventoryItem",
+    itemGid,
+    itemLiveObs(
+      shopId,
+      `${prefix}-i`,
+      itemGid,
+      variantGid,
+      await nextObservationGen(prisma),
+      await nextObservationGen(prisma),
+    ),
+  );
+  await applyF2bDirect(
+    prisma,
+    shopId,
+    `${prefix}-l`,
+    "Location",
+    locationGid,
+    locationLiveObs(
+      shopId,
+      `${prefix}-l`,
+      locationGid,
+      await nextObservationGen(prisma),
+      await nextObservationGen(prisma),
+      `Loc ${suffix}`,
+    ),
+  );
+  await applyF2bDirect(
+    prisma,
+    shopId,
+    `${prefix}-il`,
+    "InventoryLevel",
+    null,
+    levelLiveObs(
+      shopId,
+      `${prefix}-il`,
+      itemGid,
+      locationGid,
+      await nextObservationGen(prisma),
+      await nextObservationGen(prisma),
+      {
+        shopifyInventoryLevelGid: levelGid,
+        omitQuantities: options?.omitLevelQuantities === true,
+      },
+    ),
+  );
+
+  return {
+    prefix,
+    productGid,
+    variantGid,
+    itemGid,
+    locationGid,
+    levelGid,
   };
 }
