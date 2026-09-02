@@ -663,6 +663,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Requires outbound HTTPS to shopify.dev to fetch the Admin GraphQL schema.
+      # Must run before Unit tests so the generated Admin 2026-07 schema artifact
+      # exists for the bulk schema gate. R-016 remains OPEN.
+      - name: GraphQL codegen / schema validation
+        run: npm run graphql-codegen
+
       - name: Unit tests
         run: npm test
 
@@ -680,10 +686,6 @@ jobs:
 
       - name: Build
         run: npm run build
-
-      # Requires outbound HTTPS to shopify.dev to fetch the Admin GraphQL schema.
-      - name: GraphQL codegen / schema validation
-        run: npm run graphql-codegen
 
   gate:
     name: CI Gate
