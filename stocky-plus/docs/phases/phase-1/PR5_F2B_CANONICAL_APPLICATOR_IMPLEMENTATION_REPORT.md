@@ -3,12 +3,12 @@
 **Slice:** PR5-F2B canonical merchant-fact applicator
 **Branch:** `cursor/pr5-f2b-canonical-applicator-055c`
 **Authority:** D-054 **EFFECTIVE**; PR5-F1 foundation **FROZEN**
-**Status:** First independent-review correction package implemented locally — pending exact-head full CI, then ChatGPT correction review. Do not ask Claude from this lane.
+**Status:** First independent-review correction package technically accepted. F2A-main merge preparation appended in §17. Pending exact-head full CI, then ChatGPT merge authorization. Do not ask Claude from this lane.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
 
-This report records the PR5-F2B applicator implementation. It does **not** claim PR 5 is complete. It does **not** start webhook, bulk/JSONL, compatibility-projection, or PR 6 work. ChatGPT has not accepted this slice.
+This report records the PR5-F2B applicator implementation. It does **not** claim PR 5 is complete. It does **not** start webhook, bulk/JSONL, compatibility-projection, F2C, or PR 6 work. ChatGPT technically accepted the correction package; merge is **not** authorized in this refresh.
 
 ---
 
@@ -593,3 +593,131 @@ Do **not** close risks from this correction.
 After exact-head full CI is green: return to ChatGPT for PR5-F2B independent-review **correction** review. Do **not** merge. Do **not** mark the PR ready. Do **not** ask Claude. Do **not** start JSONL, webhook integration, F2C integration, or PR 6.
 
 Exact-head `pull_request` CI for this correction head is recorded after the single push. This report does not embed an unknown future SHA or run id.
+
+## 17. F2A-main merge preparation (emergency refresh)
+
+**Status:** Merge preparation only. ChatGPT technically accepted PR5-F2B. Merge is **not** yet authorized.
+
+This section is appended after ChatGPT technical acceptance of the F2B correction package and after F2A merged to `main`. It does **not** rewrite the history above. It does **not** edit any Claude review artifact. It does **not** change F2B runtime, F2B tests, schema, migrations, or package files beyond the F2A merge. It does **not** edit `PROJECT_STATUS.md`, `DECISIONS.md`, or `RISK_REGISTER.md`. Those live-control records are updated **after** merge.
+
+### 17.1 Identities
+
+| Field | Value |
+|---|---|
+| ChatGPT technical acceptance | **ACCEPT PR5-F2B CANONICAL APPLICATOR** (correction package) |
+| Accepted F2B implementation head | `1b72a4c95f0056783c6c3356bea18a572ca4d5ef` |
+| Authorized `origin/main` at refresh start | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (F2A squash merge) |
+| F2A post-merge main CI | run `32362021387`, event `push`, head `f65ab4b…`, **SUCCESS** (Classify / Heavy / CI Gate SUCCESS) |
+| Previous PR #31 merge base | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Sync strategy | non-destructive `git merge origin/main` (no rebase, no force-push, no amend of reviewed commits) |
+| Merge commit | `3b01fb88b9c6ee699936c71c8a4297ae6da1427d` (parents `dba3b24…` + `f65ab4b…`) |
+| Immutable first review | `PR5_F2B_CANONICAL_APPLICATOR_INDEPENDENT_REVIEW.md` blob `e3fe412180ddb6d5b79d9fa8c6d566e68433918a` (**not edited**) |
+| Final independent correction review branch | `claude/pr5-f2b-applicator-review-io7c16` |
+| Final independent correction review commit | `d0e5f2fb8e0439b6e7010699f171651f299b4d26` |
+| Review commit cherry-picked | `d0e5f2fb8e0439b6e7010699f171651f299b4d26` → branch commit `dba3b24d29fe257584c1f1d9d1ad6a8139114f69` |
+| Final correction-review artifact blob | `b01569fd77455566438bcedbe869647beb24eda7` (byte-identical after cherry-pick) |
+| Independent verdict | `APPROVE PR5-F2B CANONICAL APPLICATOR CORRECTION` |
+| Final independent finding posture | P0 0 / P1 0 / P2 0 |
+| PR #31 | remains OPEN / DRAFT / UNMERGED. Merge is **not** performed in this package. |
+
+Lineage after merge: `HEAD` contains accepted F2B head `1b72a4c…` **and** current main `f65ab4b…`. Last F2B runtime/test implementation commit remains `1b72a4c…`. Cherry-pick and merge commits are documentation / synchronization only.
+
+A later documentation commit on the same branch may exist; it must not be treated as a runtime change. This report does not embed its own commit SHA or an unknown future CI run id.
+
+### 17.2 Conflicts encountered and exact resolutions
+
+Only one conflict:
+
+`stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md`
+
+Both sides changed the mechanically generated `scannedFiles` count:
+
+- F2B HEAD: `274`
+- F2A `origin/main`: `285`
+- content digest, findings (1408), converted paths (450), approved exceptions (958), and violations (0) were identical
+
+Resolution: after the combined tree was present, regenerate with `npm run tenant:access:inventory`. Do not hand-edit. Result:
+
+- `scannedFiles`: **301** (258 foundation + 16 F2B apply modules + 27 F2A admin-read modules)
+- findings: 1408
+- violations: 0
+- content digest unchanged: `4670755fc5d481b42efd04705d4e26fc60b2cf20a06197ebb5cb2e24979e2ba5`
+
+`PR3_DATABASE_ENFORCEMENT_INVENTORY.md` was **not** regenerated (`tenant:enforcement:inventory:check` reported fresh).
+
+F2A `foundation-safety.test.ts` was taken from merged main (F2A ownership). F2B `app/lib/catalog-facts/apply/**`, `lock-capacity.ts`, `catalog-facts/index.ts` apply exports, and `pr5-f2b-canonical-applicator.test.ts` are byte-identical to `1b72a4c…`.
+
+`catalog-facts/index.ts` still does **not** re-export admin-read (F2A contract). F2B apply re-exports remain.
+
+### 17.3 Changed files introduced by this refresh only
+
+Relative to accepted head `1b72a4c…`:
+
+- cherry-picked immutable Claude correction-review artifact
+- F2A merge: `admin-read/**`, F2A review/implementation docs, `package.json` / `package-lock.json` (`graphql` `^16.14.2`), `.github/workflows/ci.yml` (GraphQL codegen before unit tests), `foundation-safety.test.ts`
+- mechanical tenant-access inventory `scannedFiles` 274 → 301
+- this merge-preparation section
+
+No Prisma schema change. No migration. No F2B applicator runtime redesign. No Shopify mutation. Inventory-write flags remain **DEFAULT OFF**. F2C was not started.
+
+### 17.4 Local validation after refresh (executed)
+
+Environment: disposable PostgreSQL **16.15** (`stocky` / `stocky_plus` on localhost:5432), Redis 7 PONG, Node v22.14.0, npm 11.5.2. Inventory-write flags were not changed. No production access. `npm run graphql-codegen` was executed so the gitignored Admin 2026-07 schema artifact existed for merged F2A `npm test` gates (R-016 remains OPEN).
+
+| Command | Exit | Result |
+|---|---|---|
+| `npx vitest run app/lib/catalog-facts/apply app/lib/catalog-facts/lock-capacity.test.ts` | 0 | **51** passed / 5 files (focused F2B unit) |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f2b-canonical-applicator.test.ts` | 0 | **72** passed / 1 file (F2B PostgreSQL race suite) |
+| `npm run test:migrations -- …/pr5-f2b-canonical-applicator.test.ts …/pr5-catalog-fact-foundation.test.ts` | 0 | **91** passed / 2 files (F2B 72 + F1 19) |
+| `npm test` | 0 | **210** passed / 23 files (includes merged F2A + F2B + F1 catalog-facts unit) |
+| `npm run lint` | 0 | executed and passed |
+| `npm run typecheck` | 0 | executed and passed |
+| `npm run build` | 0 | executed and passed (`react-router build`) |
+| `git diff --check` | 0 | executed and passed |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 301`, `findings: 1408`, `violations: 0` |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` |
+| `npm run tenant:enforcement:inventory:check` | 0 | `tenant_enforcement_inventory_fresh` |
+| original review artifact blob | 0 | `e3fe412180ddb6d5b79d9fa8c6d566e68433918a` |
+| correction-review artifact blob | 0 | `b01569fd77455566438bcedbe869647beb24eda7` |
+
+`assertCatalogFactsReadBoundarySafe` / F2A mutation-safety scan passed against the combined `catalog-facts` tree, including F2B `apply/` production modules.
+
+Full `npm run test:migrations` (entire tenant-enforcement corpus) was **not** re-executed locally in this refresh; required on exact-head full CI.
+
+### 17.5 Accepted P3 residuals preserved
+
+Not implemented in this refresh. Carried forward from the immutable correction re-review:
+
+- **NEW-CLAUDE-PR5F2BC-01** P3 — rejection diagnostic never cleared on recovery
+- **NEW-CLAUDE-PR5F2BC-02** P3 — stale unusable payload can still degrade a fresher fact; duplicate `lockObservationRows`
+- **NEW-CLAUDE-PR5F2BC-03** P3 — `selectedOptions` compares only `name`/`value`
+- **NEW-CLAUDE-PR5F2BC-04** P3 — `DEGRADED` on an ignored observation vs brief column definition
+
+Plus earlier accepted nonblocking P3 residuals recorded in the original F2B independent review. None are closed here.
+
+### 17.6 Risk posture during merge preparation
+
+Do **not** close risks from this refresh. `RISK_REGISTER.md` was not edited.
+
+| Risk | Merge-prep posture |
+|---|---|
+| R-157 | **OPEN** — do not close |
+| R-158 | **OPEN** |
+| R-159 | **OPEN** |
+| R-160 | **OPEN** |
+| R-161 | **OPEN** — do not close |
+| R-162 | technically satisfied (independent review + applicator is a real direct-input consumer). Formal closure belongs to ChatGPT / live-control synchronization. **Not closed here.** |
+| R-163 | **OPEN** — F2A is now merged; formal closure still belongs to ChatGPT |
+| R-164 | **OPEN** — do not close |
+
+### 17.7 Next action
+
+Push this refresh **once**. Require exact-head automatic `pull_request` CI with `full_ci=true`, Classify SUCCESS, Heavy SUCCESS, CI Gate SUCCESS. Keep PR #31 OPEN / DRAFT / UNMERGED.
+
+Then return to ChatGPT for the emergency F2B **merge decision**. Do **not** merge. Do **not** mark ready. Do **not** start F2C runtime. Do **not** start JSONL, webhook integration, or PR 6.
+
+Exact-head `pull_request` CI for the final refresh head is recorded after the single push. This report does not embed an unknown future SHA or run id.
+
+Production remains **unauthorized**. Inventory-write flags remain **DEFAULT OFF**. PR 5 remains **incomplete**. PR 6 remains **not started**.
+
+**MERGE NOT YET AUTHORIZED — awaiting explicit ChatGPT / user authorization.**
