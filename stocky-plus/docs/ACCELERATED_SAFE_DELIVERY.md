@@ -7,7 +7,7 @@
 
 This operating model changes **calendar execution**, not acceptance standards.
 
-**Current authority:** D-054 is **EFFECTIVE**. Implementation-entry PR [#26](https://github.com/Vedang1998/Stocky/pull/26) merged previously. The PR5-F1 foundation is now **ACCEPTED / MERGED / FROZEN** after PR [#27](https://github.com/Vedang1998/Stocky/pull/27). Parallel PR5 runtime lanes may begin only when ChatGPT separately defines them under this operating model. D-054 does **not** authorize production, merchant production data, inventory-write flags, or Shopify inventory mutations.
+**Current authority:** D-054 is **EFFECTIVE**. Implementation-entry PR [#26](https://github.com/Vedang1998/Stocky/pull/26) merged previously. The PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN** after PR [#27](https://github.com/Vedang1998/Stocky/pull/27). PR5-F2A is **ACCEPTED / MERGED** after PR [#29](https://github.com/Vedang1998/Stocky/pull/29). Emergency Continuity Sprint calendar control is recorded in `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` and does **not** relax any gate in this document. Parallel runtime lanes may begin only when ChatGPT separately defines them under this operating model (maximum four). D-054 does **not** authorize production, merchant production data, inventory-write flags, or Shopify inventory mutations.
 
 **Historical (implementation-entry PR, while open):** D-054 was **CONDITIONAL** while the implementation-entry PR was open. Recording this document did **not** by itself authorize PR 5 runtime implementation, production, inventory writes, or any later phase.
 
