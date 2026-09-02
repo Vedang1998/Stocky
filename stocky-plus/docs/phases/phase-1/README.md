@@ -251,6 +251,7 @@
 47. `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` — immutable (blob `b1c4265…`)
 48. `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` — immutable final planning review `APPROVE PR5 PLANNING` (blob `0d322db…`; never edit)
 49. `../../ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model
+50. `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — emergency planning-only packet for Phase 1 PR 6 order/refund facts (**not** runtime authorization)
 
 ## Immutable PR 5 planning (#24) merge evidence
 
