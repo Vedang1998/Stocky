@@ -1,66 +1,57 @@
 # Phase 1 PR 5 — Emergency remaining integration plan
 
-**Status:** `PLANNING CORRECTION — F3 RUNTIME NOT AUTHORIZED`
+**Status:** `PLANNING CURRENT-MAIN SYNC — F3 RUNTIME NOT AUTHORIZED — PENDING CHATGPT MERGE DECISION`
 **Product owner:** ChatGPT
 **Planning owner:** Cursor
 **Independent reviewer (when requested):** Claude Code
 **Authority:** D-054 **EFFECTIVE**. D-053 planning remains **ACCEPTED AND MERGED**. Do **not** create D-055.
 **Emergency target:** 2026-09-07 operational rescue (calendar pressure does **not** weaken safety gates).
-**This document:** execution-ready remaining-work plan and test/fixture map after F2A / F2B / F2C cores, **corrected** from the accepted early independent Tier-A review.
-**This document does not:** implement F3 runtime, begin PR6 runtime, merge F2B/F2C/this PR, enable inventory-write flags, enable the absence-tombstone flag, access production, or authorize Shopify inventory mutations.
+**This document:** execution-ready remaining-work plan and test/fixture map after F2A / F2B / F2C cores, independently **APPROVED** as a planning correction, now synchronized onto complete F2A+F2B+F2C `main`.
+**This document does not:** implement F3 runtime, begin PR6 runtime, merge this PR or PR #33 / PR #34, enable inventory-write flags, enable the absence-tombstone flag, access production, or authorize Shopify inventory mutations.
 
 Approved product authority remains `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. This packet does not change product rules. It names what is already frozen, what is still unwired, and the smallest safe runtime lane that can close PR 5.
 
-**Lane recommendation (ACCEPTED IN DIRECTION; retained):** one remaining runtime PR (`PR5-F3`). JSONL ingest, authoritative webhook/refetch, absence/reconcile, and projection integration stay inside **one F3 merge boundary**. Do **not** split those surfaces.
+**Lane recommendation (ACCEPTED IN DIRECTION; retained):** one remaining runtime PR (`PR5-F3`). JSONL ingest, authoritative webhook/refetch, absence/reconcile, compatibility-projection integration, v1 legacy authority fencing, required two-root scanner expansion, and health-state integration stay inside **one F3 merge boundary**. Do **not** split JSONL into an earlier runtime PR.
 
 ---
 
-## 0. Evidence snapshot (re-inspected 2026-09-02 during this correction)
+## 0. Evidence snapshot (re-inspected 2026-09-04 during current-main synchronization)
 
-Inspected live GitHub + local git. Not inherited from the original PR #32 snapshot.
+Inspected live GitHub + local git. Not inherited from the 2026-09-02 planning-correction snapshot.
 
 | Field | Observed value |
 |---|---|
 | Planning branch | `cursor/pr5-emergency-remaining-integration-plan-b53e` |
+| Accepted planning-correction head | `a6b65f155de480354c66d147149fd98effb87430` |
 | Original reviewed PR #32 head | `b886bb562a0f77cfb9a8964e24b9a348b310514a` |
-| `origin/main` | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` |
-| `main` tip subject | `Phase 1 PR5-F2A — canonical Shopify admin read boundary (#29)` |
+| `origin/main` | `f9841691307583381695973600df3546dd1b9ee4` |
+| `main` tip subject | `Phase 1 PR5-F2C — compatibility projection core (#30)` |
 | F2A PR | [#29](https://github.com/Vedang1998/Stocky/pull/29) **CLOSED / MERGED** at `2026-08-20T11:04:26Z` |
-| F2A squash merge | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` |
+| F2A squash merge | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (ancestor of current `main`) |
 | F2A post-merge main CI | run [`32362021387`](https://github.com/Vedang1998/Stocky/actions/runs/32362021387), event `push`, head `f65ab4b…`, **SUCCESS** |
-| F2B PR | [#31](https://github.com/Vedang1998/Stocky/pull/31) **OPEN / DRAFT / UNMERGED** |
-| F2B accepted implementation head | `1b72a4c95f0056783c6c3356bea18a572ca4d5ef` |
-| F2B current refreshed head | `cd3b87e2d0a146fc4d73d5609207f7361c4d0e27` |
-| F2B merge-base vs current `main` | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (F2A **is** an ancestor) |
-| F2B GitHub mergeability vs current `main` | `MERGEABLE` / `BLOCKED` (draft + required checks) |
-| F2B final correction review | **ON PR #31** at `dba3b24d29fe257584c1f1d9d1ad6a8139114f69` |
+| F2B PR | [#31](https://github.com/Vedang1998/Stocky/pull/31) **CLOSED / MERGED** at `2026-09-02T10:32:09Z` |
+| F2B squash merge | `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` (ancestor of current `main`) |
+| F2B post-merge main CI | run [`33619969867`](https://github.com/Vedang1998/Stocky/actions/runs/33619969867), event `push`, head `0284b66…`, **SUCCESS** (Classify `100214488053` SUCCESS; Heavy `100214522724` SUCCESS; CI Gate `100227810337` SUCCESS) |
 | F2B correction verdict | `APPROVE PR5-F2B CANONICAL APPLICATOR CORRECTION` |
 | F2B correction review blob | `b01569fd77455566438bcedbe869647beb24eda7` |
-| F2B current-head PR CI (this inspection) | run [`33577381656`](https://github.com/Vedang1998/Stocky/actions/runs/33577381656), head `cd3b87e…`, Classify **SUCCESS**, Heavy **IN_PROGRESS** — do **not** treat as a pass |
-| F2B ChatGPT acceptance / merge | **NOT** claimed. **NOT** merged. |
-| F2C PR | [#30](https://github.com/Vedang1998/Stocky/pull/30) **OPEN / DRAFT / UNMERGED** |
-| F2C accepted implementation head / current head | `2d2e8801dd383a778c1237cec4ed068922859cf0` |
-| F2C merge-base vs current `main` | `5129707ee684e66cadcf96b976e16eb57385a7cb` (**pre-F2A**) |
-| F2C GitHub mergeability vs current `main` | `CONFLICTING` / `DIRTY` |
+| F2C PR | [#30](https://github.com/Vedang1998/Stocky/pull/30) **CLOSED / MERGED** at `2026-09-03T23:16:51Z` |
+| F2C squash merge / current `main` | `f9841691307583381695973600df3546dd1b9ee4` |
+| F2C post-merge main CI | run [`33816908539`](https://github.com/Vedang1998/Stocky/actions/runs/33816908539), event `push`, head `f984169…`, **SUCCESS** (Classify `100850950694` SUCCESS; Heavy `100850978903` SUCCESS; CI Gate `100862247959` SUCCESS) |
+| F2C isolated accepted implementation head | `2d2e8801dd383a778c1237cec4ed068922859cf0` (ancestor of the F2C squash) |
 | F2C second-correction verdict | `APPROVE PR5-F2C COMPATIBILITY PROJECTION SECOND CORRECTION` |
-| F2C second-correction review commit | `7015c6e83e1b6aebbb65eaf03f4da2cc0e1251f3` — **not** an ancestor of PR #30 |
 | F2C second-correction review blob | `d637a9ecf0f42c3ae62f87e0391abb0b80e2e2ad` |
-| F2C review on current PR #30 branch | **NO** — path does not exist at `2d2e880…` |
-| F2C exact-head PR CI (accepted implementation head) | run [`32263480615`](https://github.com/Vedang1998/Stocky/actions/runs/32263480615), head `2d2e880…`, Classify / Heavy / CI Gate **SUCCESS** |
-| F2C ChatGPT acceptance / merge | **NOT** claimed. **NOT** merged. |
+| F2C current-main review | **ON THIS BRANCH** — see §0.3 |
+| F2C current-main verdict | `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` |
 | PR #32 | [#32](https://github.com/Vedang1998/Stocky/pull/32) **OPEN / DRAFT / UNMERGED** |
-| PR #33 | [#33](https://github.com/Vedang1998/Stocky/pull/33) **OPEN / DRAFT / UNMERGED**, head `33a381ac9204a13396158551f511cee01b60b179`, `MERGEABLE`. Overlaps `PROJECT_STATUS.md` and `phases/phase-1/README.md`. **Do not merge either PR from this packet.** |
+| PR #33 | [#33](https://github.com/Vedang1998/Stocky/pull/33) **OPEN / DRAFT / UNMERGED**, head `33a381ac9204a13396158551f511cee01b60b179`. Overlaps `PROJECT_STATUS.md`, `phases/phase-1/README.md`, `RISK_REGISTER.md`, `DECISIONS.md`. **Do not merge or edit PR #33 from this packet.** After PR #32 merges, PR #33 refreshes separately onto the resulting `main`. |
+| PR #34 | [#34](https://github.com/Vedang1998/Stocky/pull/34) PR6 planning — **do not edit**. PR6 planning is independently accepted. PR6 **runtime** remains **NOT AUTHORIZED** until PR 5 is fully closed. |
 | Production | **NOT AUTHORIZED** |
 | Inventory-write flags | **DEFAULT OFF** |
 | Absence-tombstone flag | **DEFAULT OFF** (named in this packet; **not** enabled here) |
 | PR6 runtime | **NOT AUTHORIZED** |
-| PR6 planning / architecture / fixtures | **ALLOWED** one dependency level ahead under Accelerated Safe Delivery v1; must be marked speculative |
+| F3 runtime | **NOT STARTED** / **NOT AUTHORIZED** by this packet |
 
-F2B is **not** missing its final independent correction review. That review is on PR #31.
-
-F2C's final second-correction review **exists** on Claude review history at `7015c6e…` and **has not been integrated** onto current PR #30.
-
-Neither F2B nor F2C is merged.
+F2A + F2B + F2C prerequisites are **merged**. This packet does **not** claim PR 5 complete.
 
 ---
 
@@ -80,11 +71,58 @@ Neither F2B nor F2C is merged.
 
 **NEVER EDIT** the immutable review artifact. Cherry-pick only.
 
-This correction packet addresses every finding by freezing architecture. It does **not** claim independent correction approval.
+The planning correction at `a6b65f1…` addressed every original finding by freezing architecture. Independent correction approval is recorded in §0.2. This current-main sync does **not** reopen that architecture.
 
 ---
 
-## 0.2 Finding disposition index
+## 0.2 Planning-correction independent review identity (immutable)
+
+| Field | Value |
+|---|---|
+| Review class | CORRECTION re-review of the PR5-F3 remaining-integration **planning** packet (not the final exact-head F3 runtime review) |
+| Review commit (source) | `96b3f1a9649ffb14a22f731fd79e271060e8c44d` |
+| Exact reviewed parent | `a6b65f155de480354c66d147149fd98effb87430` |
+| Artifact | `stocky-plus/docs/phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.md` |
+| Immutable blob | `00e8307e3aaf83b032fbcc1e2d0258beab47a864` |
+| Verdict | **APPROVE PR5-F3 PLANNING CORRECTION** |
+| Counts | P0 **0** / P1 **0** / P2 **0** / P3 **2** (`F-CLAUDE-PR5F3EC-01`, `F-CLAUDE-PR5F3EC-02`) |
+| Original findings | **25/25** corrected |
+| One-F3-PR architecture | **RETAINED** |
+
+**NEVER EDIT** the immutable correction-review artifact. Cherry-pick only.
+
+---
+
+## 0.3 F2C current-main independent review identity (immutable)
+
+The final exact-current-main F2C review existed off the merged PR #30 branch and is made durable on this planning packet so it can land on `main` through this documentation/control transition.
+
+| Field | Value |
+|---|---|
+| Review class | Exact-current-main F2C integration review |
+| Source commit | `a894bfaa5118cf21f079bff7565e9c5839108438` |
+| Artifact | `stocky-plus/docs/phases/phase-1/PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` |
+| Immutable blob | `e14fc21efbe2cee874df6c1bd2e35647669c5445` |
+| Verdict | **APPROVE PR5-F2C CURRENT-MAIN INTEGRATION** |
+| Counts | P0 **0** / P1 **0** / P2 **0** / P3 **4** (new `NEW-CLAUDE-F2CCM-01` + retained `NEW-CLAUDE-F2CC2-01` / `-02` / `-03`) |
+
+**NEVER EDIT** the immutable F2C current-main review artifact. Integrate the addition only.
+
+---
+
+## 0.4 Accepted residual P3s carried into F3 (implementation/review targets)
+
+These remain **OPEN** as F3 implementation/review targets. They do **not** redesign the one-F3 architecture and are **not** closed by this packet.
+
+| ID | Severity | Carry-forward |
+|---|---|---|
+| **F-CLAUDE-PR5F3EC-01** | P3 | C16 `D * B` over-approximates vs worker concurrency. F3 must use `D * max(B, Σ worker concurrency across canonical-writer queues)` **or** fail closed at startup if `B < Σ worker concurrency`. |
+| **F-CLAUDE-PR5F3EC-02** | P3 | Completeness count tokens must match `^[0-9]+$` before string compare. A non-conforming token is an omitted count → fail closed (C1). |
+| **NEW-CLAUDE-F2CCM-01** | P3 | Product is a **terminal** resource. Terminal Product revival requires **two non-overlapping** authoritative LIVE confirmations. F3 retry / reconcile budgeting must not assume Product convergence in a single observation cycle. Bounded retry must allow that two-confirmation revival path **before** treating `canonical_product_not_live` as exhausted. Lower bound: **at least two full observation cycles**. Clarification of the already-approved retry contract (C23 / Race AB / R-155), not a redesign. |
+
+---
+
+## 0.5 Finding disposition index
 
 Every finding has an explicit frozen disposition in this packet. Implementation-time acceptance for the future F3 exact-head Claude review is listed in §14.
 
@@ -127,9 +165,9 @@ Every finding has an explicit frozen disposition in this packet. Implementation-
 | Slice | Live state | Frozen interface | Explicitly not done |
 |---|---|---|---|
 | **PR5-F1** | ACCEPTED / MERGED / FROZEN (`7827e535…`, later closeout `5129707…`) | Canonical fact schema, RLS, `stocky_catalog_observation_gen_seq`, `CatalogObservationInFlight`, advisory lock primitives, lock-capacity evaluator, `SyncRun.fenceGeneration` / `fenceAt`, `ingestBatchId` on facts | No ingest, no apply engine, no workers |
-| **PR5-F2A** | ACCEPTED / MERGED on `main` (`f65ab4b…`) | `app/lib/catalog-facts/admin-read/**`: executable 2026-07 QUERY documents, complete location pagination, eight quantity names, unitCost preflight, `bulkOperation(id:)` poll by persisted GID, recursive mutation scanner, `item { id }` + `location { id }` on inventory-level bulk shape. Scan root today: `app/lib/catalog-facts`. | No `bulkOperationRunQuery` submit, no JSONL stream, no workers, no `SyncRun` writes |
-| **PR5-F2B** | OPEN draft core on PR #31. Accepted implementation head `1b72a4c…`. Correction review **APPROVE** on the branch. Current head `cd3b87e…` includes F2A-main merge + docs. **Not merged. Not ChatGPT-accepted.** | `applyCanonicalFacts` / `applyCanonicalFactsWithRetry` under `app/lib/catalog-facts/apply/**`. Consumes **already-authoritative** observations. Universal `pg_advisory_xact_lock`. Tombstone-only ordinary apply. Full-sync presence uses `LIVE_FULL_SYNC_PRESENT` with NULL/NULL existence gens. R-162 safe-integer evaluator in-lane | No Shopify I/O. No JSONL. No webhook adapter. No `SyncRun` checkpoint. No `compatibilityProjectionState` writer (INSERT omits the column → schema default `HEALTHY`). No diagnostic reconciler |
-| **PR5-F2C** | OPEN draft core on PR #30 at `2d2e880…`. Second-correction review **APPROVE** exists at `7015c6e…` and is **not** on the PR branch. **Not merged. Not ChatGPT-accepted. CONFLICTING with current main.** | `projectCompatibilityFromCanonicalFacts` under `app/lib/catalog-facts/compatibility-projection/**`. Separate TenantDb. Cannot roll back canonical facts. No HEALTHY recommendation. Fail-closed unknown `availableQuantity` | No worker wiring. No `compatibilityProjectionState` persistence. No `DataIssue` / `SyncHealth`. `resumeAfterQuarantineCursor` unusable until durable quarantine. Does not fence legacy `available ?? 0` |
+| **PR5-F2A** | ACCEPTED / MERGED on `main` (`f65ab4b…`; ancestor of current `f984169…`) | `app/lib/catalog-facts/admin-read/**`: executable 2026-07 QUERY documents, complete location pagination, eight quantity names, unitCost preflight, `bulkOperation(id:)` poll by persisted GID, recursive mutation scanner, `item { id }` + `location { id }` on inventory-level bulk shape. Scan root today: `app/lib/catalog-facts`. | No `bulkOperationRunQuery` submit, no JSONL stream, no workers, no `SyncRun` writes |
+| **PR5-F2B** | ACCEPTED / MERGED. PR [#31](https://github.com/Vedang1998/Stocky/pull/31) **CLOSED / MERGED**. Squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` at `2026-09-02T10:32:09Z`. Post-merge main CI run `33619969867` **SUCCESS**. Correction verdict `APPROVE PR5-F2B CANONICAL APPLICATOR CORRECTION` (blob `b01569fd…`). | `applyCanonicalFacts` / `applyCanonicalFactsWithRetry` under `app/lib/catalog-facts/apply/**`. Consumes **already-authoritative** observations. Universal `pg_advisory_xact_lock`. Tombstone-only ordinary apply. Full-sync presence uses `LIVE_FULL_SYNC_PRESENT` with NULL/NULL existence gens. R-162 safe-integer evaluator in-lane | No Shopify I/O. No JSONL. No webhook adapter. No `SyncRun` checkpoint. No `compatibilityProjectionState` writer (INSERT omits the column → schema default `HEALTHY`). No diagnostic reconciler |
+| **PR5-F2C** | ACCEPTED / MERGED. PR [#30](https://github.com/Vedang1998/Stocky/pull/30) **CLOSED / MERGED**. Squash / current `main` `f9841691307583381695973600df3546dd1b9ee4` at `2026-09-03T23:16:51Z`. Post-merge main CI run `33816908539` **SUCCESS**. Current-main review `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` (blob `e14fc21e…`) is **on this branch**. | `projectCompatibilityFromCanonicalFacts` under `app/lib/catalog-facts/compatibility-projection/**`. Separate TenantDb. Cannot roll back canonical facts. No HEALTHY recommendation. Fail-closed unknown `availableQuantity` | No worker wiring. No `compatibilityProjectionState` persistence. No `DataIssue` / `SyncHealth`. `resumeAfterQuarantineCursor` unusable until durable quarantine. Does not fence legacy `available ?? 0` |
 
 ### 1.2 Remaining PR 5 scope (this is F3)
 
@@ -151,7 +189,7 @@ Everything in the approved brief that is **not** a frozen F1/F2A/F2B/F2C core:
 
 ### 1.3 Still present on current `main` (must be replaced or fenced, not extended)
 
-Observed on `f65ab4b…`:
+Observed on current `main` `f9841691307583381695973600df3546dd1b9ee4` (F2A+F2B+F2C merged). These legacy defects remain on the **unwired** path and are F3 replacement/fence targets:
 
 | Defect | Evidence |
 |---|---|
@@ -197,15 +235,15 @@ Cursor must **not** invent a second parallel F3 lane.
 
 ### 2.2 Hard preconditions before F3 runtime may start
 
-F3 runtime is **not** authorized by this planning packet. ChatGPT may authorize F3 only after:
+F3 runtime is **not** authorized by this planning packet. F2A + F2B + F2C merge preconditions are **satisfied**. ChatGPT may authorize F3 only after:
 
-1. PR #31 F2B receives ChatGPT acceptance, explicit user merge, and post-merge `main` CI on the squash SHA. Independent correction review is **already present** (`APPROVE PR5-F2B CANONICAL APPLICATOR CORRECTION`, blob `b01569fd…`) and is **not** a remaining blocker of that class.
-2. PR #30 F2C integrates the existing second-correction review (blob `d637a9ec…`) onto the PR branch, refreshes onto current F2A `main`, then receives ChatGPT acceptance, explicit user merge, and post-merge `main` CI on the squash SHA. Independent second-correction verdict already exists **off-branch**.
-3. Both are merged **onto current F2A `main`**, not onto `5129707…`. Observed F2C merge-base is still pre-F2A; GitHub reports F2C `CONFLICTING`.
-4. F3 branch is created from the **post-F2B-and-F2C** `origin/main` SHA, recorded in the F3 implementation report before edits.
-5. Working tree clean; no D-055; no PR6 runtime.
+1. PR #31 F2B — **DONE.** CLOSED / MERGED. Squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. Post-merge main CI run `33619969867` **SUCCESS**. Independent correction review remains `APPROVE PR5-F2B CANONICAL APPLICATOR CORRECTION` (blob `b01569fd…`).
+2. PR #30 F2C — **DONE.** CLOSED / MERGED. Squash `f9841691307583381695973600df3546dd1b9ee4`. Post-merge main CI run `33816908539` **SUCCESS**. Current-main independent review `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` (blob `e14fc21e…`) is on this branch.
+3. Both are merged **onto the F2A lineage**. Current `origin/main` is the F2C squash `f984169…`. F2A `f65ab4b…` and F2B `0284b66…` are ancestors.
+4. F3 branch is created from the **post-F2B-and-F2C** `origin/main` SHA (`f9841691307583381695973600df3546dd1b9ee4` unless `main` has moved further after this packet merges), recorded in the F3 implementation report before edits. **This packet does not start that branch.**
+5. Working tree clean; no D-055; no PR6 runtime; explicit ChatGPT F3 **runtime** authorization after this planning packet is merged.
 
-Recommended merge order: **F2B then F2C**. F3 calls `applyCanonicalFacts` then `projectCompatibilityFromCanonicalFacts`. F2B carries R-162 lock-capacity hardening. F2C carries R-165 register text. Do not merge both in parallel.
+F3 calls `applyCanonicalFacts` then `projectCompatibilityFromCanonicalFacts`. F2B carries R-162 lock-capacity hardening. F2C carries R-165 register text (now on `main`; still OPEN until F3 fences `available ?? 0`). Historical recommended merge order F2B then F2C is **complete**.
 
 ### 2.3 Internal F3 commit sequence (same PR, not extra PRs)
 
@@ -314,6 +352,8 @@ A clean parser EOF **alone is insufficient**.
    - Locations domain is **not** JSONL; completeness is F2A pagination exhausted (`hasNextPage=false` on the last page). Pagination completeness is independent of BulkOperation counts.
 
 **If Shopify omits `objectCount` or `rootObjectCount` (null/empty):** **FAIL CLOSED**. No absence nomination. No tombstone. No completeness watermark. Domain `PARTIAL_FAILURE`.
+
+**F-CLAUDE-PR5F3EC-02 (F3 implementation/review target, not a planning redesign):** before the unsigned-decimal string compare, both persisted count tokens MUST match `^[0-9]+$`. A non-conforming token is treated exactly as an omitted count (fail closed, zero nomination). Do not compare raw non-canonical strings.
 
 **All of the following produce `PARTIAL_FAILURE`, zero nomination, zero tombstone, zero success watermark:**
 
@@ -430,7 +470,7 @@ Current F2A scan root is `app/lib/catalog-facts`. Workers were **never** inside 
 | A | `app/lib/catalog-facts/**` | today’s deny-by-default (`@shopify/*` and `/services/` denied; current empty `CANONICAL_READ_IMPORT_EXCEPTIONS`) | all mutations denied except P1-05 |
 | B | `app/jobs/workers/catalog-facts/**` | worker policy: **may** import `unauthenticated` from `app/shopify.server`; **must** reject Shopify inventory/product/transfer write services and unauthorized GraphQL mutations | same mutation policy as A, including P1-05 (worker tree cannot host the submitter exception; exception is exact-path to the submitter file under Root A) |
 
-**R-163 remains OPEN** until F3 exact-head scanner evidence proves **both** roots. Not closed by F2A merge. Not closed by this planning packet.
+**R-163 remains globally OPEN** until F3 exact-head scanner evidence proves **both** roots. Not closed by F2A merge. Not closed by F2B/F2C merge. Not closed by this planning packet. Do **not** inherit PR #33 “closed for F2A lane” wording as global closure.
 
 Planted tests: worker-tree `inventoryBulkToggleActivation`; worker-tree forbidden write-service import; legitimate `unauthenticated` import passes.
 
@@ -621,6 +661,8 @@ TenantDb after canonical commit, so peak per job = 1):
 configuredWorstCaseConcurrentCanonicalTransactions = D * B
 ```
 
+**F-CLAUDE-PR5F3EC-01 (F3 implementation/review target, not a planning redesign):** `D * B` over-approximates when `B` exceeds aggregate worker concurrency and would **under**-approximate if a deployment lowered `batchSize` below that sum. F3 must implement `D * max(B, Σ worker concurrency across canonical-writer queues)` **or** fail closed at startup if `B < Σ worker concurrency`. `FX-RACE-AW` already exercises the derived value.
+
 F3 **must** pass this derived value into `evaluateCanonicalLockCapacity`. If condition B is unsafe at 32 identities, reduce identities-per-transaction (existing evaluator). Do **not** raise PostgreSQL settings from app code.
 
 `FX-RACE-AW` uses the **derived** deployment envelope from the test harness’s actual `D` and `B`, not merely evaluator default 4.
@@ -629,7 +671,7 @@ F3 **must** pass this derived value into `evaluateCanonicalLockCapacity`. If con
 
 ### C17. P2-17 — stale control records
 
-Corrected in §0 and in PR #32’s own `PROJECT_STATUS.md` / `phases/phase-1/README.md` edits. Do **not** claim F2B missing its final correction review. Do **not** claim F2C’s second-correction review is on PR #30 head. Do **not** claim either merged.
+Corrected in §0 and in PR #32’s own `PROJECT_STATUS.md` / `phases/phase-1/README.md` edits. Do **not** claim F2B missing its final correction review. Do **not** claim F2C’s second-correction review is on the historical isolated PR #30 head as the current-main review. Do **not** claim F2B or F2C remains unmerged. Current facts: F2B and F2C are **MERGED**; F2C current-main review is **on this branch**.
 
 ### C18. P3-18 — `jsonlCommittedLineOrdinal` representation
 
@@ -738,17 +780,21 @@ Locations pagination may store the F2A page cursor **during** an in-progress run
 
 No unbounded queue/provider spend. Shopify five-concurrent bulk ceiling is respected by C14 failed-domain-only retry + C9 no double-submit.
 
+**NEW-CLAUDE-F2CCM-01 carry-forward (clarification of this already-approved retry contract, not a redesign):** Product is a **terminal** resource. A terminal Product revival requires **two non-overlapping** authoritative LIVE confirmations. Therefore F3 retry / reconcile budgeting must **not** assume Product convergence in a single observation cycle. The bounded retry topology must allow the required two-confirmation revival path **before** treating `canonical_product_not_live` as exhausted. Lower bound: **at least two full observation cycles**. A single LIVE observation yields `terminal_first_confirmation` and leaves the Product fact ABSENT; child variants keep failing retryable `canonical_product_not_live` across that intermediate state. This sharpens retained `NEW-CLAUDE-F2CC2-01` rather than replacing C23 ceilings.
+
 ### C24. P3-24 — PR #32 / PR #33 serialization
 
-Both touch `PROJECT_STATUS.md` and phase README.
+Both touch `PROJECT_STATUS.md` and phase README. PR #33 also overlaps `RISK_REGISTER.md` and `DECISIONS.md`.
 
-**Do not merge either from this packet.**
+**Do not merge PR #33 from this packet. Do not edit PR #33. Do not merge this PR from this packet.**
 
-Durable ordering for **eventual** merge:
+PR #32 is the runtime-critical planning/control packet and goes first. After PR #32 is merged, PR #33 will be refreshed separately onto the resulting `main`.
 
-1. current runtime critical-path merge(s) first (F2B then F2C)
-2. one docs/control PR
-3. refresh the remaining docs PR against then-current main
+Durable ordering:
+
+1. F2B then F2C runtime merges — **DONE** (`0284b66…` then `f984169…`)
+2. this docs/control PR (#32) — ChatGPT merge decision; user merge still required
+3. refresh the remaining docs PR (#33) against then-current main
 
 Do not independently resolve overlapping control docs in parallel.
 
@@ -890,7 +936,7 @@ Circuit breaker (count **and** proportion of LIVE rows): trip → **zero** tombs
 
 `FEATURE_PR5_ABSENCE_TOMBSTONE` DEFAULT OFF (C2): nomination may persist candidates; **zero tombstones**.
 
-When later enabled: bounded batched confirmation via F2A existence queries. Completed null → `ABSENT_CONFIRMED_QUERY` (Race W). Overlapping LIVE keeps LIVE (Race AL). Terminal GIDs: two **non-overlapping** LIVE confirmations + `createdAt` match where available (Race AB). InventoryLevel pairs remain reconnectable (Race J).
+When later enabled: bounded batched confirmation via F2A existence queries. Completed null → `ABSENT_CONFIRMED_QUERY` (Race W). Overlapping LIVE keeps LIVE (Race AL). Terminal GIDs: two **non-overlapping** LIVE confirmations + `createdAt` match where available (Race AB). InventoryLevel pairs remain reconnectable (Race J). Product is a terminal resource; F3 retry / reconcile budgeting must allow that two-confirmation revival path before treating `canonical_product_not_live` as exhausted (C23 / NEW-CLAUDE-F2CCM-01).
 
 ### 4.8 Inventory-state reconciliation
 
@@ -1045,13 +1091,13 @@ Legend:
 | **AV** | Deterministic lock order | F2B | Multi-identity JSONL batches opposite input order |
 | **AW** | Lock-capacity / concurrent bulk apply | F2B evaluator + engine | Concurrent catalog-sync batches at **derived** envelope (C16); unsafe envelope rejected; lock exhaustion aborts whole txn; no half-applied abandonment |
 
-Engine coverage on PR #31 is **not** PR 5 closeout evidence until F2B is merged **and** F3 reproduces the adapter-level rows above.
+Engine coverage on merged PR #31 is **not** PR 5 closeout evidence until F3 reproduces the adapter-level rows above.
 
 ---
 
 ## 7. R-157..R-165 remaining applicability
 
-Do **not** close any of these from this correction packet. Formal close requires ChatGPT after independent F3 evidence (and F2B/F2C merge where noted).
+Do **not** close any of these from this packet. Formal close requires ChatGPT after independent F3 evidence.
 
 | Risk | Severity | May close at F2B/F2C merge? | Corrected F3 remaining close condition |
 |---|---|---|---|
@@ -1059,11 +1105,11 @@ Do **not** close any of these from this correction packet. Formal close requires
 | **R-158** | P1 | **No** | Requires **F3 evidence**. Direct refetch workers allocate start **before** HTTP and end **after** usable response. Overlapping webhook vs confirmation must not LWW by `responseGen` (AH/AJ/AL through adapters). |
 | **R-159** | P2 | **No** | Requires **F3 evidence**. Worker hard-crash after `ACTIVE` in-flight commit and before apply. No network lock. Successor uses F2B durable `ACTIVE→ABANDONED`. No F3 reaper that physically deletes in-flight rows as a correctness path. |
 | **R-160** | P1 | **No** | Requires **F3 evidence**. **Every** new canonical / diagnostic / **nomination** writer uses the same derivation function + known-answer vectors 1–3: JSONL batch apply, webhook apply, reconcile apply, diagnostic projection-state writer, absence nomination/confirmation writer. No unanchored ingest upsert. |
-| **R-161** | P2 | **No** | Requires **F3 evidence** **and** the derived concurrency envelope (C16). Race AW against disposable PostgreSQL with intended `max_locks_per_transaction`. Concurrent F3 multi-identity transactions at the **derived** ceiling. Do not raise PostgreSQL settings from app code. Unsafe envelope rejected/reduced. |
-| **R-162** | P3 | **Eligible after F2B merge plus actual downstream-consumer proof** | Keep evaluator; F3 must not pass unsafe direct inputs. **Not** closed by F2B merge alone. **Not** closed by this planning packet. |
-| **R-163** | P3 | **No** | Requires **F3 evidence** of the **two-root** scanner (Root A `app/lib/catalog-facts/**` and Root B `app/jobs/workers/catalog-facts/**`) plus Race-AC plants in both trees. **Not** closed by F2A merge. Workers were never inside the current scan. |
+| **R-161** | P2 | **No** | Requires **F3 evidence** **and** the derived concurrency envelope (C16, including F-CLAUDE-PR5F3EC-01). Race AW against disposable PostgreSQL with intended `max_locks_per_transaction`. Concurrent F3 multi-identity transactions at the **derived** ceiling. Do not raise PostgreSQL settings from app code. Unsafe envelope rejected/reduced. |
+| **R-162** | P3 | **Eligible after F2B merge plus actual downstream-consumer proof** | F2B is merged. Keep evaluator; F3 must not pass unsafe direct inputs. **Not** closed by F2B merge alone. **Not** closed by this planning packet. |
+| **R-163** | P3 | **No** | Requires **F3 evidence** of the **two-root** scanner (Root A `app/lib/catalog-facts/**` and Root B `app/jobs/workers/catalog-facts/**`) plus Race-AC plants in both trees. **Globally OPEN** until that two-root proof. **Not** closed by F2A merge. **Not** closed by F2B/F2C merge. Do **not** inherit PR #33 “closed for F2A lane” wording as global closure. Workers were never inside the F2A scan root. |
 | **R-164** | P3 | **No** | Requires **F3 evidence**. F3 ingest/workers/diagnostic/nomination paths must not call `delete`/`deleteMany` on canonical facts. Tombstone only. Maintenance delete remains out of ordinary APIs. |
-| **R-165** | P2 | **No** | Register text lands on `main` with F2C merge (do not duplicate-edit `RISK_REGISTER.md` in this planning PR). Closure requires F3 **whole-path** removal/fencing of webhook `available ?? 0` (C13), including `webhook-processor.ts`. Canonical unknown ≠ zero. Health must not claim current when availability is unknown. |
+| **R-165** | P2 | **No** | Register text is **now on `main`** with the F2C squash `f984169…` (do not duplicate-edit `RISK_REGISTER.md` in this planning PR). Closure still requires F3 **whole-path** removal/fencing of webhook `available ?? 0` (C13), including `webhook-processor.ts`. Canonical unknown ≠ zero. Health must not claim current when availability is unknown. |
 
 Related open risks F3 advances but does **not** close as “PR 5 complete”:
 
@@ -1079,8 +1125,10 @@ Related open risks F3 advances but does **not** close as “PR 5 complete”:
 | **R-146** | Re-stream from 0; paired two-phase checkpoint (C8) |
 | **R-147** | Reconcile bounded; no N+1; webhook anti-starvation (C11) |
 | **R-154** | Candidates + breaker; unproven bulk nominates nothing (C1); kill switch (C2) |
-| **R-155** | Terminal two-confirmation via delete worker; flag DEFAULT OFF until later authorization |
+| **R-155** | Terminal two-confirmation via delete worker; flag DEFAULT OFF until later authorization; F3 retry budget ≥ two observation cycles for `canonical_product_not_live` (NEW-CLAUDE-F2CCM-01) |
 | **R-156** | Diagnostic reconciler; Race Z |
+
+**R-142 / R-145 / R-156 remain OPEN** where applicable. This packet does not close them.
 
 ---
 
@@ -1323,9 +1371,9 @@ A focused command that prints `0 passed` is a failed check even if exit 0 would 
 
 When ChatGPT requests review of the F3 exact head, Claude must independently falsify at least the §14 checklist. Required verdict language: approve F3 only with P0=0 P1=0 P2=0 blocking, or `CORRECTIONS REQUIRED`. A green worker demo is not completion.
 
-Immutable F1/F2A/F2B/F2C review artifacts and `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md` must not be edited.
+Immutable F1/F2A/F2B/F2C review artifacts, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md`, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`, and `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` must not be edited.
 
-This planning correction does **not** replace that final exact-head review.
+This planning packet does **not** replace the final exact-head F3 runtime review.
 
 ---
 
@@ -1335,12 +1383,12 @@ This planning correction does **not** replace that final exact-head review.
 
 Critical path:
 
-1. **This planning correction packet** — ChatGPT reviews the corrected F3 architecture (now).
-2. **F2B ChatGPT accept + user merge onto F2A `main`** — independent correction review is already on PR #31.
-3. **F2C integrate off-branch second-correction review, refresh onto that `main`, ChatGPT accept, user merge** — currently `CONFLICTING` with F2A `main`.
-4. **F3 runtime** — one integration PR from the post-merge SHA, exact-head **full** CI, independent review, ChatGPT acceptance, user merge. **Not authorized by this packet.**
+1. **F2A / F2B / F2C cores** — **DONE.** Merged onto `main` at `f65ab4b…` / `0284b66…` / `f984169…` with green post-merge CI.
+2. **This planning packet (PR #32)** — independently approved F3 architecture, now synchronized onto current `main`. Pending ChatGPT **merge decision**. User merge still required. **This packet does not merge itself.**
+3. **PR #33 refresh** — after PR #32 merges; do not edit or merge PR #33 from this packet.
+4. **F3 runtime** — one integration PR from the post-F2C `origin/main` SHA, exact-head **full** CI, independent review, ChatGPT acceptance, user merge. **Not authorized by this packet. Not started.**
 5. **PR 5 closure sync** — only after F3 acceptance/merge.
-6. **PR6 runtime** — only after PR5 closes. **PR6 planning / architecture / fixtures** one level ahead **are allowed now** if expressly authorized and marked speculative (C25).
+6. **PR6 runtime** — only after PR5 closes. **PR6 planning / architecture / fixtures** one level ahead **are allowed now** if expressly authorized and marked speculative (C25). Do not edit PR #34.
 
 Work that does **not** help the rescue: opening PR6 **runtime**, rewriting F2A bulk documents, forking F2B clocks beyond the named `compatibilityProjectionState` field, deleting tests, enabling inventory-write flags, enabling the absence-tombstone flag, or splitting F3 so overlap races move to a later PR.
 
@@ -1351,30 +1399,31 @@ Work that does **not** help the rescue: opening PR6 **runtime**, rewriting F2A b
 This packet:
 
 - does **not** authorize F3 runtime implementation;
-- does **not** merge or rebase PR #30 / PR #31 / PR #32 / PR #33;
+- does **not** merge, rebase, or mark-ready PR #32 / PR #33 / PR #34;
+- does **not** edit PR #33 or PR #34;
 - does **not** create D-055;
 - does **not** authorize PR6 **runtime**, migrations, Shopify configuration, or production actions;
 - **does** allow expressly authorized PR6 **planning / architecture / acceptance criteria / fixtures / test matrices** one dependency level ahead, marked speculative;
 - does **not** authorize production, merchant production data, Partner Dashboard validation, or inventory-write flags;
 - does **not** enable `FEATURE_PR5_ABSENCE_TOMBSTONE`;
 - does **not** authorize Shopify inventory mutations;
-- does **not** close R-157..R-165;
-- does **not** claim independent correction approval of this planning packet;
+- does **not** close R-157..R-165 (R-163 remains **globally OPEN** until F3 two-root proof);
 - does **not** claim PR 5 complete or Phase 1 complete.
 
-Cursor status for this packet: **planning correction complete — pending ChatGPT PR5-F3 planning correction review**.
+Cursor status for this packet: **planning current-main sync complete — pending ChatGPT PR5-F3 planning merge decision**.
 
 ---
 
 ## 13. ChatGPT decision requested
 
-1. Accept this **corrected** remaining-work map as the F3 architecture contract.
-2. Keep **one** F3 integration PR after F2B and F2C merge (JSONL + webhook/refetch + absence/reconcile + projection in one merge boundary).
+1. Accept this remaining-work map, now synchronized onto current F2A+F2B+F2C `main` `f984169…`, as the F3 architecture contract.
+2. Keep **one** F3 integration PR (JSONL + webhook/refetch + absence/reconcile + projection integration + v1 fencing + two-root scanner + health in one merge boundary). Do **not** split JSONL into an earlier runtime PR.
 3. Do **not** authorize F3 runtime from this packet.
-4. Serialise F2B merge then F2C merge onto current F2A `main` (not parallel merges onto conflicting bases).
-5. Serialise eventual docs/control PR merges per C24. Merge neither PR #32 nor PR #33 from this packet.
-6. After F2B/F2C merges, authorize F3 from the exact post-merge `origin/main` SHA.
-7. Treat PR6 **runtime** as blocked; treat authorized PR6 **planning** as allowed under Accelerated Safe Delivery v1.
+4. Record F2B and F2C as **MERGED** with green post-merge CI. Do not reopen those cores.
+5. Serialise eventual docs/control PR merges per C24: PR #32 first; PR #33 refreshes after. Merge neither from this packet.
+6. After this planning packet is merged, F3 runtime still requires a **separate** ChatGPT authorization from the then-current `origin/main` SHA.
+7. Treat PR6 **runtime** as blocked; treat authorized PR6 **planning** as allowed under Accelerated Safe Delivery v1. Do not edit PR #34.
+8. Production remains unauthorized. Inventory writes remain unauthorized. All inventory-write flags remain DEFAULT OFF. Merge of this PR remains unauthorized until the user explicitly authorizes it.
 
 ---
 
@@ -1384,12 +1433,12 @@ Future final Claude review of the F3 exact head should mechanically check closur
 
 | ID | F3 exact-head closure check |
 |---|---|
-| P1-01 | Completeness gate implemented; FX-JSONL-010/011 pass; omitted Shopify counts fail closed |
+| P1-01 | Completeness gate implemented; FX-JSONL-010/011 pass; omitted Shopify counts fail closed; F-CLAUDE-PR5F3EC-02 token `^[0-9]+$` before compare |
 | P1-02 | `FEATURE_PR5_ABSENCE_TOMBSTONE` exists, DEFAULT OFF, distinct from breaker; FX-ABS-FLAG-OFF passes; flag not enabled without later authorization |
 | P1-03 | Owning-domain map implemented; inventory-level JSONL does not write InventoryItem presence; FX-ABS-003 passes |
 | P1-04 | `PROJECTION_PENDING` enum+default shipped; writer sets it in the canonical txn; FX-PROJ-009 passes |
 | P1-05 | Exception is exact path + exact root; FX-SCAN-001/002/003 pass |
-| P1-06 | Two-root scanner live; FX-SCAN-004/005 pass; R-163 still not closed without that evidence |
+| P1-06 | Two-root scanner live; FX-SCAN-004/005 pass; R-163 **globally OPEN** until that evidence |
 | P1-07 | v1 fail-closed on `payloadSchemaVersion`; FX-BULK-010/011 pass; listed legacy files fenced |
 | P1-08 | Paired GID+ordinal; deterministic `ingestBatchId`; FX-BULK-012/013 pass; no HTTP Range |
 | P2-09 | Pre-submit intent + `bulkOperations(first: 25)` recovery; FX-BULK-014 passes; no `currentBulkOperation` |
@@ -1399,16 +1448,19 @@ Future final Claude review of the F3 exact head should mechanically check closur
 | P2-13 | Whole-`app/**` search gates; canonical path has no `available ?? 0` / `currentBulkOperation` / full-body `response.text()` |
 | P2-14 | One parent job, three child SyncRuns, failed-domain-only retry, new fence only on new bulk |
 | P2-15 | GID-prefix table implemented; unknown line fails closed |
-| P2-16 | Workers pass derived `D*B`; FX-RACE-AW uses derived envelope, not default 4 |
-| P2-17 | Status files no longer claim F2B lacks correction review or that F2C review is on PR #30 head |
+| P2-16 | Workers pass derived envelope including F-CLAUDE-PR5F3EC-01; FX-RACE-AW uses derived envelope, not default 4 |
+| P2-17 | Status files no longer claim F2B/F2C unmerged, F2C review off-branch pending, or `main` = `f65ab4b` |
 | P3-18 | `Int?` + CHECK ≥ 1 + 1-based null-before-ack |
 | P3-19 | `bulk_operations/finish` is CONTROL_ONLY continuation; index exists; every new topic enumerated |
 | P3-20 | Refetch digest is delivery+resolved identities; FX-WH-012 no-op still receipts |
 | P3-21 | Session advisory-lock gate matches the four forbidden prefixes; xact variants allowed |
 | P3-22 | Successful cursor is `full-sync-epoch:<SyncRun.id>`; incomplete runs do not overwrite |
-| P3-23 | Projection uses PR4 lifecycle; poll/reconcile ceilings enforced |
+| P3-23 | Projection uses PR4 lifecycle; poll/reconcile ceilings enforced; `canonical_product_not_live` budget ≥ two observation cycles (NEW-CLAUDE-F2CCM-01) |
 | P3-24 | No parallel independent merge of overlapping control docs |
 | P3-25 | F3/PR5 docs do not forbid authorized PR6 planning; PR6 runtime still blocked |
+| F-CLAUDE-PR5F3EC-01 | Envelope `D * max(B, Σ worker concurrency)` or fail closed if `B < Σ` |
+| F-CLAUDE-PR5F3EC-02 | Count tokens match `^[0-9]+$` before compare; non-conforming = omitted = fail closed |
+| NEW-CLAUDE-F2CCM-01 | Retry/reconcile budget allows two-confirmation terminal Product revival before exhausting `canonical_product_not_live` |
 
 ---
 
