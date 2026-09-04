@@ -80,16 +80,17 @@ The planning correction at `a6b65f1…` addressed every original finding by free
 | Field | Value |
 |---|---|
 | Review class | CORRECTION re-review of the PR5-F3 remaining-integration **planning** packet (not the final exact-head F3 runtime review) |
+| Review branch | `claude/pr5-f3-planning-correction-review-vzjfw0` |
 | Review commit (source) | `96b3f1a9649ffb14a22f731fd79e271060e8c44d` |
 | Exact reviewed parent | `a6b65f155de480354c66d147149fd98effb87430` |
-| Artifact | `stocky-plus/docs/phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.md` |
-| Immutable blob | `00e8307e3aaf83b032fbcc1e2d0258beab47a864` |
+| Canonical artifact path | `stocky-plus/docs/phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.md` |
+| Canonical blob | `00e8307e3aaf83b032fbcc1e2d0258beab47a864` |
 | Verdict | **APPROVE PR5-F3 PLANNING CORRECTION** |
 | Counts | P0 **0** / P1 **0** / P2 **0** / P3 **2** (`F-CLAUDE-PR5F3EC-01`, `F-CLAUDE-PR5F3EC-02`) |
 | Original findings | **25/25** corrected |
 | One-F3-PR architecture | **RETAINED** |
 
-**NEVER EDIT** the immutable correction-review artifact. Cherry-pick only.
+The canonical review remains on the dedicated Claude branch and source commit above. It is **referenced rather than copied onto this PR tip** because the immutable source blob contains historical trailing whitespace rejected by repository `git diff --check`. **NEVER EDIT** the immutable correction-review artifact. **Do not** copy a modified file to the same canonical artifact path. **Do not** change the canonical blob identity.
 
 ---
 
@@ -1371,7 +1372,7 @@ A focused command that prints `0 passed` is a failed check even if exit 0 would 
 
 When ChatGPT requests review of the F3 exact head, Claude must independently falsify at least the §14 checklist. Required verdict language: approve F3 only with P0=0 P1=0 P2=0 blocking, or `CORRECTIONS REQUIRED`. A green worker demo is not completion.
 
-Immutable F1/F2A/F2B/F2C review artifacts, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md`, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`, and `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` must not be edited.
+Immutable F1/F2A/F2B/F2C review artifacts, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md`, the canonical F3 correction review on `claude/pr5-f3-planning-correction-review-vzjfw0` at blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864`, and `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` must not be edited.
 
 This planning packet does **not** replace the final exact-head F3 runtime review.
 
