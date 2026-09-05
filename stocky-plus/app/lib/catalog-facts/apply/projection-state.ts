@@ -84,12 +84,16 @@ async function updateOne(
       RETURNING id`;
     return rows.length;
   }
+  const levelIdentity = identity as Extract<
+    CanonicalFactIdentity,
+    { resourceKind: "InventoryLevel" }
+  >;
   const rows = await queryRows(db)`UPDATE "ShopifyInventoryLevelFact"
     SET "compatibilityProjectionState" = ${state}::"CatalogCompatibilityProjectionState",
         "updatedAt" = clock_timestamp()
     WHERE "shopId" = ${shopId}
-      AND "inventoryItemGid" = ${identity.inventoryItemGid}
-      AND "locationGid" = ${identity.locationGid}
+      AND "inventoryItemGid" = ${levelIdentity.inventoryItemGid}
+      AND "locationGid" = ${levelIdentity.locationGid}
     RETURNING id`;
   return rows.length;
 }

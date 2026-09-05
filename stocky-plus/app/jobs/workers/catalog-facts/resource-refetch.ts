@@ -210,9 +210,13 @@ async function readAndMap(
     } else if (input.identity.resourceKind === "Location") {
       value = await reads.readLocation(admin, input.identity.shopifyGid);
     } else {
+      const levelIdentity = input.identity as Extract<
+        CanonicalFactIdentity,
+        { resourceKind: "InventoryLevel" }
+      >;
       value = await reads.readInventoryLevel(admin, {
-        inventoryItemGid: input.identity.inventoryItemGid,
-        locationGid: input.identity.locationGid,
+        inventoryItemGid: levelIdentity.inventoryItemGid,
+        locationGid: levelIdentity.locationGid,
       });
     }
   } catch (error) {

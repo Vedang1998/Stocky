@@ -113,6 +113,10 @@ async function updateFactMetadata(
     `;
     return (rows as unknown[]).length;
   }
+  const levelIdentity = identity as Extract<
+    CanonicalFactIdentity,
+    { resourceKind: "InventoryLevel" }
+  >;
   const rows = await db.$queryRaw`
     UPDATE "ShopifyInventoryLevelFact"
     SET "absenceNominationState" = COALESCE(${state}::"CatalogAbsenceNominationState", "absenceNominationState"),
@@ -121,8 +125,8 @@ async function updateFactMetadata(
         "existenceDiagnosticState" = COALESCE(${input.diagnostic ?? null}, "existenceDiagnosticState"),
         "updatedAt" = clock_timestamp()
     WHERE "shopId" = ${identity.shopId}
-      AND "inventoryItemGid" = ${identity.inventoryItemGid}
-      AND "locationGid" = ${identity.locationGid}
+      AND "inventoryItemGid" = ${levelIdentity.inventoryItemGid}
+      AND "locationGid" = ${levelIdentity.locationGid}
       AND (NOT ${requireFence} OR ("existenceState" = 'LIVE' AND ("existenceRequestGen" IS NULL OR "existenceRequestGen" <= ${generation}::bigint)))
     RETURNING id
   `;

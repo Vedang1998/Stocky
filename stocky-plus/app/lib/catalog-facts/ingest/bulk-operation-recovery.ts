@@ -79,6 +79,7 @@ export async function recoverOrphanBulkOperation(
         typeof node.query !== "string" ||
         typeof node.status !== "string" ||
         typeof node.createdAt !== "string" ||
+        typeof node.id !== "string" ||
         !ADOPTABLE_STATUSES.has(node.status)
       ) {
         return [];

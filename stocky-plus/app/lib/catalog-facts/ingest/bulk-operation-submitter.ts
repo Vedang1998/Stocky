@@ -81,6 +81,11 @@ export async function submitCatalogFactBulkOperation(
       "bulkOperationRunQuery returned no operation",
     );
   }
+  if (typeof payload.bulkOperation.id !== "string") {
+    throw new BulkOperationSubmitError(
+      "bulkOperationRunQuery returned an invalid operation id",
+    );
+  }
   const id = parseBulkOperationGid(payload.bulkOperation.id);
   if (
     typeof payload.bulkOperation.status !== "string" ||

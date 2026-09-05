@@ -70,7 +70,7 @@ function sourceFindings(source: string, file: string): F3SafetyFinding[] {
       node.operatorToken.kind === ts.SyntaxKind.QuestionQuestionToken &&
       ts.isNumericLiteral(node.right) &&
       node.right.text === "0" &&
-      /available/i.test(node.left.getText(sf))
+      /(?:^|[.?\]])available$/.test(node.left.getText(sf))
     ) {
       add(
         "unknown_available_to_zero",
