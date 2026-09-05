@@ -251,41 +251,45 @@ async function readAndMap(
     signalDeliveryId: input.signalDeliveryId,
   };
 
-  if (input.identity.resourceKind === "Product") {
-    return mapDirectProduct({
-      ...mapperBase,
-      value: value as ProductRead | null,
-    });
-  }
-  if (input.identity.resourceKind === "ProductVariant") {
-    const currencyCode = await reads.readCurrency(admin);
-    if (!currencyCode) {
-      await abandonDirectObservation(input.authority, handle);
-      throw new Error("shop_currency_missing");
+  try {
+    if (input.identity.resourceKind === "Product") {
+      return mapDirectProduct({
+        ...mapperBase,
+        value: value as ProductRead | null,
+      });
     }
-    return mapDirectVariant({
+    if (input.identity.resourceKind === "ProductVariant") {
+      const currencyCode = await reads.readCurrency(admin);
+      if (!currencyCode) {
+        throw new Error("shop_currency_missing");
+      }
+      return mapDirectVariant({
+        ...mapperBase,
+        value: value as ProductVariantRead | null,
+        currencyCode,
+      });
+    }
+    if (input.identity.resourceKind === "InventoryItem") {
+      return mapDirectInventoryItem({
+        ...mapperBase,
+        value: value as InventoryItemRead | null,
+        unitCostAccess: "QUERY_ERROR_ISOLATED",
+      });
+    }
+    if (input.identity.resourceKind === "Location") {
+      return mapDirectLocation({
+        ...mapperBase,
+        value: value as LocationRead | null,
+      });
+    }
+    return mapDirectInventoryLevel({
       ...mapperBase,
-      value: value as ProductVariantRead | null,
-      currencyCode,
+      value: value as InventoryLevelRead | null,
     });
+  } catch (error) {
+    await abandonDirectObservation(input.authority, handle);
+    throw error;
   }
-  if (input.identity.resourceKind === "InventoryItem") {
-    return mapDirectInventoryItem({
-      ...mapperBase,
-      value: value as InventoryItemRead | null,
-      unitCostAccess: "QUERY_ERROR_ISOLATED",
-    });
-  }
-  if (input.identity.resourceKind === "Location") {
-    return mapDirectLocation({
-      ...mapperBase,
-      value: value as LocationRead | null,
-    });
-  }
-  return mapDirectInventoryLevel({
-    ...mapperBase,
-    value: value as InventoryLevelRead | null,
-  });
 }
 
 export function catalogRefetchApplicationDigest(input: {
@@ -567,6 +571,16 @@ export async function applyCatalogFactWebhookRefetch(input: {
       applied = { status: "already_applied", result: null };
     }
     if (applied.status === "applied") applicationStatus = "applied";
+    if (applied.status === "already_applied") {
+      for (const item of chunk) {
+        await abandonDirectObservation(input.authority, {
+          token: item.observationToken,
+          requestGeneration: item.observationRequestGen,
+          identity: item.identity,
+          leaseExpiresAt: new Date(0),
+        });
+      }
+    }
     const appliedRows = Array.isArray(applied.result)
       ? (applied.result as Array<{ outcome?: string }>)
       : [];
