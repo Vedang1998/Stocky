@@ -52,6 +52,7 @@ export async function resetF3Rows(prisma: PrismaClient): Promise<void> {
       "ShopifyProductCollectionMembership",
       "ShopifyInventoryLevelFact", "ShopifyInventoryItemFact",
       "ShopifyVariantFact", "ShopifyLocationFact", "ShopifyProductFact",
+      "ShopifyVariantCache", "InventorySnapshot",
       "SyncApplicationReceipt", "DeadLetter", "JobReplay", "JobAttempt",
       "JobDispatch", "WebhookDelivery", "DurableJob", "DispatchReadyShop"
     CASCADE
@@ -113,4 +114,187 @@ export function completeProductData(input: {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+export function completeVariantData(input: {
+  id: string;
+  shopId: string;
+  productId?: string;
+  compatibilityProjectionState?: "PROJECTION_PENDING" | "HEALTHY" | "DEGRADED";
+}) {
+  const now = new Date("2026-09-05T00:00:00Z");
+  const productId = input.productId ?? "1";
+  return {
+    id: input.id,
+    shopId: input.shopId,
+    shopifyGid: `gid://shopify/ProductVariant/${input.id}`,
+    shopifyProductGid: `gid://shopify/Product/${productId}`,
+    title: `Variant ${input.id}`,
+    selectedOptions: [{ name: "Title", value: input.id }],
+    priceAmount: "1.000000",
+    currencyCode: "USD",
+    existenceState: "LIVE" as const,
+    existenceKind: "LIVE_REFETCH" as const,
+    existenceObservedAt: now,
+    existenceRequestGen: 3n,
+    existenceResponseGen: 4n,
+    attributeRequestGen: 3n,
+    attributeResponseGen: 4n,
+    attributeFreshnessState: "ORDERED" as const,
+    compatibilityProjectionState:
+      input.compatibilityProjectionState ?? "PROJECTION_PENDING",
+    absenceNominationState: "NONE" as const,
+    sourceKind: "INCREMENTAL_REFETCH" as const,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function completeInventoryItemData(input: {
+  id: string;
+  shopId: string;
+  variantId?: string;
+  compatibilityProjectionState?: "PROJECTION_PENDING" | "HEALTHY" | "DEGRADED";
+}) {
+  const now = new Date("2026-09-05T00:00:00Z");
+  return {
+    id: input.id,
+    shopId: input.shopId,
+    shopifyGid: `gid://shopify/InventoryItem/${input.id}`,
+    shopifyVariantGid: `gid://shopify/ProductVariant/${input.variantId ?? "2"}`,
+    tracked: true,
+    requiresShipping: true,
+    unitCostAccess: "NULL" as const,
+    existenceState: "LIVE" as const,
+    existenceKind: "LIVE_REFETCH" as const,
+    existenceObservedAt: now,
+    existenceRequestGen: 5n,
+    existenceResponseGen: 6n,
+    attributeRequestGen: 5n,
+    attributeResponseGen: 6n,
+    attributeFreshnessState: "ORDERED" as const,
+    compatibilityProjectionState:
+      input.compatibilityProjectionState ?? "PROJECTION_PENDING",
+    absenceNominationState: "NONE" as const,
+    sourceKind: "INCREMENTAL_REFETCH" as const,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function completeLocationData(input: {
+  id: string;
+  shopId: string;
+  compatibilityProjectionState?: "PROJECTION_PENDING" | "HEALTHY" | "DEGRADED";
+  requestGen?: bigint;
+}) {
+  const now = new Date("2026-09-05T00:00:00Z");
+  const gen = input.requestGen ?? 7n;
+  return {
+    id: input.id,
+    shopId: input.shopId,
+    shopifyGid: `gid://shopify/Location/${input.id}`,
+    name: `Location ${input.id}`,
+    isActive: true,
+    fulfillsOnlineOrders: true,
+    shipsInventory: true,
+    isFulfillmentService: false,
+    hasActiveInventory: true,
+    existenceState: "LIVE" as const,
+    existenceKind: "LIVE_REFETCH" as const,
+    existenceObservedAt: now,
+    existenceRequestGen: gen,
+    existenceResponseGen: gen + 1n,
+    attributeRequestGen: gen,
+    attributeResponseGen: gen + 1n,
+    attributeFreshnessState: "ORDERED" as const,
+    compatibilityProjectionState:
+      input.compatibilityProjectionState ?? "PROJECTION_PENDING",
+    absenceNominationState: "NONE" as const,
+    sourceKind: "INCREMENTAL_REFETCH" as const,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function completeInventoryLevelData(input: {
+  id?: string;
+  shopId: string;
+  itemId?: string;
+  locationId?: string;
+  available?: number | null;
+  compatibilityProjectionState?: "PROJECTION_PENDING" | "HEALTHY" | "DEGRADED";
+  existenceDiagnosticState?: string | null;
+  sourceKind?: "INCREMENTAL_REFETCH" | "RECONCILE" | "FULL_SYNC";
+}) {
+  const now = new Date("2026-09-05T00:00:00Z");
+  const itemId = input.itemId ?? "3";
+  const locationId = input.locationId ?? "5";
+  return {
+    id: input.id ?? "level",
+    shopId: input.shopId,
+    inventoryItemGid: `gid://shopify/InventoryItem/${itemId}`,
+    locationGid: `gid://shopify/Location/${locationId}`,
+    isActive: true,
+    availableQuantity: input.available === undefined ? 5 : input.available,
+    existenceState: "LIVE" as const,
+    existenceKind: "LIVE_REFETCH" as const,
+    existenceObservedAt: now,
+    existenceRequestGen: 9n,
+    existenceResponseGen: 10n,
+    attributeRequestGen: 9n,
+    attributeResponseGen: 10n,
+    attributeFreshnessState: "ORDERED" as const,
+    compatibilityProjectionState:
+      input.compatibilityProjectionState ?? "PROJECTION_PENDING",
+    existenceDiagnosticState: input.existenceDiagnosticState ?? null,
+    absenceNominationState: "NONE" as const,
+    sourceKind: input.sourceKind ?? ("INCREMENTAL_REFETCH" as const),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export function catalogProductJsonl(id: number): string {
+  return JSON.stringify({
+    id: `gid://shopify/Product/${id}`,
+    legacyResourceId: String(id),
+    title: `Product ${id}`,
+    handle: `product-${id}`,
+    vendor: "Vendor",
+    productType: "Type",
+    tags: [],
+    status: "ACTIVE",
+    featuredMedia: null,
+    createdAt: "2026-09-01T00:00:00Z",
+    updatedAt: "2026-09-02T00:00:00Z",
+  });
+}
+
+export function eightQuantities(input?: {
+  available?: number | null;
+  onHand?: number;
+  incoming?: number;
+  committed?: number;
+  updatedAt?: string | null;
+  committedUpdatedAt?: string | null;
+}) {
+  const updatedAt = input?.updatedAt ?? "2026-09-05T10:00:00Z";
+  return [
+    ["available", input?.available ?? 0],
+    ["on_hand", input?.onHand ?? 1],
+    ["incoming", input?.incoming ?? 2],
+    ["committed", input?.committed ?? 3],
+    ["reserved", 4],
+    ["damaged", 5],
+    ["safety_stock", 6],
+    ["quality_control", 7],
+  ].map(([name, quantity]) => ({
+    name,
+    quantity,
+    updatedAt:
+      name === "committed"
+        ? (input?.committedUpdatedAt ?? updatedAt)
+        : updatedAt,
+  }));
 }

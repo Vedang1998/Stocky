@@ -8,11 +8,68 @@ import {
   isCatalogFactAtomicWebhookTopic,
   resolveCatalogWebhookIdentity,
 } from "../../../app/jobs/workers/catalog-facts/resource-refetch";
+import { runCatalogFactsSyncStep } from "../../../app/jobs/workers/catalog-facts/catalog-sync";
 import { resetF3Rows, setupF3Database } from "./pr5-f3-test-helpers";
 
 type Authority = Awaited<ReturnType<typeof setupF3Database>>["authority"];
 
 const NOW = new Date("2026-09-05T12:00:00Z");
+
+function variantIdsResponse(ids: number[], hasNextPage = false) {
+  return {
+    data: {
+      product: {
+        id: "gid://shopify/Product/1",
+        variants: {
+          pageInfo: {
+            hasNextPage,
+            endCursor: ids.length ? `c${ids[ids.length - 1]}` : null,
+          },
+          edges: ids.map((id) => ({
+            cursor: `c${id}`,
+            node: { id: `gid://shopify/ProductVariant/${id}` },
+          })),
+        },
+      },
+    },
+  };
+}
+
+function variantResponse(id: number, updatedAt = "2026-09-05T10:00:00Z") {
+  return {
+    data: {
+      productVariant: {
+        id: `gid://shopify/ProductVariant/${id}`,
+        legacyResourceId: String(id),
+        title: `Variant ${id}`,
+        displayName: `Variant ${id}`,
+        sku: `SKU-${id}`,
+        barcode: null,
+        position: id,
+        price: "1.00",
+        compareAtPrice: null,
+        selectedOptions: [{ name: "Title", value: String(id) }],
+        product: { id: "gid://shopify/Product/1" },
+        inventoryItem: { id: `gid://shopify/InventoryItem/${id}` },
+        createdAt: "2026-09-01T00:00:00Z",
+        updatedAt,
+      },
+    },
+  };
+}
+
+function defaultCatalogGraphql(query: string): unknown {
+  if (query.includes("query CatalogFactProductVariantIds")) {
+    return variantIdsResponse([]);
+  }
+  if (query.includes("query CatalogFactShopCurrency")) {
+    return { data: { shop: { currencyCode: "USD" } } };
+  }
+  if (query.includes("query CatalogFactProductVariant(")) {
+    return variantResponse(2);
+  }
+  return undefined;
+}
 
 function admin(
   handler: (query: string, variables: Record<string, unknown>) => unknown,
@@ -21,7 +78,11 @@ function admin(
     async graphql(query, options) {
       return {
         async json() {
-          return handler(query, options?.variables ?? {});
+          const result = handler(query, options?.variables ?? {});
+          if (result !== undefined) return result;
+          const fallback = defaultCatalogGraphql(query);
+          if (fallback !== undefined) return fallback;
+          throw new Error(`unexpected query ${query}`);
         },
       };
     },
@@ -265,15 +326,14 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     ).toThrow("identity_missing");
   });
 
-  it("uses authoritative Product refetch rather than webhook body fields", async () => {
+  it("FX-WH uses authoritative Product refetch rather than webhook body fields", async () => {
     const result = await applyCatalogFactWebhookRefetch({
       ...baseInput(
         authority,
         admin((query) => {
-          if (query.includes("CatalogFactProduct(")) {
+          if (query.includes("query CatalogFactProduct(")) {
             return productResponse("Authoritative");
           }
-          throw new Error(`unexpected query ${query}`);
         }),
       ),
       topic: "products/update",
@@ -299,7 +359,7 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     });
   });
 
-  it("keeps a Product live when a delayed delete signal refetches live", async () => {
+  it("FX-WH-002 keeps a Product live when a delayed delete signal refetches live", async () => {
     await prisma.shopifyProductFact.create({
       data: {
         id: "product-existing",
@@ -322,7 +382,11 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     await applyCatalogFactWebhookRefetch({
       ...baseInput(
         authority,
-        admin(() => productResponse("Still Live")),
+        admin((query) => {
+          if (query.includes("query CatalogFactProduct(")) {
+            return productResponse("Still Live");
+          }
+        }),
       ),
       topic: "products/delete",
       payload: { admin_graphql_api_id: "gid://shopify/Product/1" },
@@ -339,7 +403,7 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     expect(row.existenceDiagnosticState).toBe("STALE_DELETE_SIGNAL");
   });
 
-  it("flag OFF holds confirmed Product absence and still writes a no-op receipt", async () => {
+  it("FX-WH-003 / FX-WH-012 flag OFF holds confirmed Product absence and still writes a receipt", async () => {
     await prisma.shopifyProductFact.create({
       data: {
         id: "product-existing",
@@ -384,7 +448,7 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     expect(await prisma.syncApplicationReceipt.count()).toBe(1);
   });
 
-  it("refetches all eight quantities and ignores webhook available", async () => {
+  it("FX-WH-006 refetches all eight quantities and ignores webhook available", async () => {
     await seedProjectionGraph(prisma, shopAId);
     const result = await applyCatalogFactWebhookRefetch({
       ...baseInput(
@@ -413,7 +477,7 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     expect(level.qualityControlQuantity).toBe(7);
   });
 
-  it("canonical UNKNOWN availability never becomes legacy zero", async () => {
+  it("FX-WH-007 / R-165 canonical UNKNOWN availability never becomes legacy zero", async () => {
     await seedProjectionGraph(prisma, shopAId);
     await expect(
       applyCatalogFactWebhookRefetch({
@@ -437,7 +501,7 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     ).toBe(1);
   });
 
-  it("canonical inventory webhook path does not write forecast or ABC side effects", async () => {
+  it("FX-WH-008 canonical inventory webhook path does not write forecast or ABC side effects", async () => {
     await seedProjectionGraph(prisma, shopAId);
     await applyCatalogFactWebhookRefetch({
       ...baseInput(
@@ -451,11 +515,15 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     expect(await prisma.variantAbcClass.count()).toBe(0);
   });
 
-  it("duplicate replay is receipt-idempotent and abandons its unused token", async () => {
+  it("FX-WH-012 duplicate replay is receipt-idempotent and abandons its unused token", async () => {
     const input = {
       ...baseInput(
         authority,
-        admin(() => productResponse()),
+        admin((query) => {
+          if (query.includes("query CatalogFactProduct(")) {
+            return productResponse();
+          }
+        }),
       ),
       applicationKey: "webhook-delivery:repeat",
       topic: "products/update" as const,
@@ -475,7 +543,7 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
     ).toBe(1);
   });
 
-  it("transport/refetch failure is not deletion and abandons exact in-flight evidence", async () => {
+  it("FX-WH-004 transport/refetch failure is not deletion and abandons exact in-flight evidence", async () => {
     await prisma.shopifyProductFact.create({
       data: {
         id: "product-existing",
@@ -522,5 +590,193 @@ describe("PR5-F3 authoritative webhook refetch and R-165", () => {
         where: { lifecycleState: "ABANDONED" },
       }),
     ).toBe(1);
+  });
+
+  it("FX-WH-001 paginates GraphQL variant IDs instead of trusting 100 webhook GIDs", async () => {
+    const payloadVariantGids = Array.from(
+      { length: 100 },
+      (_, index) => `gid://shopify/ProductVariant/${index + 1}`,
+    );
+    const result = await applyCatalogFactWebhookRefetch({
+      ...baseInput(
+        authority,
+        admin((query, variables) => {
+          if (query.includes("query CatalogFactProduct(")) {
+            return productResponse("Paged");
+          }
+          if (query.includes("query CatalogFactProductVariantIds")) {
+            if (variables.after == null) {
+              return variantIdsResponse(
+                Array.from({ length: 100 }, (_, index) => index + 1),
+                true,
+              );
+            }
+            expect(variables.after).toBe("c100");
+            return variantIdsResponse([101], false);
+          }
+          if (query.includes("query CatalogFactProductVariant(")) {
+            const id = String(variables.id ?? "");
+            const numeric = Number(id.split("/").pop());
+            return variantResponse(numeric);
+          }
+        }),
+      ),
+      topic: "products/update",
+      payload: {
+        id: 1,
+        admin_graphql_api_id: "gid://shopify/Product/1",
+        variant_gids: payloadVariantGids,
+      },
+    });
+    expect(result.applicationStatus).toBe("applied");
+    expect(await prisma.shopifyVariantFact.count({ where: { shopId: shopAId } })).toBe(
+      101,
+    );
+    expect(
+      await prisma.shopifyVariantFact.findUnique({
+        where: {
+          shopId_shopifyGid: {
+            shopId: shopAId,
+            shopifyGid: "gid://shopify/ProductVariant/101",
+          },
+        },
+      }),
+    ).not.toBeNull();
+  }, 180_000);
+
+  it("FX-WH-005 maps inventory_levels/disconnect pair identity from item and location ids only", async () => {
+    await seedProjectionGraph(prisma, shopAId);
+    await applyCatalogFactWebhookRefetch({
+      ...baseInput(
+        authority,
+        admin((query) => {
+          if (query.includes("query CatalogFactInventoryLevelByPair")) {
+            return inventoryResponse(4);
+          }
+        }),
+      ),
+      topic: "inventory_levels/disconnect",
+      payload: { inventory_item_id: 3, location_id: 5 },
+    });
+    expect(await prisma.shopifyInventoryLevelFact.count()).toBe(1);
+    const level = await prisma.shopifyInventoryLevelFact.findUniqueOrThrow({
+      where: {
+        shopId_inventoryItemGid_locationGid: {
+          shopId: shopAId,
+          inventoryItemGid: "gid://shopify/InventoryItem/3",
+          locationGid: "gid://shopify/Location/5",
+        },
+      },
+    });
+    expect(level.existenceDiagnosticState).toBe("STALE_DISCONNECT_SIGNAL");
+    expect(level.existenceState).toBe("LIVE");
+  });
+
+  it("FX-WH-009 Clock A keeps the newer Shopify updatedAt across out-of-order webhooks", async () => {
+    await applyCatalogFactWebhookRefetch({
+      ...baseInput(
+        authority,
+        admin((query) => {
+          if (query.includes("query CatalogFactProduct(")) {
+            return productResponse("Newer");
+          }
+        }),
+      ),
+      applicationKey: "webhook-delivery:newer",
+      topic: "products/update",
+      payload: { admin_graphql_api_id: "gid://shopify/Product/1" },
+    });
+    await applyCatalogFactWebhookRefetch({
+      ...baseInput(
+        authority,
+        admin((query) => {
+          if (query.includes("query CatalogFactProduct(")) {
+            return {
+              data: {
+                product: {
+                  ...productResponse("Older").data.product,
+                  title: "Older",
+                  updatedAt: "2026-09-01T00:00:00Z",
+                },
+              },
+            };
+          }
+        }),
+      ),
+      applicationKey: "webhook-delivery:older",
+      topic: "products/update",
+      payload: { admin_graphql_api_id: "gid://shopify/Product/1" },
+    });
+    expect(
+      (
+        await prisma.shopifyProductFact.findUniqueOrThrow({
+          where: {
+            shopId_shopifyGid: {
+              shopId: shopAId,
+              shopifyGid: "gid://shopify/Product/1",
+            },
+          },
+        })
+      ).title,
+    ).toBe("Newer");
+  });
+
+  it("FX-WH-010 disabled shop fails closed with zero merchant writes", async () => {
+    await prisma.shop.update({
+      where: { id: shopAId },
+      data: { processingEnabled: false },
+    });
+    let graphqlCalls = 0;
+    await expect(
+      applyCatalogFactWebhookRefetch({
+        ...baseInput(
+          authority,
+          admin(() => {
+            graphqlCalls += 1;
+            throw new Error("must not refetch while disabled");
+          }),
+        ),
+        topic: "products/update",
+        payload: { admin_graphql_api_id: "gid://shopify/Product/1" },
+      }),
+    ).rejects.toThrow("shop_processing_disabled");
+    expect(graphqlCalls).toBe(0);
+    expect(await prisma.shopifyProductFact.count()).toBe(0);
+  });
+
+  it("FX-WH-011 catalog-sync defers while webhook-class work is pending", async () => {
+    await prisma.durableJob.create({
+      data: {
+        shopId: shopAId,
+        jobType: "webhook:inventory_levels/update",
+        source: "webhook:inventory_levels/update",
+        queueName: "stocky-webhooks",
+        payloadSchemaVersion: "webhook-projection-inventory-levels-update-v1",
+        sanitizedPayload: {},
+        payloadDigest: "b".repeat(64),
+        idempotencyKey: "webhook-backlog-wh011",
+        correlationId: "webhook-backlog-wh011",
+        authorityVersion: "tenant-job-envelope-v3",
+        executionStrategy: "ATOMIC_APPLICATION_RECEIPT",
+      },
+    });
+    let calls = 0;
+    const result = await runCatalogFactsSyncStep({
+      authority,
+      admin: admin(() => {
+        calls += 1;
+        throw new Error("must not call Shopify while deferred");
+      }),
+      durableJobId: "catalog-job",
+      correlationId: "catalog-job",
+      durableAttemptCount: 0,
+      canonicalBatchSize: 32,
+      canonicalConcurrency: 50,
+    });
+    expect(result).toMatchObject({
+      status: "CONTINUE",
+      reason: "webhook_backlog_preferred",
+    });
+    expect(calls).toBe(0);
   });
 });

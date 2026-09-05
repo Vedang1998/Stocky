@@ -13,7 +13,7 @@ describe("F3 unsigned completeness count tokens", () => {
   );
 
   it.each([null, undefined, "", " 1", "+1", "-1", "1.0", "1e3"])(
-    "fails closed on omitted/non-conforming token %s",
+    "F-CLAUDE-PR5F3EC-02 fails closed on omitted/non-conforming token %s",
     (token) => {
       expect(validateUnsignedCountToken(token)).toMatchObject({
         ok: false,

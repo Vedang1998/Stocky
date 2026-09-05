@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import type { CatalogAdminReadClient } from "../../../app/lib/catalog-facts/admin-read";
 import {
@@ -6,8 +6,18 @@ import {
   reconcileCatalogDiagnostics,
 } from "../../../app/jobs/workers/catalog-facts/diagnostic-reconciler";
 import { runInventoryStateReconcileStep } from "../../../app/jobs/workers/catalog-facts/catalog-sync";
+import { applyParsedJsonlBatch } from "../../../app/lib/catalog-facts/ingest/apply-batch";
 import { executionStrategyForJobType } from "../../../app/sync/execution-strategy.server";
-import { resetF3Rows, setupF3Database } from "./pr5-f3-test-helpers";
+import {
+  completeInventoryItemData,
+  completeInventoryLevelData,
+  completeLocationData,
+  completeProductData,
+  completeVariantData,
+  eightQuantities,
+  resetF3Rows,
+  setupF3Database,
+} from "./pr5-f3-test-helpers";
 
 type Authority = Awaited<ReturnType<typeof setupF3Database>>["authority"];
 const NOW = new Date("2026-09-05T12:00:00Z");
@@ -24,9 +34,11 @@ describe("PR5-F3 bounded inventory reconcile and health honesty", () => {
   beforeEach(async () => {
     delete process.env.FEATURE_PR5_ABSENCE_TOMBSTONE;
     await resetF3Rows(prisma);
+    vi.unstubAllGlobals();
   });
 
   afterAll(async () => {
+    vi.unstubAllGlobals();
     await prisma?.$disconnect();
   });
 
@@ -36,83 +48,25 @@ describe("PR5-F3 bounded inventory reconcile and health honesty", () => {
     diagnostic?: string | null;
   }) {
     await prisma.shopifyProductFact.create({
-      data: {
-        id: "p",
-        shopId: shopAId,
-        shopifyGid: "gid://shopify/Product/1",
-        title: "P",
-        handle: "p",
-        tags: [],
-        status: "ACTIVE",
-        existenceState: "LIVE",
-        existenceKind: "LIVE_REFETCH",
-        existenceObservedAt: NOW,
-        sourceKind: "RECONCILE",
-      },
+      data: completeProductData({ id: "1", shopId: shopAId }),
     });
     await prisma.shopifyVariantFact.create({
-      data: {
-        id: "v",
-        shopId: shopAId,
-        shopifyGid: "gid://shopify/ProductVariant/2",
-        shopifyProductGid: "gid://shopify/Product/1",
-        title: "V",
-        selectedOptions: [{ name: "Title", value: "Default" }],
-        priceAmount: "1",
-        currencyCode: "USD",
-        existenceState: "LIVE",
-        existenceKind: "LIVE_REFETCH",
-        existenceObservedAt: NOW,
-        sourceKind: "RECONCILE",
-      },
+      data: completeVariantData({ id: "2", shopId: shopAId }),
     });
     await prisma.shopifyInventoryItemFact.create({
-      data: {
-        id: "i",
-        shopId: shopAId,
-        shopifyGid: "gid://shopify/InventoryItem/3",
-        shopifyVariantGid: "gid://shopify/ProductVariant/2",
-        tracked: true,
-        requiresShipping: true,
-        unitCostAccess: "NULL",
-        existenceState: "LIVE",
-        existenceKind: "LIVE_REFETCH",
-        existenceObservedAt: NOW,
-        sourceKind: "RECONCILE",
-      },
+      data: completeInventoryItemData({ id: "3", shopId: shopAId }),
     });
     await prisma.shopifyLocationFact.create({
-      data: {
-        id: "l",
-        shopId: shopAId,
-        shopifyGid: "gid://shopify/Location/5",
-        name: "L",
-        isActive: true,
-        fulfillsOnlineOrders: true,
-        shipsInventory: true,
-        isFulfillmentService: false,
-        hasActiveInventory: true,
-        existenceState: "LIVE",
-        existenceKind: "LIVE_REFETCH",
-        existenceObservedAt: NOW,
-        sourceKind: "RECONCILE",
-      },
+      data: completeLocationData({ id: "5", shopId: shopAId }),
     });
     await prisma.shopifyInventoryLevelFact.create({
-      data: {
-        id: "level",
+      data: completeInventoryLevelData({
         shopId: shopAId,
-        inventoryItemGid: "gid://shopify/InventoryItem/3",
-        locationGid: "gid://shopify/Location/5",
-        isActive: true,
-        availableQuantity: input && "available" in input ? input.available : 5,
-        existenceState: "LIVE",
-        existenceKind: "LIVE_REFETCH",
-        existenceObservedAt: NOW,
-        sourceKind: "RECONCILE",
+        available: input && "available" in input ? input.available : 5,
         compatibilityProjectionState: input?.projection ?? "HEALTHY",
         existenceDiagnosticState: input?.diagnostic ?? null,
-      },
+        sourceKind: "RECONCILE",
+      }),
     });
   }
 
@@ -268,5 +222,176 @@ describe("PR5-F3 bounded inventory reconcile and health honesty", () => {
       reason: "webhook_backlog_preferred",
     });
     expect(calls).toBe(0);
+  });
+
+  async function applyLevelJsonl(quantities: ReturnType<typeof eightQuantities>) {
+    return applyParsedJsonlBatch({
+      authority,
+      domain: "inventory_levels",
+      batch: {
+        startLineOrdinal: 1,
+        endLineOrdinal: 1,
+        lines: [
+          {
+            ordinal: 1,
+            resourceKind: "InventoryLevel",
+            root: false,
+            value: {
+              id: "gid://shopify/InventoryLevel/4",
+              item: { id: "gid://shopify/InventoryItem/3" },
+              location: { id: "gid://shopify/Location/5" },
+              isActive: true,
+              createdAt: "2026-09-01T00:00:00Z",
+              updatedAt: "2026-09-05T10:00:00Z",
+              quantities,
+            },
+          },
+        ],
+      },
+      syncRunId: "reconcile-run",
+      bulkOperationGid: "gid://shopify/BulkOperation/rec",
+      fenceGeneration: 10n,
+      durableJobId: "reconcile-job",
+      observedAt: NOW,
+      currencyCode: "USD",
+      unitCostAccess: "QUERY_ERROR_ISOLATED",
+      unitCostSelected: false,
+      canonicalIdentitiesPerTransaction: 32,
+      configuredWorstCaseConcurrentCanonicalTransactions: 50,
+      assertProcessingEnabled: async () => undefined,
+    });
+  }
+
+  it("FX-REC-001 reconcile/bulk corrects committed without an inventory_levels/update webhook", async () => {
+    await seedLevel({ available: 5 });
+    await applyLevelJsonl(eightQuantities({ available: 5, committed: 42 }));
+    const level = await prisma.shopifyInventoryLevelFact.findFirstOrThrow();
+    expect(level.committedQuantity).toBe(42);
+    expect(level.availableQuantity).toBe(5);
+  });
+
+  it("FX-REC-002 keeps available, on_hand, and incoming as distinct quantities", async () => {
+    await seedLevel();
+    await applyLevelJsonl(
+      eightQuantities({ available: 11, onHand: 22, incoming: 33, committed: 4 }),
+    );
+    const level = await prisma.shopifyInventoryLevelFact.findFirstOrThrow();
+    expect(level.availableQuantity).toBe(11);
+    expect(level.onHandQuantity).toBe(22);
+    expect(level.incomingQuantity).toBe(33);
+  });
+
+  it("FX-REC-003 stale reconcile older per-name updatedAt does not rewind", async () => {
+    await seedLevel();
+    await applyLevelJsonl(
+      eightQuantities({
+        available: 8,
+        committed: 9,
+        updatedAt: "2026-09-05T12:00:00Z",
+        committedUpdatedAt: "2026-09-05T12:00:00Z",
+      }),
+    );
+    await applyLevelJsonl(
+      eightQuantities({
+        available: 1,
+        committed: 1,
+        updatedAt: "2026-09-01T00:00:00Z",
+        committedUpdatedAt: "2026-09-01T00:00:00Z",
+      }),
+    );
+    const level = await prisma.shopifyInventoryLevelFact.findFirstOrThrow();
+    expect(level.availableQuantity).toBe(8);
+    expect(level.committedQuantity).toBe(9);
+  });
+
+  it("FX-REC-004 inventory reconcile Shopify reads are O(bulk operations), not O(variants×locations)", async () => {
+    await seedLevel();
+    await prisma.shopifyLocationFact.create({
+      data: {
+        ...completeLocationData({
+          id: "6",
+          shopId: shopAId,
+          compatibilityProjectionState: "HEALTHY",
+        }),
+        id: "l2",
+        name: "L2",
+        sourceKind: "RECONCILE",
+      },
+    });
+    await prisma.syncRun.create({
+      data: {
+        shopId: shopAId,
+        syncDomain: "inventory_levels",
+        source: "catalog-facts-v1",
+        status: "RUNNING",
+        correlationId: "fx-rec-004",
+        startedAt: NOW,
+        bulkOperationGid: "gid://shopify/BulkOperation/rec004",
+        fenceGeneration: 10n,
+      },
+    });
+    const jsonl = [
+      JSON.stringify({ id: "gid://shopify/InventoryItem/3" }),
+      JSON.stringify({
+        id: "gid://shopify/InventoryLevel/4",
+        item: { id: "gid://shopify/InventoryItem/3" },
+        location: { id: "gid://shopify/Location/5" },
+        isActive: true,
+        createdAt: "2026-09-01T00:00:00Z",
+        updatedAt: "2026-09-05T10:00:00Z",
+        quantities: eightQuantities({ available: 5, committed: 7 }),
+      }),
+      JSON.stringify({
+        id: "gid://shopify/InventoryLevel/5",
+        item: { id: "gid://shopify/InventoryItem/3" },
+        location: { id: "gid://shopify/Location/6" },
+        isActive: true,
+        createdAt: "2026-09-01T00:00:00Z",
+        updatedAt: "2026-09-05T10:00:00Z",
+        quantities: eightQuantities({ available: 6, committed: 8 }),
+      }),
+    ].join("\n") + "\n";
+    const queries: string[] = [];
+    vi.stubGlobal("fetch", async () => new Response(jsonl, { status: 200 }));
+    const mockAdmin: CatalogAdminReadClient = {
+      async graphql(query) {
+        queries.push(query);
+        return {
+          async json() {
+            if (query.includes("query CatalogFactBulkOperation(")) {
+              return {
+                data: {
+                  bulkOperation: {
+                    id: "gid://shopify/BulkOperation/rec004",
+                    status: "COMPLETED",
+                    errorCode: null,
+                    objectCount: "3",
+                    rootObjectCount: "1",
+                    url: "https://example.test/levels.jsonl",
+                    partialDataUrl: null,
+                    createdAt: "2026-09-05T12:00:00Z",
+                    completedAt: "2026-09-05T12:01:00Z",
+                  },
+                },
+              };
+            }
+            throw new Error(`unexpected ${query.slice(0, 80)}`);
+          },
+        };
+      },
+    };
+    const result = await runInventoryStateReconcileStep({
+      authority,
+      admin: mockAdmin,
+      durableJobId: "reconcile-job",
+      correlationId: "fx-rec-004",
+      canonicalBatchSize: 32,
+      canonicalConcurrency: 50,
+    });
+    expect(result.status).toBe("SUCCEEDED");
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain("query CatalogFactBulkOperation(");
+    expect(queries.join("\n")).not.toMatch(/\bcurrentBulkOperation\b/);
+    expect(await prisma.shopifyInventoryLevelFact.count()).toBe(2);
   });
 });

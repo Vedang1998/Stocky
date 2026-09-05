@@ -70,7 +70,7 @@ describe("F3 bounded JSONL completeness", () => {
     expect(onBatch).not.toHaveBeenCalled();
   });
 
-  it("treats boundary-aligned truncation as partial failure", async () => {
+  it("FX-JSONL-010 treats boundary-aligned truncation as partial failure", async () => {
     const result = await streamJsonlBatches({
       domain: "catalog",
       source: chunks(`${product(1)}\n${variant(1)}\n`),
@@ -99,7 +99,7 @@ describe("F3 bounded JSONL completeness", () => {
     });
   });
 
-  it("retains prior batch acknowledgement on malformed JSON", async () => {
+  it("FX-JSONL-006 retains prior batch acknowledgement on malformed JSON", async () => {
     const result = await streamJsonlBatches({
       domain: "catalog",
       source: chunks(`${product(1)}\n{bad-json}\n`),
@@ -277,7 +277,7 @@ describe("F3 bounded JSONL completeness", () => {
     expect(result.status).toBe("COMPLETE");
   });
 
-  it("streams 100k lines within the 256MB bounded-memory envelope", async () => {
+  it("FX-JSONL-005 streams 100k lines within the 256MB bounded-memory envelope", async () => {
     async function* largeFixture() {
       for (let start = 1; start <= 100_000; start += 1_000) {
         yield `${Array.from({ length: 1_000 }, (_, offset) =>

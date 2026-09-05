@@ -111,7 +111,7 @@ describe("PR5-F3 adapter overlap races A / AT-3 / S / AV", () => {
     };
   }
 
-  it("Race A: delayed bulk cannot overwrite newer direct attributes but advances presence", async () => {
+  it("FX-RACE-A: delayed bulk cannot overwrite newer direct attributes but advances presence", async () => {
     await apply([await direct("newer")]);
     await apply([full("stale", "bulk-epoch", 1n)]);
     const row = await prisma.shopifyProductFact.findUniqueOrThrow({
@@ -126,14 +126,14 @@ describe("PR5-F3 adapter overlap races A / AT-3 / S / AV", () => {
     expect(row.lastSeenFullSyncRunId).toBe("bulk-epoch");
   });
 
-  it("Race AT-3 uses the same canonical lock key for bulk and refetch identity", () => {
+  it("FX-RACE-AT3 uses the same canonical lock key for bulk and refetch identity", () => {
     const identity = full("x").identity;
     const directKey = deriveCanonicalLockKey(identity);
     const bulkKey = deriveCanonicalLockKey(identity);
     expect(directKey).toEqual(bulkKey);
   });
 
-  it("Race AV orders opposite input lists into the same lock sequence", () => {
+  it("FX-RACE-AV orders opposite input lists into the same lock sequence", () => {
     const a = deriveCanonicalLockKey({
       shopId: shopAId,
       resourceKind: "Product",
@@ -149,7 +149,7 @@ describe("PR5-F3 adapter overlap races A / AT-3 / S / AV", () => {
     );
   });
 
-  it("Race S commits in-flight evidence without retaining an advisory lock across I/O", async () => {
+  it("FX-RACE-S commits in-flight evidence without retaining an advisory lock across I/O", async () => {
     await beginDirectObservation(authority, {
       identity: full("x").identity,
       leaseDurationMs: 60_000,
@@ -169,7 +169,7 @@ describe("PR5-F3 adapter overlap races A / AT-3 / S / AV", () => {
     expect(await prisma.shopifyProductFact.count()).toBe(1);
   });
 
-  it("full-sync first insertion is PROJECTION_PENDING, never false HEALTHY", async () => {
+  it("FX-PROJ-009 full-sync first insertion is PROJECTION_PENDING, never false HEALTHY", async () => {
     await apply([full("pending")]);
     expect(
       (

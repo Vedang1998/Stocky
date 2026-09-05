@@ -74,7 +74,7 @@ describe("F3 BulkOperation submit and orphan recovery", () => {
     ).rejects.toThrow("Expected BulkOperation GID");
   });
 
-  it("adopts exactly one fingerprint/time-window match", async () => {
+  it("FX-BULK-014 adopts exactly one fingerprint/time-window match", async () => {
     const query = "{ products { nodes { id } } }";
     const intentAt = new Date("2026-09-05T12:00:00Z");
     const { admin } = mockAdmin({

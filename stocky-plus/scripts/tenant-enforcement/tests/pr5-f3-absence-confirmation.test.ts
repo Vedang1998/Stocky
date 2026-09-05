@@ -17,10 +17,22 @@ import {
   shouldRetryCompatibilityProjection,
 } from "../../../app/jobs/workers/catalog-facts/projection";
 import {
+  completeInventoryItemData,
+  completeLocationData,
   completeProductData,
+  completeVariantData,
   resetF3Rows,
   setupF3Database,
 } from "./pr5-f3-test-helpers";
+import {
+  applyCanonicalFacts,
+  type CanonicalApplyDb,
+} from "../../../app/lib/catalog-facts";
+import { createTenantDb } from "../../../app/tenant/tenant-db.server";
+import {
+  allocateDirectResponseGeneration,
+  beginDirectObservation,
+} from "../../../app/lib/catalog-facts/ingest/direct-observation";
 
 type Authority = Awaited<ReturnType<typeof setupF3Database>>["authority"];
 
@@ -52,6 +64,8 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
         lastSeenFullSyncRunId: options?.seen ?? null,
         existenceRequestGen:
           options?.requestGen === undefined ? 1n : options.requestGen,
+        existenceResponseGen:
+          options?.requestGen === undefined ? 2n : options.requestGen + 1n,
       },
     });
     return {
@@ -61,7 +75,7 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     };
   }
 
-  it("nominates a LIVE identity omitted from a proven owning-domain epoch", async () => {
+  it("FX-ABS-001 nominates a LIVE identity omitted from a proven owning-domain epoch", async () => {
     await seed("1");
     const result = await nominateAbsenceCandidates({
       authority,
@@ -98,7 +112,7 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     expect(result.candidateCount).toBe(0);
   });
 
-  it("holds every candidate when both breaker thresholds trip", async () => {
+  it("FX-LOC-004 / Race V holds every candidate when both breaker thresholds trip", async () => {
     await seed("1");
     await seed("2");
     const result = await nominateAbsenceCandidates({
@@ -131,7 +145,7 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     expect(result.circuitBreakerHeldCount).toBe(0);
   });
 
-  it("flag OFF produces zero tombstones even after null confirmation", async () => {
+  it("FX-ABS-FLAG-OFF produces zero tombstones even after null confirmation", async () => {
     const identity = await seed("1");
     const apply = vi.fn();
     const result = await confirmAbsenceCandidates({
@@ -147,7 +161,7 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     ).toBe("LIVE");
   });
 
-  it("LIVE confirmation clears the nomination without a tombstone", async () => {
+  it("FX-ABS-001 LIVE confirmation clears the nomination without a tombstone", async () => {
     const identity = await seed("1");
     await nominateAbsenceCandidates({
       authority,
@@ -211,8 +225,16 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     expect(apply).toHaveBeenCalledOnce();
   });
 
-  it("inventory-level epoch does not nominate InventoryItem presence", async () => {
-    await seed("product");
+  it("FX-ABS-003 inventory-level epoch does not nominate InventoryItem presence", async () => {
+    await prisma.shopifyProductFact.create({
+      data: completeProductData({ id: "1", shopId: shopAId }),
+    });
+    await prisma.shopifyVariantFact.create({
+      data: completeVariantData({ id: "2", shopId: shopAId }),
+    });
+    await prisma.shopifyInventoryItemFact.create({
+      data: completeInventoryItemData({ id: "3", shopId: shopAId }),
+    });
     const result = await nominateAbsenceCandidates({
       authority,
       domain: "inventory_levels",
@@ -221,8 +243,9 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     });
     expect(result.candidateCount).toBe(0);
     expect(
-      (await prisma.shopifyProductFact.findFirstOrThrow())
-        .absenceNominationState,
+      (
+        await prisma.shopifyInventoryItemFact.findFirstOrThrow()
+      ).absenceNominationState,
     ).toBe("NONE");
   });
 
@@ -237,7 +260,7 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     expect(result.deletionReconciliationHealthy).toBe(false);
   });
 
-  it("Product retry budget permits at least two full revival cycles", () => {
+  it("NEW-CLAUDE-F2CCM-01 Product retry budget permits at least two full revival cycles", () => {
     expect(MIN_PRODUCT_REVIVAL_OBSERVATION_CYCLES).toBeGreaterThanOrEqual(2);
     expect(
       shouldRetryCompatibilityProjection("canonical_product_not_live", 0),
@@ -248,5 +271,152 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     expect(
       shouldRetryCompatibilityProjection("canonical_product_not_live", 2),
     ).toBe(false);
+  });
+
+  it("FX-LOC-002 does not nominate a LIVE location whose existenceRequestGen exceeds the fence", async () => {
+    await prisma.shopifyLocationFact.create({
+      data: completeLocationData({
+        id: "5",
+        shopId: shopAId,
+        requestGen: 11n,
+      }),
+    });
+    const result = await nominateAbsenceCandidates({
+      authority,
+      domain: "locations",
+      epochId: "locations-epoch",
+      fenceGeneration: 10n,
+    });
+    expect(result.nominatedCount).toBe(0);
+    expect(
+      (await prisma.shopifyLocationFact.findFirstOrThrow())
+        .absenceNominationState,
+    ).toBe("NONE");
+  });
+
+  it("FX-ABS-002 confirmed Product absence is not revived by an older bulk line", async () => {
+    const now = new Date("2026-09-05T00:00:00Z");
+    await prisma.shopifyProductFact.create({
+      data: {
+        ...completeProductData({ id: "1", shopId: shopAId }),
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        deletedAt: now,
+        deletionSource: "CONFIRMED_QUERY",
+        shopifyCreatedAt: new Date("2026-01-01T00:00:00Z"),
+        shopifyUpdatedAt: now,
+      },
+    });
+    const db = createTenantDb(authority);
+    await db.$transaction((tx) =>
+      applyCanonicalFacts(tx as unknown as CanonicalApplyDb, {
+        shopId: shopAId,
+        observations: [
+          {
+            observationKind: "full_sync",
+            identity: {
+              shopId: shopAId,
+              resourceKind: "Product",
+              shopifyGid: "gid://shopify/Product/1",
+            },
+            existenceKind: "LIVE_FULL_SYNC_PRESENT",
+            existenceObservedAt: now,
+            shopifyCreatedAt: new Date("2026-01-01T00:00:00Z"),
+            shopifyUpdatedAt: new Date("2026-08-01T00:00:00Z"),
+            sourceKind: "FULL_SYNC",
+            fenceGeneration: 1n,
+            epochId: "stale-bulk",
+            attributes: {
+              title: "stale bulk",
+              handle: "product-1",
+              vendor: null,
+              productType: null,
+              tags: [],
+              status: "ACTIVE",
+              featuredMediaUrl: null,
+            },
+          },
+        ],
+        configuredWorstCaseConcurrentCanonicalTransactions: 50,
+      }),
+    );
+    expect(
+      (
+        await prisma.shopifyProductFact.findFirstOrThrow()
+      ).existenceState,
+    ).toBe("ABSENT");
+  });
+
+  it("NEW-CLAUDE-F2CCM-01 requires two non-overlapping LIVE confirmations to revive a Product", async () => {
+    const now = new Date("2026-09-05T00:00:00Z");
+    await prisma.shopifyProductFact.create({
+      data: {
+        ...completeProductData({ id: "1", shopId: shopAId }),
+        existenceState: "ABSENT",
+        existenceKind: "ABSENT_CONFIRMED_QUERY",
+        deletedAt: now,
+        deletionSource: "CONFIRMED_QUERY",
+        existenceRequestGen: 1n,
+        existenceResponseGen: 2n,
+        shopifyCreatedAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    const identity = {
+      shopId: shopAId,
+      resourceKind: "Product" as const,
+      shopifyGid: "gid://shopify/Product/1",
+    };
+    // Consume the tombstone interval {1,2} so the first LIVE confirmation is a
+    // later non-overlapping observation (NEW-CLAUDE-F2CCM-01 / Race AB).
+    await allocateDirectResponseGeneration(authority);
+    await allocateDirectResponseGeneration(authority);
+    async function liveRefetch(title: string) {
+      const handle = await beginDirectObservation(authority, {
+        identity,
+        leaseDurationMs: 60_000,
+      });
+      const responseGeneration =
+        await allocateDirectResponseGeneration(authority);
+      const db = createTenantDb(authority);
+      return db.$transaction((tx) =>
+        applyCanonicalFacts(tx as unknown as CanonicalApplyDb, {
+          shopId: shopAId,
+          observations: [
+            {
+              observationKind: "direct",
+              identity,
+              observationToken: handle.token,
+              observationRequestGen: handle.requestGeneration,
+              observationResponseGen: responseGeneration,
+              existenceKind: "LIVE_REFETCH",
+              existenceObservedAt: now,
+              shopifyCreatedAt: new Date("2026-01-01T00:00:00Z"),
+              shopifyUpdatedAt: now,
+              sourceKind: "INCREMENTAL_REFETCH",
+              attributes: {
+                title,
+                handle: "product-1",
+                vendor: null,
+                productType: null,
+                tags: [],
+                status: "ACTIVE",
+                featuredMediaUrl: null,
+              },
+            },
+          ],
+          configuredWorstCaseConcurrentCanonicalTransactions: 50,
+        }),
+      );
+    }
+    await liveRefetch("first confirmation");
+    const afterFirst = await prisma.shopifyProductFact.findFirstOrThrow();
+    expect(afterFirst.existenceState).toBe("ABSENT");
+    expect(afterFirst.existenceDiagnosticState).toMatch(
+      /^TERMINAL_IDENTITY_REVIVAL_CONFLICT:/,
+    );
+    await liveRefetch("second confirmation");
+    expect(
+      (await prisma.shopifyProductFact.findFirstOrThrow()).existenceState,
+    ).toBe("LIVE");
   });
 });

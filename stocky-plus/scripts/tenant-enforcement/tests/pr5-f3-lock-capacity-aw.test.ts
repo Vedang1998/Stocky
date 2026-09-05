@@ -36,7 +36,7 @@ describe("PR5-F3 Race AW derived lock-capacity envelope", () => {
     await prisma?.$disconnect();
   });
 
-  it("uses D * max(B, aggregate worker concurrency)", () => {
+  it("FX-RACE-AW uses D * max(B, aggregate worker concurrency)", () => {
     expect(
       deriveCanonicalWriterConcurrency({
         dispatcherProcessCount: 2,
@@ -46,7 +46,7 @@ describe("PR5-F3 Race AW derived lock-capacity envelope", () => {
     ).toBe(100);
   });
 
-  it("does not undercount when dispatch batch is below worker concurrency", () => {
+  it("FX-RACE-AW / F-CLAUDE-PR5F3EC-01 does not undercount when dispatch batch is below worker concurrency", () => {
     expect(
       deriveCanonicalWriterConcurrency({
         dispatcherProcessCount: 3,

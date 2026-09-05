@@ -77,7 +77,7 @@ const quantities = [
 }));
 
 describe("F3 JSONL canonical mappers", () => {
-  it("maps a complete Product as catalog-owned presence", () => {
+  it("FX-JSONL-001 maps a complete Product as catalog-owned presence", () => {
     const mapped = mapJsonlLineToCanonical({
       ...base,
       domain: "catalog",
@@ -92,7 +92,7 @@ describe("F3 JSONL canonical mappers", () => {
     });
   });
 
-  it("maps a variant and its nested InventoryItem without float money conversion", () => {
+  it("FX-MONEY maps a variant and its nested InventoryItem without float money conversion", () => {
     const mapped = mapJsonlLineToCanonical({
       ...base,
       domain: "catalog",
@@ -153,7 +153,7 @@ describe("F3 JSONL canonical mappers", () => {
     });
   });
 
-  it("does not emit InventoryItem presence from inventory-level parent lines", () => {
+  it("FX-JSONL-002 does not emit InventoryItem presence from inventory-level parent lines", () => {
     const mapped = mapJsonlLineToCanonical({
       ...base,
       domain: "inventory_levels",
@@ -164,7 +164,7 @@ describe("F3 JSONL canonical mappers", () => {
     expect(mapped.observations).toEqual([]);
   });
 
-  it("maps all eight inventory quantities onto pair identity", () => {
+  it("FX-JSONL-002 maps all eight inventory quantities onto pair identity", () => {
     const mapped = mapJsonlLineToCanonical({
       ...base,
       domain: "inventory_levels",
@@ -192,7 +192,7 @@ describe("F3 JSONL canonical mappers", () => {
     ).toHaveLength(8);
   });
 
-  it("fails closed rather than using __parentId as pair identity", () => {
+  it("FX-JSONL-003 fails closed rather than using __parentId as pair identity", () => {
     expect(() =>
       mapJsonlLineToCanonical({
         ...base,

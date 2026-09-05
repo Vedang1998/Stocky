@@ -29,7 +29,7 @@ afterEach(() => {
 });
 
 describe("PR5-F3 exact mutation exception and two-root scanner", () => {
-  it("allows bulkOperationRunQuery only in the exact submitter", () => {
+  it("FX-SCAN-001 allows bulkOperationRunQuery only in the exact submitter", () => {
     expect(() =>
       assertCanonicalCatalogDocumentForModule(
         CATALOG_FACT_BULK_OPERATION_RUN_QUERY_MUTATION,
@@ -38,7 +38,7 @@ describe("PR5-F3 exact mutation exception and two-root scanner", () => {
     ).not.toThrow();
   });
 
-  it("rejects bulkOperationRunQuery in another ingest module", () => {
+  it("FX-SCAN-002 rejects bulkOperationRunQuery in another ingest module", () => {
     expect(() =>
       assertCanonicalCatalogDocumentForModule(
         CATALOG_FACT_BULK_OPERATION_RUN_QUERY_MUTATION,
@@ -47,7 +47,7 @@ describe("PR5-F3 exact mutation exception and two-root scanner", () => {
     ).toThrow(/rejects GraphQL mutation/);
   });
 
-  it("rejects an inventory mutation even in the exact submitter", () => {
+  it("FX-SCAN-003 rejects an inventory mutation even in the exact submitter", () => {
     expect(() =>
       assertCanonicalCatalogDocumentForModule(
         `mutation Bad($id: ID!) {
@@ -60,7 +60,7 @@ describe("PR5-F3 exact mutation exception and two-root scanner", () => {
     ).toThrow(/inventoryBulkToggleActivation/);
   });
 
-  it("finds a planted worker-tree mutation recursively", () => {
+  it("FX-SCAN-004 finds a planted worker-tree mutation recursively", () => {
     const root = workerRoot(`
       export const operation = \`mutation Bad($id: ID!) {
         inventoryBulkToggleActivation(inventoryItemId: $id) {
@@ -79,7 +79,7 @@ describe("PR5-F3 exact mutation exception and two-root scanner", () => {
     );
   });
 
-  it("rejects a planted worker write-service import", () => {
+  it("FX-SCAN-005 rejects a planted worker write-service import", () => {
     const root = workerRoot(
       `import { adjustShopifyInventory } from "../../../services/shopify-sync.server";`,
     );

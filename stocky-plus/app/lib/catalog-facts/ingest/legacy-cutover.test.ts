@@ -13,7 +13,7 @@ const source = (relative: string) =>
   readFileSync(path.join(APP, relative), "utf8");
 
 describe("PR5-F3 v1 authority cutover and continuation contracts", () => {
-  it("canonical enqueue emits catalog-facts-v1 only", () => {
+  it("FX-BULK-010 canonical enqueue emits catalog-facts-v1 only", () => {
     const queue = source("jobs/queue.server.ts");
     expect(queue).toContain('payloadSchemaVersion: "catalog-facts-v1"');
     expect(queue).not.toContain('payloadSchemaVersion: "catalog-sync-v1"');
@@ -33,7 +33,7 @@ describe("PR5-F3 v1 authority cutover and continuation contracts", () => {
     expect(legacy).not.toMatch(/response\.text\s*\(/);
   });
 
-  it("legacy current-operation poller is physically absent", () => {
+  it("FX-BULK-011 legacy current-operation poller is physically absent", () => {
     const legacy = source("services/shopify-gql.server.ts");
     expect(legacy).not.toMatch(/pollBulkOperation|StockyCurrentBulkOperation/);
     expect(legacy).not.toMatch(/\bcurrentBulkOperation\b/);

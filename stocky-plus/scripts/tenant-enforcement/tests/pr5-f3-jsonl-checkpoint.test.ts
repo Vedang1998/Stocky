@@ -1,5 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
+import type { CatalogAdminReadClient } from "../../../app/lib/catalog-facts/admin-read";
+import { CATALOG_BULK_QUERY_NO_UNIT_COST } from "../../../app/lib/catalog-facts/admin-read";
+import { runCatalogFactsSyncStep } from "../../../app/jobs/workers/catalog-facts/catalog-sync";
 import {
   acknowledgeJsonlBatch,
   attachBulkOperationGid,
@@ -9,9 +12,13 @@ import {
   markSyncRunPartialFailure,
   persistBulkCounts,
   persistBulkSubmitIntentAndFence,
+  assertPolledBulkOperationMatches,
 } from "../../../app/lib/catalog-facts/ingest/checkpoint";
+import { fingerprintBulkQuery } from "../../../app/lib/catalog-facts/ingest/bulk-operation-recovery";
 import { deriveIngestBatchId } from "../../../app/lib/catalog-facts/ingest/ingest-batch-id";
+import { applyParsedJsonlBatch } from "../../../app/lib/catalog-facts/ingest/apply-batch";
 import {
+  catalogProductJsonl,
   completeProductData,
   resetF3Rows,
   setupF3Database,
@@ -91,7 +98,7 @@ describe("PR5-F3 paired JSONL checkpoint PostgreSQL boundaries", () => {
     expect(stored.bulkSubmitIntentAt).toBeInstanceOf(Date);
   });
 
-  it("atomically resets ordinal when a new GID is attached", async () => {
+  it("FX-BULK-012 atomically resets ordinal when a new GID is attached", async () => {
     const created = await run();
     await prisma.syncRun.update({
       where: { id: created.id },
@@ -200,7 +207,7 @@ describe("PR5-F3 paired JSONL checkpoint PostgreSQL boundaries", () => {
     ).toBe(2);
   });
 
-  it("fails closed when a stale GID tries to use another operation's ordinal", async () => {
+  it("FX-BULK-013 fails closed when a stale GID tries to use another operation's ordinal", async () => {
     const created = await run();
     await attachBulkOperationGid(
       {
@@ -278,7 +285,7 @@ describe("PR5-F3 paired JSONL checkpoint PostgreSQL boundaries", () => {
     ).rejects.toThrow();
   });
 
-  it("processing disabled mid-ingest prevents checkpoint advance", async () => {
+  it("FX-JSONL-012 processing disabled mid-ingest prevents checkpoint advance", async () => {
     const created = await run();
     await prisma.syncRun.update({
       where: { id: created.id },
@@ -308,7 +315,7 @@ describe("PR5-F3 paired JSONL checkpoint PostgreSQL boundaries", () => {
     ).toBeNull();
   });
 
-  it("Race E after-commit crash leaves facts durable while checkpoint lags, then catches up", async () => {
+  it("FX-BULK-005 Race E after-commit crash leaves facts durable while checkpoint lags, then catches up", async () => {
     const created = await run();
     const gid = "gid://shopify/BulkOperation/A";
     await attachBulkOperationGid(
@@ -360,7 +367,7 @@ describe("PR5-F3 paired JSONL checkpoint PostgreSQL boundaries", () => {
     ).toBe(200);
   });
 
-  it("Race E before-commit crash leaves neither facts nor a leading checkpoint", async () => {
+  it("FX-BULK-006 Race E before-commit crash leaves neither facts nor a leading checkpoint", async () => {
     const created = await run();
     await attachBulkOperationGid(
       {
@@ -477,5 +484,338 @@ describe("PR5-F3 paired JSONL checkpoint PostgreSQL boundaries", () => {
   it("full-sync cursor helper rejects missing run identity", () => {
     expect(fullSyncCursorValue("run")).toBe("full-sync-epoch:run");
     expect(() => fullSyncCursorValue("")).toThrow("sync_run_id_missing");
+  });
+
+  it("FX-BULK-013 polled GID mismatch fails closed without a success cursor", () => {
+    expect(() =>
+      assertPolledBulkOperationMatches(
+        "gid://shopify/BulkOperation/A",
+        "gid://shopify/BulkOperation/B",
+      ),
+    ).toThrow(/does not match the paired checkpoint GID/);
+  });
+});
+
+const BULK_GID = "gid://shopify/BulkOperation/1";
+const JSONL_URL = "https://example.test/catalog.jsonl";
+
+function bulkSnapshot(input: {
+  id?: string;
+  status?: string;
+  objectCount: string;
+  rootObjectCount: string;
+  url?: string | null;
+  partialDataUrl?: string | null;
+}) {
+  return {
+    data: {
+      bulkOperation: {
+        id: input.id ?? BULK_GID,
+        status: input.status ?? "COMPLETED",
+        errorCode: null,
+        objectCount: input.objectCount,
+        rootObjectCount: input.rootObjectCount,
+        url: input.url === undefined ? JSONL_URL : input.url,
+        partialDataUrl: input.partialDataUrl ?? null,
+        createdAt: "2026-09-05T12:00:00Z",
+        completedAt: "2026-09-05T12:01:00Z",
+      },
+    },
+  };
+}
+
+function catalogSyncAdmin(input?: {
+  objectCount?: string;
+  rootObjectCount?: string;
+  url?: string | null;
+  partialDataUrl?: string | null;
+  status?: string;
+  polledId?: string;
+  recoveryNodes?: Array<Record<string, unknown>>;
+}): CatalogAdminReadClient & { queries: string[] } {
+  const queries: string[] = [];
+  return {
+    queries,
+    async graphql(query) {
+      queries.push(query);
+      return {
+        async json() {
+          if (query.includes("query CatalogFactUnitCostProbeIdentity")) {
+            return { data: { inventoryItems: { nodes: [] } } };
+          }
+          if (query.includes("mutation CatalogFactBulkOperationRunQuery")) {
+            return {
+              data: {
+                bulkOperationRunQuery: {
+                  bulkOperation: { id: BULK_GID, status: "CREATED" },
+                  userErrors: [],
+                },
+              },
+            };
+          }
+          if (query.includes("query CatalogFactBulkOperationRecovery")) {
+            return {
+              data: { bulkOperations: { nodes: input?.recoveryNodes ?? [] } },
+            };
+          }
+          if (query.includes("query CatalogFactBulkOperation(")) {
+            return bulkSnapshot({
+              id: input?.polledId ?? BULK_GID,
+              status: input?.status,
+              objectCount: input?.objectCount ?? "1",
+              rootObjectCount: input?.rootObjectCount ?? "1",
+              url: input?.url,
+              partialDataUrl: input?.partialDataUrl,
+            });
+          }
+          if (query.includes("query CatalogFactShopCurrency")) {
+            return { data: { shop: { currencyCode: "USD" } } };
+          }
+          throw new Error(`unexpected catalog-sync query ${query.slice(0, 80)}`);
+        },
+      };
+    },
+  };
+}
+
+describe("PR5-F3 JSONL completeness through catalog-sync", () => {
+  let prisma: PrismaClient;
+  let shopAId: string;
+  let authority: Awaited<ReturnType<typeof setupF3Database>>["authority"];
+
+  beforeAll(async () => {
+    ({ prisma, shopAId, authority } = await setupF3Database());
+  }, 120_000);
+
+  beforeEach(async () => {
+    await resetF3Rows(prisma);
+    vi.unstubAllGlobals();
+  });
+
+  afterAll(async () => {
+    vi.unstubAllGlobals();
+    await prisma?.$disconnect();
+  });
+
+  async function seedLocationsSucceeded(correlationId: string) {
+    await prisma.syncRun.create({
+      data: {
+        shopId: shopAId,
+        syncDomain: "locations",
+        source: "catalog-facts-v1",
+        status: "SUCCEEDED",
+        correlationId,
+        startedAt: new Date(),
+        completedAt: new Date(),
+      },
+    });
+  }
+
+  async function submitThenIngest(input: {
+    correlationId: string;
+    jsonl: string;
+    objectCount: string;
+    rootObjectCount: string;
+  }) {
+    vi.stubGlobal(
+      "fetch",
+      async () => new Response(input.jsonl, { status: 200 }),
+    );
+    const admin = catalogSyncAdmin({
+      objectCount: input.objectCount,
+      rootObjectCount: input.rootObjectCount,
+    });
+    const first = await runCatalogFactsSyncStep({
+      authority,
+      admin,
+      durableJobId: "catalog-job",
+      correlationId: input.correlationId,
+      durableAttemptCount: 0,
+      canonicalBatchSize: 32,
+      canonicalConcurrency: 50,
+    });
+    expect(first).toMatchObject({ status: "CONTINUE", reason: "bulk_submitted" });
+    return runCatalogFactsSyncStep({
+      authority,
+      admin,
+      durableJobId: "catalog-job",
+      correlationId: input.correlationId,
+      durableAttemptCount: 0,
+      canonicalBatchSize: 32,
+      canonicalConcurrency: 50,
+    });
+  }
+
+  it("FX-JSONL-010 truncated complete-url stream does not nominate or watermark", async () => {
+    const correlationId = "fx-jsonl-010";
+    await seedLocationsSucceeded(correlationId);
+    const products = Array.from({ length: 10 }, (_, index) =>
+      catalogProductJsonl(index + 1),
+    );
+    const streamed = products.slice(0, 9).join("\n") + "\n";
+    const result = await submitThenIngest({
+      correlationId,
+      jsonl: streamed,
+      objectCount: "10",
+      rootObjectCount: "10",
+    });
+    expect(result).toMatchObject({
+      status: "PARTIAL_FAILURE",
+      reason: "object_count_mismatch",
+    });
+    expect(
+      await prisma.shopifyProductFact.count({
+        where: { absenceNominationState: "CANDIDATE" },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.syncCursor.findUnique({
+        where: {
+          shopId_syncDomain: { shopId: shopAId, syncDomain: "catalog" },
+        },
+      }),
+    ).toBeNull();
+    expect(
+      (
+        await prisma.syncRun.findFirstOrThrow({
+          where: { shopId: shopAId, syncDomain: "catalog" },
+        })
+      ).status,
+    ).toBe("PARTIAL_FAILURE");
+  });
+
+  it("FX-JSONL-011 objectCount mismatch by one fails closed with zero nominations", async () => {
+    const correlationId = "fx-jsonl-011";
+    await seedLocationsSucceeded(correlationId);
+    const result = await submitThenIngest({
+      correlationId,
+      jsonl: `${catalogProductJsonl(1)}\n`,
+      objectCount: "2",
+      rootObjectCount: "1",
+    });
+    expect(result).toMatchObject({
+      status: "PARTIAL_FAILURE",
+      reason: "object_count_mismatch",
+    });
+    expect(
+      await prisma.shopifyProductFact.count({
+        where: { absenceNominationState: "CANDIDATE" },
+      }),
+    ).toBe(0);
+    expect(await prisma.syncCursor.count()).toBe(0);
+  });
+
+  it("FX-JSONL-006 malformed JSONL keeps prior committed facts and nominates nothing", async () => {
+    const created = await prisma.syncRun.create({
+      data: {
+        shopId: shopAId,
+        syncDomain: "catalog",
+        source: "catalog-facts-v1",
+        correlationId: "fx-jsonl-006",
+        fenceGeneration: 10n,
+      },
+    });
+    await applyParsedJsonlBatch({
+      authority,
+      domain: "catalog",
+      batch: {
+        startLineOrdinal: 1,
+        endLineOrdinal: 1,
+        lines: [
+          {
+            ordinal: 1,
+            resourceKind: "Product",
+            root: true,
+            value: JSON.parse(catalogProductJsonl(1)),
+          },
+        ],
+      },
+      syncRunId: created.id,
+      bulkOperationGid: BULK_GID,
+      fenceGeneration: 10n,
+      durableJobId: "job",
+      observedAt: new Date("2026-09-05T00:00:00Z"),
+      currencyCode: "USD",
+      unitCostAccess: "OMITTED_NO_PERMISSION",
+      unitCostSelected: false,
+      canonicalIdentitiesPerTransaction: 32,
+      configuredWorstCaseConcurrentCanonicalTransactions: 50,
+      assertProcessingEnabled: async () => undefined,
+    });
+    await prisma.shopifyProductFact.updateMany({
+      data: { compatibilityProjectionState: "HEALTHY" },
+    });
+    await seedLocationsSucceeded("fx-jsonl-006-stream");
+    const result = await submitThenIngest({
+      correlationId: "fx-jsonl-006-stream",
+      jsonl: `${catalogProductJsonl(2)}\n{bad-json}\n`,
+      objectCount: "2",
+      rootObjectCount: "1",
+    });
+    expect(result.status).toBe("PARTIAL_FAILURE");
+    expect(await prisma.shopifyProductFact.count()).toBe(1);
+    expect(
+      await prisma.shopifyProductFact.count({
+        where: { absenceNominationState: "CANDIDATE" },
+      }),
+    ).toBe(0);
+    expect(await prisma.syncCursor.count()).toBe(0);
+  });
+
+  it("FX-BULK-014 recovers a unique orphan via bulkOperations list, never currentBulkOperation", async () => {
+    const correlationId = "fx-bulk-014";
+    await seedLocationsSucceeded(correlationId);
+    const fingerprint = fingerprintBulkQuery({
+      query: CATALOG_BULK_QUERY_NO_UNIT_COST,
+      shopId: shopAId,
+    });
+    await prisma.syncRun.create({
+      data: {
+        shopId: shopAId,
+        syncDomain: "catalog",
+        source: "catalog-facts-v1",
+        status: "RUNNING",
+        correlationId,
+        startedAt: new Date(),
+        bulkSubmitIntentAt: new Date("2026-09-05T12:00:00Z"),
+        bulkQueryFingerprint: fingerprint,
+        fenceGeneration: 3n,
+        cursorBefore: "no-unitCost",
+      },
+    });
+    const admin = catalogSyncAdmin({
+      recoveryNodes: [
+        {
+          id: BULK_GID,
+          status: "RUNNING",
+          query: CATALOG_BULK_QUERY_NO_UNIT_COST,
+          createdAt: "2026-09-05T12:00:30Z",
+        },
+      ],
+    });
+    const result = await runCatalogFactsSyncStep({
+      authority,
+      admin,
+      durableJobId: "catalog-job",
+      correlationId,
+      durableAttemptCount: 0,
+      canonicalBatchSize: 32,
+      canonicalConcurrency: 50,
+    });
+    expect(result).toMatchObject({
+      status: "CONTINUE",
+      reason: "orphan_bulk_adopted",
+    });
+    expect(
+      (
+        await prisma.syncRun.findFirstOrThrow({
+          where: { shopId: shopAId, syncDomain: "catalog" },
+        })
+      ).bulkOperationGid,
+    ).toBe(BULK_GID);
+    expect(admin.queries.join("\n")).not.toMatch(/\bcurrentBulkOperation\b/);
+    expect(admin.queries.some((query) => query.includes("bulkOperations"))).toBe(
+      true,
+    );
   });
 });
