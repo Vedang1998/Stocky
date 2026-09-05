@@ -57,7 +57,7 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
-const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
+export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "SyncApplicationReceipt",
   "ShopifyProductFact",
   "ShopifyProductCollectionMembership",

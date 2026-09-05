@@ -536,7 +536,10 @@ describe("PR5-F2C compatibility projection TenantDb core", () => {
       },
     });
     expect(factB?.title).toBe("Blue");
-    expect(factB?.compatibilityProjectionState).toBe("HEALTHY");
+    // F2C core is frozen not to write compatibilityProjectionState. F3 changed
+    // the column default to PROJECTION_PENDING; shop B's successful core
+    // projection must not invent HEALTHY and shop A must not clobber shop B.
+    expect(factB?.compatibilityProjectionState).toBe("PROJECTION_PENDING");
   });
 
   it("does not write forecast, ABC, or LowStockAlert rows", async () => {

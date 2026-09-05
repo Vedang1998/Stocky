@@ -131,6 +131,8 @@ jobs:
       FEATURE_RECEIPT_WRITES: "false"
       FEATURE_COST_SYNC: "false"
       FEATURE_TRANSFER_WRITES: "false"
+      FEATURE_PR5_ABSENCE_TOMBSTONE: "false"
+      STOCKY_DISPATCHER_PROCESS_COUNT: "1"
       ALLOW_DEV_SUBSCRIPTION_ACTIVATE: "false"
 
     steps:
@@ -668,6 +670,44 @@ jobs:
       # exists for the bulk schema gate. R-016 remains OPEN.
       - name: GraphQL codegen / schema validation
         run: npm run graphql-codegen
+
+      - name: PR5-F3 JSONL ingest unit matrix
+        run: npx vitest run app/lib/catalog-facts/ingest --reporter=verbose --passWithNoTests false
+
+      - name: PR5-F3 two-root scanner and exact bulk-submit exception
+        run: >-
+          npx vitest run
+          app/lib/catalog-facts/foundation-safety.test.ts
+          app/lib/catalog-facts/admin-read/mutation-safety.test.ts
+          app/lib/catalog-facts/admin-read/f3-scanner.test.ts
+          --reporter=verbose --passWithNoTests false
+
+      - name: PR5-F3 whole-application semantic safety scan
+        run: npx tsx scripts/pr5-f3-safety-scan.ts
+
+      - name: PR5-F3 JSONL checkpoint and completeness PostgreSQL matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-jsonl-checkpoint.test.ts
+
+      - name: PR5-F3 webhook authoritative-refetch and R-165 matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts
+
+      - name: PR5-F3 overlap races
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-overlap-races.test.ts
+
+      - name: PR5-F3 absence confirmation and flag-off matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-absence-confirmation.test.ts
+
+      - name: PR5-F3 inventory reconcile matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-inventory-reconcile.test.ts
+
+      - name: PR5-F3 projection and health matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-projection-health.test.ts
+
+      - name: PR5-F3 derived lock-capacity Race AW
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-lock-capacity-aw.test.ts
+
+      - name: PR5-F3 scale completeness
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts
 
       - name: Unit tests
         run: npm test

@@ -63,6 +63,13 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
   },
   {
     kind: "producer",
+    id: "producer:inventory-state-reconcile",
+    path: "app/jobs/queue.server.ts",
+    symbol: "enqueueInventoryStateReconcile",
+    notes: "Coalesced, webhook-deferred canonical inventory-state reconcile",
+  },
+  {
+    kind: "producer",
     id: "producer:abc-analysis-shop",
     path: "app/jobs/queue.server.ts",
     symbol: "enqueueAbcAnalysisForShop",
@@ -103,6 +110,59 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "app/jobs/workers/webhook-processor.ts",
     symbol: "processCronJob",
     notes: "Durable lifecycle wrapper for cron jobs",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-sync",
+    path: "app/jobs/workers/catalog-facts/catalog-sync.ts",
+    symbol: "runCatalogFactsSyncStep",
+    notes:
+      "One parent job with locations/catalog/inventory_levels child SyncRuns",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-refetch",
+    path: "app/jobs/workers/catalog-facts/resource-refetch.ts",
+    symbol: "applyCatalogFactWebhookRefetch",
+    notes: "Authoritative Admin refetch before canonical webhook application",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-bulk-finish",
+    path: "app/jobs/workers/catalog-facts/bulk-finish.ts",
+    symbol: "signalBulkOperationContinuation",
+    notes:
+      "CONTROL_ONLY bulk_operations/finish continuation of the persisted GID",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-capacity",
+    path: "app/jobs/workers/catalog-facts/capacity.ts",
+    symbol: "assertCanonicalWriterCapacityAtStartup",
+    notes:
+      "F-CLAUDE-PR5F3EC-01 D*max(B, Σ worker concurrency) fail-closed envelope",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-projection",
+    path: "app/jobs/workers/catalog-facts/projection.ts",
+    symbol: "projectAppliedCanonicalFacts",
+    notes:
+      "Post-commit compatibility projection; live processingEnabled read",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-diagnostic-reconciler",
+    path: "app/jobs/workers/catalog-facts/diagnostic-reconciler.ts",
+    symbol: "reconcileCatalogDiagnostics",
+    notes: "Catalog health evidence and diagnostic DataIssue reconcile",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-jsonl-checkpoint",
+    path: "app/lib/catalog-facts/ingest/checkpoint.ts",
+    symbol: "acknowledgeJsonlBatch",
+    notes: "Race Y two-phase checkpoint uses the control-plane role only",
   },
   {
     kind: "worker",
@@ -155,6 +215,14 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
   },
   {
     kind: "webhook_route",
+    id: "webhook:catalog-facts",
+    path: "app/routes/webhooks.catalog-facts.tsx",
+    symbol: "action",
+    notes:
+      "Shared durable intake route for PR5 catalog/inventory signal topics",
+  },
+  {
+    kind: "webhook_route",
     id: "webhook:compliance",
     path: "app/routes/webhooks.compliance.tsx",
     symbol: "action",
@@ -194,6 +262,13 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "app/sync/sanitize.server.ts",
     symbol: "sanitizeWebhookPayload",
     notes: "Versioned inventory projection",
+  },
+  {
+    kind: "sanitizer",
+    id: "sanitizer:catalog-facts",
+    path: "app/sync/sanitize.server.ts",
+    symbol: "sanitizeCatalogIdentityProjection",
+    notes: "Identity and signal metadata only for PR5 resource topics",
   },
   {
     kind: "sanitizer",
