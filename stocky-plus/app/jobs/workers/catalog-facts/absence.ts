@@ -37,7 +37,7 @@ const DOMAIN_FACTS: Record<PresenceAuthorityDomain, FactDescriptor[]> = {
 
 function candidateWhere(epochId: string, fenceGeneration: bigint) {
   return {
-    existenceState: "LIVE",
+    existenceState: "LIVE" as const,
     AND: [
       {
         OR: [
@@ -53,6 +53,109 @@ function candidateWhere(epochId: string, fenceGeneration: bigint) {
       },
     ],
   };
+}
+
+type AbsenceCandidateRow = {
+  id: string;
+  shopifyGid?: string;
+  inventoryItemGid?: string;
+  locationGid?: string;
+};
+
+async function countAbsenceCandidates(
+  db: ReturnType<typeof createTenantDb>,
+  descriptor: FactDescriptor,
+  epochId: string,
+  fenceGeneration: bigint,
+): Promise<{ liveCount: number; candidateCount: number }> {
+  const where = candidateWhere(epochId, fenceGeneration);
+  switch (descriptor.delegate) {
+    case "shopifyProductFact":
+      return {
+        liveCount: await db.shopifyProductFact.count({
+          where: { existenceState: "LIVE" },
+        }),
+        candidateCount: await db.shopifyProductFact.count({ where }),
+      };
+    case "shopifyVariantFact":
+      return {
+        liveCount: await db.shopifyVariantFact.count({
+          where: { existenceState: "LIVE" },
+        }),
+        candidateCount: await db.shopifyVariantFact.count({ where }),
+      };
+    case "shopifyInventoryItemFact":
+      return {
+        liveCount: await db.shopifyInventoryItemFact.count({
+          where: { existenceState: "LIVE" },
+        }),
+        candidateCount: await db.shopifyInventoryItemFact.count({ where }),
+      };
+    case "shopifyLocationFact":
+      return {
+        liveCount: await db.shopifyLocationFact.count({
+          where: { existenceState: "LIVE" },
+        }),
+        candidateCount: await db.shopifyLocationFact.count({ where }),
+      };
+    case "shopifyInventoryLevelFact":
+      return {
+        liveCount: await db.shopifyInventoryLevelFact.count({
+          where: { existenceState: "LIVE" },
+        }),
+        candidateCount: await db.shopifyInventoryLevelFact.count({ where }),
+      };
+  }
+}
+
+async function loadAbsenceCandidatePage(
+  db: ReturnType<typeof createTenantDb>,
+  descriptor: FactDescriptor,
+  epochId: string,
+  fenceGeneration: bigint,
+  cursor: string | undefined,
+): Promise<AbsenceCandidateRow[]> {
+  const where = {
+    ...candidateWhere(epochId, fenceGeneration),
+    ...(cursor ? { id: { gt: cursor } } : {}),
+  };
+  switch (descriptor.delegate) {
+    case "shopifyProductFact":
+      return db.shopifyProductFact.findMany({
+        where,
+        orderBy: { id: "asc" },
+        take: 32,
+        select: { id: true, shopifyGid: true },
+      });
+    case "shopifyVariantFact":
+      return db.shopifyVariantFact.findMany({
+        where,
+        orderBy: { id: "asc" },
+        take: 32,
+        select: { id: true, shopifyGid: true },
+      });
+    case "shopifyInventoryItemFact":
+      return db.shopifyInventoryItemFact.findMany({
+        where,
+        orderBy: { id: "asc" },
+        take: 32,
+        select: { id: true, shopifyGid: true },
+      });
+    case "shopifyLocationFact":
+      return db.shopifyLocationFact.findMany({
+        where,
+        orderBy: { id: "asc" },
+        take: 32,
+        select: { id: true, shopifyGid: true },
+      });
+    case "shopifyInventoryLevelFact":
+      return db.shopifyInventoryLevelFact.findMany({
+        where,
+        orderBy: { id: "asc" },
+        take: 32,
+        select: { id: true, inventoryItemGid: true, locationGid: true },
+      });
+  }
 }
 
 function identityFromRow(
@@ -127,12 +230,12 @@ export async function nominateAbsenceCandidates(input: {
   let circuitBreakerHeldCount = 0;
 
   for (const descriptor of DOMAIN_FACTS[input.domain]) {
-    const delegate = db[descriptor.delegate];
-    const where = candidateWhere(input.epochId, input.fenceGeneration);
-    const [liveCount, count] = await Promise.all([
-      delegate.count({ where: { existenceState: "LIVE" } }),
-      delegate.count({ where }),
-    ]);
+    const { liveCount, candidateCount: count } = await countAbsenceCandidates(
+      db,
+      descriptor,
+      input.epochId,
+      input.fenceGeneration,
+    );
     candidateCount += count;
     const proportionBps =
       liveCount === 0 ? 0 : Math.floor((count * 10_000) / liveCount);
@@ -141,23 +244,13 @@ export async function nominateAbsenceCandidates(input: {
 
     let cursor: string | undefined;
     for (;;) {
-      const rows = (await delegate.findMany({
-        where: {
-          ...where,
-          ...(cursor ? { id: { gt: cursor } } : {}),
-        },
-        orderBy: { id: "asc" },
-        take: 32,
-        select:
-          descriptor.resourceKind === "InventoryLevel"
-            ? { id: true, inventoryItemGid: true, locationGid: true }
-            : { id: true, shopifyGid: true },
-      })) as Array<{
-        id: string;
-        shopifyGid?: string;
-        inventoryItemGid?: string;
-        locationGid?: string;
-      }>;
+      const rows = await loadAbsenceCandidatePage(
+        db,
+        descriptor,
+        input.epochId,
+        input.fenceGeneration,
+        cursor,
+      );
       if (rows.length === 0) break;
       for (const row of rows) {
         const updated = await writeCanonicalFactMetadata(input.authority, {

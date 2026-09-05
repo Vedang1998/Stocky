@@ -8,28 +8,23 @@ import {
 import { getControlPlanePrisma } from "../../../sync/control-plane-db.server";
 import type { PresenceAuthorityDomain } from "./absence";
 
-const DOMAIN_DELEGATES = {
-  catalog: [
-    "shopifyProductFact",
-    "shopifyVariantFact",
-    "shopifyInventoryItemFact",
-  ],
-  locations: ["shopifyLocationFact"],
-  inventory_levels: ["shopifyInventoryLevelFact"],
-} as const;
-
-async function sumCounts(
-  delegates: readonly string[],
+async function countDomainFacts(
   db: ReturnType<typeof createTenantDb>,
+  domain: PresenceAuthorityDomain,
   where: Record<string, unknown>,
 ): Promise<number> {
-  let count = 0;
-  for (const name of delegates) {
-    count += await (
-      db as unknown as Record<string, { count(args: unknown): Promise<number> }>
-    )[name]!.count({ where });
+  switch (domain) {
+    case "catalog":
+      return (
+        (await db.shopifyProductFact.count({ where })) +
+        (await db.shopifyVariantFact.count({ where })) +
+        (await db.shopifyInventoryItemFact.count({ where }))
+      );
+    case "locations":
+      return db.shopifyLocationFact.count({ where });
+    case "inventory_levels":
+      return db.shopifyInventoryLevelFact.count({ where });
   }
-  return count;
 }
 
 export async function readCatalogHealthEvidence(
@@ -37,7 +32,6 @@ export async function readCatalogHealthEvidence(
   domain: PresenceAuthorityDomain,
 ): Promise<CatalogHealthEvidence> {
   const db = createTenantDb(authority);
-  const delegates = DOMAIN_DELEGATES[domain];
   const [
     projectionPendingCount,
     projectionFailedCount,
@@ -45,19 +39,19 @@ export async function readCatalogHealthEvidence(
     freshnessDegradedCount,
     diagnosticCount,
   ] = await Promise.all([
-    sumCounts(delegates, db, {
+    countDomainFacts(db, domain, {
       compatibilityProjectionState: "PROJECTION_PENDING",
     }),
-    sumCounts(delegates, db, {
+    countDomainFacts(db, domain, {
       compatibilityProjectionState: "DEGRADED",
     }),
-    sumCounts(delegates, db, {
+    countDomainFacts(db, domain, {
       absenceNominationState: { not: "NONE" },
     }),
-    sumCounts(delegates, db, {
+    countDomainFacts(db, domain, {
       attributeFreshnessState: "DEGRADED",
     }),
-    sumCounts(delegates, db, {
+    countDomainFacts(db, domain, {
       existenceDiagnosticState: { not: null },
     }),
   ]);
