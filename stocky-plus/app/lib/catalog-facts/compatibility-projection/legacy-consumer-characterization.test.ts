@@ -42,22 +42,19 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
     expect(source).toMatch(/cache\?\.title/);
   });
 
-  it("current catalog ingest writes the same ShopifyVariantCache field set", () => {
+  it("F3 cutover removes competing catalog ShopifyVariantCache writers from shopify-sync", () => {
     const source = readApp("services/shopify-sync.server.ts");
-    expect(source).toMatch(/shopifyVariantCache\.upsert/);
-    expect(source).toMatch(/shopifyProductId:/);
-    expect(source).toMatch(/inventoryItemId:/);
-    expect(source).toMatch(/imageUrl:/);
-    expect(source).toMatch(/weight:/);
-    expect(source).toMatch(/weightUnit:/);
-    expect(source).toMatch(/ — /);
+    expect(source).not.toMatch(/shopifyVariantCache\.upsert/);
+    expect(source).not.toMatch(/startCatalogSync/);
+    expect(source).not.toMatch(/ingestBulkVariantCache/);
   });
 
-  it("current inventory webhook writes today's InventorySnapshot.quantityAvailable", () => {
+  it("F3/R-165 inventory webhook no longer coerces unknown available to zero", () => {
     const source = readApp("jobs/workers/webhook-processor.ts");
-    expect(source).toMatch(/inventorySnapshot\.upsert/);
-    expect(source).toMatch(/quantityAvailable:\s*inv\.available\s*\?\?\s*0/);
-    expect(source).toMatch(/computeForecast/);
-    expect(source).toMatch(/lowStockAlert\.create/);
+    expect(source).not.toMatch(/quantityAvailable:\s*inv\.available\s*\?\?\s*0/);
+    expect(source).not.toMatch(/inventorySnapshot\.upsert/);
+    expect(source).not.toMatch(/computeForecast/);
+    expect(source).not.toMatch(/lowStockAlert\.create/);
+    expect(source).toContain("LEGACY_CATALOG_SYNC_V1_DISABLED");
   });
 });
