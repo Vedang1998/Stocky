@@ -60,8 +60,14 @@ describe("PR5-F1 foundation safety", () => {
         return forbidden.test(source) ? [file] : [];
       }),
     ).toEqual([]);
-    expect(readFileSync(path.join(DIR, "advisory-lock.ts"), "utf8")).toMatch(
-      /pg_advisory_xact_lock/,
+    const advisorySource = readFileSync(path.join(DIR, "advisory-lock.ts"), "utf8");
+    expect(advisorySource).toMatch(/pg_advisory_xact_lock/);
+    expect(advisorySource).toMatch(
+      /pg_advisory_xact_lock\(CAST\(\$\{key\.key1\} AS INTEGER\), CAST\(\$\{key\.key2\} AS INTEGER\)\)/,
     );
+    expect(advisorySource).toMatch(
+      /WITH _canonical_identity_lock AS/,
+    );
+    expect(advisorySource).toMatch(/SELECT 1 AS acquired FROM _canonical_identity_lock/);
   });
 });
