@@ -21,14 +21,12 @@ export async function setupF3Database(): Promise<{
       data: {
         myshopifyDomain: SHOP_A,
         processingEnabled: true,
-        tenantContextVersion: ENFORCEMENT_CONTEXT_VERSION,
       },
     }),
     prisma.shop.create({
       data: {
         myshopifyDomain: SHOP_B,
         processingEnabled: true,
-        tenantContextVersion: ENFORCEMENT_CONTEXT_VERSION,
       },
     }),
   ]);

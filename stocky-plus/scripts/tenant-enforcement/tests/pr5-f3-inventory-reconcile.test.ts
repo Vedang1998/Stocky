@@ -244,6 +244,7 @@ describe("PR5-F3 bounded inventory reconcile and health honesty", () => {
         payloadDigest: "a".repeat(64),
         idempotencyKey: "webhook-backlog",
         correlationId: "webhook-backlog",
+        authorityVersion: "tenant-job-envelope-v3",
         executionStrategy: "ATOMIC_APPLICATION_RECEIPT",
       },
     });

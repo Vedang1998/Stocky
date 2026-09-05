@@ -140,7 +140,7 @@ export async function nominateAbsenceCandidates(input: {
       count >= breaker.absoluteCount && proportionBps >= breaker.proportionBps;
 
     let cursor: string | undefined;
-    while (true) {
+    for (;;) {
       const rows = (await delegate.findMany({
         where: {
           ...where,
