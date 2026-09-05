@@ -34,7 +34,7 @@ Reusable copies are under `phases/_templates/`.
 - `RISK_REGISTER.md` — active risks and owners;
 - `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules;
 - `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward;
-- `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue after Stocky sunset; does not change product rules or relax safety gates).
+- `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue after Stocky sunset; does not change product rules, relax safety gates, or authorize F3 runtime).
 
 Open `PROJECT_STATUS.md` first whenever the project feels confusing.
 

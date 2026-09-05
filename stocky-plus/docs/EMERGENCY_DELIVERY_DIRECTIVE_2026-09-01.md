@@ -1,14 +1,22 @@
 # Emergency Continuity Sprint — Control Packet
 
 **Recorded:** 2026-09-01
-**Status:** DURABLE CONTROL PACKET — pending ChatGPT review of this documentation PR
+**Current-state addendum:** 2026-09-05
+**Status:** DURABLE CONTROL PACKET — synchronized onto current `main` after PR #32 merged; pending ChatGPT review of PR #33; **does not authorize F3 runtime**
 **Authority recorded here:** ChatGPT operational control for an INTERNAL / CONTROLLED rescue
 **Product-rule authority:** unchanged. Approved product documents remain source of truth.
 **Implementation authority:** **D-054 remains EFFECTIVE.** This packet does **not** create D-055.
 **Operating model:** `ACCELERATED_SAFE_DELIVERY.md` (calendar execution only; safety gates unchanged)
 **This PR / lane:** documentation only. No runtime. No schema. No migration. No Shopify configuration. No inventory-write flag change.
 
-This is the durable Emergency Continuity Sprint control packet for the Stocky sunset. It does **not** start or authorize a future runtime lane. ChatGPT must separately define any Cursor lanes after reviewing this packet.
+This is the durable Emergency Continuity Sprint control packet for the Stocky sunset. It does **not** start or authorize a future runtime lane, including F3. ChatGPT must separately define any Cursor lanes after reviewing this packet.
+
+Readers must separate:
+
+- **enduring emergency operating principles** (safety gates, Shopify authority, inventory-write flags DEFAULT OFF, maximum four lanes, exact-head CI, independent review);
+- **historical targets/deadlines** recorded on 2026-09-01 (Monday 7 September 2026 internal/controlled rescue);
+- **already-completed prerequisites** now on `main` (F2A, F2B, F2C, PR #32 remaining-integration planning);
+- **still-future work** (F3 runtime, PR6 runtime, production, inventory writes).
 
 ---
 
@@ -16,9 +24,9 @@ This is the durable Emergency Continuity Sprint control packet for the Stocky su
 
 Stocky became unavailable after **31 August 2026**.
 
-Emergency operational target: **Monday 7 September 2026**.
+Emergency operational target recorded on 2026-09-01: **Monday 7 September 2026**.
 
-That Monday target is an **INTERNAL / CONTROLLED operational rescue**. It is **not** full public App Store parity, Built for Shopify certification, or commercial launch by 7 September 2026.
+That Monday target is an **INTERNAL / CONTROLLED operational rescue**. It is **not** full public App Store parity, Built for Shopify certification, or commercial launch by 7 September 2026. Recording the target does **not** prove that rescue work occurred, and it does **not** convert this packet into F3 implementation authorization.
 
 Full commercial launch remains subject to the normal phase and release gates in `product/06_ROADMAP_AND_RELEASE_GATES.md` and the approved product documents.
 
@@ -159,7 +167,7 @@ Recorded from live Git / GitHub at the start of this documentation lane. These a
 | Production | **NOT AUTHORIZED** |
 | Inventory-write flags | **DEFAULT OFF** |
 
-PR 5 remains **IN PROGRESS**. Phase 1 remains **IN PROGRESS**. F2B / F2C / F3 / PR 6 remain **not started** by this packet.
+PR 5 remains **IN PROGRESS**. Phase 1 remains **IN PROGRESS**. At the time this packet was first recorded, F2B / F2C / F3 / PR 6 remained **not started by this packet**. Later merged `main` identities are in §10 and do not retroactively authorize F3.
 
 ---
 
@@ -170,29 +178,60 @@ PR 5 remains **IN PROGRESS**. Phase 1 remains **IN PROGRESS**. F2B / F2C / F3 / 
 - recording the emergency operational target and internal/controlled rescue framing;
 - recording F2A post-merge identity and post-merge CI `32362021387`;
 - applying Accelerated Safe Delivery to this incident with a maximum of four Cursor lanes **once ChatGPT defines them**;
-- closing **R-163** if and only if the existing risk definition and merged F2A evidence mechanically support it (see `RISK_REGISTER.md`).
+- recording that the F2A admin-read sub-lane satisfied **its own** R-163 scanner obligation, while **R-163 remains globally OPEN** until F3 proves both scanner roots.
 
 **Does not authorize:**
 
 - runtime code in this lane;
 - a whole-phase PR;
 - enabling inventory-write flags;
+- enabling `FEATURE_PR5_ABSENCE_TOMBSTONE`;
 - Shopify inventory mutations by the app;
 - production access or production data;
-- starting F2B, F2C, F3, or PR 6 from this file;
+- starting F3 or PR 6 runtime from this file;
 - creating D-055;
 - claiming Phase 1 complete, PR 5 complete, or App Store readiness;
-- changing approved product behavior.
+- changing approved product behavior;
+- converting F2A lane-specific R-163 satisfaction into global R-163 closure;
+- splitting JSONL bulk ingestion into an earlier runtime PR than the accepted one-F3 architecture.
 
 ---
 
 ## 9. Next action after this packet
 
-1. ChatGPT reviews this control packet.
-2. If accepted, ChatGPT defines up to four exclusive Cursor lanes with exact base SHA and file ownership.
+1. ChatGPT reviews this control packet on the synchronized PR #33 head.
+2. If accepted, ChatGPT may define exclusive Cursor lanes with exact base SHA and file ownership. F3 remains a later, separately authorized runtime lane.
 3. Cursor implements only those authorized lanes.
 4. Claude independently reviews Tier A work at exact heads.
 5. Exact-head CI remains the automatic evidence for each open implementation PR.
 6. The user alone authorizes merges.
 
 **This documentation PR starts none of those runtime lanes.**
+
+---
+
+## 10. Current repository state addendum (2026-09-05)
+
+This addendum updates live current-state after later merges. It does **not** rewrite the 2026-09-01 recording identities in §7.
+
+| Field | Value |
+|---|---|
+| Current `origin/main` | `f1201f853b8a42f40e4d3e5565b6406410360c8a` |
+| That SHA | PR [#32](https://github.com/Vedang1998/Stocky/pull/32) remaining-integration planning squash merge |
+| PR #32 merge timestamp | `2026-09-05T13:01:09Z` |
+| Post-merge PR #32 CI | run [`33967677166`](https://github.com/Vedang1998/Stocky/actions/runs/33967677166) SUCCESS |
+| PR5-F2A | **MERGED** (historical squash `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7`) |
+| PR5-F2B | **MERGED** (squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`; post-merge CI `33619969867` SUCCESS) |
+| PR5-F2C | **MERGED** (squash `f9841691307583381695973600df3546dd1b9ee4`; post-merge CI `33816908539` SUCCESS) |
+| F3 runtime | **NOT STARTED** and **not authorized** by this packet or by merged PR #32 planning |
+| One-F3 architecture | **RETAINED** — JSONL bulk ingestion; authoritative webhook/refetch; absence nomination/reconcile; compatibility-projection integration; v1 legacy-authority fencing; two-root scanner; health-state integration. Do **not** split JSONL into an earlier runtime PR. |
+| Carry-forwards retained | `NEW-CLAUDE-F2CCM-01`; `F-CLAUDE-PR5F3EC-01`; `F-CLAUDE-PR5F3EC-02`; `F-CLAUDE-PR5F3DUR-01` remains non-blocking P3 |
+| R-163 | **OPEN globally** until F3 proves both scanner roots |
+| PR6 runtime | **NOT AUTHORIZED** until PR 5 closes |
+| Production | **NOT AUTHORIZED** |
+| Inventory-write flags | **DEFAULT OFF** |
+| `FEATURE_PR5_ABSENCE_TOMBSTONE` | **DEFAULT OFF** |
+| D-055 | **Not created** |
+| PR #34 | Untouched by this packet |
+
+Already-completed prerequisites on `main` are F2A, F2B, F2C, and PR #32 planning. Still-future work includes F3 runtime, PR6 runtime, production, and inventory writes. This addendum does **not** imply that Monday rescue priorities were completed.

@@ -7,8 +7,8 @@
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
 **Phase 1 PR 4:** FORMALLY CLOSED
-**Next authorized action:** PR5-F2A ADMIN READ BOUNDARY ACCEPTED / MERGED — Emergency Continuity Sprint control packet recorded; ChatGPT must still define any rescue lanes; F2B / F2C / F3 NOT STARTED
-**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (EFFECTIVE)**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR #26 CLOSED / MERGED; PR #27 CLOSED / MERGED; PR #28 CLOSED / MERGED; PR #29 CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F2A ADMIN READ BOUNDARY ACCEPTED / MERGED; Emergency Continuity Sprint control packet recorded (not D-055)
+**Next authorized action:** ChatGPT reviews synchronized PR #33 on exact current `main` `f1201f853b8a42f40e4d3e5565b6406410360c8a`. F2A (#29), F2B (#31), F2C (#30), and PR #32 remaining-integration planning are MERGED. F3 runtime is NOT STARTED and is not authorized by this control-packet sync or by the merged remaining-integration planning packet
+**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (EFFECTIVE)**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR #26 CLOSED / MERGED; PR #27 CLOSED / MERGED; PR #29 F2A CLOSED / MERGED; PR #31 F2B CLOSED / MERGED; PR #30 F2C CLOSED / MERGED; PR #32 remaining-integration planning CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; F3 NOT STARTED; PR6 RUNTIME NOT AUTHORIZED; authorized PR6 planning one level ahead remains allowed; Emergency Continuity Sprint control packet recorded (not D-055)
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -23,7 +23,7 @@
 - PR [#22](https://github.com/Vedang1998/Stocky/pull/22) is **CLOSED and MERGED**. Accepted closure head `b99039f9c34fb12e74d804a3df748cbfdb435313`. Squash merge `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` at `2026-08-14T04:01:29Z`.
 - PR 4 repository implementation remains **ACCEPTED** under **D-052** at accepted implementation head `eb757119…`. Independent verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
 - Phase 1 PR 4 is **FORMALLY CLOSED**. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
-- Next gate: **PR5-F2A ADMIN READ BOUNDARY ACCEPTED / MERGED** (PR #29). Planning (D-053 / PR #24) is **ACCEPTED AND MERGED**. Implementation-entry (D-054 / PR #26) is **CLOSED / MERGED**. PR5-F1 foundation (PR #27) is **CLOSED / MERGED**. PR5-F2A (PR #29) is **CLOSED / MERGED**. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Foundation report: `PR5_FOUNDATION_IMPLEMENTATION_REPORT.md`. Foundation closure: `PR5_FOUNDATION_CLOSURE_REPORT.md`. F2A closure: `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md`. Emergency control packet: `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. Canonical governance: `../../ACCELERATED_SAFE_DELIVERY.md`. F2B / F2C / F3 remain **NOT STARTED**. Emergency runtime lanes are **NOT STARTED** by this docs sync. Do **not** create D-055. Do **not** state PR 5 is complete. Do **not** edit the immutable review reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`), `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` (blob `0d322db…`), `PR5_FOUNDATION_INDEPENDENT_REVIEW.md` (blob `7161c481…`), `PR5_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `4b735360…`), `PR5_F2A_ADMIN_READ_INDEPENDENT_REVIEW.md` (blob `81bc0678…`), `PR5_F2A_ADMIN_READ_CORRECTION_INDEPENDENT_REVIEW.md` (blob `d06fc9f6…`), `PR5_F2A_ADMIN_READ_SECOND_CORRECTION_INDEPENDENT_REVIEW.md` (blob `acbd5127…`), or `PR5_F2A_ADMIN_READ_S01_INDEPENDENT_REVIEW.md` (blob `bba424c0…`).
+- Next gate: ChatGPT reviews synchronized PR #33. D-054 **EFFECTIVE**. PR5-F1 **FROZEN**. PR5-F2A **MERGED** (PR #29, squash `f65ab4b…`). PR5-F2B **MERGED** (PR #31, squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`, post-merge CI `33619969867` SUCCESS). PR5-F2C **MERGED** (PR #30, squash `f9841691307583381695973600df3546dd1b9ee4`, post-merge CI `33816908539` SUCCESS). PR #32 remaining-integration planning **MERGED** (squash / current `main` `f1201f853b8a42f40e4d3e5565b6406410360c8a`, post-merge CI `33967677166` SUCCESS). F2C current-main review `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` (blob `e14fc21efbe2cee874df6c1bd2e35647669c5445`; never edit). F3 remaining integration **NOT STARTED** and is **not** authorized by the merged planning packet or by this control-packet sync. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Remaining plan: `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md`. F2A closure: `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md`. Emergency control packet: `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. Immutable early F3 architecture review: `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md` (blob `ebf2e87bf108bbd5eaa7d31a323842de13ae53ca`; never edit). Canonical F3 correction review `APPROVE PR5-F3 PLANNING CORRECTION` remains immutable at source commit `96b3f1a9649ffb14a22f731fd79e271060e8c44d`, blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864` (never edit). Direct canonical Markdown copy is intentionally absent because historical trailing whitespace fails `git diff --check`. Main carries the lossless exact-byte archive `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64` plus `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW_ARCHIVE_MANIFEST.md`. **F-CLAUDE-PR5F3DUR-01** remains a non-blocking P3. Do **not** create D-055. Do **not** state PR 5 is complete. Do **not** edit immutable review reports. PR6 runtime is not authorized; authorized PR6 planning one level ahead remains allowed.
 - D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
 - D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
 - D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
@@ -34,21 +34,21 @@
 - D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-052 artifacts: `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`); `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`; `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
 - Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050; D-051; cumulative acceptance review — do not edit.
-- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main; `de1bb193…` = PR #23 squash merge / historical PR 5 planning base; `edabd8de…` = PR #24 squash merge; `1691933e…` = PR 5 planning review head before squash; `0d322db…` = final immutable PR 5 planning review blob; `ae1b4280…` = PR #26 squash merge; `56c764d0…` = PR5-F1 accepted review-record head; `7827e535…` = PR #27 squash merge; `7161c481…` = immutable PR5-F1 initial review blob; `4b735360…` = immutable PR5-F1 correction re-review blob; `5129707e…` = PR #28 squash merge (F1 closeout); `bfbe369f…` = PR5-F2A accepted implementation head; `f65ab4b9…` = PR #29 squash merge; `81bc0678…` = immutable F2A first review blob; `d06fc9f6…` = immutable F2A correction review blob; `acbd5127…` = immutable F2A second-correction review blob; `bba424c0…` = immutable F2A S01 review blob.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main; `de1bb193…` = PR #23 squash merge / historical PR 5 planning base; `edabd8de…` = PR #24 squash merge; `1691933e…` = PR 5 planning review head before squash; `0d322db…` = final immutable PR 5 planning review blob; `ae1b4280…` = PR #26 squash merge; `56c764d0…` = PR5-F1 accepted review-record head; `7827e535…` = PR #27 squash merge (historical; later F2A/F2B/F2C/PR32 advanced main); `7161c481…` = immutable PR5-F1 initial review blob; `4b735360…` = immutable PR5-F1 correction re-review blob; `5129707e…` = PR #28 squash merge (F1 closeout); `bfbe369f…` = PR5-F2A accepted implementation head; `f65ab4b9…` = PR #29 squash merge; `0284b66c…` = PR #31 F2B squash merge; `f9841691…` = PR #30 F2C squash merge; `f1201f85…` = PR #32 remaining-integration planning squash / current main; `81bc0678…` = immutable F2A first review blob; `d06fc9f6…` = immutable F2A correction review blob; `acbd5127…` = immutable F2A second-correction review blob; `bba424c0…` = immutable F2A S01 review blob.
 - PR 5 **planning** is **ACCEPTED AND MERGED** (D-053 / PR #24).
 - PR #26 is **CLOSED / MERGED**. Accepted review-record head `7171c2cb…`. Squash merge `ae1b4280…`. Post-merge main CI `31966584542` SUCCESS.
 - **D-054** is **EFFECTIVE**.
 - PR [#27](https://github.com/Vedang1998/Stocky/pull/27) is **CLOSED / MERGED**. Accepted review-record head `56c764d0…`. Squash merge `7827e535…`. Post-merge main CI `32036740386` SUCCESS.
 - PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**.
 - PR [#29](https://github.com/Vedang1998/Stocky/pull/29) is **CLOSED / MERGED**. Accepted implementation head `bfbe369f…`. Squash merge `f65ab4b9…`. Independent verdict `APPROVE PR5-F2A ADMIN READ S01 CORRECTION`. Post-merge main CI `32362021387` SUCCESS.
-- PR5-F2A admin-read boundary is **ACCEPTED / MERGED**.
-- **R-163** is **CLOSED FOR PR5-F2A ADMIN-READ LANE**.
-- PR 5 **implementation** remains **STARTED**. F2B / F2C / F3 remain **NOT STARTED**.
-- Emergency Continuity Sprint control packet: `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. This phase README does **not** start emergency runtime lanes.
+- PR5-F2A admin-read boundary is **ACCEPTED / MERGED**. Closure report: `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md`.
+- PR 5 **implementation** remains **STARTED**. PR5-F2A, PR5-F2B, and PR5-F2C are merged. PR #32 remaining-integration planning is merged. F3 remaining integration is **NOT STARTED**.
+- **R-163** remains **globally OPEN** until F3 proves both scanner roots. The F2A admin-read sub-lane satisfied its own scanner obligation; that is not global closure.
+- Emergency Continuity Sprint control packet: `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. This phase README does **not** start F3 runtime.
 - Do **not** state that Phase 1 is complete.
 - Do **not** state that PR 5 is complete.
 - Do **not** create D-055.
-- Do **not** start F2B / F2C / F3 or an emergency runtime lane from this docs sync.
+- Do **not** start a downstream PR5 runtime lane from this closeout.
 - **Q-003 / F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does not authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
 - **R-031 / R-032 / R-033 / R-039 / R-099 through R-121 / R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052).
 - **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** previously CLOSED on D-050 independent evidence; D-052 confirms repository-implementation closure / no R-124 reopen.
@@ -196,8 +196,7 @@
 - **R-127 / R-128:** CLOSED — no regression (D-052).
 - **R-129 through R-160:** OPEN — PR 5 planning / implementation-entry risks (raised under D-053 / D-054; D-054 now **EFFECTIVE**); not implementation-closed. Foundation primitives do not close these risks.
 - **R-161:** OPEN — PR 5 lock-capacity / concurrency / deployment evidence still required. Do **not** close in this docs PR.
-- **R-162 / R-164:** OPEN — PR5-F1 correction-review P3 carry-forwards. NEW-CLAUDE-PR5F1C-03 is **RESOLVED BY THE F1 DOCS CLOSEOUT**.
-- **R-163:** **CLOSED FOR PR5-F2A ADMIN-READ LANE** (PR #29 / post-merge CI `32362021387`). Do **not** reopen PR5-F1. **R-138 remains OPEN.**
+- **R-162 / R-163 / R-164:** OPEN — PR5-F1 correction-review P3 carry-forwards. **R-163 remains globally OPEN** until F3 proves both scanner roots (`app/lib/catalog-facts/**` and `app/jobs/workers/catalog-facts/**`). The F2A admin-read sub-lane satisfied its own scanner obligation; that is not global closure. NEW-CLAUDE-PR5F1C-03 is **RESOLVED BY THE F1 DOCS CLOSEOUT**.
 - **R-014 / R-013 / R-010 / R-062 / R-079:** remain open as previously tracked. R-010 is not closed by PR 5 planning.
 - Production inventory writes remain **UNAPPROVED**. Every inventory-write flag remains **DEFAULT OFF**.
 
@@ -250,19 +249,20 @@
 43b. `PR5_FOUNDATION_CLOSURE_REPORT.md` — PR5-F1 foundation ACCEPTED / MERGED / FROZEN identity
 43c. `PR5_FOUNDATION_INDEPENDENT_REVIEW.md` — immutable initial review (blob `7161c481…`; never edit)
 43d. `PR5_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` — immutable correction re-review `APPROVE PR5-F1 FOUNDATION CORRECTION` (blob `4b735360…`; never edit)
-43e. `PR5_F2A_ADMIN_READ_IMPLEMENTATION_REPORT.md` — PR5-F2A admin-read implementation evidence
-43f. `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md` — PR5-F2A ACCEPTED / MERGED identity
-43g. `PR5_F2A_ADMIN_READ_INDEPENDENT_REVIEW.md` — immutable (blob `81bc0678…`; never edit)
-43h. `PR5_F2A_ADMIN_READ_CORRECTION_INDEPENDENT_REVIEW.md` — immutable (blob `d06fc9f6…`; never edit)
-43i. `PR5_F2A_ADMIN_READ_SECOND_CORRECTION_INDEPENDENT_REVIEW.md` — immutable (blob `acbd5127…`; never edit)
-43j. `PR5_F2A_ADMIN_READ_S01_INDEPENDENT_REVIEW.md` — immutable `APPROVE PR5-F2A ADMIN READ S01 CORRECTION` (blob `bba424c0…`; never edit)
+43e. `PR5_F2A_ADMIN_READ_IMPLEMENTATION_REPORT.md` and immutable F2A reviews — F2A merged via PR #29
+43e1. `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md` — PR5-F2A ACCEPTED / MERGED identity (F2A lane scanner obligation recorded; R-163 remains globally OPEN)
+43f. `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` — remaining F3 integration plan / fixture map after F2A/F2B/F2C cores (planning only; F3 runtime not started; independently approved planning correction merged via PR #32)
+43g. `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md` — immutable early Tier-A architecture review `CORRECTIONS REQUIRED` (blob `ebf2e87bf108bbd5eaa7d31a323842de13ae53ca`; never edit)
+43h. Canonical F3 correction review `APPROVE PR5-F3 PLANNING CORRECTION` (P0=0 / P1=0 / P2=0 / P3=2; 25/25 original findings corrected) remains immutable at source commit `96b3f1a9649ffb14a22f731fd79e271060e8c44d`, blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864` (never edit). Direct canonical Markdown copy is intentionally absent from the live tip because historical trailing whitespace fails `git diff --check`. Lossless exact-byte archive: `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64`. Manifest: `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW_ARCHIVE_MANIFEST.md`. The archive reconstructs the canonical Git blob. This packaging does not modify the review verdict or F3 architecture.
+43i. `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` — immutable F2C current-main review `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` (blob `e14fc21efbe2cee874df6c1bd2e35647669c5445`; never edit)
+43j. `PR5_F3_PLANNING_DURABILITY_INDEPENDENT_REVIEW.md` — immutable chain-of-custody review; **F-CLAUDE-PR5F3DUR-01** remains a non-blocking P3 (never edit)
 44. `PR5_PLANNING_INDEPENDENT_REVIEW.md` — immutable (blob `f6e62fe…`)
 45. `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` — immutable (blob `e645c81…`)
 46. `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` — immutable (blob `c465b7d…`)
 47. `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` — immutable (blob `b1c4265…`)
 48. `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` — immutable final planning review `APPROVE PR5 PLANNING` (blob `0d322db…`; never edit)
 49. `../../ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model
-50. `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue; safety gates unchanged)
+50. `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue; safety gates unchanged; does not authorize F3 runtime)
 
 ## Immutable PR 5 planning (#24) merge evidence
 
@@ -311,14 +311,14 @@
 | Independent correction verdict | `APPROVE PR5-F1 FOUNDATION CORRECTION` — P0:0 P1:0 P2:0 P3:4 |
 | Immutable initial review blob | `7161c481baf597d54bf57e745f9c06d8812d7468` |
 | Immutable correction re-review blob | `4b73536057fdb43e8f470385fd58b786c522edbe` |
-| Squash merge / current main | Historical row — later superseded by PR #28 then PR #29 |
+| Squash merge / historical main after PR #27 | `7827e535415c9acbacfbbb4bdedff08be6650d5c` |
 | Merge timestamp | `2026-08-17T13:48:17Z` |
 | Pre-merge exact-head PR CI | run `31988065401`, event `pull_request`, **SUCCESS** |
 | Post-merge main CI | run `32036740386`, event `push`, **SUCCESS** |
 | Classify job | `95408642308` SUCCESS |
 | Full Heavy validation | `95408670595` SUCCESS |
 | CI Gate job | `95417341718` SUCCESS |
-| Downstream PR5 lanes | Historical row at F1 closeout — later **PR5-F2A MERGED** via PR #29; F2B / F2C / F3 remain **NOT STARTED** |
+| Downstream PR5 lanes | F2A **MERGED** (PR #29). F2B **MERGED** (PR #31). F2C **MERGED** (PR #30). PR #32 remaining-integration planning **MERGED**. F3 **NOT STARTED** |
 | Closure report | `PR5_FOUNDATION_CLOSURE_REPORT.md` |
 | Production / inventory writes | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
 
@@ -342,8 +342,9 @@
 | Classify job | `96403425899` SUCCESS |
 | Full Heavy validation | `96403462492` SUCCESS |
 | CI Gate job | `96415720267` SUCCESS |
-| R-163 | **CLOSED FOR PR5-F2A ADMIN-READ LANE** |
-| F2B / F2C / F3 | **NOT STARTED** |
+| R-163 (F2A sub-lane) | F2A admin-read scanner obligation **satisfied** on `app/lib/catalog-facts` |
+| R-163 (live/global) | **OPEN** until F3 proves both scanner roots |
+| Later downstream after this closeout | F2B **MERGED**. F2C **MERGED**. F3 runtime **NOT STARTED**. PR6 runtime **NOT AUTHORIZED**. |
 | Closure report | `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md` |
 | Production / inventory writes | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
 

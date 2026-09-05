@@ -3,17 +3,17 @@
 **Status:** `PR5-F2A ADMIN READ BOUNDARY ACCEPTED / MERGED`
 **PR 5 overall:** `IN PROGRESS`
 **Phase 1:** `IN PROGRESS`
-**Downstream F2B / F2C / F3 / PR 6:** `NOT STARTED`
+**Later downstream after this closeout:** F2B **MERGED**; F2C **MERGED**; F3 runtime **NOT STARTED**; PR6 runtime **NOT AUTHORIZED**
 **Production:** `NOT AUTHORIZED`
 **Merchant production data:** `NOT AUTHORIZED`
 **Shopify inventory mutations:** `NOT AUTHORIZED`
 **Inventory-write flags:** `DEFAULT OFF`
 
-This report records post-merge identity for the accepted, independently reviewed, squash-merged, and post-merge-validated PR [#29](https://github.com/Vedang1998/Stocky/pull/29). It is **not** a new runtime decision, **not** D-055, **not** PR 5 completion, **not** Phase 1 completion, and **not** authorization to start F2B / F2C / F3 / PR 6.
+This report records post-merge identity for the accepted, independently reviewed, squash-merged, and post-merge-validated PR [#29](https://github.com/Vedang1998/Stocky/pull/29). It is **not** a new runtime decision, **not** D-055, **not** PR 5 completion, **not** Phase 1 completion, and **not** authorization to start F3 or PR 6 runtime.
 
 D-054 remains the implementation authority.
 
-Emergency Continuity Sprint calendar control is recorded in `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. That directive does **not** alter this F2A closure identity.
+Emergency Continuity Sprint calendar control is recorded in `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. That directive does **not** alter this F2A closure identity and does **not** authorize F3 runtime.
 
 Do **not** edit any immutable F2A independent-review artifact.
 
@@ -30,7 +30,7 @@ PR5-F2A landed the canonical Shopify Admin **read/query** boundary only:
 - graphql-js deny-by-default mutation / non-query rejection **before** `admin.graphql`;
 - recursive production-module enumeration for the no-Shopify / mutation-safety scanner.
 
-Out of scope and **not** started by PR #29: JSONL ingest, canonical apply engine, webhook fact application, compatibility-projection writers, F2B refresh, F2C, F3 / PR 6 writes, UI, or inventory-write flag enablement.
+Out of scope and **not** started by PR #29: JSONL ingest, canonical apply engine, webhook fact application, compatibility-projection writers, F2B refresh, F2C, F3 / PR 6 writes, UI, or inventory-write flag enablement. Later, independently authorized lanes merged F2B and F2C; those later merges do not change this F2A identity and do not start F3.
 
 ## Identities
 
@@ -82,7 +82,7 @@ Recorded in the S01 independent review and merge-prep section of `PR5_F2A_ADMIN_
 
 | Risk | Disposition |
 |---|---|
-| R-163 | **CLOSED FOR PR5-F2A ADMIN-READ LANE** — see `../../RISK_REGISTER.md`. Original NEW-CLAUDE-PR5F1C-02 non-recursive scanner defect is remediated by recursive module discovery independently falsified three directories deep; semantic deny-by-default mutation rejection is implemented on the F2A read boundary; S01 identity fail-open hold is independently closed. Formal closure was deferred until merge / post-merge synchronization; this report is that synchronization. |
+| R-163 | F2A admin-read **sub-lane scanner obligation satisfied**; **R-163 remains globally OPEN**. See `../../RISK_REGISTER.md`. Original NEW-CLAUDE-PR5F1C-02 non-recursive scanner defect is remediated on the F2A admin-read tree by recursive module discovery independently falsified three directories deep; semantic deny-by-default mutation rejection is implemented on the F2A read boundary; S01 identity fail-open hold is independently closed. Workers under `app/jobs/workers/catalog-facts/**` were never inside the F2A scan root. Global closure requires F3 exact-head proof of **both** scanner roots. |
 | R-016 | **OPEN** — GraphQL codegen still depends on live Shopify network. |
 | R-132 | **OPEN** — unitCost preflight exists; production permission-denial evidence and catalog-submit consumption remain outstanding. `FEATURE_COST_SYNC` remains DEFAULT OFF. |
 | R-134 | **OPEN** — `bulkOperation(id:)` reader exists; close only when the ingest lane consumes it end-to-end. |
@@ -90,7 +90,7 @@ Recorded in the S01 independent review and merge-prep section of `PR5_F2A_ADMIN_
 | R-138 | **OPEN** — deny-by-default AST rejection is implemented and recursively scanned; production inventory writes remain UNAPPROVED. Extraction-residue P3 from F2A reviews remains nonblocking. |
 | R-162 / R-164 | **OPEN** — unrelated to F2A; not closed here. |
 
-Do **not** reopen PR5-F1. Do **not** close R-138 because R-163 closed.
+Do **not** reopen PR5-F1. Do **not** close R-138 because the F2A sub-lane scanner obligation was satisfied. Do **not** treat that F2A-lane satisfaction as global R-163 closure.
 
 ## Explicit non-authorization
 
@@ -98,6 +98,7 @@ Do **not** reopen PR5-F1. Do **not** close R-138 because R-163 closed.
 - Merchant production data remains **NOT AUTHORIZED**.
 - Shopify inventory mutations remain **NOT AUTHORIZED**.
 - Every inventory-write flag remains **DEFAULT OFF**.
+- `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF**.
 - No D-055.
-- No F2B / F2C / F3 / PR 6 started by this closeout.
-- The Emergency Continuity Sprint directive does **not** start runtime from this F2A record.
+- This F2A closeout did not start F2B / F2C / F3 / PR 6. Later merged F2B / F2C / PR #32 planning do not start F3 runtime.
+- The Emergency Continuity Sprint directive does **not** start F3 runtime from this F2A record.
