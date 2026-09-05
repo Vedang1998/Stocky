@@ -128,6 +128,44 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
   },
   {
     kind: "worker",
+    id: "worker:catalog-facts-bulk-finish",
+    path: "app/jobs/workers/catalog-facts/bulk-finish.ts",
+    symbol: "signalBulkOperationContinuation",
+    notes:
+      "CONTROL_ONLY bulk_operations/finish continuation of the persisted GID",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-capacity",
+    path: "app/jobs/workers/catalog-facts/capacity.ts",
+    symbol: "assertCanonicalWriterCapacityAtStartup",
+    notes:
+      "F-CLAUDE-PR5F3EC-01 D*max(B, Σ worker concurrency) fail-closed envelope",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-projection",
+    path: "app/jobs/workers/catalog-facts/projection.ts",
+    symbol: "projectAppliedCanonicalFacts",
+    notes:
+      "Post-commit compatibility projection; live processingEnabled read",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-diagnostic-reconciler",
+    path: "app/jobs/workers/catalog-facts/diagnostic-reconciler.ts",
+    symbol: "reconcileCatalogDiagnostics",
+    notes: "Catalog health evidence and diagnostic DataIssue reconcile",
+  },
+  {
+    kind: "worker",
+    id: "worker:catalog-facts-jsonl-checkpoint",
+    path: "app/lib/catalog-facts/ingest/checkpoint.ts",
+    symbol: "acknowledgeJsonlBatch",
+    notes: "Race Y two-phase checkpoint uses the control-plane role only",
+  },
+  {
+    kind: "worker",
     id: "worker:entrypoint",
     path: "app/jobs/workers/index.ts",
     symbol: "main",
