@@ -46,12 +46,18 @@ async function requireLiveProcessing(
   }
 }
 
+const PROJECTION_CHILD_PAGE = 100;
+
 async function resolveProjectionIdentities(
   authority: TenantAuthority,
   identities: readonly CanonicalFactIdentity[],
-): Promise<CompatibilityProjectionIdentity[]> {
+): Promise<{
+  identities: CompatibilityProjectionIdentity[];
+  truncated: boolean;
+}> {
   const db = createTenantDb(authority);
   const resolved: CompatibilityProjectionIdentity[] = [];
+  let truncated = false;
   for (const identity of identities) {
     if (identity.resourceKind === "ProductVariant") {
       resolved.push({
@@ -69,13 +75,16 @@ async function resolveProjectionIdentities(
         where: { shopifyProductGid: identity.shopifyGid },
         select: { shopifyGid: true },
         orderBy: { shopifyGid: "asc" },
-        take: 100,
+        take: PROJECTION_CHILD_PAGE + 1,
       });
+      if (variants.length > PROJECTION_CHILD_PAGE) truncated = true;
       resolved.push(
-        ...variants.map((variant: { shopifyGid: string }) => ({
-          kind: "ProductVariant" as const,
-          shopifyGid: variant.shopifyGid,
-        })),
+        ...variants.slice(0, PROJECTION_CHILD_PAGE).map(
+          (variant: { shopifyGid: string }) => ({
+            kind: "ProductVariant" as const,
+            shopifyGid: variant.shopifyGid,
+          }),
+        ),
       );
     } else if (identity.resourceKind === "InventoryItem") {
       const item = await db.shopifyInventoryItemFact.findUnique({
@@ -96,10 +105,11 @@ async function resolveProjectionIdentities(
       const levels = await db.shopifyInventoryLevelFact.findMany({
         where: { inventoryItemGid: identity.shopifyGid },
         select: { inventoryItemGid: true, locationGid: true },
-        take: 100,
+        take: PROJECTION_CHILD_PAGE + 1,
       });
+      if (levels.length > PROJECTION_CHILD_PAGE) truncated = true;
       resolved.push(
-        ...levels.map(
+        ...levels.slice(0, PROJECTION_CHILD_PAGE).map(
           (level: { inventoryItemGid: string; locationGid: string }) => ({
             kind: "InventoryLevel" as const,
             inventoryItemGid: level.inventoryItemGid,
@@ -111,10 +121,11 @@ async function resolveProjectionIdentities(
       const levels = await db.shopifyInventoryLevelFact.findMany({
         where: { locationGid: identity.shopifyGid },
         select: { inventoryItemGid: true, locationGid: true },
-        take: 100,
+        take: PROJECTION_CHILD_PAGE + 1,
       });
+      if (levels.length > PROJECTION_CHILD_PAGE) truncated = true;
       resolved.push(
-        ...levels.map(
+        ...levels.slice(0, PROJECTION_CHILD_PAGE).map(
           (level: { inventoryItemGid: string; locationGid: string }) => ({
             kind: "InventoryLevel" as const,
             inventoryItemGid: level.inventoryItemGid,
@@ -132,7 +143,7 @@ async function resolveProjectionIdentities(
         : `level:${identity.inventoryItemGid}:${identity.locationGid}`;
     unique.set(key, identity);
   }
-  return [...unique.values()];
+  return { identities: [...unique.values()], truncated };
 }
 
 async function persistState(
@@ -158,11 +169,11 @@ export async function projectAppliedCanonicalFacts(input: {
   completedObservationCycles?: number;
 }): Promise<CompatibilityProjectionResult | null> {
   await requireLiveProcessing(input.authority);
-  const projectionIdentities = await resolveProjectionIdentities(
+  const resolved = await resolveProjectionIdentities(
     input.authority,
     input.canonicalIdentities,
   );
-  if (projectionIdentities.length === 0) {
+  if (resolved.identities.length === 0) {
     await persistState(input.authority, input.canonicalIdentities, "HEALTHY");
     return null;
   }
@@ -171,18 +182,22 @@ export async function projectAppliedCanonicalFacts(input: {
     authority: input.authority,
     processingEnabled: true,
     mode: "identities",
-    identities: projectionIdentities,
+    identities: resolved.identities,
     limit: 100,
     now: input.now,
   });
-  if (result.status === "SUCCEEDED" && !result.hasMore) {
+  if (
+    result.status === "SUCCEEDED" &&
+    !result.hasMore &&
+    !resolved.truncated
+  ) {
     await persistState(input.authority, input.canonicalIdentities, "HEALTHY");
     return result;
   }
   if (result.status === "SUCCEEDED") {
     // A bounded partial page is not failure and cannot authorize whole-set
     // HEALTHY. Existing PROJECTION_PENDING evidence remains authoritative.
-    return result;
+    return { ...result, hasMore: true };
   }
 
   await persistState(input.authority, input.canonicalIdentities, "DEGRADED");

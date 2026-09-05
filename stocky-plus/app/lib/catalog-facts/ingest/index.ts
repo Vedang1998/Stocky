@@ -48,6 +48,12 @@ export {
 } from "./direct-mappers";
 export { classifyJsonlGid, UnknownJsonlIdentityError } from "./gid-classifier";
 export {
+  CATALOG_FACT_PRODUCT_VARIANT_IDS_QUERY,
+  PRODUCT_VARIANT_IDS_PAGE_SIZE,
+  listProductVariantGids,
+  ProductVariantIdsPaginationError,
+} from "./product-variant-ids";
+export {
   deriveIngestBatchId,
   INGEST_BATCH_ID_VERSION,
 } from "./ingest-batch-id";

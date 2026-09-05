@@ -44,7 +44,10 @@ import type {
 import { nominateAbsenceCandidates } from "./absence";
 import { applyCanonicalObservationBatches } from "./canonical-batch";
 import { reconcileCatalogDiagnostics } from "./diagnostic-reconciler";
-import { recoverPendingCompatibilityProjection } from "./projection";
+import {
+  projectAppliedCanonicalFacts,
+  recoverPendingCompatibilityProjection,
+} from "./projection";
 
 const DOMAIN_ORDER = ["locations", "catalog", "inventory_levels"] as const;
 type CatalogSyncDomain = (typeof DOMAIN_ORDER)[number];
@@ -507,6 +510,21 @@ async function runBulkDomain(input: {
       ).length;
       for (const set of completeSets) {
         await replaceProductCollectionMemberships(input.authority, set);
+      }
+      try {
+        await projectAppliedCanonicalFacts({
+          authority: input.authority,
+          canonicalIdentities: applied.projectionIdentities,
+        });
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          error.message === "shop_processing_disabled"
+        ) {
+          throw error;
+        }
+        // Projection failure must not roll back canonical facts or lead the
+        // checkpoint. Pending/DEGRADED rows remain honest until retry.
       }
       await acknowledgeJsonlBatch({
         shopId: input.authority.shopId,

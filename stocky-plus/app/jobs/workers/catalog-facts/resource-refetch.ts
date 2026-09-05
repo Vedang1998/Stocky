@@ -50,6 +50,7 @@ import {
   mapDirectProduct,
   mapDirectVariant,
 } from "../../../lib/catalog-facts/ingest/direct-mappers";
+import { listProductVariantGids } from "../../../lib/catalog-facts/ingest/product-variant-ids";
 import { featureFlags } from "../../../lib/feature-flags.server";
 import { projectAppliedCanonicalFacts } from "./projection";
 import { writeCanonicalFactMetadata } from "./fact-diagnostics";
@@ -340,6 +341,17 @@ export async function applyCatalogFactWebhookRefetch(input: {
   applicationStatus: "applied" | "already_applied" | "tombstone_held";
   canonicalOutcome?: string;
 }> {
+  const shop = await getControlPlanePrisma().shop.findUnique({
+    where: { id: input.authority.shopId },
+    select: { myshopifyDomain: true, processingEnabled: true },
+  });
+  if (
+    !shop?.processingEnabled ||
+    shop.myshopifyDomain !== input.authority.myshopifyDomain
+  ) {
+    throw new Error("shop_processing_disabled");
+  }
+
   const identity = resolveCatalogWebhookIdentity(
     input.authority.shopId,
     input.topic,
@@ -358,19 +370,13 @@ export async function applyCatalogFactWebhookRefetch(input: {
     identity.resourceKind === "Product" &&
     observations[0]?.existenceKind === "LIVE_REFETCH"
   ) {
-    const variantGids = Array.isArray(input.payload.variant_gids)
-      ? input.payload.variant_gids.flatMap((entry) => {
-          const raw =
-            typeof entry === "object" && entry !== null
-              ? (entry as Record<string, unknown>).admin_graphql_api_id
-              : entry;
-          return typeof raw === "string" &&
-            raw.startsWith("gid://shopify/ProductVariant/")
-            ? [raw]
-            : [];
-        })
-      : [];
-    for (const variantGid of [...new Set(variantGids)].sort()) {
+    // Webhook bodies include at most 100 variant GIDs and are never the
+    // complete identity set. Paginate authoritative variant IDs, then refetch.
+    const variantGids = await listProductVariantGids(
+      input.admin,
+      identity.shopifyGid,
+    );
+    for (const variantGid of variantGids) {
       const variantIdentity: CanonicalFactIdentity = {
         shopId: input.authority.shopId,
         resourceKind: "ProductVariant",
