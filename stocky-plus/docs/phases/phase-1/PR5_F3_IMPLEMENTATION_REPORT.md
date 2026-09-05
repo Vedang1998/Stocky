@@ -6,7 +6,7 @@
 **Decision boundary:** This authorization is **not D-055**
 **Authorized base:** `28c810090394f319e599fc6c501b898befa39cad`
 **Branch:** `cursor/pr5-f3-remaining-integration-6d09`
-**Status:** `AUTHORIZED / IN PROGRESS`
+**Status:** `AUTHORIZED / IMPLEMENTATION COMPLETE — AWAITING EXACT-HEAD CI`
 **Production:** `NOT AUTHORIZED`
 **Merchant production data:** `NOT AUTHORIZED`
 **Shopify inventory mutations:** `NOT AUTHORIZED`
@@ -204,20 +204,198 @@ reconciliation.
 
 ## 4. Implementation evidence
 
-`PENDING.`
+Runtime implementation followed the merged F3 contract
+(`PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` C1–C25 and §8 fixture map).
+Shopify remains authoritative for Product, ProductVariant, InventoryItem,
+Location, and InventoryLevel. Webhook bodies are signals; merchant-visible
+current state is applied only after authoritative refetch or a proven JSONL
+stream.
+
+### 4.1 Architecture implemented
+
+| Piece | Implementation |
+|---|---|
+| JSONL bulk ingestion | Bounded streamer in `app/lib/catalog-facts/ingest/jsonl-stream.ts`; GID classifier; owning-domain mappers; catalog-sync worker drives three child SyncRuns (locations, catalog, inventory_levels) |
+| Completeness | Count tokens must match `^[0-9]+$` before comparison (`ingest/counts.ts`). Malformed/omitted counts fail closed. Clean transport end is not completeness |
+| Checkpoint / resume | Paired `bulkOperationGid` + 1-based `jsonlCommittedLineOrdinal` on `SyncRun`; deterministic `ingestBatchId` SHA-256 over version/syncRunId/GID/start ordinal |
+| Bulk submit / orphan recovery | Exact-path `bulkOperationRunQuery` in `bulk-operation-submitter.ts` only; orphan recovery lists `bulkOperations(first: 25)` and never `currentBulkOperation` |
+| Authoritative webhooks | `resource-refetch.ts` plus `CatalogFactProductVariantIds` pagination (page size 100). Topics in `shopify.app.toml` include products, inventory items/levels, locations, and `bulk_operations/finish` (CONTROL_ONLY) |
+| Absence | Nomination → confirmation/reconcile in `workers/catalog-facts/absence.ts`. Tombstones require `FEATURE_PR5_ABSENCE_TOMBSTONE`, which remains DEFAULT OFF |
+| Product revival | Terminal Product; two non-overlapping LIVE confirmations and at least two observation cycles before `canonical_product_not_live` exhaustion (`NEW-CLAUDE-F2CCM-01`) |
+| Projection | Post-commit compatibility projection; default `PROJECTION_PENDING`; `hasMore`/truncated pages cannot write `HEALTHY`; projection failure does not roll back canonical facts |
+| v1 fencing | Enqueue `catalog-facts-v1` only. Legacy `catalog-sync-v1` dead-letters `LEGACY_CATALOG_SYNC_V1_DISABLED`. `pollBulkOperation` / `currentBulkOperation` removed from live paths |
+| Two-root scanner | Recursive scan of `app/lib/catalog-facts/**` and `app/jobs/workers/catalog-facts/**` plus `scripts/pr5-f3-safety-scan.ts`. Mutation denial remains semantic / deny-by-default with the exact submitter exception |
+| Health | `computeSyncHealth` consumes catalog evidence: incomplete ingestion, unknown quantity, projection pending/failure, absence/reconcile uncertainty, disabled processing, exhausted retry. A succeeded job alone is not current |
+| Capacity | `D * max(B, Σ worker concurrency)` with `CANONICAL_WRITER_QUEUE_CONCURRENCY_SUM = 5 + 1`. Unsafe envelopes fail closed at startup (`F-CLAUDE-PR5F3EC-01`) |
+| Locks | Canonical identity `pg_advisory_xact_lock(integer, integer)` via Prisma CAST/CTE. No Shopify I/O while locks are held. Deterministic lock order preserved |
+
+Canonical apply remains tombstone/existence-state based. F3 does not introduce
+physical DELETE as an ordinary apply path and does not weaken RLS.
+
+### 4.2 Schema and migrations
+
+Additive only. No production execution.
+
+1. `20260905173000_pr5_f3_projection_pending_enum` — adds
+   `CatalogCompatibilityProjectionState.PROJECTION_PENDING` before `HEALTHY`.
+2. `20260905173500_pr5_f3_remaining_integration` — nullable SyncRun checkpoint
+   columns (`bulkOperationGid`, `jsonlCommittedLineOrdinal` CHECK ≥ 1,
+   submit intent, fingerprint, count tokens), shopId+GID index, fact default
+   `PROJECTION_PENDING`, and `@@index([shopId, ingestBatchId])` on the five
+   fact models.
+
+`ALL_MIGRATION_NAMES` in `tenant-expansion.migration.test.ts` includes both
+folders and fails closed if on-disk migration directories drift. Init-only
+parking therefore cannot apply the enum ALTER TYPE before the foundation type
+exists.
+
+### 4.3 Feature flags
+
+| Flag | Default | F3 state |
+|---|---|---|
+| `FEATURE_STOCKTAKE_INVENTORY_WRITES` | false | unchanged, DEFAULT OFF |
+| `FEATURE_ADJUSTMENT_WRITES` | false | unchanged, DEFAULT OFF |
+| `FEATURE_RECEIPT_WRITES` | false | unchanged, DEFAULT OFF |
+| `FEATURE_COST_SYNC` | false | unchanged, DEFAULT OFF |
+| `FEATURE_TRANSFER_WRITES` | false | unchanged, DEFAULT OFF |
+| `FEATURE_PR5_ABSENCE_TOMBSTONE` | false | added; DEFAULT OFF in code, `.env.example`, and CI |
+
+### 4.4 Tenant-access corrections during F3
+
+Computed TenantDb delegates in absence nomination and diagnostic health counts
+were rewritten to explicit `db.shopify*Fact` calls. JSONL checkpoint
+`$transaction` stays on the control-plane Prisma client (Race Y) and is
+allowlisted as `EX-SYNC-008`. F3 PostgreSQL fixtures are exact-file
+`EX-ENF-*` exceptions, matching prior enforcement tests. Regenerated
+`PR2_TENANT_ACCESS_INVENTORY.md`: findings 1722, **violations 0**.
+
+F2C-core isolation now asserts shop B remains `PROJECTION_PENDING` after a
+successful F2C-core project: F2C core is frozen not to write that column, and
+F3 owns `HEALTHY` via `writeCompatibilityProjectionState`. Sync inventory
+registers the five additional exact-path F3 control-plane importers (bulk-finish,
+capacity, projection, diagnostic reconciler, JSONL checkpoint). The unsupported
+webhook sanitizer negative test now uses `customers/create`; `products/create`
+is an F3 identity-only signal.
 
 ## 5. Test and validation evidence
 
-`PENDING.`
+Environment: disposable local PostgreSQL 16.15, isolated Redis, Node 22.14.0,
+npm 11.5.2, inventory-write flags false, `FEATURE_PR5_ABSENCE_TOMBSTONE=false`,
+`STOCKY_DISPATCHER_PROCESS_COUNT=1`, no production credentials or data.
+
+### 5.1 Focused F3 floors (all raised, none lowered)
+
+| Suite | Floor | Observed | Exit |
+|---|---:|---|---:|
+| ingest unit `app/lib/catalog-facts/ingest` | ≥24 | **86 passed / 8 files** | 0 |
+| JSONL checkpoint PG | ≥16 | **27 passed** | 0 |
+| webhook-refetch PG | ≥18 | **30 passed** | 0 |
+| overlap-races PG | ≥8 | **8 passed** | 0 |
+| absence-confirmation PG | ≥10 | **15 passed** | 0 |
+| inventory-reconcile PG | ≥6 | **13 passed** | 0 |
+| projection-health PG | ≥12 | **18 passed** | 0 |
+| lock-capacity-aw PG | ≥4 | **12 passed** | 0 |
+| scale-completeness PG | ≥2 | **2 passed** | 0 |
+| scanner / Race AC (+ foundation-safety + mutation-safety) | ≥5 | **28 passed / 3 files** | 0 |
+| two-root script scan | n/a | `filesScanned: 151`, `findings: []` | 0 |
+
+### 5.2 Adversarial / fixture coverage executed
+
+JSONL: FX-JSONL-001..012 including malformed counts, boundary-aligned
+truncation, objectCount mismatch, interrupted stream, 100k-line bounded
+memory, processing disabled mid-ingest, deterministic resume, duplicate
+replay.
+
+Bulk: FX-BULK-005/006 Race E both crash sides, FX-BULK-010/011 v1 fencing,
+FX-BULK-012/013 GID/ordinal, FX-BULK-014 orphan list recovery.
+
+Webhooks: FX-WH-001..012 including 101-variant pagination, delayed delete,
+flag-OFF absence, eight quantities, R-165 unknown≠zero, forecast isolation,
+disabled shop, webhook/bulk claim preference, receipt idempotency.
+
+Absence: FX-ABS-001/002/003, FX-ABS-FLAG-OFF, FX-LOC-001/002/004, Race V,
+NEW-CLAUDE-F2CCM-01 two-confirmation Product revival.
+
+Projection/health: FX-PROJ-001..009, unknown quantity, hasMore, diagnostic lag.
+
+Concurrency: FX-RACE-A/AT3/AV/AW/S; worker formula `D * max(B, Σ workers)`.
+
+Scanner: FX-SCAN-001..005 in both roots; exact `bulkOperationRunQuery`
+exception; planted mutations fail.
+
+### 5.3 Module and aggregate local suites
+
+| Command | Exit | Result |
+|---|---:|---|
+| `npx prisma validate` | 0 | schema valid |
+| `npx prisma generate` | 0 | Prisma Client 6.19.3 |
+| `npx prisma migrate status` | 0 | **20/20** up to date |
+| `npm run graphql-codegen` | 0 | Admin 2026-07 documents generated |
+| `npx tsx scripts/pr5-f3-safety-scan.ts` | 0 | 151 files, 0 findings |
+| `npx vitest run app/lib/catalog-facts --reporter=verbose --passWithNoTests false` | 0 | after F2C characterization retarget; included in `npm test` |
+| `npm test -- --passWithNoTests false` | 0 | **373 passed / 39 files** (baseline 280/30; floors raised) |
+| `npm run lint` | 0 | clean |
+| `npm run typecheck` | 0 | clean after non-null generation override |
+| `npm run build` | 0 | client+ssr built |
+| `npm run tenant:access:audit` | 0 | violations 0; `EX-SYNC-008` used |
+| `npm run tenant:access:inventory:check` | 0 | inventory fresh; digest `5d11daa099ba0423a1739b7da38aea0821dafdd4d9e77626ecc6f674f1e94190` |
+| `npm run tenant:enforcement:inventory:check` | 0 | inventory fresh |
+| `npm run sync:inventory:check` | 0 | surfaces=48; digest `7363d6d85e84f782136c471088e36bbf5a86584c68f9f4558fc5eb6887e260a8` |
+| classifier vs `28c810090394f319e599fc6c501b898befa39cad` | 0 | `docs_only=false`, `full_ci=true`, `classification_reason=non_docs_or_unknown_path` |
+| `git diff --check` vs `origin/main` after this report rewrite | 0 | clean; the prior extra EOF blank line on the 233-line authorization stub is removed |
+| `npm run test:migrations` | 0 | **443 passed / 59 files**; elapsed 600s |
+| `npm run test:tenant-access` | 0 | **326 passed / 35 files**; elapsed 121s after isolation retarget (earlier 1 fail / 325 pass was `HEALTHY` vs `PROJECTION_PENDING`) |
+| `npm run test:db-isolation` | 0 | **19 passed / 2 files**; elapsed 32s |
+| `npm run test:sync-integration` | 0 | **242 passed / 20 files**; elapsed 351s (baseline 241/20; +1 catalog-identity sanitizer test). Earlier 2 fail / 239 pass were F3 characterization: `products/create` is now a supported identity topic, and five catalog-facts control-plane importers were missing from `SYNC_SURFACES` |
+
+Init-only parking regression: after adding F3 folders to `ALL_MIGRATION_NAMES`,
+`tenant-expansion.migration.test.ts` passed **7/7**, including NEW-PR4-C07
+role-present/role-absent and the injected parking-cleanup assertion.
+
+Non-superuser owner tests passed **2/2** when `STOCKY_BOOTSTRAP_DATABASE_URL`
+matched CI (local first attempt without that variable was an environment miss,
+not an F3 product defect).
 
 ## 6. Risk and carry-forward dispositions
 
-`PENDING. R-163 remains globally OPEN and may become only a candidate for
-closure pending exact-head independent Claude evidence.`
+Do **not** close R-157..R-165 in `RISK_REGISTER.md` from this implementation
+report. Formal close still requires ChatGPT after exact-head independent Claude
+evidence. Dispositions below are implementation-lane status only.
+
+| ID | Lane disposition | Evidence |
+|---|---|---|
+| R-157 | Implemented; candidate pending Claude | F3 fence and direct interval allocation use `nextval('stocky_catalog_observation_gen_seq')`; sequence privilege suite remains in CI |
+| R-158 | Implemented; candidate pending Claude | Direct refetch allocates start before HTTP and end after usable response; overlapping webhook vs confirmation fixtures |
+| R-159 | Implemented; candidate pending Claude | FX-WH-004 transport failure abandons exact in-flight evidence; no ordinary physical delete of in-flight rows |
+| R-160 | Implemented; candidate pending Claude | JSONL, webhook, reconcile, diagnostic, and nomination writers use the frozen identity-lock / ingestBatch derivation |
+| R-161 | Implemented; candidate pending Claude | Derived envelope + Race AW (`F-CLAUDE-PR5F3EC-01`) |
+| R-162 | Not closed | Downstream consumer characterization retargeted onto the F3 fence; unsafe direct inputs still rejected. Eligible only after consumer proof ChatGPT accepts |
+| R-163 | **Candidate for closure pending exact-head independent Claude evidence.** Remains globally OPEN in the register | Two-root recursive scanner + FX-SCAN-001..005 plants in both trees. Do not mark CLOSED because implementation code exists |
+| R-164 | Implemented; candidate pending Claude | Ordinary F3 apply/nomination/diagnostic paths are tombstone/existence-state; scanner rejects physical canonical DELETE |
+| R-165 | Implemented; candidate pending Claude | Canonical webhook path no longer writes `available ?? 0`; FX-WH-007 and FX-PROJ-006; health degrades on unknown quantity |
+
+| Carry-forward | Disposition |
+|---|---|
+| `F-CLAUDE-PR5F3EC-01` | Tested. Capacity uses `D * max(B, Σ canonical-writer concurrency)` and fails closed when unsafe |
+| `F-CLAUDE-PR5F3EC-02` | Reviewed as the paired planning capacity/lock finding; lock acquisition through Prisma CAST/CTE plus Race AW exhaustion abort. Not a planning-document rewrite |
+| `NEW-CLAUDE-F2CCM-01` | Tested. Two non-overlapping LIVE confirmations; retry budget allows two full observation cycles before terminal Product exhaustion |
+| `F-CLAUDE-PR5F3DUR-01` | Non-blocking planning-evidence discoverability. Immutable review not edited |
+
+Related R-129..R-156 obligations are advanced by the F3 adapters and fixtures
+above. They are not claimed CLOSED as “PR 5 complete”.
 
 ## 7. Exact-head CI and PR state
 
-`PENDING. The pull request must remain DRAFT and UNMERGED.`
+| Field | Value |
+|---|---|
+| PR | [#35](https://github.com/Vedang1998/Stocky/pull/35) |
+| State | OPEN / DRAFT / UNMERGED |
+| Base | `28c810090394f319e599fc6c501b898befa39cad` |
+| Classifier (local vs base) | `docs_only=false`, `full_ci=true` |
+| Exact-head `pull_request` CI | Pending on this report commit. The run ID is not known at commit time and is not invented here. ChatGPT's implementation-review packet cites the exact-head `pull_request` run after it completes. No later push is authorized after that green run. |
+
+This report does not self-approve F3. ChatGPT will issue a new Claude Code
+chat for exhaustive Tier-A exact-head review.
 
 ## 8. Explicit safety accounting
 
@@ -228,6 +406,6 @@ closure pending exact-head independent Claude evidence.`
 | Shopify inventory writes | `0` |
 | Production deployments | `0` |
 | Inventory-write flags enabled | `0`; all remain `DEFAULT OFF` |
+| `FEATURE_PR5_ABSENCE_TOMBSTONE` enabled | `0`; remains `DEFAULT OFF` |
 | PR6 runtime changes | `0`; `NOT AUTHORIZED` |
-| PR #34 changes | `0`; must remain untouched |
-
+| PR #34 changes | `0`; head remains `f5d429b7b3577c87e67c5ef3445e88560e565a5c` |
