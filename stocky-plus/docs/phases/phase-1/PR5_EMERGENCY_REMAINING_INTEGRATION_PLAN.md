@@ -89,8 +89,11 @@ The planning correction at `a6b65f1…` addressed every original finding by free
 | Counts | P0 **0** / P1 **0** / P2 **0** / P3 **2** (`F-CLAUDE-PR5F3EC-01`, `F-CLAUDE-PR5F3EC-02`) |
 | Original findings | **25/25** corrected |
 | One-F3-PR architecture | **RETAINED** |
+| Live-tip canonical Markdown path | **ABSENT** (intentional) |
+| Live-tip lossless archive | `stocky-plus/docs/phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64` |
+| Archive manifest | `stocky-plus/docs/phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW_ARCHIVE_MANIFEST.md` |
 
-The canonical review remains on the dedicated Claude branch and source commit above. It is **referenced rather than copied onto this PR tip** because the immutable source blob contains historical trailing whitespace rejected by repository `git diff --check`. **NEVER EDIT** the immutable correction-review artifact. **Do not** copy a modified file to the same canonical artifact path. **Do not** change the canonical blob identity.
+The canonical Markdown artifact remains immutable at source commit `96b3f1a…`. Direct copy of that Markdown file onto the PR tip is **intentionally absent** because historical trailing whitespace fails repository `git diff --check`. PR #32 instead carries a **lossless exact-byte Base64 archive** that reconstructs Git blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864`. That archive is evidence storage, not a modified review. A squash merge onto `main` therefore preserves the exact review bytes. This packaging change does **not** modify the review verdict or F3 architecture. **NEVER EDIT** the canonical source artifact. **Do not** copy a modified file to the canonical Markdown path. **Do not** change the canonical blob identity.
 
 ---
 
@@ -1372,7 +1375,7 @@ A focused command that prints `0 passed` is a failed check even if exit 0 would 
 
 When ChatGPT requests review of the F3 exact head, Claude must independently falsify at least the §14 checklist. Required verdict language: approve F3 only with P0=0 P1=0 P2=0 blocking, or `CORRECTIONS REQUIRED`. A green worker demo is not completion.
 
-Immutable F1/F2A/F2B/F2C review artifacts, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md`, the canonical F3 correction review on `claude/pr5-f3-planning-correction-review-vzjfw0` at blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864`, and `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` must not be edited.
+Immutable F1/F2A/F2B/F2C review artifacts, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md`, the canonical F3 correction review at source commit `96b3f1a…` / blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864` (lossless archive on this PR tip; canonical Markdown path not copied), and `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` must not be edited.
 
 This planning packet does **not** replace the final exact-head F3 runtime review.
 
