@@ -58,14 +58,13 @@ describe("PR5-F3 absence nomination, breaker, confirmation, and flag gate", () =
     id: string,
     options?: { seen?: string | null; requestGen?: bigint | null },
   ) {
+    const requestGen = options?.requestGen ?? 1n;
     await prisma.shopifyProductFact.create({
       data: {
         ...completeProductData({ id, shopId: shopAId }),
         lastSeenFullSyncRunId: options?.seen ?? null,
-        existenceRequestGen:
-          options?.requestGen === undefined ? 1n : options.requestGen,
-        existenceResponseGen:
-          options?.requestGen === undefined ? 2n : options.requestGen + 1n,
+        existenceRequestGen: requestGen,
+        existenceResponseGen: requestGen + 1n,
       },
     });
     return {
