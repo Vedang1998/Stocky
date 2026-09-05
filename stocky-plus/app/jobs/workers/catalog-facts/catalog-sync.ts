@@ -520,7 +520,7 @@ async function runBulkDomain(input: {
   await persistBulkCounts({
     shopId: input.authority.shopId,
     syncRunId: run.id,
-    bulkOperationGid: run.bulkOperationGid,
+    bulkOperationGid: run.bulkOperationGid!,
     objectCount: polled.snapshot.objectCount,
     rootObjectCount: polled.snapshot.rootObjectCount,
     streamedObjectCount: streamed.streamedObjectCount,
