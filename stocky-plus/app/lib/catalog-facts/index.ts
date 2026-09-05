@@ -39,6 +39,10 @@ export {
 } from "./lock-key";
 export { allocateCatalogObservationGeneration } from "./observation-generation";
 export {
+  writeCompatibilityProjectionState,
+  type CompatibilityProjectionWriteState,
+} from "./apply/projection-state";
+export {
   applyCanonicalFacts,
   applyCanonicalFactsWithRetry,
   CANONICAL_APPLY_PHYSICAL_DELETE_OPERATIONS,

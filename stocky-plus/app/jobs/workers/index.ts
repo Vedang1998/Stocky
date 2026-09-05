@@ -5,9 +5,14 @@ import {
 } from "../queue.server";
 import { processCronJob, processWebhookJob } from "./webhook-processor";
 import { dispatchPendingJobs } from "../../sync/dispatcher.server";
+import { assertCanonicalWriterCapacityAtStartup } from "./catalog-facts/capacity";
 
 async function main() {
   console.log("Starting Stocky++ workers...");
+  const capacity = await assertCanonicalWriterCapacityAtStartup();
+  console.log(
+    `Canonical writer capacity: batch=${capacity.effectiveCanonicalIdentitiesPerTransaction} concurrency=${capacity.configuredWorstCaseConcurrentCanonicalTransactions}`,
+  );
 
   const webhookWorker = createWebhookWorker(processWebhookJob);
   const cronWorker = createCronWorker(processCronJob);

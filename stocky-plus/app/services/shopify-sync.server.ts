@@ -1,107 +1,5 @@
 import type { TenantDb } from "../tenant/tenant-db.server";
-import {
-  pollBulkOperation,
-  runBulkProductSync,
-  shopifyGraphQL,
-  type AdminGraphQLClient,
-} from "./shopify-gql.server";
-
-interface BulkVariantRow {
-  id: string;
-  title: string;
-  sku?: string;
-  barcode?: string;
-  inventoryItem?: {
-    id: string;
-    measurement?: { weight?: { value: number; unit: string } | null } | null;
-  };
-  image?: { url: string } | null;
-  __parentId?: string;
-}
-
-interface BulkProductRow {
-  id: string;
-  title: string;
-}
-
-export async function ingestBulkVariantCache(
-  db: TenantDb,
-  jsonlUrl: string,
-): Promise<number> {
-  const shop = db.authority.myshopifyDomain;
-  const response = await fetch(jsonlUrl);
-  const text = await response.text();
-  const lines = text.trim().split("\n").filter(Boolean);
-
-  const products = new Map<string, string>();
-  const variants: BulkVariantRow[] = [];
-
-  for (const line of lines) {
-    const row = JSON.parse(line) as BulkVariantRow | BulkProductRow;
-    if (row.id.includes("/Product/")) {
-      products.set(row.id, (row as BulkProductRow).title);
-    } else if (row.id.includes("/ProductVariant/")) {
-      variants.push(row as BulkVariantRow);
-    }
-  }
-
-  let count = 0;
-  for (const variant of variants) {
-    const productTitle = variant.__parentId
-      ? products.get(variant.__parentId)
-      : undefined;
-
-    const fields = {
-      title: productTitle
-        ? `${productTitle} — ${variant.title}`
-        : variant.title,
-      sku: variant.sku,
-      barcode: variant.barcode,
-      inventoryItemId: variant.inventoryItem?.id,
-      imageUrl: variant.image?.url,
-      weight: variant.inventoryItem?.measurement?.weight?.value,
-      weightUnit: variant.inventoryItem?.measurement?.weight?.unit,
-    };
-
-    await db.shopifyVariantCache.upsert({
-      where: {
-        shop_shopifyVariantId: { shop, shopifyVariantId: variant.id },
-      },
-      create: {
-        shop,
-        shopifyVariantId: variant.id,
-        shopifyProductId: variant.__parentId,
-        ...fields,
-      },
-      update: fields,
-    });
-    count++;
-  }
-
-  return count;
-}
-
-export async function startCatalogSync(
-  db: TenantDb,
-  admin: AdminGraphQLClient,
-) {
-  await runBulkProductSync(admin);
-
-  let attempts = 0;
-  while (attempts < 60) {
-    await new Promise((r) => setTimeout(r, 5000));
-    const op = await pollBulkOperation(admin);
-    if (!op) break;
-    if (op.status === "COMPLETED" && op.url) {
-      return ingestBulkVariantCache(db, op.url);
-    }
-    if (op.status === "FAILED") {
-      throw new Error(`Bulk sync failed: ${op.errorCode}`);
-    }
-    attempts++;
-  }
-  throw new Error("Bulk sync timed out");
-}
+import { shopifyGraphQL, type AdminGraphQLClient } from "./shopify-gql.server";
 
 export async function adjustShopifyInventory(
   admin: AdminGraphQLClient,
@@ -268,7 +166,10 @@ export async function processBomSale(
   });
 
   return components.map(
-    (c: { componentVariantId: string; quantity: { toString(): string } | number }) => ({
+    (c: {
+      componentVariantId: string;
+      quantity: { toString(): string } | number;
+    }) => ({
       componentVariantId: c.componentVariantId,
       quantityToDecrement: Number(c.quantity) * quantitySold,
     }),

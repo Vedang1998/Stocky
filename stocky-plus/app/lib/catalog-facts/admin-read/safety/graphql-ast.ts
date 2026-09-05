@@ -8,6 +8,13 @@
 
 import { Kind, parse, visit, type DocumentNode } from "graphql";
 
+export const CANONICAL_SUBMIT_MUTATION_EXCEPTIONS = [
+  {
+    modulePath: "ingest/bulk-operation-submitter.ts",
+    rootFieldName: "bulkOperationRunQuery",
+  },
+] as const;
+
 export class CanonicalReadGraphQLSyntaxError extends Error {
   readonly code = "CANONICAL_READ_GRAPHQL_SYNTAX" as const;
 
@@ -107,6 +114,71 @@ export function assertCanonicalReadDocument(source: string): DocumentNode {
         rootFieldNames,
       );
     }
+  }
+
+  visit(ast, {
+    Field(node) {
+      if (node.name.value === "currentBulkOperation") {
+        throw new CanonicalReadForbiddenFieldError("currentBulkOperation");
+      }
+    },
+  });
+
+  return ast;
+}
+
+/**
+ * Scanner-only assertion for the complete canonical catalog boundary.
+ *
+ * Queries retain the ordinary read contract. The sole mutation exception is
+ * bound to one exact module path and one exact root field; no glob, prefix,
+ * fragment-spread, second operation, or second root field is accepted.
+ */
+export function assertCanonicalCatalogDocumentForModule(
+  source: string,
+  modulePath: string,
+): DocumentNode {
+  const normalizedPath = modulePath.replace(/\\/g, "/");
+  const ast = parseCanonicalReadDocument(source);
+  const operations = ast.definitions.filter(
+    (definition) => definition.kind === Kind.OPERATION_DEFINITION,
+  );
+
+  if (operations.length !== 1) {
+    throw new CanonicalReadMutationRejectedError(
+      operations.map((operation) => operation.operation).join(",") || "none",
+      null,
+      [],
+    );
+  }
+
+  const operation = operations[0];
+  if (operation.operation === "query") {
+    return assertCanonicalReadDocument(source);
+  }
+
+  const rootFields = operation.selectionSet.selections.flatMap((selection) =>
+    selection.kind === Kind.FIELD ? [selection.name.value] : [],
+  );
+  const hasOnlyDirectFieldSelections =
+    rootFields.length === operation.selectionSet.selections.length;
+  const exception = CANONICAL_SUBMIT_MUTATION_EXCEPTIONS.find(
+    (candidate) =>
+      candidate.modulePath === normalizedPath &&
+      rootFields.length === 1 &&
+      rootFields[0] === candidate.rootFieldName,
+  );
+
+  if (
+    operation.operation !== "mutation" ||
+    !hasOnlyDirectFieldSelections ||
+    !exception
+  ) {
+    throw new CanonicalReadMutationRejectedError(
+      operation.operation,
+      operation.name?.value ?? null,
+      rootFields,
+    );
   }
 
   visit(ast, {

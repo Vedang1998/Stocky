@@ -31,8 +31,24 @@ api_version = "2026-07"
   uri = "/webhooks/refunds/create"
 
   [[webhooks.subscriptions]]
-  topics = ["inventory_levels/update"]
-  uri = "/webhooks/inventory_levels/update"
+  topics = ["products/create", "products/update", "products/delete"]
+  uri = "/webhooks/catalog-facts"
+
+  [[webhooks.subscriptions]]
+  topics = ["inventory_items/create", "inventory_items/update", "inventory_items/delete"]
+  uri = "/webhooks/catalog-facts"
+
+  [[webhooks.subscriptions]]
+  topics = ["inventory_levels/connect", "inventory_levels/update", "inventory_levels/disconnect"]
+  uri = "/webhooks/catalog-facts"
+
+  [[webhooks.subscriptions]]
+  topics = ["locations/create", "locations/update", "locations/delete", "locations/activate", "locations/deactivate"]
+  uri = "/webhooks/catalog-facts"
+
+  [[webhooks.subscriptions]]
+  topics = ["bulk_operations/finish"]
+  uri = "/webhooks/catalog-facts"
 
   # Mandatory App Store compliance webhooks (https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance)
   [[webhooks.subscriptions]]

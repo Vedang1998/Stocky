@@ -7,29 +7,47 @@ import type { JobExecutionStrategy } from "@prisma/client";
 export type ExecutionStrategy = JobExecutionStrategy;
 
 /** Stable application-outcome codes for dead-letter / quarantine. */
-export const APPLICATION_OUTCOME_UNCERTAIN = "application_outcome_uncertain" as const;
-export const APPLICATION_DIGEST_CONFLICT = "application_digest_conflict" as const;
-export const APPLICATION_ALREADY_APPLIED = "application_already_applied" as const;
+export const APPLICATION_OUTCOME_UNCERTAIN =
+  "application_outcome_uncertain" as const;
+export const APPLICATION_DIGEST_CONFLICT =
+  "application_digest_conflict" as const;
+export const APPLICATION_ALREADY_APPLIED =
+  "application_already_applied" as const;
 
-const WEBHOOK_ATOMIC_TOPICS = new Set([
+export const WEBHOOK_ATOMIC_TOPICS = new Set([
   "orders/create",
   "orders/cancelled",
   "refunds/create",
+  "products/create",
+  "products/update",
+  "products/delete",
+  "inventory_items/create",
+  "inventory_items/update",
+  "inventory_items/delete",
+  "inventory_levels/connect",
   "inventory_levels/update",
+  "inventory_levels/disconnect",
+  "locations/create",
+  "locations/update",
+  "locations/delete",
+  "locations/activate",
+  "locations/deactivate",
 ]);
 
 /**
  * Declare execution strategy for every known job type.
  * Unknown job types fail closed as NO_AUTOMATIC_RETRY.
  */
-export function executionStrategyForJobType(jobType: string): ExecutionStrategy {
+export function executionStrategyForJobType(
+  jobType: string,
+): ExecutionStrategy {
   if (jobType.startsWith("webhook:")) {
     const topic = jobType.slice("webhook:".length);
     if (WEBHOOK_ATOMIC_TOPICS.has(topic)) {
       return "ATOMIC_APPLICATION_RECEIPT";
     }
     // Uninstall and other control webhooks have no merchant-domain effect.
-    if (topic === "app/uninstalled") {
+    if (topic === "app/uninstalled" || topic === "bulk_operations/finish") {
       return "CONTROL_ONLY";
     }
     return "NO_AUTOMATIC_RETRY";
@@ -37,7 +55,10 @@ export function executionStrategyForJobType(jobType: string): ExecutionStrategy 
 
   switch (jobType) {
     case "catalog-sync":
-      // Rebuildable: startCatalogSync upserts cache rows to converge.
+      // Rebuildable canonical catalog facts; payload version is fenced by the
+      // worker so catalog-sync-v1 cannot execute after the F3 cutover.
+      return "REBUILDABLE_IDEMPOTENT";
+    case "inventory-state-reconcile":
       return "REBUILDABLE_IDEMPOTENT";
     case "abc-analysis-shop":
       // Rebuildable: ABC recompute overwrites classification rows.

@@ -2,9 +2,16 @@
  * Canonical fact writers. INSERT and UPDATE only — never DELETE/deleteMany.
  */
 import type { GenerationInterval } from "./clocks";
-import { CanonicalApplyIncompleteFirstLiveError, CanonicalApplyQuantityDomainError } from "./errors";
+import {
+  CanonicalApplyIncompleteFirstLiveError,
+  CanonicalApplyQuantityDomainError,
+} from "./errors";
 import { isCanonicalInt32, validateFirstLiveAttributes } from "./first-live";
-import { assertFrozenNumericColumn, exactNumericEqual, frozenNumericTextOrNull } from "./money";
+import {
+  assertFrozenNumericColumn,
+  exactNumericEqual,
+  frozenNumericTextOrNull,
+} from "./money";
 import {
   asBigIntOrNull,
   asBool,
@@ -82,7 +89,12 @@ export type FactSnapshot = {
   quantities: Partial<
     Record<
       QuantityName,
-      { value: number | null; updatedAt: Date | null; requestGen: bigint | null; responseGen: bigint | null }
+      {
+        value: number | null;
+        updatedAt: Date | null;
+        requestGen: bigint | null;
+        responseGen: bigint | null;
+      }
     >
   >;
 };
@@ -115,13 +127,25 @@ function mapSnapshot(row: Record<string, unknown>): FactSnapshot {
     id: String(row.id),
     existenceState: row.existenceState === "ABSENT" ? "ABSENT" : "LIVE",
     existenceKind: String(row.existenceKind),
-    existenceRequestGen: asBigIntOrNull(row.existenceRequestGen, "existenceRequestGen"),
-    existenceResponseGen: asBigIntOrNull(row.existenceResponseGen, "existenceResponseGen"),
+    existenceRequestGen: asBigIntOrNull(
+      row.existenceRequestGen,
+      "existenceRequestGen",
+    ),
+    existenceResponseGen: asBigIntOrNull(
+      row.existenceResponseGen,
+      "existenceResponseGen",
+    ),
     existenceDiagnosticState: asString(row.existenceDiagnosticState),
     shopifyCreatedAt: asDate(row.shopifyCreatedAt),
     shopifyUpdatedAt: asDate(row.shopifyUpdatedAt),
-    attributeRequestGen: asBigIntOrNull(row.attributeRequestGen, "attributeRequestGen"),
-    attributeResponseGen: asBigIntOrNull(row.attributeResponseGen, "attributeResponseGen"),
+    attributeRequestGen: asBigIntOrNull(
+      row.attributeRequestGen,
+      "attributeRequestGen",
+    ),
+    attributeResponseGen: asBigIntOrNull(
+      row.attributeResponseGen,
+      "attributeResponseGen",
+    ),
     attributeFreshnessState: String(row.attributeFreshnessState ?? "ORDERED"),
     lastSeenFullSyncRunId: asString(row.lastSeenFullSyncRunId),
     title: asString(row.title),
@@ -142,7 +166,8 @@ function mapSnapshot(row: Record<string, unknown>): FactSnapshot {
     currencyCode: asString(row.currencyCode),
     position: asInt(row.position),
     tracked: row.tracked == null ? null : asBool(row.tracked),
-    requiresShipping: row.requiresShipping == null ? null : asBool(row.requiresShipping),
+    requiresShipping:
+      row.requiresShipping == null ? null : asBool(row.requiresShipping),
     weightValue: moneyCol(row.weightValue),
     weightUnit: asString(row.weightUnit),
     unitCostAmount: moneyCol(row.unitCostAmount),
@@ -151,10 +176,18 @@ function mapSnapshot(row: Record<string, unknown>): FactSnapshot {
     name: asString(row.name),
     isActive: row.isActive == null ? null : asBool(row.isActive),
     deactivatedAt: asDate(row.deactivatedAt),
-    fulfillsOnlineOrders: row.fulfillsOnlineOrders == null ? null : asBool(row.fulfillsOnlineOrders),
-    shipsInventory: row.shipsInventory == null ? null : asBool(row.shipsInventory),
-    isFulfillmentService: row.isFulfillmentService == null ? null : asBool(row.isFulfillmentService),
-    hasActiveInventory: row.hasActiveInventory == null ? null : asBool(row.hasActiveInventory),
+    fulfillsOnlineOrders:
+      row.fulfillsOnlineOrders == null
+        ? null
+        : asBool(row.fulfillsOnlineOrders),
+    shipsInventory:
+      row.shipsInventory == null ? null : asBool(row.shipsInventory),
+    isFulfillmentService:
+      row.isFulfillmentService == null
+        ? null
+        : asBool(row.isFulfillmentService),
+    hasActiveInventory:
+      row.hasActiveInventory == null ? null : asBool(row.hasActiveInventory),
     address1: asString(row.address1),
     city: asString(row.city),
     provinceCode: asString(row.provinceCode),
@@ -264,7 +297,12 @@ export async function insertFact(
         attrs.status == null ||
         !Array.isArray(attrs.tags)
       ) {
-        throw new CanonicalApplyIncompleteFirstLiveError(["title", "handle", "tags", "status"]);
+        throw new CanonicalApplyIncompleteFirstLiveError([
+          "title",
+          "handle",
+          "tags",
+          "status",
+        ]);
       }
       await queryRows(db)`INSERT INTO "ShopifyProductFact" (
            id, "shopId", "shopifyGid", title, handle, vendor, "productType", tags, status,
@@ -272,6 +310,7 @@ export async function insertFact(
            "existenceState", "existenceKind", "existenceObservedAt",
            "existenceRequestGen", "existenceResponseGen", "existenceDiagnosticState",
            "attributeRequestGen", "attributeResponseGen", "attributeFreshnessState",
+           "compatibilityProjectionState",
            "lastSeenFullSyncRunId", "ingestBatchId", "sourceKind",
            "deletedAt", "deletionSource", "shopifyLegacyResourceId",
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
@@ -288,6 +327,7 @@ export async function insertFact(
            ${gens.req}::bigint, ${gens.resp}::bigint, ${existence.diagnostic},
            ${attrReq}::bigint, ${attrResp}::bigint,
            ${freshness}::"CatalogAttributeFreshnessState",
+           'PROJECTION_PENDING'::"CatalogCompatibilityProjectionState",
            ${presenceEpochId}, ${observation.ingestBatchId ?? null},
            ${sourceKind}::"CatalogSourceKind",
            ${deletedAt}, ${existence.deletionSource}::"CatalogDeletionSource",
@@ -305,6 +345,7 @@ export async function insertFact(
            "existenceState", "existenceKind", "existenceObservedAt",
            "existenceRequestGen", "existenceResponseGen", "existenceDiagnosticState",
            "attributeRequestGen", "attributeResponseGen", "attributeFreshnessState",
+           "compatibilityProjectionState",
            "lastSeenFullSyncRunId", "ingestBatchId", "sourceKind",
            "deletedAt", "deletionSource", "shopifyLegacyResourceId",
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
@@ -323,6 +364,7 @@ export async function insertFact(
            ${gens.req}::bigint, ${gens.resp}::bigint, ${existence.diagnostic},
            ${attrReq}::bigint, ${attrResp}::bigint,
            ${freshness}::"CatalogAttributeFreshnessState",
+           'PROJECTION_PENDING'::"CatalogCompatibilityProjectionState",
            ${presenceEpochId}, ${observation.ingestBatchId ?? null},
            ${sourceKind}::"CatalogSourceKind",
            ${deletedAt}, ${existence.deletionSource}::"CatalogDeletionSource",
@@ -341,6 +383,7 @@ export async function insertFact(
            "existenceState", "existenceKind", "existenceObservedAt",
            "existenceRequestGen", "existenceResponseGen", "existenceDiagnosticState",
            "attributeRequestGen", "attributeResponseGen", "attributeFreshnessState",
+           "compatibilityProjectionState",
            "lastSeenFullSyncRunId", "ingestBatchId", "sourceKind",
            "deletedAt", "deletionSource", "shopifyLegacyResourceId",
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
@@ -359,6 +402,7 @@ export async function insertFact(
            ${gens.req}::bigint, ${gens.resp}::bigint, ${existence.diagnostic},
            ${attrReq}::bigint, ${attrResp}::bigint,
            ${freshness}::"CatalogAttributeFreshnessState",
+           'PROJECTION_PENDING'::"CatalogCompatibilityProjectionState",
            ${presenceEpochId}, ${observation.ingestBatchId ?? null},
            ${sourceKind}::"CatalogSourceKind",
            ${deletedAt}, ${existence.deletionSource}::"CatalogDeletionSource",
@@ -377,6 +421,7 @@ export async function insertFact(
            "existenceState", "existenceKind", "existenceObservedAt",
            "existenceRequestGen", "existenceResponseGen", "existenceDiagnosticState",
            "attributeRequestGen", "attributeResponseGen", "attributeFreshnessState",
+           "compatibilityProjectionState",
            "lastSeenFullSyncRunId", "ingestBatchId", "sourceKind",
            "deletedAt", "deletionSource", "shopifyLegacyResourceId",
            "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
@@ -394,6 +439,7 @@ export async function insertFact(
            ${gens.req}::bigint, ${gens.resp}::bigint, ${existence.diagnostic},
            ${attrReq}::bigint, ${attrResp}::bigint,
            ${freshness}::"CatalogAttributeFreshnessState",
+           'PROJECTION_PENDING'::"CatalogCompatibilityProjectionState",
            ${presenceEpochId}, ${observation.ingestBatchId ?? null},
            ${sourceKind}::"CatalogSourceKind",
            ${deletedAt}, ${existence.deletionSource}::"CatalogDeletionSource",
@@ -412,6 +458,7 @@ export async function insertFact(
          "existenceState", "existenceKind", "existenceObservedAt",
          "existenceRequestGen", "existenceResponseGen", "existenceDiagnosticState",
          "attributeRequestGen", "attributeResponseGen", "attributeFreshnessState",
+         "compatibilityProjectionState",
          "lastSeenFullSyncRunId", "ingestBatchId", "sourceKind",
          "deletedAt", "deletionSource", "shopifyLegacyResourceId",
          "appliedAt", "lastRefreshedAt", "createdAt", "updatedAt"
@@ -425,6 +472,7 @@ export async function insertFact(
          ${gens.req}::bigint, ${gens.resp}::bigint, ${existence.diagnostic},
          ${attrReq}::bigint, ${attrResp}::bigint,
          ${freshness}::"CatalogAttributeFreshnessState",
+         'PROJECTION_PENDING'::"CatalogCompatibilityProjectionState",
          ${presenceEpochId}, ${observation.ingestBatchId ?? null},
          ${sourceKind}::"CatalogSourceKind",
          ${deletedAt}, ${existence.deletionSource}::"CatalogDeletionSource",
@@ -541,13 +589,64 @@ function tableFor(identity: CanonicalFactIdentity) {
   }
 }
 
+/**
+ * F3 projection handoff marker. The caller already holds the canonical
+ * advisory identity lock; this write stays in the same canonical transaction.
+ */
+export async function markCompatibilityProjectionPending(
+  db: CanonicalApplyDb,
+  identity: CanonicalFactIdentity,
+  factId: string,
+): Promise<void> {
+  const shopId = identity.shopId;
+  const table = tableFor(identity);
+  if (table === "ShopifyProductFact") {
+    await queryRows(db)`UPDATE "ShopifyProductFact"
+       SET "compatibilityProjectionState" = 'PROJECTION_PENDING',
+           "updatedAt" = clock_timestamp()
+       WHERE "shopId" = ${shopId} AND id = ${factId}`;
+    return;
+  }
+  if (table === "ShopifyVariantFact") {
+    await queryRows(db)`UPDATE "ShopifyVariantFact"
+       SET "compatibilityProjectionState" = 'PROJECTION_PENDING',
+           "updatedAt" = clock_timestamp()
+       WHERE "shopId" = ${shopId} AND id = ${factId}`;
+    return;
+  }
+  if (table === "ShopifyInventoryItemFact") {
+    await queryRows(db)`UPDATE "ShopifyInventoryItemFact"
+       SET "compatibilityProjectionState" = 'PROJECTION_PENDING',
+           "updatedAt" = clock_timestamp()
+       WHERE "shopId" = ${shopId} AND id = ${factId}`;
+    return;
+  }
+  if (table === "ShopifyLocationFact") {
+    await queryRows(db)`UPDATE "ShopifyLocationFact"
+       SET "compatibilityProjectionState" = 'PROJECTION_PENDING',
+           "updatedAt" = clock_timestamp()
+       WHERE "shopId" = ${shopId} AND id = ${factId}`;
+    return;
+  }
+  await queryRows(db)`UPDATE "ShopifyInventoryLevelFact"
+     SET "compatibilityProjectionState" = 'PROJECTION_PENDING',
+         "updatedAt" = clock_timestamp()
+     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+}
+
 export async function updateExistence(
   db: CanonicalApplyDb,
   identity: CanonicalFactIdentity,
   factId: string,
   existence: ExistenceWrite,
 ): Promise<void> {
-  await updateExistenceOnTable(db, tableFor(identity), identity.shopId, factId, existence);
+  await updateExistenceOnTable(
+    db,
+    tableFor(identity),
+    identity.shopId,
+    factId,
+    existence,
+  );
 }
 
 export async function updateDiagnostic(
@@ -559,26 +658,36 @@ export async function updateDiagnostic(
   const shopId = identity.shopId;
   const table = tableFor(identity);
   if (table === "ShopifyProductFact") {
-    await queryRows(db)`UPDATE "ShopifyProductFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyProductFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
   if (table === "ShopifyVariantFact") {
-    await queryRows(db)`UPDATE "ShopifyVariantFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyVariantFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
   if (table === "ShopifyInventoryItemFact") {
-    await queryRows(db)`UPDATE "ShopifyInventoryItemFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyInventoryItemFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
   if (table === "ShopifyLocationFact") {
-    await queryRows(db)`UPDATE "ShopifyLocationFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyLocationFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
-  await queryRows(db)`UPDATE "ShopifyInventoryLevelFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
+  await queryRows(
+    db,
+  )`UPDATE "ShopifyInventoryLevelFact" SET "existenceDiagnosticState" = ${diagnostic}, "updatedAt" = clock_timestamp()
      WHERE "shopId" = ${shopId} AND id = ${factId}`;
 }
 
@@ -639,26 +748,36 @@ export async function updatePresenceMarker(
   const shopId = identity.shopId;
   const table = tableFor(identity);
   if (table === "ShopifyProductFact") {
-    await queryRows(db)`UPDATE "ShopifyProductFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyProductFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
   if (table === "ShopifyVariantFact") {
-    await queryRows(db)`UPDATE "ShopifyVariantFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyVariantFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
   if (table === "ShopifyInventoryItemFact") {
-    await queryRows(db)`UPDATE "ShopifyInventoryItemFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyInventoryItemFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
   if (table === "ShopifyLocationFact") {
-    await queryRows(db)`UPDATE "ShopifyLocationFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
+    await queryRows(
+      db,
+    )`UPDATE "ShopifyLocationFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${factId}`;
     return;
   }
-  await queryRows(db)`UPDATE "ShopifyInventoryLevelFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
+  await queryRows(
+    db,
+  )`UPDATE "ShopifyInventoryLevelFact" SET "lastSeenFullSyncRunId" = ${epochId}, "updatedAt" = clock_timestamp()
      WHERE "shopId" = ${shopId} AND id = ${factId}`;
 }
 
@@ -974,7 +1093,12 @@ function tagsSemanticallyEqual(
 }
 
 function selectedOptionItemEqual(left: unknown, right: unknown): boolean {
-  if (left == null || right == null || typeof left !== "object" || typeof right !== "object") {
+  if (
+    left == null ||
+    right == null ||
+    typeof left !== "object" ||
+    typeof right !== "object"
+  ) {
     return false;
   }
   if (Array.isArray(left) || Array.isArray(right)) return false;
@@ -983,10 +1107,15 @@ function selectedOptionItemEqual(left: unknown, right: unknown): boolean {
   return a.name === b.name && a.value === b.value;
 }
 
-export function selectedOptionsSemanticallyEqual(stored: unknown, incoming: unknown): boolean {
+export function selectedOptionsSemanticallyEqual(
+  stored: unknown,
+  incoming: unknown,
+): boolean {
   if (!Array.isArray(stored) || !Array.isArray(incoming)) return false;
   if (stored.length !== incoming.length) return false;
-  return stored.every((item, index) => selectedOptionItemEqual(item, incoming[index]));
+  return stored.every((item, index) =>
+    selectedOptionItemEqual(item, incoming[index]),
+  );
 }
 
 export function productAttributesEqual(
@@ -1012,10 +1141,17 @@ export function variantAttributesEqual(
     (stored.shopifyProductGid ?? null) === attrs.shopifyProductGid &&
     stored.title === attrs.title &&
     (stored.displayName ?? null) === attrs.displayName &&
-    selectedOptionsSemanticallyEqual(stored.selectedOptions, attrs.selectedOptions) &&
+    selectedOptionsSemanticallyEqual(
+      stored.selectedOptions,
+      attrs.selectedOptions,
+    ) &&
     (stored.sku ?? null) === attrs.sku &&
     (stored.barcode ?? null) === attrs.barcode &&
-    exactNumericEqual(stored.priceAmount ?? null, attrs.priceAmount, "priceAmount") &&
+    exactNumericEqual(
+      stored.priceAmount ?? null,
+      attrs.priceAmount,
+      "priceAmount",
+    ) &&
     exactNumericEqual(
       stored.compareAtPriceAmount ?? null,
       attrs.compareAtPriceAmount,
@@ -1035,7 +1171,11 @@ export function inventoryItemAttributesEqual(
     (stored.sku ?? null) === attrs.sku &&
     stored.tracked === attrs.tracked &&
     stored.requiresShipping === attrs.requiresShipping &&
-    exactNumericEqual(stored.weightValue ?? null, attrs.weightValue, "weightValue") &&
+    exactNumericEqual(
+      stored.weightValue ?? null,
+      attrs.weightValue,
+      "weightValue",
+    ) &&
     (stored.weightUnit ?? null) === attrs.weightUnit &&
     exactNumericEqual(
       stored.unitCostAmount ?? null,
@@ -1073,7 +1213,8 @@ export function inventoryLevelAttributesEqual(
   attrs: InventoryLevelAttributes,
 ): boolean {
   return (
-    (stored.shopifyInventoryLevelGid ?? null) === (attrs.shopifyInventoryLevelGid ?? null) &&
+    (stored.shopifyInventoryLevelGid ?? null) ===
+      (attrs.shopifyInventoryLevelGid ?? null) &&
     stored.isActive === attrs.isActive
   );
 }

@@ -9,11 +9,27 @@ export const WEBHOOK_PROJECTION_SCHEMA_VERSIONS = {
   "orders/create": "webhook-projection-orders-create-v1",
   "orders/cancelled": "webhook-projection-orders-cancelled-v1",
   "refunds/create": "webhook-projection-refunds-create-v1",
+  "products/create": "webhook-projection-products-create-v1",
+  "products/update": "webhook-projection-products-update-v1",
+  "products/delete": "webhook-projection-products-delete-v1",
+  "inventory_items/create": "webhook-projection-inventory-items-create-v1",
+  "inventory_items/update": "webhook-projection-inventory-items-update-v1",
+  "inventory_items/delete": "webhook-projection-inventory-items-delete-v1",
+  "inventory_levels/connect": "webhook-projection-inventory-levels-connect-v1",
   "inventory_levels/update": "webhook-projection-inventory-levels-update-v1",
+  "inventory_levels/disconnect":
+    "webhook-projection-inventory-levels-disconnect-v1",
+  "locations/create": "webhook-projection-locations-create-v1",
+  "locations/update": "webhook-projection-locations-update-v1",
+  "locations/delete": "webhook-projection-locations-delete-v1",
+  "locations/activate": "webhook-projection-locations-activate-v1",
+  "locations/deactivate": "webhook-projection-locations-deactivate-v1",
+  "bulk_operations/finish": "webhook-projection-bulk-operations-finish-v1",
   "app/uninstalled": "webhook-projection-app-uninstalled-v1",
 } as const;
 
-export type SanitizedWebhookTopic = keyof typeof WEBHOOK_PROJECTION_SCHEMA_VERSIONS;
+export type SanitizedWebhookTopic =
+  keyof typeof WEBHOOK_PROJECTION_SCHEMA_VERSIONS;
 
 export type SanitizedWebhookProjection = {
   schemaVersion: string;
@@ -139,13 +155,18 @@ function pickLineItem(raw: unknown): Record<string, unknown> | null {
     id: assertScalarId(raw.id, "line_item.id"),
     variant_id: assertScalarId(raw.variant_id, "line_item.variant_id"),
     product_id: assertScalarId(raw.product_id, "line_item.product_id"),
-    sku: typeof raw.sku === "string" ? raw.sku.slice(0, PROJECTION_BOUNDS.maxStringLength) : null,
+    sku:
+      typeof raw.sku === "string"
+        ? raw.sku.slice(0, PROJECTION_BOUNDS.maxStringLength)
+        : null,
     quantity: typeof raw.quantity === "number" ? raw.quantity : null,
     price: moneyString(raw.price),
     total_discount: moneyString(raw.total_discount),
     location_id: assertScalarId(raw.location_id, "line_item.location_id"),
     fulfillment_status:
-      typeof raw.fulfillment_status === "string" ? raw.fulfillment_status : null,
+      typeof raw.fulfillment_status === "string"
+        ? raw.fulfillment_status
+        : null,
   };
 }
 
@@ -169,8 +190,10 @@ function sanitizeOrderProjection(
       "admin_graphql_api_id",
     ),
     name: typeof payload.name === "string" ? payload.name : null,
-    created_at: typeof payload.created_at === "string" ? payload.created_at : null,
-    updated_at: typeof payload.updated_at === "string" ? payload.updated_at : null,
+    created_at:
+      typeof payload.created_at === "string" ? payload.created_at : null,
+    updated_at:
+      typeof payload.updated_at === "string" ? payload.updated_at : null,
     cancelled_at:
       typeof payload.cancelled_at === "string" ? payload.cancelled_at : null,
     cancel_reason:
@@ -224,7 +247,8 @@ function sanitizeRefundProjection(
   return {
     id: assertScalarId(payload.id, "id"),
     order_id: assertScalarId(payload.order_id, "order_id"),
-    created_at: typeof payload.created_at === "string" ? payload.created_at : null,
+    created_at:
+      typeof payload.created_at === "string" ? payload.created_at : null,
     note: null,
     refund_line_items: refundLineItems,
   };
@@ -240,7 +264,65 @@ function sanitizeInventoryProjection(
     ),
     location_id: assertScalarId(payload.location_id, "location_id"),
     available: typeof payload.available === "number" ? payload.available : null,
-    updated_at: typeof payload.updated_at === "string" ? payload.updated_at : null,
+    updated_at:
+      typeof payload.updated_at === "string" ? payload.updated_at : null,
+  };
+}
+
+function sanitizeCatalogIdentityProjection(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const rawVariantGids = Array.isArray(payload.variant_gids)
+    ? payload.variant_gids
+    : [];
+  if (rawVariantGids.length > PROJECTION_BOUNDS.maxArrayElements) {
+    throw new SyncControlPlaneError(
+      "projection_bounds_exceeded",
+      "variant_gids exceeds the persisted signal bound",
+    );
+  }
+  return {
+    id: assertScalarId(payload.id, "id"),
+    admin_graphql_api_id: assertScalarId(
+      payload.admin_graphql_api_id,
+      "admin_graphql_api_id",
+    ),
+    inventory_item_id: assertScalarId(
+      payload.inventory_item_id,
+      "inventory_item_id",
+    ),
+    location_id: assertScalarId(payload.location_id, "location_id"),
+    updated_at:
+      typeof payload.updated_at === "string" ? payload.updated_at : null,
+    variant_gids: rawVariantGids.map((item) =>
+      isRecord(item)
+        ? {
+            admin_graphql_api_id: assertScalarId(
+              item.admin_graphql_api_id ?? item.id,
+              "variant_gids[].admin_graphql_api_id",
+            ),
+          }
+        : {
+            admin_graphql_api_id: assertScalarId(
+              item,
+              "variant_gids[].admin_graphql_api_id",
+            ),
+          },
+    ),
+  };
+}
+
+function sanitizeBulkFinishProjection(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    id: assertScalarId(
+      payload.admin_graphql_api_id ?? payload.id,
+      "bulk_operation.id",
+    ),
+    status: typeof payload.status === "string" ? payload.status : null,
+    completed_at:
+      typeof payload.completed_at === "string" ? payload.completed_at : null,
   };
 }
 
@@ -297,8 +379,26 @@ export function sanitizeWebhookPayload(
     case "refunds/create":
       projection = sanitizeRefundProjection(payload);
       break;
+    case "products/create":
+    case "products/update":
+    case "products/delete":
+    case "inventory_items/create":
+    case "inventory_items/update":
+    case "inventory_items/delete":
+    case "inventory_levels/connect":
+    case "inventory_levels/disconnect":
+    case "locations/create":
+    case "locations/update":
+    case "locations/delete":
+    case "locations/activate":
+    case "locations/deactivate":
+      projection = sanitizeCatalogIdentityProjection(payload);
+      break;
     case "inventory_levels/update":
       projection = sanitizeInventoryProjection(payload);
+      break;
+    case "bulk_operations/finish":
+      projection = sanitizeBulkFinishProjection(payload);
       break;
     case "app/uninstalled":
       projection = sanitizeUninstallProjection(payload);
