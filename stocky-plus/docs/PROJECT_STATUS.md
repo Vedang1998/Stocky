@@ -1,7 +1,7 @@
 # Project Status
 
-**Updated:** 2026-09-04
-**Current stage:** Phase 1 PR 5 IMPLEMENTATION IN PROGRESS — F2A+F2B+F2C MERGED; REMAINING INTEGRATION PLANNING PACKET OPEN / DRAFT; F3 RUNTIME NOT STARTED
+**Updated:** 2026-09-05
+**Current stage:** Phase 1 PR 5 IMPLEMENTATION IN PROGRESS — F2A+F2B+F2C MERGED; PR #32 REMAINING-INTEGRATION PLANNING MERGED; F3 RUNTIME NOT STARTED; EMERGENCY CONTINUITY SPRINT CONTROL PACKET RECORDED
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
@@ -14,7 +14,8 @@
 **PR 5 planning:** ACCEPTED AND MERGED (D-053 / PR #24)
 **PR 5 implementation-entry:** ACCEPTED AND MERGED (D-054 / PR #26)
 **PR 5 implementation:** STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F2A ADMIN READ ACCEPTED / MERGED; PR5-F2B CANONICAL APPLICATOR ACCEPTED / MERGED; PR5-F2C COMPATIBILITY PROJECTION ACCEPTED / MERGED; F3 RUNTIME NOT STARTED
-**PR 5 remaining-integration planning:** OPEN — `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` (planning / fixtures only; independent correction review `APPROVE PR5-F3 PLANNING CORRECTION`; synchronized onto current F2A+F2B+F2C `main`; F3 runtime not authorized)
+**PR 5 remaining-integration planning:** MERGED — PR [#32](https://github.com/Vedang1998/Stocky/pull/32) squash `f1201f853b8a42f40e4d3e5565b6406410360c8a`; post-merge CI run `33967677166` SUCCESS; planning / fixtures only; independent correction review `APPROVE PR5-F3 PLANNING CORRECTION`; F3 runtime **NOT AUTHORIZED**
+**Emergency Continuity Sprint:** CONTROL PACKET RECORDED — INTERNAL / CONTROLLED rescue framing after Stocky sunset; as of the 2026-09-05 current-state addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01; it is not a completion claim and does **not** authorize F3 runtime
 **D-054:** EFFECTIVE
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -43,7 +44,7 @@
 | Post-merge main CI (PR #20) | run `31756319986`, job `94632696479`, success at `f618103…` |
 | Post-merge main CI (PR #22) | run `31768571828`, job `94669500249`, success at `99d48db…` |
 | Closure report | `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md` |
-| Next gate | **PR5 remaining integration (F3) is NOT STARTED and is not authorized by the remaining-integration planning packet.** F2A (#29), F2B (#31), and F2C (#30) are **CLOSED / MERGED**. Current `origin/main` is F2C squash `f9841691307583381695973600df3546dd1b9ee4` (post-merge CI `33816908539` SUCCESS). F2B squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` (post-merge CI `33619969867` SUCCESS). PR #32 remaining-integration planning is OPEN / DRAFT / UNMERGED and pending ChatGPT merge decision. D-052 remains PR 4 technical-acceptance authority. D-053 remains PR 5 planning-acceptance authority. D-054 remains implementation authority. |
+| Next gate | **PR5 remaining integration (F3) is NOT STARTED and is not authorized by this control-packet sync or by the merged remaining-integration planning packet.** F2A (#29), F2B (#31), and F2C (#30) are **CLOSED / MERGED**. PR #32 remaining-integration planning is **CLOSED / MERGED** as squash `f1201f853b8a42f40e4d3e5565b6406410360c8a` (post-merge CI `33967677166` SUCCESS). That squash is current `origin/main`. PR [#33](https://github.com/Vedang1998/Stocky/pull/33) is **OPEN / DRAFT / UNMERGED** pending ChatGPT review of this current-main synchronization. D-052 remains PR 4 technical-acceptance authority. D-053 remains PR 5 planning-acceptance authority. D-054 remains implementation authority. |
 | PR 5 planning | ACCEPTED AND MERGED |
 | PR 5 implementation | STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN |
 | Production | NOT AUTHORIZED |
@@ -97,10 +98,13 @@ D-053 is **not** a PR 4 correction, acceptance, or closure decision. Planning is
 | Historical implementation branch | `phase-1/catalog-location-inventory-facts` (PR #27; now merged) |
 | Foundation report | `phases/phase-1/PR5_FOUNDATION_IMPLEMENTATION_REPORT.md` |
 | Foundation closure | `phases/phase-1/PR5_FOUNDATION_CLOSURE_REPORT.md` |
+| F2A closure | `phases/phase-1/PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md` |
+| Remaining-integration plan | `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` |
+| Emergency control packet | `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
-D-054 is **EFFECTIVE**. PR 5 runtime implementation remains authorized under D-054. The PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**. PR5-F2A is **ACCEPTED / MERGED**. PR5-F2B is **ACCEPTED / MERGED**. PR5-F2C is **ACCEPTED / MERGED**. Remaining PR5 integration (JSONL ingest, checkpoint, webhooks, absence confirmation, reconcile, projection triggering, health) is **NOT STARTED**. Do **not** create D-055. Do **not** state PR 5 is complete. Do **not** close Phase 1. Production, merchant production data, Shopify inventory mutations, and inventory-write flags remain unauthorized / **DEFAULT OFF**.
+D-054 is **EFFECTIVE**. PR 5 runtime implementation remains authorized under D-054. The PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**. PR5-F2A is **ACCEPTED / MERGED**. PR5-F2B is **ACCEPTED / MERGED**. PR5-F2C is **ACCEPTED / MERGED**. PR #32 remaining-integration planning is **MERGED**. Remaining PR5 integration (JSONL ingest, checkpoint, webhooks, absence confirmation, reconcile, projection triggering, health) is **NOT STARTED**. The Emergency Continuity Sprint control packet is recorded and does **not** authorize F3 runtime. Do **not** create D-055. Do **not** state PR 5 is complete. Do **not** close Phase 1. Production, merchant production data, Shopify inventory mutations, and inventory-write flags remain unauthorized / **DEFAULT OFF**. `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF**.
 
 ## Phase 1 PR5-F1 foundation closeout (PR #27)
 
@@ -125,6 +129,53 @@ D-054 is **EFFECTIVE**. PR 5 runtime implementation remains authorized under D-0
 | Closure report | `PR5_FOUNDATION_CLOSURE_REPORT.md` |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
+
+## Phase 1 PR5-F2A admin-read closeout (PR #29)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation authority. This closeout is post-authorization execution identity, not D-055. |
+| ChatGPT disposition | **ACCEPT PR5-F2A ADMIN READ BOUNDARY** |
+| PR #29 | **CLOSED / MERGED** |
+| Accepted base | `5129707ee684e66cadcf96b976e16eb57385a7cb` |
+| Accepted implementation head | `bfbe369f590e38f36de8165e366dd7e84449ecd7` |
+| Independent S01 verdict | `APPROVE PR5-F2A ADMIN READ S01 CORRECTION` |
+| Final findings | P0 0 / P1 0 / P2 0 (accepted nonblocking P3 residuals remain in immutable reviews) |
+| Squash merge / `origin/main` at F2A merge | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` |
+| Merge timestamp | `2026-08-20T11:04:26Z` |
+| Implementation-head exact-head PR CI | run `32263496048`, event `pull_request`, head `bfbe369f…`, **SUCCESS** |
+| Post-merge main CI | run `32362021387`, event `push`, head `f65ab4b…`, **SUCCESS** |
+| Classify job | `96403425899` SUCCESS |
+| Full Heavy validation | `96403462492` SUCCESS |
+| CI Gate job | `96415720267` SUCCESS |
+| Lane state | **ACCEPTED / MERGED** |
+| Closure report | `PR5_F2A_ADMIN_READ_CLOSURE_REPORT.md` |
+| R-163 (F2A sub-lane) | F2A admin-read scanner obligation **satisfied** on `app/lib/catalog-facts` (recursive discovery + semantic deny-by-default mutation rejection; independently verified; S01 closed) |
+| R-163 (live/global) | **OPEN** until F3 proves both scanner roots (`app/lib/catalog-facts/**` and `app/jobs/workers/catalog-facts/**`) |
+| Later downstream after this closeout | F2B (#31) **MERGED**. F2C (#30) **MERGED**. F3 runtime **NOT STARTED**. PR6 runtime **NOT AUTHORIZED**. |
+| Production | NOT AUTHORIZED |
+| Inventory-write flags | DEFAULT OFF |
+
+## Emergency Continuity Sprint (2026-09-01 control packet)
+
+| Field | Value |
+|---|---|
+| Durable record | `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` |
+| Incident | Stocky became unavailable after 31 August 2026 |
+| Upcoming operational target | Monday 7 September 2026 — originally recorded on 2026-09-01 as an **INTERNAL / CONTROLLED operational rescue**, not full public App Store parity by that date |
+| Current calendar (2026-09-05) | As of this addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01. It is not a completion claim and does **not** authorize F3 runtime. |
+| Product scope | Full **132-feature** scope **unchanged** |
+| Safety gates | **NOT relaxed** |
+| Delivery method | Accelerated Safe Delivery v1; **maximum four** independent Cursor lanes; one writer per branch |
+| This docs lane | Does **not** start or define F3 or other runtime lanes |
+| Inventory-write flags | **DEFAULT OFF** |
+| `FEATURE_PR5_ABSENCE_TOMBSTONE` | **DEFAULT OFF** |
+| Shopify | Remains authoritative |
+| Emergency write bridge | Shopify-native purchase orders / receiving / transfers / adjustments until equivalent app writes pass later safety gates |
+| Monday rescue priorities | Reliable inventory facts, replenishment, ABC/U, low-stock, editable quantities, Shopify-compatible ordering/export |
+| Full commercial launch | Subject to normal phase / release gates |
+| D-055 | **Not created** |
+| Production | NOT AUTHORIZED |
 
 ## Phase 1 PR 4 D-051 (historical correction closure)
 
@@ -165,9 +216,9 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-129 through R-160:** OPEN — PR 5 planning / implementation risks; foundation primitives do not close these risks
 **R-161:** OPEN — PR 5 lock-capacity / concurrency / deployment evidence still required; arithmetic evaluator alone does not close this risk
 **R-162:** OPEN — P3 PR5 lock-capacity evaluator direct-input safe-integer hardening (NEW-CLAUDE-PR5F1C-01). Do **not** reopen PR5-F1.
-**R-163:** OPEN globally — P3 PR5 canonical read-boundary mutation scanner / module discovery hardening (NEW-CLAUDE-PR5F1C-02). F3 must prove **both** production scanner roots (`app/lib/catalog-facts/**` and `app/jobs/workers/catalog-facts/**`). Do **not** inherit PR #33 “closed for F2A lane” wording as global closure. Do **not** reopen PR5-F1.
+**R-163:** OPEN globally — P3 PR5 canonical read-boundary mutation scanner / module discovery hardening (NEW-CLAUDE-PR5F1C-02). The PR5-F2A admin-read sub-lane satisfied **its own** scanner obligation (recursive discovery on `app/lib/catalog-facts` plus semantic deny-by-default mutation rejection; independently verified; S01 closed; post-merge CI `32362021387` SUCCESS). That lane-specific satisfaction is **not** global closure. F3 must prove **both** production scanner roots (`app/lib/catalog-facts/**` and `app/jobs/workers/catalog-facts/**`). Do **not** treat “closed for F2A lane” wording as global closure. Do **not** reopen PR5-F1.
 **R-164:** OPEN — P3 canonical fact physical-delete surface versus tombstone-only runtime contract (NEW-CLAUDE-PR5F1C-04). Mandatory applicator-lane gate. Do **not** close in this docs PR.
-**R-165:** OPEN on current `main` after F2C merge `f984169…` (legacy `available ?? 0` vs unknown canonical availability). Register text landed with F2C. Closure still requires F3 whole-path fencing. Do **not** close in this planning PR.
+**R-165:** OPEN on current `main` after F2C merge `f984169…` (legacy `available ?? 0` vs unknown canonical availability). Register text landed with F2C. Closure still requires F3 whole-path fencing. Do **not** close in this docs sync.
 **NEW-CLAUDE-PR5F1C-03:** P3 — **RESOLVED BY THIS DOCS CLOSEOUT** (stale live “D-054 conditional” parenthetical). No long-lived risk.
 **F-CLAUDE-PR4ACC-01:** P3 — **RESOLVED BY PR BODY UPDATE** before squash merge (not a runtime correction)
 **F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in PR 4)
@@ -183,7 +234,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** ChatGPT makes the **PR5-F3 planning merge decision** for PR #32. Do **not** start F3 runtime from this planning packet. Do **not** merge this PR from this packet. Do **not** edit or merge PR #33 / PR #34. Do **not** create D-055. PR6 **runtime** is not authorized. Authorized PR6 **planning / architecture / fixtures** one dependency level ahead remain allowed under Accelerated Safe Delivery v1 and must be marked speculative. Do **not** edit any immutable review report. The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`), `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` (blob `0d322db…`), `PR5_FOUNDATION_INDEPENDENT_REVIEW.md` (blob `7161c481…`), `PR5_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `4b735360…`), the F2A immutable reviews, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md` (blob `ebf2e87bf108bbd5eaa7d31a323842de13ae53ca`), the canonical F3 correction review `APPROVE PR5-F3 PLANNING CORRECTION` at source commit `96b3f1a9649ffb14a22f731fd79e271060e8c44d` blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864` (canonical Markdown path intentionally absent from the live tip because historical trailing whitespace fails `git diff --check`; lossless exact-byte archive `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64` reconstructs that blob so the evidence survives squash merge onto `main`), and `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` (blob `e14fc21efbe2cee874df6c1bd2e35647669c5445`) remain unmodified historical evidence.
+**Next action:** ChatGPT reviews synchronized PR [#33](https://github.com/Vedang1998/Stocky/pull/33) on exact current `main` `f1201f853b8a42f40e4d3e5565b6406410360c8a`. Do **not** start F3 runtime. Do **not** merge this PR from this packet. Do **not** mark this PR ready. Do **not** edit or merge PR #34. Do **not** create D-055. PR6 **runtime** is not authorized. Authorized PR6 **planning / architecture / fixtures** one dependency level ahead remain allowed under Accelerated Safe Delivery v1 and must be marked speculative. Do **not** edit any immutable review report. The immutable Claude reports `PR5_PLANNING_INDEPENDENT_REVIEW.md` (blob `f6e62fe…`), `PR5_PLANNING_CORRECTION_4_INDEPENDENT_REVIEW.md` (blob `e645c81…`), `PR5_PLANNING_CORRECTION_5_INDEPENDENT_REVIEW.md` (blob `c465b7d…`), `PR5_PLANNING_CORRECTION_7_INDEPENDENT_REVIEW.md` (blob `b1c4265…`), `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` (blob `0d322db…`), `PR5_FOUNDATION_INDEPENDENT_REVIEW.md` (blob `7161c481…`), `PR5_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `4b735360…`), the F2A immutable reviews, `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_INDEPENDENT_REVIEW.md` (blob `ebf2e87bf108bbd5eaa7d31a323842de13ae53ca`), the canonical F3 correction review `APPROVE PR5-F3 PLANNING CORRECTION` at source commit `96b3f1a9649ffb14a22f731fd79e271060e8c44d` blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864` (canonical Markdown path intentionally absent from the live tip because historical trailing whitespace fails `git diff --check`; lossless exact-byte archive `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64` reconstructs that blob so the evidence survives squash merge onto `main`), `PR5_F2C_CURRENT_MAIN_INDEPENDENT_REVIEW.md` (blob `e14fc21efbe2cee874df6c1bd2e35647669c5445`), and `PR5_F3_PLANNING_DURABILITY_INDEPENDENT_REVIEW.md` remain unmodified historical evidence. **F-CLAUDE-PR5F3DUR-01** remains a non-blocking P3.
 
 ## Current truth
 
@@ -205,14 +256,16 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**.
 - PR [#29](https://github.com/Vedang1998/Stocky/pull/29) (PR5-F2A) is **CLOSED / MERGED**. Squash merge `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` at `2026-08-20T11:04:26Z`. Post-merge main CI run `32362021387` **SUCCESS**. ChatGPT disposition recorded in the F2A report: **ACCEPT PR5-F2A ADMIN READ BOUNDARY**. Independent S01 verdict: `APPROVE PR5-F2A ADMIN READ S01 CORRECTION`. F2A is an ancestor of current `main`.
 - PR [#31](https://github.com/Vedang1998/Stocky/pull/31) (PR5-F2B) is **CLOSED / MERGED**. Squash merge `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` at `2026-09-02T10:32:09Z`. Post-merge main CI run `33619969867` **SUCCESS**. Independent correction verdict `APPROVE PR5-F2B CANONICAL APPLICATOR CORRECTION`; blob `b01569fd77455566438bcedbe869647beb24eda7`.
-- PR [#30](https://github.com/Vedang1998/Stocky/pull/30) (PR5-F2C) is **CLOSED / MERGED**. Squash merge / current `origin/main` `f9841691307583381695973600df3546dd1b9ee4` at `2026-09-03T23:16:51Z`. Post-merge main CI run `33816908539` **SUCCESS**. Isolated accepted implementation head `2d2e8801dd383a778c1237cec4ed068922859cf0`. Second-correction blob `d637a9ecf0f42c3ae62f87e0391abb0b80e2e2ad`. Current-main independent review `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` is on PR #32 (blob `e14fc21efbe2cee874df6c1bd2e35647669c5445`; never edit).
-- PR [#32](https://github.com/Vedang1998/Stocky/pull/32) (remaining-integration planning) is **OPEN / DRAFT / UNMERGED**. Independent correction verdict `APPROVE PR5-F3 PLANNING CORRECTION` (P0 0 / P1 0 / P2 0 / P3 2; 25/25 original findings corrected). Canonical correction review remains immutable at source commit `96b3f1a9649ffb14a22f731fd79e271060e8c44d`, blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864`. Direct canonical Markdown copy is intentionally absent from the live tip because historical trailing whitespace fails `git diff --check`. PR #32 instead contains the lossless exact-byte archive `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64` plus `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW_ARCHIVE_MANIFEST.md`, which reconstruct the canonical Git blob so the review evidence survives squash merge onto `main`. Early review blob `ebf2e87bf108bbd5eaa7d31a323842de13ae53ca`. One-F3-PR architecture **RETAINED**. F3 runtime is **not** authorized. Merge is **not** authorized by this packet.
-- PR [#33](https://github.com/Vedang1998/Stocky/pull/33) is **OPEN / DRAFT / UNMERGED** and overlaps control docs with PR #32. Do **not** merge or edit PR #33 from this packet. After PR #32 merges, PR #33 refreshes separately onto the resulting `main`.
+- PR [#30](https://github.com/Vedang1998/Stocky/pull/30) (PR5-F2C) is **CLOSED / MERGED**. Squash merge `f9841691307583381695973600df3546dd1b9ee4` at `2026-09-03T23:16:51Z`. Post-merge main CI run `33816908539` **SUCCESS**. Isolated accepted implementation head `2d2e8801dd383a778c1237cec4ed068922859cf0`. Second-correction blob `d637a9ecf0f42c3ae62f87e0391abb0b80e2e2ad`. Current-main independent review `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` (blob `e14fc21efbe2cee874df6c1bd2e35647669c5445`; never edit) landed via PR #32.
+- PR [#32](https://github.com/Vedang1998/Stocky/pull/32) (remaining-integration planning) is **CLOSED / MERGED**. Squash merge / current `origin/main` `f1201f853b8a42f40e4d3e5565b6406410360c8a` at `2026-09-05T13:01:09Z`. Post-merge main CI run [`33967677166`](https://github.com/Vedang1998/Stocky/actions/runs/33967677166) **SUCCESS**. Independent correction verdict `APPROVE PR5-F3 PLANNING CORRECTION` (P0 0 / P1 0 / P2 0 / P3 2; 25/25 original findings corrected). Canonical correction review remains immutable at source commit `96b3f1a9649ffb14a22f731fd79e271060e8c44d`, blob `00e8307e3aaf83b032fbcc1e2d0258beab47a864`. Direct canonical Markdown copy is intentionally absent from the live tip because historical trailing whitespace fails `git diff --check`. Main carries the lossless exact-byte archive `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW.EXACT_BYTES.base64` plus `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN_CORRECTION_INDEPENDENT_REVIEW_ARCHIVE_MANIFEST.md`. Early review blob `ebf2e87bf108bbd5eaa7d31a323842de13ae53ca`. One-F3-PR architecture **RETAINED**. **F-CLAUDE-PR5F3DUR-01** remains a non-blocking P3. F3 runtime is **not** authorized by the merged planning packet.
+- PR [#33](https://github.com/Vedang1998/Stocky/pull/33) is **OPEN / DRAFT / UNMERGED**. This branch is the Emergency Continuity Sprint control packet plus durable PR5-F2A closure identity, history-preserving-merged onto exact current `main` `f1201f853…`. ChatGPT review is required. Merge is **not** authorized by this packet. Do **not** mark ready.
 - PR [#34](https://github.com/Vedang1998/Stocky/pull/34) PR6 planning is independently accepted. Do **not** edit PR #34. PR6 **runtime** remains **NOT AUTHORIZED** until PR 5 is fully closed.
 - Remaining PR5 integration (JSONL ingest, two-phase checkpoint, webhook refetch, absence confirmation, inventory-state reconcile, projection triggering/recovery, merchant-visible health) is **NOT STARTED**.
 - Remaining-integration planning packet: `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md`. This is planning / fixtures only. It does **not** authorize F3 runtime.
-- Recommended remaining runtime lane: **one** PR5-F3 integration PR. Do **not** split JSONL from webhooks. One-F3-PR direction is retained. R-163 remains **globally OPEN** until F3 proves both scanner roots.
+- Recommended remaining runtime lane: **one** PR5-F3 integration PR. Do **not** split JSONL from webhooks. One-F3-PR direction is retained. JSONL bulk ingestion, authoritative webhook/refetch, absence nomination/reconcile, compatibility-projection integration, v1 legacy-authority fencing, two-root scanner, and health-state integration remain inside that one F3 merge boundary.
+- **R-163** remains **globally OPEN** until F3 proves both scanner roots. The F2A admin-read sub-lane satisfied its own scanner obligation; that is not global closure.
+- Emergency Continuity Sprint control packet: `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. Enduring operating principles survive. As of the 2026-09-05 current-state addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01; it is not a completion claim and does **not** authorize F3 runtime. Already-completed F2B/F2C/PR32 work is recorded from merged `main`. Still-future F3 runtime is not authorized here.
 - Production remains unauthorized. No deployment, backfill, ownership repair, or inventory mutation is authorized.
-- Every inventory-write flag remains **DEFAULT OFF**. Planned F3 absence-tombstone flag remains **DEFAULT OFF** and is not enabled here.
+- Every inventory-write flag remains **DEFAULT OFF**. Planned F3 absence-tombstone flag `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF** and is not enabled here.
 - Do **not** state that Phase 1 is complete, that PR 5 is complete, or that production is ready.
-- Do **not** create D-055. Do **not** start F3 runtime from this planning packet. PR6 **runtime** is not authorized. Authorized PR6 **planning** one dependency level ahead remains allowed under Accelerated Safe Delivery v1.
+- Do **not** create D-055. Do **not** start F3 runtime from this control-packet sync. PR6 **runtime** is not authorized. Authorized PR6 **planning** one dependency level ahead remains allowed under Accelerated Safe Delivery v1.
