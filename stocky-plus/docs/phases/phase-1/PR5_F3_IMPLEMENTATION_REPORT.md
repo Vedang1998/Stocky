@@ -377,7 +377,7 @@ evidence. Dispositions below are implementation-lane status only.
 | Carry-forward | Disposition |
 |---|---|
 | `F-CLAUDE-PR5F3EC-01` | Tested. Capacity uses `D * max(B, Σ canonical-writer concurrency)` and fails closed when unsafe |
-| `F-CLAUDE-PR5F3EC-02` | Reviewed as the paired planning capacity/lock finding; lock acquisition through Prisma CAST/CTE plus Race AW exhaustion abort. Not a planning-document rewrite |
+| `F-CLAUDE-PR5F3EC-02` | Tested. Count tokens must match `^[0-9]+$` before exact string comparison; omitted/malformed/non-conforming tokens fail closed as omitted counts. Evidence: ingest/counts.ts, counts.test.ts, and JSONL completeness/checkpoint fixtures |
 | `NEW-CLAUDE-F2CCM-01` | Tested. Two non-overlapping LIVE confirmations; retry budget allows two full observation cycles before terminal Product exhaustion |
 | `F-CLAUDE-PR5F3DUR-01` | Non-blocking planning-evidence discoverability. Immutable review not edited |
 
