@@ -18,6 +18,7 @@
 **Emergency Continuity Sprint:** CONTROL PACKET MERGED via PR #33 as squash `28c810090394f319e599fc6c501b898befa39cad`; that packet did not authorize F3 runtime, but ChatGPT separately and expressly authorized F3 on 2026-09-05 under existing D-054 EFFECTIVE
 **D-054:** EFFECTIVE
 **F3 authorization date:** 2026-09-05 — existing **D-054 EFFECTIVE**; **no D-055**
+**PR5-F3 pull request:** [#35](https://github.com/Vedang1998/Stocky/pull/35) — OPEN / DRAFT / UNMERGED; branch `cursor/pr5-f3-remaining-integration-6d09`; exact base `28c810090394f319e599fc6c501b898befa39cad`
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 
