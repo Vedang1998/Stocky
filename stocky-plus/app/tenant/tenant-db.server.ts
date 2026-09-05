@@ -28,10 +28,12 @@ import {
   MERCHANT_DELEGATE_NAMES,
   MERCHANT_MODEL_SET,
   PARENT_OWNERSHIP_RULES,
+  type DirectMerchantModel,
   type MerchantOwnedModel,
 } from "./models";
 import {
   createTenantScopeMemo,
+  DIRECT_NO_LEGACY_SHOP,
   mergeWhere,
   nestedBulkScalarScopeWhereAsync,
   rowOwnershipOk,
@@ -199,7 +201,12 @@ function injectOwnership(
   const next: Record<string, unknown> = { ...data };
   if (DIRECT_MODEL_SET.has(model)) {
     next.shopId = authority.shopId;
-    next.shop = authority.myshopifyDomain;
+    // PR5 canonical / receipt models have a Shop relation named `shop`, not a
+    // legacy domain string. Injecting myshopifyDomain here makes Prisma pick
+    // the relation create input and reject `shopId` (SQLSTATE N/A).
+    if (!DIRECT_NO_LEGACY_SHOP.has(model as DirectMerchantModel)) {
+      next.shop = authority.myshopifyDomain;
+    }
   } else if (CHILD_MODEL_SET.has(model)) {
     next.shopId = authority.shopId;
   }
