@@ -14,7 +14,7 @@ This is the durable Emergency Continuity Sprint control packet for the Stocky su
 Readers must separate:
 
 - **enduring emergency operating principles** (safety gates, Shopify authority, inventory-write flags DEFAULT OFF, maximum four lanes, exact-head CI, independent review);
-- **historical targets/deadlines** recorded on 2026-09-01 (Monday 7 September 2026 internal/controlled rescue);
+- **upcoming operational target** originally recorded on 2026-09-01 (as of the 2026-09-05 current-state addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target; it is not a completion claim and does not authorize F3 runtime);
 - **already-completed prerequisites** now on `main` (F2A, F2B, F2C, PR #32 remaining-integration planning);
 - **still-future work** (F3 runtime, PR6 runtime, production, inventory writes).
 
@@ -220,6 +220,7 @@ This addendum updates live current-state after later merges. It does **not** rew
 | That SHA | PR [#32](https://github.com/Vedang1998/Stocky/pull/32) remaining-integration planning squash merge |
 | PR #32 merge timestamp | `2026-09-05T13:01:09Z` |
 | Post-merge PR #32 CI | run [`33967677166`](https://github.com/Vedang1998/Stocky/actions/runs/33967677166) SUCCESS |
+| Monday 7 September 2026 | Remains the **upcoming** INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01. Not a completion claim. Does **not** authorize F3 runtime. |
 | PR5-F2A | **MERGED** (historical squash `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7`) |
 | PR5-F2B | **MERGED** (squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`; post-merge CI `33619969867` SUCCESS) |
 | PR5-F2C | **MERGED** (squash `f9841691307583381695973600df3546dd1b9ee4`; post-merge CI `33816908539` SUCCESS) |

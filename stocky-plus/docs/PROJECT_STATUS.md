@@ -15,7 +15,7 @@
 **PR 5 implementation-entry:** ACCEPTED AND MERGED (D-054 / PR #26)
 **PR 5 implementation:** STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F2A ADMIN READ ACCEPTED / MERGED; PR5-F2B CANONICAL APPLICATOR ACCEPTED / MERGED; PR5-F2C COMPATIBILITY PROJECTION ACCEPTED / MERGED; F3 RUNTIME NOT STARTED
 **PR 5 remaining-integration planning:** MERGED — PR [#32](https://github.com/Vedang1998/Stocky/pull/32) squash `f1201f853b8a42f40e4d3e5565b6406410360c8a`; post-merge CI run `33967677166` SUCCESS; planning / fixtures only; independent correction review `APPROVE PR5-F3 PLANNING CORRECTION`; F3 runtime **NOT AUTHORIZED**
-**Emergency Continuity Sprint:** CONTROL PACKET RECORDED — INTERNAL / CONTROLLED rescue framing after Stocky sunset; Monday 7 September 2026 is a historical calendar target, not a completion claim; this docs sync does **not** start F3 runtime
+**Emergency Continuity Sprint:** CONTROL PACKET RECORDED — INTERNAL / CONTROLLED rescue framing after Stocky sunset; as of the 2026-09-05 current-state addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01; it is not a completion claim and does **not** authorize F3 runtime
 **D-054:** EFFECTIVE
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -162,8 +162,8 @@ D-054 is **EFFECTIVE**. PR 5 runtime implementation remains authorized under D-0
 |---|---|
 | Durable record | `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` |
 | Incident | Stocky became unavailable after 31 August 2026 |
-| Historical operational target | Monday 7 September 2026 — recorded as an **INTERNAL / CONTROLLED operational rescue**, not full public App Store parity by that date |
-| Current calendar (2026-09-05) | The Monday target remains a historical calendar framing. This control-packet sync does **not** claim that rescue work completed, and it does **not** authorize F3 runtime. |
+| Upcoming operational target | Monday 7 September 2026 — originally recorded on 2026-09-01 as an **INTERNAL / CONTROLLED operational rescue**, not full public App Store parity by that date |
+| Current calendar (2026-09-05) | As of this addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01. It is not a completion claim and does **not** authorize F3 runtime. |
 | Product scope | Full **132-feature** scope **unchanged** |
 | Safety gates | **NOT relaxed** |
 | Delivery method | Accelerated Safe Delivery v1; **maximum four** independent Cursor lanes; one writer per branch |
@@ -264,7 +264,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Remaining-integration planning packet: `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md`. This is planning / fixtures only. It does **not** authorize F3 runtime.
 - Recommended remaining runtime lane: **one** PR5-F3 integration PR. Do **not** split JSONL from webhooks. One-F3-PR direction is retained. JSONL bulk ingestion, authoritative webhook/refetch, absence nomination/reconcile, compatibility-projection integration, v1 legacy-authority fencing, two-root scanner, and health-state integration remain inside that one F3 merge boundary.
 - **R-163** remains **globally OPEN** until F3 proves both scanner roots. The F2A admin-read sub-lane satisfied its own scanner obligation; that is not global closure.
-- Emergency Continuity Sprint control packet: `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. Enduring operating principles survive. Historical Monday 7 September 2026 targets remain historical. Already-completed F2B/F2C/PR32 work is recorded from merged `main`. Still-future F3 runtime is not authorized here.
+- Emergency Continuity Sprint control packet: `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. Enduring operating principles survive. As of the 2026-09-05 current-state addendum, Monday 7 September 2026 remains the upcoming INTERNAL / CONTROLLED operational target originally recorded on 2026-09-01; it is not a completion claim and does **not** authorize F3 runtime. Already-completed F2B/F2C/PR32 work is recorded from merged `main`. Still-future F3 runtime is not authorized here.
 - Production remains unauthorized. No deployment, backfill, ownership repair, or inventory mutation is authorized.
 - Every inventory-write flag remains **DEFAULT OFF**. Planned F3 absence-tombstone flag `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF** and is not enabled here.
 - Do **not** state that Phase 1 is complete, that PR 5 is complete, or that production is ready.
