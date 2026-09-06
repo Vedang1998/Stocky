@@ -38,6 +38,7 @@ It does **not** authorize PR6 runtime, production, merchant production data, dep
 | Accepted residual backlog | `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` |
 | Immutable F3 exact-head review | `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit; blob `8d6d47a204d7976339c0023b6b28249f20a337a7`) |
 | Immutable PR #36 closeout review | `PR5_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (never edit; blob `49dc7915ebb0bf99eaca5deb0fbdfebb38c35c54`) |
+| Immutable PR #36 closeout correction re-review | `PR5_FORMAL_CLOSEOUT_CORRECTION_INDEPENDENT_REVIEW.md` (never edit; blob `678980e8254f22cc2c287fca0314566895071d5b`) |
 
 ## Implementation lineage
 

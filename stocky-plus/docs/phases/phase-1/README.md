@@ -263,6 +263,7 @@
 43k. `PR5_F3_IMPLEMENTATION_REPORT.md` — PR5-F3 remaining-integration implementation evidence
 43l. `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable exact-head review `APPROVE PR5-F3 EXACT-HEAD IMPLEMENTATION` (blob `8d6d47a204d7976339c0023b6b28249f20a337a7`; never edit)
 43l1. `PR5_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` — immutable PR #36 closeout docs/governance review `CORRECTIONS REQUIRED` (blob `49dc7915ebb0bf99eaca5deb0fbdfebb38c35c54`; never edit)
+43l2. `PR5_FORMAL_CLOSEOUT_CORRECTION_INDEPENDENT_REVIEW.md` — immutable PR #36 closeout correction re-review `CORRECTIONS REQUIRED` (blob `678980e8254f22cc2c287fca0314566895071d5b`; never edit)
 43m. `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure (effective upon merge of this closeout PR)
 43n. `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements F3XH-06 and F3XH-08
 44. `PR5_PLANNING_INDEPENDENT_REVIEW.md` — immutable (blob `f6e62fe…`)
@@ -391,6 +392,7 @@
 - PR5 closure: `PR5_CLOSURE_REPORT.md`
 - PR5-F3 exact-head review: `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit)
 - PR5 formal-closeout independent review: `PR5_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (never edit)
+- PR5 formal-closeout correction re-review: `PR5_FORMAL_CLOSEOUT_CORRECTION_INDEPENDENT_REVIEW.md` (never edit)
 - PR5-F3 accepted residuals: `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
