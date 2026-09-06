@@ -46,6 +46,8 @@ const ALL_MIGRATION_NAMES = [
   "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
   "20260812230000_sync_control_plane_d051_readiness_lock_scope",
   "20260816193000_pr5_catalog_fact_foundation",
+  "20260905173000_pr5_f3_projection_pending_enum",
+  "20260905173500_pr5_f3_remaining_integration",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
@@ -280,10 +282,27 @@ async function applyCompatibilityIndexes() {
  * there as a migration (empty dirs cause P3015).
  *
  * Every migration after init must be parked for the init-only pass; otherwise
- * later additive migrations (e.g. sync control plane ALTER TABLE "Shop") run
- * before tenant_expansion creates Shop.
+ * later additive migrations (e.g. sync control plane ALTER TABLE "Shop", or
+ * PR5-F3 enum ALTER TYPE) run before their prerequisite objects exist.
+ *
+ * Fail closed if `ALL_MIGRATION_NAMES` drifts from on-disk folders: an unlisted
+ * later migration would otherwise remain during the init-only pass.
  */
+function assertMigrationAllowlistMatchesDisk(): void {
+  const onDisk = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
+  const expected = [...ALL_MIGRATION_NAMES].sort();
+  if (onDisk.join("\0") !== expected.join("\0")) {
+    throw new Error(
+      `ALL_MIGRATION_NAMES drifted from prisma/migrations. on-disk=[${onDisk.join(", ")}] expected=[${expected.join(", ")}]`,
+    );
+  }
+}
+
 function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
+  assertMigrationAllowlistMatchesDisk();
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
   mkdirSync(parked, { recursive: true });
   const parkedPaths = AFTER_INIT_MIGRATION_NAMES.map((name) => ({
@@ -342,6 +361,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(out).toContain("20260730160000_tenant_expansion");
     expect(out).toContain("20260730160100_tenant_compatibility_indexes");
     expect(out).toContain("20260730210000_tenant_backfill_correction");
+    expect(out).toContain("20260905173000_pr5_f3_projection_pending_enum");
+    expect(out).toContain("20260905173500_pr5_f3_remaining_integration");
   }, 120_000);
 
   it("applies new migrations on top of current-main init schema", async () => {
@@ -362,7 +383,11 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       "20260804220000_sync_control_plane_correction_defaults",
     );
     expect(initOut).not.toContain("20260816193000_pr5_catalog_fact_foundation");
+    expect(initOut).not.toContain("20260905173000_pr5_f3_projection_pending_enum");
+    expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
     expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
+    expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
+    expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
@@ -382,6 +407,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260811190000_sync_control_plane_d050_split_claim_statement_triggers",
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
         "20260816193000_pr5_catalog_fact_foundation",
+        "20260905173000_pr5_f3_projection_pending_enum",
+        "20260905173500_pr5_f3_remaining_integration",
         "migration_lock.toml",
       ]),
     );
@@ -427,6 +454,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
       );
       expect(initOut).not.toContain("20260816193000_pr5_catalog_fact_foundation");
+      expect(initOut).not.toContain("20260905173000_pr5_f3_projection_pending_enum");
+      expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -458,6 +487,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
       );
       expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
+      expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
+      expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -513,6 +544,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260812230000_sync_control_plane_d051_readiness_lock_scope",
       );
       expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
+      expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
+      expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 

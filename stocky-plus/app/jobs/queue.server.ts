@@ -7,6 +7,11 @@ import type { TenantJobEnvelopeV1 } from "../tenant/job-envelope.server";
 import type { TenantJobEnvelopeV2 } from "../sync/envelope-v2.server";
 import { TenantAuthorityError } from "../tenant/errors";
 import { createDurableJob } from "../sync/intake.server";
+import { getControlPlanePrisma } from "../sync/control-plane-db.server";
+import {
+  CRON_WORKER_CONCURRENCY,
+  WEBHOOK_WORKER_CONCURRENCY,
+} from "./worker-concurrency";
 
 async function kickDispatcher(batchSize = 5): Promise<void> {
   // Dynamic import avoids circular dependency with dispatcher → queue.
@@ -18,9 +23,7 @@ async function kickDispatcher(batchSize = 5): Promise<void> {
  * Require an explicitly configured Redis URL (F-PR4-19).
  * Never fall back to a redaction placeholder or unexpected host.
  */
-export function requireRedisUrl(
-  env: NodeJS.ProcessEnv = process.env,
-): string {
+export function requireRedisUrl(env: NodeJS.ProcessEnv = process.env): string {
   const raw = env.REDIS_URL;
   if (raw == null || raw.trim() === "") {
     throw new Error(
@@ -66,6 +69,7 @@ function getConnection(): IORedis {
 
 export const WEBHOOK_QUEUE = "stocky-webhooks";
 export const CRON_QUEUE = "stocky-cron";
+export const INVENTORY_RECONCILE_MIN_ENQUEUE_INTERVAL_MS = 15 * 60 * 1000;
 
 export type WebhookJobData = {
   topic: string;
@@ -73,7 +77,10 @@ export type WebhookJobData = {
   payloadShop: string;
   payload: Record<string, unknown>;
   /** v3 preferred; v2 accepted only for in-flight pre-cutover jobs. */
-  tenant: TenantJobEnvelopeV1 | TenantJobEnvelopeV2 | import("../sync/envelope-v3.server").TenantJobEnvelopeV3;
+  tenant:
+    | TenantJobEnvelopeV1
+    | TenantJobEnvelopeV2
+    | import("../sync/envelope-v3.server").TenantJobEnvelopeV3;
   durableJobId?: string;
   dispatchId?: string;
   dispatchSequence?: number;
@@ -186,11 +193,12 @@ export async function enqueueCatalogSync(tenant: TenantAuthority) {
     jobType: "catalog-sync",
     source: "catalog_sync",
     queueName: CRON_QUEUE,
-    payloadSchemaVersion: "catalog-sync-v1",
+    payloadSchemaVersion: "catalog-facts-v1",
     sanitizedPayload: { shopId: auth.shopId },
     idempotencyKey: `catalog-sync:${auth.shopId}:${auth.correlationId}`,
     correlationId: auth.correlationId,
     causationId: auth.causationId,
+    maxAttempts: 125,
   });
   await kickDispatcher();
 }
@@ -203,13 +211,62 @@ export async function enqueueAfterAuthCatalogSync(tenant: TenantAuthority) {
     jobType: "catalog-sync",
     source: "after_auth_catalog_sync",
     queueName: CRON_QUEUE,
-    payloadSchemaVersion: "catalog-sync-v1",
+    payloadSchemaVersion: "catalog-facts-v1",
     sanitizedPayload: { shopId: auth.shopId, reason: "after_auth" },
     idempotencyKey: `after-auth-catalog-sync:${auth.shopId}:${auth.correlationId}`,
     correlationId: auth.correlationId,
     causationId: auth.causationId,
+    maxAttempts: 125,
   });
   await kickDispatcher();
+}
+
+export async function enqueueInventoryStateReconcile(
+  tenant: TenantAuthority,
+): Promise<{ enqueued: boolean; reason?: string }> {
+  const auth = requireAuthority(tenant, "enqueueInventoryStateReconcile");
+  const prisma = getControlPlanePrisma();
+  const webhookBacklog = await prisma.durableJob.count({
+    where: {
+      shopId: auth.shopId,
+      jobType: { startsWith: "webhook:" },
+      NOT: { jobType: "webhook:bulk_operations/finish" },
+      state: { in: ["PENDING", "RETRY_WAIT", "DISPATCH_LEASED"] },
+    },
+  });
+  if (webhookBacklog > 0) {
+    return { enqueued: false, reason: "webhook_backlog_preferred" };
+  }
+  const existing = await prisma.durableJob.findFirst({
+    where: {
+      shopId: auth.shopId,
+      jobType: "inventory-state-reconcile",
+      state: {
+        in: ["PENDING", "RETRY_WAIT", "DISPATCH_LEASED", "ENQUEUED", "RUNNING"],
+      },
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { enqueued: false, reason: "already_pending" };
+  }
+  const bucket = Math.floor(
+    Date.now() / INVENTORY_RECONCILE_MIN_ENQUEUE_INTERVAL_MS,
+  );
+  await createDurableJob({
+    shopId: auth.shopId,
+    jobType: "inventory-state-reconcile",
+    source: "inventory_state_reconcile",
+    queueName: CRON_QUEUE,
+    payloadSchemaVersion: "inventory-state-reconcile-v1",
+    sanitizedPayload: { shopId: auth.shopId, scheduleBucket: bucket },
+    idempotencyKey: `inventory-state-reconcile:${auth.shopId}:${bucket}`,
+    correlationId: auth.correlationId,
+    causationId: auth.causationId,
+    maxAttempts: 125,
+  });
+  await kickDispatcher();
+  return { enqueued: true };
 }
 
 export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
@@ -233,14 +290,14 @@ export function createWebhookWorker(
 ) {
   return new Worker<WebhookJobData>(WEBHOOK_QUEUE, processor, {
     connection: getConnection(),
-    concurrency: 5,
+    concurrency: WEBHOOK_WORKER_CONCURRENCY,
   });
 }
 
 export function createCronWorker(processor: (job: Job) => Promise<void>) {
   return new Worker(CRON_QUEUE, processor, {
     connection: getConnection(),
-    concurrency: 1,
+    concurrency: CRON_WORKER_CONCURRENCY,
   });
 }
 

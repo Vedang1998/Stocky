@@ -16,7 +16,64 @@ export type ComputeSyncHealthResult = {
   detailSummary: string | null;
 };
 
-function jobDomainFilter(syncDomain: string): { startsWith?: string; equals?: string } {
+export type CatalogHealthEvidence = {
+  incompleteIngestionCount: number;
+  unknownAuthoritativeQuantityCount: number;
+  projectionPendingCount: number;
+  projectionFailedCount: number;
+  absenceUncertaintyCount: number;
+  reconcileUncertaintyCount: number;
+};
+
+function catalogEvidenceDetail(
+  evidence: CatalogHealthEvidence | undefined,
+): { code: string; summary: string } | null {
+  if (!evidence) return null;
+  const ordered: Array<[number, string, string]> = [
+    [
+      evidence.incompleteIngestionCount,
+      "catalog_ingestion_incomplete",
+      "Catalog ingestion is incomplete",
+    ],
+    [
+      evidence.unknownAuthoritativeQuantityCount,
+      "authoritative_quantity_unknown",
+      "Required Shopify authoritative quantity is unknown",
+    ],
+    [
+      evidence.projectionFailedCount,
+      "compatibility_projection_failed",
+      "Compatibility projection failed",
+    ],
+    [
+      evidence.projectionPendingCount,
+      "compatibility_projection_pending",
+      "Compatibility projection has not completed",
+    ],
+    [
+      evidence.absenceUncertaintyCount,
+      "absence_reconciliation_uncertain",
+      "Catalog absence reconciliation is incomplete or held",
+    ],
+    [
+      evidence.reconcileUncertaintyCount,
+      "catalog_reconcile_uncertain",
+      "Catalog reconciliation has unresolved diagnostic evidence",
+    ],
+  ];
+  const match = ordered.find(([count]) => count > 0);
+  return match
+    ? {
+        code: match[1],
+        summary: `${match[2]} (${match[0]} affected facts)`,
+      }
+    : null;
+}
+
+function jobDomainFilter(syncDomain: string): {
+  startsWith?: string;
+  equals?: string;
+} {
   // Domains map to jobType prefixes: webhook:orders/*, catalog, inventory, etc.
   if (syncDomain === "webhooks") {
     return { startsWith: "webhook:" };
@@ -30,6 +87,7 @@ function jobDomainFilter(syncDomain: string): { startsWith?: string; equals?: st
 export async function computeSyncHealth(
   shopId: string,
   syncDomain: string,
+  options?: { catalogEvidence?: CatalogHealthEvidence },
 ): Promise<ComputeSyncHealthResult> {
   const prisma = getControlPlanePrisma();
   const shop = await prisma.shop.findUnique({
@@ -132,6 +190,9 @@ export async function computeSyncHealth(
             ? `Job ${retryJob.id} in RETRY_WAIT`
             : `Open partial-failure SyncRun ${partialRun!.id}`;
         } else {
+          const evidenceDetail = catalogEvidenceDetail(
+            options?.catalogEvidence,
+          );
           const latestRun = await prisma.syncRun.findFirst({
             where: { shopId, syncDomain },
             orderBy: { createdAt: "desc" },
@@ -141,15 +202,20 @@ export async function computeSyncHealth(
             orderBy: { createdAt: "desc" },
           });
 
-          if (
+          if (evidenceDetail) {
+            state = "DEGRADED";
+            detailCode = evidenceDetail.code;
+            detailSummary = evidenceDetail.summary;
+          } else if (
             latestRun?.status === "SUCCEEDED" ||
             latestJob?.state === "SUCCEEDED"
           ) {
             state = "HEALTHY";
             detailCode = "latest_succeeded";
-            detailSummary = latestRun?.status === "SUCCEEDED"
-              ? `SyncRun ${latestRun.id} succeeded`
-              : `Job ${latestJob!.id} succeeded`;
+            detailSummary =
+              latestRun?.status === "SUCCEEDED"
+                ? `SyncRun ${latestRun.id} succeeded`
+                : `Job ${latestJob!.id} succeeded`;
           } else if (!latestRun && !latestJob) {
             state = "NEVER_STARTED";
             detailCode = "no_history";

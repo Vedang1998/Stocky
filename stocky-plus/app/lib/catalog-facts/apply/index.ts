@@ -82,6 +82,7 @@ import {
   inventoryLevelAttributesEqual,
   locationAttributesEqual,
   lockAndReadFact,
+  markCompatibilityProjectionPending,
   productAttributesEqual,
   updateDiagnostic,
   updateExistence,
@@ -107,7 +108,10 @@ export function denyCanonicalFactPhysicalDelete(): never {
   throw new CanonicalApplyPhysicalDeleteError();
 }
 
-function compareObservations(a: CanonicalObservation, b: CanonicalObservation): number {
+function compareObservations(
+  a: CanonicalObservation,
+  b: CanonicalObservation,
+): number {
   const aGen =
     a.observationKind === "full_sync"
       ? a.fenceGeneration
@@ -120,22 +124,34 @@ function compareObservations(a: CanonicalObservation, b: CanonicalObservation): 
     return aGen < bGen ? -1 : 1;
   }
   const aToken =
-    a.observationKind === "direct" ? a.observationToken : `full_sync:${a.epochId}`;
+    a.observationKind === "direct"
+      ? a.observationToken
+      : `full_sync:${a.epochId}`;
   const bToken =
-    b.observationKind === "direct" ? b.observationToken : `full_sync:${b.epochId}`;
+    b.observationKind === "direct"
+      ? b.observationToken
+      : `full_sync:${b.epochId}`;
   return aToken < bToken ? -1 : aToken > bToken ? 1 : 0;
 }
 
 function validateObservation(observation: CanonicalObservation): void {
-  if (observation.identity.shopId == null || observation.identity.shopId === "") {
-    throw new CanonicalApplyError("canonical_apply_identity_invalid", "shopId is required");
+  if (
+    observation.identity.shopId == null ||
+    observation.identity.shopId === ""
+  ) {
+    throw new CanonicalApplyError(
+      "canonical_apply_identity_invalid",
+      "shopId is required",
+    );
   }
   if (
     observation.existenceKind !== "LIVE_REFETCH" &&
     observation.existenceKind !== "LIVE_FULL_SYNC_PRESENT" &&
     observation.existenceKind !== "ABSENT_CONFIRMED_QUERY"
   ) {
-    throw new CanonicalApplyExistenceKindError(String(observation.existenceKind));
+    throw new CanonicalApplyExistenceKindError(
+      String(observation.existenceKind),
+    );
   }
   if (
     observation.observationKind === "full_sync" &&
@@ -147,7 +163,9 @@ function validateObservation(observation: CanonicalObservation): void {
     if (!observation.observationToken) {
       throw new CanonicalApplyMissingTokenError();
     }
-    if (observation.observationRequestGen >= observation.observationResponseGen) {
+    if (
+      observation.observationRequestGen >= observation.observationResponseGen
+    ) {
       throw new CanonicalApplyError(
         "canonical_apply_interval_invalid",
         "direct observationRequestGen must be < observationResponseGen",
@@ -156,8 +174,13 @@ function validateObservation(observation: CanonicalObservation): void {
   }
 }
 
-async function requireTenant(db: CanonicalApplyDb, shopId: string): Promise<void> {
-  const rows = await queryRows<{ shop_id: string | null }>(db)`SELECT NULLIF(current_setting('stocky.current_shop_id', true), '') AS shop_id`;
+async function requireTenant(
+  db: CanonicalApplyDb,
+  shopId: string,
+): Promise<void> {
+  const rows = await queryRows<{ shop_id: string | null }>(
+    db,
+  )`SELECT NULLIF(current_setting('stocky.current_shop_id', true), '') AS shop_id`;
   const current = rows[0]?.shop_id ?? null;
   if (!current || current !== shopId) {
     throw new CanonicalApplyError(
@@ -167,7 +190,9 @@ async function requireTenant(db: CanonicalApplyDb, shopId: string): Promise<void
   }
 }
 
-async function readCapacitySettings(db: CanonicalApplyDb): Promise<LockCapacitySettings> {
+async function readCapacitySettings(
+  db: CanonicalApplyDb,
+): Promise<LockCapacitySettings> {
   const rows = await queryRows<{
     max_locks_per_transaction: string;
     max_connections: string;
@@ -220,7 +245,9 @@ async function acquireOrderedLocks(
     identity,
     key: deriveCanonicalLockKey(identity),
   }));
-  const ordered = orderCanonicalLockKeysForAcquisition(keys.map((item) => item.key));
+  const ordered = orderCanonicalLockKeysForAcquisition(
+    keys.map((item) => item.key),
+  );
   const seen = new Set<string>();
   for (const key of ordered) {
     const match = keys.find(
@@ -234,9 +261,12 @@ async function acquireOrderedLocks(
   }
 }
 
-function storedIntervalFromFact(fact: FactSnapshot | null): GenerationInterval | null {
+function storedIntervalFromFact(
+  fact: FactSnapshot | null,
+): GenerationInterval | null {
   if (!fact) return null;
-  if (fact.attributeRequestGen == null || fact.attributeResponseGen == null) return null;
+  if (fact.attributeRequestGen == null || fact.attributeResponseGen == null)
+    return null;
   return {
     requestGen: fact.attributeRequestGen,
     responseGen: fact.attributeResponseGen,
@@ -248,7 +278,11 @@ async function rejectUsableObservation(
   observation: CanonicalObservation,
   abandoned: string[],
   failure: { error: CanonicalApplyError; diagnostic: string },
-  extras?: { factId: string | null; existenceMutated: boolean; fact?: FactSnapshot | null },
+  extras?: {
+    factId: string | null;
+    existenceMutated: boolean;
+    fact?: FactSnapshot | null;
+  },
 ): Promise<{
   result: CanonicalApplyObservationResult;
   abandoned: string[];
@@ -262,7 +296,15 @@ async function rejectUsableObservation(
       observation.identity,
       extras.factId,
       "DEGRADED",
-      preserveRevivalDiagnostic(extras.fact.existenceDiagnosticState, failure.diagnostic),
+      preserveRevivalDiagnostic(
+        extras.fact.existenceDiagnosticState,
+        failure.diagnostic,
+      ),
+    );
+    await markCompatibilityProjectionPending(
+      db,
+      observation.identity,
+      extras.factId,
     );
   }
   await completeObservation(
@@ -300,7 +342,10 @@ async function persistClockNoop(
   db: CanonicalApplyDb,
   identity: CanonicalFactIdentity,
   fact: FactSnapshot,
-  decision: { freshness: "ORDERED" | "DEGRADED" | null; diagnostic: string | null },
+  decision: {
+    freshness: "ORDERED" | "DEGRADED" | null;
+    diagnostic: string | null;
+  },
 ): Promise<void> {
   if (!decision.freshness && !decision.diagnostic) return;
   await updateFreshnessAndDiagnostic(
@@ -308,7 +353,10 @@ async function persistClockNoop(
     identity,
     fact.id,
     decision.freshness ?? "DEGRADED",
-    preserveRevivalDiagnostic(fact.existenceDiagnosticState, decision.diagnostic),
+    preserveRevivalDiagnostic(
+      fact.existenceDiagnosticState,
+      decision.diagnostic,
+    ),
   );
 }
 
@@ -420,7 +468,11 @@ async function applyAttributes(
   }
   if (identity.resourceKind === "InventoryLevel") {
     const attrs = observation.attributes as InventoryLevelAttributes;
-    if (!inventoryLevelHasResourceAttributes(attrs as unknown as Record<string, unknown>)) {
+    if (
+      !inventoryLevelHasResourceAttributes(
+        attrs as unknown as Record<string, unknown>,
+      )
+    ) {
       return { applied: false, diagnostic: null };
     }
     const decision = decideAttributeClock({
@@ -516,7 +568,9 @@ async function applyOneObservation(
           fullSyncAttributeMarker(observation),
         );
   const token =
-    observation.observationKind === "direct" ? observation.observationToken : null;
+    observation.observationKind === "direct"
+      ? observation.observationToken
+      : null;
   const abandoned: string[] = [];
 
   // Frozen order: tenant/RLS (caller) → advisory (batch) → canonical row →
@@ -576,11 +630,21 @@ async function applyOneObservation(
 
   const expiredBlockers =
     observation.observationKind === "direct" && directInterval
-      ? await loadExpiredActiveResultlessBlockers(db, identity.shopId, identity, {
-          currentToken: token,
-          maxRequestGen: directInterval.requestGen,
-        })
-      : await loadExpiredActiveResultlessBlockers(db, identity.shopId, identity, {});
+      ? await loadExpiredActiveResultlessBlockers(
+          db,
+          identity.shopId,
+          identity,
+          {
+            currentToken: token,
+            maxRequestGen: directInterval.requestGen,
+          },
+        )
+      : await loadExpiredActiveResultlessBlockers(
+          db,
+          identity.shopId,
+          identity,
+          {},
+        );
   const blockers =
     observation.observationKind === "direct" && directInterval
       ? await loadActiveUnexpiredBlockers(
@@ -590,7 +654,11 @@ async function applyOneObservation(
           token,
           directInterval,
         )
-      : await loadActiveUnexpiredBlockersForFullSync(db, identity.shopId, identity);
+      : await loadActiveUnexpiredBlockersForFullSync(
+          db,
+          identity.shopId,
+          identity,
+        );
   const overlappingCompleted =
     observation.observationKind === "direct" && directInterval
       ? await loadCompletedOverlappingIntervals(
@@ -649,7 +717,11 @@ async function applyOneObservation(
 
   if (reliesOnExpiry) {
     abandoned.push(
-      ...(await abandonExpiredResultlessRows(db, identity.shopId, expiredBlockers)),
+      ...(await abandonExpiredResultlessRows(
+        db,
+        identity.shopId,
+        expiredBlockers,
+      )),
     );
     const blockersAfter =
       observation.observationKind === "direct" && directInterval
@@ -660,7 +732,11 @@ async function applyOneObservation(
             token,
             directInterval,
           )
-        : await loadActiveUnexpiredBlockersForFullSync(db, identity.shopId, identity);
+        : await loadActiveUnexpiredBlockersForFullSync(
+            db,
+            identity.shopId,
+            identity,
+          );
     existenceBlocked = blockersAfter.length > 0;
     existenceDecision = decideWithBlock(existenceBlocked);
   } else {
@@ -677,7 +753,9 @@ async function applyOneObservation(
       state: existenceDecision.nextState,
       kind: existenceDecision.nextKind,
       interval:
-        observation.existenceKind === "LIVE_FULL_SYNC_PRESENT" ? null : directInterval,
+        observation.existenceKind === "LIVE_FULL_SYNC_PRESENT"
+          ? null
+          : directInterval,
       observedAt: observation.existenceObservedAt,
       diagnostic,
       deletionSource: existenceDecision.deletionSource,
@@ -691,13 +769,20 @@ async function applyOneObservation(
         }
         const firstLiveQty = validateObservationQuantityColumns(observation);
         if (!firstLiveQty.ok) {
-          return rejectUsableObservation(db, observation, abandoned, firstLiveQty);
+          return rejectUsableObservation(
+            db,
+            observation,
+            abandoned,
+            firstLiveQty,
+          );
         }
       }
       const freshness =
         observation.shopifyUpdatedAt == null ? "DEGRADED" : "ORDERED";
       const presence =
-        observation.observationKind === "full_sync" ? observation.epochId : null;
+        observation.observationKind === "full_sync"
+          ? observation.epochId
+          : null;
       try {
         factId = await insertFact(
           db,
@@ -714,7 +799,9 @@ async function applyOneObservation(
             diagnostic: DIAGNOSTIC.INCOMPLETE_FIRST_LIVE,
           });
         }
-        if (error instanceof CanonicalApplyIncompleteAuthoritativeAttributesError) {
+        if (
+          error instanceof CanonicalApplyIncompleteAuthoritativeAttributesError
+        ) {
           return rejectUsableObservation(db, observation, abandoned, {
             error,
             diagnostic: DIAGNOSTIC.INCOMPLETE_AUTHORITATIVE,
@@ -763,11 +850,17 @@ async function applyOneObservation(
   if (allowAttributes && fact) {
     const existingShape = validateExistingAuthoritativeAttributes(observation);
     if (!existingShape.ok) {
-      return rejectUsableObservation(db, observation, abandoned, existingShape, {
-        factId: fact.id,
-        existenceMutated,
-        fact,
-      });
+      return rejectUsableObservation(
+        db,
+        observation,
+        abandoned,
+        existingShape,
+        {
+          factId: fact.id,
+          existenceMutated,
+          fact,
+        },
+      );
     }
     const numericCheck = validateObservationNumericColumns(observation);
     if (!numericCheck.ok) {
@@ -779,11 +872,17 @@ async function applyOneObservation(
     }
     const quantityCheck = validateObservationQuantityColumns(observation);
     if (!quantityCheck.ok) {
-      return rejectUsableObservation(db, observation, abandoned, quantityCheck, {
-        factId: fact.id,
-        existenceMutated,
-        fact,
-      });
+      return rejectUsableObservation(
+        db,
+        observation,
+        abandoned,
+        quantityCheck,
+        {
+          factId: fact.id,
+          existenceMutated,
+          fact,
+        },
+      );
     }
   }
 
@@ -803,7 +902,10 @@ async function applyOneObservation(
     );
     attributesApplied = attrResult.applied;
     if (attrResult.diagnostic) {
-      diagnostic = preserveRevivalDiagnostic(fact.existenceDiagnosticState, attrResult.diagnostic);
+      diagnostic = preserveRevivalDiagnostic(
+        fact.existenceDiagnosticState,
+        attrResult.diagnostic,
+      );
     }
     fact = (await lockAndReadFact(db, identity)) ?? fact;
     const qtyApplied = await applyQuantities(
@@ -813,6 +915,16 @@ async function applyOneObservation(
       attributeFallbackInterval,
     );
     attributesApplied = attributesApplied || qtyApplied;
+  }
+
+  if (
+    factId &&
+    (existenceMutated ||
+      attributesApplied ||
+      presenceUpdated ||
+      diagnostic != null)
+  ) {
+    await markCompatibilityProjectionPending(db, identity, factId);
   }
 
   if (observation.observationKind === "direct") {
@@ -826,9 +938,17 @@ async function applyOneObservation(
   }
 
   let outcome: CanonicalApplyObservationResult["outcome"] = "applied";
-  if (existenceBlocked && !existenceMutated && !attributesApplied && !presenceUpdated) {
+  if (
+    existenceBlocked &&
+    !existenceMutated &&
+    !attributesApplied &&
+    !presenceUpdated
+  ) {
     outcome = "blocked";
-  } else if (existenceDecision.reason.includes("conflict") || diagnostic?.includes("CONFLICT")) {
+  } else if (
+    existenceDecision.reason.includes("conflict") ||
+    diagnostic?.includes("CONFLICT")
+  ) {
     outcome = "conflict";
   } else if (!existenceMutated && !attributesApplied && !presenceUpdated) {
     outcome = "noop";
@@ -857,7 +977,10 @@ export async function applyCanonicalFacts(
   input: CanonicalApplyBatchInput,
 ): Promise<CanonicalApplyBatchResult> {
   if (!input.shopId) {
-    throw new CanonicalApplyError("canonical_apply_shop_required", "shopId is required");
+    throw new CanonicalApplyError(
+      "canonical_apply_shop_required",
+      "shopId is required",
+    );
   }
   for (const observation of input.observations) {
     if (observation.identity.shopId !== input.shopId) {
@@ -895,7 +1018,9 @@ export async function applyCanonicalFacts(
     configuredWorstCaseConcurrentCanonicalTransactions:
       input.configuredWorstCaseConcurrentCanonicalTransactions,
   });
-  if (identities.length > evaluation.effectiveCanonicalIdentitiesPerTransaction) {
+  if (
+    identities.length > evaluation.effectiveCanonicalIdentitiesPerTransaction
+  ) {
     throw new CanonicalApplyBatchExceedsCapacityError(
       identities.length,
       evaluation.effectiveCanonicalIdentitiesPerTransaction,
@@ -931,7 +1056,9 @@ export async function applyCanonicalFacts(
       item.identity.resourceKind === "InventoryLevel"
         ? `${item.identity.shopId}|InventoryLevel|${item.identity.inventoryItemGid}|${item.identity.locationGid}`
         : `${item.identity.shopId}|${item.identity.resourceKind}|${item.identity.shopifyGid}`;
-    const observations = (byIdentity.get(key) ?? []).slice().sort(compareObservations);
+    const observations = (byIdentity.get(key) ?? [])
+      .slice()
+      .sort(compareObservations);
     for (const observation of observations) {
       const applied = await applyOneObservation(db, observation);
       results.push(applied.result);
@@ -953,7 +1080,9 @@ export async function applyCanonicalFacts(
  * (SQLSTATE 25P02). No ON CONFLICT DO UPDATE. No savepoint recovery.
  */
 export async function applyCanonicalFactsWithRetry(
-  begin: (fn: (db: CanonicalApplyDb) => Promise<CanonicalApplyBatchResult>) => Promise<CanonicalApplyBatchResult>,
+  begin: (
+    fn: (db: CanonicalApplyDb) => Promise<CanonicalApplyBatchResult>,
+  ) => Promise<CanonicalApplyBatchResult>,
   input: CanonicalApplyBatchInput,
   options?: { maxAttempts?: number },
 ): Promise<CanonicalApplyBatchResult> {

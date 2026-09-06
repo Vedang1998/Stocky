@@ -3,14 +3,8 @@ import { randomUUID } from "node:crypto";
 import { unauthenticated } from "../../shopify.server";
 import type { WebhookJobData } from "../queue.server";
 import { enqueueAbcAnalysisForShop } from "../queue.server";
-import {
-  computeForecast,
-  runAbcAnalysis,
-} from "../../services/forecasting.server";
-import {
-  processBomSale,
-  startCatalogSync,
-} from "../../services/shopify-sync.server";
+import { runAbcAnalysis } from "../../services/forecasting.server";
+import { processBomSale } from "../../services/shopify-sync.server";
 import {
   resolveTenantJobContext,
   TENANT_JOB_ENVELOPE_VERSION,
@@ -43,6 +37,18 @@ import { SyncControlPlaneError } from "../../sync/errors";
 import { planPerShopSchedulerJobs } from "../../tenant/scheduler.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { TenantAuthorityError } from "../../tenant/errors";
+import {
+  applyCatalogFactWebhookRefetch,
+  catalogRefetchApplicationDigest,
+  isCatalogFactAtomicWebhookTopic,
+  resolveCatalogWebhookIdentity,
+} from "./catalog-facts/resource-refetch";
+import {
+  runCatalogFactsSyncStep,
+  runInventoryStateReconcileStep,
+} from "./catalog-facts/catalog-sync";
+import { assertCanonicalWriterCapacityAtStartup } from "./catalog-facts/capacity";
+import { signalBulkOperationContinuation } from "./catalog-facts/bulk-finish";
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -181,7 +187,11 @@ async function handleRefundCreate(
   const shop = db.authority.myshopifyDomain;
   const refund = payload as {
     refund_line_items?: Array<{
-      line_item?: { variant_id: number | null; quantity: number; price: string };
+      line_item?: {
+        variant_id: number | null;
+        quantity: number;
+        price: string;
+      };
       quantity: number;
     }>;
   };
@@ -221,81 +231,6 @@ async function handleRefundCreate(
   }
 }
 
-async function handleInventoryUpdate(
-  db: TenantDb,
-  payload: Record<string, unknown>,
-) {
-  const shop = db.authority.myshopifyDomain;
-  const inv = payload as {
-    inventory_item_id: number;
-    location_id: number;
-    available: number | null;
-  };
-
-  const variantGid = await resolveVariantFromInventoryItem(
-    db,
-    inv.inventory_item_id,
-  );
-  if (!variantGid) return;
-
-  const locationGid = `gid://shopify/Location/${inv.location_id}`;
-  const today = startOfDay(new Date());
-
-  await db.inventorySnapshot.upsert({
-    where: {
-      shop_shopifyVariantId_locationId_snapshotDate: {
-        shop,
-        shopifyVariantId: variantGid,
-        locationId: locationGid,
-        snapshotDate: today,
-      },
-    },
-    create: {
-      shop,
-      shopifyVariantId: variantGid,
-      locationId: locationGid,
-      snapshotDate: today,
-      quantityAvailable: inv.available ?? 0,
-    },
-    update: {
-      quantityAvailable: inv.available ?? 0,
-    },
-  });
-
-  const forecast = await computeForecast(db, {
-    variantId: variantGid,
-    locationId: locationGid,
-  });
-
-  const abc = await db.variantAbcClass.findFirst({
-    where: { shopifyVariantId: variantGid },
-  });
-
-  if (abc?.abcClass === "A" && forecast.onHand < forecast.reorderPoint) {
-    await db.lowStockAlert.create({
-      data: {
-        shop,
-        shopifyVariantId: variantGid,
-        locationId: locationGid,
-        reorderPoint: forecast.reorderPoint,
-        currentStock: forecast.onHand,
-      },
-    });
-  }
-}
-
-async function resolveVariantFromInventoryItem(
-  db: TenantDb,
-  inventoryItemId: number,
-): Promise<string | null> {
-  const cache = await db.shopifyVariantCache.findFirst({
-    where: {
-      inventoryItemId: `gid://shopify/InventoryItem/${inventoryItemId}`,
-    },
-  });
-  return cache?.shopifyVariantId ?? null;
-}
-
 async function requireJobContext(
   rawTenant: unknown,
   options?: { payloadShop?: string; expectedJobNameOrTopic?: string },
@@ -331,11 +266,11 @@ async function runLegacyWebhookHandler(
     case "refunds/create":
       await handleRefundCreate(db, payload);
       break;
-    case "inventory_levels/update":
-      await handleInventoryUpdate(db, payload);
-      break;
     default:
-      console.warn(`Unhandled webhook topic: ${topic}`);
+      throw new SyncControlPlaneError(
+        "topic_unsupported",
+        `Legacy webhook handler does not own topic: ${topic}`,
+      );
   }
 }
 
@@ -357,7 +292,9 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
   if (envelope.schemaVersion === TENANT_JOB_ENVELOPE_V3_VERSION) {
     const durableJobId =
       job.data.durableJobId ??
-      (typeof envelope.durableJobId === "string" ? envelope.durableJobId : null);
+      (typeof envelope.durableJobId === "string"
+        ? envelope.durableJobId
+        : null);
     if (!durableJobId) {
       throw new SyncControlPlaneError(
         "job_not_found",
@@ -454,10 +391,73 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       webhookDeliveryId: durable.webhookDeliveryId,
       idempotencyKey: durable.idempotencyKey,
     });
+    let expectedApplicationDigest = durable.payloadDigest;
 
     try {
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
+
+      if (topic === "bulk_operations/finish") {
+        const signaled = await signalBulkOperationContinuation({
+          shopId: durable.shopId,
+          payload: handlerPayload,
+        });
+        await completeAttemptSuccess({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+          resultMetadata: {
+            controlStatus: signaled.signaled ? "signaled" : "unmatched",
+          },
+        });
+        return;
+      }
+
+      if (isCatalogFactAtomicWebhookTopic(topic)) {
+        const { admin } = await unauthenticated.admin(
+          ctx.tenant.myshopifyDomain,
+        );
+        const writerConfig = await assertCanonicalWriterCapacityAtStartup();
+        const identity = resolveCatalogWebhookIdentity(
+          durable.shopId,
+          topic,
+          handlerPayload,
+        );
+        expectedApplicationDigest = catalogRefetchApplicationDigest({
+          applyingDurableJobId: durable.id,
+          topic,
+          shopId: durable.shopId,
+          resolvedIdentities: [identity],
+        });
+        const result = await applyCatalogFactWebhookRefetch({
+          authority: ctx.tenant,
+          admin,
+          topic,
+          payload: handlerPayload,
+          durableJobId: durable.id,
+          rootDurableJobId: durable.causationId ?? durable.id,
+          attemptId: attempt.id,
+          correlationId: durable.correlationId,
+          signalDeliveryId: durable.webhookDeliveryId,
+          signalReceivedAt: durable.createdAt,
+          applicationKey,
+          applicationPayloadDigest: expectedApplicationDigest,
+          leaseDurationMs: 60_000,
+          canonicalBatchSize:
+            writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+          configuredWorstCaseConcurrentCanonicalTransactions:
+            writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+        });
+        await completeAttemptSuccess({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+          resultMetadata: result,
+        });
+        return;
+      }
 
       // Atomic merchant application: all writes + receipt in one tenant tx.
       const applyResult = await ctx.db.$transaction(async (tx) => {
@@ -496,7 +496,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
         await finalizeApplicationAfterRollback({
           db: ctx.db,
           applicationKey,
-          expectedPayloadDigest: durable.payloadDigest,
+          expectedPayloadDigest: expectedApplicationDigest,
           durableJobId: durable.id,
           shopId: durable.shopId,
           attemptId: attempt.id,
@@ -541,7 +541,9 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     // on the control plane BEFORE opening a merchant-domain tenant transaction.
     const durableJobId =
       job.data.durableJobId ??
-      (typeof envelope.durableJobId === "string" ? envelope.durableJobId : null);
+      (typeof envelope.durableJobId === "string"
+        ? envelope.durableJobId
+        : null);
     if (!durableJobId) {
       throw new SyncControlPlaneError(
         "job_not_found",
@@ -722,7 +724,11 @@ export async function processCronJob(job: Job) {
     queueJobId?: string;
   };
 
-  if (job.name === "abc-analysis-shop" || job.name === "catalog-sync") {
+  if (
+    job.name === "abc-analysis-shop" ||
+    job.name === "catalog-sync" ||
+    job.name === "inventory-state-reconcile"
+  ) {
     if (!isRecord(data.tenant)) {
       throw new TenantAuthorityError(
         "missing_envelope",
@@ -749,7 +755,10 @@ export async function processCronJob(job: Job) {
         where: { id: durableJobId },
       });
       if (!durable) {
-        throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
+        throw new SyncControlPlaneError(
+          "job_not_found",
+          "DurableJob not found",
+        );
       }
       await assertShopProcessingEnabled(durable.shopId);
 
@@ -775,7 +784,7 @@ export async function processCronJob(job: Job) {
         );
       }
 
-      const { attempt } = await claimAttempt({
+      const { attempt, job: claimedJob } = await claimAttempt({
         durableJobId: durable.id,
         shopId: durable.shopId,
         workerId,
@@ -783,25 +792,93 @@ export async function processCronJob(job: Job) {
       });
 
       try {
-        // REBUILDABLE_IDEMPOTENT — repeated execution converges.
         if (job.name === "abc-analysis-shop") {
           await runAbcAnalysis(ctx.db, "REVENUE");
           await runAbcAnalysis(ctx.db, "VOLUME");
-        } else {
-          const { admin } = await unauthenticated.admin(
-            ctx.tenant.myshopifyDomain,
-          );
-          const count = await startCatalogSync(ctx.db, admin);
-          console.log(
-            `Catalog sync for ${ctx.tenant.myshopifyDomain}: ${count} variants cached`,
+          await completeAttemptSuccess({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            workerId,
+          });
+          return;
+        }
+
+        if (
+          job.name === "catalog-sync" &&
+          durable.payloadSchemaVersion !== "catalog-facts-v1"
+        ) {
+          await completeAttemptFail({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            errorCode: "LEGACY_CATALOG_SYNC_V1_DISABLED",
+            failureSummary:
+              "catalog-sync-v1 is disabled after the canonical PR5-F3 cutover",
+          });
+          return;
+        }
+
+        if (
+          job.name !== "catalog-sync" &&
+          job.name !== "inventory-state-reconcile"
+        ) {
+          throw new SyncControlPlaneError(
+            "job_type_unsupported",
+            `Unsupported canonical cron job ${job.name}`,
           );
         }
-        await completeAttemptSuccess({
-          durableJobId: durable.id,
-          shopId: durable.shopId,
-          attemptId: attempt.id,
-          workerId,
-        });
+
+        const { admin } = await unauthenticated.admin(
+          ctx.tenant.myshopifyDomain,
+        );
+        const writerConfig = await assertCanonicalWriterCapacityAtStartup();
+        const result =
+          job.name === "catalog-sync"
+            ? await runCatalogFactsSyncStep({
+                authority: ctx.tenant,
+                admin,
+                durableJobId: durable.id,
+                correlationId: durable.correlationId,
+                durableAttemptCount: claimedJob.attemptCount,
+                canonicalBatchSize:
+                  writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+                canonicalConcurrency:
+                  writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+              })
+            : await runInventoryStateReconcileStep({
+                authority: ctx.tenant,
+                admin,
+                durableJobId: durable.id,
+                correlationId: durable.correlationId,
+                canonicalBatchSize:
+                  writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+                canonicalConcurrency:
+                  writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+              });
+
+        if (result.status === "SUCCEEDED") {
+          await completeAttemptSuccess({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            workerId,
+          });
+        } else {
+          await completeAttemptRetry({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            workerId,
+            errorCode:
+              result.status === "PARTIAL_FAILURE"
+                ? "catalog_domain_partial_failure"
+                : "catalog_continuation",
+            failureSummary: result.reason,
+            backoffMs: result.status === "CONTINUE" ? result.backoffMs : 5_000,
+            retryClassification: result.status.toLowerCase(),
+          });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         await completeAttemptRetry({
@@ -827,11 +904,9 @@ export async function processCronJob(job: Job) {
       await runAbcAnalysis(db, "VOLUME");
       return;
     }
-
-    const { admin } = await unauthenticated.admin(tenant.myshopifyDomain);
-    const count = await startCatalogSync(db, admin);
-    console.log(
-      `Catalog sync for ${tenant.myshopifyDomain}: ${count} variants cached`,
+    throw new SyncControlPlaneError(
+      "legacy_envelope_unsupported",
+      `${job.name} requires tenant-job-envelope-v3 after the PR5-F3 cutover`,
     );
   }
 }

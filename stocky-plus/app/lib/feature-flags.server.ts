@@ -14,8 +14,7 @@ function envFlag(name: string, defaultEnabled = false): boolean {
 
 export const featureFlags = {
   /** Stocktake completion may call inventoryAdjustQuantities */
-  stocktakeInventoryWrites: () =>
-    envFlag("FEATURE_STOCKTAKE_INVENTORY_WRITES"),
+  stocktakeInventoryWrites: () => envFlag("FEATURE_STOCKTAKE_INVENTORY_WRITES"),
   /** Manual adjustment mutations (future module; gate now) */
   adjustmentWrites: () => envFlag("FEATURE_ADJUSTMENT_WRITES"),
   /** PO receive may call inventoryAdjustQuantities */
@@ -24,6 +23,12 @@ export const featureFlags = {
   costSync: () => envFlag("FEATURE_COST_SYNC"),
   /** Transfer create/ship/complete mutations against Shopify */
   transferWrites: () => envFlag("FEATURE_TRANSFER_WRITES"),
+  /**
+   * PR5 absence confirmation may tombstone terminal canonical identities.
+   * This destructive read-model transition is separately authorized and
+   * remains DEFAULT OFF through F3.
+   */
+  pr5AbsenceTombstone: () => envFlag("FEATURE_PR5_ABSENCE_TOMBSTONE"),
 } as const;
 
 export type InventoryWriteCapability =

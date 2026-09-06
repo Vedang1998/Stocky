@@ -151,6 +151,15 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/resume-preflight-drift.test.ts",
   "scripts/tenant-enforcement/tests/catalog-qualification.test.ts",
   "scripts/tenant-enforcement/tests/advisory-unlock-failure.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-test-helpers.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-absence-confirmation.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-inventory-reconcile.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-jsonl-checkpoint.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-lock-capacity-aw.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-overlap-races.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-projection-health.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {
@@ -236,6 +245,7 @@ function syncControlPlaneExceptions(): AccessException[] {
     "app/sync/uninstall.server.ts",
     "app/sync/dispatcher.server.ts",
     "app/sync/fair-claim-query.server.ts",
+    "app/lib/catalog-facts/ingest/checkpoint.ts",
   ] as const;
   return files.map((path, i) => ({
     id: `EX-SYNC-${String(i + 1).padStart(3, "0")}`,
