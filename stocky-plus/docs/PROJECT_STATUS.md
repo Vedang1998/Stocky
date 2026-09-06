@@ -52,7 +52,7 @@
 | Closure report | `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md` |
 | Next gate | **Historical D-052 row.** Live next action after PR5 closeout merge is PR #34 current-main synchronization + final independent correction re-review of PR6 planning. D-052 remains PR 4 technical-acceptance authority. D-053 remains PR 5 planning-acceptance authority. D-054 remains implementation authority. PR5 repository implementation is technically accepted; formal PR5 closure becomes effective upon merge of this closeout/control PR. |
 | PR 5 planning | ACCEPTED AND MERGED |
-| PR 5 implementation | STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN |
+| PR 5 implementation | **Historical D-052 row.** STARTED — PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN |
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
@@ -244,7 +244,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-124:** CLOSED — no regression; **not reopened**. F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is accepted nonblocking out-of-scope F-F03 harness load sensitivity for PR 1/PR 3 tooling maintenance, not PR 4 runtime correction.
 **R-127:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
 **R-128:** CLOSED — no regression (D-052; previously CLOSED on D-051 independent evidence)
-**R-129 through R-156:** OPEN — this closeout does not invent closures for those planning risks
+**R-129 through R-156:** post-PR5 dispositions recorded individually in `RISK_REGISTER.md` — **15 CLOSED FOR PR5 REPOSITORY IMPLEMENTATION**; **13 remain OPEN** (standing P0 write-enablement R-138; later PR/phase R-142 / R-147; surviving production/operational/readiness R-132, R-140, R-141, R-143, R-145, R-148, R-151, R-152, R-154, R-156). No severity lowered. No residual remains `OPEN — PR 5 planning`.
 **R-157:** CLOSED FOR PR5 REPOSITORY IMPLEMENTATION (exact-head Claude review + PR #35 merge + post-merge CI `34004211341` SUCCESS). Not production-privilege validation.
 **R-158:** OPEN — original P1 retained. Concurrent-response scheduling inversion remains an architectural/operational residual. Exact-head review did not support formal closure.
 **R-159:** CLOSED FOR PR5 REPOSITORY IMPLEMENTATION. Not production operational validation.
@@ -255,7 +255,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **R-164:** OPEN — original P3 retained. Independent review reproduced tenant-scoped physical DELETE at the database layer; ordinary canonical applicator/runtime remains tombstone-only. Do not change DELETE privilege or RLS in this closeout.
 **R-165:** CLOSED FOR PR5 REPOSITORY IMPLEMENTATION (legacy `available ?? 0` writer removed; authoritative refetch path). Leftover unsubscribed route is **P3-CLAUDE-F3XH-05** only.
 **NEW-CLAUDE-PR5F1C-03:** P3 — **RESOLVED BY THIS DOCS CLOSEOUT** (stale live “D-054 conditional” parenthetical). No long-lived risk.
-**NEW-CLAUDE-PR33CP-01:** P3 — deferred control correction. Must be corrected during **PR #34 current-main synchronization**. This closeout does **not** edit PR #34. Current-main control docs no longer repeat the false statement that PR6 planning is already independently accepted.
+**NEW-CLAUDE-PR33CP-01:** P3 — **main-side stale acceptance statement corrected by this closeout PR (#36)**. The live sentence in `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` no longer repeats the stale independent-acceptance claim for PR6 planning. PR #34 still requires its own current-main synchronization + final independent correction re-review. This closeout does **not** edit PR #34.
 **F-CLAUDE-PR4ACC-01:** P3 — **RESOLVED BY PR BODY UPDATE** before squash merge (not a runtime correction)
 **F-CLAUDE-PR4ACC-02:** P3 — ACCEPTED NONBLOCKING FUTURE MAINTENANCE (2025-10 inbound adapter; do not remove in PR 4)
 **F-CLAUDE-PR4ACC-03:** P3 — ACCEPTED NONBLOCKING under R-123
@@ -300,8 +300,8 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - PR [#35](https://github.com/Vedang1998/Stocky/pull/35) (PR5-F3 remaining-integration runtime) is **CLOSED / MERGED**. Accepted exact implementation head `502b869eb540ea9071224bd4b5da52c6b55498f0`. Independent review commit `b06e1ae2287f0d8fbf1ba6be87b8ee496a05f1ee`. Immutable review blob `8d6d47a204d7976339c0023b6b28249f20a337a7`. Independent verdict `APPROVE PR5-F3 EXACT-HEAD IMPLEMENTATION` (P0 0 / P1 0 / P2 0 / P3 9). Squash merge / current `origin/main` `36365e2535a2394fa53b0642db4dbf90a438316f` at `2026-09-06T01:33:34Z`. Exact-head pre-merge CI `33996153641` SUCCESS. Post-merge main CI `34004211341` SUCCESS (Classify `101408364320`; Heavy `101408383357`; CI Gate `101414546762`).
 - **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION.** Phase 1 PR5 repository implementation is technically accepted. Formal PR5 closure becomes effective upon merge of this closeout/control PR. This is **not D-055**. D-054 remains EFFECTIVE.
 - Closure report: `phases/phase-1/PR5_CLOSURE_REPORT.md`. Accepted residual backlog: `phases/phase-1/PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`. Immutable F3 review: `phases/phase-1/PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit). F3 implementation report: `phases/phase-1/PR5_F3_IMPLEMENTATION_REPORT.md`.
-- PR [#34](https://github.com/Vedang1998/Stocky/pull/34) remains untouched at `f5d429b7b3577c87e67c5ef3445e88560e565a5c`. PR6 planning correction exists in draft PR #34; independent final correction re-review remains pending. **NEW-CLAUDE-PR33CP-01** is deferred to PR #34 current-main synchronization after this closeout merges. PR6 **runtime** remains **NOT AUTHORIZED**.
-- **R-157 / R-159 / R-160 / R-165** are **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION**. **R-163** is **CLOSED FOR PR5 REPOSITORY SCANNER OBLIGATION**, preserving **P3-CLAUDE-F3XH-01** and **P3-CLAUDE-F3XH-02**. **R-158 / R-161 / R-162 / R-164** remain **OPEN** at their original severities. This closeout does not invent closures for R-129 through R-156.
+- PR [#34](https://github.com/Vedang1998/Stocky/pull/34) remains untouched at `f5d429b7b3577c87e67c5ef3445e88560e565a5c`. PR6 planning correction exists in draft PR #34; independent final correction re-review remains pending. **NEW-CLAUDE-PR33CP-01** main-side stale acceptance statement is corrected by this closeout; PR #34 still requires current-main synchronization + final independent correction re-review. PR6 **runtime** remains **NOT AUTHORIZED**.
+- **R-157 / R-159 / R-160 / R-165** are **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION**. **R-163** is **CLOSED FOR PR5 REPOSITORY SCANNER OBLIGATION**, preserving **P3-CLAUDE-F3XH-01** and **P3-CLAUDE-F3XH-02**. **R-158 / R-161 / R-162 / R-164** remain **OPEN** at their original severities. **R-129 through R-156** have individual post-PR5 dispositions in `RISK_REGISTER.md` (15 closed for repository implementation; 13 remain OPEN as surviving production/operational/readiness, later-PR, or standing P0 write-enablement controls).
 - **P3-CLAUDE-F3XH-06** and **P3-CLAUDE-F3XH-08** are production-readiness requirements despite remaining P3.
 - Remaining-integration planning packet: `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md`. Historical planning / fixtures only.
 - Emergency Continuity Sprint control packet: `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. Enduring operating principles survive. The packet itself did not authorize F3; later explicit ChatGPT authorization dated 2026-09-05 did so under existing D-054 EFFECTIVE; F3 is now **ACCEPTED / MERGED**.

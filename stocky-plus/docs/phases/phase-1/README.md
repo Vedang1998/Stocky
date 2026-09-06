@@ -119,7 +119,7 @@
 | Decision | D-052 remains PR 4 technical-acceptance authority; later **D-053** is PR 5 planning only |
 | PR 4 | **FORMALLY CLOSED** |
 | PR 5 planning | **IN PROGRESS — IMPLEMENTATION NOT AUTHORIZED** |
-| PR 5 implementation | **NOT STARTED — NOT AUTHORIZED** |
+| PR 5 implementation | **Historical PR #23 close row.** **NOT STARTED — NOT AUTHORIZED** |
 | Production / merchant data | **No production or merchant data was accessed** |
 | Inventory writes | **UNAPPROVED**; every inventory-write flag remains **DEFAULT OFF** |
 
@@ -194,7 +194,7 @@
 - **R-122 / R-123:** ACCEPTED NONBLOCKING RESIDUALS — see `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`.
 - **R-124:** CLOSED — not reopened (F-CLAUDE-D051-03 / F-CLAUDE-PR4ACC-04 is distinct F-F03 tooling debt).
 - **R-127 / R-128:** CLOSED — no regression (D-052).
-- **R-129 through R-156:** OPEN — this closeout does not invent closures for those planning risks.
+- **R-129 through R-156:** post-PR5 dispositions recorded individually in `../../RISK_REGISTER.md` — 15 CLOSED FOR PR5 REPOSITORY IMPLEMENTATION; 13 remain OPEN (standing P0 write-enablement R-138; later PR/phase R-142 / R-147; surviving production/operational/readiness R-132, R-140, R-141, R-143, R-145, R-148, R-151, R-152, R-154, R-156). No residual remains `OPEN — PR 5 planning`.
 - **R-157 / R-159 / R-160 / R-165:** CLOSED FOR PR5 REPOSITORY IMPLEMENTATION. Not production validation.
 - **R-158:** OPEN at original P1 — concurrent-response scheduling inversion residual; exact-head review did not support formal closure.
 - **R-161:** OPEN at original P2 — production-scale lock-capacity evidence still required.
@@ -262,6 +262,7 @@
 43j. `PR5_F3_PLANNING_DURABILITY_INDEPENDENT_REVIEW.md` — immutable chain-of-custody review; **F-CLAUDE-PR5F3DUR-01** remains a non-blocking P3 (never edit)
 43k. `PR5_F3_IMPLEMENTATION_REPORT.md` — PR5-F3 remaining-integration implementation evidence
 43l. `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable exact-head review `APPROVE PR5-F3 EXACT-HEAD IMPLEMENTATION` (blob `8d6d47a204d7976339c0023b6b28249f20a337a7`; never edit)
+43l1. `PR5_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` — immutable PR #36 closeout docs/governance review `CORRECTIONS REQUIRED` (blob `49dc7915ebb0bf99eaca5deb0fbdfebb38c35c54`; never edit)
 43m. `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure (effective upon merge of this closeout PR)
 43n. `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements F3XH-06 and F3XH-08
 44. `PR5_PLANNING_INDEPENDENT_REVIEW.md` — immutable (blob `f6e62fe…`)
@@ -389,6 +390,7 @@
 - Emergency Continuity Sprint: `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`
 - PR5 closure: `PR5_CLOSURE_REPORT.md`
 - PR5-F3 exact-head review: `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit)
+- PR5 formal-closeout independent review: `PR5_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (never edit)
 - PR5-F3 accepted residuals: `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`

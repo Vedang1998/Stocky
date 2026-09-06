@@ -36,7 +36,8 @@ It does **not** authorize PR6 runtime, production, merchant production data, dep
 | Canonical governance | `../../ACCELERATED_SAFE_DELIVERY.md` |
 | Closure report | this file |
 | Accepted residual backlog | `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` |
-| Immutable F3 exact-head review | `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit) |
+| Immutable F3 exact-head review | `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit; blob `8d6d47a204d7976339c0023b6b28249f20a337a7`) |
+| Immutable PR #36 closeout review | `PR5_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (never edit; blob `49dc7915ebb0bf99eaca5deb0fbdfebb38c35c54`) |
 
 ## Implementation lineage
 
@@ -158,7 +159,7 @@ Independent exact-head evidence is `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (bl
 | Risk | Severity (unchanged) | Disposition |
 |---|---|---|
 | R-157 | P1 | **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION** |
-| R-158 | P1 | **OPEN** — architectural/operational residual; not closed |
+| R-158 | P1 | **OPEN** — architectural/operational residual; preserve `pr5-f3-overlap-races`; revisit if generation/interval semantics or production concurrency evidence change |
 | R-159 | P2 | **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION** |
 | R-160 | P1 | **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION** |
 | R-161 | P2 | **OPEN** — production/operational capacity residual; not closed |
@@ -167,7 +168,20 @@ Independent exact-head evidence is `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (bl
 | R-164 | P3 | **OPEN** — independently reproduced tenant-scoped physical DELETE at the database layer; ordinary canonical applicator/runtime remains tombstone-only |
 | R-165 | P2 | **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION** |
 
-Do **not** lower any remaining OPEN severity. Do **not** treat repository-implementation closure as production validation. Do **not** invent closures for R-129 through R-156 in this packet.
+Do **not** lower any remaining OPEN severity. Do **not** treat repository-implementation closure as production validation.
+
+### R-129 through R-156 post-PR5 dispositions
+
+Authoritative residual and follow-up text remains in `../../RISK_REGISTER.md`. This closeout reviewed every row individually against the immutable F3 exact-head review. No severity was lowered. No new PR5 engineering lane was created. No residual remains `OPEN — PR 5 planning`. No follow-up points only at the closing `PR 5 implementation` lane.
+
+| Class | Count | IDs |
+|---|---|---|
+| **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION** | 15 | R-129, R-130, R-131, R-133, R-134, R-135, R-136, R-137, R-139, R-144, R-146, R-149, R-150, R-153, R-155 |
+| **OPEN — standing P0 write-enablement / production-safety control** | 1 | R-138 |
+| **OPEN — later approved PR / phase** | 2 | R-142 (later focused cleanup PR); R-147 (PR 8 / R-034) |
+| **OPEN — surviving production / operational / readiness risk** | 10 | R-132, R-140, R-141, R-143, R-145, R-148, R-151, R-152, R-154, R-156 |
+
+**R-138** remains **OPEN at P0**. The PR5 repository scanner / deny-by-default / negative-fixture obligation is independently satisfied. Accidental Shopify-write risk is **not** globally closed. Production inventory writes remain **UNAPPROVED**. Write flags remain **DEFAULT OFF**. Scanner and negative-fixture gates remain mandatory.
 
 Detail: `../../RISK_REGISTER.md`. Accepted P3 findings: `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`.
 
@@ -179,10 +193,10 @@ This closeout branch does **not** edit PR [#34](https://github.com/Vedang1998/St
 |---|---|
 | PR #34 exact head (must remain) | `f5d429b7b3577c87e67c5ef3445e88560e565a5c` |
 | PR #34 state at this closeout | OPEN / draft planning PR — **untouched** |
-| Deferred control correction | **NEW-CLAUDE-PR33CP-01** |
+| **NEW-CLAUDE-PR33CP-01** | **Main-side stale acceptance statement corrected by this closeout PR (#36).** PR #34 still requires its own current-main synchronization + final independent correction re-review. |
 | Required wording | PR6 planning correction exists in draft PR #34; independent final correction re-review remains pending. PR6 runtime remains **NOT AUTHORIZED**. |
 
-After this closeout PR merges, PR #34 becomes eligible for its **separately controlled** current-main synchronization. The stale statement that “PR6 planning is independently accepted” must be corrected during that PR #34 synchronization, because PR #34 still records independent final correction re-review as pending. That correction is **not** performed from this closeout branch.
+The live main-side sentence in `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` no longer repeats the stale independent-acceptance claim for PR6 planning. PR #34 synchronization cannot alter a main-side file, so that stale sentence is corrected here. After this closeout PR merges, PR #34 becomes eligible for its **separately controlled** current-main synchronization + final independent correction re-review. This closeout does **not** edit PR #34.
 
 ## Safety state
 

@@ -44,7 +44,7 @@ Inspected live GitHub + local git. Not inherited from the 2026-09-02 planning-co
 | F2C current-main verdict | `APPROVE PR5-F2C CURRENT-MAIN INTEGRATION` |
 | PR #32 | [#32](https://github.com/Vedang1998/Stocky/pull/32) **OPEN / DRAFT / UNMERGED** |
 | PR #33 | [#33](https://github.com/Vedang1998/Stocky/pull/33) **OPEN / DRAFT / UNMERGED**, head `33a381ac9204a13396158551f511cee01b60b179`. Overlaps `PROJECT_STATUS.md`, `phases/phase-1/README.md`, `RISK_REGISTER.md`, `DECISIONS.md`. **Do not merge or edit PR #33 from this packet.** After PR #32 merges, PR #33 refreshes separately onto the resulting `main`. |
-| PR #34 | [#34](https://github.com/Vedang1998/Stocky/pull/34) PR6 planning — **do not edit**. PR6 planning is independently accepted. PR6 **runtime** remains **NOT AUTHORIZED** until PR 5 is fully closed. |
+| PR #34 | [#34](https://github.com/Vedang1998/Stocky/pull/34) PR6 planning — **do not edit**. PR #34 PR6 planning correction remains OPEN / DRAFT; independent final correction re-review remains pending. PR6 runtime remains **NOT AUTHORIZED**. |
 | Production | **NOT AUTHORIZED** |
 | Inventory-write flags | **DEFAULT OFF** |
 | Absence-tombstone flag | **DEFAULT OFF** (named in this packet; **not** enabled here) |
