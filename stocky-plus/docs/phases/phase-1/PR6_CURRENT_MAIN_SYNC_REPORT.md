@@ -32,9 +32,10 @@ This report records the previously authorized **final current-main synchronizati
 | Merge commit (this branch) | `ba47ecba8bfd2433f48673d0a109d00c0810c280` |
 | Merge parents | `f5d429b7…` (PR #34) + `58bf62b4…` (`origin/main`) |
 | Post-merge merge-base with `origin/main` | `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` |
-| Post-merge behind count | **0** |
-| Post-merge ahead count before this docs commit | **6** (5 original PR #34 commits + merge) |
-| Synchronized planning-docs HEAD | recorded as `git rev-parse HEAD` after the docs commit that adds this report |
+| Behind count after merge | **0** |
+| First docs commit after merge | `2860885f54cec09bd21bd18f9a1379377ab8836e` |
+| Classifier recorded against first docs commit | `--from-git 58bf62b4d1c5f51dac70ee96fed4ece0a109b25f 2860885f54cec09bd21bd18f9a1379377ab8836e` → `docs_only=true` `full_ci=false` (11 docs paths) |
+| Live synchronized HEAD | tip of `cursor/pr6-order-refund-planning-87c7` after this planning-docs sequence; recorded in the PR body. This file does **not** embed its own future commit SHA. |
 
 ### PR5 / PR36 closure identity (live)
 
@@ -293,7 +294,7 @@ Executed on the working tree immediately before the docs commit (classifier vs m
 |---|---|
 | `git diff --check` | **clean** (exit 0) |
 | Classifier self-test | `.github/scripts/classify-ci-change-set.test.sh` — `assertions=40 pass=40 fail=0`; `classify-ci-change-set self-test OK` |
-| Classifier vs current main | recorded after the docs commit via `--from-git origin/main HEAD`; required `docs_only=true` `full_ci=false` |
+| Classifier vs current main | `--from-git 58bf62b4d1c5f51dac70ee96fed4ece0a109b25f 2860885f54cec09bd21bd18f9a1379377ab8836e` → `range_usable=true`; `changed_path_count=11`; `classification_reason=every_changed_path_is_docs_allowlist`; **`docs_only=true`**; **`full_ci=false`**. Follow-up docs-commit that records this output is classified the same way. |
 | Risk-ID uniqueness | `RISK_REGISTER.md`: 165 unique IDs, max **R-165**, no duplicates. Plan §21.1 proposed block **R-166…R-185** (20 contiguous). Overlap with register: **none**. |
 | OPEN_QUESTIONS uniqueness | table IDs **Q-001…Q-016**, 16 unique, no duplicates |
 | Immutable blob checks | original `d72340c01dd9c662d0e8bb4aa8d43482940470d9`; correction `fca2b260d03e3105782ed216f7773c53e6aef2a7` |
