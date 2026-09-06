@@ -1,15 +1,17 @@
 # Phase 1 PR 6 Emergency Plan — Order / Order-Line / Refund / Cancellation Facts
 
 **Status:** PLANNING ONLY — NOT IMPLEMENTATION AUTHORITY
-**Correction status:** FINAL CONSOLIDATED PLANNING CORRECTION of NEW-CLAUDE-PR6PC-01 … 06 — **INDEPENDENT FINAL CORRECTION RE-REVIEW PENDING**
+**Correction status:** CURRENT-MAIN SYNCHRONIZED + PO-10 / PO-11 INCORPORATED — **INDEPENDENT FINAL CORRECTION RE-REVIEW PENDING**
 **Product owner:** ChatGPT
 **Implementation owner (when later authorized):** Cursor
-**Independent reviewer:** Claude Code (early Tier-A review + correction re-review incorporated; **final correction re-review of this head is pending**; this packet does **not** claim independent correction approval)
-**Document type:** Emergency one-dependency-level-ahead architecture packet (corrected)
-**Authorized planning base / `origin/main` at original authoring:** `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (PR5-F2A squash merge `#29`)
-**Current observed `origin/main` (this correction pass; not merged into this branch):** `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` (PR5-F2B squash merge `#31`)
+**Independent reviewer:** Claude Code (early Tier-A review + correction re-review incorporated; **final correction re-review of this synchronized head is pending**; this packet does **not** claim independent correction approval)
+**Document type:** Emergency one-dependency-level-ahead architecture packet (corrected; current-main synchronized)
+**Authorized planning base / `origin/main` at original authoring (historical):** `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` (PR5-F2A squash merge `#29`)
+**Previous observed `origin/main` (historical 2026-09-02 correction pass; not then merged):** `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` (PR5-F2B squash merge `#31`)
+**Current `origin/main` merged into this branch:** `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` (PR #36 PR5 closeout squash)
+**PR #34 head before this synchronization (historical):** `f5d429b7b3577c87e67c5ef3445e88560e565a5c`
 **Reviewed planning head (pre-first-correction):** `76a8f339af3201d91ce8c6e8e47b1cf24b1f1d5b`
-**Reviewed corrected head (pre-this-pass):** `11d9cf6f9f759f2ebb1c467f06ea56af69672f9d`
+**Reviewed corrected head (pre-signed-units pass):** `11d9cf6f9f759f2ebb1c467f06ea56af69672f9d`
 **Independent review commit:** `4fd81bae2c4c42732ffd573d8523965c4d2289fb`
 **Immutable original review artifact:** `stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`
 **Immutable original review blob (must remain exact):** `d72340c01dd9c662d0e8bb4aa8d43482940470d9`
@@ -24,18 +26,19 @@
 **Inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 **PR 6 runtime:** NOT AUTHORIZED by this document
-**PR 5:** must close first (independently reviewed, accepted, merged, closure-synchronized)
+**PR 5 repository implementation:** **FORMALLY CLOSED** (PR #35 F3 + PR #36 closeout)
+**Phase 1:** IN PROGRESS
 **Phase 2 forecasting / ABC / buying-table runtime:** NOT AUTHORIZED
-**Merge:** UNAUTHORIZED
+**Merge of this PR:** UNAUTHORIZED
 **Mark-ready:** UNAUTHORIZED
 
-This document is the **corrected** execution-grade contract so Phase 1 PR 6 can start after PR 5 closes. It does **not** start PR 6 runtime, migrations, GraphQL production documents, webhook workers, forecasting, or Shopify configuration.
+This document is the **corrected** execution-grade contract so Phase 1 PR 6 can start **only after later ChatGPT runtime authorization**. It does **not** start PR 6 runtime, migrations, GraphQL production documents, webhook workers, forecasting, or Shopify configuration.
 
-Official Shopify facts were read from `shopify.dev` Admin GraphQL `2026-07` object/query pages, webhook and bulk-operations guides, and access-scope documentation on **2026-09-02**, plus the independent review’s live-schema verification on that date. Community posts are not API authority.
+Official Shopify facts were originally read from `shopify.dev` Admin GraphQL `2026-07` object/query pages, webhook and bulk-operations guides, and access-scope documentation on **2026-09-02**, plus the independent review’s live-schema verification on that date. Mutable factual notes were **refreshed from official 2026-07 sources on 2026-09-06** during current-main synchronization. Community posts are not API authority. Genuinely unresolved external behavior remains **UNVERIFIED**.
 
 Historical `stocky-plus/docs/PHASE_1_TECHNICAL_PLAN.md` is **not** implementation authority. This plan does **not** import that document’s receipt, cost, entitlement, billing, or AI ledger items.
 
-Both independent review artifacts are **immutable**. Never edit them. This plan is the only document that may change to absorb corrections. This branch is **not** rebased onto current main in this pass; one final current-main synchronization happens only after PR 5 closes.
+Both independent review artifacts are **immutable**. Never edit them. This plan is the only document that may change to absorb corrections. This branch **has now merged** current `origin/main` `58bf62b4…`. Do **not** rebase or force-push. PR6 runtime remains **NOT AUTHORIZED**.
 
 ---
 
@@ -56,6 +59,8 @@ Both independent review artifacts are **immutable**. Never edit them. This plan 
 | Correction-list items applied | original §16 items 1 … 70, plus PC-01 … PC-06 |
 | This packet claims independent correction approval | **No** — **INDEPENDENT FINAL CORRECTION RE-REVIEW PENDING** |
 | This packet authorizes PR 6 runtime | **No** |
+| Current-main synchronization | Merge of `origin/main` `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` into this branch; no rebase / no force-push |
+| Product-owner decisions added this pass | **PO-10** (unit classification) and **PO-11** (`priceAfterAllDiscountsBeforeTaxesSet`) — **RESOLVED**, not open questions |
 
 ---
 
@@ -78,9 +83,9 @@ Without authoritative historical access:
 - `orders/delete` is the deletion signal;
 - where a delete signal cannot be authoritatively rechecked because the order is outside the window, retain the fact with `existenceKind = ABSENT_SIGNALLED_DELETE_UNVERIFIED` and `deletionSource = DELETE_WEBHOOK`.
 
-If `read_all_orders` is later granted, reconciliation **may** use the broader authoritative window (window predicate then unconditional; PR 5 absence semantics apply). Grant sequencing remains a Partner/ops question (proposed **Q-016**); it is not a PR 6 correctness dependency.
+If `read_all_orders` is later granted, reconciliation **may** use the broader authoritative window (window predicate then unconditional; PR 5 absence semantics apply). Grant sequencing remains a Partner/ops question (**Q-016**); it is not a PR 6 correctness dependency.
 
-Closes former **Q-PR6-10** as a PR6-D blocker: answered for correctness. Partner *timing* of the grant is proposed Q-016.
+Closes former **Q-PR6-10** as a PR6-D blocker: answered for correctness. Partner *timing* of the grant is registered **Q-016**.
 
 ### PO-02 — Legacy `SalesDailyAggregate` cutover
 
@@ -159,9 +164,132 @@ Monday rescue metrics are **shop-wide** when authoritative line-level location c
 
 Do **not** use legacy `"default"` as canonical location.
 
-Full location-grain demand remains a **later explicit contract** (proposed **Q-014**).
+Full location-grain demand remains a **later explicit contract** (registered **Q-014**).
 
 Former **Q-PR6-06** remains a genuine later product question; Monday does not invent location.
+
+### PO-10 — Unit classification (actionType + signed quantity)
+
+**Frozen.** The parent-agreement-reason-only formula is **insufficient**.
+
+#### Authority
+
+Unit **direction** is determined by:
+
+1. `Sale.actionType`
+2. signed `Sale.quantity`
+
+`SalesAgreement.reason` supplies **business context / category and dating**.
+
+It does **not** independently determine unit direction.
+
+#### Required classification
+
+For eligible `ProductSale`:
+
+##### `actionType = ORDER`
+
+Valid unit direction: `quantity > 0`
+
+Contribution: `+quantity`
+
+If agreement reason = `ORDER`:
+
+- original ordered units;
+- metric date = order `processedAt` in shop IANA timezone.
+
+If agreement reason is a later agreement such as `ORDER_EDIT`, `RETURN`, or another valid non-original context:
+
+- true later addition / exchange addition;
+- metric date = agreement `happenedAt`.
+
+Do **not** classify an `ORDER` sale as a refund merely because the parent agreement is a return/refund-like agreement.
+
+##### `actionType = RETURN`
+
+Valid unit direction: `quantity < 0`
+
+Contribution to signed `net_units`: the negative quantity as supplied.
+
+If agreement reason ∈ `{REFUND, RETURN}`:
+
+`refunded_units += -quantity`
+
+If agreement reason = `ORDER_EDIT`:
+
+`removed_units += -quantity`
+
+##### `actionType = UPDATE`
+
+Unit contribution = **0**.
+
+`UPDATE` represents price/tax/discount modification, **not** a unit movement.
+
+Persist the Sale lineage/money evidence as appropriate, but **exclude** it from the unit-event sum.
+
+##### `actionType = UNKNOWN`
+
+Persist raw evidence.
+
+Mark unit diagnostics **untrustworthy**.
+
+Do **not** silently include it in operational demand.
+
+##### Contradictory sign or action/reason combination
+
+Persist the raw Shopify value.
+
+Record `UNIT_SALE_SIGN_INCONSISTENT` (or the approved equivalent).
+
+Do **not** use `abs()`.
+
+Do **not** manufacture a corrected quantity.
+
+Affected derived magnitudes must remain untrusted / fail closed.
+
+#### Unit ledger remains
+
+The sole authoritative unit-event ledger remains `ShopifyOrderAgreementSaleFact`.
+
+Refund-line quantity remains excluded from the demand ledger.
+
+One agreement can legitimately contain **positive `ORDER` ProductSale(s)** and **negative `RETURN` ProductSale(s)** (exchange / mixed agreement). That combination must **not** false-fire `UNIT_SALE_SIGN_INCONSISTENT`. T58 is the required fixture.
+
+### PO-11 — `LineItem.priceAfterAllDiscountsBeforeTaxesSet`
+
+**Frozen.** Corrects the old factual claim that this field does not exist.
+
+In Shopify Admin API **2026-07** this field **exists** and is `MoneyBag!`.
+
+It represents the current line subtotal:
+
+- after all discounts;
+- excluding refunded quantities;
+- excluding removed quantities;
+- before tax.
+
+Official changelog (2026-07): equivalent to REST `current_subtotal_price_set` on line items.
+
+#### PR6 policy
+
+Do **not** establish this field as a second canonical net-sales / revenue authority in PR6.
+
+PR6 canonical money authority remains the approved:
+
+- SalesAgreement / Sale lineage;
+- Refund lineage;
+- successful refund transaction settlement rules;
+- exact shop-money / currency handling.
+
+The PR6 runtime **must not depend** on `priceAfterAllDiscountsBeforeTaxesSet`.
+
+If the plan lists it, classify it only as an **optional / reconciliation-capable** Shopify field whose existence is known.
+
+Do **not** derive authoritative per-unit price by dividing this field.
+
+Do **not** expand PR6-A schema merely because the field now exists unless another already-approved PR6 invariant specifically requires it.
+
+No remaining statement in this mutable plan may say the field does not exist.
 
 ---
 
@@ -189,7 +317,7 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 | **F-CLAUDE-PR6P-16** | P2 | **ACCEPTED AND INCORPORATED.** Lane graph `PR6-A → (PR6-B ∥ PR6-C) → PR6-D`. Types contract in PR6-A `app/lib/order-facts/types.ts` (types only). |
 | **F-CLAUDE-PR6P-17** | P2 | **ACCEPTED AND INCORPORATED, then PC-04.** `Shop.ianaTimezone` and `Shop.currencyCode` in PR6-A. API fields are **non-null** in 2026-07; defensive transport handling is policy, not schema nullability. |
 | **F-CLAUDE-PR6P-18** | P2 | **ACCEPTED AND INCORPORATED, then PC-01.** Identity `ordered − current − refunded = removed` only on a **consistent valid-sign** snapshot pair. Null `Sale.quantity` persisted. T29/T54 must actually detect contradictory identities. |
-| **F-CLAUDE-PR6P-19** | P3 | **ACCEPTED AND INCORPORATED.** In-plan proposed sequential `R-###` / `Q-0##` table. **Do not** edit `RISK_REGISTER.md` or `OPEN_QUESTIONS.md` in this PR. |
+| **F-CLAUDE-PR6P-19** | P3 | **ACCEPTED AND INCORPORATED, then this current-main sync.** Historical reviews required in-plan sequential IDs without editing control registers in the original planning pass. **This authorized synchronization** remaps the entire PR6 proposed risk block (old proposed R-165…R-184 → synchronized R-166…R-185) because current main already owns **R-165**. Remaining genuine product questions **Q-012…Q-016** are registered in `OPEN_QUESTIONS.md`. **Do not** edit `RISK_REGISTER.md` in this planning PR. Immutable reviews retain historical proposed IDs. |
 | **F-CLAUDE-PR6P-20** | P3 | **ACCEPTED AND INCORPORATED.** Single sale-fact identity: `(shopId, shopifyGid)` on `ShopifyOrderAgreementSaleFact` (`Sale.id` is `ID!`). `agreementGid` is a required FK column, not a second unique identity. |
 | **F-CLAUDE-PR6P-21** | P3 | **ACCEPTED AND INCORPORATED.** Expanded forbidden PII list. |
 | **F-CLAUDE-PR6P-22** | P3 | **ACCEPTED AND INCORPORATED.** Explicit nullability: `Refund.createdAt` nullable; `OrderTransaction.processedAt` nullable; `Sale.quantity` nullable; `RefundLineItem.id` nullable. |
@@ -202,7 +330,7 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 
 | ID | Sev | Disposition |
 |---|---|---|
-| **NEW-CLAUDE-PR6PC-01** | P1 | **INCORPORATED.** Signed-sale convention frozen in §7.1 / §7.2 / §15 / T29 / T47 / T54 / T55. Magnitudes of valid negative reversals/removals. Never `abs()` unexpected signs. |
+| **NEW-CLAUDE-PR6PC-01** | P1 | **INCORPORATED, then PO-10.** Signed-sale convention is now **actionType + signed quantity**, with agreement reason as context/dating only. Frozen in §7.1 / §7.2 / §15 / T29 / T47 / T54 / T55 / **T58**. Magnitudes of valid negative reversals/removals. Never `abs()` unexpected signs. Mixed-agreement exchange must not false-fire `UNIT_SALE_SIGN_INCONSISTENT`. |
 | **NEW-CLAUDE-PR6PC-02** | P2 | **INCORPORATED.** Nested per-parent pagination: `OrderFactById` + `OrderAgreementSalesPage` + `RefundFactById` with distinct connection variables. Incomplete walk uses `OrderFactObservationInFlight` + `SNAPSHOT_PAGINATION_INCOMPLETE`. No partial canonical apply. T56/T57. |
 | **NEW-CLAUDE-PR6PC-03** | P3 | **INCORPORATED.** LIST-vs-connection rules qualified by owning type. T20 scoped to named non-connection LISTs. |
 | **NEW-CLAUDE-PR6PC-04** | P3 | **INCORPORATED.** `RefundLineItem.priceSet` and `Shop.ianaTimezone` are **non-null** in 2026-07. `priceSet` is a required refund-line bag. Timezone missing/malformed fails closed. |
@@ -213,11 +341,12 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 
 | Topic | Sections that must match |
 |---|---|
-| Signed unit formulas | §7.1, §7.2, §7.2.2, §15 unit row, T29, T47, T54, T55 |
+| Signed unit formulas | §7.1, §7.2, §7.2.2, §15 unit row, T29, T47, T54, T55, **T58**, PO-10 |
 | Nested pagination | §4.2, §4.3, §4.5 request envelope, §5.8, §15 incomplete-pages row, T56, T57 |
 | LIST vs connection | §4.1, §4.2 forbidden, §4.3, T20 |
 | Locks | §5.1, §13 |
 | Transaction topic | §4.1(7), §7.4, §9.1, T36 |
+| `priceAfterAllDiscountsBeforeTaxesSet` | PO-11, §3, §4.1(19), Bulk A notes |
 
 ---
 
@@ -225,7 +354,7 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 
 ### 0.1 Why this packet exists
 
-After PR 5 catalog/location/inventory facts close, PR 6 is a remaining **data** dependency for the September 2026 rescue workflow:
+After PR 5 catalog/location/inventory facts **formally closed**, PR 6 remains a remaining **data** dependency for the September 2026 rescue workflow:
 
 Shopify order/refund facts → dated net units and shop-currency amounts → deterministic Last-X / custom-range demand → ABC/U → low-stock ranking → editable reorder quantities → ordering/export.
 
@@ -235,22 +364,30 @@ This packet must make PR 6 implementable without another broad architecture disc
 
 | Item | Evidence |
 |---|---|
-| Original planning `origin/main` | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` — PR5-F2A squash `#29` (authoring / first-correction base) |
-| Current observed `origin/main` (this pass) | `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` — `Phase 1 PR5-F2B — canonical fact applicator (#31)` |
-| PR5-F1 | Merged / frozen (`#27`) |
-| PR5-F2A admin-read | Merged on main (`#29`) |
-| PR `#31` F2B canonical applicator | **MERGED** 2026-09-02T10:32:09Z; squash/main SHA `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. Post-merge `push` run [`33619969867`](https://github.com/Vedang1998/Stocky/actions/runs/33619969867): event `push`, `head_sha` `0284b66…`, **conclusion SUCCESS** (Classify SUCCESS; Heavy SUCCESS; CI Gate SUCCESS). Inspected this pass; **not modified**. |
-| PR `#30` F2C compatibility projection | OPEN DRAFT, `CONFLICTING`, head `2d2e8801dd383a778c1237cec4ed068922859cf0` — **inspected only; not modified**. **Do not use PR #30 as a base.** |
+| Original planning `origin/main` (historical) | `f65ab4b906f53b3a1c72cdd7b29cdc0cbde6a7d7` — PR5-F2A squash `#29` (authoring / first-correction base) |
+| Historical observed `origin/main` (2026-09-02; **not current**) | `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26` — PR5-F2B squash `#31` |
+| **Current `origin/main` merged into this branch** | `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` — `Record Phase 1 PR5 repository-implementation closeout (#36)` |
+| PR5-F1 | **ACCEPTED / MERGED / FROZEN** (`#27`) |
+| PR5-F2A admin-read | **ACCEPTED / MERGED** (`#29`) |
+| PR `#31` F2B canonical applicator | **CLOSED / MERGED** 2026-09-02T10:32:09Z; squash `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. Post-merge `push` run [`33619969867`](https://github.com/Vedang1998/Stocky/actions/runs/33619969867) **SUCCESS**. Pattern source for PR6-C. |
+| PR `#30` F2C compatibility projection | **CLOSED / MERGED** 2026-09-03T23:16:51Z; squash `f9841691307583381695973600df3546dd1b9ee4`. **Historical** OPEN/CONFLICTING status is retired. Isolated accepted implementation head `2d2e8801dd383a778c1237cec4ed068922859cf0`. |
+| PR `#32` remaining-integration planning | **CLOSED / MERGED** squash `f1201f853b8a42f40e4d3e5565b6406410360c8a` |
+| PR `#33` Emergency Continuity Sprint control packet | **CLOSED / MERGED** squash `28c810090394f319e599fc6c501b898befa39cad` |
+| PR `#35` F3 remaining-integration runtime | **CLOSED / MERGED** squash `36365e2535a2394fa53b0642db4dbf90a438316f` at `2026-09-06T01:33:34Z`. Accepted exact implementation head `502b869eb540ea9071224bd4b5da52c6b55498f0`. Independent verdict `APPROVE PR5-F3 EXACT-HEAD IMPLEMENTATION`. |
+| PR `#36` PR5 closeout | **CLOSED / MERGED** squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` at `2026-09-06T16:51:22Z`. Post-merge main CI run `34046777505` SUCCESS (Classify `101523117557`; Heavy `101523133707` SKIPPED; CI Gate `101523133212`). |
+| PR 5 repository implementation | **FORMALLY CLOSED** |
+| Phase 1 | **IN PROGRESS** |
 | Current order/refund webhooks | Signal-only intake: `orders/create`, `orders/cancelled`, `refunds/create` |
-| Current merchant application | Legacy `SalesDailyAggregate` via `parseFloat` in `app/jobs/workers/webhook-processor.ts` |
-| Current scopes | `read_orders` present; `read_all_orders` **absent**; `write_orders` **absent** (must stay absent) |
-| This planning branch vs current main | **Not rebased / not merged** in this pass. One final current-main sync only after PR 5 closes. Premise files (`schema.prisma`, `shopify.app.toml`, sanitizers, webhook processor, tenant models, registers) **unchanged** by `#31`; `#31` added `app/lib/catalog-facts/apply/**` plus lock-capacity R-162 guards. |
+| Current merchant application | Legacy `SalesDailyAggregate` via `parseFloat` in `app/jobs/workers/webhook-processor.ts` — **must not** become PR6 canonical logic |
+| Current scopes | `read_orders` present; `read_all_orders` **absent**; `write_orders` **absent** (must stay absent). Do **not** add either scope in this planning PR. |
+| Tenant manifest hard-coded counts PR6-A must update | `scripts/tenant-enforcement/manifest.ts` `MERCHANT_TABLES.length !== 26`; `app/tenant/models.ts` DIRECT 20 / CHILD 6; `tenant-db.test.ts` asserts those lengths |
+| This planning branch vs current main | **Merged** current main `58bf62b4…` in this pass. Behind count must remain zero. No rebase / no force-push. |
 
 ### 0.3 Hard gate before any PR 6 runtime lane
 
-Phase 1 brief: PR 6 cannot begin until PR 5 **implementation** is independently reviewed, accepted, merged, and closure-synchronized.
+Phase 1 brief: PR 6 **runtime** cannot begin until this corrected plan is ChatGPT-accepted **and** a later explicit runtime authorization exists. PR 5 repository implementation is already **FORMALLY CLOSED**.
 
-This planning packet may exist one dependency level ahead under Accelerated Safe Delivery v1. It is **not** D-055, not PR 5 completion, and not PR 6 runtime authorization.
+This planning packet existed one dependency level ahead under Accelerated Safe Delivery v1. It is **not** D-055, not Phase 1 completion, and not PR 6 runtime authorization. Do **not** begin PR6-A/B/C/D from this document.
 
 ---
 
@@ -342,7 +479,7 @@ Not authorized in this planning PR and not authorized in later PR 6 runtime unle
 - Prisma schema / migrations in this PR;
 - GraphQL production documents in this PR;
 - webhook/worker/runtime changes in this PR;
-- PR 5 / PR 30 / PR 31 modifications;
+- PR 5 / PR 30 / PR 31 / PR 35 / PR 36 modifications;
 - Phase 2 forecast, ABC, or buying-table runtime;
 - replenishment / PO / receiving runtime;
 - inventory mutations or inventory-write flag enablement;
@@ -361,7 +498,8 @@ Not authorized in this planning PR and not authorized in later PR 6 runtime unle
 - production access, backfill, or merge;
 - illegal Bulk C (`orders { agreements { sales } }`);
 - passing pagination args on named **non-connection LIST** fields (`Order.refunds`, `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, `Refund.duties`);
-- selecting `Order.cancellation` or `LineItem.priceAfterAllDiscountsBeforeTaxesSet`;
+- selecting `Order.cancellation` (use `cancelReason`);
+- treating `LineItem.priceAfterAllDiscountsBeforeTaxesSet` as a second canonical net-sales / revenue authority, or depending on it in PR6 runtime (PO-11: the field **exists**; optional/reconciliation-capable only);
 - querying `Sale.lineItem` on the `Sale` interface.
 
 ---
@@ -382,15 +520,20 @@ API version is **Admin GraphQL 2026-07**. Documents follow F2A:
 
 No mutations.
 
-### 4.1 Official field authority used by this plan (accessed 2026-09-02)
+### 4.1 Official field authority used by this plan (accessed 2026-09-02; refreshed 2026-09-06)
 
-Sources:
+Sources (official `shopify.dev` Admin GraphQL **2026-07** unless noted):
 
 - [Order 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Order)
 - [LineItem 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/LineItem)
+- [Shop 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Shop)
 - [Refund 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/Refund)
 - [RefundLineItem 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/RefundLineItem)
 - [OrderAdjustment 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/OrderAdjustment)
+- [Sale 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/interfaces/Sale)
+- [SalesAgreement 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/interfaces/SalesAgreement)
+- [SaleActionType 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/enums/SaleActionType)
+- [OrderActionType 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/enums/OrderActionType)
 - [OrderEditAgreement 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/OrderEditAgreement)
 - [MoneyBag 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/MoneyBag)
 - [MoneyV2 2026-07](https://shopify.dev/docs/api/admin-graphql/2026-07/objects/MoneyV2)
@@ -400,6 +543,7 @@ Sources:
 - [Edit existing orders](https://shopify.dev/docs/apps/build/orders-fulfillment/order-management-apps/edit-orders)
 - [Access scopes](https://shopify.dev/docs/api/usage/access-scopes)
 - [Bulk operations queries](https://shopify.dev/docs/api/usage/bulk-operations/queries)
+- [LineItem `priceAfterAllDiscountsBeforeTaxesSet` changelog](https://shopify.dev/changelog/lineitem-priceafteralldiscountsbeforetaxesset-field-now-available) (version 2026-07)
 
 Official notes that bind architecture:
 
@@ -412,17 +556,20 @@ Official notes that bind architecture:
 7. A `Refund` object does **not** guarantee money has been returned; transactions have their own status. `ORDER_TRANSACTIONS_CREATE` fires when a transaction is created **or its status is updated**, **only** for statuses **`success`, `failure`, or `error`**. It does **not** fire for `PENDING`. PENDING transactions are observed through refund snapshots. The SUCCESS transition PO-06 depends on **does** fire.
 8. Webhook delivery and ordering are **not** guaranteed; reconciliation jobs are required.
 9. `orders/edited` payload reports **what changed**, not the new full order; refetch the order by GID.
-10. `Order.refunds` is an **array** (non-connection LIST) with optional `first` truncation. `Order.transactions`, `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, and `Refund.duties` are also non-connection LISTs. `Refund.transactions`, `Refund.refundLineItems`, `Refund.orderAdjustments`, `Refund.refundShippingLines`, `Order.lineItems`, `Order.agreements`, and `SalesAgreement.sales` are **connections** and **must** use `first`/`after`. Production refetch must **not** pass pagination args on named LIST fields.
+10. `Order.refunds` is an **array** (non-connection LIST `[Refund!]!`) with optional `first` truncation. `Order.transactions` is likewise a non-connection LIST. `LineItem.taxLines`, `LineItem.discountAllocations`, `LineItem.duties`, and `Refund.duties` are also non-connection LISTs. `Refund.transactions`, `Refund.refundLineItems`, `Refund.orderAdjustments`, `Refund.refundShippingLines`, `Order.lineItems`, `Order.agreements`, and `SalesAgreement.sales` are **connections** and **must** use `first`/`after`. Production refetch must **not** pass pagination args on named LIST fields.
 11. `LineItem.variant` and `LineItem.product` are nullable (deleted catalog identities).
 12. `Sale` does **not** expose `lineItem` on the interface. Only `ProductSale`, `GiftCardSale`, and `TipSale` do.
-13. `RefundLineItem.id` is **nullable** `ID`.
-14. `Refund.updatedAt` is `DateTime!`. `Refund.createdAt` is nullable.
+13. `RefundLineItem.id` is **nullable** `ID`. `RefundLineItem.priceSet` is `MoneyBag!` (non-null). `RefundLineItem.lineItem` is `LineItem!`.
+14. `Refund.updatedAt` is `DateTime!`. `Refund.createdAt` is nullable. `Refund.processedAt` is `DateTime!` (non-null).
 15. `OrderTransaction` has `createdAt` + nullable `processedAt` and **no `updatedAt`**, while `status` is mutable.
-16. `ORDERS_DELETE` exists and requires `read_orders`.
-17. Bulk operations: ≤5 connections, maximum nesting **depth two** counting the top-level connection. `orders { agreements { sales } }` is **three** levels and **illegal**.
-18. `SalesAgreement.reason` is `OrderActionType!` ∈ {`ORDER`, `ORDER_EDIT`, `REFUND`, `RETURN`, `UNKNOWN`}. Concrete types include `OrderAgreement`, `OrderEditAgreement`, `RefundAgreement`, **`ReturnAgreement`**.
-19. Every `LineItem` money bag (`originalTotalSet`, `discountedTotalSet`, `totalDiscountSet`, `discountedUnitPriceSet`, `discountedUnitPriceAfterAllDiscountsSet`) **includes refunded and removed quantities**. There is **no** current-quantity line money field.
-20. `ProductSale` has **no** `variant` field. Variant identity at sale is reachable only via `lineItem { variant { id } }` in the **same** snapshot.
+16. `ORDERS_DELETE` exists and requires `read_orders` (official `WebhookSubscriptionTopic` 2026-07). Payload shape remains **UNVERIFIED** as a production contract — sanitizer fail-closed; do not assume `admin_graphql_api_id`. Official webhook sample payload for `orders/delete` (accessed 2026-09-06) contains only REST `"id"`; that sample is **not** a completeness guarantee.
+17. Bulk operations (official [Bulk operations queries](https://shopify.dev/docs/api/usage/bulk-operations/queries), accessed 2026-09-06): maximum of **five total connections**; maximum of **two levels** of nested connections; connections **must implement the `Node` interface**; a bulk query must include a connection. `orders { agreements { sales } }` is **three** levels and **illegal**. Generated 2026-07 types: concrete `*Agreement` types and `Sale` / `*Sale` types **do not implement `Node`**. In API versions `2026-01` and higher, each app may run **up to five bulk operations of each type** (`bulkOperationRunQuery` / `bulkOperationRunMutation`) **per shop simultaneously**. Bulk B connection-under-LIST legality (and whether `Order.refunds` LIST + nested refund connections, or agreement `sales` connections, are bulk-legal) remains a **PR6-B executable/schema gate**. Official bulk docs say to validate supplied queries and do not exhaustively enumerate LIST-vs-connection combinations. Treat as **UNVERIFIED** until that gate records a result. Costed per-order refund refetch remains the fallback.
+18. `SalesAgreement.reason` is `OrderActionType!` ∈ {`ORDER`, `ORDER_EDIT`, `REFUND`, `RETURN`, `UNKNOWN`}. Concrete types include `OrderAgreement`, `OrderEditAgreement`, `RefundAgreement`, **`ReturnAgreement`**. Concrete agreement types **do not implement `Node`**; continuation is via the parent order (`OrderAgreementSalesPage`), not `node(id:)`.
+19. `Sale.actionType` is `SaleActionType!` ∈ {`ORDER`, `RETURN`, `UNKNOWN`, `UPDATE`}. `Sale.quantity` is nullable `Int`. Official 2026-07 `order` query example includes a mixed agreement with a positive `ORDER` ProductSale and a negative `RETURN` ProductSale.
+20. `LineItem.priceAfterAllDiscountsBeforeTaxesSet` **exists** in 2026-07 as `MoneyBag!`: current line subtotal after all discounts, excluding refunded and removed quantities, before tax. **PO-11:** optional / reconciliation-capable only. **Not** a second canonical net-sales authority. PR6 runtime **must not depend** on it. Do **not** derive per-unit price by dividing it. Do **not** expand PR6-A schema merely because it exists.
+21. Other LineItem money bags (`originalTotalSet`, `discountedTotalSet`, `totalDiscountSet`, `discountedUnitPriceSet`, `discountedUnitPriceAfterAllDiscountsSet`) **include refunded and removed quantities**.
+22. `ProductSale` has **no** `variant` field. Variant identity at sale is reachable only via `lineItem { variant { id } }` in the **same** snapshot.
+23. `Shop.ianaTimezone` is `String!` (IANA). `Shop.currencyCode` is `CurrencyCode!`. Defensive transport handling is policy, not schema nullability (PC-04 / F-CLAUDE-PR6P-17).
 
 ### 4.2 Direct refetch documents (planning names)
 
@@ -684,7 +831,7 @@ Required:
 - `variant { id legacyResourceId sku title }` (nullable)
 - `product { id legacyResourceId title handle }` (nullable)
 
-**Do not select:** `priceAfterAllDiscountsBeforeTaxesSet` (does not exist); `customAttributes`; `staffMember`; `taxLines(first:)`; `discountAllocations(first:)`; `duties(first:)`. If tax/discount/duty arrays are selected at all, **omit `first`**.
+**Do not select as a canonical money path:** `priceAfterAllDiscountsBeforeTaxesSet` (**exists** in 2026-07 as `MoneyBag!`; PO-11: optional/reconciliation-capable only; PR6 runtime must **not** depend on it); `customAttributes`; `staffMember`; `taxLines(first:)`; `discountAllocations(first:)`; `duties(first:)`. If tax/discount/duty arrays are selected at all, **omit `first`**.
 
 ### 4.3 Pagination rules (nested per-parent walk — frozen)
 
@@ -792,7 +939,7 @@ Bulk **is** the historical import path for **orders + lines**. Direct pagination
 }
 ```
 
-Bulk A must **not** select `priceAfterAllDiscountsBeforeTaxesSet` or `cancellation`.
+Bulk A must **not** depend on `priceAfterAllDiscountsBeforeTaxesSet` (PO-11: optional/reconciliation-capable only) and must **not** select `cancellation`.
 
 **Bulk B — refunds / adjustments:** `orders { refunds { refundLineItems { … } } }` uses `refunds` as an **array**, not a connection. Bulk documentation does not address non-connection list fields. **PR6-B gate deliverable:** submit the candidate document to the schema/bulk gate and **record the result**.
 
@@ -1127,7 +1274,7 @@ Forbidden:
 
 If `shopMoney.currencyCode` ≠ order `currencyCode` on a **required** bag: **fail-apply the entire resource snapshot**. No “skip bag”. No partial-freshness model.
 
-Multi-currency shops: each order has its own `currencyCode`. Cross-order ABC revenue **must not** sum mixed currencies. **No app FX.** Product still chooses exclude vs shop-only vs (forbidden) FX — proposed **Q-012**. Engineering half is frozen here.
+Multi-currency shops: each order has its own `currencyCode`. Cross-order ABC revenue **must not** sum mixed currencies. **No app FX.** Product still chooses exclude vs shop-only vs (forbidden) FX — registered **Q-012**. Engineering half is frozen here.
 
 Per-order `Order.currencyCode` (`shopCurrencyCode` on the fact) is what makes historical amounts survive a later shop currency change.
 
@@ -1201,27 +1348,34 @@ Evaluated **only** over a **consistent snapshot pair** (same observation / same 
 
 **Sole unit-event ledger:** `ShopifyOrderAgreementSaleFact`. Do **not** reintroduce refund-line units into the unit ledger.
 
-**Variant net units** for a line are the **sum of signed eligible `Sale.quantity`** (`ProductSale` / `PRODUCT`) dated per §7.2.2:
+**Variant net units** for a line are the **sum of signed eligible `Sale.quantity`** (`ProductSale` / `PRODUCT`) dated per §7.2.2 / PO-10:
 
 ```text
 net_units = Σ Sale.quantity
             over eligible ProductSales on that line
-            with parent reason ∈ {ORDER, ORDER_EDIT, REFUND, RETURN}
-            and Sale.quantity IS NOT NULL
+            where Sale.quantity IS NOT NULL
+              and Sale.actionType ∈ {ORDER, RETURN}
+              and the actionType/sign pair is valid per PO-10
 ```
 
-**Frozen sale-quantity sign convention (Shopify 2026-07):**
+`actionType = UPDATE` contributes **0** units (price/tax/discount only). Persist lineage/money; exclude from the unit-event sum.
 
-| Parent `SalesAgreement.reason` | Eligible `Sale.quantity` | Meaning |
-|---|---|---|
-| `ORDER` | **positive** | original sale |
-| `ORDER_EDIT` **positive** | **positive** | true **addition** — **never** a removal |
-| `ORDER_EDIT` **negative** | **negative** | edit **removal** |
-| `REFUND` / `RETURN` reversal | **negative** | reversal of original sale units |
+`actionType = UNKNOWN` is persisted; unit diagnostics are untrustworthy; do **not** silently include in operational demand.
+
+**Frozen sale classification (PO-10 — actionType + signed quantity; agreement reason is context/dating only):**
+
+| `Sale.actionType` | Valid unit direction | Contribution | Agreement `reason` role |
+|---|---|---|---|
+| `ORDER` | `quantity > 0` | `+quantity` | If `ORDER`: original units; metric date = order `processedAt` (shop IANA). If later (`ORDER_EDIT`, `RETURN`, or another valid non-original context): true later / exchange **addition**; metric date = agreement `happenedAt`. **Do not** treat as a refund merely because the parent agreement is return/refund-like. |
+| `RETURN` | `quantity < 0` | signed quantity as supplied | If reason ∈ `{REFUND, RETURN}`: `refunded_units += -quantity`. If reason = `ORDER_EDIT`: `removed_units += -quantity`. |
+| `UPDATE` | n/a | **0** | Persist lineage/money; exclude from unit sum. |
+| `UNKNOWN` | n/a | **not included** | Persist raw evidence; mark unit diagnostics untrustworthy. |
+
+One agreement may legitimately contain **positive `ORDER` ProductSale(s)** and **negative `RETURN` ProductSale(s)** (exchange / mixed agreement). That is **not** `UNIT_SALE_SIGN_INCONSISTENT`. T58.
 
 Official 2026-07 `order` query example (pinned by T55): a `RETURN` `ProductSale` has `"quantity": -2` (and a negative `totalAmount`).
 
-**Never `abs()` and never otherwise coerce an unexpected sign.** Persist Shopify’s raw `Sale.quantity`. If a `REFUND`/`RETURN` sale has a **positive** quantity, or any other sign contradiction vs the table above, set `unitDiagnosticState=UNIT_SALE_SIGN_INCONSISTENT`. Derived magnitudes for **that inconsistent snapshot** must **not** be represented as trustworthy values.
+**Never `abs()` and never otherwise coerce an unexpected sign.** Persist Shopify’s raw `Sale.quantity`. If `actionType = ORDER` with `quantity ≤ 0`, `actionType = RETURN` with `quantity ≥ 0`, or any other contradictory action/sign/reason combination vs the table above, set `unitDiagnosticState=UNIT_SALE_SIGN_INCONSISTENT`. Do **not** manufacture a corrected quantity. Derived magnitudes for **that inconsistent snapshot** must **not** be represented as trustworthy values.
 
 For each line, on a **consistent valid-sign** snapshot only:
 
@@ -1229,20 +1383,22 @@ For each line, on a **consistent valid-sign** snapshot only:
 |---|---|---|
 | `ordered_units` | Units ordered including later refunds and removals | `LineItem.quantity` |
 | `current_units` | Units remaining excluding refunded and removed | `LineItem.currentQuantity` |
-| `refunded_units` | **Positive magnitude** of valid **negative** eligible REFUND/RETURN sale quantities | unit-event ledger — **not** refund-line sum |
-| `removed_units` | **Positive magnitude** of valid **negative** eligible ORDER_EDIT removal quantities. Positive ORDER_EDIT quantities are **additions, never removals**. | unit-event ledger |
+| `refunded_units` | **Positive magnitude** of valid **negative** eligible `RETURN` ProductSales whose parent reason ∈ `{REFUND, RETURN}` | unit-event ledger — **not** refund-line sum |
+| `removed_units` | **Positive magnitude** of valid **negative** eligible `RETURN` ProductSales whose parent reason = `ORDER_EDIT`. Positive `ORDER` ProductSales on `ORDER_EDIT` (or other later agreements) are **additions, never removals**. | unit-event ledger |
 
-Exact formulas (eligible = variant-unit `ProductSale` / `PRODUCT`; `Sale.quantity IS NOT NULL`):
+Exact formulas (eligible = variant-unit `ProductSale` / `PRODUCT`; `Sale.quantity IS NOT NULL`; valid actionType/sign per PO-10):
 
 ```text
 refunded_units
   = −Σ (Sale.quantity of eligible ProductSales
-        whose parent reason ∈ {REFUND, RETURN}
+        whose actionType = RETURN
+        and parent reason ∈ {REFUND, RETURN}
         and Sale.quantity < 0)
 
 removed_units
   = −Σ (Sale.quantity of eligible ProductSales
-        whose parent reason = ORDER_EDIT
+        whose actionType = RETURN
+        and parent reason = ORDER_EDIT
         and Sale.quantity < 0)
 ```
 
@@ -1256,7 +1412,7 @@ Do **not** evaluate this identity, and do **not** publish trustworthy derived ma
 
 If the identity fails on a consistent **valid-sign** snapshot pair, do not coerce. Set `unitDiagnosticState=LINE_UNIT_IDENTITY_INCONSISTENT`. Keep stored Shopify fields.
 
-T29 and T54 must **actually detect** contradictory unit identities (a broken identity must fire; a consistent exchange must not). T47: the underlying reversal sale stores **−1** **and** derived `refunded_units = 1`.
+T29 and T54 must **actually detect** contradictory unit identities (a broken identity must fire; a consistent exchange must not). T47: the underlying reversal sale stores **−1** with `actionType=RETURN` **and** derived `refunded_units = 1`. T58: mixed ORDER+RETURN sales on one agreement must not false-fire `UNIT_SALE_SIGN_INCONSISTENT`.
 
 Gift-card lines (`isGiftCard=true`) and `GiftCardSale` / `TipSale`: stored; **excluded from variant demand / replenishment / ABC** (PO-08).
 
@@ -1266,11 +1422,13 @@ Test orders (`orderTest=true`): stored; **excluded from every operational demand
 
 ### 7.2 One unit-event ledger (Option A — frozen)
 
-**Sole unit-event ledger:** `ShopifyOrderAgreementSaleFact` rows whose parent `SalesAgreement.reason` ∈ {`ORDER`, `ORDER_EDIT`, `REFUND`, `RETURN`} **and** whose concrete sale type is variant-unit eligible per §7.2.1.
+**Sole unit-event ledger:** `ShopifyOrderAgreementSaleFact` rows whose concrete sale type is variant-unit eligible per §7.2.1 **and** whose `actionType`/sign pair is valid per PO-10.
+
+Parent `SalesAgreement.reason` is **context and dating**, not independent unit direction.
 
 Refund-line facts remain stored as **money, restock, and reconciliation evidence** and are **not** unit events. Do **not** reintroduce refund-line units into the unit ledger.
 
-`UNKNOWN` agreement reason: persist sales; **not** unit events until a later named policy; set `unitDiagnosticState` accordingly.
+`UNKNOWN` agreement reason: persist sales; apply PO-10 actionType/sign rules for unit contribution; if reason is unknown, dating/context diagnostics remain untrusted until a later named policy.
 
 Cancellation is **not** a second unit event if lines/agreements already reflect remaining units. `cancelledAt` is status.
 
@@ -1291,15 +1449,17 @@ Facts retain original timestamps. **Metric dating:**
 
 | Event | Units | Metric calendar day (shop IANA timezone) |
 |---|---|---|
-| Original `reason=ORDER` ProductSale | **positive** `Sale.quantity` | original order `processedAt` |
-| Edit removal `reason=ORDER_EDIT` **negative** ProductSale | restates **original order** net demand | original order `processedAt` (not happenedAt) |
-| True edit **addition** `reason=ORDER_EDIT` **positive** ProductSale | **positive** `Sale.quantity`; **never** a removal | agreement `happenedAt` |
-| Refund/return `reason ∈ {REFUND, RETURN}` ProductSale | **negative** reversal `Sale.quantity`; restates **original order** net demand | original order `processedAt` (not refund day) |
+| Original `actionType=ORDER` ProductSale on `reason=ORDER` | **positive** `Sale.quantity` | original order `processedAt` |
+| Later `actionType=ORDER` ProductSale on `ORDER_EDIT` / `RETURN` / other valid non-original reason | **positive** `Sale.quantity`; true **addition / exchange addition**; **never** a refund | agreement `happenedAt` |
+| `actionType=RETURN` ProductSale on `reason=ORDER_EDIT` (`quantity < 0`) | restates **original order** net demand as `removed_units` | original order `processedAt` (not happenedAt) |
+| `actionType=RETURN` ProductSale on `reason ∈ {REFUND, RETURN}` (`quantity < 0`) | restates **original order** net demand as `refunded_units` | original order `processedAt` (not refund day) |
+| `actionType=UPDATE` | **0** units; persist lineage/money | n/a |
+| `actionType=UNKNOWN` | persist; **not** silently included in operational demand | n/a |
 | Refund line | **not a unit event** | n/a |
 | `Sale.quantity IS NULL` | persist; **never** a unit event | n/a |
-| Unexpected sign (e.g. REFUND/RETURN **positive**) | persist raw Shopify value; `UNIT_SALE_SIGN_INCONSISTENT`; derived magnitudes **not trustworthy** | n/a |
+| Unexpected actionType/sign combination | persist raw Shopify value; `UNIT_SALE_SIGN_INCONSISTENT`; derived magnitudes **not trustworthy** | n/a |
 
-T47: 3 ordered − 1 refunded ⇒ the reversal sale stores **−1** **and** derived `refunded_units = 1`, **not** 2, with **both** agreement and refund facts present. T55 pins Shopify’s documented RETURN example (`quantity: -2`).
+T47: 3 ordered − 1 refunded ⇒ the reversal sale stores **−1** with `actionType=RETURN` **and** derived `refunded_units = 1`, **not** 2, with **both** agreement and refund facts present. T55 pins Shopify’s documented RETURN example (`actionType: RETURN`, `quantity: -2`). T58 pins a mixed agreement containing a positive `ORDER` ProductSale **and** a negative `RETURN` ProductSale without `UNIT_SALE_SIGN_INCONSISTENT`.
 
 ### 7.3 Metric policy — frozen
 
@@ -1311,7 +1471,7 @@ PR 6 **implementation** still must **not** label a merchant-visible Stocky-parit
 
 ### 7.4 Money metric names (facts, not yet forecast)
 
-Persist Shopify bags. Do not rename them into “net sales” in code until proposed **Q-013** (former Q-PR6-04) closes:
+Persist Shopify bags. Do not rename them into “net sales” in code until registered **Q-013** (former Q-PR6-04) closes:
 
 | Name | Proposed Shopify binding (provisional) | Status |
 |---|---|---|
@@ -1327,6 +1487,8 @@ Refund **money** affects net-sales/revenue **only after** the relevant refund tr
 
 Order-level `currentTotalPriceSet` includes taxes and discounts after returns (official Order docs). That is **not** automatically “net sales.”
 
+`LineItem.priceAfterAllDiscountsBeforeTaxesSet` **exists** (`MoneyBag!`) and is **not** the PR6 canonical net-sales bag (PO-11). Do not divide it.
+
 ### 7.5 Scenario rules (apply behavior)
 
 | Scenario | Apply rule |
@@ -1338,7 +1500,7 @@ Order-level `currentTotalPriceSet` includes taxes and discounts after returns (o
 | Order edits | `edited=true`; agreements/sales upserted from **order** snapshot; line quantities replaced from refetch, not patched from webhook deltas |
 | Line removal | Line row remains; `currentQuantity=0` |
 | Quantity increase/decrease | New snapshot + agreement sales; additions dated `happenedAt`; removals restate original `processedAt` |
-| **Exchange** | Persist Shopify snapshots; do **not** emit spurious `LINE_UNIT_IDENTITY_INCONSISTENT` when the valid-sign identity holds on a consistent pair (T54). T54 **must also** detect a contradictory identity when one is injected. |
+| **Exchange / mixed agreement** | Persist Shopify snapshots. One agreement may contain positive `ORDER` ProductSale(s) **and** negative `RETURN` ProductSale(s) without `UNIT_SALE_SIGN_INCONSISTENT` (T58). Do **not** emit spurious `LINE_UNIT_IDENTITY_INCONSISTENT` when the valid-sign identity holds on a consistent pair (T54). T54 **must also** detect a contradictory identity when one is injected. |
 | **`SaleLineType.ADJUSTMENT` / `AdjustmentSale`** | Persist; **not** a unit event; money reconciliation only |
 | Cancel after payment | `cancelledAt` + `cancelReason`; refunds may exist; do not apply webhook line_items as deltas |
 | Refund after cancellation | Persist both; identity on consistent snapshot |
@@ -1676,26 +1838,45 @@ Do not ship a labeled Stocky-parity velocity from PR 6 itself (Phase 2 consumer)
 
 ## 17. Implementation lane decomposition
 
-Runtime lanes start **only after** (a) this **corrected** plan is ChatGPT-accepted and (b) PR 5 implementation is independently reviewed, accepted, merged, and closure-synchronized.
+Runtime lanes start **only after** (a) this **corrected and current-main-synchronized** plan is ChatGPT-accepted, (b) independent final planning re-review completes, and (c) ChatGPT later issues **explicit PR6 runtime authorization**. PR 5 repository implementation is already **FORMALLY CLOSED**. This packet does **not** start PR6-A/B/C/D.
 
 Shared contracts freeze in **PR6-A** before B and C (Accelerated Safe Delivery: schema/interfaces freeze before dependent runtime lanes).
 
 ### 17.1 Revised graph (F-CLAUDE-PR6P-16)
 
 ```text
-PR5 closed
-  └─ PR6-A foundation (schema + locks + types.ts + Shop.ianaTimezone/currencyCode
-       + denormalized line columns + roles.ts + DIRECT/CHILD)
-       ├─ PR6-B admin-read (documents, bulk gate, app/types/**)  ─┐
-       └─ PR6-C applicator (no Shopify I/O; consumes A types)    ─┴─→ PR6-D webhooks/import
-            (keep v1 sanitizers for 3 existing topics;
-             identity-only for new topics;
-             orders/edited, orders/delete, order_transactions/create)
+PR5 FORMALLY CLOSED
+  └─ later ChatGPT PR6 runtime authorization (NOT this PR)
+       └─ PR6-A foundation (schema + locks + order-domain types.ts
+            + Shop.ianaTimezone/currencyCode
+            + denormalized line columns + roles.ts + DIRECT/CHILD)
+            ├─ PR6-B admin-read (documents, bulk gate, app/types/**)  ─┐
+            └─ PR6-C applicator (no Shopify I/O; consumes A types)    ─┴─→ PR6-D webhooks/import
+                 (keep v1 sanitizers for 3 existing topics;
+                  identity-only for new topics;
+                  orders/edited, orders/delete, order_transactions/create)
 ```
 
 PR6-C is pure apply and needs the **frozen types** from A, not B’s reader implementation. Serialising C behind B’s merge is unnecessary.
 
-Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four writers at once. Do not start A before PR 5 closes.
+Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four writers at once. Do not start A from this planning PR.
+
+PR6-C copies **patterns** from merged PR5, in **order-domain sibling modules** — do **not** widen `CatalogResourceKind` or repurpose catalog enums for orders:
+
+- tenant-scoped DB access (`TenantDb`);
+- advisory identity locks (`stocky-pr5-canonical-lock-v1` pattern → `stocky-pr6-canonical-lock-v1`);
+- deterministic lock ordering;
+- safe lock-capacity handling;
+- exact money helpers (`app/lib/catalog-facts/apply/money.ts` pattern);
+- observation-generation sequence / intervals / fencing;
+- no Shopify I/O under canonical locks;
+- application receipts / idempotence;
+- projection pending/health patterns where applicable;
+- physical-delete denial pattern.
+
+Order existence kinds remain siblings, including `INACCESSIBLE_HISTORY_WINDOW` and `ABSENT_SIGNALLED_DELETE_UNVERIFIED`. Catalog existence kinds stay catalog-only.
+
+PR6-D should reference F3 authoritative-refetch (`app/jobs/workers/catalog-facts/resource-refetch.ts`) and JSONL/checkpoint ingest patterns (`app/lib/catalog-facts/ingest/jsonl-stream.ts`, `checkpoint.ts`) where applicable. Do not copy catalog resource kinds.
 
 ### 17.2 Lanes
 
@@ -1707,9 +1888,9 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 | Objective | Additive Prisma models, migration, RLS/enforcement registration **including roles.ts**, lock-key module `stocky-pr6-canonical-lock-v1`, observation-in-flight table, known-answer lock vectors, `Shop.ianaTimezone` / `Shop.currencyCode`, denormalized line columns, **types-only** `app/lib/order-facts/types.ts` (no Prisma import, no GraphQL import) |
 | File ownership | `prisma/schema.prisma` (order-domain models + Shop columns/relations only), `prisma/migrations/<pr6_order_facts>/`, `app/lib/order-facts/constants.ts`, `app/lib/order-facts/lock-key.ts`, `app/lib/order-facts/advisory-lock.ts`, `app/lib/order-facts/types.ts`, `scripts/tenant-enforcement/manifest.ts` (additive), `scripts/tenant-enforcement/roles.ts` (additive grants), `app/tenant/models.ts` (additive DIRECT/CHILD), enforcement tests `scripts/tenant-enforcement/tests/pr6-*.test.ts` |
 | Must not touch | GraphQL documents, webhooks, workers, catalog-facts/admin-read, catalog apply, F2C, forecast/ABC, `app/types/**` |
-| Dependencies | PR 5 closed; this corrected plan accepted |
+| Dependencies | PR 5 **FORMALLY CLOSED**; this corrected plan accepted; later explicit PR6 runtime authorization |
 | Tier | **A** |
-| Tests | RLS isolation, shopId immutability, lock known-answers, migration empty+current schema, cross-shop identical GIDs, denormalized column invariant fixtures, DIRECT vs CHILD registration |
+| Tests | RLS isolation, shopId immutability, lock known-answers, migration empty+current schema, cross-shop identical GIDs, denormalized column invariant fixtures, DIRECT vs CHILD registration. **Must update** current-main hard-coded counts: `MERCHANT_TABLES.length === 26`, DIRECT 20, CHILD 6 in `scripts/tenant-enforcement/manifest.ts`, `app/tenant/models.ts`, and `tenant-db.test.ts`. |
 | Claude | **Required** (Tier A) |
 | Merge order | **1** |
 
@@ -1737,7 +1918,7 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 | Must not touch | admin-read documents, prisma schema, webhook routes, forecast, `app/types/**` |
 | Dependencies | **PR6-A merged** (tables + types). **Not** blocked on PR6-B merge |
 | Tier | **A** |
-| Tests | §19 apply/clock/money/unit cases including T41–T50, T54–T57 |
+| Tests | §19 apply/clock/money/unit cases including T41–T50, T54–T58 |
 | Claude | **Required** |
 | Merge order | **2 (parallel with B)** |
 
@@ -1757,7 +1938,7 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 
 ### 17.3 File-ownership conflict watch
 
-`webhook-processor.ts`, `sanitize.server.ts`, `job-envelope.server.ts`, `schema.prisma` are single-writer files. Only the listed lane may edit them. **Do not use PR #30 as a base.** PR **#31** is **merged** on `origin/main` as `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`; `app/lib/catalog-facts/apply/**` on main is the merged reference applicator pattern for PR6-C. This planning branch is **not** rebased onto current main in this pass.
+`webhook-processor.ts`, `sanitize.server.ts`, `job-envelope.server.ts`, `schema.prisma` are single-writer files. Only the listed lane may edit them. PR **#30** F2C and PR **#31** F2B are **CLOSED / MERGED**. Copy **patterns** from current-main `app/lib/catalog-facts/apply/**`, tenant/lock/money/fencing, and F3 refetch/JSONL modules. Plan **order-domain sibling** types/modules. Do **not** widen `CatalogResourceKind`.
 
 ---
 
@@ -1767,8 +1948,9 @@ Two concurrent Cursor lanes after A: **B ∥ C**, then D. Do not open four write
 
 - [x] All 24 findings have explicit dispositions (this packet; ChatGPT still decides technical acceptance)
 - [x] All 70 correction-list items incorporated
-- [x] Product-owner decisions PO-01 … PO-09 frozen
-- [x] NEW-CLAUDE-PR6PC-01 … 06 incorporated in contract text (this pass; independent final correction re-review pending)
+- [x] Product-owner decisions PO-01 … PO-11 frozen
+- [x] NEW-CLAUDE-PR6PC-01 … 06 incorporated in contract text (prior pass; independent final correction re-review pending)
+- [x] Current main `58bf62b4…` merged; PR5 **FORMALLY CLOSED**; PO-10 / PO-11 incorporated; proposed risks remapped off colliding R-165
 - [ ] Immutable original review blob remains `d72340c01dd9c662d0e8bb4aa8d43482940470d9`
 - [ ] Immutable correction re-review blob remains `fca2b260d03e3105782ed216f7773c53e6aef2a7`
 - [ ] Diff is docs-only under `stocky-plus/docs/**` (and `AGENTS.md` if it were touched — it is not)
@@ -1849,7 +2031,7 @@ Positive / negative / bypass / drift required for each important rule.
 | T44 | − | Stale order response | Must **not** write its children |
 | T45 | + | Equal-`updatedAt` refetch | Repairs drifted children |
 | T46 | + | Refund line with null `id` | Ingests; idempotent |
-| T47 | + | 3 ordered − 1 refunded with **both** agreement and refund facts | Underlying reversal sale stores **−1**; derived `refunded_units = 1`, **not** 2 |
+| T47 | + | 3 ordered − 1 refunded with **both** agreement and refund facts | Underlying reversal sale stores **−1** with `actionType=RETURN`; derived `refunded_units = 1`, **not** 2 |
 | T48 | − | One invalid required MoneyBag | Rejects **whole** snapshot (no partial row) |
 | T49 | + | Refund money-reconciliation identity | Balances; unbalanced ⇒ diagnostic / DataIssue via reconciler |
 | T50 | bypass | Scope downgrade | Voids prior absence authority |
@@ -1860,6 +2042,7 @@ Positive / negative / bypass / drift required for each important rule.
 | T55 | + | Documented Shopify RETURN example (`actionType: RETURN`, `quantity: -2`) | Ledger stores **−2**; derived `refunded_units` magnitude **2** on a valid-sign snapshot |
 | T56 | + | Two refunds each exceeding one child page | Complete snapshot **eventually applies**; no partial refund rows from truncated embeds |
 | T57 | − | Exhausted / incomplete nested walk | `SNAPSHOT_PAGINATION_INCOMPLETE` on `OrderFactObservationInFlight`; **never** partially applied; reconciler `DataIssue` visible |
+| T58 | + | Mixed agreement: positive `actionType=ORDER` ProductSale(s) **and** negative `actionType=RETURN` ProductSale(s) on the **same** parent agreement | Applies; **must not** emit `UNIT_SALE_SIGN_INCONSISTENT`; net_units = signed sum; refunded/removed magnitudes follow PO-10 reason rules |
 
 Also required (clock races, not separate IDs): refund/order interleaving both directions; transaction pending→success with no parent bump **observed via refund snapshot** (topic does not fire for PENDING); exact-boundary `windowDays` drift.
 
@@ -1874,15 +2057,15 @@ line originalTotal 10.00 qty 2 refund 1 × 5.00 → persist Shopify bags; do not
 
 ---
 
-## 20. Product questions — disposition and proposed `Q-0##` IDs
+## 20. Product questions — disposition and registered `Q-0##` IDs
 
-**This PR does not edit `OPEN_QUESTIONS.md`.** ChatGPT should synchronize the control record after acceptance using this table.
+**This current-main synchronization registers remaining genuine questions in `OPEN_QUESTIONS.md`.** Highest existing register id on current main before this pass: **Q-011**. Next available: **Q-012**.
 
-Highest existing register id at `f65ab4b9…`: **Q-011**.
+PO-10 and PO-11 are **RESOLVED**, not open questions.
 
 ### 20.1 Closed / frozen (must not remain open as PR6 product questions)
 
-| Former id | Disposition | Proposed register action |
+| Former id | Disposition | Register action |
 |---|---|---|
 | Q-PR6-01 | **FROZEN** `net-units-order-date-v1` (PO-03) | Do not add a Q |
 | Q-PR6-03 | **ENGINEERING** — shop IANA calendar days; `Shop.ianaTimezone` in PR6-A | Do not add a Q |
@@ -1890,18 +2073,20 @@ Highest existing register id at `f65ab4b9…`: **Q-011**.
 | Q-PR6-07 | **FROZEN** SUCCESS gating + required `order_transactions/create` (PO-06) | Do not add a Q |
 | Q-PR6-08 | **FROZEN** persist; exclude from variant demand (PO-08) | Do not add a Q |
 | Q-PR6-09 | **FROZEN** do not tighten three sanitizers; separate authorized cutover (PO-02) | Do not add a Q |
-| Q-PR6-10 | **FROZEN** correctness without grant (PO-01); pursue Partner approval | Partner **timing** only → Q-016 |
+| Q-PR6-10 | **FROZEN** correctness without grant (PO-01); pursue Partner approval | Partner **timing** only → **Q-016** |
 | Q-PR6-12 | **CLOSED** — never explode BOM (`AGENTS.md` principle 7) | Do not add a Q |
 
-### 20.2 Remaining genuine product questions (storage-neutral or later grain)
+### 20.2 Remaining genuine product questions (registered this pass)
 
-| Proposed ID | Former id | Question | Why it remains | Blocks |
+None of these is a **PR6-A fact-correctness blocker** unless a later product decision says the answer is required to persist facts honestly. Engineering already forbids mixed-currency sums, app FX, invented location, and treating `read_all_orders` as a correctness dependency.
+
+| ID | Former id | Question | Classification | Blocks PR6-A? |
 |---|---|---|---|---|
-| **Q-012** | Q-PR6-02 | Multi-currency ABC: exclude mixed-currency orders vs shop-currency-only vs (forbidden) FX | Engineering already forbids summing mixed currencies and app FX | ABC revenue **label** |
-| **Q-013** | Q-PR6-04 | Which MoneyBag is “net sales” / ABC revenue (tax, shipping, discounts) | PRD says “revenue” only | ABC / worksheet revenue |
-| **Q-014** | Q-PR6-06 | Location-grain demand identity | No stable GraphQL line sale-location; Monday is shop-wide (PO-09) | Per-location Last-X |
-| **Q-015** | Q-PR6-11 | Do cancelled unpaid orders contribute `ordered_units` then cancel vs never sold? | Status vs units; storage-neutral | Net units edge |
-| **Q-016** | Q-PR6-10 timing | When to request/receive Partner `read_all_orders` grant | Not a correctness dependency (PO-01); needed for live lookback >60d / last-year **from Shopify** | Live history depth / out-of-window refund observability **from Shopify** |
+| **Q-012** | Q-PR6-02 | Multi-currency ABC: exclude mixed-currency orders vs shop-currency-only vs (forbidden) FX | **Later metric / product** | **No** — persist per-order currency; do not sum mixed currencies |
+| **Q-013** | Q-PR6-04 | Authoritative later “net sales” / ABC revenue presentation definition (tax, shipping, discounts). PO-11 already forbids using `priceAfterAllDiscountsBeforeTaxesSet` as a second canonical authority. | **Later metric / product** | **No** — persist Sale/Refund/transaction bags |
+| **Q-014** | Q-PR6-06 | Future location-grain demand identity | **Later metric / product** | **No** — Monday is shop-wide (PO-09) |
+| **Q-015** | Q-PR6-11 | Cancelled/unpaid order treatment in later metrics (`ordered_units` then cancel vs never sold) | **Later metric / product** | **No** — storage-neutral; persist Shopify status/units |
+| **Q-016** | Q-PR6-10 timing | When to request/receive Partner `read_all_orders` grant | **Production / Partner** | **No** — PO-01: correctness must not depend on the grant |
 
 Q-004 (incoming inventory forecast mix) remains **OPEN** and **out of PR 6**.
 
@@ -1909,38 +2094,65 @@ Q-PR6-03 is **not** remaining. Do not leave BOM or Q-PR6-03 open.
 
 ---
 
-## 21. Risk-register impacts — proposed `R-###` IDs
+## 21. Risk-register impacts — synchronized `R-###` IDs
 
-**This PR does not edit `RISK_REGISTER.md`.** Highest existing id at `f65ab4b9…`: **R-164**. Proposed next: **R-165**.
+**This PR does not edit `RISK_REGISTER.md`.** Highest authoritative id on current main `58bf62b4…`: **R-165** (F2C null→zero; **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION**). That ID must **not** be reused.
 
-R-014 remains **OPEN**. This plan is the architecture to close it on the **new** fact path. Legacy webhook `parseFloat` remains until the separate cutover PR (PO-02). Planning approval does **not** close R-014.
+Historical planning reviews proposed PR6 risks as **R-165…R-184**. Those IDs remain in the **immutable** review artifacts as evidence of the reviewed historical packet. Mutable plan/current-control prose uses the synchronized IDs below.
 
-R-139 (catalog money) is not closed by PR 6 planning. R-016 still applies when PR6-B adds documents. R-160 / R-161 reuse lock-before-insert and capacity evidence; do not assume catalog lock version covers orders.
+**Old proposed → synchronized final mapping (entire PR6 proposed block, contiguous, +1):**
 
-### 21.1 Proposed renumbering table (durable; for later control-record sync)
+| Historical proposed ID (immutable reviews) | Synchronized ID (this plan) |
+|---|---|
+| R-165 | **R-166** |
+| R-166 | **R-167** |
+| R-167 | **R-168** |
+| R-168 | **R-169** |
+| R-169 | **R-170** |
+| R-170 | **R-171** |
+| R-171 | **R-172** |
+| R-172 | **R-173** |
+| R-173 | **R-174** |
+| R-174 | **R-175** |
+| R-175 | **R-176** |
+| R-176 | **R-177** |
+| R-177 | **R-178** |
+| R-178 | **R-179** |
+| R-179 | **R-180** |
+| R-180 | **R-181** |
+| R-181 | **R-182** |
+| R-182 | **R-183** |
+| R-183 | **R-184** |
+| R-184 | **R-185** |
 
-| Proposed ID | Sev | Former / source | Risk |
+R-014 remains **OPEN**. This plan is the architecture to close it on the **new** fact path. Legacy webhook `parseFloat` remains until the separate cutover PR (PO-02). Planning approval does **not** close R-014. Unsafe legacy `parseFloat`/`Number` order handlers **must not** become PR6 canonical logic.
+
+R-139 (catalog money) is not closed by PR 6 planning. R-016 still applies when PR6-B adds documents. R-160 / R-161 reuse lock-before-insert and capacity evidence; do not assume catalog lock version covers orders. Current-main **R-165** remains the PR5 F2C risk and is distinct from every PR6 proposed ID.
+
+### 21.1 Synchronized PR6 proposed risk block
+
+| Synchronized ID | Sev | Former / source | Risk |
 |---|---|---|---|
-| **R-165** | P1 | R-PR6-01 | Silent line/refund/array truncation via `first` on array fields |
-| **R-166** | P1 | R-PR6-02 | 60-day window silently treated as a complete lookback |
-| **R-167** | P1 | R-PR6-03 | Runtime invents a net-units policy other than frozen `net-units-order-date-v1` |
-| **R-168** | P1 | R-PR6-04 | Location `default` carried from legacy aggregates as canonical |
-| **R-169** | P1 | R-PR6-05 | Webhook REST payload used as quantity ledger |
-| **R-170** | P1 | R-PR6-06 | FK from order lines to current variant facts losing deleted-variant history |
-| **R-171** | P1 | R-PR6-07 | Mixing shop and presentment money in ABC |
-| **R-172** | P2 | R-PR6-08 | `orders/edited` / `orders/delete` / `order_transactions/create` not subscribed; Last-X stale or money SUCCESS unobservable |
-| **R-173** | P1 | R-PR6-09 | Conflicted PR #30 applicator copied incorrectly into order apply (clock collapse). PR #31 is merged; use `app/lib/catalog-facts/apply/**` on main as the PR6-C pattern. |
-| **R-174** | P1 | R-PR6-10 | Bulk nesting invalid document submitted without schema gate |
-| **R-175** | **P0** | R-PR6-11 | Rolling 60-day access window causes mass false tombstoning; loss unrecoverable; terminal-revival never fires |
-| **R-176** | P1 | R-PR6-12 | `orders/delete` omitted so no sound deletion authority |
-| **R-177** | P1 | R-PR6-13 | Refunds/edits on orders older than the window permanently unobservable; reconcile cannot heal |
-| **R-178** | P1 | R-PR6-14 | Stale parent snapshot overwrites fresher children (no all-or-nothing rule) |
-| **R-179** | P1 | R-PR6-15 | Nullable `RefundLineItem.id` ⇒ refund-line idempotency unfounded |
-| **R-180** | P1 | R-PR6-16 | Agreement sales and refund lines both post unit events ⇒ double subtraction |
-| **R-181** | P1 | R-PR6-17 | Identity-only sanitizer silently zeroes live legacy demand while replacement has no consumer |
-| **R-182** | P1 | R-PR6-18 | Apply-time diagnostics unwritable (`DataIssue` control-plane; no merchant-durable columns) |
-| **R-183** | P2 | R-PR6-19 | `OrderTransaction.status` mutable with no version and no subscribed signal |
-| **R-184** | P2 | R-PR6-20 | Illegal Bulk C / uncosted Bulk B ⇒ Monday agreement/refund import path uncosted |
+| **R-166** | P1 | R-PR6-01 (old proposed R-165) | Silent line/refund/array truncation via `first` on array fields |
+| **R-167** | P1 | R-PR6-02 (old proposed R-166) | 60-day window silently treated as a complete lookback |
+| **R-168** | P1 | R-PR6-03 (old proposed R-167) | Runtime invents a net-units policy other than frozen `net-units-order-date-v1` |
+| **R-169** | P1 | R-PR6-04 (old proposed R-168) | Location `default` carried from legacy aggregates as canonical |
+| **R-170** | P1 | R-PR6-05 (old proposed R-169) | Webhook REST payload used as quantity ledger |
+| **R-171** | P1 | R-PR6-06 (old proposed R-170) | FK from order lines to current variant facts losing deleted-variant history |
+| **R-172** | P1 | R-PR6-07 (old proposed R-171) | Mixing shop and presentment money in ABC |
+| **R-173** | P2 | R-PR6-08 (old proposed R-172) | `orders/edited` / `orders/delete` / `order_transactions/create` not subscribed; Last-X stale or money SUCCESS unobservable |
+| **R-174** | P1 | R-PR6-09 (old proposed R-173) | Catalog applicator copied incorrectly into order apply (clock collapse). PR #30 F2C and PR #31 F2B are **CLOSED / MERGED**; copy **patterns** from current-main `app/lib/catalog-facts/apply/**` into order-domain siblings. |
+| **R-175** | P1 | R-PR6-10 (old proposed R-174) | Bulk nesting invalid document submitted without schema gate |
+| **R-176** | **P0** | R-PR6-11 (old proposed R-175) | Rolling 60-day access window causes mass false tombstoning; loss unrecoverable; terminal-revival never fires |
+| **R-177** | P1 | R-PR6-12 (old proposed R-176) | `orders/delete` omitted so no sound deletion authority |
+| **R-178** | P1 | R-PR6-13 (old proposed R-177) | Refunds/edits on orders older than the window permanently unobservable; reconcile cannot heal |
+| **R-179** | P1 | R-PR6-14 (old proposed R-178) | Stale parent snapshot overwrites fresher children (no all-or-nothing rule) |
+| **R-180** | P1 | R-PR6-15 (old proposed R-179) | Nullable `RefundLineItem.id` ⇒ refund-line idempotency unfounded |
+| **R-181** | P1 | R-PR6-16 (old proposed R-180) | Agreement sales and refund lines both post unit events ⇒ double subtraction |
+| **R-182** | P1 | R-PR6-17 (old proposed R-181) | Identity-only sanitizer silently zeroes live legacy demand while replacement has no consumer |
+| **R-183** | P1 | R-PR6-18 (old proposed R-182) | Apply-time diagnostics unwritable (`DataIssue` control-plane; no merchant-durable columns) |
+| **R-184** | P2 | R-PR6-19 (old proposed R-183) | `OrderTransaction.status` mutable with no version and no subscribed signal |
+| **R-185** | P2 | R-PR6-20 (old proposed R-184) | Illegal Bulk C / uncosted Bulk B ⇒ Monday agreement/refund import path uncosted |
 
 ---
 
@@ -1950,17 +2162,15 @@ Operational target (Monday 2026-09-07) is **not** a commitment and does not over
 
 Dependency order only:
 
-1. ChatGPT accepts this **corrected** planning packet (this PR). Frozen PO decisions are already in the contract.
-2. PR 5 remaining runtime lanes independently reviewed, accepted, merged, closure-synced. **PR 6 runtime cannot start before this.** PR **#31** is **merged** (`0284b66c…`); inspect only. **Do not use PR #30 as a base** (still OPEN DRAFT, CONFLICTING). This planning branch is **not** rebased onto current main in this pass; one final current-main sync only after PR 5 closes.
-3. **PR6-A**.
+1. This **current-main-synchronized** planning packet receives independent Claude final planning re-review, then ChatGPT acceptance (this PR). Frozen PO-01 … PO-11 are already in the contract.
+2. PR 5 remaining runtime is **already** independently reviewed, accepted, merged, and closure-synced (**FORMALLY CLOSED** via PR #35 + PR #36). **PR 6 runtime still cannot start** until later explicit ChatGPT runtime authorization.
+3. **PR6-A** (after later runtime authorization).
 4. **PR6-B ∥ PR6-C**.
 5. **PR6-D**.
 6. Independent Claude review per Tier A lane; ChatGPT acceptance; user merge authorization each lane.
 7. Phase 2 forecast/ABC consumers remain a **later** phase.
 
-Critical path is PR5 close → A → (B ∥ C) → D. Skipping C or reconciliation is not a faster safe path.
-
-If PR 5 close slips, this packet still stands; runtime wait is unchanged.
+Critical path is A → (B ∥ C) → D after later runtime authorization. Skipping C or reconciliation is not a faster safe path.
 
 ---
 
@@ -1977,24 +2187,32 @@ If PR 5 close slips, this packet still stands; runtime wait is unchanged.
 
 `app/services/forecasting.server.ts` / `runAbcAnalysis` read `SalesDailyAggregate` and use `Number(revenue)` with a **90-day** window, not the PRD **eight weeks**. That is Phase 2 debt, not a PR 6 formula.
 
-PR 6 facts replace the **source**. They do not rewrite forecast in this phase. They also **must not** starve the legacy path in PR6-D (PO-02).
+PR 6 facts replace the **source**. They do not rewrite forecast in this phase. They also **must not** starve the legacy path in PR6-D (PO-02). Keep v1 sanitizers (PO-02) until a later authorized cutover. `SalesDailyAggregate` is **not** PR6 source of record.
 
 ---
 
-## 24. PR 30 / PR 31 interface notes (read-only)
+## 24. Current-main PR5 primitive references (read-only)
 
-Inspected 2026-09-02; **not modified**. This planning branch is **not** rebased onto current main.
+Inspected on current main `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` during this synchronization. **Not modified.**
 
-| PR | Lane | Interface PR 6 should reuse conceptually |
+| Merged PR5 surface | Path / identity | How PR6 should reuse it |
 |---|---|---|
-| `#31` F2B | **MERGED** on `origin/main` as `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`. `app/lib/catalog-facts/apply/**` on **main** | **Merged** reference applicator pattern for **PR6-C**: Clock A/B/C, observation evidence, money reject Number, first-insert lock. Copy contracts from this merged tree, not from a conflicted branch head. |
-| `#30` F2C | `app/lib/catalog-facts/compatibility-projection/**` | Rebuildable projection **after** canonical commit; never HEALTHY-by-assertion over broken facts. **Do not use PR #30 as a base.** |
+| Tenant-scoped DB | `app/tenant/tenant-db.server.ts`, `app/tenant/models.ts` | Same TenantDb pattern; **order-domain sibling** models; update DIRECT/CHILD counts in PR6-A |
+| Advisory identity locks | `app/lib/catalog-facts/advisory-lock.ts`; encoding `stocky-pr5-canonical-lock-v1` | Copy pattern as `stocky-pr6-canonical-lock-v1`; do not share catalog resource kinds |
+| Deterministic lock ordering / capacity | `app/lib/catalog-facts/lock-capacity.ts` | Same fail-closed capacity arithmetic; Race AW analogue |
+| Exact money helpers | `app/lib/catalog-facts/apply/money.ts` | Reject `Number`/`parseFloat`; exact NUMERIC |
+| Observation sequence / fencing | `stocky_catalog_observation_gen_seq`; `app/lib/catalog-facts/apply/fencing.ts`, `observation-evidence.ts` | Reuse platform sequence with explicit infra note; no Shopify I/O under locks |
+| Application receipts / idempotence | `SyncApplicationReceipt` + apply writers | Same receipt-before-mutation pattern |
+| Physical-delete denial | PR5 scanner / apply tombstone-only | Same deny-by-default; R-164 remains OPEN at original P3 |
+| DataIssue control-plane | reconciler-only DML | Applicator **must not** DML `DataIssue` |
+| F2A admin-read | `app/lib/catalog-facts/admin-read/**` | Mirror under `app/lib/order-facts/admin-read/**` |
+| F2B applicator | `app/lib/catalog-facts/apply/**` (PR #31 squash `0284b66c…`, **historical**) | Pattern source for **PR6-C** clocks, first-insert lock, money reject |
+| F2C projection | `app/lib/catalog-facts/compatibility-projection/**` (PR #30 squash `f9841691…`, **CLOSED / MERGED**) | Projection **after** canonical commit; never HEALTHY-by-assertion over broken facts |
+| F3 refetch | `app/jobs/workers/catalog-facts/resource-refetch.ts` | Pattern source for **PR6-D** authoritative webhook refetch |
+| F3 JSONL / checkpoint | `app/lib/catalog-facts/ingest/jsonl-stream.ts`, `checkpoint.ts`, `bulk-operation-recovery.ts` | Pattern source for **PR6-D** bulk import resume |
+| F3 projection pending/health | `app/lib/catalog-facts/apply/projection-state.ts`; F3 projection worker | Use where applicable; do not import catalog writers |
 
-PR 6 must **not** import catalog apply writers or write `SalesDailyAggregate`.
-
-F2A on main (`app/lib/catalog-facts/admin-read/**`) is the read-boundary pattern to mirror under `order-facts/admin-read`.
-
-Post-merge main `push` run for `#31`: [`33619969867`](https://github.com/Vedang1998/Stocky/actions/runs/33619969867) — event `push`, `head_sha` `0284b66c776bbfa0ce7b8c7d9e579a365d7dfe26`, **SUCCESS** (Classify SUCCESS; Heavy SUCCESS; CI Gate SUCCESS).
+PR 6 must **not** import catalog apply writers, widen `CatalogResourceKind`, or write `SalesDailyAggregate`.
 
 ---
 
@@ -2057,9 +2275,9 @@ Post-merge main `push` run for `#31`: [`33619969867`](https://github.com/Vedang1
 | 53 | Q-PR6-09 / Q-PR6-10 answered before PR6-D (PO-02 / PO-01) | Done |
 | 54 | Q-PR6-05 exclude test | Done |
 | 55 | Q-PR6-07 requires transaction topic | Done |
-| 56 | Proposed R-165…R-184 / Q-012…Q-016 in-plan | Done |
+| 56 | Synchronized R-166…R-185 / registered Q-012…Q-016 | Done |
 | 57–70 | T41–T54 | Done |
-| PC-01 | §7.1 / §7.2 signed magnitudes; T29/T47/T54/T55 | Done |
+| PC-01 | §7.1 / §7.2 PO-10 actionType+sign; T29/T47/T54/T55/T58 | Done |
 | PC-02 | §4.2 / §4.3 / §4.5 / §5.8 / §15 nested walk; T56/T57 | Done |
 | PC-03 | LIST-vs-connection by owning type; T20 | Done |
 | PC-04 | `priceSet` required; `Shop.ianaTimezone` non-null API + fail-closed | Done |
@@ -2070,17 +2288,18 @@ Post-merge main `push` run for `#31`: [`33619969867`](https://github.com/Vedang1
 
 ## 26. Evidence of planning work
 
-### 26.1 Repository files inspected (original + correction)
+### 26.1 Repository files inspected (original + this synchronization)
 
-- Independent review artifact (read in full; **not edited**)
-- Original plan at `76a8f339…`
-- `OPEN_QUESTIONS.md` (highest Q-011; **not edited**)
-- `RISK_REGISTER.md` (highest R-164; **not edited**)
-- Review-cited schema/webhook/lock facts at `f65ab4b9…`
+- Independent review artifacts (read in full; **not edited**; blobs verified)
+- Original plan at `76a8f339…`; signed-units head `f5d429b7…`
+- Current main `58bf62b4…` after PR #36
+- `OPEN_QUESTIONS.md` (highest Q-011 on main; **this pass registers Q-012…Q-016**)
+- `RISK_REGISTER.md` (highest R-165 on main; **not edited**; PR6 proposed block remapped in-plan to R-166…R-185)
+- PR5 closeout / F3 records on current main
 
-### 26.2 Commands executed (correction phase)
+### 26.2 Commands executed (synchronization phase)
 
-Recorded in the implementation report after git operations. Review blob verification:
+Recorded in `PR6_CURRENT_MAIN_SYNC_REPORT.md`. Review blob verification:
 
 ```text
 git hash-object stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md
@@ -2092,21 +2311,22 @@ git hash-object stocky-plus/docs/phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS
 
 ### 26.3 Not executed
 
-- PR 6 runtime, migrations, GraphQL documents, tests
+- PR 6 runtime, migrations, GraphQL documents, executable tests
 - production Shopify / merchant data
 - Partner Dashboard `read_all_orders` request
-- edits to `RISK_REGISTER.md` / `OPEN_QUESTIONS.md`
-- merge / mark-ready
+- edits to `RISK_REGISTER.md` / `shopify.app.toml` / `.github/**`
+- merge / mark-ready of this PR
+- PR6-A/B/C/D runtime branches
 
 ---
 
 ## 27. Stop condition
 
-This packet is implementation-grade when ChatGPT can authorize **PR6-A then PR6-B ∥ PR6-C** without another architecture PR, Monday-critical facts are explicit, remaining Q-012…Q-016 are isolated, lanes/tests are concrete, the immutable review is unchanged, and this planning PR is open with docs-only CI.
+This packet is implementation-grade when ChatGPT can later authorize **PR6-A then PR6-B ∥ PR6-C** without another architecture PR, Monday-critical facts are explicit, remaining Q-012…Q-016 are isolated, lanes/tests are concrete, the immutable reviews are unchanged, current main is merged, and this planning PR is open with docs-only CI.
 
 **PR 6 runtime remains unauthorized.**
-**PR 5 must close first.**
+**PR 5 repository implementation is FORMALLY CLOSED.**
 **Production unauthorized.**
 **Inventory writes unauthorized.**
-**Merge unauthorized.**
+**Merge of this PR unauthorized.**
 **Independent correction approval is not claimed.**

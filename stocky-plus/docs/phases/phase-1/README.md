@@ -420,3 +420,6 @@
 - Local tooling: Node compatible with `package.json` engines; **npm exactly 11.5.2**
 - Open questions: `../../OPEN_QUESTIONS.md`
 - Risks: `../../RISK_REGISTER.md`
+- PR6 plan: `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md`
+- PR6 current-main sync report: `PR6_CURRENT_MAIN_SYNC_REPORT.md`
+- Immutable PR6 reviews (never edit): `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`; `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`
