@@ -127,7 +127,8 @@ export function fairClaimDegradedStaleRepairBoundCycles(
   const repairCycles =
     staleDueRows === 0 ? 0 : Math.ceil(staleDueRows / repairCapacity);
   return (
-    repairCycles + fairClaimStarvationBoundCycles(activeEligibleShops, batchSize)
+    repairCycles +
+    fairClaimStarvationBoundCycles(activeEligibleShops, batchSize)
   );
 }
 
@@ -220,9 +221,7 @@ WHERE false
   }
 
   const shopValues = Prisma.join(
-    shops.map(
-      (s) => Prisma.sql`(${s.shopId}::text, ${s.ordinal}::int)`,
-    ),
+    shops.map((s) => Prisma.sql`(${s.shopId}::text, ${s.ordinal}::int)`),
   );
 
   return Prisma.sql`
@@ -234,6 +233,7 @@ candidates AS (
     x.id,
     x."nextEligibleAt",
     x."createdAt",
+    x.webhook_priority,
     ls.shop_ord,
     x.shop_slot
   FROM locked_shops ls
@@ -242,36 +242,47 @@ candidates AS (
       id,
       "nextEligibleAt",
       "createdAt",
+      webhook_priority,
       ROW_NUMBER() OVER (
-        ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+        ORDER BY webhook_priority ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
       ) AS shop_slot
     FROM (
       (
-        SELECT id, "nextEligibleAt", "createdAt"
+        SELECT id, "nextEligibleAt", "createdAt",
+          CASE
+            WHEN "jobType" LIKE 'webhook:%'
+              AND "jobType" <> 'webhook:bulk_operations/finish'
+            THEN 0 ELSE 1
+          END AS webhook_priority
         FROM "DurableJob"
         WHERE "shopId" >= ls.shop_id AND "shopId" <= ls.shop_id
           AND state = 'PENDING'
           AND "nextEligibleAt" <= ${now}
-        ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+        ORDER BY "shopId" ASC, webhook_priority ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
         LIMIT ${maxPerShop}
       )
       UNION ALL
       (
-        SELECT id, "nextEligibleAt", "createdAt"
+        SELECT id, "nextEligibleAt", "createdAt",
+          CASE
+            WHEN "jobType" LIKE 'webhook:%'
+              AND "jobType" <> 'webhook:bulk_operations/finish'
+            THEN 0 ELSE 1
+          END AS webhook_priority
         FROM "DurableJob"
         WHERE "shopId" >= ls.shop_id AND "shopId" <= ls.shop_id
           AND state = 'RETRY_WAIT'
           AND "nextEligibleAt" <= ${now}
-        ORDER BY "shopId" ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+        ORDER BY "shopId" ASC, webhook_priority ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
         LIMIT ${maxPerShop}
       )
     ) merged
-    ORDER BY "nextEligibleAt" ASC, "createdAt" ASC, id ASC
+    ORDER BY webhook_priority ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
     LIMIT ${maxPerShop}
   ) x
 ),
 ordered_candidates AS (
-  SELECT id, "nextEligibleAt", "createdAt", shop_ord, shop_slot
+  SELECT id, "nextEligibleAt", "createdAt", webhook_priority, shop_ord, shop_slot
   FROM candidates
   ORDER BY shop_slot ASC, shop_ord ASC, "nextEligibleAt" ASC, "createdAt" ASC, id ASC
   LIMIT ${batchSize}
@@ -321,7 +332,9 @@ export function buildFairClaimReadinessReconcileSql(params: {
     return Prisma.sql`SELECT NULL::text AS "shopId", NULL::text AS action WHERE false`;
   }
 
-  const shopValues = Prisma.join(shopIds.map((id) => Prisma.sql`(${id}::text)`));
+  const shopValues = Prisma.join(
+    shopIds.map((id) => Prisma.sql`(${id}::text)`),
+  );
 
   return Prisma.sql`
 WITH locked_shops(shop_id) AS (
@@ -590,9 +603,11 @@ export function fairClaimSqlIdentity(): {
  * One fair-claim lock + fresh-snapshot reconcile round (no lease).
  * Used by lifecycle/heal tests and mirrors dispatcher steps A/B/D.
  */
-export async function executeFairClaimLockAndReconcileRound<TClient extends {
-  $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
-}>(
+export async function executeFairClaimLockAndReconcileRound<
+  TClient extends {
+    $queryRaw: <T = unknown>(query: Prisma.Sql) => Promise<T>;
+  },
+>(
   tx: TClient,
   params: FairClaimQueryParams,
 ): Promise<
@@ -693,8 +708,14 @@ export function assertDispatcherUsesProductionFairClaimSql(
     );
   }
   const withoutBuilderCalls = source
-    .replace(/buildFairClaimSchedulerLockSql\s*\(\s*\{[^}]*\}\s*\)/g, "BUILDER()")
-    .replace(/buildFairClaimJobCandidateSql\s*\(\s*\{[\s\S]*?\}\s*\)/g, "BUILDER()")
+    .replace(
+      /buildFairClaimSchedulerLockSql\s*\(\s*\{[^}]*\}\s*\)/g,
+      "BUILDER()",
+    )
+    .replace(
+      /buildFairClaimJobCandidateSql\s*\(\s*\{[\s\S]*?\}\s*\)/g,
+      "BUILDER()",
+    )
     .replace(
       /buildFairClaimReadinessReconcileSql\s*\(\s*\{[^}]*\}\s*\)/g,
       "BUILDER()",
@@ -703,7 +724,10 @@ export function assertDispatcherUsesProductionFairClaimSql(
       /buildExpiredDispatchLeaseRecoverySql\s*\(\s*\{[^}]*\}\s*\)/g,
       "BUILDER()",
     )
-    .replace(/buildFairClaimLockedSelectSql\s*\(\s*\{[^}]*\}\s*\)/g, "BUILDER()");
+    .replace(
+      /buildFairClaimLockedSelectSql\s*\(\s*\{[^}]*\}\s*\)/g,
+      "BUILDER()",
+    );
   if (
     /\$queryRaw(?:Unsafe)?(?:<[^>]+>)?\s*(?:`|\(\s*`)[\s\S]*?\bWITH\b[\s\S]*?\bFOR UPDATE\b[\s\S]*?\bSKIP LOCKED\b/.test(
       withoutBuilderCalls,

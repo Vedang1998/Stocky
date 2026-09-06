@@ -26,6 +26,13 @@ Each phase gets its own folder containing:
 
 Reusable copies are under `phases/_templates/`.
 
+Phase 1 PR 5 repository-implementation closeout records live under `phases/phase-1/`:
+
+- `PR5_F3_IMPLEMENTATION_REPORT.md` — F3 runtime implementation evidence;
+- `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable Claude exact-head review (never edit);
+- `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure;
+- `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements.
+
 ## Live project control files
 
 - `PROJECT_STATUS.md` — current phase, active work, blockers, and next action;
@@ -33,7 +40,8 @@ Reusable copies are under `phases/_templates/`.
 - `OPEN_QUESTIONS.md` — unresolved product or technical questions;
 - `RISK_REGISTER.md` — active risks and owners;
 - `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules;
-- `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward.
+- `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward;
+- `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue after Stocky sunset; does not change product rules or relax safety gates; that packet itself did not authorize F3 runtime).
 
 Open `PROJECT_STATUS.md` first whenever the project feels confusing.
 

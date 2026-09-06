@@ -54,8 +54,21 @@ describe("sanitizeWebhookPayload", () => {
     expect(lines[0].price).toBe("6.25");
   });
 
+  it("sanitizes catalog identity topics as F3 signals", () => {
+    const result = sanitizeWebhookPayload("products/create", {
+      id: 1,
+      admin_graphql_api_id: "gid://shopify/Product/1",
+      title: "must-not-persist",
+    });
+    expect(result.schemaVersion).toBe("webhook-projection-products-create-v1");
+    expect(result.projection.admin_graphql_api_id).toBe(
+      "gid://shopify/Product/1",
+    );
+    expect(result.projection).not.toHaveProperty("title");
+  });
+
   it("rejects unsupported topics", () => {
-    expect(() => sanitizeWebhookPayload("products/create", {})).toThrow(
+    expect(() => sanitizeWebhookPayload("customers/create", {})).toThrow(
       SyncControlPlaneError,
     );
   });

@@ -15,7 +15,7 @@ import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { parse } from "graphql";
 import {
-  assertCanonicalReadDocument,
+  assertCanonicalCatalogDocumentForModule,
   CanonicalReadForbiddenFieldError,
   CanonicalReadGraphQLSyntaxError,
   CanonicalReadMutationRejectedError,
@@ -49,6 +49,8 @@ export type CanonicalReadImportException = {
   reason: string;
 };
 
+export type CatalogFactScanPolicy = "library" | "worker";
+
 /**
  * Exact reviewed exceptions to the deny-by-default import boundary.
  * Empty: this lane has no approved `@shopify/*` or application-service imports.
@@ -59,6 +61,23 @@ export const CANONICAL_READ_IMPORT_EXCEPTIONS: readonly CanonicalReadImportExcep
 const CANONICAL_READ_IMPORT_EXCEPTION_SPECIFIERS = new Set(
   CANONICAL_READ_IMPORT_EXCEPTIONS.map((entry) => entry.specifier),
 );
+
+function isWorkerShopifyServerSpecifier(
+  specifier: string,
+  fromFile: string,
+): boolean {
+  const normalized = specifier.replace(/\\/g, "/");
+  const resolved = specifier.startsWith(".")
+    ? path
+        .normalize(path.join(path.dirname(fromFile), specifier))
+        .replace(/\\/g, "/")
+    : normalized;
+  return (
+    normalized === "~/shopify.server" ||
+    normalized === "app/shopify.server" ||
+    /\/app\/shopify\.server$/.test(resolved)
+  );
+}
 
 function stripLeadingGraphQLCommentAndTagLines(text: string): string {
   const lines = text.split(/\r?\n/);
@@ -161,12 +180,21 @@ export function extractGraphQLDocumentsFromTypeScript(
 export function isForbiddenCanonicalReadImport(
   specifier: string,
   fromFile: string,
+  policy: CatalogFactScanPolicy = "library",
 ): boolean {
   if (CANONICAL_READ_IMPORT_EXCEPTION_SPECIFIERS.has(specifier)) {
     return false;
   }
   const normalized = specifier.replace(/\\/g, "/");
   if (normalized.startsWith("@shopify/")) return true;
+  const resolved = specifier.startsWith(".")
+    ? path
+        .normalize(path.join(path.dirname(fromFile), specifier))
+        .replace(/\\/g, "/")
+    : normalized;
+  const isWorkerShopifyServer =
+    policy === "worker" && isWorkerShopifyServerSpecifier(specifier, fromFile);
+  if (isWorkerShopifyServer) return false;
   if (
     normalized.includes("shopify-sync.server") ||
     normalized.includes("shopify-gql.server") ||
@@ -183,9 +211,6 @@ export function isForbiddenCanonicalReadImport(
     return true;
   }
   if (specifier.startsWith(".")) {
-    const resolved = path
-      .normalize(path.join(path.dirname(fromFile), specifier))
-      .replace(/\\/g, "/");
     if (resolved.includes("/services/")) return true;
   }
   return false;
@@ -199,7 +224,11 @@ function staticModuleSpecifier(node: ts.Node | undefined): string | null {
   return null;
 }
 
-function forbiddenImportSpecifiers(source: string, fileName: string): string[] {
+function forbiddenImportSpecifiers(
+  source: string,
+  fileName: string,
+  policy: CatalogFactScanPolicy,
+): string[] {
   const sf = ts.createSourceFile(
     fileName,
     source,
@@ -210,18 +239,53 @@ function forbiddenImportSpecifiers(source: string, fileName: string): string[] {
   const specs: string[] = [];
 
   function visit(node: ts.Node): void {
-    if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
+    if (ts.isImportDeclaration(node)) {
       const spec = staticModuleSpecifier(node.moduleSpecifier);
-      if (spec !== null && isForbiddenCanonicalReadImport(spec, fileName)) {
+      if (
+        spec !== null &&
+        policy === "worker" &&
+        isWorkerShopifyServerSpecifier(spec, fileName)
+      ) {
+        const clause = node.importClause;
+        const named = clause?.namedBindings;
+        const valid =
+          clause?.name == null &&
+          named != null &&
+          ts.isNamedImports(named) &&
+          named.elements.length === 1 &&
+          (named.elements[0]?.propertyName?.text ??
+            named.elements[0]?.name.text) === "unauthenticated" &&
+          named.elements[0]?.name.text === "unauthenticated";
+        if (!valid) {
+          specs.push(`${spec} (worker may import only unauthenticated)`);
+        }
+      } else if (
+        spec !== null &&
+        isForbiddenCanonicalReadImport(spec, fileName, policy)
+      ) {
+        specs.push(spec);
+      }
+    } else if (ts.isExportDeclaration(node)) {
+      const spec = staticModuleSpecifier(node.moduleSpecifier);
+      if (
+        spec !== null &&
+        (isWorkerShopifyServerSpecifier(spec, fileName) ||
+          isForbiddenCanonicalReadImport(spec, fileName, policy))
+      ) {
         specs.push(spec);
       }
     } else if (ts.isCallExpression(node) && node.arguments.length > 0) {
-      const isDynamicImport = node.expression.kind === ts.SyntaxKind.ImportKeyword;
+      const isDynamicImport =
+        node.expression.kind === ts.SyntaxKind.ImportKeyword;
       const isRequire =
         ts.isIdentifier(node.expression) && node.expression.text === "require";
       if (isDynamicImport || isRequire) {
         const spec = staticModuleSpecifier(node.arguments[0]);
-        if (spec !== null && isForbiddenCanonicalReadImport(spec, fileName)) {
+        if (
+          spec !== null &&
+          (isWorkerShopifyServerSpecifier(spec, fileName) ||
+            isForbiddenCanonicalReadImport(spec, fileName, policy))
+        ) {
           specs.push(spec);
         }
       }
@@ -235,7 +299,9 @@ function forbiddenImportSpecifiers(source: string, fileName: string): string[] {
 
 export function scanCatalogFactsProductionModules(
   rootDir: string,
+  options: { policy?: CatalogFactScanPolicy } = {},
 ): CatalogFactSafetyScanResult {
+  const policy = options.policy ?? "library";
   const files = listProductionTypeScriptModulesRecursive(rootDir);
   const findings: CatalogFactSafetyFinding[] = [];
   let graphqlDocumentCount = 0;
@@ -264,7 +330,7 @@ export function scanCatalogFactsProductionModules(
 
     for (const document of extracted.documents) {
       try {
-        assertCanonicalReadDocument(document);
+        assertCanonicalCatalogDocumentForModule(document, relative);
       } catch (error) {
         if (error instanceof CanonicalReadMutationRejectedError) {
           findings.push({
@@ -292,7 +358,7 @@ export function scanCatalogFactsProductionModules(
       }
     }
 
-    for (const spec of forbiddenImportSpecifiers(source, file)) {
+    for (const spec of forbiddenImportSpecifiers(source, file, policy)) {
       findings.push({
         file: relative,
         kind: "forbidden_import",
@@ -317,5 +383,18 @@ export function assertCatalogFactsReadBoundarySafe(rootDir: string): void {
     .join("\n");
   throw new Error(
     `Canonical catalog-facts read boundary safety scan failed:\n${details}`,
+  );
+}
+
+export function assertCatalogFactsWorkerBoundarySafe(rootDir: string): void {
+  const result = scanCatalogFactsProductionModules(rootDir, {
+    policy: "worker",
+  });
+  if (result.findings.length === 0) return;
+  const details = result.findings
+    .map((finding) => `${finding.file}: ${finding.kind}: ${finding.detail}`)
+    .join("\n");
+  throw new Error(
+    `Canonical catalog-facts worker safety scan failed:\n${details}`,
   );
 }

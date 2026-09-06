@@ -60,49 +60,82 @@ export class CanonicalLockCapacityInsufficientError extends Error {
   }
 }
 
-function requireIntAtLeast(name: string, value: number, min: number): number {
-  if (!Number.isInteger(value) || value < min) {
-    throw new Error(`${name} must be an integer >= ${min}`);
+/**
+ * Direct/configured evaluator inputs must be fail-closed (R-162).
+ * Number.isInteger accepts 2^53, 2^53+2, and Number.MAX_VALUE; those are
+ * not safe integers and can emit precision-loss or Infinity diagnostics.
+ */
+function requireSafeIntAtLeast(name: string, value: number, min: number): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isSafeInteger(value) ||
+    value < min
+  ) {
+    throw new Error(
+      `${name} must be a safe integer >= ${min} (rejected ${String(value)})`,
+    );
   }
   return value;
+}
+
+function multiplySafeIntegers(
+  a: number,
+  b: number,
+  name: string,
+): number {
+  const product = a * b;
+  if (!Number.isSafeInteger(product)) {
+    throw new Error(`${name} exceeds the safe integer range`);
+  }
+  return product;
 }
 
 export function evaluateCanonicalLockCapacity(
   settings: LockCapacitySettings,
   request: LockCapacityRequest = {},
 ): LockCapacityEvaluation {
-  const maxLocksPerTransaction = requireIntAtLeast(
+  const maxLocksPerTransaction = requireSafeIntAtLeast(
     "maxLocksPerTransaction",
     settings.maxLocksPerTransaction,
     1,
   );
-  const maxConnections = requireIntAtLeast(
+  const maxConnections = requireSafeIntAtLeast(
     "maxConnections",
     settings.maxConnections,
     1,
   );
-  const maxPreparedTransactions = requireIntAtLeast(
+  const maxPreparedTransactions = requireSafeIntAtLeast(
     "maxPreparedTransactions",
     settings.maxPreparedTransactions,
     0,
   );
-  const requestedBatch = requireIntAtLeast(
+  const requestedBatch = requireSafeIntAtLeast(
     "requestedCanonicalIdentitiesPerTransaction",
     request.requestedCanonicalIdentitiesPerTransaction ??
       PR5_DEFAULT_CANONICAL_IDENTITIES_PER_TRANSACTION,
     1,
   );
-  const concurrency = requireIntAtLeast(
+  const concurrency = requireSafeIntAtLeast(
     "configuredWorstCaseConcurrentCanonicalTransactions",
     request.configuredWorstCaseConcurrentCanonicalTransactions ??
       PR5_DEFAULT_WORST_CASE_CONCURRENT_CANONICAL_TRANSACTIONS,
     1,
   );
 
-  const sharedLockObjectBudget =
-    maxLocksPerTransaction * (maxConnections + maxPreparedTransactions);
+  const connectionSlots = maxConnections + maxPreparedTransactions;
+  if (!Number.isSafeInteger(connectionSlots)) {
+    throw new Error("connection slot sum exceeds the safe integer range");
+  }
+  const sharedLockObjectBudget = multiplySafeIntegers(
+    maxLocksPerTransaction,
+    connectionSlots,
+    "sharedLockObjectBudget",
+  );
   const conditionACap = Math.floor(maxLocksPerTransaction / 2);
   const conditionBBudget = Math.floor(sharedLockObjectBudget * 0.25);
+  if (!Number.isSafeInteger(conditionBBudget) || conditionBBudget < 0) {
+    throw new Error("condition B budget is not a safe integer");
+  }
   const conditionBCap = Math.floor(conditionBBudget / concurrency);
 
   if (conditionACap < 1 || conditionBCap < 1) {
@@ -188,13 +221,13 @@ export async function readPostgresLockCapacitySettings(query: {
       row.max_prepared_transactions,
     ),
   };
-  requireIntAtLeast(
+  requireSafeIntAtLeast(
     "max_locks_per_transaction",
     settings.maxLocksPerTransaction,
     1,
   );
-  requireIntAtLeast("max_connections", settings.maxConnections, 1);
-  requireIntAtLeast(
+  requireSafeIntAtLeast("max_connections", settings.maxConnections, 1);
+  requireSafeIntAtLeast(
     "max_prepared_transactions",
     settings.maxPreparedTransactions,
     0,

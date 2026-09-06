@@ -128,7 +128,18 @@ export async function acquireCanonicalIdentityAdvisoryLock(
 
   await db.$queryRaw`SELECT set_config('lock_timeout', ${`${timeoutMs}ms`}, true)`;
   try {
-    await db.$queryRaw`SELECT pg_advisory_xact_lock(${key.key1}, ${key.key2})`;
+    // PostgreSQL exposes pg_advisory_xact_lock(integer, integer) and
+    // pg_advisory_xact_lock(bigint), not a two-argument bigint overload.
+    // Prisma $queryRaw sends JS numbers as bigint (SQLSTATE 42883). CAST to
+    // INTEGER selects the frozen two-key identity-anchor signature used by
+    // signed int32 keys. The pg-Client F2B adapter still accepts the CAST.
+    // Prisma also cannot deserialize void; the CTE projects a scalar row.
+    await db.$queryRaw`
+      WITH _canonical_identity_lock AS (
+        SELECT pg_advisory_xact_lock(CAST(${key.key1} AS INTEGER), CAST(${key.key2} AS INTEGER))
+      )
+      SELECT 1 AS acquired FROM _canonical_identity_lock
+    `;
   } catch (error) {
     if (isPostgresLockTimeoutError(error)) {
       // Transaction is aborted. Do not restore. Caller must ROLLBACK.

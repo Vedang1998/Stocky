@@ -945,6 +945,15 @@ model SyncRun {
   /// Persist as PostgreSQL bigint / Prisma BigInt — never a JavaScript Number.
   fenceGeneration      BigInt?
   fenceAt              DateTime?
+  /// PR5-F3 paired JSONL checkpoint. The ordinal is meaningful only for this GID.
+  bulkOperationGid             String?  @db.VarChar(512)
+  jsonlCommittedLineOrdinal    Int?
+  bulkSubmitIntentAt           DateTime?
+  bulkQueryFingerprint         String?  @db.VarChar(64)
+  bulkObjectCount              String?  @db.VarChar(32)
+  bulkRootObjectCount          String?  @db.VarChar(32)
+  streamedObjectCount          String?  @db.VarChar(32)
+  streamedRootObjectCount      String?  @db.VarChar(32)
   createdAt            DateTime      @default(now())
   updatedAt            DateTime      @updatedAt
 
@@ -955,6 +964,7 @@ model SyncRun {
   @@index([shopId, syncDomain, createdAt])
   @@index([shopId, status, createdAt])
   @@index([shopId, fenceGeneration])
+  @@index([shopId, bulkOperationGid])
 }
 
 model SyncCursor {
@@ -1059,6 +1069,7 @@ enum CatalogAttributeFreshnessState {
 }
 
 enum CatalogCompatibilityProjectionState {
+  PROJECTION_PENDING
   HEALTHY
   DEGRADED
 }
@@ -1137,7 +1148,7 @@ model ShopifyProductFact {
   attributeRequestGen          BigInt?
   attributeResponseGen         BigInt?
   attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
-  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(PROJECTION_PENDING)
   existenceDiagnosticState     String?                             @db.VarChar(128)
   absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
   absenceCandidateEpochId      String?
@@ -1163,6 +1174,7 @@ model ShopifyProductFact {
   @@unique([shopId, shopifyGid])
   @@index([shopId, existenceState])
   @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, ingestBatchId])
   @@index([shopId, handle])
   @@index([shopId, vendor])
 }
@@ -1213,7 +1225,7 @@ model ShopifyVariantFact {
   attributeRequestGen          BigInt?
   attributeResponseGen         BigInt?
   attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
-  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(PROJECTION_PENDING)
   existenceDiagnosticState     String?                             @db.VarChar(128)
   absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
   absenceCandidateEpochId      String?
@@ -1240,6 +1252,7 @@ model ShopifyVariantFact {
   @@index([shopId, shopifyProductGid])
   @@index([shopId, existenceState])
   @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, ingestBatchId])
   @@index([shopId, sku])
   @@index([shopId, barcode])
 }
@@ -1272,7 +1285,7 @@ model ShopifyInventoryItemFact {
   attributeRequestGen          BigInt?
   attributeResponseGen         BigInt?
   attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
-  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(PROJECTION_PENDING)
   existenceDiagnosticState     String?                             @db.VarChar(128)
   absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
   absenceCandidateEpochId      String?
@@ -1299,6 +1312,7 @@ model ShopifyInventoryItemFact {
   @@index([shopId, shopifyVariantGid])
   @@index([shopId, existenceState])
   @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, ingestBatchId])
 }
 
 model ShopifyLocationFact {
@@ -1332,7 +1346,7 @@ model ShopifyLocationFact {
   attributeRequestGen          BigInt?
   attributeResponseGen         BigInt?
   attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
-  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(PROJECTION_PENDING)
   existenceDiagnosticState     String?                             @db.VarChar(128)
   absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
   absenceCandidateEpochId      String?
@@ -1357,6 +1371,7 @@ model ShopifyLocationFact {
   @@unique([shopId, shopifyGid])
   @@index([shopId, existenceState])
   @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, ingestBatchId])
   @@index([shopId, isActive])
 }
 
@@ -1414,7 +1429,7 @@ model ShopifyInventoryLevelFact {
   attributeRequestGen          BigInt?
   attributeResponseGen         BigInt?
   attributeFreshnessState      CatalogAttributeFreshnessState      @default(ORDERED)
-  compatibilityProjectionState CatalogCompatibilityProjectionState @default(HEALTHY)
+  compatibilityProjectionState CatalogCompatibilityProjectionState @default(PROJECTION_PENDING)
   existenceDiagnosticState     String?                             @db.VarChar(128)
   absenceNominationState       CatalogAbsenceNominationState       @default(NONE)
   absenceCandidateEpochId      String?
@@ -1442,6 +1457,7 @@ model ShopifyInventoryLevelFact {
   @@index([shopId, inventoryItemGid])
   @@index([shopId, existenceState])
   @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, ingestBatchId])
   @@index([shopId, shopifyInventoryLevelGid])
 }
 

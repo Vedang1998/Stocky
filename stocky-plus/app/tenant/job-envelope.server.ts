@@ -9,10 +9,7 @@
  */
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-  issueTenantAuthority,
-  type TenantAuthority,
-} from "./authority.server";
+import { issueTenantAuthority, type TenantAuthority } from "./authority.server";
 import {
   normalizeVerifiedShopifyDomain,
   requireCanonicalShopMatch,
@@ -34,11 +31,26 @@ export const TENANT_JOB_SOURCES = [
   "catalog_sync",
   "abc_analysis",
   "after_auth_catalog_sync",
+  "inventory_state_reconcile",
   "weekly_abc_analysis",
+  "webhook:products/create",
+  "webhook:products/update",
+  "webhook:products/delete",
+  "webhook:inventory_items/create",
+  "webhook:inventory_items/update",
+  "webhook:inventory_items/delete",
+  "webhook:inventory_levels/connect",
   "webhook:orders/create",
   "webhook:orders/cancelled",
   "webhook:refunds/create",
   "webhook:inventory_levels/update",
+  "webhook:inventory_levels/disconnect",
+  "webhook:locations/create",
+  "webhook:locations/update",
+  "webhook:locations/delete",
+  "webhook:locations/activate",
+  "webhook:locations/deactivate",
+  "webhook:bulk_operations/finish",
   "webhook:app/uninstalled",
 ] as const;
 
@@ -49,12 +61,27 @@ const SOURCE_SET = new Set<string>(TENANT_JOB_SOURCES);
 /** Job-name / webhook-topic → approved envelope source. */
 export const JOB_SOURCE_BY_NAME: Record<string, TenantJobSource> = {
   "catalog-sync": "catalog_sync",
+  "inventory-state-reconcile": "inventory_state_reconcile",
   "abc-analysis-shop": "abc_analysis",
   "abc-analysis": "weekly_abc_analysis",
   "orders/create": "webhook:orders/create",
   "orders/cancelled": "webhook:orders/cancelled",
   "refunds/create": "webhook:refunds/create",
   "inventory_levels/update": "webhook:inventory_levels/update",
+  "products/create": "webhook:products/create",
+  "products/update": "webhook:products/update",
+  "products/delete": "webhook:products/delete",
+  "inventory_items/create": "webhook:inventory_items/create",
+  "inventory_items/update": "webhook:inventory_items/update",
+  "inventory_items/delete": "webhook:inventory_items/delete",
+  "inventory_levels/connect": "webhook:inventory_levels/connect",
+  "inventory_levels/disconnect": "webhook:inventory_levels/disconnect",
+  "locations/create": "webhook:locations/create",
+  "locations/update": "webhook:locations/update",
+  "locations/delete": "webhook:locations/delete",
+  "locations/activate": "webhook:locations/activate",
+  "locations/deactivate": "webhook:locations/deactivate",
+  "bulk_operations/finish": "webhook:bulk_operations/finish",
   "app/uninstalled": "webhook:app/uninstalled",
 };
 
@@ -271,7 +298,10 @@ export function parseTenantJobEnvelope(
     );
   }
 
-  if (typeof raw.myshopifyDomain !== "string" || raw.myshopifyDomain.length === 0) {
+  if (
+    typeof raw.myshopifyDomain !== "string" ||
+    raw.myshopifyDomain.length === 0
+  ) {
     throw new TenantAuthorityError(
       "missing_envelope_domain",
       "Job envelope missing myshopifyDomain",
@@ -402,7 +432,10 @@ export async function resolveTenantJobContext(
 
   if (options?.payloadShop != null && options.payloadShop !== "") {
     const payloadNorm = normalizeShopDomain(options.payloadShop);
-    if (!payloadNorm.ok || payloadNorm.normalized !== envelope.myshopifyDomain) {
+    if (
+      !payloadNorm.ok ||
+      payloadNorm.normalized !== envelope.myshopifyDomain
+    ) {
       throw new TenantAuthorityError(
         "payload_envelope_mismatch",
         "Payload shop does not match tenant job envelope",
@@ -436,15 +469,13 @@ export async function issueJobEnvelopeForVerifiedDomain(input: {
   createShopIfMissing?: boolean;
 }): Promise<{ envelope: TenantJobEnvelopeV1; tenant: TenantAuthority }> {
   assertTenantJobSource(input.source);
-  const { resolveAuthorityAfterVerifiedAuth } = await import(
-    "./bootstrap.server"
-  );
+  const { resolveAuthorityAfterVerifiedAuth } =
+    await import("./bootstrap.server");
   const { tenant } = await resolveAuthorityAfterVerifiedAuth({
     verifiedDomain: input.verifiedDomain,
-    source:
-      input.source.startsWith("webhook:")
-        ? "verified_webhook"
-        : "verified_scheduler",
+    source: input.source.startsWith("webhook:")
+      ? "verified_webhook"
+      : "verified_scheduler",
     correlationId: input.correlationId,
     causationId: input.causationId,
     createIfMissing: input.createShopIfMissing ?? false,

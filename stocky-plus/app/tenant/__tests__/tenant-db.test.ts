@@ -209,6 +209,32 @@ describe("tenant-bound database contract (PR 2)", () => {
     expect(b[0].title).toBe("B");
   });
 
+  it("creates CatalogObservationInFlight with shopId only (no legacy shop string)", async () => {
+    const row = await dbA.catalogObservationInFlight.create({
+      data: {
+        resourceKind: "Product",
+        shopifyGid: "gid://shopify/Product/tenant-db",
+        observationRequestGen: 1n,
+        leaseDurationMs: 60_000,
+        leaseExpiresAt: new Date("2026-09-05T00:00:00.000Z"),
+        lifecycleState: "ACTIVE",
+      },
+    });
+    expect(row.shopId).toBe(shopAId);
+    expect(
+      await prisma.catalogObservationInFlight.findUnique({
+        where: { id: row.id },
+        select: { shopId: true, shopifyGid: true },
+      }),
+    ).toEqual({
+      shopId: shopAId,
+      shopifyGid: "gid://shopify/Product/tenant-db",
+    });
+    await expect(
+      dbB.catalogObservationInFlight.findUnique({ where: { id: row.id } }),
+    ).resolves.toBeNull();
+  });
+
   it("delete cannot delete another tenant's row", async () => {
     const b = await dbB.supplier.create({ data: { name: "B only" } });
     await expect(

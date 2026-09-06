@@ -117,6 +117,47 @@ describe("PR5 canonical lock capacity evaluator", () => {
     }
   });
 
+  it("rejects unsafe / non-safe integer direct inputs (R-162)", () => {
+    expect(() =>
+      evaluateCanonicalLockCapacity({
+        maxLocksPerTransaction: 2 ** 53,
+        maxConnections: 100,
+        maxPreparedTransactions: 0,
+      }),
+    ).toThrow(/safe integer/);
+    expect(() =>
+      evaluateCanonicalLockCapacity({
+        maxLocksPerTransaction: 2 ** 53 + 2,
+        maxConnections: 100,
+        maxPreparedTransactions: 0,
+      }),
+    ).toThrow(/safe integer/);
+    expect(() =>
+      evaluateCanonicalLockCapacity({
+        maxLocksPerTransaction: Number.MAX_VALUE,
+        maxConnections: 1,
+        maxPreparedTransactions: 0,
+      }),
+    ).toThrow(/safe integer/);
+    expect(() =>
+      evaluateCanonicalLockCapacity(
+        {
+          maxLocksPerTransaction: 64,
+          maxConnections: 100,
+          maxPreparedTransactions: 0,
+        },
+        { requestedCanonicalIdentitiesPerTransaction: Number.MAX_VALUE },
+      ),
+    ).toThrow(/safe integer/);
+    expect(() =>
+      evaluateCanonicalLockCapacity({
+        maxLocksPerTransaction: Number.MAX_SAFE_INTEGER,
+        maxConnections: 3,
+        maxPreparedTransactions: 0,
+      }),
+    ).toThrow(/safe integer range/);
+  });
+
   it("rejects invalid capacity inputs", () => {
     expect(() =>
       evaluateCanonicalLockCapacity({
