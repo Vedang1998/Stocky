@@ -19,7 +19,10 @@ import {
   withMigrationPg,
   withRuntimePg,
 } from "./helpers";
-import { MERCHANT_SQL_TABLES } from "../../../../scripts/tenant-enforcement/manifest";
+import {
+  EXPECTED_MERCHANT_TABLE_COUNT,
+  MERCHANT_SQL_TABLES,
+} from "../../../../scripts/tenant-enforcement/manifest";
 import { verifyRoles } from "../../../../scripts/tenant-enforcement/roles";
 import {
   verifyEnforcement,
@@ -130,7 +133,7 @@ describe("PR3 database isolation — missing context + RLS matrix", () => {
     try {
       const rls = await verifyRlsOnly(client);
       expect(rls.ok).toBe(true);
-      expect(MERCHANT_SQL_TABLES).toHaveLength(26);
+      expect(MERCHANT_SQL_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
       const full = await verifyEnforcement(client);
       expect(full.ok).toBe(true);
     } finally {
@@ -560,8 +563,8 @@ describe("PR3 database isolation — bootstrap boundary", () => {
 });
 
 describe("PR3 merchant model count", () => {
-  it("covers all 26 merchant-owned models", () => {
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(26);
-    expect(MERCHANT_SQL_TABLES).toHaveLength(26);
+  it("covers all merchant-owned models", () => {
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
+    expect(MERCHANT_SQL_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
   });
 });

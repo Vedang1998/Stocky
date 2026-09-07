@@ -1860,7 +1860,16 @@ export type TenantDb = {
   shopifyLocationFact: TenantModelDelegate;
   shopifyInventoryLevelFact: TenantModelDelegate;
   catalogObservationInFlight: TenantModelDelegate;
+  shopifyOrderFact: TenantModelDelegate;
+  shopifyOrderLineFact: TenantModelDelegate;
+  shopifyOrderRefundFact: TenantModelDelegate;
+  orderFactObservationInFlight: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
+  shopifyOrderRefundLineFact: TenantModelDelegate;
+  shopifyOrderAdjustmentFact: TenantModelDelegate;
+  shopifyOrderAgreementFact: TenantModelDelegate;
+  shopifyOrderAgreementSaleFact: TenantModelDelegate;
+  shopifyOrderRefundTransactionFact: TenantModelDelegate;
   volumePriceTier: TenantModelDelegate;
   leadTimeSnapshot: TenantModelDelegate;
   pOLineItem: TenantModelDelegate;

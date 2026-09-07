@@ -279,6 +279,7 @@
 53. `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md` — immutable correction re-review `CORRECTIONS REQUIRED` (blob `fca2b260d03e3105782ed216f7773c53e6aef2a7`; never edit)
 54. `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence/control record
 55. `PR6_CURRENT_MAIN_FINAL_INDEPENDENT_REVIEW.md` — immutable final planning review `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`; never edit)
+56. `PR6_A_FOUNDATION_IMPLEMENTATION_REPORT.md` — PR6-A foundation implementation evidence; independent review pending; PR6-B/C/D remain **NOT AUTHORIZED**
 
 ## Immutable PR 5 planning (#24) merge evidence
 
@@ -444,4 +445,5 @@
 - Risks: `../../RISK_REGISTER.md`
 - PR6 plan: `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md`
 - PR6 current-main sync report: `PR6_CURRENT_MAIN_SYNC_REPORT.md`
+- PR6-A foundation implementation report: `PR6_A_FOUNDATION_IMPLEMENTATION_REPORT.md`
 - Immutable PR6 reviews (never edit): `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`; `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`; `PR6_CURRENT_MAIN_FINAL_INDEPENDENT_REVIEW.md`

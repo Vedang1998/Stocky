@@ -48,6 +48,7 @@ const ALL_MIGRATION_NAMES = [
   "20260816193000_pr5_catalog_fact_foundation",
   "20260905173000_pr5_f3_projection_pending_enum",
   "20260905173500_pr5_f3_remaining_integration",
+  "20260907010000_pr6_a_order_refund_fact_foundation",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
@@ -363,6 +364,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(out).toContain("20260730210000_tenant_backfill_correction");
     expect(out).toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(out).toContain("20260905173500_pr5_f3_remaining_integration");
+    expect(out).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
   }, 120_000);
 
   it("applies new migrations on top of current-main init schema", async () => {
@@ -385,9 +387,11 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(initOut).not.toContain("20260816193000_pr5_catalog_fact_foundation");
     expect(initOut).not.toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
+    expect(initOut).not.toContain("20260907010000_pr6_a_order_refund_fact_foundation");
     expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
     expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
+    expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
@@ -409,6 +413,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260816193000_pr5_catalog_fact_foundation",
         "20260905173000_pr5_f3_projection_pending_enum",
         "20260905173500_pr5_f3_remaining_integration",
+        "20260907010000_pr6_a_order_refund_fact_foundation",
         "migration_lock.toml",
       ]),
     );
@@ -456,6 +461,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain("20260816193000_pr5_catalog_fact_foundation");
       expect(initOut).not.toContain("20260905173000_pr5_f3_projection_pending_enum");
       expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
+      expect(initOut).not.toContain("20260907010000_pr6_a_order_refund_fact_foundation");
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -489,6 +495,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
       expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
       expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
+      expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -546,6 +553,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
       expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
       expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
+      expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -716,6 +724,12 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       "ShopifyInventoryItemFact_shopId_shopifyVariantGid_fkey",
       "ShopifyInventoryLevelFact_shopId_inventoryItemGid_fkey",
       "ShopifyInventoryLevelFact_shopId_locationGid_fkey",
+      "ShopifyOrderAdjustmentFact_shopId_shopifyRefundGid_fkey",
+      "ShopifyOrderAgreementFact_shopId_shopifyOrderGid_fkey",
+      "ShopifyOrderAgreementSaleFact_shopId_shopifyAgreementGid_fkey",
+      "ShopifyOrderLineFact_shopId_shopifyOrderGid_fkey",
+      "ShopifyOrderRefundLineFact_shopId_shopifyRefundGid_fkey",
+      "ShopifyOrderRefundTransactionFact_shopId_shopifyRefundGid_fkey",
       "ShopifyProductCollectionMembership_shopId_shopifyProductGi_fkey",
       "ShopifyVariantFact_shopId_shopifyProductGid_fkey",
     ]);

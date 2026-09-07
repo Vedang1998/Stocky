@@ -3,6 +3,25 @@
  * Do not silently expand these lists.
  */
 
+/** Pre-PR6-A inventories. PR6-A tests must derive 20+4 / 6+5 / 26+9. */
+export const PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT = 20;
+export const PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT = 6;
+
+export const PR6_A_DIRECT_MERCHANT_MODELS = [
+  "ShopifyOrderFact",
+  "ShopifyOrderLineFact",
+  "ShopifyOrderRefundFact",
+  "OrderFactObservationInFlight",
+] as const;
+
+export const PR6_A_CHILD_MERCHANT_MODELS = [
+  "ShopifyOrderRefundLineFact",
+  "ShopifyOrderAdjustmentFact",
+  "ShopifyOrderAgreementFact",
+  "ShopifyOrderAgreementSaleFact",
+  "ShopifyOrderRefundTransactionFact",
+] as const;
+
 export const DIRECT_MERCHANT_MODELS = [
   "Supplier",
   "PurchaseOrder",
@@ -24,6 +43,7 @@ export const DIRECT_MERCHANT_MODELS = [
   "ShopifyLocationFact",
   "ShopifyInventoryLevelFact",
   "CatalogObservationInFlight",
+  ...PR6_A_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -33,6 +53,7 @@ export const CHILD_MERCHANT_MODELS = [
   "POLineItem",
   "TransferLineItem",
   "StocktakeLineItem",
+  ...PR6_A_CHILD_MERCHANT_MODELS,
 ] as const;
 
 export const MERCHANT_OWNED_MODELS = [
@@ -76,7 +97,16 @@ export const MERCHANT_DELEGATE_NAMES = {
   ShopifyLocationFact: "shopifyLocationFact",
   ShopifyInventoryLevelFact: "shopifyInventoryLevelFact",
   CatalogObservationInFlight: "catalogObservationInFlight",
+  ShopifyOrderFact: "shopifyOrderFact",
+  ShopifyOrderLineFact: "shopifyOrderLineFact",
+  ShopifyOrderRefundFact: "shopifyOrderRefundFact",
+  OrderFactObservationInFlight: "orderFactObservationInFlight",
   SupplierSkuMapping: "supplierSkuMapping",
+  ShopifyOrderRefundLineFact: "shopifyOrderRefundLineFact",
+  ShopifyOrderAdjustmentFact: "shopifyOrderAdjustmentFact",
+  ShopifyOrderAgreementFact: "shopifyOrderAgreementFact",
+  ShopifyOrderAgreementSaleFact: "shopifyOrderAgreementSaleFact",
+  ShopifyOrderRefundTransactionFact: "shopifyOrderRefundTransactionFact",
   VolumePriceTier: "volumePriceTier",
   LeadTimeSnapshot: "leadTimeSnapshot",
   POLineItem: "pOLineItem",

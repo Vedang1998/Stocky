@@ -8,6 +8,7 @@ import {
   exceptionForPath,
 } from "./allowlist";
 import { assertNoViolations, scanRepository, type AccessFinding } from "./scan";
+import { EXPECTED_MERCHANT_TABLE_COUNT } from "../tenant-enforcement/manifest";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.join(HERE, "fixtures");
@@ -38,7 +39,7 @@ describe("tenant access architecture audit", () => {
     const result = scanRepository();
     expect(result.violations).toEqual([]);
     // Includes SyncApplicationReceipt (PR 4 D-043 merchant-domain receipt).
-    expect(result.modelsCovered.length).toBe(26);
+    expect(result.modelsCovered.length).toBe(EXPECTED_MERCHANT_TABLE_COUNT);
     // P3-c: EX-RAW-001 removed — construction lives in EX-RAW-002 only.
     expect(result.exceptionsUsed).toContain("EX-RAW-002");
     expect(result.exceptionsUsed).not.toContain("EX-RAW-001");

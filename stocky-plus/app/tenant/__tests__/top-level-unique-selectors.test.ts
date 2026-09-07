@@ -7,6 +7,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../authority.server";
 import { TenantAccessError } from "../errors";
+import { MERCHANT_OWNED_MODELS } from "../models";
 import { MODEL_UNIQUE_SELECTORS } from "../selectors";
 import { createTenantDb } from "../tenant-db.server";
 import {
@@ -69,34 +70,7 @@ describe("tenant top-level unique-selector tests (F-PR2R2-01)", () => {
 
   it("MODEL_UNIQUE_SELECTORS enumerates every merchant model", () => {
     expect(Object.keys(MODEL_UNIQUE_SELECTORS).sort()).toEqual(
-      [
-        "BomComponent",
-        "CatalogObservationInFlight",
-        "ForecastOverride",
-        "InventorySnapshot",
-        "LeadTimeSnapshot",
-        "LowStockAlert",
-        "POLineItem",
-        "PurchaseOrder",
-        "SalesDailyAggregate",
-        "ShopSettings",
-        "ShopifyInventoryItemFact",
-        "ShopifyInventoryLevelFact",
-        "ShopifyLocationFact",
-        "ShopifyProductCollectionMembership",
-        "ShopifyProductFact",
-        "ShopifyVariantCache",
-        "ShopifyVariantFact",
-        "Stocktake",
-        "StocktakeLineItem",
-        "Supplier",
-        "SupplierSkuMapping",
-        "SyncApplicationReceipt",
-        "TransferLineItem",
-        "TransferOrder",
-        "VariantAbcClass",
-        "VolumePriceTier",
-      ].sort(),
+      [...MERCHANT_OWNED_MODELS].sort(),
     );
   });
 

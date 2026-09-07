@@ -53,6 +53,11 @@ model Shop {
   processingDisabledAt      DateTime?
   uninstalledAt             DateTime?
   reinstalledAt             DateTime?
+  /// Shopify Shop.ianaTimezone — Admin 2026-07 is String!; nullable-first here
+  /// is migration safety only. Never default UTC or server-local.
+  ianaTimezone              String?                        @db.VarChar(64)
+  /// Shopify Shop.currencyCode — Admin 2026-07 is CurrencyCode!; nullable-first.
+  currencyCode              String?                        @db.VarChar(8)
   createdAt                 DateTime                       @default(now())
   updatedAt                 DateTime                       @updatedAt
 
@@ -76,6 +81,15 @@ model Shop {
   shopifyInventoryLevelFacts ShopifyInventoryLevelFact[]
   catalogObservationsInFlight CatalogObservationInFlight[]
   shopifyProductCollectionMemberships ShopifyProductCollectionMembership[]
+  shopifyOrderFacts ShopifyOrderFact[]
+  shopifyOrderLineFacts ShopifyOrderLineFact[]
+  shopifyOrderRefundFacts ShopifyOrderRefundFact[]
+  shopifyOrderRefundLineFacts ShopifyOrderRefundLineFact[]
+  shopifyOrderAdjustmentFacts ShopifyOrderAdjustmentFact[]
+  shopifyOrderAgreementFacts ShopifyOrderAgreementFact[]
+  shopifyOrderAgreementSaleFacts ShopifyOrderAgreementSaleFact[]
+  shopifyOrderRefundTransactionFacts ShopifyOrderRefundTransactionFact[]
+  orderFactObservationsInFlight OrderFactObservationInFlight[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -1488,4 +1502,621 @@ model CatalogObservationInFlight {
   @@index([shopId, resourceKind, inventoryItemGid, locationGid, lifecycleState])
   @@index([shopId, leaseExpiresAt, lifecycleState])
   @@index([shopId, observationRequestGen])
+}
+
+// ─── PR6-A order / refund fact foundation ───────────────────────────────────
+// Sibling order-domain enums. Do not widen catalog enums.
+// ShopifyOrderShippingLineFact is intentionally absent (post-Monday parity).
+// Refund shipping money is columns on ShopifyOrderRefundFact (§5.7).
+
+enum OrderExistenceState {
+  LIVE
+  ABSENT
+}
+
+enum OrderExistenceKind {
+  LIVE_REFETCH
+  LIVE_FULL_SYNC_PRESENT
+  ABSENT_CONFIRMED_QUERY
+  INACCESSIBLE_HISTORY_WINDOW
+  ABSENT_SIGNALLED_DELETE_UNVERIFIED
+}
+
+enum OrderAttributeFreshnessState {
+  ORDERED
+  DEGRADED
+}
+
+enum OrderAbsenceNominationState {
+  NONE
+  CANDIDATE
+  CIRCUIT_BREAKER_HELD
+}
+
+enum OrderObservationLifecycleState {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum OrderResourceKind {
+  Order
+  OrderLine
+  Refund
+  RefundLine
+}
+
+enum OrderSourceKind {
+  FULL_SYNC
+  INCREMENTAL_REFETCH
+  DELETE_WEBHOOK
+  RECONCILE
+  TRANSACTION_WEBHOOK
+}
+
+enum OrderDeletionSource {
+  WEBHOOK
+  CONFIRMED_QUERY
+}
+
+model ShopifyOrderFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  name                         String
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  processedAt                  DateTime?                    @db.Timestamptz(3)
+  processedAtShopify           String?                      @db.VarChar(64)
+  cancelledAt                  DateTime?
+  cancelReason                 String?                      @db.VarChar(64)
+  closed                       Boolean
+  closedAt                     DateTime?
+  edited                       Boolean
+  test                         Boolean
+  confirmed                    Boolean
+  shopCurrencyCode             String                       @db.VarChar(8)
+  presentmentCurrencyCode      String?                      @db.VarChar(8)
+  taxesIncluded                Boolean
+  displayFinancialStatus       String?                      @db.VarChar(64)
+  displayFulfillmentStatus     String?                      @db.VarChar(64)
+  sourceName                   String?                      @db.VarChar(64)
+  retailLocationGid            String?                      @db.VarChar(256)
+  currentSubtotalLineItemsQuantity Int?
+  subtotalLineItemsQuantity    Int?
+  originalTotalShopAmount      Decimal?                     @db.Decimal(20, 6)
+  originalTotalShopCurrencyCode String?                     @db.VarChar(8)
+  originalTotalPresentmentAmount Decimal?                   @db.Decimal(20, 6)
+  originalTotalPresentmentCurrencyCode String?              @db.VarChar(8)
+  currentTotalShopAmount       Decimal?                     @db.Decimal(20, 6)
+  currentTotalShopCurrencyCode String?                      @db.VarChar(8)
+  currentTotalPresentmentAmount Decimal?                    @db.Decimal(20, 6)
+  currentTotalPresentmentCurrencyCode String?               @db.VarChar(8)
+  currentSubtotalShopAmount    Decimal?                     @db.Decimal(20, 6)
+  currentSubtotalShopCurrencyCode String?                   @db.VarChar(8)
+  currentSubtotalPresentmentAmount Decimal?                 @db.Decimal(20, 6)
+  currentSubtotalPresentmentCurrencyCode String?            @db.VarChar(8)
+  currentTotalDiscountsShopAmount Decimal?                  @db.Decimal(20, 6)
+  currentTotalDiscountsShopCurrencyCode String?             @db.VarChar(8)
+  currentTotalDiscountsPresentmentAmount Decimal?           @db.Decimal(20, 6)
+  currentTotalDiscountsPresentmentCurrencyCode String?      @db.VarChar(8)
+  currentTotalTaxShopAmount    Decimal?                     @db.Decimal(20, 6)
+  currentTotalTaxShopCurrencyCode String?                   @db.VarChar(8)
+  currentTotalTaxPresentmentAmount Decimal?                 @db.Decimal(20, 6)
+  currentTotalTaxPresentmentCurrencyCode String?            @db.VarChar(8)
+  totalRefundedShopAmount      Decimal?                     @db.Decimal(20, 6)
+  totalRefundedShopCurrencyCode String?                     @db.VarChar(8)
+  totalRefundedPresentmentAmount Decimal?                   @db.Decimal(20, 6)
+  totalRefundedPresentmentCurrencyCode String?              @db.VarChar(8)
+  netPaymentShopAmount         Decimal?                     @db.Decimal(20, 6)
+  netPaymentShopCurrencyCode   String?                      @db.VarChar(8)
+  netPaymentPresentmentAmount  Decimal?                     @db.Decimal(20, 6)
+  netPaymentPresentmentCurrencyCode String?                 @db.VarChar(8)
+  refundDiscrepancyShopAmount  Decimal?                     @db.Decimal(20, 6)
+  refundDiscrepancyShopCurrencyCode String?                 @db.VarChar(8)
+  refundDiscrepancyPresentmentAmount Decimal?               @db.Decimal(20, 6)
+  refundDiscrepancyPresentmentCurrencyCode String?          @db.VarChar(8)
+  cartDiscountShopAmount       Decimal?                     @db.Decimal(20, 6)
+  cartDiscountShopCurrencyCode String?                      @db.VarChar(8)
+  cartDiscountPresentmentAmount Decimal?                    @db.Decimal(20, 6)
+  cartDiscountPresentmentCurrencyCode String?               @db.VarChar(8)
+  currentCartDiscountShopAmount Decimal?                    @db.Decimal(20, 6)
+  currentCartDiscountShopCurrencyCode String?               @db.VarChar(8)
+  currentCartDiscountPresentmentAmount Decimal?             @db.Decimal(20, 6)
+  currentCartDiscountPresentmentCurrencyCode String?        @db.VarChar(8)
+  currentShippingShopAmount    Decimal?                     @db.Decimal(20, 6)
+  currentShippingShopCurrencyCode String?                   @db.VarChar(8)
+  currentShippingPresentmentAmount Decimal?                 @db.Decimal(20, 6)
+  currentShippingPresentmentCurrencyCode String?            @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop        Shop                      @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lines       ShopifyOrderLineFact[]
+  agreements  ShopifyOrderAgreementFact[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, processedAt])
+  @@index([shopId, shopifyUpdatedAt])
+  @@index([shopId, existenceState])
+  @@index([shopId, lastSeenFullSyncRunId])
+  @@index([shopId, ingestBatchId])
+}
+
+model ShopifyOrderLineFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  quantity                     Int
+  currentQuantity              Int
+  refundableQuantity           Int
+  unfulfilledQuantity          Int?
+  isGiftCard                   Boolean
+  title                        String
+  variantTitle                 String?
+  vendor                       String?
+  sku                          String?
+  name                         String?
+  variantGidAtSale             String?                      @db.VarChar(256)
+  productGidAtSale             String?                      @db.VarChar(256)
+  currentVariantGid            String?                      @db.VarChar(256)
+  currentProductGid            String?                      @db.VarChar(256)
+  variantLegacyResourceId      String?                      @db.VarChar(64)
+  orderProcessedAt             DateTime?                    @db.Timestamptz(3)
+  orderCancelledAt             DateTime?
+  orderTest                    Boolean
+  orderShopCurrencyCode        String                       @db.VarChar(8)
+  originalTotalShopAmount      Decimal?                     @db.Decimal(20, 6)
+  originalTotalShopCurrencyCode String?                     @db.VarChar(8)
+  originalTotalPresentmentAmount Decimal?                   @db.Decimal(20, 6)
+  originalTotalPresentmentCurrencyCode String?              @db.VarChar(8)
+  originalUnitPriceShopAmount  Decimal?                     @db.Decimal(20, 6)
+  originalUnitPriceShopCurrencyCode String?                 @db.VarChar(8)
+  originalUnitPricePresentmentAmount Decimal?               @db.Decimal(20, 6)
+  originalUnitPricePresentmentCurrencyCode String?          @db.VarChar(8)
+  discountedTotalShopAmount    Decimal?                     @db.Decimal(20, 6)
+  discountedTotalShopCurrencyCode String?                   @db.VarChar(8)
+  discountedTotalPresentmentAmount Decimal?                 @db.Decimal(20, 6)
+  discountedTotalPresentmentCurrencyCode String?            @db.VarChar(8)
+  totalDiscountShopAmount      Decimal?                     @db.Decimal(20, 6)
+  totalDiscountShopCurrencyCode String?                     @db.VarChar(8)
+  totalDiscountPresentmentAmount Decimal?                   @db.Decimal(20, 6)
+  totalDiscountPresentmentCurrencyCode String?              @db.VarChar(8)
+  discountedUnitPriceAfterAllDiscountsShopAmount Decimal?   @db.Decimal(20, 6)
+  discountedUnitPriceAfterAllDiscountsShopCurrencyCode String? @db.VarChar(8)
+  discountedUnitPriceAfterAllDiscountsPresentmentAmount Decimal? @db.Decimal(20, 6)
+  discountedUnitPriceAfterAllDiscountsPresentmentCurrencyCode String? @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop  Shop             @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  order ShopifyOrderFact @relation(fields: [shopId, shopifyOrderGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyOrderGid])
+  @@index([shopId, variantGidAtSale, orderProcessedAt])
+  @@index([shopId, existenceState])
+}
+
+model ShopifyOrderRefundFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  shopifyCreatedAt             DateTime?
+  shopifyUpdatedAt             DateTime?
+  processedAt                  DateTime?                    @db.Timestamptz(3)
+  processedAtShopify           String?                      @db.VarChar(64)
+  totalRefundedShopAmount      Decimal?                     @db.Decimal(20, 6)
+  totalRefundedShopCurrencyCode String?                     @db.VarChar(8)
+  totalRefundedPresentmentAmount Decimal?                   @db.Decimal(20, 6)
+  totalRefundedPresentmentCurrencyCode String?              @db.VarChar(8)
+  /// Monday refund-shipping money as columns of the refund snapshot (§5.7).
+  /// Not a new merchant identity/model. Later C sums RefundShippingLine bags.
+  refundShippingLineCount      Int                          @default(0)
+  refundShippingSubtotalShopAmount Decimal?                 @db.Decimal(20, 6)
+  refundShippingSubtotalShopCurrencyCode String?            @db.VarChar(8)
+  refundShippingSubtotalPresentmentAmount Decimal?          @db.Decimal(20, 6)
+  refundShippingSubtotalPresentmentCurrencyCode String?     @db.VarChar(8)
+  refundShippingTaxShopAmount  Decimal?                     @db.Decimal(20, 6)
+  refundShippingTaxShopCurrencyCode String?                 @db.VarChar(8)
+  refundShippingTaxPresentmentAmount Decimal?               @db.Decimal(20, 6)
+  refundShippingTaxPresentmentCurrencyCode String?          @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop          Shop                             @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  refundLines   ShopifyOrderRefundLineFact[]
+  adjustments   ShopifyOrderAdjustmentFact[]
+  transactions  ShopifyOrderRefundTransactionFact[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyOrderGid])
+  @@index([shopId, shopifyUpdatedAt])
+  @@index([shopId, existenceState])
+}
+
+model ShopifyOrderRefundLineFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyRefundGid             String                       @db.VarChar(256)
+  shopifyLineItemGid           String                       @db.VarChar(256)
+  refundLineOrdinal            Int
+  shopifyGid                   String?                      @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  quantity                     Int
+  restockType                  String?                      @db.VarChar(64)
+  restocked                    Boolean?
+  restockLocationGid           String?                      @db.VarChar(256)
+  subtotalShopAmount           Decimal?                     @db.Decimal(20, 6)
+  subtotalShopCurrencyCode     String?                      @db.VarChar(8)
+  subtotalPresentmentAmount    Decimal?                     @db.Decimal(20, 6)
+  subtotalPresentmentCurrencyCode String?                   @db.VarChar(8)
+  totalTaxShopAmount           Decimal?                     @db.Decimal(20, 6)
+  totalTaxShopCurrencyCode     String?                      @db.VarChar(8)
+  totalTaxPresentmentAmount    Decimal?                     @db.Decimal(20, 6)
+  totalTaxPresentmentCurrencyCode String?                   @db.VarChar(8)
+  priceShopAmount              Decimal?                     @db.Decimal(20, 6)
+  priceShopCurrencyCode        String?                      @db.VarChar(8)
+  pricePresentmentAmount       Decimal?                     @db.Decimal(20, 6)
+  pricePresentmentCurrencyCode String?                      @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop   Shop                    @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  refund ShopifyOrderRefundFact  @relation(fields: [shopId, shopifyRefundGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal], map: "ShopifyOrderRefundLineFact_refund_line_identity_key")
+  @@index([shopId, shopifyOrderGid])
+  @@index([shopId, shopifyLineItemGid])
+  @@index([shopId, shopifyRefundGid])
+}
+
+model ShopifyOrderAdjustmentFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  shopifyRefundGid             String                       @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  reason                       String?                      @db.VarChar(128)
+  amountShopAmount             Decimal?                     @db.Decimal(20, 6)
+  amountShopCurrencyCode       String?                      @db.VarChar(8)
+  amountPresentmentAmount      Decimal?                     @db.Decimal(20, 6)
+  amountPresentmentCurrencyCode String?                     @db.VarChar(8)
+  taxAmountShopAmount          Decimal?                     @db.Decimal(20, 6)
+  taxAmountShopCurrencyCode    String?                      @db.VarChar(8)
+  taxAmountPresentmentAmount   Decimal?                     @db.Decimal(20, 6)
+  taxAmountPresentmentCurrencyCode String?                  @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop   Shop                   @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  refund ShopifyOrderRefundFact @relation(fields: [shopId, shopifyRefundGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyOrderGid])
+  @@index([shopId, shopifyRefundGid])
+}
+
+model ShopifyOrderAgreementFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  happenedAt                   DateTime
+  agreementTypename            String                       @db.VarChar(64)
+  reason                       String?                      @db.VarChar(64)
+  refundGid                    String?                      @db.VarChar(256)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop  Shop                            @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  order ShopifyOrderFact                @relation(fields: [shopId, shopifyOrderGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+  sales ShopifyOrderAgreementSaleFact[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyOrderGid])
+}
+
+model ShopifyOrderAgreementSaleFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  shopifyAgreementGid          String                       @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  quantity                     Int?
+  lineType                     String?                      @db.VarChar(64)
+  actionType                   String?                      @db.VarChar(64)
+  saleTypename                 String                       @db.VarChar(64)
+  shopifyLineItemGid           String?                      @db.VarChar(256)
+  happenedAt                   DateTime
+  totalAmountShopAmount        Decimal?                     @db.Decimal(20, 6)
+  totalAmountShopCurrencyCode  String?                      @db.VarChar(8)
+  totalAmountPresentmentAmount Decimal?                     @db.Decimal(20, 6)
+  totalAmountPresentmentCurrencyCode String?                @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop      Shop                      @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  agreement ShopifyOrderAgreementFact @relation(fields: [shopId, shopifyAgreementGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyOrderGid])
+  @@index([shopId, shopifyLineItemGid])
+  @@index([shopId, happenedAt])
+  @@index([shopId, shopifyAgreementGid])
+}
+
+model ShopifyOrderRefundTransactionFact {
+  id                           String                       @id @default(cuid())
+  shopId                       String
+  shopifyGid                   String                       @db.VarChar(256)
+  shopifyRefundGid             String                       @db.VarChar(256)
+  shopifyOrderGid              String                       @db.VarChar(256)
+  status                       String                       @db.VarChar(32)
+  kind                         String?                      @db.VarChar(64)
+  shopifyCreatedAt             DateTime
+  processedAt                  DateTime?
+  amountShopAmount             Decimal?                     @db.Decimal(20, 6)
+  amountShopCurrencyCode       String?                      @db.VarChar(8)
+  amountPresentmentAmount      Decimal?                     @db.Decimal(20, 6)
+  amountPresentmentCurrencyCode String?                     @db.VarChar(8)
+  existenceState               OrderExistenceState
+  existenceKind                OrderExistenceKind
+  existenceObservedAt          DateTime
+  existenceRequestGen          BigInt?
+  existenceResponseGen         BigInt?
+  signalReceivedAt             DateTime?
+  lastSignalTopic              String?                      @db.VarChar(128)
+  lastSignalDeliveryId         String?                      @db.VarChar(128)
+  lastSignalTriggeredAt        DateTime?
+  lastSeenFullSyncRunId        String?
+  attributeRequestGen          BigInt?
+  attributeResponseGen         BigInt?
+  attributeFreshnessState      OrderAttributeFreshnessState @default(ORDERED)
+  existenceDiagnosticState     String?                      @db.VarChar(128)
+  absenceNominationState       OrderAbsenceNominationState  @default(NONE)
+  ingestBatchId                String?
+  moneyDiagnosticState         String?                      @db.VarChar(128)
+  unitDiagnosticState          String?                      @db.VarChar(128)
+  historyWindowState           String?                      @db.VarChar(128)
+  sourceKind                   OrderSourceKind
+  lastSyncRunId                String?
+  lastDurableJobId             String?
+  deletedAt                    DateTime?
+  deletionSource               OrderDeletionSource?
+  shopifyLegacyResourceId      String?                      @db.VarChar(64)
+  accessScopeSnapshot          String[]
+  createdAt                    DateTime                     @default(now())
+  updatedAt                    DateTime                     @updatedAt
+
+  shop   Shop                   @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  refund ShopifyOrderRefundFact @relation(fields: [shopId, shopifyRefundGid], references: [shopId, shopifyGid], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, shopifyGid])
+  @@index([shopId, shopifyRefundGid])
+  @@index([shopId, shopifyOrderGid])
+}
+
+model OrderFactObservationInFlight {
+  id                     String                         @id @default(cuid())
+  shopId                 String
+  resourceKind           OrderResourceKind
+  shopifyGid             String?                        @db.VarChar(256)
+  shopifyRefundGid       String?                        @db.VarChar(256)
+  shopifyLineItemGid     String?                        @db.VarChar(256)
+  refundLineOrdinal      Int?
+  observationRequestGen  BigInt
+  observationResponseGen BigInt?
+  leaseDurationMs        Int
+  leaseExpiresAt         DateTime                       @db.Timestamptz(3)
+  lifecycleState         OrderObservationLifecycleState
+  terminalOutcome        String?                        @db.VarChar(128)
+  failureCode            String?                        @db.VarChar(128)
+  failureDetail          String?                        @db.VarChar(512)
+  accessScopeSnapshot    String[]
+  durableJobId           String?
+  jobAttemptId           String?
+  correlationId          String?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@index([shopId, resourceKind, shopifyGid, lifecycleState])
+  @@index([shopId, leaseExpiresAt, lifecycleState])
+  @@index([shopId, observationRequestGen])
+  @@index([shopId, resourceKind, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal])
 }
