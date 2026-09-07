@@ -6,6 +6,11 @@ import { DURABLE_JOB_TRANSITION_PAIRS } from "../../../app/sync/state-machine.se
 import {
   CONTROL_PLANE_SHOP_COLUMNS,
   CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+  SHOP_COLUMN_CLASSIFICATION_OVERLAP,
+  SHOP_COLUMN_CLASSIFIED_MISSING,
+  SHOP_COLUMN_DUPLICATE_CLASSIFICATION,
+  SHOP_COLUMN_UNCLASSIFIED,
+  evaluateShopColumnCoverage,
 } from "../roles";
 
 describe("test:sync-role-isolation", () => {
@@ -42,6 +47,31 @@ describe("test:sync-role-isolation", () => {
       "ianaTimezone",
       "currencyCode",
     ]);
+  });
+
+  it("F-CLAUDE-PR6A-04 Shop-column coverage rejects unclassified/overlap/missing/duplicate", () => {
+    const approved = [
+      ...CONTROL_PLANE_SHOP_COLUMNS,
+      ...CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+    ];
+    expect(evaluateShopColumnCoverage(approved)).toEqual([]);
+    expect(
+      evaluateShopColumnCoverage([...approved, "pr6aUnclassifiedGuardCol"]),
+    ).toEqual([`${SHOP_COLUMN_UNCLASSIFIED}:pr6aUnclassifiedGuardCol`]);
+    expect(
+      evaluateShopColumnCoverage(
+        approved.filter((c) => c !== "currencyCode"),
+      ),
+    ).toEqual([`${SHOP_COLUMN_CLASSIFIED_MISSING}:currencyCode`]);
+    expect(
+      evaluateShopColumnCoverage(approved, ["id", "ianaTimezone"], [
+        "ianaTimezone",
+        "currencyCode",
+      ]),
+    ).toContain(`${SHOP_COLUMN_CLASSIFICATION_OVERLAP}:ianaTimezone`);
+    expect(
+      evaluateShopColumnCoverage(approved, ["id", "id"], ["ianaTimezone"]),
+    ).toContain(`${SHOP_COLUMN_DUPLICATE_CLASSIFICATION}:id`);
   });
 
   it("control-plane RLS is enabled+forced on all 11 control-plane tables", async () => {

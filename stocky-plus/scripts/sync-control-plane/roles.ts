@@ -42,6 +42,59 @@ export const CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS = [
   "currencyCode",
 ] as const;
 
+export const SHOP_COLUMN_UNCLASSIFIED = "shop_column_unclassified";
+export const SHOP_COLUMN_CLASSIFIED_MISSING = "shop_column_classified_missing";
+export const SHOP_COLUMN_CLASSIFICATION_OVERLAP =
+  "shop_column_classification_overlap";
+export const SHOP_COLUMN_DUPLICATE_CLASSIFICATION =
+  "shop_column_duplicate_classification";
+
+/**
+ * F-CLAUDE-PR6A-04: compare actual Shop columns with the explicit lifecycle
+ * SELECT+UPDATE list and the SELECT-only list. Never auto-grant discovered
+ * columns. Overlap, duplicates, missing classified columns, and unclassified
+ * actual columns are verifier failures.
+ */
+export function evaluateShopColumnCoverage(
+  actualColumns: readonly string[],
+  lifecycleColumns: readonly string[] = CONTROL_PLANE_SHOP_COLUMNS,
+  selectOnlyColumns: readonly string[] = CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+): string[] {
+  const errors: string[] = [];
+  const actual = new Set(actualColumns);
+  const lifecycleSeen = new Set<string>();
+  const selectOnlySeen = new Set<string>();
+
+  for (const col of lifecycleColumns) {
+    if (lifecycleSeen.has(col)) {
+      errors.push(`${SHOP_COLUMN_DUPLICATE_CLASSIFICATION}:${col}`);
+    }
+    lifecycleSeen.add(col);
+    if (!actual.has(col)) {
+      errors.push(`${SHOP_COLUMN_CLASSIFIED_MISSING}:${col}`);
+    }
+  }
+  for (const col of selectOnlyColumns) {
+    if (selectOnlySeen.has(col)) {
+      errors.push(`${SHOP_COLUMN_DUPLICATE_CLASSIFICATION}:${col}`);
+    }
+    selectOnlySeen.add(col);
+    if (lifecycleSeen.has(col)) {
+      errors.push(`${SHOP_COLUMN_CLASSIFICATION_OVERLAP}:${col}`);
+    }
+    if (!actual.has(col)) {
+      errors.push(`${SHOP_COLUMN_CLASSIFIED_MISSING}:${col}`);
+    }
+  }
+  const classified = new Set([...lifecycleSeen, ...selectOnlySeen]);
+  for (const col of actualColumns) {
+    if (!classified.has(col)) {
+      errors.push(`${SHOP_COLUMN_UNCLASSIFIED}:${col}`);
+    }
+  }
+  return errors;
+}
+
 export function defaultControlPlaneRoleName(
   env: NodeJS.ProcessEnv = process.env,
 ): string {
@@ -501,6 +554,30 @@ export async function verifyControlPlaneRole(
     if (update.rows[0]?.has === true) {
       errors.push(`control_plane_shop_update_forbidden:${col}`);
     }
+  }
+
+  const shopExists = await client.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'Shop'`,
+  );
+  if ((shopExists.rowCount ?? 0) === 0) {
+    errors.push("shop_table_missing");
+  } else {
+    const shopColumns = await client.query<{ column_name: string }>(
+      `SELECT a.attname AS column_name
+       FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND c.relname = 'Shop'
+         AND c.relkind = 'r'
+         AND a.attnum > 0
+         AND NOT a.attisdropped
+       ORDER BY a.attnum`,
+    );
+    errors.push(
+      ...evaluateShopColumnCoverage(shopColumns.rows.map((r) => r.column_name)),
+    );
   }
 
   // NEW-PR4-C08: receipt probe function ownership and EXECUTE grants.

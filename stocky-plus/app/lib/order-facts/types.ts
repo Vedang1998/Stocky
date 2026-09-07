@@ -171,16 +171,32 @@ export type OrderMoneyDiagnosticState =
 
 export const ORDER_UNIT_DIAGNOSTIC_STATES = [
   "LINE_UNIT_IDENTITY_INCONSISTENT",
+  "UNIT_SALE_SIGN_INCONSISTENT",
 ] as const;
 export type OrderUnitDiagnosticState =
   (typeof ORDER_UNIT_DIAGNOSTIC_STATES)[number];
 
+/** Merchant `historyWindowState` codes. INACCESSIBLE_HISTORY_WINDOW is an existenceKind. */
 export const ORDER_HISTORY_WINDOW_STATES = [
   "ORDER_HISTORY_WINDOW_TRUNCATED",
-  "INACCESSIBLE_HISTORY_WINDOW",
+  "REFUND_OUTSIDE_ACCESSIBLE_WINDOW",
 ] as const;
 export type OrderHistoryWindowState =
   (typeof ORDER_HISTORY_WINDOW_STATES)[number];
+
+export const ORDER_EXISTENCE_DIAGNOSTIC_STATES = [
+  "ORDER_EXISTENCE_UNVERIFIABLE_WINDOW",
+] as const;
+export type OrderExistenceDiagnosticState =
+  (typeof ORDER_EXISTENCE_DIAGNOSTIC_STATES)[number];
+
+export const ORDER_HISTORY_ACCESS_DIAGNOSTICS = [
+  "ORDER_HISTORY_WINDOW_TRUNCATED",
+  "ORDER_EXISTENCE_UNVERIFIABLE_WINDOW",
+  "REFUND_OUTSIDE_ACCESSIBLE_WINDOW",
+] as const;
+export type OrderHistoryAccessDiagnostic =
+  (typeof ORDER_HISTORY_ACCESS_DIAGNOSTICS)[number];
 
 export type OrderFactDiagnostics = {
   moneyDiagnosticState: string | null;
@@ -196,9 +212,16 @@ export type OrderFactDiagnostics = {
  */
 export type RefundShippingLineSnapshot = {
   shopifyGid: string | null;
-  subtotal: OptionalMoneyBagSides;
-  tax: OptionalMoneyBagSides;
+  subtotal: MoneyBagSides;
+  tax: MoneyBagSides;
 };
+
+/** Compile-time proof: required refund-shipping bag sides cannot be null. */
+export const REFUND_SHIPPING_REQUIRED_SIDES_COMPILE_CHECK: RefundShippingLineSnapshot["subtotal"]["shopAmount"] extends ExactMoneyText
+  ? RefundShippingLineSnapshot["tax"]["shopAmount"] extends ExactMoneyText
+    ? true
+    : never
+  : never = true;
 
 export const ORDER_REQUIRED_MONEY_BAGS = {
   order: [
@@ -216,7 +239,12 @@ export const ORDER_REQUIRED_MONEY_BAGS = {
     "discountedTotalSet",
     "totalDiscountSet",
   ],
+  refund: ["totalRefundedSet"],
   refundLine: ["subtotalSet", "totalTaxSet", "priceSet"],
+  refundShippingLine: ["subtotalAmountSet", "taxAmountSet"],
+  orderAdjustment: ["amountSet", "taxAmountSet"],
+  sale: ["totalAmount"],
+  orderTransaction: ["amountSet"],
 } as const;
 
 export const ORDER_OPTIONAL_MONEY_BAGS = {

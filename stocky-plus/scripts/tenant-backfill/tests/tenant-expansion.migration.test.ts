@@ -49,6 +49,7 @@ const ALL_MIGRATION_NAMES = [
   "20260905173000_pr5_f3_projection_pending_enum",
   "20260905173500_pr5_f3_remaining_integration",
   "20260907010000_pr6_a_order_refund_fact_foundation",
+  "20260907020000_pr6_a_order_refund_existence_coherence",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
@@ -302,6 +303,28 @@ function assertMigrationAllowlistMatchesDisk(): void {
   }
 }
 
+const PR6_A_SUCCESSOR_MIGRATION =
+  "20260907020000_pr6_a_order_refund_existence_coherence";
+
+function withParkedPr6aSuccessor<T>(fn: () => T): T {
+  assertMigrationAllowlistMatchesDisk();
+  const parkedRoot = join(APP_ROOT, ".tmp-parked-pr6a-successor");
+  const src = join(MIGRATIONS_DIR, PR6_A_SUCCESSOR_MIGRATION);
+  const dest = join(parkedRoot, PR6_A_SUCCESSOR_MIGRATION);
+  mkdirSync(parkedRoot, { recursive: true });
+  try {
+    if (existsSync(src)) moveDir(src, dest);
+    return fn();
+  } finally {
+    if (existsSync(dest) && !existsSync(src)) {
+      moveDir(dest, src);
+    }
+    if (existsSync(parkedRoot)) {
+      rmSync(parkedRoot, { recursive: true, force: true });
+    }
+  }
+}
+
 function migrateInitOnlyThenRest(): { initOut: string; restOut: string } {
   assertMigrationAllowlistMatchesDisk();
   const parked = join(APP_ROOT, ".tmp-parked-migrations");
@@ -365,6 +388,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(out).toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(out).toContain("20260905173500_pr5_f3_remaining_integration");
     expect(out).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+    expect(out).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
   }, 120_000);
 
   it("applies new migrations on top of current-main init schema", async () => {
@@ -388,10 +412,12 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(initOut).not.toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
     expect(initOut).not.toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+    expect(initOut).not.toContain("20260907020000_pr6_a_order_refund_existence_coherence");
     expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
     expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
     expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+    expect(restOut).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
@@ -414,6 +440,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260905173000_pr5_f3_projection_pending_enum",
         "20260905173500_pr5_f3_remaining_integration",
         "20260907010000_pr6_a_order_refund_fact_foundation",
+        "20260907020000_pr6_a_order_refund_existence_coherence",
         "migration_lock.toml",
       ]),
     );
@@ -462,6 +489,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain("20260905173000_pr5_f3_projection_pending_enum");
       expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
       expect(initOut).not.toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+      expect(initOut).not.toContain("20260907020000_pr6_a_order_refund_existence_coherence");
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -496,6 +524,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
       expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
       expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+      expect(restOut).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -554,6 +583,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
       expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
       expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+      expect(restOut).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -1002,5 +1032,135 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       ok: true,
       normalized: "shop-a.myshopify.com",
     });
+  }, 180_000);
+
+  it("upgrades from original PR6-A with valid seeded rows unchanged and eight CHECKs validated", async () => {
+    await resetPublicSchema(prisma);
+    const parkedDeploy = withParkedPr6aSuccessor(() => migrateDeploy());
+    expect(parkedDeploy).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
+    expect(parkedDeploy).not.toContain(PR6_A_SUCCESSOR_MIGRATION);
+
+    const shop = await prisma.shop.create({
+      data: { myshopifyDomain: "pr6a-upgrade-valid.myshopify.com" },
+    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "ShopifyOrderFact" (
+         id, "shopId", "shopifyGid", name, closed, edited, test, confirmed,
+         "shopCurrencyCode", "taxesIncluded",
+         "existenceState", "existenceKind", "existenceObservedAt",
+         "existenceRequestGen", "existenceResponseGen",
+         "sourceKind", "createdAt", "updatedAt"
+       ) VALUES (
+         'upgrade-valid-order', '${shop.id}', 'gid://shopify/Order/upgrade-valid',
+         '#9001', false, false, false, true, 'USD', true,
+         'LIVE', 'LIVE_FULL_SYNC_PRESENT', CLOCK_TIMESTAMP(),
+         NULL, NULL, 'FULL_SYNC', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+       )`,
+    );
+    const before = await prisma.$queryRawUnsafe<
+      Array<{
+        existenceKind: string;
+        existenceRequestGen: bigint | null;
+        name: string;
+      }>
+    >(
+      `SELECT "existenceKind", "existenceRequestGen", name
+       FROM "ShopifyOrderFact" WHERE id = 'upgrade-valid-order'`,
+    );
+    expect(before[0]?.existenceKind).toBe("LIVE_FULL_SYNC_PRESENT");
+    expect(before[0]?.existenceRequestGen).toBeNull();
+    expect(before[0]?.name).toBe("#9001");
+
+    const successorOut = migrateDeploy();
+    expect(successorOut).toContain(PR6_A_SUCCESSOR_MIGRATION);
+
+    const after = await prisma.$queryRawUnsafe<
+      Array<{
+        existenceKind: string;
+        existenceRequestGen: bigint | null;
+        name: string;
+      }>
+    >(
+      `SELECT "existenceKind", "existenceRequestGen", name
+       FROM "ShopifyOrderFact" WHERE id = 'upgrade-valid-order'`,
+    );
+    expect(after).toEqual(before);
+
+    const checks = await prisma.$queryRawUnsafe<
+      Array<{ table_name: string; convalidated: boolean }>
+    >(
+      `SELECT c.relname AS table_name, p.convalidated
+       FROM pg_constraint p
+       JOIN pg_class c ON c.oid = p.conrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND p.conname LIKE '%_existence_coherence_check'
+         AND c.relname LIKE 'ShopifyOrder%Fact'
+       ORDER BY c.relname`,
+    );
+    expect(checks).toHaveLength(8);
+    expect(checks.every((r) => r.convalidated)).toBe(true);
+  }, 180_000);
+
+  it("fails successor VALIDATE on an invalid pre-existing fixture without deleting or coercing it", async () => {
+    await resetPublicSchema(prisma);
+    withParkedPr6aSuccessor(() => migrateDeploy());
+    const shop = await prisma.shop.create({
+      data: { myshopifyDomain: "pr6a-upgrade-invalid.myshopify.com" },
+    });
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "ShopifyOrderFact" (
+         id, "shopId", "shopifyGid", name, closed, edited, test, confirmed,
+         "shopCurrencyCode", "taxesIncluded",
+         "existenceState", "existenceKind", "existenceObservedAt",
+         "sourceKind", "createdAt", "updatedAt"
+       ) VALUES (
+         'upgrade-invalid-order', '${shop.id}', 'gid://shopify/Order/upgrade-invalid',
+         '#9002', false, false, false, true, 'USD', true,
+         'LIVE', 'LIVE_REFETCH', CLOCK_TIMESTAMP(),
+         'INCREMENTAL_REFETCH', CLOCK_TIMESTAMP(), CLOCK_TIMESTAMP()
+       )`,
+    );
+
+    try {
+      migrateDeploy();
+      throw new Error("expected successor migration to fail VALIDATE");
+    } catch (err) {
+      const e = err as { message?: string; stderr?: string; stdout?: string };
+      const text = `${e.message ?? ""}\n${e.stderr ?? ""}\n${e.stdout ?? ""}`;
+      if (text.includes("expected successor migration to fail VALIDATE")) {
+        throw err;
+      }
+      expect(text).toMatch(
+        /ShopifyOrderFact_existence_coherence_check/,
+      );
+    }
+
+    const surviving = await prisma.$queryRawUnsafe<
+      Array<{ existenceKind: string; deletedAt: Date | null }>
+    >(
+      `SELECT "existenceKind", "deletedAt"
+       FROM "ShopifyOrderFact" WHERE id = 'upgrade-invalid-order'`,
+    );
+    expect(surviving).toHaveLength(1);
+    expect(surviving[0]?.existenceKind).toBe("LIVE_REFETCH");
+    expect(surviving[0]?.deletedAt).toBeNull();
+
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM "ShopifyOrderFact" WHERE id = 'upgrade-invalid-order'`,
+    );
+    try {
+      run("npx", [
+        "prisma",
+        "migrate",
+        "resolve",
+        "--rolled-back",
+        PR6_A_SUCCESSOR_MIGRATION,
+      ]);
+    } catch {
+      // Prisma may have rolled back the failed _prisma_migrations row with the SQL.
+    }
+    const recovered = migrateDeploy();
+    expect(recovered).toContain(PR6_A_SUCCESSOR_MIGRATION);
   }, 180_000);
 });
