@@ -36,7 +36,12 @@ import {
   PR6_A_ADDED_MERCHANT_TABLE_COUNT,
 } from "../manifest";
 import { verifyRoles } from "../roles";
-import { verifyControlPlaneRole } from "../../sync-control-plane/roles";
+import {
+  CONTROL_PLANE_SHOP_COLUMNS,
+  CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+  provisionControlPlaneRole,
+  verifyControlPlaneRole,
+} from "../../sync-control-plane/roles";
 import { verifyEnforcement, verifyImmutabilityOnly, verifyRlsOnly } from "../verify";
 import { resetSchemaAndApplyEnforcement } from "./helpers";
 
@@ -201,6 +206,83 @@ describe.sequential("PR6-A order / refund fact foundation", () => {
       expect((await verifyControlPlaneRole(client)).ok).toBe(true);
     } finally {
       await client.end();
+    }
+  });
+
+  it("control-plane SELECT-only Shop timezone/currency so Prisma RETURNING * works", async () => {
+    const migration = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      const provisioned = await provisionControlPlaneRole(migration, {
+        apply: true,
+        password: process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD,
+      });
+      expect(provisioned.ok).toBe(true);
+      const verified = await verifyControlPlaneRole(migration);
+      expect(verified.errors).toEqual([]);
+      expect(verified.ok).toBe(true);
+
+      const role =
+        process.env.STOCKY_CONTROL_PLANE_ROLE?.trim() || "stocky_control_plane";
+      for (const col of CONTROL_PLANE_SHOP_COLUMNS) {
+        const select = await migration.query<{ has: boolean }>(
+          `SELECT has_column_privilege($1, format('%I.%I', 'public', 'Shop')::regclass, $2, 'SELECT') AS has`,
+          [role, col],
+        );
+        const update = await migration.query<{ has: boolean }>(
+          `SELECT has_column_privilege($1, format('%I.%I', 'public', 'Shop')::regclass, $2, 'UPDATE') AS has`,
+          [role, col],
+        );
+        expect(select.rows[0]?.has, col).toBe(true);
+        expect(update.rows[0]?.has, col).toBe(true);
+      }
+      for (const col of CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS) {
+        const select = await migration.query<{ has: boolean }>(
+          `SELECT has_column_privilege($1, format('%I.%I', 'public', 'Shop')::regclass, $2, 'SELECT') AS has`,
+          [role, col],
+        );
+        const update = await migration.query<{ has: boolean }>(
+          `SELECT has_column_privilege($1, format('%I.%I', 'public', 'Shop')::regclass, $2, 'UPDATE') AS has`,
+          [role, col],
+        );
+        expect(select.rows[0]?.has, col).toBe(true);
+        expect(update.rows[0]?.has, col).toBe(false);
+      }
+    } finally {
+      await migration.end();
+    }
+
+    const controlUrl = process.env.DATABASE_CONTROL_PLANE_URL;
+    if (!controlUrl) {
+      throw new Error("DATABASE_CONTROL_PLANE_URL is required");
+    }
+    const control = new Client({ connectionString: controlUrl });
+    await control.connect();
+    try {
+      const returned = await control.query<{ id: string; ianaTimezone: string | null }>(
+        `UPDATE "Shop"
+         SET "processingEnabled" = "processingEnabled"
+         WHERE id = $1
+         RETURNING id, "ianaTimezone"`,
+        [shopAId],
+      );
+      expect(returned.rows).toHaveLength(1);
+      expect(returned.rows[0]?.id).toBe(shopAId);
+      await expect(
+        control.query(
+          `UPDATE "Shop" SET "ianaTimezone" = 'Etc/UTC' WHERE id = $1`,
+          [shopAId],
+        ),
+      ).rejects.toThrow(/permission denied/i);
+      await expect(
+        control.query(
+          `UPDATE "Shop" SET "currencyCode" = 'USD' WHERE id = $1`,
+          [shopAId],
+        ),
+      ).rejects.toThrow(/permission denied/i);
+    } finally {
+      await control.end();
     }
   });
 

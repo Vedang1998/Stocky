@@ -95,6 +95,11 @@ Runtime table privileges follow the existing SELECT/INSERT/UPDATE/DELETE
 pattern. `stocky_runtime` still has no BYPASSRLS, no table ownership, and no
 `DataIssue` DML. Sequence privilege remains USAGE-only. PUBLIC remains denied.
 
+Control-plane Shop grants remain column-level (F-PR4-06). Lifecycle columns
+stay SELECT+UPDATE. `ianaTimezone` and `currencyCode` are **SELECT-only** so
+Prisma `UPDATE … RETURNING *` on uninstall/reinstall does not fail, and
+control-plane cannot write those Shopify facts.
+
 Composite tenant FKs added:
 
 - `ShopifyOrderLineFact (shopId, shopifyOrderGid) → ShopifyOrderFact`
@@ -155,7 +160,10 @@ Inventory-write flags remain false.
 | `npx vitest run app/lib/order-facts` | 17 passed |
 | `npx vitest run app/lib/catalog-facts/lock-key.test.ts` | 5 passed |
 | `npm test` | 385 passed; 5 failed on gitignored `app/types/admin-2026-07.schema.json` absence (PO-11 carry-forward; CI generates this file first) |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts` | 17 passed |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts` | 18 passed (after SELECT-only Shop grant correction) |
+| `npm run test:sync-uninstall` | 8 passed |
+| `npx vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-control-plane.integration.test.ts` | 17 passed |
+| `npm run test:sync-role-isolation` | 9 passed |
 | sequence-privilege tests | 2 passed |
 | tenant-db + unique-selector tests | 24 passed |
 | db-isolation `isolation.test.ts` | 14 passed |
@@ -171,8 +179,16 @@ Inventory-write flags remain false.
 Exact-head GitHub Actions `pull_request` CI is the authoritative automatic
 evidence after this branch is pushed. This file does not invent a CI run ID
 or this commit’s own SHA. Independent review must use the live PR head and
-exact-head Classify / Heavy / CI Gate jobs. No later push is intended after
-that exact-head run is green.
+exact-head Classify / Heavy / CI Gate jobs.
+
+First exact-head run `34074356984` on `368e46454331e3cea3130e9d532aea8e347b4cb3`
+failed Heavy step “Sync control-plane integration tests” (8 failures): Prisma
+`tx.shop.update()` in `app/sync/uninstall.server.ts` returned PostgreSQL
+`42501 permission denied for table Shop`. Cause: F-PR4-06 column-level Shop
+grants did not yet SELECT the new PR6-A columns, so `UPDATE … RETURNING *`
+failed. Correction: SELECT-only grants for `ianaTimezone` / `currencyCode`;
+UPDATE remains denied. Control-plane lifecycle UPDATE columns are unchanged.
+No later push is intended after the corrected exact-head run is green.
 
 ## 8a. Files in the implementation commit
 
@@ -189,6 +205,8 @@ Runtime / schema / enforcement:
 - `stocky-plus/app/lib/order-facts/foundation-safety.test.ts`
 - `stocky-plus/scripts/tenant-enforcement/manifest.ts`
 - `stocky-plus/scripts/tenant-enforcement/roles.ts`
+- `stocky-plus/scripts/sync-control-plane/roles.ts`
+- `stocky-plus/scripts/sync-control-plane/tests/sync-role-isolation.test.ts`
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts`
 - `stocky-plus/scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts`
 - `stocky-plus/app/tenant/models.ts`

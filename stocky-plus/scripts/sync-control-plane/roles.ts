@@ -17,7 +17,7 @@ export const DEFAULT_RUNTIME_ROLE = "stocky_runtime";
 export const DEFAULT_RECEIPT_PROBE_OWNER_ROLE = "stocky_receipt_probe_owner";
 
 /**
- * Shop columns the control-plane role may SELECT/UPDATE for lifecycle only.
+ * Shop columns the control-plane role may SELECT and UPDATE for lifecycle only.
  * Session/token tables remain fully revoked. No broad Shop.* grant.
  */
 export const CONTROL_PLANE_SHOP_COLUMNS = [
@@ -30,6 +30,16 @@ export const CONTROL_PLANE_SHOP_COLUMNS = [
   "reinstalledAt",
   "createdAt",
   "updatedAt",
+] as const;
+
+/**
+ * PR6-A Shopify shop facts. Control-plane must SELECT them so Prisma
+ * `UPDATE … RETURNING *` on lifecycle columns does not fail closed with
+ * `permission denied for table Shop`. Control-plane must not UPDATE them.
+ */
+export const CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS = [
+  "ianaTimezone",
+  "currencyCode",
 ] as const;
 
 export function defaultControlPlaneRoleName(
@@ -123,12 +133,20 @@ export async function provisionControlPlaneRole(
     await client.query(
       `REVOKE ALL ON TABLE ${quoteIdent("Shop")} FROM ${quoteIdent(role)}`,
     ).catch(() => undefined);
-    const cols = CONTROL_PLANE_SHOP_COLUMNS.map((c) => quoteIdent(c)).join(", ");
+    const updateCols = CONTROL_PLANE_SHOP_COLUMNS.map((c) => quoteIdent(c)).join(
+      ", ",
+    );
+    const selectCols = [
+      ...CONTROL_PLANE_SHOP_COLUMNS,
+      ...CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+    ]
+      .map((c) => quoteIdent(c))
+      .join(", ");
     await client.query(
-      `GRANT SELECT (${cols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
+      `GRANT SELECT (${selectCols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
     );
     await client.query(
-      `GRANT UPDATE (${cols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
+      `GRANT UPDATE (${updateCols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
     );
     grantsApplied.push("Shop:column-lifecycle");
 
@@ -448,6 +466,40 @@ export async function verifyControlPlaneRole(
           `dangerous_default_acl:${row.defaclrole}:${row.defaclobjtype}`,
         );
       }
+    }
+  }
+
+  const shopRegclassSql = `format('%I.%I', 'public', 'Shop')::regclass`;
+  for (const col of CONTROL_PLANE_SHOP_COLUMNS) {
+    const select = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'SELECT') AS has`,
+      [role, col],
+    );
+    if (select.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_shop_select:${col}`);
+    }
+    const update = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'UPDATE') AS has`,
+      [role, col],
+    );
+    if (update.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_shop_update:${col}`);
+    }
+  }
+  for (const col of CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS) {
+    const select = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'SELECT') AS has`,
+      [role, col],
+    );
+    if (select.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_shop_select:${col}`);
+    }
+    const update = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'UPDATE') AS has`,
+      [role, col],
+    );
+    if (update.rows[0]?.has === true) {
+      errors.push(`control_plane_shop_update_forbidden:${col}`);
     }
   }
 

@@ -3,7 +3,10 @@
  */
 import { describe, expect, it } from "vitest";
 import { DURABLE_JOB_TRANSITION_PAIRS } from "../../../app/sync/state-machine.server";
-import { CONTROL_PLANE_SHOP_COLUMNS } from "../roles";
+import {
+  CONTROL_PLANE_SHOP_COLUMNS,
+  CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+} from "../roles";
 
 describe("test:sync-role-isolation", () => {
   it("application transition graph includes uninstall cancel edges", () => {
@@ -33,6 +36,12 @@ describe("test:sync-role-isolation", () => {
     expect(CONTROL_PLANE_SHOP_COLUMNS).toContain("processingEnabled");
     expect(CONTROL_PLANE_SHOP_COLUMNS).not.toContain("accessToken");
     expect(CONTROL_PLANE_SHOP_COLUMNS).not.toContain("session");
+    expect(CONTROL_PLANE_SHOP_COLUMNS).not.toContain("ianaTimezone");
+    expect(CONTROL_PLANE_SHOP_COLUMNS).not.toContain("currencyCode");
+    expect(CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS).toEqual([
+      "ianaTimezone",
+      "currencyCode",
+    ]);
   });
 
   it("control-plane RLS is enabled+forced on all 11 control-plane tables", async () => {
