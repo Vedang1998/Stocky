@@ -8,8 +8,9 @@
 **Phase 1 PR 3:** MERGED AND CLOSED
 **Phase 1 PR 4:** FORMALLY CLOSED
 **Phase 1 PR 5 repository implementation:** FORMALLY CLOSED (PR [#36](https://github.com/Vedang1998/Stocky/pull/36) squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`)
-**Next authorized action:** **Final independent Claude planning re-review of PR #34** after this current-main synchronization. Not PR6 runtime. Production and PR6 runtime remain unauthorized
-**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (EFFECTIVE)**; **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION** (same D-054; **no D-055**); PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR #26 CLOSED / MERGED; PR #27 CLOSED / MERGED; PR #29 F2A CLOSED / MERGED; PR #31 F2B CLOSED / MERGED; PR #30 F2C CLOSED / MERGED; PR #32 remaining-integration planning CLOSED / MERGED; PR #33 control packet CLOSED / MERGED; PR #35 F3 CLOSED / MERGED; PR #36 closeout CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F3 ACCEPTED / MERGED; PR5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**; current `origin/main` `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`; PR #34 current-main synchronized in this planning PR; independent final correction re-review **PENDING**; PR6 RUNTIME NOT AUTHORIZED
+**PR6 planning:** ACCEPTED AND MERGED (PR [#34](https://github.com/Vedang1998/Stocky/pull/34) squash `09feffd3f36eb4698f2ed8a152efe414cd9b77bd`)
+**Next authorized action:** **PR6-A foundation implementation** on exact main `09feffd3f36eb4698f2ed8a152efe414cd9b77bd`. PR6-B/C/D, production, and write flags remain unauthorized
+**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (EFFECTIVE)** remains the implementation-authority / current-lane record (**no D-055**); **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION**; **ChatGPT disposition: AUTHORIZE PR6-A FOUNDATION ONLY**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR #26 CLOSED / MERGED; PR #27 CLOSED / MERGED; PR #29 F2A CLOSED / MERGED; PR #31 F2B CLOSED / MERGED; PR #30 F2C CLOSED / MERGED; PR #32 remaining-integration planning CLOSED / MERGED; PR #33 control packet CLOSED / MERGED; PR #35 F3 CLOSED / MERGED; PR #36 closeout CLOSED / MERGED; PR #34 planning CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F3 ACCEPTED / MERGED; PR5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**; current `origin/main` `09feffd3f36eb4698f2ed8a152efe414cd9b77bd`; independent PR6 verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f…`); PR6-A **AUTHORIZED / IN PROGRESS**; PR6-B/C/D **NOT AUTHORIZED**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -24,7 +25,7 @@
 - PR [#22](https://github.com/Vedang1998/Stocky/pull/22) is **CLOSED and MERGED**. Accepted closure head `b99039f9c34fb12e74d804a3df748cbfdb435313`. Squash merge `99d48db22ad0d114f2ea43028fd35b4bc1806ac1` at `2026-08-14T04:01:29Z`.
 - PR 4 repository implementation remains **ACCEPTED** under **D-052** at accepted implementation head `eb757119…`. Independent verdict: `READY FOR CHATGPT PR 4 ACCEPTANCE` (cumulative review commit `ca799848…`; report blob `c9fca9b2…`). Findings: P0 0 / P1 0 / P2 0 / P3 4.
 - Phase 1 PR 4 is **FORMALLY CLOSED**. See `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
-- Next gate: Phase 1 PR5 repository implementation is **FORMALLY CLOSED**. PR [#36](https://github.com/Vedang1998/Stocky/pull/36) squash / current `origin/main` `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`. Post-merge PR36 main CI run `34046777505` SUCCESS (Classify `101523117557` SUCCESS; Heavy `101523133707` SKIPPED; CI Gate `101523133212` SUCCESS). This PR [#34](https://github.com/Vedang1998/Stocky/pull/34) is the authorized **current-main synchronization** of PR6 planning. Next authorized action is **final independent Claude planning re-review**. D-054 **EFFECTIVE**. PR5-F1 **FROZEN**. PR5-F2A/F2B/F2C **MERGED**. PR5-F3 **ACCEPTED / MERGED** via PR #35 squash `36365e2535a2394fa53b0642db4dbf90a438316f`. Primary brief: `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md`. Remaining plan: `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md`. Implementation evidence: `PR5_F3_IMPLEMENTATION_REPORT.md`. Immutable exact-head review: `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit). Overall closure: `PR5_CLOSURE_REPORT.md`. Accepted residuals: `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`. **F-CLAUDE-PR5F3DUR-01** remains a non-blocking P3. Do **not** create D-055. Do **not** state Phase 1 is complete. PR6 runtime is **NOT AUTHORIZED**. Independent final correction re-review of this synchronized PR6 plan remains **PENDING**.
+- Next gate: Phase 1 PR5 repository implementation is **FORMALLY CLOSED**. PR [#36](https://github.com/Vedang1998/Stocky/pull/36) squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`. PR [#34](https://github.com/Vedang1998/Stocky/pull/34) is **CLOSED / MERGED** as squash / current `origin/main` `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` at `2026-09-07T00:53:25Z`. Post-merge PR34 main CI run `34071226302` SUCCESS (Classify `101588830168` SUCCESS; Heavy `101588852919` SKIPPED; CI Gate `101588852489` SUCCESS). Independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`). PR6 planning is **ACCEPTED / MERGED**. Next authorized action is **PR6-A foundation implementation**. D-054 **EFFECTIVE**. PR5-F1 **FROZEN**. PR5-F2A/F2B/F2C **MERGED**. PR5-F3 **ACCEPTED / MERGED**. Do **not** create D-055. Do **not** state Phase 1 is complete. PR6-B/C/D remain **NOT AUTHORIZED**.
 - D-049 independent review: `CORRECTIONS REQUIRED` (immutable report blob `aa713ad…`).
 - D-050 independent review: `APPROVE D-050 CORRECTION CLOSURE` (immutable report blob `8247d8ae…`) — not PR 4 acceptance.
 - D-051 independent review: `APPROVE D-051 CORRECTION CLOSURE` (immutable report blob `d17df590…`) — not PR 4 acceptance.
@@ -35,7 +36,7 @@
 - D-051 artifacts: `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_BACKLOG.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_IMPLEMENTATION_REPORT.md`, `PR4_SYNC_CONTROL_PLANE_D051_CORRECTION_REVIEW_REPORT.md` (immutable).
 - D-052 artifacts: `PR4_SYNC_CONTROL_PLANE_CUMULATIVE_ACCEPTANCE_REVIEW_REPORT.md` (immutable blob `c9fca9b2…`); `PR4_SYNC_CONTROL_PLANE_ACCEPTED_RESIDUAL_BACKLOG.md`; `PR4_SYNC_CONTROL_PLANE_CLOSURE_REPORT.md`.
 - Immutable reports: original review; correction reviews; D-046; D-046 follow-up; D-047; D-048; D-049; D-050; D-051; cumulative acceptance review — do not edit.
-- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main; `de1bb193…` = PR #23 squash merge / historical PR 5 planning base; `edabd8de…` = PR #24 squash merge; `1691933e…` = PR 5 planning review head before squash; `0d322db…` = final immutable PR 5 planning review blob; `ae1b4280…` = PR #26 squash merge; `56c764d0…` = PR5-F1 accepted review-record head; `7827e535…` = PR #27 squash merge (historical; later F2A/F2B/F2C/PR32/PR33/PR35/PR36 advanced main); `7161c481…` = immutable PR5-F1 initial review blob; `4b735360…` = immutable PR5-F1 correction re-review blob; `5129707e…` = PR #28 squash merge (F1 closeout); `bfbe369f…` = PR5-F2A accepted implementation head; `f65ab4b9…` = PR #29 squash merge; `0284b66c…` = PR #31 F2B squash merge (**historical**; not current main); `f9841691…` = PR #30 F2C squash merge (**CLOSED / MERGED**; not an open conflicting PR); `f1201f85…` = PR #32 remaining-integration planning squash (historical); `28c81009…` = PR #33 control-packet squash / F3 base; `81bc0678…` = immutable F2A first review blob; `d06fc9f6…` = immutable F2A correction review blob; `acbd5127…` = immutable F2A second-correction review blob; `bba424c0…` = immutable F2A S01 review blob; `36365e25…` = PR #35 F3 squash merge (**historical** current main at F3 merge); `502b869e…` = accepted F3 exact implementation head; `b06e1ae…` = F3 exact-head independent review commit; `8d6d47a2…` = immutable F3 exact-head review blob; `58bf62b4…` = PR #36 closeout squash / **current** `origin/main`.
+- Identity labels: `62f4cff…` = independently reviewed D-050 implementation head; `2e1fc399…` = D-050 review cherry-pick source; `05bcb88…` = D-051 runtime/test implementation head; `938e998…` = independently reviewed D-051 head; `d17df590…` = final D-051 review-report blob; `eb757119…` = D-052 accepted implementation head; `ca799848…` = cumulative review commit; `c9fca9b2…` = cumulative review-report blob; `04522c59…` = final synchronized PR #20 head; `f618103…` = PR #20 squash merge on main; `b99039f9…` = PR #22 accepted closure head; `99d48db…` = PR #22 squash merge on main; `de1bb193…` = PR #23 squash merge / historical PR 5 planning base; `edabd8de…` = PR #24 squash merge; `1691933e…` = PR 5 planning review head before squash; `0d322db…` = final immutable PR 5 planning review blob; `ae1b4280…` = PR #26 squash merge; `56c764d0…` = PR5-F1 accepted review-record head; `7827e535…` = PR #27 squash merge (historical; later F2A/F2B/F2C/PR32/PR33/PR35/PR36 advanced main); `7161c481…` = immutable PR5-F1 initial review blob; `4b735360…` = immutable PR5-F1 correction re-review blob; `5129707e…` = PR #28 squash merge (F1 closeout); `bfbe369f…` = PR5-F2A accepted implementation head; `f65ab4b9…` = PR #29 squash merge; `0284b66c…` = PR #31 F2B squash merge (**historical**; not current main); `f9841691…` = PR #30 F2C squash merge (**CLOSED / MERGED**; not an open conflicting PR); `f1201f85…` = PR #32 remaining-integration planning squash (historical); `28c81009…` = PR #33 control-packet squash / F3 base; `81bc0678…` = immutable F2A first review blob; `d06fc9f6…` = immutable F2A correction review blob; `acbd5127…` = immutable F2A second-correction review blob; `bba424c0…` = immutable F2A S01 review blob; `36365e25…` = PR #35 F3 squash merge (**historical** current main at F3 merge); `502b869e…` = accepted F3 exact implementation head; `b06e1ae…` = F3 exact-head independent review commit; `8d6d47a2…` = immutable F3 exact-head review blob; `58bf62b4…` = PR #36 closeout squash (**historical** current main at PR5 close); `09feffd3…` = PR #34 PR6 planning squash / **current** `origin/main`; `4f5ea10f…` = immutable PR6 current-main final planning review blob.
 - PR 5 **planning** is **ACCEPTED AND MERGED** (D-053 / PR #24).
 - PR #26 is **CLOSED / MERGED**. Accepted review-record head `7171c2cb…`. Squash merge `ae1b4280…`. Post-merge main CI `31966584542` SUCCESS.
 - **D-054** is **EFFECTIVE**.
@@ -48,7 +49,7 @@
 - Emergency Continuity Sprint control packet: `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md`. That packet did not start F3; ChatGPT separately authorized F3 on 2026-09-05 under D-054; F3 is now **ACCEPTED / MERGED**.
 - Do **not** state that Phase 1 is complete.
 - Do **not** create D-055.
-- Do **not** begin PR6 runtime. PR #34 is the current-main-synchronized planning packet; independent final correction re-review remains **PENDING**. PR6-A/B/C/D runtime lanes are **NOT AUTHORIZED**.
+- PR6 planning is **ACCEPTED / MERGED** via PR [#34](https://github.com/Vedang1998/Stocky/pull/34) squash `09feffd3f36eb4698f2ed8a152efe414cd9b77bd`. Independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`). PR6-A foundation is **AUTHORIZED / IN PROGRESS**. PR6-B/C/D remain **NOT AUTHORIZED**.
 - **Q-003 / F-PR4-18:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052). Does not authorize production deployment, Partner Dashboard validation, production API-health validation, or production writes.
 - **R-031 / R-032 / R-033 / R-039 / R-099 through R-121 / R-125 / R-126:** CLOSED FOR PR 4 REPOSITORY IMPLEMENTATION (D-052).
 - **R-119 / R-120 / R-121 / R-124 / R-125 / R-126:** previously CLOSED on D-050 independent evidence; D-052 confirms repository-implementation closure / no R-124 reopen.
@@ -273,10 +274,11 @@
 48. `PR5_PLANNING_CORRECTION_8_INDEPENDENT_REVIEW.md` — immutable final planning review `APPROVE PR5 PLANNING` (blob `0d322db…`; never edit)
 49. `../../ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model
 50. `../../EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue; safety gates unchanged; that packet itself did not authorize F3 runtime)
-51. `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — emergency planning-only packet for Phase 1 PR 6 order/refund facts (**not** runtime authorization); current-main synchronized onto `58bf62b4…`; PO-01 … PO-11 frozen; **INDEPENDENT FINAL CORRECTION RE-REVIEW PENDING**
+51. `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — emergency planning packet for Phase 1 PR 6 order/refund facts; **ACCEPTED / MERGED** via PR #34 squash `09feffd3…`; PO-01 … PO-11 frozen
 52. `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md` — immutable early Tier-A review `CORRECTIONS REQUIRED` (blob `d72340c01dd9c662d0e8bb4aa8d43482940470d9`; never edit)
 53. `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md` — immutable correction re-review `CORRECTIONS REQUIRED` (blob `fca2b260d03e3105782ed216f7773c53e6aef2a7`; never edit)
-54. `PR6_CURRENT_MAIN_SYNC_REPORT.md` — this PR #34 current-main synchronization evidence/control record only
+54. `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence/control record
+55. `PR6_CURRENT_MAIN_FINAL_INDEPENDENT_REVIEW.md` — immutable final planning review `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`; never edit)
 
 ## Immutable PR 5 planning (#24) merge evidence
 
@@ -394,7 +396,7 @@
 | PR | [#36](https://github.com/Vedang1998/Stocky/pull/36) — closed and merged |
 | Decision | D-054 remains implementation authority; Phase 1 PR5 repository implementation **FORMALLY CLOSED**. This is **not D-055**. |
 | ChatGPT disposition | **ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION** |
-| Squash merge / current `origin/main` | `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` |
+| Squash merge / historical `origin/main` at PR5 close | `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` |
 | Merge timestamp | `2026-09-06T16:51:22Z` |
 | Post-merge main CI | run `34046777505` **SUCCESS** |
 | Classify job | `101523117557` SUCCESS |
@@ -402,8 +404,28 @@
 | CI Gate job | `101523133212` SUCCESS |
 | Closure report | `PR5_CLOSURE_REPORT.md` |
 | Phase 1 | **IN PROGRESS** |
-| PR #34 | This planning PR — current-main synchronized; independent final correction re-review **PENDING** |
-| PR6 runtime | **NOT AUTHORIZED** |
+| PR #34 | Later **CLOSED / MERGED** as squash `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` — see live PR6-A section |
+| PR6-A | Later **AUTHORIZED / IN PROGRESS** under the same D-054 heading |
+| PR6-B / PR6-C / PR6-D | **NOT AUTHORIZED** |
+| Production / inventory writes | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
+
+## Live PR6 planning / PR #34 merge evidence
+
+| Field | Value |
+|---|---|
+| PR | [#34](https://github.com/Vedang1998/Stocky/pull/34) — closed and merged |
+| Decision | D-054 remains implementation authority; PR6 planning **ACCEPTED / MERGED**; PR6-A foundation **AUTHORIZED**. This is **not D-055**. |
+| Independent verdict | `APPROVE PR6 CURRENT-MAIN PLANNING` |
+| Immutable review-report blob | `4f5ea10f6d36175d3540cb977a8f3543f36c15c2` |
+| Squash merge / current `origin/main` | `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` |
+| Merge timestamp | `2026-09-07T00:53:25Z` |
+| Post-merge main CI | run `34071226302` **SUCCESS** |
+| Classify job | `101588830168` SUCCESS |
+| Heavy job | `101588852919` SKIPPED (docs-only planning) |
+| CI Gate job | `101588852489` SUCCESS |
+| Implementation branch | `phase-1/pr6-a-order-refund-fact-foundation` |
+| PR6-A | **AUTHORIZED / IN PROGRESS** (foundation only) |
+| PR6-B / PR6-C / PR6-D | **NOT AUTHORIZED** |
 | Production / inventory writes | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
 
 ## Related documents
@@ -422,4 +444,4 @@
 - Risks: `../../RISK_REGISTER.md`
 - PR6 plan: `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md`
 - PR6 current-main sync report: `PR6_CURRENT_MAIN_SYNC_REPORT.md`
-- Immutable PR6 reviews (never edit): `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`; `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`
+- Immutable PR6 reviews (never edit): `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`; `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`; `PR6_CURRENT_MAIN_FINAL_INDEPENDENT_REVIEW.md`
