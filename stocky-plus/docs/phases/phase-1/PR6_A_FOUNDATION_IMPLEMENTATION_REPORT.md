@@ -188,7 +188,14 @@ failed Heavy step “Sync control-plane integration tests” (8 failures): Prism
 grants did not yet SELECT the new PR6-A columns, so `UPDATE … RETURNING *`
 failed. Correction: SELECT-only grants for `ianaTimezone` / `currencyCode`;
 UPDATE remains denied. Control-plane lifecycle UPDATE columns are unchanged.
-No later push is intended after the corrected exact-head run is green.
+
+Second exact-head run `34075969689` on `0f482f66acc3e7a6c9a8941723c45891fe3b72e2`
+failed Heavy step “Tenant enforcement preflight”
+(`tenant:access:inventory:check_failed_exit_1`) because the SELECT-only grant
+edit shifted scanner line anchors in `scripts/sync-control-plane/roles.ts`.
+`PR2_TENANT_ACCESS_INVENTORY.md` was regenerated (`npm run tenant:access:inventory`);
+findings remain 1734, violations remain 0. No later push is intended after the
+corrected exact-head run is green.
 
 ## 8a. Files in the implementation commit
 

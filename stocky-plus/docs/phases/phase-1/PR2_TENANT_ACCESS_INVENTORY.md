@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `905b811b950520e1c4a9b5cc3699b331a3201bd9d581f0bbec1bc0fb8334fdb5`
+**Content digest:** `fb8f9780316e0eff6a60eeb171d7ac57068a34b08e8afebc09eb0c0015bdc6de`
 **Scanned files:** 372
 **Findings:** 1734
 **Converted paths:** 513
@@ -1650,11 +1650,11 @@ All 35 approved merchant-owned models must appear below.
 | `prisma/seed.ts` | 1 / `prisma` | script | — | value import of app/db.server | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 33 / `prisma.shopSettings.upsert` | script | ShopSettings | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 50 / `prisma.supplier.upsert` | script | Supplier | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
-| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 40 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
-| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 71 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
-| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 94 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
-| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 133 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
-| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 190 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
+| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 49 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
+| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 80 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
+| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 103 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
+| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 142 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
+| `scripts/sync-control-plane/tests/sync-role-isolation.test.ts` | 199 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-009 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-009 | PR 4 D-043 F-PR4-06 role isolation disposable harness |
 | `scripts/tenant-backfill/cli.ts` | 55 / `new PrismaClient` | script | — | PrismaClient construction | approved exception EX-BF-004 | infrastructure | approved exception | tenant:access:audit | EX-BF-004 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
 | `scripts/tenant-backfill/diagnose.ts` | 10 / `new PrismaClient` | script | — | PrismaClient construction | approved exception EX-BF-005 | infrastructure | approved exception | tenant:access:audit | EX-BF-005 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
 | `scripts/tenant-backfill/engine.ts` | 600 / `$transaction` | script | — | Prisma $transaction | approved exception EX-BF-006 | pr1_maintenance_backfill | approved exception | tenant:access:audit / test:tenant-access | EX-BF-006 | — |
@@ -2109,6 +2109,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "905b811b950520e1c4a9b5cc3699b331a3201bd9d581f0bbec1bc0fb8334fdb5"
+  "contentDigest": "fb8f9780316e0eff6a60eeb171d7ac57068a34b08e8afebc09eb0c0015bdc6de"
 }
 ```
