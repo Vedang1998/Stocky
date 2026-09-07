@@ -1,8 +1,8 @@
 # Phase 1 PR 5 — Repository Implementation Closure Report
 
-**Status:** `PR5 REPOSITORY IMPLEMENTATION TECHNICALLY ACCEPTED — FORMAL CLOSURE EFFECTIVE UPON MERGE OF THIS CLOSEOUT/CONTROL PR`
+**Status:** `PR5 REPOSITORY IMPLEMENTATION FORMALLY CLOSED`
 **Phase 1:** `IN PROGRESS`
-**PR6 planning:** Draft PR [#34](https://github.com/Vedang1998/Stocky/pull/34) exists; independent final correction re-review remains pending
+**PR6 planning:** Draft PR [#34](https://github.com/Vedang1998/Stocky/pull/34) current-main-synchronized; independent final correction re-review remains pending
 **PR6 runtime:** `NOT AUTHORIZED`
 **Production:** `NOT AUTHORIZED`
 **Merchant production data:** `NOT AUTHORIZED`
@@ -14,7 +14,7 @@ This report is the durable closeout/control packet for Phase 1 PR 5 **repository
 
 It is **not** D-055. Existing **D-054 EFFECTIVE** remains the implementation authority.
 
-It does **not** claim this closeout PR is already merged.
+**Live status after PR #36 merge (recorded during the authorized PR #34 current-main synchronization):** PR [#36](https://github.com/Vedang1998/Stocky/pull/36) is **CLOSED / MERGED** as squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` at `2026-09-06T16:51:22Z`. Formal PR5 repository-implementation closure **is effective**. Historical publication sentences that said this closeout PR was not yet merged, or that this closeout branch did not edit PR #34, remain **historical at publication**. After that merge, this file’s live header/status lines are additionally updated by the authorized PR #34 synchronization. Historical closeout identities (F1/F2A/F2B/F2C/PR #32/#33/#35/#36) are **not** reverted.
 
 It does **not** state that Phase 1 is complete.
 
@@ -22,7 +22,7 @@ It does **not** authorize PR6 runtime, production, merchant production data, dep
 
 **ChatGPT disposition:** **ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION**
 
-**Formal effectiveness:** Phase 1 PR5 repository implementation is technically accepted. Formal PR5 closure becomes effective upon merge of this closeout/control PR.
+**Formal effectiveness:** **FORMALLY CLOSED** as of PR #36 squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`. **Historical at original closeout publication:** formal closure was written as becoming effective upon merge of the closeout/control PR; that merge has now occurred.
 
 ## Authority
 
@@ -188,16 +188,16 @@ Detail: `../../RISK_REGISTER.md`. Accepted P3 findings: `PR5_F3_ACCEPTED_RESIDUA
 
 ## PR #34 / NEW-CLAUDE-PR33CP-01
 
-This closeout branch does **not** edit PR [#34](https://github.com/Vedang1998/Stocky/pull/34).
+**Historical at closeout publication:** this closeout branch did **not** edit PR [#34](https://github.com/Vedang1998/Stocky/pull/34). After PR #36 merged, the authorized PR #34 current-main synchronization updates live status lines in this file without reverting PR5 identities.
 
 | Field | Value |
 |---|---|
-| PR #34 exact head (must remain) | `f5d429b7b3577c87e67c5ef3445e88560e565a5c` |
-| PR #34 state at this closeout | OPEN / draft planning PR — **untouched** |
-| **NEW-CLAUDE-PR33CP-01** | **Main-side stale acceptance statement corrected by this closeout PR (#36).** PR #34 still requires its own current-main synchronization + final independent correction re-review. |
-| Required wording | PR6 planning correction exists in draft PR #34; independent final correction re-review remains pending. PR6 runtime remains **NOT AUTHORIZED**. |
+| PR #34 exact head **at closeout publication** (historical) | `f5d429b7b3577c87e67c5ef3445e88560e565a5c` |
+| PR #34 state at closeout publication | OPEN / draft planning PR — **untouched by PR #36** |
+| **NEW-CLAUDE-PR33CP-01** | **Main-side stale acceptance statement corrected by closeout PR (#36).** PR #34 then required its own current-main synchronization + final independent correction re-review. |
+| Live after this PR #34 sync | Current-main synchronized onto `58bf62b4…`; independent final correction re-review remains **PENDING**. PR6 runtime remains **NOT AUTHORIZED**. |
 
-The live main-side sentence in `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` no longer repeats the stale independent-acceptance claim for PR6 planning. PR #34 synchronization cannot alter a main-side file, so that stale sentence is corrected here. After this closeout PR merges, PR #34 becomes eligible for its **separately controlled** current-main synchronization + final independent correction re-review. This closeout does **not** edit PR #34.
+The live main-side sentence in `PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md` no longer repeats the stale independent-acceptance claim for PR6 planning. **Historical:** PR #34 synchronization could not alter a main-side file from the closeout branch, so that stale sentence was corrected in PR #36. After PR #36 merged, PR #34 became eligible for this **separately controlled** current-main synchronization + final independent correction re-review.
 
 ## Safety state
 
@@ -217,9 +217,9 @@ No production or merchant data was accessed while recording this closeout. No de
 
 ## Next action after closeout merge
 
-**PR #34 current-main synchronization + final independent correction re-review of PR6 planning.**
+**Historical at closeout publication:** PR #34 current-main synchronization + final independent correction re-review of PR6 planning.
 
-Not PR6 runtime.
+**Live:** this PR #34 performs the authorized current-main synchronization. Next authorized action is **final independent Claude planning re-review**. Not PR6 runtime.
 
 ## Explicit non-authorization
 
@@ -233,4 +233,4 @@ Not PR6 runtime.
 - PR6 runtime remains **NOT AUTHORIZED**.
 - The nine accepted P3 findings are **not** fixed in this docs PR.
 - Database privileges and RLS are **not** changed in this docs PR.
-- PR #34 is **not** edited from this branch.
+- PR #34 is **not** edited from the historical closeout branch. After PR #36 merge, this authorized PR #34 synchronization updates live status only.

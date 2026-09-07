@@ -7,7 +7,7 @@
 |---|---|---|---|
 | Products / variants | Shopify | Partial `ShopifyVariantCache` (title, sku, barcode, image, inventoryItemId, weight) | Missing vendor, price, Shopify cost, tracked flag, tags, status, location quantities |
 | Sellable inventory states | Shopify | Live GraphQL reads + `InventorySnapshot` (available only) | GraphQL `inventoryLevel` query args invalid on Admin API 2025-10 (codegen failure); no on-hand/committed distinction in stocktake freeze |
-| Orders / refunds | Shopify | Webhooks enqueue → daily aggregates only | No order/line fact ledger; refunds incomplete for audits |
+| Orders / refunds | Shopify | Legacy webhooks enqueue → `SalesDailyAggregate` only. PR6 planning (PR #34) specifies `ShopifyOrderAgreementSaleFact` as the intended unit-event ledger; **runtime NOT AUTHORIZED**. | No order/line/refund fact ledger in production runtime yet; refunds incomplete for audits |
 | Product vendor | Shopify | Not synced into cache | F-016 gap |
 | Supplier master | App | `Supplier` + mappings + tiers | Child tables lack denormalized `shop`; OK if parent always checked |
 | Advanced PO ledger | App | `PurchaseOrder` / `POLineItem` | No versions, approvals, invoices, communication timeline |

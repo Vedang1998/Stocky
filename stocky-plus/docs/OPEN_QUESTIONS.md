@@ -13,6 +13,11 @@
 | Q-009 | Should Phase 0 freeze also hide Receiving/Stocktake/Transfer nav entries while flags are off? | UX clarity vs auditability | Product | Optional UX polish | Open |
 | Q-010 | Native Shopify transfer receive mutation replacement for removed `inventoryTransferComplete` | Transfer Phase 5 design | Engineering research | Phase 5 | Open |
 | Q-011 | Phase 1 foundation must add database-enforced tenant isolation (canonical Shop, shopId, composite tenant constraints, forced RLS, restricted runtime role, separate migration role, transaction-local context, bootstrap exception, real PostgreSQL and pool isolation tests) — Claude F-016 / R-022 | **P1 gating requirement.** Application-layer shop filters alone are insufficient. Planning direction approved. PR 1 tooling merged (D-026). PR 2 application-layer tenant contract merged in PR #13 (D-034 / D-035). **PR 3 database enforcement merged in PR #15 (D-040 / D-041)** at accepted implementation `01dbb6f…` / independent review `a51f03…` / squash `deef5d7…`. | Product + Cursor (Phase 1) | Phase 1 foundation — implementation gate closed; production activation separately gated | **CLOSED FOR PHASE 1 IMPLEMENTATION — PR 3 MERGED AND INDEPENDENTLY VERIFIED** (does **not** authorize production activation, production backfill, ownership repair, deployment, or inventory writes; R-028 / R-029 remain open) |
+| Q-012 | Multi-currency ABC: exclude mixed-currency orders vs shop-currency-only vs (forbidden) FX? | ABC revenue **label** only. Engineering already forbids summing mixed currencies and app FX. Persist per-order `currencyCode`. | Product (ChatGPT) | Later ABC / worksheet revenue | **Open — later metric/product. Not a PR6-A fact-correctness blocker.** Registered from PR #34 current-main sync. |
+| Q-013 | Authoritative later “net sales” / ABC revenue presentation definition (tax, shipping, discounts)? | PRD says “revenue” only. PO-11 already forbids treating `LineItem.priceAfterAllDiscountsBeforeTaxesSet` as a second canonical authority. Persist Sale/Refund/transaction bags. | Product (ChatGPT) | Later ABC / worksheet revenue | **Open — later metric/product. Not a PR6-A fact-correctness blocker.** Registered from PR #34 current-main sync. |
+| Q-014 | Future location-grain demand identity? | No stable GraphQL line sale-location; Monday rescue metrics are shop-wide (PO-09). Do not invent `"default"`. | Product (ChatGPT) | Later per-location Last-X | **Open — later metric/product. Not a PR6-A fact-correctness blocker.** Registered from PR #34 current-main sync. |
+| Q-015 | Cancelled/unpaid order treatment in later metrics (`ordered_units` then cancel vs never sold)? | Status vs units; storage-neutral. Persist Shopify status/units. | Product (ChatGPT) | Later net-units edge | **Open — later metric/product. Not a PR6-A fact-correctness blocker.** Registered from PR #34 current-main sync. |
+| Q-016 | When to request/receive Partner `read_all_orders` grant? | PO-01: PR6 correctness MUST NOT depend on the grant. Needed for live Shopify lookback >60d / last-year **from Shopify**. | Product + Partner account holder | Production / Partner timing | **Open — production/Partner question. Not a PR6-A fact-correctness blocker.** Registered from PR #34 current-main sync. |
 
 ## Q-002 — evidence still required
 
@@ -122,3 +127,39 @@ R-028 and R-029 remain open operational gates. Accepted nonblocking residuals R-
 **PR 2 merge-closure historical note:** PR 2 application-layer tenant contract **merged** in PR [#13](https://github.com/Vedang1998/Stocky/pull/13) (authorized head `5fc98192d2ca350de358316d9383e39103b98c80`; squash `e9c4f87eb28ce0e957a8cbd159719586892f8b98`; `2026-08-03T01:38:59Z`; D-035). That merge alone did **not** close Q-011.
 
 **PR 3 correction history (historical):** Independent review at `57016ed…` returned `NOT READY — CORRECTIONS REQUIRED`. First correction handoff `cb9d04e…` was re-reviewed at report `7865e30…` with `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:2 P2:6 P3:9). Second-correction reviewed implementation head `24cc4d8…` was re-reviewed at report `440a93e…` with `NOT READY — FURTHER CORRECTIONS REQUIRED` (P0:0 P1:1 P2:3 P3:4). Third correction accepted at `01dbb6f…` / report `a51f03…` under D-040; merged under D-041.
+
+## Q-012 … Q-016 — registered from PR #34 current-main synchronization
+
+**Source:** `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` §20. Registered on current main `58bf62b4…` during PR #34 synchronization. PO-10 and PO-11 are **RESOLVED** and are **not** open questions.
+
+None of these is a PR6-A fact-correctness blocker. PR6 runtime remains **NOT AUTHORIZED**.
+
+### Q-012 — multi-currency ABC policy
+
+**Status:** OPEN — later metric/product.
+
+Engineering already forbids summing mixed shop currencies and forbids app FX. The remaining product choice is how ABC **labels** mixed-currency shops (exclude mixed-currency orders vs shop-currency-only vs forbidden FX). Persist per-order `currencyCode`.
+
+### Q-013 — later “net sales” presentation definition
+
+**Status:** OPEN — later metric/product.
+
+Approved product docs say “revenue” without naming a MoneyBag. PR6 persists Sale / Refund / successful-transaction settlement bags. PO-11: `LineItem.priceAfterAllDiscountsBeforeTaxesSet` **exists** in Admin API 2026-07 as `MoneyBag!` and is **optional/reconciliation-capable only**. It is **not** a second canonical net-sales authority and PR6 runtime must **not** depend on it.
+
+### Q-014 — future location-grain demand
+
+**Status:** OPEN — later metric/product.
+
+Monday rescue metrics are shop-wide (PO-09). GraphQL LineItem has no stable sale-location equivalent to REST `location_id`. Do not invent `"default"`.
+
+### Q-015 — cancelled / unpaid orders in later metrics
+
+**Status:** OPEN — later metric/product.
+
+Storage-neutral. Persist Shopify status and unit facts. Later metrics must decide whether cancelled unpaid orders contribute `ordered_units` then cancel versus never-sold. Not required to persist facts honestly in PR6-A.
+
+### Q-016 — `read_all_orders` Partner approval timing
+
+**Status:** OPEN — production/Partner.
+
+PO-01 remains frozen: Stocky will pursue Partner approval; PR6 correctness MUST NOT depend on the grant. Without the grant the default Shopify historical window limitation remains explicit; aged-out null is not deletion authority; retained app facts survive; inaccessible history is represented honestly. Do not add the scope in PR #34. Do not change `shopify.app.toml`.
