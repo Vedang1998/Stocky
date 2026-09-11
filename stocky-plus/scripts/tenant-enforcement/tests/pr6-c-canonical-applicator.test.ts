@@ -2358,7 +2358,6 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
             orderSnapshot(gid, {
               shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
               name: "#STALE",
-              nestedRefunds: undefined,
             }),
             req2,
             resp2,

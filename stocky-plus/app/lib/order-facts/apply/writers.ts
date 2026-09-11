@@ -1,6 +1,6 @@
 /**
  * Order-fact writers. INSERT and UPDATE only — never DELETE/deleteMany.
- * No ON CONFLICT DO UPDATE. Unique races retry the full apply.
+ * Unique races retry the full apply. Do not use conflict-target upsert.
  */
 import type { OrderSourceKind } from "../types";
 import type { GenerationInterval } from "./clocks";

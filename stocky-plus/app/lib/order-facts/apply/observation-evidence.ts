@@ -52,7 +52,11 @@ function refundWalkComplete(refund: {
 
 export function isSnapshotStructurallyComplete(observation: {
   snapshotComplete: boolean;
-  order?: { linesComplete: boolean; agreementsComplete: boolean } | null;
+  order?: {
+    linesComplete: boolean;
+    agreementsComplete: boolean;
+    agreements?: Array<{ salesComplete: boolean }>;
+  } | null;
   refund?: {
     linesComplete: boolean;
     adjustmentsComplete: boolean;
@@ -72,9 +76,7 @@ export function isSnapshotStructurallyComplete(observation: {
     ) {
       return false;
     }
-    for (const agreement of (
-      observation.order as { agreements: Array<{ salesComplete: boolean }> }
-    ).agreements) {
+    for (const agreement of observation.order.agreements ?? []) {
       if (!agreement.salesComplete) return false;
     }
   }

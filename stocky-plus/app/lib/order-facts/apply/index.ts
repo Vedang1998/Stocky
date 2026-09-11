@@ -8,12 +8,12 @@
 import {
   acquireOrderIdentityAdvisoryLock,
   evaluateCanonicalLockCapacity,
-  type LockCapacitySettings,
 } from "../advisory-lock";
+import type { LockCapacitySettings } from "../../catalog-facts/lock-capacity";
 import {
   deriveOrderLockKey,
   orderOrderLockKeysForAcquisition,
-  type OrderLockIdentity,
+  type OrderGidLockIdentity,
 } from "../lock-key";
 import { decideClockA, isWithinHistoryWindow, type GenerationInterval } from "./clocks";
 import {
@@ -214,10 +214,10 @@ async function readCapacitySettings(
 function collectLockIdentities(
   shopId: string,
   observations: readonly OrderObservation[],
-): OrderLockIdentity[] {
+): OrderGidLockIdentity[] {
   const seen = new Set<string>();
-  const identities: OrderLockIdentity[] = [];
-  const add = (identity: OrderLockIdentity) => {
+  const identities: OrderGidLockIdentity[] = [];
+  const add = (identity: OrderGidLockIdentity) => {
     const key = `${identity.resourceKind}|${identity.shopifyGid}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -257,7 +257,7 @@ function collectLockIdentities(
 
 async function acquireOrderedLocks(
   db: OrderApplyDb,
-  identities: OrderLockIdentity[],
+  identities: OrderGidLockIdentity[],
 ): Promise<void> {
   const keys = identities.map((identity) => ({
     identity,

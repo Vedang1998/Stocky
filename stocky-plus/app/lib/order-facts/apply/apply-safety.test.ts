@@ -78,6 +78,9 @@ describe("PR6-C apply surface safety (R-164)", () => {
     const index = readFileSync(path.join(DIR, "index.ts"), "utf8");
     expect(index).toMatch(/MUST start a fresh[\s*]+PostgreSQL transaction/);
     const writers = readFileSync(path.join(DIR, "writers.ts"), "utf8");
-    expect(writers).not.toMatch(/ON CONFLICT DO UPDATE/);
+    expect(writers).not.toMatch(/ON CONFLICT[\s\n]+(?:\([^;]+\)\s*)?DO UPDATE/);
+    const receipts = readFileSync(path.join(DIR, "receipts.ts"), "utf8");
+    expect(receipts).toMatch(/ON CONFLICT \("shopId", "applicationKey"\) DO NOTHING/);
+    expect(receipts).not.toMatch(/ON CONFLICT[\s\n]+(?:\([^;]+\)\s*)?DO UPDATE/);
   });
 });
