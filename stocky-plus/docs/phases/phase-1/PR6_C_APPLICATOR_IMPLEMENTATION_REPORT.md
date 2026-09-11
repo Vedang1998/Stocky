@@ -38,6 +38,7 @@ C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-orde
 - `stocky-plus/app/lib/order-facts/apply/**` including module-local unit tests
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts`
 - `stocky-plus/docs/phases/phase-1/PR6_C_APPLICATOR_IMPLEMENTATION_REPORT.md` (this report)
+- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 372 → 392 only; findings 1741; violations 0; digest unchanged; no unused allowlist entries)
 
 **Not owned / not edited**
 
@@ -132,23 +133,39 @@ Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. Post
 
 **Not C:** T02, T19, T20, T30 reader, T39, T52, T53 (B). T21, T22, T24, T32, T33, T37, T43 webhook/import orchestration, T51 (D). T56/T57 **reader pagination** remains B.
 
-## 6. Local validation
+## 6. Local validation (executed)
 
-Recorded after commands execute. This documentation snapshot does **not** invent results.
+Recorded after commands execute. This documentation snapshot does **not** invent results and does **not** embed its own commit SHA.
 
-Environment intended: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL=postgresql://stocky@localhost:5432/stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD` from CI-only runtime role (not committed). Inventory-write flags unchanged.
+Environment: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL` pointing at local `stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD=stocky_runtime_ci_only` (CI allowlist secret, not committed). Inventory-write flags unchanged. Generated Admin schema (`app/types/admin-*.schema.json`) is gitignored and was materialized locally with `npm run graphql-codegen` before `npm test`.
 
-| Command | Status at this documentation snapshot |
-|---|---|
-| `npx vitest run app/lib/order-facts/apply/*.test.ts` | not yet executed at this commit |
-| `npx vitest run app/lib/order-facts` | not yet executed at this commit |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | not yet executed at this commit |
-| `npx tsc --noEmit` | not yet executed at this commit |
-| focused eslint on C paths | not yet executed at this commit |
-| `npm test` | not yet executed at this commit |
-| `npm run build` | not yet executed at this commit |
-| `npm run tenant:access:audit` / `inventory:check` | not yet executed at this commit |
-| exact-head pull_request Classify + Heavy + CI Gate | not yet executed |
+Runtime/test implementation head for the commands below: `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness, T14 RLS count, kill-switch observation-before-disable). Prior C commits on this branch: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck). This report is a later C-owned documentation commit on the same exclusive files.
+
+| Command | Exit | Result |
+|---|---|---|
+| `npx vitest run app/lib/order-facts/apply/*.test.ts` | 0 | **33** passed / 5 files |
+| `npx vitest run app/lib/order-facts` | 0 | **52** passed / 8 files |
+| `npx tsc --noEmit` | 0 | no errors |
+| focused eslint on `app/lib/order-facts/apply` + `pr6-c-canonical-applicator.test.ts` | 0 | no errors |
+| `npm run lint` | 0 | no errors |
+| `npm run typecheck` (`react-router typegen && tsc --noEmit`) | 0 | no errors |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **49** passed / 1 file (nonzero; collected 49) |
+| `npm run tenant:access:audit` | 0 | `scannedFiles: 392`, `findings: 1741`, `violations: 0` |
+| `npm run tenant:access:inventory` + `tenant:access:inventory:check` | 0 | regenerated `scannedFiles` 372 → 392; findings 1741; violations 0; content digest still `d4fc40275641ec9a16904e210bf37b7c0d3cfb89cf89227b592842c9788ee771`; check `tenant_access_inventory_fresh` |
+| `npx tsx scripts/pr5-f3-safety-scan.ts` | 0 | `filesScanned: 169`, `findings: []` |
+| `npm run graphql-codegen` | 0 | Admin 2026-07 schema + types written under gitignored `app/types/` |
+| `npm test` (after codegen) | 0 | **425** passed / 47 files |
+| `npm run build` | 0 | `react-router build` succeeded |
+| Full `npm run test:migrations` (entire tenant-enforcement corpus) | — | **not executed locally**; required on exact-head full CI |
+| exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not treat superseded failed/cancelled runs as exact-head success. |
+
+Superseded `pull_request` CI (not substituted for the live head):
+
+- Run [34651762649](https://github.com/Vedang1998/Stocky/actions/runs/34651762649) — failure (earlier C head).
+- Run [34651974372](https://github.com/Vedang1998/Stocky/actions/runs/34651974372) on `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` — Classify `103435982023` SUCCESS; Heavy `103436042861` FAILURE at tenant-enforcement preflight (`tenant:access:inventory:check_failed_exit_1`); CI Gate `103436575673` FAILURE. Cause: new apply TypeScript files raised `scannedFiles` 372 → 392. Corrected at `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8`.
+- Run [34652494303](https://github.com/Vedang1998/Stocky/actions/runs/34652494303) — cancelled (superseded).
+
+Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only. No unused allowlist entries. No A/B/shared-control edits.
 
 ## 7. Risk status after this slice
 
