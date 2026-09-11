@@ -32,8 +32,10 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable Claude exact-head review (never edit);
 - `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure;
 - `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements.
-- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning-only packet (runtime **NOT AUTHORIZED**);
-- `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence.
+- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **CORRECTIONS IMPLEMENTED / INDEPENDENT RE-REVIEW PENDING** (PR #37). PR6-B/C/D remain **NOT AUTHORIZED**;
+- `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence;
+- `PR6_A_FOUNDATION_IMPLEMENTATION_REPORT.md` — PR6-A order/refund fact foundation implementation and correction evidence. Independent re-review is pending.
+- `PR6_A_FOUNDATION_INDEPENDENT_REVIEW.md` — immutable Claude implementation review of `5f8b2e76…` (never edit). Verdict **CORRECTIONS REQUIRED**.
 
 ## Live project control files
 

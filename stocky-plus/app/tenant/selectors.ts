@@ -239,6 +239,49 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
     ],
   },
+  ShopifyOrderFact: {
+    model: "ShopifyOrderFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyOrderLineFact: {
+    model: "ShopifyOrderLineFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyOrderRefundFact: {
+    model: "ShopifyOrderRefundFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  OrderFactObservationInFlight: {
+    model: "OrderFactObservationInFlight",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [
@@ -272,6 +315,71 @@ export const MODEL_UNIQUE_SELECTORS: Record<
   StocktakeLineItem: {
     model: "StocktakeLineItem",
     selectors: [{ kind: "scalar", name: "id" }],
+  },
+  ShopifyOrderRefundLineFact: {
+    model: "ShopifyOrderRefundLineFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyRefundGid_shopifyLineItemGid_refundLineOrdinal",
+        fields: [
+          "shopId",
+          "shopifyRefundGid",
+          "shopifyLineItemGid",
+          "refundLineOrdinal",
+        ],
+      },
+    ],
+  },
+  ShopifyOrderAdjustmentFact: {
+    model: "ShopifyOrderAdjustmentFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyOrderAgreementFact: {
+    model: "ShopifyOrderAgreementFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyOrderAgreementSaleFact: {
+    model: "ShopifyOrderAgreementSaleFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
+  },
+  ShopifyOrderRefundTransactionFact: {
+    model: "ShopifyOrderRefundTransactionFact",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_shopifyGid",
+        fields: ["shopId", "shopifyGid"],
+      },
+    ],
   },
 };
 

@@ -6,6 +6,10 @@ import {
   CHILD_MERCHANT_MODELS,
   DIRECT_MERCHANT_MODELS,
   MERCHANT_OWNED_MODELS,
+  PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT,
+  PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT,
+  PR6_A_CHILD_MERCHANT_MODELS,
+  PR6_A_DIRECT_MERCHANT_MODELS,
 } from "../models";
 import {
   createTenantDb,
@@ -51,6 +55,15 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.variantAbcClass.deleteMany();
     await prisma.inventorySnapshot.deleteMany();
     await prisma.shopifyVariantCache.deleteMany();
+    await prisma.orderFactObservationInFlight.deleteMany();
+    await prisma.shopifyOrderAgreementSaleFact.deleteMany();
+    await prisma.shopifyOrderRefundLineFact.deleteMany();
+    await prisma.shopifyOrderAdjustmentFact.deleteMany();
+    await prisma.shopifyOrderRefundTransactionFact.deleteMany();
+    await prisma.shopifyOrderAgreementFact.deleteMany();
+    await prisma.shopifyOrderLineFact.deleteMany();
+    await prisma.shopifyOrderRefundFact.deleteMany();
+    await prisma.shopifyOrderFact.deleteMany();
     await prisma.catalogObservationInFlight.deleteMany();
     await prisma.shopifyProductCollectionMembership.deleteMany();
     await prisma.shopifyInventoryLevelFact.deleteMany();
@@ -86,10 +99,16 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.$disconnect();
   });
 
-  it("registers all 26 merchant models", () => {
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(26);
-    expect(DIRECT_MERCHANT_MODELS).toHaveLength(20);
-    expect(CHILD_MERCHANT_MODELS).toHaveLength(6);
+  it("registers merchant models with PR6-A derived DIRECT/CHILD inventories", () => {
+    expect(DIRECT_MERCHANT_MODELS).toHaveLength(
+      PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT + PR6_A_DIRECT_MERCHANT_MODELS.length,
+    );
+    expect(CHILD_MERCHANT_MODELS).toHaveLength(
+      PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT + PR6_A_CHILD_MERCHANT_MODELS.length,
+    );
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(
+      DIRECT_MERCHANT_MODELS.length + CHILD_MERCHANT_MODELS.length,
+    );
   });
 
   it("Shop A reads only Shop A rows; Shop B only Shop B; overlapping external IDs isolated", async () => {
@@ -232,6 +251,33 @@ describe("tenant-bound database contract (PR 2)", () => {
     });
     await expect(
       dbB.catalogObservationInFlight.findUnique({ where: { id: row.id } }),
+    ).resolves.toBeNull();
+  });
+
+  it("creates OrderFactObservationInFlight with shopId only (no catalog table reuse)", async () => {
+    const row = await dbA.orderFactObservationInFlight.create({
+      data: {
+        resourceKind: "Order",
+        shopifyGid: "gid://shopify/Order/tenant-db",
+        observationRequestGen: 1n,
+        leaseDurationMs: 60_000,
+        leaseExpiresAt: new Date("2026-09-07T00:00:00.000Z"),
+        lifecycleState: "ACTIVE",
+      },
+    });
+    expect(row.shopId).toBe(shopAId);
+    expect(
+      await prisma.orderFactObservationInFlight.findUnique({
+        where: { id: row.id },
+        select: { shopId: true, shopifyGid: true, resourceKind: true },
+      }),
+    ).toEqual({
+      shopId: shopAId,
+      shopifyGid: "gid://shopify/Order/tenant-db",
+      resourceKind: "Order",
+    });
+    await expect(
+      dbB.orderFactObservationInFlight.findUnique({ where: { id: row.id } }),
     ).resolves.toBeNull();
   });
 

@@ -17,7 +17,7 @@ export const DEFAULT_RUNTIME_ROLE = "stocky_runtime";
 export const DEFAULT_RECEIPT_PROBE_OWNER_ROLE = "stocky_receipt_probe_owner";
 
 /**
- * Shop columns the control-plane role may SELECT/UPDATE for lifecycle only.
+ * Shop columns the control-plane role may SELECT and UPDATE for lifecycle only.
  * Session/token tables remain fully revoked. No broad Shop.* grant.
  */
 export const CONTROL_PLANE_SHOP_COLUMNS = [
@@ -31,6 +31,69 @@ export const CONTROL_PLANE_SHOP_COLUMNS = [
   "createdAt",
   "updatedAt",
 ] as const;
+
+/**
+ * PR6-A Shopify shop facts. Control-plane must SELECT them so Prisma
+ * `UPDATE … RETURNING *` on lifecycle columns does not fail closed with
+ * `permission denied for table Shop`. Control-plane must not UPDATE them.
+ */
+export const CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS = [
+  "ianaTimezone",
+  "currencyCode",
+] as const;
+
+export const SHOP_COLUMN_UNCLASSIFIED = "shop_column_unclassified";
+export const SHOP_COLUMN_CLASSIFIED_MISSING = "shop_column_classified_missing";
+export const SHOP_COLUMN_CLASSIFICATION_OVERLAP =
+  "shop_column_classification_overlap";
+export const SHOP_COLUMN_DUPLICATE_CLASSIFICATION =
+  "shop_column_duplicate_classification";
+
+/**
+ * F-CLAUDE-PR6A-04: compare actual Shop columns with the explicit lifecycle
+ * SELECT+UPDATE list and the SELECT-only list. Never auto-grant discovered
+ * columns. Overlap, duplicates, missing classified columns, and unclassified
+ * actual columns are verifier failures.
+ */
+export function evaluateShopColumnCoverage(
+  actualColumns: readonly string[],
+  lifecycleColumns: readonly string[] = CONTROL_PLANE_SHOP_COLUMNS,
+  selectOnlyColumns: readonly string[] = CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+): string[] {
+  const errors: string[] = [];
+  const actual = new Set(actualColumns);
+  const lifecycleSeen = new Set<string>();
+  const selectOnlySeen = new Set<string>();
+
+  for (const col of lifecycleColumns) {
+    if (lifecycleSeen.has(col)) {
+      errors.push(`${SHOP_COLUMN_DUPLICATE_CLASSIFICATION}:${col}`);
+    }
+    lifecycleSeen.add(col);
+    if (!actual.has(col)) {
+      errors.push(`${SHOP_COLUMN_CLASSIFIED_MISSING}:${col}`);
+    }
+  }
+  for (const col of selectOnlyColumns) {
+    if (selectOnlySeen.has(col)) {
+      errors.push(`${SHOP_COLUMN_DUPLICATE_CLASSIFICATION}:${col}`);
+    }
+    selectOnlySeen.add(col);
+    if (lifecycleSeen.has(col)) {
+      errors.push(`${SHOP_COLUMN_CLASSIFICATION_OVERLAP}:${col}`);
+    }
+    if (!actual.has(col)) {
+      errors.push(`${SHOP_COLUMN_CLASSIFIED_MISSING}:${col}`);
+    }
+  }
+  const classified = new Set([...lifecycleSeen, ...selectOnlySeen]);
+  for (const col of actualColumns) {
+    if (!classified.has(col)) {
+      errors.push(`${SHOP_COLUMN_UNCLASSIFIED}:${col}`);
+    }
+  }
+  return errors;
+}
 
 export function defaultControlPlaneRoleName(
   env: NodeJS.ProcessEnv = process.env,
@@ -123,12 +186,20 @@ export async function provisionControlPlaneRole(
     await client.query(
       `REVOKE ALL ON TABLE ${quoteIdent("Shop")} FROM ${quoteIdent(role)}`,
     ).catch(() => undefined);
-    const cols = CONTROL_PLANE_SHOP_COLUMNS.map((c) => quoteIdent(c)).join(", ");
+    const updateCols = CONTROL_PLANE_SHOP_COLUMNS.map((c) => quoteIdent(c)).join(
+      ", ",
+    );
+    const selectCols = [
+      ...CONTROL_PLANE_SHOP_COLUMNS,
+      ...CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS,
+    ]
+      .map((c) => quoteIdent(c))
+      .join(", ");
     await client.query(
-      `GRANT SELECT (${cols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
+      `GRANT SELECT (${selectCols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
     );
     await client.query(
-      `GRANT UPDATE (${cols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
+      `GRANT UPDATE (${updateCols}) ON TABLE ${quoteIdent("Shop")} TO ${quoteIdent(role)}`,
     );
     grantsApplied.push("Shop:column-lifecycle");
 
@@ -449,6 +520,64 @@ export async function verifyControlPlaneRole(
         );
       }
     }
+  }
+
+  const shopRegclassSql = `format('%I.%I', 'public', 'Shop')::regclass`;
+  for (const col of CONTROL_PLANE_SHOP_COLUMNS) {
+    const select = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'SELECT') AS has`,
+      [role, col],
+    );
+    if (select.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_shop_select:${col}`);
+    }
+    const update = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'UPDATE') AS has`,
+      [role, col],
+    );
+    if (update.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_shop_update:${col}`);
+    }
+  }
+  for (const col of CONTROL_PLANE_SHOP_SELECT_ONLY_COLUMNS) {
+    const select = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'SELECT') AS has`,
+      [role, col],
+    );
+    if (select.rows[0]?.has !== true) {
+      errors.push(`control_plane_missing_shop_select:${col}`);
+    }
+    const update = await client.query<{ has: boolean }>(
+      `SELECT has_column_privilege($1, ${shopRegclassSql}, $2, 'UPDATE') AS has`,
+      [role, col],
+    );
+    if (update.rows[0]?.has === true) {
+      errors.push(`control_plane_shop_update_forbidden:${col}`);
+    }
+  }
+
+  const shopExists = await client.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = 'public' AND table_name = 'Shop'`,
+  );
+  if ((shopExists.rowCount ?? 0) === 0) {
+    errors.push("shop_table_missing");
+  } else {
+    const shopColumns = await client.query<{ column_name: string }>(
+      `SELECT a.attname AS column_name
+       FROM pg_attribute a
+       JOIN pg_class c ON c.oid = a.attrelid
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND c.relname = 'Shop'
+         AND c.relkind = 'r'
+         AND a.attnum > 0
+         AND NOT a.attisdropped
+       ORDER BY a.attnum`,
+    );
+    errors.push(
+      ...evaluateShopColumnCoverage(shopColumns.rows.map((r) => r.column_name)),
+    );
   }
 
   // NEW-PR4-C08: receipt probe function ownership and EXECUTE grants.
