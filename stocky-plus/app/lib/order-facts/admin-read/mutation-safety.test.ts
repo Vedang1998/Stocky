@@ -3,17 +3,17 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { executeAdminReadQuery } from "../execute";
+import { executeAdminReadQuery } from "./execute";
 import {
   assertCanonicalReadDocument,
   CanonicalReadForbiddenFieldError,
   CanonicalReadGraphQLSyntaxError,
   CanonicalReadMutationRejectedError,
-} from "../safety/graphql-ast";
-import { assertOrderFactsReadBoundarySafe } from "../safety/scan";
-import { createMockAdmin } from "./mock-admin";
+} from "./safety/graphql-ast";
+import { assertOrderFactsReadBoundarySafe } from "./safety/scan";
+import { createMockAdmin } from "./__tests__/mock-admin";
 
-const PLANTED_MUTATION = `#graphql
+const PLANTED_MUTATION = `
   mutation PlantedOrderWrite {
     orderCancel(orderId: "gid://shopify/Order/1", reason: OTHER, refund: false, restock: false) {
       job { id }
@@ -83,7 +83,7 @@ describe("PR6-B T02 mutation and forbidden-field AST safety", () => {
 
   it("production admin-read modules pass the recursive boundary scan", () => {
     const root = path.dirname(
-      fileURLToPath(new URL("../documents.ts", import.meta.url)),
+      fileURLToPath(new URL("./documents.ts", import.meta.url)),
     );
     expect(() => assertOrderFactsReadBoundarySafe(root)).not.toThrow();
   });

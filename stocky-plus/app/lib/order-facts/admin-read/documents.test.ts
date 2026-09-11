@@ -1,20 +1,19 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_ORDER_ADMIN_READ_QUERY_DOCUMENTS,
   ORDER_FACT_BY_ID_QUERY,
   REFUND_FACT_BY_ID_QUERY,
-} from "../documents";
-import { ORDER_FACTS_BULK_QUERY_DOCUMENTS } from "../bulk-query-documents";
-import { assertCanonicalReadDocument } from "../safety/graphql-ast";
-import { loadGeneratedAdmin202607Schema } from "../bulk-query-schema";
+} from "./documents";
+import { ORDER_FACTS_BULK_QUERY_DOCUMENTS } from "./bulk-query-documents";
+import { assertCanonicalReadDocument } from "./safety/graphql-ast";
+import { loadGeneratedAdmin202607Schema } from "./bulk-query-schema";
 import {
   assertNoForbiddenListPagination,
   findForbiddenListPagination,
-} from "../list-pagination";
-import { FORBIDDEN_LIST_PAGINATION_FIELDS } from "../constants";
+} from "./list-pagination";
+import { FORBIDDEN_LIST_PAGINATION_FIELDS } from "./constants";
 
 const PLANTED_LIST_FIRST = `
 query PlantedRefundsFirst {
@@ -89,7 +88,7 @@ describe("PR6-B GraphQL documents", () => {
   });
 
   it("does not interpolate GraphQL documents", () => {
-    const documentsPath = fileURLToPath(new URL("../documents.ts", import.meta.url));
+    const documentsPath = fileURLToPath(new URL("./documents.ts", import.meta.url));
     const source = readFileSync(documentsPath, "utf8");
     expect(source).not.toMatch(/\$\{/);
   });

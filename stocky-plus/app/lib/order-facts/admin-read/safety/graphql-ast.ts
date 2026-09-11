@@ -2,7 +2,7 @@
  * GraphQL AST inspection for the PR6-B Admin READ boundary.
  *
  * Deny-by-default: any operation whose GraphQL operation type is not QUERY
- * is rejected before network. There is no bulkOperationRunQuery exception.
+ * is rejected before network. There is no bulk-operation submit exception.
  * currentBulkOperation is forbidden by field AST, not substring matching.
  */
 

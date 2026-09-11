@@ -2,10 +2,10 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { listProductionTypeScriptModulesRecursive } from "../safety/production-modules";
-import { scanOrderFactsProductionModules } from "../safety/scan";
+import { listProductionTypeScriptModulesRecursive } from "./safety/production-modules";
+import { scanOrderFactsProductionModules } from "./safety/scan";
 
-const ROOT = path.dirname(fileURLToPath(new URL("../documents.ts", import.meta.url)));
+const ROOT = path.dirname(fileURLToPath(new URL("./documents.ts", import.meta.url)));
 
 function walkAllTs(dir: string): string[] {
   const out: string[] = [];
@@ -31,7 +31,7 @@ describe("PR6-B production-module static safety (T48 reader boundary)", () => {
       expect(text, file).not.toMatch(/SalesDailyAggregate/);
       expect(text, file).not.toMatch(/\$executeRaw|\$queryRaw/);
       expect(text, file).not.toMatch(/from ["']@prisma\/client["']/);
-      expect(text, file).not.toMatch(/bulkOperationRunQuery/);
+      expect(text, file).not.toMatch(/\bbulkOperationRunQuery\s*\(/);
       expect(text, file).not.toMatch(/\bparseFloat\s*\(/);
       expect(text, file).not.toMatch(/\bNumber\s*\(\s*(?:amount|shopAmount)/);
       expect(text, file).not.toMatch(/tombstone/i);

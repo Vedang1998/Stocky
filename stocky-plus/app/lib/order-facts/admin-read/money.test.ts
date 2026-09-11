@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { optionalMoneyBag, requireMoneyBag } from "../money";
-import { OrderFactReadWalkError } from "../errors";
-import { ORDER_OPTIONAL_MONEY_BAGS, ORDER_REQUIRED_MONEY_BAGS } from "../../types";
-import { moneyBag } from "./fixtures";
+import { optionalMoneyBag, requireMoneyBag } from "./money";
+import { OrderFactReadWalkError } from "./errors";
+import { ORDER_OPTIONAL_MONEY_BAGS, ORDER_REQUIRED_MONEY_BAGS } from "../types";
+import { moneyBag } from "./__tests__/fixtures";
 
 describe("PR6-B money mapping", () => {
   it("T30 rejects Number money amounts", () => {

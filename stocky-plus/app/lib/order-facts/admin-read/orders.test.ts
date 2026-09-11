@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { readOrderFact } from "../orders";
-import { readRefundFact } from "../refunds";
-import { readShopTimezoneCurrency } from "../shop";
-import { readCurrentAppInstallationAccessScopes } from "../access-scopes";
+import { readOrderFact } from "./orders";
+import { readRefundFact } from "./refunds";
+import { readShopTimezoneCurrency } from "./shop";
+import { readCurrentAppInstallationAccessScopes } from "./access-scopes";
 import {
   agreementNode,
   lineNode,
@@ -12,9 +12,9 @@ import {
   refundNode,
   saleNode,
   TRUSTED_SHOP,
-} from "./fixtures";
-import { createOrderStoreAdmin } from "./order-store-admin";
-import { createMockAdmin } from "./mock-admin";
+} from "./__tests__/fixtures";
+import { createOrderStoreAdmin } from "./__tests__/order-store-admin";
+import { createMockAdmin } from "./__tests__/mock-admin";
 
 function context(admin: ReturnType<typeof createOrderStoreAdmin>, request?: Request) {
   return { admin, shop: TRUSTED_SHOP, request };

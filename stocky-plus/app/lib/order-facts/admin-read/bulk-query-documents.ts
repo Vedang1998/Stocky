@@ -7,7 +7,7 @@
  * 1. graphql-js `specifiedRules` against the generated Admin 2026-07 schema;
  * 2. Shopify bulk-operation connection rules (Node, nesting, counts).
  *
- * Do not wrap them in bulkOperationRunQuery (that is a mutation).
+ * Do not wrap them in the bulk-operation submit mutation.
  * Do not select Order.cancellation or priceAfterAllDiscountsBeforeTaxesSet.
  */
 

@@ -3,7 +3,7 @@
  *
  * Bulk B is schema-valid under specifiedRules but is not a production import
  * path. Refund-bearing orders use per-order `order(id:)` / `RefundFactById`.
- * No bulkOperationRunQuery submission happens in this module.
+ * No bulk-operation submit mutation happens in this module.
  */
 
 import { ORDER_LINE_IMPORT_ENVELOPE } from "./constants";

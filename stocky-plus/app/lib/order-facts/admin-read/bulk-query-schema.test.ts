@@ -7,19 +7,19 @@ import {
   ORDER_FACTS_BULK_B_REFUNDS_CANDIDATE,
   ORDER_FACTS_BULK_C_AGREEMENTS_SALES_ILLEGAL,
   ORDER_FACTS_BULK_QUERY_DOCUMENTS,
-} from "../bulk-query-documents";
+} from "./bulk-query-documents";
 import {
   ADMIN_2026_07_SCHEMA_PATH,
   assertQuerySchemaValid,
   bulkQueryValidationRules,
   loadGeneratedAdmin202607Schema,
   validateQueryAgainstAdminSchema,
-} from "../bulk-query-schema";
-import { evaluateBulkOperationRules } from "../bulk-operation-rules";
-import { BULK_B_PRODUCTION_ENABLED, costBulkBFallback } from "../bulk-b-fallback";
-import { CANONICAL_ORDER_ADMIN_READ_QUERY_DOCUMENTS } from "../documents";
-import { assertCanonicalReadDocument } from "../safety/graphql-ast";
-import { ORDER_LINE_IMPORT_ENVELOPE } from "../constants";
+} from "./bulk-query-schema";
+import { evaluateBulkOperationRules } from "./bulk-operation-rules";
+import { BULK_B_PRODUCTION_ENABLED, costBulkBFallback } from "./bulk-b-fallback";
+import { CANONICAL_ORDER_ADMIN_READ_QUERY_DOCUMENTS } from "./documents";
+import { assertCanonicalReadDocument } from "./safety/graphql-ast";
+import { ORDER_LINE_IMPORT_ENVELOPE } from "./constants";
 
 const INVALID_SALE_LINEITEM_ON_INTERFACE = `
 query InvalidSaleLineItemOnInterface {
@@ -49,7 +49,7 @@ describe("PR6-B bulk schema and bulk-rule gates", () => {
       /does not fetch shopify\.dev/,
     );
     const loaderSource = readFileSync(
-      fileURLToPath(new URL("../bulk-query-schema.ts", import.meta.url)),
+      fileURLToPath(new URL("./bulk-query-schema.ts", import.meta.url)),
       "utf8",
     );
     expect(loaderSource).not.toMatch(/\bfetch\s*\(/);

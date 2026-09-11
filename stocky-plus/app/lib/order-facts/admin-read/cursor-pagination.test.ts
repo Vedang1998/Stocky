@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mapConnectionPage } from "../cursor-pagination";
-import { OrderPaginationError } from "../errors";
+import { mapConnectionPage } from "./cursor-pagination";
+import { OrderPaginationError } from "./errors";
 
 describe("PR6-B cursor pagination fail-closed", () => {
   it("fails when pageInfo is missing", () => {

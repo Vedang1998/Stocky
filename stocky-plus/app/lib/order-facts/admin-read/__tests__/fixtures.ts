@@ -113,8 +113,8 @@ export function refundNode(
     order: { id: "gid://shopify/Order/1" },
     totalRefundedSet: moneyBag("1.00"),
     refundLineItems: lines,
-    orderAdjustments: [] as unknown[],
-    refundShippingLines: [] as unknown[],
+    orderAdjustments: [] as Array<{ id?: string | null }>,
+    refundShippingLines: [] as Array<{ id?: string | null }>,
     transactions: [
       {
         id: `gid://shopify/OrderTransaction/${index}`,

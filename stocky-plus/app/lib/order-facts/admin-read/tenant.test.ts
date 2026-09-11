@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { readOrderFact } from "../orders";
-import { lineNode, orderHeader, TRUSTED_SHOP } from "./fixtures";
-import { createOrderStoreAdmin } from "./order-store-admin";
+import { readOrderFact } from "./orders";
+import { lineNode, orderHeader, TRUSTED_SHOP } from "./__tests__/fixtures";
+import { createOrderStoreAdmin } from "./__tests__/order-store-admin";
 
 describe("PR6-B T03 tenant identity", () => {
   it("denies a conflicting client shop header", async () => {
