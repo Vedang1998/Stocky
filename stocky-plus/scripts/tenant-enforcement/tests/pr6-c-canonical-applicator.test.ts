@@ -630,10 +630,22 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
         });
       }, shopId);
     }
-    const count = await prisma.shopifyOrderFact.count({
-      where: { shopifyGid: gid },
-    });
-    expect(count).toBe(2);
+    const seenByA = await withTenant(async (client) => {
+      const row = await client.query(
+        `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      return row.rows[0].n as number;
+    }, shopAId);
+    const seenByB = await withTenant(async (client) => {
+      const row = await client.query(
+        `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      return row.rows[0].n as number;
+    }, shopBId);
+    expect(seenByA).toBe(1);
+    expect(seenByB).toBe(1);
   });
 
   it("T15 persists sub-cent 1.234567", async () => {
@@ -2603,20 +2615,20 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
 
   it("fails closed when Shop processingEnabled is false", async () => {
     const gid = "gid://shopify/Order/kill";
-    await prisma.shop.update({
-      where: { id: shopAId },
-      data: { processingEnabled: false },
-    });
-    try {
-      await withTenant(async (client, db) => {
-        const req = await allocateCatalogObservationGeneration(db);
-        await insertObservation(client, {
-          id: "obs-kill",
-          shopId: shopAId,
-          resourceKind: "Order",
-          shopifyGid: gid,
-          requestGen: req,
-        });
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-kill",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req,
+      });
+      await prisma.shop.update({
+        where: { id: shopAId },
+        data: { processingEnabled: false },
+      });
+      try {
         const resp = await allocateCatalogObservationGeneration(db);
         await expect(
           applyOrderFacts(db, {
@@ -2624,13 +2636,18 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
             observations: [liveOrder(shopAId, "obs-kill", orderSnapshot(gid), req, resp)],
           }),
         ).rejects.toBeInstanceOf(OrderApplyProcessingDisabledError);
-      });
-    } finally {
-      await prisma.shop.update({
-        where: { id: shopAId },
-        data: { processingEnabled: true },
-      });
-    }
+        const rows = await client.query(
+          `SELECT 1 FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+          [gid],
+        );
+        expect(rows.rowCount).toBe(0);
+      } finally {
+        await prisma.shop.update({
+          where: { id: shopAId },
+          data: { processingEnabled: true },
+        });
+      }
+    });
   });
 
   it("T07 edit agreement then refund persists both and keeps one unit ledger", async () => {

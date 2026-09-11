@@ -14,7 +14,6 @@ import type {
   AdjustmentSnapshot,
   OrderLineSnapshot,
   OrderSnapshot,
-  RefundShippingLineInput,
   RefundSnapshot,
   SaleSnapshot,
 } from "./types";
