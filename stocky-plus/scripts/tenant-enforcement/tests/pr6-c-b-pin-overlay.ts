@@ -18,6 +18,29 @@ export const B_ADMIN_READ_OVERLAY_DIR = path.join(
   "app/lib/order-facts/admin-read",
 );
 
+/** Git blobs of B production readers / test transport at pin 610ed050. */
+export const PINNED_B_READER_BLOBS = {
+  "stocky-plus/app/lib/order-facts/admin-read/orders.ts":
+    "b5ce0d53cf29c8b370065330f1a3e84c55c7096d",
+  "stocky-plus/app/lib/order-facts/admin-read/refunds.ts":
+    "5324d33205f490a1a4c76d6b1011e0bef2e429f7",
+  "stocky-plus/app/lib/order-facts/admin-read/index.ts":
+    "85fc132817166b48771376ec3ae1b1b23758cc2c",
+  "stocky-plus/app/lib/order-facts/admin-read/__tests__/fixtures.ts":
+    "5981aef29f2d423a5907b8970d5684bf6878738b",
+  "stocky-plus/app/lib/order-facts/admin-read/__tests__/order-store-admin.ts":
+    "34a778f251ecaa3f6acc29498afd549791bef28a",
+  "stocky-plus/app/lib/order-facts/admin-read/__tests__/mock-admin.ts":
+    "34671adf9fdab380ac1bfb9d115cd90c8e82d6d5",
+} as const;
+
+export function readPinnedBBlob(repoPath: string): string {
+  ensurePinnedBCommit();
+  return git(["rev-parse", `${B_TYPED_READ_CONTRACT_PIN}:${repoPath}`])
+    .toString()
+    .trim();
+}
+
 function git(args: string[]): Buffer {
   return execFileSync("git", args, {
     cwd: REPO_ROOT,

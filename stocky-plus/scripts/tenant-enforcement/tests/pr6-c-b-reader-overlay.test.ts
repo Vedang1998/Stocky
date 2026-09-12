@@ -30,8 +30,10 @@ import {
   setTenant,
 } from "./pr6-c-pg-harness";
 import {
+  PINNED_B_READER_BLOBS,
   materializePinnedBAdminReadOverlay,
   overlayPresent,
+  readPinnedBBlob,
   removePinnedBAdminReadOverlay,
 } from "./pr6-c-b-pin-overlay";
 
@@ -52,8 +54,16 @@ type OverlayFixtures = {
   refundNode: (
     index: number,
     lines: Array<Record<string, unknown>>,
-  ) => Record<string, unknown> & { order?: unknown };
+  ) => Record<string, unknown> & { order?: unknown; updatedAt?: string };
   refundLineNode: (
+    index: number,
+    overrides?: Record<string, unknown>,
+  ) => Record<string, unknown>;
+  agreementNode: (
+    index: number,
+    sales: Array<Record<string, unknown>>,
+  ) => Record<string, unknown>;
+  saleNode: (
     index: number,
     overrides?: Record<string, unknown>,
   ) => Record<string, unknown>;
@@ -209,6 +219,9 @@ describe("PR6-C pinned B reader overlay", () => {
     expect(B_TYPED_READ_CONTRACT_PIN).toBe(
       "610ed0503a3aa2998aca7228f4fca9617bed23a3",
     );
+    for (const [repoPath, blob] of Object.entries(PINNED_B_READER_BLOBS)) {
+      expect(readPinnedBBlob(repoPath)).toBe(blob);
+    }
     const orderGid = "gid://shopify/Order/overlay-live";
     const admin = createOrderStoreAdmin({
       header: fixtures.orderHeader({
@@ -872,6 +885,364 @@ describe("PR6-C pinned B reader overlay", () => {
         [key],
       );
       expect(receipts.rows[0].n).toBe(1);
+    });
+  }, 120_000);
+
+  it("completes a stable multi-page Order through the real B reader", async () => {
+    const orderGid = "gid://shopify/Order/overlay-multipage";
+    const admin = createOrderStoreAdmin({
+      header: fixtures.orderHeader({
+        id: orderGid,
+        currentSubtotalLineItemsQuantity: 2,
+        subtotalLineItemsQuantity: 2,
+      }),
+      lines: linesFor(orderGid, 2),
+      agreements: [],
+      refunds: [],
+    });
+    const bResult = (await readOrderFact(
+      shopContext(admin, shopId, domain),
+      orderGid,
+      { pageSize: 1 },
+    )) as OrderReadResult<OrderFactSnapshot>;
+    expect(bResult.status).toBe("complete");
+    if (bResult.status !== "complete") return;
+    expect(bResult.value.lineItems).toHaveLength(2);
+    expect(
+      admin.calls.filter((call) => call.query.includes("OrderFactById")).length,
+    ).toBeGreaterThan(1);
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      const resp = await allocateCatalogObservationGeneration(db);
+      const mapped = mapBOrderReadResult(
+        bResult,
+        ctxFor(shopId, "obs-overlay-multipage", req, resp),
+      );
+      expect(mapped.status).toBe("mapped");
+      if (mapped.status !== "mapped") return;
+      await applyMapped(client, db, mapped.observation);
+      const lines = await client.query(
+        `SELECT count(*)::int AS n FROM "ShopifyOrderLineFact"
+          WHERE "shopifyOrderGid" = $1 AND "existenceState" = 'LIVE'`,
+        [orderGid],
+      );
+      expect(lines.rows[0].n).toBe(2);
+    });
+  }, 120_000);
+
+  it("applies an independently clocked Refund from a real B RefundFactById read", async () => {
+    const orderGid = "gid://shopify/Order/overlay-ind-refund";
+    const refundGid = "gid://shopify/Refund/31";
+    const refund = fixtures.refundNode(31, [
+      fixtures.refundLineNode(1, { lineItem: { id: `${orderGid}/LineItem/1` } }),
+    ]);
+    refund.order = { id: orderGid };
+    refund.updatedAt = "2026-08-20T00:00:00Z";
+    const admin = createOrderStoreAdmin({
+      header: fixtures.orderHeader({
+        id: orderGid,
+        updatedAt: "2026-08-10T00:00:00Z",
+      }),
+      lines: linesFor(orderGid, 1),
+      agreements: [],
+      refunds: [refund],
+    });
+    const bResult = (await readRefundFact(
+      shopContext(admin, shopId, domain),
+      refundGid,
+      { orderCurrencyCode: "USD" },
+    )) as OrderReadResult<RefundRead>;
+    expect(admin.calls.some((call) => call.query.includes("RefundFactById"))).toBe(
+      true,
+    );
+    expect(bResult.status).toBe("complete");
+    if (bResult.status !== "complete") return;
+    expect(bResult.value.updatedAt).toBe("2026-08-20T00:00:00Z");
+    expect(bResult.value.orderId).toBe(orderGid);
+    const mapped = mapBRefundReadResult(
+      bResult,
+      ctxFor(shopId, "obs-overlay-ind-refund", 1n, 2n),
+    );
+    expect(mapped.status).toBe("mapped");
+    if (mapped.status !== "mapped") return;
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      const resp = await allocateCatalogObservationGeneration(db);
+      mapped.observation.observationRequestGen = req;
+      mapped.observation.observationResponseGen = resp;
+      await applyMapped(client, db, mapped.observation);
+      const row = await client.query(
+        `SELECT "shopifyOrderGid", "shopifyUpdatedAt"
+           FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(row.rows).toHaveLength(1);
+      expect(row.rows[0].shopifyOrderGid).toBe(orderGid);
+      const orders = await client.query(
+        `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [orderGid],
+      );
+      expect(orders.rows[0].n).toBe(0);
+    });
+  }, 120_000);
+
+  it("distinguishes genuine empty refunds from a missing or malformed refund list", async () => {
+    const emptyGid = "gid://shopify/Order/overlay-refunds-empty";
+    const missingGid = "gid://shopify/Order/overlay-refunds-missing";
+    const badGid = "gid://shopify/Order/overlay-refunds-bad";
+    const emptyAdmin = createOrderStoreAdmin({
+      header: fixtures.orderHeader({ id: emptyGid }),
+      lines: linesFor(emptyGid, 1),
+      agreements: [],
+      refunds: [],
+    });
+    const missingAdmin = createOrderStoreAdmin({
+      header: fixtures.orderHeader({ id: missingGid }),
+      lines: linesFor(missingGid, 1),
+      agreements: [],
+      refunds: [],
+      omitRefunds: true,
+    });
+    const badAdmin = createOrderStoreAdmin({
+      header: fixtures.orderHeader({ id: badGid }),
+      lines: linesFor(badGid, 1),
+      agreements: [],
+      refunds: [],
+      rawRefunds: { id: "not-a-list" },
+    });
+    const emptyRead = (await readOrderFact(
+      shopContext(emptyAdmin, shopId, domain),
+      emptyGid,
+    )) as OrderReadResult<OrderFactSnapshot>;
+    const missingRead = (await readOrderFact(
+      shopContext(missingAdmin, shopId, domain),
+      missingGid,
+    )) as OrderReadResult<OrderFactSnapshot>;
+    const badRead = (await readOrderFact(
+      shopContext(badAdmin, shopId, domain),
+      badGid,
+    )) as OrderReadResult<OrderFactSnapshot>;
+    expect(emptyRead.status).toBe("complete");
+    if (emptyRead.status === "complete") {
+      expect(emptyRead.value.refunds).toEqual([]);
+    }
+    expect(missingRead.status).toBe("failure");
+    expect(badRead.status).toBe("failure");
+    if (missingRead.status === "failure") {
+      expect(missingRead.kind).toBe("MALFORMED_ENVELOPE");
+    }
+    if (badRead.status === "failure") {
+      expect(badRead.kind).toBe("MALFORMED_ENVELOPE");
+    }
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      const resp = await allocateCatalogObservationGeneration(db);
+      const mapped = mapBOrderReadResult(
+        emptyRead,
+        ctxFor(shopId, "obs-overlay-refunds-empty", req, resp),
+      );
+      expect(mapped.status).toBe("mapped");
+      if (mapped.status !== "mapped") return;
+      await applyMapped(client, db, mapped.observation);
+      const ok = await client.query(
+        `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [emptyGid],
+      );
+      expect(ok.rows[0].n).toBe(1);
+      for (const gid of [missingGid, badGid]) {
+        const n = await client.query(
+          `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+          [gid],
+        );
+        expect(n.rows[0].n).toBe(0);
+      }
+    });
+  }, 120_000);
+
+  it("writes no canonical success when Order.updatedAt drifts on a real B continuation", async () => {
+    const orderGid = "gid://shopify/Order/overlay-drift";
+    const header = fixtures.orderHeader({
+      id: orderGid,
+      updatedAt: "2026-08-10T00:00:00Z",
+    });
+    const admin = createOrderStoreAdmin({
+      header,
+      lines: linesFor(orderGid, 2),
+      agreements: [],
+      refunds: [],
+      onOrderQuery: (callIndex: number) => {
+        if (callIndex >= 2) {
+          header.updatedAt = "2026-08-20T00:00:00Z";
+        }
+      },
+    });
+    const bResult = (await readOrderFact(
+      shopContext(admin, shopId, domain),
+      orderGid,
+      { pageSize: 1 },
+    )) as OrderReadResult<OrderFactSnapshot>;
+    expect(bResult.status).not.toBe("complete");
+    const mapped = mapBOrderReadResult(
+      bResult,
+      ctxFor(shopId, "obs-overlay-drift", 1n, 2n),
+    );
+    expect(mapped.status).not.toBe("mapped");
+    await withTenant(async (client) => {
+      const n = await client.query(
+        `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [orderGid],
+      );
+      expect(n.rows[0].n).toBe(0);
+    });
+  }, 120_000);
+
+  it("assigns refundLineOrdinal across pages for null refund-line IDs", async () => {
+    const orderGid = "gid://shopify/Order/overlay-null-ordinal";
+    const refund = fixtures.refundNode(40, [
+      fixtures.refundLineNode(1, {
+        id: null,
+        lineItem: { id: `${orderGid}/LineItem/1` },
+      }),
+      fixtures.refundLineNode(2, {
+        id: null,
+        lineItem: { id: `${orderGid}/LineItem/2` },
+      }),
+      fixtures.refundLineNode(3, {
+        id: `${orderGid}/RefundLine/3`,
+        lineItem: { id: `${orderGid}/LineItem/3` },
+      }),
+    ]);
+    refund.order = { id: orderGid };
+    const admin = createOrderStoreAdmin({
+      header: fixtures.orderHeader({
+        id: orderGid,
+        currentSubtotalLineItemsQuantity: 3,
+        subtotalLineItemsQuantity: 3,
+      }),
+      lines: linesFor(orderGid, 3),
+      agreements: [],
+      refunds: [refund],
+    });
+    const bResult = (await readOrderFact(
+      shopContext(admin, shopId, domain),
+      orderGid,
+      { pageSize: 1 },
+    )) as OrderReadResult<OrderFactSnapshot>;
+    expect(bResult.status).toBe("complete");
+    if (bResult.status !== "complete") return;
+    expect(
+      bResult.value.refunds[0]?.refundLineItems.map((item) => item.refundLineOrdinal),
+    ).toEqual([0, 1, 2]);
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      const resp = await allocateCatalogObservationGeneration(db);
+      const mapped = mapBOrderReadResult(
+        bResult,
+        ctxFor(shopId, "obs-overlay-null-ordinal", req, resp),
+      );
+      expect(mapped.status).toBe("mapped");
+      if (mapped.status !== "mapped") return;
+      await applyMapped(client, db, mapped.observation);
+      const rows = await client.query(
+        `SELECT "refundLineOrdinal" FROM "ShopifyOrderRefundLineFact"
+          WHERE "shopifyRefundGid" = $1
+          ORDER BY "refundLineOrdinal"`,
+        ["gid://shopify/Refund/40"],
+      );
+      expect(rows.rows.map((row) => row.refundLineOrdinal)).toEqual([0, 1, 2]);
+    });
+  }, 120_000);
+
+  it("mixed-exchange 6/3/3/0 from a real B walk is unit-clean; stale ordered-5 is not", async () => {
+    const cleanGid = "gid://shopify/Order/overlay-units-clean";
+    const staleGid = "gid://shopify/Order/overlay-units-stale";
+    const lineId = (gid: string) => `${gid}/LineItem/1`;
+    function unitsAdmin(gid: string, quantity: number, currentQuantity: number) {
+      const agreementOrder = fixtures.agreementNode(1, [
+        fixtures.saleNode(1, {
+          id: `${gid}/Sale/order`,
+          quantity: 6,
+          actionType: "ORDER",
+          totalAmount: fixtures.moneyBag("60.00"),
+          lineItem: { id: lineId(gid) },
+        }),
+      ]);
+      const agreementRefund = fixtures.agreementNode(2, [
+        fixtures.saleNode(2, {
+          id: `${gid}/Sale/return`,
+          quantity: -3,
+          actionType: "RETURN",
+          lineType: "PRODUCT",
+          totalAmount: fixtures.moneyBag("-30.00"),
+          lineItem: { id: lineId(gid) },
+        }),
+      ]);
+      agreementRefund.__typename = "RefundAgreement";
+      agreementRefund.reason = "REFUND";
+      return createOrderStoreAdmin({
+        header: fixtures.orderHeader({
+          id: gid,
+          currentSubtotalLineItemsQuantity: currentQuantity,
+          subtotalLineItemsQuantity: quantity,
+        }),
+        lines: [
+          fixtures.lineNode(1, {
+            id: lineId(gid),
+            quantity,
+            currentQuantity,
+            refundableQuantity: currentQuantity,
+            originalTotalSet: fixtures.moneyBag("60.00"),
+            originalUnitPriceSet: fixtures.moneyBag("10.00"),
+            discountedTotalSetWithCodeDiscounts: fixtures.moneyBag("30.00"),
+            discountedTotalSetWithoutCodeDiscounts: fixtures.moneyBag("30.00"),
+            totalDiscountSet: fixtures.moneyBag("0.00"),
+          }),
+        ],
+        agreements: [agreementOrder, agreementRefund],
+        refunds: [],
+      });
+    }
+    const cleanRead = (await readOrderFact(
+      shopContext(unitsAdmin(cleanGid, 6, 3), shopId, domain),
+      cleanGid,
+    )) as OrderReadResult<OrderFactSnapshot>;
+    const staleRead = (await readOrderFact(
+      shopContext(unitsAdmin(staleGid, 5, 3), shopId, domain),
+      staleGid,
+    )) as OrderReadResult<OrderFactSnapshot>;
+    expect(cleanRead.status).toBe("complete");
+    expect(staleRead.status).toBe("complete");
+    await withTenant(async (client, db) => {
+      const req1 = await allocateCatalogObservationGeneration(db);
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      const clean = mapBOrderReadResult(
+        cleanRead,
+        ctxFor(shopId, "obs-overlay-units-clean", req1, resp1),
+      );
+      expect(clean.status).toBe("mapped");
+      if (clean.status !== "mapped") return;
+      await applyMapped(client, db, clean.observation);
+      const cleanDiag = await client.query(
+        `SELECT "unitDiagnosticState" FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [cleanGid],
+      );
+      expect(cleanDiag.rows[0].unitDiagnosticState).toBeNull();
+      const req2 = await allocateCatalogObservationGeneration(db);
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const stale = mapBOrderReadResult(
+        staleRead,
+        ctxFor(shopId, "obs-overlay-units-stale", req2, resp2),
+      );
+      expect(stale.status).toBe("mapped");
+      if (stale.status !== "mapped") return;
+      await applyMapped(client, db, stale.observation);
+      const staleDiag = await client.query(
+        `SELECT "unitDiagnosticState" FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [staleGid],
+      );
+      expect(staleDiag.rows[0].unitDiagnosticState).toBe(
+        "LINE_UNIT_IDENTITY_INCONSISTENT",
+      );
     });
   }, 120_000);
 });

@@ -3,7 +3,7 @@
 **Slice:** PR6-C complete-module canonical order/refund applicator
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
 **PR:** #40 OPEN / DRAFT / UNMERGED
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719)
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719); routing/continuation [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315) (`user=Vedang1998`, `created_at=2026-09-12T18:21:41Z`, id `5647803315`) — this is the outstanding C evidence-completion assignment, not a repeat of the already executed F-01–F-08 package.
 **Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 are implemented; F-09–F-12 are disposed; gates A–E smoke remain. This head additionally executes the ChatGPT evidence-completion work order (PR #40 comment [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315)): actual 1,000,000-line C apply, actual pinned-B reader overlay, and real session/process-loss. This is **not** a resubmission of the unchanged `b0b7f58` packet. Independent re-review and ChatGPT complete-module acceptance remain **pending**. Merge is **not** authorized.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -236,7 +236,8 @@ Prior F-01–F-08 / gates / mapper-only probe commands remain recorded against `
 | `npm run lint` | 0 | no errors |
 | `npx vitest run app/lib/order-facts` | 0 | **64** passed / 9 files (nonzero) |
 | `npm test` | 0 | **437** passed / 48 files (nonzero) |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-reader-overlay.test.ts scripts/tenant-enforcement/tests/pr6-c-process-loss.test.ts scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` | 0 | **20** passed / **1** skipped / 3 files (nonzero; collected 21). Skip is the 1e6 envelope because `PR6_C_SCALE_1E6` was unset. Overlay **12**, process-loss **7**, scale policy **1**. |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-reader-overlay.test.ts scripts/tenant-enforcement/tests/pr6-c-process-loss.test.ts scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` | 0 | **20** passed / **1** skipped / 3 files on `14fb29f…` (nonzero; collected 21). Skip is the 1e6 envelope. Overlay **12**, process-loss **7**, scale policy **1**. Do not relabel as the later 18-test overlay file. |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-reader-overlay.test.ts` (additional actual-reader cases) | 0 | **18** passed / 1 file (nonzero; collected 18). Overlay removed afterwards. |
 | `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **108** passed / 3 files (nonzero; collected 108 = 82 + 9 + 17) |
 | `PR6_C_SCALE_1E6=1 npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` | 0 | **2** passed / 1 file (nonzero; collected 2). **Actual** 1,000,000 line facts. Duration 912.06s. See §6.2. |
 | `npm run test:migrations` (full corpus, CI-like disposable env, `PR6_C_SCALE_1E6` unset) | 0 | **595** passed / **1** skipped / 66 files (nonzero; collected 596). The skip is the 1e6 envelope. Duration 666.70s. Overlay 12 and process-loss 7 passed inside this corpus. |
@@ -287,6 +288,7 @@ This is **not** extrapolation from Gate E’s 1,400 lines.
 | RSS | 144216064 → 151367680 bytes |
 | Throughput | 1105.46 line facts / s against applyMs |
 | PostgreSQL | `max_connections=100`, `max_locks_per_transaction=64`, `max_prepared_transactions=0`, isolation `read committed` |
+| Host (this execution) | 4 CPUs; MemTotal 16398384 kB; `PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` |
 | Assertions | `ShopifyOrderLineFact` count **exactly** 1,000,000; high-child parent `LIVE=1` / `ABSENT=499`; not equal to 1400 |
 
 PHASE_BRIEF list p95 < 500ms and webhook enqueue p95 < 1s are **not** this apply SLA. The envelope is skipped unless `PR6_C_SCALE_1E6=1`. On `GITHUB_ACTIONS=true` the policy test asserts the env is unset. Heavy `timeout-minutes` is 70. Exact-head Heavy on `b0b7f58…` (run `34670954315`, job started `2026-09-12T03:39:58Z` / completed `2026-09-12T04:36:12Z`) already consumed ~56 minutes; adding this envelope’s 912s locally would risk the 70-minute job budget, and workflow YAML is outside C ownership. Default `npm run test:migrations` therefore records **1 skipped** (the envelope) and must not be labelled as a 1e6 pass.
@@ -297,12 +299,28 @@ Copied B types and fabricated read results in `pr6-c-b-compat-probe.test.ts` rem
 
 `pr6-c-b-reader-overlay.test.ts` materializes `stocky-plus/app/lib/order-facts/admin-read` from pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` with `git archive`, deletes `*.test.ts` from the overlay, dynamically imports B’s `readOrderFact` / `readRefundFact` / `createOrderStoreAdmin` / `createMockAdmin` / fixtures, drives mocked Shopify transport, maps through the test-local mapper, and applies on disposable PostgreSQL. Overlay is removed in `afterAll` and by a cleanup describe. It is never committed.
 
-Command (focused): `npm run test:migrations -- …/pr6-c-b-reader-overlay.test.ts …` as part of the 20/1/3 run. Overlay file: **12** passed / 1 file. Re-executed inside the full corpus: **12** passed.
+Command (focused, after additional actual-reader cases): `npm run test:migrations -- …/pr6-c-b-reader-overlay.test.ts` → **18** passed / 1 file. Earlier focused run on `14fb29f…` was **12** passed before those cases were added. Overlay directory absent after both runs.
+
+Pinned B production/test-transport blobs at `610ed050` (`git rev-parse 610ed050:<path>`), asserted in-test:
+
+| Path | Blob |
+|---|---|
+| `stocky-plus/app/lib/order-facts/admin-read/orders.ts` | `b5ce0d53cf29c8b370065330f1a3e84c55c7096d` |
+| `stocky-plus/app/lib/order-facts/admin-read/refunds.ts` | `5324d33205f490a1a4c76d6b1011e0bef2e429f7` |
+| `stocky-plus/app/lib/order-facts/admin-read/index.ts` | `85fc132817166b48771376ec3ae1b1b23758cc2c` |
+| `stocky-plus/app/lib/order-facts/admin-read/__tests__/fixtures.ts` | `5981aef29f2d423a5907b8970d5684bf6878738b` |
+| `stocky-plus/app/lib/order-facts/admin-read/__tests__/order-store-admin.ts` | `34a778f251ecaa3f6acc29498afd549791bef28a` |
+| `stocky-plus/app/lib/order-facts/admin-read/__tests__/mock-admin.ts` | `34671adf9fdab380ac1bfb9d115cd90c8e82d6d5` |
 
 | Case | Result |
 |---|---|
-| Real B `OrderFactById` transport | `admin.calls` nonempty and query text includes `OrderFactById`; `processedAt` `2026-08-01T00:00:00Z`; with-code total `9.00` persisted, not `9.50` |
+| Real B `OrderFactById` transport | `admin.calls` nonempty and query text includes `OrderFactById`; `processedAt` `2026-08-01T00:00:00Z`; with-code total `9.00` persisted, not `9.50`; pin blobs match the table above |
+| Stable multi-page Order | `pageSize=1`, two lines, `complete`, more than one `OrderFactById` call, 2 LIVE line facts |
+| Independently clocked Refund | real `RefundFactById`; refund `updatedAt` `2026-08-20T00:00:00Z`; C stores the refund without a local Order row |
+| Genuine empty vs missing/malformed refunds | `refunds=[]` completes and persists; `omitRefunds` / object-shaped refunds are B `MALFORMED_ENVELOPE`; 0 facts for those GIDs |
+| Version drift on continuation | mutated `updatedAt` on call ≥2; B not `complete`; mapper not `mapped`; 0 order facts |
 | Restock / ordinal | B complete-connection ordinals `[0,1,2]`; C persists `restocked=true`, `restockLocationGid=gid://shopify/Location/7`. Refund `order.id` matches the header GID so B does not `IDENTITY_MISMATCH`. |
+| Null refund-line IDs across pages | three lines (two `id=null`) at `pageSize=1`; B ordinals `[0,1,2]` with no per-page reset; C persists the same |
 | Neutral `null_observed` | B does not assign `INACCESSIBLE_HISTORY_WINDOW`; mapper emits `ABSENT_CONFIRMED_QUERY` + `queryCompleted` / `queryReturnedNull` |
 | In-window then null | C tombstone `ABSENT` / `ABSENT_CONFIRMED_QUERY` / `deletedAt` set |
 | Aged-out then null | C `LIVE` + `INACCESSIBLE_HISTORY_WINDOW` + `deletedAt` NULL + `ORDER_HISTORY_WINDOW_TRUNCATED` |
@@ -312,6 +330,7 @@ Command (focused): `npm run test:migrations -- …/pr6-c-b-reader-overlay.test.t
 | Malformed money (F-12) | B at this pin may `complete` with `"not-a-decimal"`; C rejects; 0 facts / 0 receipts |
 | At-sale GID preserve | later current variant `ProductVariant/99` does not overwrite stored `variantGidAtSale` |
 | Same key/digest retry | malformed then valid B read; one receipt |
+| Mixed-exchange 6/3/3/0 vs stale ordered-5 | real B walk; clean `unitDiagnosticState` null; stale `LINE_UNIT_IDENTITY_INCONSISTENT` |
 | Cleanup | overlay directory absent |
 
 ## 6.4 Real session/process-loss and uncertain outcome (executed)
