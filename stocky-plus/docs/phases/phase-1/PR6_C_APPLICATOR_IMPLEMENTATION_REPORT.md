@@ -33,7 +33,7 @@ This report records the PR6-C applicator implementation. It does **not** claim P
 | Final C independent review | `f8e60805dcee6f80f3e40760afad7aea40cfb4b8` (sole parent `04a3e276…`; blob `a90ae442a80ee593bb43bee3b15c2228f32d6e15`; only added file `PR6_C_APPLICATOR_INDEPENDENT_REVIEW.md`). **Never edited.** Superseded identity `ff0ce52e…` is not used. |
 | Review integration | `git merge --ff-only` was impossible because C had already advanced past `04a3e276…`. Review was merged as `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (parents `9f3840a…` + `f8e60805…`). Tree blob remains `a90ae442…`. |
 | Runtime/test correction head | `0474fecc15d728ce69ad858a0bae3de637c573e8` |
-| B PR #39 (read-only) | OPEN / DRAFT head `d9717f68ea981aa68f108428a31d7726d0ba2a8f`. **Not** a ChatGPT-accepted corrected B head. B→C compatibility probe is **pending**. |
+| B typed-read pin (read-only) | `610ed0503a3aa2998aca7228f4fca9617bed23a3` — PR #39 comment [5643079993](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5643079993). Live corrected B head after review `59f469a…` blob `b4533610…` plus F-CLAUDE-PR6B-01…11. **Not** merged into C. Superseded overlay identity `d9717f68…` is not used. |
 | B review (read-only) | `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`, blob `b4533610b5af305816aef5434b884c3065b06f94`. Not integrated into C. |
 
 C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-order-admin-read` are not this lane’s base. C does not edit B’s shared-control files.
@@ -45,9 +45,10 @@ C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-orde
 - `stocky-plus/app/lib/order-facts/apply/**` including module-local unit tests
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts`
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` (test-local mapper; no B overlay committed)
 - `stocky-plus/docs/phases/phase-1/PR6_C_APPLICATOR_IMPLEMENTATION_REPORT.md` (this report)
 - Immutable review addition already present at blob `a90ae442…` (not edited)
-- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 392 → 395; findings 1741; violations 0; digest `d4fc4027…` unchanged; no unused allowlist entries)
+- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 392 → 396; findings 1741; violations 0; digest `d4fc4027…` unchanged; no unused allowlist entries)
 
 **Not owned / not edited**
 
@@ -155,10 +156,10 @@ Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. Post
 | F-06 | P1 | C | Closed. Complete direct parent snapshot marks omitted parent-versioned children ABSENT (`ABSENT_CONFIRMED_QUERY`, retained, no DELETE) for lines, agreements, sales, refund lines, adjustments, transactions. Nested Order.refund omission stays LIVE. Full-sync remains CANDIDATE. Present `currentQuantity=0` is not omitted. 2-to-1 and 1-to-0 covered. | PG F-06 family |
 | F-07 | P2 | C | Closed. Durable observation `accessScopeSnapshot` compared as a set; fabricated `read_all_orders` throws `order_apply_access_scope_mismatch`. | PG F-07 mismatch + matching sets |
 | F-08 | P2 | C | Closed. Empty new batch returns `receiptStatus: "none"` and inserts 0 receipts. Empty already-receipted batch may return `already_applied`. | PG F-08; PG F-04 empty already-receipted |
-| F-09 | P3 | B owns extraction; C preserves | C already stores nullable `restocked` / `restockLocationGid` / `refundLineOrdinal`. B will add explicit extraction. Compatibility probe waits for a ChatGPT-accepted corrected B head. C did not duplicate B reader work. | Schema already present at **M**; C snapshots persist the fields; probe **pending** |
-| F-10 | P3 | C documents / B mapping | Missing local Order row is supported (parentless complete Refund). Missing authoritative parent Order GID is a blocked mapping: no FK, no nullable schema change, no success receipt. | PG refund without Order; documented expected boundary |
-| F-11 | P3 | C preserves; D residual | Previously established `variantGidAtSale` / `productGidAtSale` are retained; never SKU-matched. First historical fetch cannot independently verify checkout-time link. Missing legacy IDs remain unknown. | PG T11 / T12 |
-| F-12 | P3 | C rejects; B may leave strings | Malformed decimal text is rejected before canonical success and, with a receipt bound, without a success receipt. Mapping uses `discountedTotalSetWithCodeDiscounts`; the without-code variant is not a second authority. | PG F-04 money two-txn; unit money reject |
+| F-09 | P3 | B owns extraction; C preserves | Pin `610ed050` emits `restocked`, `restockLocationId`, and complete-connection `refundLineOrdinal`. C persists them. The mapper does not invent ordinals from array index when B supplies the field. | PG B-compat: `restocked=true`, `restockLocationGid=gid://shopify/Location/7`, `refundLineOrdinal=2` (not `0`) |
+| F-10 | P3 | C documents / mapper blocks | Missing local Order **row** remains supported. Missing authoritative parent Order **GID** (`orderId=null` without an enclosing Order) is blocked: no `String(null)` cast, no FK, no nullable schema change, no success receipt. Embedded walks may use the enclosing Order GID; a contradictory returned parent GID is blocked. | Mapper contract + PG orphan refund 0 rows; enclosing vs contradictory cases |
+| F-11 | P3 | C preserves; D residual | First B read copies the current catalog GID onto both at-sale and current fields (source cannot independently verify checkout-time link). Later B reads with a different current/SKU do **not** overwrite stored `variantGidAtSale`. Line `shopifyLegacyResourceId` stays `null`. | PG B-compat at-sale preserve; T11 / T12 |
+| F-12 | P3 | C rejects; B may leave strings | Malformed required decimal on a `status: "complete"` B payload is mapped through and rejected by C before success/receipt. Canonical line total is `discountedTotalSetWithCodeDiscounts` (`9.00`); `withoutCodeDiscounts` (`9.50`) is not a second authority and is not a fallback. | PG B-compat money two-txn + with-code persist; unit money reject |
 
 ## 5.2 Order / Refund existence parity
 
@@ -213,9 +214,9 @@ Failed-then-valid same-key proof: malformed `netPaymentSet` with key `f04-delive
 
 Recorded after commands execute. This documentation snapshot does **not** invent results and does **not** embed its own commit SHA.
 
-Environment: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL` pointing at local `stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD=stocky_runtime_ci_only` (CI allowlist secret, not committed). Inventory-write flags unchanged. PostgreSQL settings observed in Gate E via `current_setting` (`max_connections`, `max_locks_per_transaction`, `max_prepared_transactions`, `default_transaction_isolation`).
+Re-executed on the working tree that contains `pr6-c-b-compat-probe.test.ts` (before this documentation commit): `npx prisma validate` / `generate` exit 0; `npm run graphql-codegen` exit 0 and working tree still only C-owned paths; `npx tsc --noEmit` exit 0; focused eslint of the probe file exit 0; `npx vitest run app/lib/order-facts` **64**/9; `npm test` **437**/48; C PG trio **108**/3; inventory `scannedFiles` 396. `npm run typecheck`, `npm run lint`, and `npm run build` were last executed on `0474fec…` and are not re-claimed for the probe tree.
 
-Runtime/test implementation head for the commands below: `0474fecc15d728ce69ad858a0bae3de637c573e8`. Prior C commits: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck), `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness), `04a3e276c9d607e440051603e54e7c96dc9ad19f` (previous local validation), `360d9583cbc0e3a7950c329a525fd13a137771be` (first F-01–F-08 pass), `9f3840a82c26bf4450c0c6a8f91d4970a28ec232` (prior correction report), `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (review merge). Final review source `f8e60805dcee6f80f3e40760afad7aea40cfb4b8`.
+Runtime/test implementation head for the F-01–F-08 / gates commands below: `0474fecc15d728ce69ad858a0bae3de637c573e8`. Prior C commits: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck), `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness), `04a3e276c9d607e440051603e54e7c96dc9ad19f` (previous local validation), `360d9583cbc0e3a7950c329a525fd13a137771be` (first F-01–F-08 pass), `9f3840a82c26bf4450c0c6a8f91d4970a28ec232` (prior correction report), `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (review merge), `65bf14332a99fb59ec88534aa6d59b3cd5a92ab7` (prior report + inventory). Final review source `f8e60805dcee6f80f3e40760afad7aea40cfb4b8`. B pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` was **not** merged; C consumed its typed-read contract via a test-local mapper.
 
 | Command | Exit | Result |
 |---|---|---|
@@ -230,18 +231,20 @@ Runtime/test implementation head for the commands below: `0474fecc15d728ce69ad85
 | `npm test` | 0 | **437** passed / 48 files (nonzero) |
 | `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **82** passed / 1 file (nonzero; collected 82) |
 | `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts` | 0 | **9** passed / 1 file (nonzero; collected 9; ~12.6s) |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **108** passed / 3 files (nonzero; collected 108 = 82 + 9 + 17). B pin `610ed050`. No B overlay in the working tree. |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **17** passed / 1 file (nonzero; collected 17) |
 | `npm run test:migrations` (full corpus, first attempt) | 1 | **executed and failed**: 47 failed / 511 passed / 62 files. Failures were missing `DATABASE_CONTROL_PLANE_URL` / `STOCKY_CONTROL_PLANE_ROLE_PASSWORD` / bootstrap URL, not C applicator assertions. C files in that run still passed (canonical 82, gates 9). |
-| `npm run test:migrations` (full corpus, CI-like disposable env) | 0 | **558** passed / 62 files (nonzero; collected 558). Env: `DATABASE_CONTROL_PLANE_URL` + `STOCKY_CONTROL_PLANE_ROLE_PASSWORD=stocky_control_plane_ci_only` + `STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK=1` + `STOCKY_BOOTSTRAP_DATABASE_URL`/`DATABASE_MIGRATION_URL`/`TENANT_MAINTENANCE_DATABASE_URL` pointing at local `stocky_plus`. Duration 647s. |
+| `npm run test:migrations` (full corpus, CI-like disposable env) | 0 | **558** passed / 62 files (nonzero; collected 558). Env: `DATABASE_CONTROL_PLANE_URL` + `STOCKY_CONTROL_PLANE_ROLE_PASSWORD=stocky_control_plane_ci_only` + `STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK=1` + `STOCKY_BOOTSTRAP_DATABASE_URL`/`DATABASE_MIGRATION_URL`/`TENANT_MAINTENANCE_DATABASE_URL` pointing at local `stocky_plus`. Duration 647s. Recorded on `0474fec…` **before** the B-compat probe file existed; do not relabel that count as covering the probe. |
 | `npm run build` | 0 | client + SSR production build |
 | `npm run tenant:access:inventory` | 0 | `tenant_access_inventory_written` findings 1741 violations 0 |
-| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 395) |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 396) |
 | `git diff --check` | 0 | clean |
 | `.github/scripts/classify-ci-change-set.sh --from-git bdbb5bba… 0474fec…` | 0 | `docs_only=false` `full_ci=true` `classification_reason=non_docs_or_unknown_path` |
 | exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not later-push solely to embed CI IDs. |
 
-Previous exact-head SUCCESS on `04a3e276…` (run `34652673104`) is superseded and is not substituted.
+Previous exact-head SUCCESS on `04a3e276…` (run `34652673104`) is superseded and is not substituted. Exact-head SUCCESS on `9f3840a82c26bf4450c0c6a8f91d4970a28ec232` (run `34667512600`) is superseded by later C heads and is **not** exact-head evidence for this packet. Run `34670253245` targeted `65bf143…` and is superseded once this packet is pushed.
 
-Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only (`scannedFiles` 392 → 395). No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited.
+Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only (`scannedFiles` 392 → 396). No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited. No `admin-read/**` files on this branch.
 
 ## 6.1 Evidence gates A–E
 
@@ -279,7 +282,23 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 - No live store call.
 - C does not DML `DataIssue`, `SalesDailyAggregate`, or explode BOM sales.
 - C does not edit B control docs or A frozen contracts.
-- B→C scratch compatibility overlay was **not** executed (corrected B head not accepted). Status: **pending**, not passed.
+- B→C compatibility probe **executed** against pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` via a test-local mapper in `pr6-c-b-compat-probe.test.ts`. No B overlay, no combined implementation commit, no D runtime. Command: `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` → **17** passed / 1 file. Combined with canonical + gates: **108** passed / 3 files.
+
+### 8.1 B→C probe cases (pin `610ed050`)
+
+| Case | Result |
+|---|---|
+| Preserve source values and raw timestamps | `processedAtShopify` kept `2026-08-01T00:00:00Z`; shop USD / presentment EUR stored separately |
+| `orderId = null` must not be cast to C's required string | mapper `blocked` / `unknown_parent_order_gid`; 0 refund rows |
+| Embedded enclosing Order GID vs contradictory parent | enclosing maps; contradictory `blocked` |
+| restock / `refundLineOrdinal` / with-code discount | persisted `restocked`, `restockLocationGid`, ordinal `2`; line total `9.00` not `9.50` |
+| Neutral `null_observed` vs incomplete/failure | mapper never assigns `INACCESSIBLE_HISTORY_WINDOW`; incomplete uses structured `reason`, not English `detail` |
+| Aged-out `null_observed` | C writes `INACCESSIBLE_HISTORY_WINDOW`, `deletedAt` NULL |
+| In-window `null_observed` | C tombstones `ABSENT_CONFIRMED_QUERY` |
+| Incomplete walk | C `incomplete` / `SNAPSHOT_PAGINATION_INCOMPLETE`; 0 facts |
+| Malformed decimal + retry | throw `OrderApplyReceiptNotCertifiableError`; 0 receipts; corrected same key/digest → 1 receipt |
+| Mixed-exchange 6/3/3/0 vs stale ordered-5 | `unitDiagnosticState` null vs `LINE_UNIT_IDENTITY_INCONSISTENT` (`reason: "REFUND"` / `RefundAgreement`) |
+| Later current/SKU does not relink at-sale | stored `variantGidAtSale` remains original GID |
 
 ## 9. Packet for ChatGPT
 
