@@ -5,8 +5,7 @@
  * Skipped unless PR6_C_SCALE_1E6=1 because Heavy CI timeout-minutes is 70
  * and changing workflow YAML is outside C ownership.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { describe, expect, it } from "vitest";
 import { applyOrderFacts } from "../../../app/lib/order-facts/apply";
 import { allocateCatalogObservationGeneration } from "../../../app/lib/catalog-facts/observation-generation";
 import { getRuntimeClient } from "../connection";
@@ -59,25 +58,25 @@ describe("PR6-C 1e6 envelope policy", () => {
       expect(runEnvelope).toBe(false);
     }
   });
+
+  it("does not put schema reset in a skipped describe beforeAll", () => {
+    // Heavy timeout-minutes is 70. A skipped describe.skipIf beforeAll that still
+    // ran resetSchemaAndApplyEnforcement would consume that budget. Envelope
+    // setup lives inside the it.skipIf body so a skip cannot open PostgreSQL.
+    expect(runEnvelope).toBe(process.env.PR6_C_SCALE_1E6 === "1");
+  });
 });
 
-describe.skipIf(!runEnvelope)("PR6-C 1,000,000-line C-specific apply envelope", () => {
-  let prisma: PrismaClient;
-  let shopAId: string;
-
-  beforeAll(async () => {
-    ({ prisma } = await resetSchemaAndApplyEnforcement());
+describe("PR6-C 1,000,000-line C-specific apply envelope", () => {
+  it.skipIf(!runEnvelope)(
+    "applies 1,000,000 line facts through real C apply and child replacement",
+    async () => {
+    const { prisma } = await resetSchemaAndApplyEnforcement();
+    try {
     const shopA = await prisma.shop.create({
       data: { myshopifyDomain: "pr6-c-scale-1e6.myshopify.com" },
     });
-    shopAId = shopA.id;
-  }, 600_000);
-
-  afterAll(async () => {
-    await prisma?.$disconnect();
-  });
-
-  it("applies 1,000,000 line facts through real C apply and child replacement", async () => {
+    const shopAId = shopA.id;
     const settings = await readPgSettings();
     const highChildParents = 2;
     const highChildLines = 500;
@@ -315,5 +314,10 @@ describe.skipIf(!runEnvelope)("PR6-C 1,000,000-line C-specific apply envelope", 
         pg: settings,
       }),
     );
-  }, 7_200_000);
+    } finally {
+      await prisma.$disconnect();
+    }
+  },
+    7_200_000,
+  );
 });

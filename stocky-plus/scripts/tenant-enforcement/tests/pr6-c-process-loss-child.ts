@@ -75,7 +75,9 @@ async function main(): Promise<void> {
     });
     writeStatus({ stage: "applied", pid: process.pid, backendPid });
     if (mode === "kill-before-commit") {
-      await sleep(120_000);
+      // Park only long enough for the parent to observe `applied` and SIGKILL.
+      // A 120s park leaked past a missed kill and held the receipt lock.
+      await sleep(30_000);
       throw new Error("parent did not kill child before commit");
     }
     if (mode === "uncertain-commit") {
@@ -85,7 +87,7 @@ async function main(): Promise<void> {
     await client.query("COMMIT");
     writeStatus({ stage: "committed", pid: process.pid, backendPid });
     if (mode === "kill-after-commit" || mode === "uncertain-commit") {
-      await sleep(120_000);
+      await sleep(30_000);
     }
   } catch (error) {
     writeStatus({

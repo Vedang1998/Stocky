@@ -127,8 +127,11 @@ function killChild(
 async function waitExit(child: ReturnType<typeof spawn>): Promise<void> {
   if (child.exitCode != null || child.signalCode != null) return;
   await new Promise<void>((resolve) => {
-    child.once("exit", () => resolve());
-    setTimeout(resolve, 8_000);
+    const timer = setTimeout(resolve, 2_000);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
 }
 
@@ -224,6 +227,12 @@ describe("PR6-C process/session-loss evidence", () => {
   it("labels SQL ROLLBACK as a control, not session-loss evidence", () => {
     expect("ROLLBACK").not.toBe("pg_terminate_backend");
     expect("ROLLBACK").not.toBe("SIGKILL");
+  });
+
+  it("bounds the child park so a missed SIGKILL cannot hold PostgreSQL for 120s", () => {
+    const src = readFileSync(CHILD_PATH, "utf8");
+    expect(src).not.toMatch(/sleep\(120_000\)/);
+    expect(src).toMatch(/await sleep\(30_000\)/);
   });
 
   it("session loss via pg_terminate_backend before COMMIT leaves 0 facts and 0 receipts", async () => {
