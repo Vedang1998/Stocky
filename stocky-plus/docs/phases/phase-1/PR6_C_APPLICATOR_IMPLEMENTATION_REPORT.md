@@ -2,8 +2,9 @@
 
 **Slice:** PR6-C complete-module canonical order/refund applicator
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436)
-**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). This branch implements C-owned **F-01–F-08**. Independent re-review and ChatGPT complete-module acceptance are **pending**. Merge is **not** authorized.
+**PR:** #40 OPEN / DRAFT / UNMERGED
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719)
+**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). This branch implements the ChatGPT-authorized C correction of **F-01–F-08**, dispositions **F-09–F-12**, and C-owned evidence gates A–E. Independent re-review and ChatGPT complete-module acceptance remain **pending**. Merge is **not** authorized.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
@@ -19,7 +20,7 @@ This report records the PR6-C applicator implementation. It does **not** claim P
 |---|---|
 | PR #37 | CLOSED / MERGED at `2026-09-11T20:07:27Z` |
 | Accepted subject head | `f7a39c3664a8a45b7a7cd3055079b4ebc888bb02` |
-| Squash **M** / `origin/main` at branch creation | `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` |
+| Squash **M** / `origin/main` | `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` |
 | **M** sole parent | `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` |
 | `M^{tree}` | `9e5a700b0f4a3b0d9b7f0638bd431e0daea029dc` (equals accepted subject tree) |
 | Correction review at **M** | `PR6_A_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` blob `da388c5d2ffa8bc0e04312de9c14a831b5ba4010` — `APPROVE PR6-A FOUNDATION CORRECTION` |
@@ -28,6 +29,12 @@ This report records the PR6-C applicator implementation. It does **not** claim P
 | Exact-M **push** CI | run [34642536795](https://github.com/Vedang1998/Stocky/actions/runs/34642536795) `event=push` `head=bdbb5bba…` **SUCCESS** |
 | B admission comment | [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436) body starts `PR6_BC_ADMISSION_READY`, user `cursor[bot]`, created `2026-09-11T21:15:39Z` |
 | Control commit (docs-only, parent = **M**) | `4a5478dd0daa658ffd2d50cce4a33571cb0ab6f6` on `phase-1/pr6-b-order-admin-read` |
+| Authorized C starting implementation head | `04a3e276c9d607e440051603e54e7c96dc9ad19f` |
+| Final C independent review | `f8e60805dcee6f80f3e40760afad7aea40cfb4b8` (sole parent `04a3e276…`; blob `a90ae442a80ee593bb43bee3b15c2228f32d6e15`; only added file `PR6_C_APPLICATOR_INDEPENDENT_REVIEW.md`). **Never edited.** Superseded identity `ff0ce52e…` is not used. |
+| Review integration | `git merge --ff-only` was impossible because C had already advanced past `04a3e276…`. Review was merged as `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (parents `9f3840a…` + `f8e60805…`). Tree blob remains `a90ae442…`. |
+| Runtime/test correction head | `0474fecc15d728ce69ad858a0bae3de637c573e8` |
+| B PR #39 (read-only) | OPEN / DRAFT head `d9717f68ea981aa68f108428a31d7726d0ba2a8f`. **Not** a ChatGPT-accepted corrected B head. B→C compatibility probe is **pending**. |
+| B review (read-only) | `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`, blob `b4533610b5af305816aef5434b884c3065b06f94`. Not integrated into C. |
 
 C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-order-admin-read` are not this lane’s base. C does not edit B’s shared-control files.
 
@@ -37,8 +44,10 @@ C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-orde
 
 - `stocky-plus/app/lib/order-facts/apply/**` including module-local unit tests
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts`
 - `stocky-plus/docs/phases/phase-1/PR6_C_APPLICATOR_IMPLEMENTATION_REPORT.md` (this report)
-- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 372 → 392 only; findings 1741; violations 0; digest unchanged; no unused allowlist entries)
+- Immutable review addition already present at blob `a90ae442…` (not edited)
+- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 392 → 395; findings 1741; violations 0; digest `d4fc4027…` unchanged; no unused allowlist entries)
 
 **Not owned / not edited**
 
@@ -48,20 +57,21 @@ C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-orde
 - Shared control docs (`PROJECT_STATUS.md`, `DECISIONS.md`, `RISK_REGISTER.md`, `PR6_BC_EXECUTION_BRIEF.md`, `PR6_A_CLOSURE_REPORT.md`, phase README, `ACCELERATED_SAFE_DELIVERY.md`)
 - Webhook/worker/import, Shopify config, packages, CI workflows, global test configs
 - Allowlist files (no unused exception added)
-
-Mechanical CI exception, if required after scanner: regenerate `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` only because new apply TypeScript files change `scannedFiles`. Do not add unused allowlist entries.
+- `PR6_C_APPLICATOR_INDEPENDENT_REVIEW.md` after merge
 
 ## 3. What the applicator does
 
-`applyOrderFacts(db, input)` applies already-authoritative Order/Refund observations inside an open tenant transaction. The caller owns COMMIT/ROLLBACK. There is no Shopify network I/O.
+`applyOrderFacts(db, input)` applies already-authoritative Order/Refund observations inside an open tenant transaction. The caller owns COMMIT/ROLLBACK. There is no Shopify network I/O. Receipt-bound batches that do not reach a terminal accepted operation throw `OrderApplyReceiptNotCertifiableError`; the caller must ROLLBACK.
 
-`applyOrderFactsWithRetry(begin, input)` retries `order_apply_unique_conflict` / `order_advisory_lock_timeout` only by rolling back and starting a **fresh** PostgreSQL transaction. No in-process unique retry. No `ON CONFLICT DO UPDATE`. No savepoint recovery.
+`applyOrderFactsWithRetry(begin, input)` retries `order_apply_unique_conflict` / `order_advisory_lock_timeout` / `order_apply_receipt_lock_timeout` only by rolling back and starting a **fresh** PostgreSQL transaction. No in-process unique retry. No `ON CONFLICT DO UPDATE`. No savepoint recovery.
 
 Supported identities locked: Order GID and nested Refund GIDs only — never every line. Refund jobs lock Order **and** Refund even when no local Order row exists. Keys are ordered ascending `(key1, key2)` via the frozen A primitive `acquireOrderIdentityAdvisoryLock` / `stocky-pr6-canonical-lock-v1`. Capacity uses the frozen catalog evaluator.
 
+When a receipt is bound, C acquires a **module-local** application-key advisory lock (`stocky-pr6-c-receipt-v1`, SHA-256 int32 pair via A’s `orderLockPreimage` without mutating A) **before** receipt lookup and identity locks. Lock order: tenant + `processingEnabled` → receipt key → short-circuit → capacity → identity locks → `processingEnabled` re-check → DML → certify or throw → receipt insert.
+
 Kill switch: runtime cannot `SELECT "Shop"`. Apply calls granted helper `stocky_shop_processing_enabled(text)`.
 
-Receipt: `SyncApplicationReceipt` insert is the **final** write (`ATOMIC_APPLICATION_RECEIPT`); `ON CONFLICT DO NOTHING`. Duplicate same digest short-circuits. Digest mismatch fails closed.
+Receipt: `SyncApplicationReceipt` insert is the **final** write (`ATOMIC_APPLICATION_RECEIPT`); `ON CONFLICT DO NOTHING`. Duplicate same digest short-circuits. Digest mismatch fails closed. Success certifies a terminal accepted operation via an explicit reason allowlist. Generic `noop` and zero-writes are not success. Bounded outcome evidence is stored on existing `resultMetadata`.
 
 ## 4. Primary gates
 
@@ -78,7 +88,7 @@ Receipt: `SyncApplicationReceipt` insert is the **final** write (`ATOMIC_APPLICA
 
 ## 5. Requirement-to-test matrix (C-owned)
 
-Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. PostgreSQL suites live only in `scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts`.
+Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. PostgreSQL suites live only in `scripts/tenant-enforcement/tests/pr6-c-*.test.ts`.
 
 | ID | Kind | C coverage |
 |---|---|---|
@@ -119,7 +129,7 @@ Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. Post
 | T47 | + | Unit + PG RETURN −1 stored; derived refunded magnitude 1; diagnostic null |
 | T48 | − | Unit + PG invalid required bag / invalid line bag; no partial order row |
 | T49 | + | Unit + PG unbalanced refund persists + `REFUND_MONEY_UNBALANCED` |
-| T50 | bypass | Unit + PG scope downgrade voids absence |
+| T50 | bypass | Unit + PG scope downgrade voids absence; missing persisted continuity denies absence |
 | T55 | + | Unit + PG documented RETURN quantity −2 |
 | T56 | + | PG two complete refund snapshots both persist (apply side) |
 | T57 | − | PG incomplete nested walk → `SNAPSHOT_PAGINATION_INCOMPLETE`; no facts |
@@ -127,58 +137,127 @@ Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. Post
 | Revival | + | PG two-step revival; first confirmation does not overwrite `#ORIG` |
 | Refund w/o Order | + | PG complete refund stands without local Order row |
 | Independent refund clock | + | PG stale order + newer nested refund still applies |
-| Kill switch | − | PG `processingEnabled=false` fails closed via helper |
+| Kill switch | − | PG `processingEnabled=false` fails closed via helper; Gate C re-checks after lock grant |
 | R-164 surface | − | PG + unit no physical-delete operation |
 | First-insert ABSENT | − | Unit + PG writes no row |
-| F-01 | +/−/bypass | PG Refund `ABSENT_CONFIRMED_QUERY` tombstone; first-insert ABSENT writes no row; unverified WEBHOOK; inaccessible diagnostics on refund row; first LIVE after tombstone does not revive |
-| F-02 | +/− | Unit + PG later LIVE advances interval; delayed older ABSENT does not tombstone; older LIVE does not rewind |
-| F-03 | +/drift | PG Refund active blocker writes no subtree (`blocked`); Order blocker writes no nested refund |
-| F-04 | −/+ | PG rejected/incomplete apply inserts no receipt; same key with corrected snapshot applies |
-| F-05 | bypass/− | Unit + PG empty `lastConfirmedAccessScopes` uses persisted `read_all_orders` floor; weak persisted floor still tombstones |
-| F-06 | +/−/bypass | PG omitted line/sale/refund-line/adjustment/transaction `ABSENT` retained; reappear LIVE; nested Order.refund omission stays LIVE; stale snapshot does not mark absence |
-| F-07 | −/+ | PG fabricated `read_all_orders` vs durable `read_orders` throws `order_apply_access_scope_mismatch`; matching sets apply |
-| F-08 | − | PG empty batch returns `receiptStatus: none` and inserts 0 receipts |
 
-**Not C:** T02, T19, T20, T30 reader, T39, T52, T53 (B). T21, T22, T24, T32, T33, T37, T43 webhook/import orchestration, T51 (D). T56/T57 **reader pagination** remains B. P3 F-09–F-12 remain B→C interface residuals (restock fields, nullable refund `orderId`, at-sale vs current catalog, discount-alias lineage). C does not implement B extraction.
+**Not C:** T02, T19, T20, T30 reader, T39, T52, T53 (B). T21, T22, T24, T32, T33, T37, T43 webhook/import orchestration, T51 (D). T56/T57 **reader pagination** remains B.
+
+## 5.1 F-01…F-12 disposition matrix
+
+| ID | Sev | Owner | Disposition | Evidence |
+|---|---|---|---|---|
+| F-01 | P1 | C | Closed. Refund existence/diagnostics/candidate writers target `ShopifyOrderRefundFact` with `RETURNING` affected-row checks. Direct Refund uses Refund existence + Clock A; nested Refund uses Refund identity blockers/existence/interval/revival with the enclosing complete interval. Unconditional `liveChildWrite` is not an existence verdict. Nested LIVE against a Refund tombstone records first confirmation and does not restore attributes. | PG Refund tombstone / first-insert ABSENT / unverified / inaccessible / first LIVE after tombstone / nested tombstone |
+| F-02 | P1 | C | Closed. Accepted newer LIVE presence interval is persisted for **Order and Refund** roots. LIVE `[1,2] → [9,10] → delayed ABSENT [5,6]` stays LIVE with evidence no older than `[9,10]`. | Unit + PG Order F-02; PG Refund F-02 |
+| F-03 | P1 | C | Closed. Independently newer Refund under a stale unblocked Order Clock A still applies. Valid Order + blocked Refund writes the order and not the refund subtree. Order-level blocker writes neither. | PG independent refund clock; F-03 nested Order blocker; F-03 valid Order + blocked Refund |
+| F-04 | P1 | C | Closed. Receipt success requires every observation to be terminal-accepted (`applied` / `already_applied` / allowlisted no-op reason). Nonterminal outcomes throw `OrderApplyReceiptNotCertifiableError` so the owning transaction rolls back. Same key/digest: malformed money → no receipt/facts; corrected fresh observation → one receipt and one order row. Mixed, incomplete, blocked, lease-invalid, conflict, digest conflict, empty new, empty already-receipted covered. | Unit `receipt-certification.test.ts`; PG F-04 family |
+| F-05 | P1 | C | Closed. Durable in-flight scopes are the comparison set. `lastValidLiveScopeFloor` ignores caller `lastConfirmedAccessScopes`. Missing persisted continuity denies absence. Inaccessible writes keep persisted LIVE `accessScopeSnapshot`. | Unit T50 / missing baseline / forged lastConfirmed; PG F-05 floor; PG F-05 inaccessible keep |
+| F-06 | P1 | C | Closed. Complete direct parent snapshot marks omitted parent-versioned children ABSENT (`ABSENT_CONFIRMED_QUERY`, retained, no DELETE) for lines, agreements, sales, refund lines, adjustments, transactions. Nested Order.refund omission stays LIVE. Full-sync remains CANDIDATE. Present `currentQuantity=0` is not omitted. 2-to-1 and 1-to-0 covered. | PG F-06 family |
+| F-07 | P2 | C | Closed. Durable observation `accessScopeSnapshot` compared as a set; fabricated `read_all_orders` throws `order_apply_access_scope_mismatch`. | PG F-07 mismatch + matching sets |
+| F-08 | P2 | C | Closed. Empty new batch returns `receiptStatus: "none"` and inserts 0 receipts. Empty already-receipted batch may return `already_applied`. | PG F-08; PG F-04 empty already-receipted |
+| F-09 | P3 | B owns extraction; C preserves | C already stores nullable `restocked` / `restockLocationGid` / `refundLineOrdinal`. B will add explicit extraction. Compatibility probe waits for a ChatGPT-accepted corrected B head. C did not duplicate B reader work. | Schema already present at **M**; C snapshots persist the fields; probe **pending** |
+| F-10 | P3 | C documents / B mapping | Missing local Order row is supported (parentless complete Refund). Missing authoritative parent Order GID is a blocked mapping: no FK, no nullable schema change, no success receipt. | PG refund without Order; documented expected boundary |
+| F-11 | P3 | C preserves; D residual | Previously established `variantGidAtSale` / `productGidAtSale` are retained; never SKU-matched. First historical fetch cannot independently verify checkout-time link. Missing legacy IDs remain unknown. | PG T11 / T12 |
+| F-12 | P3 | C rejects; B may leave strings | Malformed decimal text is rejected before canonical success and, with a receipt bound, without a success receipt. Mapping uses `discountedTotalSetWithCodeDiscounts`; the without-code variant is not a second authority. | PG F-04 money two-txn; unit money reject |
+
+## 5.2 Order / Refund existence parity
+
+| Case | Order | Refund |
+|---|---|---|
+| Direct first LIVE | insert `ShopifyOrderFact` | insert `ShopifyOrderRefundFact` (no Order row required) |
+| Direct null in-window + scope continuity | `ABSENT_CONFIRMED_QUERY` | same on refund row |
+| Aged-out null | `INACCESSIBLE_HISTORY_WINDOW`, `deletedAt` NULL | same on refund row |
+| Unverified delete | `ABSENT_SIGNALLED_DELETE_UNVERIFIED` + `WEBHOOK` | same on refund row |
+| Confirmed absence | tombstone + children retained | tombstone + refund children retained |
+| First revival confirmation | diagnostic only; attributes not restored | nested LIVE against tombstone: diagnostic only |
+| Second independent non-overlapping LIVE | restores LIVE | same |
+| Overlapping LIVE vs ABSENT | `overlap_conflict`, no LWW | same decision function |
+| Stale LIVE vs newer presence | interval not rewound | Refund F-02 `[1,2]→[9,10]→ABSENT[5,6]` stays LIVE |
+| Active blocker | no canonical write | Refund identity blocker skips refund subtree even under a valid Order |
+| Expired blocker | abandon + re-check | same helper path |
+| Wrong token / identity | fence fail-closed | same |
+| Newer nested Refund + stale Order Clock A | Order children skipped; Refund Clock A may apply | covered |
+| Valid Order + blocked Refund | Order written; refund subtree not | covered |
+| Nested Refund vs own tombstone | n/a | first confirmation does not restore |
+| Parentless complete Refund | n/a | stored with known parent GID, no FK |
+
+## 5.3 Receipt terminal-outcome table
+
+Receipt-bound success requires `batchCertifiesReceiptSuccess`: every observation is `applied`, `already_applied`, or `noop` with an allowlisted reason. Otherwise apply **throws** `order_apply_receipt_not_certifiable` and the caller rolls back.
+
+| Outcome / reason | Certifies receipt? |
+|---|---|
+| `applied` / `already_applied` | yes |
+| `noop` + `already_live` / `already_absent` / `overlap_agree` / `presence_keep_live` / `absent_not_later` / `preserve_established_tombstone` / `already_unverified_delete` / `first_insert_absent_preserve_no_row` / `clock_a_stale` / `terminal_first_confirmation` | yes |
+| `noop` + generic `noop` / missing reason / zero-writes alone | no |
+| `rejected` / `incomplete` / `blocked` / `conflict` / `lease_invalid` | no |
+| empty new batch | `receiptStatus: none`, no insert |
+| empty already-receipted same digest | `already_applied` |
+| different digest | `order_apply_receipt_digest_conflict`, rollback |
+
+Failed-then-valid same-key proof: malformed `netPaymentSet` with key `f04-delivery` → throw + 0 receipts + 0 order rows; corrected fresh token, **same** key/digest → 1 receipt + 1 `ShopifyOrderFact`.
+
+## 5.4 Scope floor and child omission
+
+- Comparison set is the fenced `OrderFactObservationInFlight.accessScopeSnapshot`.
+- Reordered equivalent arrays match. Fabricated elevation mismatches.
+- Last-valid-LIVE floor is persisted fact `accessScopeSnapshot`. Caller `lastConfirmedAccessScopes` is ignored as authority.
+- Missing persisted continuity is `SCOPE_DOWNGRADE`, not permission for absence.
+- Inaccessible/rejected writes do not replace that floor.
+- Direct complete parent: omitted previously-LIVE children become `ABSENT` + `ABSENT_CONFIRMED_QUERY` + `CONFIRMED_QUERY` using the parent interval. Rows retained. No physical DELETE.
+- Full-sync omission nominates `CANDIDATE` only. Null gens do not invent a confirmation interval.
+- Refund itself is independently clocked and is not tombstoned because it is missing from an Order list.
+- A line still present with `currentQuantity=0` stays LIVE.
 
 ## 6. Local validation (executed)
 
 Recorded after commands execute. This documentation snapshot does **not** invent results and does **not** embed its own commit SHA.
 
-Environment: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL` pointing at local `stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD=stocky_runtime_ci_only` (CI allowlist secret, not committed). Inventory-write flags unchanged.
+Environment: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL` pointing at local `stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD=stocky_runtime_ci_only` (CI allowlist secret, not committed). Inventory-write flags unchanged. PostgreSQL settings observed in Gate E via `current_setting` (`max_connections`, `max_locks_per_transaction`, `max_prepared_transactions`, `default_transaction_isolation`).
 
-Runtime/test implementation head for the commands below: `360d9583cbc0e3a7950c329a525fd13a137771be` (F-01–F-08 corrections). Prior C commits on this branch: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck), `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness), `04a3e276c9d607e440051603e54e7c96dc9ad19f` (previous local validation). Independent review of `04a3e276…`: commit `ff0ce52e2a65d141bbb064bcfed1ef82438889ec` on `claude/pr40-pr6c-independent-review` (sole changed path `PR6_C_APPLICATOR_INDEPENDENT_REVIEW.md`; C does not edit that artifact).
+Runtime/test implementation head for the commands below: `0474fecc15d728ce69ad858a0bae3de637c573e8`. Prior C commits: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck), `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness), `04a3e276c9d607e440051603e54e7c96dc9ad19f` (previous local validation), `360d9583cbc0e3a7950c329a525fd13a137771be` (first F-01–F-08 pass), `9f3840a82c26bf4450c0c6a8f91d4970a28ec232` (prior correction report), `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (review merge). Final review source `f8e60805dcee6f80f3e40760afad7aea40cfb4b8`.
 
 | Command | Exit | Result |
 |---|---|---|
-| `npx vitest run app/lib/order-facts/apply/*.test.ts` | 0 | **39** passed / 5 files |
-| `npx vitest run app/lib/order-facts` | 0 | **58** passed / 8 files |
+| `npx prisma validate` | 0 | schema valid |
+| `npx prisma generate` | 0 | Prisma Client v6.19.3 |
+| `npm run graphql-codegen` | 0 | Admin types generated; working tree unchanged |
 | `npx tsc --noEmit` | 0 | no errors |
-| focused eslint on `app/lib/order-facts/apply` + `pr6-c-canonical-applicator.test.ts` | 0 | no errors |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **68** passed / 1 file (nonzero; collected 68) |
-| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` still 392; no new apply TypeScript files) |
-| Full `npm run lint` / `npm run typecheck` / `npm test` / `npm run build` | — | **not re-executed** on this correction head; focused tsc + eslint + apply unit + C PG suites were executed |
-| Full `npm run test:migrations` (entire tenant-enforcement corpus) | — | **not executed locally**; required on exact-head full CI |
-| exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not treat superseded failed/cancelled runs as exact-head success. |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| focused eslint `app/lib/order-facts/apply` + `pr6-c-*.test.ts` | 0 | no errors |
+| `npm run lint` | 0 | no errors |
+| `npx vitest run app/lib/order-facts` | 0 | **64** passed / 9 files (nonzero) |
+| `npm test` | 0 | **437** passed / 48 files (nonzero) |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **82** passed / 1 file (nonzero; collected 82) |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts` | 0 | **9** passed / 1 file (nonzero; collected 9; ~12.6s) |
+| `npm run test:migrations` (full corpus, first attempt) | 1 | **executed and failed**: 47 failed / 511 passed / 62 files. Failures were missing `DATABASE_CONTROL_PLANE_URL` / `STOCKY_CONTROL_PLANE_ROLE_PASSWORD` / bootstrap URL, not C applicator assertions. C files in that run still passed (canonical 82, gates 9). |
+| `npm run test:migrations` (full corpus, CI-like disposable env) | 0 | **558** passed / 62 files (nonzero; collected 558). Env: `DATABASE_CONTROL_PLANE_URL` + `STOCKY_CONTROL_PLANE_ROLE_PASSWORD=stocky_control_plane_ci_only` + `STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK=1` + `STOCKY_BOOTSTRAP_DATABASE_URL`/`DATABASE_MIGRATION_URL`/`TENANT_MAINTENANCE_DATABASE_URL` pointing at local `stocky_plus`. Duration 647s. |
+| `npm run build` | 0 | client + SSR production build |
+| `npm run tenant:access:inventory` | 0 | `tenant_access_inventory_written` findings 1741 violations 0 |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 395) |
+| `git diff --check` | 0 | clean |
+| `.github/scripts/classify-ci-change-set.sh --from-git bdbb5bba… 0474fec…` | 0 | `docs_only=false` `full_ci=true` `classification_reason=non_docs_or_unknown_path` |
+| exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not later-push solely to embed CI IDs. |
 
-Previous exact-head SUCCESS on `04a3e276…` (run `34652673104`) is superseded by this correction head and is not substituted.
+Previous exact-head SUCCESS on `04a3e276…` (run `34652673104`) is superseded and is not substituted.
 
-Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only. No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited.
+Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only (`scannedFiles` 392 → 395). No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited.
 
-## 6.1 Claude F-01–F-08 corrections (C-owned)
+## 6.1 Evidence gates A–E
 
-| ID | Sev | Correction |
-|---|---|---|
-| F-01 | P1 | Existence mutate/diagnostics for `resourceKind === "Refund"` write `ShopifyOrderRefundFact`. First-insert ABSENT still writes no row. Nested LIVE snapshot will not revive an ABSENT refund parent. |
-| F-02 | P1 | Later same-kind LIVE mutates with `advance_live_presence_interval`. Older LIVE does not rewind. Delayed older ABSENT hits `absent_not_later`. |
-| F-03 | P1 | Refund subtree writes require `!existenceBlocked`. Refund identity LIVE snapshot requires resulting existence LIVE. Independent nested-refund Clock A under a stale **unblocked** Order still applies. |
-| F-04 | P1 | Receipt insert only when every observation outcome is `applied` or `noop`. Rejected/incomplete/blocked/conflict/lease_invalid leave the key retryable. |
-| F-05 | P1 | `mergeAccessScopeFloor` unions caller last-confirmed with persisted `accessScopeSnapshot`. Empty caller `[]` cannot drop `read_all_orders`. |
-| F-06 | P1 | Complete direct parent snapshot marks omitted lines/agreements/sales and refund lines/adjustments/transactions `existenceState=ABSENT` (`ABSENT_CONFIRMED_QUERY`, retained). Does **not** mark omitted nested Order.refunds. Full-sync (null gens) does not invent a confirmation interval. |
-| F-07 | P2 | `fenceDirectObservation` selects durable `accessScopeSnapshot` and throws `OrderApplyAccessScopeMismatchError` on set mismatch. Matched durable scopes are provenance for currentScopes. |
-| F-08 | P2 | Empty batch returns `receiptStatus: "none"` and does not insert. |
+All C-owned PostgreSQL harnesses are in `scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts`. Command: `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts`. Environment: disposable PG16, runtime role, `vitest.migrations.config.ts`, serialized file execution.
 
-P3 F-09–F-12 are B→C residuals; not implemented in this lane.
+| Gate | Achieved schedule | Result | Remaining limitation |
+|---|---|---|---|
+| A interrupt before commit | apply then `ROLLBACK` | 0 facts, 0 receipts | none for this schedule |
+| A after commit / before ack | commit then retry empty batch | facts+receipt present; retry `already_applied`; still 1 receipt | none for this schedule |
+| A adversarial receipt DELETE | labelled separately; retry upserts same GID | still 1 order row, new receipt | not a D dead-letter worker (D not authorized) |
+| B reverse identity order | two sessions, reverse GID input, real apply path | both commit, no hang, no fabricated `40P01` | correct ordering need not produce deadlock |
+| C real lock timeout | holder `pg_advisory_xact_lock`; waiter apply | `order_advisory_lock_timeout` ~5s; rollback; fresh txn retry applies | uses frozen A identity lock + existing helper |
+| C kill switch while waiting | flip `processingEnabled` while waiter blocked | `OrderApplyProcessingDisabledError` after lock grant; 0 facts; restored after test | none for this schedule |
+| D same key/digest disjoint GIDs | **`serialized_before_missing_receipt_lookup`** | winner commits; loser `already_applied`; loser GID 0 rows | both sessions cannot pass missing-receipt lookup; do **not** claim that unachieved schedule |
+| D different digest | sequential then conflicting digest | `order_apply_receipt_digest_conflict`; no disjoint facts | none for this schedule |
+| E C-specific scale | 400-child parent + 2-to-1 replacement; 40 parents × 25 lines; setup vs apply times and RSS/query counts recorded in-test | 9/9 gate file passed; ~2s apply batch; `executedLines` 1400 | **not** the 1e6-line envelope. Gate **unexecuted** for 1e6. Do not label this smoke as that envelope. |
 
 ## 7. Risk status after this slice
 
@@ -200,7 +279,8 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 - No live store call.
 - C does not DML `DataIssue`, `SalesDailyAggregate`, or explode BOM sales.
 - C does not edit B control docs or A frozen contracts.
+- B→C scratch compatibility overlay was **not** executed (corrected B head not accepted). Status: **pending**, not passed.
 
 ## 9. Packet for ChatGPT
 
-Issued only after local focused suites pass **and** exact-head pull_request Classify + full Heavy + CI Gate SUCCESS on this branch head. Until those exist, this lane is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`. Independent Claude re-review of this correction head is required after exact-head CI.
+This lane is ready for ChatGPT **consolidated correction** review after exact-head `pull_request` Classify SUCCESS, full Heavy SUCCESS (not SKIPPED), and CI Gate SUCCESS on the live PR head that contains this report. Until those GitHub checks exist, do not treat local suites as a substitute for exact-head CI. Independent Claude re-review of the correction head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW` and is **not** merge authorization.
