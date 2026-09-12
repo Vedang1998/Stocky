@@ -100,7 +100,7 @@ describe("PR6-C 1,000,000-line C-specific apply envelope", () => {
     const rssBefore = process.memoryUsage().rss;
     const setupStarted = Date.now();
 
-    function refundFor(orderGid: string): RefundSnapshot {
+    const refundFor = (orderGid: string): RefundSnapshot => {
       return {
         shopifyGid: `${orderGid}/Refund/1`,
         shopifyOrderGid: orderGid,
@@ -140,14 +140,14 @@ describe("PR6-C 1,000,000-line C-specific apply envelope", () => {
         ],
         transactionsComplete: true,
       };
-    }
+    };
 
-    async function applyParentBatch(
+    const applyParentBatch = async (
       parentIds: string[],
       linesEach: number,
       updatedAt: Date,
       withRefund = false,
-    ): Promise<void> {
+    ): Promise<void> => {
       const observations = [];
       for (const gid of parentIds) {
         observationSeq += 1;
@@ -187,7 +187,7 @@ describe("PR6-C 1,000,000-line C-specific apply envelope", () => {
       await session.client.query("COMMIT");
       await session.client.query("BEGIN");
       await setTenant(session.client, shopAId);
-    }
+    };
 
     for (let parent = 0; parent < highChildParents; parent += 1) {
       const gid = `gid://shopify/Order/e1e6-high-${parent}`;
