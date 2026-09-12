@@ -82,6 +82,8 @@ async function spawnChild(args: {
 }): Promise<{ statusPath: string; child: ReturnType<typeof spawn>; tmp: string }> {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "pr6-c-loss-"));
   const statusPath = path.join(tmp, "status.json");
+  // New process group so SIGKILL reaps tsx and its Node grandchild. Status is
+  // a file, so stdio can be ignored (piped unread stdio can deadlock tsx).
   const child = spawn(TSX_BIN, [CHILD_PATH], {
     cwd: APP_ROOT,
     env: {
@@ -94,15 +96,28 @@ async function spawnChild(args: {
       PR6_C_CHILD_DIGEST: args.digest,
       PR6_C_CHILD_OBS_ID: args.obsId,
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: "ignore",
+    detached: true,
   });
+  child.on("error", () => undefined);
   return { statusPath, child, tmp };
 }
 
-function killChild(child: ReturnType<typeof spawn>): void {
-  if (child.pid) {
+function killChild(
+  child: ReturnType<typeof spawn>,
+  extraPid?: number,
+): void {
+  const pids = [child.pid, extraPid].filter(
+    (pid): pid is number => typeof pid === "number" && pid > 0,
+  );
+  for (const pid of pids) {
     try {
-      process.kill(child.pid, "SIGKILL");
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      // process group already gone
+    }
+    try {
+      process.kill(pid, "SIGKILL");
     } catch {
       // already exited
     }
@@ -113,8 +128,31 @@ async function waitExit(child: ReturnType<typeof spawn>): Promise<void> {
   if (child.exitCode != null || child.signalCode != null) return;
   await new Promise<void>((resolve) => {
     child.once("exit", () => resolve());
-    setTimeout(resolve, 5_000);
+    setTimeout(resolve, 8_000);
   });
+}
+
+/**
+ * Node SIGKILL does not drop the PostgreSQL backend immediately. The session
+ * and receipt advisory xact lock remain until the backend is reaped.
+ */
+async function reapAbandonedBackend(backendPid?: number): Promise<void> {
+  if (!backendPid) return;
+  const killer = await getBootstrapClient();
+  try {
+    await killer.query("SELECT pg_terminate_backend($1)", [backendPid]);
+    const started = Date.now();
+    while (Date.now() - started < 5_000) {
+      const live = await killer.query(
+        "SELECT 1 FROM pg_stat_activity WHERE pid = $1",
+        [backendPid],
+      );
+      if ((live.rowCount ?? 0) === 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  } finally {
+    await killer.end();
+  }
 }
 
 async function retryReceipt(
@@ -192,6 +230,7 @@ describe("PR6-C process/session-loss evidence", () => {
     const gid = "gid://shopify/Order/loss-term-before";
     const key = "loss-term-before";
     const session = await openTenant(shopAId);
+    session.client.on("error", () => undefined);
     const pidRow = await session.client.query<{ pid: number }>(
       "SELECT pg_backend_pid() AS pid",
     );
@@ -282,9 +321,12 @@ describe("PR6-C process/session-loss evidence", () => {
       obsId: "obs-loss-kill-before",
     });
     try {
-      await waitForStage(statusPath, ["applied"], 20_000);
-      killChild(child);
+      const status = await waitForStage(statusPath, ["applied"], 20_000);
+      expect(status.pid).toBeGreaterThan(0);
+      expect(status.backendPid).toBeGreaterThan(0);
+      killChild(child, status.pid);
       await waitExit(child);
+      await reapAbandonedBackend(status.backendPid);
       expect(await countTable(shopAId, "ShopifyOrderFact", "shopifyGid", gid)).toBe(0);
       expect(
         await countTable(shopAId, "SyncApplicationReceipt", "applicationKey", key),
@@ -314,8 +356,8 @@ describe("PR6-C process/session-loss evidence", () => {
       obsId: "obs-loss-kill-after",
     });
     try {
-      await waitForStage(statusPath, ["committed"], 20_000);
-      killChild(child);
+      const status = await waitForStage(statusPath, ["committed"], 20_000);
+      killChild(child, status.pid);
       await waitExit(child);
       expect(await countTable(shopAId, "ShopifyOrderFact", "shopifyGid", gid)).toBe(1);
       expect(
@@ -361,7 +403,7 @@ describe("PR6-C process/session-loss evidence", () => {
           await killer.end();
         }
       }
-      killChild(child);
+      killChild(child, status.pid);
       await waitExit(child);
       const retry = await retryReceipt(shopAId, gid, key, digest);
       expect(["applied", "already_applied"]).toContain(retry.receiptStatus);
@@ -380,6 +422,7 @@ describe("PR6-C process/session-loss evidence", () => {
     const key = "loss-destroy";
     const digest = "loss-destroy-digest";
     const client = await getRuntimeClient();
+    client.on("error", () => undefined);
     await client.query("BEGIN");
     await setTenant(client, shopAId);
     const db = asQueryRaw(client);

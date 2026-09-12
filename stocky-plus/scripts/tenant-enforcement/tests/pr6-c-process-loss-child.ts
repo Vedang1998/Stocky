@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   }
   writeStatus({ stage: "started", pid: process.pid });
   const client = await getRuntimeClient();
+  client.on("error", () => undefined);
   try {
     await client.query("BEGIN");
     await setTenant(client, shopId);

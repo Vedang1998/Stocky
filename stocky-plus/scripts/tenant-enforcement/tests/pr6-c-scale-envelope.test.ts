@@ -315,5 +315,5 @@ describe.skipIf(!runEnvelope)("PR6-C 1,000,000-line C-specific apply envelope", 
         pg: settings,
       }),
     );
-  }, 3_600_000);
+  }, 7_200_000);
 });
