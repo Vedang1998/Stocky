@@ -11,6 +11,7 @@ import {
   denyOrderFactPhysicalDelete,
 } from "../../../app/lib/order-facts/apply";
 import {
+  OrderApplyAccessScopeMismatchError,
   OrderApplyBatchExceedsCapacityError,
   OrderApplyClientShopDeniedError,
   OrderApplyPhysicalDeleteError,
@@ -287,6 +288,7 @@ function refundObservation(
   refund: RefundSnapshot,
   requestGen: bigint,
   responseGen: bigint,
+  extras: Partial<DirectOrderObservation> = {},
 ): DirectOrderObservation {
   return {
     observationKind: "direct",
@@ -304,6 +306,7 @@ function refundObservation(
     accessScopeSnapshot: ["read_orders"],
     snapshotComplete: true,
     refund,
+    ...extras,
   };
 }
 
@@ -345,6 +348,37 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
     } finally {
       await client.end();
     }
+  }
+
+  async function seedLiveRefund(
+    client: Client,
+    db: OrderApplyDb,
+    orderGid: string,
+    refund: RefundSnapshot,
+    tokenPrefix: string,
+  ): Promise<void> {
+    const reqO = await allocateCatalogObservationGeneration(db);
+    await insertObservation(client, {
+      id: `${tokenPrefix}-o`,
+      shopId: shopAId,
+      resourceKind: "Order",
+      shopifyGid: orderGid,
+      requestGen: reqO,
+    });
+    const respO = await allocateCatalogObservationGeneration(db);
+    await applyOrderFacts(db, {
+      shopId: shopAId,
+      observations: [
+        liveOrder(
+          shopAId,
+          `${tokenPrefix}-o`,
+          orderSnapshot(orderGid),
+          reqO,
+          respO,
+          { nestedRefunds: [refund] },
+        ),
+      ],
+    });
   }
 
   it("exposes no physical-delete operation", () => {
@@ -1176,6 +1210,7 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
         resourceKind: "Order",
         shopifyGid: gid,
         requestGen: req1,
+        scopes: ["read_orders", "read_all_orders"],
       });
       const resp1 = await allocateCatalogObservationGeneration(db);
       await applyOrderFacts(db, {
@@ -2918,6 +2953,1156 @@ describe("PR6-C canonical applicator PostgreSQL", () => {
         [gid],
       );
       expect(rows.rowCount).toBe(0);
+    });
+  });
+
+  it("F-01 confirmed-absent Refund is tombstoned on ShopifyOrderRefundFact", async () => {
+    const orderGid = "gid://shopify/Order/f01-tombstone";
+    const refundGid = "gid://shopify/Refund/f01-tombstone";
+    await withTenant(async (client, db) => {
+      await seedLiveRefund(
+        client,
+        db,
+        orderGid,
+        refundSnapshot(refundGid, orderGid),
+        "obs-f01t",
+      );
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f01t-r",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const result = await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f01t-r",
+            refundSnapshot(refundGid, orderGid),
+            req,
+            resp,
+            {
+              existenceKind: "ABSENT_CONFIRMED_QUERY",
+              queryCompleted: true,
+              queryReturnedNull: true,
+              lastConfirmedAccessScopes: ["read_orders"],
+              refund: undefined,
+            },
+          ),
+        ],
+      });
+      expect(result.results[0]?.existenceMutated).toBe(true);
+      const row = await client.query(
+        `SELECT "existenceState", "existenceKind", "deletedAt", "deletionSource"
+           FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(row.rows[0].existenceState).toBe("ABSENT");
+      expect(row.rows[0].existenceKind).toBe("ABSENT_CONFIRMED_QUERY");
+      expect(row.rows[0].deletedAt).not.toBeNull();
+      expect(row.rows[0].deletionSource).toBe("CONFIRMED_QUERY");
+    });
+  });
+
+  it("F-01 first-insert ABSENT Refund writes no row", async () => {
+    const refundGid = "gid://shopify/Refund/f01-absent-first";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f01af",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f01af",
+            refundSnapshot(refundGid, "gid://shopify/Order/f01-absent-first"),
+            req,
+            resp,
+            {
+              existenceKind: "ABSENT_CONFIRMED_QUERY",
+              queryCompleted: true,
+              queryReturnedNull: true,
+              refund: undefined,
+            },
+          ),
+        ],
+      });
+      const rows = await client.query(
+        `SELECT 1 FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(rows.rowCount).toBe(0);
+    });
+  });
+
+  it("F-01 unverified delete tombstones a Refund with WEBHOOK source", async () => {
+    const orderGid = "gid://shopify/Order/f01-unverified";
+    const refundGid = "gid://shopify/Refund/f01-unverified";
+    await withTenant(async (client, db) => {
+      await seedLiveRefund(
+        client,
+        db,
+        orderGid,
+        refundSnapshot(refundGid, orderGid),
+        "obs-f01u",
+      );
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f01u-r",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f01u-r",
+            refundSnapshot(refundGid, orderGid),
+            req,
+            resp,
+            {
+              existenceKind: "ABSENT_SIGNALLED_DELETE_UNVERIFIED",
+              refund: undefined,
+            },
+          ),
+        ],
+      });
+      const row = await client.query(
+        `SELECT "existenceState", "existenceKind", "deletionSource", "deletedAt"
+           FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(row.rows[0].existenceState).toBe("ABSENT");
+      expect(row.rows[0].existenceKind).toBe(
+        "ABSENT_SIGNALLED_DELETE_UNVERIFIED",
+      );
+      expect(row.rows[0].deletionSource).toBe("WEBHOOK");
+      expect(row.rows[0].deletedAt).not.toBeNull();
+    });
+  });
+
+  it("F-01 Refund inaccessible diagnostics land on the refund row", async () => {
+    const orderGid = "gid://shopify/Order/f01-inacc";
+    const refundGid = "gid://shopify/Refund/f01-inacc";
+    await withTenant(async (client, db) => {
+      await seedLiveRefund(
+        client,
+        db,
+        orderGid,
+        refundSnapshot(refundGid, orderGid),
+        "obs-f01i",
+      );
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f01i-r",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f01i-r",
+            refundSnapshot(refundGid, orderGid),
+            req,
+            resp,
+            {
+              existenceKind: "INACCESSIBLE_HISTORY_WINDOW",
+              refund: undefined,
+            },
+          ),
+        ],
+      });
+      const row = await client.query(
+        `SELECT "existenceState", "existenceKind", "existenceDiagnosticState",
+                "historyWindowState", "deletedAt"
+           FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(row.rows[0].existenceState).toBe("LIVE");
+      expect(row.rows[0].existenceKind).toBe("INACCESSIBLE_HISTORY_WINDOW");
+      expect(row.rows[0].existenceDiagnosticState).toBe(
+        DIAGNOSTIC.EXISTENCE_UNVERIFIABLE,
+      );
+      expect(row.rows[0].historyWindowState).toBe(DIAGNOSTIC.WINDOW_TRUNCATED);
+      expect(row.rows[0].deletedAt).toBeNull();
+    });
+  });
+
+  it("F-01 first LIVE after Refund tombstone does not revive (bypass)", async () => {
+    const orderGid = "gid://shopify/Order/f01-revival";
+    const refundGid = "gid://shopify/Refund/f01-revival";
+    await withTenant(async (client, db) => {
+      await seedLiveRefund(
+        client,
+        db,
+        orderGid,
+        refundSnapshot(refundGid, orderGid),
+        "obs-f01v",
+      );
+      const reqAbs = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f01v-abs",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: reqAbs,
+      });
+      const respAbs = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f01v-abs",
+            refundSnapshot(refundGid, orderGid),
+            reqAbs,
+            respAbs,
+            {
+              existenceKind: "ABSENT_CONFIRMED_QUERY",
+              queryCompleted: true,
+              queryReturnedNull: true,
+              lastConfirmedAccessScopes: ["read_orders"],
+              refund: undefined,
+            },
+          ),
+        ],
+      });
+      const reqLive = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f01v-live",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: reqLive,
+      });
+      const respLive = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f01v-live",
+            refundSnapshot(refundGid, orderGid),
+            reqLive,
+            respLive,
+          ),
+        ],
+      });
+      const row = await client.query(
+        `SELECT "existenceState", "existenceKind" FROM "ShopifyOrderRefundFact"
+          WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(row.rows[0].existenceState).toBe("ABSENT");
+      expect(row.rows[0].existenceKind).toBe("ABSENT_CONFIRMED_QUERY");
+    });
+  });
+
+  it("F-02 later LIVE advances the stored interval so delayed ABSENT cannot tombstone", async () => {
+    const gid = "gid://shopify/Order/f02-advance";
+    await withTenant(async (client, db) => {
+      const g1 = await allocateCatalogObservationGeneration(db);
+      const g2 = await allocateCatalogObservationGeneration(db);
+      const g5 = await allocateCatalogObservationGeneration(db);
+      const g6 = await allocateCatalogObservationGeneration(db);
+      const g9 = await allocateCatalogObservationGeneration(db);
+      const g10 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f02a",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: g1,
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [liveOrder(shopAId, "obs-f02a", orderSnapshot(gid), g1, g2)],
+      });
+      await insertObservation(client, {
+        id: "obs-f02b",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: g9,
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(shopAId, "obs-f02b", orderSnapshot(gid), g9, g10),
+        ],
+      });
+      const afterLive = await client.query(
+        `SELECT "existenceRequestGen"::text AS req, "existenceResponseGen"::text AS resp
+           FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(afterLive.rows[0].req).toBe(g9.toString());
+      expect(afterLive.rows[0].resp).toBe(g10.toString());
+      await insertObservation(client, {
+        id: "obs-f02c",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: g5,
+      });
+      const absent = await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          {
+            observationKind: "direct",
+            observationToken: "obs-f02c",
+            observationRequestGen: g5,
+            observationResponseGen: g6,
+            identity: { shopId: shopAId, resourceKind: "Order", shopifyGid: gid },
+            existenceKind: "ABSENT_CONFIRMED_QUERY",
+            existenceObservedAt: new Date("2026-09-01T00:00:00.000Z"),
+            sourceKind: "INCREMENTAL_REFETCH",
+            accessScopeSnapshot: ["read_orders"],
+            lastConfirmedAccessScopes: ["read_orders"],
+            snapshotComplete: true,
+            queryCompleted: true,
+            queryReturnedNull: true,
+          },
+        ],
+      });
+      expect(absent.results[0]?.outcome).not.toBe("applied");
+      const row = await client.query(
+        `SELECT "existenceState", "existenceKind", "existenceRequestGen"::text AS req
+           FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(row.rows[0].existenceState).toBe("LIVE");
+      expect(row.rows[0].existenceKind).toBe("LIVE_REFETCH");
+      expect(row.rows[0].req).toBe(g9.toString());
+    });
+  });
+
+  it("F-02 older LIVE does not rewind a newer stored interval", async () => {
+    const gid = "gid://shopify/Order/f02-norewind";
+    await withTenant(async (client, db) => {
+      const g1 = await allocateCatalogObservationGeneration(db);
+      const g2 = await allocateCatalogObservationGeneration(db);
+      const g9 = await allocateCatalogObservationGeneration(db);
+      const g10 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f02n-a",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: g9,
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(shopAId, "obs-f02n-a", orderSnapshot(gid), g9, g10),
+        ],
+      });
+      await insertObservation(client, {
+        id: "obs-f02n-b",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: g1,
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(shopAId, "obs-f02n-b", orderSnapshot(gid), g1, g2),
+        ],
+      });
+      const row = await client.query(
+        `SELECT "existenceRequestGen"::text AS req, "existenceResponseGen"::text AS resp
+           FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(row.rows[0].req).toBe(g9.toString());
+      expect(row.rows[0].resp).toBe(g10.toString());
+    });
+  });
+
+  it("F-03 active blocker on Refund writes no subtree and reports blocked", async () => {
+    const refundGid = "gid://shopify/Refund/f03-block";
+    const orderGid = "gid://shopify/Order/f03-block";
+    await withTenant(async (client, db) => {
+      const blockerReq = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f03-block",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: blockerReq,
+      });
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f03",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const result = await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(
+            shopAId,
+            "obs-f03",
+            refundSnapshot(refundGid, orderGid),
+            req,
+            resp,
+          ),
+        ],
+      });
+      expect(result.results[0]?.outcome).toBe("blocked");
+      const rows = await client.query(
+        `SELECT 1 FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(rows.rowCount).toBe(0);
+    });
+  });
+
+  it("F-03 Order active blocker writes no nested refund subtree", async () => {
+    const gid = "gid://shopify/Order/f03-nested";
+    const refundGid = "gid://shopify/Refund/f03-nested";
+    await withTenant(async (client, db) => {
+      const blockerReq = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f03n-block",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: blockerReq,
+      });
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f03n",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const result = await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(shopAId, "obs-f03n", orderSnapshot(gid), req, resp, {
+            nestedRefunds: [refundSnapshot(refundGid, gid)],
+          }),
+        ],
+      });
+      expect(result.results[0]?.outcome).toBe("blocked");
+      const orders = await client.query(
+        `SELECT 1 FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      const refunds = await client.query(
+        `SELECT 1 FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(orders.rowCount).toBe(0);
+      expect(refunds.rowCount).toBe(0);
+    });
+  });
+
+  it("F-04 rejected money apply does not insert a receipt; corrected retry applies", async () => {
+    const gid = "gid://shopify/Order/f04-receipt";
+    const receipt = {
+      applicationKey: "f04-delivery",
+      sourceJobType: "webhook:orders/create",
+      rootDurableJobId: "job-f04",
+      applyingDurableJobId: "job-f04",
+      payloadDigest: "f04digestf04digestf04digestf04digestf04digestf04digestxxxx",
+    };
+    await withTenant(async (client, db) => {
+      const reqBad = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f04-bad",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: reqBad,
+      });
+      const respBad = await allocateCatalogObservationGeneration(db);
+      const bad = orderSnapshot(gid, {
+        netPaymentSet: {
+          shopAmount: "not-a-number",
+          shopCurrencyCode: "USD",
+          presentmentAmount: "30.00",
+          presentmentCurrencyCode: "USD",
+        },
+      });
+      const rejected = await applyOrderFacts(db, {
+        shopId: shopAId,
+        receipt,
+        observations: [liveOrder(shopAId, "obs-f04-bad", bad, reqBad, respBad)],
+      });
+      expect(rejected.results[0]?.outcome).toBe("rejected");
+      expect(rejected.receiptStatus).toBe("none");
+      const afterReject = await client.query(
+        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt" WHERE "applicationKey" = $1`,
+        ["f04-delivery"],
+      );
+      expect(afterReject.rows[0].n).toBe(0);
+      const reqGood = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f04-good",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: reqGood,
+      });
+      const respGood = await allocateCatalogObservationGeneration(db);
+      const applied = await applyOrderFacts(db, {
+        shopId: shopAId,
+        receipt,
+        observations: [
+          liveOrder(shopAId, "obs-f04-good", orderSnapshot(gid), reqGood, respGood),
+        ],
+      });
+      expect(applied.results[0]?.outcome).toBe("applied");
+      expect(applied.receiptStatus).toBe("applied");
+      const receipts = await client.query(
+        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt" WHERE "applicationKey" = $1`,
+        ["f04-delivery"],
+      );
+      expect(receipts.rows[0].n).toBe(1);
+      const orders = await client.query(
+        `SELECT 1 FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(orders.rowCount).toBe(1);
+    });
+  });
+
+  it("F-04 incomplete snapshot does not insert a receipt", async () => {
+    const gid = "gid://shopify/Order/f04-incomplete";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f04i",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const result = await applyOrderFacts(db, {
+        shopId: shopAId,
+        receipt: {
+          applicationKey: "f04-incomplete",
+          sourceJobType: "webhook:orders/create",
+          rootDurableJobId: "job-f04i",
+          applyingDurableJobId: "job-f04i",
+          payloadDigest: "f04idigestf04idigestf04idigestf04idigestf04idigestxxxxxx",
+        },
+        observations: [
+          liveOrder(
+            shopAId,
+            "obs-f04i",
+            orderSnapshot(gid, { linesComplete: false }),
+            req,
+            resp,
+          ),
+        ],
+      });
+      expect(result.results[0]?.outcome).toBe("incomplete");
+      expect(result.receiptStatus).toBe("none");
+      const receipts = await client.query(
+        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt" WHERE "applicationKey" = $1`,
+        ["f04-incomplete"],
+      );
+      expect(receipts.rows[0].n).toBe(0);
+    });
+  });
+
+  it("F-05 empty lastConfirmedAccessScopes still uses persisted read_all_orders floor", async () => {
+    const gid = "gid://shopify/Order/f05-floor";
+    await withTenant(async (client, db) => {
+      const req1 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f05a",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req1,
+        scopes: ["read_orders", "read_all_orders"],
+      });
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(shopAId, "obs-f05a", orderSnapshot(gid), req1, resp1, {
+            accessScopeSnapshot: ["read_orders", "read_all_orders"],
+          }),
+        ],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f05b",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req2,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          {
+            observationKind: "direct",
+            observationToken: "obs-f05b",
+            observationRequestGen: req2,
+            observationResponseGen: resp2,
+            identity: { shopId: shopAId, resourceKind: "Order", shopifyGid: gid },
+            existenceKind: "ABSENT_CONFIRMED_QUERY",
+            existenceObservedAt: new Date("2026-09-01T00:00:00.000Z"),
+            sourceKind: "INCREMENTAL_REFETCH",
+            accessScopeSnapshot: ["read_orders"],
+            lastConfirmedAccessScopes: [],
+            snapshotComplete: true,
+            queryCompleted: true,
+            queryReturnedNull: true,
+          },
+        ],
+      });
+      const row = await client.query(
+        `SELECT "existenceState", "existenceDiagnosticState"
+           FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(row.rows[0].existenceState).toBe("LIVE");
+      expect(row.rows[0].existenceDiagnosticState).toBe(
+        DIAGNOSTIC.SCOPE_DOWNGRADE,
+      );
+    });
+  });
+
+  it("F-06 complete newer snapshot marks omitted order children ABSENT without deleting them", async () => {
+    const gid = "gid://shopify/Order/f06-lines";
+    await withTenant(async (client, db) => {
+      const req1 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06a",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req1,
+      });
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      const twoLines = orderSnapshot(gid, {
+        shopifyUpdatedAt: new Date("2026-08-10T00:00:00.000Z"),
+        lines: [line(`${gid}/Line/1`), line(`${gid}/Line/2`)],
+        agreements: [
+          {
+            shopifyGid: `${gid}/Agreement/1`,
+            happenedAt: new Date("2026-08-01T00:00:00.000Z"),
+            agreementTypename: "OrderAgreement",
+            reason: "ORDER",
+            refundGid: null,
+            salesComplete: true,
+            sales: [
+              sale({
+                shopifyGid: `${gid}/Sale/1`,
+                shopifyLineItemGid: `${gid}/Line/1`,
+              }),
+              sale({
+                shopifyGid: `${gid}/Sale/2`,
+                shopifyLineItemGid: `${gid}/Line/2`,
+              }),
+            ],
+          },
+        ],
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [liveOrder(shopAId, "obs-f06a", twoLines, req1, resp1)],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06b",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req2,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      const oneLine = orderSnapshot(gid, {
+        shopifyUpdatedAt: new Date("2026-08-20T00:00:00.000Z"),
+        lines: [line(`${gid}/Line/1`)],
+        agreements: [
+          {
+            shopifyGid: `${gid}/Agreement/1`,
+            happenedAt: new Date("2026-08-01T00:00:00.000Z"),
+            agreementTypename: "OrderAgreement",
+            reason: "ORDER",
+            refundGid: null,
+            salesComplete: true,
+            sales: [
+              sale({
+                shopifyGid: `${gid}/Sale/1`,
+                shopifyLineItemGid: `${gid}/Line/1`,
+              }),
+            ],
+          },
+        ],
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [liveOrder(shopAId, "obs-f06b", oneLine, req2, resp2)],
+      });
+      const lines = await client.query(
+        `SELECT "shopifyGid", "existenceState" FROM "ShopifyOrderLineFact"
+          WHERE "shopifyOrderGid" = $1 ORDER BY "shopifyGid"`,
+        [gid],
+      );
+      expect(lines.rowCount).toBe(2);
+      expect(
+        lines.rows.find((row) => row.shopifyGid === `${gid}/Line/1`)
+          ?.existenceState,
+      ).toBe("LIVE");
+      expect(
+        lines.rows.find((row) => row.shopifyGid === `${gid}/Line/2`)
+          ?.existenceState,
+      ).toBe("ABSENT");
+      const sales = await client.query(
+        `SELECT "shopifyGid", "existenceState" FROM "ShopifyOrderAgreementSaleFact"
+          WHERE "shopifyOrderGid" = $1 ORDER BY "shopifyGid"`,
+        [gid],
+      );
+      expect(sales.rowCount).toBe(2);
+      expect(
+        sales.rows.find((row) => row.shopifyGid === `${gid}/Sale/2`)
+          ?.existenceState,
+      ).toBe("ABSENT");
+    });
+  });
+
+  it("F-06 omitted child reappears LIVE and stale snapshot does not mark absence", async () => {
+    const gid = "gid://shopify/Order/f06-revive";
+    await withTenant(async (client, db) => {
+      const req1 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06r-a",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req1,
+      });
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      const twoLines = orderSnapshot(gid, {
+        shopifyUpdatedAt: new Date("2026-08-10T00:00:00.000Z"),
+        lines: [line(`${gid}/Line/1`), line(`${gid}/Line/2`)],
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [liveOrder(shopAId, "obs-f06r-a", twoLines, req1, resp1)],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06r-b",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req2,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(
+            shopAId,
+            "obs-f06r-b",
+            orderSnapshot(gid, {
+              shopifyUpdatedAt: new Date("2026-08-20T00:00:00.000Z"),
+              lines: [line(`${gid}/Line/1`)],
+            }),
+            req2,
+            resp2,
+          ),
+        ],
+      });
+      const reqStale = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06r-stale",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: reqStale,
+      });
+      const respStale = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(
+            shopAId,
+            "obs-f06r-stale",
+            orderSnapshot(gid, {
+              shopifyUpdatedAt: new Date("2026-08-01T00:00:00.000Z"),
+              lines: [line(`${gid}/Line/1`)],
+            }),
+            reqStale,
+            respStale,
+          ),
+        ],
+      });
+      const afterStale = await client.query(
+        `SELECT "existenceState" FROM "ShopifyOrderLineFact"
+          WHERE "shopifyGid" = $1`,
+        [`${gid}/Line/2`],
+      );
+      expect(afterStale.rows[0].existenceState).toBe("ABSENT");
+      const req3 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06r-c",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req3,
+      });
+      const resp3 = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(
+            shopAId,
+            "obs-f06r-c",
+            orderSnapshot(gid, {
+              shopifyUpdatedAt: new Date("2026-08-21T00:00:00.000Z"),
+              lines: [line(`${gid}/Line/1`), line(`${gid}/Line/2`)],
+            }),
+            req3,
+            resp3,
+          ),
+        ],
+      });
+      const lines = await client.query(
+        `SELECT "shopifyGid", "existenceState" FROM "ShopifyOrderLineFact"
+          WHERE "shopifyOrderGid" = $1`,
+        [gid],
+      );
+      expect(lines.rowCount).toBe(2);
+      expect(
+        lines.rows.every((row) => row.existenceState === "LIVE"),
+      ).toBe(true);
+    });
+  });
+
+  it("F-06 omitted refund children are ABSENT and LIVE children match parent money", async () => {
+    const orderGid = "gid://shopify/Order/f06-refund";
+    const refundGid = "gid://shopify/Refund/f06-refund";
+    await withTenant(async (client, db) => {
+      const twoLineRefund = refundSnapshot(refundGid, orderGid, {
+        shopifyUpdatedAt: new Date("2026-08-11T00:00:00.000Z"),
+        totalRefundedSet: bag("20.00"),
+        lines: [
+          {
+            shopifyGid: null,
+            shopifyLineItemGid: `${orderGid}/Line/1`,
+            refundLineOrdinal: 0,
+            quantity: 1,
+            restockType: null,
+            restocked: null,
+            restockLocationGid: null,
+            subtotalSet: bag("10.00"),
+            totalTaxSet: bag("0.00"),
+            priceSet: bag("10.00"),
+          },
+          {
+            shopifyGid: null,
+            shopifyLineItemGid: `${orderGid}/Line/2`,
+            refundLineOrdinal: 1,
+            quantity: 1,
+            restockType: null,
+            restocked: null,
+            restockLocationGid: null,
+            subtotalSet: bag("10.00"),
+            totalTaxSet: bag("0.00"),
+            priceSet: bag("10.00"),
+          },
+        ],
+        adjustments: [
+          {
+            shopifyGid: `${refundGid}/Adj/1`,
+            reason: "SHIPPING_REFUND",
+            amountSet: bag("0.00"),
+            taxAmountSet: bag("0.00"),
+          },
+        ],
+        transactions: [
+          {
+            shopifyGid: `${refundGid}/Txn/1`,
+            status: "SUCCESS",
+            kind: "REFUND",
+            shopifyCreatedAt: new Date("2026-08-11T00:00:00.000Z"),
+            processedAt: new Date("2026-08-11T00:00:00.000Z"),
+            amountSet: bag("20.00"),
+          },
+          {
+            shopifyGid: `${refundGid}/Txn/2`,
+            status: "SUCCESS",
+            kind: "REFUND",
+            shopifyCreatedAt: new Date("2026-08-11T00:00:00.000Z"),
+            processedAt: new Date("2026-08-11T00:00:00.000Z"),
+            amountSet: bag("0.00"),
+          },
+        ],
+      });
+      await seedLiveRefund(client, db, orderGid, twoLineRefund, "obs-f06rf");
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06rf-r",
+        shopId: shopAId,
+        resourceKind: "Refund",
+        shopifyGid: refundGid,
+        requestGen: req,
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const oneLine = refundSnapshot(refundGid, orderGid, {
+        shopifyUpdatedAt: new Date("2026-08-21T00:00:00.000Z"),
+        totalRefundedSet: bag("10.00"),
+        lines: [
+          {
+            shopifyGid: null,
+            shopifyLineItemGid: `${orderGid}/Line/1`,
+            refundLineOrdinal: 0,
+            quantity: 1,
+            restockType: null,
+            restocked: null,
+            restockLocationGid: null,
+            subtotalSet: bag("10.00"),
+            totalTaxSet: bag("0.00"),
+            priceSet: bag("10.00"),
+          },
+        ],
+        adjustments: [],
+        transactions: [
+          {
+            shopifyGid: `${refundGid}/Txn/1`,
+            status: "SUCCESS",
+            kind: "REFUND",
+            shopifyCreatedAt: new Date("2026-08-11T00:00:00.000Z"),
+            processedAt: new Date("2026-08-11T00:00:00.000Z"),
+            amountSet: bag("10.00"),
+          },
+        ],
+      });
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          refundObservation(shopAId, "obs-f06rf-r", oneLine, req, resp),
+        ],
+      });
+      const parent = await client.query(
+        `SELECT "totalRefundedShopAmount"::text AS amt, "moneyDiagnosticState"
+           FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(parent.rows[0].amt).toMatch(/10/);
+      const lines = await client.query(
+        `SELECT "refundLineOrdinal", "existenceState", "subtotalShopAmount"::text AS amt
+           FROM "ShopifyOrderRefundLineFact" WHERE "shopifyRefundGid" = $1
+           ORDER BY "refundLineOrdinal"`,
+        [refundGid],
+      );
+      expect(lines.rowCount).toBe(2);
+      expect(lines.rows[0].existenceState).toBe("LIVE");
+      expect(lines.rows[1].existenceState).toBe("ABSENT");
+      const liveSum = await client.query(
+        `SELECT coalesce(sum("subtotalShopAmount"), 0)::text AS amt
+           FROM "ShopifyOrderRefundLineFact"
+          WHERE "shopifyRefundGid" = $1 AND "existenceState" = 'LIVE'`,
+        [refundGid],
+      );
+      expect(liveSum.rows[0].amt).toMatch(/10/);
+      const adj = await client.query(
+        `SELECT "existenceState" FROM "ShopifyOrderAdjustmentFact"
+          WHERE "shopifyGid" = $1`,
+        [`${refundGid}/Adj/1`],
+      );
+      expect(adj.rows[0].existenceState).toBe("ABSENT");
+      const txn = await client.query(
+        `SELECT "shopifyGid", "existenceState" FROM "ShopifyOrderRefundTransactionFact"
+          WHERE "shopifyRefundGid" = $1 ORDER BY "shopifyGid"`,
+        [refundGid],
+      );
+      expect(
+        txn.rows.find((row) => row.shopifyGid === `${refundGid}/Txn/2`)
+          ?.existenceState,
+      ).toBe("ABSENT");
+      expect(
+        txn.rows.find((row) => row.shopifyGid === `${refundGid}/Txn/1`)
+          ?.existenceState,
+      ).toBe("LIVE");
+    });
+  });
+
+  it("F-06 omitted nested refund from an order snapshot stays LIVE", async () => {
+    const gid = "gid://shopify/Order/f06-nested";
+    const refundGid = "gid://shopify/Refund/f06-nested";
+    await withTenant(async (client, db) => {
+      const req1 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06n-a",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req1,
+      });
+      const resp1 = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(
+            shopAId,
+            "obs-f06n-a",
+            orderSnapshot(gid, {
+              shopifyUpdatedAt: new Date("2026-08-10T00:00:00.000Z"),
+            }),
+            req1,
+            resp1,
+            { nestedRefunds: [refundSnapshot(refundGid, gid)] },
+          ),
+        ],
+      });
+      const req2 = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f06n-b",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req2,
+      });
+      const resp2 = await allocateCatalogObservationGeneration(db);
+      await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(
+            shopAId,
+            "obs-f06n-b",
+            orderSnapshot(gid, {
+              shopifyUpdatedAt: new Date("2026-08-20T00:00:00.000Z"),
+            }),
+            req2,
+            resp2,
+          ),
+        ],
+      });
+      const refund = await client.query(
+        `SELECT "existenceState" FROM "ShopifyOrderRefundFact" WHERE "shopifyGid" = $1`,
+        [refundGid],
+      );
+      expect(refund.rows[0].existenceState).toBe("LIVE");
+    });
+  });
+
+  it("F-07 fabricated read_all_orders against durable read_orders fails closed", async () => {
+    const gid = "gid://shopify/Order/f07-mismatch";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f07",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req,
+        scopes: ["read_orders"],
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      await expect(
+        applyOrderFacts(db, {
+          shopId: shopAId,
+          observations: [
+            liveOrder(shopAId, "obs-f07", orderSnapshot(gid), req, resp, {
+              accessScopeSnapshot: ["read_orders", "read_all_orders"],
+            }),
+          ],
+        }),
+      ).rejects.toBeInstanceOf(OrderApplyAccessScopeMismatchError);
+      const rows = await client.query(
+        `SELECT 1 FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(rows.rowCount).toBe(0);
+    });
+  });
+
+  it("F-07 matching durable scopes still apply", async () => {
+    const gid = "gid://shopify/Order/f07-match";
+    await withTenant(async (client, db) => {
+      const req = await allocateCatalogObservationGeneration(db);
+      await insertObservation(client, {
+        id: "obs-f07m",
+        shopId: shopAId,
+        resourceKind: "Order",
+        shopifyGid: gid,
+        requestGen: req,
+        scopes: ["read_orders", "read_all_orders"],
+      });
+      const resp = await allocateCatalogObservationGeneration(db);
+      const result = await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [
+          liveOrder(shopAId, "obs-f07m", orderSnapshot(gid), req, resp, {
+            accessScopeSnapshot: ["read_all_orders", "read_orders"],
+          }),
+        ],
+      });
+      expect(result.results[0]?.outcome).toBe("applied");
+      const row = await client.query(
+        `SELECT "accessScopeSnapshot" FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+        [gid],
+      );
+      expect(row.rows[0].accessScopeSnapshot).toEqual(
+        expect.arrayContaining(["read_orders", "read_all_orders"]),
+      );
+    });
+  });
+
+  it("F-08 empty observation batch reports receiptStatus none and inserts nothing", async () => {
+    await withTenant(async (client, db) => {
+      const withReceipt = await applyOrderFacts(db, {
+        shopId: shopAId,
+        receipt: {
+          applicationKey: "f08-empty",
+          sourceJobType: "webhook:orders/create",
+          rootDurableJobId: "job-f08",
+          applyingDurableJobId: "job-f08",
+          payloadDigest: "f08digestf08digestf08digestf08digestf08digestf08digestxxxx",
+        },
+        observations: [],
+      });
+      expect(withReceipt.receiptStatus).toBe("none");
+      const none = await applyOrderFacts(db, {
+        shopId: shopAId,
+        observations: [],
+      });
+      expect(none.receiptStatus).toBe("none");
+      const receipts = await client.query(
+        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt" WHERE "applicationKey" = $1`,
+        ["f08-empty"],
+      );
+      expect(receipts.rows[0].n).toBe(0);
     });
   });
 });

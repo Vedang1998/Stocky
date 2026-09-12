@@ -108,6 +108,40 @@ export function scopesGrantReadAllOrders(
 }
 
 /**
+ * Set equality for scope snapshots. Order and duplicates do not matter.
+ */
+export function accessScopeSetsEqual(
+  left: readonly string[] | null | undefined,
+  right: readonly string[] | null | undefined,
+): boolean {
+  const leftSet = new Set(left ?? []);
+  const rightSet = new Set(right ?? []);
+  if (leftSet.size !== rightSet.size) return false;
+  for (const scope of leftSet) {
+    if (!rightSet.has(scope)) return false;
+  }
+  return true;
+}
+
+/**
+ * Persisted LIVE scope history is a floor. An empty or weaker caller
+ * lastConfirmedAccessScopes must not erase read_all_orders (T50 / F-05).
+ */
+export function mergeAccessScopeFloor(
+  caller: readonly string[] | null | undefined,
+  persisted: readonly string[] | null | undefined,
+): string[] {
+  const merged = new Set<string>();
+  for (const scope of persisted ?? []) {
+    if (scope) merged.add(scope);
+  }
+  for (const scope of caller ?? []) {
+    if (scope) merged.add(scope);
+  }
+  return [...merged];
+}
+
+/**
  * Deny absence if grant continuity is missing, stale, or downgraded vs the
  * last valid LIVE confirmation (T50).
  */
@@ -326,7 +360,10 @@ export function decideOrderExistence(input: {
     }
     const scope = scopeContinuityAllowsAbsence({
       currentScopes: input.currentScopes,
-      lastConfirmedScopes: input.lastConfirmedScopes ?? stored.accessScopeSnapshot,
+      lastConfirmedScopes: mergeAccessScopeFloor(
+        input.lastConfirmedScopes,
+        stored.accessScopeSnapshot,
+      ),
     });
     if (!scope.ok) {
       return {
@@ -405,6 +442,20 @@ export function decideOrderExistence(input: {
           nextState: "LIVE",
           nextKind: "LIVE_REFETCH",
           reason: "upgrade_to_live_refetch",
+          diagnostic: null,
+          deletionSource: null,
+          deletedAtNow: false,
+        };
+      }
+      if (
+        storedInterval &&
+        isNonOverlappingLater(incomingInterval, storedInterval)
+      ) {
+        return {
+          mutate: true,
+          nextState: "LIVE",
+          nextKind: "LIVE_REFETCH",
+          reason: "advance_live_presence_interval",
           diagnostic: null,
           deletionSource: null,
           deletedAtNow: false,

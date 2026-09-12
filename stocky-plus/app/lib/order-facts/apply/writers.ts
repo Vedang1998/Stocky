@@ -138,6 +138,41 @@ function genPair(interval: GenerationInterval | null): {
   };
 }
 
+function liveExistenceColumns(write: ExistenceWriteInput): {
+  state: "LIVE" | "ABSENT";
+  kind: string;
+  observedAt: Date;
+  request: string | null;
+  response: string | null;
+  scopesJson: string;
+  sourceKind: OrderSourceKind;
+} {
+  const gens = genPair(
+    write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
+  );
+  return {
+    state: write.decision.nextState,
+    kind: write.decision.nextKind,
+    observedAt: write.observedAt,
+    request: gens.request,
+    response: gens.response,
+    scopesJson: JSON.stringify([...write.accessScopeSnapshot]),
+    sourceKind: write.sourceKind,
+  };
+}
+
+function childAbsenceInterval(
+  write: ExistenceWriteInput,
+): GenerationInterval | null {
+  if (write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT") return null;
+  if (!write.interval) return null;
+  return write.interval;
+}
+
+function refundLineAbsenceKey(lineItemGid: string, ordinal: number): string {
+  return `${lineItemGid}\u001f${String(ordinal)}`;
+}
+
 export type ExistenceWriteInput = {
   decision: Extract<ExistenceDecision, { mutate: true }>;
   interval: GenerationInterval | null;
@@ -402,6 +437,62 @@ export async function updateOrderDiagnosticsOnly(
      WHERE "shopId" = ${shopId} AND id = ${factId}`;
 }
 
+export async function updateRefundExistence(
+  db: OrderApplyDb,
+  shopId: string,
+  factId: string,
+  write: ExistenceWriteInput,
+): Promise<void> {
+  const gens = genPair(
+    write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT"
+      ? null
+      : write.interval,
+  );
+  const scopes = [...write.accessScopeSnapshot];
+  await queryRows(db)`
+    UPDATE "ShopifyOrderRefundFact"
+       SET "existenceState" = ${write.decision.nextState}::"OrderExistenceState",
+           "existenceKind" = ${write.decision.nextKind}::"OrderExistenceKind",
+           "existenceObservedAt" = ${write.observedAt},
+           "existenceRequestGen" = ${gens.request}::bigint,
+           "existenceResponseGen" = ${gens.response}::bigint,
+           "existenceDiagnosticState" = ${write.decision.diagnostic},
+           "historyWindowState" = ${write.decision.historyWindowState ?? null},
+           "deletedAt" = CASE
+             WHEN ${write.decision.nextState} = 'LIVE' THEN NULL
+             WHEN ${write.decision.deletedAtNow} THEN COALESCE("deletedAt", ${write.observedAt})
+             ELSE "deletedAt"
+           END,
+           "deletionSource" = CASE
+             WHEN ${write.decision.nextState} = 'LIVE' THEN NULL
+             ELSE ${deletionSourceSql(write.decision.deletionSource)}::"OrderDeletionSource"
+           END,
+           "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(scopes)}::jsonb)),
+           "attributeFreshnessState" = CASE
+             WHEN ${write.decision.nextKind} = 'INACCESSIBLE_HISTORY_WINDOW'
+             THEN 'DEGRADED'::"OrderAttributeFreshnessState"
+             ELSE "attributeFreshnessState"
+           END,
+           "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+           "updatedAt" = clock_timestamp()
+     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+}
+
+export async function updateRefundDiagnosticsOnly(
+  db: OrderApplyDb,
+  shopId: string,
+  factId: string,
+  diagnostic: string | null,
+  historyWindowState: string | null,
+): Promise<void> {
+  await queryRows(db)`
+    UPDATE "ShopifyOrderRefundFact"
+       SET "existenceDiagnosticState" = COALESCE(${diagnostic}, "existenceDiagnosticState"),
+           "historyWindowState" = COALESCE(${historyWindowState}, "historyWindowState"),
+           "updatedAt" = clock_timestamp()
+     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+}
+
 export async function nominateAbsenceCandidate(
   db: OrderApplyDb,
   shopId: string,
@@ -429,6 +520,7 @@ export async function upsertOrderLine(
   const gens = genPair(
     write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
   );
+  const live = liveExistenceColumns(write);
   const scopes = [...write.accessScopeSnapshot];
   const existing = await queryRows<{
     id: string;
@@ -486,6 +578,15 @@ export async function upsertOrderLine(
              "discountedUnitPriceAfterAllDiscountsPresentmentCurrencyCode" = ${money.discountedUnitPriceAfterAllDiscountsSet?.presentmentCurrencyCode ?? null},
              "attributeRequestGen" = ${gens.request}::bigint,
              "attributeResponseGen" = ${gens.response}::bigint,
+             "existenceState" = ${live.state}::"OrderExistenceState",
+             "existenceKind" = ${live.kind}::"OrderExistenceKind",
+             "existenceObservedAt" = ${live.observedAt},
+             "existenceRequestGen" = ${live.request}::bigint,
+             "existenceResponseGen" = ${live.response}::bigint,
+             "deletedAt" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletedAt" END,
+             "deletionSource" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletionSource" END,
+             "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${live.scopesJson}::jsonb)),
+             "sourceKind" = ${live.sourceKind}::"OrderSourceKind",
              "shopifyLegacyResourceId" = ${line.shopifyLegacyResourceId},
              "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${existing[0].id}`;
@@ -578,6 +679,7 @@ export async function upsertAgreementAndSales(
   const gens = genPair(
     write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
   );
+  const live = liveExistenceColumns(write);
   const scopes = [...write.accessScopeSnapshot];
   const existing = await queryRows<{ id: string }>(db)`
     SELECT id FROM "ShopifyOrderAgreementFact"
@@ -593,6 +695,15 @@ export async function upsertAgreementAndSales(
              "refundGid" = ${agreement.refundGid},
              "attributeRequestGen" = ${gens.request}::bigint,
              "attributeResponseGen" = ${gens.response}::bigint,
+             "existenceState" = ${live.state}::"OrderExistenceState",
+             "existenceKind" = ${live.kind}::"OrderExistenceKind",
+             "existenceObservedAt" = ${live.observedAt},
+             "existenceRequestGen" = ${live.request}::bigint,
+             "existenceResponseGen" = ${live.response}::bigint,
+             "deletedAt" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletedAt" END,
+             "deletionSource" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletionSource" END,
+             "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${live.scopesJson}::jsonb)),
+             "sourceKind" = ${live.sourceKind}::"OrderSourceKind",
              "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${agreementId}`;
   } else {
@@ -648,6 +759,7 @@ async function upsertSale(
   const gens = genPair(
     write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
   );
+  const live = liveExistenceColumns(write);
   const scopes = [...write.accessScopeSnapshot];
   const existing = await queryRows<{ id: string }>(db)`
     SELECT id FROM "ShopifyOrderAgreementSaleFact"
@@ -668,6 +780,15 @@ async function upsertSale(
              "totalAmountPresentmentCurrencyCode" = ${money.presentmentCurrencyCode},
              "attributeRequestGen" = ${gens.request}::bigint,
              "attributeResponseGen" = ${gens.response}::bigint,
+             "existenceState" = ${live.state}::"OrderExistenceState",
+             "existenceKind" = ${live.kind}::"OrderExistenceKind",
+             "existenceObservedAt" = ${live.observedAt},
+             "existenceRequestGen" = ${live.request}::bigint,
+             "existenceResponseGen" = ${live.response}::bigint,
+             "deletedAt" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletedAt" END,
+             "deletionSource" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletionSource" END,
+             "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${live.scopesJson}::jsonb)),
+             "sourceKind" = ${live.sourceKind}::"OrderSourceKind",
              "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${existing[0].id}`;
     return;
@@ -805,6 +926,7 @@ export async function upsertRefundSnapshot(
   for (const txn of refund.transactions) {
     await upsertTransaction(db, shopId, refund, txn, write, sourceKind, shopCurrency);
   }
+  await markOmittedRefundChildrenAbsent(db, shopId, refund, write);
   return { id, moneyDiagnosticState: money.moneyDiagnosticState };
 }
 
@@ -820,6 +942,7 @@ async function upsertRefundLine(
   const gens = genPair(
     write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
   );
+  const live = liveExistenceColumns(write);
   const scopes = [...write.accessScopeSnapshot];
   const parsed = parseLineLikeRefund(line, shopCurrency);
   const existing = await queryRows<{ id: string }>(db)`
@@ -849,6 +972,15 @@ async function upsertRefundLine(
              "priceShopCurrencyCode" = ${parsed.price.shopCurrencyCode},
              "pricePresentmentAmount" = ${parsed.price.presentmentAmount}::numeric,
              "pricePresentmentCurrencyCode" = ${parsed.price.presentmentCurrencyCode},
+             "existenceState" = ${live.state}::"OrderExistenceState",
+             "existenceKind" = ${live.kind}::"OrderExistenceKind",
+             "existenceObservedAt" = ${live.observedAt},
+             "existenceRequestGen" = ${live.request}::bigint,
+             "existenceResponseGen" = ${live.response}::bigint,
+             "deletedAt" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletedAt" END,
+             "deletionSource" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletionSource" END,
+             "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${live.scopesJson}::jsonb)),
+             "sourceKind" = ${live.sourceKind}::"OrderSourceKind",
              "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${existing[0].id}`;
     return;
@@ -914,6 +1046,7 @@ async function upsertAdjustment(
   const gens = genPair(
     write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
   );
+  const live = liveExistenceColumns(write);
   const scopes = [...write.accessScopeSnapshot];
   const existing = await queryRows<{ id: string }>(db)`
     SELECT id FROM "ShopifyOrderAdjustmentFact"
@@ -931,6 +1064,15 @@ async function upsertAdjustment(
              "taxAmountShopCurrencyCode" = ${parsed.taxAmountSet.shopCurrencyCode},
              "taxAmountPresentmentAmount" = ${parsed.taxAmountSet.presentmentAmount}::numeric,
              "taxAmountPresentmentCurrencyCode" = ${parsed.taxAmountSet.presentmentCurrencyCode},
+             "existenceState" = ${live.state}::"OrderExistenceState",
+             "existenceKind" = ${live.kind}::"OrderExistenceKind",
+             "existenceObservedAt" = ${live.observedAt},
+             "existenceRequestGen" = ${live.request}::bigint,
+             "existenceResponseGen" = ${live.response}::bigint,
+             "deletedAt" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletedAt" END,
+             "deletionSource" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletionSource" END,
+             "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${live.scopesJson}::jsonb)),
+             "sourceKind" = ${live.sourceKind}::"OrderSourceKind",
              "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${existing[0].id}`;
     return;
@@ -979,6 +1121,7 @@ async function upsertTransaction(
   const gens = genPair(
     write.decision.nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : write.interval,
   );
+  const live = liveExistenceColumns(write);
   const scopes = [...write.accessScopeSnapshot];
   const existing = await queryRows<{ id: string }>(db)`
     SELECT id FROM "ShopifyOrderRefundTransactionFact"
@@ -995,6 +1138,15 @@ async function upsertTransaction(
              "amountShopCurrencyCode" = ${amount.shopCurrencyCode},
              "amountPresentmentAmount" = ${amount.presentmentAmount}::numeric,
              "amountPresentmentCurrencyCode" = ${amount.presentmentCurrencyCode},
+             "existenceState" = ${live.state}::"OrderExistenceState",
+             "existenceKind" = ${live.kind}::"OrderExistenceKind",
+             "existenceObservedAt" = ${live.observedAt},
+             "existenceRequestGen" = ${live.request}::bigint,
+             "existenceResponseGen" = ${live.response}::bigint,
+             "deletedAt" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletedAt" END,
+             "deletionSource" = CASE WHEN ${live.state} = 'LIVE' THEN NULL ELSE "deletionSource" END,
+             "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${live.scopesJson}::jsonb)),
+             "sourceKind" = ${live.sourceKind}::"OrderSourceKind",
              "updatedAt" = clock_timestamp()
        WHERE "shopId" = ${shopId} AND id = ${existing[0].id}`;
     return;
@@ -1026,6 +1178,224 @@ async function upsertTransaction(
   } catch (error) {
     throwIfUniqueViolation(error);
   }
+}
+
+async function markOmittedChildRowsAbsent(
+  db: OrderApplyDb,
+  table:
+    | "ShopifyOrderLineFact"
+    | "ShopifyOrderAgreementFact"
+    | "ShopifyOrderAgreementSaleFact"
+    | "ShopifyOrderAdjustmentFact"
+    | "ShopifyOrderRefundTransactionFact",
+  shopId: string,
+  parentGid: string,
+  presentGids: readonly string[],
+  write: ExistenceWriteInput,
+): Promise<void> {
+  const interval = childAbsenceInterval(write);
+  if (!interval) return;
+  const gens = genPair(interval);
+  const scopesJson = JSON.stringify([...write.accessScopeSnapshot]);
+  const presentJson = JSON.stringify([...presentGids]);
+  const presentCount = presentGids.length;
+  const sqlByTable: Record<typeof table, () => Promise<unknown>> = {
+    ShopifyOrderLineFact: () =>
+      queryRows(db)`
+        UPDATE "ShopifyOrderLineFact"
+           SET "existenceState" = 'ABSENT'::"OrderExistenceState",
+               "existenceKind" = 'ABSENT_CONFIRMED_QUERY'::"OrderExistenceKind",
+               "existenceObservedAt" = ${write.observedAt},
+               "existenceRequestGen" = ${gens.request}::bigint,
+               "existenceResponseGen" = ${gens.response}::bigint,
+               "deletedAt" = COALESCE("deletedAt", ${write.observedAt}),
+               "deletionSource" = 'CONFIRMED_QUERY'::"OrderDeletionSource",
+               "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${scopesJson}::jsonb)),
+               "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+               "updatedAt" = clock_timestamp()
+         WHERE "shopId" = ${shopId}
+           AND "shopifyOrderGid" = ${parentGid}
+           AND "existenceState" = 'LIVE'
+           AND (
+             ${presentCount}::int = 0
+             OR NOT ("shopifyGid" = ANY (ARRAY(SELECT jsonb_array_elements_text(${presentJson}::jsonb))))
+           )`,
+    ShopifyOrderAgreementFact: () =>
+      queryRows(db)`
+        UPDATE "ShopifyOrderAgreementFact"
+           SET "existenceState" = 'ABSENT'::"OrderExistenceState",
+               "existenceKind" = 'ABSENT_CONFIRMED_QUERY'::"OrderExistenceKind",
+               "existenceObservedAt" = ${write.observedAt},
+               "existenceRequestGen" = ${gens.request}::bigint,
+               "existenceResponseGen" = ${gens.response}::bigint,
+               "deletedAt" = COALESCE("deletedAt", ${write.observedAt}),
+               "deletionSource" = 'CONFIRMED_QUERY'::"OrderDeletionSource",
+               "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${scopesJson}::jsonb)),
+               "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+               "updatedAt" = clock_timestamp()
+         WHERE "shopId" = ${shopId}
+           AND "shopifyOrderGid" = ${parentGid}
+           AND "existenceState" = 'LIVE'
+           AND (
+             ${presentCount}::int = 0
+             OR NOT ("shopifyGid" = ANY (ARRAY(SELECT jsonb_array_elements_text(${presentJson}::jsonb))))
+           )`,
+    ShopifyOrderAgreementSaleFact: () =>
+      queryRows(db)`
+        UPDATE "ShopifyOrderAgreementSaleFact"
+           SET "existenceState" = 'ABSENT'::"OrderExistenceState",
+               "existenceKind" = 'ABSENT_CONFIRMED_QUERY'::"OrderExistenceKind",
+               "existenceObservedAt" = ${write.observedAt},
+               "existenceRequestGen" = ${gens.request}::bigint,
+               "existenceResponseGen" = ${gens.response}::bigint,
+               "deletedAt" = COALESCE("deletedAt", ${write.observedAt}),
+               "deletionSource" = 'CONFIRMED_QUERY'::"OrderDeletionSource",
+               "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${scopesJson}::jsonb)),
+               "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+               "updatedAt" = clock_timestamp()
+         WHERE "shopId" = ${shopId}
+           AND "shopifyOrderGid" = ${parentGid}
+           AND "existenceState" = 'LIVE'
+           AND (
+             ${presentCount}::int = 0
+             OR NOT ("shopifyGid" = ANY (ARRAY(SELECT jsonb_array_elements_text(${presentJson}::jsonb))))
+           )`,
+    ShopifyOrderAdjustmentFact: () =>
+      queryRows(db)`
+        UPDATE "ShopifyOrderAdjustmentFact"
+           SET "existenceState" = 'ABSENT'::"OrderExistenceState",
+               "existenceKind" = 'ABSENT_CONFIRMED_QUERY'::"OrderExistenceKind",
+               "existenceObservedAt" = ${write.observedAt},
+               "existenceRequestGen" = ${gens.request}::bigint,
+               "existenceResponseGen" = ${gens.response}::bigint,
+               "deletedAt" = COALESCE("deletedAt", ${write.observedAt}),
+               "deletionSource" = 'CONFIRMED_QUERY'::"OrderDeletionSource",
+               "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${scopesJson}::jsonb)),
+               "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+               "updatedAt" = clock_timestamp()
+         WHERE "shopId" = ${shopId}
+           AND "shopifyRefundGid" = ${parentGid}
+           AND "existenceState" = 'LIVE'
+           AND (
+             ${presentCount}::int = 0
+             OR NOT ("shopifyGid" = ANY (ARRAY(SELECT jsonb_array_elements_text(${presentJson}::jsonb))))
+           )`,
+    ShopifyOrderRefundTransactionFact: () =>
+      queryRows(db)`
+        UPDATE "ShopifyOrderRefundTransactionFact"
+           SET "existenceState" = 'ABSENT'::"OrderExistenceState",
+               "existenceKind" = 'ABSENT_CONFIRMED_QUERY'::"OrderExistenceKind",
+               "existenceObservedAt" = ${write.observedAt},
+               "existenceRequestGen" = ${gens.request}::bigint,
+               "existenceResponseGen" = ${gens.response}::bigint,
+               "deletedAt" = COALESCE("deletedAt", ${write.observedAt}),
+               "deletionSource" = 'CONFIRMED_QUERY'::"OrderDeletionSource",
+               "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${scopesJson}::jsonb)),
+               "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+               "updatedAt" = clock_timestamp()
+         WHERE "shopId" = ${shopId}
+           AND "shopifyRefundGid" = ${parentGid}
+           AND "existenceState" = 'LIVE'
+           AND (
+             ${presentCount}::int = 0
+             OR NOT ("shopifyGid" = ANY (ARRAY(SELECT jsonb_array_elements_text(${presentJson}::jsonb))))
+           )`,
+  };
+  await sqlByTable[table]();
+}
+
+export async function markOmittedOrderChildrenAbsent(
+  db: OrderApplyDb,
+  shopId: string,
+  order: OrderSnapshot,
+  write: ExistenceWriteInput,
+): Promise<void> {
+  if (!childAbsenceInterval(write)) return;
+  const presentLines = order.lines.map((item) => item.shopifyGid);
+  const presentAgreements = order.agreements.map((item) => item.shopifyGid);
+  const presentSales = order.agreements.flatMap((agreement) =>
+    agreement.sales.map((item) => item.shopifyGid),
+  );
+  await markOmittedChildRowsAbsent(
+    db,
+    "ShopifyOrderLineFact",
+    shopId,
+    order.shopifyGid,
+    presentLines,
+    write,
+  );
+  await markOmittedChildRowsAbsent(
+    db,
+    "ShopifyOrderAgreementFact",
+    shopId,
+    order.shopifyGid,
+    presentAgreements,
+    write,
+  );
+  await markOmittedChildRowsAbsent(
+    db,
+    "ShopifyOrderAgreementSaleFact",
+    shopId,
+    order.shopifyGid,
+    presentSales,
+    write,
+  );
+}
+
+export async function markOmittedRefundChildrenAbsent(
+  db: OrderApplyDb,
+  shopId: string,
+  refund: RefundSnapshot,
+  write: ExistenceWriteInput,
+): Promise<void> {
+  const interval = childAbsenceInterval(write);
+  if (!interval) return;
+  const gens = genPair(interval);
+  const scopesJson = JSON.stringify([...write.accessScopeSnapshot]);
+  const presentLineKeys = JSON.stringify(
+    refund.lines.map((item) =>
+      refundLineAbsenceKey(item.shopifyLineItemGid, item.refundLineOrdinal),
+    ),
+  );
+  const presentLineCount = refund.lines.length;
+  await queryRows(db)`
+    UPDATE "ShopifyOrderRefundLineFact"
+       SET "existenceState" = 'ABSENT'::"OrderExistenceState",
+           "existenceKind" = 'ABSENT_CONFIRMED_QUERY'::"OrderExistenceKind",
+           "existenceObservedAt" = ${write.observedAt},
+           "existenceRequestGen" = ${gens.request}::bigint,
+           "existenceResponseGen" = ${gens.response}::bigint,
+           "deletedAt" = COALESCE("deletedAt", ${write.observedAt}),
+           "deletionSource" = 'CONFIRMED_QUERY'::"OrderDeletionSource",
+           "accessScopeSnapshot" = ARRAY(SELECT jsonb_array_elements_text(${scopesJson}::jsonb)),
+           "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
+           "updatedAt" = clock_timestamp()
+     WHERE "shopId" = ${shopId}
+       AND "shopifyRefundGid" = ${refund.shopifyGid}
+       AND "existenceState" = 'LIVE'
+       AND (
+         ${presentLineCount}::int = 0
+         OR NOT (
+           ("shopifyLineItemGid" || chr(31) || "refundLineOrdinal"::text)
+           = ANY (ARRAY(SELECT jsonb_array_elements_text(${presentLineKeys}::jsonb)))
+         )
+       )`;
+  await markOmittedChildRowsAbsent(
+    db,
+    "ShopifyOrderAdjustmentFact",
+    shopId,
+    refund.shopifyGid,
+    refund.adjustments.map((item) => item.shopifyGid),
+    write,
+  );
+  await markOmittedChildRowsAbsent(
+    db,
+    "ShopifyOrderRefundTransactionFact",
+    shopId,
+    refund.shopifyGid,
+    refund.transactions.map((item) => item.shopifyGid),
+    write,
+  );
 }
 
 export async function applyOrderUnitDiagnostics(

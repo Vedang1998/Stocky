@@ -44,6 +44,15 @@ export class OrderApplyRequestGenerationMismatchError extends OrderApplyError {
   }
 }
 
+export class OrderApplyAccessScopeMismatchError extends OrderApplyError {
+  constructor(
+    message = "Caller accessScopeSnapshot does not match the durable observation row",
+  ) {
+    super("order_apply_access_scope_mismatch", message);
+    this.name = "OrderApplyAccessScopeMismatchError";
+  }
+}
+
 export class OrderApplyExistenceKindError extends OrderApplyError {
   constructor(kind: string) {
     super(

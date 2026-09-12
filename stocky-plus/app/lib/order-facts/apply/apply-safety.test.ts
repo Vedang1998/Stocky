@@ -8,6 +8,7 @@ import {
   denyOrderFactPhysicalDelete,
 } from "./index";
 import {
+  OrderApplyAccessScopeMismatchError,
   OrderApplyLeaseInvalidError,
   OrderApplyPhysicalDeleteError,
   OrderApplyRequestGenerationMismatchError,
@@ -42,6 +43,9 @@ describe("PR6-C apply surface safety (R-164)", () => {
     const error = new OrderApplyRequestGenerationMismatchError();
     expect(error).not.toBeInstanceOf(OrderApplyLeaseInvalidError);
     expect(error.code).toBe("order_apply_request_generation_mismatch");
+    const scopeError = new OrderApplyAccessScopeMismatchError();
+    expect(scopeError.code).toBe("order_apply_access_scope_mismatch");
+    expect(scopeError).not.toBeInstanceOf(OrderApplyLeaseInvalidError);
   });
 
   it("apply module source has no physical delete, Shopify I/O, or Number money arithmetic", () => {
@@ -75,6 +79,8 @@ describe("PR6-C apply surface safety (R-164)", () => {
   it("does not retry unique conflicts in-process and binds requestGen", () => {
     const fencing = readFileSync(path.join(DIR, "fencing.ts"), "utf8");
     expect(fencing).toMatch(/OrderApplyRequestGenerationMismatchError/);
+    expect(fencing).toMatch(/"accessScopeSnapshot"/);
+    expect(fencing).toMatch(/OrderApplyAccessScopeMismatchError/);
     const index = readFileSync(path.join(DIR, "index.ts"), "utf8");
     expect(index).toMatch(/MUST start a fresh[\s*]+PostgreSQL transaction/);
     const writers = readFileSync(path.join(DIR, "writers.ts"), "utf8");

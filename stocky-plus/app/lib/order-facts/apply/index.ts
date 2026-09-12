@@ -31,7 +31,12 @@ import {
   OrderApplyNumericScaleError,
   OrderApplyPhysicalDeleteError,
 } from "./errors";
-import { decideOrderExistence, scopesGrantReadAllOrders, type ExistenceDecision } from "./existence";
+import {
+  decideOrderExistence,
+  mergeAccessScopeFloor,
+  scopesGrantReadAllOrders,
+  type ExistenceDecision,
+} from "./existence";
 import {
   abandonExpiredResultlessRows,
   abandonOwnExpiredObservation,
@@ -74,12 +79,15 @@ import {
   insertOrderFact,
   lockAndReadOrderFact,
   lockAndReadRefundFact,
+  markOmittedOrderChildrenAbsent,
   nominateAbsenceCandidate,
   refreshLineDenormalized,
   requireProcessingEnabled,
   updateOrderAttributes,
   updateOrderDiagnosticsOnly,
   updateOrderExistence,
+  updateRefundDiagnosticsOnly,
+  updateRefundExistence,
   upsertAgreementAndSales,
   upsertOrderLine,
   upsertRefundSnapshot,
@@ -280,6 +288,7 @@ async function acquireOrderedLocks(
 function liveChildWrite(
   observation: OrderObservation,
   interval: GenerationInterval | null,
+  accessScopeSnapshot: readonly string[],
 ): ExistenceWriteInput {
   const nextKind =
     observation.observationKind === "full_sync"
@@ -298,7 +307,7 @@ function liveChildWrite(
     interval: nextKind === "LIVE_FULL_SYNC_PRESENT" ? null : interval,
     observedAt: observation.existenceObservedAt,
     sourceKind: observation.sourceKind,
-    accessScopeSnapshot: observation.accessScopeSnapshot,
+    accessScopeSnapshot,
   };
 }
 
@@ -308,8 +317,9 @@ async function applyOrderChildren(
   observation: OrderObservation,
   order: NonNullable<OrderObservation["order"]>,
   interval: GenerationInterval | null,
+  accessScopeSnapshot: readonly string[],
 ): Promise<void> {
-  const write = liveChildWrite(observation, interval);
+  const write = liveChildWrite(observation, interval, accessScopeSnapshot);
   for (const line of order.lines) {
     await upsertOrderLine(
       db,
@@ -331,6 +341,7 @@ async function applyOrderChildren(
       observation.sourceKind,
     );
   }
+  await markOmittedOrderChildrenAbsent(db, shopId, order, write);
   const units = evaluateUnits({
     lines: order.lines,
     agreements: order.agreements,
@@ -355,8 +366,12 @@ async function applyRefundIfClockAllows(
   observation: OrderObservation,
   refund: NonNullable<OrderObservation["refund"]>,
   interval: GenerationInterval | null,
+  accessScopeSnapshot: readonly string[],
 ): Promise<{ applied: boolean; diagnostic: string | null; factId: string | null }> {
   const stored = await lockAndReadRefundFact(db, shopId, refund.shopifyGid);
+  if (stored?.existenceState === "ABSENT") {
+    return { applied: false, diagnostic: null, factId: stored.id };
+  }
   const clock = decideClockA({
     incomingUpdatedAt: refund.shopifyUpdatedAt,
     storedUpdatedAt: stored?.shopifyUpdatedAt ?? null,
@@ -369,7 +384,7 @@ async function applyRefundIfClockAllows(
     shopId,
     refund.shopifyOrderGid,
   );
-  const write = liveChildWrite(observation, interval);
+  const write = liveChildWrite(observation, interval, accessScopeSnapshot);
   const result = await upsertRefundSnapshot(
     db,
     shopId,
@@ -408,6 +423,7 @@ async function applyOneObservation(
       ? observation.observationToken
       : null;
   const abandoned: string[] = [];
+  let currentScopes = [...observation.accessScopeSnapshot];
 
   if (identity.resourceKind === "Order") {
     await lockAndReadOrderFact(db, shopId, identity.shopifyGid);
@@ -418,13 +434,15 @@ async function applyOneObservation(
 
   if (observation.observationKind === "direct") {
     try {
-      await fenceDirectObservation(
+      const fenced = await fenceDirectObservation(
         db,
         shopId,
         token as string,
         identity,
         observation.observationRequestGen,
+        observation.accessScopeSnapshot,
       );
+      currentScopes = fenced.accessScopeSnapshot;
     } catch (error) {
       if (error instanceof OrderApplyLeaseInvalidError) {
         await abandonOwnExpiredObservation(
@@ -549,7 +567,7 @@ async function applyOneObservation(
         observation.observationKind === "direct"
           ? observation.queryReturnedNull
           : false,
-      currentScopes: observation.accessScopeSnapshot,
+      currentScopes,
       lastConfirmedScopes:
         observation.observationKind === "direct"
           ? observation.lastConfirmedAccessScopes
@@ -602,7 +620,10 @@ async function applyOneObservation(
     interval: directInterval,
     observedAt: observation.existenceObservedAt,
     sourceKind: observation.sourceKind,
-    accessScopeSnapshot: observation.accessScopeSnapshot,
+    accessScopeSnapshot: mergeAccessScopeFloor(
+      currentScopes,
+      fact?.accessScopeSnapshot,
+    ),
   });
 
   try {
@@ -623,45 +644,60 @@ async function applyOneObservation(
       );
     }
 
-    if (existenceDecision.mutate && identity.resourceKind === "Order") {
+    if (existenceDecision.mutate) {
       const write = writeFromDecision(existenceDecision);
-      if (!fact) {
-        if (
-          existenceDecision.nextState === "LIVE" &&
-          observation.order &&
-          (observation.existenceKind === "LIVE_REFETCH" ||
-            observation.existenceKind === "LIVE_FULL_SYNC_PRESENT")
-        ) {
-          factId = await insertOrderFact(
-            db,
-            shopId,
-            observation.order,
-            write,
-            observation.sourceKind,
-          );
-          fact = await lockAndReadOrderFact(db, shopId, identity.shopifyGid);
-          existenceMutated = true;
-          attributesApplied = true;
+      if (identity.resourceKind === "Order") {
+        if (!fact) {
+          if (
+            existenceDecision.nextState === "LIVE" &&
+            observation.order &&
+            (observation.existenceKind === "LIVE_REFETCH" ||
+              observation.existenceKind === "LIVE_FULL_SYNC_PRESENT")
+          ) {
+            factId = await insertOrderFact(
+              db,
+              shopId,
+              observation.order,
+              write,
+              observation.sourceKind,
+            );
+            fact = await lockAndReadOrderFact(db, shopId, identity.shopifyGid);
+            existenceMutated = true;
+            attributesApplied = true;
+          } else {
+            existenceMutated = false;
+          }
         } else {
-          existenceMutated = false;
+          await updateOrderExistence(db, shopId, fact.id, write);
+          existenceMutated = true;
+          fact = await lockAndReadOrderFact(db, shopId, identity.shopifyGid);
         }
-      } else {
-        await updateOrderExistence(db, shopId, fact.id, write);
+      } else if (fact) {
+        await updateRefundExistence(db, shopId, fact.id, write);
         existenceMutated = true;
-        fact = await lockAndReadOrderFact(db, shopId, identity.shopifyGid);
+        fact = await lockAndReadRefundFact(db, shopId, identity.shopifyGid);
       }
     } else if (
-      !existenceDecision.mutate &&
       fact &&
       (existenceDecision.diagnostic || existenceDecision.historyWindowState)
     ) {
-      await updateOrderDiagnosticsOnly(
-        db,
-        shopId,
-        fact.id,
-        existenceDecision.diagnostic,
-        existenceDecision.historyWindowState ?? null,
-      );
+      if (identity.resourceKind === "Order") {
+        await updateOrderDiagnosticsOnly(
+          db,
+          shopId,
+          fact.id,
+          existenceDecision.diagnostic,
+          existenceDecision.historyWindowState ?? null,
+        );
+      } else {
+        await updateRefundDiagnosticsOnly(
+          db,
+          shopId,
+          fact.id,
+          existenceDecision.diagnostic,
+          existenceDecision.historyWindowState ?? null,
+        );
+      }
     }
 
     const incomingLive =
@@ -671,6 +707,10 @@ async function applyOneObservation(
     const resultingLive = existenceDecision.mutate
       ? existenceDecision.nextState === "LIVE"
       : fact?.existenceState === "LIVE";
+    const childScopes = mergeAccessScopeFloor(
+      currentScopes,
+      fact?.accessScopeSnapshot,
+    );
     if (
       identity.resourceKind === "Order" &&
       incomingLive &&
@@ -701,29 +741,47 @@ async function applyOneObservation(
           observation,
           orderSnapshot,
           directInterval,
+          childScopes,
         );
         childrenApplied = true;
       }
     }
 
-    for (const refund of refunds) {
-      const refundResult = await applyRefundIfClockAllows(
-        db,
-        shopId,
-        observation,
-        refund,
-        directInterval,
-      );
-      if (refundResult.applied) {
-        childrenApplied = true;
-        if (refundResult.diagnostic) diagnostic = refundResult.diagnostic;
-        if (!factId) factId = refundResult.factId;
+    const allowRefundWrites =
+      !existenceBlocked &&
+      (identity.resourceKind !== "Refund" || Boolean(resultingLive));
+    if (allowRefundWrites) {
+      for (const refund of refunds) {
+        const refundResult = await applyRefundIfClockAllows(
+          db,
+          shopId,
+          observation,
+          refund,
+          directInterval,
+          childScopes,
+        );
+        if (refundResult.applied) {
+          childrenApplied = true;
+          if (refundResult.diagnostic) diagnostic = refundResult.diagnostic;
+          if (!factId) factId = refundResult.factId;
+          if (
+            identity.resourceKind === "Refund" &&
+            existenceDecision.mutate &&
+            existenceDecision.nextState === "LIVE" &&
+            !existenceMutated
+          ) {
+            existenceMutated = true;
+            fact = await lockAndReadRefundFact(db, shopId, identity.shopifyGid);
+            factId = fact?.id ?? factId;
+          }
+        }
       }
     }
 
     if (
       observation.observationKind === "full_sync" &&
       observation.nominateAbsence &&
+      identity.resourceKind === "Order" &&
       fact &&
       fact.existenceState === "LIVE" &&
       isWithinHistoryWindow({
@@ -731,9 +789,7 @@ async function applyOneObservation(
         shopifyCreatedAt: fact.shopifyCreatedAt,
         observedAt: observation.existenceObservedAt,
         windowDays: ORDER_HISTORY_WINDOW_DAYS,
-        hasReadAllOrders: scopesGrantReadAllOrders(
-          observation.accessScopeSnapshot,
-        ),
+        hasReadAllOrders: scopesGrantReadAllOrders(currentScopes),
       })
     ) {
       await nominateAbsenceCandidate(db, shopId, fact.id);
@@ -758,13 +814,23 @@ async function applyOneObservation(
           ? DIAGNOSTIC.MONEY_CURRENCY
           : diagnostic;
       if (fact) {
-        await updateOrderDiagnosticsOnly(
-          db,
-          shopId,
-          fact.id,
-          moneyDiag,
-          null,
-        );
+        if (identity.resourceKind === "Order") {
+          await updateOrderDiagnosticsOnly(
+            db,
+            shopId,
+            fact.id,
+            moneyDiag,
+            null,
+          );
+        } else {
+          await updateRefundDiagnosticsOnly(
+            db,
+            shopId,
+            fact.id,
+            moneyDiag,
+            null,
+          );
+        }
       }
       return {
         abandoned,
@@ -886,7 +952,7 @@ export async function applyOrderFacts(
       results: [],
       identitiesLocked: 0,
       abandonedBlockerTokens: [],
-      receiptStatus: input.receipt ? "applied" : "none",
+      receiptStatus: "none",
     };
   }
 
@@ -947,7 +1013,12 @@ export async function applyOrderFacts(
   }
 
   let receiptStatus: OrderApplyBatchResult["receiptStatus"] = "none";
-  if (input.receipt) {
+  const receiptCertifiesSuccess =
+    results.length > 0 &&
+    results.every(
+      (result) => result.outcome === "applied" || result.outcome === "noop",
+    );
+  if (input.receipt && receiptCertifiesSuccess) {
     const inserted = await insertReceiptFinal(
       db,
       input.shopId,

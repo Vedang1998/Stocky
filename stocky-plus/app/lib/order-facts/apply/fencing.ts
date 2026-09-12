@@ -2,8 +2,10 @@
  * OrderFactObservationInFlight fencing. Lease validity uses PostgreSQL
  * clock_timestamp() only. No Shopify I/O.
  */
+import { accessScopeSetsEqual } from "./existence";
 import {
   OrderApplyAbandonedTokenError,
+  OrderApplyAccessScopeMismatchError,
   OrderApplyError,
   OrderApplyLeaseInvalidError,
   OrderApplyMissingTokenError,
@@ -14,6 +16,7 @@ import {
   asBigIntOrNull,
   asBool,
   asDate,
+  asStringArray,
   queryRows,
   type OrderApplyDb,
 } from "./sql";
@@ -27,6 +30,7 @@ export type ObservationRow = {
   observationResponseGen: bigint | null;
   leaseExpiresAt: Date;
   terminalOutcome: string | null;
+  accessScopeSnapshot: string[];
 };
 
 export async function lockObservationRows(
@@ -62,6 +66,7 @@ export async function lockObservationRows(
     ),
     leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
     terminalOutcome: row.terminalOutcome,
+    accessScopeSnapshot: [],
   }));
 }
 
@@ -71,6 +76,7 @@ export async function fenceDirectObservation(
   token: string,
   identity: OrderApplyIdentity,
   expectedRequestGen: bigint,
+  expectedAccessScopes: readonly string[],
 ): Promise<ObservationRow> {
   if (!token) {
     throw new OrderApplyMissingTokenError();
@@ -83,8 +89,9 @@ export async function fenceDirectObservation(
     leaseExpiresAt: unknown;
     leaseValid: boolean;
     terminalOutcome: string | null;
+    accessScopeSnapshot: unknown;
   }>(db)`SELECT id, "lifecycleState", "observationRequestGen", "observationResponseGen",
-            "leaseExpiresAt", "terminalOutcome",
+            "leaseExpiresAt", "terminalOutcome", "accessScopeSnapshot",
             (clock_timestamp() < "leaseExpiresAt") AS "leaseValid"
      FROM "OrderFactObservationInFlight"
      WHERE "shopId" = ${shopId}
@@ -116,9 +123,13 @@ export async function fenceDirectObservation(
     ),
     leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
     terminalOutcome: row.terminalOutcome,
+    accessScopeSnapshot: asStringArray(row.accessScopeSnapshot),
   };
   if (mapped.observationRequestGen !== expectedRequestGen) {
     throw new OrderApplyRequestGenerationMismatchError();
+  }
+  if (!accessScopeSetsEqual(mapped.accessScopeSnapshot, expectedAccessScopes)) {
+    throw new OrderApplyAccessScopeMismatchError();
   }
   if (mapped.lifecycleState === "ABANDONED") {
     throw new OrderApplyAbandonedTokenError();
@@ -183,6 +194,7 @@ export async function loadExpiredActiveResultlessBlockers(
     ),
     leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
     terminalOutcome: row.terminalOutcome,
+    accessScopeSnapshot: [],
   }));
 }
 
@@ -255,6 +267,7 @@ export async function loadActiveUnexpiredBlockers(
     ),
     leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
     terminalOutcome: row.terminalOutcome,
+    accessScopeSnapshot: [],
   }));
 }
 
@@ -293,6 +306,7 @@ export async function loadActiveUnexpiredBlockersForFullSync(
     ),
     leaseExpiresAt: asDate(row.leaseExpiresAt) ?? new Date(0),
     terminalOutcome: row.terminalOutcome,
+    accessScopeSnapshot: [],
   }));
 }
 
