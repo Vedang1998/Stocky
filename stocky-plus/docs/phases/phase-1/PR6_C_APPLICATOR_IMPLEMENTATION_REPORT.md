@@ -4,7 +4,7 @@
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
 **PR:** #40 OPEN / DRAFT / UNMERGED
 **Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719); routing/continuation [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315) (`user=Vedang1998`, `created_at=2026-09-12T18:21:41Z`, id `5647803315`) — this is the outstanding C evidence-completion assignment, not a repeat of the already executed F-01–F-08 package.
-**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 are implemented; F-09–F-12 are disposed; gates A–E smoke remain. This head additionally executes the ChatGPT evidence-completion work order (PR #40 comment [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315)): actual 1,000,000-line C apply, actual pinned-B reader overlay, and real session/process-loss. This is **not** a resubmission of the unchanged `b0b7f58` packet. Independent re-review and ChatGPT complete-module acceptance remain **pending**. Merge is **not** authorized.
+**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 are implemented; F-09–F-12 are disposed; gates A–E smoke remain. This head additionally executes the ChatGPT evidence-completion work order (PR #40 comment [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315)): actual 1,000,000-line C apply, actual pinned-B reader overlay, and real session/process-loss. Exact-head `pull_request` run [34714619941](https://github.com/Vedang1998/Stocky/actions/runs/34714619941) on `e5af049…` is **not** success: Classify SUCCESS, Heavy **CANCELLED** at `timeout-minutes: 70`, CI Gate FAIL (`validate_result=cancelled`). This documentation commit records that outcome and the C-owned Heavy-budget fixes; it is **not** a resubmission of the unchanged `b0b7f58` packet. Independent re-review and ChatGPT complete-module acceptance remain **pending**. Merge is **not** authorized. Do **not** treat this file as `READY FOR CHATGPT PR6-C EVIDENCE-COMPLETE CORRECTION REVIEW` until Classify + Heavy + Gate are SUCCESS on the live PR head.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
@@ -246,9 +246,9 @@ Prior F-01–F-08 / gates / mapper-only probe commands remain recorded against `
 | `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 403) |
 | `git diff --check` | 0 | clean |
 | `.github/scripts/classify-ci-change-set.sh --from-git bdbb5bba… 14fb29f…` | 0 | `docs_only=false` `full_ci=true` `classification_reason=non_docs_or_unknown_path` `changed_path_count=34` |
-| exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not later-push solely to embed CI IDs. |
+| exact-head `pull_request` on `e5af049459992f3c6a5c32b799dca00d1279020e` | Gate 1 | run [34714619941](https://github.com/Vedang1998/Stocky/actions/runs/34714619941) `event=pull_request`. Classify job `103609574612` **SUCCESS**. Heavy job `103609595251` **CANCELLED** (`startedAt=2026-09-12T22:19:23Z`, `completedAt=2026-09-12T23:29:45Z`, ~70m22s, `timeout-minutes: 70`). CI Gate job `103638944625` **FAIL**: `classify_result=success` `validate_result=cancelled` `full_ci=true` `docs_only=false` — `CI Gate FAIL: full CI required but validate result is cancelled`. Do **not** label this run Heavy SUCCESS or exact-head green. |
 
-Previous exact-head SUCCESS values on `04a3e276…` / `9f3840a…` / `65bf143…` / `b0b7f58…` / `26dd788…` / `14fb29f…` are superseded once this documentation commit is pushed and are **not** substituted as exact-head evidence for this packet.
+Previous exact-head SUCCESS values on `04a3e276…` / `9f3840a…` / `65bf143…` / `b0b7f58…` / `26dd788…` / `14fb29f…` are superseded and are **not** substituted as exact-head evidence for this packet. Run `34714619941` is the exact-head result for `e5af049…` and is **cancelled/failed**, not success. This documentation commit will have its own exact-head run after push; do not later-push solely to embed that future run ID.
 
 Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only (`scannedFiles` 396 → 403). Digest unchanged. No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited. No `admin-read/**` files on this branch.
 
@@ -291,7 +291,7 @@ This is **not** extrapolation from Gate E’s 1,400 lines.
 | Host (this execution) | 4 CPUs; MemTotal 16398384 kB; `PostgreSQL 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` |
 | Assertions | `ShopifyOrderLineFact` count **exactly** 1,000,000; high-child parent `LIVE=1` / `ABSENT=499`; not equal to 1400 |
 
-PHASE_BRIEF list p95 < 500ms and webhook enqueue p95 < 1s are **not** this apply SLA. The envelope is skipped unless `PR6_C_SCALE_1E6=1`. On `GITHUB_ACTIONS=true` the policy test asserts the env is unset. Heavy `timeout-minutes` is 70. Exact-head Heavy on `b0b7f58…` (run `34670954315`, job started `2026-09-12T03:39:58Z` / completed `2026-09-12T04:36:12Z`) already consumed ~56 minutes; adding this envelope’s 912s locally would risk the 70-minute job budget, and workflow YAML is outside C ownership. Default `npm run test:migrations` therefore records **1 skipped** (the envelope) and must not be labelled as a 1e6 pass.
+PHASE_BRIEF list p95 < 500ms and webhook enqueue p95 < 1s are **not** this apply SLA. The envelope is skipped unless `PR6_C_SCALE_1E6=1`. On `GITHUB_ACTIONS=true` the policy test asserts the env is unset. Schema reset for the envelope lives **inside** the `it.skipIf` body so a skip cannot run `resetSchemaAndApplyEnforcement`. Heavy `timeout-minutes` is 70. Exact-head Heavy on `b0b7f58…` (run `34670954315`, job started `2026-09-12T03:39:58Z` / completed `2026-09-12T04:36:12Z`) consumed ~56 minutes. Exact-head Heavy on `e5af049…` (run `34714619941`, job `103609595251`) was **CANCELLED** at that 70-minute cap during aggregate `test:migrations` after ~53 minutes of pre-migration steps (vs ~40 minutes on `b0b7f58…`). C cannot change `.github/workflows/ci.yml`. Default `npm run test:migrations` therefore records **1 skipped** (the envelope) and must not be labelled as a 1e6 pass.
 
 ## 6.3 Actual pinned B reader overlay (executed, overlay removed)
 
@@ -335,7 +335,7 @@ Pinned B production/test-transport blobs at `610ed050` (`git rev-parse 610ed050:
 
 ## 6.4 Real session/process-loss and uncertain outcome (executed)
 
-Distinct from Gate A SQL `ROLLBACK` / `COMMIT` controls and from adversarial receipt DELETE. No D worker. File: `pr6-c-process-loss.test.ts` plus child `pr6-c-process-loss-child.ts`. **7** passed / 1 file (focused 5990ms; re-executed in the full corpus).
+Distinct from Gate A SQL `ROLLBACK` / `COMMIT` controls and from adversarial receipt DELETE. No D worker. File: `pr6-c-process-loss.test.ts` plus child `pr6-c-process-loss-child.ts`. Child park after `applied`/`committed` is **30s** (not 120s) so a missed SIGKILL cannot hold the receipt lock across later Heavy files. `waitExit` is 2s then `pg_terminate_backend`. The source-bound park assertion is an additional test in the same file.
 
 | Case | Mechanism | Result |
 |---|---|---|
@@ -346,6 +346,32 @@ Distinct from Gate A SQL `ROLLBACK` / `COMMIT` controls and from adversarial rec
 | Process SIGKILL after COMMIT | SIGKILL after child `committed` | 1 fact + 1 receipt; retry `already_applied`; still 1 |
 | Uncertain COMMIT | `pg_terminate_backend` during child COMMIT race, then retry | retry `applied` or `already_applied`; **exactly** 1 fact + 1 receipt |
 | Uncertain socket destroy | destroy the pg stream during `COMMIT`, then retry | retry `applied` or `already_applied`; **exactly** 1 fact + 1 receipt |
+| Child park bound | source assertion | child has `sleep(30_000)` and must not contain `sleep(120_000)` |
+
+## 6.5 Exact-head CI on `e5af049…` (executed, not success)
+
+Authoritative run: [34714619941](https://github.com/Vedang1998/Stocky/actions/runs/34714619941) `event=pull_request` `head_sha=e5af049459992f3c6a5c32b799dca00d1279020e`.
+
+| Check | Job | Result |
+|---|---|---|
+| Classify change set | `103609574612` | SUCCESS (~19:36Z) |
+| Lint, typecheck, test, build, Prisma, GraphQL | `103609595251` | **CANCELLED** at job `timeout-minutes: 70` (queued ~162 min on `ubuntu-latest`, then `startedAt=2026-09-12T22:19:23Z` / `completedAt=2026-09-12T23:29:45Z`) |
+| CI Gate | `103638944625` | **FAIL** — `validate_result=cancelled` |
+
+Heavy reached aggregate `Migration and tenant-backfill tests` at `23:12:56Z` and was cancelled at `23:29:36Z` (`##[error]The operation was canceled.`). C-owned files that had already finished in that step:
+
+| File | Result in cancelled log |
+|---|---|
+| `pr6-c-canonical-applicator.test.ts` | 82 passed |
+| `pr6-c-b-reader-overlay.test.ts` | 18 passed (`git fetch` of pin `610ed050…` observed) |
+| `pr6-c-b-compat-probe.test.ts` | 17 passed |
+| `pr6-c-evidence-gates.test.ts` | 9 passed |
+| `pr6-c-process-loss.test.ts` | 7 passed |
+| `pr6-c-scale-envelope.test.ts` | 2 tests / 1 skipped |
+
+Non-C file `scripts/tenant-indexes/tests/indexes.migration.test.ts` reported **1 failed** (`DML overlaps active build-scan and validation-scan phases (F-F03)` → `expected true to be false`, `buildSettled`). That file is outside C ownership. The Gate failure mode is Heavy **cancelled**, not a completed vitest non-zero exit. Do not treat F-F03 as the Gate cause and do not edit tenant-indexes from this lane.
+
+Pre-migration wall on this job was ~53 minutes vs ~40 minutes on successful `b0b7f58…` Heavy `103492147143`. C cannot raise `timeout-minutes`.
 
 ## 7. Risk status after this slice
 
@@ -389,6 +415,8 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 
 ## 9. Packet for ChatGPT
 
-This lane is ready for ChatGPT **PR6-C evidence-completion** disposition after exact-head `pull_request` Classify SUCCESS, full Heavy SUCCESS (not SKIPPED), and CI Gate SUCCESS on the live PR head that contains this report. Until those GitHub checks exist, do not treat local suites as a substitute for exact-head CI.
+**PR6-C EVIDENCE GATE BLOCKED — NOT READY FOR ACCEPTANCE** on `e5af049…` because exact-head Heavy was cancelled at 70 minutes and CI Gate failed. Local 1e6 / overlay / process-loss evidence in §6 remains executed; it is **not** a substitute for exact-head Classify + Heavy + Gate SUCCESS.
 
-This packet is **not** a resubmission of the unchanged `b0b7f58` return. Independent Claude re-review of the correction-plus-evidence head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW` and is **not** merge authorization. R-176 remains **OPEN / P0**.
+C-owned follow-up on this documentation head (does **not** change workflow YAML): envelope schema reset cannot run when the 1e6 `it` is skipped; process-loss child park is 30s not 120s. Overlay and process-loss PG cases still run in default `test:migrations` (they passed inside cancelled run `34714619941` before the job was killed). Raising `timeout-minutes` is outside C ownership.
+
+This packet is **not** a resubmission of the unchanged `b0b7f58` return. Independent Claude re-review of the correction-plus-evidence head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`, **not** `READY FOR CHATGPT PR6-C EVIDENCE-COMPLETE CORRECTION REVIEW`, and is **not** merge authorization. R-176 remains **OPEN / P0**.
