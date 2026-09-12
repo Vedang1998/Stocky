@@ -240,7 +240,7 @@ Prior F-01–F-08 / gates / mapper-only probe commands remain recorded against `
 | `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-reader-overlay.test.ts` (additional actual-reader cases) | 0 | **18** passed / 1 file (nonzero; collected 18). Overlay removed afterwards. |
 | `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **108** passed / 3 files (nonzero; collected 108 = 82 + 9 + 17) |
 | `PR6_C_SCALE_1E6=1 npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` | 0 | **2** passed / 1 file (nonzero; collected 2). **Actual** 1,000,000 line facts. Duration 912.06s. See §6.2. |
-| `npm run test:migrations` (full corpus, CI-like disposable env, `PR6_C_SCALE_1E6` unset) | 0 | **595** passed / **1** skipped / 66 files (nonzero; collected 596). The skip is the 1e6 envelope. Duration 666.70s. Overlay 12 and process-loss 7 passed inside this corpus. |
+| `npm run test:migrations` (full corpus, CI-like disposable env, `PR6_C_SCALE_1E6` unset) | 0 | **595** passed / **1** skipped / 66 files on `14fb29f…` (nonzero; collected 596). The skip is the 1e6 envelope. Duration 666.70s. Overlay **12** and process-loss **7** passed inside that corpus; do not relabel as the later 18-test overlay file. |
 | `npm run build` | 0 | client + SSR production build |
 | `npm run tenant:access:inventory` | 0 | `tenant_access_inventory_written` findings 1741 violations 0 |
 | `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 403) |
