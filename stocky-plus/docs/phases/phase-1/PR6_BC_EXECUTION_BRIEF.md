@@ -150,3 +150,33 @@ T19 is **reader** pagination of 300 lines, not webhook projection. T20 must **no
 - Production, merchant production data, deployment, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**.
 - No live store call is authorized by this brief.
 - No D-055.
+
+## ChatGPT consolidated-correction addendum (PR #39 comment 5642819080)
+
+**Authorization:** ChatGPT comment [`5642819080`](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5642819080) (companion C comment `5642820719`). Same D-054. **No D-055.**
+
+**Old / new boundary**
+
+| Topic | Previous B/C shared record | Corrected boundary |
+|---|---|---|
+| B null / aged-out `order(id:)` | T41 mapped explicit null to A's existence kind `INACCESSIBLE_HISTORY_WINDOW` | B reports **neutral read evidence only**. Initial explicit null selected root on a well-formed, successful, error-free query is `{ status: "null_observed", resourceKind, requestedGid, queryCompleted: true, nodeReturned: null, phase: "initial", cost }`. B does **not** assign `INACCESSIBLE_HISTORY_WINDOW`. C still adjudicates stored history and scope continuity. D later constructs observations from this evidence plus trusted provenance. |
+| Required `Order.refunds` | Missing/null/non-array collapsed to `[]` in a complete snapshot | Absent/null/object/scalar, null/malformed entries, invalid/duplicate refund GIDs fail closed. Genuine `refunds: []` remains a valid complete snapshot. Refund-line quantities are **not** a second unit ledger; SalesAgreement/Sale remains the sole unit ledger. |
+| Pagination completeness | First-page Order header / last-page Refund header could mix with other versions | Per-resource Clock A pin using exact timestamp strings (no `Date` conversion). Order pin includes `updatedAt` + `currencyCode`; sales pages select and check both. Refund pin is independent and taken from the **first** page of that Refund walk. Drift, disappearance after presence, empty promised continuation, or cursor loop → `SNAPSHOT_PAGINATION_INCOMPLETE`. Bounded version recheck shares the request budget. Do **not** compare `lineItems.length` with `subtotalLineItemsQuantity` / `currentSubtotalLineItemsQuantity` (those are unit sums). |
+| Bulk eligibility | AST counted definitions independently; unused fragments could inflate depth; multi-op implicit choice | Operation-scoped walk of the single executable operation and reachable fragments. Multiple executable operations are rejected. Unused fragments are not executed connections. Unknown/unresolved shape is never `eligible: true`. Frozen catalog validator untouched. Bulk B remains disabled. No `bulkOperationRunQuery` / store call. |
+| Restock / ordinals | B did not select `restocked` / `location { id }` and did not emit `refundLineOrdinal` | B now maps `restocked` / `restockLocationId` and zero-based `refundLineOrdinal` over the **complete** paginated refund-line connection. C remains the consumer. These fields are not sale-location authority and not inventory-mutation permission. |
+| Refund parent GID | Nullable `RefundRead.orderId` vs C required `shopifyOrderGid` | `orderId = null` is **not** permission to fabricate a parent GID. A complete snapshot with a **known authoritative parent GID** may persist without a local Order row. In an embedded Order walk, the enclosing authenticated Order GID is valid lineage; a contradictory returned parent GID fails. Standalone B output with a truly unknown parent must remain `null` and must not be silently cast to C's required string. Absent parent identity is a typed blocked mapping/observation in C, with no canonical-success claim. |
+| Receipts (C-owned; recorded here so lanes do not invent a second rule) | C's companion correction owns the implementation | Receipt success certifies a terminal **accepted** operation only — never rejection, incompleteness, blocking, or uncertainty. An empty new batch has no receipt. A receipted batch cannot silently commit a successful subset and discard a failed subset. |
+| Child omission (C-owned; recorded here) | §5.1 vs full-sync | Direct complete-parent child omission is **parent-scoped**. Full-sync omission remains candidate/reconcile evidence, not direct-query deletion proof. Preserve A's CHECKs and root revival rules. |
+| At-sale linkage (C F-11 residual) | Current catalog GIDs recorded as at-sale on first insert | First historical import has a **source limitation**. Preserve observed GID and provenance. Do not claim a separately verified checkout-time link. Never relink by SKU, infer a historical GID, or invent an unavailable legacy ID. C must keep already-established at-sale identity. This is a source/provenance residual, **not** a code-generation license. |
+| Discount alias lineage | Both `withCodeDiscounts` aliases selected | Canonical `discountedTotalSet` mapping uses `withCodeDiscounts: true`. Both aliases remain in B when returned. The without-code value is **not** a second authority. No new fact column. Per-row provenance of the argument is not a separate stored column in B; residual for D rather than a false "stored" claim. Raw decimal strings still cross B; C remains the exact-decimal boundary. |
+| `read_all_orders` / live refund-bearing ratio | UNVERIFIED | Remain UNVERIFIED / non-granted. No store call. Not newly invented blockers for this correction. |
+
+**Merchant effect:** none in production. This correction changes B's typed read evidence so C/D do not parse English `detail` and do not treat fabricated empty collections or mixed-version pages as complete merchant snapshots.
+
+**Schema / migration:** none. No A types/constants/locks change. No D-055.
+
+**Lane independence:** C need not wait for a B merge. When this corrected typed read contract exists at an exact commit, B publishes one PR comment so C can pin it. This addendum freezes the source-level contract.
+
+**Ownership wording (F-11):** B cannot implement C on the B branch. C's separately authorized lane is **in correction**, not globally unauthorized. PR6-D runtime, production, merchant data, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**.
+
+R-176 stays **OPEN / P0**. R-164 unchanged. Neither B nor C is accepted for merge on this addendum.

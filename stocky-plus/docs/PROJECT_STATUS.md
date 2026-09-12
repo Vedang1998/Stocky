@@ -1,6 +1,6 @@
 # Project Status
 
-**Updated:** 2026-09-11
+**Updated:** 2026-09-12
 **Current stage:** Phase 1 PR6-A FOUNDATION ACCEPTED / MERGED / CLOSED — PR6-B / PR6-C COMPLETE-MODULE WORK AUTHORIZED AFTER ADMISSION; PR6-D RUNTIME NOT AUTHORIZED
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
@@ -25,7 +25,7 @@
 **PR #37:** CLOSED / MERGED; squash **M** / current `origin/main` `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` at `2026-09-11T20:07:27Z`; exact-M push CI run `34642536795` SUCCESS (Classify `103405479267` SUCCESS; full Heavy `103405514450` SUCCESS; CI Gate `103422700596` SUCCESS)
 **PR6 planning:** ACCEPTED / MERGED — independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING`; immutable final review blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`
 **PR6-A:** ACCEPTED / MERGED / CLOSED — PR [#37](https://github.com/Vedang1998/Stocky/pull/37); independent correction verdict `APPROVE PR6-A FOUNDATION CORRECTION` (blob `da388c5d2ffa8bc0e04312de9c14a831b5ba4010`)
-**PR6-B / PR6-C:** AUTHORIZED after admission — complete modules on separate branches from **M**; B owns shared control docs; C starts from M, not B runtime
+**PR6-B / PR6-C:** AUTHORIZED after admission — complete modules on separate branches from **M**; B owns shared control docs; C starts from M, not B runtime. PR #39 (B) is **OPEN / DRAFT / UNMERGED** and is executing the ChatGPT consolidated correction ([5642819080](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5642819080)); it is **not** accepted for merge. C remains a separately authorized parallel lane in correction, not globally unauthorized.
 **PR6-D runtime:** NOT AUTHORIZED
 **Monday 7 September 2026 target:** missed (not re-dated)
 **Production:** NOT AUTHORIZED

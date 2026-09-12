@@ -1,6 +1,6 @@
 # Phase 1 PR6-B — Admin READ order and refund extraction
 
-**Status:** Implementation complete — pending independent Claude review and ChatGPT acceptance
+**Status:** Consolidated correction implemented — pending independent Claude re-review of PR #39 and ChatGPT acceptance
 **Slice:** PR6-B Admin READ / extraction only
 **Branch:** `phase-1/pr6-b-order-admin-read`
 **Authority:** D-054 **EFFECTIVE**. PR6-A **ACCEPTED / MERGED / CLOSED**. No D-055.
@@ -10,11 +10,12 @@
 **Production:** NOT AUTHORIZED
 **Merchant production data:** NOT AUTHORIZED
 **Shopify writes / inventory writes / scope additions / flag enablement:** NOT AUTHORIZED
-**PR6-C apply / PR6-D runtime:** NOT AUTHORIZED on this branch
+**PR6-C apply:** not implemented on this branch; C's separately authorized lane is in correction, not globally unauthorized
+**PR6-D runtime:** NOT AUTHORIZED
 
-This report records the PR6-B Admin READ implementation. It does **not** claim independent review, ChatGPT acceptance, merge authorization, or PR 6 completion. It does **not** start C apply, D webhooks/import, or production.
+This report records the PR6-B Admin READ implementation **and** the ChatGPT-authorized consolidated correction of F-CLAUDE-PR6B-01…11. It does **not** claim independent re-review approval, ChatGPT acceptance, merge authorization, or PR 6 completion. It does **not** start C apply, D webhooks/import, or production.
 
-This file does **not** invent its own commit SHA or the live PR-head SHA that contains this file. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs are recorded in the PR body after that head exists; they are not guessed here.
+This file does **not** invent its own commit SHA or the live PR-head SHA that contains this file. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs are recorded in the PR body after that head exists; they are not guessed here. Baseline exact-head run on pre-correction head `d9717f68ea981aa68f108428a31d7726d0ba2a8f` is [`34651155935`](https://github.com/Vedang1998/Stocky/actions/runs/34651155935) **SUCCESS** and is **not** evidence for the correction head.
 
 ---
 
@@ -34,6 +35,9 @@ This file does **not** invent its own commit SHA or the live PR-head SHA that co
 | First runtime commit | `3031119dbb791ae7aed86600f4edf11c76e8bc94` |
 | Test/codegen/static-safety fix | `e82e0f2d66322ab685e1da78d6621426aee87644` |
 | Runtime/test implementation head | `748b84f981757f31241c23a6c968c98840e993c1` |
+| Implementation report commit / pre-correction live PR head | `d9717f68ea981aa68f108428a31d7726d0ba2a8f` |
+| Immutable B independent review | commit `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`; blob `b4533610b5af305816aef5434b884c3065b06f94`; sole parent `d9717f68…`; one-file delta `PR6_B_ADMIN_READ_INDEPENDENT_REVIEW.md` (never edit) |
+| ChatGPT correction decision | PR #39 comment [`5642819080`](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5642819080) |
 | Draft PR | https://github.com/Vedang1998/Stocky/pull/39 (draft, targeting `main`) |
 | Admin API | **2026-07** QUERY-only (`ApiVersion.July26`); not bumped |
 | Working tree at runtime/test head | clean |
@@ -128,11 +132,12 @@ Fragments: `OrderLineFactFields` aliases `discountedTotalSet(withCodeDiscounts: 
 - Page size default `ORDER_ADMIN_READ_PAGE_SIZE = 100`.
 - Request budget `ORDER_ADMIN_READ_MAX_REQUESTS = 250`. Exhaustion → typed `SNAPSHOT_PAGINATION_INCOMPLETE`, never a truncated complete snapshot (T57). B does **not** persist that outcome onto `OrderFactObservationInFlight` (C owns apply).
 - Extra line pages re-query `OrderFactById` and consume only `lineItems`. Extra agreement pages consume only `agreements`.
-- T19: 300 lines, page size 100, three `OrderFactById` calls, no silent 250-line cap. T19 is **reader** pagination, not webhook projection.
+- T19: 300 lines, page size 100, **four** `OrderFactById` calls (three pages + one bounded version recheck counted in the request budget), no silent 250-line cap. T19 is **reader** pagination, not webhook projection. The pre-correction three-call expectation is replaced by this stronger regression, not deleted.
 - T39: 101 lines (exactly one extra page) all present.
-- Truncated refund embeds continue via `RefundFactById` (T56: two refunds × 150 lines, `childrenComplete === true`).
-- Cursor fail-closed: missing `pageInfo`, empty page with `hasNextPage`, `hasNextPage` without `endCursor`.
-- Aged-out `order(id:)` null → `INACCESSIBLE_HISTORY_WINDOW`. Detail does **not** say “tombstone” (T41). Nested paging that later returns null does not fabricate an Order/Agreement/Sale.
+- Truncated refund embeds continue via `RefundFactById` (T56: two refunds × 150 lines, `childrenComplete === true`). A first standalone `RefundFactById` made to continue an already-truncated embed is continuation evidence, not `null_observed`.
+- Cursor fail-closed: missing `pageInfo`, empty page with `hasNextPage`, `hasNextPage` without `endCursor`, empty continuation after `hasNextPage`.
+- Aged-out `order(id:)` explicit null → **`null_observed`** (T41 kept as a stronger regression). Detail does **not** say “tombstone”. Nested paging that later returns null is `SNAPSHOT_PAGINATION_INCOMPLETE` and does not fabricate an Order/Agreement/Sale.
+- Complete results pin Order `updatedAt` + `currencyCode` from the first page and Refund `updatedAt` from the first Refund page. Comparisons are exact timestamp strings. Independent Order/Refund clocks are allowed.
 
 ---
 
@@ -154,7 +159,7 @@ Required vs optional bags are **imported** from A `ORDER_REQUIRED_MONEY_BAGS` / 
 Two gates on this tree. Frozen catalog `app/lib/catalog-facts/admin-read/bulk-query-schema.ts` was **not** modified.
 
 1. graphql-js `specifiedRules` against generated `app/types/admin-2026-07.schema.json` (path `../../../types/admin-2026-07.schema.json`). No `fetch`, no shopify.dev.
-2. Shopify bulk-rule validator: must include a connection; ≤5 connections; ≤2 nested connection levels; connection node types must implement **Node**; no top-level `node`/`nodes`.
+2. Shopify bulk-rule validator: inspects the **single executed operation** and reachable named/inline fragments while retaining parent type, root position, and connection depth. Must include a connection; ≤5 connections; ≤2 nested connection levels; connection node types must implement **Node**; no top-level `node`/`nodes`. Multiple executable operations are rejected rather than chosen implicitly. Unused fragment definitions are not counted. Fragment cycles, undefined/invalid spreads, and unknown fields fail closed (`eligible: false`). Bound: `BULK_MAX_SELECTION_VISITS = 10_000`.
 
 | Document | GraphQL schema | Bulk eligibility | Production path |
 |---|---|---|---|
@@ -216,11 +221,11 @@ Minimum B IDs from the execution brief, plus other reader-applicable rows.
 | T02 | − | Mutation document rejected before network; `currentBulkOperation` / cancellation / PII / `priceAfterAllDiscountsBeforeTaxesSet` via field AST | `mutation-safety.test.ts` — planted mutation **untagged** so codegen stays valid |
 | T03 | bypass | Conflicting `x-shopify-shop-domain` → `TENANT_DENIED`, `admin.calls === []`. Matching header allowed, not treated as authority | `tenant.test.ts` |
 | T17 / T18 | + | `test=true` and gift-card / tip lines preserved on the **same** complete snapshot (raw evidence for C; B does not persist or compute operational-metric exclusion) | `orders.test.ts` |
-| T19 | + | 300 lines, page size 100, three `OrderFactById` pages, unique GIDs 1…300, no silent 250 cap | `orders.test.ts` |
+| T19 | + | 300 lines, page size 100, four `OrderFactById` calls (3 pages + version recheck), unique GIDs 1…300, no silent 250 cap | `orders.test.ts` |
 | T20 | − | `first` forbidden on named non-connection LISTs (`Order.refunds`, `Order.transactions`, …). **Does not** flag `Refund.transactions` (Connection) | `documents.test.ts` |
 | T30 | + | Number money amounts → `MALFORMED_MONEY` | `money.test.ts` |
 | T39 | + | 101 lines / page size 100 → all present | `orders.test.ts` |
-| T41 | − | `order(id:)` null → `INACCESSIBLE_HISTORY_WINDOW`; detail must not match `/tombstone/i` | `orders.test.ts` |
+| T41 | − | `order(id:)` explicit null → `null_observed`; JSON must not match `/tombstone/i` or `INACCESSIBLE_HISTORY_WINDOW` | `orders.test.ts` |
 | T46 (reader) | + | Complete refund snapshot accepts nullable refund-line ids (apply/idempotency remains C) | `orders.test.ts` refund reader |
 | T48 | − | One invalid required MoneyBag rejects the whole snapshot. Production modules do not DML facts / observations / `SalesDailyAggregate` / Prisma | `orders.test.ts`, `static-safety.test.ts` |
 | T52 | − | `Sale.lineItem` without inline fragments fails schema validation. Invalid document is **untagged** in `bulk-query-schema.test.ts` (must not live in `documents.ts`) | `bulk-query-schema.test.ts` |
@@ -244,22 +249,34 @@ Minimum B IDs from the execution brief, plus other reader-applicable rows.
 
 Environment: Cursor Cloud Agent workspace `/workspace/stocky-plus`. Disposable local Node. No production database. No merchant/store Admin token.
 
-Runtime/test implementation head for the commands below: `748b84f981757f31241c23a6c968c98840e993c1`.
+### 10.1 Pre-correction baseline (do not inherit as this correction)
+
+Runtime/test implementation head: `748b84f981757f31241c23a6c968c98840e993c1`. Report commit / pre-correction PR head: `d9717f68ea981aa68f108428a31d7726d0ba2a8f`.
 
 | Command | Exit | Status | Notes |
 |---|---:|---|---|
 | `npx vitest run app/lib/order-facts/admin-read --reporter=verbose` | 0 | executed and passed | **9 files, 47 tests passed** |
 | `npx vitest run app/lib/order-facts --reporter=verbose` | 0 | executed and passed | **12 files, 66 tests passed** (A + B) |
 | `npm test` / `npx vitest run` | 0 | executed and passed | **51 files, 439 tests passed** |
-| `npx eslint app/lib/order-facts/admin-read` | 0 | executed and passed | clean |
+| GitHub `pull_request` [`34651155935`](https://github.com/Vedang1998/Stocky/actions/runs/34651155935) on `d9717f68…` | 0 | executed and passed | Baseline only after the correction push |
+
+### 10.2 Consolidated-correction local gates
+
+Observed on the correction working tree **before** the correction commits. Counts are **not** inherited from §10.1.
+
+| Command | Exit | Status | Notes |
+|---|---:|---|---|
+| `npm run graphql-codegen` | 0 | executed and passed | Prerequisite; restocked / `location { id }` / sales-page clock fields validated against Admin 2026-07 |
+| `npx vitest run app/lib/order-facts/admin-read --reporter=verbose` | 0 | executed and passed | **10 files, 119 tests passed** |
+| `npx vitest run app/lib/order-facts --reporter=verbose` | 0 | executed and passed | **13 files, 138 tests passed** (A + B) |
+| `npx vitest run` (`npm test`) | 0 | executed and passed | **52 files, 511 tests passed** |
+| `npx eslint app/lib/order-facts/admin-read` | 0 | executed and passed | clean after unused-var fixes |
 | `npm run lint` | 0 | executed and passed | clean |
-| `npm run graphql-codegen` | 0 | executed and passed | after untagging planted mutation / T52 invalid Sale document |
-| `npm run typecheck` | 0 | executed and passed | |
-| `npx tsx scripts/pr5-f3-safety-scan.ts` | 0 | executed and passed | `filesScanned: 182`, `findings: []` |
-| `npm run tenant:access:inventory:check` | 0 | executed and passed | after regenerate; `tenant_access_inventory_fresh` |
+| `npm run typecheck` | 0 | executed and passed | after `doTypesOverlap` composite-type guard |
+| `npm run build` | 0 | executed and passed | `react-router build` |
+| `npx tsx scripts/pr5-f3-safety-scan.ts` | 0 | executed and passed | `filesScanned: 186`, `findings: []` (was 182; +4 production modules) |
+| `npm run tenant:access:inventory` then `:check` | 0 | executed and passed | `scannedFiles` 411 → **416**; findings 1741; violations 0; digest unchanged `d4fc40275641ec9a16904e210bf37b7c0d3cfb89cf89227b592842c9788ee771` |
 | `git diff --check` | 0 | executed and passed | clean |
-| `git status --porcelain` at runtime/test head | 0 | executed and passed | empty |
-| GitHub `pull_request` run [`34650235398`](https://github.com/Vedang1998/Stocky/actions/runs/34650235398) on `3031119…` | 1 | executed and **failed** | Classify SUCCESS; Heavy FAIL `tenant:access:inventory:check_failed_exit_1`; CI Gate FAIL. **Superseded.** |
 | Live Admin / store GraphQL | — | **not executed** | Not authorized |
 | `bulkOperationRunQuery` / bulk submit | — | **not executed** | Forbidden in B |
 | PostgreSQL / Redis / Docker migration suites (local) | — | **not executed** | B tests are unit/mock; exact-head GitHub full CI remains required |
@@ -278,7 +295,7 @@ Focused commands ran nonzero tests. Empty collection would have been a failure.
 - Kill switch / inventory-write flags: untouched; remain default off.
 - Reconciliation: not this lane (D).
 - PII: customer fields rejected by field AST; not selected on production documents.
-- Rolling window: null `order(id:)` is inaccessible, not confirmed absence, not a tombstone.
+- Rolling window: explicit null `order(id:)` is **neutral `null_observed` evidence**, not confirmed absence, not a tombstone, and not `INACCESSIBLE_HISTORY_WINDOW` from B. C/D retain existence-kind adjudication.
 
 ---
 
@@ -307,13 +324,19 @@ No unapproved product-rule change. No FX. No BOM explosion. No sanitizer-limit r
 
 | Item | Severity | Owner |
 |---|---|---|
-| Exact-head `pull_request` Classify + full Heavy + CI Gate on the **live PR head that contains this report** | Required evidence; IDs not invented here | Cursor B / GitHub Actions |
+| Independent Claude review of the pre-correction implementation | Completed as CORRECTIONS REQUIRED (P0=0 / P1=2 / P2=4 / P3=5); immutable blob `b4533610b5af305816aef5434b884c3065b06f94` | Claude Code |
+| Independent Claude re-review of this correction head | Required; not started in this report | Claude Code after exact-head CI |
+| Exact-head `pull_request` Classify + full Heavy + CI Gate on the **live correction PR head that contains this report** | Required evidence; IDs not invented here | Cursor B / GitHub Actions |
 | Live refund-bearing-order ratio | UNVERIFIED (no store call) | Later authorized measurement; not a B/C start blocker per brief |
 | Bulk B LIST/Node ineligibility | Confirmed locally against generated 2026-07 schema; not a live Shopify bulk submit | Recorded; production disabled |
-| PR6-C apply / PR6-D runtime | Not started | Separate lanes |
-| Independent Claude review of this implementation | Not started | Claude Code after exact-head CI |
+| PR6-C apply | Not implemented on this branch; C's separately authorized lane is in correction | Cursor C |
+| PR6-D runtime | Not started | Separate later authorization |
+| R-176 | OPEN / P0 (A representability satisfied; C/D window apply remaining) | PR6-C / PR6-D |
+| R-164 | OPEN / P3 unchanged | Canonical applicator / later maintenance |
+| C F-11 at-sale first-insert source limitation | Residual; not a codegen license | C / D |
+| Per-row `withCodeDiscounts` argument provenance | Not a separate stored column in B | D residual |
 
-Superseded failed exact-head run on `3031119…`: [`34650235398`](https://github.com/Vedang1998/Stocky/actions/runs/34650235398). Do not treat that run as this report’s head.
+Superseded failed exact-head run on `3031119…`: [`34650235398`](https://github.com/Vedang1998/Stocky/actions/runs/34650235398). Pre-correction SUCCESS run [`34651155935`](https://github.com/Vedang1998/Stocky/actions/runs/34651155935) on `d9717f68…` is **baseline only**. Do not treat either as this correction head.
 
 ---
 
@@ -327,23 +350,51 @@ ChatGPT still owns acceptance. The user alone authorizes merge. This PR stays **
 
 ## 16. Claude review handoff
 
-Verify the **live PR #39 head** (the commit that contains this file), not only `748b84f…` and not the superseded `3031119…` CI failure.
+Verify the **live PR #39 head** that contains this file (review artifact `59f469a…` plus correction commits), not only `748b84f…`, not `d9717f68…`, and not the superseded `3031119…` CI failure.
 
 Please verify:
 
-1. Exclusive tree is `app/lib/order-facts/admin-read/**` plus this report plus mechanical `PR2_TENANT_ACCESS_INVENTORY.md`. A types/schema/locks, C apply, D webhooks, Shopify config, and package/CI configs were not edited.
+1. Exclusive tree is `app/lib/order-facts/admin-read/**` plus this report, the execution-brief addendum, and mechanical `PR2_TENANT_ACCESS_INVENTORY.md`. A types/schema/locks, C apply, D webhooks, Shopify config, and package/CI configs were not edited. The immutable review file was not edited.
 2. QUERY-only AST gate; no bulk submit; no `currentBulkOperation` exception.
-3. Two bulk gates; Bulk A/B/C disposition table; T53 uses the bulk-rule validator.
-4. Complete pagination (T19 300 lines; T56 refund continuations; T57 never truncated-complete).
+3. Two bulk gates; fragment/operation-scoped bulk-rule validator; Bulk A/B/C disposition table; T53 uses the bulk-rule validator.
+4. Complete pagination (T19 300 lines + version recheck; T56 refund continuations; T57 never truncated-complete).
 5. T20 does **not** flag `Refund.transactions`.
-6. T41 inaccessible ≠ tombstone.
-7. Money: exact strings; Number rejected; A bag tables imported not copied.
+6. T41 explicit null is `null_observed`, not `INACCESSIBLE_HISTORY_WINDOW`, and not a tombstone.
+7. Money: exact strings; Number rejected; A bag tables imported not copied. No B decimal-money parsing/normalization.
 8. Tenant: `denyConflictingClientShop` only; conflicting header never reaches Admin.
-9. Tests mapped above actually assert (not name-only). Exact-head CI IDs in the PR body match the live head.
+9. F-01…F-11 tests mapped in §18 actually assert (not name-only). Exact-head CI IDs in the PR body match the live head.
 10. No production/store call claimed.
 
 ---
 
 ## 17. Explicit stop statement
 
-PR6-D runtime was **not** started. Production, merchant data, deployment, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**. No D-055. C must branch from **M**, not from this runtime branch. This PR remains **OPEN / DRAFT / UNMERGED** until ChatGPT acceptance and explicit user merge authorization.
+PR6-D runtime was **not** started. Production, merchant data, deployment, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**. No D-055. B cannot implement C on this branch; C's separately authorized lane is in correction and must continue from **M**, not from this runtime branch. This PR remains **OPEN / DRAFT / UNMERGED** until ChatGPT acceptance and explicit user merge authorization.
+
+---
+
+## 18. F-CLAUDE-PR6B-01…11 disposition (original severities unchanged)
+
+ChatGPT accepted **CORRECTIONS REQUIRED** (P0=0 / P1=2 / P2=4 / P3=5) and authorized this package. Neither B nor C is accepted for merge.
+
+| ID | Sev | Disposition | Tests (exported production behavior) |
+|---|---|---|---|
+| F-01 | P1 | Required `Order.refunds` no longer fabricates `[]`. Genuine `[]` complete. Absent/null/object/scalar/null-entry/duplicate/empty GID fail closed. Refund-line qty is not a unit ledger. | `correction.test.ts` F-01; empty-array complete; identity cases |
+| F-02 | P1 | Per-resource Clock A pin; Order first-page header; sales page `updatedAt`+`currencyCode`; bounded version recheck counted in budget. No `lineItems.length` vs unit-sum comparison. One line quantity 10 is a positive control. | `correction.test.ts` F-02/F-03; `orders.test.ts` T19 (4 calls) |
+| F-03 | P2 | Empty promised continuation, duplicate cursor, disappearance after presence, and shrinking/last-header hybrid fail as `SNAPSHOT_PAGINATION_INCOMPLETE`. Refund pin from first page. Independent newer Refund clock allowed. | `correction.test.ts` empty continuation, refund first-vs-last pin, truncated-embed null |
+| F-04 | P2 | Envelope variants: missing data / `data:null` / missing root / malformed root / malformed errors → `MALFORMED_ENVELOPE`. GraphQL errors remain `ADMIN_READ_ERROR`. | `correction.test.ts` F-04/F-05 |
+| F-05 | P2 | `null_observed` only for initial explicit null. Continuation null / truncated-embed first `RefundFactById` null → incomplete. Structured `resourceKind` / `requestedGid` / `phase` / `reason`. T41 kept. Production modules must not contain `INACCESSIBLE_HISTORY_WINDOW`. | `orders.test.ts` T41; `static-safety.test.ts`; nested paging null |
+| F-06 | P2 | Operation-scoped fragment-aware bulk gate. Hidden `nodes`, inline-root `node`, hidden depth-3, dead fragments, multi-op, alias Bulk A, reused spreads, invalid fragment parent, undefined spread, cycle, unknown field. | `bulk-query-schema.test.ts` F-06 |
+| F-07 | P3 | `restocked` + `location { id }` → `restocked` / `restockLocationId` on tagged queries, bulk B candidate, embed and standalone. Not sale-location authority. | `documents.test.ts`; `correction.test.ts` F-07/F-08; `orders.test.ts` refund reader |
+| F-08 | P3 | `refundLineOrdinal` zero-based across the complete paginated connection; null IDs kept distinct; no per-page reset. No A schema change. | `correction.test.ts` F-07/F-08 |
+| F-09 | P3 | `pageSize` / `maxRequests` validated before transport; invalid options → zero Admin calls. pageSize ≤ 250; maxRequests ≤ 250. | `correction.test.ts` F-09/F-10; refund reader options |
+| F-10 | P3 | LineItem counts nonnegative GraphQL Int. Sale.quantity signed+nullable. No `abs()`. No B money-decimal parsing. | `correction.test.ts`; `decimal.test.ts` |
+| F-11 | P3 | PR #39 metadata: B cannot implement C here; C is in correction, not globally unauthorized. D/production/write restrictions preserved. No standalone metadata commit. | PR body (this correction push) |
+
+**Typed null/envelope contract:** `complete` \| `incomplete` (`SNAPSHOT_PAGINATION_INCOMPLETE`) \| `failure` (typed kind) \| `null_observed` (initial explicit null only). D must use `status` / `kind` / `reason` / `phase` / `resourceKind` / `requestedGid`, not English `detail`.
+
+**Version/completeness:** first-page Order pin (`gid`+`updatedAt`+`currencyCode`); first-page Refund pin (`gid`+`updatedAt`); sales pages re-check Order pin; continuation empty/null/drift → incomplete; version recheck after multi-request walks.
+
+**Bulk adversarial matrix:** fragment-hidden root `nodes` FAIL; inline-root `node` FAIL; fragment depth-3 FAIL; dead fragments ignored; reused fragment counted per spread (2× `lineItems`); invalid Order fragment on DraftOrder unresolved; undefined spread FAIL; cycle FAIL; unknown field FAIL; multi-op FAIL; aliased Bulk A PASS.
+
+**Field/ordinal compatibility:** `restocked` / `restockLocationId` / `refundLineOrdinal` now flow from B; C consumes. Embedded omitted `order.id` uses enclosing Order GID; contradictory parent GID fails; standalone unknown parent stays `null`.
