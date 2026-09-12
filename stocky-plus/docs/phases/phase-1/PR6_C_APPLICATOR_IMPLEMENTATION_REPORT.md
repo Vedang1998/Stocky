@@ -4,7 +4,7 @@
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
 **PR:** #40 OPEN / DRAFT / UNMERGED
 **Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719)
-**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). This branch implements the ChatGPT-authorized C correction of **F-01–F-08**, dispositions **F-09–F-12**, and C-owned evidence gates A–E. Independent re-review and ChatGPT complete-module acceptance remain **pending**. Merge is **not** authorized.
+**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 are implemented; F-09–F-12 are disposed; gates A–E smoke remain. This head additionally executes the ChatGPT evidence-completion work order (PR #40 comment [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315)): actual 1,000,000-line C apply, actual pinned-B reader overlay, and real session/process-loss. This is **not** a resubmission of the unchanged `b0b7f58` packet. Independent re-review and ChatGPT complete-module acceptance remain **pending**. Merge is **not** authorized.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
@@ -33,6 +33,8 @@ This report records the PR6-C applicator implementation. It does **not** claim P
 | Final C independent review | `f8e60805dcee6f80f3e40760afad7aea40cfb4b8` (sole parent `04a3e276…`; blob `a90ae442a80ee593bb43bee3b15c2228f32d6e15`; only added file `PR6_C_APPLICATOR_INDEPENDENT_REVIEW.md`). **Never edited.** Superseded identity `ff0ce52e…` is not used. |
 | Review integration | `git merge --ff-only` was impossible because C had already advanced past `04a3e276…`. Review was merged as `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (parents `9f3840a…` + `f8e60805…`). Tree blob remains `a90ae442…`. |
 | Runtime/test correction head | `0474fecc15d728ce69ad858a0bae3de637c573e8` |
+| Unchanged returned packet (does **not** complete evidence) | `b0b7f5825601e7f66e2547739cb0ff304697b83e` |
+| Evidence-harness runtime/test head (before this documentation commit) | `14fb29f7ef54cdf3851637892704c69e3fd5dfc2` |
 | B typed-read pin (read-only) | `610ed0503a3aa2998aca7228f4fca9617bed23a3` — PR #39 comment [5643079993](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5643079993). Live corrected B head after review `59f469a…` blob `b4533610…` plus F-CLAUDE-PR6B-01…11. **Not** merged into C. Superseded overlay identity `d9717f68…` is not used. |
 | B review (read-only) | `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`, blob `b4533610b5af305816aef5434b884c3065b06f94`. Not integrated into C. |
 
@@ -46,9 +48,16 @@ C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-orde
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts`
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts`
 - `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` (test-local mapper; no B overlay committed)
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-b-compat-mapper.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-b-pin-overlay.ts` (test-time `git archive` of the B pin; overlay is removed and is never committed)
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-b-reader-overlay.test.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-pg-harness.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-process-loss.test.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-process-loss-child.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts`
 - `stocky-plus/docs/phases/phase-1/PR6_C_APPLICATOR_IMPLEMENTATION_REPORT.md` (this report)
 - Immutable review addition already present at blob `a90ae442…` (not edited)
-- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 392 → 396; findings 1741; violations 0; digest `d4fc4027…` unchanged; no unused allowlist entries)
+- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 396 → 403; findings 1741; violations 0; digest `d4fc4027…` unchanged; no unused allowlist entries)
 
 **Not owned / not edited**
 
@@ -89,7 +98,7 @@ Receipt: `SyncApplicationReceipt` insert is the **final** write (`ATOMIC_APPLICA
 
 ## 5. Requirement-to-test matrix (C-owned)
 
-Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. PostgreSQL suites live only in `scripts/tenant-enforcement/tests/pr6-c-*.test.ts`.
+Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. PostgreSQL suites live only in `scripts/tenant-enforcement/tests/pr6-c-*.test.ts`. The 1,000,000-line envelope is in `pr6-c-scale-envelope.test.ts` and runs only when `PR6_C_SCALE_1E6=1`.
 
 | ID | Kind | C coverage |
 |---|---|---|
@@ -214,37 +223,33 @@ Failed-then-valid same-key proof: malformed `netPaymentSet` with key `f04-delive
 
 Recorded after commands execute. This documentation snapshot does **not** invent results and does **not** embed its own commit SHA.
 
-Re-executed on the working tree that contains `pr6-c-b-compat-probe.test.ts` (before this documentation commit): `npx prisma validate` / `generate` exit 0; `npm run graphql-codegen` exit 0 and working tree still only C-owned paths; `npx tsc --noEmit` exit 0; focused eslint of the probe file exit 0; `npx vitest run app/lib/order-facts` **64**/9; `npm test` **437**/48; C PG trio **108**/3; inventory `scannedFiles` 396. `npm run typecheck`, `npm run lint`, and `npm run build` were last executed on `0474fec…` and are not re-claimed for the probe tree.
+Evidence-harness runtime/test implementation head for the commands below: `14fb29f7ef54cdf3851637892704c69e3fd5dfc2` (parent `01212d9cf3097ac9fb54014da1924218a0e99b64` overlay GID/F-12 fixes; grandparent `26dd788462ebc38b9714466ba8dccda4eb7b015c` harnesses). B pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` was **not** merged; C materialized it at test time via `git archive` into `app/lib/order-facts/admin-read/**` and removed it before inventory. After the focused overlay file and after the full migrations corpus, `app/lib/order-facts/admin-read` was absent and `git ls-files` had no `admin-read` paths.
 
-Runtime/test implementation head for the F-01–F-08 / gates commands below: `0474fecc15d728ce69ad858a0bae3de637c573e8`. Prior C commits: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck), `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness), `04a3e276c9d607e440051603e54e7c96dc9ad19f` (previous local validation), `360d9583cbc0e3a7950c329a525fd13a137771be` (first F-01–F-08 pass), `9f3840a82c26bf4450c0c6a8f91d4970a28ec232` (prior correction report), `1f61e33bcf9fedaee56efa3e0082f8f593ccd887` (review merge), `65bf14332a99fb59ec88534aa6d59b3cd5a92ab7` (prior report + inventory). Final review source `f8e60805dcee6f80f3e40760afad7aea40cfb4b8`. B pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` was **not** merged; C consumed its typed-read contract via a test-local mapper.
+Prior F-01–F-08 / gates / mapper-only probe commands remain recorded against `0474fec…` / `b0b7f58…` and are not relabelled as this evidence-completion packet.
 
 | Command | Exit | Result |
 |---|---|---|
 | `npx prisma validate` | 0 | schema valid |
-| `npx prisma generate` | 0 | Prisma Client v6.19.3 |
-| `npm run graphql-codegen` | 0 | Admin types generated; working tree unchanged |
 | `npx tsc --noEmit` | 0 | no errors |
 | `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
-| focused eslint `app/lib/order-facts/apply` + `pr6-c-*.test.ts` | 0 | no errors |
+| focused eslint of new `pr6-c-b-*` / `pr6-c-process-loss*` / `pr6-c-scale-envelope.test.ts` / `pr6-c-pg-harness.ts` | 0 | no errors |
 | `npm run lint` | 0 | no errors |
 | `npx vitest run app/lib/order-facts` | 0 | **64** passed / 9 files (nonzero) |
 | `npm test` | 0 | **437** passed / 48 files (nonzero) |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **82** passed / 1 file (nonzero; collected 82) |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts` | 0 | **9** passed / 1 file (nonzero; collected 9; ~12.6s) |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **108** passed / 3 files (nonzero; collected 108 = 82 + 9 + 17). B pin `610ed050`. No B overlay in the working tree. |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **17** passed / 1 file (nonzero; collected 17) |
-| `npm run test:migrations` (full corpus, first attempt) | 1 | **executed and failed**: 47 failed / 511 passed / 62 files. Failures were missing `DATABASE_CONTROL_PLANE_URL` / `STOCKY_CONTROL_PLANE_ROLE_PASSWORD` / bootstrap URL, not C applicator assertions. C files in that run still passed (canonical 82, gates 9). |
-| `npm run test:migrations` (full corpus, CI-like disposable env) | 0 | **558** passed / 62 files (nonzero; collected 558). Env: `DATABASE_CONTROL_PLANE_URL` + `STOCKY_CONTROL_PLANE_ROLE_PASSWORD=stocky_control_plane_ci_only` + `STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK=1` + `STOCKY_BOOTSTRAP_DATABASE_URL`/`DATABASE_MIGRATION_URL`/`TENANT_MAINTENANCE_DATABASE_URL` pointing at local `stocky_plus`. Duration 647s. Recorded on `0474fec…` **before** the B-compat probe file existed; do not relabel that count as covering the probe. |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-reader-overlay.test.ts scripts/tenant-enforcement/tests/pr6-c-process-loss.test.ts scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` | 0 | **20** passed / **1** skipped / 3 files (nonzero; collected 21). Skip is the 1e6 envelope because `PR6_C_SCALE_1E6` was unset. Overlay **12**, process-loss **7**, scale policy **1**. |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts scripts/tenant-enforcement/tests/pr6-c-evidence-gates.test.ts scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` | 0 | **108** passed / 3 files (nonzero; collected 108 = 82 + 9 + 17) |
+| `PR6_C_SCALE_1E6=1 npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` | 0 | **2** passed / 1 file (nonzero; collected 2). **Actual** 1,000,000 line facts. Duration 912.06s. See §6.2. |
+| `npm run test:migrations` (full corpus, CI-like disposable env, `PR6_C_SCALE_1E6` unset) | 0 | **595** passed / **1** skipped / 66 files (nonzero; collected 596). The skip is the 1e6 envelope. Duration 666.70s. Overlay 12 and process-loss 7 passed inside this corpus. |
 | `npm run build` | 0 | client + SSR production build |
 | `npm run tenant:access:inventory` | 0 | `tenant_access_inventory_written` findings 1741 violations 0 |
-| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 396) |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` 403) |
 | `git diff --check` | 0 | clean |
-| `.github/scripts/classify-ci-change-set.sh --from-git bdbb5bba… 0474fec…` | 0 | `docs_only=false` `full_ci=true` `classification_reason=non_docs_or_unknown_path` |
+| `.github/scripts/classify-ci-change-set.sh --from-git bdbb5bba… 14fb29f…` | 0 | `docs_only=false` `full_ci=true` `classification_reason=non_docs_or_unknown_path` `changed_path_count=34` |
 | exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not later-push solely to embed CI IDs. |
 
-Previous exact-head SUCCESS on `04a3e276…` (run `34652673104`) is superseded and is not substituted. Exact-head SUCCESS on `9f3840a82c26bf4450c0c6a8f91d4970a28ec232` (run `34667512600`) is superseded by later C heads and is **not** exact-head evidence for this packet. Run `34670253245` targeted `65bf143…` and is superseded once this packet is pushed.
+Previous exact-head SUCCESS values on `04a3e276…` / `9f3840a…` / `65bf143…` / `b0b7f58…` / `26dd788…` / `14fb29f…` are superseded once this documentation commit is pushed and are **not** substituted as exact-head evidence for this packet.
 
-Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only (`scannedFiles` 392 → 396). No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited. No `admin-read/**` files on this branch.
+Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only (`scannedFiles` 396 → 403). Digest unchanged. No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited. No `admin-read/**` files on this branch.
 
 ## 6.1 Evidence gates A–E
 
@@ -260,7 +265,68 @@ All C-owned PostgreSQL harnesses are in `scripts/tenant-enforcement/tests/pr6-c-
 | C kill switch while waiting | flip `processingEnabled` while waiter blocked | `OrderApplyProcessingDisabledError` after lock grant; 0 facts; restored after test | none for this schedule |
 | D same key/digest disjoint GIDs | **`serialized_before_missing_receipt_lookup`** | winner commits; loser `already_applied`; loser GID 0 rows | both sessions cannot pass missing-receipt lookup; do **not** claim that unachieved schedule |
 | D different digest | sequential then conflicting digest | `order_apply_receipt_digest_conflict`; no disjoint facts | none for this schedule |
-| E C-specific scale | 400-child parent + 2-to-1 replacement; 40 parents × 25 lines; setup vs apply times and RSS/query counts recorded in-test | 9/9 gate file passed; ~2s apply batch; `executedLines` 1400 | **not** the 1e6-line envelope. Gate **unexecuted** for 1e6. Do not label this smoke as that envelope. |
+| E C-specific scale | 400-child parent + 2-to-1 replacement; 40 parents × 25 lines; setup vs apply times and RSS/query counts recorded in-test | 9/9 gate file passed; ~2s apply batch; `executedLines` 1400 | **not** the 1e6-line envelope. See §6.2 for the actual 1,000,000-line run. Do not label this smoke as that envelope. |
+
+## 6.2 Actual 1,000,000-line C-specific envelope (executed locally)
+
+This is **not** extrapolation from Gate E’s 1,400 lines.
+
+| Field | Observed |
+|---|---|
+| Command | `PR6_C_SCALE_1E6=1 npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-scale-envelope.test.ts` |
+| Exit | 0 |
+| Collected / passed | 2 / 2 (policy + envelope; nonzero) |
+| Duration | 912.06s (envelope it 906839ms) |
+| `lineFacts` | **1000000** |
+| Mix | 2 parents × 500 lines, then 500→1 replacement; 19960 parents × 50 lines in batches of 20; 20 refund-bearing parents × 50 lines in batches of 10 |
+| `batches` | 1000 |
+| `setupMs` | 829 |
+| `applyMs` | 904601 |
+| `replacementMs` | 113 |
+| `queryCount` | 3484058 |
+| RSS | 144216064 → 151367680 bytes |
+| Throughput | 1105.46 line facts / s against applyMs |
+| PostgreSQL | `max_connections=100`, `max_locks_per_transaction=64`, `max_prepared_transactions=0`, isolation `read committed` |
+| Assertions | `ShopifyOrderLineFact` count **exactly** 1,000,000; high-child parent `LIVE=1` / `ABSENT=499`; not equal to 1400 |
+
+PHASE_BRIEF list p95 < 500ms and webhook enqueue p95 < 1s are **not** this apply SLA. The envelope is skipped unless `PR6_C_SCALE_1E6=1`. On `GITHUB_ACTIONS=true` the policy test asserts the env is unset. Heavy `timeout-minutes` is 70. Exact-head Heavy on `b0b7f58…` (run `34670954315`, job started `2026-09-12T03:39:58Z` / completed `2026-09-12T04:36:12Z`) already consumed ~56 minutes; adding this envelope’s 912s locally would risk the 70-minute job budget, and workflow YAML is outside C ownership. Default `npm run test:migrations` therefore records **1 skipped** (the envelope) and must not be labelled as a 1e6 pass.
+
+## 6.3 Actual pinned B reader overlay (executed, overlay removed)
+
+Copied B types and fabricated read results in `pr6-c-b-compat-probe.test.ts` remain the mapper contract suite (**17** passed). They are **not** this gate.
+
+`pr6-c-b-reader-overlay.test.ts` materializes `stocky-plus/app/lib/order-facts/admin-read` from pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` with `git archive`, deletes `*.test.ts` from the overlay, dynamically imports B’s `readOrderFact` / `readRefundFact` / `createOrderStoreAdmin` / `createMockAdmin` / fixtures, drives mocked Shopify transport, maps through the test-local mapper, and applies on disposable PostgreSQL. Overlay is removed in `afterAll` and by a cleanup describe. It is never committed.
+
+Command (focused): `npm run test:migrations -- …/pr6-c-b-reader-overlay.test.ts …` as part of the 20/1/3 run. Overlay file: **12** passed / 1 file. Re-executed inside the full corpus: **12** passed.
+
+| Case | Result |
+|---|---|
+| Real B `OrderFactById` transport | `admin.calls` nonempty and query text includes `OrderFactById`; `processedAt` `2026-08-01T00:00:00Z`; with-code total `9.00` persisted, not `9.50` |
+| Restock / ordinal | B complete-connection ordinals `[0,1,2]`; C persists `restocked=true`, `restockLocationGid=gid://shopify/Location/7`. Refund `order.id` matches the header GID so B does not `IDENTITY_MISMATCH`. |
+| Neutral `null_observed` | B does not assign `INACCESSIBLE_HISTORY_WINDOW`; mapper emits `ABSENT_CONFIRMED_QUERY` + `queryCompleted` / `queryReturnedNull` |
+| In-window then null | C tombstone `ABSENT` / `ABSENT_CONFIRMED_QUERY` / `deletedAt` set |
+| Aged-out then null | C `LIVE` + `INACCESSIBLE_HISTORY_WINDOW` + `deletedAt` NULL + `ORDER_HISTORY_WINDOW_TRUNCATED` |
+| Incomplete walk | B `SNAPSHOT_PAGINATION_INCOMPLETE`; C writes 0 order facts |
+| `orderId=null` refund | B `RefundFactById` complete with `orderId` null; mapper `blocked` / `unknown_parent_order_gid`; 0 refund rows |
+| Enclosing vs contradictory parent | nested refund uses Order GID; contradictory B `IDENTITY_MISMATCH`; 0 clash rows |
+| Malformed money (F-12) | B at this pin may `complete` with `"not-a-decimal"`; C rejects; 0 facts / 0 receipts |
+| At-sale GID preserve | later current variant `ProductVariant/99` does not overwrite stored `variantGidAtSale` |
+| Same key/digest retry | malformed then valid B read; one receipt |
+| Cleanup | overlay directory absent |
+
+## 6.4 Real session/process-loss and uncertain outcome (executed)
+
+Distinct from Gate A SQL `ROLLBACK` / `COMMIT` controls and from adversarial receipt DELETE. No D worker. File: `pr6-c-process-loss.test.ts` plus child `pr6-c-process-loss-child.ts`. **7** passed / 1 file (focused 5990ms; re-executed in the full corpus).
+
+| Case | Mechanism | Result |
+|---|---|---|
+| Control label | string inequality | `ROLLBACK` is not `pg_terminate_backend` / `SIGKILL` |
+| Session loss before COMMIT | `pg_terminate_backend` of the applying backend after DML, no ROLLBACK | 0 order facts, 0 receipts |
+| Abrupt client disconnect | `client.end()` after apply, no COMMIT/ROLLBACK | 0 facts, 0 receipts |
+| Process SIGKILL before COMMIT | tsx process-group SIGKILL, then `pg_terminate_backend` of the abandoned backend (Node death does **not** drop the session/receipt advisory lock by itself), then retry | 0 facts after kill; retry `applied`; then 1 fact + 1 receipt |
+| Process SIGKILL after COMMIT | SIGKILL after child `committed` | 1 fact + 1 receipt; retry `already_applied`; still 1 |
+| Uncertain COMMIT | `pg_terminate_backend` during child COMMIT race, then retry | retry `applied` or `already_applied`; **exactly** 1 fact + 1 receipt |
+| Uncertain socket destroy | destroy the pg stream during `COMMIT`, then retry | retry `applied` or `already_applied`; **exactly** 1 fact + 1 receipt |
 
 ## 7. Risk status after this slice
 
@@ -282,7 +348,9 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 - No live store call.
 - C does not DML `DataIssue`, `SalesDailyAggregate`, or explode BOM sales.
 - C does not edit B control docs or A frozen contracts.
-- B→C compatibility probe **executed** against pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` via a test-local mapper in `pr6-c-b-compat-probe.test.ts`. No B overlay, no combined implementation commit, no D runtime. Command: `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-b-compat-probe.test.ts` → **17** passed / 1 file. Combined with canonical + gates: **108** passed / 3 files.
+- B→C compatibility probe **executed** against pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` via a test-local mapper in `pr6-c-b-compat-probe.test.ts` (**17** passed). That mapper suite is **not** a substitute for the pinned-B overlay in §6.3.
+- Pinned B runtime is materialized only at test time and is **not** committed. No B branch edits. No combined B+C implementation commit. No D runtime.
+- The 1e6 envelope is **not** part of default CI `test:migrations`. Local execution in §6.2 is the C-owned evidence. Do not treat the Gate E 1,400-line smoke or the corpus skip as that envelope.
 
 ### 8.1 B→C probe cases (pin `610ed050`)
 
@@ -302,4 +370,6 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 
 ## 9. Packet for ChatGPT
 
-This lane is ready for ChatGPT **consolidated correction** review after exact-head `pull_request` Classify SUCCESS, full Heavy SUCCESS (not SKIPPED), and CI Gate SUCCESS on the live PR head that contains this report. Until those GitHub checks exist, do not treat local suites as a substitute for exact-head CI. Independent Claude re-review of the correction head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW` and is **not** merge authorization.
+This lane is ready for ChatGPT **PR6-C evidence-completion** disposition after exact-head `pull_request` Classify SUCCESS, full Heavy SUCCESS (not SKIPPED), and CI Gate SUCCESS on the live PR head that contains this report. Until those GitHub checks exist, do not treat local suites as a substitute for exact-head CI.
+
+This packet is **not** a resubmission of the unchanged `b0b7f58` return. Independent Claude re-review of the correction-plus-evidence head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW` and is **not** merge authorization. R-176 remains **OPEN / P0**.
