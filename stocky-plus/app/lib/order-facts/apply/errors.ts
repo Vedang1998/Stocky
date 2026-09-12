@@ -156,6 +156,38 @@ export class OrderApplyReceiptDigestConflictError extends OrderApplyError {
   }
 }
 
+export class OrderApplyReceiptNotCertifiableError extends OrderApplyError {
+  constructor(
+    message = "Receipt-bound apply did not reach a terminal accepted operation",
+  ) {
+    super("order_apply_receipt_not_certifiable", message);
+    this.name = "OrderApplyReceiptNotCertifiableError";
+  }
+}
+
+export class OrderApplyReceiptLockTimeoutError extends OrderApplyError {
+  readonly timeoutMs: number;
+
+  constructor(timeoutMs: number) {
+    super(
+      "order_apply_receipt_lock_timeout",
+      `Receipt application-key lock timed out after ${timeoutMs}ms`,
+    );
+    this.name = "OrderApplyReceiptLockTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
+export class OrderApplyAffectedRowError extends OrderApplyError {
+  constructor(context: string, actual: number) {
+    super(
+      "order_apply_affected_row_mismatch",
+      `${context}: expected 1 updated row, got ${actual}`,
+    );
+    this.name = "OrderApplyAffectedRowError";
+  }
+}
+
 export class OrderApplyCurrencyMismatchError extends OrderApplyError {
   constructor(field: string) {
     super(

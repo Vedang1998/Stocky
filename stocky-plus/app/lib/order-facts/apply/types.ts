@@ -236,6 +236,7 @@ export type OrderApplyObservationResult = {
     | "incomplete"
     | "already_applied"
     | "lease_invalid";
+  reason: string;
   existenceMutated: boolean;
   attributesApplied: boolean;
   childrenApplied: boolean;

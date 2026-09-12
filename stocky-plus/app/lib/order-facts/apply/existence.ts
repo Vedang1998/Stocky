@@ -123,27 +123,58 @@ export function accessScopeSetsEqual(
   return true;
 }
 
-/**
- * Persisted LIVE scope history is a floor. An empty or weaker caller
- * lastConfirmedAccessScopes must not erase read_all_orders (T50 / F-05).
- */
-export function mergeAccessScopeFloor(
-  caller: readonly string[] | null | undefined,
-  persisted: readonly string[] | null | undefined,
+function uniqueScopes(
+  scopes: readonly string[] | null | undefined,
 ): string[] {
   const merged = new Set<string>();
-  for (const scope of persisted ?? []) {
-    if (scope) merged.add(scope);
-  }
-  for (const scope of caller ?? []) {
+  for (const scope of scopes ?? []) {
     if (scope) merged.add(scope);
   }
   return [...merged];
 }
 
 /**
+ * Union helper for a successful LIVE confirmation write. Caller arrays never
+ * replace persisted history; they may only add scopes onto an already-LIVE
+ * baseline. Inaccessible/rejected writes must not use this helper.
+ */
+export function mergeAccessScopeFloor(
+  caller: readonly string[] | null | undefined,
+  persisted: readonly string[] | null | undefined,
+): string[] {
+  const merged = new Set<string>(uniqueScopes(persisted));
+  for (const scope of uniqueScopes(caller)) {
+    merged.add(scope);
+  }
+  return [...merged];
+}
+
+/**
+ * Last-valid-LIVE floor for absence/downgrade checks. Caller lastConfirmed
+ * may only tighten an already-safe persisted decision; empty, omitted, weaker
+ * or fabricated caller values cannot invent or replace durable history.
+ */
+export function lastValidLiveScopeFloor(
+  persisted: readonly string[] | null | undefined,
+  callerLastConfirmed?: readonly string[] | null | undefined,
+): string[] {
+  const durable = uniqueScopes(persisted);
+  void uniqueScopes(callerLastConfirmed);
+  return durable;
+}
+
+export function existenceWriteConfirmsLive(
+  decision: Extract<ExistenceDecision, { mutate: true }>,
+): boolean {
+  return (
+    decision.nextState === "LIVE" && incomingIsLive(decision.nextKind)
+  );
+}
+
+/**
  * Deny absence if grant continuity is missing, stale, or downgraded vs the
- * last valid LIVE confirmation (T50).
+ * last valid LIVE confirmation (T50). Missing historical continuity is not
+ * affirmative permission for absence.
  */
 export function scopeContinuityAllowsAbsence(input: {
   currentScopes: readonly string[];
@@ -153,16 +184,17 @@ export function scopeContinuityAllowsAbsence(input: {
     return { ok: false, diagnostic: DIAGNOSTIC.SCOPE_DOWNGRADE };
   }
   const last = input.lastConfirmedScopes ?? null;
-  if (last && last.length > 0) {
-    if (
-      scopesGrantReadAllOrders(last) &&
-      !scopesGrantReadAllOrders(input.currentScopes)
-    ) {
-      return { ok: false, diagnostic: DIAGNOSTIC.SCOPE_DOWNGRADE };
-    }
-    if (scopesGrantReadOrders(last) && !scopesGrantReadOrders(input.currentScopes)) {
-      return { ok: false, diagnostic: DIAGNOSTIC.SCOPE_DOWNGRADE };
-    }
+  if (!last || last.length === 0) {
+    return { ok: false, diagnostic: DIAGNOSTIC.SCOPE_DOWNGRADE };
+  }
+  if (
+    scopesGrantReadAllOrders(last) &&
+    !scopesGrantReadAllOrders(input.currentScopes)
+  ) {
+    return { ok: false, diagnostic: DIAGNOSTIC.SCOPE_DOWNGRADE };
+  }
+  if (scopesGrantReadOrders(last) && !scopesGrantReadOrders(input.currentScopes)) {
+    return { ok: false, diagnostic: DIAGNOSTIC.SCOPE_DOWNGRADE };
   }
   return { ok: true, diagnostic: null };
 }
@@ -360,9 +392,9 @@ export function decideOrderExistence(input: {
     }
     const scope = scopeContinuityAllowsAbsence({
       currentScopes: input.currentScopes,
-      lastConfirmedScopes: mergeAccessScopeFloor(
-        input.lastConfirmedScopes,
+      lastConfirmedScopes: lastValidLiveScopeFloor(
         stored.accessScopeSnapshot,
+        input.lastConfirmedScopes,
       ),
     });
     if (!scope.ok) {

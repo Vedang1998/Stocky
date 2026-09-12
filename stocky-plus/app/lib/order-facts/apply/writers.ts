@@ -4,7 +4,10 @@
  */
 import type { OrderSourceKind } from "../types";
 import type { GenerationInterval } from "./clocks";
-import { OrderApplyProcessingDisabledError } from "./errors";
+import {
+  OrderApplyAffectedRowError,
+  OrderApplyProcessingDisabledError,
+} from "./errors";
 import type { ExistenceDecision } from "./existence";
 import { parseRequiredMoneyBag } from "./money";
 import {
@@ -185,6 +188,15 @@ function deletionSourceSql(
   source: "CONFIRMED_QUERY" | "WEBHOOK" | null,
 ): string | null {
   return source;
+}
+
+async function requireSingleUpdatedRow(
+  rows: { id: string }[],
+  context: string,
+): Promise<void> {
+  if (rows.length !== 1) {
+    throw new OrderApplyAffectedRowError(context, rows.length);
+  }
 }
 
 export async function insertOrderFact(
@@ -393,7 +405,7 @@ export async function updateOrderExistence(
       : write.interval,
   );
   const scopes = [...write.accessScopeSnapshot];
-  await queryRows(db)`
+  const updated = await queryRows<{ id: string }>(db)`
     UPDATE "ShopifyOrderFact"
        SET "existenceState" = ${write.decision.nextState}::"OrderExistenceState",
            "existenceKind" = ${write.decision.nextKind}::"OrderExistenceKind",
@@ -419,7 +431,9 @@ export async function updateOrderExistence(
            END,
            "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
            "updatedAt" = clock_timestamp()
-     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+     WHERE "shopId" = ${shopId} AND id = ${factId}
+     RETURNING id`;
+  await requireSingleUpdatedRow(updated, "ShopifyOrderFact existence");
 }
 
 export async function updateOrderDiagnosticsOnly(
@@ -429,12 +443,14 @@ export async function updateOrderDiagnosticsOnly(
   diagnostic: string | null,
   historyWindowState: string | null,
 ): Promise<void> {
-  await queryRows(db)`
+  const updated = await queryRows<{ id: string }>(db)`
     UPDATE "ShopifyOrderFact"
        SET "existenceDiagnosticState" = COALESCE(${diagnostic}, "existenceDiagnosticState"),
            "historyWindowState" = COALESCE(${historyWindowState}, "historyWindowState"),
            "updatedAt" = clock_timestamp()
-     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+     WHERE "shopId" = ${shopId} AND id = ${factId}
+     RETURNING id`;
+  await requireSingleUpdatedRow(updated, "ShopifyOrderFact diagnostics");
 }
 
 export async function updateRefundExistence(
@@ -449,7 +465,7 @@ export async function updateRefundExistence(
       : write.interval,
   );
   const scopes = [...write.accessScopeSnapshot];
-  await queryRows(db)`
+  const updated = await queryRows<{ id: string }>(db)`
     UPDATE "ShopifyOrderRefundFact"
        SET "existenceState" = ${write.decision.nextState}::"OrderExistenceState",
            "existenceKind" = ${write.decision.nextKind}::"OrderExistenceKind",
@@ -475,7 +491,9 @@ export async function updateRefundExistence(
            END,
            "sourceKind" = ${write.sourceKind}::"OrderSourceKind",
            "updatedAt" = clock_timestamp()
-     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+     WHERE "shopId" = ${shopId} AND id = ${factId}
+     RETURNING id`;
+  await requireSingleUpdatedRow(updated, "ShopifyOrderRefundFact existence");
 }
 
 export async function updateRefundDiagnosticsOnly(
@@ -485,12 +503,14 @@ export async function updateRefundDiagnosticsOnly(
   diagnostic: string | null,
   historyWindowState: string | null,
 ): Promise<void> {
-  await queryRows(db)`
+  const updated = await queryRows<{ id: string }>(db)`
     UPDATE "ShopifyOrderRefundFact"
        SET "existenceDiagnosticState" = COALESCE(${diagnostic}, "existenceDiagnosticState"),
            "historyWindowState" = COALESCE(${historyWindowState}, "historyWindowState"),
            "updatedAt" = clock_timestamp()
-     WHERE "shopId" = ${shopId} AND id = ${factId}`;
+     WHERE "shopId" = ${shopId} AND id = ${factId}
+     RETURNING id`;
+  await requireSingleUpdatedRow(updated, "ShopifyOrderRefundFact diagnostics");
 }
 
 export async function nominateAbsenceCandidate(

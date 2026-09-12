@@ -3,6 +3,7 @@ import {
   accessScopeSetsEqual,
   decideOrderExistence,
   encodeRevivalConfirmation,
+  lastValidLiveScopeFloor,
   mergeAccessScopeFloor,
   scopeContinuityAllowsAbsence,
 } from "./existence";
@@ -191,7 +192,10 @@ describe("PR6-C existence / window / revival", () => {
     });
     expect(continuity.ok).toBe(false);
     const decision = decideOrderExistence({
-      stored: liveStored,
+      stored: {
+        ...liveStored,
+        accessScopeSnapshot: ["read_orders", "read_all_orders"],
+      },
       incomingKind: "ABSENT_CONFIRMED_QUERY",
       incomingInterval: later,
       existenceObservedAt: observedAt,
@@ -200,7 +204,7 @@ describe("PR6-C existence / window / revival", () => {
       queryCompleted: true,
       queryReturnedNull: true,
       currentScopes: ["read_orders"],
-      lastConfirmedScopes: ["read_orders", "read_all_orders"],
+      lastConfirmedScopes: [],
     });
     expect(decision.mutate).toBe(false);
     expect(decision.diagnostic).toBe(DIAGNOSTIC.SCOPE_DOWNGRADE);
@@ -284,6 +288,9 @@ describe("PR6-C existence / window / revival", () => {
     expect(
       mergeAccessScopeFloor([], ["read_orders", "read_all_orders"]),
     ).toEqual(["read_orders", "read_all_orders"]);
+    expect(
+      lastValidLiveScopeFloor(["read_orders", "read_all_orders"], []),
+    ).toEqual(["read_orders", "read_all_orders"]);
     const decision = decideOrderExistence({
       stored: {
         ...liveStored,
@@ -315,6 +322,46 @@ describe("PR6-C existence / window / revival", () => {
       queryReturnedNull: true,
       currentScopes: ["read_orders"],
       lastConfirmedScopes: [],
+    });
+    expect(decision.mutate).toBe(true);
+    if (decision.mutate) {
+      expect(decision.nextKind).toBe("ABSENT_CONFIRMED_QUERY");
+    }
+  });
+
+  it("does not treat missing persisted continuity as permission for absence (F-05)", () => {
+    expect(lastValidLiveScopeFloor([], ["read_all_orders"])).toEqual([]);
+    const decision = decideOrderExistence({
+      stored: {
+        ...liveStored,
+        accessScopeSnapshot: [],
+      },
+      incomingKind: "ABSENT_CONFIRMED_QUERY",
+      incomingInterval: later,
+      existenceObservedAt: observedAt,
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      queryCompleted: true,
+      queryReturnedNull: true,
+      currentScopes: ["read_orders"],
+      lastConfirmedScopes: ["read_orders", "read_all_orders"],
+    });
+    expect(decision.mutate).toBe(false);
+    expect(decision.diagnostic).toBe(DIAGNOSTIC.SCOPE_DOWNGRADE);
+  });
+
+  it("does not let forged lastConfirmed elevate durable history (F-05)", () => {
+    const decision = decideOrderExistence({
+      stored: liveStored,
+      incomingKind: "ABSENT_CONFIRMED_QUERY",
+      incomingInterval: later,
+      existenceObservedAt: observedAt,
+      existenceBlocked: false,
+      overlappingCompleted: [],
+      queryCompleted: true,
+      queryReturnedNull: true,
+      currentScopes: ["read_orders"],
+      lastConfirmedScopes: ["read_orders", "read_all_orders"],
     });
     expect(decision.mutate).toBe(true);
     if (decision.mutate) {

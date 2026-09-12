@@ -30,12 +30,16 @@ import {
   OrderApplyMoneyError,
   OrderApplyNumericScaleError,
   OrderApplyPhysicalDeleteError,
+  OrderApplyReceiptNotCertifiableError,
 } from "./errors";
 import {
   decideOrderExistence,
+  existenceWriteConfirmsLive,
+  lastValidLiveScopeFloor,
   mergeAccessScopeFloor,
   scopesGrantReadAllOrders,
   type ExistenceDecision,
+  type StoredOrderExistence,
 } from "./existence";
 import {
   abandonExpiredResultlessRows,
@@ -60,9 +64,11 @@ import {
   refundShopCurrency,
 } from "./parse";
 import {
+  acquireReceiptApplicationKeyLock,
   insertReceiptFinal,
   shortCircuitIfApplied,
 } from "./receipts";
+import { batchCertifiesReceiptSuccess } from "./receipt-certification";
 import { queryRows, type OrderApplyDb } from "./sql";
 import {
   DIAGNOSTIC,
@@ -98,6 +104,7 @@ import {
 export type { OrderApplyDb };
 
 export { ORDER_APPLY_PHYSICAL_DELETE_OPERATIONS };
+export { observationCertifiesReceiptSuccess } from "./receipt-certification";
 
 export function denyOrderFactPhysicalDelete(): never {
   throw new OrderApplyPhysicalDeleteError();
@@ -285,7 +292,7 @@ async function acquireOrderedLocks(
   }
 }
 
-function liveChildWrite(
+function parentVersionedChildWrite(
   observation: OrderObservation,
   interval: GenerationInterval | null,
   accessScopeSnapshot: readonly string[],
@@ -299,7 +306,7 @@ function liveChildWrite(
       mutate: true,
       nextState: "LIVE",
       nextKind,
-      reason: "live_child",
+      reason: "parent_versioned_child",
       diagnostic: null,
       deletionSource: null,
       deletedAtNow: false,
@@ -311,6 +318,34 @@ function liveChildWrite(
   };
 }
 
+function toStoredExistence(row: OrderFactRow | null): StoredOrderExistence | null {
+  if (!row) return null;
+  return {
+    existenceState: row.existenceState,
+    existenceKind: row.existenceKind,
+    existenceRequestGen: row.existenceRequestGen,
+    existenceResponseGen: row.existenceResponseGen,
+    shopifyCreatedAt: row.shopifyCreatedAt,
+    processedAt: row.processedAt,
+    deletedAt: row.deletedAt,
+    deletionSource: row.deletionSource,
+    existenceDiagnosticState: row.existenceDiagnosticState,
+    historyWindowState: row.historyWindowState,
+    accessScopeSnapshot: row.accessScopeSnapshot,
+  };
+}
+
+function accessScopesForFactWrite(
+  decision: Extract<ExistenceDecision, { mutate: true }>,
+  currentScopes: readonly string[],
+  persisted: readonly string[] | null | undefined,
+): string[] {
+  if (existenceWriteConfirmsLive(decision)) {
+    return mergeAccessScopeFloor(currentScopes, persisted);
+  }
+  return [...(persisted ?? [])];
+}
+
 async function applyOrderChildren(
   db: OrderApplyDb,
   shopId: string,
@@ -319,7 +354,7 @@ async function applyOrderChildren(
   interval: GenerationInterval | null,
   accessScopeSnapshot: readonly string[],
 ): Promise<void> {
-  const write = liveChildWrite(observation, interval, accessScopeSnapshot);
+  const write = parentVersionedChildWrite(observation, interval, accessScopeSnapshot);
   for (const line of order.lines) {
     await upsertOrderLine(
       db,
@@ -360,13 +395,14 @@ async function applyOrderChildren(
   }
 }
 
-async function applyRefundIfClockAllows(
+async function applyRefundSnapshotIfClockAllows(
   db: OrderApplyDb,
   shopId: string,
   observation: OrderObservation,
   refund: NonNullable<OrderObservation["refund"]>,
   interval: GenerationInterval | null,
   accessScopeSnapshot: readonly string[],
+  existenceWrite: ExistenceWriteInput | null,
 ): Promise<{ applied: boolean; diagnostic: string | null; factId: string | null }> {
   const stored = await lockAndReadRefundFact(db, shopId, refund.shopifyGid);
   if (stored?.existenceState === "ABSENT") {
@@ -376,15 +412,17 @@ async function applyRefundIfClockAllows(
     incomingUpdatedAt: refund.shopifyUpdatedAt,
     storedUpdatedAt: stored?.shopifyUpdatedAt ?? null,
   });
-  if (!clock.applyParent && !clock.applyChildren) {
-    return { applied: false, diagnostic: null, factId: stored?.id ?? null };
+  if (!clock.applyParent && !clock.applyChildren && stored) {
+    return { applied: false, diagnostic: null, factId: stored.id };
   }
   const localOrder = await lockAndReadOrderFact(
     db,
     shopId,
     refund.shopifyOrderGid,
   );
-  const write = liveChildWrite(observation, interval, accessScopeSnapshot);
+  const write =
+    existenceWrite ??
+    parentVersionedChildWrite(observation, interval, accessScopeSnapshot);
   const result = await upsertRefundSnapshot(
     db,
     shopId,
@@ -397,6 +435,183 @@ async function applyRefundIfClockAllows(
     applied: true,
     diagnostic: result.moneyDiagnosticState,
     factId: result.id,
+  };
+}
+
+async function applyEmbeddedRefund(
+  db: OrderApplyDb,
+  shopId: string,
+  observation: OrderObservation,
+  refund: NonNullable<OrderObservation["refund"]>,
+  interval: GenerationInterval | null,
+  fenceGeneration: bigint | null,
+  accessScopeSnapshot: readonly string[],
+): Promise<{
+  applied: boolean;
+  existenceMutated: boolean;
+  diagnostic: string | null;
+  factId: string | null;
+  blocked: boolean;
+}> {
+  const refundIdentity = {
+    shopId,
+    resourceKind: "Refund" as const,
+    shopifyGid: refund.shopifyGid,
+  };
+  await lockObservationRows(db, shopId, refundIdentity);
+  let stored = await lockAndReadRefundFact(db, shopId, refund.shopifyGid);
+  const incomingKind =
+    observation.observationKind === "full_sync"
+      ? "LIVE_FULL_SYNC_PRESENT"
+      : "LIVE_REFETCH";
+  const expiredBlockers =
+    observation.observationKind === "direct" && interval
+      ? await loadExpiredActiveResultlessBlockers(db, shopId, refundIdentity, {
+          maxRequestGen: interval.requestGen,
+        })
+      : await loadExpiredActiveResultlessBlockers(db, shopId, refundIdentity, {});
+  const blockers =
+    observation.observationKind === "direct" && interval
+      ? await loadActiveUnexpiredBlockers(
+          db,
+          shopId,
+          refundIdentity,
+          null,
+          interval,
+        )
+      : await loadActiveUnexpiredBlockersForFullSync(db, shopId, refundIdentity);
+  const overlappingCompleted =
+    observation.observationKind === "direct" && interval
+      ? await loadCompletedOverlappingIntervals(
+          db,
+          shopId,
+          refundIdentity,
+          null,
+          interval,
+        )
+      : [];
+
+  const decideWithBlock = (blocked: boolean) =>
+    decideOrderExistence({
+      stored: toStoredExistence(stored),
+      incomingKind,
+      incomingInterval: interval,
+      incomingShopifyCreatedAt: refund.shopifyCreatedAt,
+      incomingProcessedAt: refund.processedAt,
+      existenceObservedAt: observation.existenceObservedAt,
+      existenceBlocked: blocked,
+      overlappingCompleted,
+      fenceGeneration,
+      queryCompleted: true,
+      queryReturnedNull: false,
+      currentScopes: accessScopeSnapshot,
+      lastConfirmedScopes: lastValidLiveScopeFloor(
+        stored?.accessScopeSnapshot,
+        null,
+      ),
+    });
+
+  const decisionHonoringExpiry = decideWithBlock(blockers.length > 0);
+  const decisionIfExpiredStillBlocking = decideWithBlock(
+    blockers.length > 0 || expiredBlockers.length > 0,
+  );
+  const reliesOnExpiry =
+    decisionHonoringExpiry.mutate &&
+    !decisionIfExpiredStillBlocking.mutate &&
+    expiredBlockers.length > 0;
+
+  let existenceDecision: ExistenceDecision;
+  let existenceBlocked: boolean;
+  if (reliesOnExpiry) {
+    await abandonExpiredResultlessRows(db, shopId, expiredBlockers);
+    const blockersAfter =
+      observation.observationKind === "direct" && interval
+        ? await loadActiveUnexpiredBlockers(
+            db,
+            shopId,
+            refundIdentity,
+            null,
+            interval,
+          )
+        : await loadActiveUnexpiredBlockersForFullSync(db, shopId, refundIdentity);
+    existenceBlocked = blockersAfter.length > 0;
+    existenceDecision = decideWithBlock(existenceBlocked);
+  } else {
+    existenceBlocked = blockers.length > 0;
+    existenceDecision = decisionHonoringExpiry;
+  }
+
+  let existenceMutated = false;
+  const diagnostic = existenceDecision.diagnostic ?? null;
+  let factId = stored?.id ?? null;
+
+  const writeFromRefundDecision = (
+    decision: Extract<ExistenceDecision, { mutate: true }>,
+  ): ExistenceWriteInput => ({
+    decision,
+    interval,
+    observedAt: observation.existenceObservedAt,
+    sourceKind: observation.sourceKind,
+    accessScopeSnapshot: accessScopesForFactWrite(
+      decision,
+      accessScopeSnapshot,
+      stored?.accessScopeSnapshot,
+    ),
+  });
+
+  if (existenceDecision.mutate) {
+    const write = writeFromRefundDecision(existenceDecision);
+    if (stored) {
+      await updateRefundExistence(db, shopId, stored.id, write);
+      existenceMutated = true;
+      stored = await lockAndReadRefundFact(db, shopId, refund.shopifyGid);
+      factId = stored?.id ?? factId;
+    }
+  } else if (
+    stored &&
+    (existenceDecision.diagnostic || existenceDecision.historyWindowState)
+  ) {
+    await updateRefundDiagnosticsOnly(
+      db,
+      shopId,
+      stored.id,
+      existenceDecision.diagnostic,
+      existenceDecision.historyWindowState ?? null,
+    );
+  }
+
+  const resultingLive = existenceDecision.mutate
+    ? existenceDecision.nextState === "LIVE"
+    : stored?.existenceState === "LIVE";
+  if (existenceBlocked || !resultingLive) {
+    return {
+      applied: false,
+      existenceMutated,
+      diagnostic,
+      factId,
+      blocked: existenceBlocked,
+    };
+  }
+
+  const snapshotWrite =
+    existenceDecision.mutate && existenceDecision.nextState === "LIVE"
+      ? writeFromRefundDecision(existenceDecision)
+      : null;
+  const snapshot = await applyRefundSnapshotIfClockAllows(
+    db,
+    shopId,
+    observation,
+    refund,
+    interval,
+    accessScopeSnapshot,
+    snapshotWrite,
+  );
+  return {
+    applied: snapshot.applied || existenceMutated,
+    existenceMutated,
+    diagnostic: snapshot.diagnostic ?? diagnostic,
+    factId: snapshot.factId ?? factId,
+    blocked: false,
   };
 }
 
@@ -457,6 +672,7 @@ async function applyOneObservation(
           result: {
             identity,
             outcome: "lease_invalid",
+            reason: "lease_invalid",
             existenceMutated: false,
             attributesApplied: false,
             childrenApplied: false,
@@ -484,6 +700,7 @@ async function applyOneObservation(
       result: {
         identity,
         outcome: "incomplete",
+        reason: "incomplete",
         existenceMutated: false,
         attributesApplied: false,
         childrenApplied: false,
@@ -549,12 +766,22 @@ async function applyOneObservation(
       incomingInterval: directInterval,
       incomingShopifyCreatedAt:
         observation.observationKind === "direct"
-          ? (observation.shopifyCreatedAt ?? observation.order?.shopifyCreatedAt ?? null)
-          : (observation.order?.shopifyCreatedAt ?? null),
+          ? (observation.shopifyCreatedAt ??
+            observation.order?.shopifyCreatedAt ??
+            observation.refund?.shopifyCreatedAt ??
+            null)
+          : (observation.order?.shopifyCreatedAt ??
+            observation.refund?.shopifyCreatedAt ??
+            null),
       incomingProcessedAt:
         observation.observationKind === "direct"
-          ? (observation.processedAt ?? observation.order?.processedAt ?? null)
-          : (observation.order?.processedAt ?? null),
+          ? (observation.processedAt ??
+            observation.order?.processedAt ??
+            observation.refund?.processedAt ??
+            null)
+          : (observation.order?.processedAt ??
+            observation.refund?.processedAt ??
+            null),
       existenceObservedAt: observation.existenceObservedAt,
       existenceBlocked: blocked,
       overlappingCompleted,
@@ -568,10 +795,12 @@ async function applyOneObservation(
           ? observation.queryReturnedNull
           : false,
       currentScopes,
-      lastConfirmedScopes:
+      lastConfirmedScopes: lastValidLiveScopeFloor(
+        stored?.accessScopeSnapshot,
         observation.observationKind === "direct"
           ? observation.lastConfirmedAccessScopes
-          : stored?.accessScopeSnapshot,
+          : null,
+      ),
     });
 
   const decisionHonoringExpiry = decideWithBlock(blockers.length > 0);
@@ -620,7 +849,8 @@ async function applyOneObservation(
     interval: directInterval,
     observedAt: observation.existenceObservedAt,
     sourceKind: observation.sourceKind,
-    accessScopeSnapshot: mergeAccessScopeFloor(
+    accessScopeSnapshot: accessScopesForFactWrite(
+      decision,
       currentScopes,
       fact?.accessScopeSnapshot,
     ),
@@ -747,33 +977,59 @@ async function applyOneObservation(
       }
     }
 
-    const allowRefundWrites =
-      !existenceBlocked &&
-      (identity.resourceKind !== "Refund" || Boolean(resultingLive));
-    if (allowRefundWrites) {
+    if (identity.resourceKind === "Order" && !existenceBlocked) {
       for (const refund of refunds) {
-        const refundResult = await applyRefundIfClockAllows(
+        const refundResult = await applyEmbeddedRefund(
           db,
           shopId,
           observation,
           refund,
           directInterval,
-          childScopes,
+          fence?.fenceGeneration ?? null,
+          currentScopes,
         );
-        if (refundResult.applied) {
+        if (refundResult.blocked && !refundResult.applied && !refundResult.existenceMutated) {
+          continue;
+        }
+        if (refundResult.applied || refundResult.existenceMutated) {
           childrenApplied = true;
+          if (refundResult.existenceMutated) existenceMutated = true;
           if (refundResult.diagnostic) diagnostic = refundResult.diagnostic;
           if (!factId) factId = refundResult.factId;
-          if (
-            identity.resourceKind === "Refund" &&
-            existenceDecision.mutate &&
-            existenceDecision.nextState === "LIVE" &&
-            !existenceMutated
-          ) {
-            existenceMutated = true;
-            fact = await lockAndReadRefundFact(db, shopId, identity.shopifyGid);
-            factId = fact?.id ?? factId;
-          }
+        }
+      }
+    } else if (
+      identity.resourceKind === "Refund" &&
+      observation.refund &&
+      !existenceBlocked &&
+      resultingLive
+    ) {
+      const refundWrite =
+        existenceDecision.mutate && existenceDecision.nextState === "LIVE"
+          ? writeFromDecision(existenceDecision)
+          : null;
+      const refundResult = await applyRefundSnapshotIfClockAllows(
+        db,
+        shopId,
+        observation,
+        observation.refund,
+        directInterval,
+        currentScopes,
+        refundWrite,
+      );
+      if (refundResult.applied) {
+        childrenApplied = true;
+        attributesApplied = true;
+        if (refundResult.diagnostic) diagnostic = refundResult.diagnostic;
+        if (!factId) factId = refundResult.factId;
+        if (
+          existenceDecision.mutate &&
+          existenceDecision.nextState === "LIVE" &&
+          !existenceMutated
+        ) {
+          existenceMutated = true;
+          fact = await lockAndReadRefundFact(db, shopId, identity.shopifyGid);
+          factId = fact?.id ?? factId;
         }
       }
     }
@@ -837,6 +1093,7 @@ async function applyOneObservation(
         result: {
           identity,
           outcome: "rejected",
+          reason: "money_unsafe",
           existenceMutated,
           attributesApplied: false,
           childrenApplied: false,
@@ -859,6 +1116,7 @@ async function applyOneObservation(
   }
 
   let outcome: OrderApplyObservationResult["outcome"] = "applied";
+  let reason = existenceDecision.reason;
   if (
     existenceBlocked &&
     !existenceMutated &&
@@ -866,6 +1124,7 @@ async function applyOneObservation(
     !childrenApplied
   ) {
     outcome = "blocked";
+    reason = "active_blocker";
   } else if (
     existenceDecision.reason.includes("conflict") ||
     diagnostic?.includes("CONFLICT")
@@ -873,6 +1132,8 @@ async function applyOneObservation(
     outcome = "conflict";
   } else if (!existenceMutated && !attributesApplied && !childrenApplied) {
     outcome = "noop";
+  } else if (outcome === "applied" && !reason) {
+    reason = "applied_snapshot";
   }
 
   return {
@@ -880,6 +1141,7 @@ async function applyOneObservation(
     result: {
       identity,
       outcome,
+      reason,
       existenceMutated,
       attributesApplied,
       childrenApplied,
@@ -924,6 +1186,11 @@ export async function applyOrderFacts(
   await requireProcessingEnabled(db, input.shopId);
 
   if (input.receipt) {
+    await acquireReceiptApplicationKeyLock(
+      db,
+      input.shopId,
+      input.receipt.applicationKey,
+    );
     const short = await shortCircuitIfApplied(
       db,
       input.shopId,
@@ -934,6 +1201,7 @@ export async function applyOrderFacts(
         results: input.observations.map((observation) => ({
           identity: observation.identity,
           outcome: "already_applied",
+          reason: "already_applied",
           existenceMutated: false,
           attributesApplied: false,
           childrenApplied: false,
@@ -974,6 +1242,7 @@ export async function applyOrderFacts(
   }
 
   await acquireOrderedLocks(db, identities);
+  await requireProcessingEnabled(db, input.shopId);
 
   const byIdentity = new Map<string, OrderObservation[]>();
   for (const observation of input.observations) {
@@ -1013,16 +1282,26 @@ export async function applyOrderFacts(
   }
 
   let receiptStatus: OrderApplyBatchResult["receiptStatus"] = "none";
-  const receiptCertifiesSuccess =
-    results.length > 0 &&
-    results.every(
-      (result) => result.outcome === "applied" || result.outcome === "noop",
-    );
-  if (input.receipt && receiptCertifiesSuccess) {
+  if (input.receipt) {
+    if (!batchCertifiesReceiptSuccess(results)) {
+      throw new OrderApplyReceiptNotCertifiableError(
+        `Receipt-bound apply outcomes are not terminal-accepted: ${results
+          .map((result) => `${result.outcome}:${result.reason}`)
+          .join(",")}`,
+      );
+    }
     const inserted = await insertReceiptFinal(
       db,
       input.shopId,
       input.receipt,
+      {
+        observationOutcomes: results.map((result) => ({
+          resourceKind: result.identity.resourceKind,
+          shopifyGid: result.identity.shopifyGid,
+          outcome: result.outcome,
+          reason: result.reason,
+        })),
+      },
     );
     receiptStatus = inserted === "inserted" ? "applied" : "already_applied";
   }
@@ -1058,7 +1337,8 @@ export async function applyOrderFactsWithRetry(
       const code = (error as { code?: string }).code;
       if (
         (code === "order_advisory_lock_timeout" ||
-          code === "order_apply_unique_conflict") &&
+          code === "order_apply_unique_conflict" ||
+          code === "order_apply_receipt_lock_timeout") &&
         attempt < maxAttempts
       ) {
         continue;
