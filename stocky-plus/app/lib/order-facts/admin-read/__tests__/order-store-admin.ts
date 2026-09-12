@@ -18,6 +18,12 @@ export type OrderStore = {
   agreements: Agreement[];
   refunds: Refund[];
   nullOrder?: boolean;
+  /** When true, Order.refunds is omitted from the JSON object. */
+  omitRefunds?: boolean;
+  /** When set, Order.refunds is this value instead of the mapped refund array. */
+  rawRefunds?: unknown;
+  /** Mutate store.header before each OrderFactById / sales-page response. */
+  onOrderQuery?: (callIndex: number) => void;
 };
 
 function intVar(value: unknown, fallback: number): number {
@@ -25,9 +31,12 @@ function intVar(value: unknown, fallback: number): number {
 }
 
 export function createOrderStoreAdmin(store: OrderStore) {
+  let orderQueryIndex = 0;
   return createMockAdmin((query, variables) => {
     const name = operationNameOf(query);
     if (name === "OrderFactById") {
+      orderQueryIndex += 1;
+      store.onOrderQuery?.(orderQueryIndex);
       if (store.nullOrder) {
         return { data: { order: null } };
       }
@@ -53,25 +62,36 @@ export function createOrderStoreAdmin(store: OrderStore) {
               agrFirst,
               agrAfter,
             ),
-            refunds: store.refunds.map((refund) => ({
-              ...refund,
-              refundLineItems: paginate(
-                refund.refundLineItems,
-                refundLineFirst,
-                null,
-              ),
-              orderAdjustments: paginate(
-                refund.orderAdjustments,
-                adjFirst,
-                null,
-              ),
-              refundShippingLines: paginate(
-                refund.refundShippingLines,
-                shipFirst,
-                null,
-              ),
-              transactions: paginate(refund.transactions, txnFirst, null),
-            })),
+            ...(store.omitRefunds
+              ? {}
+              : {
+                  refunds:
+                    "rawRefunds" in store
+                      ? store.rawRefunds
+                      : store.refunds.map((refund) => ({
+                          ...refund,
+                          refundLineItems: paginate(
+                            refund.refundLineItems,
+                            refundLineFirst,
+                            null,
+                          ),
+                          orderAdjustments: paginate(
+                            refund.orderAdjustments,
+                            adjFirst,
+                            null,
+                          ),
+                          refundShippingLines: paginate(
+                            refund.refundShippingLines,
+                            shipFirst,
+                            null,
+                          ),
+                          transactions: paginate(
+                            refund.transactions,
+                            txnFirst,
+                            null,
+                          ),
+                        })),
+                }),
           },
         },
         extensions: { cost: { requestedQueryCost: 10 } },
@@ -79,6 +99,8 @@ export function createOrderStoreAdmin(store: OrderStore) {
     }
 
     if (name === "OrderAgreementSalesPage") {
+      orderQueryIndex += 1;
+      store.onOrderQuery?.(orderQueryIndex);
       if (store.nullOrder) return { data: { order: null } };
       const after = variables?.agreementAfter ?? null;
       const saleFirst = intVar(variables?.saleFirst, 100);
@@ -90,16 +112,20 @@ export function createOrderStoreAdmin(store: OrderStore) {
           data: {
             order: {
               id: store.header.id,
+              updatedAt: store.header.updatedAt,
+              currencyCode: store.header.currencyCode,
               agreements: emptyConnection(),
             },
           },
         };
       }
       return {
-        data: {
-          order: {
-            id: store.header.id,
-            agreements: {
+          data: {
+            order: {
+              id: store.header.id,
+              updatedAt: store.header.updatedAt,
+              currencyCode: store.header.currencyCode,
+              agreements: {
               pageInfo: page.pageInfo,
               edges: [
                 {

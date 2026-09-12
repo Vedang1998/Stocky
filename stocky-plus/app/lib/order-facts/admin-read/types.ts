@@ -1,6 +1,9 @@
 /**
  * PR6-B Admin READ types. Maps Shopify JSON into typed read models.
  * Does not persist canonical facts or issue Shopify mutations.
+ *
+ * B reports what a QUERY returned. It does not assign domain existence kinds
+ * (those remain A's stored vocabulary and C's adjudication).
  */
 
 import type { MoneyBagSides } from "../types";
@@ -62,6 +65,28 @@ export type CatalogNodeRef = {
   handle?: string | null;
 };
 
+export type OrderReadResourceKind = "Order" | "Refund" | "Shop" | "AccessScopes";
+
+export type OrderReadPhase =
+  | "initial"
+  | "lineItems"
+  | "agreements"
+  | "sales"
+  | "refunds"
+  | "refundLineItems"
+  | "orderAdjustments"
+  | "refundShippingLines"
+  | "transactions"
+  | "version_recheck"
+  | "options"
+  | "tenant";
+
+export type OrderReadIssueExtras = {
+  resourceKind?: OrderReadResourceKind;
+  requestedGid?: string | null;
+  phase?: OrderReadPhase;
+};
+
 export type OrderLineRead = {
   id: string;
   sku: string | null;
@@ -110,7 +135,10 @@ export type RefundLineRead = {
   id: string | null;
   quantity: number;
   restockType: string | null;
+  restocked: boolean | null;
+  restockLocationId: string | null;
   lineItemId: string;
+  refundLineOrdinal: number;
   subtotalSet: MoneyBagSides;
   totalTaxSet: MoneyBagSides;
   priceSet: MoneyBagSides;
@@ -205,25 +233,40 @@ export type AccessScopeSnapshot = {
 
 export type OrderReadFailureKind =
   | "SNAPSHOT_PAGINATION_INCOMPLETE"
-  | "INACCESSIBLE_HISTORY_WINDOW"
   | "IDENTITY_MISMATCH"
   | "MALFORMED_MONEY"
   | "MONEY_CURRENCY_MISMATCH"
   | "MALFORMED_DATETIME"
+  | "MALFORMED_ENVELOPE"
+  | "INVALID_READ_OPTIONS"
   | "TENANT_DENIED"
   | "ADMIN_READ_ERROR";
 
+export type OrderReadStructuredIssue = {
+  resourceKind: OrderReadResourceKind | null;
+  requestedGid: string | null;
+  phase: OrderReadPhase;
+  reason: OrderReadFailureKind;
+  detail: string;
+  cost: RequestCostAccumulator;
+};
+
 export type OrderReadResult<T> =
   | { status: "complete"; value: T; cost: RequestCostAccumulator }
-  | {
+  | ({
       status: "incomplete";
       outcome: "SNAPSHOT_PAGINATION_INCOMPLETE";
-      cost: RequestCostAccumulator;
-      detail: string;
-    }
-  | {
+    } & OrderReadStructuredIssue)
+  | ({
       status: "failure";
       kind: OrderReadFailureKind;
-      detail: string;
+    } & OrderReadStructuredIssue)
+  | {
+      status: "null_observed";
+      resourceKind: "Order" | "Refund";
+      requestedGid: string;
+      queryCompleted: true;
+      nodeReturned: null;
+      phase: "initial";
       cost: RequestCostAccumulator;
     };

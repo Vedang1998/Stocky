@@ -41,4 +41,32 @@ describe("PR6-B cursor pagination fail-closed", () => {
       }),
     ).toThrow(/endCursor is missing/);
   });
+
+  it("fails when edges is missing rather than treating it as an empty page", () => {
+    expect(() =>
+      mapConnectionPage({
+        connection: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+        },
+        connectionName: "lineItems",
+        mapNode: (node) => node,
+        nodeIdentity: (node) => (node as { id: string }).id,
+      }),
+    ).toThrow(/edges must be an array/);
+  });
+
+  it("fails when a promised continuation page is empty", () => {
+    expect(() =>
+      mapConnectionPage({
+        connection: {
+          pageInfo: { hasNextPage: false, endCursor: null },
+          edges: [],
+        },
+        connectionName: "lineItems",
+        mapNode: (node) => node,
+        nodeIdentity: (node) => (node as { id: string }).id,
+        requireNonEmpty: true,
+      }),
+    ).toThrow(/continuation page was empty/);
+  });
 });

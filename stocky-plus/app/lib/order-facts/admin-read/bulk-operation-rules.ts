@@ -8,25 +8,34 @@
  * - connections must implement the Node interface;
  * - top-level `node` / `nodes` are forbidden.
  *
- * Schema validity (`specifiedRules`) is a separate gate. A document can be
- * GraphQL-valid and still illegal for bulk execution.
+ * Inspects the single executed operation and reachable fragment spreads.
+ * Unused fragment definitions are not counted. Unknown/unresolved shape
+ * never returns eligible: true.
+ *
+ * Schema validity (`specifiedRules`) is a separate gate.
  */
 
 import {
-  TypeInfo,
+  Kind,
+  doTypesOverlap,
   getNamedType,
+  isCompositeType,
   isInterfaceType,
   isObjectType,
   parse,
-  visit,
-  visitWithTypeInfo,
+  type DocumentNode,
+  type FieldNode,
+  type FragmentDefinitionNode,
   type GraphQLNamedType,
-  type GraphQLSchema,
   type GraphQLObjectType,
+  type GraphQLSchema,
+  type OperationDefinitionNode,
+  type SelectionSetNode,
 } from "graphql";
 
 export const BULK_MAX_CONNECTIONS = 5;
 export const BULK_MAX_CONNECTION_DEPTH = 2;
+export const BULK_MAX_SELECTION_VISITS = 10_000;
 
 export type BulkConnectionFinding = {
   fieldName: string;
@@ -76,79 +85,259 @@ function connectionNodeType(
   return getNamedType(nodeField.type);
 }
 
+function ineligible(
+  reasons: string[],
+  extras: Partial<BulkRuleResult> = {},
+): BulkRuleResult {
+  return {
+    eligible: false,
+    reasons,
+    connections: extras.connections ?? [],
+    maxDepth: extras.maxDepth ?? 0,
+    hasTopLevelNodeOrNodes: extras.hasTopLevelNodeOrNodes ?? false,
+  };
+}
+
+function fieldMapOf(type: GraphQLNamedType): ReturnType<GraphQLObjectType["getFields"]> | null {
+  if (isObjectType(type) || isInterfaceType(type)) {
+    return type.getFields();
+  }
+  return null;
+}
+
+function resolveSpreadType(
+  schema: GraphQLSchema,
+  typeConditionName: string | undefined,
+  parentType: GraphQLNamedType,
+): GraphQLNamedType | null {
+  if (!typeConditionName) return parentType;
+  const named = schema.getType(typeConditionName);
+  if (!named) return null;
+  if (!isCompositeType(parentType) || !isCompositeType(named)) return null;
+  if (!doTypesOverlap(schema, parentType, named)) return null;
+  return named;
+}
+
+type WalkState = {
+  schema: GraphQLSchema;
+  fragments: Map<string, FragmentDefinitionNode>;
+  connections: BulkConnectionFinding[];
+  reasons: string[];
+  hasTopLevelNodeOrNodes: boolean;
+  visits: number;
+  unresolved: boolean;
+};
+
+function walkSelectionSet(
+  state: WalkState,
+  selectionSet: SelectionSetNode,
+  parentType: GraphQLNamedType,
+  connectionDepth: number,
+  atRoot: boolean,
+  fragmentStack: readonly string[],
+): void {
+  if (state.unresolved) return;
+  for (const selection of selectionSet.selections) {
+    state.visits += 1;
+    if (state.visits > BULK_MAX_SELECTION_VISITS) {
+      state.unresolved = true;
+      state.reasons.push("selection traversal exceeded bound");
+      return;
+    }
+    if (selection.kind === Kind.FIELD) {
+      walkField(state, selection, parentType, connectionDepth, atRoot, fragmentStack);
+      continue;
+    }
+    if (selection.kind === Kind.INLINE_FRAGMENT) {
+      const nextType = resolveSpreadType(
+        state.schema,
+        selection.typeCondition?.name.value,
+        parentType,
+      );
+      if (!nextType) {
+        state.unresolved = true;
+        state.reasons.push("inline fragment type is unresolved or invalid on parent");
+        return;
+      }
+      walkSelectionSet(
+        state,
+        selection.selectionSet,
+        nextType,
+        connectionDepth,
+        atRoot,
+        fragmentStack,
+      );
+      continue;
+    }
+    if (selection.kind === Kind.FRAGMENT_SPREAD) {
+      const name = selection.name.value;
+      if (fragmentStack.includes(name)) {
+        state.unresolved = true;
+        state.reasons.push(`fragment cycle involving ${name}`);
+        return;
+      }
+      const fragment = state.fragments.get(name);
+      if (!fragment) {
+        state.unresolved = true;
+        state.reasons.push(`undefined fragment ${name}`);
+        return;
+      }
+      const nextType = resolveSpreadType(
+        state.schema,
+        fragment.typeCondition.name.value,
+        parentType,
+      );
+      if (!nextType) {
+        state.unresolved = true;
+        state.reasons.push(
+          `fragment ${name} type is unresolved or invalid on parent`,
+        );
+        return;
+      }
+      walkSelectionSet(
+        state,
+        fragment.selectionSet,
+        nextType,
+        connectionDepth,
+        atRoot,
+        [...fragmentStack, name],
+      );
+    }
+  }
+}
+
+function walkField(
+  state: WalkState,
+  field: FieldNode,
+  parentType: GraphQLNamedType,
+  connectionDepth: number,
+  atRoot: boolean,
+  fragmentStack: readonly string[],
+): void {
+  if (state.unresolved) return;
+  const fieldName = field.name.value;
+  if (atRoot && (fieldName === "node" || fieldName === "nodes")) {
+    state.hasTopLevelNodeOrNodes = true;
+  }
+  if (fieldName.startsWith("__")) {
+    return;
+  }
+  const fields = fieldMapOf(parentType);
+  const fieldDef = fields?.[fieldName];
+  if (!fieldDef) {
+    state.unresolved = true;
+    state.reasons.push(`unresolved field ${fieldName} on ${parentType.name}`);
+    return;
+  }
+  const named = getNamedType(fieldDef.type);
+  const isConnection = isConnectionNamedType(named) && isObjectType(named);
+  let nextDepth = connectionDepth;
+  if (isConnection && isObjectType(named)) {
+    const depth = connectionDepth + 1;
+    const nodeType = connectionNodeType(named);
+    state.connections.push({
+      fieldName,
+      typeName: named.name,
+      depth,
+      nodeTypeName: namedTypeName(nodeType),
+      nodeImplementsNode: implementsNode(nodeType),
+    });
+    nextDepth = depth;
+  }
+  if (field.selectionSet) {
+    if (!named) {
+      state.unresolved = true;
+      state.reasons.push(`unresolved return type for field ${fieldName}`);
+      return;
+    }
+    walkSelectionSet(
+      state,
+      field.selectionSet,
+      named,
+      nextDepth,
+      false,
+      fragmentStack,
+    );
+  }
+}
+
 export function evaluateBulkOperationRules(
   schema: GraphQLSchema,
   document: string,
 ): BulkRuleResult {
-  const ast = parse(document);
-  const typeInfo = new TypeInfo(schema);
-  const connections: BulkConnectionFinding[] = [];
-  let hasTopLevelNodeOrNodes = false;
-  const reasons: string[] = [];
+  let ast: DocumentNode;
+  try {
+    ast = parse(document);
+  } catch {
+    return ineligible(["GraphQL document is not parseable"]);
+  }
 
-  const connectionAncestorStack: string[] = [];
-  const connectionEnterStack: boolean[] = [];
-
-  visit(
-    ast,
-    visitWithTypeInfo(typeInfo, {
-      OperationDefinition: {
-        enter(node) {
-          for (const selection of node.selectionSet.selections) {
-            if (selection.kind === "Field") {
-              const name = selection.name.value;
-              if (name === "node" || name === "nodes") {
-                hasTopLevelNodeOrNodes = true;
-              }
-            }
-          }
-        },
-      },
-      Field: {
-        enter(node) {
-          const outputType = typeInfo.getType();
-          const named = outputType ? getNamedType(outputType) : null;
-          const isConnection =
-            isConnectionNamedType(named) && isObjectType(named);
-          connectionEnterStack.push(isConnection);
-          if (!isConnection || !named || !isObjectType(named)) {
-            return;
-          }
-          const depth = connectionAncestorStack.length + 1;
-          const nodeType = connectionNodeType(named);
-          const nodeTypeName = namedTypeName(nodeType);
-          const nodeImplements = implementsNode(nodeType);
-          connections.push({
-            fieldName: node.name.value,
-            typeName: named.name,
-            depth,
-            nodeTypeName,
-            nodeImplementsNode: nodeImplements,
-          });
-          connectionAncestorStack.push(node.name.value);
-        },
-        leave() {
-          const wasConnection = connectionEnterStack.pop();
-          if (wasConnection) {
-            connectionAncestorStack.pop();
-          }
-        },
-      },
-    }),
+  const operations = ast.definitions.filter(
+    (definition): definition is OperationDefinitionNode =>
+      definition.kind === Kind.OPERATION_DEFINITION,
   );
+  const fragments = new Map<string, FragmentDefinitionNode>();
+  for (const definition of ast.definitions) {
+    if (definition.kind === Kind.FRAGMENT_DEFINITION) {
+      fragments.set(definition.name.value, definition);
+    }
+  }
 
-  if (hasTopLevelNodeOrNodes) {
+  if (operations.length === 0) {
+    return ineligible(["document has no executable operation"]);
+  }
+  if (operations.length > 1) {
+    return ineligible([
+      "multiple executable operations; refusing implicit choice",
+    ]);
+  }
+
+  const operation = operations[0]!;
+  const rootType =
+    operation.operation === "query"
+      ? schema.getQueryType()
+      : operation.operation === "mutation"
+        ? schema.getMutationType()
+        : schema.getSubscriptionType();
+  if (!rootType) {
+    return ineligible(["operation root type is unresolved"]);
+  }
+
+  const state: WalkState = {
+    schema,
+    fragments,
+    connections: [],
+    reasons: [],
+    hasTopLevelNodeOrNodes: false,
+    visits: 0,
+    unresolved: false,
+  };
+  walkSelectionSet(state, operation.selectionSet, rootType, 0, true, []);
+
+  if (state.unresolved) {
+    return ineligible(state.reasons, {
+      connections: state.connections,
+      hasTopLevelNodeOrNodes: state.hasTopLevelNodeOrNodes,
+      maxDepth: state.connections.reduce(
+        (max, item) => Math.max(max, item.depth),
+        0,
+      ),
+    });
+  }
+
+  const reasons = [...state.reasons];
+  if (state.hasTopLevelNodeOrNodes) {
     reasons.push("top-level node/nodes is forbidden in a bulk query");
   }
-  if (connections.length === 0) {
+  if (state.connections.length === 0) {
     reasons.push("bulk query must include a connection");
   }
-  if (connections.length > BULK_MAX_CONNECTIONS) {
+  if (state.connections.length > BULK_MAX_CONNECTIONS) {
     reasons.push(
-      `bulk query has ${connections.length} connections; maximum is ${BULK_MAX_CONNECTIONS}`,
+      `bulk query has ${state.connections.length} connections; maximum is ${BULK_MAX_CONNECTIONS}`,
     );
   }
-  const maxDepth = connections.reduce(
+  const maxDepth = state.connections.reduce(
     (max, item) => Math.max(max, item.depth),
     0,
   );
@@ -157,7 +346,7 @@ export function evaluateBulkOperationRules(
       `bulk query nested connection depth is ${maxDepth}; maximum is ${BULK_MAX_CONNECTION_DEPTH}`,
     );
   }
-  for (const item of connections) {
+  for (const item of state.connections) {
     if (!item.nodeImplementsNode) {
       reasons.push(
         `connection ${item.fieldName} node type ${item.nodeTypeName ?? "(unknown)"} does not implement Node`,
@@ -168,9 +357,9 @@ export function evaluateBulkOperationRules(
   return {
     eligible: reasons.length === 0,
     reasons,
-    connections,
+    connections: state.connections,
     maxDepth,
-    hasTopLevelNodeOrNodes,
+    hasTopLevelNodeOrNodes: state.hasTopLevelNodeOrNodes,
   };
 }
 

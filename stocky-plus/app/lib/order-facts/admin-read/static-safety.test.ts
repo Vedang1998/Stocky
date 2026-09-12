@@ -35,6 +35,7 @@ describe("PR6-B production-module static safety (T48 reader boundary)", () => {
       expect(text, file).not.toMatch(/\bparseFloat\s*\(/);
       expect(text, file).not.toMatch(/\bNumber\s*\(\s*(?:amount|shopAmount)/);
       expect(text, file).not.toMatch(/tombstone/i);
+      expect(text, file).not.toMatch(/INACCESSIBLE_HISTORY_WINDOW/);
     }
   });
 

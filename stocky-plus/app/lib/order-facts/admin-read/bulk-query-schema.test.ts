@@ -151,6 +151,230 @@ describe("PR6-B bulk schema and bulk-rule gates", () => {
     expect(result.hasTopLevelNodeOrNodes).toBe(true);
   });
 
+  it("F-06: fragment-hidden root nodes is ineligible", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{ ...RootNodes } fragment RootNodes on QueryRoot { nodes(ids: ["gid://shopify/Order/1"]) { id } }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.hasTopLevelNodeOrNodes).toBe(true);
+  });
+
+  it("F-06: inline-root node is ineligible", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{ ... on QueryRoot { node(id: "gid://shopify/Order/1") { id } } }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.hasTopLevelNodeOrNodes).toBe(true);
+  });
+
+  it("F-06: fragment-hidden depth-three path is ineligible", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{
+        orders {
+          edges {
+            node {
+              ...Deep
+            }
+          }
+        }
+      }
+      fragment Deep on Order {
+        agreements {
+          edges {
+            node {
+              sales {
+                edges { node { id } }
+              }
+            }
+          }
+        }
+      }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.maxDepth).toBeGreaterThan(2);
+  });
+
+  it("F-06: unused dead fragments are not counted as executed connections", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const live = evaluateBulkOperationRules(
+      schema,
+      `{
+        orders { edges { node { id lineItems { edges { node { id } } } } } }
+      }`,
+    );
+    const withDead = evaluateBulkOperationRules(
+      schema,
+      `{
+        orders { edges { node { id lineItems { edges { node { id } } } } } }
+      }
+      fragment Dead on Order {
+        agreements {
+          edges {
+            node {
+              sales { edges { node { id } } }
+            }
+          }
+        }
+      }
+      fragment DeadRoot on QueryRoot {
+        nodes(ids: ["gid://shopify/Order/1"]) { id }
+      }`,
+    );
+    expect(live.eligible).toBe(true);
+    expect(withDead.eligible).toBe(live.eligible);
+    expect(withDead.connections.length).toBe(live.connections.length);
+    expect(withDead.maxDepth).toBe(live.maxDepth);
+    expect(withDead.hasTopLevelNodeOrNodes).toBe(false);
+  });
+
+  it("F-06: reused fragments are counted per parent context, not globally deduplicated", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const once = evaluateBulkOperationRules(
+      schema,
+      `{
+        orders {
+          edges {
+            node {
+              id
+              ...Lines
+            }
+          }
+        }
+      }
+      fragment Lines on Order {
+        lineItems { edges { node { id } } }
+      }`,
+    );
+    const twice = evaluateBulkOperationRules(
+      schema,
+      `{
+        orders {
+          edges {
+            node {
+              id
+              ...Lines
+            }
+          }
+        }
+        moreOrders: orders {
+          edges {
+            node {
+              id
+              ...Lines
+            }
+          }
+        }
+      }
+      fragment Lines on Order {
+        lineItems { edges { node { id } } }
+      }`,
+    );
+    expect(once.eligible).toBe(true);
+    expect(once.connections.filter((item) => item.fieldName === "lineItems")).toHaveLength(
+      1,
+    );
+    expect(twice.connections.filter((item) => item.fieldName === "lineItems")).toHaveLength(
+      2,
+    );
+    expect(twice.connections).toHaveLength(4);
+    expect(twice.maxDepth).toBe(2);
+  });
+
+  it("F-06: fragment type that does not overlap the parent is unresolved, never eligible", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{
+        draftOrders {
+          edges {
+            node {
+              id
+              ...Lines
+            }
+          }
+        }
+      }
+      fragment Lines on Order {
+        lineItems { edges { node { id } } }
+      }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons.join("\n")).toMatch(/unresolved or invalid/i);
+  });
+
+  it("F-06: undefined fragment spreads fail closed", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{ orders { edges { node { ...Missing } } } }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons.join("\n")).toMatch(/undefined fragment Missing/);
+  });
+
+  it("F-06: fragment cycles fail closed", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{
+        orders { edges { node { ...CycleA } } }
+      }
+      fragment CycleA on Order { ...CycleB }
+      fragment CycleB on Order { ...CycleA }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons.join("\n")).toMatch(/fragment cycle/);
+  });
+
+  it("F-06: unknown field shape is never eligible", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{ orders { edges { node { definitelyNotAField } } } }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons.join("\n")).toMatch(/unresolved field/);
+  });
+
+  it("F-06: multiple executable operations are rejected rather than picking one", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `query A { orders { edges { node { id } } } }
+       query B { nodes(ids: ["gid://shopify/Order/1"]) { id } }`,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons.join("\n")).toMatch(/multiple executable operations/i);
+  });
+
+  it("F-06: equivalent alias form of Bulk A remains eligible", () => {
+    const { schema } = loadGeneratedAdmin202607Schema();
+    const result = evaluateBulkOperationRules(
+      schema,
+      `{
+        allOrders: orders {
+          edges {
+            node {
+              id
+              lines: lineItems {
+                edges { node { id } }
+              }
+            }
+          }
+        }
+      }`,
+    );
+    expect(result.eligible).toBe(true);
+    expect(result.connections.length).toBe(2);
+    expect(result.maxDepth).toBe(2);
+  });
+
   it("enumerates the three candidate bulk documents", () => {
     expect(ORDER_FACTS_BULK_QUERY_DOCUMENTS).toHaveLength(3);
   });

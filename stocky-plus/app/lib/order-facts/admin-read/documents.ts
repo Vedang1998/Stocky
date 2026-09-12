@@ -174,6 +174,9 @@ export const ORDER_FACT_BY_ID_QUERY = `#graphql
         createdAt
         updatedAt
         processedAt
+        order {
+          id
+        }
         totalRefundedSet {
           shopMoney {
             amount
@@ -381,6 +384,10 @@ export const ORDER_FACT_BY_ID_QUERY = `#graphql
     id
     quantity
     restockType
+    restocked
+    location {
+      id
+    }
     lineItem {
       id
     }
@@ -529,6 +536,8 @@ export const ORDER_AGREEMENT_SALES_PAGE_QUERY = `#graphql
   ) {
     order(id: $orderId) {
       id
+      updatedAt
+      currencyCode
       agreements(first: 1, after: $agreementAfter) {
         pageInfo {
           hasNextPage
@@ -658,6 +667,10 @@ export const REFUND_FACT_BY_ID_QUERY = `#graphql
             id
             quantity
             restockType
+            restocked
+            location {
+              id
+            }
             lineItem {
               id
             }

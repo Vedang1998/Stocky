@@ -82,10 +82,12 @@ describe("PR6-B order snapshot walk", () => {
     const orderCalls = admin.calls.filter((call) =>
       call.query.includes("query OrderFactById"),
     );
-    expect(orderCalls.length).toBe(3);
+    expect(orderCalls.length).toBe(4);
     expect(orderCalls[0]?.variables?.lineAfter == null).toBe(true);
     expect(orderCalls[1]?.variables?.lineAfter).toBe("gid://shopify/LineItem/100");
     expect(orderCalls[2]?.variables?.lineAfter).toBe("gid://shopify/LineItem/200");
+    expect(orderCalls[3]?.variables?.lineAfter == null).toBe(true);
+    expect(orderCalls[3]?.variables?.lineFirst).toBe(1);
   });
 
   it("T39 includes the boundary extra page (101 lines, page size 100)", async () => {
@@ -107,7 +109,7 @@ describe("PR6-B order snapshot walk", () => {
     expect(result.value.lineItems).toHaveLength(101);
   });
 
-  it("T41 aged-out order(id:) null is inaccessible, not a tombstone", async () => {
+  it("T41 aged-out order(id:) explicit null is neutral null_observed, not an existence kind", async () => {
     const admin = createOrderStoreAdmin({
       header: orderHeader(),
       lines: [lineNode(1)],
@@ -116,10 +118,16 @@ describe("PR6-B order snapshot walk", () => {
       nullOrder: true,
     });
     const result = await readOrderFact(context(admin), "gid://shopify/Order/1");
-    expect(result.status).toBe("failure");
-    if (result.status !== "failure") return;
-    expect(result.kind).toBe("INACCESSIBLE_HISTORY_WINDOW");
-    expect(result.detail).not.toMatch(/tombstone/i);
+    expect(result.status).toBe("null_observed");
+    if (result.status !== "null_observed") return;
+    expect(result.resourceKind).toBe("Order");
+    expect(result.requestedGid).toBe("gid://shopify/Order/1");
+    expect(result.queryCompleted).toBe(true);
+    expect(result.nodeReturned).toBeNull();
+    expect(result.phase).toBe("initial");
+    expect(result).not.toHaveProperty("kind");
+    expect(JSON.stringify(result)).not.toMatch(/INACCESSIBLE_HISTORY_WINDOW/);
+    expect(JSON.stringify(result)).not.toMatch(/tombstone/i);
   });
 
   it("T48 rejects the whole snapshot when one required MoneyBag is invalid", async () => {
@@ -191,6 +199,9 @@ describe("PR6-B order snapshot walk", () => {
     expect(result.status).toBe("incomplete");
     if (result.status !== "incomplete") return;
     expect(result.outcome).toBe("SNAPSHOT_PAGINATION_INCOMPLETE");
+    expect(result.phase).toBe("lineItems");
+    expect(result.reason).toBe("SNAPSHOT_PAGINATION_INCOMPLETE");
+    expect(result.resourceKind).toBe("Order");
   });
 
   it("fails closed on GID mismatch", async () => {
@@ -257,9 +268,14 @@ describe("PR6-B order snapshot walk", () => {
     const result = await readOrderFact(context(admin), "gid://shopify/Order/1", {
       pageSize: 1,
     });
-    expect(result.status).toBe("failure");
-    if (result.status !== "failure") return;
-    expect(result.kind).toBe("INACCESSIBLE_HISTORY_WINDOW");
+    expect(result.status).toBe("incomplete");
+    if (result.status !== "incomplete") return;
+    expect(result.outcome).toBe("SNAPSHOT_PAGINATION_INCOMPLETE");
+    expect(result.reason).toBe("SNAPSHOT_PAGINATION_INCOMPLETE");
+    expect(result.resourceKind).toBe("Order");
+    expect(result.requestedGid).toBe("gid://shopify/Order/1");
+    expect(result.phase).toBe("lineItems");
+    expect("kind" in result).toBe(false);
   });
 });
 
@@ -313,6 +329,11 @@ describe("PR6-B refund reader", () => {
     expect(result.value.refundLineItems[0]?.id).toBeNull();
     expect(result.value.refundLineItems[0]?.lineItemId).toBe(
       "gid://shopify/LineItem/9",
+    );
+    expect(result.value.refundLineItems[0]?.refundLineOrdinal).toBe(0);
+    expect(result.value.refundLineItems[0]?.restocked).toBe(false);
+    expect(result.value.refundLineItems[0]?.restockLocationId).toBe(
+      "gid://shopify/Location/1",
     );
     expect(result.value.childrenComplete).toBe(true);
   });

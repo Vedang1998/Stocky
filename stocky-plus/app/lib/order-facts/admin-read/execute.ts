@@ -6,6 +6,7 @@
  */
 
 import { assertCanonicalReadDocument } from "./safety/graphql-ast";
+import { OrderFactReadWalkError } from "./errors";
 import type {
   AdminGraphQLError,
   AdminGraphQLResponse,
@@ -62,16 +63,33 @@ export async function executeAdminReadQuery<T>(
 
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     const response = await admin.graphql(document, { variables });
-    const json = (await response.json()) as AdminGraphQLResponse<T>;
-    const errors = json.errors ?? [];
+    const json = await response.json();
+    if (json == null || typeof json !== "object" || Array.isArray(json)) {
+      throw new OrderFactReadWalkError(
+        "MALFORMED_ENVELOPE",
+        "Admin JSON envelope is not an object",
+      );
+    }
+    const envelope = json as AdminGraphQLResponse<T>;
+    if (
+      Object.prototype.hasOwnProperty.call(envelope, "errors") &&
+      envelope.errors != null &&
+      !Array.isArray(envelope.errors)
+    ) {
+      throw new OrderFactReadWalkError(
+        "MALFORMED_ENVELOPE",
+        "Admin JSON errors is not an array",
+      );
+    }
+    const errors = envelope.errors ?? [];
 
     if (errors.length > 0) {
       if (isThrottled(errors) && attempt < MAX_RETRIES - 1) {
-        const throttle = json.extensions?.cost?.throttleStatus;
+        const throttle = envelope.extensions?.cost?.throttleStatus;
         const delay =
           throttle?.restoreRate && throttle.currentlyAvailable !== undefined
             ? Math.ceil(
-                ((json.extensions?.cost?.requestedQueryCost ?? 10) -
+                ((envelope.extensions?.cost?.requestedQueryCost ?? 10) -
                   throttle.currentlyAvailable) /
                   throttle.restoreRate,
               ) * 1000
@@ -85,10 +103,10 @@ export async function executeAdminReadQuery<T>(
           errors,
         );
       }
-      return json;
+      return envelope;
     }
 
-    const throttle = json.extensions?.cost?.throttleStatus;
+    const throttle = envelope.extensions?.cost?.throttleStatus;
     if (
       throttle?.currentlyAvailable !== undefined &&
       throttle.currentlyAvailable < 50 &&
@@ -97,7 +115,7 @@ export async function executeAdminReadQuery<T>(
       await sleep(BASE_DELAY_MS * Math.pow(2, attempt));
     }
 
-    return json;
+    return envelope;
   }
 
   throw new OrderAdminReadError("GraphQL request failed after retries");

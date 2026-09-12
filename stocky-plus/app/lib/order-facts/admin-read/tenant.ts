@@ -19,7 +19,9 @@ export async function assertTrustedOrderAdminReadContext(
     });
   } catch (error) {
     if (error instanceof TenantAuthorityError) {
-      throw new OrderFactReadWalkError("TENANT_DENIED", error.message);
+      throw new OrderFactReadWalkError("TENANT_DENIED", error.message, {
+        phase: "tenant",
+      });
     }
     throw error;
   }

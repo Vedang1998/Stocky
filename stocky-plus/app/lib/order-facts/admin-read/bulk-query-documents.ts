@@ -239,6 +239,10 @@ export const ORDER_FACTS_BULK_B_REFUNDS_CANDIDATE = `{
                 id
                 quantity
                 restockType
+                restocked
+                location {
+                  id
+                }
                 lineItem {
                   id
                 }

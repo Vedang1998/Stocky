@@ -1,7 +1,3 @@
-import {
-  ORDER_ADMIN_READ_MAX_REQUESTS,
-  ORDER_ADMIN_READ_PAGE_SIZE,
-} from "./constants";
 import { ORDER_FACT_BY_ID_QUERY } from "./documents";
 import { executeBudgetedQuery } from "./budgeted-execute";
 import {
@@ -9,7 +5,15 @@ import {
   mapConnectionPage,
   type CursorConnection,
 } from "./cursor-pagination";
-import { OrderFactReadWalkError, OrderPaginationError } from "./errors";
+import { OrderPaginationError } from "./errors";
+import { extractSelectedRoot } from "./envelope";
+import { resolveReadOptions } from "./read-options";
+import { assertUniqueNonEmptyGids, requireObjectList } from "./required-list";
+import {
+  assertOrderClockPin,
+  pinOrderClock,
+  type OrderClockPin,
+} from "./snapshot-pin";
 import { assertReturnedGidMatches } from "./identity";
 import {
   mapOrderLineNode,
@@ -22,14 +26,18 @@ import {
 import { completeAgreementSales, mapAgreementFromFirstPage } from "./agreements";
 import { optionalMoneyBag, requireMoneyBag } from "./money";
 import { mapEmbeddedOrContinueRefund } from "./refunds";
-import { createRequestCostAccumulator, walkErrorToResult } from "./result";
+import {
+  createRequestCostAccumulator,
+  nullObservedResult,
+  walkErrorToResult,
+} from "./result";
 import { assertTrustedOrderAdminReadContext } from "./tenant";
 import {
   optionalLegacyResourceId,
   optionalString,
   requireBoolean,
-  requireInteger,
   requireNonEmptyString,
+  requireNonnegativeGraphqlInt,
   requireString,
 } from "./decimal";
 import type {
@@ -37,6 +45,7 @@ import type {
   OrderAgreementRead,
   OrderFactSnapshot,
   OrderLineRead,
+  OrderReadIssueExtras,
   OrderReadResult,
   RefundRead,
   RequestCostAccumulator,
@@ -83,12 +92,19 @@ type OrderNode = {
   currentShippingPriceSet?: unknown;
   lineItems?: CursorConnection<LineItemNode>;
   agreements?: CursorConnection<AgreementNode>;
-  refunds?: RefundNode[] | null;
+  refunds?: unknown;
 };
 
 type OrderFactByIdData = {
   order?: OrderNode | null;
 };
+
+function orderExtras(
+  orderGid: string,
+  phase: OrderReadIssueExtras["phase"],
+): OrderReadIssueExtras {
+  return { resourceKind: "Order", requestedGid: orderGid, phase };
+}
 
 function orderFactVariables(input: {
   id: string;
@@ -147,11 +163,11 @@ function mapOrderHeader(node: OrderNode): Omit<
     displayFinancialStatus: optionalString(node.displayFinancialStatus),
     displayFulfillmentStatus: optionalString(node.displayFulfillmentStatus),
     sourceName: optionalString(node.sourceName),
-    currentSubtotalLineItemsQuantity: requireInteger(
+    currentSubtotalLineItemsQuantity: requireNonnegativeGraphqlInt(
       node.currentSubtotalLineItemsQuantity,
       "order.currentSubtotalLineItemsQuantity",
     ),
-    subtotalLineItemsQuantity: requireInteger(
+    subtotalLineItemsQuantity: requireNonnegativeGraphqlInt(
       node.subtotalLineItemsQuantity,
       "order.subtotalLineItemsQuantity",
     ),
@@ -219,15 +235,42 @@ async function fetchOrderPage(
   variables: Record<string, unknown>,
   cost: RequestCostAccumulator,
   maxRequests: number,
-): Promise<OrderNode | null> {
+  extras: OrderReadIssueExtras,
+): Promise<{ status: "explicit_null" } | { status: "value"; value: OrderNode }> {
   const json = await executeBudgetedQuery<OrderFactByIdData>(
     context.admin,
     ORDER_FACT_BY_ID_QUERY,
     variables,
     cost,
     maxRequests,
+    extras,
   );
-  return json.data?.order ?? null;
+  return extractSelectedRoot<OrderNode>(json, "order", extras);
+}
+
+async function requireOrderContinuation(
+  context: OrderAdminReadContext,
+  variables: Record<string, unknown>,
+  cost: RequestCostAccumulator,
+  maxRequests: number,
+  pin: OrderClockPin,
+  extras: OrderReadIssueExtras,
+): Promise<OrderNode> {
+  const extracted = await fetchOrderPage(
+    context,
+    variables,
+    cost,
+    maxRequests,
+    extras,
+  );
+  if (extracted.status === "explicit_null") {
+    throw new OrderPaginationError(
+      `order ${pin.gid} disappeared after prior presence`,
+      extras,
+    );
+  }
+  assertOrderClockPin(pin, extracted.value, extras);
+  return extracted.value;
 }
 
 export async function readOrderFact(
@@ -236,13 +279,15 @@ export async function readOrderFact(
   options?: OrderReadOptions,
 ): Promise<OrderReadResult<OrderFactSnapshot>> {
   const cost = createRequestCostAccumulator();
-  const pageSize = options?.pageSize ?? ORDER_ADMIN_READ_PAGE_SIZE;
-  const maxRequests = options?.maxRequests ?? ORDER_ADMIN_READ_MAX_REQUESTS;
-
+  const extras = orderExtras(orderGid, "initial");
   try {
+    const { pageSize, maxRequests } = resolveReadOptions(options, {
+      ...extras,
+      phase: "options",
+    });
     await assertTrustedOrderAdminReadContext(context);
 
-    const first = await fetchOrderPage(
+    const firstExtracted = await fetchOrderPage(
       context,
       orderFactVariables({
         id: orderGid,
@@ -252,16 +297,17 @@ export async function readOrderFact(
       }),
       cost,
       maxRequests,
+      extras,
     );
-    if (first == null) {
-      throw new OrderFactReadWalkError(
-        "INACCESSIBLE_HISTORY_WINDOW",
-        `order(id: ${orderGid}) returned null; existenceKind INACCESSIBLE_HISTORY_WINDOW`,
-      );
+    if (firstExtracted.status === "explicit_null") {
+      return nullObservedResult("Order", orderGid, cost);
     }
-    assertReturnedGidMatches(orderGid, first.id, "order");
+    const first = firstExtracted.value;
+    assertReturnedGidMatches(orderGid, first.id, "order", extras);
+    const pin = pinOrderClock(first);
     const header = mapOrderHeader(first);
     const currencyCode = header.currencyCode;
+    let usedContinuation = false;
 
     const lineItems: OrderLineRead[] = [];
     const seenLineIds = new Set<string>();
@@ -271,19 +317,28 @@ export async function readOrderFact(
       connectionName: "lineItems",
       mapNode: (node) => mapOrderLineNode(node, currencyCode),
       nodeIdentity: (node) => node.id,
+      extras: orderExtras(orderGid, "lineItems"),
     });
     for (const item of linePage.items) {
       if (seenLineIds.has(item.id)) {
         throw new OrderPaginationError(
           `duplicate lineItem GID across pages: ${item.id}`,
+          orderExtras(orderGid, "lineItems"),
         );
       }
       seenLineIds.add(item.id);
       lineItems.push(item);
     }
     while (linePage.hasNextPage) {
-      assertAdvancingCursor("lineItems", linePage.endCursor!, seenLineCursors);
-      const extra = await fetchOrderPage(
+      usedContinuation = true;
+      const lineExtras = orderExtras(orderGid, "lineItems");
+      assertAdvancingCursor(
+        "lineItems",
+        linePage.endCursor!,
+        seenLineCursors,
+        lineExtras,
+      );
+      const extra = await requireOrderContinuation(
         context,
         orderFactVariables({
           id: orderGid,
@@ -294,24 +349,22 @@ export async function readOrderFact(
         }),
         cost,
         maxRequests,
+        pin,
+        lineExtras,
       );
-      if (extra == null) {
-        throw new OrderFactReadWalkError(
-          "INACCESSIBLE_HISTORY_WINDOW",
-          `order ${orderGid} became inaccessible while paging lineItems`,
-        );
-      }
-      assertReturnedGidMatches(orderGid, extra.id, "order");
       linePage = mapConnectionPage({
         connection: extra.lineItems,
         connectionName: "lineItems",
         mapNode: (node) => mapOrderLineNode(node, currencyCode),
         nodeIdentity: (node) => node.id,
+        requireNonEmpty: true,
+        extras: lineExtras,
       });
       for (const item of linePage.items) {
         if (seenLineIds.has(item.id)) {
           throw new OrderPaginationError(
             `duplicate lineItem GID across pages: ${item.id}`,
+            lineExtras,
           );
         }
         seenLineIds.add(item.id);
@@ -328,12 +381,14 @@ export async function readOrderFact(
     const seenAgreementIds = new Set<string>();
     const seenAgreementCursors = new Set<string>();
     let precedingCursor: string | null = null;
+    const agrExtrasFirst = orderExtras(orderGid, "agreements");
     let agrPage = mapConnectionPage({
       connection: first.agreements,
       connectionName: "agreements",
       mapNode: (node, cursor) =>
-        mapAgreementFromFirstPage(node, cursor, currencyCode),
+        mapAgreementFromFirstPage(node, cursor, currencyCode, agrExtrasFirst),
       nodeIdentity: (node) => node.id,
+      extras: agrExtrasFirst,
     });
     for (let index = 0; index < agrPage.items.length; index += 1) {
       const mapped = agrPage.items[index]!;
@@ -341,6 +396,7 @@ export async function readOrderFact(
       if (seenAgreementIds.has(mapped.agreement.id)) {
         throw new OrderPaginationError(
           `duplicate agreement GID across pages: ${mapped.agreement.id}`,
+          orderExtras(orderGid, "agreements"),
         );
       }
       seenAgreementIds.add(mapped.agreement.id);
@@ -351,8 +407,15 @@ export async function readOrderFact(
       precedingCursor = edgeCursor;
     }
     while (agrPage.hasNextPage) {
-      assertAdvancingCursor("agreements", agrPage.endCursor!, seenAgreementCursors);
-      const extra = await fetchOrderPage(
+      usedContinuation = true;
+      const agrExtras = orderExtras(orderGid, "agreements");
+      assertAdvancingCursor(
+        "agreements",
+        agrPage.endCursor!,
+        seenAgreementCursors,
+        agrExtras,
+      );
+      const extra = await requireOrderContinuation(
         context,
         orderFactVariables({
           id: orderGid,
@@ -363,20 +426,17 @@ export async function readOrderFact(
         }),
         cost,
         maxRequests,
+        pin,
+        agrExtras,
       );
-      if (extra == null) {
-        throw new OrderFactReadWalkError(
-          "INACCESSIBLE_HISTORY_WINDOW",
-          `order ${orderGid} became inaccessible while paging agreements`,
-        );
-      }
-      assertReturnedGidMatches(orderGid, extra.id, "order");
       agrPage = mapConnectionPage({
         connection: extra.agreements,
         connectionName: "agreements",
         mapNode: (node, cursor) =>
-          mapAgreementFromFirstPage(node, cursor, currencyCode),
+          mapAgreementFromFirstPage(node, cursor, currencyCode, agrExtras),
         nodeIdentity: (node) => node.id,
+        requireNonEmpty: true,
+        extras: agrExtras,
       });
       for (let index = 0; index < agrPage.items.length; index += 1) {
         const mapped = agrPage.items[index]!;
@@ -384,6 +444,7 @@ export async function readOrderFact(
         if (seenAgreementIds.has(mapped.agreement.id)) {
           throw new OrderPaginationError(
             `duplicate agreement GID across pages: ${mapped.agreement.id}`,
+            agrExtras,
           );
         }
         seenAgreementIds.add(mapped.agreement.id);
@@ -401,6 +462,7 @@ export async function readOrderFact(
         agreements.push({ ...pending.agreement, salesComplete: true });
         continue;
       }
+      usedContinuation = true;
       agreements.push(
         await completeAgreementSales(
           context,
@@ -412,7 +474,7 @@ export async function readOrderFact(
             hasNextPage: pending.salesHasNextPage,
             endCursor: pending.salesEndCursor,
           },
-          currencyCode,
+          pin,
           cost,
           pageSize,
           maxRequests,
@@ -420,7 +482,13 @@ export async function readOrderFact(
       );
     }
 
-    const refundNodes = Array.isArray(first.refunds) ? first.refunds : [];
+    const refundExtras = orderExtras(orderGid, "refunds");
+    const refundNodes = requireObjectList<RefundNode>(
+      first.refunds,
+      "order.refunds",
+      refundExtras,
+    );
+    assertUniqueNonEmptyGids(refundNodes, "order.refunds", refundExtras);
     const refunds: RefundRead[] = [];
     for (const refundNode of refundNodes) {
       refunds.push(
@@ -431,7 +499,26 @@ export async function readOrderFact(
           cost,
           pageSize,
           maxRequests,
+          orderGid,
         ),
+      );
+    }
+
+    if (usedContinuation || cost.requests > 1) {
+      await requireOrderContinuation(
+        context,
+        orderFactVariables({
+          id: orderGid,
+          pageSize,
+          lineAfter: null,
+          agrAfter: null,
+          lineFirst: 1,
+          agrFirst: 1,
+        }),
+        cost,
+        maxRequests,
+        pin,
+        orderExtras(orderGid, "version_recheck"),
       );
     }
 
@@ -446,6 +533,6 @@ export async function readOrderFact(
       cost,
     };
   } catch (error) {
-    return walkErrorToResult(error, cost);
+    return walkErrorToResult(error, cost, extras);
   }
 }

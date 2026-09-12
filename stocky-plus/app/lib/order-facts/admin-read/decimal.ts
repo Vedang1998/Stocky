@@ -75,6 +75,10 @@ export function optionalFiniteNumber(
   return value;
 }
 
+/** GraphQL Int scalar: signed 32-bit. */
+export const GRAPHQL_INT_MIN = -2_147_483_648;
+export const GRAPHQL_INT_MAX = 2_147_483_647;
+
 export function requireInteger(value: unknown, field: string): number {
   if (typeof value !== "number" || !Number.isInteger(value)) {
     throw new Error(`${field} must be an integer from Shopify JSON`);
@@ -82,9 +86,43 @@ export function requireInteger(value: unknown, field: string): number {
   return value;
 }
 
+export function requireGraphqlInt(value: unknown, field: string): number {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    !Number.isSafeInteger(value)
+  ) {
+    throw new Error(`${field} must be a GraphQL Int from Shopify JSON`);
+  }
+  if (value < GRAPHQL_INT_MIN || value > GRAPHQL_INT_MAX) {
+    throw new Error(`${field} is outside the GraphQL Int range`);
+  }
+  return value;
+}
+
+export function requireNonnegativeGraphqlInt(
+  value: unknown,
+  field: string,
+): number {
+  const integer = requireGraphqlInt(value, field);
+  if (integer < 0) {
+    throw new Error(`${field} must be a nonnegative GraphQL Int`);
+  }
+  return integer;
+}
+
 export function optionalInteger(value: unknown, field: string): number | null {
   if (value == null) return null;
   return requireInteger(value, field);
+}
+
+/** Sale.quantity is signed and nullable. Do not abs() or ban negatives. */
+export function optionalSignedGraphqlInt(
+  value: unknown,
+  field: string,
+): number | null {
+  if (value == null) return null;
+  return requireGraphqlInt(value, field);
 }
 
 /**

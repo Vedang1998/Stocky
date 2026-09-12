@@ -92,6 +92,8 @@ export function refundLineNode(
     id: `gid://shopify/RefundLineItem/${index}`,
     quantity: 1,
     restockType: "CANCEL",
+    restocked: false,
+    location: { id: "gid://shopify/Location/1" },
     lineItem: { id: `gid://shopify/LineItem/${index}` },
     subtotalSet: moneyBag("1.00"),
     totalTaxSet: moneyBag("0.00"),

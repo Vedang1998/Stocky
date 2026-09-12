@@ -1,12 +1,13 @@
 import {
-  optionalInteger,
+  optionalBoolean,
   optionalIsoTimestamp,
   optionalLegacyResourceId,
+  optionalSignedGraphqlInt,
   optionalString,
   requireBoolean,
-  requireInteger,
   requireIsoTimestamp,
   requireNonEmptyString,
+  requireNonnegativeGraphqlInt,
   requireString,
 } from "./decimal";
 import { OrderFactReadWalkError } from "./errors";
@@ -104,6 +105,8 @@ export type RefundLineNode = {
   id?: unknown;
   quantity?: unknown;
   restockType?: unknown;
+  restocked?: unknown;
+  location?: { id?: unknown } | null;
   lineItem?: { id?: unknown } | null;
   subtotalSet?: unknown;
   totalTaxSet?: unknown;
@@ -173,20 +176,20 @@ export function mapOrderLineNode(
     vendor: optionalString(node.vendor),
     name: optionalString(node.name),
     isGiftCard: requireBoolean(node.isGiftCard, "lineItem.isGiftCard"),
-    quantity: requireInteger(node.quantity, "lineItem.quantity"),
-    currentQuantity: requireInteger(
+    quantity: requireNonnegativeGraphqlInt(node.quantity, "lineItem.quantity"),
+    currentQuantity: requireNonnegativeGraphqlInt(
       node.currentQuantity,
       "lineItem.currentQuantity",
     ),
-    refundableQuantity: requireInteger(
+    refundableQuantity: requireNonnegativeGraphqlInt(
       node.refundableQuantity,
       "lineItem.refundableQuantity",
     ),
-    unfulfilledQuantity: requireInteger(
+    unfulfilledQuantity: requireNonnegativeGraphqlInt(
       node.unfulfilledQuantity,
       "lineItem.unfulfilledQuantity",
     ),
-    nonFulfillableQuantity: requireInteger(
+    nonFulfillableQuantity: requireNonnegativeGraphqlInt(
       node.nonFulfillableQuantity,
       "lineItem.nonFulfillableQuantity",
     ),
@@ -232,7 +235,7 @@ export function mapSaleNode(
   return {
     id: requireNonEmptyString(node.id, "sale.id"),
     typename: requireString(node.__typename, "sale.__typename"),
-    quantity: optionalInteger(node.quantity, "sale.quantity"),
+    quantity: optionalSignedGraphqlInt(node.quantity, "sale.quantity"),
     lineType: requireString(node.lineType, "sale.lineType"),
     actionType: requireString(node.actionType, "sale.actionType"),
     totalAmount: requireMoneyBag(
@@ -263,15 +266,22 @@ export function mapAgreementHeader(
 export function mapRefundLineNode(
   node: RefundLineNode,
   orderCurrencyCode: string,
+  refundLineOrdinal: number,
 ): RefundLineRead {
   return {
     id: optionalString(node.id),
-    quantity: requireInteger(node.quantity, "refundLineItem.quantity"),
+    quantity: requireNonnegativeGraphqlInt(
+      node.quantity,
+      "refundLineItem.quantity",
+    ),
     restockType: optionalString(node.restockType),
+    restocked: optionalBoolean(node.restocked, "refundLineItem.restocked"),
+    restockLocationId: optionalString(node.location?.id),
     lineItemId: requireNonEmptyString(
       node.lineItem?.id,
       "refundLineItem.lineItem.id",
     ),
+    refundLineOrdinal,
     subtotalSet: requireMoneyBag(
       node.subtotalSet,
       "refundLineItem.subtotalSet",

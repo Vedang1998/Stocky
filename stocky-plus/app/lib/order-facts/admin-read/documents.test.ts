@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_ORDER_ADMIN_READ_QUERY_DOCUMENTS,
+  ORDER_AGREEMENT_SALES_PAGE_QUERY,
   ORDER_FACT_BY_ID_QUERY,
   REFUND_FACT_BY_ID_QUERY,
 } from "./documents";
@@ -77,6 +78,10 @@ describe("PR6-B GraphQL documents", () => {
     expect(ORDER_FACT_BY_ID_QUERY).not.toMatch(/refunds\s*\(\s*first/);
     expect(ORDER_FACT_BY_ID_QUERY).toMatch(/transactions\s*\(\s*first:\s*\$txnFirst/);
     expect(REFUND_FACT_BY_ID_QUERY).toMatch(/transactions\s*\(\s*first:\s*\$txnFirst/);
+    expect(ORDER_FACT_BY_ID_QUERY).toMatch(/restocked/);
+    expect(ORDER_FACT_BY_ID_QUERY).toMatch(/location\s*\{\s*id/);
+    expect(REFUND_FACT_BY_ID_QUERY).toMatch(/restocked/);
+    expect(REFUND_FACT_BY_ID_QUERY).toMatch(/location\s*\{\s*id/);
   });
 
   it("does not share nested after variables on OrderFactById", () => {
@@ -85,6 +90,11 @@ describe("PR6-B GraphQL documents", () => {
     expect(ORDER_FACT_BY_ID_QUERY).not.toMatch(/\$adjAfter/);
     expect(ORDER_FACT_BY_ID_QUERY).not.toMatch(/\$shipRefundAfter/);
     expect(ORDER_FACT_BY_ID_QUERY).not.toMatch(/\$txnAfter/);
+  });
+
+  it("selects Order clock evidence on OrderAgreementSalesPage", () => {
+    expect(ORDER_AGREEMENT_SALES_PAGE_QUERY).toMatch(/updatedAt/);
+    expect(ORDER_AGREEMENT_SALES_PAGE_QUERY).toMatch(/currencyCode/);
   });
 
   it("does not interpolate GraphQL documents", () => {

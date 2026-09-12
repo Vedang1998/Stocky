@@ -11,6 +11,7 @@ import { OrderFactReadWalkError, OrderPaginationError } from "./errors";
 import type {
   AdminGraphQLResponse,
   OrderAdminReadClient,
+  OrderReadIssueExtras,
   RequestCostAccumulator,
 } from "./types";
 
@@ -20,10 +21,12 @@ export async function executeBudgetedQuery<T>(
   variables: Record<string, unknown> | undefined,
   cost: RequestCostAccumulator,
   maxRequests: number,
+  extras: OrderReadIssueExtras = {},
 ): Promise<AdminGraphQLResponse<T>> {
   if (cost.requests >= maxRequests) {
     throw new OrderPaginationError(
       `Admin request budget exhausted (${maxRequests}); refusing a truncated complete snapshot`,
+      extras,
     );
   }
   try {
@@ -33,7 +36,7 @@ export async function executeBudgetedQuery<T>(
   } catch (error) {
     if (error instanceof OrderFactReadWalkError) throw error;
     if (error instanceof OrderAdminReadError) {
-      throw new OrderFactReadWalkError("ADMIN_READ_ERROR", error.message);
+      throw new OrderFactReadWalkError("ADMIN_READ_ERROR", error.message, extras);
     }
     throw error;
   }

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   optionalIsoTimestamp,
+  optionalSignedGraphqlInt,
   requireIsoTimestamp,
+  requireNonnegativeGraphqlInt,
 } from "./decimal";
 
 const SHOPIFY_EXAMPLE = "2019-07-16T19:20:30Z";
@@ -45,5 +47,24 @@ describe("PR6-B Shopify DateTime mapping", () => {
     expect(() => optionalIsoTimestamp(["2026-01-01T00:00:00Z"], "createdAt")).toThrow(
       /createdAt must be a string/,
     );
+  });
+});
+
+describe("PR6-B GraphQL Int mapping", () => {
+  it("accepts nonnegative LineItem-style counts and rejects negatives", () => {
+    expect(requireNonnegativeGraphqlInt(0, "lineItem.quantity")).toBe(0);
+    expect(requireNonnegativeGraphqlInt(10, "lineItem.quantity")).toBe(10);
+    expect(() => requireNonnegativeGraphqlInt(-1, "lineItem.quantity")).toThrow(
+      /nonnegative GraphQL Int/,
+    );
+    expect(() =>
+      requireNonnegativeGraphqlInt(2_147_483_648, "lineItem.quantity"),
+    ).toThrow(/outside the GraphQL Int range/);
+  });
+
+  it("keeps Sale.quantity signed and nullable without abs()", () => {
+    expect(optionalSignedGraphqlInt(null, "sale.quantity")).toBeNull();
+    expect(optionalSignedGraphqlInt(-2, "sale.quantity")).toBe(-2);
+    expect(optionalSignedGraphqlInt(3, "sale.quantity")).toBe(3);
   });
 });
