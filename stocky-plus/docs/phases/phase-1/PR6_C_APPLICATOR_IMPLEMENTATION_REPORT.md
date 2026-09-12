@@ -3,7 +3,7 @@
 **Slice:** PR6-C complete-module canonical order/refund applicator
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
 **Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436)
-**Status:** Implementation on this branch. Independent Claude review and ChatGPT complete-module acceptance are **pending**. Merge is **not** authorized.
+**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). This branch implements C-owned **F-01–F-08**. Independent re-review and ChatGPT complete-module acceptance are **pending**. Merge is **not** authorized.
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
 **Shopify network I/O in this lane:** NONE
@@ -130,42 +130,55 @@ Default-discovered `app/lib/order-facts/apply/*.test.ts` are database-free. Post
 | Kill switch | − | PG `processingEnabled=false` fails closed via helper |
 | R-164 surface | − | PG + unit no physical-delete operation |
 | First-insert ABSENT | − | Unit + PG writes no row |
+| F-01 | +/−/bypass | PG Refund `ABSENT_CONFIRMED_QUERY` tombstone; first-insert ABSENT writes no row; unverified WEBHOOK; inaccessible diagnostics on refund row; first LIVE after tombstone does not revive |
+| F-02 | +/− | Unit + PG later LIVE advances interval; delayed older ABSENT does not tombstone; older LIVE does not rewind |
+| F-03 | +/drift | PG Refund active blocker writes no subtree (`blocked`); Order blocker writes no nested refund |
+| F-04 | −/+ | PG rejected/incomplete apply inserts no receipt; same key with corrected snapshot applies |
+| F-05 | bypass/− | Unit + PG empty `lastConfirmedAccessScopes` uses persisted `read_all_orders` floor; weak persisted floor still tombstones |
+| F-06 | +/−/bypass | PG omitted line/sale/refund-line/adjustment/transaction `ABSENT` retained; reappear LIVE; nested Order.refund omission stays LIVE; stale snapshot does not mark absence |
+| F-07 | −/+ | PG fabricated `read_all_orders` vs durable `read_orders` throws `order_apply_access_scope_mismatch`; matching sets apply |
+| F-08 | − | PG empty batch returns `receiptStatus: none` and inserts 0 receipts |
 
-**Not C:** T02, T19, T20, T30 reader, T39, T52, T53 (B). T21, T22, T24, T32, T33, T37, T43 webhook/import orchestration, T51 (D). T56/T57 **reader pagination** remains B.
+**Not C:** T02, T19, T20, T30 reader, T39, T52, T53 (B). T21, T22, T24, T32, T33, T37, T43 webhook/import orchestration, T51 (D). T56/T57 **reader pagination** remains B. P3 F-09–F-12 remain B→C interface residuals (restock fields, nullable refund `orderId`, at-sale vs current catalog, discount-alias lineage). C does not implement B extraction.
 
 ## 6. Local validation (executed)
 
 Recorded after commands execute. This documentation snapshot does **not** invent results and does **not** embed its own commit SHA.
 
-Environment: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL` pointing at local `stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD=stocky_runtime_ci_only` (CI allowlist secret, not committed). Inventory-write flags unchanged. Generated Admin schema (`app/types/admin-*.schema.json`) is gitignored and was materialized locally with `npm run graphql-codegen` before `npm test`.
+Environment: disposable PostgreSQL 16 / Redis on localhost, `DATABASE_URL` pointing at local `stocky_plus`, `STOCKY_RUNTIME_ROLE_PASSWORD=stocky_runtime_ci_only` (CI allowlist secret, not committed). Inventory-write flags unchanged.
 
-Runtime/test implementation head for the commands below: `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness, T14 RLS count, kill-switch observation-before-disable). Prior C commits on this branch: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck). This report is a later C-owned documentation commit on the same exclusive files.
+Runtime/test implementation head for the commands below: `360d9583cbc0e3a7950c329a525fd13a137771be` (F-01–F-08 corrections). Prior C commits on this branch: `af790529a917affef91add15e97ad888613c6032` (applicator), `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` (typecheck), `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8` (inventory freshness), `04a3e276c9d607e440051603e54e7c96dc9ad19f` (previous local validation). Independent review of `04a3e276…`: commit `ff0ce52e2a65d141bbb064bcfed1ef82438889ec` on `claude/pr40-pr6c-independent-review` (sole changed path `PR6_C_APPLICATOR_INDEPENDENT_REVIEW.md`; C does not edit that artifact).
 
 | Command | Exit | Result |
 |---|---|---|
-| `npx vitest run app/lib/order-facts/apply/*.test.ts` | 0 | **33** passed / 5 files |
-| `npx vitest run app/lib/order-facts` | 0 | **52** passed / 8 files |
+| `npx vitest run app/lib/order-facts/apply/*.test.ts` | 0 | **39** passed / 5 files |
+| `npx vitest run app/lib/order-facts` | 0 | **58** passed / 8 files |
 | `npx tsc --noEmit` | 0 | no errors |
 | focused eslint on `app/lib/order-facts/apply` + `pr6-c-canonical-applicator.test.ts` | 0 | no errors |
-| `npm run lint` | 0 | no errors |
-| `npm run typecheck` (`react-router typegen && tsc --noEmit`) | 0 | no errors |
-| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **49** passed / 1 file (nonzero; collected 49) |
-| `npm run tenant:access:audit` | 0 | `scannedFiles: 392`, `findings: 1741`, `violations: 0` |
-| `npm run tenant:access:inventory` + `tenant:access:inventory:check` | 0 | regenerated `scannedFiles` 372 → 392; findings 1741; violations 0; content digest still `d4fc40275641ec9a16904e210bf37b7c0d3cfb89cf89227b592842c9788ee771`; check `tenant_access_inventory_fresh` |
-| `npx tsx scripts/pr5-f3-safety-scan.ts` | 0 | `filesScanned: 169`, `findings: []` |
-| `npm run graphql-codegen` | 0 | Admin 2026-07 schema + types written under gitignored `app/types/` |
-| `npm test` (after codegen) | 0 | **425** passed / 47 files |
-| `npm run build` | 0 | `react-router build` succeeded |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-c-canonical-applicator.test.ts` | 0 | **68** passed / 1 file (nonzero; collected 68) |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` (`scannedFiles` still 392; no new apply TypeScript files) |
+| Full `npm run lint` / `npm run typecheck` / `npm test` / `npm run build` | — | **not re-executed** on this correction head; focused tsc + eslint + apply unit + C PG suites were executed |
 | Full `npm run test:migrations` (entire tenant-enforcement corpus) | — | **not executed locally**; required on exact-head full CI |
 | exact-head `pull_request` Classify + Heavy + CI Gate | — | **not** recorded in this file. Authoritative run IDs belong to the live PR head after this documentation commit is pushed. Do not treat superseded failed/cancelled runs as exact-head success. |
 
-Superseded `pull_request` CI (not substituted for the live head):
+Previous exact-head SUCCESS on `04a3e276…` (run `34652673104`) is superseded by this correction head and is not substituted.
 
-- Run [34651762649](https://github.com/Vedang1998/Stocky/actions/runs/34651762649) — failure (earlier C head).
-- Run [34651974372](https://github.com/Vedang1998/Stocky/actions/runs/34651974372) on `7d0f99a194ff0dc1513db5a1059e7c127c6f7669` — Classify `103435982023` SUCCESS; Heavy `103436042861` FAILURE at tenant-enforcement preflight (`tenant:access:inventory:check_failed_exit_1`); CI Gate `103436575673` FAILURE. Cause: new apply TypeScript files raised `scannedFiles` 372 → 392. Corrected at `18a2f68a8a0b3a7733a4f176cd38d0129bbf1ec8`.
-- Run [34652494303](https://github.com/Vedang1998/Stocky/actions/runs/34652494303) — cancelled (superseded).
+Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only. No unused allowlist entries. No A/B/shared-control edits. Independent review artifact not edited.
 
-Mechanical inventory exception: `PR2_TENANT_ACCESS_INVENTORY.md` only. No unused allowlist entries. No A/B/shared-control edits.
+## 6.1 Claude F-01–F-08 corrections (C-owned)
+
+| ID | Sev | Correction |
+|---|---|---|
+| F-01 | P1 | Existence mutate/diagnostics for `resourceKind === "Refund"` write `ShopifyOrderRefundFact`. First-insert ABSENT still writes no row. Nested LIVE snapshot will not revive an ABSENT refund parent. |
+| F-02 | P1 | Later same-kind LIVE mutates with `advance_live_presence_interval`. Older LIVE does not rewind. Delayed older ABSENT hits `absent_not_later`. |
+| F-03 | P1 | Refund subtree writes require `!existenceBlocked`. Refund identity LIVE snapshot requires resulting existence LIVE. Independent nested-refund Clock A under a stale **unblocked** Order still applies. |
+| F-04 | P1 | Receipt insert only when every observation outcome is `applied` or `noop`. Rejected/incomplete/blocked/conflict/lease_invalid leave the key retryable. |
+| F-05 | P1 | `mergeAccessScopeFloor` unions caller last-confirmed with persisted `accessScopeSnapshot`. Empty caller `[]` cannot drop `read_all_orders`. |
+| F-06 | P1 | Complete direct parent snapshot marks omitted lines/agreements/sales and refund lines/adjustments/transactions `existenceState=ABSENT` (`ABSENT_CONFIRMED_QUERY`, retained). Does **not** mark omitted nested Order.refunds. Full-sync (null gens) does not invent a confirmation interval. |
+| F-07 | P2 | `fenceDirectObservation` selects durable `accessScopeSnapshot` and throws `OrderApplyAccessScopeMismatchError` on set mismatch. Matched durable scopes are provenance for currentScopes. |
+| F-08 | P2 | Empty batch returns `receiptStatus: "none"` and does not insert. |
+
+P3 F-09–F-12 are B→C residuals; not implemented in this lane.
 
 ## 7. Risk status after this slice
 
@@ -190,4 +203,4 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 
 ## 9. Packet for ChatGPT
 
-Issued only after local focused suites pass **and** exact-head pull_request Classify + full Heavy + CI Gate SUCCESS on this branch head. Until those exist, this lane is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`.
+Issued only after local focused suites pass **and** exact-head pull_request Classify + full Heavy + CI Gate SUCCESS on this branch head. Until those exist, this lane is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`. Independent Claude re-review of this correction head is required after exact-head CI.
