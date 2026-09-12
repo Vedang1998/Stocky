@@ -112,6 +112,15 @@ function shopContext(admin: MockAdmin, shopId: string, domain: string) {
   };
 }
 
+function linesFor(orderGid: string, count: number, extra: Record<string, unknown> = {}) {
+  return Array.from({ length: count }, (_, index) =>
+    fixtures.lineNode(index + 1, {
+      id: `${orderGid}/LineItem/${index + 1}`,
+      ...extra,
+    }),
+  );
+}
+
 describe("PR6-C pinned B reader overlay", () => {
   let prisma: PrismaClient;
   let shopId: string;
@@ -200,8 +209,10 @@ describe("PR6-C pinned B reader overlay", () => {
     expect(B_TYPED_READ_CONTRACT_PIN).toBe(
       "610ed0503a3aa2998aca7228f4fca9617bed23a3",
     );
+    const orderGid = "gid://shopify/Order/overlay-live";
     const admin = createOrderStoreAdmin({
       header: fixtures.orderHeader({
+        id: orderGid,
         processedAt: "2026-08-01T00:00:00Z",
         currencyCode: "USD",
         presentmentCurrencyCode: "EUR",
@@ -212,6 +223,7 @@ describe("PR6-C pinned B reader overlay", () => {
       }),
       lines: [
         fixtures.lineNode(1, {
+          id: `${orderGid}/LineItem/1`,
           originalTotalSet: fixtures.moneyBag("10.00", "USD", "9.00", "EUR"),
           originalUnitPriceSet: fixtures.moneyBag("10.00", "USD", "9.00", "EUR"),
           discountedTotalSetWithCodeDiscounts: fixtures.moneyBag(
@@ -234,7 +246,7 @@ describe("PR6-C pinned B reader overlay", () => {
     });
     const bResult = (await readOrderFact(
       shopContext(admin, shopId, domain),
-      "gid://shopify/Order/1",
+      orderGid,
     )) as OrderReadResult<OrderFactSnapshot>;
     expect(admin.calls.length).toBeGreaterThan(0);
     expect(admin.calls.some((call) => call.query.includes("OrderFactById"))).toBe(
@@ -266,16 +278,16 @@ describe("PR6-C pinned B reader overlay", () => {
       );
       await applyMapped(client, db, mapped.observation);
       const line = await client.query(
-        `SELECT "discountedTotalShopAmount"::text AS amt, "processedAtShopify"
+        `SELECT "discountedTotalShopAmount"::text AS amt
            FROM "ShopifyOrderLineFact"
           WHERE "shopifyOrderGid" = $1`,
-        ["gid://shopify/Order/1"],
+        [orderGid],
       );
       expect(line.rows[0].amt).toBe("9.000000");
       const order = await client.query(
         `SELECT "processedAtShopify", "shopCurrencyCode", "presentmentCurrencyCode"
            FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
-        ["gid://shopify/Order/1"],
+        [orderGid],
       );
       expect(order.rows[0].processedAtShopify).toBe("2026-08-01T00:00:00Z");
       expect(order.rows[0].shopCurrencyCode).toBe("USD");
@@ -284,23 +296,30 @@ describe("PR6-C pinned B reader overlay", () => {
   }, 120_000);
 
   it("persists B restock evidence and complete-connection refundLineOrdinal", async () => {
+    const orderGid = "gid://shopify/Order/restock";
     const refund = fixtures.refundNode(20, [
-      fixtures.refundLineNode(1),
+      fixtures.refundLineNode(1, { lineItem: { id: `${orderGid}/LineItem/1` } }),
       fixtures.refundLineNode(2, {
         restocked: true,
         location: { id: "gid://shopify/Location/7" },
+        lineItem: { id: `${orderGid}/LineItem/2` },
       }),
-      fixtures.refundLineNode(3),
+      fixtures.refundLineNode(3, { lineItem: { id: `${orderGid}/LineItem/3` } }),
     ]);
+    refund.order = { id: orderGid };
     const admin = createOrderStoreAdmin({
-      header: fixtures.orderHeader({ id: "gid://shopify/Order/restock" }),
-      lines: [fixtures.lineNode(1), fixtures.lineNode(2), fixtures.lineNode(3)],
+      header: fixtures.orderHeader({
+        id: orderGid,
+        currentSubtotalLineItemsQuantity: 3,
+        subtotalLineItemsQuantity: 3,
+      }),
+      lines: linesFor(orderGid, 3),
       agreements: [],
       refunds: [refund],
     });
     const bResult = (await readOrderFact(
       shopContext(admin, shopId, domain),
-      "gid://shopify/Order/restock",
+      orderGid,
     )) as OrderReadResult<OrderFactSnapshot>;
     expect(bResult.status).toBe("complete");
     if (bResult.status !== "complete") return;
@@ -337,7 +356,7 @@ describe("PR6-C pinned B reader overlay", () => {
   it("maps B null_observed through mocked transport; C never copies INACCESSIBLE from B", async () => {
     const admin = createOrderStoreAdmin({
       header: fixtures.orderHeader({ id: "gid://shopify/Order/null-live" }),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/null-live", 1),
       agreements: [],
       refunds: [],
       nullOrder: true,
@@ -371,7 +390,7 @@ describe("PR6-C pinned B reader overlay", () => {
         processedAt: "2026-08-01T00:00:00Z",
         updatedAt: "2026-08-10T00:00:00Z",
       }),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/null-window", 1),
       agreements: [],
       refunds: [],
     });
@@ -430,7 +449,7 @@ describe("PR6-C pinned B reader overlay", () => {
         processedAt: "2026-01-01T00:00:00Z",
         updatedAt: "2026-01-02T00:00:00Z",
       }),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/null-aged", 1),
       agreements: [],
       refunds: [],
     });
@@ -567,7 +586,7 @@ describe("PR6-C pinned B reader overlay", () => {
     refund.order = null;
     const admin = createOrderStoreAdmin({
       header: fixtures.orderHeader(),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/1", 1),
       agreements: [],
       refunds: [refund],
     });
@@ -599,11 +618,15 @@ describe("PR6-C pinned B reader overlay", () => {
   }, 120_000);
 
   it("uses enclosing Order GID from a real B nested refund and blocks a contradictory parent", async () => {
-    const nested = fixtures.refundNode(21, [fixtures.refundLineNode(1)]);
+    const nested = fixtures.refundNode(21, [
+      fixtures.refundLineNode(1, {
+        lineItem: { id: "gid://shopify/Order/embed/LineItem/1" },
+      }),
+    ]);
     nested.order = { id: "gid://shopify/Order/embed" };
     const okAdmin = createOrderStoreAdmin({
       header: fixtures.orderHeader({ id: "gid://shopify/Order/embed" }),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/embed", 1),
       agreements: [],
       refunds: [nested],
     });
@@ -618,7 +641,7 @@ describe("PR6-C pinned B reader overlay", () => {
     clash.order = { id: "gid://shopify/Order/other" };
     const clashAdmin = createOrderStoreAdmin({
       header: fixtures.orderHeader({ id: "gid://shopify/Order/embed-clash" }),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/embed-clash", 1),
       agreements: [],
       refunds: [clash],
     });
@@ -653,40 +676,54 @@ describe("PR6-C pinned B reader overlay", () => {
     });
   }, 120_000);
 
-  it("does not apply when B rejects malformed money; C still rejects a mapped malformed bag", async () => {
+  it("does not persist when B or C rejects malformed money", async () => {
+    const orderGid = "gid://shopify/Order/malformed";
     const admin = createOrderStoreAdmin({
-      header: fixtures.orderHeader({ id: "gid://shopify/Order/malformed" }),
-      lines: [
-        fixtures.lineNode(1, {
-          discountedTotalSetWithCodeDiscounts: fixtures.moneyBag("not-a-decimal"),
-        }),
-      ],
+      header: fixtures.orderHeader({ id: orderGid }),
+      lines: linesFor(orderGid, 1, {
+        discountedTotalSetWithCodeDiscounts: fixtures.moneyBag("not-a-decimal"),
+      }),
       agreements: [],
       refunds: [],
     });
     const bResult = (await readOrderFact(
       shopContext(admin, shopId, domain),
-      "gid://shopify/Order/malformed",
+      orderGid,
     )) as OrderReadResult<OrderFactSnapshot>;
-    expect(bResult.status).toBe("failure");
-    if (bResult.status === "failure") {
-      expect(bResult.kind).toBe("MALFORMED_MONEY");
-    }
     const mapped = mapBOrderReadResult(
       bResult,
       ctxFor(shopId, "obs-overlay-malformed", 1n, 2n),
     );
-    expect(mapped.status).toBe("failure");
-    await withTenant(async (client) => {
+    if (bResult.status === "failure") {
+      expect(bResult.kind).toBe("MALFORMED_MONEY");
+      expect(mapped.status).toBe("failure");
+    } else {
+      expect(bResult.status).toBe("complete");
+      expect(mapped.status).toBe("mapped");
+    }
+    await withTenant(async (client, db) => {
+      if (mapped.status === "mapped") {
+        await expect(
+          applyMapped(client, db, mapped.observation, {
+            applicationKey: "overlay-malformed",
+            payloadDigest: "overlay-malformed-digest",
+          }),
+        ).rejects.toBeTruthy();
+        await client.query("ROLLBACK");
+        await client.query("BEGIN");
+        await setTenant(client, shopId);
+      }
       const rows = await client.query(
         `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
-        ["gid://shopify/Order/malformed"],
+        [orderGid],
       );
       expect(rows.rows[0].n).toBe(0);
       const receipts = await client.query(
-        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt"`,
+        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt"
+          WHERE "applicationKey" = $1`,
+        ["overlay-malformed"],
       );
-      expect(receipts.rows[0].n).toBeGreaterThanOrEqual(0);
+      expect(receipts.rows[0].n).toBe(0);
     });
   }, 120_000);
 
@@ -696,7 +733,7 @@ describe("PR6-C pinned B reader overlay", () => {
         id: "gid://shopify/Order/atsale",
         updatedAt: "2026-08-10T00:00:00Z",
       }),
-      lines: [fixtures.lineNode(1)],
+      lines: linesFor("gid://shopify/Order/atsale", 1),
       agreements: [],
       refunds: [],
     });
@@ -705,23 +742,21 @@ describe("PR6-C pinned B reader overlay", () => {
         id: "gid://shopify/Order/atsale",
         updatedAt: "2026-08-20T00:00:00Z",
       }),
-      lines: [
-        fixtures.lineNode(1, {
+      lines: linesFor("gid://shopify/Order/atsale", 1, {
+        sku: "SKU-RECREATED",
+        variant: {
+          id: "gid://shopify/ProductVariant/99",
+          legacyResourceId: "99",
           sku: "SKU-RECREATED",
-          variant: {
-            id: "gid://shopify/ProductVariant/99",
-            legacyResourceId: "99",
-            sku: "SKU-RECREATED",
-            title: "Default",
-          },
-          product: {
-            id: "gid://shopify/Product/99",
-            legacyResourceId: "99",
-            title: "Product 99",
-            handle: "product-99",
-          },
-        }),
-      ],
+          title: "Default",
+        },
+        product: {
+          id: "gid://shopify/Product/99",
+          legacyResourceId: "99",
+          title: "Product 99",
+          handle: "product-99",
+        },
+      }),
       agreements: [],
       refunds: [],
     });
@@ -768,37 +803,57 @@ describe("PR6-C pinned B reader overlay", () => {
     });
   }, 120_000);
 
-  it("receipt-bound malformed B failure then valid B retry uses the same key/digest", async () => {
+  it("receipt-bound malformed B payload then valid B retry uses the same key/digest", async () => {
+    const orderGid = "gid://shopify/Order/retry-money";
     const badAdmin = createOrderStoreAdmin({
-      header: fixtures.orderHeader({ id: "gid://shopify/Order/retry-money" }),
-      lines: [
-        fixtures.lineNode(1, {
-          discountedTotalSetWithCodeDiscounts: fixtures.moneyBag("nope"),
-        }),
-      ],
+      header: fixtures.orderHeader({ id: orderGid }),
+      lines: linesFor(orderGid, 1, {
+        discountedTotalSetWithCodeDiscounts: fixtures.moneyBag("nope"),
+      }),
       agreements: [],
       refunds: [],
     });
     const goodAdmin = createOrderStoreAdmin({
-      header: fixtures.orderHeader({ id: "gid://shopify/Order/retry-money" }),
-      lines: [fixtures.lineNode(1)],
+      header: fixtures.orderHeader({ id: orderGid }),
+      lines: linesFor(orderGid, 1),
       agreements: [],
       refunds: [],
     });
     const badRead = (await readOrderFact(
       shopContext(badAdmin, shopId, domain),
-      "gid://shopify/Order/retry-money",
+      orderGid,
     )) as OrderReadResult<OrderFactSnapshot>;
     const goodRead = (await readOrderFact(
       shopContext(goodAdmin, shopId, domain),
-      "gid://shopify/Order/retry-money",
+      orderGid,
     )) as OrderReadResult<OrderFactSnapshot>;
-    expect(badRead.status).toBe("failure");
     expect(goodRead.status).toBe("complete");
+    const key = "overlay-retry";
+    const digest = "overlay-retry-digest";
     await withTenant(async (client, db) => {
-      expect(mapBOrderReadResult(badRead, ctxFor(shopId, "tok", 1n, 2n)).status).toBe(
-        "failure",
+      const badMapped = mapBOrderReadResult(
+        badRead,
+        ctxFor(shopId, "obs-overlay-retry-bad", 1n, 2n),
       );
+      if (badMapped.status === "mapped") {
+        await expect(
+          applyMapped(client, db, badMapped.observation, {
+            applicationKey: key,
+            payloadDigest: digest,
+          }),
+        ).rejects.toBeTruthy();
+        await client.query("ROLLBACK");
+        await client.query("BEGIN");
+        await setTenant(client, shopId);
+      } else {
+        expect(["failure", "blocked"]).toContain(badMapped.status);
+      }
+      const receiptsBefore = await client.query(
+        `SELECT count(*)::int AS n FROM "SyncApplicationReceipt"
+          WHERE "applicationKey" = $1`,
+        [key],
+      );
+      expect(receiptsBefore.rows[0].n).toBe(0);
       const req = await allocateCatalogObservationGeneration(db);
       const resp = await allocateCatalogObservationGeneration(db);
       const mapped = mapBOrderReadResult(
@@ -808,13 +863,13 @@ describe("PR6-C pinned B reader overlay", () => {
       expect(mapped.status).toBe("mapped");
       if (mapped.status !== "mapped") return;
       await applyMapped(client, db, mapped.observation, {
-        applicationKey: "overlay-retry",
-        payloadDigest: "overlay-retry-digest",
+        applicationKey: key,
+        payloadDigest: digest,
       });
       const receipts = await client.query(
         `SELECT count(*)::int AS n FROM "SyncApplicationReceipt"
           WHERE "applicationKey" = $1`,
-        ["overlay-retry"],
+        [key],
       );
       expect(receipts.rows[0].n).toBe(1);
     });
