@@ -31,6 +31,21 @@ const CONCURRENT_WRITE_THRESHOLD_MS = 15_000;
 const CONCURRENT_INDEX_ROW_COUNT = 100_000;
 /** Larger fixture for observable active build/validation scan phases (F-F03). */
 const ACTIVE_PHASE_ROW_COUNT = 400_000;
+/** Successful F-F03 iterations required. Do not reduce. */
+const FF03_REQUIRED_ITERATIONS = 3;
+/**
+ * Extra attempts for observer misses only. All-null shopId builds in ~150–180ms
+ * on SSD, so `pg_stat_progress_create_index` can miss an active phase. A miss
+ * retries the iteration; AccessExclusiveLock / write-threshold failures do not.
+ */
+const FF03_MAX_ATTEMPTS = 12;
+
+class ActivePhaseMissedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ActivePhaseMissedError";
+  }
+}
 
 function run(cmd: string, args: string[]) {
   return execFileSync(cmd, args, {
@@ -73,6 +88,17 @@ async function withMaintenanceClient<T>(
 }
 
 describe("tenant compatibility index manifest", () => {
+  it("F-F03 observer-miss errors are distinct from timeouts and assertions", () => {
+    const miss = new ActivePhaseMissedError("phase missed");
+    expect(miss).toBeInstanceOf(Error);
+    expect(miss.name).toBe("ActivePhaseMissedError");
+    const timeout = new Error(
+      'Iteration 1: timed out waiting for phase "building index: scanning table"',
+    );
+    expect(timeout).not.toBeInstanceOf(ActivePhaseMissedError);
+    expect(timeout.name).not.toBe("ActivePhaseMissedError");
+  });
+
   it("lists 44 expected indexes", () => {
     expect(TENANT_COMPATIBILITY_INDEXES).toHaveLength(44);
   });
@@ -622,6 +648,40 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
     );
   }, 900_000);
 
+  it("F-F03 fixture contract: distinct non-null shopId; all-NULL and collapsed keys fail closed", async () => {
+    await resetPublicSchema(prisma);
+    run("npx", ["prisma", "migrate", "deploy"]);
+
+    await clientPopulateSuppliers(prisma, 50, "distinct");
+    const distinct = await supplierShopIdFixtureStats(prisma);
+    expect(distinct.n).toBe(50);
+    expect(distinct.nulls).toBe(0);
+    expect(distinct.distinct_ids).toBe(50);
+
+    await withMaintenanceClient(async (client) => {
+      await client.query(`DELETE FROM "Supplier"`);
+    });
+    await clientPopulateSuppliers(prisma, 50, "all_null");
+    const allNull = await supplierShopIdFixtureStats(prisma);
+    expect(allNull.n).toBe(50);
+    expect(allNull.nulls).toBe(50);
+    expect(allNull.distinct_ids).toBe(0);
+    // Same predicates F-F03 uses after the 400k populate.
+    expect(allNull.nulls === 0 && allNull.distinct_ids === allNull.n).toBe(
+      false,
+    );
+
+    await withMaintenanceClient(async (client) => {
+      await client.query(`DELETE FROM "Supplier"`);
+    });
+    await clientPopulateSuppliers(prisma, 50, "collapsed");
+    const collapsed = await supplierShopIdFixtureStats(prisma);
+    expect(collapsed.n).toBe(50);
+    expect(collapsed.nulls).toBe(0);
+    expect(collapsed.distinct_ids).toBe(1);
+    expect(collapsed.distinct_ids).not.toBe(collapsed.n);
+  }, 180_000);
+
   it("DML overlaps active build-scan and validation-scan phases (F-F03), 3 iterations", async () => {
     await resetPublicSchema(prisma);
     run("npx", ["prisma", "migrate", "deploy"]);
@@ -630,11 +690,22 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
       await applyIndexes(client, { apply: true });
     });
 
-    await clientPopulateSuppliers(prisma, ACTIVE_PHASE_ROW_COUNT);
+    await clientPopulateSuppliers(prisma, ACTIVE_PHASE_ROW_COUNT, "distinct");
+    const fixture = await supplierShopIdFixtureStats(prisma);
+    expect(fixture.n).toBe(ACTIVE_PHASE_ROW_COUNT);
+    expect(fixture.nulls).toBe(0);
+    expect(fixture.distinct_ids).toBe(ACTIVE_PHASE_ROW_COUNT);
 
     const iterationEvidence: Array<Record<string, unknown>> = [];
+    const missedAttempts: Array<Record<string, unknown>> = [];
 
-    for (let iteration = 1; iteration <= 3; iteration += 1) {
+    for (
+      let attempt = 1;
+      iterationEvidence.length < FF03_REQUIRED_ITERATIONS &&
+      attempt <= FF03_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
+      const iteration = iterationEvidence.length + 1;
       await withMaintenanceClient(async (client) => {
         await client.query(
           `DROP INDEX CONCURRENTLY IF EXISTS "Supplier_shopId_idx"`,
@@ -646,6 +717,9 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
       });
       const writer = new Client({ connectionString: DATABASE_URL });
       await writer.connect();
+      await writer.query(
+        `DELETE FROM "Supplier" WHERE id LIKE 'sup-gate%' OR id LIKE 'sup-active-%'`,
+      );
       const observer = new Client({ connectionString: DATABASE_URL });
       await observer.connect();
 
@@ -660,6 +734,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
       const evidence: Record<string, unknown> = {
         iteration,
+        attempt,
         rowCount: ACTIVE_PHASE_ROW_COUNT,
         writeThresholdMs: CONCURRENT_WRITE_THRESHOLD_MS,
         environment: {
@@ -669,6 +744,8 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         },
       };
 
+      let builderPid: number | undefined;
+      let buildPromise: Promise<unknown> | undefined;
       try {
         // Deterministically lengthen the active phases: no parallel workers
         // and a tiny sort budget force long external build and validation scans.
@@ -678,14 +755,15 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         const pidResult = await builder.query<{ pid: number }>(
           `SELECT pg_backend_pid() AS pid`,
         );
-        const builderPid = pidResult.rows[0]!.pid;
+        builderPid = pidResult.rows[0]!.pid;
         evidence.builderPid = builderPid;
 
         // Gate 1 open before the build starts — first WaitForLockers waits on it.
+        // Probe IDs use attempt so a missed iteration cannot collide on retry.
         await gate1.query("BEGIN");
         await gate1.query(
           `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
-           VALUES ('sup-gate1-${iteration}', 'gate.myshopify.com', 'G1', NOW(), NOW())`,
+           VALUES ('sup-gate1-${attempt}', 'gate.myshopify.com', 'G1', NOW(), NOW())`,
         );
 
         let buildSettled = false;
@@ -694,7 +772,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         const buildStartedAtNs = process.hrtime.bigint();
         evidence.buildStartedAtNs = buildStartedAtNs.toString();
 
-        const buildPromise = builder
+        buildPromise = builder
           .query(
             `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
           )
@@ -733,7 +811,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           const deadline = Date.now() + deadlineMs;
           for (;;) {
             if (buildSettled) {
-              throw new Error(
+              throw new ActivePhaseMissedError(
                 `Iteration ${iteration}: build settled before phase "${target}" was observed ` +
                   `(phasesSeen=${JSON.stringify([...phasesSeen])})`,
               );
@@ -804,11 +882,19 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
             },
           ];
           for (const { op, sql } of ops) {
-            expect(buildSettled).toBe(false);
+            if (buildSettled) {
+              throw new ActivePhaseMissedError(
+                `Iteration ${iteration}: build settled before ${op} during ${observedPhase.phase}`,
+              );
+            }
             const startNs = process.hrtime.bigint();
             await writer.query(sql);
             const endNs = process.hrtime.bigint();
-            expect(buildSettled).toBe(false);
+            if (buildSettled) {
+              throw new ActivePhaseMissedError(
+                `Iteration ${iteration}: build settled during ${op} in ${observedPhase.phase}`,
+              );
+            }
             expect(buildSettledAtNs).toBeNull();
             const durationMs = Number(endNs - startNs) / 1e6;
             expect(durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
@@ -835,7 +921,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         await gate2.query("BEGIN");
         await gate2.query(
           `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
-           VALUES ('sup-gate2-${iteration}', 'gate.myshopify.com', 'G2', NOW(), NOW())`,
+           VALUES ('sup-gate2-${attempt}', 'gate.myshopify.com', 'G2', NOW(), NOW())`,
         );
         await gate1.query("COMMIT");
 
@@ -851,7 +937,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         const buildScanWrites = await timedWritesDuringPhase(
           buildPhase,
           buildLocks,
-          `build-${iteration}`,
+          `build-${attempt}`,
         );
 
         // Deterministic validation gate: CIC parks until gate2 commits.
@@ -869,7 +955,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         const validationScanWrites = await timedWritesDuringPhase(
           validationPhase,
           validationLocks,
-          `validate-${iteration}`,
+          `validate-${attempt}`,
         );
 
         await buildPromise;
@@ -904,7 +990,7 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
 
         // Remove committed gate rows so later iterations start identically.
         await writer.query(
-          `DELETE FROM "Supplier" WHERE id IN ('sup-gate1-${iteration}', 'sup-gate2-${iteration}')`,
+          `DELETE FROM "Supplier" WHERE id LIKE 'sup-gate%' OR id LIKE 'sup-active-%'`,
         );
 
         const entry = TENANT_COMPATIBILITY_INDEXES.find(
@@ -926,13 +1012,58 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
             ...evidence,
           }),
         );
+      } catch (error) {
+        if (error instanceof ActivePhaseMissedError) {
+          missedAttempts.push({
+            attempt,
+            iteration,
+            message: error.message,
+          });
+          // eslint-disable-next-line no-console
+          console.log(
+            JSON.stringify({
+              event: "tenant_index_active_phase_missed",
+              attempt,
+              iteration,
+              message: error.message,
+            }),
+          );
+        } else {
+          throw error;
+        }
       } finally {
+        // Unpark then cancel so a missed attempt cannot wait forever on gates.
         for (const gate of [gate1, gate2]) {
           try {
             await gate.query("ROLLBACK");
           } catch {
             // already committed or closed
           }
+        }
+        if (builderPid !== undefined) {
+          try {
+            await observer.query(`SELECT pg_cancel_backend($1::int)`, [
+              builderPid,
+            ]);
+          } catch {
+            // observer already closed or backend gone
+          }
+        }
+        if (buildPromise) {
+          try {
+            await buildPromise;
+          } catch {
+            // cancelled CIC or failed build; retry path ignores
+          }
+        }
+        try {
+          await writer.query(
+            `DELETE FROM "Supplier" WHERE id LIKE 'sup-gate%' OR id LIKE 'sup-active-%'`,
+          );
+        } catch {
+          // writer already closed
+        }
+        for (const gate of [gate1, gate2]) {
           try {
             await gate.end();
           } catch {
@@ -945,7 +1076,17 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
       }
     }
 
-    expect(iterationEvidence).toHaveLength(3);
+    expect(iterationEvidence).toHaveLength(FF03_REQUIRED_ITERATIONS);
+    // eslint-disable-next-line no-console
+    console.log(
+      JSON.stringify({
+        event: "tenant_index_active_phase_summary",
+        requiredIterations: FF03_REQUIRED_ITERATIONS,
+        successfulIterations: iterationEvidence.length,
+        attempts: missedAttempts.length + iterationEvidence.length,
+        missedAttempts,
+      }),
+    );
   }, 900_000);
 
   it("verify fails when indexes were dropped after apply", async () => {
@@ -962,16 +1103,47 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
   }, 300_000);
 });
 
+type SupplierShopIdPopulateMode = "distinct" | "all_null" | "collapsed";
+
+async function supplierShopIdFixtureStats(prisma: PrismaClient): Promise<{
+  nulls: number;
+  distinct_ids: number;
+  n: number;
+}> {
+  const rows = await prisma.$queryRaw<
+    Array<{ nulls: number; distinct_ids: number; n: number }>
+  >`
+    SELECT
+      count(*) FILTER (WHERE "shopId" IS NULL)::int AS nulls,
+      count(DISTINCT "shopId")::int AS distinct_ids,
+      count(*)::int AS n
+    FROM "Supplier"
+  `;
+  return rows[0]!;
+}
+
 async function clientPopulateSuppliers(
   prisma: PrismaClient,
   count: number,
+  shopIdMode: SupplierShopIdPopulateMode = "distinct",
 ): Promise<void> {
+  // Distinct non-null shopId is required for F-F03: an all-NULL shopId btree
+  // builds in ~150–180ms on SSD (CI e5af049 iteration 1 was 184ms) and the
+  // observer misses `building index: scanning table`. Collapsed identical
+  // keys are also rejected by distinct_ids === n.
+  const shopIdExpr =
+    shopIdMode === "distinct"
+      ? `'shop-id-' || g`
+      : shopIdMode === "collapsed"
+        ? `'same-shop'`
+        : `NULL`;
   await prisma.$executeRawUnsafe(`
-    INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+    INSERT INTO "Supplier" (id, shop, name, "shopId", "createdAt", "updatedAt")
     SELECT
       'sup-bulk-' || g,
       'bulk.myshopify.com',
       'Name-' || g,
+      ${shopIdExpr},
       NOW(),
       NOW()
     FROM generate_series(1, ${count}) AS g

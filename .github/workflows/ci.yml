@@ -74,8 +74,16 @@ jobs:
     runs-on: ubuntu-latest
     # D-050 adversarial race/deadlock/fairness suites + full migration chain
     # exceed the prior 45m wall on GitHub-hosted runners (observed cancel at
-    # ~45m during final test:migrations on tip 314981e).
-    timeout-minutes: 70
+    # ~45m during final test:migrations on tip 314981e). Raised 45→70 then.
+    # Shared 70m cancellations on 2026-09-12 (not an application SLA):
+    # - PR #40 e5af049 run 34714619941 Heavy 103609595251 cancelled ~70m22s
+    #   (pre-migration ~53m; aggregate test:migrations incomplete after ~16.5m)
+    # - PR #39 57bebc6 run 34722422036 Heavy 103630630199 cancelled ~70m27s
+    #   (pre-migration ~49m; aggregate test:migrations incomplete after ~19.4m)
+    # Last complete PR #40 Heavy on b0b7f58 run 34670954315 finished ~56m14s.
+    # 90m is a bounded cancellation guard (~20m slack vs 70), not a changed
+    # product performance target. Does not dispose F-F03.
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: stocky-plus
