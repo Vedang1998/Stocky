@@ -198,7 +198,9 @@ index-management or historical migration edit was required or performed.
 
 ### 5.2 Repair (test-local only)
 
-New helper `stocky-plus/scripts/tenant-indexes/tests/ff03-active-phase-overlap.ts`:
+Helpers live in the already-excepted file
+`stocky-plus/scripts/tenant-indexes/tests/indexes.migration.test.ts`
+(EX-IDX-014). They are **not** a new exact-path tenant-access exception.
 
 - One observer round-trip: `pg_stat_activity` + `pg_stat_progress_create_index`
   + granted `Supplier` relation locks.
@@ -269,7 +271,7 @@ settlement race.
 
 Command:
 
-`npm run test:migrations -- scripts/tenant-indexes/tests/ff03-active-phase-overlap.unit.test.ts`
+`npm run test:migrations -- scripts/tenant-indexes/tests/indexes.migration.test.ts -t "F-F03 active-scan overlap helper"`
 
 Result: **7 passed / 7**, exit **0**, ~175ms. Coverage:
 
@@ -328,7 +330,40 @@ Including:
   (**distinct** from F-F03; preserved)
 - `schema-drift.migration.test.ts` **3/3**
 - classify / timeouts / maintenance-url / drift-redaction unit tests
-- new F-F03 helper unit file **7/7**
+- F-F03 helper unit tests **7/7** (same `indexes.migration.test.ts` file; **20/20** in that file)
+
+### 6.7 Superseded tooling-PR CI (not a timeout, not F-F03)
+
+Exact-head `pull_request` run `34790452855` on `5ec61bd3eb024cfa1e8e98cfe043d4b7c133676b`:
+
+- Classify `103813562888` SUCCESS
+- Heavy `103813576174` FAIL at step **Tenant enforcement preflight** (~3m wall, not the 70/120 budget)
+- CI Gate `103813994120` FAIL (`validate_result=failure`)
+- Preflight JSON: all 35 merchant tables `ok:true`;
+  `globalFailures: ["tenant:access:inventory:check_failed_exit_1"]`
+
+Cause: an earlier revision added new files under `scripts/tenant-indexes/tests/`
+that are **not** on the exact-path `EX-IDX-*` allowlist, and the F-F03 edit
+shifted line numbers of existing EX-IDX-014 findings, so
+`PR2_TENANT_ACCESS_INVENTORY.md` was stale. This is a mechanical inventory
+freshness failure, not an F-F03 overlap-proof failure and not a Heavy-budget
+failure.
+
+Correction (this head):
+
+- Inline helpers and helper unit tests into `indexes.migration.test.ts`
+  (already EX-IDX-014). **No new exception ID. Allowlist not broadened.**
+- Mechanically regenerate `PR2_TENANT_ACCESS_INVENTORY.md` via
+  `npm run tenant:access:inventory` (digest
+  `8e9b1ed937ec4b23db9c78616ca0498e8e557c61fa1367fa2830c019fd8c190a`).
+  Findings remain **1741**, scanned files **372**, violations **0**.
+  Only EX-IDX-014 line numbers moved (`$executeRawUnsafe` 49–52→50–53,
+  `new PrismaClient` 88→506, populate `$executeRawUnsafe` 969→1387).
+- `npm run tenant:access:inventory:check` exit 0
+- `npm run tenant:enforcement:inventory:check` exit 0 (unchanged)
+- `npm run tenant:access:audit` → `tenant_access_audit_ok`
+
+Run `34790452855` is **superseded failed evidence**, not the review head.
 
 ### 6.5 Classifier, lint, typecheck, build
 
@@ -364,14 +399,15 @@ Allowed and used:
 
 - `.github/workflows/ci.yml` — Heavy `timeout-minutes` 70→120 only
 - `stocky-plus/scripts/tenant-indexes/tests/indexes.migration.test.ts` — F-F03
-  body + helper imports + CPU/loadavg evidence fields only
-- `stocky-plus/scripts/tenant-indexes/tests/ff03-active-phase-overlap.ts` — new
-- `stocky-plus/scripts/tenant-indexes/tests/ff03-active-phase-overlap.unit.test.ts` — new
+  harness + inlined helper/unit tests (EX-IDX-014)
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` —
+  mechanical freshness regenerate only (line numbers / digest)
 - `stocky-plus/docs/phases/phase-1/PR6_BC_CI_RELIABILITY_REPORT.md` — this file
 
 Not edited: B/C branches, application, Prisma schema/migrations, roles,
 lockfiles, Vitest global config, CI classifier, CI Gate logic, immutable
-reviews, `PROJECT_STATUS.md`, inventory-write flags.
+reviews, `PROJECT_STATUS.md`, inventory-write flags, tenant-access
+**allowlist**.
 
 `git diff --check` on the implementation tree: clean.
 
