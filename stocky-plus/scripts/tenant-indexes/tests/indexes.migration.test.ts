@@ -3,6 +3,7 @@
  * Requires DATABASE_URL / TENANT_MAINTENANCE_DATABASE_URL on disposable PostgreSQL 16.
  */
 import { execFileSync } from "node:child_process";
+import { cpus, loadavg } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -72,6 +73,309 @@ async function withMaintenanceClient<T>(
   }
 }
 
+/* F-F03 test-local overlap helpers (kept in this already-excepted file so
+ * tenant-access inventory does not require a new exact-path exception). */
+
+type Ff03ProgressSample = {
+  sampledAtNs: bigint;
+  phase: string | null;
+  relid: string | null;
+  schema: string | null;
+  tuplesDone: number | null;
+  tuplesTotal: number | null;
+  blocksDone: number | null;
+  blocksTotal: number | null;
+  lockModes: string[];
+  builderState: string | null;
+  builderQuery: string | null;
+};
+
+type Ff03WriteWindow = {
+  op: string;
+  startNs: string;
+  endNs: string;
+  durationMs: number;
+  phaseAtWriteStart: string | null;
+  tuplesDoneAtStart: number | null;
+  tuplesTotalAtStart: number | null;
+  blocksDoneAtStart: number | null;
+  blocksTotalAtStart: number | null;
+};
+
+function asNullableNumber(value: string | number | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * One observer round-trip: builder activity + progress + granted relation locks
+ * on Supplier. Used so phase, remaining-scan counters, and ShareUpdateExclusiveLock
+ * are contemporaneous with the decision to write.
+ */
+async function sampleConcurrentIndexProgress(
+  observer: Client,
+  builderPid: number,
+): Promise<Ff03ProgressSample> {
+  const sampledAtNs = process.hrtime.bigint();
+  const result = await observer.query<{
+    phase: string | null;
+    relid: string | null;
+    schema: string | null;
+    tuples_done: string | null;
+    tuples_total: string | null;
+    blocks_done: string | null;
+    blocks_total: string | null;
+    lock_modes: string[] | null;
+    builder_state: string | null;
+    builder_query: string | null;
+  }>(
+    `
+    SELECT
+      p.phase::text AS phase,
+      p.relid::text AS relid,
+      n.nspname AS schema,
+      p.tuples_done::text AS tuples_done,
+      p.tuples_total::text AS tuples_total,
+      p.blocks_done::text AS blocks_done,
+      p.blocks_total::text AS blocks_total,
+      a.state::text AS builder_state,
+      a.query::text AS builder_query,
+      COALESCE((
+        SELECT array_agg(l.mode::text ORDER BY l.mode)
+        FROM pg_locks l
+        JOIN pg_class c2 ON c2.oid = l.relation
+        WHERE l.pid = a.pid
+          AND l.locktype = 'relation'
+          AND c2.relname = 'Supplier'
+          AND l.granted = true
+      ), ARRAY[]::text[]) AS lock_modes
+    FROM pg_stat_activity a
+    LEFT JOIN pg_stat_progress_create_index p ON p.pid = a.pid
+    LEFT JOIN pg_class c ON c.oid = p.relid
+    LEFT JOIN pg_namespace n ON n.oid = c.relnamespace AND c.relname = 'Supplier'
+    WHERE a.pid = $1
+    `,
+    [builderPid],
+  );
+  const row = result.rows[0];
+  return {
+    sampledAtNs,
+    phase: row?.phase ?? null,
+    relid: row?.relid ?? null,
+    schema: row?.schema ?? null,
+    tuplesDone: asNullableNumber(row?.tuples_done),
+    tuplesTotal: asNullableNumber(row?.tuples_total),
+    blocksDone: asNullableNumber(row?.blocks_done),
+    blocksTotal: asNullableNumber(row?.blocks_total),
+    lockModes: row?.lock_modes ?? [],
+    builderState: row?.builder_state ?? null,
+    builderQuery: row?.builder_query ?? null,
+  };
+}
+
+function builderStillCreatingConcurrentIndex(
+  sample: Ff03ProgressSample,
+): boolean {
+  const q = sample.builderQuery ?? "";
+  return /CREATE\s+INDEX\s+CONCURRENTLY/i.test(q);
+}
+
+function hasShareUpdateExclusiveWithoutAccessExclusive(
+  sample: Ff03ProgressSample,
+): boolean {
+  return (
+    sample.lockModes.length > 0 &&
+    sample.lockModes.includes("ShareUpdateExclusiveLock") &&
+    !sample.lockModes.includes("AccessExclusiveLock")
+  );
+}
+
+/**
+ * True when the sample is the requested scan phase, the builder still holds
+ * SHARE UPDATE EXCLUSIVE (not ACCESS EXCLUSIVE), CIC is still the builder
+ * query, and PostgreSQL reports remaining scan work. Phase-text-only samples
+ * without remaining-work counters are rejected so we do not treat a gate
+ * or a finished scan as overlap coverage.
+ */
+function isActiveScanSample(
+  sample: Ff03ProgressSample,
+  targetPhase: string,
+): boolean {
+  if (sample.phase !== targetPhase) {
+    return false;
+  }
+  if (!hasShareUpdateExclusiveWithoutAccessExclusive(sample)) {
+    return false;
+  }
+  if (!builderStillCreatingConcurrentIndex(sample)) {
+    return false;
+  }
+  if (sample.tuplesTotal != null && sample.tuplesTotal > 0) {
+    const remaining = sample.tuplesTotal - (sample.tuplesDone ?? 0);
+    const floor = Math.max(1, Math.floor(sample.tuplesTotal * 0.1));
+    return remaining > floor;
+  }
+  if (sample.blocksTotal != null && sample.blocksTotal > 0) {
+    const remaining = sample.blocksTotal - (sample.blocksDone ?? 0);
+    const floor = Math.max(32, Math.floor(sample.blocksTotal * 0.1));
+    return remaining > floor;
+  }
+  return false;
+}
+
+async function waitForNamedIndexPhase(options: {
+  observer: Client;
+  builderPid: number;
+  targetPhase: string;
+  deadlineMs: number;
+  iteration: number;
+  phasesSeen: Set<string>;
+  isBuildSettled: () => boolean;
+}): Promise<Ff03ProgressSample> {
+  const deadline = Date.now() + options.deadlineMs;
+  for (;;) {
+    if (options.isBuildSettled()) {
+      throw new Error(
+        `Iteration ${options.iteration}: build settled before phase "${options.targetPhase}" was observed ` +
+          `(phasesSeen=${JSON.stringify([...options.phasesSeen])})`,
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `Iteration ${options.iteration}: timed out waiting for phase "${options.targetPhase}" ` +
+          `(phasesSeen=${JSON.stringify([...options.phasesSeen])})`,
+      );
+    }
+    const sample = await sampleConcurrentIndexProgress(
+      options.observer,
+      options.builderPid,
+    );
+    if (sample.phase) {
+      options.phasesSeen.add(sample.phase);
+      if (sample.phase === options.targetPhase) {
+        return sample;
+      }
+    }
+  }
+}
+
+/**
+ * Wait until the target *scan* phase is active with contemporaneous SHARE UPDATE
+ * EXCLUSIVE locks, then return that sample immediately so callers can DML
+ * without a second lock query.
+ */
+async function waitForActiveScanTrigger(options: {
+  observer: Client;
+  builderPid: number;
+  targetPhase: string;
+  deadlineMs: number;
+  iteration: number;
+  phasesSeen: Set<string>;
+  isBuildSettled: () => boolean;
+}): Promise<Ff03ProgressSample> {
+  const deadline = Date.now() + options.deadlineMs;
+  let last: Ff03ProgressSample | null = null;
+  for (;;) {
+    if (options.isBuildSettled()) {
+      throw new Error(
+        `Iteration ${options.iteration}: build settled before in-progress "${options.targetPhase}" overlap ` +
+          `(phasesSeen=${JSON.stringify([...options.phasesSeen])} last=${JSON.stringify(summarizeSample(last))})`,
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `Iteration ${options.iteration}: timed out waiting for active scan "${options.targetPhase}" ` +
+          `(phasesSeen=${JSON.stringify([...options.phasesSeen])} last=${JSON.stringify(summarizeSample(last))})`,
+      );
+    }
+    const sample = await sampleConcurrentIndexProgress(
+      options.observer,
+      options.builderPid,
+    );
+    last = sample;
+    if (sample.phase) {
+      options.phasesSeen.add(sample.phase);
+    }
+    if (isActiveScanSample(sample, options.targetPhase)) {
+      return sample;
+    }
+    // Phase text matches but counters say the scan already finished: do not
+    // treat that as active coverage; keep polling until a remaining-work
+    // sample appears or the build settles.
+  }
+}
+
+function summarizeSample(
+  sample: Ff03ProgressSample | null,
+): Record<string, unknown> | null {
+  if (!sample) {
+    return null;
+  }
+  return {
+    phase: sample.phase,
+    schema: sample.schema,
+    relid: sample.relid,
+    tuplesDone: sample.tuplesDone,
+    tuplesTotal: sample.tuplesTotal,
+    blocksDone: sample.blocksDone,
+    blocksTotal: sample.blocksTotal,
+    lockModes: sample.lockModes,
+    builderState: sample.builderState,
+    builderQueryPreview: (sample.builderQuery ?? "").slice(0, 80),
+    sampledAtNs: sample.sampledAtNs.toString(),
+  };
+}
+
+/**
+ * INSERT/UPDATE/DELETE back-to-back after a triggering active-scan sample.
+ * No extra observer round-trip is taken before the first write. After the
+ * burst, the caller re-samples to prove the scan phase was still reported.
+ */
+async function burstRepresentativeSupplierDml(options: {
+  writer: Client;
+  trigger: Ff03ProgressSample;
+  idSuffix: string;
+}): Promise<Ff03WriteWindow[]> {
+  const rowId = `sup-active-${options.idSuffix}`;
+  const ops: Array<{ op: string; sql: string }> = [
+    {
+      op: "insert",
+      sql: `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
+            VALUES ('${rowId}', 'active-probe.myshopify.com', 'A', NOW(), NOW())`,
+    },
+    {
+      op: "update",
+      sql: `UPDATE "Supplier" SET name = 'A2' WHERE id = '${rowId}'`,
+    },
+    {
+      op: "delete",
+      sql: `DELETE FROM "Supplier" WHERE id = '${rowId}'`,
+    },
+  ];
+  const windows: Ff03WriteWindow[] = [];
+  for (const { op, sql } of ops) {
+    const startNs = process.hrtime.bigint();
+    await options.writer.query(sql);
+    const endNs = process.hrtime.bigint();
+    const durationMs = Number(endNs - startNs) / 1e6;
+    windows.push({
+      op,
+      startNs: startNs.toString(),
+      endNs: endNs.toString(),
+      durationMs,
+      phaseAtWriteStart: options.trigger.phase,
+      tuplesDoneAtStart: options.trigger.tuplesDone,
+      tuplesTotalAtStart: options.trigger.tuplesTotal,
+      blocksDoneAtStart: options.trigger.blocksDone,
+      blocksTotalAtStart: options.trigger.blocksTotal,
+    });
+  }
+  return windows;
+}
+
 describe("tenant compatibility index manifest", () => {
   it("lists 44 expected indexes", () => {
     expect(TENANT_COMPATIBILITY_INDEXES).toHaveLength(44);
@@ -81,6 +385,120 @@ describe("tenant compatibility index manifest", () => {
     expect(normalizeIndexDef("  CREATE   INDEX  foo  ")).toBe(
       "create index foo",
     );
+  });
+});
+
+
+const FF03_HELPER_TARGET = "building index: scanning table";
+
+function ff03HelperSample(
+  overrides: Partial<Ff03ProgressSample> = {},
+): Ff03ProgressSample {
+  return {
+    sampledAtNs: 1n,
+    phase: FF03_HELPER_TARGET,
+    relid: "1",
+    schema: "public",
+    tuplesDone: 0,
+    tuplesTotal: 0,
+    blocksDone: 10,
+    blocksTotal: 100,
+    lockModes: ["ShareUpdateExclusiveLock"],
+    builderState: "active",
+    builderQuery: `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`,
+    ...overrides,
+  };
+}
+
+describe("F-F03 active-scan overlap helper", () => {
+  it("accepts an in-progress scan with remaining blocks and SHARE UPDATE EXCLUSIVE", () => {
+    expect(isActiveScanSample(ff03HelperSample(), FF03_HELPER_TARGET)).toBe(true);
+    expect(hasShareUpdateExclusiveWithoutAccessExclusive(ff03HelperSample())).toBe(true);
+    expect(builderStillCreatingConcurrentIndex(ff03HelperSample())).toBe(true);
+  });
+
+  it("rejects a completed scan that still carries the phase text", () => {
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({ blocksDone: 100, blocksTotal: 100 }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects waiting-for-writers / old-snapshot samples as active scan coverage", () => {
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({ phase: "waiting for writers before build" }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({ phase: "waiting for old snapshots" }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects empty locks and AccessExclusiveLock (R-051/R-052 bypass)", () => {
+    expect(
+      isActiveScanSample(ff03HelperSample({ lockModes: [] }), FF03_HELPER_TARGET),
+    ).toBe(false);
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({
+          lockModes: ["ShareUpdateExclusiveLock", "AccessExclusiveLock"],
+        }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+    expect(
+      hasShareUpdateExclusiveWithoutAccessExclusive(
+        ff03HelperSample({ lockModes: [] }),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects a builder that is no longer running CREATE INDEX CONCURRENTLY", () => {
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({ builderQuery: "SELECT 1" }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+    expect(builderStillCreatingConcurrentIndex(ff03HelperSample({ builderQuery: "SELECT 1" }))).toBe(
+      false,
+    );
+  });
+
+  it("rejects a late scan sample with almost no remaining work", () => {
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({ blocksDone: 5300, blocksTotal: 5324 }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects phase-text-only samples with no remaining-work counters", () => {
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({
+          tuplesDone: null,
+          tuplesTotal: null,
+          blocksDone: null,
+          blocksTotal: null,
+        }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({ tuplesDone: 0, tuplesTotal: 0, blocksDone: 0, blocksTotal: 0 }),
+        FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
   });
 });
 
@@ -666,6 +1084,8 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           node: process.version,
           platform: process.platform,
           databaseUrlHost: new URL(DATABASE_URL).host,
+          cpuCount: cpus().length,
+          loadavg: loadavg(),
         },
       };
 
@@ -674,6 +1094,21 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         // and a tiny sort budget force long external build and validation scans.
         await builder.query(`SET max_parallel_maintenance_workers = 0`);
         await builder.query(`SET maintenance_work_mem = '1MB'`);
+        const pgSettings = await builder.query<{ name: string; setting: string }>(
+          `SELECT name, setting
+           FROM pg_settings
+           WHERE name IN (
+             'max_parallel_maintenance_workers',
+             'maintenance_work_mem',
+             'shared_buffers',
+             'work_mem',
+             'max_parallel_workers'
+           )
+           ORDER BY name`,
+        );
+        evidence.postgresSettings = Object.fromEntries(
+          pgSettings.rows.map((r) => [r.name, r.setting]),
+        );
 
         const pidResult = await builder.query<{ pid: number }>(
           `SELECT pg_backend_pid() AS pid`,
@@ -712,124 +1147,113 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
             },
           );
 
-        type PhaseWrites = {
-          phaseAtStart: string;
-          relid: string;
-          schema: string;
-          lockModes: string[];
-          writeWindows: Array<{
-            op: string;
-            startNs: string;
-            endNs: string;
-            durationMs: number;
-          }>;
-        };
         const phasesSeen = new Set<string>();
+        const isBuildSettled = () => buildSettled;
 
-        const waitForPhase = async (
-          target: string,
-          deadlineMs: number,
-        ): Promise<{ phase: string; relid: string; schema: string }> => {
-          const deadline = Date.now() + deadlineMs;
-          for (;;) {
-            if (buildSettled) {
-              throw new Error(
-                `Iteration ${iteration}: build settled before phase "${target}" was observed ` +
-                  `(phasesSeen=${JSON.stringify([...phasesSeen])})`,
-              );
-            }
-            if (Date.now() > deadline) {
-              throw new Error(
-                `Iteration ${iteration}: timed out waiting for phase "${target}" ` +
-                  `(phasesSeen=${JSON.stringify([...phasesSeen])})`,
-              );
-            }
-            const progress = await observer.query<{
-              phase: string | null;
-              relid: string;
-              schema: string;
-            }>(
-              `SELECT p.phase::text AS phase, p.relid::text AS relid,
-                      n.nspname AS schema
-               FROM pg_stat_progress_create_index p
-               JOIN pg_class c ON c.oid = p.relid
-               JOIN pg_namespace n ON n.oid = c.relnamespace
-               WHERE p.pid = $1 AND c.relname = 'Supplier'`,
-              [builderPid],
-            );
-            const row = progress.rows[0];
-            if (row?.phase) {
-              phasesSeen.add(row.phase);
-              if (row.phase === target) {
-                return { phase: row.phase, relid: row.relid, schema: row.schema };
-              }
-            }
-          }
-        };
-
-        const grantedTargetLocks = async (): Promise<string[]> => {
-          const locks = await observer.query<{ mode: string }>(
-            `SELECT l.mode
-             FROM pg_locks l
-             JOIN pg_class c ON c.oid = l.relation
-             WHERE l.pid = $1
-               AND l.locktype = 'relation'
-               AND c.relname = 'Supplier'
-               AND l.granted = true`,
-            [builderPid],
-          );
-          return locks.rows.map((l) => l.mode);
-        };
-
-        const timedWritesDuringPhase = async (
-          observedPhase: { phase: string; relid: string; schema: string },
-          lockModes: string[],
+        const overlapWritesWithActiveScan = async (
+          targetPhase: string,
           idSuffix: string,
-        ): Promise<PhaseWrites> => {
-          const windows: PhaseWrites["writeWindows"] = [];
-          const rowId = `sup-active-${idSuffix}`;
-          const ops: Array<{ op: string; sql: string }> = [
-            {
-              op: "insert",
-              sql: `INSERT INTO "Supplier" (id, shop, name, "createdAt", "updatedAt")
-                    VALUES ('${rowId}', 'active-probe.myshopify.com', 'A', NOW(), NOW())`,
-            },
-            {
-              op: "update",
-              sql: `UPDATE "Supplier" SET name = 'A2' WHERE id = '${rowId}'`,
-            },
-            {
-              op: "delete",
-              sql: `DELETE FROM "Supplier" WHERE id = '${rowId}'`,
-            },
-          ];
-          for (const { op, sql } of ops) {
-            expect(buildSettled).toBe(false);
-            const startNs = process.hrtime.bigint();
-            await writer.query(sql);
-            const endNs = process.hrtime.bigint();
-            expect(buildSettled).toBe(false);
-            expect(buildSettledAtNs).toBeNull();
-            const durationMs = Number(endNs - startNs) / 1e6;
-            expect(durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
-            windows.push({
-              op,
-              startNs: startNs.toString(),
-              endNs: endNs.toString(),
-              durationMs,
-            });
+          deadlineMs: number,
+        ) => {
+          // Combined progress+lock+activity sample is the trigger. DML starts
+          // from that sample with no extra lock round-trip (the CI failure was
+          // expect(buildSettled).toBe(false) after a later write await, once
+          // Node processed CIC settlement that interleaved with the write).
+          const trigger = await waitForActiveScanTrigger({
+            observer,
+            builderPid,
+            targetPhase,
+            deadlineMs,
+            iteration,
+            phasesSeen,
+            isBuildSettled,
+          });
+          expect(buildSettled).toBe(false);
+          expect(buildSettledAtNs).toBeNull();
+          expect(trigger.phase).toBe(targetPhase);
+          expect(trigger.schema).toBe("public");
+          expect(trigger.relid).toBeTruthy();
+          expect(trigger.lockModes.length).toBeGreaterThan(0);
+          expect(trigger.lockModes).toContain("ShareUpdateExclusiveLock");
+          expect(trigger.lockModes).not.toContain("AccessExclusiveLock");
+          const remainingTuples =
+            trigger.tuplesTotal != null &&
+            trigger.tuplesTotal > 0 &&
+            (trigger.tuplesDone ?? 0) < trigger.tuplesTotal;
+          const remainingBlocks =
+            trigger.blocksTotal != null &&
+            trigger.blocksTotal > 0 &&
+            (trigger.blocksDone ?? 0) < trigger.blocksTotal;
+          expect(remainingTuples || remainingBlocks).toBe(true);
+
+          const writeWindows = await burstRepresentativeSupplierDml({
+            writer,
+            trigger,
+            idSuffix,
+          });
+          expect(writeWindows).toHaveLength(3);
+          for (const w of writeWindows) {
+            expect(w.phaseAtWriteStart).toBe(targetPhase);
+            expect(w.durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+            expect(BigInt(w.startNs) > trigger.sampledAtNs).toBe(true);
           }
+
+          const after = await sampleConcurrentIndexProgress(
+            observer,
+            builderPid,
+          );
+          if (after.phase) {
+            phasesSeen.add(after.phase);
+          }
+          // Stronger than Node settlement-after-await: the scan phase must
+          // still be reported after the entire INSERT/UPDATE/DELETE burst.
+          expect(buildSettled).toBe(false);
+          expect(buildSettledAtNs).toBeNull();
+          expect(after.phase).toBe(targetPhase);
+          expect(after.lockModes.length).toBeGreaterThan(0);
+          expect(after.lockModes).toContain("ShareUpdateExclusiveLock");
+          expect(after.lockModes).not.toContain("AccessExclusiveLock");
+          expect(after.sampledAtNs > BigInt(writeWindows[2]!.endNs)).toBe(
+            true,
+          );
+          if (
+            trigger.blocksTotal != null &&
+            trigger.blocksTotal > 0 &&
+            trigger.blocksDone != null &&
+            after.blocksDone != null
+          ) {
+            expect(after.blocksDone).toBeGreaterThan(trigger.blocksDone);
+          }
+          if (
+            trigger.tuplesTotal != null &&
+            trigger.tuplesTotal > 0 &&
+            trigger.tuplesDone != null &&
+            after.tuplesDone != null
+          ) {
+            expect(after.tuplesDone).toBeGreaterThan(trigger.tuplesDone);
+          }
+
           return {
-            phaseAtStart: observedPhase.phase,
-            relid: observedPhase.relid,
-            schema: observedPhase.schema,
-            lockModes,
-            writeWindows: windows,
+            phaseAtStart: trigger.phase!,
+            relid: trigger.relid!,
+            schema: trigger.schema!,
+            lockModes: trigger.lockModes,
+            writeWindows,
+            trigger: summarizeSample(trigger),
+            afterBurst: summarizeSample(after),
           };
         };
 
         // Deterministic build gate: CIC parks until gate1 commits.
-        await waitForPhase("waiting for writers before build", 60_000);
+        await waitForNamedIndexPhase({
+          observer,
+          builderPid,
+          targetPhase: "waiting for writers before build",
+          deadlineMs: 60_000,
+          iteration,
+          phasesSeen,
+          isBuildSettled,
+        });
         // Gate 2 opens while CIC is parked — it is outside the first locker
         // snapshot but inside the validation locker snapshot.
         await gate2.query("BEGIN");
@@ -839,37 +1263,28 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
         );
         await gate1.query("COMMIT");
 
-        // PostgreSQL 16 reports the btree build sub-phase in the phase text.
-        const buildPhase = await waitForPhase(
+        const buildScanWrites = await overlapWritesWithActiveScan(
           "building index: scanning table",
-          120_000,
-        );
-        const buildLocks = await grantedTargetLocks();
-        expect(buildLocks.length).toBeGreaterThan(0);
-        expect(buildLocks).toContain("ShareUpdateExclusiveLock");
-        expect(buildLocks).not.toContain("AccessExclusiveLock");
-        const buildScanWrites = await timedWritesDuringPhase(
-          buildPhase,
-          buildLocks,
           `build-${iteration}`,
+          120_000,
         );
 
         // Deterministic validation gate: CIC parks until gate2 commits.
-        await waitForPhase("waiting for writers before validation", 120_000);
+        await waitForNamedIndexPhase({
+          observer,
+          builderPid,
+          targetPhase: "waiting for writers before validation",
+          deadlineMs: 120_000,
+          iteration,
+          phasesSeen,
+          isBuildSettled,
+        });
         await gate2.query("COMMIT");
 
-        const validationPhase = await waitForPhase(
+        const validationScanWrites = await overlapWritesWithActiveScan(
           "index validation: scanning table",
-          120_000,
-        );
-        const validationLocks = await grantedTargetLocks();
-        expect(validationLocks.length).toBeGreaterThan(0);
-        expect(validationLocks).toContain("ShareUpdateExclusiveLock");
-        expect(validationLocks).not.toContain("AccessExclusiveLock");
-        const validationScanWrites = await timedWritesDuringPhase(
-          validationPhase,
-          validationLocks,
           `validate-${iteration}`,
+          120_000,
         );
 
         await buildPromise;
@@ -895,10 +1310,13 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
           expect(phaseWrites.lockModes).toContain("ShareUpdateExclusiveLock");
           expect(phaseWrites.lockModes).not.toContain("AccessExclusiveLock");
           expect(phaseWrites.writeWindows).toHaveLength(3);
+          expect(phaseWrites.afterBurst?.phase).toBe(phaseWrites.phaseAtStart);
           for (const w of phaseWrites.writeWindows) {
             expect(BigInt(w.startNs) > buildStartedAtNs).toBe(true);
+            expect(BigInt(w.startNs) < settledAt).toBe(true);
             expect(BigInt(w.endNs) < settledAt).toBe(true);
             expect(w.durationMs).toBeLessThan(CONCURRENT_WRITE_THRESHOLD_MS);
+            expect(w.phaseAtWriteStart).toBe(phaseWrites.phaseAtStart);
           }
         }
 
