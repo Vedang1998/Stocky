@@ -1,9 +1,22 @@
 /**
  * Materialize / remove the pinned B admin-read tree for C overlay tests.
- * Files are never committed. Callers must remove the overlay before inventory.
+ * Files are never committed. Callers must remove owned scratch before inventory.
+ *
+ * Never deletes or replaces a tracked B `admin-read` directory. Pinned-reader
+ * tests use an owned disposable scratch location under os.tmpdir().
+ * Integrated-reader tests use the actual tracked files.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { B_TYPED_READ_CONTRACT_PIN } from "./pr6-c-b-compat-mapper";
@@ -13,10 +26,17 @@ const APP_ROOT = path.resolve(
   "../../..",
 );
 const REPO_ROOT = path.resolve(APP_ROOT, "..");
-export const B_ADMIN_READ_OVERLAY_DIR = path.join(
+const TRACKED_ADMIN_READ_PREFIX = "stocky-plus/app/lib/order-facts/admin-read";
+const OWNED_MARKER_NAME = ".pr6-c-owned-scratch";
+const OWNED_SCRATCH_PREFIX = "pr6-c-owned-b-pin-";
+
+export const B_ADMIN_READ_PRODUCTION_DIR = path.join(
   APP_ROOT,
   "app/lib/order-facts/admin-read",
 );
+
+/** @deprecated Use B_ADMIN_READ_PRODUCTION_DIR. Never a delete target. */
+export const B_ADMIN_READ_OVERLAY_DIR = B_ADMIN_READ_PRODUCTION_DIR;
 
 /** Git blobs of B production readers / test transport at pin 610ed050. */
 export const PINNED_B_READER_BLOBS = {
@@ -34,24 +54,58 @@ export const PINNED_B_READER_BLOBS = {
     "34671adf9fdab380ac1bfb9d115cd90c8e82d6d5",
 } as const;
 
-export function readPinnedBBlob(repoPath: string): string {
-  ensurePinnedBCommit();
-  return git(["rev-parse", `${B_TYPED_READ_CONTRACT_PIN}:${repoPath}`])
-    .toString()
-    .trim();
+export type PinOverlayEnv = {
+  repoRoot: string;
+  productionAdminReadDir: string;
+};
+
+export type BAdminReadSource = {
+  mode: "integrated" | "pinned-scratch";
+  dir: string;
+  scratchRoot?: string;
+};
+
+export class UnownedAdminReadPathError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnownedAdminReadPathError";
+  }
 }
 
-function git(args: string[]): Buffer {
+export class TrackedAdminReadPresentError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TrackedAdminReadPresentError";
+  }
+}
+
+let defaultScratchRoot: string | undefined;
+
+export function defaultPinOverlayEnv(): PinOverlayEnv {
+  return {
+    repoRoot: REPO_ROOT,
+    productionAdminReadDir: B_ADMIN_READ_PRODUCTION_DIR,
+  };
+}
+
+function git(args: string[], cwd: string): Buffer {
   return execFileSync("git", args, {
-    cwd: REPO_ROOT,
+    cwd,
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     maxBuffer: 32 * 1024 * 1024,
   });
 }
 
+export function readPinnedBBlob(repoPath: string): string {
+  ensurePinnedBCommit();
+  return git(["rev-parse", `${B_TYPED_READ_CONTRACT_PIN}:${repoPath}`], REPO_ROOT)
+    .toString()
+    .trim();
+}
+
 function pinAvailable(): boolean {
   try {
-    git(["cat-file", "-t", B_TYPED_READ_CONTRACT_PIN]);
+    git(["cat-file", "-t", B_TYPED_READ_CONTRACT_PIN], REPO_ROOT);
     return true;
   } catch {
     return false;
@@ -80,7 +134,7 @@ export function ensurePinnedBCommit(): void {
   let lastError: unknown;
   for (const args of fetchAttempts) {
     try {
-      git(args);
+      git(args, REPO_ROOT);
       if (pinAvailable()) return;
     } catch (error) {
       lastError = error;
@@ -91,11 +145,106 @@ export function ensurePinnedBCommit(): void {
   );
 }
 
+export function listTrackedAdminReadPaths(env: PinOverlayEnv): string[] {
+  const out = git(
+    ["ls-files", "-z", "--", TRACKED_ADMIN_READ_PREFIX],
+    env.repoRoot,
+  )
+    .toString()
+    .split("\0")
+    .filter(Boolean);
+  return out;
+}
+
+export function listTrackedAdminReadBlobs(
+  env: PinOverlayEnv,
+): Record<string, string> {
+  const blobs: Record<string, string> = {};
+  for (const repoPath of listTrackedAdminReadPaths(env)) {
+    blobs[repoPath] = git(["rev-parse", `HEAD:${repoPath}`], env.repoRoot)
+      .toString()
+      .trim();
+  }
+  return blobs;
+}
+
+export function listTrackedAdminReadStage(
+  env: PinOverlayEnv,
+): string {
+  return git(
+    ["ls-files", "-s", "--", TRACKED_ADMIN_READ_PREFIX],
+    env.repoRoot,
+  ).toString();
+}
+
+function assertPathNotSymlink(target: string, stopAt: string): void {
+  let current = path.resolve(target);
+  const root = path.resolve(stopAt);
+  while (true) {
+    if (existsSync(current)) {
+      const st = lstatSync(current);
+      if (st.isSymbolicLink()) {
+        throw new UnownedAdminReadPathError(
+          `refusing symlink at ${current} while resolving ${target}`,
+        );
+      }
+    }
+    if (current === root) break;
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+}
+
+function isUnderDir(candidate: string, parent: string): boolean {
+  const resolved = path.resolve(candidate);
+  const root = path.resolve(parent);
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`);
+}
+
+function isDefaultProductionEnv(env: PinOverlayEnv): boolean {
+  return (
+    path.resolve(env.repoRoot) === path.resolve(REPO_ROOT) &&
+    path.resolve(env.productionAdminReadDir) ===
+      path.resolve(B_ADMIN_READ_PRODUCTION_DIR)
+  );
+}
+
+export function assertAdminReadOwnership(env: PinOverlayEnv): void {
+  assertPathNotSymlink(env.productionAdminReadDir, env.repoRoot);
+  const tracked = listTrackedAdminReadPaths(env);
+  if (tracked.length > 0) {
+    if (!existsSync(env.productionAdminReadDir)) {
+      throw new Error(
+        `tracked admin-read paths exist but directory is missing: ${env.productionAdminReadDir}`,
+      );
+    }
+    const st = lstatSync(env.productionAdminReadDir);
+    if (st.isSymbolicLink() || !st.isDirectory()) {
+      throw new UnownedAdminReadPathError(
+        `tracked admin-read path is not a real directory: ${env.productionAdminReadDir}`,
+      );
+    }
+    return;
+  }
+  if (existsSync(env.productionAdminReadDir)) {
+    throw new UnownedAdminReadPathError(
+      `pre-existing untracked admin-read at ${env.productionAdminReadDir} is not an owned C scratch; fail closed`,
+    );
+  }
+}
+
 function removeTestFiles(dir: string): void {
   if (!existsSync(dir)) return;
   for (const entry of readdirSync(dir)) {
+    if (entry === OWNED_MARKER_NAME) continue;
     const full = path.join(dir, entry);
-    const stat = statSync(full);
+    const stat = lstatSync(full);
+    if (stat.isSymbolicLink()) {
+      throw new UnownedAdminReadPathError(
+        `refusing symlink inside owned scratch at ${full}`,
+      );
+    }
     if (stat.isDirectory()) {
       removeTestFiles(full);
       continue;
@@ -106,32 +255,143 @@ function removeTestFiles(dir: string): void {
   }
 }
 
-export function materializePinnedBAdminReadOverlay(): string {
-  ensurePinnedBCommit();
-  rmSync(B_ADMIN_READ_OVERLAY_DIR, { recursive: true, force: true });
-  const archive = git([
-    "archive",
-    B_TYPED_READ_CONTRACT_PIN,
-    "stocky-plus/app/lib/order-facts/admin-read",
-  ]);
-  execFileSync("tar", ["-x"], {
-    cwd: REPO_ROOT,
-    input: archive,
-    maxBuffer: 32 * 1024 * 1024,
-  });
-  if (!existsSync(B_ADMIN_READ_OVERLAY_DIR)) {
-    throw new Error(
-      `git archive of ${B_TYPED_READ_CONTRACT_PIN} did not create ${B_ADMIN_READ_OVERLAY_DIR}`,
-    );
-  }
-  removeTestFiles(B_ADMIN_READ_OVERLAY_DIR);
-  return B_ADMIN_READ_OVERLAY_DIR;
+function writeOwnedMarker(scratchRoot: string): void {
+  writeFileSync(
+    path.join(scratchRoot, OWNED_MARKER_NAME),
+    JSON.stringify({
+      owner: "pr6-c-b-pin-overlay",
+      pin: B_TYPED_READ_CONTRACT_PIN,
+      pid: process.pid,
+    }),
+    "utf8",
+  );
 }
 
-export function removePinnedBAdminReadOverlay(): void {
-  rmSync(B_ADMIN_READ_OVERLAY_DIR, { recursive: true, force: true });
+function isOwnedScratch(scratchRoot: string): boolean {
+  const marker = path.join(scratchRoot, OWNED_MARKER_NAME);
+  if (!existsSync(marker)) return false;
+  try {
+    const parsed = JSON.parse(readFileSync(marker, "utf8")) as {
+      owner?: string;
+    };
+    return parsed.owner === "pr6-c-b-pin-overlay";
+  } catch {
+    return false;
+  }
+}
+
+function isCOwnedScratchLocation(scratchRoot: string): boolean {
+  const resolved = path.resolve(scratchRoot);
+  const tmp = path.resolve(os.tmpdir());
+  const name = path.basename(resolved);
+  return (
+    isUnderDir(resolved, tmp) &&
+    name.startsWith(OWNED_SCRATCH_PREFIX) &&
+    isOwnedScratch(scratchRoot)
+  );
+}
+
+function removeOwnedScratch(scratchRoot: string | undefined): void {
+  if (!scratchRoot) return;
+  if (!existsSync(scratchRoot)) return;
+  const resolved = path.resolve(scratchRoot);
+  if (isUnderDir(resolved, APP_ROOT) || isUnderDir(resolved, REPO_ROOT)) {
+    throw new UnownedAdminReadPathError(
+      `refusing to delete application or repository path ${scratchRoot}`,
+    );
+  }
+  if (!isCOwnedScratchLocation(scratchRoot)) {
+    throw new UnownedAdminReadPathError(
+      `refusing to delete unowned path ${scratchRoot}`,
+    );
+  }
+  rmSync(scratchRoot, { recursive: true, force: false });
+}
+
+/**
+ * Extract the pinned B admin-read tree into an owned disposable directory.
+ * Throws if the env already has tracked B files (use those instead).
+ */
+export function materializePinnedBAdminReadOverlay(
+  env: PinOverlayEnv = defaultPinOverlayEnv(),
+): BAdminReadSource {
+  ensurePinnedBCommit();
+  assertAdminReadOwnership(env);
+  const tracked = listTrackedAdminReadPaths(env);
+  if (tracked.length > 0) {
+    throw new TrackedAdminReadPresentError(
+      `tracked B admin-read is present (${tracked.length} paths); will not overlay or delete ${env.productionAdminReadDir}`,
+    );
+  }
+  const scratchRoot = mkdtempSync(
+    path.join(os.tmpdir(), OWNED_SCRATCH_PREFIX),
+  );
+  writeOwnedMarker(scratchRoot);
+  try {
+    const archive = git(
+      ["archive", B_TYPED_READ_CONTRACT_PIN, TRACKED_ADMIN_READ_PREFIX],
+      REPO_ROOT,
+    );
+    execFileSync("tar", ["-x"], {
+      cwd: scratchRoot,
+      input: archive,
+      maxBuffer: 32 * 1024 * 1024,
+    });
+    const dir = path.join(scratchRoot, TRACKED_ADMIN_READ_PREFIX);
+    if (!existsSync(dir)) {
+      throw new Error(
+        `git archive of ${B_TYPED_READ_CONTRACT_PIN} did not create ${dir}`,
+      );
+    }
+    removeTestFiles(dir);
+    if (isDefaultProductionEnv(env)) {
+      defaultScratchRoot = scratchRoot;
+    }
+    return { mode: "pinned-scratch", dir, scratchRoot };
+  } catch (error) {
+    try {
+      removeOwnedScratch(scratchRoot);
+    } catch {
+      // still throw the original failure
+    }
+    throw error;
+  }
+}
+
+export function prepareBAdminReadForCTests(
+  env: PinOverlayEnv = defaultPinOverlayEnv(),
+): BAdminReadSource {
+  assertAdminReadOwnership(env);
+  const tracked = listTrackedAdminReadPaths(env);
+  if (tracked.length > 0) {
+    return {
+      mode: "integrated",
+      dir: env.productionAdminReadDir,
+    };
+  }
+  return materializePinnedBAdminReadOverlay(env);
+}
+
+export function removePinnedBAdminReadOverlay(
+  scratchRoot: string | undefined = defaultScratchRoot,
+): void {
+  if (!scratchRoot) {
+    if (defaultScratchRoot) {
+      removeOwnedScratch(defaultScratchRoot);
+      defaultScratchRoot = undefined;
+    }
+    return;
+  }
+  removeOwnedScratch(scratchRoot);
+  if (scratchRoot === defaultScratchRoot) defaultScratchRoot = undefined;
 }
 
 export function overlayPresent(): boolean {
-  return existsSync(B_ADMIN_READ_OVERLAY_DIR);
+  return Boolean(defaultScratchRoot && existsSync(defaultScratchRoot));
+}
+
+export function productionAdminReadExists(
+  env: PinOverlayEnv = defaultPinOverlayEnv(),
+): boolean {
+  return existsSync(env.productionAdminReadDir);
 }

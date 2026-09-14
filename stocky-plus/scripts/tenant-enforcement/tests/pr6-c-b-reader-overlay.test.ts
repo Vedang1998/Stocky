@@ -1,9 +1,10 @@
 /**
- * PR6-C actual pinned B reader overlay evidence.
+ * PR6-C actual B reader overlay evidence.
  *
- * Materializes admin-read from 610ed050 at test time, drives mocked Shopify
- * transport through B's readOrderFact/readRefundFact, maps into C, and applies
- * on disposable PostgreSQL. Overlay is removed before the file finishes.
+ * C-only trees materialize pin 610ed050 into an owned tmp scratch.
+ * Combined trees execute the tracked B admin-read files in place.
+ * Setup/cleanup never delete or replace a tracked B admin-read directory.
+ * Copied-type mapper fixtures in pr6-c-b-compat-probe.test.ts are not this gate.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
@@ -29,10 +30,18 @@ import {
   insertObservation,
   setTenant,
 } from "./pr6-c-pg-harness";
+import { existsSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   PINNED_B_READER_BLOBS,
-  materializePinnedBAdminReadOverlay,
+  type BAdminReadSource,
+  defaultPinOverlayEnv,
+  listTrackedAdminReadBlobs,
   overlayPresent,
+  prepareBAdminReadForCTests,
+  productionAdminReadExists,
   readPinnedBBlob,
   removePinnedBAdminReadOverlay,
 } from "./pr6-c-b-pin-overlay";
@@ -96,6 +105,8 @@ let createOrderStoreAdmin: OverlayStoreAdmin;
 let createMockAdmin: (handler: (...args: unknown[]) => unknown) => MockAdmin;
 let readOrderFact: OverlayReadOrderFact;
 let readRefundFact: OverlayReadRefundFact;
+let readerSource: BAdminReadSource;
+const trackedBlobsBefore = listTrackedAdminReadBlobs(defaultPinOverlayEnv());
 
 function ctxFor(
   shopId: string,
@@ -138,22 +149,37 @@ describe("PR6-C pinned B reader overlay", () => {
 
   beforeAll(async () => {
     process.on("exit", () => {
-      removePinnedBAdminReadOverlay();
+      removePinnedBAdminReadOverlay(readerSource?.scratchRoot);
     });
-    materializePinnedBAdminReadOverlay();
-    expect(overlayPresent()).toBe(true);
-    const overlayRel = "../../../app/lib/order-facts/admin-read";
-    fixtures = (await import(`${overlayRel}/__tests__/fixtures.ts`)) as OverlayFixtures;
+    readerSource = prepareBAdminReadForCTests();
+    expect(existsSync(readerSource.dir)).toBe(true);
+    if (readerSource.mode === "pinned-scratch") {
+      expect(overlayPresent()).toBe(true);
+      expect(productionAdminReadExists()).toBe(false);
+      expect(readerSource.dir.startsWith(`${os.tmpdir()}${path.sep}`)).toBe(true);
+      expect(readerSource.scratchRoot?.startsWith(`${os.tmpdir()}${path.sep}`)).toBe(
+        true,
+      );
+    } else {
+      expect(productionAdminReadExists()).toBe(true);
+      expect(readerSource.scratchRoot).toBeUndefined();
+      expect(readerSource.dir).toBe(defaultPinOverlayEnv().productionAdminReadDir);
+      expect(Object.keys(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).length).toBeGreaterThan(
+        0,
+      );
+    }
+    const overlayHref = pathToFileURL(readerSource.dir).href;
+    fixtures = (await import(`${overlayHref}/__tests__/fixtures.ts`)) as OverlayFixtures;
     ({ createOrderStoreAdmin } = (await import(
-      `${overlayRel}/__tests__/order-store-admin.ts`
+      `${overlayHref}/__tests__/order-store-admin.ts`
     )) as { createOrderStoreAdmin: OverlayStoreAdmin });
-    ({ createMockAdmin } = (await import(`${overlayRel}/__tests__/mock-admin.ts`)) as {
+    ({ createMockAdmin } = (await import(`${overlayHref}/__tests__/mock-admin.ts`)) as {
       createMockAdmin: (handler: (...args: unknown[]) => unknown) => MockAdmin;
     });
-    ({ readOrderFact } = (await import(`${overlayRel}/orders.ts`)) as {
+    ({ readOrderFact } = (await import(`${overlayHref}/orders.ts`)) as {
       readOrderFact: OverlayReadOrderFact;
     });
-    ({ readRefundFact } = (await import(`${overlayRel}/refunds.ts`)) as {
+    ({ readRefundFact } = (await import(`${overlayHref}/refunds.ts`)) as {
       readRefundFact: OverlayReadRefundFact;
     });
     ({ prisma } = await resetSchemaAndApplyEnforcement());
@@ -165,8 +191,14 @@ describe("PR6-C pinned B reader overlay", () => {
 
   afterAll(async () => {
     await prisma?.$disconnect();
-    removePinnedBAdminReadOverlay();
+    expect(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).toEqual(
+      trackedBlobsBefore,
+    );
+    removePinnedBAdminReadOverlay(readerSource?.scratchRoot);
     expect(overlayPresent()).toBe(false);
+    if (Object.keys(trackedBlobsBefore).length === 0) {
+      expect(productionAdminReadExists()).toBe(false);
+    }
   });
 
   async function withTenant<T>(
@@ -219,8 +251,15 @@ describe("PR6-C pinned B reader overlay", () => {
     expect(B_TYPED_READ_CONTRACT_PIN).toBe(
       "610ed0503a3aa2998aca7228f4fca9617bed23a3",
     );
-    for (const [repoPath, blob] of Object.entries(PINNED_B_READER_BLOBS)) {
-      expect(readPinnedBBlob(repoPath)).toBe(blob);
+    if (readerSource.mode === "pinned-scratch") {
+      for (const [repoPath, blob] of Object.entries(PINNED_B_READER_BLOBS)) {
+        expect(readPinnedBBlob(repoPath)).toBe(blob);
+      }
+    } else {
+      expect(readerSource.dir).toBe(defaultPinOverlayEnv().productionAdminReadDir);
+      expect(
+        Object.keys(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).length,
+      ).toBeGreaterThan(0);
     }
     const orderGid = "gid://shopify/Order/overlay-live";
     const admin = createOrderStoreAdmin({
@@ -1248,8 +1287,16 @@ describe("PR6-C pinned B reader overlay", () => {
 });
 
 describe("PR6-C B overlay cleanup", () => {
-  it("does not leave admin-read on the C tree", () => {
-    removePinnedBAdminReadOverlay();
+  it("does not leave pinned scratch or delete tracked B files", () => {
+    expect(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).toEqual(
+      trackedBlobsBefore,
+    );
+    removePinnedBAdminReadOverlay(readerSource?.scratchRoot);
     expect(overlayPresent()).toBe(false);
+    if (Object.keys(trackedBlobsBefore).length === 0) {
+      expect(productionAdminReadExists()).toBe(false);
+    } else {
+      expect(productionAdminReadExists()).toBe(true);
+    }
   });
 });
