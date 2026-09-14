@@ -75,7 +75,7 @@ jobs:
     # D-050 adversarial race/deadlock/fairness suites + full migration chain
     # exceed the prior 45m wall on GitHub-hosted runners (observed cancel at
     # ~45m during final test:migrations on tip 314981e).
-    timeout-minutes: 70
+    timeout-minutes: 120
     defaults:
       run:
         working-directory: stocky-plus
