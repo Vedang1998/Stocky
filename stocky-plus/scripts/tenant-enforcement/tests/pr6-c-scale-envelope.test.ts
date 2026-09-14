@@ -43,7 +43,7 @@ function parseValidateJobTimeoutMinutes(yaml: string): number {
   }
   const jobs = yaml.slice(jobsOffset);
   const validateMatch = jobs.match(
-    /\n  validate:\n([\s\S]*?)(?=\n  [A-Za-z0-9_-]+:|\n*$)/,
+    /\n {2}validate:\n([\s\S]*?)(?=\n {2}[A-Za-z0-9_-]+:|\n*$)/,
   );
   if (!validateMatch) {
     throw new Error("ci.yml missing validate job");
@@ -133,7 +133,7 @@ describe("PR6-C 1e6 envelope policy", () => {
     expect(minutes).not.toBe(10);
     expect(minutes).not.toBe(5);
     const classifyTimeout = yaml.match(
-      /\n  classify:\n[\s\S]*?timeout-minutes:\s*(\d+)/,
+      /\n {2}classify:\n[\s\S]*?timeout-minutes:\s*(\d+)/,
     );
     expect(Number(classifyTimeout?.[1])).toBe(10);
     expect(minutes).not.toBe(Number(classifyTimeout?.[1]));

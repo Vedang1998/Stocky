@@ -180,7 +180,7 @@ export function listTrackedAdminReadStage(
 function assertPathNotSymlink(target: string, stopAt: string): void {
   let current = path.resolve(target);
   const root = path.resolve(stopAt);
-  while (true) {
+  for (let remaining = 64; remaining > 0; remaining -= 1) {
     if (existsSync(current)) {
       const st = lstatSync(current);
       if (st.isSymbolicLink()) {
@@ -189,11 +189,14 @@ function assertPathNotSymlink(target: string, stopAt: string): void {
         );
       }
     }
-    if (current === root) break;
+    if (current === root) return;
     const parent = path.dirname(current);
-    if (parent === current) break;
+    if (parent === current) return;
     current = parent;
   }
+  throw new UnownedAdminReadPathError(
+    `refusing unresolved path walk from ${target} toward ${stopAt}`,
+  );
 }
 
 function isUnderDir(candidate: string, parent: string): boolean {
