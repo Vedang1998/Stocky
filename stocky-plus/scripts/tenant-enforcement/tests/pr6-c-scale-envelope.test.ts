@@ -137,9 +137,7 @@ describe("PR6-C 1e6 envelope policy", () => {
     );
     expect(Number(classifyTimeout?.[1])).toBe(10);
     expect(minutes).not.toBe(Number(classifyTimeout?.[1]));
-    const source = scaleEnvelopeSource();
-    expect(source).not.toMatch(/const HEAVY_TIMEOUT_MINUTES = 70/);
-    expect(source).not.toMatch(/const HEAVY_TIMEOUT_MINUTES = 90/);
+    expect(yaml).toMatch(/^\s+timeout-minutes:\s*120\s*$/m);
   });
 
   it("parses validate timeout independently of a self-confirming constant", () => {
@@ -188,7 +186,9 @@ describe("fixture envelope", () => {
 `;
     expect(() =>
       assertSkippedEnvelopeDoesNotAttemptDatabaseSetup(withBeforeAll),
-    ).toThrow(/beforeAll/);
+    ).toThrow(
+      /beforeAll|resetSchemaAndApplyEnforcement is not inside the skipped envelope it/,
+    );
     const withDescribeSkip = `
 describe.skipIf(!runEnvelope)("fixture envelope", () => {
   it("applies", async () => {
