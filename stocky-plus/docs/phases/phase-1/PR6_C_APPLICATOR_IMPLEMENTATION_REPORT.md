@@ -4,7 +4,7 @@
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
 **PR:** #40 OPEN / DRAFT / UNMERGED
 **Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719); routing/continuation [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315) (`user=Vedang1998`, `created_at=2026-09-12T18:21:41Z`, id `5647803315`) — this is the outstanding C evidence-completion assignment, not a repeat of the already executed F-01–F-08 package.
-**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 remain implemented. Independent correction/evidence review of `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` (blob `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`) issued `CORRECTIONS REQUIRED` (P0 0 / P1 0 / P2 1 / P3 4). F-CR-01…05 plus tooling **T** merge landed at `e8c0e54a02d4686699fcb7d75c60ac57654d2067`. Combined-tree isolation landed at `124d4f557b54218657e73e057235a89612ab3160`. Exact-head `pull_request` [34879406832](https://github.com/Vedang1998/Stocky/actions/runs/34879406832) on that SHA is historical **FAILURE** (Classify SUCCESS; Heavy/Gate FAIL) because `git archive 7338aaa…` ran against a shallow C checkout that lacked the object. This follow-up fetches that SHA the same way the pin already did. It is **not** a resubmission of `b0b7f58` and **not** an applicator rewrite. Historical SUCCESS for `e8c0e54…` (run `34801383240`) is not this packet’s exact-head result. Run `34879406832` is **not** green and is **not** this follow-up’s head. New current-head Classify + Heavy + Gate are **not** marked green here. Independent C acceptance remains **pending**. Merge is **not** authorized.
+**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 remain implemented. Independent correction/evidence review of `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` (blob `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`) issued `CORRECTIONS REQUIRED` (P0 0 / P1 0 / P2 1 / P3 4). F-CR-01…05 plus tooling **T** merge landed at `e8c0e54a02d4686699fcb7d75c60ac57654d2067`. Combined-tree isolation and fetch-before-archive landed at `042e83563c8a8d367ae11df3fda6c0e10c6badd0`. Exact-head `pull_request` [34886822386](https://github.com/Vedang1998/Stocky/actions/runs/34886822386) on that SHA is historical **FAILURE** (Classify SUCCESS; Heavy/Gate FAIL on T-owned F-F03). That run was **not** cancelled. PR #39 is CLOSED/MERGED. Squash **U** / current main is `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`. History-preserving merge into C is `c76a5d3704e3e4285f4e1152b0ada005a5e946a6` (parents `042e835…` + `1ec7af31…`). Exact-U push [34891789836](https://github.com/Vedang1998/Stocky/actions/runs/34891789836) is **not** marked green here. New exact-integrated-C Classify + Heavy + Gate are **not** marked green here. Independent C acceptance remains **pending**. Merge of PR #40 is **not** authorized.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -39,14 +39,17 @@ This report records the PR6-C applicator implementation. It does **not** claim P
 | Starting C head for this correction/integration packet | `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` |
 | Immutable C correction review | `e24ac2d50950373213c2a2ece9ee784b335c2c7e` — sole parent `4a5fc80…`; sole added path `PR6_C_APPLICATOR_CORRECTION_INDEPENDENT_REVIEW.md`; blob `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`. Fast-forwarded; never edited. |
 | Required tooling **T** | `f5ec7abb01d14d5803e186b3e883fa15defad38f` (PR #42 squash). Sole parent **M**. History-preserving merge `3d25fdd520071e154cfaa85d651acf14983140aa` (parents `e24ac2d…` + `f5ec7ab…`). PR #41 remains parked. |
-| B typed-read pin (read-only) | `610ed0503a3aa2998aca7228f4fca9617bed23a3` — PR #39 comment [5643079993](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5643079993). Live corrected B head after review `59f469a…` blob `b4533610…` plus F-CLAUDE-PR6B-01…11. **Not** merged into C. Superseded overlay identity `d9717f68…` is not used. |
-| Accepted B integration reference | `7338aaa45294c28526330aa259779308bd6d851e` — PR #39 `headRefOid` at this packet. PR #39 remains **OPEN / UNMERGED**. No squash **U**. Combined testing used an isolated disposable worktree only. |
-| B review (read-only) | `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`, blob `b4533610b5af305816aef5434b884c3065b06f94`. Not integrated into C. |
+| B typed-read pin (read-only) | `610ed0503a3aa2998aca7228f4fca9617bed23a3` — still used for C-only pinned-scratch tests. Accepted B runtime is on C via **U**, not by rewriting this pin. Superseded overlay identity `d9717f68…` is not used. |
+| Accepted B subject head | `7338aaa45294c28526330aa259779308bd6d851e` — PR #39 CLOSED / MERGED at `2026-09-14T20:15:14Z` (comment [5670216046](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5670216046)). |
+| Squash **U** / current `origin/main` | `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`. Sole parent **T** `f5ec7abb01d14d5803e186b3e883fa15defad38f`. `U^{tree}` `84dbb800d45e7c7037ab87ee4dfc8a77de19ae56` equals `7338aaa^{tree}`. |
+| B review (read-only) | `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`, blob `b4533610b5af305816aef5434b884c3065b06f94`. Not edited by C. |
 | C-INTEGRATION-01 starting head | `e8c0e54a02d4686699fcb7d75c60ac57654d2067` |
-| C-INTEGRATION-01 isolation head (failed exact-head CI) | `124d4f557b54218657e73e057235a89612ab3160` — run [34879406832](https://github.com/Vedang1998/Stocky/actions/runs/34879406832) Classify `104094645199` SUCCESS, Heavy `104094697451` **FAILURE**, Gate `104115647881` **FAILURE** |
-| C-INTEGRATION-01 fetch-before-archive implementation | `3358ee982445b1b04aac15e7d47a131ab5af5522` (parent `124d4f5…`). This documentation commit is a child of that SHA and does not embed its own unknown future SHA. |
+| C-INTEGRATION-01 isolation head (failed overlay-archive CI) | `124d4f557b54218657e73e057235a89612ab3160` — run [34879406832](https://github.com/Vedang1998/Stocky/actions/runs/34879406832) Classify `104094645199` SUCCESS, Heavy `104094697451` **FAILURE**, Gate `104115647881` **FAILURE** |
+| C-INTEGRATION-01 fetch-before-archive implementation | `3358ee982445b1b04aac15e7d47a131ab5af5522` (parent `124d4f5…`). |
+| Pre-U C head (failed F-F03 exact-head CI) | `042e83563c8a8d367ae11df3fda6c0e10c6badd0` — run [34886822386](https://github.com/Vedang1998/Stocky/actions/runs/34886822386) terminal **FAILURE**. Not cancelled. Overlay safety 15/15 and reader 18/18 passed. Heavy failed T-owned F-F03. |
+| U merge into C | `c76a5d3704e3e4285f4e1152b0ada005a5e946a6` (parents `042e835…` + `1ec7af31…`). This documentation commit is a child of that SHA and does not embed its own unknown future SHA. |
 
-C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-order-admin-read` are not this lane’s base. C does not edit B’s shared-control files.
+C started from **M**, not from B runtime. Accepted B is now present on C via the authorized history-preserving merge of squash **U**. C does not edit B’s shared-control files or B `admin-read/**` contents.
 
 ## 2. Exclusive C ownership
 
@@ -67,7 +70,7 @@ C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-orde
 - `stocky-plus/docs/phases/phase-1/PR6_C_APPLICATOR_IMPLEMENTATION_REPORT.md` (this report)
 - Immutable first-pass review blob `a90ae442…` (not edited)
 - Immutable correction review blob `8c384b69…` (not edited)
-- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (`scannedFiles` 403 → 404 after this packet; findings 1741; violations 0; digest `8e9b1ed9…` unchanged; no unused allowlist entries)
+- Mechanical scanner exception: `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (combined-tree regen after U: `scannedFiles` **448**; findings 1741; violations 0; digest `8e9b1ed9…` unchanged; no unused allowlist entries)
 
 **Not owned / not edited**
 
@@ -368,8 +371,10 @@ F-CR-05: historical failed CI, historical successful CI, current-head CI, implem
 | Historical successful C `pull_request` | [34726234237](https://github.com/Vedang1998/Stocky/actions/runs/34726234237) | `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` | Classify + Heavy + Gate SUCCESS. Does **not** dispose F-F03 (intermittent; tenant-indexes blob identical to M). Does **not** re-attribute the cancelled run. |
 | Exact-T post-merge `push` | [34799274517](https://github.com/Vedang1998/Stocky/actions/runs/34799274517) | `f5ec7abb01d14d5803e186b3e883fa15defad38f` | Classify `103838454264` SUCCESS. Heavy `103838476115` SUCCESS. Gate `103848213649` SUCCESS. Aggregate **SUCCESS**. |
 | Historical C `pull_request` on F-CR/T packet | [34801383240](https://github.com/Vedang1998/Stocky/actions/runs/34801383240) | `e8c0e54a02d4686699fcb7d75c60ac57654d2067` | Classify `103844656536` SUCCESS. Heavy `103844674320` SUCCESS. Gate `103853429475` SUCCESS (`classify_result=success` `validate_result=success` `full_ci=true` `docs_only=false`). Evidence for `e8c0e54…` only. **Not** this C-INTEGRATION-01 head. |
-| Historical failed C-INTEGRATION-01 `pull_request` | [34879406832](https://github.com/Vedang1998/Stocky/actions/runs/34879406832) | `124d4f557b54218657e73e057235a89612ab3160` | Classify `104094645199` SUCCESS. Heavy `104094697451` **FAILURE** (step “Migration and tenant-backfill tests”: **2 failed / 626 passed / 1 skipped (629)**; **1 failed file / 66 passed (67)**). Gate `104115647881` **FAILURE** (`validate_result` failed). Both failures: C-owned `pr6-c-b-pin-overlay.safety.test.ts` (`isolated tracked-B fixture…` and `tracked-B fixture empty map…`) with `fatal: not a tree object: 7338aaa45294c28526330aa259779308bd6d851e`. Reader overlay **18/18** and the other **9** safety tests passed. **Not** green. **Not** this follow-up’s head. |
-| Current-head C `pull_request` | new run after the fetch-before-archive documentation commit that contains this sentence | live PR head | **Pending — not green.** Do not treat `34879406832` as this head. |
+| Historical failed C-INTEGRATION-01 overlay-archive `pull_request` | [34879406832](https://github.com/Vedang1998/Stocky/actions/runs/34879406832) | `124d4f557b54218657e73e057235a89612ab3160` | Classify `104094645199` SUCCESS. Heavy `104094697451` **FAILURE**. Gate `104115647881` **FAILURE**. `git archive 7338aaa…` on shallow C. **Not** green. **Not** this head. |
+| Historical failed pre-U C `pull_request` | [34886822386](https://github.com/Vedang1998/Stocky/actions/runs/34886822386) | `042e83563c8a8d367ae11df3fda6c0e10c6badd0` | Terminal **FAILURE**. **Not cancelled.** Classify `104119402578` SUCCESS. Heavy `104119441376` **FAILURE**. Gate `104138617440` **FAILURE** (`classify_result=success` `validate_result=failure` `full_ci=true` `docs_only=false`). Migrations **1 failed / 631 passed / 1 skipped (633)**. C overlay safety **15/15** and reader **18/18** passed. Failed test: T-owned F-F03 `indexes.migration.test.ts:1210` `expect(buildSettled).toBe(false)` got `true`. **Not** combined-tree evidence. **Not** this head. |
+| Exact-U post-merge `push` | [34891789836](https://github.com/Vedang1998/Stocky/actions/runs/34891789836) | `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505` | **Pending — not green.** Classify `104136027179` SUCCESS at the time this sentence was written; Heavy was still in progress. Do not treat as SUCCESS here. |
+| Current-head exact-integrated-C `pull_request` | new run after the U-merge documentation commit that contains this sentence | live PR head | **Pending — not green.** Earlier C-only CI is not combined-tree evidence. |
 
 ### 6.5.1 Historical failed run `34714619941` (`e5af049…`) — preserved measurement
 
@@ -458,7 +463,45 @@ C regressions after the correction (C-only tree): process-loss **11**, scale **6
 | Combined same | tracked 44 paths | actual-reader PG | **18 / 18** | **integrated** (no pin worktree line) |
 | focused eslint of the two overlay files | `3358ee9…` | eslint | 0 errors | exit 0 |
 
-`apply/**` still unchanged versus `e8c0e54…` / `4a5fc80…`. T files remain `ci.yml` `8d1fa98a…` and `indexes.migration.test.ts` `8bfc6d8b…`. Review blobs unchanged. PR #39 still OPEN at `7338aaa…`. No squash **U**. 1e6 envelope was **not** re-run. Inventory was not regenerated (no new scanned application file).
+`apply/**` still unchanged versus `e8c0e54…` / `4a5fc80…`. T files remain `ci.yml` `8d1fa98a…` and `indexes.migration.test.ts` `8bfc6d8b…`. Review blobs unchanged. The sentences in this subsection about PR #39 remaining unmerged describe the pre-U isolation packet only. See §6.8.
+
+## 6.8 Authorized U merge into C (this packet)
+
+**Authority.** ChatGPT PR #39 comment [5670216046](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5670216046). PR #39 CLOSED/MERGED. Continue the existing C integration assignment; do not restart completed corrections.
+
+**U verification (executed).** `origin/main` `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`. Sole parent `f5ec7abb01d14d5803e186b3e883fa15defad38f` (**T**). `U^{tree}` `84dbb800d45e7c7037ab87ee4dfc8a77de19ae56` equals `7338aaa^{tree}`. Merge-base(C, U) = **T**. Overlapping path vs C: only `PR2_TENANT_ACCESS_INVENTORY.md` (mechanical `scannedFiles` 404 vs 416). No unexpected executable conflict in `apply/**`, schema, CI, or B `admin-read/**`.
+
+**Pre-U run preserved.** [34886822386](https://github.com/Vedang1998/Stocky/actions/runs/34886822386) on `042e835…` reached terminal **FAILURE** and was **not** cancelled. C overlay passed; T-owned F-F03 failed.
+
+**Merge.** History-preserving `git merge origin/main`. Merge commit `c76a5d3704e3e4285f4e1152b0ada005a5e946a6` parents `042e83563c8a8d367ae11df3fda6c0e10c6badd0` + `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`. Inventory regenerated from the combined tree: `scannedFiles` **448**, findings 1741, violations 0, digest `8e9b1ed9…` unchanged, `tenant_access_inventory_fresh`, `tenant_access_audit_ok`.
+
+**Preservation (executed).**
+
+| Artifact | Pre-merge | Post-merge `c76a5d3…` |
+|---|---|---|
+| `apply/` tree | `cfdbb98f…` at `042e835…` | `cfdbb98f…` identical |
+| `admin-read/` tree | absent on C | `8ae3d688…` identical to **U** / `7338aaa` (**44** paths). `orders.ts` `b5ce0d53…` |
+| First C review blob | `a90ae442…` | `a90ae442…` |
+| C correction review blob | `8c384b69…` | `8c384b69…` |
+| T `ci.yml` | `8d1fa98a…` | `8d1fa98a…` |
+| T `indexes.migration.test.ts` | `8bfc6d8b…` | `8bfc6d8b…` |
+
+C vs **U** remaining paths: **36** (C applicator, C tests, C reviews/report, combined inventory). No schema/CI/apply edits in the merge delta.
+
+**Combined-tree tests on `c76a5d3…` (executed).** Live checkout has tracked B; actual-reader used **integrated** mode (no pin worktree line).
+
+| Command | Exit | Result |
+|---|---|---|
+| `npm run test:migrations -- …/pr6-c-b-pin-overlay.safety.test.ts` | 0 | **15 / 15**. Isolated C-only still pins. Isolated tracked-B fixture non-empty. Live checkout **integrated**. Shallow-checkout absent-object / pin-not-substitute / ensure-then-archive covered. Partial-setup cleanup covered. |
+| `npm run test:migrations -- …/pr6-c-b-reader-overlay.test.ts` | 0 | **18 / 18** integrated. After the suite: **44** tracked admin-read paths; working tree clean; `orders.ts` still `b5ce0d53…`. |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| `npm run tenant:access:inventory:check` | 0 | `tenant_access_inventory_fresh` |
+| `npm run tenant:access:audit` | 0 | `tenant_access_audit_ok` scannedFiles 448 findings 1741 violations 0 |
+| `git diff --check` | 0 | clean |
+
+Logs: `/opt/cursor/artifacts/pr6-c-u-merge-safety.log`, `/opt/cursor/artifacts/pr6-c-u-merge-reader.log`. 1e6 envelope was **not** re-run. No B redesign. No D runtime.
+
+Exact-U push [34891789836](https://github.com/Vedang1998/Stocky/actions/runs/34891789836) and the new exact-integrated-C `pull_request` are **not** marked green in this file. Independent C approval remains **pending**.
 
 ## 7. Risk status after this slice
 
@@ -481,7 +524,7 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 - C does not DML `DataIssue`, `SalesDailyAggregate`, or explode BOM sales.
 - C does not edit B control docs or A frozen contracts.
 - B→C compatibility probe **executed** against pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` via a test-local mapper in `pr6-c-b-compat-probe.test.ts` (**17** passed). That mapper suite is **not** a substitute for the pinned-B overlay in §6.3.
-- Pinned B runtime is materialized only at test time and is **not** committed. No B branch edits. No combined B+C implementation commit. No D runtime.
+- Accepted B `admin-read/**` is present on C **only** via the authorized merge of squash **U**. C did not rewrite B files. The C-only pin `610ed050…` remains a test-time scratch for isolated fixtures. No D runtime.
 - The 1e6 envelope is **not** part of default CI `test:migrations`. Local execution in §6.2 is the C-owned evidence. Do not treat the Gate E 1,400-line smoke or the corpus skip as that envelope.
 
 ### 8.1 B→C probe cases (pin `610ed050`)
@@ -502,8 +545,8 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 
 ## 9. Packet for ChatGPT
 
-This is the **PR6-C combined-tree isolation** packet (C-INTEGRATION-01) plus the **shallow-clone fetch-before-archive** follow-up. Starting isolation head `e8c0e54…`. Isolation implementation head `124d4f5…`. Fetch implementation `3358ee9…`. It is **not** a resubmission of `b0b7f58` and **not** an applicator rewrite.
+This is the **PR6-C authorized U integration** packet on existing PR #40. Isolation/fetch corrections are already on `042e835…`. Merge commit `c76a5d3…` parents `042e835…` + **U** `1ec7af31…`. It is **not** a resubmission of `b0b7f58` and **not** an applicator rewrite.
 
-**Current-head exact `pull_request` Classify + Heavy + Gate are pending and are not marked green in this file.** Run `34879406832` is historical **FAILURE** for `124d4f5…` only. Run `34801383240` remains historical SUCCESS for `e8c0e54…` only. Exact-T push `34799274517` is SUCCESS. No squash **U** (PR #39 unmerged at `7338aaa…`).
+**Run `34886822386` on `042e835…` is terminal FAILURE and was not cancelled.** Overlay passed; T-owned F-F03 failed. That C-only run is **not** combined-tree evidence.
 
-Independent Claude re-review of this correction head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`, **not** merge authorization, and **not** D-055. R-176 remains **OPEN / P0**. R-164 unchanged.
+**Exact-U push `34891789836` and the new exact-integrated-C `pull_request` Classify + Heavy + Gate are pending and are not marked green in this file.** Independent Claude re-review of the integrated head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`, **not** merge authorization of PR #40, and **not** D-055. R-176 remains **OPEN / P0**. R-164 unchanged.
