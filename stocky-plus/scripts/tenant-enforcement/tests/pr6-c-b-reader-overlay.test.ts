@@ -37,8 +37,8 @@ import { pathToFileURL } from "node:url";
 import {
   PINNED_B_READER_BLOBS,
   type BAdminReadSource,
+  captureAdminReadWorkingTree,
   defaultPinOverlayEnv,
-  listTrackedAdminReadBlobs,
   overlayPresent,
   prepareBAdminReadForCTests,
   productionAdminReadExists,
@@ -106,7 +106,8 @@ let createMockAdmin: (handler: (...args: unknown[]) => unknown) => MockAdmin;
 let readOrderFact: OverlayReadOrderFact;
 let readRefundFact: OverlayReadRefundFact;
 let readerSource: BAdminReadSource;
-const trackedBlobsBefore = listTrackedAdminReadBlobs(defaultPinOverlayEnv());
+const liveOverlayEnv = defaultPinOverlayEnv();
+const trackedWorkingTreeBefore = captureAdminReadWorkingTree(liveOverlayEnv);
 
 function ctxFor(
   shopId: string,
@@ -163,9 +164,11 @@ describe("PR6-C pinned B reader overlay", () => {
     } else {
       expect(productionAdminReadExists()).toBe(true);
       expect(readerSource.scratchRoot).toBeUndefined();
-      expect(readerSource.dir).toBe(defaultPinOverlayEnv().productionAdminReadDir);
-      expect(Object.keys(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).length).toBeGreaterThan(
-        0,
+      expect(readerSource.dir).toBe(liveOverlayEnv.productionAdminReadDir);
+      expect(overlayPresent()).toBe(false);
+      expect(trackedWorkingTreeBefore.paths.length).toBeGreaterThan(0);
+      expect(Object.keys(trackedWorkingTreeBefore.diskHashes).length).toBe(
+        trackedWorkingTreeBefore.paths.length,
       );
     }
     const overlayHref = pathToFileURL(readerSource.dir).href;
@@ -191,13 +194,18 @@ describe("PR6-C pinned B reader overlay", () => {
 
   afterAll(async () => {
     await prisma?.$disconnect();
-    expect(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).toEqual(
-      trackedBlobsBefore,
+    expect(captureAdminReadWorkingTree(liveOverlayEnv)).toEqual(
+      trackedWorkingTreeBefore,
     );
     removePinnedBAdminReadOverlay(readerSource?.scratchRoot);
     expect(overlayPresent()).toBe(false);
-    if (Object.keys(trackedBlobsBefore).length === 0) {
+    expect(captureAdminReadWorkingTree(liveOverlayEnv)).toEqual(
+      trackedWorkingTreeBefore,
+    );
+    if (trackedWorkingTreeBefore.paths.length === 0) {
       expect(productionAdminReadExists()).toBe(false);
+    } else {
+      expect(productionAdminReadExists()).toBe(true);
     }
   });
 
@@ -252,14 +260,19 @@ describe("PR6-C pinned B reader overlay", () => {
       "610ed0503a3aa2998aca7228f4fca9617bed23a3",
     );
     if (readerSource.mode === "pinned-scratch") {
+      expect(readerSource.dir.startsWith(`${os.tmpdir()}${path.sep}`)).toBe(true);
       for (const [repoPath, blob] of Object.entries(PINNED_B_READER_BLOBS)) {
         expect(readPinnedBBlob(repoPath)).toBe(blob);
       }
     } else {
-      expect(readerSource.dir).toBe(defaultPinOverlayEnv().productionAdminReadDir);
-      expect(
-        Object.keys(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).length,
-      ).toBeGreaterThan(0);
+      expect(readerSource.dir).toBe(liveOverlayEnv.productionAdminReadDir);
+      expect(readerSource.scratchRoot).toBeUndefined();
+      expect(overlayPresent()).toBe(false);
+      const live = captureAdminReadWorkingTree(liveOverlayEnv);
+      expect(live.paths.length).toBeGreaterThan(0);
+      expect(Object.keys(live.diskHashes).length).toBe(live.paths.length);
+      expect(live.diskHashes).toEqual(live.indexBlobs);
+      expect(live.indexStage.length).toBeGreaterThan(0);
     }
     const orderGid = "gid://shopify/Order/overlay-live";
     const admin = createOrderStoreAdmin({
@@ -1287,16 +1300,23 @@ describe("PR6-C pinned B reader overlay", () => {
 });
 
 describe("PR6-C B overlay cleanup", () => {
-  it("does not leave pinned scratch or delete tracked B files", () => {
-    expect(listTrackedAdminReadBlobs(defaultPinOverlayEnv())).toEqual(
-      trackedBlobsBefore,
+  it("does not leave pinned scratch or mutate tracked B working-tree files", () => {
+    expect(captureAdminReadWorkingTree(liveOverlayEnv)).toEqual(
+      trackedWorkingTreeBefore,
     );
     removePinnedBAdminReadOverlay(readerSource?.scratchRoot);
     expect(overlayPresent()).toBe(false);
-    if (Object.keys(trackedBlobsBefore).length === 0) {
+    expect(captureAdminReadWorkingTree(liveOverlayEnv)).toEqual(
+      trackedWorkingTreeBefore,
+    );
+    if (trackedWorkingTreeBefore.paths.length === 0) {
       expect(productionAdminReadExists()).toBe(false);
     } else {
       expect(productionAdminReadExists()).toBe(true);
+      expect(trackedWorkingTreeBefore.paths.length).toBeGreaterThan(0);
+      expect(
+        Object.keys(trackedWorkingTreeBefore.diskHashes).length,
+      ).toBeGreaterThan(0);
     }
   });
 });

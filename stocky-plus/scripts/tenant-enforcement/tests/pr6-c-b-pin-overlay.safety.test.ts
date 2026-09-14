@@ -1,5 +1,9 @@
 /**
  * PR6-C B-reader overlay isolation: never delete/replace tracked B files.
+ *
+ * C-only scenarios use an isolated git fixture with no tracked admin-read.
+ * Tracked-B scenarios use a separate committed fixture with a non-empty inventory.
+ * Neither scenario is derived from the live checkout accidentally lacking B.
  */
 import { execFileSync } from "node:child_process";
 import {
@@ -15,18 +19,18 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
-import { B_TYPED_READ_CONTRACT_PIN } from "./pr6-c-b-compat-mapper";
 import {
   TrackedAdminReadPresentError,
   UnownedAdminReadPathError,
+  captureAdminReadWorkingTree,
   defaultPinOverlayEnv,
-  listTrackedAdminReadBlobs,
+  listGitWorktreePaths,
   listTrackedAdminReadPaths,
-  listTrackedAdminReadStage,
   materializePinnedBAdminReadOverlay,
   prepareBAdminReadForCTests,
   productionAdminReadExists,
   removePinnedBAdminReadOverlay,
+  type AdminReadWorkingTreeEvidence,
   type PinOverlayEnv,
 } from "./pr6-c-b-pin-overlay";
 
@@ -34,6 +38,10 @@ const REPO_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../../../..",
 );
+
+/** Accepted B integration reference (PR39 head). Used only as a fixture source. */
+const ACCEPTED_B_ADMIN_READ_TREE =
+  "7338aaa45294c28526330aa259779308bd6d851e";
 
 const scratchRoots: string[] = [];
 
@@ -57,18 +65,39 @@ function git(args: string[], cwd: string): Buffer {
 
 function initTempRepo(): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "pr6-c-overlay-repo-"));
-  git(["init"], root);
+  git(["init", "-b", "main"], root);
   git(["config", "user.email", "pr6-c-overlay@example.test"], root);
   git(["config", "user.name", "pr6-c-overlay"], root);
   return root;
 }
 
-function commitTrackedAdminRead(root: string): PinOverlayEnv {
+function isolatedCOnlyEnv(): PinOverlayEnv {
+  const root = initTempRepo();
+  git(["commit", "--allow-empty", "-m", "c-only no admin-read"], root);
+  return {
+    repoRoot: root,
+    productionAdminReadDir: path.join(
+      root,
+      "stocky-plus/app/lib/order-facts/admin-read",
+    ),
+  };
+}
+
+function isolatedTrackedBEnv(): PinOverlayEnv {
+  const root = initTempRepo();
   const archive = git(
-    ["archive", B_TYPED_READ_CONTRACT_PIN, "stocky-plus/app/lib/order-facts/admin-read"],
+    [
+      "archive",
+      ACCEPTED_B_ADMIN_READ_TREE,
+      "stocky-plus/app/lib/order-facts/admin-read",
+    ],
     REPO_ROOT,
   );
-  execFileSync("tar", ["-x"], { cwd: root, input: archive, maxBuffer: 32 * 1024 * 1024 });
+  execFileSync("tar", ["-x"], {
+    cwd: root,
+    input: archive,
+    maxBuffer: 32 * 1024 * 1024,
+  });
   git(["add", "stocky-plus/app/lib/order-facts/admin-read"], root);
   git(["commit", "-m", "tracked B admin-read"], root);
   return {
@@ -86,20 +115,28 @@ function listOwnedScratchDirs(): string[] {
     .map((name) => path.join(os.tmpdir(), name));
 }
 
-function hashObject(filePath: string, cwd: string): string {
-  return git(["hash-object", filePath], cwd).toString().trim();
+function expectWorkingTreeUnchanged(
+  before: AdminReadWorkingTreeEvidence,
+  env: PinOverlayEnv,
+): void {
+  const after = captureAdminReadWorkingTree(env);
+  expect(after.paths).toEqual(before.paths);
+  expect(after.indexStage).toBe(before.indexStage);
+  expect(after.indexBlobs).toEqual(before.indexBlobs);
+  expect(after.diskHashes).toEqual(before.diskHashes);
+  expect(after.status).toBe(before.status);
+  expect(after.diff).toBe(before.diff);
+  expect(after.cachedDiff).toBe(before.cachedDiff);
 }
 
 describe("PR6-C B-reader overlay isolation", () => {
-  it("C-only pinned-reader uses owned scratch and never creates production admin-read", () => {
-    const env: PinOverlayEnv = {
-      repoRoot: REPO_ROOT,
-      productionAdminReadDir: path.join(
-        mkdtempSync(path.join(os.tmpdir(), "pr6-c-prod-absent-")),
-        "admin-read",
-      ),
-    };
-    expect(listTrackedAdminReadPaths(env).length).toBe(0);
+  it("C-only isolated fixture has no tracked B reader and pins into owned scratch", () => {
+    const env = isolatedCOnlyEnv();
+    const before = captureAdminReadWorkingTree(env);
+    expect(before.paths).toEqual([]);
+    expect(before.indexBlobs).toEqual({});
+    expect(before.diskHashes).toEqual({});
+    expect(productionAdminReadExists(env)).toBe(false);
     const source = prepareBAdminReadForCTests(env);
     if (source.scratchRoot) scratchRoots.push(source.scratchRoot);
     expect(source.mode).toBe("pinned-scratch");
@@ -110,16 +147,11 @@ describe("PR6-C B-reader overlay isolation", () => {
     removePinnedBAdminReadOverlay(source.scratchRoot);
     expect(existsSync(source.dir)).toBe(false);
     expect(existsSync(env.productionAdminReadDir)).toBe(false);
+    expectWorkingTreeUnchanged(before, env);
   });
 
-  it("repeated pinned materialize stays on owned scratch", () => {
-    const env: PinOverlayEnv = {
-      repoRoot: REPO_ROOT,
-      productionAdminReadDir: path.join(
-        mkdtempSync(path.join(os.tmpdir(), "pr6-c-prod-repeat-")),
-        "admin-read",
-      ),
-    };
+  it("repeated pinned materialize on a C-only fixture stays on owned scratch", () => {
+    const env = isolatedCOnlyEnv();
     const first = materializePinnedBAdminReadOverlay(env);
     if (first.scratchRoot) scratchRoots.push(first.scratchRoot);
     const firstOrders = readFileSync(path.join(first.dir, "orders.ts"), "utf8");
@@ -138,28 +170,30 @@ describe("PR6-C B-reader overlay isolation", () => {
     expect(existsSync(second.dir)).toBe(false);
   });
 
-  it("existing tracked B reader is used in place and blobs are preserved", () => {
-    const root = initTempRepo();
-    const env = commitTrackedAdminRead(root);
-    const beforeBlobs = listTrackedAdminReadBlobs(env);
-    const beforeStage = listTrackedAdminReadStage(env);
-    const beforeStatus = git(["status", "--porcelain"], root).toString();
+  it("isolated tracked-B fixture is used in place with non-empty on-disk preservation", () => {
+    const env = isolatedTrackedBEnv();
+    const before = captureAdminReadWorkingTree(env);
+    expect(before.paths.length).toBeGreaterThan(0);
+    expect(Object.keys(before.indexBlobs).length).toBe(before.paths.length);
+    expect(Object.keys(before.diskHashes).length).toBe(before.paths.length);
+    expect(before.diskHashes).toEqual(before.indexBlobs);
+    expect(before.status).toBe("");
+    expect(before.diff).toBe("");
+    expect(before.cachedDiff).toBe("");
+    expect(productionAdminReadExists(env)).toBe(true);
     const ordersPath = path.join(env.productionAdminReadDir, "orders.ts");
-    const beforeHash = hashObject(ordersPath, root);
-    expect(Object.keys(beforeBlobs).length).toBeGreaterThan(0);
+    expect(existsSync(ordersPath)).toBe(true);
     expect(() => materializePinnedBAdminReadOverlay(env)).toThrow(
       TrackedAdminReadPresentError,
     );
+    expectWorkingTreeUnchanged(before, env);
     const prepared = prepareBAdminReadForCTests(env);
     expect(prepared.mode).toBe("integrated");
     expect(prepared.dir).toBe(env.productionAdminReadDir);
     expect(prepared.scratchRoot).toBeUndefined();
     expect(existsSync(path.join(prepared.dir, "orders.ts"))).toBe(true);
     removePinnedBAdminReadOverlay(prepared.scratchRoot);
-    expect(listTrackedAdminReadBlobs(env)).toEqual(beforeBlobs);
-    expect(listTrackedAdminReadStage(env)).toBe(beforeStage);
-    expect(git(["status", "--porcelain"], root).toString()).toBe(beforeStatus);
-    expect(hashObject(ordersPath, root)).toBe(beforeHash);
+    expectWorkingTreeUnchanged(before, env);
     expect(productionAdminReadExists(env)).toBe(true);
   });
 
@@ -202,14 +236,49 @@ describe("PR6-C B-reader overlay isolation", () => {
     expect(readFileSync(path.join(real, "orders.ts"), "utf8")).toBe("not-owned");
   });
 
-  it("cleanup after setup failure does not touch production or unowned paths", () => {
-    const env: PinOverlayEnv = {
-      repoRoot: REPO_ROOT,
-      productionAdminReadDir: path.join(
-        mkdtempSync(path.join(os.tmpdir(), "pr6-c-prod-fail-")),
-        "admin-read",
-      ),
-    };
+  it("partial setup failure after the owned worktree exists cleans only that scratch", () => {
+    const env = isolatedCOnlyEnv();
+    const before = captureAdminReadWorkingTree(env);
+    const unowned = mkdtempSync(path.join(os.tmpdir(), "pr6-c-unowned-keep-"));
+    const unownedFile = path.join(unowned, "keep.txt");
+    writeFileSync(unownedFile, "pre-existing-unowned");
+    const beforeWorktrees = new Set(listGitWorktreePaths());
+    const beforeScratch = new Set(listOwnedScratchDirs());
+    let created: string | undefined;
+    expect(() =>
+      materializePinnedBAdminReadOverlay(env, {
+        afterScratchCreated: (scratchRoot) => {
+          created = scratchRoot;
+          expect(existsSync(scratchRoot)).toBe(true);
+          expect(existsSync(path.join(scratchRoot, ".pr6-c-owned-scratch"))).toBe(
+            true,
+          );
+          const listed = listGitWorktreePaths().map((p) => path.resolve(p));
+          expect(listed).toContain(path.resolve(scratchRoot));
+          throw new Error("induced partial setup failure");
+        },
+      }),
+    ).toThrow(/induced partial setup failure/);
+    expect(created).toBeTruthy();
+    expect(existsSync(created as string)).toBe(false);
+    const afterWorktrees = listGitWorktreePaths().map((p) => path.resolve(p));
+    expect(afterWorktrees).not.toContain(path.resolve(created as string));
+    for (const listed of afterWorktrees) {
+      if (!beforeWorktrees.has(listed)) {
+        throw new Error(`orphaned worktree left behind: ${listed}`);
+      }
+    }
+    const createdScratch = listOwnedScratchDirs().filter(
+      (dir) => !beforeScratch.has(dir),
+    );
+    expect(createdScratch).toEqual([]);
+    expect(readFileSync(unownedFile, "utf8")).toBe("pre-existing-unowned");
+    expect(existsSync(env.productionAdminReadDir)).toBe(false);
+    expectWorkingTreeUnchanged(before, env);
+  });
+
+  it("cleanup refuses foreign and planted-marker paths after a real C-only setup", () => {
+    const env = isolatedCOnlyEnv();
     const source = materializePinnedBAdminReadOverlay(env);
     expect(source.scratchRoot).toBeTruthy();
     const foreign = mkdtempSync(path.join(os.tmpdir(), "pr6-c-foreign-"));
@@ -243,42 +312,51 @@ describe("PR6-C B-reader overlay isolation", () => {
     expect(existsSync(planted)).toBe(true);
   });
 
-  it("live C-only prepare/cleanup preserves tracked tree and does not create production admin-read", () => {
+  it("live checkout prepare/cleanup preserves working-tree inventory in either mode", () => {
     const env = defaultPinOverlayEnv();
-    const beforeBlobs = listTrackedAdminReadBlobs(env);
-    const beforeStage = listTrackedAdminReadStage(env);
-    const beforeLs = git(
-      ["ls-files", "--", "stocky-plus/app/lib/order-facts/admin-read"],
-      REPO_ROOT,
-    ).toString();
-    expect(beforeBlobs).toEqual({});
-    expect(beforeStage).toBe("");
-    expect(productionAdminReadExists(env)).toBe(false);
-    const first = prepareBAdminReadForCTests(env);
-    if (first.scratchRoot) scratchRoots.push(first.scratchRoot);
-    expect(first.mode).toBe("pinned-scratch");
-    expect(existsSync(first.dir)).toBe(true);
-    expect(productionAdminReadExists(env)).toBe(false);
-    removePinnedBAdminReadOverlay(first.scratchRoot);
+    const before = captureAdminReadWorkingTree(env);
+    const beforeRepoStatus = git(["status", "--porcelain"], REPO_ROOT).toString();
+    const source = prepareBAdminReadForCTests(env);
+    if (source.scratchRoot) scratchRoots.push(source.scratchRoot);
+    if (before.paths.length === 0) {
+      expect(source.mode).toBe("pinned-scratch");
+      expect(source.scratchRoot).toBeTruthy();
+      expect(productionAdminReadExists(env)).toBe(false);
+      expect(before.indexBlobs).toEqual({});
+      expect(before.diskHashes).toEqual({});
+    } else {
+      expect(source.mode).toBe("integrated");
+      expect(source.dir).toBe(env.productionAdminReadDir);
+      expect(source.scratchRoot).toBeUndefined();
+      expect(productionAdminReadExists(env)).toBe(true);
+      expect(Object.keys(before.diskHashes).length).toBe(before.paths.length);
+      expect(before.diskHashes).toEqual(before.indexBlobs);
+    }
+    removePinnedBAdminReadOverlay(source.scratchRoot);
+    expectWorkingTreeUnchanged(before, env);
+    expect(git(["status", "--porcelain"], REPO_ROOT).toString()).toBe(
+      beforeRepoStatus,
+    );
     const second = prepareBAdminReadForCTests(env);
     if (second.scratchRoot) scratchRoots.push(second.scratchRoot);
-    expect(second.mode).toBe("pinned-scratch");
+    expect(second.mode).toBe(source.mode);
     removePinnedBAdminReadOverlay(second.scratchRoot);
-    expect(listTrackedAdminReadBlobs(env)).toEqual(beforeBlobs);
-    expect(listTrackedAdminReadStage(env)).toBe(beforeStage);
-    expect(
-      git(
-        ["ls-files", "--", "stocky-plus/app/lib/order-facts/admin-read"],
-        REPO_ROOT,
-      ).toString(),
-    ).toBe(beforeLs);
+    expectWorkingTreeUnchanged(before, env);
+  });
+
+  it("C-only absence empty map is valid only on an isolated fixture without B", () => {
+    const env = isolatedCOnlyEnv();
+    expect(listTrackedAdminReadPaths(env)).toEqual([]);
+    expect(captureAdminReadWorkingTree(env).diskHashes).toEqual({});
     expect(productionAdminReadExists(env)).toBe(false);
   });
 
-  it("C tree currently has no tracked admin-read and production path is absent", () => {
-    const env = defaultPinOverlayEnv();
-    expect(listTrackedAdminReadPaths(env)).toEqual([]);
-    expect(listTrackedAdminReadBlobs(env)).toEqual({});
-    expect(productionAdminReadExists(env)).toBe(false);
+  it("tracked-B fixture empty map is rejected; inventory is non-empty", () => {
+    const env = isolatedTrackedBEnv();
+    const evidence = captureAdminReadWorkingTree(env);
+    expect(evidence.paths.length).toBeGreaterThan(0);
+    expect(Object.keys(evidence.diskHashes).length).toBeGreaterThan(0);
+    expect(evidence.indexBlobs).not.toEqual({});
+    expect(productionAdminReadExists(env)).toBe(true);
   });
 });

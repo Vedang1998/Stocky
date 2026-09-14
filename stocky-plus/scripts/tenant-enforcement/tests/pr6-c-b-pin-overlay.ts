@@ -65,6 +65,21 @@ export type BAdminReadSource = {
   scratchRoot?: string;
 };
 
+export type MaterializePinnedOptions = {
+  /** Invoked after the owned worktree exists and before it is returned. */
+  afterScratchCreated?: (scratchRoot: string) => void;
+};
+
+export type AdminReadWorkingTreeEvidence = {
+  paths: string[];
+  indexStage: string;
+  indexBlobs: Record<string, string>;
+  diskHashes: Record<string, string>;
+  status: string;
+  diff: string;
+  cachedDiff: string;
+};
+
 export class UnownedAdminReadPathError extends Error {
   constructor(message: string) {
     super(message);
@@ -156,18 +171,6 @@ export function listTrackedAdminReadPaths(env: PinOverlayEnv): string[] {
   return out;
 }
 
-export function listTrackedAdminReadBlobs(
-  env: PinOverlayEnv,
-): Record<string, string> {
-  const blobs: Record<string, string> = {};
-  for (const repoPath of listTrackedAdminReadPaths(env)) {
-    blobs[repoPath] = git(["rev-parse", `HEAD:${repoPath}`], env.repoRoot)
-      .toString()
-      .trim();
-  }
-  return blobs;
-}
-
 export function listTrackedAdminReadStage(
   env: PinOverlayEnv,
 ): string {
@@ -175,6 +178,72 @@ export function listTrackedAdminReadStage(
     ["ls-files", "-s", "--", TRACKED_ADMIN_READ_PREFIX],
     env.repoRoot,
   ).toString();
+}
+
+/** Index object IDs from `git ls-files -s`. Not HEAD-only. */
+export function listTrackedAdminReadBlobs(
+  env: PinOverlayEnv,
+): Record<string, string> {
+  const blobs: Record<string, string> = {};
+  const stage = listTrackedAdminReadStage(env);
+  for (const line of stage.split("\n")) {
+    if (!line) continue;
+    const tab = line.indexOf("\t");
+    if (tab < 0) continue;
+    const meta = line.slice(0, tab).trim().split(/\s+/);
+    const repoPath = line.slice(tab + 1);
+    if (meta.length >= 2 && repoPath) {
+      blobs[repoPath] = meta[1];
+    }
+  }
+  return blobs;
+}
+
+export function listOnDiskAdminReadHashes(
+  env: PinOverlayEnv,
+): Record<string, string> {
+  const hashes: Record<string, string> = {};
+  for (const repoPath of listTrackedAdminReadPaths(env)) {
+    const abs = path.join(env.repoRoot, repoPath);
+    if (!existsSync(abs)) continue;
+    const st = lstatSync(abs);
+    if (st.isSymbolicLink() || !st.isFile()) continue;
+    hashes[repoPath] = git(["hash-object", abs], env.repoRoot)
+      .toString()
+      .trim();
+  }
+  return hashes;
+}
+
+export function captureAdminReadWorkingTree(
+  env: PinOverlayEnv,
+): AdminReadWorkingTreeEvidence {
+  return {
+    paths: listTrackedAdminReadPaths(env),
+    indexStage: listTrackedAdminReadStage(env),
+    indexBlobs: listTrackedAdminReadBlobs(env),
+    diskHashes: listOnDiskAdminReadHashes(env),
+    status: git(
+      ["status", "--porcelain", "-uall", "--", TRACKED_ADMIN_READ_PREFIX],
+      env.repoRoot,
+    ).toString(),
+    diff: git(["diff", "--", TRACKED_ADMIN_READ_PREFIX], env.repoRoot).toString(),
+    cachedDiff: git(
+      ["diff", "--cached", "--", TRACKED_ADMIN_READ_PREFIX],
+      env.repoRoot,
+    ).toString(),
+  };
+}
+
+export function listGitWorktreePaths(): string[] {
+  const out = git(["worktree", "list", "--porcelain"], REPO_ROOT).toString();
+  const paths: string[] = [];
+  for (const line of out.split("\n")) {
+    if (line.startsWith("worktree ")) {
+      paths.push(path.resolve(line.slice("worktree ".length)));
+    }
+  }
+  return paths;
 }
 
 function assertPathNotSymlink(target: string, stopAt: string): void {
@@ -343,6 +412,7 @@ function removeOwnedScratch(scratchRoot: string | undefined): void {
  */
 export function materializePinnedBAdminReadOverlay(
   env: PinOverlayEnv = defaultPinOverlayEnv(),
+  options: MaterializePinnedOptions = {},
 ): BAdminReadSource {
   ensurePinnedBCommit();
   assertAdminReadOwnership(env);
@@ -365,6 +435,7 @@ export function materializePinnedBAdminReadOverlay(
       REPO_ROOT,
     );
     writeOwnedMarker(scratchRoot);
+    options.afterScratchCreated?.(scratchRoot);
     const dir = path.join(scratchRoot, TRACKED_ADMIN_READ_PREFIX);
     if (!existsSync(dir)) {
       throw new Error(
