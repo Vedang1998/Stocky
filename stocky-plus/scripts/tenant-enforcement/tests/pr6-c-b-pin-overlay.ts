@@ -26,7 +26,6 @@ const APP_ROOT = path.resolve(
   "../../..",
 );
 const REPO_ROOT = path.resolve(APP_ROOT, "..");
-const TRACKED_ADMIN_READ_PREFIX = "stocky-plus/app/lib/order-facts/admin-read";
 const OWNED_MARKER_NAME = ".pr6-c-owned-scratch";
 const OWNED_SCRATCH_PREFIX = "pr6-c-owned-b-pin-";
 
@@ -37,6 +36,16 @@ export const B_ADMIN_READ_PRODUCTION_DIR = path.join(
 
 /** @deprecated Use B_ADMIN_READ_PRODUCTION_DIR. Never a delete target. */
 export const B_ADMIN_READ_OVERLAY_DIR = B_ADMIN_READ_PRODUCTION_DIR;
+
+/**
+ * Accepted B integration reference (PR #39 head at C-INTEGRATION-01).
+ * Tracked-B fixtures archive this SHA. It is not the typed-read pin.
+ */
+export const ACCEPTED_B_ADMIN_READ_TREE =
+  "7338aaa45294c28526330aa259779308bd6d851e";
+
+export const TRACKED_ADMIN_READ_PREFIX =
+  "stocky-plus/app/lib/order-facts/admin-read";
 
 /** Git blobs of B production readers / test transport at pin 610ed050. */
 export const PINNED_B_READER_BLOBS = {
@@ -118,25 +127,31 @@ export function readPinnedBBlob(repoPath: string): string {
     .trim();
 }
 
-function pinAvailable(): boolean {
+export function gitCommitAvailable(
+  sha: string,
+  cwd: string = REPO_ROOT,
+): boolean {
   try {
-    git(["cat-file", "-t", B_TYPED_READ_CONTRACT_PIN], REPO_ROOT);
-    return true;
+    return git(["cat-file", "-t", sha], cwd).toString().trim() === "commit";
   } catch {
     return false;
   }
 }
 
-export function ensurePinnedBCommit(): void {
-  if (pinAvailable()) return;
+export function ensureGitCommit(
+  sha: string,
+  cwd: string = REPO_ROOT,
+): void {
+  if (gitCommitAvailable(sha, cwd)) return;
+  const short = sha.slice(0, 12);
   const fetchAttempts = [
-    ["fetch", "--no-tags", "--depth=1", "origin", B_TYPED_READ_CONTRACT_PIN],
+    ["fetch", "--no-tags", "--depth=1", "origin", sha],
     [
       "fetch",
       "--no-tags",
       "--depth=1",
       "origin",
-      `${B_TYPED_READ_CONTRACT_PIN}:refs/tmp/pr6-c-b-pin`,
+      `${sha}:refs/tmp/pr6-c-b-${short}`,
     ],
     ["fetch", "--no-tags", "--depth=1", "origin", "pull/39/head"],
     [
@@ -149,15 +164,34 @@ export function ensurePinnedBCommit(): void {
   let lastError: unknown;
   for (const args of fetchAttempts) {
     try {
-      git(args, REPO_ROOT);
-      if (pinAvailable()) return;
+      git(args, cwd);
+      if (gitCommitAvailable(sha, cwd)) return;
     } catch (error) {
       lastError = error;
     }
   }
   throw new Error(
-    `Unable to materialize pinned B commit ${B_TYPED_READ_CONTRACT_PIN}: ${String(lastError)}`,
+    `Unable to materialize git commit ${sha}: ${String(lastError)}`,
   );
+}
+
+export function ensurePinnedBCommit(cwd: string = REPO_ROOT): void {
+  ensureGitCommit(B_TYPED_READ_CONTRACT_PIN, cwd);
+}
+
+/** Archive accepted B admin-read after ensuring the SHA exists in `cwd`. */
+export function archiveAcceptedBAdminRead(cwd: string = REPO_ROOT): Buffer {
+  ensureGitCommit(ACCEPTED_B_ADMIN_READ_TREE, cwd);
+  const archive = git(
+    ["archive", ACCEPTED_B_ADMIN_READ_TREE, TRACKED_ADMIN_READ_PREFIX],
+    cwd,
+  );
+  if (archive.length === 0) {
+    throw new Error(
+      `git archive of ${ACCEPTED_B_ADMIN_READ_TREE} produced an empty payload`,
+    );
+  }
+  return archive;
 }
 
 export function listTrackedAdminReadPaths(env: PinOverlayEnv): string[] {

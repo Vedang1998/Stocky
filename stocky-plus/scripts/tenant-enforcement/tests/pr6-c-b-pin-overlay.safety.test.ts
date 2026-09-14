@@ -12,6 +12,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -19,11 +20,18 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import { B_TYPED_READ_CONTRACT_PIN } from "./pr6-c-b-compat-mapper";
 import {
+  ACCEPTED_B_ADMIN_READ_TREE,
+  TRACKED_ADMIN_READ_PREFIX,
   TrackedAdminReadPresentError,
   UnownedAdminReadPathError,
+  archiveAcceptedBAdminRead,
   captureAdminReadWorkingTree,
   defaultPinOverlayEnv,
+  ensureGitCommit,
+  ensurePinnedBCommit,
+  gitCommitAvailable,
   listGitWorktreePaths,
   listTrackedAdminReadPaths,
   materializePinnedBAdminReadOverlay,
@@ -39,11 +47,8 @@ const REPO_ROOT = path.resolve(
   "../../../..",
 );
 
-/** Accepted B integration reference (PR39 head). Used only as a fixture source. */
-const ACCEPTED_B_ADMIN_READ_TREE =
-  "7338aaa45294c28526330aa259779308bd6d851e";
-
 const scratchRoots: string[] = [];
+const disposableGitRoots: string[] = [];
 
 afterEach(() => {
   for (const root of scratchRoots.splice(0)) {
@@ -52,6 +57,9 @@ afterEach(() => {
     } catch {
       // already gone or unowned
     }
+  }
+  for (const root of disposableGitRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 
@@ -76,37 +84,34 @@ function isolatedCOnlyEnv(): PinOverlayEnv {
   git(["commit", "--allow-empty", "-m", "c-only no admin-read"], root);
   return {
     repoRoot: root,
-    productionAdminReadDir: path.join(
-      root,
-      "stocky-plus/app/lib/order-facts/admin-read",
-    ),
+    productionAdminReadDir: path.join(root, TRACKED_ADMIN_READ_PREFIX),
   };
 }
 
 function isolatedTrackedBEnv(): PinOverlayEnv {
   const root = initTempRepo();
-  const archive = git(
-    [
-      "archive",
-      ACCEPTED_B_ADMIN_READ_TREE,
-      "stocky-plus/app/lib/order-facts/admin-read",
-    ],
-    REPO_ROOT,
-  );
+  const archive = archiveAcceptedBAdminRead();
   execFileSync("tar", ["-x"], {
     cwd: root,
     input: archive,
     maxBuffer: 32 * 1024 * 1024,
   });
-  git(["add", "stocky-plus/app/lib/order-facts/admin-read"], root);
+  git(["add", TRACKED_ADMIN_READ_PREFIX], root);
   git(["commit", "-m", "tracked B admin-read"], root);
   return {
     repoRoot: root,
-    productionAdminReadDir: path.join(
-      root,
-      "stocky-plus/app/lib/order-facts/admin-read",
-    ),
+    productionAdminReadDir: path.join(root, TRACKED_ADMIN_READ_PREFIX),
   };
+}
+
+/** Depth-1 clone of current HEAD only. Does not contain unrelated B SHAs. */
+function isolatedShallowCCheckout(): string {
+  const root = mkdtempSync(path.join(os.tmpdir(), "pr6-c-shallow-c-"));
+  disposableGitRoots.push(root);
+  git(["init", "-b", "main"], root);
+  git(["remote", "add", "origin", REPO_ROOT], root);
+  git(["fetch", "--depth=1", "origin", "HEAD"], root);
+  return root;
 }
 
 function listOwnedScratchDirs(): string[] {
@@ -358,5 +363,64 @@ describe("PR6-C B-reader overlay isolation", () => {
     expect(Object.keys(evidence.diskHashes).length).toBeGreaterThan(0);
     expect(evidence.indexBlobs).not.toEqual({});
     expect(productionAdminReadExists(env)).toBe(true);
+  });
+
+  it("accepted B archive fails closed when the object is absent from a shallow C checkout", () => {
+    expect(ACCEPTED_B_ADMIN_READ_TREE).toBe(
+      "7338aaa45294c28526330aa259779308bd6d851e",
+    );
+    expect(ACCEPTED_B_ADMIN_READ_TREE).not.toBe(B_TYPED_READ_CONTRACT_PIN);
+    const shallow = isolatedShallowCCheckout();
+    expect(gitCommitAvailable(ACCEPTED_B_ADMIN_READ_TREE, shallow)).toBe(false);
+    expect(() =>
+      git(
+        ["archive", ACCEPTED_B_ADMIN_READ_TREE, TRACKED_ADMIN_READ_PREFIX],
+        shallow,
+      ),
+    ).toThrow(/not a tree object/);
+  });
+
+  it("pin fetch is not a substitute for the accepted B SHA", () => {
+    const shallow = isolatedShallowCCheckout();
+    ensurePinnedBCommit(shallow);
+    expect(gitCommitAvailable(B_TYPED_READ_CONTRACT_PIN, shallow)).toBe(true);
+    expect(gitCommitAvailable(ACCEPTED_B_ADMIN_READ_TREE, shallow)).toBe(false);
+    expect(() =>
+      git(
+        ["archive", ACCEPTED_B_ADMIN_READ_TREE, TRACKED_ADMIN_READ_PREFIX],
+        shallow,
+      ),
+    ).toThrow(/not a tree object/);
+  });
+
+  it("ensureGitCommit then archive of accepted B yields a non-empty tree", () => {
+    const shallow = isolatedShallowCCheckout();
+    const archive = archiveAcceptedBAdminRead(shallow);
+    expect(gitCommitAvailable(ACCEPTED_B_ADMIN_READ_TREE, shallow)).toBe(true);
+    expect(
+      git(["rev-parse", ACCEPTED_B_ADMIN_READ_TREE], shallow).toString().trim(),
+    ).toBe(ACCEPTED_B_ADMIN_READ_TREE);
+    expect(archive.length).toBeGreaterThan(0);
+    const listing = execFileSync("tar", ["-t"], {
+      input: archive,
+      maxBuffer: 32 * 1024 * 1024,
+    })
+      .toString()
+      .split("\n")
+      .filter(Boolean);
+    expect(listing.length).toBeGreaterThan(0);
+    expect(
+      listing.some((entry) => entry.endsWith("admin-read/orders.ts")),
+    ).toBe(true);
+  });
+
+  it("ensureGitCommit rejects an unknown SHA without substituting an empty archive", () => {
+    const shallow = isolatedShallowCCheckout();
+    const unknown = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    expect(() => ensureGitCommit(unknown, shallow)).toThrow(
+      /Unable to materialize git commit/,
+    );
+    expect(gitCommitAvailable(unknown, shallow)).toBe(false);
+    expect(gitCommitAvailable(ACCEPTED_B_ADMIN_READ_TREE, shallow)).toBe(false);
   });
 });
