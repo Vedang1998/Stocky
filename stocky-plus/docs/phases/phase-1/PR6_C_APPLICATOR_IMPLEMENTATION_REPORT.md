@@ -4,7 +4,7 @@
 **Branch:** `phase-1/pr6-c-order-fact-applicator`
 **PR:** #40 OPEN / DRAFT / UNMERGED
 **Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT B/C addendum [5639320213](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5639320213); admission [5640728436](https://github.com/Vedang1998/Stocky/pull/37#issuecomment-5640728436); consolidated correction decision [5642820719](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5642820719); routing/continuation [5647803315](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5647803315) (`user=Vedang1998`, `created_at=2026-09-12T18:21:41Z`, id `5647803315`) — this is the outstanding C evidence-completion assignment, not a repeat of the already executed F-01–F-08 package.
-**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 remain implemented. Independent correction/evidence review of `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` (blob `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`) issued `CORRECTIONS REQUIRED` (P0 0 / P1 0 / P2 1 / P3 4). This packet implements that F-CR-01…05 plus safe B-reader isolation and history-preserving merge of tooling **T** `f5ec7abb01d14d5803e186b3e883fa15defad38f`. It is **not** a resubmission of unchanged `b0b7f58`. Historical failed CI, historical successful CI, and current-head CI are distinct (see §6.5–§6.7). Current-head Classify + Heavy + Gate are **not** marked green here. Independent C acceptance remains **pending**. Merge is **not** authorized.
+**Status:** Independent Claude review of `04a3e276c9d607e440051603e54e7c96dc9ad19f` issued `CORRECTIONS REQUIRED` (P0 0 / P1 6 / P2 2 / P3 4). F-01–F-08 remain implemented. Independent correction/evidence review of `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` (blob `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`) issued `CORRECTIONS REQUIRED` (P0 0 / P1 0 / P2 1 / P3 4). F-CR-01…05 plus tooling **T** merge landed at `e8c0e54a02d4686699fcb7d75c60ac57654d2067`. This packet is the **C-INTEGRATION-01** combined-tree test-isolation correction on that head. It is **not** a resubmission of `b0b7f58` and **not** an applicator rewrite. Historical CI for `e8c0e54…` (run `34801383240`) is not this packet’s exact-head result. New current-head Classify + Heavy + Gate are **not** marked green here. Independent C acceptance remains **pending**. Merge is **not** authorized.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -40,7 +40,9 @@ This report records the PR6-C applicator implementation. It does **not** claim P
 | Immutable C correction review | `e24ac2d50950373213c2a2ece9ee784b335c2c7e` — sole parent `4a5fc80…`; sole added path `PR6_C_APPLICATOR_CORRECTION_INDEPENDENT_REVIEW.md`; blob `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`. Fast-forwarded; never edited. |
 | Required tooling **T** | `f5ec7abb01d14d5803e186b3e883fa15defad38f` (PR #42 squash). Sole parent **M**. History-preserving merge `3d25fdd520071e154cfaa85d651acf14983140aa` (parents `e24ac2d…` + `f5ec7ab…`). PR #41 remains parked. |
 | B typed-read pin (read-only) | `610ed0503a3aa2998aca7228f4fca9617bed23a3` — PR #39 comment [5643079993](https://github.com/Vedang1998/Stocky/pull/39#issuecomment-5643079993). Live corrected B head after review `59f469a…` blob `b4533610…` plus F-CLAUDE-PR6B-01…11. **Not** merged into C. Superseded overlay identity `d9717f68…` is not used. |
+| Accepted B integration reference | `7338aaa45294c28526330aa259779308bd6d851e` — PR #39 `headRefOid` at this packet. PR #39 remains **OPEN / UNMERGED**. No squash **U**. Combined testing used an isolated disposable worktree only. |
 | B review (read-only) | `59f469a1951a4a4d86c6273f9ff10cc6635cf0e3`, blob `b4533610b5af305816aef5434b884c3065b06f94`. Not integrated into C. |
+| C-INTEGRATION-01 starting head | `e8c0e54a02d4686699fcb7d75c60ac57654d2067` |
 
 C started from **M**, not from B runtime. B later commits on `phase-1/pr6-b-order-admin-read` are not this lane’s base. C does not edit B’s shared-control files.
 
@@ -362,8 +364,9 @@ F-CR-05: historical failed CI, historical successful CI, current-head CI, implem
 |---|---|---|---|
 | Historical failed C `pull_request` | [34714619941](https://github.com/Vedang1998/Stocky/actions/runs/34714619941) | `e5af049459992f3c6a5c32b799dca00d1279020e` | Classify `103609574612` SUCCESS. Heavy `103609595251` **CANCELLED** at `timeout-minutes: 70` (~70m22s executing after ~162 min queued). Gate `103638944625` FAIL (`validate_result=cancelled`). F-F03 also failed inside Heavy before cancel. |
 | Historical successful C `pull_request` | [34726234237](https://github.com/Vedang1998/Stocky/actions/runs/34726234237) | `4a5fc80417f90c80f6e310428a6ce0d0036f9d93` | Classify + Heavy + Gate SUCCESS. Does **not** dispose F-F03 (intermittent; tenant-indexes blob identical to M). Does **not** re-attribute the cancelled run. |
-| Exact-T post-merge `push` | [34799274517](https://github.com/Vedang1998/Stocky/actions/runs/34799274517) | `f5ec7abb01d14d5803e186b3e883fa15defad38f` | Classify `103838454264` SUCCESS. Heavy/Gate **not claimed SUCCESS in this report** unless independently observed complete. |
-| Current-head C `pull_request` | new run after the documentation commit that contains this sentence | live PR head | **Pending — not green.** Earlier in-progress/cancelled runs on superseded correction SHAs are not this head. |
+| Exact-T post-merge `push` | [34799274517](https://github.com/Vedang1998/Stocky/actions/runs/34799274517) | `f5ec7abb01d14d5803e186b3e883fa15defad38f` | Classify `103838454264` SUCCESS. Heavy `103838476115` SUCCESS. Gate `103848213649` SUCCESS. Aggregate **SUCCESS**. |
+| Historical C `pull_request` on F-CR/T packet | [34801383240](https://github.com/Vedang1998/Stocky/actions/runs/34801383240) | `e8c0e54a02d4686699fcb7d75c60ac57654d2067` | Classify `103844656536` SUCCESS. Heavy `103844674320` SUCCESS. Gate `103853429475` SUCCESS (`classify_result=success` `validate_result=success` `full_ci=true` `docs_only=false`). Evidence for `e8c0e54…` only. **Not** this C-INTEGRATION-01 head. |
+| Current-head C `pull_request` | new run after the C-INTEGRATION-01 documentation commit that contains this sentence | live PR head | **Pending — not green.** |
 
 ### 6.5.1 Historical failed run `34714619941` (`e5af049…`) — preserved measurement
 
@@ -411,8 +414,30 @@ Million-line envelope remains opt-in (`PR6_C_SCALE_1E6=1`, never on GitHub Actio
 | F-CR-03 | P3 | **Corrected in this report.** 2/2 and 912.06s attributed to pre-delta harness; current discovery 7/6/1 recorded separately. |
 | F-CR-04 | P3 | **Corrected in tests.** Both 30s parks asserted; either-one 60s mutation fails; interruption schedules preserved. |
 | F-CR-05 | P3 | **Corrected in this report and PR body.** CI classes distinguished; current-head not marked green. |
+| C-INTEGRATION-01 | P2 | **Corrected in tests.** Isolated C-only fixture; isolated tracked-B fixture; genuine partial-setup failure; both-mode safety 11/11; both-mode actual-reader 18/18. |
 
 Independent re-review of this packet remains **pending**.
+
+## 6.7 C-INTEGRATION-01 — combined-tree isolation (this packet)
+
+**Finding.** Several safety tests used the live `REPO_ROOT` and asserted zero tracked B `admin-read` paths, empty blob/stage maps, and an absent production directory. Those assertions fail once accepted B is tracked. The isolated tracked-reader preservation test did not correct those checkout-dependent tests. The test named cleanup-after-setup-failure did not induce a failure inside setup.
+
+**Reproduction (executed, before correction).** Disposable worktree of `e8c0e54…` plus `git checkout 7338aaa… -- stocky-plus/app/lib/order-facts/admin-read` (**44** tracked paths). Command: `npm run test:migrations -- …/pr6-c-b-pin-overlay.safety.test.ts`. Exit 1. **5 failed / 4 passed (9)**. Failures: C-only pinned-reader (`expected 44 to be +0`); repeated materialize (`tracked admin-read paths exist but directory is missing`); cleanup-after-setup-failure (same missing-directory error); live C-only prepare (`HEAD:` blob missing for staged paths); `C tree currently has no tracked admin-read` (`expected [44 paths] to equal []`). Log: `/opt/cursor/artifacts/pr6-c-c-integration-01-repro.log`.
+
+**Correction.** C-only scenarios use a disposable git fixture with no tracked B. Tracked-B scenarios use a separate committed fixture archived from `7338aaa…` with a non-empty inventory. The live-checkout test is mode-agnostic and never asserts emptiness. `afterScratchCreated` induces a real failure after the owned worktree exists; cleanup removes only that scratch, leaves no orphan worktree, and preserves production, tracked, and pre-existing unowned files. Working-tree evidence is index stage, index blobs, on-disk `git hash-object` hashes, `status --porcelain`, `diff`, and `diff --cached` — not HEAD blob IDs alone. An empty map is valid only as the isolated C-only absence assertion.
+
+PR #39 remained unmerged. No squash **U**. Combined execution used `/tmp/pr6-c-combined-repro` only. B runtime was not committed on C.
+
+| Mode | Source SHA | Suite | Collected / executed | Mode selected | Result |
+|---|---|---|---|---|---|
+| C-only subject | `e8c0e54…` working tree + this correction | safety | **11 / 11** | pinned-scratch on isolated fixture; live checkout empty | exit 0 |
+| Combined disposable | local `9ce389b` (C + committed 44 B admin-read files from `7338aaa…`; not on C) | safety | **11 / 11** | live checkout **integrated**; C-only tests still used isolated empty fixture | exit 0 |
+| C-only subject | same | actual-reader PG | **18 / 18** | **pinned-scratch** (`Preparing worktree (detached HEAD 610ed05)`) | exit 0 |
+| Combined disposable | same local combined HEAD | actual-reader PG | **18 / 18** | **integrated** (no pin worktree line; production dir used) | exit 0 |
+
+Combined on-disk preservation after integrated reader: **44** tracked paths; disk hashes equal index blobs; `status`/`diff`/`cachedDiff` empty. `orders.ts` blob `b5ce0d53…` matches `7338aaa` and the pin. Applicator workload unchanged; 1e6 envelope was **not** re-run.
+
+C regressions after the correction (C-only tree): process-loss **11**, scale **6 passed / 1 skipped**, canonical **82**, gates **9**, probe **17**, `app/lib/order-facts` **64 / 9 files**, eslint 0, typecheck 0, inventory fresh (`scannedFiles` 404), audit ok. `apply/**` unchanged versus `e8c0e54…` and versus `4a5fc80…`. Review blobs `a90ae442…` / `8c384b69…` and T files unchanged.
 
 ## 7. Risk status after this slice
 
@@ -456,8 +481,8 @@ No D-055. Monday 7 September 2026 target remains missed and is not re-dated.
 
 ## 9. Packet for ChatGPT
 
-This is the **PR6-C final correction and integration** packet (F-CR-01…05, overlay isolation, immutable review FF, exact-T merge). It is **not** a resubmission of `b0b7f58`.
+This is the **PR6-C combined-tree isolation** packet (C-INTEGRATION-01) on starting head `e8c0e54…`. It is **not** a resubmission of `b0b7f58` and **not** an applicator rewrite.
 
-**Current-head exact `pull_request` Classify + Heavy + Gate are pending and are not marked green in this file.** Exact-T push run `34799274517` is required SUCCESS before merge readiness and is not claimed here beyond Classify SUCCESS already observed.
+**Current-head exact `pull_request` Classify + Heavy + Gate are pending and are not marked green in this file.** Run `34801383240` remains historical evidence for `e8c0e54…` only. Exact-T push `34799274517` is SUCCESS. No squash **U** (PR #39 unmerged).
 
-Independent Claude re-review of this correction/integration head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`, **not** merge authorization, and **not** D-055. R-176 remains **OPEN / P0**. R-164 unchanged.
+Independent Claude re-review of this correction head remains required. This is **not** `READY FOR CHATGPT PR6-C COMPLETE-MODULE REVIEW`, **not** merge authorization, and **not** D-055. R-176 remains **OPEN / P0**. R-164 unchanged.
