@@ -180,3 +180,21 @@ T19 is **reader** pagination of 300 lines, not webhook projection. T20 must **no
 **Ownership wording (F-11):** B cannot implement C on the B branch. C's separately authorized lane is **in correction**, not globally unauthorized. PR6-D runtime, production, merchant data, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**.
 
 R-176 stays **OPEN / P0**. R-164 unchanged. Neither B nor C is accepted for merge on this addendum.
+
+## ChatGPT PR42 tooling integration addendum (comment 5658188883)
+
+**Authorization:** ChatGPT comment [`5658188883`](https://github.com/Vedang1998/Stocky/pull/42#issuecomment-5658188883) (owner squash-merge verified; B/C may integrate **T** on existing draft branches). Same D-054. **No D-055.**
+
+| Topic | Record |
+|---|---|
+| PR #42 | **CLOSED / MERGED**. Authorized packaging head `83d23bf7ad1b8995c2ca5207ff4605047a5c7c14`. Squash **T** / current `origin/main` `f5ec7abb01d14d5803e186b3e883fa15defad38f` at `2026-09-14T02:27:29Z`. Sole parent **M** `bdbb5bba91ac8af82e49a99e36cce5db8b401c68`. Tree `f882c4b31c488c9dcd2e0a1dd6ad8c30c1fab129`. |
+| Tooling review | Immutable blob `5a47f6f8133806848ad71a545e07c030a2137e37` — `PR6_BC_CI_RELIABILITY_INDEPENDENT_REVIEW.md` (never edit). Verdict **`APPROVE PR6 B/C CI RELIABILITY`**. Historical artifact; not amended to the squash SHA. |
+| Exact-T post-merge push CI | Run [`34799274517`](https://github.com/Vedang1998/Stocky/actions/runs/34799274517). Classify `103838454264` SUCCESS. Heavy `103838476115` **IN PROGRESS** at this record. CI Gate not yet created. **Pending is not passed.** A failed T run is a shared blocker. |
+| B merge | History-preserving merge of exact **T** into `phase-1/pr6-b-order-admin-read`. No rebase, force-push, or PR41 patch. B `app/lib/order-facts/admin-read/**` remains byte-identical to accepted `57bebc6b141e1f5290bbeee6fa75557238cc96f4`. Workflow and F-F03 harness blobs match **T**. |
+| Inventory | `PR2_TENANT_ACCESS_INVENTORY.md` regenerated from the merged B tree. Do not copy C's count. |
+| B product status | **TECHNICALLY ACCEPTED**, **NOT MERGED**. Correction-review blob `e902a1ce07e30174cd56cea13114be7325195c98`. NEW-CLAUDE-PR6B-C01 remains accepted nonblocking. Both schema and bulk-rule gates remain mandatory. |
+| C | **IN CORRECTION**. C need not repin unchanged B runtime (`610ed0503a3aa2998aca7228f4fca9617bed23a3`) solely for this tooling merge. |
+| PR #41 | Parked / unmerged. |
+| PR6-D / production / writes / scopes / flags | **NOT AUTHORIZED**. |
+
+No new independent tooling review is requested for this exact T merge. New exact-head `pull_request` CI on the B integration head remains required.

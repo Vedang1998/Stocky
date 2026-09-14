@@ -1,6 +1,6 @@
 # Phase 1 PR6-B — Admin READ order and refund extraction
 
-**Status:** Consolidated correction implemented — pending independent Claude re-review of PR #39 and ChatGPT acceptance
+**Status:** ChatGPT **ACCEPT PR6-B ADMIN READ CORRECTION** (technical only) — synchronizing onto merged PR #42 squash **T**; **not merged**
 **Slice:** PR6-B Admin READ / extraction only
 **Branch:** `phase-1/pr6-b-order-admin-read`
 **Authority:** D-054 **EFFECTIVE**. PR6-A **ACCEPTED / MERGED / CLOSED**. No D-055.
@@ -13,7 +13,7 @@
 **PR6-C apply:** not implemented on this branch; C's separately authorized lane is in correction, not globally unauthorized
 **PR6-D runtime:** NOT AUTHORIZED
 
-This report records the PR6-B Admin READ implementation **and** the ChatGPT-authorized consolidated correction of F-CLAUDE-PR6B-01…11. It does **not** claim independent re-review approval, ChatGPT acceptance, merge authorization, or PR 6 completion. It does **not** start C apply, D webhooks/import, or production.
+This report records the PR6-B Admin READ implementation, the ChatGPT-authorized consolidated correction of F-CLAUDE-PR6B-01…11, independent correction approval, and the later history-preserving merge of squash **T**. It does **not** claim merge authorization, PR 6 completion, C acceptance, or PR6-D. It does **not** start C apply, D webhooks/import, or production.
 
 This file does **not** invent its own commit SHA or the live PR-head SHA that contains this file. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs are recorded in the PR body after that head exists; they are not guessed here. Baseline exact-head run on pre-correction head `d9717f68ea981aa68f108428a31d7726d0ba2a8f` is [`34651155935`](https://github.com/Vedang1998/Stocky/actions/runs/34651155935) **SUCCESS** and is **not** evidence for the correction head.
 
@@ -24,7 +24,8 @@ This file does **not** invent its own commit SHA or the live PR-head SHA that co
 | Field | Value |
 |---|---|
 | Role | Cursor B — exclusive Admin READ lane |
-| Authorized squash **M** / `origin/main` at admission and at this record | `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` |
+| Authorized squash **M** / `origin/main` at admission | `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` |
+| Squash **T** / current `origin/main` after PR #42 | `f5ec7abb01d14d5803e186b3e883fa15defad38f` |
 | **M** sole parent | `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` |
 | `M^{tree}` | `9e5a700b0f4a3b0d9b7f0638bd431e0daea029dc` |
 | PR #37 | **CLOSED / MERGED** `2026-09-11T20:07:27Z` |
@@ -369,7 +370,7 @@ Please verify:
 
 ## 17. Explicit stop statement
 
-PR6-D runtime was **not** started. Production, merchant data, deployment, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**. No D-055. B cannot implement C on this branch; C's separately authorized lane is in correction and must continue from **M**, not from this runtime branch. This PR remains **OPEN / DRAFT / UNMERGED** until ChatGPT acceptance and explicit user merge authorization.
+PR6-D runtime was **not** started. Production, merchant data, deployment, Shopify writes, inventory writes, scope additions, and flag enablement remain **NOT AUTHORIZED**. No D-055. B cannot implement C on this branch; C's separately authorized lane is in correction. This PR remains **OPEN / DRAFT / UNMERGED** until ChatGPT current-main merge decision and explicit user merge authorization.
 
 ---
 
@@ -398,3 +399,58 @@ ChatGPT accepted **CORRECTIONS REQUIRED** (P0=0 / P1=2 / P2=4 / P3=5) and author
 **Bulk adversarial matrix:** fragment-hidden root `nodes` FAIL; inline-root `node` FAIL; fragment depth-3 FAIL; dead fragments ignored; reused fragment counted per spread (2× `lineItems`); invalid Order fragment on DraftOrder unresolved; undefined spread FAIL; cycle FAIL; unknown field FAIL; multi-op FAIL; aliased Bulk A PASS.
 
 **Field/ordinal compatibility:** `restocked` / `restockLocationId` / `refundLineOrdinal` now flow from B; C consumes. Embedded omitted `order.id` uses enclosing Order GID; contradictory parent GID fails; standalone unknown parent stays `null`.
+
+---
+
+## 19. PR42 tooling / current-main integration
+
+ChatGPT owner squash-merge of PR [#42](https://github.com/Vedang1998/Stocky/pull/42) is verified ([5658188883](https://github.com/Vedang1998/Stocky/pull/42#issuecomment-5658188883)). This section records B's history-preserving merge of exact **T**. It does **not** change reader behavior and does **not** invent this report commit's SHA or exact-head CI IDs.
+
+| Field | Value |
+|---|---|
+| Starting accepted B head | `57bebc6b141e1f5290bbeee6fa75557238cc96f4` |
+| Previous base **M** | `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` |
+| Required tooling/main **T** | `f5ec7abb01d14d5803e186b3e883fa15defad38f` |
+| **T** sole parent | **M** |
+| `T^{tree}` | `f882c4b31c488c9dcd2e0a1dd6ad8c30c1fab129` |
+| Merge parents | `57bebc6b…` and `f5ec7abb…` |
+| Merge style | normal `--no-ff` history-preserving merge; no rebase; no force-push; no PR41 patch |
+| Conflict | only `PR2_TENANT_ACCESS_INVENTORY.md` (expected). Regenerated from the merged tree; neither side's count copied. No executable/source conflict. |
+| B `admin-read` tree | `8ae3d688c78ad71566a0b20071f395821a1fece6` — byte-identical to `57bebc6b` |
+| Workflow blob | `8d1fa98a53db95f4e5b641fee76322cfe4f7ac13` — matches **T** (`timeout-minutes: 120`) |
+| F-F03 harness blob | `8bfc6d8bacf4d307fff7e0b61fbf6315a734e347` — matches **T** |
+| B correction-review blob | `e902a1ce07e30174cd56cea13114be7325195c98` |
+| Merged tooling-review blob | `5a47f6f8133806848ad71a545e07c030a2137e37` |
+| Regenerated inventory | scannedFiles 416; findings 1741; violations 0; content digest `8e9b1ed937ec4b23db9c78616ca0498e8e557c61fa1367fa2830c019fd8c190a` |
+| Exact-T push CI | [`34799274517`](https://github.com/Vedang1998/Stocky/actions/runs/34799274517) — Classify `103838454264` SUCCESS; Heavy `103838476115` **IN PROGRESS** at this record. **Pending is not passed.** |
+| Exact-head PR CI | recorded in the PR body after the live integration head exists |
+| NEW-CLAUDE-PR6B-C01 | accepted nonblocking; both validation gates remain mandatory |
+| C reader pin | `610ed0503a3aa2998aca7228f4fca9617bed23a3` remains valid; C need not repin solely for this tooling merge |
+| Merge | **NOT AUTHORIZED** |
+| History-preserving merge commit | `9e42f46976af4285ac9b4cc17574f143eb73c14c` (parents `57bebc6b…` + `f5ec7abb…`). This control-record commit's own SHA is **not** invented here. |
+
+### 19.1 Local validation (integration working tree; codegen first)
+
+Disposable local PostgreSQL **16.15** on `localhost:5432` (database `stocky_plus`; no production host). Redis was started locally and was **not** required by these commands. No store Admin token. No `.env` file written.
+
+| Command | Exit | Status | Notes |
+|---|---:|---|---|
+| `npm run graphql-codegen` | 0 | executed and passed | No generated-file drift (`git status` still docs-only) |
+| `npx vitest run app/lib/order-facts/admin-read --reporter=verbose` | 0 | executed and passed | **10 files, 119 tests passed** (byte-identical accepted tree) |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-indexes/tests/indexes.migration.test.ts -t "F-F03 active-scan overlap helper"` | 0 | executed and passed | **7 passed**, 13 skipped (nonzero; helper-only filter) |
+| same file `-t "DML overlaps active build-scan and validation-scan phases"` | 0 | executed and passed | **1 passed**, 19 skipped; 3/3 iterations `indexVerification=valid_exact`; `ShareUpdateExclusiveLock`; scan blocks advanced during DML burst |
+| `npm run tenant:access:inventory:check` | 0 | executed and passed | fresh; scannedFiles 416; findings 1741; violations 0; digest `8e9b1ed937ec4b23db9c78616ca0498e8e557c61fa1367fa2830c019fd8c190a` |
+| `npx tsx scripts/pr5-f3-safety-scan.ts` | 0 | executed and passed | `filesScanned: 186`, `findings: []` |
+| `npm run lint` | 0 | executed and passed | clean |
+| `npm run typecheck` | 0 | executed and passed | clean |
+| `npm run build` | 0 | executed and passed | `react-router build` |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | executed and passed | `assertions=40 pass=40 fail=0` |
+| `bash .github/scripts/classify-ci-change-set.sh --from-git f5ec7abb… 9e42f46…` | 0 | executed and passed | `range_usable=true`; `changed_path_count=56`; `docs_only=false`; `full_ci=true` (hex SHAs required; symbolic `HEAD` is unusable) |
+| `git diff --check` | 0 | executed and passed | clean |
+| Live Admin / store GraphQL | — | **not executed** | Not authorized |
+| `workflow_dispatch` / empty-commit retrigger | — | **not executed** | Not used |
+| Full `npm run test:migrations` (entire Heavy file set) | — | **not executed locally** | Exact-head GitHub Heavy remains required |
+
+Focused commands ran nonzero tests. Empty collection would have been a failure. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the live integration head are recorded in the PR body after that head exists; they are not guessed here.
+
+Superseded cancelled exact-head run on `57bebc6b…`: [`34722422036`](https://github.com/Vedang1998/Stocky/actions/runs/34722422036) (Heavy 70-minute wall during `test:migrations`; Gate correctly fail-closed). That run is **not** evidence for the T-integration head.
