@@ -7,10 +7,10 @@
  * Integrated-reader tests use the actual tracked files.
  */
 import { execFileSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import {
   existsSync,
   lstatSync,
-  mkdtempSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -291,6 +291,22 @@ function isCOwnedScratchLocation(scratchRoot: string): boolean {
   );
 }
 
+function forceRemoveCreatedScratch(scratchRoot: string): void {
+  const resolved = path.resolve(scratchRoot);
+  try {
+    git(["worktree", "remove", "--force", resolved], REPO_ROOT);
+  } catch {
+    if (existsSync(resolved)) {
+      rmSync(resolved, { recursive: true, force: true });
+    }
+    try {
+      git(["worktree", "prune"], REPO_ROOT);
+    } catch {
+      // prune is best-effort after a failed worktree remove
+    }
+  }
+}
+
 function removeOwnedScratch(scratchRoot: string | undefined): void {
   if (!scratchRoot) return;
   if (!existsSync(scratchRoot)) return;
@@ -305,11 +321,21 @@ function removeOwnedScratch(scratchRoot: string | undefined): void {
       `refusing to delete unowned path ${scratchRoot}`,
     );
   }
-  rmSync(scratchRoot, { recursive: true, force: false });
+  try {
+    git(["worktree", "remove", "--force", resolved], REPO_ROOT);
+  } catch {
+    rmSync(resolved, { recursive: true, force: false });
+    try {
+      git(["worktree", "prune"], REPO_ROOT);
+    } catch {
+      // prune is best-effort
+    }
+  }
 }
 
 /**
- * Extract the pinned B admin-read tree into an owned disposable directory.
+ * Materialize the pinned B tree into an owned disposable git worktree.
+ * Relative B imports (tenant primitives, A types) resolve inside that worktree.
  * Throws if the env already has tracked B files (use those instead).
  */
 export function materializePinnedBAdminReadOverlay(
@@ -323,24 +349,23 @@ export function materializePinnedBAdminReadOverlay(
       `tracked B admin-read is present (${tracked.length} paths); will not overlay or delete ${env.productionAdminReadDir}`,
     );
   }
-  const scratchRoot = mkdtempSync(
-    path.join(os.tmpdir(), OWNED_SCRATCH_PREFIX),
+  const scratchRoot = path.join(
+    os.tmpdir(),
+    `${OWNED_SCRATCH_PREFIX}${process.pid}-${randomBytes(6).toString("hex")}`,
   );
-  writeOwnedMarker(scratchRoot);
+  if (existsSync(scratchRoot)) {
+    throw new Error(`owned scratch path already exists: ${scratchRoot}`);
+  }
   try {
-    const archive = git(
-      ["archive", B_TYPED_READ_CONTRACT_PIN, TRACKED_ADMIN_READ_PREFIX],
+    git(
+      ["worktree", "add", "--detach", scratchRoot, B_TYPED_READ_CONTRACT_PIN],
       REPO_ROOT,
     );
-    execFileSync("tar", ["-x"], {
-      cwd: scratchRoot,
-      input: archive,
-      maxBuffer: 32 * 1024 * 1024,
-    });
+    writeOwnedMarker(scratchRoot);
     const dir = path.join(scratchRoot, TRACKED_ADMIN_READ_PREFIX);
     if (!existsSync(dir)) {
       throw new Error(
-        `git archive of ${B_TYPED_READ_CONTRACT_PIN} did not create ${dir}`,
+        `worktree of ${B_TYPED_READ_CONTRACT_PIN} did not create ${dir}`,
       );
     }
     removeTestFiles(dir);
@@ -349,11 +374,7 @@ export function materializePinnedBAdminReadOverlay(
     }
     return { mode: "pinned-scratch", dir, scratchRoot };
   } catch (error) {
-    try {
-      removeOwnedScratch(scratchRoot);
-    } catch {
-      // still throw the original failure
-    }
+    forceRemoveCreatedScratch(scratchRoot);
     throw error;
   }
 }
