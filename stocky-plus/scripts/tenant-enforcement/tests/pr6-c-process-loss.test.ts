@@ -208,6 +208,118 @@ async function retryReceipt(
   }
 }
 
+const PARK_BOUND_MS = 30_000;
+const COMMIT_RACE_YIELD_MS = 75;
+
+function parseMsLiteral(raw: string): number {
+  return Number(raw.replaceAll("_", ""));
+}
+
+function parseChildParks(source: string): {
+  killBeforeParkMs: number;
+  killAfterParkMs: number;
+  uncertainYieldMs: number;
+} {
+  const before = source.match(
+    /if \(mode === "kill-before-commit"\) \{[\s\S]*?await sleep\((\d+(?:_\d+)*)\)/,
+  );
+  const yieldMatch = source.match(
+    /if \(mode === "uncertain-commit"\) \{[\s\S]*?await sleep\((\d+(?:_\d+)*)\)/,
+  );
+  const after = source.match(
+    /if \(mode === "kill-after-commit" \|\| mode === "uncertain-commit"\) \{\s*await sleep\((\d+(?:_\d+)*)\)/,
+  );
+  if (!before || !yieldMatch || !after) {
+    throw new Error(
+      "failed to locate both process-loss parks and the commit-race yield",
+    );
+  }
+  return {
+    killBeforeParkMs: parseMsLiteral(before[1]),
+    killAfterParkMs: parseMsLiteral(after[1]),
+    uncertainYieldMs: parseMsLiteral(yieldMatch[1]),
+  };
+}
+
+function assertChildParksAtMost(source: string, maxMs: number): void {
+  const parks = parseChildParks(source);
+  if (parks.killBeforeParkMs > maxMs) {
+    throw new Error(
+      `applied-phase park ${parks.killBeforeParkMs} exceeds ${maxMs}`,
+    );
+  }
+  if (parks.killAfterParkMs > maxMs) {
+    throw new Error(
+      `committed-phase park ${parks.killAfterParkMs} exceeds ${maxMs}`,
+    );
+  }
+}
+
+function replaceParkSleep(
+  source: string,
+  which: "before" | "after",
+  newMs: number,
+): string {
+  if (which === "before") {
+    return source.replace(
+      /(if \(mode === "kill-before-commit"\) \{[\s\S]*?await sleep\()(\d+(?:_\d+)*)(\))/,
+      `$1${newMs}$3`,
+    );
+  }
+  return source.replace(
+    /(if \(mode === "kill-after-commit" \|\| mode === "uncertain-commit"\) \{\s*await sleep\()(\d+(?:_\d+)*)(\))/,
+    `$1${newMs}$3`,
+  );
+}
+
+describe("PR6-C process-loss park bound (source)", () => {
+  const childSource = readFileSync(CHILD_PATH, "utf8");
+  const parentSource = readFileSync(fileURLToPath(import.meta.url), "utf8");
+
+  it("keeps both relevant process-loss parks at 30 seconds", () => {
+    const parks = parseChildParks(childSource);
+    expect(parks.killBeforeParkMs).toBe(PARK_BOUND_MS);
+    expect(parks.killAfterParkMs).toBe(PARK_BOUND_MS);
+    expect(parks.uncertainYieldMs).toBe(COMMIT_RACE_YIELD_MS);
+    expect(childSource).not.toMatch(/sleep\(120_000\)/);
+    assertChildParksAtMost(childSource, PARK_BOUND_MS);
+  });
+
+  it("rejects changing the applied-phase park individually to an excessive duration", () => {
+    const mutated = replaceParkSleep(childSource, "before", 60_000);
+    const parks = parseChildParks(mutated);
+    expect(parks.killBeforeParkMs).toBe(60_000);
+    expect(parks.killAfterParkMs).toBe(PARK_BOUND_MS);
+    expect(parks.uncertainYieldMs).toBe(COMMIT_RACE_YIELD_MS);
+    expect(() => assertChildParksAtMost(mutated, PARK_BOUND_MS)).toThrow(
+      /applied-phase park 60000 exceeds 30000/,
+    );
+  });
+
+  it("rejects changing the committed-phase park individually to an excessive duration", () => {
+    const mutated = replaceParkSleep(childSource, "after", 60_000);
+    const parks = parseChildParks(mutated);
+    expect(parks.killBeforeParkMs).toBe(PARK_BOUND_MS);
+    expect(parks.killAfterParkMs).toBe(60_000);
+    expect(parks.uncertainYieldMs).toBe(COMMIT_RACE_YIELD_MS);
+    expect(() => assertChildParksAtMost(mutated, PARK_BOUND_MS)).toThrow(
+      /committed-phase park 60000 exceeds 30000/,
+    );
+  });
+
+  it("preserves interruption schedules and abandoned-backend cleanup", () => {
+    expect(parentSource).toMatch(
+      /waitForStage\(statusPath, \["applied"\], 20_000\)/,
+    );
+    expect(parentSource).toMatch(
+      /waitForStage\(\s*statusPath,\s*\["applied", "committing", "committed", "error"\],\s*20_000/,
+    );
+    expect(parentSource).toMatch(/reapAbandonedBackend/);
+    expect(parentSource).toMatch(/pg_terminate_backend/);
+    expect(parentSource).toMatch(/setTimeout\(resolve, 2_000\)/);
+  });
+});
+
 describe("PR6-C process/session-loss evidence", () => {
   let prisma: PrismaClient;
   let shopAId: string;
@@ -227,12 +339,6 @@ describe("PR6-C process/session-loss evidence", () => {
   it("labels SQL ROLLBACK as a control, not session-loss evidence", () => {
     expect("ROLLBACK").not.toBe("pg_terminate_backend");
     expect("ROLLBACK").not.toBe("SIGKILL");
-  });
-
-  it("bounds the child park so a missed SIGKILL cannot hold PostgreSQL for 120s", () => {
-    const src = readFileSync(CHILD_PATH, "utf8");
-    expect(src).not.toMatch(/sleep\(120_000\)/);
-    expect(src).toMatch(/await sleep\(30_000\)/);
   });
 
   it("session loss via pg_terminate_backend before COMMIT leaves 0 facts and 0 receipts", async () => {
