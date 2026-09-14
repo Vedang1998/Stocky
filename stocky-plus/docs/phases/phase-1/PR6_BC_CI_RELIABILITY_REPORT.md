@@ -425,3 +425,106 @@ reviews, `PROJECT_STATUS.md`, inventory-write flags, tenant-access
 - Production, Shopify, write flags, and merge authority remain unchanged.
 
 End of implementation record. Independent tooling review follows.
+
+---
+
+## Addendum A — Evidence provenance (ChatGPT packaging authorization)
+
+This addendum is **append-only**. Every byte of the implementation record
+above is preserved unchanged as a prefix. It does **not** rewrite historical
+claims in place. Cursor executions remain Cursor executions; Claude
+independent-review executions remain Claude's and are **not** attributed to
+Cursor.
+
+### A.1 Source review and ChatGPT decision
+
+| Item | Value |
+| --- | --- |
+| ChatGPT disposition | ACCEPT PR6 B/C CI RELIABILITY (tooling only) |
+| Accepted technical subject | `c4253ba82d24178f9a9d9c9d8c5fb89f569a0152` |
+| Base / live main | `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` |
+| Independent review commit | `3d4c99b842b752788ae3dc31c3e3a440ca411cd7` |
+| Review sole parent | accepted subject `c4253ba…` |
+| Review path | `stocky-plus/docs/phases/phase-1/PR6_BC_CI_RELIABILITY_INDEPENDENT_REVIEW.md` |
+| Immutable review blob | `5a47f6f8133806848ad71a545e07c030a2137e37` |
+| Independent verdict | APPROVE PR6 B/C CI RELIABILITY |
+| Findings | P0=0 / P1=0 / P2=0 / P3=4, all dispositioned |
+
+This packaging is **not** merge or mark-ready authorization, **not** B/C
+integration, **not** PR6-D, and **not** D-055. D-054 remains EFFECTIVE.
+R-176 stays OPEN/P0. PR #41 stays parked. PR #39 / PR #40 are untouched.
+
+### A.2 F-TOOL-01 — line 811 attribution is inference
+
+The compact Vitest failure on Heavy `103609595251` is `expected true to be
+false` with **no** `indexes.migration.test.ts:<line>` stack frame (grep count
+0 in that log). On the failed-head blob, lines 807 and 811 are both
+`expect(buildSettled).toBe(false)`.
+
+**Corrected statement:** the failed log demonstrates a `buildSettled`
+assertion at **one of** those identified sites. It does **not** prove
+attribution to old line 811 rather than 807. The report body above that
+names line 811 as "the demonstrated failure" is therefore **inference**,
+not a stack-backed fact. `buildSettled` can also flip during the extra
+`await grantedTargetLocks()` on that blob, which is before the first
+write's line-807 assertion.
+
+The classification "test-harness observation race, not an index/migration
+product defect" holds for **both** candidate sites. ChatGPT accepted this
+as a nonblocking documentary correction.
+
+### A.3 F-TOOL-02 — superseded-head counts vs subject-head counts
+
+The §6.3 table ("1 passed / 12 skipped") and §6.4 ("7 files",
+`indexes.migration.test.ts` **13/13**) describe executions on superseded
+head `5ec61bd3eb024cfa1e8e98cfe043d4b7c133676b` (helpers in a separate
+file). They are **not** measurements of accepted subject `c4253ba…`.
+
+**Subject-head evidence** after the EX-IDX-014 inline (Cursor local, and
+independently re-measured by Claude — Claude's re-executions are Claude's):
+
+| Measurement | Subject head `c4253ba…` |
+| --- | --- |
+| Independent F-F03 name filter | 1 passed / **19 skipped** (20 tests in file) |
+| Tenant-indexes suite | **6 files** / **55** tests |
+| `indexes.migration.test.ts` | **20/20** |
+
+The headline **55** total is unchanged (tests moved into EX-IDX-014, not
+added). Exact-head CI run `34790950894` on `c4253ba…` executed that file
+20/20 in 37051ms (F-F03 6859ms). That run is evidence for the accepted
+**subject**, not for this later packaging head.
+
+Do not treat Claude's additional local iterations, NC1–NC5, or GraphQL
+392/392 as Cursor evidence. Those belong to the independent review
+artifact.
+
+### A.4 F-TOOL-03 — accepted nonblocking; not overlap evidence
+
+`expect(w.phaseAtWriteStart).toBe(targetPhase)` copies `trigger.phase` and
+cannot fail independently. ChatGPT accepts this as optional test-only
+cleanup. **No test edit in this packaging commit.** The load-bearing
+overlap proof remains the after-burst re-sample: same scan phase, SHARE
+UPDATE EXCLUSIVE, strictly increasing `blocks_done`. That proof is
+unchanged.
+
+### A.5 F-TOOL-04 — accepted as-is
+
+`timeout-minutes: 120` is a bounded cancellation cap, not a performance
+SLA and not evidence that successful Heavy run `34790950894` (~59m40s)
+needed the extra budget. No cap increase and no duration-trend guard is
+authorized in this packaging.
+
+### A.6 Packaging delta (from accepted subject)
+
+Authorized sequence: fast-forward `tooling/pr6-bc-ci-reliability` to review
+commit `3d4c99b…` (no cherry-pick, no rewrite), then this single
+append-only docs commit. From `c4253ba…` the delta is exactly:
+
+1. added immutable review file (blob `5a47f6f8133806848ad71a545e07c030a2137e37`)
+2. this append-only report addendum
+
+Workflow, F-F03 test, inventory, and allowlist blobs are unchanged from
+`c4253ba…`. Against `main` the PR has five paths and requires full CI.
+Exact-head Classify + full Heavy + CI Gate IDs for **this packaging head**
+are recorded on PR #42 after that run; they are not invented here, and
+`c4253ba…` CI is not reused as the final-head result.
