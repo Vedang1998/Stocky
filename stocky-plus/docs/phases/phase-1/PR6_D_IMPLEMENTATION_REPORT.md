@@ -204,7 +204,7 @@ Environment (disposable): PostgreSQL 16 `stocky_plus_ci`; Redis 7 after local in
 | D046 without `STOCKY_DISPATCHER_PROCESS_COUNT` | capacity reader throw | CI already sets `1` (environment) |
 | Envelope tests without `SHOPIFY_APP_URL` | shopifyApp empty appUrl | CI already sets `https://example.com` (environment) |
 | `tsc` on D wiring | LegacyWebhookRunner / receipt `continue` / JSON / fixture nulls | type repairs; C/B internals unchanged |
-| Exact-head CI `34931435422` | FAILURE on `93e7add…` (pre-repair) | superseded; not a pass |
+| Exact-head CI `34931435422` | FAILURE on `93e7add…` | Classify SUCCESS; Heavy FAIL `tenant:access:inventory:check_failed_exit_1`; Gate FAIL; superseded |
 | Exact-head CI `34932750380` | FAILURE on `9063f2d…` | Classify SUCCESS; Heavy FAIL `tenant:access:inventory:check_failed_exit_1` (stale inventory vs D files); Gate FAIL; superseded |
 | Exact-head CI `34934129024` | FAILURE on `17d1324…` | Classify FAIL `git diff --check` trailing whitespace in this report; Heavy SKIPPED; Gate FAIL; not a pass |
 
