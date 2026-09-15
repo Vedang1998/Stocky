@@ -185,7 +185,9 @@ export type ListedOrder = {
 
 export type BulkMock = {
   id?: string;
-  status?: string;
+  status?: string | (() => string);
+  /** Poll-by-id status; defaults to `status` then COMPLETED. */
+  pollStatus?: string | (() => string);
   url?: string | null;
   partialDataUrl?: string | null;
   objectCount?: string;
@@ -282,11 +284,14 @@ export function createOrderFactsAdmin(input: {
               bulkOperationRunQuery: {
                 bulkOperation: {
                   id: bulk.id ?? "gid://shopify/BulkOperation/d1",
-                  status: bulk.status ?? "CREATED",
+                  status:
+                    typeof bulk.status === "function"
+                      ? bulk.status()
+                      : (bulk.status ?? "CREATED"),
                 },
                 userErrors: [],
               },
-            }),
+            },
           }),
         };
       }
@@ -298,13 +303,19 @@ export function createOrderFactsAdmin(input: {
             data: {
               bulkOperation: {
                 id: bulk.mismatchPolledId ?? bulk.id ?? "gid://shopify/BulkOperation/d1",
-                status: bulk.status ?? "COMPLETED",
+                status:
+                  typeof bulk.pollStatus === "function"
+                    ? bulk.pollStatus()
+                    : (bulk.pollStatus ??
+                      (typeof bulk.status === "function"
+                        ? bulk.status()
+                        : (bulk.status ?? "COMPLETED"))),
                 url: bulk.url ?? "https://example.invalid/order-facts.jsonl",
                 partialDataUrl: bulk.partialDataUrl ?? null,
                 objectCount: bulk.objectCount ?? "2",
                 rootObjectCount: bulk.rootObjectCount ?? "1",
               },
-            }),
+            },
           }),
         };
       }
@@ -407,10 +418,15 @@ export function legacyRunner(shopId: string) {
     payload: Record<string, unknown>,
   ): Promise<void> => {
     const applyDb = db as OrderApplyDb;
-    const variant =
-      typeof payload.id === "number" || typeof payload.id === "string"
-        ? `gid://shopify/ProductVariant/legacy-${payload.id}`
-        : `gid://shopify/ProductVariant/legacy-${randomUUID()}`;
+    const seed =
+      typeof payload.admin_graphql_api_id === "string"
+        ? payload.admin_graphql_api_id
+        : typeof payload.id === "string" || typeof payload.id === "number"
+          ? String(payload.id)
+          : randomUUID();
+    const variant = `gid://shopify/ProductVariant/legacy-${seed
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(-48)}`;
     await queryRows(applyDb)`INSERT INTO "SalesDailyAggregate" (
         id, shop, "shopId", "shopifyVariantId", "locationId", date, "unitsSold", revenue
       ) VALUES (

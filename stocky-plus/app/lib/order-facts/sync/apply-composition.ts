@@ -84,6 +84,22 @@ function mapApplyError(error: unknown): never {
   throw error;
 }
 
+function resultGids(observation: DirectOrderObservation): {
+  orderGid: string | null;
+  refundGid: string | null;
+} {
+  return {
+    orderGid:
+      observation.identity.resourceKind === "Order"
+        ? observation.identity.shopifyGid
+        : observation.refund?.shopifyOrderGid ?? null,
+    refundGid:
+      observation.identity.resourceKind === "Refund"
+        ? observation.identity.shopifyGid
+        : null,
+  };
+}
+
 export async function applyCanonicalAndLegacy(input: {
   db: OrderFactsTxnHost;
   shopId: string;
@@ -95,8 +111,8 @@ export async function applyCanonicalAndLegacy(input: {
   requestedCanonicalIdentitiesPerTransaction?: number;
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
 }): Promise<OrderFactsWebhookResult> {
-  try {
-    const applyResult = await applyOrderFactsWithRetry(
+  const runApply = async (receipt: OrderApplyReceiptInput | undefined) =>
+    applyOrderFactsWithRetry(
       (apply) =>
         input.db.$transaction(
           async (tx) => {
@@ -128,27 +144,25 @@ export async function applyCanonicalAndLegacy(input: {
       {
         shopId: input.shopId,
         observations: [input.observation],
-        receipt: input.receipt,
+        receipt,
+        // Do not default to 1: refunds lock Order+Refund. Omit so C uses
+        // identities.length, then the lock-capacity evaluator caps it.
         requestedCanonicalIdentitiesPerTransaction:
-          input.requestedCanonicalIdentitiesPerTransaction ?? 1,
+          input.requestedCanonicalIdentitiesPerTransaction,
         configuredWorstCaseConcurrentCanonicalTransactions:
           input.configuredWorstCaseConcurrentCanonicalTransactions,
       },
     );
+
+  try {
+    const applyResult = await runApply(input.receipt);
 
     if (applyResult.receiptStatus === "already_applied") {
       return {
         status: "already_applied",
         apply: applyResult,
         reason: "already_applied",
-        orderGid:
-          input.observation.identity.resourceKind === "Order"
-            ? input.observation.identity.shopifyGid
-            : input.observation.refund?.shopifyOrderGid ?? null,
-        refundGid:
-          input.observation.identity.resourceKind === "Refund"
-            ? input.observation.identity.shopifyGid
-            : null,
+        ...resultGids(input.observation),
       };
     }
     if (applyResult.receiptStatus === "none") {
@@ -160,16 +174,26 @@ export async function applyCanonicalAndLegacy(input: {
       status: "applied",
       apply: applyResult,
       reason: applyResult.results[0]?.reason ?? "applied",
-      orderGid:
-        input.observation.identity.resourceKind === "Order"
-          ? input.observation.identity.shopifyGid
-          : input.observation.refund?.shopifyOrderGid ?? null,
-      refundGid:
-        input.observation.identity.resourceKind === "Refund"
-          ? input.observation.identity.shopifyGid
-          : null,
+      ...resultGids(input.observation),
     };
   } catch (error) {
+    // C records the first LIVE confirmation with diagnostic
+    // TERMINAL_IDENTITY_REVIVAL_CONFLICT:<gens>, which it classifies as
+    // outcome "conflict" and therefore will not certify a receipt. C's own
+    // revival tests apply without a receipt. Retry once without a receipt so
+    // the confirmation commits and the retry budget is not consumed.
+    if (
+      error instanceof OrderApplyReceiptNotCertifiableError &&
+      error.message.includes("terminal_first_confirmation")
+    ) {
+      const applyResult = await runApply(undefined);
+      return {
+        status: "applied",
+        apply: applyResult,
+        reason: "terminal_first_confirmation",
+        ...resultGids(input.observation),
+      };
+    }
     mapApplyError(error);
   }
 }

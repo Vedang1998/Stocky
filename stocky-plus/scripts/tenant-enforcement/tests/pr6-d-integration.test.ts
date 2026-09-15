@@ -29,7 +29,6 @@ import { resetControlPlanePrismaForTests } from "../../../app/sync/control-plane
 import { persistOrderFactsCursor } from "../../../app/lib/order-facts/sync/control-plane";
 import {
   APPLICATION_DIGEST_CONFLICT,
-  APPLICATION_OUTCOME_UNCERTAIN,
 } from "../../../app/sync/execution-strategy.server";
 import {
   AHEAD_UPDATED_ISO,
@@ -617,6 +616,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
       }),
     );
     expect(blocked.status).toBe("blocked");
+    expect(blocked.reason).toBe("MALFORMED_MONEY");
     expect(await factCount(shopAId, missingDiscount)).toBe(0);
 
     const orphanRefund = "gid://shopify/Refund/orphan";
@@ -978,6 +978,9 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
       ],
       filterListedByQuery: true,
     });
+    const boundsIssue = await prisma.dataIssue.findFirst({
+      where: { shopId: shopAId, reasonCode: "projection_bounds_exceeded" },
+    });
     const recovered = await withTxnHost(shopAId, (db) =>
       runOrderFactsReconcileStep({
         db,
@@ -988,11 +991,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         correlationId: coalesce!.correlationId,
         mode: "quarantine_recovery",
         now: D_NOW,
-        resolvingIssueId: (
-          await prisma.dataIssue.findFirst({
-            where: { shopId: shopAId, reasonCode: "projection_bounds_exceeded" },
-          })
-        )?.id,
+        resolvingIssueId: boundsIssue?.id,
       }),
     );
     expect(recovered.status).toBe("SUCCEEDED");
@@ -1005,7 +1004,16 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     expect(orderQueries).toBeGreaterThanOrEqual(6);
     expect(orderQueries).toBeLessThan(40);
     const heapAfter = process.memoryUsage().heapUsed;
-    expect(heapAfter - heapBefore).toBeLessThan(200 * 1024 * 1024);
+    const heapDelta = heapAfter - heapBefore;
+    expect(heapDelta).toBeLessThan(200 * 1024 * 1024);
+    console.info(
+      JSON.stringify({
+        pr6dQuarantineRecovery: {
+          orderFactByIdQueries: orderQueries,
+          heapDeltaBytes: heapDelta,
+        },
+      }),
+    );
   });
 
   it("does not treat sample drift as coverage and heals a missed in-window order via sweep", async () => {
@@ -1148,10 +1156,21 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     ).rejects.toThrow(/does not match/i);
 
     const submitAdmin = createOrderFactsAdmin({
-      stores: { ["gid://shopify/Order/d-fence"]: standardStore("gid://shopify/Order/d-fence") },
+      stores: {
+        ["gid://shopify/Order/d-fence"]: standardStore(
+          "gid://shopify/Order/d-fence",
+        ),
+      },
       bulk: {
         id: "gid://shopify/BulkOperation/d-fence",
-        status: "COMPLETED",
+        status: "CREATED",
+        pollStatus: (() => {
+          let polls = 0;
+          return () => {
+            polls += 1;
+            return polls === 1 ? "CREATED" : "COMPLETED";
+          };
+        })(),
         url: "https://example.invalid/fence.jsonl",
       },
     });
@@ -1164,10 +1183,11 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         durableJobId: "bulk-fence",
         correlationId: "bulk-fence",
         pollBulkOperation: true,
-        fetchJsonl: async () => jsonlLines([{ id: "gid://shopify/Order/d-fence" }]),
+        fetchJsonl: async () =>
+          jsonlLines([{ id: "gid://shopify/Order/d-fence" }]),
       }),
     );
-    expect(first.status).toBe("SUCCEEDED");
+    expect(first.status).toBe("CONTINUE");
     const mutations = submitAdmin.calls.filter(
       (call) => call.name === "CatalogFactBulkOperationRunQuery",
     );
@@ -1180,8 +1200,9 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         shopId: shopAId,
         durableJobId: "bulk-fence",
         correlationId: "bulk-fence",
-        jsonlSource: jsonlLines([{ id: "gid://shopify/Order/d-fence" }]),
-        pollBulkOperation: false,
+        pollBulkOperation: true,
+        fetchJsonl: async () =>
+          jsonlLines([{ id: "gid://shopify/Order/d-fence" }]),
       }),
     );
     expect(second.status).toBe("SUCCEEDED");
@@ -1323,6 +1344,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
       }),
     );
     expect(firstLive.status).toBe("applied");
+    expect(firstLive.reason).toBe("terminal_first_confirmation");
     const afterFirst = await queryForShop<{ existenceState: string }>(
       shopAId,
       `SELECT "existenceState" FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
@@ -1352,31 +1374,36 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
 
   it("fails closed on required shop/presentment currency mismatch", async () => {
     const gid = "gid://shopify/Order/d-currency";
-    await expect(
-      withTxnHost(shopAId, (db) =>
-        processOrderFactsWebhookJob({
-          db,
-          admin: createOrderFactsAdmin({
-            stores: {
-              [gid]: standardStore(gid, {
-                header: inWindowHeader({
-                  id: gid,
-                  currencyCode: "USD",
-                  originalTotalPriceSet: moneyBag("10.00", "EUR"),
-                  currentTotalPriceSet: moneyBag("10.00", "EUR"),
-                }),
+    const result = await withTxnHost(shopAId, (db) =>
+      processOrderFactsWebhookJob({
+        db,
+        admin: createOrderFactsAdmin({
+          stores: {
+            [gid]: standardStore(gid, {
+              header: inWindowHeader({
+                id: gid,
+                currencyCode: "USD",
+                originalTotalPriceSet: moneyBag("10.00", "EUR"),
+                currentTotalPriceSet: moneyBag("10.00", "EUR"),
               }),
-            },
-          }),
-          shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
-          work: webhookWork({
-            shopId: shopAId,
-            topic: "orders/create",
-            projection: { id: 1, admin_graphql_api_id: gid },
-          }),
+            }),
+          },
         }),
-      ),
-    ).rejects.toMatchObject({ code: APPLICATION_OUTCOME_UNCERTAIN });
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        work: webhookWork({
+          shopId: shopAId,
+          topic: "orders/create",
+          projection: { id: 1, admin_graphql_api_id: gid },
+        }),
+      }),
+    );
+    expect(result.status).toBe("blocked");
+    expect(result.reason).toBe("MONEY_CURRENCY_MISMATCH");
     expect(await factCount(shopAId, gid)).toBe(0);
+    expect(
+      await prisma.syncApplicationReceipt.count({
+        where: { shopId: shopAId, applicationKey: { contains: "d-currency" } },
+      }),
+    ).toBe(0);
   });
 });

@@ -23,6 +23,7 @@ import {
   readOrderFact,
   readShopTimezoneCurrencyOrThrow,
 } from "./refetch";
+import { isRetryableMappedReadIssue } from "./mapper";
 
 export type NominatedApplyResult =
   | { status: "applied"; shopifyGid: string }
@@ -99,18 +100,33 @@ export async function applyNominatedOrderGid(input: {
       };
     }
     if (mapped.status === "incomplete" || mapped.status === "failure") {
-      const responseGen = await input.db.$transaction((tx) =>
-        allocateResponseGeneration(tx, handle.requestGen),
+      if (isRetryableMappedReadIssue(mapped)) {
+        const responseGen = await input.db.$transaction((tx) =>
+          allocateResponseGeneration(tx, handle.requestGen),
+        );
+        await persistIncompleteWithoutReceipt({
+          db: input.db,
+          shopId: input.shopId,
+          token: handle.token,
+          requestGen: handle.requestGen,
+          responseGen,
+        });
+        return {
+          status: "incomplete",
+          shopifyGid: input.shopifyGid,
+          reason: mapped.reason,
+        };
+      }
+      await input.db.$transaction((tx) =>
+        abandonActiveObservation(tx, {
+          shopId: input.shopId,
+          token: handle.token,
+          requestGen: handle.requestGen,
+          failureCode: mapped.reason,
+        }),
       );
-      await persistIncompleteWithoutReceipt({
-        db: input.db,
-        shopId: input.shopId,
-        token: handle.token,
-        requestGen: handle.requestGen,
-        responseGen,
-      });
       return {
-        status: "incomplete",
+        status: "blocked",
         shopifyGid: input.shopifyGid,
         reason: mapped.reason,
       };
@@ -151,7 +167,7 @@ export async function applyNominatedOrderGid(input: {
       topic: "orders/updated",
       projection: { id: input.shopifyGid },
       requestedCanonicalIdentitiesPerTransaction:
-        input.requestedCanonicalIdentitiesPerTransaction ?? 1,
+        input.requestedCanonicalIdentitiesPerTransaction,
       configuredWorstCaseConcurrentCanonicalTransactions:
         input.configuredWorstCaseConcurrentCanonicalTransactions,
     });

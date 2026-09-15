@@ -36,6 +36,7 @@ import {
   readRefundFact,
   readShopTimezoneCurrencyOrThrow,
 } from "./refetch";
+import { isRetryableMappedReadIssue } from "./mapper";
 import { dispatchOrderFactsSchema } from "./schema-dispatch";
 import { recordOrderFactsDataIssue } from "./control-plane";
 import type {
@@ -231,18 +232,34 @@ export async function processOrderFactsWebhookJob(
       };
     }
     if (mapped.status === "incomplete" || mapped.status === "failure") {
-      const responseGen = await input.db.$transaction((tx) =>
-        allocateResponseGeneration(tx, handle.requestGen),
+      if (isRetryableMappedReadIssue(mapped)) {
+        const responseGen = await input.db.$transaction((tx) =>
+          allocateResponseGeneration(tx, handle.requestGen),
+        );
+        await persistIncompleteWithoutReceipt({
+          db: input.db,
+          shopId: input.work.shopId,
+          token: handle.token,
+          requestGen: handle.requestGen,
+          responseGen,
+        });
+        return {
+          status: "incomplete",
+          reason: mapped.reason,
+          orderGid: resourceKind === "Order" ? shopifyGid : enclosingOrderGid,
+          refundGid: resourceKind === "Refund" ? shopifyGid : null,
+        };
+      }
+      await input.db.$transaction((tx) =>
+        abandonActiveObservation(tx, {
+          shopId: input.work.shopId,
+          token: handle.token,
+          requestGen: handle.requestGen,
+          failureCode: mapped.reason,
+        }),
       );
-      await persistIncompleteWithoutReceipt({
-        db: input.db,
-        shopId: input.work.shopId,
-        token: handle.token,
-        requestGen: handle.requestGen,
-        responseGen,
-      });
       return {
-        status: "incomplete",
+        status: "blocked",
         reason: mapped.reason,
         orderGid: resourceKind === "Order" ? shopifyGid : enclosingOrderGid,
         refundGid: resourceKind === "Refund" ? shopifyGid : null,

@@ -244,6 +244,14 @@ function directShell(
   };
 }
 
+/** Pagination incompleteness and transport errors retry. Malformed money/identity fail closed. */
+export function isRetryableMappedReadIssue(
+  mapped: Extract<MapOutcome, { status: "incomplete" | "failure" }>,
+): boolean {
+  if (mapped.status === "incomplete") return true;
+  return mapped.reason === "ADMIN_READ_ERROR";
+}
+
 function catchDatetime(fn: () => MapOutcome): MapOutcome {
   try {
     return fn();
