@@ -32,13 +32,15 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable Claude exact-head review (never edit);
 - `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure;
 - `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements.
-- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **ACCEPTED / MERGED / CLOSED** (PR #37). PR6-B/C complete-module work is **AUTHORIZED** after admission; PR6-D runtime remains **NOT AUTHORIZED**;
+- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **ACCEPTED / MERGED / CLOSED** (PR #37). PR6-B is **ACCEPTED / MERGED / CLOSED** (PR #39 squash **U**). PR6-C is **ACCEPTED / MERGED / CLOSED** (PR #40 squash **V**). PR6-D complete integration is **ADMITTED** after the B/C closure checkpoint;
 - `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence;
 - `PR6_A_FOUNDATION_IMPLEMENTATION_REPORT.md` — PR6-A order/refund fact foundation implementation and correction evidence.
 - `PR6_A_FOUNDATION_INDEPENDENT_REVIEW.md` — immutable Claude implementation review of `5f8b2e76…` (never edit). Verdict **CORRECTIONS REQUIRED**.
 - `PR6_A_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md` — immutable Claude correction re-review (never edit). Verdict **APPROVE PR6-A FOUNDATION CORRECTION**.
 - `PR6_A_CLOSURE_REPORT.md` — PR6-A post-merge admission identity.
-- `PR6_BC_EXECUTION_BRIEF.md` — PR6-B/C ownership and addendum dispositions after admission.
+- `PR6_BC_EXECUTION_BRIEF.md` — historical PR6-B/C ownership record after A admission (superseded for live lane status by `PR6_BC_CLOSURE_REPORT.md`).
+- `PR6_BC_CLOSURE_REPORT.md` — B/C repository-lane acceptance, squash identities, preserved review blobs, exact-U/V push CI, accepted residuals, and remaining D-owned risks.
+- `PR6_D_EXECUTION_BRIEF.md` — approved PR6-D complete-integration execution contract after admission.
 
 ## Live project control files
 
