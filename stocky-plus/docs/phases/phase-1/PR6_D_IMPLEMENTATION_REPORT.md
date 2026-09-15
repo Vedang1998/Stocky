@@ -1,16 +1,16 @@
 # Phase 1 PR6-D — Complete webhook, import, and reconciliation implementation report
 
-**Slice:** PR6-D complete §17.2 integration module  
-**Branch:** `phase-1/pr6-d-order-webhook-import`  
-**PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)  
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`  
+**Slice:** PR6-D complete §17.2 integration module
+**Branch:** `phase-1/pr6-d-order-webhook-import`
+**PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`
 **Status:** Repository module implemented on this branch with local execution evidence. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs are recorded in PR #43 metadata after that run terminates; this report does **not** invent them and does **not** embed this documentation commit’s own SHA. Independent Claude review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
 
-**Production:** NOT AUTHORIZED  
-**Inventory-write flags:** DEFAULT OFF  
-**Shopify network I/O / live subscription registration / store calls:** NONE in this assignment  
-**`read_all_orders` / `write_orders`:** NOT AUTHORIZED  
-**PR 6 / Phase 1:** IN PROGRESS  
+**Production:** NOT AUTHORIZED
+**Inventory-write flags:** DEFAULT OFF
+**Shopify network I/O / live subscription registration / store calls:** NONE in this assignment
+**`read_all_orders` / `write_orders`:** NOT AUTHORIZED
+**PR 6 / Phase 1:** IN PROGRESS
 **R-176:** remains **OPEN / P0**
 
 This report records the PR6-D orchestration module. It does **not** claim Phase 1 or PR 6 overall is complete. It does **not** enable flags, deploy, or merge.
@@ -205,7 +205,8 @@ Environment (disposable): PostgreSQL 16 `stocky_plus_ci`; Redis 7 after local in
 | Envelope tests without `SHOPIFY_APP_URL` | shopifyApp empty appUrl | CI already sets `https://example.com` (environment) |
 | `tsc` on D wiring | LegacyWebhookRunner / receipt `continue` / JSON / fixture nulls | type repairs; C/B internals unchanged |
 | Exact-head CI `34931435422` | FAILURE on `93e7add…` (pre-repair) | superseded; not a pass |
-| Exact-head CI `34932750380` | started on `9063f2d…` | superseded by this documentation/repair push; not used as final evidence |
+| Exact-head CI `34932750380` | FAILURE on `9063f2d…` | Classify SUCCESS; Heavy FAIL `tenant:access:inventory:check_failed_exit_1` (stale inventory vs D files); Gate FAIL; superseded |
+| Exact-head CI `34934129024` | FAILURE on `17d1324…` | Classify FAIL `git diff --check` trailing whitespace in this report; Heavy SKIPPED; Gate FAIL; not a pass |
 
 ---
 
