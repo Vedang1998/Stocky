@@ -1,0 +1,193 @@
+import { Prisma } from "@prisma/client";
+import { applyOrderFactsWithRetry } from "../apply";
+import {
+  persistIncompleteObservation,
+} from "../apply/fencing";
+import {
+  acquireReceiptApplicationKeyLock,
+  shortCircuitIfApplied,
+} from "../apply/receipts";
+import {
+  OrderApplyReceiptDigestConflictError,
+  OrderApplyReceiptNotCertifiableError,
+} from "../apply/errors";
+import type { DirectOrderObservation, OrderApplyReceiptInput } from "../apply/types";
+import type { OrderApplyDb } from "../apply/sql";
+import { SyncControlPlaneError } from "../../../sync/errors";
+import {
+  APPLICATION_DIGEST_CONFLICT,
+  APPLICATION_OUTCOME_UNCERTAIN,
+} from "../../../sync/execution-strategy.server";
+import { isLegacyOrderWebhookTopic } from "./constants";
+import { abandonActiveObservation } from "./observations";
+import type { LegacyWebhookRunner, OrderFactsWebhookResult } from "./types";
+import type { TenantDb } from "../../../tenant/tenant-db.server";
+
+export type OrderFactsTxnHost = OrderApplyDb & {
+  $transaction: <T>(
+    fn: (tx: OrderFactsTxnHost) => Promise<T>,
+    options?: {
+      maxWait?: number;
+      timeout?: number;
+      isolationLevel?: Prisma.TransactionIsolationLevel;
+    },
+  ) => Promise<T>;
+};
+
+function asApplyDb(db: OrderApplyDb): OrderApplyDb {
+  // Do not rebind $queryRaw onto the TenantDb proxy — Prisma's tagged
+  // template is already bound to the transaction client.
+  return { $queryRaw: db.$queryRaw };
+}
+
+export async function probeReceiptBeforeShopifyIo(
+  db: OrderFactsTxnHost,
+  shopId: string,
+  receipt: OrderApplyReceiptInput,
+): Promise<"already_applied" | "proceed"> {
+  try {
+    return await db.$transaction(
+      async (tx) => {
+        const applyDb = asApplyDb(tx);
+        await acquireReceiptApplicationKeyLock(
+          applyDb,
+          shopId,
+          receipt.applicationKey,
+        );
+        return shortCircuitIfApplied(applyDb, shopId, receipt);
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+    );
+  } catch (error) {
+    mapApplyError(error);
+  }
+}
+
+function mapApplyError(error: unknown): never {
+  if (error instanceof OrderApplyReceiptDigestConflictError) {
+    throw new SyncControlPlaneError(
+      APPLICATION_DIGEST_CONFLICT,
+      error.message,
+    );
+  }
+  if (
+    error instanceof OrderApplyReceiptNotCertifiableError ||
+    (error instanceof Error &&
+      "code" in error &&
+      (error as { code?: string }).code === "order_apply_receipt_uncertain")
+  ) {
+    throw new SyncControlPlaneError(
+      APPLICATION_OUTCOME_UNCERTAIN,
+      error.message,
+    );
+  }
+  throw error;
+}
+
+export async function applyCanonicalAndLegacy(input: {
+  db: OrderFactsTxnHost;
+  shopId: string;
+  observation: DirectOrderObservation;
+  receipt: OrderApplyReceiptInput;
+  topic: string;
+  projection: Record<string, unknown>;
+  runLegacy?: LegacyWebhookRunner;
+  requestedCanonicalIdentitiesPerTransaction?: number;
+  configuredWorstCaseConcurrentCanonicalTransactions?: number;
+}): Promise<OrderFactsWebhookResult> {
+  try {
+    const applyResult = await applyOrderFactsWithRetry(
+      (apply) =>
+        input.db.$transaction(
+          async (tx) => {
+            const batch = await apply(asApplyDb(tx));
+            if (
+              batch.receiptStatus === "applied" &&
+              isLegacyOrderWebhookTopic(input.topic) &&
+              input.runLegacy
+            ) {
+              await input.runLegacy(
+                input.topic,
+                tx as unknown as TenantDb,
+                input.projection,
+              );
+            }
+            if (batch.receiptStatus === "already_applied") {
+              await abandonActiveObservation(asApplyDb(tx), {
+                shopId: input.shopId,
+                token: input.observation.observationToken,
+                requestGen: input.observation.observationRequestGen,
+                responseGen: input.observation.observationResponseGen,
+                failureCode: "already_applied",
+              });
+            }
+            return batch;
+          },
+          { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
+        ),
+      {
+        shopId: input.shopId,
+        observations: [input.observation],
+        receipt: input.receipt,
+        requestedCanonicalIdentitiesPerTransaction:
+          input.requestedCanonicalIdentitiesPerTransaction ?? 1,
+        configuredWorstCaseConcurrentCanonicalTransactions:
+          input.configuredWorstCaseConcurrentCanonicalTransactions,
+      },
+    );
+
+    if (applyResult.receiptStatus === "already_applied") {
+      return {
+        status: "already_applied",
+        apply: applyResult,
+        reason: "already_applied",
+        orderGid:
+          input.observation.identity.resourceKind === "Order"
+            ? input.observation.identity.shopifyGid
+            : input.observation.refund?.shopifyOrderGid ?? null,
+        refundGid:
+          input.observation.identity.resourceKind === "Refund"
+            ? input.observation.identity.shopifyGid
+            : null,
+      };
+    }
+    if (applyResult.receiptStatus === "none") {
+      throw new OrderApplyReceiptNotCertifiableError(
+        "Receipt-bound apply returned receiptStatus none",
+      );
+    }
+    return {
+      status: "applied",
+      apply: applyResult,
+      reason: applyResult.results[0]?.reason ?? "applied",
+      orderGid:
+        input.observation.identity.resourceKind === "Order"
+          ? input.observation.identity.shopifyGid
+          : input.observation.refund?.shopifyOrderGid ?? null,
+      refundGid:
+        input.observation.identity.resourceKind === "Refund"
+          ? input.observation.identity.shopifyGid
+          : null,
+    };
+  } catch (error) {
+    mapApplyError(error);
+  }
+}
+
+export async function persistIncompleteWithoutReceipt(input: {
+  db: OrderFactsTxnHost;
+  shopId: string;
+  token: string;
+  requestGen: bigint;
+  responseGen: bigint;
+}): Promise<void> {
+  await input.db.$transaction(async (tx) => {
+    await persistIncompleteObservation(
+      asApplyDb(tx),
+      input.shopId,
+      input.token,
+      input.requestGen,
+      input.responseGen,
+    );
+  });
+}

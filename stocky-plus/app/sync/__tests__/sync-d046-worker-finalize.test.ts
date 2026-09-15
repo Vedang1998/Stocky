@@ -35,18 +35,24 @@ import {
 import { SyncControlPlaneError } from "../errors";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 
-const { applyMock, originalApply, ownerPrismaHolder } = vi.hoisted(() => {
-  const applyMock = vi.fn();
-  return {
-    applyMock,
-    originalApply: {
-      current: null as null | ((...args: never[]) => Promise<unknown>),
-    },
-    ownerPrismaHolder: {
-      current: null as null | PrismaClient,
-    },
-  };
-});
+const { applyMock, originalApply, ownerPrismaHolder, dWebhookMock, originalD } =
+  vi.hoisted(() => {
+    const applyMock = vi.fn();
+    const dWebhookMock = vi.fn();
+    return {
+      applyMock,
+      originalApply: {
+        current: null as null | ((...args: never[]) => Promise<unknown>),
+      },
+      ownerPrismaHolder: {
+        current: null as null | PrismaClient,
+      },
+      dWebhookMock,
+      originalD: {
+        current: null as null | ((...args: never[]) => Promise<unknown>),
+      },
+    };
+  });
 
 vi.mock("../application-receipt.server", async (importOriginal) => {
   const actual =
@@ -109,6 +115,32 @@ vi.mock("../../tenant/tenant-db.server", async (importOriginal) => {
     },
   };
 });
+
+vi.mock("../../lib/order-facts/sync", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../lib/order-facts/sync")>();
+  originalD.current = actual.processOrderFactsWebhookJob as (
+    ...args: never[]
+  ) => Promise<unknown>;
+  dWebhookMock.mockImplementation((...args: never[]) =>
+    (originalD.current as (...a: never[]) => Promise<unknown>)(...args),
+  );
+  return {
+    ...actual,
+    processOrderFactsWebhookJob: (...args: unknown[]) =>
+      dWebhookMock(...(args as never[])),
+  };
+});
+
+vi.mock("../../shopify.server", () => ({
+  unauthenticated: {
+    admin: async () => ({
+      admin: {
+        graphql: async () => ({ json: async () => ({ data: {} }) }),
+      },
+    }),
+  },
+}));
 
 const { processWebhookJob } = await import(
   "../../jobs/workers/webhook-processor"
@@ -185,6 +217,13 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
         throw new Error("original applyWithApplicationReceipt not captured");
       }
       return originalApply.current(...args);
+    });
+    dWebhookMock.mockReset();
+    dWebhookMock.mockImplementation((...args: never[]) => {
+      if (!originalD.current) {
+        throw new Error("original processOrderFactsWebhookJob not captured");
+      }
+      return originalD.current(...args);
     });
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
@@ -343,7 +382,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       orderBy: { startedAt: "desc" },
     });
     expect(attempt.resultMetadata).toMatchObject({
-      applicationStatus: "already_applied_verified_after_rollback",
+      applicationStatus: "already_applied",
     });
     expect(
       await prisma.salesDailyAggregate.count({ where: { shopId } }),
@@ -381,7 +420,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       orderBy: { startedAt: "desc" },
     });
     expect(attempt.resultMetadata).toMatchObject({
-      applicationStatus: "already_applied_verified_after_rollback",
+      applicationStatus: "already_applied",
     });
     expect(
       await prisma.salesDailyAggregate.count({ where: { shopId } }),
@@ -440,7 +479,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       where: { shopId },
     });
 
-    applyMock.mockImplementation(async () => {
+    dWebhookMock.mockImplementation(async () => {
       throw new SyncControlPlaneError(
         APPLICATION_ALREADY_APPLIED,
         "ALREADY_APPLIED without durable receipt",
@@ -465,7 +504,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
   it("NEW-CLAUDE-D045-02: worker uncertain-outcome dead-letter (v2)", async () => {
     const { job } = await ingestAndPrepare("wh-d046-v2-miss");
 
-    applyMock.mockImplementation(async () => {
+    dWebhookMock.mockImplementation(async () => {
       throw new SyncControlPlaneError(
         APPLICATION_ALREADY_APPLIED,
         "ALREADY_APPLIED without durable receipt",
@@ -484,12 +523,6 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
   it("NEW-CLAUDE-D045-02: RepeatableRead transaction option", async () => {
     const { job, dispatch } = await ingestAndPrepare("wh-d046-rr");
     await seedReceipt(job, job.payloadDigest);
-    applyMock.mockImplementation(async () => {
-      throw new SyncControlPlaneError(
-        APPLICATION_ALREADY_APPLIED,
-        "force verification transaction",
-      );
-    });
 
     await processWebhookJob(buildV3Job(job, dispatch));
 

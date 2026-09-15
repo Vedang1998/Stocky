@@ -49,6 +49,14 @@ import {
 } from "./catalog-facts/catalog-sync";
 import { assertCanonicalWriterCapacityAtStartup } from "./catalog-facts/capacity";
 import { signalBulkOperationContinuation } from "./catalog-facts/bulk-finish";
+import {
+  isOrderFactsWebhookTopic,
+  processOrderFactsWebhookJob,
+} from "../../lib/order-facts/sync";
+import {
+  runOrderFactsReconcileJob,
+  runOrderFactsSyncJob,
+} from "./order-facts/sync-jobs";
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -274,6 +282,92 @@ async function runLegacyWebhookHandler(
   }
 }
 
+async function applyOrderFactsWebhookIfOwned(input: {
+  topic: string;
+  ctx: TenantJobContext | { tenant: { shopId: string; myshopifyDomain: string }; db: TenantDb };
+  durable: {
+    id: string;
+    shopId: string;
+    jobType: string;
+    payloadDigest: string;
+    payloadSchemaVersion: string;
+    sanitizedPayload: unknown;
+    causationId: string | null;
+    correlationId: string | null;
+    webhookDeliveryId: string | null;
+    createdAt: Date;
+  };
+  attemptId: string;
+  handlerPayload: Record<string, unknown>;
+  applicationKey: string;
+}): Promise<
+  | { handled: false }
+  | {
+      handled: true;
+      applicationStatus: string;
+      retry?: { reason: string };
+      fail?: { code: string; reason: string };
+    }
+> {
+  if (!isOrderFactsWebhookTopic(input.topic)) {
+    return { handled: false };
+  }
+  const writerConfig = await assertCanonicalWriterCapacityAtStartup();
+  const { admin } = await unauthenticated.admin(
+    input.ctx.tenant.myshopifyDomain,
+  );
+  const result = await processOrderFactsWebhookJob({
+    db: input.ctx.db as never,
+    admin,
+    shop: {
+      id: input.ctx.tenant.shopId,
+      myshopifyDomain: input.ctx.tenant.myshopifyDomain,
+    },
+    work: {
+      shopId: input.durable.shopId,
+      topic: input.topic,
+      payloadSchemaVersion: input.durable.payloadSchemaVersion,
+      projection: input.handlerPayload,
+      applicationKey: input.applicationKey,
+      payloadDigest: input.durable.payloadDigest,
+      sourceJobType: input.durable.jobType,
+      rootDurableJobId: input.durable.causationId ?? input.durable.id,
+      applyingDurableJobId: input.durable.id,
+      durableJobId: input.durable.id,
+      jobAttemptId: input.attemptId,
+      correlationId: input.durable.correlationId,
+      receivedAt: input.durable.createdAt,
+      leaseDurationMs: 60_000,
+    },
+    runLegacy: runLegacyWebhookHandler,
+    requestedCanonicalIdentitiesPerTransaction:
+      writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+    configuredWorstCaseConcurrentCanonicalTransactions:
+      writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+  });
+  if (result.status === "incomplete") {
+    return {
+      handled: true,
+      applicationStatus: result.status,
+      retry: { reason: result.reason },
+    };
+  }
+  if (result.status === "blocked") {
+    return {
+      handled: true,
+      applicationStatus: result.status,
+      fail: {
+        code:
+          result.reason === "scope_continuity_denies_absence"
+            ? "order_facts_scope_continuity"
+            : "order_facts_blocked",
+        reason: result.reason,
+      },
+    };
+  }
+  return { handled: true, applicationStatus: result.status };
+}
+
 /**
  * Process a webhook BullMQ job with exactly-once merchant application (F-PR4-01)
  * and envelope/dispatch identity assertions (F-PR4-16).
@@ -459,6 +553,48 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
         return;
       }
 
+      const orderFacts = await applyOrderFactsWebhookIfOwned({
+        topic,
+        ctx,
+        durable,
+        attemptId: attempt.id,
+        handlerPayload,
+        applicationKey,
+      });
+      if (orderFacts.handled) {
+        if (orderFacts.retry) {
+          await completeAttemptRetry({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            workerId,
+            errorCode: "order_facts_incomplete",
+            failureSummary: orderFacts.retry.reason,
+            backoffMs: 5_000,
+            retryClassification: "incomplete",
+          });
+          return;
+        }
+        if (orderFacts.fail) {
+          await completeAttemptFail({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            errorCode: orderFacts.fail.code,
+            failureSummary: orderFacts.fail.reason,
+          });
+          return;
+        }
+        await completeAttemptSuccess({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+          resultMetadata: { applicationStatus: orderFacts.applicationStatus },
+        });
+        return;
+      }
+
       // Atomic merchant application: all writes + receipt in one tenant tx.
       const applyResult = await ctx.db.$transaction(async (tx) => {
         return applyWithApplicationReceipt(
@@ -618,6 +754,47 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
     try {
       const handlerPayload =
         (durable.sanitizedPayload as Record<string, unknown>) ?? payload;
+      const orderFacts = await applyOrderFactsWebhookIfOwned({
+        topic,
+        ctx,
+        durable,
+        attemptId: attempt.id,
+        handlerPayload,
+        applicationKey,
+      });
+      if (orderFacts.handled) {
+        if (orderFacts.retry) {
+          await completeAttemptRetry({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            workerId,
+            errorCode: "order_facts_incomplete",
+            failureSummary: orderFacts.retry.reason,
+            backoffMs: 5_000,
+            retryClassification: "incomplete",
+          });
+          return;
+        }
+        if (orderFacts.fail) {
+          await completeAttemptFail({
+            durableJobId: durable.id,
+            shopId: durable.shopId,
+            attemptId: attempt.id,
+            errorCode: orderFacts.fail.code,
+            failureSummary: orderFacts.fail.reason,
+          });
+          return;
+        }
+        await completeAttemptSuccess({
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          attemptId: attempt.id,
+          workerId,
+          resultMetadata: { applicationStatus: orderFacts.applicationStatus },
+        });
+        return;
+      }
       await ctx.db.$transaction(async (tx) => {
         await applyWithApplicationReceipt(
           tx,
@@ -727,7 +904,9 @@ export async function processCronJob(job: Job) {
   if (
     job.name === "abc-analysis-shop" ||
     job.name === "catalog-sync" ||
-    job.name === "inventory-state-reconcile"
+    job.name === "inventory-state-reconcile" ||
+    job.name === "order-facts-sync" ||
+    job.name === "order-facts-reconcile"
   ) {
     if (!isRecord(data.tenant)) {
       throw new TenantAuthorityError(
@@ -821,7 +1000,9 @@ export async function processCronJob(job: Job) {
 
         if (
           job.name !== "catalog-sync" &&
-          job.name !== "inventory-state-reconcile"
+          job.name !== "inventory-state-reconcile" &&
+          job.name !== "order-facts-sync" &&
+          job.name !== "order-facts-reconcile"
         ) {
           throw new SyncControlPlaneError(
             "job_type_unsupported",
@@ -846,16 +1027,42 @@ export async function processCronJob(job: Job) {
                 canonicalConcurrency:
                   writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
               })
-            : await runInventoryStateReconcileStep({
-                authority: ctx.tenant,
-                admin,
-                durableJobId: durable.id,
-                correlationId: durable.correlationId,
-                canonicalBatchSize:
-                  writerConfig.effectiveCanonicalIdentitiesPerTransaction,
-                canonicalConcurrency:
-                  writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
-              });
+            : job.name === "inventory-state-reconcile"
+              ? await runInventoryStateReconcileStep({
+                  authority: ctx.tenant,
+                  admin,
+                  durableJobId: durable.id,
+                  correlationId: durable.correlationId,
+                  canonicalBatchSize:
+                    writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+                  canonicalConcurrency:
+                    writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+                })
+              : job.name === "order-facts-sync"
+                ? await runOrderFactsSyncJob({
+                    authority: ctx.tenant,
+                    admin,
+                    db: ctx.db as never,
+                    durableJobId: durable.id,
+                    correlationId: durable.correlationId,
+                    payload: (durable.sanitizedPayload as Record<string, unknown>) ?? {},
+                    requestedCanonicalIdentitiesPerTransaction:
+                      writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+                    configuredWorstCaseConcurrentCanonicalTransactions:
+                      writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+                  })
+                : await runOrderFactsReconcileJob({
+                    authority: ctx.tenant,
+                    admin,
+                    db: ctx.db as never,
+                    durableJobId: durable.id,
+                    correlationId: durable.correlationId,
+                    payload: (durable.sanitizedPayload as Record<string, unknown>) ?? {},
+                    requestedCanonicalIdentitiesPerTransaction:
+                      writerConfig.effectiveCanonicalIdentitiesPerTransaction,
+                    configuredWorstCaseConcurrentCanonicalTransactions:
+                      writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
+                  });
 
         if (result.status === "SUCCEEDED") {
           await completeAttemptSuccess({
