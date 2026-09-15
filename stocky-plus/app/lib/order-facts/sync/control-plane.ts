@@ -1,4 +1,9 @@
-import type { DataIssueSeverity, PrismaClient, SyncRun } from "@prisma/client";
+import type {
+  DataIssueSeverity,
+  Prisma,
+  PrismaClient,
+  SyncRun,
+} from "@prisma/client";
 import { getControlPlanePrisma } from "../../../sync/control-plane-db.server";
 import { computeSyncHealth } from "../../../sync/health.server";
 import {
@@ -26,7 +31,11 @@ export async function recordOrderFactsDataIssue(input: {
       severity: input.severity ?? "ERROR",
       externalResourceType: input.externalResourceType ?? null,
       externalResourceId: input.externalResourceId ?? null,
-      redactedEvidence: input.redactedEvidence ?? undefined,
+      redactedEvidence: input.redactedEvidence
+        ? (JSON.parse(
+            JSON.stringify(input.redactedEvidence),
+          ) as Prisma.InputJsonValue)
+        : undefined,
     },
   });
   return { id: row.id };

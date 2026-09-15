@@ -339,7 +339,8 @@ async function applyOrderFactsWebhookIfOwned(input: {
       receivedAt: input.durable.createdAt,
       leaseDurationMs: 60_000,
     },
-    runLegacy: runLegacyWebhookHandler,
+    runLegacy: (topic, db, payload) =>
+      runLegacyWebhookHandler(topic, db as unknown as TenantDb, payload),
     requestedCanonicalIdentitiesPerTransaction:
       writerConfig.effectiveCanonicalIdentitiesPerTransaction,
     configuredWorstCaseConcurrentCanonicalTransactions:

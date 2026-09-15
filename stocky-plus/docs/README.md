@@ -41,6 +41,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR6_BC_EXECUTION_BRIEF.md` — historical PR6-B/C ownership record after A admission (superseded for live lane status by `PR6_BC_CLOSURE_REPORT.md`).
 - `PR6_BC_CLOSURE_REPORT.md` — B/C repository-lane acceptance, squash identities, preserved review blobs, exact-U/V push CI, accepted residuals, and remaining D-owned risks.
 - `PR6_D_EXECUTION_BRIEF.md` — approved PR6-D complete-integration execution contract after admission.
+- `PR6_D_IMPLEMENTATION_REPORT.md` — PR6-D webhook/import/reconciliation implementation evidence (draft PR #43; not merge authorization).
 
 ## Live project control files
 

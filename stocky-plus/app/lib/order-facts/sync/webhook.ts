@@ -1,5 +1,4 @@
 import type { OrderAdminReadClient, TrustedShopIdentity } from "../admin-read";
-import { allocateResponseGeneration } from "./observations";
 import type { OrderApplyReceiptInput } from "../apply/types";
 import type { OrderSourceKind } from "../types";
 import {
@@ -25,6 +24,7 @@ import {
 } from "./identity";
 import {
   abandonActiveObservation,
+  allocateResponseGeneration,
   beginDirectOrderObservation,
 } from "./observations";
 import {
@@ -311,17 +311,15 @@ export async function processOrderFactsWebhookJob(
         input.configuredWorstCaseConcurrentCanonicalTransactions,
     });
   } catch (error) {
-    await input.db
-      .$transaction((tx) =>
-        abandonActiveObservation(tx, {
-          shopId: input.work.shopId,
-          token: handle.token,
-          requestGen: handle.requestGen,
-          failureCode:
-            error instanceof Error ? error.name : "order_facts_sync_error",
-        }),
-      )
-      .catch(() => undefined);
+    await input.db.$transaction((tx) =>
+      abandonActiveObservation(tx, {
+        shopId: input.work.shopId,
+        token: handle.token,
+        requestGen: handle.requestGen,
+        failureCode:
+          error instanceof Error ? error.name : "order_facts_sync_error",
+      }),
+    ).catch(() => undefined);
     throw error;
   }
 }

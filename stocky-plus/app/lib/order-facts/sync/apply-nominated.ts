@@ -183,17 +183,15 @@ export async function applyNominatedOrderGid(input: {
       reason: applied.reason,
     };
   } catch (error) {
-    await input.db
-      .$transaction((tx) =>
-        abandonActiveObservation(tx, {
-          shopId: input.shopId,
-          token: handle.token,
-          requestGen: handle.requestGen,
-          failureCode:
-            error instanceof Error ? error.name : "order_facts_sync_error",
-        }),
-      )
-      .catch(() => undefined);
+    await input.db.$transaction((tx) =>
+      abandonActiveObservation(tx, {
+        shopId: input.shopId,
+        token: handle.token,
+        requestGen: handle.requestGen,
+        failureCode:
+          error instanceof Error ? error.name : "order_facts_sync_error",
+      }),
+    ).catch(() => undefined);
     throw error;
   }
 }

@@ -176,7 +176,10 @@ export async function mapRefundReadToObservation(input: {
   enclosingOrderGid: string | null;
 }): Promise<
   | { status: "observation"; observation: DirectOrderObservation }
-  | Extract<MapOutcome, { status: "incomplete" | "failure" | "blocked" }>
+  | Extract<
+      MapOutcome,
+      { status: "incomplete" | "failure" | "blocked" | "noop" }
+    >
 > {
   const responseGen = await allocateResponseGeneration(
     input.db,

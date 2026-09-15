@@ -108,7 +108,7 @@ export type WebhookDeliveryWork = {
 
 export type LegacyWebhookRunner = (
   topic: string,
-  db: unknown,
+  db: OrderApplyDb,
   payload: Record<string, unknown>,
 ) => Promise<void>;
 

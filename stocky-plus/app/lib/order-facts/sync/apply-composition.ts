@@ -21,7 +21,6 @@ import {
 import { isLegacyOrderWebhookTopic } from "./constants";
 import { abandonActiveObservation } from "./observations";
 import type { LegacyWebhookRunner, OrderFactsWebhookResult } from "./types";
-import type { TenantDb } from "../../../tenant/tenant-db.server";
 
 export type OrderFactsTxnHost = OrderApplyDb & {
   $transaction: <T>(
@@ -54,7 +53,12 @@ export async function probeReceiptBeforeShopifyIo(
           shopId,
           receipt.applicationKey,
         );
-        return shortCircuitIfApplied(applyDb, shopId, receipt);
+        const probed = await shortCircuitIfApplied(
+          applyDb,
+          shopId,
+          receipt,
+        );
+        return probed === "already_applied" ? "already_applied" : "proceed";
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
     );
@@ -124,7 +128,7 @@ export async function applyCanonicalAndLegacy(input: {
             ) {
               await input.runLegacy(
                 input.topic,
-                tx as unknown as TenantDb,
+                asApplyDb(tx),
                 input.projection,
               );
             }

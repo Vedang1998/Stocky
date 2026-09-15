@@ -215,7 +215,7 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | PR6-B / PR6-C | **ACCEPTED / MERGED / CLOSED** (repository lanes) |
 | PR6-D | **ADMITTED** for complete §17.2 integration on `phase-1/pr6-d-order-webhook-import` |
 | Accepted residuals (not fixed) | C **P3-FINAL-01** (tooling F-F03), **P3-FINAL-02** (fixture hygiene), **P3-FINAL-03** (D at-sale provenance carry-forward); B **NEW-CLAUDE-PR6B-C01** (duplicate fragment names) |
-| R-176 | **OPEN / P0** — D webhook/import/reconcile evidence still required |
+| R-176 | **OPEN / P0** — D repository evidence exists on draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43); independent review and merge remain required |
 | R-164 | unchanged / **OPEN** |
 | PR #41 | stays parked / unmerged |
 | D-055 | **NOT CREATED** |
@@ -357,7 +357,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Cursor D implements the complete admitted PR6-D webhook/import/reconciliation module on `phase-1/pr6-d-order-webhook-import` from **V**, then opens one new draft PR. Independent Claude review and a later ChatGPT merge decision remain required. Do **not** create D-055. Production and inventory writes remain unauthorized. All write flags remain **DEFAULT OFF**.
+**Next action:** Independent Claude PR6-D complete integration review of draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43) after exact-head Classify + full Heavy + CI Gate SUCCESS (IDs in PR metadata). ChatGPT merge decision remains required. Do **not** create D-055. Production and inventory writes remain unauthorized. All write flags remain **DEFAULT OFF**.
 
 ## Current truth
 
@@ -400,4 +400,4 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Every inventory-write flag remains **DEFAULT OFF**. `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF** and is not enabled here.
 - Do **not** state that Phase 1 is complete or that production is ready.
 - Do **not** create D-055. PR6-B and PR6-C repository lanes are **ACCEPTED / MERGED / CLOSED**. **PR6-D is ADMITTED** for the complete integration module. Production, Shopify writes, inventory writes, `read_all_orders`, `write_orders`, live subscription registration, and feature-flag enablement remain unauthorized.
-- Next action: Cursor D implements the complete admitted module on `phase-1/pr6-d-order-webhook-import` from **V** and opens one new draft PR. Independent Claude review remains required.
+- Next action: Independent Claude review of draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43) (PR6-D complete integration). ChatGPT merge decision remains required.

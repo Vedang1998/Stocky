@@ -37,13 +37,16 @@ import {
   IN_WINDOW_ISO,
   OUT_OF_WINDOW_ISO,
   SHOP_A_DOMAIN,
-  SHOP_B_DOMAIN,
   countForShop,
+  countSalesDailyAggregate,
+  countSyncApplicationReceipts,
   createOrderFactsAdmin,
   digest64,
   inWindowHeader,
+  insertSyncApplicationReceipt,
   jsonlLines,
   legacyRunner,
+  loadSyncApplicationReceipt,
   queryForShop,
   setupPr6DDatabase,
   standardStore,
@@ -181,7 +184,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
                 quantity: 1,
                 restockType: "NO_RESTOCK",
                 restocked: false,
-                location: null,
+                location: { id: "gid://shopify/Location/1" },
                 lineItem: { id: `${orderGid}/LineItem/1` },
                 subtotalSet: moneyBag("1.00"),
                 totalTaxSet: moneyBag("0.00"),
@@ -337,20 +340,15 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     const gid = "gid://shopify/Order/d-pred";
     const applicationKey = `webhook-delivery:pred-${randomUUID()}`;
     const digest = digest64("pre-d-legacy-only");
-    await prisma.syncApplicationReceipt.create({
-      data: {
-        shopId: shopAId,
-        applicationKey,
-        sourceJobType: "webhook:orders/create",
-        rootDurableJobId: randomUUID(),
-        firstApplyingDurableJobId: randomUUID(),
-        payloadDigest: digest,
-        applicationSchemaVersion: "sync-application-receipt-v1",
-      },
+    await insertSyncApplicationReceipt({
+      shopId: shopAId,
+      applicationKey,
+      sourceJobType: "webhook:orders/create",
+      rootDurableJobId: randomUUID(),
+      firstApplyingDurableJobId: randomUUID(),
+      payloadDigest: digest,
     });
-    const aggregatesBefore = await prisma.salesDailyAggregate.count({
-      where: { shopId: shopAId },
-    });
+    const aggregatesBefore = await countSalesDailyAggregate(shopAId);
     const result = await withTxnHost(shopAId, (db) =>
       processOrderFactsWebhookJob({
         db,
@@ -372,9 +370,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     );
     expect(result.status).toBe("already_applied");
     expect(await factCount(shopAId, gid)).toBe(0);
-    expect(
-      await prisma.salesDailyAggregate.count({ where: { shopId: shopAId } }),
-    ).toBe(aggregatesBefore);
+    expect(await countSalesDailyAggregate(shopAId)).toBe(aggregatesBefore);
     const importResult = await withTxnHost(shopAId, (db) =>
       runOrderFactsImportStep({
         db,
@@ -389,10 +385,11 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     );
     expect(importResult.status).toBe("SUCCEEDED");
     expect(await factCount(shopAId, gid)).toBe(1);
-    const receipt = await prisma.syncApplicationReceipt.findFirstOrThrow({
-      where: { shopId: shopAId, applicationKey },
+    const receipt = await loadSyncApplicationReceipt({
+      shopId: shopAId,
+      applicationKey,
     });
-    expect(receipt.payloadDigest).toBe(digest);
+    expect(receipt?.payloadDigest).toBe(digest);
   });
 
   it("replays the same webhook application key without duplicating facts", async () => {
@@ -632,7 +629,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
                   {
                     ...refundNode(9, []),
                     id: orphanRefund,
-                    order: null,
+                    order: null as unknown as { id: string },
                   },
                 ],
               },
@@ -828,16 +825,13 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
   it("maps digest conflict and rolls back injected commit loss", async () => {
     const gid = "gid://shopify/Order/d-digest";
     const applicationKey = `webhook-delivery:digest-${gid}`;
-    await prisma.syncApplicationReceipt.create({
-      data: {
-        shopId: shopAId,
-        applicationKey,
-        sourceJobType: "webhook:orders/create",
-        rootDurableJobId: randomUUID(),
-        firstApplyingDurableJobId: randomUUID(),
-        payloadDigest: digest64("other-digest"),
-        applicationSchemaVersion: "sync-application-receipt-v1",
-      },
+    await insertSyncApplicationReceipt({
+      shopId: shopAId,
+      applicationKey,
+      sourceJobType: "webhook:orders/create",
+      rootDurableJobId: randomUUID(),
+      firstApplyingDurableJobId: randomUUID(),
+      payloadDigest: digest64("other-digest"),
     });
     await expect(
       withTxnHost(shopAId, (db) =>
@@ -1299,17 +1293,14 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         work: webhookWork({
           shopId: shopAId,
           topic: "orders/create",
+          applicationKey: `webhook-delivery:d-incomplete-${gid}`,
           projection: { id: 1, admin_graphql_api_id: gid },
         }),
       }),
     );
     expect(result.status).toBe("incomplete");
     expect(await factCount(shopAId, gid)).toBe(0);
-    expect(
-      await prisma.syncApplicationReceipt.count({
-        where: { shopId: shopAId, applicationKey: { contains: "d-incomplete" } },
-      }),
-    ).toBe(0);
+    expect(await countSyncApplicationReceipts(shopAId, "d-incomplete")).toBe(0);
   });
 
   it("requires two non-overlapping LIVE confirmations to revive a confirmed tombstone", async () => {
@@ -1393,6 +1384,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         work: webhookWork({
           shopId: shopAId,
           topic: "orders/create",
+          applicationKey: `webhook-delivery:d-currency-${gid}`,
           projection: { id: 1, admin_graphql_api_id: gid },
         }),
       }),
@@ -1400,10 +1392,6 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     expect(result.status).toBe("blocked");
     expect(result.reason).toBe("MONEY_CURRENCY_MISMATCH");
     expect(await factCount(shopAId, gid)).toBe(0);
-    expect(
-      await prisma.syncApplicationReceipt.count({
-        where: { shopId: shopAId, applicationKey: { contains: "d-currency" } },
-      }),
-    ).toBe(0);
+    expect(await countSyncApplicationReceipts(shopAId, "d-currency")).toBe(0);
   });
 });

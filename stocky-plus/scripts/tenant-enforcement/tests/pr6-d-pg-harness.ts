@@ -146,6 +146,89 @@ export async function queryForShop<T extends Record<string, unknown>>(
   }
 }
 
+export async function insertSyncApplicationReceipt(input: {
+  shopId: string;
+  applicationKey: string;
+  sourceJobType: string;
+  rootDurableJobId: string;
+  firstApplyingDurableJobId: string;
+  payloadDigest: string;
+  applicationSchemaVersion?: string;
+}): Promise<void> {
+  const client = await getRuntimeClient();
+  try {
+    await client.query("BEGIN");
+    await setTenant(client, input.shopId);
+    await client.query(
+      `INSERT INTO "SyncApplicationReceipt" (
+         id,
+         "shopId",
+         "applicationKey",
+         "sourceJobType",
+         "rootDurableJobId",
+         "firstApplyingDurableJobId",
+         "payloadDigest",
+         "applicationSchemaVersion"
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        `ocr-d-${randomUUID()}`,
+        input.shopId,
+        input.applicationKey,
+        input.sourceJobType,
+        input.rootDurableJobId,
+        input.firstApplyingDurableJobId,
+        input.payloadDigest,
+        input.applicationSchemaVersion ?? "sync-application-receipt-v1",
+      ],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    await client.end();
+  }
+}
+
+export async function countSyncApplicationReceipts(
+  shopId: string,
+  applicationKeyContains?: string,
+): Promise<number> {
+  if (applicationKeyContains) {
+    return countForShop(
+      shopId,
+      `SELECT count(*)::int AS n FROM "SyncApplicationReceipt"
+        WHERE "applicationKey" LIKE $1`,
+      [`%${applicationKeyContains}%`],
+    );
+  }
+  return countForShop(
+    shopId,
+    `SELECT count(*)::int AS n FROM "SyncApplicationReceipt"`,
+  );
+}
+
+export async function loadSyncApplicationReceipt(input: {
+  shopId: string;
+  applicationKey: string;
+}): Promise<{ payloadDigest: string } | null> {
+  const rows = await queryForShop<{ payloadDigest: string }>(
+    input.shopId,
+    `SELECT "payloadDigest" FROM "SyncApplicationReceipt"
+      WHERE "applicationKey" = $1`,
+    [input.applicationKey],
+  );
+  return rows[0] ?? null;
+}
+
+export async function countSalesDailyAggregate(shopId: string): Promise<number> {
+  return countForShop(
+    shopId,
+    `SELECT count(*)::int AS n FROM "SalesDailyAggregate" WHERE "shopId" = $1`,
+    [shopId],
+  );
+}
+
 export function inWindowHeader(overrides: Record<string, unknown> = {}) {
   return orderHeader({
     createdAt: IN_WINDOW_ISO,

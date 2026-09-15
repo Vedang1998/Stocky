@@ -128,7 +128,7 @@ describe("PR6-D production B→C mapper", () => {
         })),
       },
     };
-    const mapped = mapBOrderReadResult(punched as typeof read, {
+    const mapped = mapBOrderReadResult(punched as unknown as typeof read, {
       shopId: "shop-mapper",
       observationToken: "token",
       observationRequestGen: 1n,
