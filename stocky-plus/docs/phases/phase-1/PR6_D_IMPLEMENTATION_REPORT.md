@@ -482,8 +482,76 @@ This section **supersedes §10.4 mid-stream quantity close, §10.6 invented `con
 
 ### 14.3 C3 execution ledger
 
-Recorded after commands run on the C3 implementation head. This subsection does **not** invent exit codes or CI IDs.
+Local commands on implementation head `eaf0b7307f62ccd9f41687a08dc7d3a3e01cf696` (parent `619f4c8`). This subsection does **not** invent Gate IDs. Historical SUCCESS `35044093460` is `7e0329f` only. Failed typecheck run `35059069898` is `4e1ad0d` only.
 
-Exact-head C3 Classify / Heavy / Gate IDs: **not yet** — require the coherent C3 push. Historical SUCCESS `35044093460` is `7e0329f` only.
+| Command | Exit | Notes |
+|---|---|---|
+| `npx vitest run app/lib/order-facts` | 0 | **30** files, **258** tests |
+| `npx vitest run` C3 unit files (`jsonl`/`source-stage`/`mapper-bulk`/`bulk`/`supplemental-ledger`/`merchant-host`) | 0 | **45** tests |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-correction.test.ts` | 0 | **11** tests |
+| `pr6-d-integration.test.ts` | 0 | **24** tests |
+| `pr6-d-worker.test.ts` | 0 | **12** tests |
+| `pr6-d-scale-envelope.test.ts` without `PR6_D_SCALE_1E6` | 0 | **3** passed / **1** skipped |
+| `npm run test:sync-exactly-once` | 0 | **35** exactly-once + **7** D046 |
+| `npm run test:sync-envelope-fail-closed` | 0 | **6** |
+| `npm run test:sync-dispatch-recovery` | 0 | **29** |
+| `npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts` | 0 | **25** |
+| `npm run test:sync-inventory-audit` | 0 | **5** |
+| `npx tsc --noEmit` / `npm run typecheck` | 0 | — |
+| `npx eslint` focused D C3 files | 0 | — |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | 40/40 assertions |
+| `git diff --check` | 0 | — |
+| First `PR6_D_SCALE_1E6=1` envelope on `619f4c8` | **1** | `lineFactsA` **999801** vs **1000000** after webhook overlap replaced a 200-line parent. **Not a pass.** |
+| Second `PR6_D_SCALE_1E6=1` envelope on `eaf0b73` | 0 | **4** passed; duration **885.08s**; see JSON below |
 
-C3 1e6 **line-fact** envelope: **not yet executed** in this report revision. Default CI still skips it (`PR6_D_SCALE_1E6=1` and not GitHub Actions). GitHub `validate` timeout-minutes remains **120**.
+Exact-head C3 Classify / Heavy / Gate on `eaf0b7307f62ccd9f41687a08dc7d3a3e01cf696`: run [`35060561603`](https://github.com/Vedang1998/Stocky/actions/runs/35060561603) **SUCCESS**. Classify `104679868899` SUCCESS. Full Heavy `104679892208` SUCCESS (not skipped). CI Gate `104693426142` SUCCESS. Historical SUCCESS `35044093460` is `7e0329f` only. Failed typecheck run `35059069898` is `4e1ad0d` only.
+
+Observed JSON (`pr6dScaleEnvelope`) from the passing second envelope:
+
+```json
+{
+  "lineFactTarget": 1000000,
+  "plannedRoots": 5192,
+  "plannedObjects": 1005192,
+  "plannedLineFacts": 1000000,
+  "childBuckets": { "zero": 101, "small": 4350, "eight": 520, "forty": 221 },
+  "warmup": {
+    "lineTarget": 1000,
+    "roots": 5,
+    "elapsedMs": 1083,
+    "peakRssBytes": 155971584,
+    "peakHeapBytes": 43911560,
+    "rssSamples": 21,
+    "heapSamples": 21
+  },
+  "crashPrefixLines": 2000,
+  "crashPrefixRoots": 11,
+  "crashCheckpointOrdinal": null,
+  "webhookOverlapStatus": "applied",
+  "applied": 5192,
+  "examined": 5192,
+  "followUpReads": 1,
+  "bulkDirectApplies": 5191,
+  "ledgerCounts": {
+    "initial": 5192,
+    "recheck": 0,
+    "agreement": 0,
+    "sale": 0,
+    "refund": 0,
+    "fallback": 1,
+    "throttle": 0
+  },
+  "shopBFacts": 1,
+  "lineFactsA": 1000000,
+  "graphqlCalls": 5200,
+  "jsonlFetches": 2,
+  "elapsedMs": 876344,
+  "sampleMs": 250,
+  "peakRssBytes": 912486400,
+  "peakHeapBytes": 672250776,
+  "rssSamples": 3499,
+  "heapSamples": 3499
+}
+```
+
+C3 scale notes: 5,192 parents produced **1,000,000** canonical order-line facts (`qty` ≠ child-record count). Every imported order received a ledger (`initial: 5192`). One overlapping `orders/edited` on zero-child root `d-scale-51` drifted to full-B (`followUpReads: 1`). Truncated crash prefix did not advance a committed ordinal. Shop B remained **1** fact. Peak RSS/heap are sampled high-water values, not bounds. Default CI still skips this envelope (`PR6_D_SCALE_1E6=1` and not GitHub Actions). GitHub `validate` timeout-minutes remains **120**.
