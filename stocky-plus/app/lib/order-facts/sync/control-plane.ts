@@ -139,7 +139,12 @@ export async function createOrderFactsSyncRun(input: {
     },
     orderBy: { createdAt: "desc" },
   });
-  if (latest && (latest.status === "PENDING" || latest.status === "RUNNING")) {
+  if (
+    latest &&
+    (latest.status === "PENDING" ||
+      latest.status === "RUNNING" ||
+      latest.status === "PARTIAL_FAILURE")
+  ) {
     return latest;
   }
   return prisma.syncRun.create({
@@ -151,6 +156,18 @@ export async function createOrderFactsSyncRun(input: {
       correlationId: input.correlationId,
       startedAt: new Date(),
     },
+  });
+}
+
+export async function incrementOrderFactsPollExaminedCount(input: {
+  shopId: string;
+  syncRunId: string;
+  prisma?: PrismaClient;
+}): Promise<void> {
+  const prisma = input.prisma ?? getControlPlanePrisma();
+  await prisma.syncRun.updateMany({
+    where: { id: input.syncRunId, shopId: input.shopId },
+    data: { examinedCount: { increment: 1 } },
   });
 }
 

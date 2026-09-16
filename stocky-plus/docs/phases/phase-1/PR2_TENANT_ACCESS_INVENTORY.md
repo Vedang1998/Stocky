@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `b5f505a193aca8f2a78d628e3e67581659c5ebfe86d1f9fcff55a4081e8b5b76`
-**Scanned files:** 483
-**Findings:** 1760
+**Content digest:** `607886370181cfe7521c736783e5859b4e4e79fa1e4311fcf800fd0c57fee8a5`
+**Scanned files:** 489
+**Findings:** 1761
 **Converted paths:** 532
-**Approved exception findings:** 1228
+**Approved exception findings:** 1229
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -31,9 +31,9 @@ All 35 approved merchant-owned models must appear below.
 | ShopSettings | 286 |
 | TransferOrder | 262 |
 | Stocktake | 259 |
-| BomComponent | 258 |
+| BomComponent | 259 |
 | LowStockAlert | 255 |
-| SyncApplicationReceipt | 274 |
+| SyncApplicationReceipt | 275 |
 | ShopifyProductFact | 302 |
 | ShopifyProductCollectionMembership | 245 |
 | ShopifyVariantFact | 276 |
@@ -62,13 +62,13 @@ All 35 approved merchant-owned models must appear below.
 | Category | Count |
 |---|---|
 | bootstrap | 1 |
-| other | 79 |
+| other | 78 |
 | route | 85 |
 | script | 51 |
 | service | 33 |
 | tenant_infra | 5 |
-| test | 1463 |
-| worker | 43 |
+| test | 1464 |
+| worker | 44 |
 
 ## Approved exceptions
 
@@ -270,14 +270,15 @@ All 35 approved merchant-owned models must appear below.
 | `app/jobs/workers/catalog-facts/projection.ts` | 288 / `db.shopifyInventoryLevelFact.findMany` | worker | ShopifyInventoryLevelFact | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
 | `app/jobs/workers/catalog-facts/resource-refetch.ts` | 434 / `$transaction` | worker | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/jobs/workers/catalog-facts/resource-refetch.ts` | 495 / `$transaction` | worker | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 93 / `db.salesDailyAggregate.upsert` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 119 / `db.salesDailyAggregate.upsert` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 165 / `db.salesDailyAggregate.findUnique` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 177 / `db.salesDailyAggregate.update` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 216 / `db.salesDailyAggregate.findUnique` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 228 / `db.salesDailyAggregate.update` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 600 / `$transaction` | worker | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/jobs/workers/webhook-processor.ts` | 799 / `$transaction` | worker | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 77 / `db.bomComponent.findMany` | worker | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 113 / `db.salesDailyAggregate.upsert` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 139 / `db.salesDailyAggregate.upsert` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 185 / `db.salesDailyAggregate.findUnique` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 197 / `db.salesDailyAggregate.update` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 236 / `db.salesDailyAggregate.findUnique` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 248 / `db.salesDailyAggregate.update` | worker | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 631 / `$transaction` | worker | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/jobs/workers/webhook-processor.ts` | 833 / `$transaction` | worker | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/catalog-facts/compatibility-projection/legacy-writer.ts` | 36 / `db.shopifyVariantCache.upsert` | other | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/catalog-facts/compatibility-projection/legacy-writer.ts` | 68 / `db.shopifyVariantCache.deleteMany` | other | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/catalog-facts/compatibility-projection/legacy-writer.ts` | 120 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
@@ -305,25 +306,24 @@ All 35 approved merchant-owned models must appear below.
 | `app/lib/catalog-facts/ingest/direct-observation.ts` | 91 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/catalog-facts/ingest/direct-observation.ts` | 101 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/catalog-facts/ingest/direct-observation.ts` | 117 / `tx.catalogObservationInFlight.updateMany` | other | CatalogObservationInFlight | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-composition.ts` | 48 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-composition.ts` | 121 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-composition.ts` | 212 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 51 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 66 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 76 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 88 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 104 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 120 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 142 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 186 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 162 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 177 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 194 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 219 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 236 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 253 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 276 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/webhook.ts` | 314 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-composition.ts` | 76 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-composition.ts` | 274 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 53 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 68 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 78 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 90 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 106 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 122 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 144 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 195 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 163 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 178 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 195 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 220 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 237 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 254 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 277 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/webhook.ts` | 316 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 19 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 25 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 28 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -526,21 +526,22 @@ All 35 approved merchant-owned models must appear below.
 | `app/sync/__tests__/sync-attempt-recovery.test.ts` | 499 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-005 | migration_tests | approved exception | allowlist EX-SYNC-TEST-005 | EX-SYNC-TEST-005 | PR 4 D-043 F-PR4-04 attempt recovery disposable harness |
 | `app/sync/__tests__/sync-control-plane.integration.test.ts` | 77 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-001 | PR 4 sync control-plane disposable PostgreSQL/Redis integration harness |
 | `app/sync/__tests__/sync-control-plane.integration.test.ts` | 92 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-001 | PR 4 sync control-plane disposable PostgreSQL/Redis integration harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 95 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 177 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-013 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 228 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 346 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 363 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 388 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 401 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 426 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 436 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 448 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 460 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 472 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 478 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 497 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
-| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 500 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 129 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 203 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-013 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 254 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 382 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 403 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 423 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 442 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 454 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 473 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 483 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 495 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 507 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 519 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 525 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 544 / `prisma.salesDailyAggregate.count` | test | SalesDailyAggregate | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
+| `app/sync/__tests__/sync-d046-worker-finalize.test.ts` | 547 / `prisma.syncApplicationReceipt.count` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-013 | migration_tests | approved exception | allowlist EX-SYNC-TEST-013 | EX-SYNC-TEST-013 | PR 4 D-046 NEW-CLAUDE-D045-02 genuine v2/v3 processWebhookJob catch-path disposable harness |
 | `app/sync/__tests__/sync-dispatch-recovery.test.ts` | 177 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-003 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-003 | PR 4 D-043 F-PR4-02 dispatch recovery disposable harness |
 | `app/sync/__tests__/sync-dispatch-recovery.test.ts` | 183 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-003 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-003 | PR 4 D-043 F-PR4-02 dispatch recovery disposable harness |
 | `app/sync/__tests__/sync-envelope-fail-closed.test.ts` | 66 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-011 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-011 | — |
@@ -1998,8 +1999,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 483,
-  "findings": 1760,
+  "scannedFiles": 489,
+  "findings": 1761,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2135,6 +2136,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "b5f505a193aca8f2a78d628e3e67581659c5ebfe86d1f9fcff55a4081e8b5b76"
+  "contentDigest": "607886370181cfe7521c736783e5859b4e4e79fa1e4311fcf800fd0c57fee8a5"
 }
 ```

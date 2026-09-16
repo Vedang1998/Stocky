@@ -3,8 +3,8 @@
 **Slice:** PR6-D complete §17.2 integration module
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`
-**Status:** Repository module implemented on this branch with local execution evidence. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs are recorded in PR #43 metadata after that run terminates; this report does **not** invent them and does **not** embed this documentation commit’s own SHA. Independent Claude review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951)
+**Status:** PR43 consolidated correction implemented on this branch. Claude’s CORRECTIONS REQUIRED review is integrated by fast-forward at `53541112832f8da3dcfa65adea8e9a4447b0f18b` (blob `48ac291a781b2347cb6017af862f2de9677826a5`) and is **not** edited. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the **corrected** head are recorded after that run terminates; run `34934317232` remains historical evidence for the defective subject `25226e46` only. This report does **not** invent those IDs and does **not** embed this documentation commit’s own SHA. Independent Claude correction re-review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -39,8 +39,11 @@ This report records the PR6-D orchestration module. It does **not** claim Phase 
 | PostgreSQL integration suite | `93e7addb90b28613db2d87e1196d8fbe227cf94e` |
 | Lock / money / revival / fence repairs | `9063f2dcf40bd23fd8d8018ad6794193f297a491` |
 | This documentation/inventory/typecheck-repair commit | child of `9063f2d…`; SHA not embedded here |
+| Required starting implementation / live PR head before correction | `25226e46905b082fe3af09bb1d9f5c68a8e39785` |
+| Immutable D complete-integration review | `53541112832f8da3dcfa65adea8e9a4447b0f18b` (sole parent `25226e46…`; blob `48ac291a781b2347cb6017af862f2de9677826a5`; never edit) |
+| Defective-subject exact-head CI | run [`34934317232`](https://github.com/Vedang1998/Stocky/actions/runs/34934317232) on `25226e46…` only |
 
-PR #41 remains parked tooling and is **not** a D writer. Immutable B/C/planning review blobs were not edited.
+PR #41 remains parked tooling and is **not** a D writer. Immutable B/C/planning/A review blobs were not edited. Preserved blobs: C final `0daa0e5395c69b1fb86508f133f6ade3f8430f56`; C original `a90ae442a80ee593bb43bee3b15c2228f32d6e15`; C correction `8c384b698bc45a7a9ac0a1dffa2ab8fdbcc65704`; B correction `e902a1ce07e30174cd56cea13114be7325195c98`; B original `b4533610b5af305816aef5434b884c3065b06f94`; tooling `5a47f6f8133806848ad71a545e07c030a2137e37`; A `198e55548a2ca09942843798a9ebd3e03a30d0fa`; A correction `da388c5d2ffa8bc0e04312de9c14a831b5ba4010`; planning `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`.
 
 ---
 
@@ -65,7 +68,7 @@ PR #41 remains parked tooling and is **not** a D writer. Immutable B/C/planning 
 - `.github/**`, package/global vitest configs, tenant-access allowlist
 - Parked PR #41, F-F03 tooling, `/tmp` hygiene, D-055
 
-C first-confirmation vs receipt: D retries once without a receipt when C throws `OrderApplyReceiptNotCertifiableError` containing `terminal_first_confirmation`. C internals were not patched.
+C first-confirmation vs receipt: D does not patch C internals. The first LIVE confirmation throws `OrderApplyReceiptNotCertifiableError` containing `terminal_first_confirmation`, persists the observation without a success receipt, returns `first_confirmation_pending`, and the worker uses `completeAttemptRetry` on the same durable job.
 
 ---
 
@@ -157,7 +160,7 @@ Disposition keys: **D-exec** = executed at the D orchestration boundary in this 
 | Currency mismatch | B `MONEY_CURRENCY_MISMATCH` → D blocked | PG currency test |
 | D046 worker finalize after D wiring | 7/7 pass with CI env | `sync-d046-worker-finalize.test.ts` |
 | Uncertain commit finalization | still PR4 `finalizeApplicationAfterRollback` | webhook-processor unchanged protocol |
-| Production-scale 1,000,000-line D streaming/queues | **unexecuted** | C 1e6 apply envelope is not D evidence |
+| Production-scale 1,000,000-line D streaming/queues | **executed** (opt-in `PR6_D_SCALE_1E6=1`, skipped on GitHub Actions) | `pr6-d-scale-envelope.test.ts`; see §13 |
 
 ---
 
@@ -222,6 +225,8 @@ Repeated executions: `orderFactByIdQueries` **8** (stable). Positive heap deltas
 
 This is **not** 1,000,000-line D streaming/queue evidence. C’s 1e6 apply-only envelope remains accepted for unchanged C only.
 
+**D-R-12 attributed retraction:** the dated 2026-09-15 quarantine PG measurement `heapDeltaBytes: 53336` (subject `25226e46`, Cursor local run) is preserved as a historical sample only. It is **not** a peak bound and **not** a universal performance claim. Claude independently measured `heapDeltaBytes: 10999720` on the same instrumented test under different conditions (review `5354111`, D-R-12). Sampled peaks elsewhere in this report are observed high-water values at a stated interval, not mathematical bounds.
+
 ---
 
 ## 7. Source verification vs store execution
@@ -263,3 +268,186 @@ Window listing `sortKey: UPDATED_AT` passed the local generated 2026-07 schema g
 - Tenant-access allowlist was **not** expanded.
 
 Independent Claude PR6-D complete integration review remains mandatory.
+
+---
+
+## 10. PR43 consolidated correction contract (checkpoint)
+
+**Authority:** PR #43 comment [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); Claude review `53541112832f8da3dcfa65adea8e9a4447b0f18b` blob `48ac291a781b2347cb6017af862f2de9677826a5`; D-054 remains **EFFECTIVE**; no D-055. This section is a work checkpoint inside the existing D implementation report, not a new planning PR.
+
+### 10.1 Production call chain
+
+1. Intake sanitizer → durable `webhook:{topic}` job (v3 envelope / supported v2 recovery) → `processWebhookJob`.
+2. `claimAttempt` → `applyOrderFactsWebhookIfOwned` → `processOrderFactsWebhookJob`.
+3. Probe `SyncApplicationReceipt` under RepeatableRead **before** Shopify I/O.
+4. Allocate observation gens → B `readOrderFact` / `readRefundFact` (Shopify transport mocked in tests).
+5. Production mapper → `applyCanonicalAndLegacy` inside the **caller’s existing TenantDb `$transaction`**.
+6. C `applyOrderFactsWithRetry(asApplyDb(tx))` (`$queryRaw` view only). Frozen v1 legacy `handleOrderCreate` / `handleOrderCancelled` / `handleRefundCreate` receive the **same transaction-scoped TenantDb**, never the query-only view.
+7. Success receipt insert is C’s final write in that transaction. Canonical facts, required legacy aggregates, and the receipt commit together or roll back together.
+
+Import: `order-facts-sync` → `runOrderFactsImportStep` → Bulk A submit/poll (one poll per durable CONTINUE) → stream JSONL → assemble complete parent snapshots → apply Bulk A bodies when sufficient, else counted B follow-up → C apply → checkpoint physical ordinals → completeness counts before watermark.
+
+### 10.2 Transaction owner
+
+The authenticated TenantDb transaction opened by `applyCanonicalAndLegacy` / nominated apply is the sole writer for one certifiable application. D does not open a second client, does not widen grants, and does not cast a `$queryRaw`-only object into TenantDb. Import harness hosts without merchant delegates cannot type-check as `LegacyWebhookRunner`.
+
+### 10.3 Success versus continuation states
+
+| State | Worker | Receipt | Legacy | Durable job |
+|---|---|---|---|---|
+| `applied` | `completeAttemptSuccess` | success inserted | frozen topics only, same txn | `SUCCEEDED` |
+| `already_applied` | success (pre-I/O probe) | existing matching digest | not replayed | `SUCCEEDED` |
+| apply-time `already_applied` after probe proceed | throw `application_already_applied` | verify after rollback | rolled back with the loser | `already_applied_verified_after_rollback` or dead-letter |
+| `first_confirmation_pending` | `completeAttemptRetry` same job | none | deferred | `RETRY_WAIT`; fresh B read; new gens |
+| `incomplete` | retry | none | none | `RETRY_WAIT` |
+| `blocked` / `noop` | fail or success-noop | none | none | terminal / no effects |
+
+A first LIVE confirmation may persist C’s diagnostic without a success receipt. It is **not** a finished application and must not set `SUCCEEDED`.
+
+### 10.4 Bounded assembly / close evidence
+
+JSONL close/release does **not** use next-root arrival, empty page, newline, unit-quantity sum, or `groupObjects:false` order. Named evidence:
+
+- **Mid-stream close:** root object persisted **and** attached LineItem children count equals the root’s selected finite `currentSubtotalLineItemsQuantity`.
+- **Stream-end completeness:** leftover empty (no partial line), no orphans, **no leftover open parents**, **and** authoritative `objectCount` **and** `rootObjectCount` tokens both equal observed counts (unsigned decimal, no Number coercion). A leftover parent without `currentSubtotalLineItemsQuantity`, or whose LineItem count does not equal that field, is `TRUNCATED`. Export-count equality and a terminating newline are not parent-complete evidence.
+- Live roots, orphan maps, live bytes, and live duplicate IDs are bounded. Released child IDs are dropped. Released root GIDs are retained only in a bounded recent-window ring (`max(2×open-parent bound, 32)`), not a whole-stream set. Duplicates inside the live set or that ring fail closed as `DUPLICATE`; a duplicate after the ring has forgotten the GID is handled by C already-applied receipts rather than unbounded ID retention.
+
+### 10.5 Count checks, ordinals, poll, recovery
+
+- Completeness requires structural validity **and** both count equalities. Missing/malformed/untrusted tokens never become zero. Proven zero-count empty export is distinct from an empty download of a nonempty export.
+- Checkpoint `jsonlCommittedLineOrdinal` is a physical JSONL object-line ordinal. Advance only the contiguous committed prefix. Restart re-reads the prefix (no HTTP Range) and skips already-committed application via receipts.
+- Poll budget is cumulative `SyncRun.examinedCount` plus wall clock from `bulkSubmitIntentAt ?? startedAt` (120 attempts / 600s), one poll per CONTINUE, fence reused, no in-txn sleep.
+- Failure: `markSyncRunPartialFailure` + DataIssue; no coverage watermark; no HEALTHY over unresolved coverage.
+
+### 10.6 Bulk A mapping limitation (`confirmed`)
+
+Frozen Bulk A does not select `Order.confirmed` (NOT NULL on `ShopifyOrderFact`). D does not change B documents. Baseline unedited / zero-refund snapshots apply Bulk A `discountedTotalSet` (not with-code) with empty `agreements` and `agreementsComplete: true`. `confirmed` is recorded as D-owned import provenance `true` because this document’s `orders` connection excludes DraftOrder — **not** as a Shopify-selected field. `closedAt`, `displayFulfillmentStatus`, and `subtotalLineItemsQuantity` are null when unselected. Qualifying `edited=true` or nonzero `totalRefundedSet` still take counted B `readOrderFact` follow-ups.
+
+---
+
+## 11. Claude twelve-finding dispositions (correction)
+
+Severities and reproduction are Claude’s (review `5354111` / blob `48ac291a…`). Cursor dispositions below are implementation claims, not independent acceptance.
+
+Evidence class keys: **direct-helper** = `processOrderFactsWebhookJob` / JSONL function; **real-worker** = `processWebhookJob` + v3/v2 durable envelope; **queue/recovery** = attempt/retry/lease; **source-contract** = Bulk A mapping / count tokens / close evidence; **scale** = opt-in 1e6 envelope.
+
+| ID | Claude severity | Concrete fix | Pre-fix failure (Claude) | Post-fix tests (Cursor-executed) |
+|---|---|---|---|---|
+| D-R-01 | P1 | Thread transaction-scoped TenantDb into `runLegacy`; `asApplyDb` is C-only; `isOrderFactsMerchantHost` rejects `$queryRaw`-only views | Frozen v1 topics fail in production worker | **real-worker** `pr6-d-worker.test.ts` create/cancelled/refunds via `processWebhookJob` |
+| D-R-02 | P1 | Release closed assemblies; bound is live parents/orphans/bytes, not total roots | 33 sequential closed roots `OPEN_PARENT_BOUND` | **source-contract** `jsonl.test.ts` 32/33/40/100/1000; **direct-helper** 40 PG Bulk A applies |
+| D-R-03 | P1 | Compare unsigned `objectCount` and `rootObjectCount` before COMPLETE/watermark/HEALTHY | Empty/truncated JSONL certified coverage | **source-contract** empty-nonzero, newline truncation, both count mismatches; **direct-helper** import count miss + proven zero export |
+| D-R-04 | P1 | `first_confirmation_pending` + `completeAttemptRetry` on the same durable job; no `SUCCEEDED` | First LIVE confirmation reported applied; no second confirmation | **real-worker** / **queue/recovery** revival, interrupt, exhaust, overlap |
+| D-R-05 | P1 | Legacy runs only when `receiptStatus === "applied"` in the same txn; deferred until certifiable | No-receipt retry skipped legacy yet reported success | **direct-helper** legacy deferred until second confirmation; **real-worker** refund reaches real handler |
+| D-R-06 | P2 | Checkpoint is physical JSONL ordinal; contiguous prefix only; resume skips committed work | Ordinal wrong units; never read | **direct-helper** truncated→resume; gap does not advance checkpoint |
+| D-R-07 | P2 | Restore D046 injection at `applyOrderFactsWithRetry` + RepeatableRead probe | Weakened already_applied_verified_after_rollback | **real-worker** `sync-d046-worker-finalize.test.ts` 7/7 |
+| D-R-08 | P2 | Streaming `TextDecoder({fatal:true})`; fail closed on malformed/truncated UTF-8 | Split multi-byte silently corrupted | **source-contract** byte-boundary round-trip of `Café — 東京`; malformed and truncated UTF-8 `MALFORMED` |
+| D-R-09 | P2 | Cumulative `SyncRun.examinedCount` + wall clock; one poll per CONTINUE | Local constant reset; dead budget | **direct-helper** first CONTINUE increments examinedCount to 1; 120 exhausts |
+| D-R-10 | P2 | Map complete Bulk A parent+lines; follow-up only edited/refund-bearing | Every order refetched | **direct-helper** 40 baseline `OrderFactById` = 0; edited+refunded = 2 follow-ups |
+| D-R-11 | P3 | Live ID set + bounded released-root ring; children dropped on release | Whole-stream `seenIds` | **source-contract** 1000 sequential roots; duplicate-across-window; byte bound on one huge parent |
+| D-R-12 | P3 | Retract 53336 as peak bound; scale envelope measurements | Unreproducible heap claim | Historical 53336 preserved as dated sample; Claude 10999720 attributed to Claude; **scale** §13 |
+
+**Attributed correction of earlier complete-module claims:** Cursor previously treated green local suites, worker-helper tests, and the 53336 heap delta as complete-module / worker / memory proof. Claude’s review showed those claims unsupported for production `processWebhookJob` legacy wiring, first-confirmation continuation, bounded import, completeness, checkpoints, UTF-8, poll budget, Bulk A body use, and scale. Those earlier claims are retracted. Independent acceptance remains Claude’s / ChatGPT’s.
+
+---
+
+## 12. Correction execution ledger (additive)
+
+Historical rows in §5 remain bound to their original heads. New correction-local executions:
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npx tsc --noEmit` | 0 | after D-owned type repairs and leftover-parent fail-closed |
+| `npx vitest run app/lib/order-facts` | 0 | **28** files, **245** tests (includes inherited A/B/C units) |
+| `npx vitest run app/lib/order-facts/sync/jsonl.test.ts mapper-bulk.test.ts merchant-host.test.ts` | 0 | **29** tests |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-correction.test.ts` | 0 | **8** tests |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-worker.test.ts` | 0 | **12** tests; real `processWebhookJob`; overlap rerun 2/2 |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-integration.test.ts` | 0 | **24** tests (was 22 at `25226e46`) |
+| `npm run test:sync-exactly-once` | 0 | **35** exactly-once + **7** D046 |
+| `npm run test:sync-envelope-fail-closed` | 0 | **6** tests |
+| `npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts` | 0 | **25** tests |
+| `npm run test:sync-dispatch-recovery` | 0 | **29** tests |
+| inherited C `pr6-c-canonical-applicator` + `pr6-c-evidence-gates` | 0 | **82** + **9** |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-scale-envelope.test.ts` | 0 | **3** passed / **1** skipped without `PR6_D_SCALE_1E6=1` |
+| `PR6_D_SCALE_1E6=1` million-line envelope | 0 | **1** passed / **3** skipped; duration **1859.38s**; see §13 |
+| `npm run tenant:access:inventory` / `:check` / `:audit` | 0 | findings **1761**, violations **0**, scannedFiles **489**, digest `607886370181cfe7521c736783e5859b4e4e79fa1e4311fcf800fd0c57fee8a5` |
+| `npm run sync:inventory` / `:check` | 0 | surfaces=**58**, digest `191b83498733a237f4a6fa341e6be0620e718d7c7bd76e467684073500360539` |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+| `npm run test:sync-inventory-audit` | 0 | **5** tests |
+| `npx eslint` focused D files + `npm run lint` | 0 | — |
+| `npm run typecheck` | 0 | `react-router typegen && tsc --noEmit` |
+| `npm run build` | 0 | client + SSR |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | 40/40 assertions |
+| `git diff --check` | 0 | — |
+| `npm run graphql-codegen` | **not executed** | CI Heavy fetches shopify.dev; local Admin 2026-07 schema gate already executed in `bulk-query-schema.test.ts` |
+
+Failed attempts during this correction (not relabelled as passes):
+
+| Attempt | Result | Correction |
+|---|---|---|
+| First `PR6_D_SCALE_1E6=1` run | assertion `orderFactsA === resultA.applied` (126439 vs 126186) after crash-prefix skip | assert fact count vs planned roots; applied may be less than examined |
+| Overlap confirmation `processWebhookJob` | PG `40001` serialize on RepeatableRead | D retries serialization at the TenantDb transaction; test looks up jobs via `WebhookDelivery.shopifyWebhookId` and allows settled throws |
+| Integration JSONL fixtures without `currentSubtotalLineItemsQuantity` | `PARTIAL_FAILURE` after leftover-parent fail-closed | fixtures use the same quantity close evidence as production Bulk A |
+
+Exact-head corrected Classify / Heavy / Gate IDs: **not yet** — require the coherent correction push. Historical SUCCESS `34934317232` is the defective subject only.
+
+---
+
+## 13. D-specific 1,000,000-line scale/recovery (executed)
+
+Command (local disposable PostgreSQL/Redis; `GITHUB_ACTIONS` unset; not CI):
+
+```text
+PR6_D_SCALE_1E6=1 npx vitest run --config vitest.migrations.config.ts \
+  scripts/tenant-enforcement/tests/pr6-d-scale-envelope.test.ts -t "streams 1,000,000 JSONL"
+```
+
+Exit **0**. Test file duration **1859.38s**. Concurrent full-import wall `elapsedMs` **1847487**. Effective worker concurrency: one Vitest worker; two shops (`pr6-d-scale-a` resume + `pr6-d-scale-b`) plus an overlapping `orders/edited` webhook on shop A. Database: disposable PostgreSQL 16. Code subject: uncommitted correction working tree on parent `5354111` (review FF). This is **not** C’s apply-only 1e6 envelope.
+
+First failed attempt (same envelope, assertion `orderFactsA === applied`) is recorded in §12 and is **not** a pass.
+
+Observed JSON (`pr6dScaleEnvelope`):
+
+```json
+{
+  "objectTarget": 1000000,
+  "plannedRoots": 126439,
+  "plannedObjects": 1000000,
+  "childBuckets": { "zero": 0, "small": 91956, "eight": 22989, "forty": 11494 },
+  "qualifyingFollowUps": 45,
+  "warmup": {
+    "objectTarget": 1000,
+    "roots": 130,
+    "elapsedMs": 1692,
+    "peakRssBytes": 155758592,
+    "peakHeapBytes": 43542648,
+    "rssSamples": 33,
+    "heapSamples": 33
+  },
+  "crashPrefixObjects": 2000,
+  "crashPrefixRoots": 254,
+  "crashSkippedRoots": 253,
+  "crashCheckpointOrdinal": 2000,
+  "webhookOverlapStatus": "applied",
+  "applied": 126186,
+  "examined": 126439,
+  "followUpReads": 45,
+  "bulkDirectApplies": 126141,
+  "shopBFacts": 1,
+  "graphqlCalls": 140,
+  "jsonlFetches": 2,
+  "elapsedMs": 1847487,
+  "sampleMs": 250,
+  "peakRssBytes": 431763456,
+  "peakHeapBytes": 285156584,
+  "rssSamples": 7389,
+  "heapSamples": 7389
+}
+```
+
+Distribution: 126439 parents across 1,000,000 objects. Child mix is 91956 small / 22989 eight-child / 11494 forty-child parents (0 zero-child). Qualifying edited/refund follow-ups **45** (not every order). Baseline Bulk A direct applies **126141**. `OrderFactById` is not used for unedited zero-refund roots. GraphQL call count **140** includes shop/scope/bulk poll plus the 45 follow-ups — not 126439 full-order refetches. JSONL downloads **2** (truncated crash prefix + full resume). Crash checkpoint physical ordinal **2000**; resume skipped **253** already-committed roots so `applied` **126186** `<` `examined` **126439**. Shop B remained **1** fact (no cross-shop leak). Webhook overlap status `applied`.
+
+Memory method: `process.memoryUsage()` sampled every **250ms** (`unref` interval) on the Node vitest worker during the concurrent full import. **Peak RSS 431763456 bytes (~412 MiB)** and **peak heap 285156584 bytes (~272 MiB)** are observed high-water values at that interval, not mathematical bounds. Warmup (1000 objects) sampled every 50ms: peak RSS 155758592, peak heap 43542648. RSS during the live run was observed near 410 MiB at 9–21 minutes while the checkpoint advanced from ~332k to ~680k of 1e6, i.e. not growing with total roots. Limitations: sampling can miss short spikes between 250ms ticks; RSS includes V8/runtime; this is one process on one disposable database; no throughput projection.
+
+D-R-12: dated 2026-09-15 quarantine PG `heapDeltaBytes: 53336` (subject `25226e46`) remains a historical sample only and is **retracted** as a peak bound. Claude independently measured `heapDeltaBytes: 10999720` under different conditions (review `5354111`). Those two endpoint heap deltas are not this scale run.
+
+Remaining limits: HTTP Range is not used (prefix re-read + receipt skip); Bulk B stays disabled and Bulk C stays rejected; `confirmed` is D import provenance as in §10.6; default CI never executes this envelope; GitHub `validate` timeout-minutes remains **120**.

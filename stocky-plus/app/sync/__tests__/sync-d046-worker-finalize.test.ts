@@ -3,10 +3,12 @@
  *
  * Drives the real worker catch branches (not finalizeApplicationAfterRollback alone).
  * Test-local mocking:
- * - applyWithApplicationReceipt — solely to throw documented post-rollback error codes
- * - createTenantDb — owner Prisma TenantDb shim (same disposable pattern as
- *   sync-exactly-once / envelope-fail-closed) that forwards transaction options so
- *   RepeatableRead is exercised; no production hook
+ * - applyOrderFactsWithRetry — D composition apply boundary (the pre-D
+ *   applyWithApplicationReceipt injection is unreachable for orders/create)
+ * - applyWithApplicationReceipt — retained for the unused non-D fallback
+ * - createTenantDb — owner Prisma TenantDb shim that forwards transaction options
+ *   so RepeatableRead is exercised; no production hook
+ * - Shopify Admin transport only
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Prisma, PrismaClient } from "@prisma/client";
@@ -34,25 +36,35 @@ import {
 } from "../execution-strategy.server";
 import { SyncControlPlaneError } from "../errors";
 import type { TenantDb } from "../../tenant/tenant-db.server";
+import type { TenantAuthority } from "../../tenant/authority.server";
+import {
+  createOrderFactsAdmin,
+  standardStore,
+} from "../../../scripts/tenant-enforcement/tests/pr6-d-pg-harness";
 
-const { applyMock, originalApply, ownerPrismaHolder, dWebhookMock, originalD } =
-  vi.hoisted(() => {
-    const applyMock = vi.fn();
-    const dWebhookMock = vi.fn();
-    return {
-      applyMock,
-      originalApply: {
-        current: null as null | ((...args: never[]) => Promise<unknown>),
-      },
-      ownerPrismaHolder: {
-        current: null as null | PrismaClient,
-      },
-      dWebhookMock,
-      originalD: {
-        current: null as null | ((...args: never[]) => Promise<unknown>),
-      },
-    };
-  });
+const {
+  applyMock,
+  originalApply,
+  applyRetryMock,
+  originalApplyRetry,
+  ownerPrismaHolder,
+} = vi.hoisted(() => {
+  const applyMock = vi.fn();
+  const applyRetryMock = vi.fn();
+  return {
+    applyMock,
+    originalApply: {
+      current: null as null | ((...args: never[]) => Promise<unknown>),
+    },
+    applyRetryMock,
+    originalApplyRetry: {
+      current: null as null | ((...args: never[]) => Promise<unknown>),
+    },
+    ownerPrismaHolder: {
+      current: null as null | PrismaClient,
+    },
+  };
+});
 
 vi.mock("../application-receipt.server", async (importOriginal) => {
   const actual =
@@ -70,19 +82,41 @@ vi.mock("../application-receipt.server", async (importOriginal) => {
   };
 });
 
+vi.mock("../../lib/order-facts/apply", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../lib/order-facts/apply")>();
+  originalApplyRetry.current = actual.applyOrderFactsWithRetry as (
+    ...args: never[]
+  ) => Promise<unknown>;
+  applyRetryMock.mockImplementation((...args: never[]) =>
+    (originalApplyRetry.current as (...a: never[]) => Promise<unknown>)(
+      ...args,
+    ),
+  );
+  return {
+    ...actual,
+    applyOrderFactsWithRetry: (...args: unknown[]) =>
+      applyRetryMock(...(args as never[])),
+  };
+});
+
 vi.mock("../../tenant/tenant-db.server", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../../tenant/tenant-db.server")>();
+  const { setTransactionLocalTenantContext } = await import(
+    "../../tenant/db-context.server"
+  );
 
   function ownerTenantShim(
     prisma: PrismaClient | Omit<PrismaClient, "$connect" | "$disconnect">,
-    authority: { shopId: string; myshopifyDomain: string },
+    authority: TenantAuthority,
   ): TenantDb {
     const client = prisma as PrismaClient;
     return {
       authority,
       syncApplicationReceipt: client.syncApplicationReceipt,
       salesDailyAggregate: client.salesDailyAggregate,
+      bomComponent: client.bomComponent,
       $queryRaw: client.$queryRaw.bind(client),
       $transaction: async <T>(
         fn: (db: TenantDb) => Promise<T>,
@@ -92,22 +126,16 @@ vi.mock("../../tenant/tenant-db.server", async (importOriginal) => {
           isolationLevel?: Prisma.TransactionIsolationLevel;
         },
       ) =>
-        client.$transaction(
-          async (tx) =>
-            fn(
-              ownerTenantShim(tx as unknown as PrismaClient, authority),
-            ),
-          options,
-        ),
+        client.$transaction(async (tx) => {
+          await setTransactionLocalTenantContext(tx, authority);
+          return fn(ownerTenantShim(tx as unknown as PrismaClient, authority));
+        }, options),
     } as unknown as TenantDb;
   }
 
   return {
     ...actual,
-    createTenantDb: (authority: {
-      shopId: string;
-      myshopifyDomain: string;
-    }) => {
+    createTenantDb: (authority: TenantAuthority) => {
       if (!ownerPrismaHolder.current) {
         throw new Error("owner Prisma not initialized for TenantDb shim");
       }
@@ -116,27 +144,25 @@ vi.mock("../../tenant/tenant-db.server", async (importOriginal) => {
   };
 });
 
-vi.mock("../../lib/order-facts/sync", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../../lib/order-facts/sync")>();
-  originalD.current = actual.processOrderFactsWebhookJob as (
-    ...args: never[]
-  ) => Promise<unknown>;
-  dWebhookMock.mockImplementation((...args: never[]) =>
-    (originalD.current as (...a: never[]) => Promise<unknown>)(...args),
-  );
-  return {
-    ...actual,
-    processOrderFactsWebhookJob: (...args: unknown[]) =>
-      dWebhookMock(...(args as never[])),
-  };
-});
-
 vi.mock("../../shopify.server", () => ({
   unauthenticated: {
     admin: async () => ({
       admin: {
-        graphql: async () => ({ json: async () => ({ data: {} }) }),
+        graphql: async (
+          query: string,
+          options?: { variables?: Record<string, unknown> },
+        ) => {
+          const requested =
+            typeof options?.variables?.id === "string"
+              ? options.variables.id
+              : "gid://shopify/Order/1";
+          const gid = requested.startsWith("gid://shopify/Order/")
+            ? requested
+            : "gid://shopify/Order/1";
+          return createOrderFactsAdmin({
+            stores: { [gid]: standardStore(gid) },
+          }).graphql(query, options);
+        },
       },
     }),
   },
@@ -218,19 +244,28 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       }
       return originalApply.current(...args);
     });
-    dWebhookMock.mockReset();
-    dWebhookMock.mockImplementation((...args: never[]) => {
-      if (!originalD.current) {
-        throw new Error("original processOrderFactsWebhookJob not captured");
+    applyRetryMock.mockReset();
+    applyRetryMock.mockImplementation((...args: never[]) => {
+      if (!originalApplyRetry.current) {
+        throw new Error("original applyOrderFactsWithRetry not captured");
       }
-      return originalD.current(...args);
+      return originalApplyRetry.current(...args);
     });
     await prisma.$executeRawUnsafe(`
       TRUNCATE TABLE
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
         "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "SalesDailyAggregate", "LowStockAlert",
-        "BomComponent"
+        "BomComponent",
+        "OrderFactObservationInFlight",
+        "ShopifyOrderAgreementSaleFact",
+        "ShopifyOrderAgreementFact",
+        "ShopifyOrderRefundTransactionFact",
+        "ShopifyOrderAdjustmentFact",
+        "ShopifyOrderRefundLineFact",
+        "ShopifyOrderRefundFact",
+        "ShopifyOrderLineFact",
+        "ShopifyOrderFact"
       CASCADE
     `);
     await prisma.shop.deleteMany({ where: { myshopifyDomain: SHOP } });
@@ -247,6 +282,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       apiVersion: "2026-07",
       payload: {
         id: Number(webhookId.replace(/\D/g, "").slice(-6) || "1"),
+        admin_graphql_api_id: `gid://shopify/Order/${webhookId}`,
         line_items: [{ variant_id: 42, quantity: 2, price: "10.00" }],
       },
     });
@@ -357,19 +393,37 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
     return applicationKey;
   }
 
-  it("NEW-CLAUDE-D045-02: v3 worker verified-after-rollback", async () => {
-    const { job, dispatch } = await ingestAndPrepare("wh-d046-v3-ok");
-    await seedReceipt(job, job.payloadDigest);
-    const aggregatesBefore = await prisma.salesDailyAggregate.count({
-      where: { shopId },
-    });
-
-    applyMock.mockImplementation(async () => {
+  function mockApplyRaceLoser(job: Awaited<ReturnType<typeof ingestAndPrepare>>["job"]) {
+    applyRetryMock.mockImplementation(async () => {
+      const applicationKey = resolveApplicationKey({
+        jobType: job.jobType,
+        webhookDeliveryId: job.webhookDeliveryId,
+        idempotencyKey: job.idempotencyKey,
+      });
+      await prisma.syncApplicationReceipt.create({
+        data: {
+          shopId: job.shopId,
+          applicationKey,
+          sourceJobType: job.jobType,
+          rootDurableJobId: job.id,
+          firstApplyingDurableJobId: job.id,
+          payloadDigest: job.payloadDigest,
+          applicationSchemaVersion: "sync-application-receipt-v1",
+        },
+      });
       throw new SyncControlPlaneError(
         APPLICATION_ALREADY_APPLIED,
         "simulated race loser after rollback",
       );
     });
+  }
+
+  it("NEW-CLAUDE-D045-02: v3 worker verified-after-rollback", async () => {
+    const { job, dispatch } = await ingestAndPrepare("wh-d046-v3-ok");
+    const aggregatesBefore = await prisma.salesDailyAggregate.count({
+      where: { shopId },
+    });
+    mockApplyRaceLoser(job);
 
     await processWebhookJob(buildV3Job(job, dispatch));
 
@@ -382,7 +436,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       orderBy: { startedAt: "desc" },
     });
     expect(attempt.resultMetadata).toMatchObject({
-      applicationStatus: "already_applied",
+      applicationStatus: "already_applied_verified_after_rollback",
     });
     expect(
       await prisma.salesDailyAggregate.count({ where: { shopId } }),
@@ -397,17 +451,10 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
 
   it("NEW-CLAUDE-D045-02: v2 worker verified-after-rollback", async () => {
     const { job } = await ingestAndPrepare("wh-d046-v2-ok");
-    await seedReceipt(job, job.payloadDigest);
     const aggregatesBefore = await prisma.salesDailyAggregate.count({
       where: { shopId },
     });
-
-    applyMock.mockImplementation(async () => {
-      throw new SyncControlPlaneError(
-        APPLICATION_ALREADY_APPLIED,
-        "simulated race loser after rollback",
-      );
-    });
+    mockApplyRaceLoser(job);
 
     await processWebhookJob(buildV2Job(job));
 
@@ -420,7 +467,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       orderBy: { startedAt: "desc" },
     });
     expect(attempt.resultMetadata).toMatchObject({
-      applicationStatus: "already_applied",
+      applicationStatus: "already_applied_verified_after_rollback",
     });
     expect(
       await prisma.salesDailyAggregate.count({ where: { shopId } }),
@@ -479,7 +526,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
       where: { shopId },
     });
 
-    dWebhookMock.mockImplementation(async () => {
+    applyRetryMock.mockImplementation(async () => {
       throw new SyncControlPlaneError(
         APPLICATION_ALREADY_APPLIED,
         "ALREADY_APPLIED without durable receipt",
@@ -504,7 +551,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
   it("NEW-CLAUDE-D045-02: worker uncertain-outcome dead-letter (v2)", async () => {
     const { job } = await ingestAndPrepare("wh-d046-v2-miss");
 
-    dWebhookMock.mockImplementation(async () => {
+    applyRetryMock.mockImplementation(async () => {
       throw new SyncControlPlaneError(
         APPLICATION_ALREADY_APPLIED,
         "ALREADY_APPLIED without durable receipt",
@@ -522,7 +569,7 @@ describe("test:sync-d046-worker-finalize (NEW-CLAUDE-D045-02)", () => {
 
   it("NEW-CLAUDE-D045-02: RepeatableRead transaction option", async () => {
     const { job, dispatch } = await ingestAndPrepare("wh-d046-rr");
-    await seedReceipt(job, job.payloadDigest);
+    mockApplyRaceLoser(job);
 
     await processWebhookJob(buildV3Job(job, dispatch));
 

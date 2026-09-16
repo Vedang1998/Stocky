@@ -4,7 +4,6 @@ import { unauthenticated } from "../../shopify.server";
 import type { WebhookJobData } from "../queue.server";
 import { enqueueAbcAnalysisForShop } from "../queue.server";
 import { runAbcAnalysis } from "../../services/forecasting.server";
-import { processBomSale } from "../../services/shopify-sync.server";
 import {
   resolveTenantJobContext,
   TENANT_JOB_ENVELOPE_VERSION,
@@ -53,6 +52,8 @@ import {
   isOrderFactsWebhookTopic,
   processOrderFactsWebhookJob,
 } from "../../lib/order-facts/sync";
+import { ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS } from "../../lib/order-facts/sync/constants";
+import type { OrderFactsMerchantHost } from "../../lib/order-facts/sync/types";
 import {
   runOrderFactsReconcileJob,
   runOrderFactsSyncJob,
@@ -68,8 +69,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+async function expandBomSale(
+  db: OrderFactsMerchantHost,
+  bundleVariantId: string,
+  quantitySold: number,
+) {
+  const components = await db.bomComponent.findMany({
+    where: { bundleVariantId },
+  });
+  return components.map(
+    (component: {
+      componentVariantId: string;
+      quantity: { toString(): string } | number;
+    }) => ({
+      componentVariantId: component.componentVariantId,
+      quantityToDecrement: Number(component.quantity) * quantitySold,
+    }),
+  );
+}
+
 async function handleOrderCreate(
-  db: TenantDb,
+  db: OrderFactsMerchantHost,
   payload: Record<string, unknown>,
 ) {
   const shop = db.authority.myshopifyDomain;
@@ -113,7 +133,7 @@ async function handleOrderCreate(
       },
     });
 
-    const bomComponents = await processBomSale(db, variantGid, item.quantity);
+    const bomComponents = await expandBomSale(db, variantGid, item.quantity);
     if (bomComponents.length > 0) {
       for (const comp of bomComponents) {
         await db.salesDailyAggregate.upsert({
@@ -143,7 +163,7 @@ async function handleOrderCreate(
 }
 
 async function handleOrderCancelled(
-  db: TenantDb,
+  db: OrderFactsMerchantHost,
   payload: Record<string, unknown>,
 ) {
   const shop = db.authority.myshopifyDomain;
@@ -189,7 +209,7 @@ async function handleOrderCancelled(
 }
 
 async function handleRefundCreate(
-  db: TenantDb,
+  db: OrderFactsMerchantHost,
   payload: Record<string, unknown>,
 ) {
   const shop = db.authority.myshopifyDomain;
@@ -261,7 +281,7 @@ async function assertShopProcessingEnabled(shopId: string): Promise<void> {
 
 async function runLegacyWebhookHandler(
   topic: string,
-  db: TenantDb,
+  db: OrderFactsMerchantHost,
   payload: Record<string, unknown>,
 ): Promise<void> {
   switch (topic) {
@@ -305,7 +325,7 @@ async function applyOrderFactsWebhookIfOwned(input: {
   | {
       handled: true;
       applicationStatus: string;
-      retry?: { reason: string };
+      retry?: { reason: string; classification: string };
       fail?: { code: string; reason: string };
     }
 > {
@@ -317,7 +337,7 @@ async function applyOrderFactsWebhookIfOwned(input: {
     input.ctx.tenant.myshopifyDomain,
   );
   const result = await processOrderFactsWebhookJob({
-    db: input.ctx.db as never,
+    db: input.ctx.db,
     admin,
     shop: {
       id: input.ctx.tenant.shopId,
@@ -339,18 +359,26 @@ async function applyOrderFactsWebhookIfOwned(input: {
       receivedAt: input.durable.createdAt,
       leaseDurationMs: 60_000,
     },
-    runLegacy: (topic, db, payload) =>
-      runLegacyWebhookHandler(topic, db as unknown as TenantDb, payload),
+    runLegacy: runLegacyWebhookHandler,
     requestedCanonicalIdentitiesPerTransaction:
       writerConfig.effectiveCanonicalIdentitiesPerTransaction,
     configuredWorstCaseConcurrentCanonicalTransactions:
       writerConfig.configuredWorstCaseConcurrentCanonicalTransactions,
   });
-  if (result.status === "incomplete") {
+  if (
+    result.status === "incomplete" ||
+    result.status === "first_confirmation_pending"
+  ) {
     return {
       handled: true,
       applicationStatus: result.status,
-      retry: { reason: result.reason },
+      retry: {
+        reason: result.reason,
+        classification:
+          result.status === "first_confirmation_pending"
+            ? "first_confirmation_pending"
+            : "incomplete",
+      },
     };
   }
   if (result.status === "blocked") {
@@ -569,10 +597,13 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
             shopId: durable.shopId,
             attemptId: attempt.id,
             workerId,
-            errorCode: "order_facts_incomplete",
+            errorCode:
+              orderFacts.retry.classification === "first_confirmation_pending"
+                ? "order_facts_first_confirmation_pending"
+                : "order_facts_incomplete",
             failureSummary: orderFacts.retry.reason,
-            backoffMs: 5_000,
-            retryClassification: "incomplete",
+            backoffMs: ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS,
+            retryClassification: orderFacts.retry.classification,
           });
           return;
         }
@@ -770,10 +801,13 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
             shopId: durable.shopId,
             attemptId: attempt.id,
             workerId,
-            errorCode: "order_facts_incomplete",
+            errorCode:
+              orderFacts.retry.classification === "first_confirmation_pending"
+                ? "order_facts_first_confirmation_pending"
+                : "order_facts_incomplete",
             failureSummary: orderFacts.retry.reason,
-            backoffMs: 5_000,
-            retryClassification: "incomplete",
+            backoffMs: ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS,
+            retryClassification: orderFacts.retry.classification,
           });
           return;
         }
@@ -1043,7 +1077,7 @@ export async function processCronJob(job: Job) {
                 ? await runOrderFactsSyncJob({
                     authority: ctx.tenant,
                     admin,
-                    db: ctx.db as never,
+                    db: ctx.db,
                     durableJobId: durable.id,
                     correlationId: durable.correlationId,
                     payload: (durable.sanitizedPayload as Record<string, unknown>) ?? {},
@@ -1055,7 +1089,7 @@ export async function processCronJob(job: Job) {
                 : await runOrderFactsReconcileJob({
                     authority: ctx.tenant,
                     admin,
-                    db: ctx.db as never,
+                    db: ctx.db,
                     durableJobId: durable.id,
                     correlationId: durable.correlationId,
                     payload: (durable.sanitizedPayload as Record<string, unknown>) ?? {},

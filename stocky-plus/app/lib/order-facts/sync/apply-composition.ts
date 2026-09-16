@@ -11,20 +11,31 @@ import {
   OrderApplyReceiptDigestConflictError,
   OrderApplyReceiptNotCertifiableError,
 } from "../apply/errors";
-import type { DirectOrderObservation, OrderApplyReceiptInput } from "../apply/types";
+import type {
+  DirectOrderObservation,
+  FullSyncOrderObservation,
+  OrderApplyReceiptInput,
+} from "../apply/types";
 import type { OrderApplyDb } from "../apply/sql";
 import { SyncControlPlaneError } from "../../../sync/errors";
 import {
+  APPLICATION_ALREADY_APPLIED,
   APPLICATION_DIGEST_CONFLICT,
   APPLICATION_OUTCOME_UNCERTAIN,
 } from "../../../sync/execution-strategy.server";
 import { isLegacyOrderWebhookTopic } from "./constants";
+import { OrderFactsSyncError } from "./errors";
 import { abandonActiveObservation } from "./observations";
-import type { LegacyWebhookRunner, OrderFactsWebhookResult } from "./types";
+import {
+  isOrderFactsMerchantHost,
+  type LegacyWebhookRunner,
+  type OrderFactsTxnClient,
+  type OrderFactsWebhookResult,
+} from "./types";
 
-export type OrderFactsTxnHost = OrderApplyDb & {
+export type OrderFactsTxnHost = OrderFactsTxnClient & {
   $transaction: <T>(
-    fn: (tx: OrderFactsTxnHost) => Promise<T>,
+    fn: (tx: OrderFactsTxnClient) => Promise<T>,
     options?: {
       maxWait?: number;
       timeout?: number;
@@ -33,10 +44,47 @@ export type OrderFactsTxnHost = OrderApplyDb & {
   ) => Promise<T>;
 };
 
-function asApplyDb(db: OrderApplyDb): OrderApplyDb {
-  // Do not rebind $queryRaw onto the TenantDb proxy — Prisma's tagged
-  // template is already bound to the transaction client.
+export function asApplyDb(db: OrderFactsTxnClient): OrderApplyDb {
+  if (typeof db.$queryRaw !== "function") {
+    throw new OrderFactsSyncError(
+      "order_facts_apply_view_missing",
+      "C apply requires the transaction-scoped $queryRaw view",
+    );
+  }
   return { $queryRaw: db.$queryRaw };
+}
+
+function isRetryableSerializationFailure(error: unknown): boolean {
+  if (error == null || typeof error !== "object") return false;
+  const code = "code" in error ? String((error as { code?: unknown }).code) : "";
+  if (code === "P2034" || code === "40001") return true;
+  const meta =
+    "meta" in error ? (error as { meta?: { code?: unknown } }).meta : undefined;
+  if (meta != null && String(meta.code) === "40001") return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /could not serialize access|40001/i.test(message);
+}
+
+async function withRepeatableReadRetry<T>(
+  db: OrderFactsTxnHost,
+  fn: (tx: OrderFactsTxnClient) => Promise<T>,
+): Promise<T> {
+  const maxAttempts = 3;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await db.$transaction(fn, {
+        isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
+      });
+    } catch (error) {
+      lastError = error;
+      if (isRetryableSerializationFailure(error) && attempt < maxAttempts) {
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
 }
 
 export async function probeReceiptBeforeShopifyIo(
@@ -45,23 +93,16 @@ export async function probeReceiptBeforeShopifyIo(
   receipt: OrderApplyReceiptInput,
 ): Promise<"already_applied" | "proceed"> {
   try {
-    return await db.$transaction(
-      async (tx) => {
-        const applyDb = asApplyDb(tx);
-        await acquireReceiptApplicationKeyLock(
-          applyDb,
-          shopId,
-          receipt.applicationKey,
-        );
-        const probed = await shortCircuitIfApplied(
-          applyDb,
-          shopId,
-          receipt,
-        );
-        return probed === "already_applied" ? "already_applied" : "proceed";
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-    );
+    return await withRepeatableReadRetry(db, async (tx) => {
+      const applyDb = asApplyDb(tx);
+      await acquireReceiptApplicationKeyLock(
+        applyDb,
+        shopId,
+        receipt.applicationKey,
+      );
+      const probed = await shortCircuitIfApplied(applyDb, shopId, receipt);
+      return probed === "already_applied" ? "already_applied" : "proceed";
+    });
   } catch (error) {
     mapApplyError(error);
   }
@@ -88,7 +129,7 @@ function mapApplyError(error: unknown): never {
   throw error;
 }
 
-function resultGids(observation: DirectOrderObservation): {
+function resultGids(observation: DirectOrderObservation | FullSyncOrderObservation): {
   orderGid: string | null;
   refundGid: string | null;
 } {
@@ -107,32 +148,56 @@ function resultGids(observation: DirectOrderObservation): {
 export async function applyCanonicalAndLegacy(input: {
   db: OrderFactsTxnHost;
   shopId: string;
-  observation: DirectOrderObservation;
+  observation: DirectOrderObservation | FullSyncOrderObservation;
   receipt: OrderApplyReceiptInput;
   topic: string;
   projection: Record<string, unknown>;
   runLegacy?: LegacyWebhookRunner;
   requestedCanonicalIdentitiesPerTransaction?: number;
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
+  throwOnApplyAlreadyApplied?: boolean;
 }): Promise<OrderFactsWebhookResult> {
   const runApply = async (receipt: OrderApplyReceiptInput | undefined) =>
     applyOrderFactsWithRetry(
       (apply) =>
-        input.db.$transaction(
-          async (tx) => {
+        withRepeatableReadRetry(input.db, async (tx) => {
             const batch = await apply(asApplyDb(tx));
+            // C allowlists terminal_first_confirmation as a receipt-success
+            // noop. D must not commit that receipt or merchant effects: the
+            // first LIVE confirmation is pending work, not a finished application.
             if (
+              receipt != null &&
+              batch.results.some(
+                (result) => result.reason === "terminal_first_confirmation",
+              )
+            ) {
+              throw new OrderApplyReceiptNotCertifiableError(
+                "Receipt-bound apply outcomes are not terminal-accepted: noop:terminal_first_confirmation",
+              );
+            }
+            // Frozen v1 effects commit only with the success receipt.
+            if (
+              receipt != null &&
               batch.receiptStatus === "applied" &&
               isLegacyOrderWebhookTopic(input.topic) &&
               input.runLegacy
             ) {
+              if (!isOrderFactsMerchantHost(tx)) {
+                throw new OrderFactsSyncError(
+                  "order_facts_legacy_host_invalid",
+                  "Frozen v1 legacy effects require the authenticated TenantDb transaction, not a query-only view",
+                );
+              }
               await input.runLegacy(
                 input.topic,
-                asApplyDb(tx),
+                tx,
                 input.projection,
               );
             }
-            if (batch.receiptStatus === "already_applied") {
+            if (
+              batch.receiptStatus === "already_applied" &&
+              input.observation.observationKind === "direct"
+            ) {
               await abandonActiveObservation(asApplyDb(tx), {
                 shopId: input.shopId,
                 token: input.observation.observationToken,
@@ -142,15 +207,11 @@ export async function applyCanonicalAndLegacy(input: {
               });
             }
             return batch;
-          },
-          { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead },
-        ),
+          }),
       {
         shopId: input.shopId,
         observations: [input.observation],
         receipt,
-        // Do not default to 1: refunds lock Order+Refund. Omit so C uses
-        // identities.length, then the lock-capacity evaluator caps it.
         requestedCanonicalIdentitiesPerTransaction:
           input.requestedCanonicalIdentitiesPerTransaction,
         configuredWorstCaseConcurrentCanonicalTransactions:
@@ -162,6 +223,12 @@ export async function applyCanonicalAndLegacy(input: {
     const applyResult = await runApply(input.receipt);
 
     if (applyResult.receiptStatus === "already_applied") {
+      if (input.throwOnApplyAlreadyApplied) {
+        throw new SyncControlPlaneError(
+          APPLICATION_ALREADY_APPLIED,
+          "Concurrent SyncApplicationReceipt insert won; aborting duplicate application",
+        );
+      }
       return {
         status: "already_applied",
         apply: applyResult,
@@ -181,18 +248,13 @@ export async function applyCanonicalAndLegacy(input: {
       ...resultGids(input.observation),
     };
   } catch (error) {
-    // C records the first LIVE confirmation with diagnostic
-    // TERMINAL_IDENTITY_REVIVAL_CONFLICT:<gens>, which it classifies as
-    // outcome "conflict" and therefore will not certify a receipt. C's own
-    // revival tests apply without a receipt. Retry once without a receipt so
-    // the confirmation commits and the retry budget is not consumed.
     if (
       error instanceof OrderApplyReceiptNotCertifiableError &&
       error.message.includes("terminal_first_confirmation")
     ) {
       const applyResult = await runApply(undefined);
       return {
-        status: "applied",
+        status: "first_confirmation_pending",
         apply: applyResult,
         reason: "terminal_first_confirmation",
         ...resultGids(input.observation),

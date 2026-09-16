@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 
 import type { OrderAdminReadClient, TrustedShopIdentity } from "../admin-read";
-import type { OrderApplyReceiptInput } from "../apply/types";
+import type { OrderApplyReceiptInput, OrderSnapshot, FullSyncOrderObservation } from "../apply/types";
 import type { OrderSourceKind } from "../types";
 import {
   applyCanonicalAndLegacy,
+  asApplyDb,
   persistIncompleteWithoutReceipt,
   type OrderFactsTxnHost,
 } from "./apply-composition";
@@ -29,6 +30,7 @@ export type NominatedApplyResult =
   | { status: "applied"; shopifyGid: string }
   | { status: "already_applied"; shopifyGid: string }
   | { status: "incomplete"; shopifyGid: string; reason: string }
+  | { status: "first_confirmation_pending"; shopifyGid: string; reason: string }
   | { status: "blocked"; shopifyGid: string; reason: string }
   | { status: "noop"; shopifyGid: string; reason: string };
 
@@ -49,7 +51,7 @@ export async function applyNominatedOrderGid(input: {
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
 }): Promise<NominatedApplyResult> {
   const handle = await input.db.$transaction((tx) =>
-    beginDirectOrderObservation(tx, {
+    beginDirectOrderObservation(asApplyDb(tx), {
       shopId: input.shopId,
       resourceKind: "Order",
       shopifyGid: input.shopifyGid,
@@ -65,7 +67,7 @@ export async function applyNominatedOrderGid(input: {
     const shopMetadata = await readShopTimezoneCurrencyOrThrow(context);
     await input.db.$transaction((tx) =>
       persistObservationScopesAndShopMetadata({
-        db: tx,
+        db: asApplyDb(tx),
         shopId: input.shopId,
         handle,
         scopes,
@@ -75,7 +77,7 @@ export async function applyNominatedOrderGid(input: {
     const read = await readOrderFact(context, input.shopifyGid);
     const mapped = await input.db.$transaction((tx) =>
       mapOrderReadToObservation({
-        db: tx,
+        db: asApplyDb(tx),
         shopId: input.shopId,
         handle,
         read,
@@ -86,7 +88,7 @@ export async function applyNominatedOrderGid(input: {
     );
     if (mapped.status === "noop") {
       await input.db.$transaction((tx) =>
-        abandonActiveObservation(tx, {
+        abandonActiveObservation(asApplyDb(tx), {
           shopId: input.shopId,
           token: handle.token,
           requestGen: handle.requestGen,
@@ -102,7 +104,7 @@ export async function applyNominatedOrderGid(input: {
     if (mapped.status === "incomplete" || mapped.status === "failure") {
       if (isRetryableMappedReadIssue(mapped)) {
         const responseGen = await input.db.$transaction((tx) =>
-          allocateResponseGeneration(tx, handle.requestGen),
+          allocateResponseGeneration(asApplyDb(tx), handle.requestGen),
         );
         await persistIncompleteWithoutReceipt({
           db: input.db,
@@ -118,7 +120,7 @@ export async function applyNominatedOrderGid(input: {
         };
       }
       await input.db.$transaction((tx) =>
-        abandonActiveObservation(tx, {
+        abandonActiveObservation(asApplyDb(tx), {
           shopId: input.shopId,
           token: handle.token,
           requestGen: handle.requestGen,
@@ -140,7 +142,7 @@ export async function applyNominatedOrderGid(input: {
         });
       }
       await input.db.$transaction((tx) =>
-        abandonActiveObservation(tx, {
+        abandonActiveObservation(asApplyDb(tx), {
           shopId: input.shopId,
           token: handle.token,
           requestGen: handle.requestGen,
@@ -177,6 +179,13 @@ export async function applyNominatedOrderGid(input: {
     if (applied.status === "applied") {
       return { status: "applied", shopifyGid: input.shopifyGid };
     }
+    if (applied.status === "first_confirmation_pending") {
+      return {
+        status: "first_confirmation_pending",
+        shopifyGid: input.shopifyGid,
+        reason: applied.reason,
+      };
+    }
     return {
       status: "incomplete",
       shopifyGid: input.shopifyGid,
@@ -184,7 +193,7 @@ export async function applyNominatedOrderGid(input: {
     };
   } catch (error) {
     await input.db.$transaction((tx) =>
-      abandonActiveObservation(tx, {
+      abandonActiveObservation(asApplyDb(tx), {
         shopId: input.shopId,
         token: handle.token,
         requestGen: handle.requestGen,
@@ -213,5 +222,66 @@ export function nominatedReceipt(input: {
     rootDurableJobId: input.durableJobId,
     applyingDurableJobId: input.durableJobId,
     payloadDigest: digest,
+  };
+}
+
+export async function applyBulkAssembledOrder(input: {
+  db: OrderFactsTxnHost;
+  shopId: string;
+  snapshot: OrderSnapshot;
+  fenceGeneration: bigint;
+  epochId: string;
+  observedAt: Date;
+  accessScopeSnapshot: readonly string[];
+  receipt: OrderApplyReceiptInput;
+  requestedCanonicalIdentitiesPerTransaction?: number;
+  configuredWorstCaseConcurrentCanonicalTransactions?: number;
+}): Promise<NominatedApplyResult> {
+  const observation: FullSyncOrderObservation = {
+    observationKind: "full_sync",
+    fenceGeneration: input.fenceGeneration,
+    epochId: input.epochId,
+    identity: {
+      shopId: input.shopId,
+      resourceKind: "Order",
+      shopifyGid: input.snapshot.shopifyGid,
+    },
+    existenceKind: "LIVE_FULL_SYNC_PRESENT",
+    existenceObservedAt: input.observedAt,
+    sourceKind: "FULL_SYNC",
+    accessScopeSnapshot: input.accessScopeSnapshot,
+    snapshotComplete: true,
+    order: input.snapshot,
+    nestedRefunds: [],
+  };
+  const applied = await applyCanonicalAndLegacy({
+    db: input.db,
+    shopId: input.shopId,
+    observation,
+    receipt: input.receipt,
+    topic: "orders/updated",
+    projection: { id: input.snapshot.shopifyGid },
+    requestedCanonicalIdentitiesPerTransaction:
+      input.requestedCanonicalIdentitiesPerTransaction,
+    configuredWorstCaseConcurrentCanonicalTransactions:
+      input.configuredWorstCaseConcurrentCanonicalTransactions,
+  });
+  if (applied.status === "already_applied") {
+    return { status: "already_applied", shopifyGid: input.snapshot.shopifyGid };
+  }
+  if (applied.status === "applied") {
+    return { status: "applied", shopifyGid: input.snapshot.shopifyGid };
+  }
+  if (applied.status === "first_confirmation_pending") {
+    return {
+      status: "first_confirmation_pending",
+      shopifyGid: input.snapshot.shopifyGid,
+      reason: applied.reason,
+    };
+  }
+  return {
+    status: "incomplete",
+    shopifyGid: input.snapshot.shopifyGid,
+    reason: applied.reason,
   };
 }

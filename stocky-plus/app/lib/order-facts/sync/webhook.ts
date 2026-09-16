@@ -10,6 +10,7 @@ import {
 import { OrderFactsIdentityError, OrderFactsSyncError } from "./errors";
 import {
   applyCanonicalAndLegacy,
+  asApplyDb,
   persistIncompleteWithoutReceipt,
   probeReceiptBeforeShopifyIo,
   type OrderFactsTxnHost,
@@ -160,7 +161,7 @@ export async function processOrderFactsWebhookJob(
 
   const context = { admin: input.admin, shop: input.shop };
   const handle = await input.db.$transaction((tx) =>
-    beginDirectOrderObservation(tx, {
+    beginDirectOrderObservation(asApplyDb(tx), {
       shopId: input.work.shopId,
       resourceKind,
       shopifyGid,
@@ -176,7 +177,7 @@ export async function processOrderFactsWebhookJob(
     const shopMetadata = await readShopTimezoneCurrencyOrThrow(context);
     await input.db.$transaction((tx) =>
       persistObservationScopesAndShopMetadata({
-        db: tx,
+        db: asApplyDb(tx),
         shopId: input.work.shopId,
         handle,
         scopes,
@@ -194,7 +195,7 @@ export async function processOrderFactsWebhookJob(
     const mapped = await input.db.$transaction((tx) =>
       resourceKind === "Order"
         ? mapOrderReadToObservation({
-            db: tx,
+            db: asApplyDb(tx),
             shopId: input.work.shopId,
             handle,
             read: readResult as Awaited<ReturnType<typeof readOrderFact>>,
@@ -204,7 +205,7 @@ export async function processOrderFactsWebhookJob(
             deleteWebhook,
           })
         : mapRefundReadToObservation({
-            db: tx,
+            db: asApplyDb(tx),
             shopId: input.work.shopId,
             handle,
             read: readResult as Awaited<ReturnType<typeof readRefundFact>>,
@@ -217,7 +218,7 @@ export async function processOrderFactsWebhookJob(
 
     if (mapped.status === "noop") {
       await input.db.$transaction((tx) =>
-        abandonActiveObservation(tx, {
+        abandonActiveObservation(asApplyDb(tx), {
           shopId: input.work.shopId,
           token: handle.token,
           requestGen: handle.requestGen,
@@ -234,7 +235,7 @@ export async function processOrderFactsWebhookJob(
     if (mapped.status === "incomplete" || mapped.status === "failure") {
       if (isRetryableMappedReadIssue(mapped)) {
         const responseGen = await input.db.$transaction((tx) =>
-          allocateResponseGeneration(tx, handle.requestGen),
+          allocateResponseGeneration(asApplyDb(tx), handle.requestGen),
         );
         await persistIncompleteWithoutReceipt({
           db: input.db,
@@ -251,7 +252,7 @@ export async function processOrderFactsWebhookJob(
         };
       }
       await input.db.$transaction((tx) =>
-        abandonActiveObservation(tx, {
+        abandonActiveObservation(asApplyDb(tx), {
           shopId: input.work.shopId,
           token: handle.token,
           requestGen: handle.requestGen,
@@ -274,7 +275,7 @@ export async function processOrderFactsWebhookJob(
         });
       }
       await input.db.$transaction((tx) =>
-        abandonActiveObservation(tx, {
+        abandonActiveObservation(asApplyDb(tx), {
           shopId: input.work.shopId,
           token: handle.token,
           requestGen: handle.requestGen,
@@ -309,10 +310,11 @@ export async function processOrderFactsWebhookJob(
         input.requestedCanonicalIdentitiesPerTransaction,
       configuredWorstCaseConcurrentCanonicalTransactions:
         input.configuredWorstCaseConcurrentCanonicalTransactions,
+      throwOnApplyAlreadyApplied: true,
     });
   } catch (error) {
     await input.db.$transaction((tx) =>
-      abandonActiveObservation(tx, {
+      abandonActiveObservation(asApplyDb(tx), {
         shopId: input.work.shopId,
         token: handle.token,
         requestGen: handle.requestGen,

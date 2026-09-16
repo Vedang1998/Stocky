@@ -300,6 +300,7 @@
 70. `PR6_BC_CLOSURE_REPORT.md` — B/C repository-lane closeout identities after **V**
 71. `PR6_D_EXECUTION_BRIEF.md` — approved PR6-D complete-integration execution contract after admission
 72. `PR6_D_IMPLEMENTATION_REPORT.md` — PR6-D complete integration implementation evidence (draft PR #43; not merge authorization)
+73. `PR6_D_COMPLETE_INTEGRATION_INDEPENDENT_REVIEW.md` — immutable Claude complete-integration review of `25226e46…` (blob `48ac291a781b2347cb6017af862f2de9677826a5`; never edit); verdict **CORRECTIONS REQUIRED**
 
 ## Immutable PR 5 planning (#24) merge evidence
 
@@ -479,6 +480,7 @@
 - PR6-B/C closure: `PR6_BC_CLOSURE_REPORT.md`
 - PR6-D execution brief: `PR6_D_EXECUTION_BRIEF.md`
 - PR6-D implementation report: `PR6_D_IMPLEMENTATION_REPORT.md`
+- Immutable PR6-D complete-integration review (never edit): `PR6_D_COMPLETE_INTEGRATION_INDEPENDENT_REVIEW.md`
 - Immutable PR6-A implementation review (never edit): `PR6_A_FOUNDATION_INDEPENDENT_REVIEW.md`
 - Immutable PR6-A correction re-review (never edit): `PR6_A_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md`
 - Immutable PR6 reviews (never edit): `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_INDEPENDENT_REVIEW.md`; `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN_CORRECTION_INDEPENDENT_REVIEW.md`; `PR6_CURRENT_MAIN_FINAL_INDEPENDENT_REVIEW.md`

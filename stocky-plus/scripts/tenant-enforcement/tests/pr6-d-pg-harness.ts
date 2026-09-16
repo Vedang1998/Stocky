@@ -14,6 +14,7 @@ import { operationNameOf } from "../../../app/lib/order-facts/admin-read/__tests
 import {
   agreementNode,
   lineNode,
+  moneyBag,
   orderHeader,
   refundNode,
   saleNode,
@@ -63,11 +64,27 @@ export async function setupPr6DDatabase(): Promise<{
 export function asOrderFactsTxnHost(
   client: Client,
   shopId: string,
-  options?: { loseAppliedCommit?: boolean },
+  options?: { loseAppliedCommit?: boolean; myshopifyDomain?: string },
 ): OrderFactsTxnHost {
   const applyDb = asQueryRaw(client);
   const host: OrderFactsTxnHost = {
     $queryRaw: applyDb.$queryRaw.bind(applyDb),
+    authority: {
+      shopId,
+      myshopifyDomain: options?.myshopifyDomain ?? SHOP_A_DOMAIN,
+    },
+    salesDailyAggregate: {
+      upsert: async () => {
+        throw new Error("pr6-d harness salesDailyAggregate is not production TenantDb");
+      },
+      findUnique: async () => null,
+      update: async () => {
+        throw new Error("pr6-d harness salesDailyAggregate is not production TenantDb");
+      },
+    },
+    bomComponent: {
+      findMany: async () => [],
+    },
     $transaction: async (fn, txOptions) => {
       const isolation =
         txOptions?.isolationLevel ===
@@ -393,7 +410,10 @@ export function createOrderFactsAdmin(input: {
                       (typeof bulk.status === "function"
                         ? bulk.status()
                         : (bulk.status ?? "COMPLETED"))),
-                url: bulk.url ?? "https://example.invalid/order-facts.jsonl",
+                url:
+                  bulk.url === undefined
+                    ? "https://example.invalid/order-facts.jsonl"
+                    : bulk.url,
                 partialDataUrl: bulk.partialDataUrl ?? null,
                 objectCount: bulk.objectCount ?? "2",
                 rootObjectCount: bulk.rootObjectCount ?? "1",
@@ -515,12 +535,67 @@ export function legacyRunner(shopId: string) {
       ) VALUES (
         ${randomUUID()}, ${SHOP_A_DOMAIN}, ${shopId}, ${variant}, 'legacy-d',
         DATE '2026-01-20', 1, 1.00
-      )`;
+      )
+      ON CONFLICT ("shop", "shopifyVariantId", "locationId", date)
+      DO UPDATE SET "unitsSold" = "SalesDailyAggregate"."unitsSold" + 1`;
   };
 }
 
 export async function* jsonlLines(objects: unknown[]): AsyncGenerator<string> {
   yield objects.map((object) => JSON.stringify(object)).join("\n") + "\n";
+}
+
+export function bulkARoot(
+  gid: string,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    id: gid,
+    name: "#bulk",
+    createdAt: IN_WINDOW_ISO,
+    updatedAt: AHEAD_UPDATED_ISO,
+    processedAt: IN_WINDOW_ISO,
+    closed: false,
+    edited: false,
+    test: false,
+    currencyCode: "USD",
+    presentmentCurrencyCode: "USD",
+    taxesIncluded: false,
+    currentSubtotalLineItemsQuantity: 1,
+    originalTotalPriceSet: moneyBag("10.00"),
+    currentTotalPriceSet: moneyBag("10.00"),
+    currentSubtotalPriceSet: moneyBag("10.00"),
+    currentTotalDiscountsSet: moneyBag("0.00"),
+    currentTotalTaxSet: moneyBag("0.00"),
+    netPaymentSet: moneyBag("10.00"),
+    totalRefundedSet: moneyBag("0.00"),
+    currentShippingPriceSet: moneyBag("0.00"),
+    ...overrides,
+  };
+}
+
+export function bulkALine(
+  orderGid: string,
+  index = 1,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const orderKey = orderGid.startsWith("gid://shopify/Order/")
+    ? orderGid.slice("gid://shopify/Order/".length)
+    : orderGid;
+  return {
+    id: `gid://shopify/LineItem/${orderKey}-${index}`,
+    __parentId: orderGid,
+    quantity: 1,
+    currentQuantity: 1,
+    refundableQuantity: 1,
+    isGiftCard: false,
+    title: "Line",
+    originalTotalSet: moneyBag("10.00"),
+    originalUnitPriceSet: moneyBag("10.00"),
+    discountedTotalSet: moneyBag("9.00"),
+    totalDiscountSet: moneyBag("1.00"),
+    ...overrides,
+  };
 }
 
 export { lineNode, refundNode, saleNode, agreementNode };

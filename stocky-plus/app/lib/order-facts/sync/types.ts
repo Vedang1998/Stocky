@@ -6,6 +6,7 @@ import type {
   OrderApplyReceiptInput,
 } from "../apply/types";
 import type { OrderExistenceKind, OrderSourceKind } from "../types";
+import type { TenantDb } from "../../../tenant/tenant-db.server";
 import type { OrderFactsWebhookTopic } from "./constants";
 
 export type OrderFactsApplyDb = OrderApplyDb;
@@ -106,19 +107,62 @@ export type WebhookDeliveryWork = {
   leaseDurationMs?: number;
 };
 
+/** Query-only C view. Never a substitute for the legacy merchant transaction. */
+export type OrderFactsApplyView = OrderApplyDb;
+
+/**
+ * D-owned merchant host for frozen v1 handlers. Incompatible `$queryRaw`-only
+ * adapters fail this structural type (no `as unknown as TenantDb`).
+ */
+export type OrderFactsMerchantHost = {
+  authority: { myshopifyDomain: string; shopId?: string };
+  salesDailyAggregate: {
+    upsert: TenantDb["salesDailyAggregate"]["upsert"];
+    findUnique: TenantDb["salesDailyAggregate"]["findUnique"];
+    update: TenantDb["salesDailyAggregate"]["update"];
+  };
+  bomComponent: {
+    findMany: TenantDb["bomComponent"]["findMany"];
+  };
+};
+
+export type OrderFactsTxnClient = Partial<OrderFactsApplyView> &
+  Partial<OrderFactsMerchantHost>;
+
+export function isOrderFactsMerchantHost(
+  db: OrderFactsTxnClient | OrderFactsMerchantHost,
+): db is OrderFactsMerchantHost {
+  const merchant = db as OrderFactsMerchantHost;
+  return (
+    typeof merchant.authority?.myshopifyDomain === "string" &&
+    merchant.salesDailyAggregate != null &&
+    merchant.bomComponent != null
+  );
+}
+
 export type LegacyWebhookRunner = (
   topic: string,
-  db: OrderApplyDb,
+  db: OrderFactsMerchantHost,
   payload: Record<string, unknown>,
 ) => Promise<void>;
 
 export type OrderFactsWebhookResult = {
-  status: "applied" | "already_applied" | "incomplete" | "blocked" | "noop";
+  status:
+    | "applied"
+    | "already_applied"
+    | "incomplete"
+    | "blocked"
+    | "noop"
+    | "first_confirmation_pending";
   apply?: OrderApplyBatchResult;
   reason: string;
   orderGid: string | null;
   refundGid: string | null;
 };
+
+export type JsonlCloseEvidence =
+  | "currentSubtotalLineItemsQuantity"
+  | "stream_end_count_agreement";
 
 export type JsonlObject = {
   id?: unknown;
@@ -140,6 +184,8 @@ export type JsonlAssemblyResult =
       rootGids: string[];
       objectCount: number;
       rootCount: number;
+      lastPhysicalOrdinal: number;
+      closeEvidence: JsonlCloseEvidence;
     }
   | {
       status: Exclude<JsonlAssemblyStatus, "COMPLETE">;
@@ -147,6 +193,7 @@ export type JsonlAssemblyResult =
       rootGids: string[];
       objectCount: number;
       rootCount: number;
+      lastPhysicalOrdinal: number;
     };
 
 export type CoverageRecord = {

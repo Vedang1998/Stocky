@@ -12,7 +12,9 @@ import {
   persistBulkCounts,
   persistBulkSubmitIntentAndFence,
 } from "../../catalog-facts/ingest/checkpoint";
+import { validateUnsignedCountToken } from "../../catalog-facts/ingest/counts";
 import {
+  applyBulkAssembledOrder,
   applyNominatedOrderGid,
   nominatedReceipt,
 } from "./apply-nominated";
@@ -20,25 +22,38 @@ import { submitOrderFactsBulkA } from "./bulk";
 import {
   ORDER_FACTS_BULK_POLL_INTERVAL_MS,
   ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
+  ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS,
   ORDER_FACTS_SYNC_DOMAIN,
   ORDER_FACTS_SYNC_JOB_TYPE,
 } from "./constants";
 import {
   assertShopProcessingEnabled,
   createOrderFactsSyncRun,
+  incrementOrderFactsPollExaminedCount,
   persistOrderFactsCoverageHealth,
   recordOrderFactsDataIssue,
 } from "./control-plane";
 import { OrderFactsSyncError } from "./errors";
 import {
-  assembleOrderFactsJsonl,
-  nominatedOrderGids,
+  streamOrderFactsJsonl,
   type JsonlByteSource,
+  type JsonlCompleteAssembly,
 } from "./jsonl";
+import {
+  bulkRootNeedsAgreementRefundFollowUp,
+  mapBulkAAssemblyToOrderSnapshot,
+} from "./mapper-bulk";
+import { readGrantedAccessScopes } from "./refetch";
 import type { OrderFactsTxnHost } from "./apply-composition";
 
 export type OrderFactsImportStepResult =
-  | { status: "SUCCEEDED"; applied: number; examined: number }
+  | {
+      status: "SUCCEEDED";
+      applied: number;
+      examined: number;
+      followUpReads: number;
+      bulkDirectApplies: number;
+    }
   | { status: "CONTINUE"; backoffMs: number; reason: string }
   | { status: "PARTIAL_FAILURE"; reason: string };
 
@@ -53,6 +68,71 @@ async function defaultFetchJsonl(url: string): Promise<JsonlByteSource> {
   return response.body;
 }
 
+async function consumePollBudget(input: {
+  shopId: string;
+  syncRunId: string;
+  examinedCount: number;
+  startedAt: Date;
+  bulkSubmitIntentAt: Date | null;
+}): Promise<"ok" | "exhausted"> {
+  const elapsed =
+    Date.now() -
+    (input.bulkSubmitIntentAt ?? input.startedAt).getTime();
+  if (
+    input.examinedCount >= ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS ||
+    elapsed >= ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS
+  ) {
+    return "exhausted";
+  }
+  await incrementOrderFactsPollExaminedCount({
+    shopId: input.shopId,
+    syncRunId: input.syncRunId,
+  });
+  return "ok";
+}
+
+async function failImport(input: {
+  shopId: string;
+  syncRunId: string;
+  errorCode: string;
+  reason: string;
+  examined?: number;
+  incomplete?: number;
+  truncated?: boolean;
+}): Promise<OrderFactsImportStepResult> {
+  await markSyncRunPartialFailure({
+    shopId: input.shopId,
+    syncRunId: input.syncRunId,
+    errorCode: input.errorCode.slice(0, 64),
+    failureSummary: input.reason.slice(0, 512),
+  });
+  await recordOrderFactsDataIssue({
+    shopId: input.shopId,
+    reasonCode: input.errorCode.slice(0, 64),
+    redactedEvidence: { reason: input.reason.slice(0, 200) },
+  });
+  await persistOrderFactsCoverageHealth({
+    shopId: input.shopId,
+    coverage: {
+      mode: "incremental",
+      examinedGids: input.examined ?? 0,
+      appliedGids: 0,
+      incompleteGids: input.incomplete ?? 1,
+      outOfWindowGids: 0,
+      behindWatermarkExamined: 0,
+      watermarkPersisted: false,
+      cursorValue: null,
+    },
+    evidence: {
+      unresolvedCoverageCount: 1,
+      openDiagnosticIssueCount: 1,
+      incompletePaginationCount: input.truncated ? 1 : 0,
+      quarantineOpenCount: 0,
+    },
+  });
+  return { status: "PARTIAL_FAILURE", reason: input.reason };
+}
+
 export async function runOrderFactsImportStep(input: {
   db: OrderFactsTxnHost;
   admin: OrderAdminReadClient;
@@ -63,6 +143,8 @@ export async function runOrderFactsImportStep(input: {
   jsonlSource?: JsonlByteSource;
   pollBulkOperation?: boolean;
   fetchJsonl?: (url: string) => Promise<JsonlByteSource>;
+  expectedObjectCount?: string | null;
+  expectedRootObjectCount?: string | null;
   requestedCanonicalIdentitiesPerTransaction?: number;
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
 }): Promise<OrderFactsImportStepResult> {
@@ -86,6 +168,10 @@ export async function runOrderFactsImportStep(input: {
         });
 
   let bulkOperationGid = syncRun.bulkOperationGid;
+  let expectedObjectCount = input.expectedObjectCount ?? syncRun.bulkObjectCount;
+  let expectedRootObjectCount =
+    input.expectedRootObjectCount ?? syncRun.bulkRootObjectCount;
+
   if (input.pollBulkOperation !== false && input.jsonlSource == null) {
     if (!bulkOperationGid) {
       const submitted = await submitOrderFactsBulkA(
@@ -102,198 +188,246 @@ export async function runOrderFactsImportStep(input: {
         bulkOperationGid,
       });
     }
-    let url: string | null = null;
-    for (let attempt = 0; attempt < ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS; attempt += 1) {
-      const polled = await readBulkOperationById(
-        input.admin as CatalogAdminReadClient,
-        bulkOperationGid,
-      );
-      if (!polled) {
-        await recordOrderFactsDataIssue({
+    const budget = await consumePollBudget({
+      shopId: input.shopId,
+      syncRunId: syncRun.id,
+      examinedCount: syncRun.examinedCount,
+      startedAt: syncRun.startedAt ?? syncRun.createdAt,
+      bulkSubmitIntentAt: syncRun.bulkSubmitIntentAt,
+    });
+    if (budget === "exhausted") {
+      return failImport({
+        shopId: input.shopId,
+        syncRunId: syncRun.id,
+        errorCode: "ORDER_FACTS_BULK_POLL_EXHAUSTED",
+        reason: "bulk_poll_budget_exhausted",
+      });
+    }
+    const polled = await readBulkOperationById(
+      input.admin as CatalogAdminReadClient,
+      bulkOperationGid,
+    );
+    if (!polled) {
+      return failImport({
+        shopId: input.shopId,
+        syncRunId: syncRun.id,
+        errorCode: "order_facts_bulk_poll_missing",
+        reason: "bulk_operation_missing",
+      });
+    }
+    assertPolledBulkOperationMatches(bulkOperationGid, polled.snapshot.id);
+    if (polled.snapshot.status === "COMPLETED") {
+      if (polled.snapshot.partialDataUrl) {
+        return failImport({
           shopId: input.shopId,
-          reasonCode: "order_facts_bulk_poll_missing",
-          redactedEvidence: { bulkOperationGid },
+          syncRunId: syncRun.id,
+          errorCode: "ORDER_FACTS_BULK_PARTIAL_URL",
+          reason: "partial_data_url_not_canonical",
         });
-        return {
-          status: "PARTIAL_FAILURE",
-          reason: "bulk_operation_missing",
-        };
       }
-      assertPolledBulkOperationMatches(bulkOperationGid, polled.snapshot.id);
-      if (polled.snapshot.status === "COMPLETED" && polled.snapshot.url) {
-        if (polled.snapshot.partialDataUrl) {
-          await markSyncRunPartialFailure({
+      expectedObjectCount = polled.snapshot.objectCount;
+      expectedRootObjectCount = polled.snapshot.rootObjectCount;
+      await persistBulkCounts({
+        shopId: input.shopId,
+        syncRunId: syncRun.id,
+        bulkOperationGid,
+        objectCount: polled.snapshot.objectCount,
+        rootObjectCount: polled.snapshot.rootObjectCount,
+      });
+      if (!polled.snapshot.url) {
+        const objectToken = validateUnsignedCountToken(expectedObjectCount);
+        const rootToken = validateUnsignedCountToken(expectedRootObjectCount);
+        if (
+          objectToken.ok &&
+          rootToken.ok &&
+          objectToken.token === "0" &&
+          rootToken.token === "0"
+        ) {
+          input = { ...input, jsonlSource: (async function* () {})() };
+        } else {
+          return failImport({
             shopId: input.shopId,
             syncRunId: syncRun.id,
-            errorCode: "ORDER_FACTS_BULK_PARTIAL_URL",
-            failureSummary: "partialDataUrl is not canonical success",
+            errorCode: "ORDER_FACTS_JSONL_EMPTY_NONEMPTY",
+            reason: "empty_download_of_nonempty_export",
           });
-          return {
-            status: "PARTIAL_FAILURE",
-            reason: "partial_data_url_not_canonical",
-          };
         }
-        url = polled.snapshot.url;
-        await persistBulkCounts({
-          shopId: input.shopId,
-          syncRunId: syncRun.id,
-          bulkOperationGid,
-          objectCount: polled.snapshot.objectCount,
-          rootObjectCount: polled.snapshot.rootObjectCount,
-        });
-        break;
-      }
-      if (
-        polled.snapshot.status === "FAILED" ||
-        polled.snapshot.status === "CANCELED" ||
-        polled.snapshot.status === "EXPIRED"
-      ) {
-        await markSyncRunPartialFailure({
-          shopId: input.shopId,
-          syncRunId: syncRun.id,
-          errorCode: "ORDER_FACTS_BULK_FAILED",
-          failureSummary: `Bulk A ${polled.snapshot.status}`,
-        });
-        return { status: "PARTIAL_FAILURE", reason: polled.snapshot.status };
-      }
-      if (attempt === 0) {
-        return {
-          status: "CONTINUE",
-          backoffMs: ORDER_FACTS_BULK_POLL_INTERVAL_MS,
-          reason: `bulk_status_${polled.snapshot.status}`,
+      } else {
+        input = {
+          ...input,
+          jsonlSource: await (input.fetchJsonl ?? defaultFetchJsonl)(
+            polled.snapshot.url,
+          ),
         };
       }
-    }
-    if (!url && input.jsonlSource == null) {
+    } else if (
+      polled.snapshot.status === "FAILED" ||
+      polled.snapshot.status === "CANCELED" ||
+      polled.snapshot.status === "EXPIRED"
+    ) {
+      return failImport({
+        shopId: input.shopId,
+        syncRunId: syncRun.id,
+        errorCode: "ORDER_FACTS_BULK_FAILED",
+        reason: polled.snapshot.status,
+      });
+    } else {
       return {
         status: "CONTINUE",
         backoffMs: ORDER_FACTS_BULK_POLL_INTERVAL_MS,
-        reason: "bulk_poll_in_progress",
-      };
-    }
-    if (url && input.jsonlSource == null) {
-      input = {
-        ...input,
-        jsonlSource: await (input.fetchJsonl ?? defaultFetchJsonl)(url),
+        reason: `bulk_status_${polled.snapshot.status}`,
       };
     }
   }
 
   if (input.jsonlSource == null) {
-    return {
-      status: "PARTIAL_FAILURE",
-      reason: "jsonl_source_missing",
-    };
-  }
-
-  const assembled = await assembleOrderFactsJsonl(input.jsonlSource);
-  if (assembled.status !== "COMPLETE") {
-    await markSyncRunPartialFailure({
+    return failImport({
       shopId: input.shopId,
       syncRunId: syncRun.id,
-      errorCode: `JSONL_${assembled.status}`.slice(0, 64),
-      failureSummary: assembled.reason.slice(0, 512),
+      errorCode: "ORDER_FACTS_JSONL_MISSING",
+      reason: "jsonl_source_missing",
     });
-    await persistOrderFactsCoverageHealth({
-      shopId: input.shopId,
-      coverage: {
-        mode: "incremental",
-        examinedGids: assembled.rootCount,
-        appliedGids: 0,
-        incompleteGids: assembled.rootCount,
-        outOfWindowGids: 0,
-        behindWatermarkExamined: 0,
-        watermarkPersisted: false,
-        cursorValue: null,
-      },
-      evidence: {
-        unresolvedCoverageCount: 1,
-        openDiagnosticIssueCount: 1,
-        incompletePaginationCount: assembled.status === "TRUNCATED" ? 1 : 0,
-        quarantineOpenCount: 0,
-      },
-    });
-    return { status: "PARTIAL_FAILURE", reason: assembled.reason };
   }
 
-  const gids = nominatedOrderGids(assembled);
+  const skipThroughOrdinal = syncRun.jsonlCommittedLineOrdinal ?? 0;
+  let contiguousCommitted = skipThroughOrdinal;
+  const pendingCommitted = new Set<number>();
   let applied = 0;
   let incomplete = 0;
+  let examined = 0;
+  let followUpReads = 0;
+  let bulkDirectApplies = 0;
   const observedAt = new Date();
-  for (let index = 0; index < gids.length; index += 1) {
-    const gid = gids[index]!;
-    const result = await applyNominatedOrderGid({
-      db: input.db,
-      admin: input.admin,
-      shop: input.shop,
-      shopId: input.shopId,
-      shopifyGid: gid,
-      sourceKind: "FULL_SYNC",
-      observedAt,
-      receipt: nominatedReceipt({
-        durableJobId: input.durableJobId,
-        shopifyGid: gid,
-        sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
-        fenceGeneration: fence.fenceGeneration,
-      }),
+  const scopes = await readGrantedAccessScopes({
+    admin: input.admin,
+    shop: input.shop,
+  });
+
+  const noteCommitted = async (ordinals: number[]) => {
+    for (const ordinal of ordinals) {
+      if (ordinal > contiguousCommitted) pendingCommitted.add(ordinal);
+    }
+    while (pendingCommitted.has(contiguousCommitted + 1)) {
+      contiguousCommitted += 1;
+      pendingCommitted.delete(contiguousCommitted);
+    }
+    if (bulkOperationGid && contiguousCommitted > skipThroughOrdinal) {
+      await acknowledgeJsonlBatch({
+        shopId: input.shopId,
+        syncRunId: syncRun.id,
+        bulkOperationGid,
+        endLineOrdinal: contiguousCommitted,
+      });
+    }
+  };
+
+  const applyAssembly = async (assembly: JsonlCompleteAssembly) => {
+    examined += 1;
+    if (assembly.lineOrdinals.every((ordinal) => ordinal <= skipThroughOrdinal)) {
+      await noteCommitted(assembly.lineOrdinals);
+      return;
+    }
+    const receipt = nominatedReceipt({
       durableJobId: input.durableJobId,
-      correlationId: input.correlationId,
-      requestedCanonicalIdentitiesPerTransaction:
-        input.requestedCanonicalIdentitiesPerTransaction,
-      configuredWorstCaseConcurrentCanonicalTransactions:
-        input.configuredWorstCaseConcurrentCanonicalTransactions,
+      shopifyGid: assembly.rootGid,
+      sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
+      fenceGeneration: fence.fenceGeneration,
     });
+    const needsFollowUp = bulkRootNeedsAgreementRefundFollowUp(assembly.root);
+    const result = needsFollowUp
+      ? await applyNominatedOrderGid({
+          db: input.db,
+          admin: input.admin,
+          shop: input.shop,
+          shopId: input.shopId,
+          shopifyGid: assembly.rootGid,
+          sourceKind: "FULL_SYNC",
+          observedAt,
+          receipt,
+          durableJobId: input.durableJobId,
+          correlationId: input.correlationId,
+          requestedCanonicalIdentitiesPerTransaction:
+            input.requestedCanonicalIdentitiesPerTransaction,
+          configuredWorstCaseConcurrentCanonicalTransactions:
+            input.configuredWorstCaseConcurrentCanonicalTransactions,
+        })
+      : await applyBulkAssembledOrder({
+          db: input.db,
+          shopId: input.shopId,
+          snapshot: mapBulkAAssemblyToOrderSnapshot(
+            assembly.root,
+            assembly.children,
+          ),
+          fenceGeneration: fence.fenceGeneration,
+          epochId: syncRun.id,
+          observedAt,
+          accessScopeSnapshot: scopes,
+          receipt,
+          requestedCanonicalIdentitiesPerTransaction:
+            input.requestedCanonicalIdentitiesPerTransaction,
+          configuredWorstCaseConcurrentCanonicalTransactions:
+            input.configuredWorstCaseConcurrentCanonicalTransactions,
+        });
+    if (needsFollowUp) followUpReads += 1;
+    else bulkDirectApplies += 1;
     if (result.status === "applied" || result.status === "already_applied") {
       applied += 1;
-      if (bulkOperationGid) {
-        await acknowledgeJsonlBatch({
-          shopId: input.shopId,
-          syncRunId: syncRun.id,
-          bulkOperationGid,
-          endLineOrdinal: index + 1,
-        });
-      }
-    } else {
-      incomplete += 1;
+      await noteCommitted(assembly.lineOrdinals);
+      return;
     }
+    if (result.status === "first_confirmation_pending") {
+      incomplete += 1;
+      return;
+    }
+    incomplete += 1;
+  };
+
+  const assembled = await streamOrderFactsJsonl(input.jsonlSource, {
+    expectedObjectCount: expectedObjectCount ?? undefined,
+    expectedRootObjectCount: expectedRootObjectCount ?? undefined,
+    onCompleteAssembly: applyAssembly,
+  });
+
+  if (assembled.status !== "COMPLETE") {
+    return failImport({
+      shopId: input.shopId,
+      syncRunId: syncRun.id,
+      errorCode: `JSONL_${assembled.status}`,
+      reason: assembled.reason,
+      examined,
+      incomplete: Math.max(incomplete, assembled.rootCount),
+      truncated: assembled.status === "TRUNCATED",
+    });
   }
 
   if (incomplete > 0) {
-    await markSyncRunPartialFailure({
+    return failImport({
       shopId: input.shopId,
       syncRunId: syncRun.id,
       errorCode: "ORDER_FACTS_IMPORT_PARTIAL",
-      failureSummary: "Partial bulk import is not complete coverage",
+      reason: "import_incomplete",
+      examined,
+      incomplete,
+    });
+  }
+
+  if (bulkOperationGid) {
+    await persistBulkCounts({
+      shopId: input.shopId,
+      syncRunId: syncRun.id,
+      bulkOperationGid,
+      objectCount: String(assembled.objectCount),
+      rootObjectCount: String(assembled.rootCount),
       streamedObjectCount: String(assembled.objectCount),
       streamedRootObjectCount: String(assembled.rootCount),
     });
-    await persistOrderFactsCoverageHealth({
-      shopId: input.shopId,
-      coverage: {
-        mode: "incremental",
-        examinedGids: gids.length,
-        appliedGids: applied,
-        incompleteGids: incomplete,
-        outOfWindowGids: 0,
-        behindWatermarkExamined: 0,
-        watermarkPersisted: false,
-        cursorValue: null,
-      },
-      evidence: {
-        unresolvedCoverageCount: incomplete,
-        openDiagnosticIssueCount: 1,
-        incompletePaginationCount: 0,
-        quarantineOpenCount: 0,
-      },
-    });
-    return { status: "PARTIAL_FAILURE", reason: "import_incomplete" };
   }
 
   await completeSyncRunAndCursor({
     shopId: input.shopId,
     syncRunId: syncRun.id,
     syncDomain: ORDER_FACTS_SYNC_DOMAIN,
-    examinedCount: gids.length,
+    examinedCount: examined,
     appliedCount: applied,
     skippedCount: 0,
   });
@@ -301,7 +435,7 @@ export async function runOrderFactsImportStep(input: {
     shopId: input.shopId,
     coverage: {
       mode: "incremental",
-      examinedGids: gids.length,
+      examinedGids: examined,
       appliedGids: applied,
       incompleteGids: 0,
       outOfWindowGids: 0,
@@ -316,5 +450,11 @@ export async function runOrderFactsImportStep(input: {
       quarantineOpenCount: 0,
     },
   });
-  return { status: "SUCCEEDED", applied, examined: gids.length };
+  return {
+    status: "SUCCEEDED",
+    applied,
+    examined,
+    followUpReads,
+    bulkDirectApplies,
+  };
 }

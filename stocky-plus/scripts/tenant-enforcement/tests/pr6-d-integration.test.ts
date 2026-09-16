@@ -379,8 +379,12 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         shopId: shopAId,
         durableJobId: `import-pred-${gid}`,
         correlationId: `import-pred-${gid}`,
-        jsonlSource: jsonlLines([{ id: gid }]),
+        jsonlSource: jsonlLines([
+          { id: gid, currentSubtotalLineItemsQuantity: 0 },
+        ]),
         pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
       }),
     );
     expect(importResult.status).toBe("SUCCEEDED");
@@ -1085,10 +1089,15 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         durableJobId: `jsonl-${gid}`,
         correlationId: `jsonl-${gid}`,
         jsonlSource: jsonlLines([
-          { id: `${gid}/LineItem/1`, __parentId: gid },
-          { id: gid },
+          {
+            id: "gid://shopify/LineItem/d-jsonl-1",
+            __parentId: gid,
+          },
+          { id: gid, currentSubtotalLineItemsQuantity: 1 },
         ]),
         pollBulkOperation: false,
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "1",
       }),
     );
     expect(ok.status).toBe("SUCCEEDED");
@@ -1106,6 +1115,8 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
           yield '{"id":"gid://shopify/Order/trunc"';
         })(),
         pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
       }),
     );
     expect(partial.status).toBe("PARTIAL_FAILURE");
@@ -1158,6 +1169,8 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
       bulk: {
         id: "gid://shopify/BulkOperation/d-fence",
         status: "CREATED",
+        objectCount: "1",
+        rootObjectCount: "1",
         pollStatus: (() => {
           let polls = 0;
           return () => {
@@ -1178,7 +1191,12 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         correlationId: "bulk-fence",
         pollBulkOperation: true,
         fetchJsonl: async () =>
-          jsonlLines([{ id: "gid://shopify/Order/d-fence" }]),
+          jsonlLines([
+            {
+              id: "gid://shopify/Order/d-fence",
+              currentSubtotalLineItemsQuantity: 0,
+            },
+          ]),
       }),
     );
     expect(first.status).toBe("CONTINUE");
@@ -1196,7 +1214,12 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         correlationId: "bulk-fence",
         pollBulkOperation: true,
         fetchJsonl: async () =>
-          jsonlLines([{ id: "gid://shopify/Order/d-fence" }]),
+          jsonlLines([
+            {
+              id: "gid://shopify/Order/d-fence",
+              currentSubtotalLineItemsQuantity: 0,
+            },
+          ]),
       }),
     );
     expect(second.status).toBe("SUCCEEDED");
@@ -1334,7 +1357,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         }),
       }),
     );
-    expect(firstLive.status).toBe("applied");
+    expect(firstLive.status).toBe("first_confirmation_pending");
     expect(firstLive.reason).toBe("terminal_first_confirmation");
     const afterFirst = await queryForShop<{ existenceState: string }>(
       shopAId,
@@ -1361,6 +1384,101 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
       [gid],
     );
     expect(revived[0]?.existenceState).toBe("LIVE");
+  });
+
+  it("defers frozen v1 legacy effects until the second confirmation commits", async () => {
+    const gid = "gid://shopify/Order/d-revive-legacy";
+    let legacyCalls = 0;
+    const runLegacy = async (
+      topic: string,
+      db: unknown,
+      payload: Record<string, unknown>,
+    ) => {
+      legacyCalls += 1;
+      return legacyRunner(shopAId)(topic, db, payload);
+    };
+    await withTxnHost(shopAId, (db) =>
+      processOrderFactsWebhookJob({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        work: webhookWork({
+          shopId: shopAId,
+          topic: "orders/create",
+          projection: { id: 44, admin_graphql_api_id: gid },
+        }),
+        runLegacy,
+      }),
+    );
+    const afterCreate = legacyCalls;
+    await withTxnHost(shopAId, (db) =>
+      processOrderFactsWebhookJob({
+        db,
+        admin: createOrderFactsAdmin({
+          stores: { [gid]: { ...standardStore(gid), nullOrder: true } },
+        }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        work: webhookWork({
+          shopId: shopAId,
+          topic: "orders/edited",
+          projection: { order_edit: { id: 1, order_id: "d-revive-legacy" } },
+        }),
+      }),
+    );
+    const firstLive = await withTxnHost(shopAId, (db) =>
+      processOrderFactsWebhookJob({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        work: webhookWork({
+          shopId: shopAId,
+          topic: "orders/create",
+          projection: { id: 44, admin_graphql_api_id: gid },
+        }),
+        runLegacy,
+      }),
+    );
+    expect(firstLive.status).toBe("first_confirmation_pending");
+    expect(legacyCalls).toBe(afterCreate);
+    const secondLive = await withTxnHost(shopAId, (db) =>
+      processOrderFactsWebhookJob({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        work: webhookWork({
+          shopId: shopAId,
+          topic: "orders/create",
+          projection: { id: 44, admin_graphql_api_id: gid },
+        }),
+        runLegacy,
+      }),
+    );
+    expect(secondLive.status).toBe("applied");
+    expect(legacyCalls).toBe(afterCreate + 1);
+  });
+
+  it("rolls back canonical facts when legacy throws in the same transaction", async () => {
+    const gid = "gid://shopify/Order/d-legacy-boom";
+    await expect(
+      withTxnHost(shopAId, (db) =>
+        processOrderFactsWebhookJob({
+          db,
+          admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+          shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+          work: webhookWork({
+            shopId: shopAId,
+            topic: "orders/create",
+            applicationKey: `webhook-delivery:d-legacy-boom-${gid}`,
+            projection: { id: 45, admin_graphql_api_id: gid },
+          }),
+          runLegacy: async () => {
+            throw new Error("legacy_boom");
+          },
+        }),
+      ),
+    ).rejects.toThrow(/legacy_boom/);
+    expect(await factCount(shopAId, gid)).toBe(0);
+    expect(await countSyncApplicationReceipts(shopAId, "d-legacy-boom")).toBe(0);
   });
 
   it("fails closed on required shop/presentment currency mismatch", async () => {
