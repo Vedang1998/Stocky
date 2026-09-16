@@ -1,6 +1,6 @@
+import { ORDER_FACTS_D_BULK_A_ORDERS_LINES } from "./bulk-a-query";
 import {
   BULK_B_PRODUCTION_ENABLED,
-  ORDER_FACTS_BULK_A_ORDERS_LINES,
   ORDER_FACTS_BULK_C_AGREEMENTS_SALES_ILLEGAL,
 } from "../admin-read";
 import {
@@ -67,7 +67,7 @@ export async function submitOrderFactsBulkA(
       "Bulk B production is disabled and must remain false",
     );
   }
-  const innerQuery = input.innerQuery ?? ORDER_FACTS_BULK_A_ORDERS_LINES;
+  const innerQuery = input.innerQuery ?? ORDER_FACTS_D_BULK_A_ORDERS_LINES;
   assertBulkCRejected(innerQuery);
   const gates = evaluateOrderFactsBulkAGates(innerQuery);
   if (!gates.schemaGatePassed || !gates.bulkRuleGatePassed) {

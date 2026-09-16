@@ -236,6 +236,7 @@ export async function applyBulkAssembledOrder(input: {
   receipt: OrderApplyReceiptInput;
   requestedCanonicalIdentitiesPerTransaction?: number;
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
+  nestedRefunds?: import("../apply/types").RefundSnapshot[];
 }): Promise<NominatedApplyResult> {
   const observation: FullSyncOrderObservation = {
     observationKind: "full_sync",
@@ -252,7 +253,7 @@ export async function applyBulkAssembledOrder(input: {
     accessScopeSnapshot: input.accessScopeSnapshot,
     snapshotComplete: true,
     order: input.snapshot,
-    nestedRefunds: [],
+    nestedRefunds: input.nestedRefunds ?? [],
   };
   const applied = await applyCanonicalAndLegacy({
     db: input.db,

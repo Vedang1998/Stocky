@@ -73,7 +73,9 @@ function mapLine(line: OrderLineRead) {
   };
 }
 
-function mapAgreement(agreement: OrderFactSnapshot["agreements"][number]) {
+export function mapAgreementRead(
+  agreement: OrderFactSnapshot["agreements"][number],
+) {
   return {
     shopifyGid: agreement.id,
     happenedAt: parseIsoToDate(agreement.happenedAt, "agreement.happenedAt"),
@@ -216,7 +218,7 @@ function mapOrderFactSnapshot(value: OrderFactSnapshot): OrderSnapshot {
     currentShippingPriceSet: value.currentShippingPriceSet,
     lines: value.lineItems.map(mapLine),
     linesComplete: true,
-    agreements: value.agreements.map(mapAgreement),
+    agreements: value.agreements.map(mapAgreementRead),
     agreementsComplete: true,
   };
 }

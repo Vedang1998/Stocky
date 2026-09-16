@@ -1,6 +1,5 @@
 import type { CatalogAdminReadClient } from "../../catalog-facts/admin-read";
 import type { OrderAdminReadClient, TrustedShopIdentity } from "../admin-read";
-import { ORDER_FACTS_BULK_A_ORDERS_LINES } from "../admin-read";
 import { readBulkOperationById } from "../../catalog-facts/admin-read";
 import { fingerprintBulkQuery } from "../../catalog-facts/ingest/bulk-operation-recovery";
 import {
@@ -19,10 +18,12 @@ import {
   nominatedReceipt,
 } from "./apply-nominated";
 import { submitOrderFactsBulkA } from "./bulk";
+import { ORDER_FACTS_D_BULK_A_ORDERS_LINES } from "./bulk-a-query";
 import {
   ORDER_FACTS_BULK_POLL_INTERVAL_MS,
   ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
   ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS,
+  ORDER_FACTS_JSONL_MAX_PENDING_ORDINALS,
   ORDER_FACTS_SYNC_DOMAIN,
   ORDER_FACTS_SYNC_JOB_TYPE,
 } from "./constants";
@@ -40,10 +41,16 @@ import {
   type JsonlCompleteAssembly,
 } from "./jsonl";
 import {
-  bulkRootNeedsAgreementRefundFollowUp,
+  bulkRootCurrencyCode,
+  bulkRootUpdatedAt,
   mapBulkAAssemblyToOrderSnapshot,
 } from "./mapper-bulk";
 import { readGrantedAccessScopes } from "./refetch";
+import {
+  mergeLedgerCounts,
+  readOrderFactsImportLedger,
+} from "./supplemental-ledger";
+import type { LedgerQueryCounts } from "./types";
 import type { OrderFactsTxnHost } from "./apply-composition";
 
 export type OrderFactsImportStepResult =
@@ -53,6 +60,7 @@ export type OrderFactsImportStepResult =
       examined: number;
       followUpReads: number;
       bulkDirectApplies: number;
+      ledgerCounts: LedgerQueryCounts;
     }
   | { status: "CONTINUE"; backoffMs: number; reason: string }
   | { status: "PARTIAL_FAILURE"; reason: string };
@@ -155,9 +163,20 @@ export async function runOrderFactsImportStep(input: {
     correlationId: input.correlationId,
   });
   const fingerprint = fingerprintBulkQuery({
-    query: ORDER_FACTS_BULK_A_ORDERS_LINES,
+    query: ORDER_FACTS_D_BULK_A_ORDERS_LINES,
     shopId: input.shopId,
   });
+  if (
+    syncRun.bulkQueryFingerprint &&
+    syncRun.bulkQueryFingerprint !== fingerprint
+  ) {
+    return failImport({
+      shopId: input.shopId,
+      syncRunId: syncRun.id,
+      errorCode: "ORDER_FACTS_BULK_FINGERPRINT_MISMATCH",
+      reason: "old_bulk_a_checkpoint_not_transferable",
+    });
+  }
   const fence =
     syncRun.fenceGeneration != null
       ? { fenceGeneration: syncRun.fenceGeneration }
@@ -289,7 +308,10 @@ export async function runOrderFactsImportStep(input: {
     });
   }
 
-  const skipThroughOrdinal = syncRun.jsonlCommittedLineOrdinal ?? 0;
+  const skipThroughOrdinal =
+    syncRun.bulkQueryFingerprint === fingerprint
+      ? (syncRun.jsonlCommittedLineOrdinal ?? 0)
+      : 0;
   let contiguousCommitted = skipThroughOrdinal;
   const pendingCommitted = new Set<number>();
   let applied = 0;
@@ -297,6 +319,15 @@ export async function runOrderFactsImportStep(input: {
   let examined = 0;
   let followUpReads = 0;
   let bulkDirectApplies = 0;
+  const ledgerCounts: LedgerQueryCounts = {
+    initial: 0,
+    recheck: 0,
+    agreement: 0,
+    sale: 0,
+    refund: 0,
+    fallback: 0,
+    throttle: 0,
+  };
   const observedAt = new Date();
   const scopes = await readGrantedAccessScopes({
     admin: input.admin,
@@ -306,6 +337,12 @@ export async function runOrderFactsImportStep(input: {
   const noteCommitted = async (ordinals: number[]) => {
     for (const ordinal of ordinals) {
       if (ordinal > contiguousCommitted) pendingCommitted.add(ordinal);
+    }
+    if (pendingCommitted.size > ORDER_FACTS_JSONL_MAX_PENDING_ORDINALS) {
+      throw new OrderFactsSyncError(
+        "order_facts_checkpoint_pending_bound",
+        `pending checkpoint ordinals exceeded ${ORDER_FACTS_JSONL_MAX_PENDING_ORDINALS}`,
+      );
     }
     while (pendingCommitted.has(contiguousCommitted + 1)) {
       contiguousCommitted += 1;
@@ -333,43 +370,70 @@ export async function runOrderFactsImportStep(input: {
       sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
       fenceGeneration: fence.fenceGeneration,
     });
-    const needsFollowUp = bulkRootNeedsAgreementRefundFollowUp(assembly.root);
-    const result = needsFollowUp
-      ? await applyNominatedOrderGid({
-          db: input.db,
-          admin: input.admin,
-          shop: input.shop,
-          shopId: input.shopId,
-          shopifyGid: assembly.rootGid,
-          sourceKind: "FULL_SYNC",
-          observedAt,
-          receipt,
-          durableJobId: input.durableJobId,
-          correlationId: input.correlationId,
-          requestedCanonicalIdentitiesPerTransaction:
-            input.requestedCanonicalIdentitiesPerTransaction,
-          configuredWorstCaseConcurrentCanonicalTransactions:
-            input.configuredWorstCaseConcurrentCanonicalTransactions,
-        })
-      : await applyBulkAssembledOrder({
-          db: input.db,
-          shopId: input.shopId,
-          snapshot: mapBulkAAssemblyToOrderSnapshot(
-            assembly.root,
-            assembly.children,
-          ),
-          fenceGeneration: fence.fenceGeneration,
-          epochId: syncRun.id,
-          observedAt,
-          accessScopeSnapshot: scopes,
-          receipt,
-          requestedCanonicalIdentitiesPerTransaction:
-            input.requestedCanonicalIdentitiesPerTransaction,
-          configuredWorstCaseConcurrentCanonicalTransactions:
-            input.configuredWorstCaseConcurrentCanonicalTransactions,
-        });
-    if (needsFollowUp) followUpReads += 1;
-    else bulkDirectApplies += 1;
+    const ledger = await readOrderFactsImportLedger({
+      context: { admin: input.admin, shop: input.shop },
+      orderGid: assembly.rootGid,
+      bulkUpdatedAt: bulkRootUpdatedAt(assembly.root),
+      bulkCurrencyCode: bulkRootCurrencyCode(assembly.root),
+    });
+    mergeLedgerCounts(ledgerCounts, ledger.counts);
+    if (ledger.status === "drift") {
+      followUpReads += 1;
+      ledgerCounts.fallback += 1;
+      const result = await applyNominatedOrderGid({
+        db: input.db,
+        admin: input.admin,
+        shop: input.shop,
+        shopId: input.shopId,
+        shopifyGid: assembly.rootGid,
+        sourceKind: "FULL_SYNC",
+        observedAt,
+        receipt,
+        durableJobId: input.durableJobId,
+        correlationId: input.correlationId,
+        requestedCanonicalIdentitiesPerTransaction:
+          input.requestedCanonicalIdentitiesPerTransaction,
+        configuredWorstCaseConcurrentCanonicalTransactions:
+          input.configuredWorstCaseConcurrentCanonicalTransactions,
+      });
+      if (result.status === "applied" || result.status === "already_applied") {
+        applied += 1;
+        await noteCommitted(assembly.lineOrdinals);
+        return;
+      }
+      if (result.status === "first_confirmation_pending") {
+        incomplete += 1;
+        return;
+      }
+      incomplete += 1;
+      return;
+    }
+    if (ledger.status !== "complete") {
+      incomplete += 1;
+      return;
+    }
+    const snapshot = mapBulkAAssemblyToOrderSnapshot(
+      assembly.root,
+      assembly.children,
+    );
+    snapshot.agreements = ledger.agreements;
+    snapshot.agreementsComplete = true;
+    const result = await applyBulkAssembledOrder({
+      db: input.db,
+      shopId: input.shopId,
+      snapshot,
+      fenceGeneration: fence.fenceGeneration,
+      epochId: syncRun.id,
+      observedAt,
+      accessScopeSnapshot: scopes,
+      receipt,
+      nestedRefunds: ledger.refunds,
+      requestedCanonicalIdentitiesPerTransaction:
+        input.requestedCanonicalIdentitiesPerTransaction,
+      configuredWorstCaseConcurrentCanonicalTransactions:
+        input.configuredWorstCaseConcurrentCanonicalTransactions,
+    });
+    bulkDirectApplies += 1;
     if (result.status === "applied" || result.status === "already_applied") {
       applied += 1;
       await noteCommitted(assembly.lineOrdinals);
@@ -382,11 +446,28 @@ export async function runOrderFactsImportStep(input: {
     incomplete += 1;
   };
 
-  const assembled = await streamOrderFactsJsonl(input.jsonlSource, {
-    expectedObjectCount: expectedObjectCount ?? undefined,
-    expectedRootObjectCount: expectedRootObjectCount ?? undefined,
-    onCompleteAssembly: applyAssembly,
-  });
+  let assembled;
+  try {
+    assembled = await streamOrderFactsJsonl(input.jsonlSource, {
+      expectedObjectCount: expectedObjectCount ?? undefined,
+      expectedRootObjectCount: expectedRootObjectCount ?? undefined,
+      shopId: input.shopId,
+      syncRunId: syncRun.id,
+      onCompleteAssembly: applyAssembly,
+    });
+  } catch (error) {
+    return failImport({
+      shopId: input.shopId,
+      syncRunId: syncRun.id,
+      errorCode:
+        error instanceof OrderFactsSyncError
+          ? error.code
+          : "ORDER_FACTS_IMPORT_APPLY",
+      reason: error instanceof Error ? error.message : String(error),
+      examined,
+      incomplete: Math.max(incomplete, 1),
+    });
+  }
 
   if (assembled.status !== "COMPLETE") {
     return failImport({
@@ -456,5 +537,6 @@ export async function runOrderFactsImportStep(input: {
     examined,
     followUpReads,
     bulkDirectApplies,
+    ledgerCounts,
   };
 }

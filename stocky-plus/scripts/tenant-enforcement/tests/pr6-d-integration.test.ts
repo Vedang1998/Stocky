@@ -8,6 +8,7 @@ import {
   ORDER_FACTS_BULK_A_ORDERS_LINES,
   ORDER_FACTS_BULK_C_AGREEMENTS_SALES_ILLEGAL,
 } from "../../../app/lib/order-facts/admin-read";
+import { ORDER_FACTS_D_BULK_A_ORDERS_LINES } from "../../../app/lib/order-facts/sync/bulk-a-query";
 import {
   assertQuerySchemaValid,
   loadGeneratedAdmin202607Schema,
@@ -37,6 +38,8 @@ import {
   IN_WINDOW_ISO,
   OUT_OF_WINDOW_ISO,
   SHOP_A_DOMAIN,
+  bulkALine,
+  bulkARoot,
   countForShop,
   countSalesDailyAggregate,
   countSyncApplicationReceipts,
@@ -94,9 +97,15 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
     assertQuerySchemaValid(schema, ORDER_FACTS_BULK_A_ORDERS_LINES, "ORDER_FACTS_BULK_A");
     const rules = evaluateBulkOperationRules(schema, ORDER_FACTS_BULK_A_ORDERS_LINES);
     expect(rules.eligible).toBe(true);
-    const gates = evaluateOrderFactsBulkAGates(ORDER_FACTS_BULK_A_ORDERS_LINES);
-    expect(gates.schemaGatePassed).toBe(true);
-    expect(gates.bulkRuleGatePassed).toBe(true);
+    const dGates = evaluateOrderFactsBulkAGates(ORDER_FACTS_D_BULK_A_ORDERS_LINES);
+    expect(dGates.schemaGatePassed).toBe(true);
+    expect(dGates.bulkRuleGatePassed).toBe(true);
+    expect(ORDER_FACTS_D_BULK_A_ORDERS_LINES).toMatch(/\bconfirmed\b/);
+    expect(ORDER_FACTS_D_BULK_A_ORDERS_LINES).toMatch(/withCodeDiscounts:\s*true/);
+    expect(ORDER_FACTS_D_BULK_A_ORDERS_LINES).not.toMatch(/\bcancellation\b/);
+    expect(ORDER_FACTS_D_BULK_A_ORDERS_LINES).not.toMatch(
+      /priceAfterAllDiscountsBeforeTaxesSet/,
+    );
     assertQuerySchemaValid(
       schema,
       ORDER_FACTS_WINDOW_LISTING_QUERY,
@@ -380,7 +389,7 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         durableJobId: `import-pred-${gid}`,
         correlationId: `import-pred-${gid}`,
         jsonlSource: jsonlLines([
-          { id: gid, currentSubtotalLineItemsQuantity: 0 },
+          bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0, subtotalLineItemsQuantity: 0 }),
         ]),
         pollBulkOperation: false,
         expectedObjectCount: "1",
@@ -1089,11 +1098,8 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         durableJobId: `jsonl-${gid}`,
         correlationId: `jsonl-${gid}`,
         jsonlSource: jsonlLines([
-          {
-            id: "gid://shopify/LineItem/d-jsonl-1",
-            __parentId: gid,
-          },
-          { id: gid, currentSubtotalLineItemsQuantity: 1 },
+          bulkALine(gid),
+          bulkARoot(gid),
         ]),
         pollBulkOperation: false,
         expectedObjectCount: "2",
@@ -1192,10 +1198,10 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         pollBulkOperation: true,
         fetchJsonl: async () =>
           jsonlLines([
-            {
-              id: "gid://shopify/Order/d-fence",
+            bulkARoot("gid://shopify/Order/d-fence", {
               currentSubtotalLineItemsQuantity: 0,
-            },
+              subtotalLineItemsQuantity: 0,
+            }),
           ]),
       }),
     );
@@ -1215,10 +1221,10 @@ describe("PR6-D complete webhook/import/reconciliation integration", () => {
         pollBulkOperation: true,
         fetchJsonl: async () =>
           jsonlLines([
-            {
-              id: "gid://shopify/Order/d-fence",
+            bulkARoot("gid://shopify/Order/d-fence", {
               currentSubtotalLineItemsQuantity: 0,
-            },
+              subtotalLineItemsQuantity: 0,
+            }),
           ]),
       }),
     );

@@ -26,7 +26,6 @@ import {
   webhookWork,
   withTxnHost,
 } from "./pr6-d-pg-harness";
-import { moneyBag } from "../../../app/lib/order-facts/admin-read/__tests__/fixtures";
 
 export const PR6_D_LINE_ENVELOPE = 1_000_000;
 const THIS_FILE = fileURLToPath(import.meta.url);
@@ -99,55 +98,80 @@ function assertSkippedEnvelopeDoesNotAttemptDatabaseSetup(source: string): void 
   }
 }
 
-function childCountFor(rootIndex: number, remaining: number): number {
-  if (remaining <= 1) return 0;
-  if (rootIndex % 11 === 0) return Math.min(remaining - 1, 40);
-  if (rootIndex % 5 === 0) return Math.min(remaining - 1, 8);
-  return Math.min(remaining - 1, 1 + (rootIndex % 4));
+function childCountFor(rootIndex: number, remainingLines: number): number {
+  if (remainingLines <= 0) return 0;
+  if (rootIndex % 51 === 0) return 0;
+  const pack = rootIndex % 23 === 0 ? 400 : rootIndex % 9 === 0 ? 80 : 200;
+  return Math.min(remainingLines, pack);
 }
 
-function planScale(objectTarget: number): {
+function planScale(lineTarget: number): {
   roots: number;
   objects: number;
-  followUpGids: string[];
+  lines: number;
 } {
-  let emitted = 0;
+  let lines = 0;
   let roots = 0;
-  const followUpGids: string[] = [];
-  while (emitted < objectTarget) {
+  let objects = 0;
+  while (lines < lineTarget) {
     roots += 1;
-    const remaining = objectTarget - emitted;
-    const children = childCountFor(roots, remaining);
-    emitted += 1 + children;
-    if (roots % 4000 === 0 || roots % 7000 === 0) {
-      followUpGids.push(`gid://shopify/Order/d-scale-${roots}`);
-    }
+    const children = childCountFor(roots, lineTarget - lines);
+    lines += children;
+    objects += 1 + children;
   }
-  return { roots, objects: emitted, followUpGids };
+  return { roots, objects, lines };
 }
 
-async function* scaleJsonl(objectTarget: number): AsyncGenerator<string> {
-  let emitted = 0;
+function lineOverrides(child: number): Record<string, unknown> {
+  const multi = child % 2 === 0;
+  const zeroCurrent = child % 5 === 0;
+  const quantity = multi ? 2 : 1;
+  const currentQuantity = zeroCurrent ? 0 : quantity;
+  return {
+    quantity,
+    currentQuantity,
+    refundableQuantity: currentQuantity,
+  };
+}
+
+function unitSumFor(children: number): number {
+  let sum = 0;
+  for (let child = 1; child <= children; child += 1) {
+    sum += Number(lineOverrides(child).currentQuantity);
+  }
+  return sum;
+}
+
+function originalQtySum(children: number): number {
+  let sum = 0;
+  for (let child = 1; child <= children; child += 1) {
+    sum += Number(lineOverrides(child).quantity);
+  }
+  return sum;
+}
+
+async function* scaleJsonl(lineTarget: number): AsyncGenerator<string> {
+  let emittedLines = 0;
   let root = 0;
-  while (emitted < objectTarget) {
+  while (emittedLines < lineTarget) {
     root += 1;
-    const remaining = objectTarget - emitted;
-    const children = childCountFor(root, remaining);
+    const children = childCountFor(root, lineTarget - emittedLines);
     const gid = `gid://shopify/Order/d-scale-${root}`;
-    const edited = root % 4000 === 0;
-    const refunded = root % 7000 === 0;
-    yield `${JSON.stringify(
-      bulkARoot(gid, {
-        currentSubtotalLineItemsQuantity: children,
-        edited,
-        totalRefundedSet: moneyBag(refunded ? "1.00" : "0.00"),
-      }),
-    )}\n`;
-    emitted += 1;
-    for (let child = 1; child <= children; child += 1) {
-      yield `${JSON.stringify(bulkALine(gid, child))}\n`;
-      emitted += 1;
+    const rootObj = bulkARoot(gid, {
+      currentSubtotalLineItemsQuantity: unitSumFor(children),
+      subtotalLineItemsQuantity: originalQtySum(children),
+    });
+    const childObjs = Array.from({ length: children }, (_, i) =>
+      bulkALine(gid, i + 1, lineOverrides(i + 1)),
+    );
+    if (root % 3 === 0) {
+      for (const child of childObjs) yield `${JSON.stringify(child)}\n`;
+      yield `${JSON.stringify(rootObj)}\n`;
+    } else {
+      yield `${JSON.stringify(rootObj)}\n`;
+      for (const child of childObjs) yield `${JSON.stringify(child)}\n`;
     }
+    emittedLines += children;
   }
 }
 
@@ -201,7 +225,7 @@ function startSampler(sampleMs: number) {
 
 describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
   it.skipIf(!runEnvelope)(
-    "streams 1,000,000 JSONL objects through D import, C apply, and recovery",
+    "streams 1,000,000 canonical order-line facts through D import, C apply, and recovery",
     async () => {
       const { prisma } = await resetSchemaAndApplyEnforcement();
       try {
@@ -223,15 +247,13 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
         let remainingProbe = PR6_D_LINE_ENVELOPE;
         for (let root = 1; remainingProbe > 0; root += 1) {
           const children = childCountFor(root, remainingProbe);
-          remainingProbe -= 1 + children;
+          remainingProbe -= children;
           if (children === 0) childBuckets.zero += 1;
-          else if (children === 8) childBuckets.eight += 1;
-          else if (children === 40) childBuckets.forty += 1;
+          else if (children === 80) childBuckets.eight += 1;
+          else if (children === 400) childBuckets.forty += 1;
           else childBuckets.small += 1;
         }
-        const stores = Object.fromEntries(
-          plan.followUpGids.map((gid) => [gid, standardStore(gid)]),
-        );
+        const stores: Record<string, ReturnType<typeof standardStore>> = {};
         const recentIso = new Date().toISOString();
         const overlapGid = "gid://shopify/Order/d-scale-1";
         stores[overlapGid] = standardStore(overlapGid, {
@@ -307,7 +329,7 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
           where: { shopId: shopA.id, correlationId: "d-scale-a" },
           orderBy: { createdAt: "desc" },
         });
-        expect(crashRun?.jsonlCommittedLineOrdinal ?? 0).toBeGreaterThan(0);
+        expect(crashRun?.jsonlCommittedLineOrdinal ?? 0).toBe(0);
 
         const sampleMs = 250;
         const sampler = startSampler(sampleMs);
@@ -398,16 +420,18 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
           shopWarm.id,
           `SELECT count(*)::int AS n FROM "ShopifyOrderFact"`,
         );
+        const lineFactsA = await countForShop(
+          shopA.id,
+          `SELECT count(*)::int AS n FROM "ShopifyOrderLineFact"`,
+        );
         expect(orderFactsA).toBe(plan.roots);
+        expect(lineFactsA).toBe(plan.lines);
+        expect(lineFactsA).toBeGreaterThanOrEqual(PR6_D_LINE_ENVELOPE);
         expect(orderFactsB).toBe(1);
         expect(orderFactsWarm).toBe(warmupPlan.roots);
         expect(resultA.examined).toBe(plan.roots);
-        expect(resultA.applied).toBeGreaterThan(33);
-        expect(resultA.applied).toBeLessThanOrEqual(plan.roots);
-        expect(plan.roots - resultA.applied).toBeLessThanOrEqual(crashPlan.roots);
-        expect(resultA.applied).toBeGreaterThan(plan.roots - crashPlan.roots - 5);
-        expect(resultA.followUpReads).toBeGreaterThan(0);
-        expect(resultA.bulkDirectApplies).toBeGreaterThan(resultA.followUpReads);
+        expect(resultA.applied).toBe(plan.roots);
+        expect(resultA.bulkDirectApplies + resultA.followUpReads).toBe(plan.roots);
         expect(fetches).toBeGreaterThanOrEqual(2);
         const resumed = await getControlPlanePrisma().syncRun.findFirst({
           where: { shopId: shopA.id, correlationId: "d-scale-a" },
@@ -418,27 +442,28 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
         console.log(
           JSON.stringify({
             pr6dScaleEnvelope: {
-              objectTarget: PR6_D_LINE_ENVELOPE,
+              lineFactTarget: PR6_D_LINE_ENVELOPE,
               plannedRoots: plan.roots,
               plannedObjects: plan.objects,
+              plannedLineFacts: plan.lines,
               childBuckets,
-              qualifyingFollowUps: plan.followUpGids.length,
               warmup: {
-                objectTarget: warmupTarget,
+                lineTarget: warmupTarget,
                 roots: warmupPlan.roots,
                 elapsedMs: warmupElapsedMs,
                 ...warmupMem,
               },
-              crashPrefixObjects: crashTarget,
+              crashPrefixLines: crashTarget,
               crashPrefixRoots: crashPlan.roots,
-              crashSkippedRoots: plan.roots - resultA.applied,
               crashCheckpointOrdinal: crashRun?.jsonlCommittedLineOrdinal ?? null,
               webhookOverlapStatus: webhookOverlap.status,
               applied: resultA.applied,
               examined: resultA.examined,
               followUpReads: resultA.followUpReads,
               bulkDirectApplies: resultA.bulkDirectApplies,
+              ledgerCounts: resultA.ledgerCounts,
               shopBFacts: orderFactsB,
+              lineFactsA,
               graphqlCalls: adminA.graphqlCount(),
               jsonlFetches: fetches,
               elapsedMs,

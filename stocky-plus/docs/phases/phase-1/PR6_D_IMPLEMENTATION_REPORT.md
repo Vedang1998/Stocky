@@ -3,8 +3,8 @@
 **Slice:** PR6-D complete §17.2 integration module
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951)
-**Status:** PR43 consolidated correction implemented on this branch. Claude’s CORRECTIONS REQUIRED review is integrated by fast-forward at `53541112832f8da3dcfa65adea8e9a4447b0f18b` (blob `48ac291a781b2347cb6017af862f2de9677826a5`) and is **not** edited. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the **corrected** head are recorded after that run terminates; run `34934317232` remains historical evidence for the defective subject `25226e46` only. This report does **not** invent those IDs and does **not** embed this documentation commit’s own SHA. Independent Claude correction re-review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528)
+**Status:** PR43 C3 source-contract correction is on this branch (plan C3 / brief §6 / D-054 subitem). Claude’s original complete-integration review `5354111` (blob `48ac291a…`) and re-review `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`) are **not** edited. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the **C3** head are recorded after that run terminates; run `35044093460` remains historical SUCCESS for `7e0329f` only; run `34934317232` remains historical evidence for defective `25226e46` only. This report does **not** invent those IDs and does **not** embed this documentation commit’s own SHA. Independent Claude C3 re-review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -451,3 +451,39 @@ Memory method: `process.memoryUsage()` sampled every **250ms** (`unref` interval
 D-R-12: dated 2026-09-15 quarantine PG `heapDeltaBytes: 53336` (subject `25226e46`) remains a historical sample only and is **retracted** as a peak bound. Claude independently measured `heapDeltaBytes: 10999720` under different conditions (review `5354111`). Those two endpoint heap deltas are not this scale run.
 
 Remaining limits: HTTP Range is not used (prefix re-read + receipt skip); Bulk B stays disabled and Bulk C stays rejected; `confirmed` is D import provenance as in §10.6; default CI never executes this envelope; GitHub `validate` timeout-minutes remains **120**.
+
+§13 records the **pre-C3** million-object envelope (quantity-as-closure, invented `confirmed`, edited/refund-bearing follow-up). It is **not** C3 scale evidence. C3 scale is canonical **order-line facts** and is recorded in §14 after that envelope is executed.
+
+---
+
+## 14. C3 source-contract correction (same D-054 — not D-055)
+
+**Authority:** PR #43 comment [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528). Plan C3 / brief §6 / D-054 subitem. Subject re-review: `a72b403fe3c0ed57fa69d262d7dfbec3d7646292` blob `ba82a3c981cda4bec52ea453c2618319288fa66c`. Prior corrected head `7e0329f` exact-head CI `35044093460` SUCCESS is preserved and is **not** C3 evidence.
+
+This section **supersedes §10.4 mid-stream quantity close, §10.6 invented `confirmed` / empty-complete agreements, and §11 D-R-02 / D-R-03 / D-R-10 / D-R-11 Cursor dispositions** for D import. Frozen B documents and C internals are unchanged. RESOLVED D-R-01/04/05/06/07/08/09/12 remain.
+
+### 14.1 Replacement import path
+
+1. Fingerprint `sha256(D Bulk A query + groupObjects:false + shopId)`. Old fingerprints fail closed (`old_bulk_a_checkpoint_not_transferable`); ordinals are not skipped against a changed epoch.
+2. Default submit/poll inner QUERY is `ORDER_FACTS_D_BULK_A_ORDERS_LINES` (`sync/bulk-a-query.ts`, version `order-facts-d-bulk-a-v2`). Both B gates still run. Frozen B `ORDER_FACTS_BULK_A_ORDERS_LINES` is not the D payload.
+3. `streamOrderFactsJsonl` **spools, indexes, and validates** on D-owned scratch (`{tmpdir}/stocky-pr6-d/{shop}/{run}`) **before** `onCompleteAssembly`. Parent closure is indexed `__parentId` membership after EOF. Orphans are `MIS_PARENTED`. `currentSubtotalLineItemsQuantity` is not a child-record count.
+4. Assemblies emit in **physical min-ordinal** order so contiguous checkpoint prefixes can advance. Live-byte and scratch-byte bounds fail before apply.
+5. Every imported order queries `OrderFactsImportLedger` (agreements/sales + refund LIST identities). Pin identity / `updatedAt` / `currencyCode` against the Bulk A root. Drift abandons the mixed candidate and falls back to `applyNominatedOrderGid` (counted `fallback`). Mapper `agreementsComplete` stays false until that ledger is attached.
+6. Selected `confirmed` and `discountedTotalSet(withCodeDiscounts: true)` are required. Omitted selected keys fail closed (N-09). Zero-money refunds still take `RefundFactById`.
+
+### 14.2 Finding mapping
+
+| ID | C3 disposition |
+|---|---|
+| D-R-02 | Staging + indexed EOF membership; 33 orphans = `MIS_PARENTED`; `onCompleteAssembly` never before validation |
+| D-R-03 | Unchanged unsigned count tokens; staging fails before apply so truncated spool cannot certify |
+| D-R-10 | Actual selected `confirmed`; with-code line money; ledger for **every** imported order |
+| D-R-11 | Whole-stream unique IDs via external sort; no 64-root ring |
+
+### 14.3 C3 execution ledger
+
+Recorded after commands run on the C3 implementation head. This subsection does **not** invent exit codes or CI IDs.
+
+Exact-head C3 Classify / Heavy / Gate IDs: **not yet** — require the coherent C3 push. Historical SUCCESS `35044093460` is `7e0329f` only.
+
+C3 1e6 **line-fact** envelope: **not yet executed** in this report revision. Default CI still skips it (`PR6_D_SCALE_1E6=1` and not GitHub Actions). GitHub `validate` timeout-minutes remains **120**.

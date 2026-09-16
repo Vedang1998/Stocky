@@ -100,7 +100,7 @@ describe("PR6-D JSONL assembly", () => {
       expectedObjectCount: "33",
       expectedRootObjectCount: "0",
     });
-    expect(result.status).toBe("OPEN_PARENT_BOUND");
+    expect(result.status).toBe("MIS_PARENTED");
   });
 
   it("completes 40, 100, and 1000 sequential roots", async () => {
@@ -215,6 +215,7 @@ describe("PR6-D JSONL assembly", () => {
   });
 
   it("fails a single oversized parent that exceeds the live byte bound", async () => {
+    const released: string[] = [];
     const hugeTitle = "x".repeat(ORDER_FACTS_JSONL_MAX_LIVE_BYTES);
     const child = JSON.stringify({
       id: "gid://shopify/LineItem/1",
@@ -232,10 +233,14 @@ describe("PR6-D JSONL assembly", () => {
         expectedRootObjectCount: "1",
         maxLiveBytes: 4096,
         maxLineBytes: ORDER_FACTS_JSONL_MAX_LIVE_BYTES + 1024,
+        onCompleteAssembly: async (assembly) => {
+          released.push(assembly.rootGid);
+        },
       },
     );
     expect(result.status).toBe("OPEN_PARENT_BOUND");
     expect(failReason(result)).toMatch(/bytes exceeded/);
+    expect(released).toEqual([]);
   });
 
   it("does not close a parent merely because the next root arrived", async () => {
@@ -255,11 +260,11 @@ describe("PR6-D JSONL assembly", () => {
         },
       },
     );
-    expect(result.status).toBe("TRUNCATED");
-    expect(released).toEqual([
-      "gid://shopify/Order/2:currentSubtotalLineItemsQuantity",
+    expect(result.status).toBe("COMPLETE");
+    expect(released.sort()).toEqual([
+      "gid://shopify/Order/1:indexed_parent_membership",
+      "gid://shopify/Order/2:indexed_parent_membership",
     ]);
-    expect(failReason(result)).toMatch(/missing currentSubtotalLineItemsQuantity/);
   });
 
   it("completes 32 sequential roots at the open-parent bound", async () => {
@@ -306,7 +311,7 @@ describe("PR6-D JSONL assembly", () => {
     expect(large.status).toBe("TRUNCATED");
   });
 
-  it("assembles delayed interleaved children using quantity evidence", async () => {
+  it("assembles delayed interleaved children from indexed membership after EOF", async () => {
     const released: string[] = [];
     const lines = [
       JSON.stringify({
@@ -334,13 +339,13 @@ describe("PR6-D JSONL assembly", () => {
       expectedObjectCount: "5",
       expectedRootObjectCount: "2",
       onCompleteAssembly: async (assembly) => {
-        released.push(`${assembly.rootGid}:${assembly.closeEvidence}`);
+        released.push(`${assembly.rootGid}:${assembly.closeEvidence}:${assembly.children.length}`);
       },
     });
     expect(result.status).toBe("COMPLETE");
     expect(released).toEqual([
-      "gid://shopify/Order/2:currentSubtotalLineItemsQuantity",
-      "gid://shopify/Order/1:currentSubtotalLineItemsQuantity",
+      "gid://shopify/Order/1:indexed_parent_membership:2",
+      "gid://shopify/Order/2:indexed_parent_membership:1",
     ]);
   });
 
@@ -386,5 +391,86 @@ describe("PR6-D JSONL assembly", () => {
     });
     expect(result.status).toBe("TRUNCATED");
     expect(failReason(result)).toMatch(/max line bytes/);
+  });
+
+  it("closes parents from indexed membership when quantity is not the child count", async () => {
+    const released: number[] = [];
+    const result = await assembleOrderFactsJsonl(
+      linesOf(
+        [
+          JSON.stringify({
+            id: "gid://shopify/Order/1",
+            currentSubtotalLineItemsQuantity: 4,
+          }),
+          JSON.stringify({
+            id: "gid://shopify/LineItem/1",
+            __parentId: "gid://shopify/Order/1",
+            currentQuantity: 2,
+          }),
+          JSON.stringify({
+            id: "gid://shopify/LineItem/2",
+            __parentId: "gid://shopify/Order/1",
+            currentQuantity: 0,
+          }),
+        ].join("\n") + "\n",
+      ),
+      {
+        expectedObjectCount: "3",
+        expectedRootObjectCount: "1",
+        onCompleteAssembly: async (assembly) => {
+          released.push(assembly.children.length);
+        },
+      },
+    );
+    expect(result.status).toBe("COMPLETE");
+    expect(released).toEqual([2]);
+  });
+
+  it("emits assemblies in physical min-ordinal order, not GID lexicographic order", async () => {
+    const released: string[] = [];
+    const result = await assembleOrderFactsJsonl(
+      linesOf(
+        [
+          JSON.stringify({
+            id: "gid://shopify/Order/9",
+            currentSubtotalLineItemsQuantity: 0,
+          }),
+          JSON.stringify({
+            id: "gid://shopify/Order/10",
+            currentSubtotalLineItemsQuantity: 0,
+          }),
+        ].join("\n") + "\n",
+      ),
+      {
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "2",
+        onCompleteAssembly: async (assembly) => {
+          released.push(assembly.rootGid);
+        },
+      },
+    );
+    expect(result.status).toBe("COMPLETE");
+    expect(released).toEqual([
+      "gid://shopify/Order/9",
+      "gid://shopify/Order/10",
+    ]);
+  });
+
+  it("does not invoke onCompleteAssembly before the source validates", async () => {
+    const released: string[] = [];
+    const result = await assembleOrderFactsJsonl(
+      linesOf(
+        `${JSON.stringify({ id: "gid://shopify/Order/1" })}\n{"id":"gid://shopify/Order/trunc"`,
+      ),
+      {
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "2",
+        onCompleteAssembly: async (assembly) => {
+          released.push(assembly.rootGid);
+        },
+      },
+    );
+    expect(result.status).toBe("TRUNCATED");
+    expect(released).toEqual([]);
   });
 });

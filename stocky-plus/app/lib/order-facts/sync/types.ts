@@ -161,14 +161,28 @@ export type OrderFactsWebhookResult = {
 };
 
 export type JsonlCloseEvidence =
-  | "currentSubtotalLineItemsQuantity"
+  | "indexed_parent_membership"
   | "stream_end_count_agreement";
+
+export type LedgerQueryCounts = {
+  initial: number;
+  recheck: number;
+  agreement: number;
+  sale: number;
+  refund: number;
+  fallback: number;
+  throttle: number;
+};
 
 export type JsonlObject = {
   id?: unknown;
   __parentId?: unknown;
   [key: string]: unknown;
 };
+
+export type JsonlByteSource =
+  | AsyncIterable<Uint8Array | string>
+  | ReadableStream<Uint8Array>;
 
 export type JsonlAssemblyStatus =
   | "COMPLETE"

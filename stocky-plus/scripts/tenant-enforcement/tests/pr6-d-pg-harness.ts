@@ -16,6 +16,7 @@ import {
   lineNode,
   moneyBag,
   orderHeader,
+  paginate,
   refundNode,
   saleNode,
 } from "../../../app/lib/order-facts/admin-read/__tests__/fixtures";
@@ -423,6 +424,45 @@ export function createOrderFactsAdmin(input: {
         };
       }
 
+      if (name === "OrderFactsImportLedger") {
+        const requested =
+          typeof variables.orderId === "string" ? variables.orderId : null;
+        const store = requested ? input.stores[requested] : undefined;
+        const header = store?.header ?? {
+          id: requested,
+          updatedAt: AHEAD_UPDATED_ISO,
+          currencyCode: "USD",
+          confirmed: true,
+        };
+        const agrFirst = typeof variables.agrFirst === "number" ? variables.agrFirst : 100;
+        const agrAfter = variables.agrAfter ?? null;
+        const saleFirst = typeof variables.saleFirst === "number" ? variables.saleFirst : 100;
+        const agreements = store?.agreements ?? [];
+        const refunds = store?.refunds ?? [];
+        return {
+          json: async () => ({
+            data: {
+              order: {
+                id: header.id,
+                updatedAt: header.updatedAt,
+                currencyCode: header.currencyCode,
+                confirmed: header.confirmed ?? true,
+                refunds: refunds.map((refund) => ({ id: refund.id })),
+                agreements: paginate(
+                  agreements.map((agreement) => ({
+                    ...agreement,
+                    sales: paginate(agreement.sales, saleFirst, null),
+                  })),
+                  agrFirst,
+                  agrAfter,
+                ),
+              },
+            },
+            extensions: { cost: { requestedQueryCost: 4 } },
+          }),
+        };
+      }
+
       if (name === "ShopTimezoneCurrency") {
         return {
           json: async () => ({
@@ -555,13 +595,22 @@ export function bulkARoot(
     createdAt: IN_WINDOW_ISO,
     updatedAt: AHEAD_UPDATED_ISO,
     processedAt: IN_WINDOW_ISO,
+    cancelledAt: null,
+    cancelReason: null,
     closed: false,
+    closedAt: null,
     edited: false,
     test: false,
+    confirmed: true,
     currencyCode: "USD",
     presentmentCurrencyCode: "USD",
     taxesIncluded: false,
+    displayFinancialStatus: null,
+    displayFulfillmentStatus: "UNFULFILLED",
+    sourceName: null,
     currentSubtotalLineItemsQuantity: 1,
+    subtotalLineItemsQuantity: 1,
+    legacyResourceId: null,
     originalTotalPriceSet: moneyBag("10.00"),
     currentTotalPriceSet: moneyBag("10.00"),
     currentSubtotalPriceSet: moneyBag("10.00"),
@@ -569,6 +618,9 @@ export function bulkARoot(
     currentTotalTaxSet: moneyBag("0.00"),
     netPaymentSet: moneyBag("10.00"),
     totalRefundedSet: moneyBag("0.00"),
+    refundDiscrepancySet: moneyBag("0.00"),
+    cartDiscountAmountSet: moneyBag("0.00"),
+    currentCartDiscountAmountSet: moneyBag("0.00"),
     currentShippingPriceSet: moneyBag("0.00"),
     ...overrides,
   };
@@ -588,12 +640,19 @@ export function bulkALine(
     quantity: 1,
     currentQuantity: 1,
     refundableQuantity: 1,
+    unfulfilledQuantity: 0,
     isGiftCard: false,
     title: "Line",
+    variantTitle: null,
+    vendor: null,
+    sku: null,
+    name: "Line",
     originalTotalSet: moneyBag("10.00"),
     originalUnitPriceSet: moneyBag("10.00"),
-    discountedTotalSet: moneyBag("9.00"),
+    discountedTotalSetWithCodeDiscounts: moneyBag("9.00"),
+    discountedTotalSet: moneyBag("9.50"),
     totalDiscountSet: moneyBag("1.00"),
+    discountedUnitPriceAfterAllDiscountsSet: moneyBag("9.00"),
     ...overrides,
   };
 }

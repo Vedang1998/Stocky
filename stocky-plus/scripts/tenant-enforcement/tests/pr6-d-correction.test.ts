@@ -15,11 +15,12 @@ import {
   countForShop,
   createOrderFactsAdmin,
   jsonlLines,
+  inWindowHeader,
   setupPr6DDatabase,
   standardStore,
   withTxnHost,
 } from "./pr6-d-pg-harness";
-import { moneyBag } from "../../../app/lib/order-facts/admin-read/__tests__/fixtures";
+import { moneyBag, refundLineNode, refundNode } from "../../../app/lib/order-facts/admin-read/__tests__/fixtures";
 
 describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () => {
   let prisma: PrismaClient;
@@ -42,7 +43,7 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
     );
   }
 
-  it("applies 40 completable Bulk A parents without refetching unedited zero-refund orders", async () => {
+  it("applies 40 completable Bulk A parents using queried ledgers without OrderFactById", async () => {
     const roots = Array.from({ length: 40 }, (_, i) => {
       const gid = `gid://shopify/Order/d-bulk-${i + 1}`;
       return { gid, objects: [bulkALine(gid), bulkARoot(gid)] };
@@ -76,11 +77,14 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
       (call) => call.name === "OrderFactById",
     );
     expect(orderFactQueries).toHaveLength(0);
+    expect(
+      admin.calls.filter((call) => call.name === "OrderFactsImportLedger"),
+    ).toHaveLength(40);
     expect(await factCount("gid://shopify/Order/d-bulk-1")).toBe(1);
     expect(await factCount("gid://shopify/Order/d-bulk-40")).toBe(1);
   });
 
-  it("counts B follow-ups only for edited or refund-bearing roots", async () => {
+  it("queries a ledger for every imported order including ordinary unedited roots", async () => {
     const baseline = "gid://shopify/Order/d-follow-base";
     const edited = "gid://shopify/Order/d-follow-edit";
     const refunded = "gid://shopify/Order/d-follow-refund";
@@ -105,7 +109,7 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
           bulkALine(edited),
           bulkARoot(edited, { edited: true }),
           bulkALine(refunded),
-          bulkARoot(refunded, { totalRefundedSet: moneyBag("1.00") }),
+          bulkARoot(refunded, { totalRefundedSet: moneyBag("0.00") }),
         ]),
         pollBulkOperation: false,
         expectedObjectCount: "6",
@@ -114,12 +118,16 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
     );
     expect(result.status).toBe("SUCCEEDED");
     if (result.status === "SUCCEEDED") {
-      expect(result.bulkDirectApplies).toBe(1);
-      expect(result.followUpReads).toBe(2);
+      expect(result.bulkDirectApplies).toBe(3);
+      expect(result.followUpReads).toBe(0);
+      expect(result.ledgerCounts.initial).toBe(3);
     }
     expect(
       admin.calls.filter((call) => call.name === "OrderFactById"),
-    ).toHaveLength(2);
+    ).toHaveLength(0);
+    expect(
+      admin.calls.filter((call) => call.name === "OrderFactsImportLedger"),
+    ).toHaveLength(3);
   });
 
   it("does not persist coverage when expected counts do not match streamed bytes", async () => {
@@ -282,8 +290,16 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
         pollBulkOperation: true,
         fetchJsonl: async () =>
           jsonlLines([
-            bulkARoot(firstGid, { currentSubtotalLineItemsQuantity: 0 }),
-            '{"id":"gid://shopify/Order/trunc"',
+            bulkARoot(firstGid, {
+              currentSubtotalLineItemsQuantity: 0,
+              subtotalLineItemsQuantity: 0,
+            }),
+            bulkALine(secondGid),
+            ((root) => {
+              const copy = { ...root };
+              delete copy.confirmed;
+              return copy;
+            })(bulkARoot(secondGid)),
           ]),
       }),
     );
@@ -342,11 +358,132 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
       }),
     );
     expect(result.status).toBe("PARTIAL_FAILURE");
-    expect(await factCount(laterGid)).toBe(1);
+    expect(await factCount(laterGid)).toBe(0);
     const run = await getControlPlanePrisma().syncRun.findFirst({
       where: { shopId: shopAId, correlationId: "import-gap" },
       orderBy: { createdAt: "desc" },
     });
     expect(run?.jsonlCommittedLineOrdinal ?? 0).toBe(0);
+  });
+
+  it("abandons a mixed bulk/ledger candidate on updatedAt drift and falls back to OrderFactById", async () => {
+    const gid = "gid://shopify/Order/d-drift";
+    const admin = createOrderFactsAdmin({
+      stores: {
+        [gid]: standardStore(gid, {
+          header: inWindowHeader({
+            id: gid,
+            updatedAt: "2026-01-19T00:00:00Z",
+          }),
+        }),
+      },
+    });
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-drift",
+        correlationId: "import-drift",
+        jsonlSource: jsonlLines([bulkALine(gid), bulkARoot(gid)]),
+        pollBulkOperation: false,
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "1",
+      }),
+    );
+    expect(result.status).toBe("SUCCEEDED");
+    if (result.status === "SUCCEEDED") {
+      expect(result.followUpReads).toBe(1);
+      expect(result.ledgerCounts.fallback).toBe(1);
+    }
+    expect(
+      admin.calls.filter((call) => call.name === "OrderFactById"),
+    ).toHaveLength(1);
+  });
+
+  it("reads zero-money refund facts from the LIST identity path", async () => {
+    const gid = "gid://shopify/Order/d-zero-refund";
+    const lineId = String(bulkALine(gid).id);
+    const admin = createOrderFactsAdmin({
+      stores: {
+        [gid]: standardStore(gid, {
+          refunds: [
+            {
+              ...refundNode(91, [
+                refundLineNode(91, { lineItem: { id: lineId } }),
+              ]),
+              totalRefundedSet: moneyBag("0.00"),
+              order: { id: gid },
+            },
+          ],
+        }),
+      },
+    });
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-zero-refund",
+        correlationId: "import-zero-refund",
+        jsonlSource: jsonlLines([
+          bulkALine(gid),
+          bulkARoot(gid, { totalRefundedSet: moneyBag("0.00") }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "1",
+      }),
+    );
+    expect(result.status, JSON.stringify(result)).toBe("SUCCEEDED");
+    expect(
+      admin.calls.filter((call) => call.name === "RefundFactById"),
+    ).toHaveLength(1);
+    expect(
+      await countForShop(
+        shopAId,
+        `SELECT count(*)::int AS n FROM "ShopifyOrderRefundFact" WHERE "shopifyOrderGid" = $1`,
+        [gid],
+      ),
+    ).toBe(1);
+  });
+
+  it("refuses to skip ordinals against an old Bulk A fingerprint", async () => {
+    const gid = "gid://shopify/Order/d-fp-old";
+    await getControlPlanePrisma().syncRun.create({
+      data: {
+        shopId: shopAId,
+        syncDomain: "order_facts",
+        source: "order-facts-sync",
+        status: "RUNNING",
+        correlationId: "import-old-fp",
+        bulkQueryFingerprint: "0".repeat(64),
+        jsonlCommittedLineOrdinal: 99,
+        startedAt: new Date(),
+      },
+    });
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-old-fp",
+        correlationId: "import-old-fp",
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+      }),
+    );
+    expect(result.status).toBe("PARTIAL_FAILURE");
+    if (result.status === "PARTIAL_FAILURE") {
+      expect(result.reason).toBe("old_bulk_a_checkpoint_not_transferable");
+    }
+    expect(await factCount(gid)).toBe(0);
   });
 });
