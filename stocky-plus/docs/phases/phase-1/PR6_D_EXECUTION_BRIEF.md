@@ -80,7 +80,7 @@ Independent Claude review and a later ChatGPT merge decision remain required. Cu
 | Field | Value |
 |---|---|
 | Prior | Quantity-equals-child-count closure; 64-root duplicate ring; mid-stream apply; frozen Bulk A plus invented `confirmed`/empty-complete agreements; follow-up only for edited or refund-bearing roots; scale = JSONL objects |
-| New | Validated scratch staging; indexed EOF membership closure; D Bulk A selects actual `confirmed`, with-code discounts, and required nullable fields; queried ledger for **every** imported order; scale ≥ 1,000,000 **canonical order-line facts** |
+| New | Validated scratch staging with streaming external sort, content-digest manifests, and on-disk ordinal acks; indexed EOF membership closure; D Bulk A selects actual `confirmed`, with-code discounts, and required nullable fields; queried ledger for **every** imported order; scale ≥ 1,000,000 **canonical order-line facts** |
 | Reason | Claude re-review D-R-02 unresolved; D-R-03/10/11 partial. ChatGPT chose staging + actual reads rather than a C contract change |
 | Merchant impact | No certification of truncated/mis-parented bulk; ordinary orders receive real agreement/refund evidence; `confirmed` is inventory reservation |
 | Technical impact | Per-order Admin ledger; worker-local scratch; new query fingerprint |

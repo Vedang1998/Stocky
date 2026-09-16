@@ -4,7 +4,7 @@
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
 **Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528)
-**Status:** PR43 C3 source-contract correction is on this branch (plan C3 / brief §6 / D-054 subitem). Claude’s original complete-integration review `5354111` (blob `48ac291a…`) and re-review `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`) are **not** edited. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the **C3** head are recorded after that run terminates; run `35044093460` remains historical SUCCESS for `7e0329f` only; run `34934317232` remains historical evidence for defective `25226e46` only. This report does **not** invent those IDs and does **not** embed this documentation commit’s own SHA. Independent Claude C3 re-review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
+**Status:** PR43 C3 source-contract correction is on this branch (plan C3 / brief §6 / D-054 subitem). Claude’s original complete-integration review `5354111` (blob `48ac291a…`) and re-review `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`) are **not** edited. Runtime/test implementation head for remaining §4/§5 proofs is `1e04ddcac612a7748b5567debee324ef1e6b6167`. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the **documentation-final** C3.5 head are recorded after that run terminates and are **not** invented here. Historical SUCCESS `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only; `34934317232` is defective `25226e46` only. This report does **not** embed this documentation commit’s own SHA. Independent Claude C3 re-review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -466,23 +466,34 @@ This section **supersedes §10.4 mid-stream quantity close, §10.6 invented `con
 
 1. Fingerprint `sha256(D Bulk A query + groupObjects:false + shopId)`. Old fingerprints fail closed (`old_bulk_a_checkpoint_not_transferable`); ordinals are not skipped against a changed epoch.
 2. Default submit/poll inner QUERY is `ORDER_FACTS_D_BULK_A_ORDERS_LINES` (`sync/bulk-a-query.ts`, version `order-facts-d-bulk-a-v2`). Both B gates still run. Frozen B `ORDER_FACTS_BULK_A_ORDERS_LINES` is not the D payload.
-3. `streamOrderFactsJsonl` **spools, indexes, and validates** on D-owned scratch (`{tmpdir}/stocky-pr6-d/{shop}/{run}`) **before** `onCompleteAssembly`. Parent closure is indexed `__parentId` membership after EOF. Orphans are `MIS_PARENTED`. `currentSubtotalLineItemsQuantity` is not a child-record count.
-4. Assemblies emit in **physical min-ordinal** order so contiguous checkpoint prefixes can advance. Live-byte and scratch-byte bounds fail before apply.
-5. Every imported order queries `OrderFactsImportLedger` (agreements/sales + refund LIST identities). Pin identity / `updatedAt` / `currencyCode` against the Bulk A root. Drift abandons the mixed candidate and falls back to `applyNominatedOrderGid` (counted `fallback`). Mapper `agreementsComplete` stays false until that ledger is attached.
-6. Selected `confirmed` and `discountedTotalSet(withCodeDiscounts: true)` are required. Omitted selected keys fail closed (N-09). Zero-money refunds still take `RefundFactById`.
+3. `streamOrderFactsJsonl` **spools, indexes, and validates** on D-owned scratch (`{tmpdir}/stocky-pr6-d/{shop}/{run}`) **before** `onCompleteAssembly`. Parent closure is indexed `__parentId` membership after EOF. Orphans are `MIS_PARENTED`. `currentSubtotalLineItemsQuantity` is not a child-record count. ID uniqueness and grouped parent membership use **bounded external sort and streaming adjacent comparison** — the export is never loaded as a whole JavaScript string, root array, or ID Set.
+4. Assemblies emit in **physical min-ordinal** order from `emit.tsv`. Blank/whitespace-only physical lines are framing only and do not occupy a checkpoint ordinal. Live-byte and scratch-byte bounds fail before apply. Pending checkpoint holes live in a **scratch ack bitset** (`ack.bits`), not an in-memory Set.
+5. Scratch `manifest.json` binds shop, run, BulkOperation GID, query fingerprint, API version `2026-07`, fence, counts, and SHA-256 content digests. Digest mismatch or epoch mismatch fails closed; ordinals are not skipped against an unverified source. Ownership marker `.stocky-pr6-d-owned` is required before cleanup.
+6. Every imported order queries `OrderFactsImportLedger` (agreements/sales + refund LIST identities). Pin identity / `updatedAt` / `currencyCode` against the Bulk A root. Drift abandons the mixed candidate and falls back to `applyNominatedOrderGid` (counted `fallback`). Mapper `agreementsComplete` stays false until that ledger is attached. Refund clocks are independent of parent `updatedAt`.
+7. Selected `confirmed` and `discountedTotalSet(withCodeDiscounts: true)` are required. Omitted selected keys fail closed (N-09). Zero-money refunds still take `RefundFactById`.
 
 ### 14.2 Finding mapping
 
-| ID | C3 disposition |
-|---|---|
-| D-R-02 | Staging + indexed EOF membership; 33 orphans = `MIS_PARENTED`; `onCompleteAssembly` never before validation |
-| D-R-03 | Unchanged unsigned count tokens; staging fails before apply so truncated spool cannot certify |
-| D-R-10 | Actual selected `confirmed`; with-code line money; ledger for **every** imported order |
-| D-R-11 | Whole-stream unique IDs via external sort; no 64-root ring |
+| ID | C3.5 disposition | Red/green tests |
+|---|---|---|
+| D-R-01,04,05,06,07,08,09,12 | **RESOLVED** (preserved) | worker/receipt/revival/scope/D046/tenant matrices unchanged |
+| D-R-02 | Staging + indexed EOF membership; 33 orphans = `MIS_PARENTED`; `onCompleteAssembly` never before validation | `jsonl.test.ts` 33/40/100/1000; PG 40 ledger applies |
+| D-R-03 | Unsigned count tokens; staging fails before apply so truncated spool cannot certify | empty-nonzero, newline truncation, crash prefix checkpoint 0 |
+| D-R-10 | Actual selected `confirmed`; with-code line money; ledger for **every** imported order | mapper-bulk; PG every-order ledger; SalesAgreement first-import |
+| D-R-11 | Whole-stream unique IDs via external sort; no 64-root ring; no whole-file ID Set | duplicate after 70 / 3000 / 70000; child reuse same/different parent |
+| N-01 | Record count independent of units | one LineItem quantity 10 → **1** PG line fact; qty≠child-count JSONL |
+| N-02 | Complete parent only after validated membership + ledger | three retained lines with one current unit; no apply before EOF |
+| N-03 | Zero-current retained lines and zero-money refunds preserved | retained `currentQuantity=0` rows; zero-money `RefundFactById` |
+| N-04 | True zero-line only when source contains none | proven empty export vs truncated/missing collection |
+| N-05 | No contiguous-parent assumption | children-before-parent; 33 open orphans; UTF-8 every byte boundary |
+| N-06 / N-07 | Exact global identity; sort-run split | duplicate after 70 and 3000; 70000-root sort-run duplicate |
+| N-08 / N-09 | `confirmed` actual; omitted ≠ selected-null | mapper-bulk omitted `confirmed`/`closedAt`; selected-null `closedAt` |
+| N-08 refund clock | Refund LIST even when parent `updatedAt` unchanged | PG refund txn `77-b` with independent clock |
+| Scratch / N resource | Digest, ENOSPC, process-loss, ownership hashes | `source-stage.test.ts`; `/dev/full`; SIGKILL leftover rebuild |
 
-### 14.3 C3 execution ledger
+### 14.3 Historical C3 execution ledger (`eaf0b73` / `74ef385`)
 
-Local commands on implementation head `eaf0b7307f62ccd9f41687a08dc7d3a3e01cf696` (parent `619f4c8`). This subsection does **not** invent Gate IDs. Historical SUCCESS `35044093460` is `7e0329f` only. Failed typecheck run `35059069898` is `4e1ad0d` only.
+Local commands on implementation head `eaf0b7307f62ccd9f41687a08dc7d3a3e01cf696` (parent `619f4c8`). This subsection is **preserved dated evidence** for that SHA. It is **not** C3.5 / `1e04ddc` evidence and is **not** relabeled. Historical SUCCESS `35044093460` is `7e0329f` only. Failed typecheck run `35059069898` is `4e1ad0d` only.
 
 | Command | Exit | Notes |
 |---|---|---|
@@ -554,4 +565,80 @@ Observed JSON (`pr6dScaleEnvelope`) from the passing second envelope:
 }
 ```
 
-C3 scale notes: 5,192 parents produced **1,000,000** canonical order-line facts (`qty` ≠ child-record count). Every imported order received a ledger (`initial: 5192`). One overlapping `orders/edited` on zero-child root `d-scale-51` drifted to full-B (`followUpReads: 1`). Truncated crash prefix did not advance a committed ordinal. Shop B remained **1** fact. Peak RSS/heap are sampled high-water values, not bounds. Default CI still skips this envelope (`PR6_D_SCALE_1E6=1` and not GitHub Actions). GitHub `validate` timeout-minutes remains **120**.
+C3 scale notes on `eaf0b73`: 5,192 parents produced **1,000,000** canonical order-line facts. That JSON remains a **historical** envelope for SHA `eaf0b73` only (whole-file ID loads still present on that SHA). It is **not** C3.5 scale evidence.
+
+### 14.4 C3.5 remaining-proof execution (`1e04ddc`)
+
+Runtime/test head `1e04ddcac612a7748b5567debee324ef1e6b6167` (parent `74ef385`). Commands below executed on that SHA in this assignment. Exact-head Classify / Heavy / Gate IDs for the **later documentation-final head** are not invented here.
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npx tsc --noEmit` | 0 | — |
+| `npx eslint` focused D C3.5 files | 0 | — |
+| `npx vitest run app/lib/order-facts` | 0 | **30** files, **271** tests |
+| `npx vitest run app/lib/order-facts/sync` | 0 | **11** files, **88** tests |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-correction.test.ts` | 0 | **15** tests |
+| `pr6-d-integration.test.ts` | 0 | **24** tests |
+| `pr6-d-worker.test.ts` | 0 | **12** tests |
+| `pr6-d-scale-envelope.test.ts` without `PR6_D_SCALE_1E6` | 0 | **3** passed / **1** skipped |
+| `npm run test:sync-exactly-once` | 0 | **35** exactly-once + **7** D046 |
+| `npm run test:sync-envelope-fail-closed` | 0 | **6** |
+| `npm run test:sync-dispatch-recovery` | 0 | **29** |
+| `npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts` | 0 | **25** |
+| `npm run test:sync-inventory-audit` | 0 | **5** |
+| `npx vitest run app/lib/order-facts/admin-read/bulk-query-schema.test.ts` | 0 | **20** |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | 40/40 assertions |
+| `git diff --check` | 0 | — |
+| `PR6_D_SCALE_1E6=1` envelope on `1e04ddc` | 0 | **4** passed; duration **929.47s**; see JSON below |
+
+First `PR6_D_SCALE_1E6=1` envelope on `619f4c8` (`lineFactsA` **999801**) remains a **failed** historical attempt and is **not** a pass. Second envelope on `eaf0b73` remains historical for that SHA. The JSON below is the **C3.5** envelope on `1e04ddc` after streaming indexes / digests / bitset.
+
+Observed JSON (`pr6dScaleEnvelope`) from the passing C3.5 envelope:
+
+```json
+{
+  "lineFactTarget": 1000000,
+  "plannedRoots": 5192,
+  "plannedObjects": 1005192,
+  "plannedLineFacts": 1000000,
+  "childBuckets": { "zero": 101, "small": 4350, "eight": 520, "forty": 221 },
+  "warmup": {
+    "lineTarget": 1000,
+    "roots": 5,
+    "elapsedMs": 1094,
+    "peakRssBytes": 159461376,
+    "peakHeapBytes": 47000680,
+    "rssSamples": 21,
+    "heapSamples": 21
+  },
+  "crashPrefixLines": 2000,
+  "crashPrefixRoots": 11,
+  "crashCheckpointOrdinal": null,
+  "webhookOverlapStatus": "applied",
+  "applied": 5192,
+  "examined": 5192,
+  "followUpReads": 1,
+  "bulkDirectApplies": 5191,
+  "ledgerCounts": {
+    "initial": 5192,
+    "recheck": 0,
+    "agreement": 0,
+    "sale": 0,
+    "refund": 0,
+    "fallback": 1,
+    "throttle": 0
+  },
+  "shopBFacts": 1,
+  "lineFactsA": 1000000,
+  "graphqlCalls": 5200,
+  "jsonlFetches": 2,
+  "elapsedMs": 920964,
+  "sampleMs": 250,
+  "peakRssBytes": 393846784,
+  "peakHeapBytes": 228991304,
+  "rssSamples": 3683,
+  "heapSamples": 3683
+}
+```
+
+C3.5 scale notes: independently planned **5,192** roots / **1,005,192** JSONL objects / **1,000,000** canonical order-line facts (`qty` ≠ child-record count). Every imported order received a ledger (`initial: 5192`). One overlapping `orders/edited` on zero-child root `d-scale-51` drifted to full-B (`followUpReads: 1`, `fallback: 1`). Truncated crash prefix did not persist a committed ordinal (`crashCheckpointOrdinal` null). Shop B remained **1** fact. Admin GraphQL calls **5200**; JSONL fetches **2** (crash + success). Wall `elapsedMs` **920964**; bash `elapsed_real=929.902` `user=147.826` `sys=46.387`. Peak RSS/heap are sampled high-water values on a 250ms interval, **not** mathematical bounds and **not** encoded-byte proofs of JavaScript heap. Scratch files are disposed after emit; this run did **not** sample peak scratch directory bytes (limitation). Default CI still skips this envelope (`PR6_D_SCALE_1E6=1` and not GitHub Actions). GitHub `validate` timeout-minutes remains **120**. `npm run graphql-codegen` was **not executed** locally; CI Heavy fetches shopify.dev; local Admin 2026-07 schema gate executed in `bulk-query-schema.test.ts`.

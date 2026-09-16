@@ -5,7 +5,7 @@
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
 **Content digest:** `607886370181cfe7521c736783e5859b4e4e79fa1e4311fcf800fd0c57fee8a5`
-**Scanned files:** 494
+**Scanned files:** 498
 **Findings:** 1761
 **Converted paths:** 532
 **Approved exception findings:** 1229
@@ -1999,7 +1999,7 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 494,
+  "scannedFiles": 498,
   "findings": 1761,
   "violations": 0,
   "exceptionsUsed": [

@@ -230,7 +230,7 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528) |
 | Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §6 |
 | Prior | Quantity-as-closure; 64-root duplicate ring; invented `confirmed` / unqueried empty-complete agreements; edited-or-refund-bearing follow-up; scale = JSONL objects |
-| New | Validated D-owned scratch staging; indexed EOF parent membership; D Bulk A with actual `confirmed` + with-code discounts + selected nullables; queried agreement/sale/refund ledger for every imported order; scale ≥ 1,000,000 canonical order-line facts |
+| New | Validated D-owned scratch staging with streaming external sort, content-digest manifests, and on-disk ordinal acks; indexed EOF parent membership; D Bulk A with actual `confirmed` + with-code discounts + selected nullables; queried agreement/sale/refund ledger for every imported order; scale ≥ 1,000,000 canonical order-line facts |
 | Reason | Independent re-review CORRECTIONS REQUIRED: D-R-02 unresolved; D-R-03/10/11 partial. ChatGPT chose staging + actual reads rather than changing C |
 | Merchant impact | Truncated/mis-parented bulk cannot certify; ordinary orders get real ledgers; `confirmed` is Shopify inventory reservation |
 | Technical impact | Per-order Admin reads; worker scratch; new Bulk A fingerprint (old checkpoints not transferable) |
