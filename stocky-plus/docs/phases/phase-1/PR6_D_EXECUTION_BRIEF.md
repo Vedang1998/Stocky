@@ -55,7 +55,7 @@ No `.github` redesign, package/global-test-config changes, allowlist expansion, 
 2. **Real B-to-C mapping.** Execute merged B readers through the same trusted installed-app context as B's granted-scope query, then map into accepted C inputs. Persist D-owned `OrderFactObservationInFlight` using existing tenant/sequence machinery. Request generation precedes resource I/O; response generation follows a complete response. No Shopify I/O while canonical/advisory locks are held. B `null_observed` is neutral query evidence. Construct absence/inaccessibility from authoritative query outcome, retained fact history, and trusted scope continuity. Missing/stale/downgraded continuity denies destructive absence. Do not overwrite established tombstones with inaccessible. Preserve C/A unverified-delete shape. Persist Shop timezone/currency through the authorized tenant path without widening control-plane column grants.
 3. **Legacy compatibility / exactly-once.** For new unreceipted legacy-topic deliveries, preserve legacy effects while adding the canonical path. C owns receipt-bearing canonical application inside the caller's tenant transaction; apply the permitted legacy handler only when the operation was not already applied; commit only after both required effects succeed. Existing pre-D receipts are not replayed to duplicate legacy effects or retroactively labelled canonical-complete. Canonical catch-up uses rebuildable import/reconciliation.
 4. **Large-order quarantine recovery.** Keep >250-line sanitizer bounds and `job:null`. Recover through bounded coalesced shop-wide complete in-window sweeps, including orders behind the incremental watermark. Out-of-window cases remain unresolved.
-5. **Historical/incremental import.** Bulk A orchestration and costed follow-ups. Bulk B disabled. Bulk C rejected. Run both B gates (GraphQL schema validity and bulk eligibility) before calling the existing audited bulk-query submitter as read-job transport. No store submission in this assignment. Stream JSONL with bounded memory. Persist checkpoints only for committed accepted work.
+5. **Historical/incremental import.** Bulk A orchestration and **C3 per-order** agreement/sale/refund ledgers (not edited/refund-bearing-only). Bulk B disabled. Bulk C rejected. Run both B gates (GraphQL schema validity and bulk eligibility) before calling the existing audited bulk-query submitter as read-job transport. Default inner QUERY is the **D-owned** Bulk A projection (`sync/bulk-a-query.ts`), fingerprinted separately from frozen B `ORDER_FACTS_BULK_A_ORDERS_LINES`. No store submission in this assignment. Spool/index/validate JSONL on D-owned scratch **before** C apply. Parent closure is indexed membership after EOF. Persist checkpoints only for committed accepted work on a revalidated epoch. Old fingerprints are not transferable.
 6. **Reconciliation and health.** Durable `order-facts-sync` and `order-facts-reconcile` jobs. Exhaustive eligible updated-order sweeps repair missed in-window events; samples detect drift only. Mirror merchant diagnostics to `DataIssue` through authorized control-plane code only. Never report HEALTHY over unresolved required coverage.
 7. **Cancellation / off switches.** Check processing/installation authority at intake/claim, before external work where applicable, and before canonical apply. Preserve C's post-lock recheck. No inventory-write flag is enabled.
 
@@ -70,3 +70,23 @@ Do not use the copied-type C compatibility mapper as the production integration 
 Stop when the complete authorized D module is review-ready, or on a concrete admission/contract/resource/scope blocker that cannot safely be resolved. Ordinary in-scope failures are corrected in the same assignment.
 
 Independent Claude review and a later ChatGPT merge decision remain required. Cursor must not certify its own independent approval.
+
+## 6. Source-contract correction checkpoint (same D-054 — not D-055)
+
+**Authority:** PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528).
+
+**Plan record:** `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3**.
+
+| Field | Value |
+|---|---|
+| Prior | Quantity-equals-child-count closure; 64-root duplicate ring; mid-stream apply; frozen Bulk A plus invented `confirmed`/empty-complete agreements; follow-up only for edited or refund-bearing roots; scale = JSONL objects |
+| New | Validated scratch staging; indexed EOF membership closure; D Bulk A selects actual `confirmed`, with-code discounts, and required nullable fields; queried ledger for **every** imported order; scale ≥ 1,000,000 **canonical order-line facts** |
+| Reason | Claude re-review D-R-02 unresolved; D-R-03/10/11 partial. ChatGPT chose staging + actual reads rather than a C contract change |
+| Merchant impact | No certification of truncated/mis-parented bulk; ordinary orders receive real agreement/refund evidence; `confirmed` is inventory reservation |
+| Technical impact | Per-order Admin ledger; worker-local scratch; new query fingerprint |
+| Migration impact | None (no schema) |
+| Tradeoffs | Higher request count vs silent empty ledgers; disk vs RAM assembly |
+| Acceptance | C3.5 tests; N-01…N-09 preserved; exact-head Classify + full Heavy + Gate |
+| Out of scope | D-055; B/C internals; production; store calls; flags; A/B/C reopen |
+
+This brief still does **not** add product decisions beyond the ChatGPT-owned C3 contract. It is **not** a completion claim.

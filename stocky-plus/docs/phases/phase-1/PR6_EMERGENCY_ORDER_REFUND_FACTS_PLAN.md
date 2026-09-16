@@ -350,6 +350,89 @@ Every finding has an explicit disposition in this packet. None is deferred as �
 
 ---
 
+## C3. PR6-D source-contract correction (D-054 checkpoint — not D-055)
+
+**Authority:** ChatGPT on PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528).
+
+**Work order:** `PR43_PR6D_Source_Contract_Correction_Work_Order.md` (owner-chat attachment; operative text is the PR comment).
+
+**Subject:** Claude re-review `a72b403fe3c0ed57fa69d262d7dfbec3d7646292` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`).
+
+**This is a checkpoint in the same PR6-D assignment, not a new planning PR.** Frozen B documents and C internals remain unchanged. No D-055.
+
+This addendum **supersedes only** the D import constraints named below. It does not reopen PR6-B/C, does not change C `OrderSnapshot` required booleans, and does not treat 1→1 survival as destruction.
+
+### C3.1 Prior contract (superseded for D import only)
+
+| Topic | Prior rule | Where recorded |
+|---|---|---|
+| JSONL parent closure | Mid-stream release when LineItem **record count** equals `currentSubtotalLineItemsQuantity`; leftover parents at EOF fail if quantity missing or unequal. Duplicate detection used a 64-root ring. `onCompleteAssembly` could run before EOF. | D `jsonl.ts` / `jsonl.test.ts`; §10 stream+apply |
+| Bulk A projection | Frozen B `ORDER_FACTS_BULK_A_ORDERS_LINES`. D mapper invented `confirmed: true`, empty `agreements` with `agreementsComplete: true`, and nulls for unselected fields (`closedAt`, `displayFulfillmentStatus`, cart/refund discrepancy bags, line `unfulfilledQuantity`). Canonical line money used selected `discountedTotalSet` without `withCodeDiscounts: true`. | Frozen B `bulk-query-documents.ts`; D `mapper-bulk.ts`; §4.5 Bulk A listing |
+| Agreement / refund follow-up | Costed paginated `order(id:) { agreements { sales } }` **only** for `edited = true` **OR** refund-bearing (`totalRefundedSet` non-zero / refunds LIST non-empty). Ordinary unedited zero-refund orders applied from Bulk A alone. | §4.5, §10.5, §14, F-CLAUDE-PR6P-09 |
+| Scale envelope | 1,000,000 **JSONL objects** (roots + children). Fixtures set `currentSubtotalLineItemsQuantity` equal to child **record** count (the old closure predicate). | D scale test; §14 envelope wording |
+
+### C3.2 New D-owned source contract
+
+**1. Validated-source staging before any bulk-derived snapshot reaches C**
+
+- D owns private disposable **worker-local scratch files** and bounded **external indexes**. No new DB table, schema, grant, storage service, package, public endpoint, or second ledger.
+- Download/spool the complete JSONL, UTF-8 fatal, newline framing. Scratch is **not** source authority.
+- Authoritative unsigned `objectCount` / `rootObjectCount` must both match `^[0-9]+$` and the observed stream. Verified empty exports (`0`/`0`) are OK. Missing counts fail. Empty download of a nonempty export fails.
+- Global exact uniqueness of root and child IDs (whole-stream, not a 64-root ring). Every parent relationship is indexed.
+- **Parent closure** is indexed record membership after validated EOF: children of a parent are exactly the index rows whose `__parentId` is that root. Zero children is valid **only** when the index has none. Closure is **not** `currentSubtotalLineItemsQuantity` (that field is a **unit sum**, pinned 2026-07 Order schema), not next-root arrival, and not `groupObjects: false` order.
+- Physical JSONL ordinals are retained. `onCompleteAssembly` runs only after the whole source validates. Partial apply of an invalid source never certifies whole-run coverage.
+- Bound RAM, external sort, descriptors, per-parent materialization bytes, scratch disk, pending checkpoint ordinals, and concurrent imports. Ownership-safe cleanup: no symlink follow, no unowned delete. Disk-full, cancel, and process-loss recover by re-spooling and revalidating; never skip ordinals against an unverified or changed epoch/fingerprint.
+- Per-shop isolation of scratch. Revalidate identity/integrity before resume.
+
+**2. Versioned D-owned Bulk A READ (under `sync/**`)**
+
+- New inner QUERY selecting actual canonical fields, including Shopify `confirmed` (inventory reservation, **not** provenance), `closedAt`, `displayFulfillmentStatus`, `subtotalLineItemsQuantity`, refund/cart discount bags, line `unfulfilledQuantity`, and `discountedTotalSet(withCodeDiscounts: true)` under a stable alias.
+- Do **not** select `cancellation`, `priceAfterAllDiscountsBeforeTaxesSet`, or agreements in Bulk A. Do not write fake null/false/true/empty for omitted keys. Selected-null is distinct from omitted (N-09).
+- Frozen B `ORDER_FACTS_BULK_A_ORDERS_LINES` remains the B document. Both B gates remain mandatory. `groupObjects: false`. Existing audited catalog submitter. Bulk B production remains disabled. Bulk C remains rejected.
+- Fingerprint is `sha256(query + groupObjects:false + shopId)` of the **new** D query. Old checkpoints are not transferable.
+
+**3. Complete agreement/sale/refund evidence for every imported order**
+
+- Replace the edited/refund-bearing-only optimization. Every imported order, including ordinary unedited zero-refund orders, needs a **queried** agreement/sale ledger and actual refund identity/presence.
+- D-owned bounded supplemental walkers reuse B safe execution, clocks, and pagination (`executeAdminReadQuery` / `executeBudgetedQuery` / `ORDER_AGREEMENT_SALES_PAGE_QUERY` / `completeAgreementSales` / `readRefundFact`). Do not routinely re-read bulk-fetched lines.
+- `Order.refunds` is a LIST of identities. Zero-money refunds still require facts. Independent Refund clocks. Pin identity / `updatedAt` / `currencyCode` against the Bulk A root.
+- Version drift: abandon the mixed candidate and either bounded full-B `applyNominatedOrderGid` for that order or explicit incomplete. No manufactured Sale/Agreement and no unqueried complete-empty ledger.
+- Count initial / recheck / agreement / sale / refund / fallback / throttle calls. No per-line Admin loop. Historical “45 follow-ups” does not predict the new contract.
+
+**4. Scale**
+
+- Corrected D-scale proves at least **1,000,000 expected canonical order-line facts** (not JSONL object count), plus roots, multi-unit and zero-current lines, zero-money refunds, out-of-order records, multi-shop/worker recovery, and webhooks.
+- Realistic fixtures must **not** encode the closure predicate (`currentSubtotalLineItemsQuantity` is not child-record count).
+- Default CI skips the 1e6 envelope (`PR6_D_SCALE_1E6=1` and not GitHub Actions). Exact-head Classify + full Heavy + Gate remain required for the implementation head.
+
+### C3.3 Reason
+
+Claude re-review upheld D-R-02 (quantity-as-closure / 64-root duplicate ring / mid-stream apply before EOF) as unresolved, and D-R-03 / D-R-10 / D-R-11 as partial (invented `confirmed` and empty-complete agreements; unselected nulls; follow-up only for edited/refund-bearing; scale counted JSONL objects). ChatGPT chose staging plus actual Bulk A reads rather than changing C’s required `confirmed` / `agreementsComplete` booleans.
+
+### C3.4 Impacts and tradeoffs
+
+| Impact | Detail |
+|---|---|
+| Merchant | Import cannot certify a truncated or mis-parented Bulk A file. Ordinary orders get a real agreement/sale/refund ledger instead of a silent empty-complete snapshot. `confirmed` is Shopify inventory-reservation, not “this arrived via bulk”. |
+| Technical | Extra Admin requests **per imported order** (ledger + refund GIDs + optional fallback). Scratch disk and external indexes on the worker. New D Bulk A fingerprint invalidates in-flight old-query checkpoints. |
+| Migration | None. No schema/grant change. |
+| Risks | Request volume vs the 1,000,000-line envelope; scratch disk-full; fingerprint mismatch on resume. Mitigations: counted budgets, fail-closed incomplete, ownership-safe cleanup, non-transferable checkpoints. |
+| Frozen lanes | B public documents and C apply internals stay frozen. D imports B APIs. |
+
+### C3.5 Acceptance tests (this assignment)
+
+Positive: indexed closure after EOF; selected `confirmed` / with-code money / nullable selected-null; queried empty-complete ledger; zero-money refund facts; 1e6 canonical line facts with qty ≠ child count.
+
+Negative: missing counts; empty nonempty download; duplicate IDs; orphans = `MIS_PARENTED` not `OPEN_PARENT_BOUND`; omitted selected field; manufactured agreements rejected.
+
+Bypass: old Bulk A fingerprint cannot skip ordinals; symlink/unowned scratch delete refused; mixed clock abandoned.
+
+Drift / partial: resume only after revalidation on the same epoch; truncated spool applies nothing; apply crash after validation resumes from contiguous committed ordinals; webhook overlap during import.
+
+Preserve RESOLVED D-R-01/04/05/06/07/08/09/12, N-01…N-09, worker/legacy/receipt/revival, D046, UTF-8, poll, and physical-ordinal checkpoint behavior except as superseded above. R-176 remains OPEN/P0. R-164 unchanged.
+
+---
+
 ## 0. Emergency context and current repository truth
 
 ### 0.1 Why this packet exists
@@ -1651,8 +1734,8 @@ Reuse PR 5 clocks **plus** §5.1:
 2. Create `SyncRun` domain `orders` / `orders_full`.
 3. Allocate `fenceGeneration` before `bulkOperationRunQuery` (PR 5 fence rule).
 4. Submit **Bulk A**. Submit **Bulk B only if** the PR6-B gate recorded it legal. **Never submit Bulk C.** Persist BulkOperation GID. Poll by id. Forbidden: `currentBulkOperation`.
-5. After Bulk A, paginated agreement/sales (and refund fallback) for `edited=true` OR refund-bearing orders, with recorded request-count bound.
-6. Stream JSONL with bounded memory. Two-phase commit with `ingestBatchId`.
+5. After Bulk A, **PR6-D C3 supersedes the edited/refund-bearing-only follow-up:** every imported order receives a D-owned bounded agreement/sale/refund ledger (queried empty-complete is allowed; unqueried empty-complete is not). Drift vs Bulk A identity/`updatedAt`/`currencyCode` abandons the mixed candidate. Count every Admin class. Frozen B/C internals unchanged.
+6. **PR6-D C3:** spool/index/validate the complete JSONL on D-owned scratch **before** any bulk-derived snapshot reaches C. Parent closure is indexed membership after EOF, not quantity/next-root. Checkpoints only for committed accepted work on a revalidated epoch. Two-phase commit with `ingestBatchId`.
 7. Apply under Order (+ Refund) advisory locks, batches of orders (not unbounded).
 8. Incomplete JSONL / throttling / 5xx → run not successful; resume from last committed ordinal.
 9. After bulk COMPLETED: nominate absence candidates **only** for in-window orders previously LIVE but omitted from a **complete** run whose `processedAt` is inside the bulk fence window. **Never** nominate out-of-window orders. Do **not** tombstone from omission when `read_all_orders` is absent.
@@ -1751,8 +1834,9 @@ Engineering envelope from Phase 1 brief: **1,000,000 order-line facts**, 50k var
 Requirements:
 
 - no N+1 Admin queries per **line** (Bulk A + paged connections);
-- agreement/refund follow-up is **per qualifying order**, bounded and counted (PR6-B);
-- bounded-memory JSONL;
+- **PR6-D C3 supersedes “per qualifying order”:** agreement/refund ledger is **per imported order**, bounded and counted (initial/recheck/agreement/sale/refund/fallback/throttle). Historical qualifying-order follow-up does not predict the new contract;
+- **PR6-D C3:** validated-source staging + bounded-memory materialize (external indexes; not a 32-root live window as closure);
+- scale envelope is **1,000,000 canonical order-line facts**, not JSONL object count;
 - **realisable** indexes:
   - `ShopifyOrderFact`: `(shopId, processedAt)`, `(shopId, shopifyGid)`
   - `ShopifyOrderLineFact`: `(shopId, shopifyGid)`, `(shopId, shopifyOrderGid)`, **`(shopId, variantGidAtSale, orderProcessedAt)`**

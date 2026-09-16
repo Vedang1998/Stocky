@@ -1,6 +1,6 @@
 # Project Status
 
-**Updated:** 2026-09-15
+**Updated:** 2026-09-16
 **Current stage:** Phase 1 PR6-B AND PR6-C REPOSITORY LANES ACCEPTED / MERGED / CLOSED — squash **V** current `origin/main`; PR6-D COMPLETE INTEGRATION **ADMITTED** on `phase-1/pr6-d-order-webhook-import` after verified exact-V push CI
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
@@ -221,6 +221,27 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | D-055 | **NOT CREATED** |
 | Phase 1 / PR 6 | **IN PROGRESS** |
 | Production / writes / scopes / flags | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
+
+### D-054 subitem — PR6-D source-contract correction (checkpoint, not D-055)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is a **same-assignment checkpoint**, **not D-055**, not a new planning PR, and not PR 6 / Phase 1 closure. |
+| ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528) |
+| Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §6 |
+| Prior | Quantity-as-closure; 64-root duplicate ring; invented `confirmed` / unqueried empty-complete agreements; edited-or-refund-bearing follow-up; scale = JSONL objects |
+| New | Validated D-owned scratch staging; indexed EOF parent membership; D Bulk A with actual `confirmed` + with-code discounts + selected nullables; queried agreement/sale/refund ledger for every imported order; scale ≥ 1,000,000 canonical order-line facts |
+| Reason | Independent re-review CORRECTIONS REQUIRED: D-R-02 unresolved; D-R-03/10/11 partial. ChatGPT chose staging + actual reads rather than changing C |
+| Merchant impact | Truncated/mis-parented bulk cannot certify; ordinary orders get real ledgers; `confirmed` is Shopify inventory reservation |
+| Technical impact | Per-order Admin reads; worker scratch; new Bulk A fingerprint (old checkpoints not transferable) |
+| Migration impact | None |
+| Tradeoffs | Request and disk cost vs silent incomplete snapshots |
+| Acceptance tests | C3.5 / N-01…N-09 / remaining D-R tests / corrected 1e6 line-fact envelope |
+| Frozen | B documents, C internals, RESOLVED D-R-01/04/05/06/07/08/09/12 |
+| R-176 | **OPEN / P0** |
+| R-164 | unchanged / **OPEN** |
+| D-055 | **NOT CREATED** |
+| Production / writes / flags | **NOT AUTHORIZED** |
 
 ## Phase 1 PR5-F1 foundation closeout (PR #27)
 
