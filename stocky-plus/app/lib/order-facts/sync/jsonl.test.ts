@@ -473,4 +473,110 @@ describe("PR6-D JSONL assembly", () => {
     expect(result.status).toBe("TRUNCATED");
     expect(released).toEqual([]);
   });
+
+  it("does not consume checkpoint ordinals for blank physical lines", async () => {
+    const released: number[][] = [];
+    const result = await assembleOrderFactsJsonl(
+      linesOf(`\n\n${rootLine(1, 0)}\n\n${rootLine(2, 0)}\n\n`),
+      {
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "2",
+        onCompleteAssembly: async (assembly) => {
+          released.push(assembly.lineOrdinals);
+        },
+      },
+    );
+    expect(result.status).toBe("COMPLETE");
+    expect(result.lastPhysicalOrdinal).toBe(2);
+    expect(released).toEqual([[1], [2]]);
+  });
+
+  it("rejects a duplicate root after 70 other roots before any apply", async () => {
+    const released: string[] = [];
+    const unique = Array.from({ length: 70 }, (_, i) => rootLine(i + 1, 0));
+    const duplicate = `${unique.join("\n")}\n${rootLine(1, 0)}\n`;
+    const result = await assembleOrderFactsJsonl(linesOf(duplicate), {
+      expectedObjectCount: "71",
+      expectedRootObjectCount: "71",
+      onCompleteAssembly: async (assembly) => {
+        released.push(assembly.rootGid);
+      },
+    });
+    expect(result.status).toBe("DUPLICATE");
+    expect(released).toEqual([]);
+  });
+
+  it("rejects a duplicate root after 3000 other roots", async () => {
+    const released: string[] = [];
+    const unique = Array.from({ length: 3000 }, (_, i) => rootLine(i + 1, 0));
+    const result = await assembleOrderFactsJsonl(
+      linesOf(`${unique.join("\n")}\n${rootLine(1, 0)}\n`),
+      {
+        expectedObjectCount: "3001",
+        expectedRootObjectCount: "3001",
+        onCompleteAssembly: async (assembly) => {
+          released.push(assembly.rootGid);
+        },
+      },
+    );
+    expect(result.status).toBe("DUPLICATE");
+    expect(released).toEqual([]);
+  });
+
+  it("rejects a duplicate child under the same parent and under a different parent", async () => {
+    const sameParent = await assembleOrderFactsJsonl(
+      linesOf(
+        [
+          rootLine(1, 2),
+          JSON.stringify({
+            id: "gid://shopify/LineItem/same",
+            __parentId: "gid://shopify/Order/1",
+          }),
+          JSON.stringify({
+            id: "gid://shopify/LineItem/same",
+            __parentId: "gid://shopify/Order/1",
+          }),
+        ].join("\n") + "\n",
+      ),
+      { expectedObjectCount: "3", expectedRootObjectCount: "1" },
+    );
+    expect(sameParent.status).toBe("DUPLICATE");
+    const differentParent = await assembleOrderFactsJsonl(
+      linesOf(
+        [
+          rootLine(1, 1),
+          rootLine(2, 1),
+          JSON.stringify({
+            id: "gid://shopify/LineItem/shared",
+            __parentId: "gid://shopify/Order/1",
+          }),
+          JSON.stringify({
+            id: "gid://shopify/LineItem/shared",
+            __parentId: "gid://shopify/Order/2",
+          }),
+        ].join("\n") + "\n",
+      ),
+      { expectedObjectCount: "4", expectedRootObjectCount: "2" },
+    );
+    expect(differentParent.status).toBe("DUPLICATE");
+  });
+
+  it("detects duplicates across sort-run boundaries and parents split across chunks", async () => {
+    const count = 70_000;
+    const lines = Array.from({ length: count }, (_, i) => rootLine(i + 1, 0));
+    const complete = await assembleOrderFactsJsonl(linesOf(`${lines.join("\n")}\n`), {
+      expectedObjectCount: String(count),
+      expectedRootObjectCount: String(count),
+    });
+    expect(complete.status).toBe("COMPLETE");
+    expect(complete.rootCount).toBe(count);
+    const duplicate = await assembleOrderFactsJsonl(
+      linesOf(`${lines.join("\n")}\n${rootLine(1, 0)}\n`),
+      {
+        expectedObjectCount: String(count + 1),
+        expectedRootObjectCount: String(count + 1),
+      },
+    );
+    expect(duplicate.status).toBe("DUPLICATE");
+  }, 60_000);
 });

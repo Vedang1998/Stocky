@@ -23,10 +23,11 @@ import {
   ORDER_FACTS_BULK_POLL_INTERVAL_MS,
   ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
   ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS,
-  ORDER_FACTS_JSONL_MAX_PENDING_ORDINALS,
+  ORDER_FACTS_D_API_VERSION,
   ORDER_FACTS_SYNC_DOMAIN,
   ORDER_FACTS_SYNC_JOB_TYPE,
 } from "./constants";
+import { DiskOrdinalAck } from "./ordinal-ack";
 import {
   assertShopProcessingEnabled,
   createOrderFactsSyncRun,
@@ -309,11 +310,14 @@ export async function runOrderFactsImportStep(input: {
   }
 
   const skipThroughOrdinal =
-    syncRun.bulkQueryFingerprint === fingerprint
+    syncRun.bulkQueryFingerprint === fingerprint &&
+    (syncRun.bulkOperationGid == null ||
+      bulkOperationGid == null ||
+      syncRun.bulkOperationGid === bulkOperationGid)
       ? (syncRun.jsonlCommittedLineOrdinal ?? 0)
       : 0;
   let contiguousCommitted = skipThroughOrdinal;
-  const pendingCommitted = new Set<number>();
+  let ordinalAck: DiskOrdinalAck | null = null;
   let applied = 0;
   let incomplete = 0;
   let examined = 0;
@@ -335,19 +339,14 @@ export async function runOrderFactsImportStep(input: {
   });
 
   const noteCommitted = async (ordinals: number[]) => {
-    for (const ordinal of ordinals) {
-      if (ordinal > contiguousCommitted) pendingCommitted.add(ordinal);
-    }
-    if (pendingCommitted.size > ORDER_FACTS_JSONL_MAX_PENDING_ORDINALS) {
+    if (!ordinalAck) {
       throw new OrderFactsSyncError(
-        "order_facts_checkpoint_pending_bound",
-        `pending checkpoint ordinals exceeded ${ORDER_FACTS_JSONL_MAX_PENDING_ORDINALS}`,
+        "order_facts_checkpoint_ack_missing",
+        "validated source bitset was not opened before checkpointing",
       );
     }
-    while (pendingCommitted.has(contiguousCommitted + 1)) {
-      contiguousCommitted += 1;
-      pendingCommitted.delete(contiguousCommitted);
-    }
+    contiguousCommitted = ordinalAck.mark(ordinals);
+    await ordinalAck.flush();
     if (bulkOperationGid && contiguousCommitted > skipThroughOrdinal) {
       await acknowledgeJsonlBatch({
         shopId: input.shopId,
@@ -453,6 +452,22 @@ export async function runOrderFactsImportStep(input: {
       expectedRootObjectCount: expectedRootObjectCount ?? undefined,
       shopId: input.shopId,
       syncRunId: syncRun.id,
+      epoch: {
+        shopId: input.shopId,
+        syncRunId: syncRun.id,
+        bulkOperationGid: bulkOperationGid ?? null,
+        queryFingerprint: fingerprint,
+        apiVersion: ORDER_FACTS_D_API_VERSION,
+        fenceGeneration:
+          fence.fenceGeneration == null ? null : String(fence.fenceGeneration),
+      },
+      onValidatedStage: async (stage) => {
+        ordinalAck = await DiskOrdinalAck.open({
+          dir: stage.dir,
+          lastOrdinal: stage.lastPhysicalOrdinal,
+          contiguous: skipThroughOrdinal,
+        });
+      },
       onCompleteAssembly: applyAssembly,
     });
   } catch (error) {

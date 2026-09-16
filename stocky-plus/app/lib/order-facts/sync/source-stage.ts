@@ -2,14 +2,18 @@
  * D-owned validated-source staging. Scratch files are worker-local, per-shop,
  * disposable, and not source authority. Parent closure is indexed membership
  * after validated EOF — not quantity, next-root, or groupObjects:false order.
+ *
+ * Blank/whitespace-only physical lines are framing only: they do not occupy a
+ * checkpoint ordinal. `lastPhysicalOrdinal` counts JSON objects in stream order.
  */
+import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import readline from "node:readline";
 import {
   lstat,
   mkdir,
   open,
   readFile,
+  readdir,
   realpath,
   rm,
   writeFile,
@@ -21,16 +25,28 @@ import {
   validateUnsignedCountToken,
 } from "../../catalog-facts/ingest/counts";
 import {
+  ORDER_FACTS_D_API_VERSION,
   ORDER_FACTS_JSONL_ID_SORT_CHUNK,
-  ORDER_FACTS_JSONL_MAX_GROUP_MERGE_FILES,
   ORDER_FACTS_JSONL_MAX_LINE_BYTES,
   ORDER_FACTS_JSONL_MAX_LIVE_BYTES,
   ORDER_FACTS_JSONL_MAX_SCRATCH_BYTES,
+  ORDER_FACTS_SCRATCH_MARKER,
   ORDER_FACTS_SCRATCH_PREFIX,
+  ORDER_FACTS_SOURCE_MANIFEST_VERSION,
   ORDER_GID_PREFIX,
 } from "./constants";
 import { OrderFactsJsonlError } from "./errors";
+import {
+  hashFileSha256,
+  verifyValidatedSourceManifest,
+  writeValidatedSourceManifest,
+  type SourceEpochBinding,
+  type ValidatedSourceManifest,
+} from "./source-digest";
+import { assertUniqueSortedFile, externalSortLines } from "./source-sort";
 import type { JsonlAssemblyResult, JsonlByteSource, JsonlObject } from "./types";
+
+export type { SourceEpochBinding, ValidatedSourceManifest };
 
 export type JsonlIndexKind = "R" | "C";
 
@@ -43,19 +59,32 @@ export type JsonlIndexRow = {
   parentId: string;
 };
 
+export type EmitSlice = {
+  minOrdinal: number;
+  offset: number;
+  length: number;
+};
+
 export type ValidatedSourceStage = {
   status: "COMPLETE";
   dir: string;
   jsonlPath: string;
   indexPath: string;
+  idsPath: string;
   groupedPath: string;
+  emitPath: string;
+  manifestPath: string;
   objectCount: number;
   rootCount: number;
   lastPhysicalOrdinal: number;
   owned: true;
+  manifest: ValidatedSourceManifest;
 };
 
-export type StageFail = Extract<JsonlAssemblyResult, { status: Exclude<JsonlAssemblyResult["status"], "COMPLETE"> }>;
+export type StageFail = Extract<
+  JsonlAssemblyResult,
+  { status: Exclude<JsonlAssemblyResult["status"], "COMPLETE"> }
+>;
 
 export type StageResult = ValidatedSourceStage | StageFail;
 
@@ -68,6 +97,7 @@ export type StageJsonlOptions = {
   expectedObjectCount?: string | null;
   expectedRootObjectCount?: string | null;
   scratchRoot?: string;
+  epoch?: SourceEpochBinding;
 };
 
 function fail(
@@ -83,6 +113,15 @@ function fail(
     rootCount: extras?.rootCount ?? 0,
     lastPhysicalOrdinal: extras?.lastPhysicalOrdinal ?? 0,
   };
+}
+
+function isEnospc(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: string }).code === "ENOSPC",
+  );
 }
 
 function safeSegment(value: string, fallback: string): string {
@@ -122,6 +161,10 @@ function isRecord(value: unknown): value is JsonlObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function markerPath(dir: string): string {
+  return path.join(dir, ORDER_FACTS_SCRATCH_MARKER);
+}
+
 async function assertOwnedDirectory(dir: string): Promise<void> {
   const st = await lstat(dir);
   if (st.isSymbolicLink()) {
@@ -144,6 +187,79 @@ async function assertOwnedDirectory(dir: string): Promise<void> {
   }
 }
 
+async function assertOwnedScratch(dir: string): Promise<void> {
+  await assertOwnedDirectory(dir);
+  try {
+    const marker = await readFile(markerPath(dir), "utf8");
+    const parsed: unknown = JSON.parse(marker);
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      Array.isArray(parsed) ||
+      (parsed as { owned?: unknown }).owned !== true ||
+      (parsed as { prefix?: unknown }).prefix !== ORDER_FACTS_SCRATCH_PREFIX
+    ) {
+      throw new OrderFactsJsonlError(
+        "scratch_unowned",
+        `refusing scratch without D ownership marker ${dir}`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof OrderFactsJsonlError) throw error;
+    throw new OrderFactsJsonlError(
+      "scratch_unowned",
+      `refusing scratch without D ownership marker ${dir}`,
+    );
+  }
+}
+
+async function isAbandonedDScratch(dir: string): Promise<boolean> {
+  try {
+    await assertOwnedScratch(dir);
+    return true;
+  } catch {
+    /* fall through to artifact-only leftovers */
+  }
+  try {
+    await assertOwnedDirectory(dir);
+  } catch {
+    return false;
+  }
+  const entries = await readdir(dir);
+  if (entries.length === 0) return true;
+  return entries.every((name) => {
+    if (name === ORDER_FACTS_SCRATCH_MARKER) return true;
+    if (name === "source.jsonl" || name === "index.tsv" || name === "ids.tsv") {
+      return true;
+    }
+    if (name === "grouped.tsv" || name === "emit.tsv" || name === "manifest.json") {
+      return true;
+    }
+    if (name === "ack.bits") return true;
+    if (name.startsWith("sort-") && name.endsWith(".part")) return true;
+    if (name.endsWith(".sorted")) return true;
+    return false;
+  });
+}
+
+async function writeOwnershipMarker(
+  dir: string,
+  input: { shopId?: string; syncRunId?: string },
+): Promise<void> {
+  await writeFile(
+    markerPath(dir),
+    `${JSON.stringify({
+      owned: true,
+      prefix: ORDER_FACTS_SCRATCH_PREFIX,
+      shopId: input.shopId ?? null,
+      syncRunId: input.syncRunId ?? null,
+      pid: process.pid,
+      createdAt: new Date().toISOString(),
+    })}\n`,
+    { mode: 0o600 },
+  );
+}
+
 export async function createOwnedScratchDir(input: {
   shopId?: string;
   syncRunId?: string;
@@ -157,13 +273,29 @@ export async function createOwnedScratchDir(input: {
   );
   await mkdir(root, { recursive: true, mode: 0o700 });
   await assertOwnedDirectory(root);
+  await writeOwnershipMarker(root, { shopId: "root", syncRunId: "prefix" });
   const shopDir = path.join(root, shop);
   await mkdir(shopDir, { recursive: true, mode: 0o700 });
   await assertOwnedDirectory(shopDir);
+  await writeOwnershipMarker(shopDir, { shopId: input.shopId, syncRunId: "shop" });
   const dir = path.join(shopDir, run);
   try {
-    await assertOwnedDirectory(dir);
-    await rm(dir, { recursive: true, force: false });
+    const existing = await lstat(dir);
+    if (existing.isSymbolicLink()) {
+      throw new OrderFactsJsonlError(
+        "scratch_symlink_refused",
+        `refusing to use symlink scratch ${dir}`,
+      );
+    }
+    if (existing.isDirectory()) {
+      if (!(await isAbandonedDScratch(dir))) {
+        throw new OrderFactsJsonlError(
+          "scratch_unowned",
+          `refusing pre-existing unowned scratch ${dir}`,
+        );
+      }
+      await rm(dir, { recursive: true, force: false });
+    }
   } catch (error) {
     if (error instanceof OrderFactsJsonlError) throw error;
     const code =
@@ -174,6 +306,7 @@ export async function createOwnedScratchDir(input: {
   }
   await mkdir(dir, { recursive: true, mode: 0o700 });
   await assertOwnedDirectory(dir);
+  await writeOwnershipMarker(dir, input);
   const resolved = await realpath(dir);
   if (resolved !== dir && path.resolve(dir) !== resolved) {
     const st = await lstat(dir);
@@ -192,19 +325,19 @@ export async function disposeOwnedScratch(
   scratchRoot?: string,
 ): Promise<void> {
   if (!dir) return;
-  try {
-    await assertOwnedDirectory(dir);
-  } catch {
-    return;
-  }
-  const resolved = await realpath(dir);
   const prefix = scratchRoot ?? path.join(os.tmpdir(), ORDER_FACTS_SCRATCH_PREFIX);
   const resolvedPrefix = await realpath(prefix).catch(() => prefix);
+  const resolved = await realpath(dir).catch(() => path.resolve(dir));
   if (!resolved.startsWith(resolvedPrefix + path.sep) && resolved !== resolvedPrefix) {
     throw new OrderFactsJsonlError(
       "scratch_unowned",
       "refusing to delete scratch outside the D prefix",
     );
+  }
+  try {
+    await assertOwnedScratch(dir);
+  } catch {
+    return;
   }
   await rm(resolved, { recursive: true, force: false });
 }
@@ -219,64 +352,163 @@ function tsvEscape(value: string): string {
   return value;
 }
 
-async function sortLines(filePath: string, chunkSize: number): Promise<void> {
-  const raw = await readFile(filePath, "utf8");
-  if (raw === "") return;
-  const lines = raw.endsWith("\n") ? raw.slice(0, -1).split("\n") : raw.split("\n");
-  if (lines.length <= chunkSize) {
-    lines.sort();
-    await writeFile(filePath, lines.length ? `${lines.join("\n")}\n` : "", "utf8");
-    return;
-  }
-  const dir = path.dirname(filePath);
-  const parts: string[] = [];
-  for (let offset = 0; offset < lines.length; offset += chunkSize) {
-    if (parts.length >= ORDER_FACTS_JSONL_MAX_GROUP_MERGE_FILES) {
-      throw new OrderFactsJsonlError(
-        "jsonl_sort_bound",
-        `external sort exceeded ${ORDER_FACTS_JSONL_MAX_GROUP_MERGE_FILES} chunk files`,
-      );
+export async function writeStreamChunk(
+  stream: NodeJS.WritableStream,
+  chunk: string | Buffer,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const finish = (error?: Error | null) => {
+      if (settled) return;
+      settled = true;
+      stream.off("drain", onDrain);
+      stream.off("error", onError);
+      if (error) reject(error);
+      else resolve();
+    };
+    const onDrain = () => finish();
+    const onError = (error: Error) => finish(error);
+    stream.once("error", onError);
+    try {
+      const ok = stream.write(chunk);
+      if (ok) finish();
+      else stream.once("drain", onDrain);
+    } catch (error) {
+      finish(error instanceof Error ? error : new Error(String(error)));
     }
-    const chunk = lines.slice(offset, offset + chunkSize).sort();
-    const partPath = path.join(dir, `sort-${parts.length}.part`);
-    await writeFile(partPath, `${chunk.join("\n")}\n`, "utf8");
-    parts.push(partPath);
-  }
-  const merged: string[] = [];
-  const heads = await Promise.all(
-    parts.map(async (part) => {
-      const text = await readFile(part, "utf8");
-      return text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n");
-    }),
-  );
-  const idx = heads.map(() => 0);
-  for (;;) {
-    let best: string | null = null;
-    let bestI = -1;
-    for (let i = 0; i < heads.length; i += 1) {
-      const row = heads[i][idx[i]];
-      if (row == null) continue;
-      if (best == null || row < best) {
-        best = row;
-        bestI = i;
-      }
-    }
-    if (best == null || bestI < 0) break;
-    merged.push(best);
-    idx[bestI] += 1;
-  }
-  await writeFile(filePath, merged.length ? `${merged.join("\n")}\n` : "", "utf8");
-  await Promise.all(parts.map((part) => rm(part, { force: true })));
+  });
 }
 
-async function assertUniqueSortedIds(idsPath: string): Promise<StageFail | null> {
-  const text = await readFile(idsPath, "utf8");
-  if (text === "") return null;
-  const lines = text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n");
-  for (let i = 1; i < lines.length; i += 1) {
-    if (lines[i] === lines[i - 1]) {
-      return fail("DUPLICATE", `duplicate JSONL id ${lines[i]}`);
+function parseGroupedLine(line: string): JsonlIndexRow {
+  const cols = line.split("\t");
+  const groupKey = cols[0] ?? "";
+  const kind: JsonlIndexKind = cols[1] === "C" ? "C" : "R";
+  return {
+    ordinal: Number.parseInt(cols[2] ?? "", 10),
+    offset: Number.parseInt(cols[3] ?? "", 10),
+    length: Number.parseInt(cols[4] ?? "", 10),
+    kind,
+    id: cols[5] ?? "",
+    parentId: kind === "C" ? groupKey : "",
+  };
+}
+
+async function* iterateFileLines(
+  filePath: string,
+): AsyncGenerator<{ line: string; offset: number; length: number }> {
+  const stream = createReadStream(filePath);
+  const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+  let leftover = "";
+  let offset = 0;
+  try {
+    for await (const chunk of stream) {
+      leftover +=
+        typeof chunk === "string" ? chunk : decoder.decode(chunk, { stream: true });
+      let newline = leftover.indexOf("\n");
+      while (newline >= 0) {
+        const rawLine = leftover.slice(0, newline);
+        leftover = leftover.slice(newline + 1);
+        const consumed = newline + 1;
+        const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+        if (line !== "") {
+          yield { line, offset, length: consumed };
+        }
+        offset += consumed;
+        newline = leftover.indexOf("\n");
+      }
     }
+    leftover += decoder.decode();
+    if (leftover !== "") {
+      yield { line: leftover, offset, length: utf8Bytes(leftover) };
+    }
+  } finally {
+    stream.destroy();
+  }
+}
+
+async function validateGroupedAndWriteEmit(input: {
+  groupedPath: string;
+  emitPath: string;
+  maxLiveBytes: number;
+  objectCount: number;
+  rootCount: number;
+  lastPhysicalOrdinal: number;
+}): Promise<StageFail | null> {
+  const emitOut = createWriteStream(input.emitPath, { mode: 0o600 });
+  try {
+    let currentKey: string | null = null;
+    let hasRoot = false;
+    let liveBytes = 0;
+    let minOrdinal = Number.POSITIVE_INFINITY;
+    let groupStart = 0;
+    let groupEnd = 0;
+
+    const flush = async (): Promise<StageFail | null> => {
+      if (currentKey == null) return null;
+      if (!hasRoot) {
+        return fail(
+          "MIS_PARENTED",
+          `JSONL children referenced missing parent ${currentKey}`,
+          {
+            objectCount: input.objectCount,
+            rootCount: input.rootCount,
+            lastPhysicalOrdinal: input.lastPhysicalOrdinal,
+          },
+        );
+      }
+      if (liveBytes > input.maxLiveBytes) {
+        return fail(
+          "OPEN_PARENT_BOUND",
+          `live JSONL assembly bytes exceeded ${input.maxLiveBytes}`,
+          {
+            objectCount: input.objectCount,
+            rootCount: input.rootCount,
+            lastPhysicalOrdinal: input.lastPhysicalOrdinal,
+          },
+        );
+      }
+      const padded = String(minOrdinal).padStart(20, "0");
+      await writeStreamChunk(
+        emitOut,
+        `${padded}\t${groupStart}\t${groupEnd - groupStart}\n`,
+      );
+      return null;
+    };
+
+    for await (const row of iterateFileLines(input.groupedPath)) {
+      const cols = row.line.split("\t");
+      const groupKey = cols[0] ?? "";
+      const kind = cols[1] === "C" ? "C" : "R";
+      const ordinal = Number.parseInt(cols[2] ?? "", 10);
+      const length = Number.parseInt(cols[4] ?? "", 10);
+      if (currentKey != null && groupKey !== currentKey) {
+        const flushed = await flush();
+        if (flushed) return flushed;
+        hasRoot = false;
+        liveBytes = 0;
+        minOrdinal = Number.POSITIVE_INFINITY;
+        groupStart = row.offset;
+      }
+      if (currentKey == null) groupStart = row.offset;
+      currentKey = groupKey;
+      if (kind === "R") hasRoot = true;
+      liveBytes += Number.isFinite(length) ? length : 0;
+      if (Number.isFinite(ordinal)) {
+        minOrdinal = Math.min(minOrdinal, ordinal);
+      }
+      groupEnd = row.offset + row.length;
+    }
+    const flushed = await flush();
+    if (flushed) return flushed;
+  } finally {
+    await new Promise<void>((resolve) => {
+      if (emitOut.destroyed) {
+        resolve();
+        return;
+      }
+      emitOut.end(() => resolve());
+      emitOut.once("error", () => resolve());
+    });
   }
   return null;
 }
@@ -320,33 +552,19 @@ export async function stageOrderFactsJsonl(
     const indexPath = path.join(dir, "index.tsv");
     const idsPath = path.join(dir, "ids.tsv");
     const groupedPath = path.join(dir, "grouped.tsv");
+    const emitPath = path.join(dir, "emit.tsv");
     const jsonlOut = createWriteStream(jsonlPath, { mode: 0o600 });
     const indexOut = createWriteStream(indexPath, { mode: 0o600 });
     const idsOut = createWriteStream(idsPath, { mode: 0o600 });
     const groupedOut = createWriteStream(groupedPath, { mode: 0o600 });
     streams.push(jsonlOut, indexOut, idsOut, groupedOut);
-    const writeOk = async (
-      stream: NodeJS.WritableStream,
-      chunk: string,
-    ): Promise<void> => {
-      if (stream.write(chunk)) return;
-      await new Promise<void>((resolve, reject) => {
-        const onDrain = () => {
-          cleanup();
-          resolve();
-        };
-        const onError = (error: Error) => {
-          cleanup();
-          reject(error);
-        };
-        const cleanup = () => {
-          stream.off("drain", onDrain);
-          stream.off("error", onError);
-        };
-        stream.once("drain", onDrain);
-        stream.once("error", onError);
+    let writeError: Error | null = null;
+    for (const stream of streams) {
+      stream.on("error", (error: Error) => {
+        writeError = error;
       });
-    };
+    }
+    const sourceHash = createHash("sha256");
     let scratchBytes = 0;
     const account = (n: number): StageFail | null => {
       scratchBytes += n;
@@ -418,15 +636,18 @@ export async function stageOrderFactsJsonl(
       const record = `${line}\n`;
       const bound = account(utf8Bytes(record) + 160);
       if (bound) return bound;
-      await writeOk(jsonlOut, record);
+      sourceHash.update(record);
+      await writeStreamChunk(jsonlOut, record);
+      if (writeError) throw writeError;
       const indexRow = `${lastPhysicalOrdinal}\t${fileOffset}\t${encoded.length}\t${kind}\t${tsvEscape(id)}\t${tsvEscape(parentId)}\n`;
-      await writeOk(indexOut, indexRow);
-      await writeOk(idsOut, `${tsvEscape(id)}\n`);
+      await writeStreamChunk(indexOut, indexRow);
+      await writeStreamChunk(idsOut, `${tsvEscape(id)}\n`);
       const groupKey = parentId || id;
-      await writeOk(
+      await writeStreamChunk(
         groupedOut,
         `${tsvEscape(groupKey)}\t${kind}\t${lastPhysicalOrdinal}\t${fileOffset}\t${encoded.length}\t${tsvEscape(id)}\n`,
       );
+      if (writeError) throw writeError;
       fileOffset += Buffer.byteLength(record, "utf8");
       return null;
     };
@@ -461,6 +682,14 @@ export async function stageOrderFactsJsonl(
       leftover += decoder.decode();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      if (isEnospc(error)) {
+        await endStreams();
+        return fail("OPEN_PARENT_BOUND", "scratch disk full", {
+          objectCount,
+          rootCount,
+          lastPhysicalOrdinal,
+        });
+      }
       if (/invalid|malformed|unexpected|utf/i.test(message)) {
         await endStreams();
         return fail("MALFORMED", `JSONL UTF-8 decode failed: ${message}`, {
@@ -523,54 +752,66 @@ export async function stageOrderFactsJsonl(
       );
     }
 
-    await sortLines(idsPath, ORDER_FACTS_JSONL_ID_SORT_CHUNK);
-    const duplicate = await assertUniqueSortedIds(idsPath);
-    if (duplicate) {
-      return {
-        ...duplicate,
+    await externalSortLines(idsPath, ORDER_FACTS_JSONL_ID_SORT_CHUNK);
+    const duplicateId = await assertUniqueSortedFile(idsPath);
+    if (duplicateId) {
+      return fail("DUPLICATE", `duplicate JSONL id ${duplicateId}`, {
         objectCount,
         rootCount,
         lastPhysicalOrdinal,
-      };
+      });
     }
-    await sortLines(groupedPath, ORDER_FACTS_JSONL_ID_SORT_CHUNK);
+    await externalSortLines(groupedPath, ORDER_FACTS_JSONL_ID_SORT_CHUNK);
+    const groupedFail = await validateGroupedAndWriteEmit({
+      groupedPath,
+      emitPath,
+      maxLiveBytes,
+      objectCount,
+      rootCount,
+      lastPhysicalOrdinal,
+    });
+    if (groupedFail) return groupedFail;
+    await externalSortLines(emitPath, ORDER_FACTS_JSONL_ID_SORT_CHUNK);
 
-    const groupedText = await readFile(groupedPath, "utf8");
-    if (groupedText !== "") {
-      const groupedLines = groupedText.endsWith("\n")
-        ? groupedText.slice(0, -1).split("\n")
-        : groupedText.split("\n");
-      let i = 0;
-      while (i < groupedLines.length) {
-        const firstCols = groupedLines[i].split("\t");
-        const groupKey = firstCols[0] ?? "";
-        let hasRoot = false;
-        let liveBytes = 0;
-        let j = i;
-        while (j < groupedLines.length) {
-          const cols = groupedLines[j].split("\t");
-          if (cols[0] !== groupKey) break;
-          if (cols[1] === "R") hasRoot = true;
-          liveBytes += Number.parseInt(cols[4] ?? "0", 10);
-          j += 1;
-        }
-        if (!hasRoot) {
-          return fail(
-            "MIS_PARENTED",
-            `JSONL children referenced missing parent ${groupKey}`,
-            { objectCount, rootCount, lastPhysicalOrdinal },
-          );
-        }
-        if (liveBytes > maxLiveBytes) {
-          return fail(
-            "OPEN_PARENT_BOUND",
-            `live JSONL assembly bytes exceeded ${maxLiveBytes}`,
-            { objectCount, rootCount, lastPhysicalOrdinal },
-          );
-        }
-        i = j;
-      }
+    const epoch = options?.epoch;
+    const manifest: ValidatedSourceManifest = {
+      version: ORDER_FACTS_SOURCE_MANIFEST_VERSION,
+      shopId: epoch?.shopId ?? options?.shopId ?? "local",
+      syncRunId: epoch?.syncRunId ?? options?.syncRunId ?? path.basename(dir),
+      bulkOperationGid: epoch?.bulkOperationGid ?? null,
+      queryFingerprint: epoch?.queryFingerprint ?? null,
+      apiVersion: epoch?.apiVersion ?? ORDER_FACTS_D_API_VERSION,
+      fenceGeneration: epoch?.fenceGeneration ?? null,
+      objectCount,
+      rootCount,
+      lastPhysicalOrdinal,
+      digests: {
+        sourceJsonl: sourceHash.digest("hex"),
+        indexTsv: await hashFileSha256(indexPath),
+        idsTsv: await hashFileSha256(idsPath),
+        groupedTsv: await hashFileSha256(groupedPath),
+        emitTsv: await hashFileSha256(emitPath),
+      },
+    };
+    const observedSource = await hashFileSha256(jsonlPath);
+    if (observedSource !== manifest.digests.sourceJsonl) {
+      return fail("MALFORMED", "scratch source.jsonl digest mismatch", {
+        objectCount,
+        rootCount,
+        lastPhysicalOrdinal,
+      });
     }
+    const manifestPath = await writeValidatedSourceManifest(dir, manifest);
+    await verifyValidatedSourceManifest({
+      dir,
+      jsonlPath,
+      indexPath,
+      idsPath,
+      groupedPath,
+      emitPath,
+      manifestPath,
+      epoch,
+    });
 
     keepScratch = true;
     return {
@@ -578,12 +819,21 @@ export async function stageOrderFactsJsonl(
       dir,
       jsonlPath,
       indexPath,
+      idsPath,
       groupedPath,
+      emitPath,
+      manifestPath,
       objectCount,
       rootCount,
       lastPhysicalOrdinal,
       owned: true,
+      manifest,
     };
+  } catch (error) {
+    if (isEnospc(error)) {
+      return fail("OPEN_PARENT_BOUND", "scratch disk full");
+    }
+    throw error;
   } finally {
     await endStreams().catch(() => undefined);
     if (dir && !keepScratch) {
@@ -620,43 +870,59 @@ export async function readJsonlObjectAt(
   }
 }
 
+export async function readGroupedSlice(
+  groupedPath: string,
+  offset: number,
+  length: number,
+): Promise<JsonlIndexRow[]> {
+  if (length === 0) return [];
+  const handle = await open(groupedPath, "r");
+  try {
+    const buf = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buf, 0, length, offset);
+    if (bytesRead !== length) {
+      throw new OrderFactsJsonlError(
+        "jsonl_short_read",
+        `expected ${length} grouped bytes at ${offset}, read ${bytesRead}`,
+      );
+    }
+    const text = buf.toString("utf8");
+    const lines = text.endsWith("\n") ? text.slice(0, -1).split("\n") : text.split("\n");
+    return lines.filter((line) => line !== "").map(parseGroupedLine);
+  } finally {
+    await handle.close();
+  }
+}
+
+export async function* iterateEmitOrder(
+  emitPath: string,
+): AsyncGenerator<EmitSlice> {
+  for await (const row of iterateFileLines(emitPath)) {
+    const cols = row.line.split("\t");
+    yield {
+      minOrdinal: Number.parseInt(cols[0] ?? "", 10),
+      offset: Number.parseInt(cols[1] ?? "", 10),
+      length: Number.parseInt(cols[2] ?? "", 10),
+    };
+  }
+}
+
 export async function* iterateGroupedIndex(
   groupedPath: string,
 ): AsyncGenerator<{ groupKey: string; rows: JsonlIndexRow[] }> {
-  const stream = createReadStream(groupedPath, { encoding: "utf8" });
-  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
   let currentKey: string | null = null;
   let rows: JsonlIndexRow[] = [];
-  try {
-    for await (const leftover of rl) {
-      if (leftover === "") continue;
-      const cols = leftover.split("\t");
-      const groupKey = cols[0] ?? "";
-      const kind = cols[1] === "C" ? "C" : "R";
-      const ordinal = Number.parseInt(cols[2] ?? "", 10);
-      const offset = Number.parseInt(cols[3] ?? "", 10);
-      const length = Number.parseInt(cols[4] ?? "", 10);
-      const id = cols[5] ?? "";
-      const row: JsonlIndexRow = {
-        ordinal,
-        offset,
-        length,
-        kind,
-        id,
-        parentId: kind === "C" ? groupKey : "",
-      };
-      if (currentKey != null && groupKey !== currentKey) {
-        yield { groupKey: currentKey, rows };
-        rows = [];
-      }
-      currentKey = groupKey;
-      rows.push(row);
-    }
-    if (currentKey != null && rows.length > 0) {
+  for await (const leftover of iterateFileLines(groupedPath)) {
+    const parsed = parseGroupedLine(leftover.line);
+    const groupKey = parsed.parentId || parsed.id;
+    if (currentKey != null && groupKey !== currentKey) {
       yield { groupKey: currentKey, rows };
+      rows = [];
     }
-  } finally {
-    rl.close();
-    stream.destroy();
+    currentKey = groupKey;
+    rows.push(parsed);
+  }
+  if (currentKey != null && rows.length > 0) {
+    yield { groupKey: currentKey, rows };
   }
 }

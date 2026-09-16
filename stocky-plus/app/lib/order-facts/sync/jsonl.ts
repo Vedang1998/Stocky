@@ -10,12 +10,15 @@ import {
 import { OrderFactsJsonlError } from "./errors";
 import {
   disposeOwnedScratch,
-  iterateGroupedIndex,
+  iterateEmitOrder,
+  readGroupedSlice,
   readJsonlObjectAt,
   stageOrderFactsJsonl,
   type JsonlIndexRow,
+  type SourceEpochBinding,
   type ValidatedSourceStage,
 } from "./source-stage";
+import { verifyValidatedSourceManifest } from "./source-digest";
 import type {
   JsonlAssemblyResult,
   JsonlByteSource,
@@ -45,6 +48,8 @@ export type StreamOrderFactsJsonlOptions = {
   shopId?: string;
   syncRunId?: string;
   scratchRoot?: string;
+  epoch?: SourceEpochBinding;
+  onValidatedStage?: (stage: ValidatedSourceStage) => Promise<void>;
   onCompleteAssembly?: (assembly: JsonlCompleteAssembly) => Promise<void>;
 };
 
@@ -76,33 +81,36 @@ async function emitValidatedAssemblies(
     options?.maxLiveBytes ?? ORDER_FACTS_JSONL_MAX_LIVE_BYTES;
   const completedRootGids: string[] = [];
   const closeEvidence: JsonlCloseEvidence = "indexed_parent_membership";
-  const groups: Array<{ groupKey: string; rows: JsonlIndexRow[] }> = [];
-  for await (const group of iterateGroupedIndex(stage.groupedPath)) {
-    groups.push(group);
-  }
-  groups.sort((left, right) => {
-    const leftMin = left.rows.reduce(
-      (min, row) => Math.min(min, row.ordinal),
-      Number.POSITIVE_INFINITY,
-    );
-    const rightMin = right.rows.reduce(
-      (min, row) => Math.min(min, row.ordinal),
-      Number.POSITIVE_INFINITY,
-    );
-    return leftMin - rightMin;
+  await verifyValidatedSourceManifest({
+    dir: stage.dir,
+    jsonlPath: stage.jsonlPath,
+    indexPath: stage.indexPath,
+    idsPath: stage.idsPath,
+    groupedPath: stage.groupedPath,
+    emitPath: stage.emitPath,
+    manifestPath: stage.manifestPath,
+    epoch: options?.epoch,
   });
+  if (options?.onValidatedStage) {
+    await options.onValidatedStage(stage);
+  }
 
-  for (const group of groups) {
-    const rootRow = group.rows.find((row) => row.kind === "R");
+  for await (const slice of iterateEmitOrder(stage.emitPath)) {
+    const rows: JsonlIndexRow[] = await readGroupedSlice(
+      stage.groupedPath,
+      slice.offset,
+      slice.length,
+    );
+    const rootRow = rows.find((row) => row.kind === "R");
     if (!rootRow) {
       return fail(
         "MIS_PARENTED",
-        `JSONL children referenced missing parent ${group.groupKey}`,
+        "JSONL emit slice missing parent root",
         stage,
       );
     }
-    const childRows = group.rows.filter((row) => row.kind === "C");
-    const liveBytes = group.rows.reduce((sum, row) => sum + row.length, 0);
+    const childRows = rows.filter((row) => row.kind === "C");
+    const liveBytes = rows.reduce((sum, row) => sum + row.length, 0);
     if (liveBytes > maxLiveBytes) {
       return fail(
         "OPEN_PARENT_BOUND",
@@ -121,9 +129,7 @@ async function emitValidatedAssemblies(
         await readJsonlObjectAt(stage.jsonlPath, child.offset, child.length),
       );
     }
-    const ordinals = group.rows
-      .map((row) => row.ordinal)
-      .sort((a, b) => a - b);
+    const ordinals = rows.map((row) => row.ordinal).sort((a, b) => a - b);
     const complete: JsonlCompleteAssembly = {
       rootGid: rootRow.id,
       root,
@@ -169,12 +175,18 @@ export async function streamOrderFactsJsonl(
     maxScratchBytes: options?.maxScratchBytes ?? ORDER_FACTS_JSONL_MAX_SCRATCH_BYTES,
     expectedObjectCount: options?.expectedObjectCount,
     expectedRootObjectCount: options?.expectedRootObjectCount,
+    epoch: options?.epoch,
   });
   if (staged.status !== "COMPLETE") {
     return staged;
   }
   try {
     return await emitValidatedAssemblies(staged, options);
+  } catch (error) {
+    if (error instanceof OrderFactsJsonlError) {
+      return fail("MALFORMED", error.message, staged);
+    }
+    throw error;
   } finally {
     await disposeOwnedScratch(staged.dir, options?.scratchRoot).catch(
       () => undefined,

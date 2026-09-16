@@ -100,4 +100,17 @@ describe("PR6-D safety and coherent registration", () => {
       "NO_AUTOMATIC_RETRY",
     );
   });
+
+  it("does not load ids or grouped indexes as a whole JavaScript string", () => {
+    const sourceStage = readFileSync(path.join(SYNC_DIR, "source-stage.ts"), "utf8");
+    expect(sourceStage).not.toMatch(/readFile\([^)]*idsPath/);
+    expect(sourceStage).not.toMatch(/readFile\([^)]*groupedPath/);
+    expect(sourceStage).not.toMatch(/new Set</);
+  });
+
+  it("does not keep pending checkpoint ordinals in an in-memory Set", () => {
+    const importer = readFileSync(path.join(SYNC_DIR, "import.ts"), "utf8");
+    expect(importer).not.toMatch(/pendingCommitted/);
+    expect(importer).toMatch(/DiskOrdinalAck/);
+  });
 });
