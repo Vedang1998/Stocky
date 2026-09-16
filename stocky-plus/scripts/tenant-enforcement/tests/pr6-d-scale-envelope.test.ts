@@ -255,7 +255,10 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
         }
         const stores: Record<string, ReturnType<typeof standardStore>> = {};
         const recentIso = new Date().toISOString();
-        const overlapGid = "gid://shopify/Order/d-scale-1";
+        // Root 51 is a zero-child parent (index % 51 === 0). Overlapping a
+        // 200-line root replaces those lines with the webhook B snapshot and
+        // drops canonical line facts below the 1e6 envelope.
+        const overlapGid = "gid://shopify/Order/d-scale-51";
         stores[overlapGid] = standardStore(overlapGid, {
           header: inWindowHeader({
             id: overlapGid,
@@ -263,6 +266,7 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
             updatedAt: recentIso,
             processedAt: recentIso,
           }),
+          lines: [],
         });
         const adminWarm = createOrderFactsAdmin({ stores: {} });
         const adminA = createOrderFactsAdmin({
@@ -389,7 +393,7 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
               work: webhookWork({
                 shopId: shopA.id,
                 topic: "orders/edited",
-                projection: { order_edit: { id: 1, order_id: "d-scale-1" } },
+                projection: { order_edit: { id: 1, order_id: "d-scale-51" } },
                 receivedAt: new Date(),
               }),
             }),

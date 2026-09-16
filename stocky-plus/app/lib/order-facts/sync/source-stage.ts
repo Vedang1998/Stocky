@@ -331,8 +331,20 @@ export async function stageOrderFactsJsonl(
     ): Promise<void> => {
       if (stream.write(chunk)) return;
       await new Promise<void>((resolve, reject) => {
-        stream.once("drain", resolve);
-        stream.once("error", reject);
+        const onDrain = () => {
+          cleanup();
+          resolve();
+        };
+        const onError = (error: Error) => {
+          cleanup();
+          reject(error);
+        };
+        const cleanup = () => {
+          stream.off("drain", onDrain);
+          stream.off("error", onError);
+        };
+        stream.once("drain", onDrain);
+        stream.once("error", onError);
       });
     };
     let scratchBytes = 0;
