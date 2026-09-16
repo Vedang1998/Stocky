@@ -572,8 +572,6 @@ export async function stageOrderFactsJsonl(
       lastPhysicalOrdinal,
       owned: true,
     };
-  } catch (error) {
-    throw error;
   } finally {
     await endStreams().catch(() => undefined);
     if (dir && !keepScratch) {

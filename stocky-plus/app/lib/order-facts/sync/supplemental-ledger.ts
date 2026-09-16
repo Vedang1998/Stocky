@@ -448,6 +448,10 @@ export async function readOrderFactsImportLedger(input: {
     if (/updatedAt drifted|currencyCode drifted|IDENTITY_MISMATCH/.test(detail)) {
       return { status: "drift", reason: detail, counts };
     }
-    return { status: "failure", reason: walked.reason ?? detail, counts };
+    return {
+      status: "failure",
+      reason: walked.status === "failure" ? walked.detail : detail,
+      counts,
+    };
   }
 }

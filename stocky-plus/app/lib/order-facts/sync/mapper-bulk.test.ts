@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { moneyBag } from "../admin-read/__tests__/fixtures";
 import { mapBulkAAssemblyToOrderSnapshot } from "./mapper-bulk";
 
-function root(overrides: Record<string, unknown> = {}) {
+function root(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: "gid://shopify/Order/1",
     name: "#1001",
@@ -40,7 +40,7 @@ function root(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function line(overrides: Record<string, unknown> = {}) {
+function line(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     id: "gid://shopify/LineItem/1",
     __parentId: "gid://shopify/Order/1",
