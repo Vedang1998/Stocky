@@ -52,6 +52,11 @@ export const TENANT_JOB_SOURCES = [
   "webhook:locations/deactivate",
   "webhook:bulk_operations/finish",
   "webhook:app/uninstalled",
+  "webhook:orders/edited",
+  "webhook:orders/delete",
+  "webhook:order_transactions/create",
+  "order_facts_sync",
+  "order_facts_reconcile",
 ] as const;
 
 export type TenantJobSource = (typeof TENANT_JOB_SOURCES)[number];
@@ -67,6 +72,11 @@ export const JOB_SOURCE_BY_NAME: Record<string, TenantJobSource> = {
   "orders/create": "webhook:orders/create",
   "orders/cancelled": "webhook:orders/cancelled",
   "refunds/create": "webhook:refunds/create",
+  "orders/edited": "webhook:orders/edited",
+  "orders/delete": "webhook:orders/delete",
+  "order_transactions/create": "webhook:order_transactions/create",
+  "order-facts-sync": "order_facts_sync",
+  "order-facts-reconcile": "order_facts_reconcile",
   "inventory_levels/update": "webhook:inventory_levels/update",
   "products/create": "webhook:products/create",
   "products/update": "webhook:products/update",

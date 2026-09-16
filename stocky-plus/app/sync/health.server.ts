@@ -78,6 +78,9 @@ function jobDomainFilter(syncDomain: string): {
   if (syncDomain === "webhooks") {
     return { startsWith: "webhook:" };
   }
+  if (syncDomain === "order_facts") {
+    return { startsWith: "order-facts-" };
+  }
   return { equals: syncDomain };
 }
 
