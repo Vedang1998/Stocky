@@ -3,8 +3,8 @@
 **Slice:** PR6-D complete §17.2 integration module
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528)
-**Status:** PR43 C3 source-contract correction is on this branch (plan C3 / brief §6 / D-054 subitem). Claude’s original complete-integration review `5354111` (blob `48ac291a…`) and re-review `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`) are **not** edited. Runtime/test implementation head for remaining §4/§5 proofs is `1e04ddcac612a7748b5567debee324ef1e6b6167`. Exact-head `pull_request` Classify + full Heavy + CI Gate IDs for the **documentation-final** C3.5 head are recorded after that run terminates and are **not** invented here. Historical SUCCESS `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only; `34934317232` is defective `25226e46` only. This report does **not** embed this documentation commit’s own SHA. Independent Claude C3 re-review and a later ChatGPT merge decision remain required. Cursor does **not** certify its own independent approval.
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913)
+**Status:** PR43 SC-01…SC-04 recovery correction is on this branch (plan **C3.6** / brief §7 / D-054 subitem — **not D-055**). Immutable reviews `5354111` (blob `48ac291a…`), `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`), and source-contract `7710758` (blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`) are **not** edited. Starting implementation SHA `09029c09ea7468e6ff676a11fdf020dde5deb694`. Required main **V** `a3ff480f1477237f8055f10c43298480a05728a1`. Historical SUCCESS `35088765421` is `09029c0` only; `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only. Exact-head SC `pull_request` Classify + full Heavy + CI Gate IDs are **pending at this report write** and must not be invented. This report does **not** embed this documentation commit’s own SHA. Cursor does **not** certify independent approval. The next independent review must be a **separate actual Claude Code** session.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -642,3 +642,193 @@ Observed JSON (`pr6dScaleEnvelope`) from the passing C3.5 envelope:
 ```
 
 C3.5 scale notes: independently planned **5,192** roots / **1,005,192** JSONL objects / **1,000,000** canonical order-line facts (`qty` ≠ child-record count). Every imported order received a ledger (`initial: 5192`). One overlapping `orders/edited` on zero-child root `d-scale-51` drifted to full-B (`followUpReads: 1`, `fallback: 1`). Truncated crash prefix did not persist a committed ordinal (`crashCheckpointOrdinal` null). Shop B remained **1** fact. Admin GraphQL calls **5200**; JSONL fetches **2** (crash + success). Wall `elapsedMs` **920964**; bash `elapsed_real=929.902` `user=147.826` `sys=46.387`. Peak RSS/heap are sampled high-water values on a 250ms interval, **not** mathematical bounds and **not** encoded-byte proofs of JavaScript heap. Scratch files are disposed after emit; this run did **not** sample peak scratch directory bytes (limitation). Default CI still skips this envelope (`PR6_D_SCALE_1E6=1` and not GitHub Actions). GitHub `validate` timeout-minutes remains **120**. `npm run graphql-codegen` was **not executed** locally; CI Heavy fetches shopify.dev; local Admin 2026-07 schema gate executed in `bulk-query-schema.test.ts`.
+
+---
+
+## 15. SC-01…SC-04 recovery correction (same D-054 — not D-055)
+
+**Authority:** PR #43 comment [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913). Plan **C3.6** / brief §7 / D-054 subitem. This is implementation/correction evidence only. It is **not** technical acceptance, independent approval, lane closure, mark-ready, merge, or D-055.
+
+### 15.1 Identities and immutable review preservation
+
+| Field | Value |
+|---|---|
+| Required starting implementation | `09029c09ea7468e6ff676a11fdf020dde5deb694` |
+| Runtime/test SC implementation | `4fd98cef76ad043de2f9c586906053d5c6a42937` |
+| Required `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Branch / PR | `phase-1/pr6-d-order-webhook-import` / [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED |
+| Source-contract review commit | `7710758b181b5a49f1affa260a56b331adafdf7e` |
+| Review sole parent | `09029c09ea7468e6ff676a11fdf020dde5deb694` |
+| Review path / blob | `stocky-plus/docs/phases/phase-1/PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md` / `1eb18cae44cdf7a6660256e2632ebc8019d6da0d` |
+| Integration | `git merge --ff-only 7710758…` onto the D branch. One-file delta. Artifact not re-authored. |
+| Complete-integration review | `53541112832f8da3dcfa65adea8e9a4447b0f18b` blob `48ac291a781b2347cb6017af862f2de9677826a5` preserved |
+| Correction re-review | `a72b403fe3c0ed57fa69d262d7dfbec3d7646292` blob `ba82a3c981cda4bec52ea453c2618319288fa66c` preserved |
+| Review provenance qualification | GitHub records `7710758` author/committer as Cursor Agent and the PR comment as cursor[bot]. That metadata does **not** establish which reasoning agent performed the work and is **not** ChatGPT-verified independence. The artifact is preserved exactly, including its claimed role. Final independent acceptance must come from a **separate actual Claude Code** review. |
+| Historical exact-head CI on `09029c0` | run [`35088765421`](https://github.com/Vedang1998/Stocky/actions/runs/35088765421) only — old-subject evidence, not this SC package |
+
+### 15.2 Policy (conservative replay; no new schema)
+
+Shop/run identity is metadata. Each physical attempt uses `mkdtemp` under `{tmpdir}/stocky-pr6-d/att-{shop}-{run}-*`. Cleanup requires an authentic in-process `WeakSet` handle plus matching on-disk token and containment. Markerless `source.jsonl` / `*.sorted` / empty dirs stay. Leftovers count toward byte and attempt limits.
+
+A newly staged download opens the ack bitset at contiguous `0`. Completion is reconstructed from C `loadReceipt` / `probeReceiptBeforeShopifyIo` with `order-facts-d-import-src-v1:{jobType}:{durableJobId}:{gid}` plus a representation-only parent/child content digest. Fence is **not** in the application key. Mutated already-receipted content fails `import_receipt_content_conflict_fresh_run_required`. Identity-only legacy receipts fail `import_legacy_receipt_fresh_run_required` and are not upgraded. No new database table.
+
+`maxRequests` is one aggregate D transport budget, including nested Refund pages, retries, and the final Order recheck. Every complete candidate, including one-page, performs that recheck and compares Refund LIST GID membership independently of parent `updatedAt`. This is multi-request consistency checking, not server snapshot isolation.
+
+### 15.3 Before/after SC-01…SC-04 (Cursor, this assignment)
+
+Before-fix probe on FF’d tree `7710758` (runtime still `1e04ddc` behavior), disposable fixtures, JSON `/opt/cursor/artifacts/sc_repro_before.json`:
+
+| ID | Before (fail) | After (this package) |
+|---|---|---|
+| SC-01 live same-shop/run | `sc01_liveStillThere: false`; second stager used the same path and deleted `LIVE-WORKER-BYTES` | Two real processes; first retains `LIVE-WORKER-BYTES`; unique `att-*` dirs |
+| SC-01 markerless | `source.jsonl` / `*.sorted` / empty dirs deleted | Untouched; marker data alone cannot grant takeover |
+| SC-02 reorder | `skipThroughOrdinal: 2`; would `SUCCEEDED` with B missing | Walk from 0; resume completes **both** A and B; `verifiedReplayApplies: 1` |
+| SC-03 `maxRequests: 1` + refund | `complete` with 2 GraphQL calls (`OrderFactsImportLedger` + `RefundFactById`) | Incomplete; exact boundary initial+refund+recheck succeeds |
+| SC-04 one-page | `complete`, `recheck: 0` | Final Order check always runs; refund membership drift without timestamp bump fails |
+
+### 15.4 Original-ID crosswalk (not renamed)
+
+| ID | SC package disposition | Notes |
+|---|---|---|
+| D-R-01,04,05,06,07,08,09,12 | **RESOLVED** (preserved) | Worker/receipt/revival/scope/D046/tenant matrices unchanged |
+| D-R-02,03,10,11 | C3.5 dispositions preserved | Staging/EOF/unsigned counts/selected fields/global IDs |
+| N-01…N-07, N-09 | preserved | qty ≠ child-count; empty vs truncated; duplicates |
+| N-04 / N-05 / N-06 | original meanings preserved | Not relabeled to unrelated passing scenarios |
+| N-08 refund clock | preserved | Independent Refund clock; LIST even when parent `updatedAt` unchanged |
+| N-08 scale/resource | **Cursor-executed** on this assignment; **not independently closed** | New 1e6 with positive checkpoint, SQL, scratch peak. No severity downgrade by Cursor |
+| SC-01…SC-04 | Cursor-repaired; pending ChatGPT + separate Claude review | Finding IDs kept |
+| Counter-evidence | preserved | Later import did not destroy an already-populated agreement ledger |
+
+### 15.5 Cursor local commands (SC tree; parent `7710758`)
+
+Environment: Node `v22.14.0`, npm `11.5.2`, linux, 4 CPUs, 16 GiB RAM, disposable PostgreSQL accepting, Redis `PONG`. Commands below are Cursor’s, this working tree.
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npx vitest run app/lib/order-facts` | 0 | **31** files, **296** tests |
+| `npx vitest run app/lib/order-facts/apply` + `bulk-query-schema.test.ts` | 0 | **7** files, **65** tests (C apply **45** + schema **20**) |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-sc-recovery.test.ts` | 0 | **13** tests (reorder, worker wrapper, mutation, legacy, commit-before-checkpoint, scratch loss, overlap, stale ordinal, multi-page, independent transport) |
+| `pr6-d-correction.test.ts` + `pr6-d-integration.test.ts` + `pr6-d-worker.test.ts` | 0 | **51** tests (**15**+**24**+**12**) |
+| `pr6-d-scale-envelope.test.ts` without `PR6_D_SCALE_1E6` | 0 | **3** passed / **1** skipped; skip does not reset schema |
+| `npm run test:sync-exactly-once` | 0 | **42** tests (**35** exactly-once + **7** D046) |
+| `npm run test:sync-envelope-fail-closed` | 0 | **6** |
+| `npm run test:sync-dispatch-recovery` | 0 | **29** |
+| `npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts` | 0 | **25** |
+| `npm run test:sync-inventory-audit` | 0 | **5** |
+| `npx tsc --noEmit` / `npm run lint` / `npm run build` | 0 | — |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | 40/40 assertions |
+| `git diff --check` | 0 | — |
+| `npm run tenant:access:inventory` / `:check` / `:audit` | 0 | findings **1761**, violations **0**, scannedFiles **503**, digest `82f3d083e2749973449cf9429b5c47d078c3218cd982efd5414191d68ec54eea` |
+| `npm run sync:inventory:check` | 0 | surfaces=**58**, digest `191b83498733…` |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+| First `PR6_D_SCALE_1E6=1` start | **not executed** | `/usr/bin/time` missing; restarted with bash `time` |
+| First executed 1e6 on this tree | **1** | `PARTIAL_FAILURE` / `import_incomplete` at special 101-sale parent: D harness routed `OrderAgreementSalesPage` (`orderId`) to the wrong store via `variables.id`. **Not a pass.** |
+| Second executed 1e6 | **1** | Import **SUCCEEDED** with 1,000,000 line facts, but assertion `bulkDirectApplies + followUpReads === 5192` received **5191** because crash-prefix parent 1 was a content-bound receipt replay. **Not a pass.** JSON was after the assertion and was not captured. |
+| Third executed 1e6 | **0** | **4** passed on runtime head `4fd98cef76ad043de2f9c586906053d5c6a42937` working tree; duration **908.04s**; bash `elapsed_real=1073.200` `user=159.834` `sys=47.397`; see JSON below |
+
+`npm run graphql-codegen` was **not executed** locally. CI Heavy fetches shopify.dev. Local Admin 2026-07 schema gate: `bulk-query-schema.test.ts` **20** tests.
+
+Combined correction+integration+worker on an earlier mid-tree revision failed once (`PARTIAL_FAILURE` vs `SUCCEEDED`) because the resume fixture’s first parent had `subtotalLineItemsQuantity: 0` while the second fetch used default `1`, triggering content-conflict. Fixture aligned; the **51**-test combined command later exited 0 on this package.
+
+### 15.6 Corrected scale/resource ledger (third 1e6; not `1e04ddc`)
+
+Observed JSON (`pr6dScaleEnvelope`) from the passing envelope starting `2026-09-17T00:34:23Z` (Cursor, this tree, parent `7710758`):
+
+```json
+{
+  "lineFactTarget": 1000000,
+  "plannedRoots": 5192,
+  "plannedObjects": 1005192,
+  "plannedLineFacts": 1000000,
+  "childBuckets": { "zero": 101, "small": 4350, "eight": 520, "forty": 221 },
+  "warmup": {
+    "lineTarget": 1000,
+    "roots": 5,
+    "elapsedMs": 1099,
+    "peakRssBytes": 166326272,
+    "peakHeapBytes": 41401344,
+    "rssSamples": 21,
+    "heapSamples": 21
+  },
+  "crashPrefixLines": 2000,
+  "crashPrefixRoots": 11,
+  "crashCheckpointOrdinal": 201,
+  "crashScratchPeakBytes": 2633131,
+  "leftoverAttemptCountBeforeLoss": 0,
+  "leftoverBytesBeforeLoss": 109,
+  "interruptKind": "injected Admin throw after the first committed parent on a complete crash-prefix source, then test-operator deletion of that attempt scratch; not the historical truncated-prefix null-checkpoint case",
+  "webhookOverlapStatus": "applied",
+  "applied": 5192,
+  "examined": 5192,
+  "followUpReads": 1,
+  "bulkDirectApplies": 5190,
+  "verifiedReplayApplies": 1,
+  "ledgerCounts": {
+    "initial": 5191,
+    "recheck": 5190,
+    "agreement": 1,
+    "sale": 1,
+    "refund": 5,
+    "fallback": 1,
+    "throttle": 0
+  },
+  "shopBFacts": 1,
+  "lineFactsA": 1000000,
+  "liveLineFactsA": 1000000,
+  "absentLineFactsA": 0,
+  "zeroCurrentLineFactsA": 200000,
+  "agreementCountA": 103,
+  "refundCountA": 3,
+  "graphqlCalls": 10393,
+  "adminClassified": {
+    "initial": 5191,
+    "recheck": 5190,
+    "agreement": 1,
+    "sale": 1,
+    "refund": 5,
+    "fallback": 1,
+    "poll": 1,
+    "scope": 2,
+    "shop": 1,
+    "other": 0
+  },
+  "jsonlFetches": 2,
+  "merchantSqlCalls": 3258946,
+  "controlPlaneEngineRequests": 15664,
+  "elapsedMs": 1060381,
+  "sampleMs": 250,
+  "peakRssBytes": 440074240,
+  "peakHeapBytes": 239110640,
+  "rssSamples": 3582,
+  "heapSamples": 3582,
+  "peakScratchBytes": 1507608226,
+  "scratchSamples": 3583
+}
+```
+
+Accounting notes (Cursor):
+
+- Direct helper `runOrderFactsImportStep` executed this envelope. Durable-worker dispatch/retry/receipt tests are the separate **42** exactly-once + D046 and **13** SC-recovery worker-wrapper cases, not this 1e6 process.
+- Crash checkpoint **201** is a complete prefix (root 1 = 1 JSONL parent + 200 children), not the historical truncated-null case.
+- `verifiedReplayApplies: 1` is that receipted parent on resume. `bulkDirectApplies 5190 + followUpReads 1 + verifiedReplayApplies 1 = 5192`.
+- Recheck **5190** equals bulk-direct applies. The overlapping `d-scale-51` webhook drifted to `OrderFactById` (`fallback: 1`) without a ledger recheck.
+- Admin classified calls **sum to 10393** (`graphqlCalls`). Independent of `ledgerCounts`.
+- SQL: merchant counted at `pg.Client.prototype.query` (includes `BEGIN`/`COMMIT`/`set_config` and C `$queryRaw`). Control-plane counted at `PrismaClient.prototype._request` (one engine request per Prisma operation, not a pg wire-message count). Post-import `countForShop` probes are included if they use `pg.Client`.
+- Scratch peak **1507608226** bytes (~1.40 GiB) is a sampled high-water from a **250 ms** synchronous directory walk during the concurrent full import, plus **2633131** bytes sampled at **50 ms** during the crash prefix. Short-lived files between ticks can be missed. Crash leftover inspect saw **109** bytes (namespace marker) and **0** attempt dirs because the crashing process still owned the `att-*` dir and disposed it on unwind; the test then deleted `scratchRoot`. Resume used a fresh unique directory.
+- RSS/heap peaks are `process.memoryUsage()` samples, not mathematical bounds.
+- Default CI still skips this envelope. GitHub `validate` timeout-minutes remains **120**.
+
+The `1e04ddc` envelope (5,192 initial, 0 rechecks, null crash checkpoint, no scratch-disk peak) remains historical only.
+
+### 15.7 Unexecuted / pending
+
+| Item | Status |
+|---|---|
+| `npm run graphql-codegen` | **not executed** locally |
+| Live Shopify / store calls / production | **not executed** (forbidden) |
+| Exact-head `pull_request` Classify + full Heavy + Gate on this SC head | **pending at report write** |
+| Independent Claude Code SC review | **not this session**; Cursor must not author that artifact |
+| ChatGPT technical acceptance / mark-ready / merge | **not authorized** |
+| N-08 independent closure | **not claimed** |
+
+R-176 remains **OPEN / P0**. R-164 unchanged. PR 6 / Phase 1 **IN PROGRESS**. No D-055.

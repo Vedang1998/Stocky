@@ -431,6 +431,25 @@ Drift / partial: resume only after revalidation on the same epoch; truncated spo
 
 Preserve RESOLVED D-R-01/04/05/06/07/08/09/12, N-01…N-09, worker/legacy/receipt/revival, D046, UTF-8, poll, and physical-ordinal checkpoint behavior except as superseded above. R-176 remains OPEN/P0. R-164 unchanged.
 
+### C3.6 SC-01…SC-04 recovery correction (same D-054 — not D-055)
+
+**Authority:** ChatGPT on PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913).
+
+**This addendum does not reopen C3.2 staging, Bulk A selection, or per-order ledgers.** It records the conservative recovery policy chosen instead of a new durable source-manifest schema.
+
+**SC-01 — attempt-owned scratch.** Each physical attempt creates a unique directory (`mkdtemp` under `{tmpdir}/stocky-pr6-d/att-{shop}-{run}-*`). Shop/run identity is metadata, not permission to replace a deterministic directory. Cleanup requires an authentic in-process ownership handle plus the matching on-disk token and containment check. Markerless `source.jsonl` / `*.sorted` / empty dirs stay. Two live same-shop/run attempts use disjoint dirs. Leftovers count toward byte and attempt limits and are not deleted from PID/age/filename guesses.
+
+**SC-02 — conservative replay.** Example: checkpoint committed prefix A, lose scratch, restage B then A under the same Bulk GID/fingerprint. A newly staged download opens the ack bitset at contiguous `0`. The persisted ordinal is historical evidence and must not skip positions in new bytes. Completion is reconstructed from C `loadReceipt` / `shortCircuitIfApplied` bound to `order-facts-d-import-src-v1:{jobType}:{durableJobId}:{gid}` plus a representation-only content digest of the staged parent/children. Identical reorder recovers both facts. Mutated already-receipted content fails `import_receipt_content_conflict_fresh_run_required`. Identity-only legacy receipts fail `import_legacy_receipt_fresh_run_required` and are not upgraded. A later fresh durable job/epoch remains the explicit new-observation path. This package does **not** add a database source-manifest table.
+
+**SC-03 — one aggregate transport budget.** `maxRequests` is a hard allowance for the whole ledger walk, including nested Refund pages, retries, and the final recheck. D wraps the supplied Admin client. `remaining <= 0 ? 1` is not restored. Exhaustion is structured incomplete, not success.
+
+**SC-04 — unconditional final Order check.** Every complete candidate, including the one-page/no-extra-page case, performs a bounded final Order read after agreement/sale/Refund I/O. Refund LIST GID membership is compared independently of parent `updatedAt`. A membership change without a timestamp bump is `ledger_refund_membership_drift`. Missing budget for that check is incomplete, not waived verification. This is multi-request consistency checking, not server snapshot isolation. No infinite recheck-until-stable loop.
+
+**Scale.** Cursor executed a **new** ≥1,000,000 canonical line-fact envelope with positive-checkpoint interruption (`jsonlCommittedLineOrdinal` **201**), scratch loss, SQL, Admin classification, and scratch-disk high-water in this assignment. Independent review must still confirm N-08. Cursor does **not** close N-08 or declare independent approval. The `1e04ddc` run (5,192 initial, zero rechecks, null crash checkpoint) remains historical only.
+
+R-176 remains OPEN/P0. R-164 unchanged. No D-055.
+
+
 ---
 
 ## 0. Emergency context and current repository truth

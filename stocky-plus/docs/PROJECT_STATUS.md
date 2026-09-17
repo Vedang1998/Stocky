@@ -243,6 +243,28 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | D-055 | **NOT CREATED** |
 | Production / writes / flags | **NOT AUTHORIZED** |
 
+### D-054 subitem — PR6-D SC-01…SC-04 recovery correction (checkpoint, not D-055)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is a **same-assignment checkpoint**, **not D-055**, not a new planning PR, and not PR 6 / Phase 1 closure. |
+| ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913) |
+| Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3.6**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §7 |
+| Prior | Deterministic shop/run scratch takeover; positional skip across newly staged bytes; renewable per-reader `maxRequests`; continuation-gated final recheck |
+| New | Unique attempt-owned scratch; conservative replay from ordinal 0; C content-bound D import receipts (`order-facts-d-import-src-v1`); one aggregate Admin transport budget; unconditional post-Refund Order recheck with refund GID membership |
+| Reason | Independent source-contract review SC-01…SC-04. ChatGPT chose conservative replay over a new source-manifest schema |
+| Merchant impact | Restaged/reordered bulk cannot drop unapplied parents; unowned scratch is not deleted; mixed refund lists cannot certify |
+| Technical impact | Per-order final recheck; D-only receipt binding; unique `att-*` scratch dirs |
+| Migration impact | None |
+| Tradeoffs | Replay cost vs a new table; leftovers count toward scratch limits |
+| Acceptance tests | SC-01…SC-04 plus a new ≥1e6 line-fact envelope with positive-checkpoint interruption, SQL, Admin, and scratch-disk accounting |
+| Frozen | B documents, C internals, webhook/reconciliation identity receipts, RESOLVED D-R-01/04/05/06/07/08/09/12, original D-R/N IDs |
+| Review provenance | Review commit `7710758b…` blob `1eb18cae…` preserved unedited. GitHub author/committer metadata is Cursor Agent / cursor[bot] and is **not** ChatGPT-verified independence |
+| R-176 | **OPEN / P0** |
+| R-164 | unchanged / **OPEN** |
+| D-055 | **NOT CREATED** |
+| Production / writes / flags | **NOT AUTHORIZED** |
+
 ## Phase 1 PR5-F1 foundation closeout (PR #27)
 
 | Field | Value |
@@ -378,7 +400,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** ChatGPT PR43 consolidated-correction evidence check of draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43), then independent Claude correction re-review of the exact corrected head after Classify + full Heavy + CI Gate SUCCESS (IDs in PR metadata). ChatGPT merge decision remains required. Do **not** create D-055. Production and inventory writes remain unauthorized. All write flags remain **DEFAULT OFF**.
+**Next action:** Cursor published the PR43 SC-01…SC-04 recovery package on draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43) (C3.6). Exact-head Classify + full Heavy + CI Gate IDs belong in PR metadata after that `pull_request` run terminates — they are not stamped here. ChatGPT SC recovery correction review is next after those SUCCESS jobs, then a **separate actual Claude Code** independent review. ChatGPT merge decision remains required. Do **not** create D-055. Production and inventory writes remain unauthorized. All write flags remain **DEFAULT OFF**.
 
 ## Current truth
 
@@ -421,4 +443,4 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Every inventory-write flag remains **DEFAULT OFF**. `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF** and is not enabled here.
 - Do **not** state that Phase 1 is complete or that production is ready.
 - Do **not** create D-055. PR6-B and PR6-C repository lanes are **ACCEPTED / MERGED / CLOSED**. **PR6-D is ADMITTED** for the complete integration module. Production, Shopify writes, inventory writes, `read_all_orders`, `write_orders`, live subscription registration, and feature-flag enablement remain unauthorized.
-- Next action: ChatGPT PR43 consolidated-correction evidence check of draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43), then independent Claude correction re-review of the exact corrected head. ChatGPT merge decision remains required.
+- Next action: Cursor published the PR43 SC-01…SC-04 recovery package on draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43). ChatGPT SC recovery correction review is next after exact-head Classify + full Heavy + Gate SUCCESS, then a separate actual Claude Code independent review. ChatGPT merge decision remains required.

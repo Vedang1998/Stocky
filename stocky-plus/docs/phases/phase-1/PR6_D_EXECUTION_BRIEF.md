@@ -90,3 +90,23 @@ Independent Claude review and a later ChatGPT merge decision remain required. Cu
 | Out of scope | D-055; B/C internals; production; store calls; flags; A/B/C reopen |
 
 This brief still does **not** add product decisions beyond the ChatGPT-owned C3 contract. It is **not** a completion claim.
+
+## 7. SC-01…SC-04 recovery correction checkpoint (same D-054 — not D-055)
+
+**Authority:** PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913).
+
+**Plan record:** `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3.6**.
+
+| Field | Value |
+|---|---|
+| Prior | Deterministic shop/run scratch takeover; skipThroughOrdinal from a persisted checkpoint onto newly staged bytes; per-reader `maxRequests` plus `remaining<=0?1`; recheck gated on continuations |
+| New | Unique attempt-owned scratch with authentic handles; conservative replay from ordinal 0 with C content-bound import receipts; one aggregate D transport budget; unconditional post-Refund Order recheck including refund GID membership |
+| Reason | Source-contract independent review SC-01…SC-04. ChatGPT chose conservative replay over a new durable source-manifest schema |
+| Merchant impact | A restaged/reordered Bulk file cannot silently drop unapplied parents; foreign scratch cannot be deleted; mixed refund membership cannot certify |
+| Technical impact | Extra Admin recheck per order; content digest on D import receipts only; unique `att-*` dirs |
+| Migration impact | None (no schema) |
+| Tradeoffs | Replaying already-receipted parents vs a new manifest table; leftovers consume scratch quota |
+| Acceptance | SC-01…SC-04 tests; positive-checkpoint 1e6 with SQL/disk; exact-head Classify + full Heavy + Gate |
+| Out of scope | D-055; B/C internals; webhook/reconciliation receipt contracts; production |
+
+The C3 source-contract independent review artifact (`PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md`, commit `7710758b181b5a49f1affa260a56b331adafdf7e`, blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`) is preserved unedited. GitHub records that commit’s author/committer as Cursor Agent and the review comment as cursor[bot]; that metadata does not establish which reasoning agent performed the work and is not ChatGPT-verified independence.
