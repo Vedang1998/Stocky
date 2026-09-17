@@ -710,6 +710,20 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
               followUpReads: resultA.followUpReads,
               bulkDirectApplies: resultA.bulkDirectApplies,
               verifiedReplayApplies: resultA.verifiedReplayApplies,
+              runTransportAttempts:
+                resultA.status === "SUCCEEDED"
+                  ? resultA.runTransportAttempts
+                  : null,
+              parentTransportAttempts:
+                resultA.status === "SUCCEEDED"
+                  ? resultA.parentTransportAttempts
+                  : null,
+              fallbackOrders:
+                resultA.status === "SUCCEEDED" ? resultA.fallbackOrders : null,
+              fallbackTransportAttempts:
+                resultA.status === "SUCCEEDED"
+                  ? resultA.fallbackTransportAttempts
+                  : null,
               ledgerCounts: resultA.ledgerCounts,
               shopBFacts: orderFactsB,
               lineFactsA,
@@ -763,6 +777,11 @@ describe("PR6-D 1,000,000-line D-specific streaming envelope", () => {
           adminClassified.initial + adminClassified.recheck,
         );
         expect(adminClassified.initial + adminClassified.recheck + adminClassified.agreement + adminClassified.sale + adminClassified.refund + adminClassified.fallback + adminClassified.poll + adminClassified.scope + adminClassified.shop + adminClassified.other).toBe(adminA.graphqlCount());
+        if (resultA.status === "SUCCEEDED") {
+          expect(
+            resultA.runTransportAttempts + resultA.parentTransportAttempts,
+          ).toBe(adminA.graphqlCount());
+        }
         expect(resumed?.status).toBe("SUCCEEDED");
         expect(resumed?.jsonlCommittedLineOrdinal).toBe(plan.objects);
         } finally {

@@ -62,8 +62,8 @@ export async function applyNominatedOrderGid(input: {
     }),
   );
   try {
-    // Callers must supply the D parent-budget wrapper; this path does not wrap
-    // a second Admin client or renew the allowance.
+    // Import fallback must pass the parent-budget wrapper already applied.
+    // This function does not wrap a second Admin client or renew the allowance.
     const context = { admin: input.admin, shop: input.shop };
     const scopes = await readGrantedAccessScopes(context);
     const shopMetadata = await readShopTimezoneCurrencyOrThrow(context);
