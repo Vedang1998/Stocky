@@ -49,6 +49,7 @@ export type StreamOrderFactsJsonlOptions = {
   syncRunId?: string;
   scratchRoot?: string;
   epoch?: SourceEpochBinding;
+  maxScratchAttempts?: number;
   onValidatedStage?: (stage: ValidatedSourceStage) => Promise<void>;
   onCompleteAssembly?: (assembly: JsonlCompleteAssembly) => Promise<void>;
 };
@@ -176,6 +177,7 @@ export async function streamOrderFactsJsonl(
     expectedObjectCount: options?.expectedObjectCount,
     expectedRootObjectCount: options?.expectedRootObjectCount,
     epoch: options?.epoch,
+    maxScratchAttempts: options?.maxScratchAttempts,
   });
   if (staged.status !== "COMPLETE") {
     return staged;
@@ -188,7 +190,7 @@ export async function streamOrderFactsJsonl(
     }
     throw error;
   } finally {
-    await disposeOwnedScratch(staged.dir, options?.scratchRoot).catch(
+    await disposeOwnedScratch(staged.ownership, options?.scratchRoot).catch(
       () => undefined,
     );
   }

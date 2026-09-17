@@ -2,7 +2,8 @@
  * Child process for D scratch process-loss evidence.
  * Invoked only by source-stage.test.ts. Not a vitest file.
  */
-import { writeFileSync } from "node:fs";
+import { writeFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { stageOrderFactsJsonl } from "./source-stage";
 
 const statusPath = process.env.PR6_D_CHILD_STATUS_PATH;
@@ -36,6 +37,9 @@ async function main(): Promise<void> {
         })}\n`;
         emitted += 1;
         if (index === 40) {
+          const attempts = readdirSync(scratchRoot).filter((name) =>
+            name.startsWith("att-"),
+          );
           writeStatus({
             stage: "parked",
             pid: process.pid,
@@ -43,6 +47,7 @@ async function main(): Promise<void> {
             scratchRoot,
             shopId,
             syncRunId,
+            dir: attempts[0] ? path.join(scratchRoot, attempts[0]) : null,
           });
           await sleep(120_000);
         }

@@ -6,11 +6,12 @@
  * Blank/whitespace-only physical lines are framing only: they do not occupy a
  * checkpoint ordinal. `lastPhysicalOrdinal` counts JSON objects in stream order.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import {
   lstat,
   mkdir,
+  mkdtemp,
   open,
   readFile,
   readdir,
@@ -29,7 +30,9 @@ import {
   ORDER_FACTS_JSONL_ID_SORT_CHUNK,
   ORDER_FACTS_JSONL_MAX_LINE_BYTES,
   ORDER_FACTS_JSONL_MAX_LIVE_BYTES,
+  ORDER_FACTS_JSONL_MAX_SCRATCH_ATTEMPTS,
   ORDER_FACTS_JSONL_MAX_SCRATCH_BYTES,
+  ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX,
   ORDER_FACTS_SCRATCH_MARKER,
   ORDER_FACTS_SCRATCH_PREFIX,
   ORDER_FACTS_SOURCE_MANIFEST_VERSION,
@@ -65,6 +68,17 @@ export type EmitSlice = {
   length: number;
 };
 
+export type ScratchOwnershipHandle = {
+  readonly dir: string;
+  readonly token: string;
+  readonly shopId: string;
+  readonly syncRunId: string;
+  readonly createdPid: number;
+  readonly createdAt: string;
+};
+
+const AUTHENTIC_SCRATCH_HANDLES = new WeakSet<ScratchOwnershipHandle>();
+
 export type ValidatedSourceStage = {
   status: "COMPLETE";
   dir: string;
@@ -78,6 +92,7 @@ export type ValidatedSourceStage = {
   rootCount: number;
   lastPhysicalOrdinal: number;
   owned: true;
+  ownership: ScratchOwnershipHandle;
   manifest: ValidatedSourceManifest;
 };
 
@@ -98,6 +113,7 @@ export type StageJsonlOptions = {
   expectedRootObjectCount?: string | null;
   scratchRoot?: string;
   epoch?: SourceEpochBinding;
+  maxScratchAttempts?: number;
 };
 
 function fail(
@@ -187,157 +203,266 @@ async function assertOwnedDirectory(dir: string): Promise<void> {
   }
 }
 
-async function assertOwnedScratch(dir: string): Promise<void> {
-  await assertOwnedDirectory(dir);
+export async function measureDScratchTreeBytes(dir: string): Promise<number> {
+  const st = await lstat(dir).catch(() => null);
+  if (!st) return 0;
+  if (st.isSymbolicLink()) return 0;
+  if (st.isFile()) return st.size;
+  if (!st.isDirectory()) return 0;
+  const entries = await readdir(dir);
+  let total = 0;
+  for (const name of entries) {
+    total += await measureDScratchTreeBytes(path.join(dir, name));
+  }
+  return total;
+}
+
+export type DScratchNamespaceInspection = {
+  root: string;
+  attemptDirs: Array<{
+    dir: string;
+    bytes: number;
+    hasMarker: boolean;
+    symlink: boolean;
+  }>;
+  leftoverAttemptCount: number;
+  leftoverBytes: number;
+};
+
+export async function inspectDScratchNamespace(
+  scratchRoot: string,
+): Promise<DScratchNamespaceInspection> {
+  const attemptDirs: DScratchNamespaceInspection["attemptDirs"] = [];
+  const st = await lstat(scratchRoot).catch(() => null);
+  if (!st || st.isSymbolicLink() || !st.isDirectory()) {
+    return {
+      root: scratchRoot,
+      attemptDirs,
+      leftoverAttemptCount: 0,
+      leftoverBytes: 0,
+    };
+  }
+  const entries = await readdir(scratchRoot);
+  let leftoverBytes = 0;
+  for (const name of entries) {
+    const full = path.join(scratchRoot, name);
+    const child = await lstat(full).catch(() => null);
+    if (!child) continue;
+    if (child.isSymbolicLink()) {
+      attemptDirs.push({
+        dir: full,
+        bytes: 0,
+        hasMarker: false,
+        symlink: true,
+      });
+      continue;
+    }
+    if (!child.isDirectory() || !name.startsWith(ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX)) {
+      leftoverBytes += child.isFile() ? child.size : await measureDScratchTreeBytes(full);
+      continue;
+    }
+    const bytes = await measureDScratchTreeBytes(full);
+    leftoverBytes += bytes;
+    attemptDirs.push({
+      dir: full,
+      bytes,
+      hasMarker: await lstat(markerPath(full))
+        .then((marker) => marker.isFile() && !marker.isSymbolicLink())
+        .catch(() => false),
+      symlink: false,
+    });
+  }
+  return {
+    root: scratchRoot,
+    attemptDirs,
+    leftoverAttemptCount: attemptDirs.filter((row) => !row.symlink).length,
+    leftoverBytes,
+  };
+}
+
+async function readScratchMarker(
+  dir: string,
+): Promise<{ token?: unknown; owned?: unknown; prefix?: unknown } | null> {
   try {
-    const marker = await readFile(markerPath(dir), "utf8");
-    const parsed: unknown = JSON.parse(marker);
+    const st = await lstat(markerPath(dir));
+    if (st.isSymbolicLink() || !st.isFile()) return null;
+    const parsed: unknown = JSON.parse(await readFile(markerPath(dir), "utf8"));
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    return parsed as { token?: unknown; owned?: unknown; prefix?: unknown };
+  } catch {
+    return null;
+  }
+}
+
+async function writeNamespaceMarker(root: string): Promise<void> {
+  try {
+    await writeFile(
+      markerPath(root),
+      `${JSON.stringify({
+        owned: true,
+        prefix: ORDER_FACTS_SCRATCH_PREFIX,
+        kind: "namespace",
+        pid: process.pid,
+        createdAt: new Date().toISOString(),
+      })}\n`,
+      { mode: 0o600, flag: "wx" },
+    );
+  } catch (error) {
+    const code =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code?: string }).code)
+        : "";
+    if (code !== "EEXIST") throw error;
+    const existing = await readScratchMarker(root);
     if (
-      !parsed ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed) ||
-      (parsed as { owned?: unknown }).owned !== true ||
-      (parsed as { prefix?: unknown }).prefix !== ORDER_FACTS_SCRATCH_PREFIX
+      !existing ||
+      existing.owned !== true ||
+      existing.prefix !== ORDER_FACTS_SCRATCH_PREFIX
     ) {
       throw new OrderFactsJsonlError(
         "scratch_unowned",
-        `refusing scratch without D ownership marker ${dir}`,
+        `refusing foreign D scratch namespace ${root}`,
       );
     }
-  } catch (error) {
-    if (error instanceof OrderFactsJsonlError) throw error;
-    throw new OrderFactsJsonlError(
-      "scratch_unowned",
-      `refusing scratch without D ownership marker ${dir}`,
-    );
   }
-}
-
-async function isAbandonedDScratch(dir: string): Promise<boolean> {
-  try {
-    await assertOwnedScratch(dir);
-    return true;
-  } catch {
-    /* fall through to artifact-only leftovers */
-  }
-  try {
-    await assertOwnedDirectory(dir);
-  } catch {
-    return false;
-  }
-  const entries = await readdir(dir);
-  if (entries.length === 0) return true;
-  return entries.every((name) => {
-    if (name === ORDER_FACTS_SCRATCH_MARKER) return true;
-    if (name === "source.jsonl" || name === "index.tsv" || name === "ids.tsv") {
-      return true;
-    }
-    if (name === "grouped.tsv" || name === "emit.tsv" || name === "manifest.json") {
-      return true;
-    }
-    if (name === "ack.bits") return true;
-    if (name.startsWith("sort-") && name.endsWith(".part")) return true;
-    if (name.endsWith(".sorted")) return true;
-    return false;
-  });
-}
-
-async function writeOwnershipMarker(
-  dir: string,
-  input: { shopId?: string; syncRunId?: string },
-): Promise<void> {
-  await writeFile(
-    markerPath(dir),
-    `${JSON.stringify({
-      owned: true,
-      prefix: ORDER_FACTS_SCRATCH_PREFIX,
-      shopId: input.shopId ?? null,
-      syncRunId: input.syncRunId ?? null,
-      pid: process.pid,
-      createdAt: new Date().toISOString(),
-    })}\n`,
-    { mode: 0o600 },
-  );
 }
 
 export async function createOwnedScratchDir(input: {
   shopId?: string;
   syncRunId?: string;
   scratchRoot?: string;
-}): Promise<string> {
+  maxScratchBytes?: number;
+  maxScratchAttempts?: number;
+}): Promise<ScratchOwnershipHandle> {
   const root = input.scratchRoot ?? path.join(os.tmpdir(), ORDER_FACTS_SCRATCH_PREFIX);
   const shop = safeSegment(input.shopId ?? "local", "local");
   const run = safeSegment(
     input.syncRunId ?? `run-${process.pid}-${Date.now()}`,
     `run-${process.pid}`,
   );
+  const maxScratchBytes = input.maxScratchBytes ?? ORDER_FACTS_JSONL_MAX_SCRATCH_BYTES;
+  const maxScratchAttempts =
+    input.maxScratchAttempts ?? ORDER_FACTS_JSONL_MAX_SCRATCH_ATTEMPTS;
   await mkdir(root, { recursive: true, mode: 0o700 });
   await assertOwnedDirectory(root);
-  await writeOwnershipMarker(root, { shopId: "root", syncRunId: "prefix" });
-  const shopDir = path.join(root, shop);
-  await mkdir(shopDir, { recursive: true, mode: 0o700 });
-  await assertOwnedDirectory(shopDir);
-  await writeOwnershipMarker(shopDir, { shopId: input.shopId, syncRunId: "shop" });
-  const dir = path.join(shopDir, run);
+  await writeNamespaceMarker(root);
+  const inspection = await inspectDScratchNamespace(root);
+  if (inspection.leftoverAttemptCount >= maxScratchAttempts) {
+    throw new OrderFactsJsonlError(
+      "scratch_resource_exhausted",
+      `D scratch attempt count ${inspection.leftoverAttemptCount} reached ${maxScratchAttempts}`,
+    );
+  }
+  if (inspection.leftoverBytes >= maxScratchBytes) {
+    throw new OrderFactsJsonlError(
+      "scratch_resource_exhausted",
+      `D scratch leftovers ${inspection.leftoverBytes} reached ${maxScratchBytes}`,
+    );
+  }
+  const dir = await mkdtemp(
+    path.join(root, `${ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX}${shop}-${run}-`),
+  );
   try {
-    const existing = await lstat(dir);
-    if (existing.isSymbolicLink()) {
+    const created = await lstat(dir);
+    if (created.isSymbolicLink()) {
       throw new OrderFactsJsonlError(
         "scratch_symlink_refused",
         `refusing to use symlink scratch ${dir}`,
       );
     }
-    if (existing.isDirectory()) {
-      if (!(await isAbandonedDScratch(dir))) {
-        throw new OrderFactsJsonlError(
-          "scratch_unowned",
-          `refusing pre-existing unowned scratch ${dir}`,
-        );
-      }
-      await rm(dir, { recursive: true, force: false });
+    await assertOwnedDirectory(dir);
+    const token = randomBytes(32).toString("hex");
+    const createdAt = new Date().toISOString();
+    await writeFile(
+      markerPath(dir),
+      `${JSON.stringify({
+        owned: true,
+        prefix: ORDER_FACTS_SCRATCH_PREFIX,
+        kind: "attempt",
+        token,
+        shopId: input.shopId ?? null,
+        syncRunId: input.syncRunId ?? null,
+        pid: process.pid,
+        createdAt,
+      })}\n`,
+      { mode: 0o600, flag: "wx" },
+    );
+    const marker = await lstat(markerPath(dir));
+    if (marker.isSymbolicLink()) {
+      throw new OrderFactsJsonlError(
+        "scratch_symlink_refused",
+        `refusing symlink ownership marker ${dir}`,
+      );
     }
+    const resolved = await realpath(dir);
+    const handle: ScratchOwnershipHandle = Object.freeze({
+      dir: resolved,
+      token,
+      shopId: input.shopId ?? "local",
+      syncRunId: input.syncRunId ?? run,
+      createdPid: process.pid,
+      createdAt,
+    });
+    AUTHENTIC_SCRATCH_HANDLES.add(handle);
+    return handle;
   } catch (error) {
-    if (error instanceof OrderFactsJsonlError) throw error;
-    const code =
-      error && typeof error === "object" && "code" in error
-        ? String((error as { code?: string }).code)
-        : "";
-    if (code !== "ENOENT") throw error;
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+    throw error;
   }
-  await mkdir(dir, { recursive: true, mode: 0o700 });
-  await assertOwnedDirectory(dir);
-  await writeOwnershipMarker(dir, input);
-  const resolved = await realpath(dir);
-  if (resolved !== dir && path.resolve(dir) !== resolved) {
-    const st = await lstat(dir);
-    if (st.isSymbolicLink()) {
-      throw new OrderFactsJsonlError(
-        "scratch_symlink_refused",
-        `refusing to use symlink scratch ${dir}`,
-      );
-    }
-  }
-  return resolved;
 }
 
 export async function disposeOwnedScratch(
-  dir: string | null | undefined,
+  handle: ScratchOwnershipHandle | string | null | undefined,
   scratchRoot?: string,
 ): Promise<void> {
-  if (!dir) return;
+  if (!handle) return;
+  if (typeof handle === "string") {
+    throw new OrderFactsJsonlError(
+      "scratch_unowned",
+      "refusing path-only scratch disposal",
+    );
+  }
+  if (!AUTHENTIC_SCRATCH_HANDLES.has(handle)) {
+    throw new OrderFactsJsonlError(
+      "scratch_unowned",
+      "refusing scratch disposal without an authentic ownership handle",
+    );
+  }
   const prefix = scratchRoot ?? path.join(os.tmpdir(), ORDER_FACTS_SCRATCH_PREFIX);
-  const resolvedPrefix = await realpath(prefix).catch(() => prefix);
-  const resolved = await realpath(dir).catch(() => path.resolve(dir));
+  const resolvedPrefix = await realpath(prefix).catch(() => path.resolve(prefix));
+  const liveStat = await lstat(handle.dir).catch(() => null);
+  if (!liveStat) return;
+  if (liveStat.isSymbolicLink()) {
+    throw new OrderFactsJsonlError(
+      "scratch_symlink_refused",
+      `refusing to follow symlink scratch ${handle.dir}`,
+    );
+  }
+  const resolved = await realpath(handle.dir);
   if (!resolved.startsWith(resolvedPrefix + path.sep) && resolved !== resolvedPrefix) {
     throw new OrderFactsJsonlError(
       "scratch_unowned",
       "refusing to delete scratch outside the D prefix",
     );
   }
-  try {
-    await assertOwnedScratch(dir);
-  } catch {
-    return;
+  if (resolved !== handle.dir && path.resolve(handle.dir) !== resolved) {
+    throw new OrderFactsJsonlError(
+      "scratch_symlink_refused",
+      `refusing path-substituted scratch ${handle.dir}`,
+    );
+  }
+  await assertOwnedDirectory(handle.dir);
+  const marker = await readScratchMarker(handle.dir);
+  if (
+    !marker ||
+    marker.owned !== true ||
+    marker.prefix !== ORDER_FACTS_SCRATCH_PREFIX ||
+    marker.token !== handle.token
+  ) {
+    throw new OrderFactsJsonlError(
+      "scratch_unowned",
+      `refusing scratch without matching ownership token ${handle.dir}`,
+    );
   }
   await rm(resolved, { recursive: true, force: false });
 }
@@ -522,6 +647,8 @@ export async function stageOrderFactsJsonl(
   const maxScratchBytes =
     options?.maxScratchBytes ?? ORDER_FACTS_JSONL_MAX_SCRATCH_BYTES;
   let dir: string | null = null;
+  let ownership: ScratchOwnershipHandle | null = null;
+  let leftoverBytes = 0;
   let keepScratch = false;
   const streams: ReturnType<typeof createWriteStream>[] = [];
   let streamsEnded = false;
@@ -543,11 +670,20 @@ export async function stageOrderFactsJsonl(
     );
   };
   try {
-    dir = await createOwnedScratchDir({
+    ownership = await createOwnedScratchDir({
       shopId: options?.shopId,
       syncRunId: options?.syncRunId,
       scratchRoot: options?.scratchRoot,
+      maxScratchBytes,
+      maxScratchAttempts: options?.maxScratchAttempts,
     });
+    dir = ownership.dir;
+    leftoverBytes = Math.max(
+      0,
+      (await inspectDScratchNamespace(
+        options?.scratchRoot ?? path.join(os.tmpdir(), ORDER_FACTS_SCRATCH_PREFIX),
+      )).leftoverBytes - (await measureDScratchTreeBytes(dir)),
+    );
     const jsonlPath = path.join(dir, "source.jsonl");
     const indexPath = path.join(dir, "index.tsv");
     const idsPath = path.join(dir, "ids.tsv");
@@ -568,7 +704,7 @@ export async function stageOrderFactsJsonl(
     let scratchBytes = 0;
     const account = (n: number): StageFail | null => {
       scratchBytes += n;
-      if (scratchBytes > maxScratchBytes) {
+      if (leftoverBytes + scratchBytes > maxScratchBytes) {
         return fail(
           "OPEN_PARENT_BOUND",
           `scratch JSONL bytes exceeded ${maxScratchBytes}`,
@@ -814,6 +950,12 @@ export async function stageOrderFactsJsonl(
     });
 
     keepScratch = true;
+    if (!dir || !ownership) {
+      throw new OrderFactsJsonlError(
+        "scratch_unowned",
+        "validated source is missing an ownership handle",
+      );
+    }
     return {
       status: "COMPLETE",
       dir,
@@ -827,17 +969,28 @@ export async function stageOrderFactsJsonl(
       rootCount,
       lastPhysicalOrdinal,
       owned: true,
+      ownership,
       manifest,
     };
   } catch (error) {
     if (isEnospc(error)) {
       return fail("OPEN_PARENT_BOUND", "scratch disk full");
     }
+    if (
+      error instanceof OrderFactsJsonlError &&
+      (error.code === "scratch_resource_exhausted" ||
+        error.code === "scratch_unowned" ||
+        error.code === "scratch_symlink_refused")
+    ) {
+      return fail("OPEN_PARENT_BOUND", error.message);
+    }
     throw error;
   } finally {
     await endStreams().catch(() => undefined);
-    if (dir && !keepScratch) {
-      await disposeOwnedScratch(dir, options?.scratchRoot).catch(() => undefined);
+    if (ownership && !keepScratch) {
+      await disposeOwnedScratch(ownership, options?.scratchRoot).catch(
+        () => undefined,
+      );
     }
   }
 }

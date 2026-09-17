@@ -496,7 +496,11 @@ export function createOrderFactsAdmin(input: {
       }
 
       const requested =
-        typeof variables.id === "string" ? variables.id : null;
+        typeof variables.id === "string"
+          ? variables.id
+          : typeof variables.orderId === "string"
+            ? variables.orderId
+            : null;
       let admin = requested ? storeAdmins.get(requested) : undefined;
       if (!admin && requested) {
         for (const [gid, store] of Object.entries(input.stores)) {

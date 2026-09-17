@@ -28,6 +28,12 @@ import { assertOrderClockPin, pinOrderClock } from "../admin-read/snapshot-pin";
 import type { AgreementSnapshot, RefundSnapshot } from "../apply/types";
 import { mapAgreementRead, mapRefundRead } from "./mapper";
 import type { LedgerQueryCounts } from "./types";
+import {
+  createDTransportBudget,
+  snapshotDTransportBudget,
+  wrapAdminWithDTransportBudget,
+  type DTransportAccounting,
+} from "./transport-budget";
 
 export const ORDER_FACTS_IMPORT_LEDGER_QUERY = `#graphql
   query OrderFactsImportLedger(
@@ -146,21 +152,25 @@ export type ImportLedgerResult =
       agreements: AgreementSnapshot[];
       refunds: RefundSnapshot[];
       counts: LedgerQueryCounts;
+      transport: DTransportAccounting;
     }
   | {
       status: "drift";
       reason: string;
       counts: LedgerQueryCounts;
+      transport: DTransportAccounting;
     }
   | {
       status: "incomplete";
       reason: string;
       counts: LedgerQueryCounts;
+      transport: DTransportAccounting;
     }
   | {
       status: "failure";
       reason: string;
       counts: LedgerQueryCounts;
+      transport: DTransportAccounting;
     };
 
 function emptyCounts(): LedgerQueryCounts {
@@ -183,6 +193,19 @@ function addCounts(target: LedgerQueryCounts, source: LedgerQueryCounts): void {
   target.refund += source.refund;
   target.fallback += source.fallback;
   target.throttle += source.throttle;
+}
+
+function refundGidMembership(nodes: Array<{ id?: unknown }>): string[] {
+  return nodes
+    .map((node) => (typeof node.id === "string" ? node.id : ""))
+    .filter((id) => id !== "")
+    .slice()
+    .sort();
+}
+
+function sameRefundMembership(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((id, index) => id === right[index]);
 }
 
 export function mergeLedgerCounts(
@@ -242,6 +265,18 @@ export async function readOrderFactsImportLedger(input: {
     requestedGid: input.orderGid,
     phase: "initial" as const,
   };
+  const budget = createDTransportBudget(ORDER_ADMIN_READ_MAX_REQUESTS);
+  const withTransport = <
+    T extends {
+      status: ImportLedgerResult["status"];
+      counts: LedgerQueryCounts;
+    },
+  >(
+    result: T,
+  ): T & { transport: DTransportAccounting } => ({
+    ...result,
+    transport: snapshotDTransportBudget(budget),
+  });
   try {
     const { pageSize, maxRequests } = resolveReadOptions(
       {
@@ -250,9 +285,15 @@ export async function readOrderFactsImportLedger(input: {
       },
       { ...extras, phase: "options" },
     );
+    budget.maxRequests = maxRequests;
+    const wrappedContext: OrderAdminReadContext = {
+      ...input.context,
+      admin: wrapAdminWithDTransportBudget(input.context.admin, budget, extras),
+    };
+    budget.phase = "initial";
     counts.initial += 1;
     const first = await loadLedgerPage(
-      input.context,
+      wrappedContext,
       input.orderGid,
       { agrFirst: pageSize, agrAfter: null, saleFirst: pageSize },
       cost,
@@ -261,13 +302,25 @@ export async function readOrderFactsImportLedger(input: {
     );
     const pin = pinOrderClock(first);
     if (pin.gid !== input.orderGid) {
-      return { status: "drift", reason: "ledger_identity_mismatch", counts };
+      return withTransport({
+        status: "drift",
+        reason: "ledger_identity_mismatch",
+        counts,
+      });
     }
     if (pin.updatedAt !== input.bulkUpdatedAt) {
-      return { status: "drift", reason: "ledger_updated_at_drift", counts };
+      return withTransport({
+        status: "drift",
+        reason: "ledger_updated_at_drift",
+        counts,
+      });
     }
     if (pin.currencyCode !== input.bulkCurrencyCode) {
-      return { status: "drift", reason: "ledger_currency_drift", counts };
+      return withTransport({
+        status: "drift",
+        reason: "ledger_currency_drift",
+        counts,
+      });
     }
 
     const agrExtrasFirst = { ...extras, phase: "agreements" as const };
@@ -306,9 +359,8 @@ export async function readOrderFactsImportLedger(input: {
       }
     };
     pushPage(agrPage, agrExtrasFirst);
-    let usedContinuation = false;
     while (agrPage.hasNextPage) {
-      usedContinuation = true;
+      budget.phase = "agreement";
       const agrExtras = { ...extras, phase: "agreements" as const };
       assertAdvancingCursor(
         "agreements",
@@ -318,7 +370,7 @@ export async function readOrderFactsImportLedger(input: {
       );
       counts.agreement += 1;
       const extra = await loadLedgerPage(
-        input.context,
+        wrappedContext,
         input.orderGid,
         {
           agrFirst: pageSize,
@@ -348,11 +400,11 @@ export async function readOrderFactsImportLedger(input: {
         agreements.push({ ...row.agreement, salesComplete: true });
         continue;
       }
-      usedContinuation = true;
-      const before = cost.requests;
+      budget.phase = "sale";
+      const before = budget.used;
       agreements.push(
         await completeAgreementSales(
-          input.context,
+          wrappedContext,
           input.orderGid,
           row.agreement,
           row.precedingCursor,
@@ -367,23 +419,7 @@ export async function readOrderFactsImportLedger(input: {
           maxRequests,
         ),
       );
-      counts.sale += Math.max(0, cost.requests - before);
-    }
-
-    if (usedContinuation) {
-      counts.recheck += 1;
-      const recheck = await loadLedgerPage(
-        input.context,
-        input.orderGid,
-        { agrFirst: 1, agrAfter: null, saleFirst: 1 },
-        cost,
-        maxRequests,
-        { ...extras, phase: "version_recheck" },
-      );
-      assertOrderClockPin(pin, recheck, {
-        ...extras,
-        phase: "version_recheck",
-      });
+      counts.sale += Math.max(0, budget.used - before);
     }
 
     const refundExtras = { ...extras, phase: "refunds" as const };
@@ -393,65 +429,131 @@ export async function readOrderFactsImportLedger(input: {
       refundExtras,
     );
     assertUniqueNonEmptyGids(refundNodes, "order.refunds", refundExtras);
+    const initialRefundMembership = refundGidMembership(refundNodes);
     const refunds: RefundRead[] = [];
     for (const node of refundNodes) {
       const refundGid = typeof node.id === "string" ? node.id : "";
-      const remaining = maxRequests - cost.requests;
-      const before = cost.requests;
-      const refundRead = await readRefundFact(input.context, refundGid, {
+      if (budget.used >= maxRequests) {
+        return withTransport({
+          status: "incomplete",
+          reason: "ledger_budget_exhausted",
+          counts,
+        });
+      }
+      budget.phase = "refund";
+      const remaining = maxRequests - budget.used;
+      const before = budget.used;
+      const refundRead = await readRefundFact(wrappedContext, refundGid, {
         pageSize,
-        maxRequests: remaining > 0 ? remaining : 1,
+        maxRequests: remaining,
         orderCurrencyCode: pin.currencyCode,
       });
-      counts.refund += refundRead.cost?.requests ?? Math.max(0, 1);
-      cost.requests += refundRead.cost?.requests ?? 1;
+      counts.refund += Math.max(0, budget.used - before);
       if (refundRead.status === "incomplete") {
-        return { status: "incomplete", reason: refundRead.reason, counts };
+        return withTransport({
+          status: "incomplete",
+          reason: refundRead.reason,
+          counts,
+        });
       }
       if (refundRead.status === "null_observed") {
-        return { status: "drift", reason: "refund_null_observed", counts };
+        return withTransport({
+          status: "drift",
+          reason: "refund_null_observed",
+          counts,
+        });
       }
       if (refundRead.status !== "complete") {
-        return {
+        return withTransport({
           status: "failure",
           reason:
             refundRead.status === "failure"
               ? refundRead.reason
               : "refund_read_unusable",
           counts,
-        };
+        });
       }
       refunds.push(refundRead.value);
-      void before;
     }
 
-    return {
+    if (budget.used >= maxRequests) {
+      return withTransport({
+        status: "incomplete",
+        reason: "ledger_budget_exhausted",
+        counts,
+      });
+    }
+    budget.phase = "recheck";
+    counts.recheck += 1;
+    const recheck = await loadLedgerPage(
+      wrappedContext,
+      input.orderGid,
+      { agrFirst: 1, agrAfter: null, saleFirst: 1 },
+      cost,
+      maxRequests,
+      { ...extras, phase: "version_recheck" },
+    );
+    assertOrderClockPin(pin, recheck, {
+      ...extras,
+      phase: "version_recheck",
+    });
+    if (recheck.id !== first.id || pin.gid !== input.orderGid) {
+      return withTransport({
+        status: "drift",
+        reason: "ledger_identity_mismatch",
+        counts,
+      });
+    }
+    const finalRefundExtras = { ...extras, phase: "refunds" as const };
+    const finalRefundNodes = requireObjectList<{ id?: unknown }>(
+      recheck.refunds,
+      "order.refunds",
+      finalRefundExtras,
+    );
+    assertUniqueNonEmptyGids(finalRefundNodes, "order.refunds", finalRefundExtras);
+    const finalRefundMembership = refundGidMembership(finalRefundNodes);
+    if (!sameRefundMembership(initialRefundMembership, finalRefundMembership)) {
+      return withTransport({
+        status: "drift",
+        reason: "ledger_refund_membership_drift",
+        counts,
+      });
+    }
+
+    return withTransport({
       status: "complete",
       agreements: agreements.map(mapAgreementRead),
       refunds: refunds.map((refund) => mapRefundRead(refund, input.orderGid)),
       counts,
-    };
+    });
   } catch (error) {
+    const transport = snapshotDTransportBudget(budget);
     const code =
       error && typeof error === "object" && "code" in error
         ? String((error as { code?: string }).code)
         : "";
     if (code === "order_facts_ledger_null") {
-      return { status: "drift", reason: "ledger_order_null", counts };
+      return { status: "drift", reason: "ledger_order_null", counts, transport };
     }
     const walked = walkErrorToResult(error, cost, extras);
     if (walked.status === "incomplete") {
-      return { status: "incomplete", reason: walked.reason, counts };
+      return {
+        status: "incomplete",
+        reason: walked.reason,
+        counts,
+        transport,
+      };
     }
     const detail = error instanceof Error ? error.message : String(error);
     if (/throttl/i.test(detail)) counts.throttle += 1;
     if (/updatedAt drifted|currencyCode drifted|IDENTITY_MISMATCH/.test(detail)) {
-      return { status: "drift", reason: detail, counts };
+      return { status: "drift", reason: detail, counts, transport };
     }
     return {
       status: "failure",
       reason: walked.status === "failure" ? walked.detail : detail,
       counts,
+      transport,
     };
   }
 }

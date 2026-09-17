@@ -205,6 +205,8 @@ export async function applyNominatedOrderGid(input: {
   }
 }
 
+export { nominatedImportReceipt } from "./import-receipt-binding";
+
 export function nominatedReceipt(input: {
   durableJobId: string;
   shopifyGid: string;

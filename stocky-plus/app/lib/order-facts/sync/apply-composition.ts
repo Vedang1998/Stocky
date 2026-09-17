@@ -5,7 +5,9 @@ import {
 } from "../apply/fencing";
 import {
   acquireReceiptApplicationKeyLock,
+  loadReceipt,
   shortCircuitIfApplied,
+  type ReceiptLookup,
 } from "../apply/receipts";
 import {
   OrderApplyReceiptDigestConflictError,
@@ -85,6 +87,16 @@ async function withRepeatableReadRetry<T>(
     }
   }
   throw lastError;
+}
+
+export async function lookupApplicationReceipt(
+  db: OrderFactsTxnHost,
+  shopId: string,
+  applicationKey: string,
+): Promise<ReceiptLookup | null> {
+  return withRepeatableReadRetry(db, async (tx) =>
+    loadReceipt(asApplyDb(tx), shopId, applicationKey),
+  );
 }
 
 export async function probeReceiptBeforeShopifyIo(

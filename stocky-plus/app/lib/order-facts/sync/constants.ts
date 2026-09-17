@@ -75,9 +75,13 @@ export const ORDER_FACTS_JSONL_MAX_ACK_BITSET_BYTES = 32 * 1024 * 1024;
 export const ORDER_FACTS_JSONL_MAX_GROUP_MERGE_FILES = 512;
 export const ORDER_FACTS_SCRATCH_PREFIX = "stocky-pr6-d" as const;
 export const ORDER_FACTS_SCRATCH_MARKER = ".stocky-pr6-d-owned" as const;
+export const ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX = "att-" as const;
+export const ORDER_FACTS_JSONL_MAX_SCRATCH_ATTEMPTS = 32;
 export const ORDER_FACTS_D_API_VERSION = "2026-07" as const;
 export const ORDER_FACTS_SOURCE_MANIFEST_VERSION =
   "order-facts-d-source-manifest-v1" as const;
+export const ORDER_FACTS_IMPORT_RECEIPT_BINDING_VERSION =
+  "order-facts-d-import-src-v1" as const;
 export const ORDER_FACTS_FIRST_CONFIRMATION_RETRY_MS = 5_000;
 export const ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS = 600_000;
 export const ORDER_FACTS_WINDOW_PAGE_SIZE = 50;

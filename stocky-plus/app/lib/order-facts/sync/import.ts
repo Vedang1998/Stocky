@@ -15,8 +15,17 @@ import { validateUnsignedCountToken } from "../../catalog-facts/ingest/counts";
 import {
   applyBulkAssembledOrder,
   applyNominatedOrderGid,
-  nominatedReceipt,
 } from "./apply-nominated";
+import {
+  lookupApplicationReceipt,
+  probeReceiptBeforeShopifyIo,
+} from "./apply-composition";
+import {
+  legacyImportReceiptApplicationKey,
+  nominatedImportReceipt,
+} from "./import-receipt-binding";
+import { APPLICATION_DIGEST_CONFLICT } from "../../../sync/execution-strategy.server";
+import { SyncControlPlaneError } from "../../../sync/errors";
 import { submitOrderFactsBulkA } from "./bulk";
 import { ORDER_FACTS_D_BULK_A_ORDERS_LINES } from "./bulk-a-query";
 import {
@@ -61,6 +70,7 @@ export type OrderFactsImportStepResult =
       examined: number;
       followUpReads: number;
       bulkDirectApplies: number;
+      verifiedReplayApplies: number;
       ledgerCounts: LedgerQueryCounts;
     }
   | { status: "CONTINUE"; backoffMs: number; reason: string }
@@ -154,6 +164,7 @@ export async function runOrderFactsImportStep(input: {
   fetchJsonl?: (url: string) => Promise<JsonlByteSource>;
   expectedObjectCount?: string | null;
   expectedRootObjectCount?: string | null;
+  scratchRoot?: string;
   requestedCanonicalIdentitiesPerTransaction?: number;
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
 }): Promise<OrderFactsImportStepResult> {
@@ -309,20 +320,15 @@ export async function runOrderFactsImportStep(input: {
     });
   }
 
-  const skipThroughOrdinal =
-    syncRun.bulkQueryFingerprint === fingerprint &&
-    (syncRun.bulkOperationGid == null ||
-      bulkOperationGid == null ||
-      syncRun.bulkOperationGid === bulkOperationGid)
-      ? (syncRun.jsonlCommittedLineOrdinal ?? 0)
-      : 0;
-  let contiguousCommitted = skipThroughOrdinal;
+  const persistedCommittedOrdinal = syncRun.jsonlCommittedLineOrdinal ?? 0;
+  let contiguousCommitted = 0;
   let ordinalAck: DiskOrdinalAck | null = null;
   let applied = 0;
   let incomplete = 0;
   let examined = 0;
   let followUpReads = 0;
   let bulkDirectApplies = 0;
+  let verifiedReplayApplies = 0;
   const ledgerCounts: LedgerQueryCounts = {
     initial: 0,
     recheck: 0,
@@ -347,7 +353,7 @@ export async function runOrderFactsImportStep(input: {
     }
     contiguousCommitted = ordinalAck.mark(ordinals);
     await ordinalAck.flush();
-    if (bulkOperationGid && contiguousCommitted > skipThroughOrdinal) {
+    if (bulkOperationGid && contiguousCommitted > persistedCommittedOrdinal) {
       await acknowledgeJsonlBatch({
         shopId: input.shopId,
         syncRunId: syncRun.id,
@@ -359,16 +365,63 @@ export async function runOrderFactsImportStep(input: {
 
   const applyAssembly = async (assembly: JsonlCompleteAssembly) => {
     examined += 1;
-    if (assembly.lineOrdinals.every((ordinal) => ordinal <= skipThroughOrdinal)) {
-      await noteCommitted(assembly.lineOrdinals);
-      return;
-    }
-    const receipt = nominatedReceipt({
+    const receipt = nominatedImportReceipt({
       durableJobId: input.durableJobId,
       shopifyGid: assembly.rootGid,
       sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
       fenceGeneration: fence.fenceGeneration,
+      shopId: input.shopId,
+      queryFingerprint: fingerprint,
+      apiVersion: ORDER_FACTS_D_API_VERSION,
+      parent: assembly.root,
+      children: assembly.children,
     });
+    const legacyKey = legacyImportReceiptApplicationKey({
+      durableJobId: input.durableJobId,
+      shopifyGid: assembly.rootGid,
+      sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
+    });
+    const legacy = await lookupApplicationReceipt(
+      input.db,
+      input.shopId,
+      legacyKey,
+    );
+    const modern = await lookupApplicationReceipt(
+      input.db,
+      input.shopId,
+      receipt.applicationKey,
+    );
+    if (legacy && !modern) {
+      throw new OrderFactsSyncError(
+        "import_legacy_receipt_fresh_run_required",
+        "import_legacy_receipt_fresh_run_required",
+      );
+    }
+    let probed: "already_applied" | "proceed";
+    try {
+      probed = await probeReceiptBeforeShopifyIo(
+        input.db,
+        input.shopId,
+        receipt,
+      );
+    } catch (error) {
+      if (
+        error instanceof SyncControlPlaneError &&
+        error.code === APPLICATION_DIGEST_CONFLICT
+      ) {
+        throw new OrderFactsSyncError(
+          "import_receipt_content_conflict_fresh_run_required",
+          "import_receipt_content_conflict_fresh_run_required",
+        );
+      }
+      throw error;
+    }
+    if (probed === "already_applied") {
+      applied += 1;
+      verifiedReplayApplies += 1;
+      await noteCommitted(assembly.lineOrdinals);
+      return;
+    }
     const ledger = await readOrderFactsImportLedger({
       context: { admin: input.admin, shop: input.shop },
       orderGid: assembly.rootGid,
@@ -452,6 +505,7 @@ export async function runOrderFactsImportStep(input: {
       expectedRootObjectCount: expectedRootObjectCount ?? undefined,
       shopId: input.shopId,
       syncRunId: syncRun.id,
+      scratchRoot: input.scratchRoot,
       epoch: {
         shopId: input.shopId,
         syncRunId: syncRun.id,
@@ -465,7 +519,7 @@ export async function runOrderFactsImportStep(input: {
         ordinalAck = await DiskOrdinalAck.open({
           dir: stage.dir,
           lastOrdinal: stage.lastPhysicalOrdinal,
-          contiguous: skipThroughOrdinal,
+          contiguous: 0,
         });
       },
       onCompleteAssembly: applyAssembly,
@@ -552,6 +606,7 @@ export async function runOrderFactsImportStep(input: {
     examined,
     followUpReads,
     bulkDirectApplies,
+    verifiedReplayApplies,
     ledgerCounts,
   };
 }

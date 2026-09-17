@@ -84,7 +84,7 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
     expect(orderFactQueries).toHaveLength(0);
     expect(
       admin.calls.filter((call) => call.name === "OrderFactsImportLedger"),
-    ).toHaveLength(40);
+    ).toHaveLength(80);
     expect(await factCount("gid://shopify/Order/d-bulk-1")).toBe(1);
     expect(await factCount("gid://shopify/Order/d-bulk-40")).toBe(1);
   });
@@ -126,13 +126,14 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
       expect(result.bulkDirectApplies).toBe(3);
       expect(result.followUpReads).toBe(0);
       expect(result.ledgerCounts.initial).toBe(3);
+      expect(result.ledgerCounts.recheck).toBe(3);
     }
     expect(
       admin.calls.filter((call) => call.name === "OrderFactById"),
     ).toHaveLength(0);
     expect(
       admin.calls.filter((call) => call.name === "OrderFactsImportLedger"),
-    ).toHaveLength(3);
+    ).toHaveLength(6);
   });
 
   it("does not persist coverage when expected counts do not match streamed bytes", async () => {
@@ -265,8 +266,12 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
   it("resumes from the physical JSONL ordinal and does not duplicate applied facts", async () => {
     const firstGid = "gid://shopify/Order/d-ckpt-1";
     const secondGid = "gid://shopify/Order/d-ckpt-2";
+    const firstRoot = bulkARoot(firstGid, {
+      currentSubtotalLineItemsQuantity: 0,
+      subtotalLineItemsQuantity: 0,
+    });
     const objects = [
-      bulkARoot(firstGid, { currentSubtotalLineItemsQuantity: 0 }),
+      firstRoot,
       bulkALine(secondGid),
       bulkARoot(secondGid),
     ];
@@ -295,10 +300,7 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
         pollBulkOperation: true,
         fetchJsonl: async () =>
           jsonlLines([
-            bulkARoot(firstGid, {
-              currentSubtotalLineItemsQuantity: 0,
-              subtotalLineItemsQuantity: 0,
-            }),
+            firstRoot,
             bulkALine(secondGid),
             ((root) => {
               const copy = { ...root };

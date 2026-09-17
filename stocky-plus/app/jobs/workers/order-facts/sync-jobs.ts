@@ -38,6 +38,14 @@ export async function runOrderFactsSyncJob(input: {
     jsonlSource: input.jsonlSource,
     pollBulkOperation:
       input.jsonlSource == null && input.payload?.pollBulkOperation !== false,
+    expectedObjectCount:
+      typeof input.payload?.expectedObjectCount === "string"
+        ? input.payload.expectedObjectCount
+        : undefined,
+    expectedRootObjectCount:
+      typeof input.payload?.expectedRootObjectCount === "string"
+        ? input.payload.expectedRootObjectCount
+        : undefined,
     requestedCanonicalIdentitiesPerTransaction:
       input.requestedCanonicalIdentitiesPerTransaction,
     configuredWorstCaseConcurrentCanonicalTransactions:
