@@ -41,8 +41,11 @@ Companion file (must stay internally consistent with this plan):
 | H branch | `phase-1/pr6-d-order-webhook-import` |
 | V is ancestor of H | **FACT** — `git merge-base --is-ancestor` succeeded |
 | Commits V..H | **21** |
-| Authorization | [PR43 comment 5707545217](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5707545217) (`user=Vedang1998`, `created_at=2026-09-17T02:29:47Z`) |
-| Work order | `PR7_Audit_Roles_Privacy_Execution_Prep_Overnight.md` SHA-256 `d7aee155dcc13e25cb00f6131b2b1544757122f6a8d95ffa7073b0b7ccbf4bf0` |
+| Authorization (planning) | [PR43 comment 5707545217](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5707545217) |
+| Authorization (corrections) | [PR45 comment 5713121021](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5713121021) (`user=Vedang1998`, `created_at=2026-09-17T10:49:56Z`) |
+| Starting planning HEAD | `4158254cba4800ceec112579ca842ee69f47c882` |
+| Original work order | `PR7_Audit_Roles_Privacy_Execution_Prep_Overnight.md` SHA-256 `d7aee155dcc13e25cb00f6131b2b1544757122f6a8d95ffa7073b0b7ccbf4bf0` |
+| Correction work order | `PR45_PR7_Planning_Corrections_Work_Order.md` SHA-256 `82d3e74611c8185f9bd5255a7b7d48493d85d3c0d9b44aa3df40c3f4e2d1b502` |
 | Decision heading | D-054 **EFFECTIVE** — **no D-055** |
 | R-176 | remains **OPEN / P0** — this packet does not close it |
 | R-164 | unchanged |
@@ -52,6 +55,23 @@ Companion file (must stay internally consistent with this plan):
 | This PR | one new **DRAFT documentation-only** PR; never reuse PR43, PR41, or PR38 |
 
 Live shared-control files on V (`PROJECT_STATUS.md`, phase-1 `README.md`) still describe an earlier PR6-B/C state (PR6-C “in correction”, `origin/main` as **T** `f5ec7abb…`). **FACT (V):** those files are stale relative to merged V `a3ff480…`. This planning PR **must not** edit them.
+
+These ChatGPT constraints are **not** acceptance of the whole plan, not PR7 runtime authorization, not legal-compliance certification, and not permission to change live controls.
+
+### 1.1 Correction crosswalk (P7-C01…06)
+
+Original decision IDs **D-PR7-01…14** are preserved. Constraints below change recommended options; they do **not** silently default unanswered items into runtime authority.
+
+| Correction | Constrains | Disposition in this packet |
+|---|---|---|
+| **P7-C01** | **D-PR7-04** (bootstrap); owner-proof half of **D-PR7-02** | First login / empty assignment table / `sessionToken.sub` / installer / email **cannot** grant `shop_owner`. Owner only from same-shop verified Shopify `associated_user.account_owner === true` for the same user id, or a separately approved owner-verification flow. |
+| **P7-C02** | **D-PR7-08**, **D-PR7-11**; privilege shape of **D-PR7-13** | Ordinary audit remains append-only. Tenant-linked audit is **deleted** by a restricted privacy-erasure capability (not in-place UPDATE). Completion receipt is a separate table with no Shop FK. Domain HMAC is **identifiable**, not anonymous. |
+| **P7-C03** | **D-PR7-05**, generation half of **D-PR7-06** | No timestamp-only `SUPERSEDED`. Ambiguous `shop/redact` vs reinstall → `ESCALATED` with 30-day deadline. Completed erasure must not permanently blacklist a fresh install. |
+| **P7-C04** | **D-PR7-12**; §7.1 vs §7.2 contradiction | Human replay/export/role work revalidates authorization at execution (or last safe pre-effect boundary). A generic worker actor cannot convert a denied human operation into allowed work. |
+| **P7-C05** | privacy worker vs processing-disabled; customer lookup keys | Verified privacy jobs use an explicit limited capability while the shop stays disabled. Customer-request lookup keys remain sufficient across retries. Empty scan only after a complete relevant-surface pass. |
+| **P7-C06** | §10 gates; matrix “Now” labels; Tier-A bar | No V-only runtime base. Formal PR6 closure on merged main required. No unresolved P0/P1/**P2**. Blocked suites are not “executed-on-V”. |
+
+**Still PROPOSED / pending (not silently defaulted):** D-PR7-01, D-PR7-02 (whether to enable `useOnlineTokens`; owner proof **needs** the online `associated_user` object if automated owner grant is wanted), D-PR7-03, D-PR7-07, D-PR7-09, D-PR7-10, D-PR7-13 (exact role split), D-PR7-14.
 
 ---
 
@@ -90,12 +110,13 @@ Audit emission, permission checks, and privacy processing share one tenant-keyed
 
 ## 3. Official Shopify facts (2026-09-17)
 
-Sources (no store calls):
+Sources (no store calls). Re-fetched **2026-09-17** for this correction packet:
 
 - [Privacy law compliance](https://shopify.dev/docs/apps/build/compliance/privacy-law-compliance) — accessed **2026-09-17**
-- [Privacy requirements](https://shopify.dev/docs/apps/launch/privacy-requirements) — accessed **2026-09-17**
+- [Authenticate admin](https://shopify.dev/docs/api/shopify-app-react-router/latest/authenticate/admin) — accessed **2026-09-17**
 - [Access tokens](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens) — accessed **2026-09-17**
-- [Authentication for apps built with Shopify CLI](https://shopify.dev/docs/apps/build/authentication-authorization/cli-app-authentication) — accessed **2026-09-17**
+- [Privacy requirements](https://shopify.dev/docs/apps/launch/privacy-requirements) — accessed **2026-09-17** (context only)
+- [Authentication for apps built with Shopify CLI](https://shopify.dev/docs/apps/build/authentication-authorization/cli-app-authentication) — accessed **2026-09-17** (context only)
 
 Repo webhook pin remains Admin API **`2026-07`** (`shopify.app.toml` `[webhooks] api_version`, `ApiVersion.July26`). The privacy-law-compliance page’s TOML **example** uses `2024-07`. That example version is **not** this repository’s pin. Payload field names below are the **currently documented** compliance contract; whether Shopify versioned those JSON bodies for `2026-07` is **UNVERIFIED**.
 
@@ -118,18 +139,24 @@ Documented payloads (synthetic field names only):
 | `customers/redact` | `shop_id`, `shop_domain`, `customer.{id,email,phone}`, `orders_to_redact[]` | If no order in past six months, payload ~10 days after request; otherwise withheld until six months |
 | `shop/redact` | `shop_id`, `shop_domain` | **48 hours after uninstall** |
 
-**UNVERIFIED:** whether `shop/redact` is still delivered if the merchant reinstalls during that 48-hour window. See **D-PR7-05**.
+**UNVERIFIED:** whether Shopify still delivers `shop/redact` if the merchant reinstalls during that 48-hour window. The official page does **not** document a timestamp-only reinstall exception, an installation-generation field, or permission to skip a delivered request. See **P7-C03** / **D-PR7-05**.
+
+**INTERPRETATION (not official text):** “Complete the action within 30 days of receiving the request” is treated as a hard operational deadline for every authenticated delivered compliance webhook, including `ESCALATED` cases. Escalation is not indefinite noncompliance. Shopify: if legally required to retain data, do not complete deletion — that exception remains **Q-008** / counsel, not a product invention.
 
 ### OFFICIAL — staff identity vs shop token
 
-- Default tokens are **offline** (shop-scoped; background/webhooks).
-- **Online** tokens are optional, tied to the staff member, expire after **24 hours or admin logout**, and carry `associated_user` + `associated_user_scope`.
-- Scaffolded apps enable online tokens with `useOnlineTokens: true` **alongside** offline tokens.
-- ID tokens authenticate the **user**; access tokens authenticate the **app**. ID tokens carry no Shopify API scopes.
+- **FACT vs INTERPRETATION split.** The following bullets quote documented behavior; product rules built on them are labeled **PROPOSED**.
+- Default tokens are **offline** (shop-scoped; background/webhooks). **OFFICIAL** access-tokens page.
+- **Online** tokens are optional, tied to the staff member, expire after **24 hours or admin logout**, and carry `associated_user` + `associated_user_scope`. **OFFICIAL.**
+- `associated_user` fields documented on the online token response include `id`, `account_owner` (`true` when the user owns the Shopify account), `collaborator`, `email`, `email_verified`. **OFFICIAL** access-tokens page; **FACT (library)** `OnlineAccessUser` in `@shopify/shopify-api` (`account_owner: boolean`, `id: number`).
+- ID tokens authenticate the **user**; they carry **no permissions** and cannot be used to call a Shopify API. Access tokens authenticate the **app**. **OFFICIAL** access-tokens page. Therefore `sessionToken.sub` is **identity**, not ownership and not an app permission grant.
+- Scaffolded apps enable online tokens with `useOnlineTokens: true`. **OFFICIAL** authenticate/admin examples for both `session.onlineAccessInfo` **and** the `sessionToken.sub` snippet still set `useOnlineTokens: true` in the companion `shopify.server.ts`.
+- **FACT (library):** `authenticate.admin` typed context includes `session` and, for embedded apps, `sessionToken: JwtPayload` with `sub: string` (user id as string), `dest` (shop domain), `iss`, `aud`.
+- **UNVERIFIED at runtime (must be proven in implementation tests, D-PR7-01):** which of `sessionToken` / `onlineAccessInfo` are actually populated when `useOnlineTokens` is **false**, as on V. Do not assume `sub` exists, and do not treat `sub` as `account_owner`.
 
 **FACT (V):** `stocky-plus/app/shopify.server.ts` does **not** set `useOnlineTokens`. It does set `future.expiringOfflineAccessTokens: true`.
 
-**FACT (library):** `authenticate.admin` returns `session` and, for embedded apps, `sessionToken: JwtPayload`. Library docs show `sessionToken.sub` as the user key and `session.onlineAccessInfo` only for online sessions.
+**P7-C01 implication:** automated `shop_owner` bootstrap needs the documented `associated_user.account_owner` bit on a **verified online** session for the **same** shop and user. Offline `sub` alone cannot grant ownership. No token/configuration change is authorized in this planning PR (**D-PR7-02** remains proposed).
 
 ---
 
@@ -172,6 +199,7 @@ Absence is from source **and** tests, not a single grep. Correctness is never in
 | PostgreSQL roles `stocky_runtime` / `stocky_control_plane` / `stocky_migration` | **implemented and demonstrated** (orthogonal) | `test:enforcement-role-membership`, `test:sync-role-isolation` |
 | Full PRD templates (buyer, receiver, …) | **explicitly later** | product `02_FULL_STOCKY_PARITY_PRD.md` §3.15; F-107/F-108 still “Missing” in the historical feature matrix |
 | Whether Shopify `associated_user_scope` drives app ACL | **requires owner decision** | **D-PR7-01**, **D-PR7-02** |
+| First-login owner bootstrap | **rejected by P7-C01** | **D-PR7-04** constrained |
 
 **FACT (V):** every `app/routes/app*.tsx` loader/action that touches merchant data uses `requireAdminTenant` only. `app/routes/app.analytics_.export.tsx` exports CSV after tenant auth with **no** role check. `replayDeadLetter` (`app/sync/replay.server.ts`) is a control-plane function with **no** staff actor and **no** admin route.
 
@@ -300,7 +328,7 @@ H also edits shared-control files (`PROJECT_STATUS.md`, `RISK_REGISTER.md`, `ACC
 | Immediate uninstall shutdown | D-021; brief privacy decision | **implemented and demonstrated** (disable+cancel) |
 | Session/token deletion on uninstall | D-021 | **implemented but unproven** E2E |
 | `shop/redact` erases operational data, caches, exports, queues, storage | D-021 | **missing** |
-| Preserve only non-reversible receipt + counsel-confirmed holds | D-021; Q-008 | **requires legal decision** |
+| Preserve only a minimized completion receipt + counsel-confirmed holds | D-021; Q-008 | **requires legal decision**. This packet does **not** treat `shopDomainHmac` as anonymous/unlinkable (**P7-C02**). |
 | Idempotent, auditable, retryable privacy | brief | **missing** |
 | Distinct privacy-job isolation tests | brief database isolation list | **deferred** in `worker-surfaces.test.ts` |
 | `npm run test:privacy` | brief required commands | **missing** |
@@ -324,26 +352,39 @@ Historical `product/05_CURRENT_REPOSITORY_GAP_AUDIT.md` and F-matrix “Missing�
 | Authorization | App-owned `ShopRoleAssignment` + permission matrix; default **deny** |
 | Client-supplied shop/actor/role fields | Never establish authority (extend today’s client-shop conflict rule to `actorId` / `role`) |
 | UI visibility | Not authorization |
-| Workers / webhooks | `actorKind = system` with explicit `actorSystemId` (job type + durableJobId / webhook topic) and `causationId` |
-| Revocation | Assignment row `revokedAt` set; subsequent checks fail closed; in-flight jobs re-read assignment at execution, not at enqueue |
+| Workers / webhooks | Split: **autonomous** jobs (`actorKind=system` or `shopify_webhook`) vs **human-authorized** jobs (`actorKind=human`, required `actorShopifyUserId` + `causationId`). See **P7-C04**. |
+| Revocation | Assignment row `revokedAt` set. Subsequent human checks fail closed. Human-requested jobs revalidate at execution or the last safe pre-effect boundary. Already-committed effects are not claimed undone. Autonomous sync/compliance does **not** use a staff grant. |
 
 **PROPOSED actor derivation for `verified_admin_request` (D-PR7-01):**
 
-1. Call existing `requireAdminTenant` (shop authority).
-2. Read, in order, **without** trusting body/query:
-   - `session.isOnline && session.onlineAccessInfo.associated_user.id`
-   - else embedded `sessionToken.sub` (library example: user key)
+1. Call existing `requireAdminTenant` (shop authority). Shop authentication ≠ staff authorization.
+2. Read, in order, **without** trusting body/query/header:
+   - if `session.isOnline` and `session.onlineAccessInfo.associated_user.id` is present: take that id;
+   - else if embedded `sessionToken.sub` is a present non-empty string: take that as identity **only**;
    - else fail closed for **platform-permissioned** actions.
-3. Persist staff row keyed by `(shopId, shopifyUserId)` where `shopifyUserId` is the decimal Shopify user id (not a client string). Display email **only** if `email_verified === true` (OFFICIAL access-token doc).
-4. Do **not** store access tokens in audit or RBAC tables.
+3. Canonicalize the Shopify user id as an **exact decimal string** (no IEEE-754 `Number()` coercion, no parseInt truncation). **FACT (library):** `OnlineAccessUser.id` is typed `number`; `JwtPayload.sub` is typed `string`. Compare by normalizing both to the same decimal-digit string. Reject values that are not `^[0-9]+$`.
+4. Bind identity to the **same** verified shop: `sessionToken.dest` (when present) must match the tenant domain; mismatched dest/shop fails closed.
+5. Persist staff row keyed by `(shopId, shopifyUserId)` using that canonical string. Display email **only** if `email_verified === true` (OFFICIAL). Do **not** store access tokens in audit or RBAC tables.
+6. A client-supplied `account_owner`, `actorId`, `role`, or `shopifyUserId` field is ignored. A forged `Session.accountOwner` / body property that is not the live `associated_user.account_owner` from `authenticate.admin` **must not** grant ownership (P7-C01).
 
-Enabling `useOnlineTokens: true` is **optional** (D-PR7-02). It is the official way to get `associated_user_scope` and durable `Session.userId`. Phase 1 app-owned RBAC does **not** require Shopify scope intersection if actor id is available from the ID token. Implementation must **prove** with a library-level test which fields `authenticate.admin` actually returns when `useOnlineTokens` is false — do not guess.
+**Identity vs owner proof (P7-C01):** `sessionToken.sub` proving a user id does **not** settle ownership. **OFFICIAL:** the ID token carries no permissions. The documented Shopify ownership bit is `associated_user.account_owner` on the **online** token response.
 
-**Bootstrap assignment (D-PR7-04):**
+**D-PR7-02 remains PROPOSED.** Narrowest library-supported paths:
 
-- If `associated_user.account_owner === true` **or** first successful admin session for a shop with zero assignments → assign `shop_owner`.
-- Otherwise new staff → `unassigned` (default deny for platform ops).
-- Collaborators are still Shopify-authenticated users; they do **not** auto-become `shop_owner`.
+| Need | Narrowest documented path | Tests implementation must add |
+|---|---|---|
+| Human actor id | Prove whether `authenticate.admin` returns `sessionToken.sub` when `useOnlineTokens` is false (V’s config). If yes, use it for identity only. If no, fail closed for platform ops until online tokens or another approved path. | Library/fixture test of actual `authenticate.admin` fields under V config **and** under `useOnlineTokens: true`. |
+| Owner proof | `session.isOnline && associated_user.account_owner === true && canonical(associated_user.id) === actorId && shop matches`. No other signal. | See bootstrap tests below. Enabling `useOnlineTokens` is a **separate** proposed config change, not authorized here. |
+
+App-owned RBAC still does not require intersecting `associated_user_scope` unless ChatGPT later says otherwise.
+
+**Bootstrap assignment (D-PR7-04, constrained by P7-C01):**
+
+- Assign `shop_owner` **only** when the owner-proof row in the table above is true on that request.
+- If assignments are empty and owner proof is absent → persist staff as `unassigned`. Do **not** promote first staff, first collaborator, first installer, first `sub`, first email, or “app access”.
+- Collaborators (`associated_user.collaborator === true`) never auto-become `shop_owner`.
+- Concurrent first logins: unique partial index on `(shopId, shopifyUserId)` where `revokedAt` is null; owner grant is a conditional insert that requires owner proof. Two non-owner sessions cannot race into `shop_owner`. Two owner-proof sessions for the **same** user are idempotent; two different users both claiming owner is **UNVERIFIED** at Shopify (normally one account owner) — fail closed to `unassigned` + `OWNER_PROOF_CONFLICT` audit and the recovery path.
+- **Recovery / onboarding path (no invented owner):** merchandising routes that today use only `requireAdminTenant` continue (D-PR7-07). Platform ops stay denied. UI/state: `owner_assignment_pending`. The next verified online `account_owner` session for that shop creates the first `shop_owner` assignment. If Shopify never presents `account_owner` (offline-only), do **not** invent a grant; require a **separately approved** owner-verification flow (not designed in this packet, not email/sub/installer). Operator runbook: support cannot click a user into ownership without that flow.
 
 ### 7.2 Phase 1 platform permission matrix
 
@@ -360,21 +401,32 @@ Later PRD templates remain **explicitly later**. Existing PO/stocktake/transfer 
 
 **PROPOSED** permission keys (server enums, not string-compared plan names):
 
-| Permission | `shop_owner` | `shop_admin` | `platform_auditor` | `unassigned` | webhook HMAC | privacy/replay worker |
-|---|---|---|---|---|---|---|
-| `platform.sync_health.read` | allow | allow | allow | deny | deny | n/a |
-| `platform.data_issues.read` | allow | allow | allow | deny | deny | n/a |
-| `platform.audit.read` | allow | allow | allow | deny | deny | n/a |
-| `platform.replay.execute` | allow | allow | deny | deny | deny | execute if job envelope valid **and** shop processing enabled |
-| `platform.export.operational` | allow | allow | deny | deny | deny | n/a |
-| `platform.roles.administer` | allow | deny | deny | deny | deny | deny |
-| `platform.privacy.manifest.read` | allow | deny | allow (minimized) | deny | deny | n/a |
-| `platform.privacy.process` | deny (not a staff click) | deny | deny | deny | **intake only** after HMAC | **execute** under `verified_job` |
-| Shopify Admin API scopes | unchanged shop grant | unchanged | unchanged | unchanged | n/a | offline token |
+| Permission | `shop_owner` | `shop_admin` | `platform_auditor` | `unassigned` | webhook HMAC | autonomous privacy worker | human-authorized worker (replay/export/roles) |
+|---|---|---|---|---|---|---|---|
+| `platform.sync_health.read` | allow | allow | allow | deny | deny | n/a | n/a |
+| `platform.data_issues.read` | allow | allow | allow | deny | deny | n/a | n/a |
+| `platform.audit.read` | allow | allow | allow | deny | deny | n/a | n/a |
+| `platform.replay.execute` | allow | allow | deny | deny | deny | deny | execute **only** if the originating actor still holds the permission at the pre-effect check **and** processing is enabled |
+| `platform.export.operational` | allow | allow | deny | deny | deny | deny | same pre-effect revalidation |
+| `platform.roles.administer` | allow | deny | deny | deny | deny | deny | deny (admin route only; no worker conversion) |
+| `platform.privacy.manifest.read` | allow | deny | allow (minimized) | deny | deny | n/a | n/a |
+| `platform.privacy.process` | deny (not a staff click) | deny | deny | deny | **intake only** after HMAC | **execute** under `verified_privacy_job` (P7-C05) | deny |
+| Shopify Admin API scopes | unchanged shop grant | unchanged | unchanged | unchanged | n/a | offline token | n/a |
 
-`replayDeadLetter` today takes `{ deadLetterId, shopId, reason }` with **no actor**. **PROPOSED** wrapper: admin route → `requireAdminTenant` + `requirePermission('platform.replay.execute')` + pass `shopId` from tenant, never from body; then existing replay function. Workers continue to apply the new durable job under the envelope.
+`replayDeadLetter` today takes `{ deadLetterId, shopId, reason }` with **no actor**. **PROPOSED** wrapper: admin route → `requireAdminTenant` + `requirePermission('platform.replay.execute')` + pass `shopId` from tenant, never from body. The durable replay job stores `actorShopifyUserId` + `causationId` of that human. The worker is **not** a generic system actor: it revalidates that the same user’s current assignment still allows `platform.replay.execute` immediately before calling `replayDeadLetter` (P7-C04). If revoked, fail closed (`REPLAY_DENIED`); do not apply.
 
 Denied permission checks **append** `PERMISSION_DENIED` audit events and **must not** emit a success event.
+
+**Human vs autonomous (P7-C04) — revocation timeline:**
+
+| Moment | Human replay/export/role | Autonomous sync / privacy |
+|---|---|---|
+| Before enqueue | Deny at the admin route; no job | n/a (HMAC/scheduler) |
+| After enqueue, before execution | Worker loads current assignment; revoked → fail closed; no protected effect | Envelope + processing/privacy capability; no staff grant |
+| Before commit (last safe boundary) | Re-check permission inside the same unit of work; abort if revoked | Privacy capability still required; shop stays disabled |
+| After commit | Committed effects remain; do **not** describe them as undone; a retry of the same human job must re-check and deny if revoked | Retry uses the privacy/sync envelope, never a removed staff member’s permission |
+
+A worker `actorKind=system` label **must not** be applied to human-requested replay/export/role jobs.
 
 ### 7.3 Immutable audit
 
@@ -384,37 +436,50 @@ Required fields: `id`, `shopId`, `occurredAt` (UTC), `actorKind` (`human` \| `sy
 
 **Event types (closed enum):**
 
-`PERMISSION_DENIED`, `ROLE_ASSIGNED`, `ROLE_REVOKED`, `SYNC_HEALTH_READ`, `REPLAY_REQUESTED`, `REPLAY_DENIED`, `EXPORT_REQUESTED`, `EXPORT_COMPLETED`, `EXPORT_FAILED`, `PRIVACY_INTAKE_ACCEPTED`, `PRIVACY_INTAKE_REJECTED`, `PRIVACY_STARTED`, `PRIVACY_CHECKPOINT`, `PRIVACY_COMPLETED`, `PRIVACY_PARTIAL_FAILED`, `PRIVACY_SUPERSEDED`, `SHOP_UNINSTALLED`, `SHOP_REINSTALLED`, `SHOP_REINSTALL_DENIED`, `AUTH_PLATFORM_DENIED`.
+`PERMISSION_DENIED`, `ROLE_ASSIGNED`, `ROLE_REVOKED`, `OWNER_PROOF_CONFLICT`, `SYNC_HEALTH_READ`, `REPLAY_REQUESTED`, `REPLAY_DENIED`, `EXPORT_REQUESTED`, `EXPORT_COMPLETED`, `EXPORT_FAILED`, `PRIVACY_INTAKE_ACCEPTED`, `PRIVACY_INTAKE_REJECTED`, `PRIVACY_STARTED`, `PRIVACY_CHECKPOINT`, `PRIVACY_COMPLETED`, `PRIVACY_PARTIAL_FAILED`, `PRIVACY_SUPERSEDED`, `PRIVACY_ESCALATED`, `SHOP_UNINSTALLED`, `SHOP_REINSTALLED`, `SHOP_REINSTALL_DENIED`, `AUTH_PLATFORM_DENIED`.
 
-Do **not** emit `*_COMPLETED` on failed writes, failed permission checks, failed replays, or partial privacy actions. Partial privacy uses `PRIVACY_PARTIAL_FAILED` + checkpoint.
+Do **not** emit `*_COMPLETED` on failed writes, failed permission checks, failed replays, or partial privacy actions. Partial privacy uses `PRIVACY_PARTIAL_FAILED` + checkpoint. Escalation uses `PRIVACY_ESCALATED`, never success.
 
-**Immutability:** runtime `GRANT INSERT, SELECT` only; `UPDATE`/`DELETE` revoked; trigger rejects all `UPDATE`/`DELETE` for application roles. Corrections **append**. Unique `(shopId, idempotencyKey)` for exactly-once insert (duplicate intake returns the existing row).
+**Ordinary immutability (application path):** `stocky_runtime` `GRANT INSERT, SELECT` only. Triggers reject `UPDATE`/`DELETE` for `stocky_runtime` and for any role that is not the privacy-erasure role. Corrections **append**. Unique `(shopId, idempotencyKey)` for exactly-once insert.
 
-**Minimization:** never persist access tokens, raw HMAC, customer email/phone, payload dumps, or unsanitized webhook bodies. Store Shopify user id, action, entity ids, counts, and content **digests**.
+**Minimization at insert time:** never persist access tokens, raw HMAC, customer email/phone, payload dumps, or unsanitized webhook bodies. Store canonical Shopify user id string, action, entity ids, counts, and content **digests**.
 
-**Privacy coexistence (D-PR7-08):** on `shop/redact`, do **not** physically delete `AuditEvent` rows that are the processing record. **PROPOSED:** overwrite nullable display fields to null and replace any residual identifier hashes already stored; keep `action` / `occurredAt` / `decision` / `idempotencyKey` as the non-reversible receipt. A second table `PrivacyCompletionReceipt` holds `{shopDomainHash, completedAt, manifestDigest, requestId}` so the `Shop` row may be removed without retaining the cleartext domain. Counsel-confirmed holds go to `PrivacyLegalHold` (segregated, no runtime SELECT for `stocky_runtime`).
+**Privacy coexistence (D-PR7-08, constrained by P7-C02) — one model, no in-place rewrite:**
 
-`JobReplay` / `SyncApplicationReceipt` remain **operational ledgers**. They are not the merchant audit trail. Privacy still **erases** their row contents per §7.6; lineage needed after redact lives only in the minimized receipt.
+1. Normal application audit writes stay append-only.
+2. A separately authorized **privacy-erasure** DB role (`stocky_privacy_erasure`, **PROPOSED** name) may `SELECT, DELETE` `AuditEvent` **only** under the same shop RLS/`SET` tenant context as runtime. It must **not** `DISABLE` RLS, `SET ROLE` to migration/owner, or read another shop.
+3. `shop/redact` **deletes** tenant-linked `AuditEvent` rows via that role after merchant/control-plane erasure and before `Shop` delete. Do **not** UPDATE audit rows to “minimize in place.”
+4. Retained proof is **not** those rows. `PrivacyCompletionReceipt` has **no** `shopId` FK, **no** customer/order/request join keys, **no** cleartext domain.
+5. **PROPOSED** receipt columns: `id`, `completedAt` (UTC), `topic`, `manifestDigest`, `shopDomainHmac` (HMAC-SHA256 of the canonical `*.myshopify.com` domain with an environment pepper **not stored in the table**).
+6. Threat model — `shopDomainHmac` is **identifiable**, not anonymous:
+   - anyone with the pepper and a candidate domain can test membership (domain enumeration / known-shop confirmation);
+   - unsalted SHA256 of the domain would be even more joinable — **do not use unsalted hashes**;
+   - do not store `PrivacyRequest.id`, Shopify `shop_id`, webhook ids, customer ids, or entity ids on the receipt (those are join keys);
+   - operators investigating a **known** shop can recompute the HMAC; that is correlation for support, not unlinkability;
+   - Q-008 remains OPEN for whether any additional legal hold records exist and for how long. Empty holds in synthetic tests **do not** certify a production retention policy.
+7. Counsel-confirmed holds (`PrivacyLegalHold`) are segregated, not selectable by `stocky_runtime`, and are empty unless Q-008 says otherwise.
+
+`JobReplay` / `SyncApplicationReceipt` remain **operational ledgers**. They are not the merchant audit trail. Privacy **deletes** those rows per §7.6. After `shop/redact`, residual emptiness means **no** tenant-linked audit rows for that shop — only the separate receipt (and any counsel hold).
 
 ### 7.4 Privacy lifecycle state machine
 
 **PROPOSED** `PrivacyRequest.state`:
 
-`RECEIVED` → `AUTHENTICATED` → `SCHEDULED` → `ENUMERATING` → `APPLYING` → `CHECKPOINTING` → (`COMPLETED` \| `PARTIAL_FAILED` \| `SUPERSEDED` \| `LEGALLY_RETAINED`).
+`RECEIVED` → `AUTHENTICATED` → `SCHEDULED` → `ENUMERATING` → `APPLYING` → `CHECKPOINTING` → (`COMPLETED` \| `PARTIAL_FAILED` \| `SUPERSEDED` \| `ESCALATED` \| `LEGALLY_RETAINED`).
 
-Terminal states are absorbing except `PARTIAL_FAILED` → `APPLYING` on retry.
+Terminal states are absorbing except `PARTIAL_FAILED` → `APPLYING` on retry and `ESCALATED` → (`APPLYING` \| `SUPERSEDED` \| `LEGALLY_RETAINED`) only after a **controlled** operator resolution that records evidence (not a timestamp heuristic). `ESCALATED` still counts against Shopify’s **30-day** clock from `receivedAt`.
 
 | Topic | Intake | Work | Completion evidence |
 |---|---|---|---|
-| `customers/data_request` | HMAC + shop resolve + persist hashed customer identifiers + `data_request.id` | Bounded scan of surfaces for those identifiers / `gid://shopify/Order/{orders_requested[i]}`; build **ephemeral** owner-download export of **only** what is actually stored (often empty) | Manifest counts + export digest; **no** long-term copy of customer email |
-| `customers/redact` | same | Delete/redact matching stored identifiers; if none, complete empty | Manifest `skipped_absent` counts |
-| `shop/redact` | HMAC + shop resolve; set `processingDisabledReason=REDACTED` if not already disabled | Full tenant enumeration §7.6 | Completion receipt + empty residual probes |
+| `customers/data_request` | HMAC + shop resolve + persist **lookup keys** (canonical customer id string + `orders_requested[]` as decimal strings) + `data_request.id`; hash email/phone for audit minimization but **do not** use hashes as the only lookup key | Bounded scan of **every relevant surface** using those ids / `gid://shopify/Order/{id}`; ephemeral owner-download of what is actually stored | Manifest counts + export digest; **no** long-term copy of customer email |
+| `customers/redact` | same lookup keys | Delete/redact matching stored identifiers; if none **after a complete scan**, complete empty | Manifest `skipped_absent` counts |
+| `shop/redact` | HMAC + shop resolve by `shop_domain` (payload has **only** `shop_id` + `shop_domain` — OFFICIAL). Bind to an app-owned **install generation** per §7.6. Do not invent a Shopify generation field. | If bound to an uninstalled generation with no live successor: full enumeration. If ambiguous: `ESCALATED`. | Completion receipt + residual probe **or** escalation record with deadline |
 
-Ack **200** only after durable `RECEIVED` row exists (or duplicate idempotent hit). Invalid HMAC remains **401** (Shopify library). Do not claim erasure in the HTTP body.
+Ack **200** only after durable `RECEIVED` row exists (or duplicate idempotent hit). Invalid HMAC remains **401**. Do not claim erasure in the HTTP body. A 200 ack is not completion.
 
-**Kill switch (D-PR7-09):** `FEATURE_PR7_PRIVACY_PAUSE` default **OFF**. When ON: still authenticate, persist `RECEIVED`, ack 200, do **not** delete; operators see `SCHEDULED` stuck. This is an emergency brake, not a waiver of the 30-day Shopify clock.
+**Kill switch (D-PR7-09):** `FEATURE_PR7_PRIVACY_PAUSE` default **OFF**. When ON: still authenticate, persist `RECEIVED`, ack 200, do **not** delete; operators see `SCHEDULED` stuck. This is an emergency brake, **not** a waiver of the 30-day Shopify clock and not legal permission to miss it.
 
-**Idempotency key:** `privacy:{topic}:{shopId}:{shopifyRequestId}` where request id is `data_request.id` or webhook id or `shop_redact:{shopifyWebhookId}`.
+**Idempotency key:** `privacy:{topic}:{shopDomain}:{shopifyRequestId}` where request id is `data_request.id` or Shopify webhook delivery id. For `shop/redact`, Shopify documents no request id in the payload — **PROPOSED** key `privacy:shop_redact:{canonicalDomain}:{hmacOfRawBody}` plus the webhook delivery unique constraint already used by PR4, so duplicates collapse. Do not key solely on “current Shop.id” (that id changes across generations).
 
 ### 7.5 Deletion manifest design
 
@@ -424,60 +489,121 @@ Manifest stores: topic, state, checkpoint cursor `(surface, afterId)`, per-surfa
 
 Lines store: `surface`, `action` (`deleted` \| `redacted` \| `skipped_absent` \| `skipped_legal` \| `skipped_tombstone_converted_to_delete`), `rowCount`, `digest`.
 
-**A manifest must not retain the data meant to be erased.** No customer email/phone, no order notes, no token fragments, no JSONL copies.
+**A manifest must not retain the data meant to be erased.** No customer email/phone, no order notes, no token fragments, no JSONL copies. Lookup keys on `PrivacyRequest` (customer id / order REST ids as decimal strings) are **request identifiers**, not extra harvested PII; they are deleted with the request row at shop/redact completion. They exist so retries can still find stored order facts.
+
+**P7-C05 identifier sufficiency:** hash-only persistence is **not** sufficient for lookup. Absence of a customer-id **column** on `ShopifyOrderFact` does **not** prove the requested order data is absent — order GIDs from `orders_requested` / `orders_to_redact` may still match. An empty-result fixture is valid **only** after a complete relevant-surface scan (every merchant table that can hold an order GID, customer GID if present, plus sessions/exports/queues for customer topics as applicable).
 
 Checkpoint/retry: process one surface per transaction batch with a documented cap; crash resumes from cursor; already-deleted rows are `skipped_absent`.
 
 ### 7.6 Surfaces, order, and failure modes
 
+**App-owned install generation (not a Shopify payload field):**
+
+**PROPOSED** control-plane table `ShopInstallGeneration`: `{id, myshopifyDomain, shopifyShopIdNullable, shopRowIdNullable, installedAt, uninstalledAt, erasedAt, processingDisabledReason}`. Written on bootstrap/uninstall/erase. Survives `Shop` delete so a late `shop/redact` can be associated. Shopify’s `shop/redact` body still contains only `shop_id` and `shop_domain` (**OFFICIAL**). Do not invent a generation claim in that JSON.
+
+**Shop/redact binding (P7-C03) — replace the withdrawn timestamp rule:**
+
+Withdrawn: `reinstalledAt > uninstalledAt AND processingEnabled => SUPERSEDED`.
+
+| Current evidence | Incoming authenticated `shop/redact` | Result |
+|---|---|---|
+| Shop disabled `UNINSTALLED`, no later enabled generation | bind to that generation; `APPLYING` erase | Normal D-021 path |
+| Shop enabled and **never** uninstalled | `ESCALATED`; do **not** erase a live never-uninstalled shop | Unexpected delivery |
+| Shop enabled after reinstall; prior generation `UNINSTALLED` and not erased | `ESCALATED`; do **not** delete the live shop; do **not** terminal-success; do **not** guessed-delete | Ambiguous payload vs generation |
+| Duplicate delivery (same idempotency key) | same request; increment duplicateCount | No second worker storm |
+| Delayed delivery; old generation already `erasedAt` set; new Shop exists | treat as duplicate completion of the **old** generation; **do not** erase the new shop | Fresh reinstall after completed erasure |
+| No Shop row; matching completion receipt HMAC | idempotent `COMPLETED` | Late replay |
+| No Shop row; generation uninstalled but not erased (crash mid-erase) | resume erase of remnants for that generation id | Missing shop row ≠ skip work |
+| `ESCALATED` past `receivedAt+30d` without resolution | remain failed-open to Shopify only in the sense that 200 was already acked; internally `PARTIAL_FAILED`/`ESCALATED` with operator incident — **not** a waiver | Must not sit forever |
+
+Controlled resolution of `ESCALATED` (operator, with audit): (a) confirm retain live generation → `SUPERSEDED` **only after** recorded evidence that the live shop is a new generation and old remnants (if any) are erased or absent; or (b) confirm old remnants only should be erased without touching the live `processingEnabled=true` shop. Default is (a)-safe: never DELETE the live enabled shop on an ambiguous payload.
+
+**Fresh reinstall after completed erasure (D-PR7-06 refined):** if this `Shop` row is still `REDACTED` (erase incomplete), afterAuth must **not** re-enable or enqueue (keep fail-closed for **that generation**). After `Shop` is deleted and a receipt exists, a later afterAuth **creates a new Shop + new generation** and may enqueue. Do **not** permanently blacklist the merchant domain.
+
+**Privacy worker while processing is disabled (P7-C05):**
+
+Ordinary import, catalog afterAuth, replay, and non-privacy webhooks stay denied when `processingEnabled=false` (PR4). The shop is **not** re-enabled for redact.
+
+**PROPOSED** limited capability `verified_privacy_job`:
+
+- Envelope `jobType` ∈ `privacy:customers_data_request` \| `privacy:customers_redact` \| `privacy:shop_redact`;
+- `shopId` from the envelope matches `PrivacyRequest` and tenant context;
+- request state ∈ `ENUMERATING` \| `APPLYING` \| `CHECKPOINTING`;
+- application helper `assertPrivacyErasureJob` **instead of** `assertProcessingEnabled`;
+- DB: `stocky_privacy_erasure` + control-plane connections as §7.7 — **no** global RLS bypass;
+- workers that are not privacy job types still fail closed on disabled shops.
+
 **Shop/redact enumeration order (PROPOSED):**
 
-1. Set `Shop.processingEnabled=false`, `processingDisabledReason=REDACTED` (control-plane txn). Cancel remaining cancellable jobs (reuse uninstall helper).
-2. Redis: remove or fail-closed shop-scoped BullMQ jobs (`stocky-webhooks`, `stocky-cron`) whose envelope `shopId` matches (**D-PR7-10**).
+1. Control-plane: bind generation; if ambiguous → `ESCALATED` and **stop** (no live-shop delete). If bound: set `processingEnabled=false`, `processingDisabledReason=REDACTED`. Cancel remaining cancellable **non-privacy** jobs (reuse uninstall helper; do not cancel the privacy job itself).
+2. Redis: shop-scoped remove of matching BullMQ jobs except the in-flight privacy job (**D-PR7-10**).
 3. **PROVISIONAL (H)** scratch: dispose only authentic `stocky-pr6-d` handles for that shop; leftovers remain in the residual probe.
-4. Merchant child tables → direct tables (respect FK order; physical DELETE is the privacy path; this is **not** ordinary catalog apply — R-164 stays about apply APIs).
+4. Merchant child tables → direct tables (FK order; physical DELETE in the privacy module; **not** C apply — R-164 unchanged).
 5. `SyncApplicationReceipt` and other merchant-domain operational rows.
-6. Control-plane rows for `shopId` (deliveries, jobs, attempts, DL, replays, runs, cursors, health, issues, dispatch readiness).
-7. `Session` rows for the domain (uninstall should have done this; redact repeats).
-8. Minimize `AuditEvent` display fields; write `PrivacyCompletionReceipt`; delete `Shop` **or** retain a tombstone shop row without tokens (**D-PR7-11**).
-9. Residual probe: runtime SELECT counts for every surface must be 0 except receipt/hold/minimized audit.
+6. Control-plane rows for `shopId` except the in-flight `PrivacyRequest` / manifest / generation row.
+7. `Session` rows for the domain.
+8. Privacy-erasure **DELETE** of tenant-linked `AuditEvent` (P7-C02). Copy `manifestDigest`; INSERT `PrivacyCompletionReceipt`; DELETE manifest/request rows; set generation `erasedAt`; DELETE `Shop`.
+9. Residual probe: no `Shop` row; no tenant-linked audit; no merchant/control-plane remnants for that `shopId`; receipt exists; legal holds empty unless Q-008.
 
-**Customers/\* :** only step 4–5 filtered by hashed identifiers / order GIDs derived from REST ids. Do **not** erase the whole shop.
+**Customers/\* :** steps 4–5 filtered by durable lookup keys (customer id + order REST ids), then complete-scan. Do **not** erase the whole shop.
 
 **Adversarial cases the design must survive** (fixtures in the matrix):
 
 | Case | Behavior |
 |---|---|
-| Duplicate webhook | increment delivery duplicateCount; return same manifest |
+| Duplicate webhook | increment delivery duplicateCount; return same request |
 | Partial storage failure | `PARTIAL_FAILED`; no success audit; retry from cursor |
 | Process death mid-batch | transaction rollback; checkpoint unchanged; retry |
-| Concurrent webhook/import during redact | processing gate + REDACTED deny new intake; H import jobs fail closed |
+| Concurrent webhook/import during redact | processing gate + REDACTED deny new **ordinary** intake; privacy job continues |
 | Enqueue-before-uninstall | existing PR4 cancel; redact deletes cancelled job rows |
-| Reinstall before `shop/redact` | **D-PR7-05** |
-| Reinstall after `REDACTED` | `reinstall_denied`; afterAuth must **not** enqueue (**D-PR7-06**) |
+| Reinstall before delivery | **ESCALATED**, not timestamp `SUPERSEDED` |
+| Delayed `shop/redact` after completed erasure + fresh reinstall | old generation idempotent complete; new shop retained |
+| Missing old generation / crash remnants | resume by generation id |
+| Concurrent afterAuth and redaction | afterAuth cannot re-enable a `REDACTED` generation; privacy job does not require afterAuth |
 | Late D scratch after redact | residual probe fails until scratch disposed |
 | Incomplete pagination | enumerator uses keyset `id > cursor` until empty page |
-| Shared Redis/DB | envelope shopId mismatch denied; RLS / control-plane shop predicate |
-| Role change mid-replay | worker re-checks processingEnabled; admin permission re-checked at click time only — in-flight system job continues with system actor (**D-PR7-12**) |
+| Shared Redis/DB | envelope shopId mismatch denied; RLS / control-plane shop predicate; **no** generic bypass |
+| Human replay revoked mid-flight | fail closed before effect (**P7-C04**); not converted to system |
 | Cross-shop same external ids | tenant predicates; Shop A request cannot see Shop B GIDs |
-| Forged actor/role in JSON | ignored; deny |
-| Legal hold | `LEGALLY_RETAINED` + `PrivacyLegalHold`; Shopify says do not complete deletion if legally required — **requires counsel** (Q-008) |
+| Forged actor/role / `account_owner` in JSON | ignored; deny |
+| Legal hold | `LEGALLY_RETAINED` + `PrivacyLegalHold`; Shopify: do not complete deletion if legally required — **Q-008** |
 
 ### 7.7 Schema, grants, migration, recovery
 
 **PROPOSED** additive Prisma migration `20260917100000_pr7_audit_roles_privacy_foundation` (name illustrative):
 
 - enums: `ShopPlatformRole`, `AuditActorKind`, `AuditAction`, `AuditDecision`, `PrivacyTopic`, `PrivacyRequestState`, `PrivacyManifestAction`;
-- tables: `ShopStaffUser`, `ShopRoleAssignment`, `AuditEvent`, `PrivacyRequest`, `PrivacyDeletionManifest`, `PrivacyDeletionManifestLine`, `PrivacyCompletionReceipt`, `PrivacyLegalHold`;
+- tables: `ShopStaffUser`, `ShopRoleAssignment`, `AuditEvent`, `PrivacyRequest`, `PrivacyDeletionManifest`, `PrivacyDeletionManifestLine`, `PrivacyCompletionReceipt` (no Shop FK), `PrivacyLegalHold`, `ShopInstallGeneration` (control-plane);
 - FKs: composite `(shopId, id)` where merchant-domain; `Shop` Restrict until ordered delete;
 - unique: assignment `(shopId, shopifyUserId)` where `revokedAt` is null (partial unique);
-- `AuditEvent` unique `(shopId, idempotencyKey)`.
+- `AuditEvent` unique `(shopId, idempotencyKey)`;
+- `shopifyUserId` stored as `VARCHAR` decimal digits (not lossy integer).
 
-Then **enforcement tooling** (same implementation PR, after migrate deploy): register tables in `scripts/tenant-enforcement/manifest.ts` / `app/tenant/models.ts` / `roles.ts`. AuditEvent: runtime `INSERT, SELECT` only; assignment tables: runtime DML minus `shopId` mutation (existing immutability trigger). PrivacyRequest: runtime insert/update of **state machine columns only** via allowlisted updates **or** control-plane-only writes (**D-PR7-13**).
+**Normal vs privacy privilege matrix (PROPOSED; D-PR7-13 still pending as a decision):**
 
-Lock strategy: new empty tables → ordinary indexes OK. If implementation lands on populated shops, still avoid `ACCESS EXCLUSIVE` validation of old tables; PR7 should not rewrite PR3/PR5/PR6 fact tables except optional **additive** columns (none required if receipts stay separate).
+| Table / object | `stocky_runtime` | `stocky_control_plane` | `stocky_privacy_erasure` | `stocky_migration` |
+|---|---|---|---|---|
+| `AuditEvent` | `INSERT, SELECT` only; trigger rejects UPDATE/DELETE | none | `SELECT, DELETE` with shop RLS **on** | DDL / repair |
+| Merchant facts | existing DML minus `shopId` mutation | none | `SELECT, DELETE` with shop RLS | DDL |
+| Control-plane job/sync tables | none | existing | none | DDL |
+| `PrivacyRequest` / manifest | none | `INSERT, SELECT, UPDATE` allowlisted state columns | none | DDL |
+| `PrivacyCompletionReceipt` | none | `INSERT, SELECT` | none | DDL |
+| `Shop` processing flags | existing limited | existing | none | DDL |
+| RLS | cannot disable | cannot disable | cannot disable | apply/verify only |
+| Other shops | denied by RLS / predicates | shop predicate | denied by RLS | n/a |
 
-Rollback: drop new tables / disable processors; **cannot** un-erase. Forward recovery: pause switch + resume from manifest cursor. Pre-RLS application is not an acceptable rollback after privacy grants.
+Never one transaction across roles. Never a generic superuser bypass. Privacy worker: control-plane connection for request/flags/receipt **then** privacy-erasure connection for tenant-scoped deletes (P7-C05).
+
+Then **enforcement tooling** (same future implementation PR, after migrate deploy): register tables in `scripts/tenant-enforcement/manifest.ts` / `app/tenant/models.ts` / `roles.ts`, including the new privacy-erasure role. Assignment tables: runtime DML minus `shopId` mutation (existing immutability trigger).
+
+Lock strategy: new empty tables → ordinary indexes OK. Do not rewrite PR3/PR5/PR6 fact tables.
+
+**Rollback / forward recovery (P7-C02):**
+
+- Empty new tables (no privacy requests, no audit rows): migration down may drop objects.
+- After audit or privacy requests exist: dropping tables is **not** a safe general rollback (destroys evidence and in-flight legal clocks). Rollback = disable processors / pause switch; leave tables.
+- After erasure: **irreversible**. There is no undo. Recovery is **restart remaining work from the manifest cursor**, not restore deleted rows from the app.
+- Pre-RLS application is not an acceptable rollback after privacy grants.
 
 **Do not** add migrations in this planning PR. SQL in this section is specification only.
 
@@ -489,7 +615,7 @@ Rollback: drop new tables / disable processors; **cannot** un-erase. Forward rec
 | PR2/PR4 | job envelope v1/v3 | privacy jobs | new `jobType` strings only after D merge if `execution-strategy` is frozen to D |
 | PR3 | RLS, runtime role, bootstrap boundary | new tables follow the same contract | additive manifest entries |
 | PR4 | `processUninstall`, `replayDeadLetter`, sanitizers, processing gate | call; emit audit from **new** wrappers | avoid rewriting uninstall internals except a documented hook |
-| PR4 | `reactivateShopAfterVerifiedReinstall` | already denies `REDACTED` | **must add tests**; afterAuth fail-closed |
+| PR4 | `reactivateShopAfterVerifiedReinstall` | already denies `REDACTED` | **must add tests**; deny re-enable of **that generation**; allow **new** Shop after completed erasure (P7-C03) |
 | PR5 A/B/C catalog | facts + receipts | erase targets | no apply API change |
 | PR6 A | order-fact schema / locks / types | erase targets | **no change** |
 | PR6 B | `admin-read/**` forbidden fields | keep as PII prevention | **no change** |
@@ -525,10 +651,10 @@ stocky-plus/docs/phases/phase-1/PR7_*IMPLEMENTATION*  # later, not this PR
 
 | File | Allowed PR7 delta |
 |---|---|
-| `app/tenant/after-auth.server.ts` | fail closed on `REDACTED`; do not enqueue |
-| `app/shopify.server.ts` | stop catalog enqueue when bootstrap says redacted; optional `useOnlineTokens` **only if D-PR7-02 accepted** |
-| `app/sync/uninstall.server.ts` | optional audit emit hook **or** emit from the route after `processUninstall` (prefer route/wrapper to keep PR4 behavior) |
-| `app/sync/replay.server.ts` | none if wrapper lives in `app/rbac` / `app/routes/app.platform.replay.tsx` |
+| `app/tenant/after-auth.server.ts` | fail closed on **this generation** `REDACTED`; do not enqueue; do not upsert settings as a revival path; allow new Shop after completed erasure |
+| `app/shopify.server.ts` | stop catalog enqueue when bootstrap says this generation is redacted; `useOnlineTokens` **only if D-PR7-02 accepted** (not authorized here) |
+| `app/sync/uninstall.server.ts` | optional audit emit hook **or** emit from the route after `processUninstall` (prefer route/wrapper to keep PR4 behavior); write `ShopInstallGeneration.uninstalledAt` |
+| `app/sync/replay.server.ts` | none if wrapper lives in `app/rbac` / `app/routes/app.platform.replay.tsx`; worker must revalidate human permission (P7-C04) |
 | `.github/workflows/ci.yml` | add `test:privacy` to heavy job — **implementation PR**, not this docs PR |
 
 **Forbidden:** D `app/lib/order-facts/sync/**`, B `admin-read/**`, C `apply/**`, A lock/types, PR43 branch, shared-control live docs in **this** planning PR.
@@ -543,13 +669,13 @@ Privacy jobs **PROPOSED** as `DurableJob.jobType` values `privacy:customers_data
 
 1. Additive migration + scanner/manifest/role grants + immutability triggers + empty-table isolation tests.
 2. Actor derivation + assignment + `requirePlatformPermission` + denial tests (including forged fields).
-3. `AuditEvent` emit helper; couple permission denials and role changes; prove no UPDATE.
-4. Rewrite `webhooks.compliance.tsx`; intake + state machine + manifest; `test:privacy` fast suite.
-5. Shop/redact enumerator + dual-role deletes + residual probe; customer topics (often empty).
-6. afterAuth REDACTED fail-closed; uninstall session E2E; reinstall matrix.
+3. `AuditEvent` emit helper; couple permission denials and role changes; prove runtime cannot UPDATE/DELETE; prove privacy-erasure role can DELETE only its shop.
+4. Rewrite `webhooks.compliance.tsx`; intake + state machine + manifest + lookup keys; `test:privacy` fast suite.
+5. Shop/redact enumerator + dual-role deletes + residual probe; customer topics after complete-scan (may be empty).
+6. afterAuth: deny **this** REDACTED generation; allow new Shop after completed erasure; uninstall session E2E; reinstall/escalation matrix.
 7. Redis (+ H scratch if D merged) cleanup; residual probe includes them.
-8. Minimal platform routes (health/replay/export/roles) with server checks independent of UI.
-9. Exact-head full CI; independent Tier-A Claude review.
+8. Minimal platform routes (health/replay/export/roles) with server checks independent of UI; human-job revalidation.
+9. Exact-head full CI; independent Tier-A Claude review with no unresolved P0/P1/P2.
 
 No estimated calendar. No fake completion percentage.
 
@@ -557,41 +683,42 @@ No estimated calendar. No fake completion percentage.
 
 ## 9. Decision register
 
-All items **PROPOSED**. ChatGPT decides.
+Original IDs preserved. ChatGPT constraints **P7-C01…06** change some recommended options; they are **not** silent runtime defaults. Status column: `constrained` = ChatGPT required this shape; `proposed` = still pending.
 
-| ID | Question | Recommended option | Tradeoffs | Blocks runtime? |
+| ID | Question | Recommended option | Status | Blocks runtime start? |
 |---|---|---|---|---|
-| **D-PR7-01** | Trusted human actor source | Verified `authenticate.admin` only: online `associated_user.id` else `sessionToken.sub`; fail closed if missing for platform ops | Without online tokens, `associated_user_scope` unavailable; must prove `sessionToken` exists for embedded admin | Yes |
-| **D-PR7-02** | Enable `useOnlineTokens: true` | **Defer unless D-PR7-01 cannot obtain user id** | Official staff attribution + Shopify permission intersection vs extra token class and 24h expiry | Yes if 01 fails |
-| **D-PR7-03** | Are `JobReplay` / receipts the audit log? | **No** — separate `AuditEvent` | Extra table vs overloading operational ledgers that redact must erase | Yes |
-| **D-PR7-04** | Who is first `shop_owner`? | `account_owner` else first admin session if zero assignments | Collaborator-first install edge; document | Yes |
-| **D-PR7-05** | `shop/redact` after reinstall-before-48h | If `reinstalledAt > uninstalledAt` and processing enabled → `SUPERSEDED`, do **not** erase | Shopify may still send redact (**UNVERIFIED**); opposite option (always erase) destroys a live reinstall | Yes |
-| **D-PR7-06** | afterAuth on `REDACTED` | Fail closed: no ShopSettings write, no catalog enqueue | Merchant cannot self-serve restore after erase (correct) | Yes |
-| **D-PR7-07** | Gate legacy merchandising routes? | **No** in PR7 | Leaves buyer/receiver to later phases; platform ops still protected | No |
-| **D-PR7-08** | Audit vs shop/redact | Minimize in place; keep action/time/decision; domain only as hash on receipt | Counsel may require different hold set (Q-008) | Legal before production, not before repo tests |
-| **D-PR7-09** | Privacy pause kill switch | `FEATURE_PR7_PRIVACY_PAUSE` default OFF | Pause can miss Shopify’s 30-day clock — operator runbook | Implementation detail |
-| **D-PR7-10** | Redis purge vs drain | **Shop-scoped remove** of matching jobs + fail-closed workers | Obliterate-all-queues is cross-tenant unsafe | Yes |
-| **D-PR7-11** | Delete `Shop` row? | Delete after children; keep `PrivacyCompletionReceipt` with **domain hash** | Tombstone shop is simpler for FKs but retains identifier | Yes |
-| **D-PR7-12** | Role change mid-worker | System jobs continue; new admin clicks use new role | In-flight replay might complete after revoke | Record in tests |
-| **D-PR7-13** | Which DB role writes privacy state? | Control-plane for control-plane tables + request/manifest; runtime TenantDb for merchant-row deletes | Dual connection like PR5 two-phase; never one txn across roles | Yes |
-| **D-PR7-14** | How to fulfill `customers/data_request` “to the store owner” | Short-lived owner-only download (`platform.export.operational`) + audit; TTL delete blob | No email provider in Phase 1; Partner/App Store may expect a different channel (**UNVERIFIED**) | Staging/legal later |
-| **Q-008** | Retention schedule / privacy-policy language | Keep OPEN; implement D-021 direction for **repository** tests using **empty** legal-hold set until counsel | Cannot certify production | Production, not this planning PR |
+| **D-PR7-01** | Trusted human actor source | Verified `authenticate.admin` only: online `associated_user.id` else `sessionToken.sub` if proven present; fail closed if missing for platform ops; canonicalize as decimal string | **proposed** | Yes |
+| **D-PR7-02** | Enable `useOnlineTokens: true` | **PROPOSED:** enable it **if** automated owner grant is wanted, because `account_owner` is documented only on the online `associated_user` object. Actor id may still come from `sub`. No config change in this PR. | **proposed** (owner-proof need is constrained; enablement is not) | Yes until answered |
+| **D-PR7-03** | Are `JobReplay` / receipts the audit log? | **No** — separate `AuditEvent` | **proposed** | Yes |
+| **D-PR7-04** | Who is first `shop_owner`? | **Only** same-shop verified `associated_user.account_owner === true` for the same user id, or a separately approved owner-verification flow. Empty assignments / first staff / collaborator / installer / email / `sub` are **not** grants. Unassigned + `owner_assignment_pending`. | **constrained by P7-C01** | Yes |
+| **D-PR7-05** | `shop/redact` vs reinstall | Bind via app-owned `ShopInstallGeneration`. Ambiguous payload → `ESCALATED` + 30-day deadline. **No** timestamp-only `SUPERSEDED`. Do not guessed-delete a live shop. | **constrained by P7-C03** | Yes |
+| **D-PR7-06** | afterAuth on `REDACTED` | Fail closed for **that generation** (no settings revival, no catalog enqueue). After completed erasure + Shop delete, a **new** generation may install. No permanent domain blacklist. | **constrained by P7-C03** | Yes |
+| **D-PR7-07** | Gate legacy merchandising routes? | **No** in PR7 | **proposed** | No |
+| **D-PR7-08** | Audit vs shop/redact | Runtime append-only. Privacy-erasure role **DELETE**s tenant-linked `AuditEvent`. Separate receipt with identifiable `shopDomainHmac` (not claimed anonymous). No in-place audit UPDATE. | **constrained by P7-C02** | Yes |
+| **D-PR7-09** | Privacy pause kill switch | `FEATURE_PR7_PRIVACY_PAUSE` default OFF; does not waive 30-day clock | **proposed** | Implementation detail |
+| **D-PR7-10** | Redis purge vs drain | **Shop-scoped remove** of matching jobs except in-flight privacy job; fail-closed workers | **proposed** | Yes |
+| **D-PR7-11** | Delete `Shop` row? | Delete after children **and** after privacy-erasure of tenant-linked audit/privacy-request rows. Receipt has **no** Shop FK. | **constrained by P7-C02** | Yes |
+| **D-PR7-12** | Role change / revoke mid-human-job | Revalidate human permission at execution / last safe pre-effect boundary. Do not convert to a system job. Autonomous privacy/sync do not use staff grants. | **constrained by P7-C04** | Yes |
+| **D-PR7-13** | Which DB roles write privacy? | Control-plane for request/manifest/receipt/flags; `stocky_privacy_erasure` for tenant-scoped fact+audit DELETE; never one txn across roles; never disable RLS | **proposed** (capability required by P7-C05; exact split pending) | Yes |
+| **D-PR7-14** | How to fulfill `customers/data_request` “to the store owner” | Short-lived owner-only download (`platform.export.operational`) + audit; TTL delete blob | **proposed** | Staging/legal later |
+| **Q-008** | Retention / privacy-policy language | Keep OPEN; empty legal-hold set in synthetic tests is **not** production policy | **OPEN** | Production, not this planning PR |
+
+Do **not** treat recommended options as runtime authority. Unanswered **proposed** security/privacy items stay pending.
 
 ---
 
 ## 10. Conditions under which a future PR7 implementation may begin
 
-All of the following — **PROPOSED** gate, ChatGPT owns the call:
+**P7-C06.** This assignment does **not** authorize a V-only alternate base. All of the following are required — ChatGPT owns the call:
 
-1. ChatGPT **accepts this execution plan + acceptance matrix** (possibly after corrections).
-2. Required **PR6 acceptance/closure** and **main synchronization**: PR6-D (PR43) technically accepted **or** ChatGPT explicitly bases PR7 on V without D surfaces; then implementation branch from the **then-current** `origin/main`, not from this planning SHA by default.
-3. Applicable post-merge evidence on that main (exact-head CI per `CI_POLICY.md`).
-4. Named writer, exclusive files (§7.9), one branch, one chat.
-5. Explicit ChatGPT **runtime** authority sentence (this packet is not that sentence).
-6. Decisions D-PR7-01, 03, 04, 05, 06, 10, 11, 13 answered (others may default to recommended).
-7. No competing writer on listed shared files (especially if D is still open).
+1. ChatGPT **accepts the corrected execution plan + acceptance matrix** and the constrained D-PR7 items.
+2. Remaining **proposed** D-PR7 decisions that block runtime (01, 02, 03, 07-as-needed, 09-as-needed, 10, 13, 14-as-needed) are explicitly answered — **not** silently defaulted.
+3. Phase 1 PR6 is **independently accepted and formally closed** on the then-current merged `origin/main` (including D). Implementation branches from that main, not from this planning SHA.
+4. Exact-head CI evidence on that merged main per `CI_POLICY.md`.
+5. Named single writer, exclusive files (§7.9), one branch, one chat; **no competing D writer**.
+6. Explicit subsequent ChatGPT **runtime** authority sentence (this packet is not that sentence).
 
-PR7 implementation is **Tier A**. Exact-head **full** CI (not docs-only) will be required for the runtime PR.
+PR7 implementation is **Tier A**. Exact-head **full** CI (not docs-only) is required. Independent review must have **no unresolved P0/P1/P2**; every P3 needs explicit disposition.
 
 ---
 
@@ -613,16 +740,17 @@ This packet does **not** claim Phase 1 complete or Phase 2 authorized.
 
 | Check | Command / method | Result |
 |---|---|---|
-| V HEAD | `git rev-parse HEAD` at start | `a3ff480f1477237f8055f10c43298480a05728a1` |
-| Working tree before edits | `git status --porcelain` | empty |
-| H fetch | `git fetch origin phase-1/pr6-d-order-webhook-import` | H `4768033b…` |
-| Sanitizer unit | `npx vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-control-plane.test.ts` | **PASS** — 11 tests, exit 0, SHA V |
-| PII/mutation + flags | `npx vitest run app/lib/order-facts/admin-read/mutation-safety.test.ts app/lib/order-facts/foundation-safety.test.ts` | **PASS** — 10 tests, exit 0 |
-| Shop-domain unit | `npx vitest run app/lib/shop-domain.test.ts` | **PASS** — 10 tests, exit 0 |
-| `test:privacy` | `npm run test:privacy` | **FAIL** missing script, exit 1 (expected) |
-| `test:sync-uninstall` / `test:tenant-access` / `test:db-isolation` | not started | **BLOCKED** — `DATABASE_URL`/`REDIS_URL` localhost TCP **refused**; docker not installed |
+| Original planning HEAD | `git rev-parse HEAD` at correction start | `4158254cba4800ceec112579ca842ee69f47c882` |
+| Required base V | `git rev-parse origin/main` | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Working tree before correction edits | `git status --porcelain` | empty |
+| Pinned H (dated, unmerged) | PR43 head at planning time | `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b` — **not re-fetched as merge authority this correction** |
+| Sanitizer unit (planning session) | `npx vitest run --config vitest.sync-integration.config.ts app/sync/__tests__/sync-control-plane.test.ts` | **PASS** — 11 tests, exit 0, SHA V — **this planning session** |
+| PII/mutation + flags (planning session) | `npx vitest run app/lib/order-facts/admin-read/mutation-safety.test.ts app/lib/order-facts/foundation-safety.test.ts` | **PASS** — 10 tests, exit 0 — **this planning session** |
+| Shop-domain unit (planning session) | `npx vitest run app/lib/shop-domain.test.ts` | **PASS** — 10 tests, exit 0 — **this planning session** |
+| `test:privacy` | `npm run test:privacy` | **FAIL** missing script, exit 1 (expected absence) |
+| `test:sync-uninstall` / `test:tenant-access` / `test:db-isolation` | not started in the planning or correction sessions | **BLOCKED** — localhost Postgres/Redis TCP refused; docker not installed. Suites **exist on V**; they were **not executed here**. Historical counts in older implementation reports are **not** this session’s evidence. |
 | Shopify store calls | — | **not executed** |
-| Classifier + `git diff --check` | after docs land | recorded in the PR / later section of the return |
+| Classifier + `git diff --check` | after correction docs land | recorded in the PR / return |
 
 Environment: Node `v22.14.0`, cwd `stocky-plus/` for npm/vitest, no disposable PostgreSQL/Redis listening.
 
@@ -632,14 +760,14 @@ Environment: Node `v22.14.0`, cwd `stocky-plus/` for npm/vitest, no disposable P
 
 | Plan section | Matrix IDs |
 |---|---|
-| Actor / forged authority | PR7-ACT-001…012 |
-| Permission matrix | PR7-RBAC-001…014 |
-| Audit immutability / minimization | PR7-AUD-001…010 |
-| Uninstall / reinstall / REDACTED afterAuth | PR7-LIFE-001…010 |
-| Privacy intake / states | PR7-PRIV-001…012 |
-| Shop/redact enumerator | PR7-RED-001…014 |
-| Customer topics | PR7-CUST-001…008 |
-| Redis / scratch / dual-role | PR7-SIDE-001…006 |
-| Isolation / CI command | PR7-ISO-001…006, PR7-CI-001…003 |
+| Actor / forged authority / owner bootstrap | PR7-ACT-001…020 |
+| Permission matrix / human-job revocation | PR7-RBAC-001…018 |
+| Audit immutability / privacy-erasure | PR7-AUD-001…012 |
+| Uninstall / reinstall / generations | PR7-LIFE-001…015 |
+| Privacy intake / states / escalation | PR7-PRIV-001…014 |
+| Shop/redact enumerator / residual | PR7-RED-001…016 |
+| Customer topics / lookup keys | PR7-CUST-001…010 |
+| Redis / scratch / dual-role / privacy capability | PR7-SIDE-001…008 |
+| Isolation / CI command | PR7-ISO-001…003, PR7-CI-001…003 |
 
 If a matrix row cites a path, that path is listed in §4 or §7. If a plan surface has no matrix row, that is a packet defect — none intended.
