@@ -4,8 +4,8 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `82f3d083e2749973449cf9429b5c47d078c3218cd982efd5414191d68ec54eea`
-**Scanned files:** 503
+**Content digest:** `22b034454b3ebd48d1ecbb8761f063e065403315731a19a4d3631b5077ff00bc`
+**Scanned files:** 506
 **Findings:** 1761
 **Converted paths:** 532
 **Approved exception findings:** 1229
@@ -309,13 +309,13 @@ All 35 approved merchant-owned models must appear below.
 | `app/lib/order-facts/sync/apply-composition.ts` | 78 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/apply-composition.ts` | 286 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/apply-nominated.ts` | 53 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 68 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 78 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 90 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 106 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 122 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 144 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/order-facts/sync/apply-nominated.ts` | 195 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 70 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 80 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 92 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 108 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 124 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 146 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/order-facts/sync/apply-nominated.ts` | 197 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 163 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 178 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 195 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
@@ -1999,7 +1999,7 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 503,
+  "scannedFiles": 506,
   "findings": 1761,
   "violations": 0,
   "exceptionsUsed": [
@@ -2136,6 +2136,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "82f3d083e2749973449cf9429b5c47d078c3218cd982efd5414191d68ec54eea"
+  "contentDigest": "22b034454b3ebd48d1ecbb8761f063e065403315731a19a4d3631b5077ff00bc"
 }
 ```

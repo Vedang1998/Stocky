@@ -110,3 +110,23 @@ This brief still does **not** add product decisions beyond the ChatGPT-owned C3 
 | Out of scope | D-055; B/C internals; webhook/reconciliation receipt contracts; production |
 
 The C3 source-contract independent review artifact (`PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md`, commit `7710758b181b5a49f1affa260a56b331adafdf7e`, blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`) is preserved unedited. GitHub records that commit’s author/committer as Cursor Agent and the review comment as cursor[bot]; that metadata does not establish which reasoning agent performed the work and is not ChatGPT-verified independence.
+
+## 8. SC-R-01…SC-R-04 control correction checkpoint (same D-054 — not D-055)
+
+**Authority:** PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882).
+
+**Plan record:** `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3.7**. Operator runbook: `PR6_D_SCRATCH_OPERATOR_RUNBOOK.md`.
+
+| Field | Value |
+|---|---|
+| Prior | Ledger-only aggregate budget; snapshot-then-write scratch quota; occupancy helper with no production caller; identity+content digest omitting fence/run/Bulk |
+| New | One parent wrapper across ledger and fallback; atomic reservation ledger; sanitized occupancy on D health/DataIssue; epoch-bound digest v2 with stable v1 key |
+| Reason | Independent SC recovery review SC-R-01…SC-R-04 |
+| Merchant impact | Drift fallback cannot exceed the parent Admin cap; concurrent staging cannot exceed 2 GiB; leftovers are visible without leaking paths; a changed fence/run/Bulk cannot silently recertify |
+| Technical impact | Per-parent D Admin wrapper; `quota.lock` / `quota.reservation`; SyncHealth overlay `order_facts_scratch_resource`; digest v2 |
+| Migration impact | None (no schema) |
+| Tradeoffs | One large import per namespace by default; leftovers require operator reclaim; v1 receipts need a fresh logical job |
+| Acceptance | SC-R-01…04 tests including SC-R-06 mutation and two-process quota; confirmatory process-loss; corrected 1e6 envelope; exact-head Classify + full Heavy + Gate |
+| Out of scope | D-055; B/C internals; full agreement re-pagination (SC-R-05 retained); production reclaim |
+
+The SC recovery independent review (`PR6_D_SC_RECOVERY_FINAL_INDEPENDENT_REVIEW.md`, commit `ec61089dcfc0530b81c64bc09fcea7f3b70b7aa5`, blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8`) is preserved unedited.

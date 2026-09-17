@@ -3,8 +3,8 @@
 **Slice:** PR6-D complete §17.2 integration module
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913)
-**Status:** PR43 SC-01…SC-04 recovery correction is on this branch (plan **C3.6** / brief §7 / D-054 subitem — **not D-055**). Immutable reviews `5354111` (blob `48ac291a…`), `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`), and source-contract `7710758` (blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`) are **not** edited. Starting implementation SHA `09029c09ea7468e6ff676a11fdf020dde5deb694`. Required main **V** `a3ff480f1477237f8055f10c43298480a05728a1`. Historical SUCCESS `35088765421` is `09029c0` only; `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only. Exact-head SC `pull_request` Classify + full Heavy + CI Gate IDs are **pending at this report write** and must not be invented. This report does **not** embed this documentation commit’s own SHA. Cursor does **not** certify independent approval. The next independent review must be a **separate actual Claude Code** session.
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913); SC-R control corrections [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882)
+**Status:** PR43 SC-R-01…SC-R-04 control correction is on this branch (plan **C3.7** / brief §8 / D-054 subitem — **not D-055**). Immutable reviews `5354111` (blob `48ac291a…`), `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`), source-contract `7710758` (blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`), and SC-recovery `ec61089` (blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8`) are **not** edited. SC subject **H** `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b`. Required main **V** `a3ff480f1477237f8055f10c43298480a05728a1`. Historical SUCCESS `35168858541` is **H only**; `35088765421` is `09029c0` only; `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only. Exact-head SC-R `pull_request` Classify + full Heavy + CI Gate IDs are **pending at this report write** and must not be invented. This report does **not** embed this documentation commit’s own SHA. Cursor does **not** certify independent approval. The next independent review must be a **separate actual Claude Code** session.
 
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -830,5 +830,194 @@ The `1e04ddc` envelope (5,192 initial, 0 rechecks, null crash checkpoint, no scr
 | Independent Claude Code SC review | **not this session**; Cursor must not author that artifact |
 | ChatGPT technical acceptance / mark-ready / merge | **not authorized** |
 | N-08 independent closure | **not claimed** |
+
+R-176 remains **OPEN / P0**. R-164 unchanged. PR 6 / Phase 1 **IN PROGRESS**. No D-055.
+
+---
+
+## 16. SC-R-01…SC-R-04 control correction (same D-054 — not D-055)
+
+**Authority:** PR #43 comment [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882). Work order `PR43_PR6D_Final_Control_Corrections_Work_Order.md` SHA-256 `d7f6a2f03bab86c7d72370c3e0c071fa4e11ed0bc012d47ac8b1c5d2f5e3da08`. Plan **C3.7** / brief §8 / D-054 subitem. Operator runbook: `PR6_D_SCRATCH_OPERATOR_RUNBOOK.md`. This is implementation/correction evidence only. It is **not** technical acceptance, independent approval, lane closure, mark-ready, merge, or D-055.
+
+### 16.1 Identities and review preservation
+
+| Field | Value |
+|---|---|
+| Required starting subject **H** | `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b` |
+| Required `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Branch / PR | `phase-1/pr6-d-order-webhook-import` / [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED |
+| SC recovery independent review | `ec61089dcfc0530b81c64bc09fcea7f3b70b7aa5` |
+| Review sole parent | **H** `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b` |
+| Review path / blob | `stocky-plus/docs/phases/phase-1/PR6_D_SC_RECOVERY_FINAL_INDEPENDENT_REVIEW.md` / `e8525c2fd2778c8baf118d0008a9213b7af4eca8` |
+| Integration | `git merge --ff-only ec61089…` onto the D branch. One-file add. Artifact not re-authored. |
+| SC-R runtime/test | `1a35bb22faba9c7f8fb1e5fa6e0c1965f276330c` |
+| Scale-envelope attribution follow-up | `b2471676d0300487802a6a916eb5546943925cb2` |
+| Complete-integration review | `53541112832f8da3dcfa65adea8e9a4447b0f18b` blob `48ac291a781b2347cb6017af862f2de9677826a5` preserved |
+| Correction re-review | `a72b403fe3c0ed57fa69d262d7dfbec3d7646292` blob `ba82a3c981cda4bec52ea453c2618319288fa66c` preserved |
+| Source-contract review | `7710758b181b5a49f1affa260a56b331adafdf7e` blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d` preserved |
+| Historical exact-head CI on **H** | run [`35168858541`](https://github.com/Vedang1998/Stocky/actions/runs/35168858541) only — H evidence, not this SC-R head |
+
+### 16.2 Finding dispositions
+
+| ID | Severity | Disposition |
+|---|---|---|
+| SC-R-01 | P2 | **Repaired.** One D parent-operation wrapper covers ledger **and** full-reader fallback. Fallback receives `parentAdmin`, not the raw client. Run-level bulk/poll/scopes are counted separately. `fallbackOrders` ≠ `fallbackTransportAttempts`. Exhaustion is incomplete; no success receipt. |
+| SC-R-02 | P2 | **Repaired.** `quota.lock` mkdir + `quota.reservation` ledger. Default omitted `reservedBytes` reserves remaining capacity (one large import). Concurrent reserved sums cannot exceed 2 GiB. Lease expiry does not free bytes. Leftovers occupy capacity. |
+| SC-R-03 | P2 | **Repaired.** Sanitized occupancy on `persistOrderFactsCoverageHealth` / `failImport` / SyncHealth. Typed `order_facts_scratch_resource`. Success cannot HEALTHY-clear leftovers. Operator reclaim after quiescence; no auto-reaper. |
+| SC-R-04 | P2 | **Repaired.** Digest v2 binds shop, SyncRun, Bulk GID, fingerprint, API, exact fence, job type, parent GID, content. Logical key stays `order-facts-d-import-src-v1:{jobType}:{durableJobId}:{gid}`. v1/legacy receipts require a fresh logical run. A new SyncRun is a new epoch. |
+| SC-R-05 | P3 | **Retained** disclosed limitation: no full agreement-membership re-pagination. |
+| SC-R-06 | P3 | **Closed with SC-R-01.** Nested B keeps `maxRequests: 250`. Disabling only `dTransportHardStop.throwOnExhaustion` lets nested graphql exceed the wrapper cap; restoring the throw keeps `used` and network attempts ≤ cap. |
+| SC-R-07 | P3 | **Retained** nonblocking; malformed/id-less children already fail staging. |
+| SC-R-08 | P3 | **Confirmatory only.** SIGKILL during staging leaves bytes and does not complete. Not claimed as a newly invented defect or a newly invented fix. |
+| N-08 H-scale/SIGKILL | — | **Preserved** as independent H evidence. Not reopened as missing. New-head envelope is a separate Cursor measurement. |
+
+Original D-R-01/04/05/06/07/08/09/12 remain **RESOLVED**. C3.5 / C3.6 source and recovery policy remain. Accepted A/B/C internals were not rewritten.
+
+### 16.3 Cursor local commands (SC-R tree)
+
+Environment: Node `v22.14.0`, npm `11.5.2`, linux, 4 CPUs, 16 GiB RAM, disposable PostgreSQL accepting, Redis `PONG`. Commands below are Cursor’s, this working tree (runtime `1a35bb22…` / attribution `b2471676…`).
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npx vitest run app/lib/order-facts` | 0 | **32** files, **313** tests |
+| `npx tsc --noEmit` | 0 | — |
+| `npm run lint` | 0 | — |
+| `npx vitest run --config vitest.migrations.config.ts scripts/tenant-enforcement/tests/pr6-d-sc-recovery.test.ts` | 0 | **20** tests (prior SC-02 suite plus SC-R fallback/exact-budget/v1/fence/leftover/exhaustion) |
+| `pr6-d-correction.test.ts` | 0 | **15** |
+| `pr6-d-integration.test.ts` | 0 | **24** |
+| `pr6-d-worker.test.ts` | 0 | **12** |
+| `pr6-d-scale-envelope.test.ts` without `PR6_D_SCALE_1E6` | 0 | **3** passed / **1** skipped |
+| `npm run test:sync-exactly-once` | 0 | **42** (**35** + **7** D046) |
+| `npm run test:sync-envelope-fail-closed` | 0 | **6** |
+| `npm run test:sync-dispatch-recovery` | 0 | **29** |
+| `npm run test:tenant-access -- app/tenant/__tests__/job-envelope.test.ts` | 0 | **25** |
+| `npm run test:sync-inventory-audit` | 0 | **5** |
+| `npm run build` | 0 | — |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | 40/40 assertions |
+| `git diff --check` | 0 | — |
+| `npm run tenant:access:inventory` / `:check` / `:audit` | 0 | findings **1761**, violations **0**, scannedFiles **506**, digest `22b034454b3ebd48d1ecbb8761f063e065403315731a19a4d3631b5077ff00bc` |
+| `npm run sync:inventory:check` | 0 | surfaces=**58**, digest `191b83498733…` |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+| `PR6_D_SCALE_1E6=1` envelope on `b2471676…` | 0 | **4** passed; Duration **924.73s**; bash `elapsed_real=925.448` `user=165.554` `sys=47.713` |
+
+`npm run graphql-codegen` was **not executed** locally. Combined correction+integration+worker in one vitest process skipped correction once (`schema "public" does not exist`) because parallel files reset the database; correction re-run **alone** exited 0 with **15** tests.
+
+### 16.4 Independent H-scale evidence (preserved, not reused as this-head proof)
+
+Claude’s independent envelope and SIGKILL recovery at **H** `4768033…` remain accepted for H (N-08). Cursor must not replace those H labels with this-head numbers.
+
+H Cursor envelope on `4fd98ce` (recorded in §15.6): `graphqlCalls` **10393**, `merchantSqlCalls` **3258946**, `peakScratchBytes` **1507608226**, `crashCheckpointOrdinal` **201**, `verifiedReplayApplies` **1**. Exact-head H CI is run `35168858541` only.
+
+### 16.5 Corrected-head envelope (Cursor; runtime `b2471676…`)
+
+Observed JSON (`pr6dScaleEnvelope`) starting `2026-09-17T11:55:03Z`:
+
+```json
+{
+  "lineFactTarget": 1000000,
+  "plannedRoots": 5192,
+  "plannedObjects": 1005192,
+  "plannedLineFacts": 1000000,
+  "childBuckets": { "zero": 101, "small": 4350, "eight": 520, "forty": 221 },
+  "warmup": {
+    "lineTarget": 1000,
+    "roots": 5,
+    "elapsedMs": 1274,
+    "peakRssBytes": 166215680,
+    "peakHeapBytes": 43146240,
+    "rssSamples": 25,
+    "heapSamples": 25
+  },
+  "crashPrefixLines": 2000,
+  "crashPrefixRoots": 11,
+  "crashCheckpointOrdinal": 201,
+  "crashScratchPeakBytes": 2633333,
+  "leftoverAttemptCountBeforeLoss": 0,
+  "leftoverBytesBeforeLoss": 0,
+  "interruptKind": "injected Admin throw after the first committed parent on a complete crash-prefix source, then test-operator deletion of that attempt scratch; not the historical truncated-prefix null-checkpoint case",
+  "webhookOverlapStatus": "applied",
+  "applied": 5192,
+  "examined": 5192,
+  "followUpReads": 1,
+  "bulkDirectApplies": 5190,
+  "verifiedReplayApplies": 1,
+  "runTransportAttempts": 2,
+  "parentTransportAttempts": 10391,
+  "fallbackOrders": 1,
+  "fallbackTransportAttempts": 3,
+  "ledgerCounts": {
+    "initial": 5191,
+    "recheck": 5190,
+    "agreement": 1,
+    "sale": 1,
+    "refund": 5,
+    "fallback": 1,
+    "fallbackOrders": 1,
+    "fallbackTransportAttempts": 3,
+    "throttle": 0
+  },
+  "shopBFacts": 1,
+  "lineFactsA": 1000000,
+  "liveLineFactsA": 1000000,
+  "absentLineFactsA": 0,
+  "zeroCurrentLineFactsA": 200000,
+  "agreementCountA": 103,
+  "refundCountA": 3,
+  "graphqlCalls": 10393,
+  "adminClassified": {
+    "initial": 5191,
+    "recheck": 5190,
+    "agreement": 1,
+    "sale": 1,
+    "refund": 5,
+    "fallback": 1,
+    "poll": 1,
+    "scope": 2,
+    "shop": 1,
+    "other": 0
+  },
+  "jsonlFetches": 2,
+  "merchantSqlCalls": 3258946,
+  "controlPlaneEngineRequests": 15664,
+  "elapsedMs": 910992,
+  "sampleMs": 250,
+  "peakRssBytes": 438947840,
+  "peakHeapBytes": 231262696,
+  "rssSamples": 3643,
+  "heapSamples": 3643,
+  "peakScratchBytes": 1509576295,
+  "scratchSamples": 3644
+}
+```
+
+Attribution notes (Cursor, this head — do not relabel the §15.6 H measurements):
+
+- `runTransportAttempts` **2** + `parentTransportAttempts` **10391** = `graphqlCalls` **10393**. The assertion is in `pr6-d-scale-envelope.test.ts`.
+- `fallbackOrders` **1** is the overlapping webhook parent. `fallbackTransportAttempts` **3** is that fallback’s Admin calls, not a single GraphQL request.
+- Recheck **5190** equals bulk-direct applies. SQL instrumentation is unchanged: merchant at `pg.Client.prototype.query`; control-plane at `PrismaClient.prototype._request`.
+- Crash leftover inspect now skips the namespace marker / quota files, so `leftoverBytesBeforeLoss` is **0** (H Cursor inspect recorded **109** marker bytes). Not a claim that H was wrong.
+- `peakScratchBytes` **1509576295** is a 250 ms sampled high-water, not quota enforcement. Quota is the reservation ledger.
+- RSS/heap peaks are `process.memoryUsage()` samples.
+
+### 16.6 Prior-evidence reuse table
+
+| Evidence | Reuse |
+|---|---|
+| Independent Claude H-scale / SIGKILL (N-08 at H) | Reuse for **H only** |
+| Cursor H envelope `graphqlCalls` 10393 / SQL 3258946 / scratch 1507608226 | Historical H/Cursor; do not overwrite with §16.5 |
+| Exact-head CI `35168858541` | **H only** |
+| D-R-01…12 / C3.5 remaining proofs / SC-01…04 policy | Reuse; not rebuilt |
+| This-head unit/PG/worker/envelope | New; required because quota/transport/receipt changed |
+
+### 16.7 Unexecuted / pending
+
+| Item | Status |
+|---|---|
+| `npm run graphql-codegen` | **not executed** locally |
+| Live Shopify / store calls / production | **not executed** (forbidden) |
+| Exact-head `pull_request` Classify + full Heavy + Gate on the SC-R head | **pending at report write** |
+| Independent Claude Code SC-R correction re-review | **not this session**; Cursor must not author that artifact |
+| ChatGPT technical acceptance / mark-ready / merge | **not authorized** |
+| N-08 independent closure at this new head | **not claimed**; H evidence stands for H |
 
 R-176 remains **OPEN / P0**. R-164 unchanged. PR 6 / Phase 1 **IN PROGRESS**. No D-055.

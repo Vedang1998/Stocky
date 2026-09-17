@@ -449,6 +449,22 @@ Preserve RESOLVED D-R-01/04/05/06/07/08/09/12, N-01…N-09, worker/legacy/receip
 
 R-176 remains OPEN/P0. R-164 unchanged. No D-055.
 
+### C3.7 SC-R-01…SC-R-04 control correction (same D-054 — not D-055)
+
+**Authority:** ChatGPT on PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882). Work order `PR43_PR6D_Final_Control_Corrections_Work_Order.md` SHA-256 `d7f6a2f03bab86c7d72370c3e0c071fa4e11ed0bc012d47ac8b1c5d2f5e3da08`. Independent review commit `ec61089dcfc0530b81c64bc09fcea7f3b70b7aa5` blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8` is preserved unedited.
+
+**This addendum does not reopen C3.6 SC-01…SC-04.** It records the four remaining P2 control repairs. SC-R-05 (agreement-membership recheck) remains a disclosed nonblocking limitation. SC-R-07 remains nonblocking for id-less children. SC-R-08 remains an unattributed observation with one confirmatory process-loss case and no invented fix. Independent H-scale/SIGKILL evidence (N-08 at H) stays accepted for H.
+
+**SC-R-01 — outer parent transport wrapper including fallback.** One finite parent-operation Admin allowance covers the ledger walk and any full-reader fallback. D wraps the raw Admin once per parent. Fallback receives the same wrapper; the allowance is not renewed. Run-level bulk/poll/shared metadata is counted separately from parent work. `fallbackOrders` is the drifted-parent count; `fallbackTransportAttempts` is the Admin calls used on those fallbacks. Exhaustion is incomplete, never a success receipt. Nested B readers keep their own `maxRequests: 250` so the outer hard-stop throw is the shared backstop (SC-R-06 mutation).
+
+**SC-R-02 — atomic scratch quota.** Namespace admission uses an exclusive `quota.lock` mkdir plus a `quota.reservation` ledger. Omitted `reservedBytes` reserves remaining capacity (one large import per local namespace, explicit and bounded). Combined concurrent reservations cannot exceed the unchanged 2 GiB cap. Lease expiry does not free bytes. Release is dispose or operator-selected reclaim after quiescence.
+
+**SC-R-03 — sanitized occupancy diagnostics.** `persistOrderFactsCoverageHealth` / `failImport` inspect occupancy and overlay SyncHealth `DEGRADED` with typed reason `order_facts_scratch_resource` when leftovers, unknown attempts, reservations, stale locks, or cap exhaustion require operator intervention. Diagnostics carry counts/bytes/age/limits only — no shop identifiers, paths, or tokens. Operator-only runbook: `PR6_D_SCRATCH_OPERATOR_RUNBOOK.md`. No automatic reaper.
+
+**SC-R-04 — epoch-bound receipt digest, stable logical key.** Digest v2 binds shop, SyncRun, BulkOperation GID, fingerprint, API version, exact fence generation, job type, parent GID, and canonical parent/children content. The application key stays `order-facts-d-import-src-v1:{jobType}:{durableJobId}:{gid}` so a changed epoch conflicts instead of minting a new key. Missing epoch fields fail closed. Stored v1/identity-only receipts are detected and require a fresh logical run; they are not upgraded. C/webhook/reconciliation receipts stay frozen.
+
+R-176 remains OPEN/P0. R-164 unchanged. No D-055.
+
 
 ---
 

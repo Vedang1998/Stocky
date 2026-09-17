@@ -265,6 +265,28 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | D-055 | **NOT CREATED** |
 | Production / writes / flags | **NOT AUTHORIZED** |
 
+### D-054 subitem — PR6-D SC-R-01…SC-R-04 control correction (checkpoint, not D-055)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is a **same-assignment checkpoint**, **not D-055**, not a new planning PR, and not PR 6 / Phase 1 closure. |
+| ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882) |
+| Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3.7**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §8 |
+| Prior | Ledger-only budget; snapshot-then-write quota; unsurfaced leftovers; digest omitting fence/run/Bulk |
+| New | Parent wrapper including fallback; atomic scratch reservation; sanitized occupancy diagnostics; epoch-bound digest v2 with stable logical key |
+| Reason | Independent SC recovery review SC-R-01…SC-R-04 |
+| Merchant impact | Fallback cannot exceed the parent cap; concurrent staging cannot exceed 2 GiB; leftovers are visible and operator-reclaimed; changed epoch cannot silently recertify |
+| Technical impact | D Admin wrapper; `quota.lock`/`quota.reservation`; SyncHealth `order_facts_scratch_resource`; receipt digest v2 |
+| Migration impact | None |
+| Tradeoffs | Default one large import per namespace; v1 receipts need a fresh logical job |
+| Acceptance tests | SC-R-01…04 including SC-R-06 mutation, two-process quota, occupancy/health, epoch/v1 receipts, confirmatory process-loss, corrected 1e6 envelope |
+| Frozen | B documents, C internals, webhook/reconciliation identity receipts, RESOLVED D-R/N IDs, SC-R-05 limitation, N-08 H-scale evidence |
+| Review provenance | Review commit `ec61089d…` blob `e8525c2f…` preserved unedited |
+| R-176 | **OPEN / P0** |
+| R-164 | unchanged / **OPEN** |
+| D-055 | **NOT CREATED** |
+| Production / writes / flags | **NOT AUTHORIZED** |
+
 ## Phase 1 PR5-F1 foundation closeout (PR #27)
 
 | Field | Value |
