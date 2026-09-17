@@ -171,6 +171,8 @@ export type LedgerQueryCounts = {
   sale: number;
   refund: number;
   fallback: number;
+  fallbackOrders: number;
+  fallbackTransportAttempts: number;
   throttle: number;
 };
 
@@ -190,6 +192,7 @@ export type JsonlAssemblyStatus =
   | "DUPLICATE"
   | "MIS_PARENTED"
   | "OPEN_PARENT_BOUND"
+  | "SCRATCH_RESOURCE"
   | "MALFORMED";
 
 export type JsonlAssemblyResult =
@@ -226,6 +229,11 @@ export type OrderFactsHealthEvidence = {
   openDiagnosticIssueCount: number;
   incompletePaginationCount: number;
   quarantineOpenCount: number;
+  scratchUnknownAttemptCount?: number;
+  scratchObservedBytes?: number;
+  scratchReservedBytes?: number;
+  scratchOldestAgeMs?: number | null;
+  scratchOperatorInterventionRequired?: boolean;
 };
 
 export type BulkSubmitIntent = {

@@ -3,7 +3,7 @@
  * reconstruct via content-bound C receipts.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -37,7 +37,26 @@ import {
   refundNode,
 } from "../../../app/lib/order-facts/admin-read/__tests__/fixtures";
 import { nominatedReceipt } from "../../../app/lib/order-facts/sync/apply-nominated";
-import { ORDER_FACTS_SYNC_JOB_TYPE } from "../../../app/lib/order-facts/sync/constants";
+import {
+  importParentContentDigest,
+  importReceiptApplicationKey,
+  v1ImportReceiptPayloadDigest,
+} from "../../../app/lib/order-facts/sync/import-receipt-binding";
+import {
+  ORDER_FACTS_D_API_VERSION,
+  ORDER_FACTS_HEALTH_DOMAIN,
+  ORDER_FACTS_SCRATCH_MARKER,
+  ORDER_FACTS_SCRATCH_PREFIX,
+  ORDER_FACTS_SCRATCH_RESOURCE_REASON,
+  ORDER_FACTS_SYNC_JOB_TYPE,
+} from "../../../app/lib/order-facts/sync/constants";
+import { ORDER_FACTS_D_BULK_A_ORDERS_LINES } from "../../../app/lib/order-facts/sync/bulk-a-query";
+import { fingerprintBulkQuery } from "../../../app/lib/catalog-facts/ingest/bulk-operation-recovery";
+import {
+  createOwnedScratchDir,
+  inspectDScratchOccupancy,
+  sanitizeDScratchOccupancy,
+} from "../../../app/lib/order-facts/sync/source-stage";
 import { operationNameOf } from "../../../app/lib/order-facts/admin-read/__tests__/mock-admin";
 
 const checkpointGate = vi.hoisted(() => ({ failNextAck: false }));
@@ -272,7 +291,12 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
         expectedRootObjectCount: "1",
       }),
     );
-    expect(second.status, JSON.stringify(second)).toBe("SUCCEEDED");
+    expect(second.status, JSON.stringify(second)).toBe("PARTIAL_FAILURE");
+    if (second.status === "PARTIAL_FAILURE") {
+      expect(second.reason).toBe(
+        "import_receipt_content_conflict_fresh_run_required",
+      );
+    }
     expect(await factCount(gid)).toBe(1);
   });
 
@@ -605,14 +629,18 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
         expectedRootObjectCount: "1",
       }),
     );
-    expect(stale.status, JSON.stringify(stale)).toBe("SUCCEEDED");
+    expect(stale.status, JSON.stringify(stale)).toBe("PARTIAL_FAILURE");
+    if (stale.status === "PARTIAL_FAILURE") {
+      expect(stale.reason).toBe(
+        "import_receipt_content_conflict_fresh_run_required",
+      );
+    }
     expect(await factCount(gid)).toBe(1);
     const latest = await getControlPlanePrisma().syncRun.findFirst({
       where: { shopId: shopAId, correlationId: "import-sc02-stale" },
       orderBy: { createdAt: "desc" },
     });
     expect(latest?.jsonlCommittedLineOrdinal).toBe(99);
-    expect(latest?.status).toBe("SUCCEEDED");
   });
 
   it("completes genuine multi-page agreement, sale, and refund parents", async () => {
@@ -745,5 +773,416 @@ describe("PR6-D SC-02 reordered recovery and mutation rejection", () => {
     expect(operationNameOf(ledgerCalls[0]?.query ?? "")).toBe(
       "OrderFactsImportLedger",
     );
+  });
+});
+
+describe("PR6-D SC-R control corrections", () => {
+  let prisma: PrismaClient;
+  let shopAId: string;
+
+  beforeAll(async () => {
+    ({ prisma, shopAId } = await setupPr6DDatabase());
+  }, 600_000);
+
+  afterAll(async () => {
+    await resetControlPlanePrismaForTests();
+    await prisma?.$disconnect();
+  });
+
+  function driftedStore(gid: string) {
+    const refund = {
+      ...refundNode(91001, [
+        refundLineNode(91001, { lineItem: { id: `${gid}/LineItem/1` } }),
+        refundLineNode(91002, { lineItem: { id: `${gid}/LineItem/1` } }),
+      ]),
+      order: { id: gid },
+    };
+    return standardStore(gid, {
+      header: inWindowHeader({
+        id: gid,
+        updatedAt: "2026-01-19T00:00:00Z",
+      }),
+      refunds: [refund],
+    });
+  }
+
+  async function factCount(gid: string): Promise<number> {
+    return countForShop(
+      shopAId,
+      `SELECT count(*)::int AS n FROM "ShopifyOrderFact" WHERE "shopifyGid" = $1`,
+      [gid],
+    );
+  }
+
+  it("keeps ledger plus fallback inside one parent Admin allowance", async () => {
+    const gid = "gid://shopify/Order/scr01-fallback";
+    const admin = createOrderFactsAdmin({
+      stores: { [gid]: standardStore(gid) },
+    });
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr01-fallback",
+        correlationId: "import-scr01-fallback",
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, {
+            currentSubtotalLineItemsQuantity: 0,
+            updatedAt: "2026-01-01T00:00:00Z",
+          }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+      }),
+    );
+    expect(result.status, JSON.stringify(result)).toBe("SUCCEEDED");
+    if (result.status !== "SUCCEEDED") return;
+    expect(result.fallbackOrders).toBe(1);
+    expect(result.ledgerCounts.fallbackOrders).toBe(1);
+    expect(result.fallbackTransportAttempts).toBeGreaterThan(1);
+    expect(result.runTransportAttempts + result.parentTransportAttempts).toBe(
+      admin.graphqlCount(),
+    );
+    expect(result.parentTransportAttempts).toBeLessThanOrEqual(250);
+    expect(result.parentTransportAttempts).toBeGreaterThan(
+      result.fallbackTransportAttempts,
+    );
+    expect(
+      admin.calls.some((call) => call.name === "OrderFactById"),
+    ).toBe(true);
+  });
+
+  it("does not enter fallback with a renewed allowance after ledger exhaustion", async () => {
+    const gid = "gid://shopify/Order/scr01-no-renew";
+    const admin = createOrderFactsAdmin({
+      stores: { [gid]: standardStore(gid) },
+    });
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr01-no-renew",
+        correlationId: "import-scr01-no-renew",
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, {
+            currentSubtotalLineItemsQuantity: 0,
+            updatedAt: "2026-01-01T00:00:00Z",
+          }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+        parentTransportMaxRequests: 1,
+      }),
+    );
+    expect(result.status).toBe("PARTIAL_FAILURE");
+    expect(
+      admin.calls.some((call) => call.name === "OrderFactById"),
+    ).toBe(false);
+    expect(
+      admin.calls.filter((call) => call.name === "OrderFactsImportLedger"),
+    ).toHaveLength(1);
+  });
+
+  it("succeeds at the exact parent budget and refuses one fewer before an over-budget call", async () => {
+    const gidOk = "gid://shopify/Order/scr01-exact";
+    const adminOk = createOrderFactsAdmin({
+      stores: { [gidOk]: driftedStore(gidOk) },
+    });
+    const ok = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: adminOk,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr01-exact",
+        correlationId: "import-scr01-exact",
+        jsonlSource: jsonlLines([
+          bulkARoot(gidOk, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+      }),
+    );
+    expect(ok.status, JSON.stringify(ok)).toBe("SUCCEEDED");
+    if (ok.status !== "SUCCEEDED") return;
+    const exact = ok.parentTransportAttempts;
+    expect(exact).toBeGreaterThan(1);
+    expect(adminOk.graphqlCount()).toBe(
+      ok.runTransportAttempts + ok.parentTransportAttempts,
+    );
+
+    const gidFit = "gid://shopify/Order/scr01-exact-fit";
+    const adminFit = createOrderFactsAdmin({
+      stores: { [gidFit]: driftedStore(gidFit) },
+    });
+    const fit = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: adminFit,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr01-exact-fit",
+        correlationId: "import-scr01-exact-fit",
+        jsonlSource: jsonlLines([
+          bulkARoot(gidFit, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+        parentTransportMaxRequests: exact,
+      }),
+    );
+    expect(fit.status, JSON.stringify(fit)).toBe("SUCCEEDED");
+    if (fit.status === "SUCCEEDED") {
+      expect(fit.parentTransportAttempts).toBe(exact);
+      expect(adminFit.graphqlCount()).toBe(
+        fit.runTransportAttempts + fit.parentTransportAttempts,
+      );
+    }
+
+    const gidShort = "gid://shopify/Order/scr01-exact-short";
+    const adminShort = createOrderFactsAdmin({
+      stores: { [gidShort]: driftedStore(gidShort) },
+    });
+    const short = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: adminShort,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr01-exact-short",
+        correlationId: "import-scr01-exact-short",
+        jsonlSource: jsonlLines([
+          bulkARoot(gidShort, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+        parentTransportMaxRequests: exact - 1,
+      }),
+    );
+    expect(short.status).toBe("PARTIAL_FAILURE");
+    expect(adminShort.graphqlCount()).toBeLessThan(adminFit.graphqlCount());
+    expect(await factCount(gidShort)).toBe(0);
+  });
+
+  it("detects a stored v1 digest and requires a fresh logical run", async () => {
+    const gid = "gid://shopify/Order/scr04-v1";
+    const parent = bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 });
+    const fingerprint = fingerprintBulkQuery({
+      query: ORDER_FACTS_D_BULK_A_ORDERS_LINES,
+      shopId: shopAId,
+    });
+    await insertSyncApplicationReceipt({
+      shopId: shopAId,
+      applicationKey: importReceiptApplicationKey({
+        durableJobId: "import-scr04-v1",
+        shopifyGid: gid,
+        sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
+      }),
+      sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
+      rootDurableJobId: "import-scr04-v1",
+      firstApplyingDurableJobId: "import-scr04-v1",
+      payloadDigest: v1ImportReceiptPayloadDigest({
+        shopId: shopAId,
+        sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
+        durableJobId: "import-scr04-v1",
+        shopifyGid: gid,
+        queryFingerprint: fingerprint,
+        apiVersion: ORDER_FACTS_D_API_VERSION,
+        contentDigest: importParentContentDigest({
+          parent,
+          children: [],
+        }),
+      }),
+    });
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr04-v1",
+        correlationId: "import-scr04-v1",
+        jsonlSource: jsonlLines([parent]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+      }),
+    );
+    expect(result.status).toBe("PARTIAL_FAILURE");
+    if (result.status === "PARTIAL_FAILURE") {
+      expect(result.reason).toBe("import_v1_receipt_fresh_run_required");
+    }
+  });
+
+  it("fails closed when fence generation changes under the same logical key", async () => {
+    const gidA = "gid://shopify/Order/scr04-fence-a";
+    const gidB = "gid://shopify/Order/scr04-fence-b";
+    const stores = {
+      [gidA]: standardStore(gidA),
+      [gidB]: standardStore(gidB),
+    };
+    const admin = createOrderFactsAdmin({ stores });
+    const first = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr04-fence",
+        correlationId: "import-scr04-fence",
+        jsonlSource: jsonlLines([
+          bulkARoot(gidA, { currentSubtotalLineItemsQuantity: 0 }),
+          ((root) => {
+            const copy = { ...root };
+            delete copy.confirmed;
+            return copy;
+          })(bulkARoot(gidB, { currentSubtotalLineItemsQuantity: 0 })),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "2",
+      }),
+    );
+    expect(first.status).toBe("PARTIAL_FAILURE");
+    const run = await getControlPlanePrisma().syncRun.findFirst({
+      where: { shopId: shopAId, correlationId: "import-scr04-fence" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(run).toBeTruthy();
+    await getControlPlanePrisma().syncRun.update({
+      where: { id: run!.id },
+      data: { fenceGeneration: 999n },
+    });
+    const resumed = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin,
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr04-fence",
+        correlationId: "import-scr04-fence",
+        jsonlSource: jsonlLines([
+          bulkARoot(gidB, { currentSubtotalLineItemsQuantity: 0 }),
+          bulkARoot(gidA, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "2",
+        expectedRootObjectCount: "2",
+      }),
+    );
+    expect(resumed.status).toBe("PARTIAL_FAILURE");
+    if (resumed.status === "PARTIAL_FAILURE") {
+      expect(resumed.reason).toBe(
+        "import_receipt_content_conflict_fresh_run_required",
+      );
+    }
+  });
+
+  it("keeps leftover occupancy visible after a successful import in the same namespace", async () => {
+    const scratch = mkdtempSync(path.join(os.tmpdir(), "pr6-d-scr03-"));
+    mkdirSync(scratch, { recursive: true });
+    const leftover = path.join(scratch, "att-orphan-leftover");
+    mkdirSync(leftover, { recursive: true });
+    writeFileSync(
+      path.join(leftover, ORDER_FACTS_SCRATCH_MARKER),
+      `${JSON.stringify({
+        owned: true,
+        prefix: ORDER_FACTS_SCRATCH_PREFIX,
+        kind: "attempt",
+        token: "orphan",
+        pid: 1,
+        createdAt: new Date().toISOString(),
+      })}\n`,
+    );
+    writeFileSync(path.join(leftover, "fat.bin"), "x".repeat(256));
+    const gid = "gid://shopify/Order/scr03-health";
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr03-health",
+        correlationId: "import-scr03-health",
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+        scratchRoot: scratch,
+      }),
+    );
+    expect(result.status, JSON.stringify(result)).toBe("SUCCEEDED");
+    const occupancy = sanitizeDScratchOccupancy(
+      await inspectDScratchOccupancy({ scratchRoot: scratch }),
+    );
+    expect(occupancy.leftoverAttemptCount).toBeGreaterThan(0);
+    expect(occupancy.operatorInterventionRequired).toBe(true);
+    expect(JSON.stringify(occupancy)).not.toMatch(/leftover-shop|att-/);
+    const health = await getControlPlanePrisma().syncHealth.findUnique({
+      where: {
+        shopId_syncDomain: {
+          shopId: shopAId,
+          syncDomain: ORDER_FACTS_HEALTH_DOMAIN,
+        },
+      },
+    });
+    expect(health?.state).toBe("DEGRADED");
+    expect(health?.detailCode).toBe(ORDER_FACTS_SCRATCH_RESOURCE_REASON);
+    expect(health?.detailSummary ?? "").not.toMatch(/leftover-shop|att-/);
+    expect(existsSync(leftover)).toBe(true);
+  });
+
+  it("surfaces a typed scratch-resource diagnostic when admission is exhausted", async () => {
+    const scratch = mkdtempSync(path.join(os.tmpdir(), "pr6-d-scr03-ex-"));
+    mkdirSync(scratch, { recursive: true });
+    await createOwnedScratchDir({
+      shopId: "block-shop",
+      syncRunId: "block-run",
+      scratchRoot: scratch,
+    });
+    const gid = "gid://shopify/Order/scr03-exhaust";
+    const result = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr03-exhaust",
+        correlationId: "import-scr03-exhaust",
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+        scratchRoot: scratch,
+      }),
+    );
+    expect(result.status).toBe("PARTIAL_FAILURE");
+    if (result.status === "PARTIAL_FAILURE") {
+      expect(result.reason).toMatch(ORDER_FACTS_SCRATCH_RESOURCE_REASON);
+    }
+    const issue = await getControlPlanePrisma().dataIssue.findFirst({
+      where: {
+        shopId: shopAId,
+        reasonCode: ORDER_FACTS_SCRATCH_RESOURCE_REASON,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(issue).toBeTruthy();
+    const evidence = JSON.stringify(issue?.redactedEvidence ?? {});
+    expect(evidence).toMatch(/leftoverAttemptCount/);
+    expect(evidence).not.toMatch(/block-shop|att-/);
   });
 });

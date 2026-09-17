@@ -59,6 +59,7 @@ async function main(): Promise<void> {
       scratchRoot,
       expectedObjectCount: "400",
       expectedRootObjectCount: "400",
+      maxScratchBytes: Number(process.env.PR6_D_CHILD_MAX_SCRATCH_BYTES ?? 32 * 1024 * 1024),
     },
   );
   writeStatus({ stage: "completed", pid: process.pid, status: result.status });

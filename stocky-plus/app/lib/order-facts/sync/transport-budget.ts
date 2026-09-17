@@ -74,11 +74,16 @@ function isThrottledEnvelope(json: unknown): boolean {
   );
 }
 
+/** Test hook: disable only the exhaustion throw. Counting still runs. */
+export const dTransportHardStop = {
+  throwOnExhaustion: true,
+};
+
 export function consumeDTransportAttempt(
   budget: DTransportBudget,
   extras: OrderReadIssueExtras = {},
 ): void {
-  if (budget.used >= budget.maxRequests) {
+  if (budget.used >= budget.maxRequests && dTransportHardStop.throwOnExhaustion) {
     throw new OrderPaginationError(
       `Admin request budget exhausted (${budget.maxRequests}); refusing a truncated complete snapshot`,
       extras,
@@ -90,6 +95,13 @@ export function consumeDTransportAttempt(
   } else {
     budget.classified[budget.phase] += 1;
   }
+}
+
+export function setDTransportPhase(
+  budget: DTransportBudget,
+  phase: DTransportClass,
+): void {
+  budget.phase = phase;
 }
 
 export function wrapAdminWithDTransportBudget(

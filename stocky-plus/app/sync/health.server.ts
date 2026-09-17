@@ -16,6 +16,36 @@ export type ComputeSyncHealthResult = {
   detailSummary: string | null;
 };
 
+export type OrderFactsScratchHealthEvidence = {
+  leftoverAttemptCount: number;
+  unknownAttemptCount: number;
+  observedBytes: number;
+  reservedBytes: number;
+  oldestAgeMs: number | null;
+  maxScratchAttempts: number;
+  maxScratchBytes: number;
+  operatorInterventionRequired: boolean;
+  reasonCode: string;
+};
+
+function scratchEvidenceDetail(
+  evidence: OrderFactsScratchHealthEvidence | undefined,
+): { code: string; summary: string } | null {
+  if (!evidence) return null;
+  const oldest =
+    evidence.oldestAgeMs == null ? "none" : String(evidence.oldestAgeMs);
+  const summary =
+    `D scratch occupancy: leftoverAttempts=${evidence.leftoverAttemptCount} ` +
+    `unknownAttempts=${evidence.unknownAttemptCount} ` +
+    `observedBytes=${evidence.observedBytes} reservedBytes=${evidence.reservedBytes} ` +
+    `oldestAgeMs=${oldest} ` +
+    `limits=${evidence.maxScratchAttempts}/${evidence.maxScratchBytes}` +
+    (evidence.operatorInterventionRequired
+      ? "; operator intervention required"
+      : "");
+  return { code: evidence.reasonCode.slice(0, 64), summary };
+}
+
 export type CatalogHealthEvidence = {
   incompleteIngestionCount: number;
   unknownAuthoritativeQuantityCount: number;
@@ -90,7 +120,10 @@ function jobDomainFilter(syncDomain: string): {
 export async function computeSyncHealth(
   shopId: string,
   syncDomain: string,
-  options?: { catalogEvidence?: CatalogHealthEvidence },
+  options?: {
+    catalogEvidence?: CatalogHealthEvidence;
+    orderFactsScratch?: OrderFactsScratchHealthEvidence;
+  },
 ): Promise<ComputeSyncHealthResult> {
   const prisma = getControlPlanePrisma();
   const shop = await prisma.shop.findUnique({
@@ -233,6 +266,19 @@ export async function computeSyncHealth(
         }
       }
     }
+  }
+
+  const scratchDetail = scratchEvidenceDetail(options?.orderFactsScratch);
+  if (
+    scratchDetail &&
+    options?.orderFactsScratch?.operatorInterventionRequired &&
+    state !== "DISABLED" &&
+    state !== "FAILED" &&
+    state !== "RUNNING"
+  ) {
+    state = "DEGRADED";
+    detailCode = scratchDetail.code;
+    detailSummary = scratchDetail.summary;
   }
 
   const health = await prisma.syncHealth.upsert({

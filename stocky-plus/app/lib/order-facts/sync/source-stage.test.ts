@@ -19,7 +19,10 @@ import {
   createOwnedScratchDir,
   disposeOwnedScratch,
   inspectDScratchNamespace,
+  inspectDScratchOccupancy,
   measureDScratchTreeBytes,
+  reclaimOperatorSelectedDScratch,
+  sanitizeDScratchOccupancy,
   stageOrderFactsJsonl,
   writeStreamChunk,
   type ScratchOwnershipHandle,
@@ -39,6 +42,10 @@ const PROCESS_LOSS_CHILD = path.join(
 const LIVE_WORKER_CHILD = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "source-stage-live-worker-child.ts",
+);
+const QUOTA_CHILD = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "source-stage-quota-child.ts",
 );
 
 function scratchRoot(): string {
@@ -99,6 +106,7 @@ describe("PR6-D source staging ownership", () => {
         shopId: "shop",
         syncRunId: "run",
         scratchRoot: link,
+        reservedBytes: 262144,
       }),
     ).rejects.toMatchObject({ code: "scratch_symlink_refused" });
   });
@@ -134,6 +142,7 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run-source",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     expect(created.dir).not.toBe(sourceOnly);
     expect(existsSync(sourceFile)).toBe(true);
@@ -155,6 +164,7 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     const keep = path.join(first.dir, "LIVE-MARKER.txt");
     writeFileSync(keep, "owned-live");
@@ -175,6 +185,7 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     expect(second.dir).not.toBe(first.dir);
     expect(inventoryFiles(first.dir)).toEqual(before);
@@ -190,11 +201,13 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop/a",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     const second = await createOwnedScratchDir({
       shopId: "shop_a",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     expect(first.dir).not.toBe(second.dir);
     writeFileSync(path.join(first.dir, "source.jsonl"), "a\n");
@@ -212,11 +225,13 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop-a",
       syncRunId: "run-a",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     const second = await createOwnedScratchDir({
       shopId: "shop-b",
       syncRunId: "run-b",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     expect(first.dir).not.toBe(second.dir);
     writeFileSync(path.join(first.dir, "source.jsonl"), "a\n");
@@ -277,6 +292,7 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     const keep = path.join(handle.dir, "keep.bin");
     writeFileSync(keep, "preserve-me");
@@ -299,12 +315,14 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     writeFileSync(path.join(older.dir, "old.txt"), "old");
     const newer = await createOwnedScratchDir({
       shopId: "shop",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     writeFileSync(path.join(newer.dir, "new.txt"), "new");
     await disposeOwnedScratch(older, root);
@@ -319,6 +337,7 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     await disposeOwnedScratch(handle, root);
     await disposeOwnedScratch(handle, root);
@@ -331,6 +350,7 @@ describe("PR6-D source staging ownership", () => {
       shopId: "shop",
       syncRunId: "run-1",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     writeFileSync(path.join(leftover.dir, "fat.bin"), "x".repeat(4096));
     const before = inventoryFiles(leftover.dir);
@@ -340,6 +360,7 @@ describe("PR6-D source staging ownership", () => {
         syncRunId: "run-2",
         scratchRoot: root,
         maxScratchBytes: 1024,
+        reservedBytes: 262144,
       }),
     ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
     expect(inventoryFiles(leftover.dir)).toEqual(before);
@@ -421,7 +442,7 @@ describe("PR6-D scratch integrity and resource failure", () => {
         expectedRootObjectCount: "1",
       },
     );
-    expect(result.status).toBe("OPEN_PARENT_BOUND");
+    expect(result.status).toBe("SCRATCH_RESOURCE");
     expect(sha256(readFileSync(foreign))).toBe(before);
   });
 
@@ -464,6 +485,7 @@ describe("PR6-D scratch integrity and resource failure", () => {
       shopId: "pl-shop",
       syncRunId: "pl-run",
       scratchRoot: root,
+      reservedBytes: 262144,
     });
     expect(rebuilt.dir).not.toBe(leftover);
     expect(existsSync(jsonlPath)).toBe(true);
@@ -492,5 +514,342 @@ describe("PR6-D scratch integrity and resource failure", () => {
     }
     await disposeOwnedScratch(rebuilt, root);
     expect(inventoryFiles(leftover)).toEqual(beforeInventory);
+    const occupancy = await inspectDScratchOccupancy({
+      scratchRoot: root,
+      maxScratchBytes: 32 * 1024 * 1024,
+    });
+    expect(occupancy.activeAttemptCount + occupancy.unknownAttemptCount).toBeGreaterThan(
+      0,
+    );
+  }, 30_000);
+
+  it("SC-R-08 confirmatory: SIGKILL during staging leaves bytes and does not complete the killed attempt", async () => {
+    const root = scratchRoot();
+    const statusPath = path.join(root, "scr08.json");
+    mkdirSync(root, { recursive: true });
+    const child = spawn(TSX_BIN, [PROCESS_LOSS_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_CHILD_STATUS_PATH: statusPath,
+        PR6_D_CHILD_SCRATCH_ROOT: root,
+        PR6_D_CHILD_SHOP_ID: "scr08-shop",
+        PR6_D_CHILD_RUN_ID: "scr08-run",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const parked = await waitStatus(statusPath, "parked");
+    expect(parked.stage).toBe("parked");
+    expect(parked.stage).not.toBe("completed");
+    const leftover = String(parked.dir);
+    const jsonlPath = path.join(leftover, "source.jsonl");
+    const before = sha256(readFileSync(jsonlPath));
+    if (typeof parked.pid === "number") process.kill(parked.pid, "SIGKILL");
+    child.kill("SIGKILL");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(existsSync(jsonlPath)).toBe(true);
+    expect(sha256(readFileSync(jsonlPath))).toBe(before);
+    const occupancy = sanitizeDScratchOccupancy(
+      await inspectDScratchOccupancy({ scratchRoot: root }),
+    );
+    expect(occupancy.leftoverAttemptCount).toBeGreaterThan(0);
+    expect(occupancy.observedBytes).toBeGreaterThan(0);
+    expect(occupancy.reservedBytes).toBeGreaterThan(0);
+  }, 30_000);
+});
+
+describe("PR6-D SC-R-02/03 quota admission and occupancy", () => {
+  it("admits two under-cap reservations and refuses a combined over-cap pair", async () => {
+    const root = scratchRoot();
+    mkdirSync(root, { recursive: true });
+    const first = await createOwnedScratchDir({
+      shopId: "shop-a",
+      syncRunId: "run-a",
+      scratchRoot: root,
+      maxScratchBytes: 10_000,
+      reservedBytes: 3_000,
+    });
+    const second = await createOwnedScratchDir({
+      shopId: "shop-b",
+      syncRunId: "run-b",
+      scratchRoot: root,
+      maxScratchBytes: 10_000,
+      reservedBytes: 3_000,
+    });
+    expect(first.dir).not.toBe(second.dir);
+    await expect(
+      createOwnedScratchDir({
+        shopId: "shop-c",
+        syncRunId: "run-c",
+        scratchRoot: root,
+        maxScratchBytes: 10_000,
+        reservedBytes: 5_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    await disposeOwnedScratch(first, root);
+    await disposeOwnedScratch(second, root);
+  });
+
+  it("default remaining reservation is exclusive for a large import", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run-1",
+      scratchRoot: root,
+      maxScratchBytes: 1_000_000,
+    });
+    await expect(
+      createOwnedScratchDir({
+        shopId: "other",
+        syncRunId: "run-2",
+        scratchRoot: root,
+        maxScratchBytes: 1_000_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    await disposeOwnedScratch(first, root);
+    const after = await createOwnedScratchDir({
+      shopId: "other",
+      syncRunId: "run-2",
+      scratchRoot: root,
+      maxScratchBytes: 1_000_000,
+    });
+    await disposeOwnedScratch(after, root);
+  });
+
+  it("two processes cannot both admit when requested capacity exceeds the cap", async () => {
+    const root = scratchRoot();
+    mkdirSync(root, { recursive: true });
+    const barrier = path.join(root, "go");
+    const firstStatus = path.join(root, "one.json");
+    const secondStatus = path.join(root, "two.json");
+    const spawnQuota = (status: string, shop: string, run: string) =>
+      spawn(TSX_BIN, [QUOTA_CHILD], {
+        env: {
+          ...process.env,
+          PR6_D_QUOTA_STATUS_PATH: status,
+          PR6_D_QUOTA_SCRATCH_ROOT: root,
+          PR6_D_QUOTA_SHOP_ID: shop,
+          PR6_D_QUOTA_RUN_ID: run,
+          PR6_D_QUOTA_BARRIER_PATH: barrier,
+          PR6_D_QUOTA_RESERVED_BYTES: "8000",
+          PR6_D_QUOTA_MAX_BYTES: "10000",
+        },
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+    const one = spawnQuota(firstStatus, "shop-a", "run-a");
+    const two = spawnQuota(secondStatus, "shop-b", "run-b");
+    await waitStatus(firstStatus, "ready");
+    await waitStatus(secondStatus, "ready");
+    writeFileSync(barrier, "go\n");
+    const firstResult = await Promise.race([
+      waitStatus(firstStatus, "admitted"),
+      waitStatus(firstStatus, "rejected"),
+    ]);
+    const secondResult = await Promise.race([
+      waitStatus(secondStatus, "admitted"),
+      waitStatus(secondStatus, "rejected"),
+    ]);
+    const stages = [String(firstResult.stage), String(secondResult.stage)].sort();
+    expect(stages).toEqual(["admitted", "rejected"]);
+    const rejected = firstResult.stage === "rejected" ? firstResult : secondResult;
+    expect(rejected.code).toBe("scratch_resource_exhausted");
+    one.kill("SIGKILL");
+    two.kill("SIGKILL");
+  }, 30_000);
+
+  it("crash after reservation still occupies capacity until operator reclaim", async () => {
+    const root = scratchRoot();
+    mkdirSync(root, { recursive: true });
+    const statusPath = path.join(root, "crash.json");
+    const child = spawn(TSX_BIN, [QUOTA_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_QUOTA_STATUS_PATH: statusPath,
+        PR6_D_QUOTA_SCRATCH_ROOT: root,
+        PR6_D_QUOTA_SHOP_ID: "crash-shop",
+        PR6_D_QUOTA_RUN_ID: "crash-run",
+        PR6_D_QUOTA_RESERVED_BYTES: "9000",
+        PR6_D_QUOTA_MAX_BYTES: "10000",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const admitted = await waitStatus(statusPath, "admitted");
+    if (typeof admitted.pid === "number") {
+      try {
+        process.kill(admitted.pid, "SIGKILL");
+      } catch (error) {
+        const code =
+          error && typeof error === "object" && "code" in error
+            ? String((error as { code?: string }).code)
+            : "";
+        if (code !== "ESRCH") throw error;
+      }
+    }
+    child.kill("SIGKILL");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        maxScratchBytes: 10_000,
+        reservedBytes: 2_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    const occupancy = sanitizeDScratchOccupancy(
+      await inspectDScratchOccupancy({
+        scratchRoot: root,
+        maxScratchBytes: 10_000,
+      }),
+    );
+    expect(occupancy.reasonCode).toBe("order_facts_scratch_resource");
+    expect(JSON.stringify(occupancy)).not.toMatch(/crash-shop|att-/);
+    expect(occupancy.reservedBytes).toBeGreaterThan(0);
+    const attempts = readdirSync(root).filter((name) => name.startsWith("att-"));
+    const reclaim = await reclaimOperatorSelectedDScratch({
+      scratchRoot: root,
+      attemptBasenames: attempts,
+      quiescenceConfirmed: true,
+    });
+    expect(reclaim.reclaimed.length).toBeGreaterThan(0);
+    const restored = await createOwnedScratchDir({
+      shopId: "next",
+      syncRunId: "next",
+      scratchRoot: root,
+      maxScratchBytes: 10_000,
+      reservedBytes: 2_000,
+    });
+    await disposeOwnedScratch(restored, root);
+  }, 30_000);
+
+  it("does not reclaim live, foreign, markerless, or symlink paths", async () => {
+    const root = scratchRoot();
+    const live = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 4096,
+    });
+    const foreign = path.join(root, "foreign-dir");
+    mkdirSync(foreign, { recursive: true });
+    writeFileSync(path.join(foreign, "secret"), "secret");
+    const markerless = path.join(root, "att-markerless");
+    mkdirSync(markerless, { recursive: true });
+    writeFileSync(path.join(markerless, "source.jsonl"), "keep\n");
+    const link = path.join(root, "att-link");
+    symlinkSync(foreign, link);
+    const result = await reclaimOperatorSelectedDScratch({
+      scratchRoot: root,
+      attemptBasenames: [
+        path.basename(live.dir),
+        "foreign-dir",
+        "att-markerless",
+        "att-link",
+      ],
+      quiescenceConfirmed: true,
+    });
+    expect(result.skipped.map((row) => row.reason).sort()).toEqual(
+      ["live_writer", "not_an_attempt_basename", "not_verified_d_resource", "symlink_refused"].sort(),
+    );
+    expect(existsSync(path.join(foreign, "secret"))).toBe(true);
+    expect(existsSync(path.join(markerless, "source.jsonl"))).toBe(true);
+    expect(existsSync(live.dir)).toBe(true);
+    await disposeOwnedScratch(live, root);
+  });
+
+  it("refuses a second attempt when the attempt cap is already filled", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run-1",
+      scratchRoot: root,
+      maxScratchAttempts: 1,
+      reservedBytes: 1024,
+      maxScratchBytes: 10_000,
+    });
+    await expect(
+      createOwnedScratchDir({
+        shopId: "other",
+        syncRunId: "run-2",
+        scratchRoot: root,
+        maxScratchAttempts: 1,
+        reservedBytes: 1024,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    await disposeOwnedScratch(first, root);
+  });
+
+  it("does not count the namespace marker as leftover bytes after dispose", async () => {
+    const root = scratchRoot();
+    const handle = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 4096,
+    });
+    await disposeOwnedScratch(handle, root);
+    const inspected = await inspectDScratchNamespace(root);
+    expect(inspected.leftoverAttemptCount).toBe(0);
+    expect(inspected.leftoverBytes).toBe(0);
+  });
+
+  it("live under-cap reservation does not require operator intervention", async () => {
+    const root = scratchRoot();
+    const live = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      maxScratchBytes: 1_000_000,
+      reservedBytes: 4096,
+    });
+    const occupancy = await inspectDScratchOccupancy({
+      scratchRoot: root,
+      maxScratchBytes: 1_000_000,
+    });
+    expect(occupancy.operatorInterventionRequired).toBe(false);
+    expect(occupancy.activeAttemptCount).toBe(1);
+    expect(JSON.stringify(sanitizeDScratchOccupancy(occupancy))).not.toMatch(/shop|att-/);
+    await disposeOwnedScratch(live, root);
+  });
+
+  it("two processes can both admit when combined reservations stay under the cap", async () => {
+    const root = scratchRoot();
+    mkdirSync(root, { recursive: true });
+    const barrier = path.join(root, "go");
+    const firstStatus = path.join(root, "one.json");
+    const secondStatus = path.join(root, "two.json");
+    const spawnQuota = (status: string, shop: string, run: string) =>
+      spawn(TSX_BIN, [QUOTA_CHILD], {
+        env: {
+          ...process.env,
+          PR6_D_QUOTA_STATUS_PATH: status,
+          PR6_D_QUOTA_SCRATCH_ROOT: root,
+          PR6_D_QUOTA_SHOP_ID: shop,
+          PR6_D_QUOTA_RUN_ID: run,
+          PR6_D_QUOTA_BARRIER_PATH: barrier,
+          PR6_D_QUOTA_RESERVED_BYTES: "3000",
+          PR6_D_QUOTA_MAX_BYTES: "10000",
+        },
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+    const one = spawnQuota(firstStatus, "shop-a", "run-a");
+    const two = spawnQuota(secondStatus, "shop-b", "run-b");
+    await waitStatus(firstStatus, "ready");
+    await waitStatus(secondStatus, "ready");
+    writeFileSync(barrier, "go\n");
+    const firstResult = await Promise.race([
+      waitStatus(firstStatus, "admitted"),
+      waitStatus(firstStatus, "rejected"),
+    ]);
+    const secondResult = await Promise.race([
+      waitStatus(secondStatus, "admitted"),
+      waitStatus(secondStatus, "rejected"),
+    ]);
+    expect([firstResult.stage, secondResult.stage].sort()).toEqual([
+      "admitted",
+      "admitted",
+    ]);
+    one.kill("SIGKILL");
+    two.kill("SIGKILL");
   }, 30_000);
 });

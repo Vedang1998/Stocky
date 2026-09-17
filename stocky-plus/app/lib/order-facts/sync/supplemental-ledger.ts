@@ -33,6 +33,7 @@ import {
   snapshotDTransportBudget,
   wrapAdminWithDTransportBudget,
   type DTransportAccounting,
+  type DTransportBudget,
 } from "./transport-budget";
 
 export const ORDER_FACTS_IMPORT_LEDGER_QUERY = `#graphql
@@ -181,6 +182,8 @@ function emptyCounts(): LedgerQueryCounts {
     sale: 0,
     refund: 0,
     fallback: 0,
+    fallbackOrders: 0,
+    fallbackTransportAttempts: 0,
     throttle: 0,
   };
 }
@@ -192,6 +195,8 @@ function addCounts(target: LedgerQueryCounts, source: LedgerQueryCounts): void {
   target.sale += source.sale;
   target.refund += source.refund;
   target.fallback += source.fallback;
+  target.fallbackOrders += source.fallbackOrders;
+  target.fallbackTransportAttempts += source.fallbackTransportAttempts;
   target.throttle += source.throttle;
 }
 
@@ -257,6 +262,7 @@ export async function readOrderFactsImportLedger(input: {
   bulkCurrencyCode: string;
   pageSize?: number;
   maxRequests?: number;
+  transportBudget?: DTransportBudget;
 }): Promise<ImportLedgerResult> {
   const counts = emptyCounts();
   const cost = createRequestCostAccumulator();
@@ -265,7 +271,8 @@ export async function readOrderFactsImportLedger(input: {
     requestedGid: input.orderGid,
     phase: "initial" as const,
   };
-  const budget = createDTransportBudget(ORDER_ADMIN_READ_MAX_REQUESTS);
+  const budget =
+    input.transportBudget ?? createDTransportBudget(ORDER_ADMIN_READ_MAX_REQUESTS);
   const withTransport = <
     T extends {
       status: ImportLedgerResult["status"];
@@ -285,10 +292,14 @@ export async function readOrderFactsImportLedger(input: {
       },
       { ...extras, phase: "options" },
     );
-    budget.maxRequests = maxRequests;
+    if (!input.transportBudget) {
+      budget.maxRequests = maxRequests;
+    }
     const wrappedContext: OrderAdminReadContext = {
       ...input.context,
-      admin: wrapAdminWithDTransportBudget(input.context.admin, budget, extras),
+      admin: input.transportBudget
+        ? input.context.admin
+        : wrapAdminWithDTransportBudget(input.context.admin, budget, extras),
     };
     budget.phase = "initial";
     counts.initial += 1;
@@ -416,7 +427,7 @@ export async function readOrderFactsImportLedger(input: {
           pin,
           cost,
           pageSize,
-          maxRequests,
+          ORDER_ADMIN_READ_MAX_REQUESTS,
         ),
       );
       counts.sale += Math.max(0, budget.used - before);
@@ -441,11 +452,10 @@ export async function readOrderFactsImportLedger(input: {
         });
       }
       budget.phase = "refund";
-      const remaining = maxRequests - budget.used;
       const before = budget.used;
       const refundRead = await readRefundFact(wrappedContext, refundGid, {
         pageSize,
-        maxRequests: remaining,
+        maxRequests: ORDER_ADMIN_READ_MAX_REQUESTS,
         orderCurrencyCode: pin.currencyCode,
       });
       counts.refund += Math.max(0, budget.used - before);

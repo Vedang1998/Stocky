@@ -25,6 +25,7 @@ async function main(): Promise<void> {
     shopId,
     syncRunId,
     scratchRoot,
+    reservedBytes: Number(process.env.PR6_D_LIVE_RESERVED_BYTES ?? 1_048_576),
   });
   const livePath = `${handle.dir}/LIVE-WORKER-BYTES`;
   writeFileSync(livePath, payload);

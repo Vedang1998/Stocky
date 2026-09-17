@@ -1,5 +1,7 @@
 import type { CatalogAdminReadClient } from "../../catalog-facts/admin-read";
 import type { OrderAdminReadClient, TrustedShopIdentity } from "../admin-read";
+import { ORDER_ADMIN_READ_MAX_REQUESTS } from "../admin-read";
+import { OrderPaginationError } from "../admin-read/errors";
 import { readBulkOperationById } from "../../catalog-facts/admin-read";
 import { fingerprintBulkQuery } from "../../catalog-facts/ingest/bulk-operation-recovery";
 import {
@@ -21,6 +23,7 @@ import {
   probeReceiptBeforeShopifyIo,
 } from "./apply-composition";
 import {
+  importReceiptMatchesV1Digest,
   legacyImportReceiptApplicationKey,
   nominatedImportReceipt,
 } from "./import-receipt-binding";
@@ -32,11 +35,18 @@ import {
   ORDER_FACTS_BULK_POLL_INTERVAL_MS,
   ORDER_FACTS_BULK_POLL_MAX_ATTEMPTS,
   ORDER_FACTS_BULK_POLL_WALL_CLOCK_MAX_MS,
+  BULK_OPERATION_GID_PREFIX,
   ORDER_FACTS_D_API_VERSION,
+  ORDER_FACTS_SCRATCH_RESOURCE_REASON,
   ORDER_FACTS_SYNC_DOMAIN,
   ORDER_FACTS_SYNC_JOB_TYPE,
 } from "./constants";
 import { DiskOrdinalAck } from "./ordinal-ack";
+import {
+  defaultDScratchRoot,
+  inspectDScratchOccupancy,
+  sanitizeDScratchOccupancy,
+} from "./source-stage";
 import {
   assertShopProcessingEnabled,
   createOrderFactsSyncRun,
@@ -60,6 +70,11 @@ import {
   mergeLedgerCounts,
   readOrderFactsImportLedger,
 } from "./supplemental-ledger";
+import {
+  createDTransportBudget,
+  setDTransportPhase,
+  wrapAdminWithDTransportBudget,
+} from "./transport-budget";
 import type { LedgerQueryCounts } from "./types";
 import type { OrderFactsTxnHost } from "./apply-composition";
 
@@ -72,6 +87,10 @@ export type OrderFactsImportStepResult =
       bulkDirectApplies: number;
       verifiedReplayApplies: number;
       ledgerCounts: LedgerQueryCounts;
+      runTransportAttempts: number;
+      parentTransportAttempts: number;
+      fallbackOrders: number;
+      fallbackTransportAttempts: number;
     }
   | { status: "CONTINUE"; backoffMs: number; reason: string }
   | { status: "PARTIAL_FAILURE"; reason: string };
@@ -118,7 +137,18 @@ async function failImport(input: {
   examined?: number;
   incomplete?: number;
   truncated?: boolean;
+  scratchRoot?: string;
 }): Promise<OrderFactsImportStepResult> {
+  const occupancy = sanitizeDScratchOccupancy(
+    await inspectDScratchOccupancy({
+      scratchRoot: input.scratchRoot ?? defaultDScratchRoot(),
+    }),
+  );
+  const scratchFailure =
+    input.errorCode === ORDER_FACTS_SCRATCH_RESOURCE_REASON ||
+    input.errorCode === "JSONL_SCRATCH_RESOURCE" ||
+    input.errorCode === "scratch_resource_exhausted" ||
+    input.reason.includes(ORDER_FACTS_SCRATCH_RESOURCE_REASON);
   await markSyncRunPartialFailure({
     shopId: input.shopId,
     syncRunId: input.syncRunId,
@@ -127,11 +157,25 @@ async function failImport(input: {
   });
   await recordOrderFactsDataIssue({
     shopId: input.shopId,
-    reasonCode: input.errorCode.slice(0, 64),
-    redactedEvidence: { reason: input.reason.slice(0, 200) },
+    reasonCode: (scratchFailure
+      ? ORDER_FACTS_SCRATCH_RESOURCE_REASON
+      : input.errorCode
+    ).slice(0, 64),
+    redactedEvidence: {
+      reason: input.reason.slice(0, 200),
+      leftoverAttemptCount: occupancy.leftoverAttemptCount,
+      unknownAttemptCount: occupancy.unknownAttemptCount,
+      observedBytes: occupancy.observedBytes,
+      reservedBytes: occupancy.reservedBytes,
+      oldestAgeMs: occupancy.oldestAgeMs,
+      maxScratchAttempts: occupancy.maxScratchAttempts,
+      maxScratchBytes: occupancy.maxScratchBytes,
+      operatorInterventionRequired: occupancy.operatorInterventionRequired,
+    },
   });
   await persistOrderFactsCoverageHealth({
     shopId: input.shopId,
+    scratchRoot: input.scratchRoot,
     coverage: {
       mode: "incremental",
       examinedGids: input.examined ?? 0,
@@ -165,6 +209,10 @@ export async function runOrderFactsImportStep(input: {
   expectedObjectCount?: string | null;
   expectedRootObjectCount?: string | null;
   scratchRoot?: string;
+  maxScratchBytes?: number;
+  maxScratchAttempts?: number;
+  reservedBytes?: number;
+  parentTransportMaxRequests?: number;
   requestedCanonicalIdentitiesPerTransaction?: number;
   configuredWorstCaseConcurrentCanonicalTransactions?: number;
 }): Promise<OrderFactsImportStepResult> {
@@ -184,6 +232,7 @@ export async function runOrderFactsImportStep(input: {
   ) {
     return failImport({
       shopId: input.shopId,
+      scratchRoot: input.scratchRoot,
       syncRunId: syncRun.id,
       errorCode: "ORDER_FACTS_BULK_FINGERPRINT_MISMATCH",
       reason: "old_bulk_a_checkpoint_not_transferable",
@@ -202,11 +251,18 @@ export async function runOrderFactsImportStep(input: {
   let expectedObjectCount = input.expectedObjectCount ?? syncRun.bulkObjectCount;
   let expectedRootObjectCount =
     input.expectedRootObjectCount ?? syncRun.bulkRootObjectCount;
+  let runTransportAttempts = 0;
+  const countRunAdmin: OrderAdminReadClient = {
+    graphql: async (query, options) => {
+      runTransportAttempts += 1;
+      return input.admin.graphql(query, options);
+    },
+  };
 
   if (input.pollBulkOperation !== false && input.jsonlSource == null) {
     if (!bulkOperationGid) {
       const submitted = await submitOrderFactsBulkA(
-        input.admin as CatalogAdminReadClient,
+        countRunAdmin as CatalogAdminReadClient,
         {
           shopId: input.shopId,
           fenceGeneration: fence.fenceGeneration,
@@ -229,18 +285,20 @@ export async function runOrderFactsImportStep(input: {
     if (budget === "exhausted") {
       return failImport({
         shopId: input.shopId,
+        scratchRoot: input.scratchRoot,
         syncRunId: syncRun.id,
         errorCode: "ORDER_FACTS_BULK_POLL_EXHAUSTED",
         reason: "bulk_poll_budget_exhausted",
       });
     }
     const polled = await readBulkOperationById(
-      input.admin as CatalogAdminReadClient,
+      countRunAdmin as CatalogAdminReadClient,
       bulkOperationGid,
     );
     if (!polled) {
       return failImport({
         shopId: input.shopId,
+        scratchRoot: input.scratchRoot,
         syncRunId: syncRun.id,
         errorCode: "order_facts_bulk_poll_missing",
         reason: "bulk_operation_missing",
@@ -251,6 +309,7 @@ export async function runOrderFactsImportStep(input: {
       if (polled.snapshot.partialDataUrl) {
         return failImport({
           shopId: input.shopId,
+          scratchRoot: input.scratchRoot,
           syncRunId: syncRun.id,
           errorCode: "ORDER_FACTS_BULK_PARTIAL_URL",
           reason: "partial_data_url_not_canonical",
@@ -278,6 +337,7 @@ export async function runOrderFactsImportStep(input: {
         } else {
           return failImport({
             shopId: input.shopId,
+            scratchRoot: input.scratchRoot,
             syncRunId: syncRun.id,
             errorCode: "ORDER_FACTS_JSONL_EMPTY_NONEMPTY",
             reason: "empty_download_of_nonempty_export",
@@ -298,6 +358,7 @@ export async function runOrderFactsImportStep(input: {
     ) {
       return failImport({
         shopId: input.shopId,
+        scratchRoot: input.scratchRoot,
         syncRunId: syncRun.id,
         errorCode: "ORDER_FACTS_BULK_FAILED",
         reason: polled.snapshot.status,
@@ -314,6 +375,7 @@ export async function runOrderFactsImportStep(input: {
   if (input.jsonlSource == null) {
     return failImport({
       shopId: input.shopId,
+      scratchRoot: input.scratchRoot,
       syncRunId: syncRun.id,
       errorCode: "ORDER_FACTS_JSONL_MISSING",
       reason: "jsonl_source_missing",
@@ -336,11 +398,29 @@ export async function runOrderFactsImportStep(input: {
     sale: 0,
     refund: 0,
     fallback: 0,
+    fallbackOrders: 0,
+    fallbackTransportAttempts: 0,
     throttle: 0,
   };
+  let parentTransportAttempts = 0;
+  let fallbackOrders = 0;
+  let fallbackTransportAttempts = 0;
+  const epochBulkGid =
+    bulkOperationGid && bulkOperationGid.startsWith(BULK_OPERATION_GID_PREFIX)
+      ? bulkOperationGid
+      : `${BULK_OPERATION_GID_PREFIX}d-jsonl-${syncRun.id}`;
+  if (!fence.fenceGeneration && fence.fenceGeneration !== 0n) {
+    return failImport({
+      shopId: input.shopId,
+      scratchRoot: input.scratchRoot,
+      syncRunId: syncRun.id,
+      errorCode: "order_facts_import_epoch_incomplete",
+      reason: "fenceGeneration required",
+    });
+  }
   const observedAt = new Date();
   const scopes = await readGrantedAccessScopes({
-    admin: input.admin,
+    admin: countRunAdmin,
     shop: input.shop,
   });
 
@@ -371,6 +451,8 @@ export async function runOrderFactsImportStep(input: {
       sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
       fenceGeneration: fence.fenceGeneration,
       shopId: input.shopId,
+      syncRunId: syncRun.id,
+      bulkOperationGid: epochBulkGid,
       queryFingerprint: fingerprint,
       apiVersion: ORDER_FACTS_D_API_VERSION,
       parent: assembly.root,
@@ -395,6 +477,25 @@ export async function runOrderFactsImportStep(input: {
       throw new OrderFactsSyncError(
         "import_legacy_receipt_fresh_run_required",
         "import_legacy_receipt_fresh_run_required",
+      );
+    }
+    if (
+      modern &&
+      importReceiptMatchesV1Digest({
+        storedDigest: modern.payloadDigest,
+        shopId: input.shopId,
+        sourceJobType: ORDER_FACTS_SYNC_JOB_TYPE,
+        durableJobId: input.durableJobId,
+        shopifyGid: assembly.rootGid,
+        queryFingerprint: fingerprint,
+        apiVersion: ORDER_FACTS_D_API_VERSION,
+        parent: assembly.root,
+        children: assembly.children,
+      })
+    ) {
+      throw new OrderFactsSyncError(
+        "import_v1_receipt_fresh_run_required",
+        "import_v1_receipt_fresh_run_required",
       );
     }
     let probed: "already_applied" | "proceed";
@@ -422,32 +523,66 @@ export async function runOrderFactsImportStep(input: {
       await noteCommitted(assembly.lineOrdinals);
       return;
     }
-    const ledger = await readOrderFactsImportLedger({
-      context: { admin: input.admin, shop: input.shop },
+    const parentBudget = createDTransportBudget(
+      input.parentTransportMaxRequests ?? ORDER_ADMIN_READ_MAX_REQUESTS,
+    );
+    const parentAdmin = wrapAdminWithDTransportBudget(input.admin, parentBudget, {
+      resourceKind: "Order",
+      requestedGid: assembly.rootGid,
+      phase: "initial",
+    });
+    try {
+      const ledger = await readOrderFactsImportLedger({
+      context: { admin: parentAdmin, shop: input.shop },
       orderGid: assembly.rootGid,
       bulkUpdatedAt: bulkRootUpdatedAt(assembly.root),
       bulkCurrencyCode: bulkRootCurrencyCode(assembly.root),
+      maxRequests: ORDER_ADMIN_READ_MAX_REQUESTS,
+      transportBudget: parentBudget,
     });
     mergeLedgerCounts(ledgerCounts, ledger.counts);
     if (ledger.status === "drift") {
+      if (parentBudget.used >= parentBudget.maxRequests) {
+        incomplete += 1;
+        return;
+      }
       followUpReads += 1;
+      fallbackOrders += 1;
       ledgerCounts.fallback += 1;
-      const result = await applyNominatedOrderGid({
-        db: input.db,
-        admin: input.admin,
-        shop: input.shop,
-        shopId: input.shopId,
-        shopifyGid: assembly.rootGid,
-        sourceKind: "FULL_SYNC",
-        observedAt,
-        receipt,
-        durableJobId: input.durableJobId,
-        correlationId: input.correlationId,
-        requestedCanonicalIdentitiesPerTransaction:
-          input.requestedCanonicalIdentitiesPerTransaction,
-        configuredWorstCaseConcurrentCanonicalTransactions:
-          input.configuredWorstCaseConcurrentCanonicalTransactions,
-      });
+      ledgerCounts.fallbackOrders += 1;
+      setDTransportPhase(parentBudget, "fallback");
+      const usedBeforeFallback = parentBudget.used;
+      let result;
+      try {
+        result = await applyNominatedOrderGid({
+          db: input.db,
+          admin: parentAdmin,
+          shop: input.shop,
+          shopId: input.shopId,
+          shopifyGid: assembly.rootGid,
+          sourceKind: "FULL_SYNC",
+          observedAt,
+          receipt,
+          durableJobId: input.durableJobId,
+          correlationId: input.correlationId,
+          requestedCanonicalIdentitiesPerTransaction:
+            input.requestedCanonicalIdentitiesPerTransaction,
+          configuredWorstCaseConcurrentCanonicalTransactions:
+            input.configuredWorstCaseConcurrentCanonicalTransactions,
+        });
+      } catch (error) {
+        const fallbackUsed = parentBudget.used - usedBeforeFallback;
+        fallbackTransportAttempts += fallbackUsed;
+        ledgerCounts.fallbackTransportAttempts += fallbackUsed;
+        if (error instanceof OrderPaginationError) {
+          incomplete += 1;
+          return;
+        }
+        throw error;
+      }
+      const fallbackUsed = parentBudget.used - usedBeforeFallback;
+      fallbackTransportAttempts += fallbackUsed;
+      ledgerCounts.fallbackTransportAttempts += fallbackUsed;
       if (result.status === "applied" || result.status === "already_applied") {
         applied += 1;
         await noteCommitted(assembly.lineOrdinals);
@@ -496,6 +631,9 @@ export async function runOrderFactsImportStep(input: {
       return;
     }
     incomplete += 1;
+    } finally {
+      parentTransportAttempts += parentBudget.used;
+    }
   };
 
   let assembled;
@@ -506,6 +644,9 @@ export async function runOrderFactsImportStep(input: {
       shopId: input.shopId,
       syncRunId: syncRun.id,
       scratchRoot: input.scratchRoot,
+      maxScratchBytes: input.maxScratchBytes,
+      maxScratchAttempts: input.maxScratchAttempts,
+      reservedBytes: input.reservedBytes,
       epoch: {
         shopId: input.shopId,
         syncRunId: syncRun.id,
@@ -527,6 +668,7 @@ export async function runOrderFactsImportStep(input: {
   } catch (error) {
     return failImport({
       shopId: input.shopId,
+      scratchRoot: input.scratchRoot,
       syncRunId: syncRun.id,
       errorCode:
         error instanceof OrderFactsSyncError
@@ -541,8 +683,12 @@ export async function runOrderFactsImportStep(input: {
   if (assembled.status !== "COMPLETE") {
     return failImport({
       shopId: input.shopId,
+      scratchRoot: input.scratchRoot,
       syncRunId: syncRun.id,
-      errorCode: `JSONL_${assembled.status}`,
+      errorCode:
+        assembled.status === "SCRATCH_RESOURCE"
+          ? ORDER_FACTS_SCRATCH_RESOURCE_REASON
+          : `JSONL_${assembled.status}`,
       reason: assembled.reason,
       examined,
       incomplete: Math.max(incomplete, assembled.rootCount),
@@ -553,6 +699,7 @@ export async function runOrderFactsImportStep(input: {
   if (incomplete > 0) {
     return failImport({
       shopId: input.shopId,
+      scratchRoot: input.scratchRoot,
       syncRunId: syncRun.id,
       errorCode: "ORDER_FACTS_IMPORT_PARTIAL",
       reason: "import_incomplete",
@@ -583,6 +730,7 @@ export async function runOrderFactsImportStep(input: {
   });
   await persistOrderFactsCoverageHealth({
     shopId: input.shopId,
+    scratchRoot: input.scratchRoot,
     coverage: {
       mode: "incremental",
       examinedGids: examined,
@@ -608,5 +756,9 @@ export async function runOrderFactsImportStep(input: {
     bulkDirectApplies,
     verifiedReplayApplies,
     ledgerCounts,
+    runTransportAttempts,
+    parentTransportAttempts,
+    fallbackOrders,
+    fallbackTransportAttempts,
   };
 }

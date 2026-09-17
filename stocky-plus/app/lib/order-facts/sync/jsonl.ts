@@ -48,6 +48,7 @@ export type StreamOrderFactsJsonlOptions = {
   shopId?: string;
   syncRunId?: string;
   scratchRoot?: string;
+  reservedBytes?: number;
   epoch?: SourceEpochBinding;
   maxScratchAttempts?: number;
   onValidatedStage?: (stage: ValidatedSourceStage) => Promise<void>;
@@ -178,6 +179,7 @@ export async function streamOrderFactsJsonl(
     expectedRootObjectCount: options?.expectedRootObjectCount,
     epoch: options?.epoch,
     maxScratchAttempts: options?.maxScratchAttempts,
+    reservedBytes: options?.reservedBytes,
   });
   if (staged.status !== "COMPLETE") {
     return staged;

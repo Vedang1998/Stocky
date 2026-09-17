@@ -3,10 +3,15 @@ import {
   canonicalizeImportJson,
   importParentContentDigest,
   importReceiptApplicationKey,
+  importReceiptMatchesV1Digest,
   legacyImportReceiptApplicationKey,
   nominatedImportReceipt,
+  v1ImportReceiptPayloadDigest,
 } from "./import-receipt-binding";
-import { ORDER_FACTS_IMPORT_RECEIPT_BINDING_VERSION } from "./constants";
+import {
+  ORDER_FACTS_IMPORT_RECEIPT_BINDING_VERSION,
+  ORDER_FACTS_IMPORT_RECEIPT_DIGEST_VERSION,
+} from "./constants";
 
 describe("PR6-D import receipt binding", () => {
   it("canonicalizes representation without inventing nulls or flipping signs", () => {
@@ -74,6 +79,8 @@ describe("PR6-D import receipt binding", () => {
       durableJobId: "job",
       shopifyGid: "gid://shopify/Order/1",
       shopId: "shop",
+      syncRunId: "run-1",
+      bulkOperationGid: "gid://shopify/BulkOperation/1",
       queryFingerprint: "abc",
       fenceGeneration: 1n,
       parent: { id: "gid://shopify/Order/1" },
@@ -81,5 +88,127 @@ describe("PR6-D import receipt binding", () => {
     });
     expect(receipt.payloadDigest).not.toMatch(/tmp|att-|scratch|ordinal/i);
     expect(receipt.applicationKey).not.toMatch(/tmp|att-/);
+  });
+
+  it("changes the digest when fence, run, Bulk, query, shop, or content change", () => {
+    const base = {
+      durableJobId: "job",
+      shopifyGid: "gid://shopify/Order/1",
+      shopId: "shop",
+      syncRunId: "run-1",
+      bulkOperationGid: "gid://shopify/BulkOperation/1",
+      queryFingerprint: "abc",
+      apiVersion: "2026-07",
+      fenceGeneration: 1n,
+      parent: { id: "gid://shopify/Order/1" },
+      children: [{ id: "gid://shopify/LineItem/a", quantity: 1 }],
+    };
+    const digest = nominatedImportReceipt(base).payloadDigest;
+    const key = nominatedImportReceipt(base).applicationKey;
+    expect(nominatedImportReceipt({ ...base, fenceGeneration: 999n }).payloadDigest).not.toBe(
+      digest,
+    );
+    expect(nominatedImportReceipt({ ...base, fenceGeneration: 999n }).applicationKey).toBe(
+      key,
+    );
+    expect(nominatedImportReceipt({ ...base, syncRunId: "run-2" }).payloadDigest).not.toBe(
+      digest,
+    );
+    expect(
+      nominatedImportReceipt({
+        ...base,
+        bulkOperationGid: "gid://shopify/BulkOperation/2",
+      }).payloadDigest,
+    ).not.toBe(digest);
+    expect(
+      nominatedImportReceipt({ ...base, queryFingerprint: "zzz" }).payloadDigest,
+    ).not.toBe(digest);
+    expect(nominatedImportReceipt({ ...base, shopId: "other" }).payloadDigest).not.toBe(
+      digest,
+    );
+    expect(nominatedImportReceipt({ ...base, apiVersion: "2026-04" }).payloadDigest).not.toBe(
+      digest,
+    );
+    expect(key).toContain(ORDER_FACTS_IMPORT_RECEIPT_BINDING_VERSION);
+    expect(digest).not.toContain(ORDER_FACTS_IMPORT_RECEIPT_DIGEST_VERSION);
+  });
+
+  it("rejects missing epoch fields before certifying facts", () => {
+    expect(() =>
+      nominatedImportReceipt({
+        durableJobId: "job",
+        shopifyGid: "gid://shopify/Order/1",
+        shopId: "shop",
+        queryFingerprint: "abc",
+        fenceGeneration: 1n,
+        parent: { id: "gid://shopify/Order/1" },
+        children: [],
+      } as never),
+    ).toThrow(/syncRunId|epoch/i);
+    expect(() =>
+      nominatedImportReceipt({
+        durableJobId: "job",
+        shopifyGid: "gid://shopify/Order/1",
+        shopId: "shop",
+        syncRunId: "run-1",
+        bulkOperationGid: "not-a-bulk",
+        queryFingerprint: "abc",
+        fenceGeneration: 1n,
+        parent: { id: "gid://shopify/Order/1" },
+        children: [],
+      }),
+    ).toThrow(/BulkOperation/);
+    expect(() =>
+      nominatedImportReceipt({
+        durableJobId: "job",
+        shopifyGid: "gid://shopify/Order/1",
+        shopId: "shop",
+        syncRunId: "run-1",
+        bulkOperationGid: "gid://shopify/BulkOperation/1",
+        queryFingerprint: "abc",
+        fenceGeneration: null,
+        parent: { id: "gid://shopify/Order/1" },
+        children: [],
+      }),
+    ).toThrow(/fenceGeneration/);
+  });
+
+  it("detects stored v1 digests without silently upgrading them", () => {
+    const parent = { id: "gid://shopify/Order/1" };
+    const children = [{ id: "gid://shopify/LineItem/a" }];
+    const v1 = v1ImportReceiptPayloadDigest({
+      shopId: "shop",
+      sourceJobType: "order-facts-sync",
+      durableJobId: "job",
+      shopifyGid: parent.id,
+      queryFingerprint: "abc",
+      apiVersion: "2026-07",
+      contentDigest: importParentContentDigest({ parent, children }),
+    });
+    expect(
+      importReceiptMatchesV1Digest({
+        storedDigest: v1,
+        shopId: "shop",
+        sourceJobType: "order-facts-sync",
+        durableJobId: "job",
+        shopifyGid: parent.id,
+        queryFingerprint: "abc",
+        apiVersion: "2026-07",
+        parent,
+        children,
+      }),
+    ).toBe(true);
+    const v2 = nominatedImportReceipt({
+      durableJobId: "job",
+      shopifyGid: parent.id,
+      shopId: "shop",
+      syncRunId: "run-1",
+      bulkOperationGid: "gid://shopify/BulkOperation/1",
+      queryFingerprint: "abc",
+      fenceGeneration: 1n,
+      parent,
+      children,
+    }).payloadDigest;
+    expect(v2).not.toBe(v1);
   });
 });

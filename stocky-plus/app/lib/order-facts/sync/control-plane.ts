@@ -12,6 +12,11 @@ import {
   ORDER_FACTS_HEALTH_DOMAIN,
   ORDER_FACTS_SYNC_DOMAIN,
 } from "./constants";
+import {
+  defaultDScratchRoot,
+  inspectDScratchOccupancy,
+  sanitizeDScratchOccupancy,
+} from "./source-stage";
 import type { CoverageRecord, OrderFactsHealthEvidence } from "./types";
 
 export async function recordOrderFactsDataIssue(input: {
@@ -105,9 +110,21 @@ export async function persistOrderFactsCoverageHealth(input: {
   coverage: CoverageRecord;
   evidence: OrderFactsHealthEvidence;
   prisma?: PrismaClient;
+  scratchRoot?: string;
 }): Promise<void> {
   void input.coverage;
   const prisma = input.prisma ?? getControlPlanePrisma();
+  const occupancy = sanitizeDScratchOccupancy(
+    await inspectDScratchOccupancy({
+      scratchRoot: input.scratchRoot ?? defaultDScratchRoot(),
+    }),
+  );
+  const residual =
+    occupancy.operatorInterventionRequired ||
+    occupancy.leftoverAttemptCount > 0 ||
+    occupancy.unknownAttemptCount > 0 ||
+    occupancy.observedBytes > 0;
+  const scratchHold = residual ? 1 : 0;
   await computeSyncHealth(input.shopId, ORDER_FACTS_HEALTH_DOMAIN, {
     catalogEvidence: {
       incompleteIngestionCount: input.evidence.incompletePaginationCount,
@@ -118,7 +135,12 @@ export async function persistOrderFactsCoverageHealth(input: {
       reconcileUncertaintyCount:
         input.evidence.unresolvedCoverageCount +
         input.evidence.openDiagnosticIssueCount +
-        input.evidence.quarantineOpenCount,
+        input.evidence.quarantineOpenCount +
+        scratchHold,
+    },
+    orderFactsScratch: {
+      ...occupancy,
+      operatorInterventionRequired: residual,
     },
   });
   void prisma;
