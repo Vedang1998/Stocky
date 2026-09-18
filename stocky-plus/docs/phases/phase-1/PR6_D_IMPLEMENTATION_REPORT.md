@@ -1142,8 +1142,9 @@ Allowed paths: `scripts/tenant-indexes/tests/indexes.migration.test.ts` (test-lo
 | Heavy | [`105572298557`](https://github.com/Vedang1998/Stocky/actions/runs/35336443725/job/105572298557) **FAILURE** (not SKIPPED). Step “Migration and tenant-backfill tests”: **2** failed / **715** passed / **2** skipped; **1** unhandled rejection |
 | CI Gate | [`105587211245`](https://github.com/Vedang1998/Stocky/actions/runs/35336443725/job/105587211245) **FAILURE** |
 | Earlier overlay failure (preserved) | run [`35219870613`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613) / Heavy [`105197300810`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613/job/105197300810) |
+| Superseded diagnosis-docs head (not INDEX-01 original) | `71ea3ae966534f13903afb9e3481e56c4154f881` run [`35399728006`](https://github.com/Vedang1998/Stocky/actions/runs/35399728006) attempt 1 **FAILURE**. Classify [`105776625491`](https://github.com/Vedang1998/Stocky/actions/runs/35399728006/job/105776625491) **SUCCESS**. Heavy [`105776663609`](https://github.com/Vedang1998/Stocky/actions/runs/35399728006/job/105776663609) **FAILURE** at “Tenant enforcement preflight”: `globalFailures:["tenant:access:inventory:check_failed_exit_1"]` because mechanical `PR2_TENANT_ACCESS_INVENTORY.md` regen was still uncommitted. Gate [`105777369986`](https://github.com/Vedang1998/Stocky/actions/runs/35399728006/job/105777369986) **FAILURE**. Not SKIPPED. Do not relabel as INDEX-01 evidence or as a same-head rerun-to-green. |
 
-Do **not** rerun `35336443725` or `35219870613` to obtain green. Do **not** `workflow_dispatch`.
+Do **not** rerun `35336443725`, `35219870613`, or `35399728006` to obtain green. Do **not** `workflow_dispatch`.
 
 #### 16.9.2 Failure A — F-F03 observation race (distinct from Failure B)
 
@@ -1175,7 +1176,7 @@ A later 40P01 at `11:34:56` on `enforcement_fault_a/b` is the existing D-050 adv
 
 #### 16.9.4 Reproduction limits
 
-Bounded local reproduction of the CI schedule is **not claimed in this commit**. The two causal chains above are taken from the exact Heavy + PostgreSQL logs of job `105572298557`. Do not manufacture a reproduction of run `35336443725`. Local F-F03 / full-file / 10-run batch evidence is recorded after execution; it is not this diagnosis.
+Bounded local reproduction of the *CI schedule* of run `35336443725` is **not claimed**. The two causal chains in §16.9.2–16.9.3 are taken from the exact Heavy + PostgreSQL logs of job `105572298557`. Local helper tests encode the CI after-burst sample (`loading tuples in tree` + copied trigger labels, no in-window scan) as a **failing** overlap evaluation, and encode leftover CIC PIDs as a schema-reset blocker. That is assertion-level reproduction of the logged failure mode, not a claim that this host replayed the GitHub runner’s 4-CPU/`loadavg 1.87` timeline.
 
 #### 16.9.5 Repair (test-local only)
 
@@ -1210,7 +1211,48 @@ Teardown (Failure B):
 | Required starting head | `2084aebdea6505ece536455611a80b30a3e1bd57` |
 | `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
 | Branch / PR | `phase-1/pr6-d-order-webhook-import` / [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED |
-| D runtime / scale harness / overlay C / immutable reviews vs `2084aeb…` | **must remain byte-identical** |
-| Local 10-run batch / full-file / lint / inventory | **pending execution after this coherent push**; fill with actual commands and counts, never relabel prior measurements |
+| Runtime/test correction | `696115f72813b55e1a665a187dbcd113dea58c0a` |
+| Diagnosis docs commit | `71ea3ae966534f13903afb9e3481e56c4154f881` |
+| Evidence + inventory commit | **this commit**; SHA is not embedded here |
+| Allowed paths vs `2084aeb…` | `scripts/tenant-indexes/tests/indexes.migration.test.ts`, this report, mechanical `PR2_TENANT_ACCESS_INVENTORY.md` (line numbers / digest only) |
+| D runtime / scale harness / overlay C / immutable reviews vs `2084aeb…` | **byte-identical** (`git diff` empty for `stocky-plus/app`, D tests, and the four immutable D review files) |
 
-R-176 remains **OPEN / P0**. R-164 unchanged. No D-055. Actual Claude Code correction re-review remains required and must include this index-test change.
+#### 16.9.8 Cursor local commands (index-test tree)
+
+Environment: Node `v22.14.0`, npm `11.5.2`, linux, disposable PostgreSQL accepting, Redis configured. Subject: `696115f72813b55e1a665a187dbcd113dea58c0a` working tree plus this evidence/inventory update.
+
+Controlled load definition for runs 6–10: two additional Python busy-loop processes (tight integer multiply-add) for the duration of that F-F03 execution; stopped by exact PID afterward. Not a Vitest / `fileParallelism` / CI timeout / allowlist change.
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npm run test:migrations -- …/indexes.migration.test.ts -t "F-F03 active-scan overlap helper"` | 0 | **13** passed / **14** skipped (27 in file). Nonzero; not a name-filter of zero. |
+| `npm run test:migrations -- …/indexes.migration.test.ts -t "cancels an in-flight CONCURRENTLY builder after injected assertion failure"` | 0 | **1** passed / 26 skipped. Cleanup observed cancel; following `resetPublicSchema` succeeded. |
+| `npm run test:migrations -- …/indexes.migration.test.ts -t "verify fails when indexes were dropped after apply"` | 0 | **1** passed / 26 skipped. |
+| `npm run test:migrations -- …/indexes.migration.test.ts -t "DML overlaps active build-scan and validation-scan phases"` | 0 | **1** passed / 26 skipped. Three evidence events; both required scan phases; `valid_exact`. |
+| Fixed batch of 10 F-F03 executions (5 ordinary + 5 controlled load) | 0 | **10/10** ok; each retained 3 iterations / 3 evidence events. Artifact: `/opt/cursor/artifacts/pr43-ci-index-01-ff03-ten-run.json`. |
+| `npm run test:migrations -- …/indexes.migration.test.ts` (full file) | 0 | **27** passed / 1 file / 29.40s. F-F03 **4547ms**, injected teardown **1890ms**, dropped-index **2142ms** immediately after. |
+| `npx eslint …/indexes.migration.test.ts` | 0 | focused |
+| `npx tsc --noEmit` | 0 | focused typecheck |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | **40/40** assertions |
+| `git diff --check` | 0 | — |
+| `npm run tenant:access:inventory` then `:check` | 0 | mechanical regen; findings **1761** / violations **0**; digest `f037db3170ac362fe0e66fd5365ae822689595ee9fb94a669ef9f154f1677eb0` |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+
+Fixed batch detail (every outcome recorded; none discarded):
+
+| i | mode | exit | ms | evidence events |
+|---|---|---|---|---|
+| 1 | ordinary | 0 | 7094 | 3 |
+| 2 | ordinary | 0 | 9507 | 3 |
+| 3 | ordinary | 0 | 7684 | 3 |
+| 4 | ordinary | 0 | 7033 | 3 |
+| 5 | ordinary | 0 | 6910 | 3 |
+| 6 | 2 CPU busy-loops | 0 | 7905 | 3 |
+| 7 | 2 CPU busy-loops | 0 | 7905 | 3 |
+| 8 | 2 CPU busy-loops | 0 | 8094 | 3 |
+| 9 | 2 CPU busy-loops | 0 | 7870 | 3 |
+| 10 | 2 CPU busy-loops | 0 | 7897 | 3 |
+
+`PR6_D_SCALE_1E6` was **not** re-run. Existing §16.5 envelope on `b2471676…` remains the Cursor million-line evidence. D scale harness and D application code are unchanged vs `2084aeb…`.
+
+This exception does **not** independently accept SC-R-01…04. Exact-head Classify + full Heavy + Gate on the live head after this evidence commit remain required. Actual Claude Code correction re-review remains required and must include this index-test change. R-176 remains **OPEN / P0**. R-164 unchanged. No D-055.
