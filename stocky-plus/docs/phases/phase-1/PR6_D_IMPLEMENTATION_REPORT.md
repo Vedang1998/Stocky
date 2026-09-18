@@ -1125,3 +1125,92 @@ Environment: Node `v22.14.0`, npm `11.5.2`, Git `2.43.0`, linux, disposable Post
 `PR6_D_SCALE_1E6` was **not** re-run. Existing §16.5 envelope on `b2471676…` remains the Cursor million-line evidence. D scale harness file is unchanged vs `62f7a06…`.
 
 This exception does **not** independently accept SC-R-01…04. ChatGPT PR43 final control correction review remains required after exact-head Classify + full Heavy + Gate SUCCESS on the cleanup head.
+
+### 16.9 PR43-CI-INDEX-01 — inherited F-F03 observation race and failure-path reset isolation
+
+**Authority:** this ChatGPT assignment is an explicit narrow extension of PR #43 comment [5723630213](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5723630213) on the same writer / same draft PR. No newer GitHub issue comment existed at fetch time. Not a new tooling PR. Not independent acceptance of SC-R. Not D-055.
+
+Allowed paths: `scripts/tenant-indexes/tests/indexes.migration.test.ts` (test-local scheduling / observation / teardown / regression coverage; helpers remain in EX-IDX-014) and this report. Production index helpers, CI/workflows, packages, allowlists, overlay C tests, and D runtime are unchanged.
+
+#### 16.9.1 Preserved failed exact-head CI (do not relabel)
+
+| Field | Value |
+|---|---|
+| Head | `2084aebdea6505ece536455611a80b30a3e1bd57` |
+| Event | `pull_request` run [`35336443725`](https://github.com/Vedang1998/Stocky/actions/runs/35336443725) attempt 1 **FAILURE** |
+| Classify | [`105572262202`](https://github.com/Vedang1998/Stocky/actions/runs/35336443725/job/105572262202) **SUCCESS** (`docs_only=false` `full_ci=true`) |
+| Heavy | [`105572298557`](https://github.com/Vedang1998/Stocky/actions/runs/35336443725/job/105572298557) **FAILURE** (not SKIPPED). Step “Migration and tenant-backfill tests”: **2** failed / **715** passed / **2** skipped; **1** unhandled rejection |
+| CI Gate | [`105587211245`](https://github.com/Vedang1998/Stocky/actions/runs/35336443725/job/105587211245) **FAILURE** |
+| Earlier overlay failure (preserved) | run [`35219870613`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613) / Heavy [`105197300810`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613/job/105197300810) |
+
+Do **not** rerun `35336443725` or `35219870613` to obtain green. Do **not** `workflow_dispatch`.
+
+#### 16.9.2 Failure A — F-F03 observation race (distinct from Failure B)
+
+| Field | Observed |
+|---|---|
+| Test | `DML overlaps active build-scan and validation-scan phases (F-F03), 3 iterations` (**6143ms**) |
+| Statement | `AssertionError: expected 'building index: loading tuples in tree' to be 'building index: scanning table'` |
+| Stack | `overlapWritesWithActiveScan` `indexes.migration.test.ts:1212` (`expect(after.phase).toBe(targetPhase)`), caller `1266` (build-scan overlap) |
+| Iteration 1 | **succeeded** and emitted `tenant_index_active_phase_write_evidence` at `2026-09-18T11:28:36.197Z`. `builderPid` **4155**. `buildDurationMs` **208.921668**. Heap **5324** blocks. Build-scan trigger `blocksDone=125`, after-burst `871`, still `scanning table`. Validation-scan also observed. `loadavg` `[1.87, 1.91, 1.64]`, 4 CPUs, `maintenance_work_mem=1024`, `max_parallel_maintenance_workers=0`. |
+| Failure iteration | **2+** (only one evidence event). After-burst sample had already left the required scan for `loading tuples in tree`. `expect(buildSettled).toBe(false)` at 1210 **passed**, so this is **not** the PR #42 Node-settlement race. |
+| Relation | PostgreSQL oid **552782** (`Supplier`) |
+
+This is an after-burst same-phase observation race on a cached subsequent CIC (iteration 1 already ~209ms end-to-end). It is **not** classified as an index/migration product defect. Production `buildCreateStatement` remains `CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")` and was not edited.
+
+#### 16.9.3 Failure B — leftover CIC vs `DROP SCHEMA` deadlock (distinct)
+
+| Field | Observed |
+|---|---|
+| Test | `verify fails when indexes were dropped after apply` (**1027ms**) |
+| Statement | `PrismaClientKnownRequestError` `resetPublicSchema` line 50 `DROP SCHEMA public CASCADE` |
+| SQLSTATE | **40P01** |
+| Backend PIDs | **4038** waits for `AccessExclusiveLock` on relation **552782** db **16384**, blocked by **4161**. **4161** waits for `ShareLock` on virtual transaction **3/91353**, blocked by **4038**. |
+| Queries | `Process 4038: DROP SCHEMA public CASCADE`. `Process 4161: CREATE INDEX CONCURRENTLY "Supplier_shopId_idx" ON "Supplier" ("shopId")`. Timestamp `2026-09-18 11:28:37.537 UTC`. |
+| Unhandled rejection | `Error: Connection terminated` from `pg/lib/client.js` while the latest test was F-F03. |
+
+Disposition: **unfinished F-F03 work leaking past failed-test teardown**, not an independent dropped-index fixture bug and not a harmless cleanup warning. The previous `finally` rolled back gates then `await builder.end()` while CIC was still in-flight, which both (a) produced the unhandled rejection and (b) left backend **4161** holding `ShareUpdateExclusiveLock` so the next test’s schema reset deadlocked.
+
+A later 40P01 at `11:34:56` on `enforcement_fault_a/b` is the existing D-050 adversarial fixture, **not** this index-test leak.
+
+#### 16.9.4 Reproduction limits
+
+Bounded local reproduction of the CI schedule is **not claimed in this commit**. The two causal chains above are taken from the exact Heavy + PostgreSQL logs of job `105572298557`. Do not manufacture a reproduction of run `35336443725`. Local F-F03 / full-file / 10-run batch evidence is recorded after execution; it is not this diagnosis.
+
+#### 16.9.5 Repair (test-local only)
+
+Observation proof (Failure A) — evidence equivalence:
+
+| Previous assertion | Replacement | Equivalence |
+|---|---|---|
+| After-burst `after.phase === targetPhase` | Concurrent sampler on a dedicated client; require `isActiveScanSample(targetPhase)` samples whose `[sampledAtNs, sampledEndNs]` **intersect** the INSERT/UPDATE/DELETE window | Same required phases (`building index: scanning table` and `index validation: scanning table`), independently observed during the write window, not a later `loading tuples in tree` / `scanning index` substitute |
+| `phaseAtWriteStart` copied from the pre-write trigger | Labels attached only from intersecting in-window active-scan samples | Copied trigger labels alone now **fail** (`copied_trigger_phase_is_not_independent_overlap`) |
+| After-burst `blocksDone` strictly greater than trigger | In-window (or still-in-phase after) counters must advance vs trigger (`omitted_progress_evidence` otherwise) | Still requires remaining-work counters, not phase-text-only |
+| `buildSettled === false` before/after burst; 15s write limit; ShareUpdateExclusiveLock; no AccessExclusiveLock; 3 iterations; `valid_exact` / `indisvalid` / `indisready` | **preserved** | Unchanged acceptance |
+| After-burst phase may now be a later build phase | Recorded in evidence, **not** used as overlap proof | Later phase without in-window scan samples **fails** (`wrong_or_finished_phase`) |
+
+Teardown (Failure B):
+
+- Track every owned client/PID and the CIC promise, including partial `open()` failure.
+- On success **and** assertion failure: stop the sampler, `pg_cancel_backend` **only the owned builder PID**, roll back owned gates, await CIC settlement or expected cancellation (`57014` / canceling statement / Connection terminated) within 8s, close every owned client even if a prior cleanup step failed, then verify no owned activity / progress / Supplier locks remain before the next `DROP SCHEMA`.
+- Preserve the original assertion error; append cleanup failures. Persistent remainder stays red. No `pg_terminate_backend`, no unrelated-process kill, no retry-`DROP SCHEMA`-until-green, no catch-and-pass.
+
+#### 16.9.6 Negative controls (committed with the harness)
+
+- Wrong/finished phase or no in-window overlap (CI `loading tuples` after-burst with copied trigger labels).
+- Blocked write (`durationMs >= 15000`) and `AccessExclusiveLock` during the window.
+- Omitted progress (in-window scan sample with no counter advance).
+- Leftover owned CIC activity/progress/locks block schema reset; idle non-builder leftovers are not CIC remainder.
+- Injected early assertion while the builder is parked in `waiting for writers before build`: leftover CIC remainder is observed, cleanup must cancel and clear it, then `resetPublicSchema` must succeed. The original dropped-index negative test still follows.
+
+#### 16.9.7 Identities for this exception
+
+| Field | Value |
+|---|---|
+| Required starting head | `2084aebdea6505ece536455611a80b30a3e1bd57` |
+| `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Branch / PR | `phase-1/pr6-d-order-webhook-import` / [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED |
+| D runtime / scale harness / overlay C / immutable reviews vs `2084aeb…` | **must remain byte-identical** |
+| Local 10-run batch / full-file / lint / inventory | **pending execution after this coherent push**; fill with actual commands and counts, never relabel prior measurements |
+
+R-176 remains **OPEN / P0**. R-164 unchanged. No D-055. Actual Claude Code correction re-review remains required and must include this index-test change.
