@@ -8,12 +8,13 @@ Immutable independent reviews (byte-for-byte; do not edit):
 
 - `stocky-plus/docs/phases/phase-1/PR7_CORRECTED_PLANNING_INDEPENDENT_REVIEW.md` (blob `c1fa5c2fed74bf80d1006267b43d767258895c17`)
 - `stocky-plus/docs/phases/phase-1/PR7_EXECUTABLE_CONTRACT_CORRECTION_INDEPENDENT_REVIEW.md` (blob `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`)
+- `stocky-plus/docs/phases/phase-1/PR7_TOPIC_AUTHORITY_FINALIZATION_INDEPENDENT_REVIEW.md` (blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c`)
 
 These rows are **test-executable in specificity**. They are documentation. They are **not** passing CI on a runtime implementation.
 
 Fixture **values** are **synthetic**. Documented Shopify payload **field names** are not synthetic. No merchant or customer production data.
 
-ChatGPT’s 2026-09-18 topic-authority comment 5729229659 is current for Decisions A–E and supersedes conflicting expected outcomes from comment 5714629032 **only as stated**. They do **not** accept the whole plan or authorize PR7 runtime.
+ChatGPT’s 2026-09-18 topic-authority comment 5729229659 is current for Decisions A–E and supersedes conflicting expected outcomes from comment 5714629032 **only as stated**. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) narrowly supplements it for **F-CLAUDE-PR7TF-01…04**. They do **not** accept the whole plan or authorize PR7 runtime.
 
 Original fixture and row IDs are preserved. New IDs continue existing prefixes. Designed fixtures are **not** passing processors.
 
@@ -448,6 +449,17 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-CUST-011 | F-CLAUDE-PR7CP-08 split | `shop_admin` with `platform.export.operational` | GET data_request artifact | deny | serving privacy export as operational export | new | export vs privacy routes | PR7 | designed |
 | PR7-CUST-012 | F-CLAUDE-PR7CP-08 uninstalled | app uninstalled; no owner session possible | fulfill | operator `scripts/privacy/fulfill-data-request.ts` recorded support path | pretending in-app owner route is reachable; public URL | new | operator fulfill | PR7 | designed |
 | PR7-CUST-013 | F-CLAUDE-PR7CP-10 | authenticated `customers/redact` delivered | intake clock | handle **on arrival**; `deadlineAt=receivedAt+30d`; changelog 2026-03-23 is newer published Shopify send policy | local six-month wait; treating the older six-month page as an implementation pause | new | intake + pause tests | PR7 | designed |
+| PR7-CUST-014 | F-CLAUDE-PR7TF-01 barrier keys | LIVE shop_a; authenticated customer `191167` + order `1001` | `stocky_privacy_install_customer_barrier` | ACTIVE rows on shop/generation + `CUSTOMER_REST_ID`/`ORDER_LEGACY_ID` (not request-id-only) | request-id-only fence; whole-shop exclusive gate | G7 `customer_barrier_installs_target_keys` | barrier helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-015 | F-CLAUDE-PR7TF-01 matching writer | barrier ACTIVE | matching `stocky_customer_write_guard` / audit insert | `customer_target_erasing` deny | silent repopulate of the target | G7 `matching_writer_denied_while_barrier_active` | write_guard | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-016 | F-CLAUDE-PR7TF-01 unrelated customer | barrier ACTIVE on customer A | write customer B / `of_a2` path | progress (row admitted) | whole-shop freeze | G7 `unrelated_customer_same_shop_progresses` | target lock keys | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-017 | F-CLAUDE-PR7TF-01 unrelated shop | barrier ACTIVE shop_a | write shop_b | progress | global lock / shop disable | G7 `unrelated_shop_progresses_during_customer_barrier` | domain+target keys | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-018 | F-CLAUDE-PR7TF-01 late row | enumerate then late `ae_a3` matching rest id | source residual **without** re-enumerate | residual > 0; remnant visible; COMPLETED denied | stale-manifest count 0 as absence | G7 `late_matching_row_visible_to_source_residual`; `complete_denied_while_remnants`; old-model CE-1 | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-019 | F-CLAUDE-PR7TF-01 re-enumerate + residual | remnant deleted; bounded re-enumerate | `stocky_privacy_complete_customer_redact` | residual 0 then COMPLETED in **same** txn holding exclusive target locks | unprotected rescan-then-complete; receipt before residual | G7 `reenumerate_then_source_residual_zero`; `complete_commits_after_drain` | complete helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-020 | F-CLAUDE-PR7TF-01 writer vs complete | residual verified; exclusive locks held | concurrent matching writer | writer waits / `55P03`; no restore | completing while a writer can land | G7 `writer_between_residual_and_complete_waits` | exclusive target locks | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-021 | F-CLAUDE-PR7TF-01 delayed restore | COMPLETED; `PrivacyCompletedTarget` | queued payload `payloadAdmittedAt < completedAt` | `customer_target_restore_denied` | restoring erased customer via delayed write | G7 `delayed_old_write_cannot_restore` | completed-target | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-022 | F-CLAUDE-PR7TF-01 later legitimate write | COMPLETED | `payloadAdmittedAt ≥ completedAt` | allowed | lifetime suppression of that customer | G7 `legitimate_later_customer_data_allowed` | completed-target | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-023 | F-CLAUDE-PR7TF-01 coverage | enumerated `preq_dr` | `stocky_privacy_data_request_coverage` | snapshot key count + `enumerationComplete` at `publicationRevision` | using erasure-empty residual as download coverage | G7 `data_request_coverage_is_snapshot_not_empty_predicate` | coverage helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-024 | F-CLAUDE-PR7TF-01 no shop freeze | customer COMPLETED | inspect shop_a | fence `LIVE`; `processingEnabled=true` | exclusive domain freeze; disabling the shop | G7 `customer_request_completed_without_shop_freeze` | classifier | PR7 | executed-synthetic-pg16 |
 
 ### 6.8 Side channels and isolation
 
@@ -481,8 +493,9 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | ID | Req | Pre-state | Action | Expected | Forbidden | Evidence | Home | Owner | Now |
 |---|---|---|---|---|---|---|---|---|---|
 | PR7-CI-001 | brief command | package.json | `npm run test:privacy` | script exists; nonzero tests; fail on zero collect | missing script | prior planning session **failed** as expected (exit 1, missing script) | package.json | PR7 runtime | **executed-prior-planning-head-not-re-run** (absence) |
-| PR7-CI-002 | CI policy | docs-only this planning PR (plan + matrix + two preserved reviews) | classify vs V | `docs_only=true`; `full_ci=false`; **four** Markdown paths | full_ci for docs-only; zero tests collected treated as success | classifier after land | classify script | this planning PR | designed until post-commit classify; then executed-this-planning-session |
+| PR7-CI-002 | CI policy | docs-only this planning PR (plan + matrix + **three** preserved reviews) | classify vs V | `docs_only=true`; `full_ci=false`; **five** Markdown paths | full_ci for docs-only; zero tests collected treated as success | classifier after land | classify script | this planning PR | designed until post-commit classify; then executed-this-planning-session |
 | PR7-CI-003 | runtime PR | implementation diff | classify | `full_ci=true`; heavy includes privacy | docs-only on schema change | CI | workflow | PR7 runtime | designed |
+| PR7-CI-004 | F-CLAUDE-PR7TF-04 | disposable driver | query `server_version` / `server_version_num` | actual cluster version recorded; `results.json` class = run log | hardcoded postgres field; treating run-log hash as a verification artifact | G10 `postgres_version_queried_not_hardcoded` | driver | this planning PR | executed-synthetic-pg16 |
 
 ---
 
@@ -504,6 +517,9 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-TOP-012 | no arbitrary keys | erasure INSERT `PrivacyTargetKey` for `of_a2` | INSERT | `42501` | enlarging scope via row ids | G1 | publisher boundary | PR7 | executed-synthetic-pg16 |
 | PR7-TOP-013 | shop/redact generation | ERASING `shop_red` | enumerate + DELETE facts/lines/audit | remaining 0 for that shop | deleting shop_a/b | G1 | delete_shop policy | PR7 | executed-synthetic-pg16 |
 | PR7-TOP-014 | incomplete enumeration | lookup order `no-such` | enumerate | `enumerationComplete=false`, `missingLinkages=1` | COMPLETED empty-by-zero-rows | G1 | enumerator | PR7 | executed-synthetic-pg16 |
+| PR7-TOP-015 | F-CLAUDE-PR7TF-01 source residual | late matching audit after enumerate | `stocky_privacy_customer_residual_count` | independent of old `PrivacyTargetKey`; remnant counted | manifest-filtered residual 0 | G7; old-model CE-1 | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-TOP-016 | F-CLAUDE-PR7TF-01 in-flight writer | writer holding shared target lock before barrier | install barrier then complete | in-flight write drains; later matching writes deny; no shop freeze | completing while a matching writer can still commit | G7 `writer_active_before_barrier_admission` | target locks | PR7 | executed-synthetic-pg16 |
+| PR7-TOP-017 | F-CLAUDE-PR7TF-01 NEG complete | drop residual/complete serialization | complete with remnant | **must fail this design** (false COMPLETED) | crediting the unchanged contract | NEG `completion_guard_removed_allows_false_complete` | load-bearing | PR7 | executed-synthetic-pg16 |
 
 ### 6.12 Privilege closure (F-CLAUDE-PR7XC-03)
 
@@ -528,6 +544,11 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-COORD-005 | already-deleted | Shop absent | finalize retry | `already_absent` | fatal error or false COMPLETED | G3 | finalizer | PR7 | executed-synthetic-pg16 |
 | PR7-COORD-006 | stale epoch | wrong attempt id | finalize | `finalizer_stale_attempt` | deleting under lost epoch | G3 | finalizer | PR7 | executed-synthetic-pg16 |
 | PR7-COORD-007 | retry after delete | Shop gone; valid epoch | `capability_allows('DELETE_SHOP')` | true | requiring Shop lookup | G3 | capability | PR7 | executed-synthetic-pg16 |
+| PR7-COORD-PUB-001 | F-CLAUDE-PR7TF-02 takeover | epoch-1 leased; worker loss | `stocky_privacy_claim_attempt` | old LOST; new epoch; ACTIVE barriers rebound; successor enumerates | completing under lost epoch | G8 `successor_enumerates_after_takeover`; `epoch_takeover_completes_under_rebound_barrier` | claim helper | PR7 | executed-synthetic-pg16 |
+| PR7-COORD-PUB-002 | F-CLAUDE-PR7TF-02 pause-then-mutate | stale caller validated then paused; successor published | stale `stocky_privacy_enumerate_targets` | `enumerator_stale_attempt`; new epoch keys/flags/`publicationRevision` byte-identical | check-then-act mutate of the new epoch | G8 `stale_publisher_after_pause_does_not_mutate`; `new_epoch_keys_unchanged_by_stale`; old-model CE-6 | publication lock | PR7 | executed-synthetic-pg16 |
+| PR7-COORD-PUB-003 | F-CLAUDE-PR7TF-02 wrong/expired | GUC attempt ≠ live leased | enumerate | denied; live keys unchanged | foreign/expired/terminal publisher | G8 `wrong_attempt_cannot_publish`; `expired_terminal_attempt_cannot_publish` | live_attempt_ok | PR7 | executed-synthetic-pg16 |
+| PR7-COORD-PUB-004 | F-CLAUDE-PR7TF-02 delayed write after takeover complete | successor COMPLETED | old-epoch delayed write | `customer_target_restore_denied` | restoring under lost epoch | G8 `delayed_old_write_after_takeover_complete_denied` | completed-target | PR7 | executed-synthetic-pg16 |
+| PR7-COORD-PUB-005 | F-CLAUDE-PR7TF-02 NEG epoch | drop publication/live-attempt fence | stale enumerate after takeover | **must fail this design** (CE-6 mutation) | crediting the unchanged contract | NEG `epoch_guard_removed_allows_stale_publish` | load-bearing | PR7 | executed-synthetic-pg16 |
 
 ### 6.14 Authorization lock and command (F-CLAUDE-PR7XC-05/07)
 
@@ -559,6 +580,11 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-TOMB-002 | expired evidence | expiresAt past | lookup | 0 rows → uncorrelated | reconstructing bind | G6 | same | PR7 | executed-synthetic-pg16 |
 | PR7-TOMB-003 | new generation | new request `gen_new` | old tombstone generation | still `gen_red` only | inheriting old completion | G6 | classifier | PR7 | executed-synthetic-pg16 |
 | PR7-GATE-008 | Redis/FS | n/a | n/a | **unexecuted LIMIT** — toy PG is not a Redis/FS fence | asserting zero residuals from PG locks | — | D recovery boundary | PR7 | not executed |
+| PR7-GATE-009 | F-CLAUDE-PR7TF-03 inventory | catalog after contract load | `stocky_inventory_is_complete` | true only with `completeAttemptRetry`, `dispatcher_disabled_shop_path`, and `withTenantBoundTransaction` **REQUIRED / not optional** | omitting those symbols; optional db-context | G9 `inventory_includes_retry_and_dispatcher_disabled`; `inventory_incomplete_when_required_writer_removed` | ParticipatingWriterInventory | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-010 | F-CLAUDE-PR7TF-03 retry write | inventoried `completeAttemptRetry` | `stocky_lifecycle_complete_attempt_retry` | guarded CP `DurableJob` stamp; freeze can wait on already-running txn | raw lifecycle UPDATE without the gate | G9 `lifecycle_complete_attempt_retry_guarded_write` | lifecycle.server.ts | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-011 | F-CLAUDE-PR7TF-03 dispatcher disabled | `processingEnabled=false` | `stocky_dispatcher_disabled_shop_write` | still writes `JobDispatch` + `DurableJob`; processingEnabled ≠ drain | treating the disabled-shop re-check as quiescence | G9 `dispatcher_disabled_shop_path_still_writes` | dispatcher.server.ts | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-012 | F-CLAUDE-PR7TF-03 unguarded probe | tenant-linked `probe_unguarded%` without guard | `stocky_detect_unguarded_cp_write` | architecture gate fails | optional wrapper; claiming inventory complete | G9 `inventory_gate_detects_unguarded_tenant_linked_write` | architecture test | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-013 | F-CLAUDE-PR7TF-03 NEG writer gate | drop participating-write guard | freeze vs uninstrumented writer | **must fail this design** (writer skips freeze) | crediting the unchanged contract | NEG `writer_gate_removed_skips_freeze` | load-bearing | PR7 | executed-synthetic-pg16 |
 
 ## 7. Mapping to current V tests (do not relabel as PR7 complete)
 
@@ -585,7 +611,7 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR8 reconciliation engine | later PR | privacy residual emptiness |
 | Million-line D scratch in PR7 | belongs to D scale; include **unit** leftover probe if D merged | ignoring scratch if files exist on base |
 | Enabling `useOnlineTokens` in **this** planning PR | D-PR7-02 constrained for FUTURE implementation; not authorized here | proving actor id **and** owner proof (`associated_user.account_owner`) plus library bind tests |
-| Live **application** PostgreSQL/Redis suites (`test:db-isolation`, uninstall) in this planning environment | App services not the disposable proof cluster (**BLOCKED** as V suites) | Disposable PG 16 proofs **did** run (G1–G6). Implementation must still execute live catalog tests on the app database |
+| Live **application** PostgreSQL/Redis suites (`test:db-isolation`, uninstall) in this planning environment | App services not the disposable proof cluster (**BLOCKED** as V suites) | Disposable PG 16 proofs **did** run (G1–G10 + NEG). Implementation must still execute live catalog tests on the app database |
 
 ---
 
@@ -598,12 +624,13 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-AUD-001…014 | §7.3, §7.7, D-PR7-03/08, **P7-C02**, **F-CLAUDE-PR7CP-02** |
 | PR7-LIFE-001…024 | §7.4, §7.6, D-PR7-05/06, **P7-C03**, **F-CLAUDE-PR7CP-01/04** |
 | PR7-PRIV-001…019 | §7.4, §7.9, §7.11, **P7-C05**, **F-CLAUDE-PR7CP-02/07**, **F-CLAUDE-PR7XC-08** |
-| PR7-TOP-* / GRANT-* / COORD-* / AUTHZ-* / CMD-* / GATE-* / TOMB-* | §7.6.2–7.11, §7.7, Decisions A–E, **F-CLAUDE-PR7XC-01…08** |
+| PR7-TOP-* / GRANT-* / COORD-* / AUTHZ-* / CMD-* / GATE-* / TOMB-* | §7.6.2–7.11, §7.7, Decisions A–E, **F-CLAUDE-PR7XC-01…08**, **F-CLAUDE-PR7TF-01…03** |
 | PR7-RED-001…021 | §7.5–7.6.4, D-PR7-10/11/13, **F-CLAUDE-PR7CP-03/04** |
-| PR7-CUST-001…013 | §3, §7.13, D-PR7-14, **F-CLAUDE-PR7CP-08/10** |
+| PR7-CUST-001…024 | §3, §7.6.2–7.6.3, §7.13, D-PR7-14, **F-CLAUDE-PR7CP-08/10**, **F-CLAUDE-PR7TF-01** |
+| PR7-COORD-PUB-* | §7.6.2 Epoch, §7.7.2, **F-CLAUDE-PR7TF-02** |
 | PR7-ESCL-001…004 | §7.12, **F-CLAUDE-PR7CP-09** |
 | PR7-SIDE-* / ISO-* | §7.7–7.9, **F-CLAUDE-PR7CP-02** |
-| PR7-CI-* | §10, CI_POLICY, **P7-C06** |
+| PR7-CI-* | §10, CI_POLICY, **P7-C06**, **F-CLAUDE-PR7TF-04** |
 
 Every constrained decision that can fail a merchant-safety test has at least one matrix row. **D-PR7-09** pause → PR7-PRIV-006. **D-PR7-14** download → PR7-CUST-006/011/012. **P7-C01** first-login → PR7-ACT-013…023. **P7-C03** escalation → PR7-LIFE-008/011…024, PR7-RED-016, PR7-ESCL-*. **P7-C04** revocation → PR7-RBAC-010/013/015…021.
 
@@ -631,7 +658,10 @@ Original D-PR7 IDs are not renamed.
 | `npx vitest run app/lib/shop-domain.test.ts` | 0 | 10 passed | V | **executed-prior-planning-head-not-re-run** |
 | Node IEEE-754 `Number("9007199254740993")===9007199254740992` | 0 | n/a | Node `v22.14.0` | **executed-prior-planning-head-not-re-run** |
 | `npm run test:privacy` | 1 | n/a missing script | V | **executed-prior-planning-head-not-re-run** (absence; implementation gate) |
-| Disposable `python3 /tmp/pr45-proof/03_run_proofs.py` | 0 | **59 passed / 0 failed** | PG 16.15 `/tmp/pr45-pg16:5433`; contract sha256 `b29ef463…` | **executed-this-planning-session** / `executed-synthetic-pg16` |
+| Disposable `python3 /tmp/pr45-proof/03_run_proofs.py` (historical 59-case) | 0 | **59 passed / 0 failed** | PG 16.15 `/tmp/pr45-pg16:5433`; contract sha256 `b29ef463…` (original-run identity) | **executed-this-planning-session** / `executed-synthetic-pg16` (S head; preserved) |
+| Old-model CE-1 / CE-6 on unchanged 59-case scripts | 0 | 2 counterexamples | CE-1 residual `0` while `ae_a3` survived; CE-6 `true,0`/3 keys → `false,1`/0 keys; sha256 `ecfe3a350d8807fb0bdaf217bd9eefa5acf3655f0826b32e17bc35bd0459c960` | **executed-this-planning-session** (defect reproduction, not a passing contract) |
+| Disposable `python3 /tmp/pr45-tf/03_run_proofs.py` (corrected contract) | 0 | **115 passed / 0 failed** (unique G1–G6 = 59; G7–G10 + NEG + clean G7–G9 rerun) | queried `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`; contract `75ab1c02…`; driver `566e0f28…`; run log `006e5799…` (**not** a verification artifact) | **executed-this-planning-session** / `executed-synthetic-pg16` |
+| First corrected-contract driver | 1 | 93 / 111 | ambiguous PL/pgSQL `t.kind`; late-row re-enumerated into manifest | **executed-this-planning-session** (failed; not hidden; contract+driver repaired; clean 115/115) |
 | First disposable driver attempt | 1 | 29 pass / 15 fail | parser + reader TargetKey SELECT | **executed-this-planning-session** (failed; not hidden) |
 | Second disposable driver attempt | 1 | 57 pass / 2 fail | `-q` / shop_b disabled leftover | **executed-this-planning-session** (failed; driver-only repair; clean rerun) |
 | `npm run test:sync-uninstall` | **not executed** | — | app Postgres/Redis | **present-on-V-not-executed** / **BLOCKED** |
@@ -668,12 +698,12 @@ No row in this table is a passing privacy processor.
 
 | ID | Sev | Original meaning | Disposition | Matrix / proof |
 |---|---|---|---|---|
-| **F-CLAUDE-PR7XC-01** | P0 | Whole-shop helper unfit for customer topics | **CORRECTED** (Decision A) | PR7-TOP-001…014; G1 |
+| **F-CLAUDE-PR7XC-01** | P0 | Whole-shop helper unfit for customer topics | **CORRECTED** (Decision A); TF-01 adds completion-integrity | PR7-TOP-001…017; PR7-CUST-014…024; G1 + G7 |
 | **F-CLAUDE-PR7XC-02** | P0 | Privacy DurableJob Restrict vs Shop delete | **CORRECTED** (Decision B) | PR7-COORD-001…007; G3 |
 | **F-CLAUDE-PR7XC-03** | P1 | Missing context-helper EXECUTE | **CORRECTED** | PR7-GRANT-001…007; G2 |
 | **F-CLAUDE-PR7XC-04** | P1 | Finalizer generation UPDATE | **CORRECTED** | PR7-COORD-003; G3 no UPDATE grant |
 | **F-CLAUDE-PR7XC-05** | P1 | FOR UPDATE needs UPDATE privilege | **CORRECTED** (Decision C) | PR7-AUTHZ-001…005; G4 |
-| **F-CLAUDE-PR7XC-06** | P1 | No quiescence primitive | **CORRECTED** as plan + PG gate; Redis/FS **LIMIT** | PR7-GATE-001…008; G5 |
+| **F-CLAUDE-PR7XC-06** | P1 | No quiescence primitive | **CORRECTED** as plan + PG gate; Redis/FS **LIMIT**; TF-03 exact inventory | PR7-GATE-001…013; G5 + G9 |
 | **F-CLAUDE-PR7XC-07** | P2 | Fresh UUID idempotency | **CORRECTED** | PR7-CMD-001…003; G4 |
 | **F-CLAUDE-PR7XC-08** | P2 | Prune destroys retry evidence | **CORRECTED**; Q-008 OPEN | PR7-PRIV-019; PR7-TOMB-*; G6 |
 | **F-CLAUDE-PR7XC-09** | P3 | Prune cited as step 7 | **CORRECTED** (named phases; P-PRUNE-PAYLOAD) | plan §7.4 / §7.6.3 |
@@ -684,19 +714,38 @@ Independent review of **this** correction by actual Claude Code remains required
 
 ---
 
+## 12.1 F-CLAUDE-PR7TF-01…04 finding crosswalk
+
+| ID | Sev | Original meaning | Disposition | Matrix / proof |
+|---|---|---|---|---|
+| **F-CLAUDE-PR7TF-01** | P1 | Customer erasure lacks completion-integrity; post-enumeration arrivals survive a manifest-filtered residual | **CORRECTED** (target-scoped barrier + source residual + serialized complete; LIVE shop) | PR7-TOP-015…017; PR7-CUST-014…024; G7; old-model CE-1; NEG complete |
+| **F-CLAUDE-PR7TF-02** | P2 | Enumerator not epoch-fenced; stale publisher mutates the new epoch | **CORRECTED** (publication lock shared with claim; pause-then-mutate leaves new epoch unchanged) | PR7-COORD-PUB-001…005; G8; old-model CE-6; NEG epoch |
+| **F-CLAUDE-PR7TF-03** | P2 | Writer inventory omitted retry + dispatcher disabled-shop; db-context optional | **CORRECTED** (26-row inventory; guards required; processingEnabled ≠ drain) | PR7-GATE-009…013; G9; NEG writer gate |
+| **F-CLAUDE-PR7TF-04** | P3 | `results.json` hashed as if reproducible; postgres hardcoded | **CORRECTED** (queried version; run log labelled; historical hashes retained as original-run identities) | PR7-CI-004; G10; matrix §14 |
+
+Original CP/XC finding IDs and the independently reproduced 59-case model are preserved. This table does **not** rebuild Decision A–E.
+
+Independent review of **this** customer-completion correction by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
+
+---
+
 ## 13. Consistency obligations for this packet
 
 | Check | Rule |
 |---|---|
 | Three identities | Delivery binding ≠ work id ≠ completion receipt. HMAC/body is not a lifetime work key. |
 | Shop DELETE | Only `stocky_privacy_finalize_shop_delete`. Runtime/CP have no bare DELETE. |
-| Completion | Residual empty **then** conditional CP txn. Receipt cannot override remnants. |
+| Completion | Residual empty **then** conditional CP txn. Receipt cannot override remnants. Customer topics: source-derived residual + exclusive target locks in the same complete txn. Stale-manifest count is insufficient. |
+| Customer barrier | Shop/generation + `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID`. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes with `payloadAdmittedAt < completedAt` denied; later legitimate writes allowed. |
+| Epoch / publication | Enumerator and claim share publication lock. Stale callers leave the new epoch’s keys/flags/revision unchanged. Check-then-act is insufficient. |
 | Actor | `sessionToken.sub` string. Wide id preserved. Unsafe numeric owner blocked. |
 | Replay | One CP txn + advisory authz lock + SELECT-only verifier + stable commandId. No `FOR UPDATE` helper. No cross-role atomicity slogan. |
 | Privacy execution | `PrivacyRequest`/`PrivacyAttempt` coordinator; per-topic capabilities; no Shop/DurableJob FK. Unknown ordinary jobs denied. Historical PRIV-015…018 path withdrawn as required. |
-| Download | `platform.privacy.data_request.download` ≠ `platform.export.operational`. |
+| Participating writers | Exact inventory including `completeAttemptRetry` and dispatcher disabled-shop writes. `withTenantBoundTransaction` guard **required**. `processingEnabled` ≠ drain. |
+| Download | `platform.privacy.data_request.download` ≠ `platform.export.operational`. Coverage is the published snapshot, not an empty residual. |
 | Escalation | Named owner route + operator CLI. No `retain_live` waiver. |
 | Timing | Changelog newer; handle on arrival; no local 180-day wait. |
+| Evidence | Script hashes are verification artifacts. `results.json` is a run log. Query `server_version`. |
 | Q-008 / R-176 / R-164 | OPEN / OPEN-P0 / unchanged. No D-055. |
 
 ---
@@ -707,12 +756,14 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 
 | | |
 |---|---|
-| Postgres | 16.15 disposable `/tmp/pr45-pg16:5433` |
-| Contract SHA-256 | `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054` |
-| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` |
-| Driver SHA-256 | `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4` |
-| Results SHA-256 | `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` |
-| Totals | **59 / 59 PASS / 0 FAIL** (clean rerun) |
+| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-pg16:5433` |
+| Contract SHA-256 (this correction) | `75ab1c02fc01560d975a78737bccbc7c2fa6330a07100ad98d2b243d349846de` |
+| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (unchanged from 59-case) |
+| Driver SHA-256 (this correction) | `566e0f289f2ca4da526286b3ca831c906030973958318eb60b55a0237823251a` |
+| Results SHA-256 | **run log, not a verification artifact.** This-run digest `006e5799544c0ae2368a75e50fbbfdee77b43b816d9cd490c5c2f5d140e94344` is an original-run identity only |
+| Totals | **115 / 115 PASS / 0 FAIL** (unique G1–G6 = 59 preserved; G7–G10 + NEG + clean G7–G9 rerun) |
+| Historical 59-case identities (S; **not** this contract) | contract `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; driver `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; Cursor run log `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8`; reviewer log `185dd1b8…` |
+| Old-model CE-1 / CE-6 | reproduced on unchanged 59-case scripts; sha256 `ecfe3a350d8807fb0bdaf217bd9eefa5acf3655f0826b32e17bc35bd0459c960` |
 
 | Group | Assertion | Result | SQLSTATE |
 |---|---|---|---|
@@ -775,5 +826,37 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 | `G6-tombstone` | `post_prune_duplicate_reconciles` | PASS | `—` |
 | `G6-tombstone` | `expired_tombstone_uncorrelated` | PASS | `—` |
 | `G6-tombstone` | `new_generation_not_inheriting_old_completion` | PASS | `—` |
+| `G7-customer-complete` | `writer_active_before_barrier_admission` | PASS | `—` |
+| `G7-customer-complete` | `customer_barrier_installs_target_keys` | PASS | `—` |
+| `G7-customer-complete` | `data_request_coverage_is_snapshot_not_empty_predicate` | PASS | `—` |
+| `G7-customer-complete` | `matching_writer_denied_while_barrier_active` | PASS | `—` |
+| `G7-customer-complete` | `unrelated_customer_same_shop_progresses` | PASS | `—` |
+| `G7-customer-complete` | `unrelated_shop_progresses_during_customer_barrier` | PASS | `—` |
+| `G7-customer-complete` | `late_matching_row_visible_to_source_residual` | PASS | `—` |
+| `G7-customer-complete` | `complete_denied_while_remnants` | PASS | `—` |
+| `G7-customer-complete` | `reenumerate_then_source_residual_zero` | PASS | `—` |
+| `G7-customer-complete` | `writer_between_residual_and_complete_waits` | PASS | `55P03` |
+| `G7-customer-complete` | `complete_commits_after_drain` | PASS | `—` |
+| `G7-customer-complete` | `customer_request_completed_without_shop_freeze` | PASS | `—` |
+| `G7-customer-complete` | `delayed_old_write_cannot_restore` | PASS | `—` |
+| `G7-customer-complete` | `legitimate_later_customer_data_allowed` | PASS | `—` |
+| `G8-epoch-publish` | `successor_enumerates_after_takeover` | PASS | `—` |
+| `G8-epoch-publish` | `stale_publisher_after_pause_does_not_mutate` | PASS | `—` |
+| `G8-epoch-publish` | `new_epoch_keys_unchanged_by_stale` | PASS | `—` |
+| `G8-epoch-publish` | `wrong_attempt_cannot_publish` | PASS | `—` |
+| `G8-epoch-publish` | `expired_terminal_attempt_cannot_publish` | PASS | `—` |
+| `G8-epoch-publish` | `epoch_takeover_completes_under_rebound_barrier` | PASS | `—` |
+| `G8-epoch-publish` | `delayed_old_write_after_takeover_complete_denied` | PASS | `—` |
+| `G9-writer-inventory` | `inventory_includes_retry_and_dispatcher_disabled` | PASS | `—` |
+| `G9-writer-inventory` | `lifecycle_complete_attempt_retry_guarded_write` | PASS | `—` |
+| `G9-writer-inventory` | `dispatcher_disabled_shop_path_still_writes` | PASS | `—` |
+| `G9-writer-inventory` | `inventory_gate_detects_unguarded_tenant_linked_write` | PASS | `—` |
+| `G9-writer-inventory` | `inventory_incomplete_when_required_writer_removed` | PASS | `—` |
+| `G10-evidence-meta` | `postgres_version_queried_not_hardcoded` | PASS | `—` |
+| `NEG-load-bearing` | `completion_guard_removed_allows_false_complete` | PASS | `—` |
+| `NEG-load-bearing` | `epoch_guard_removed_allows_stale_publish` | PASS | `—` |
+| `NEG-load-bearing` | `writer_gate_removed_skips_freeze` | PASS | `—` |
 
-Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` online-token bind; application `test:privacy`.
+Unique G1–G6 = 59. Unique G7–G10 + NEG = 30. Clean G7–G9 rerun repeats 26 names. Driver total **115**. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
+
+Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` online-token bind; application `test:privacy`. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations.
