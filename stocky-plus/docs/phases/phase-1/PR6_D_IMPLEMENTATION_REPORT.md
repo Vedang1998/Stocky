@@ -1015,9 +1015,113 @@ Attribution notes (Cursor, this head — do not relabel the §15.6 H measurement
 |---|---|
 | `npm run graphql-codegen` | **not executed** locally |
 | Live Shopify / store calls / production | **not executed** (forbidden) |
-| Exact-head `pull_request` Classify + full Heavy + Gate on the SC-R head | **pending at report write** |
-| Independent Claude Code SC-R correction re-review | **not this session**; Cursor must not author that artifact |
+| Exact-head `pull_request` Classify + full Heavy + Gate on SC-R head `62f7a06…` | **executed and failed** — preserve run [`35219870613`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613); do not rerun-to-green |
+| Exact-head `pull_request` Classify + full Heavy + Gate on the PR43-CI-CLEANUP-01 head | **pending at this docs write**; IDs belong in PR body after the new `pull_request` run, not in this commit |
+| Independent Claude Code SC-R + cleanup re-review | **not this session**; Cursor must not author that artifact |
 | ChatGPT technical acceptance / mark-ready / merge | **not authorized** |
 | N-08 independent closure at this new head | **not claimed**; H evidence stands for H |
 
 R-176 remains **OPEN / P0**. R-164 unchanged. PR 6 / Phase 1 **IN PROGRESS**. No D-055.
+
+### 16.8 PR43-CI-CLEANUP-01 — inherited C disposable Git-fixture teardown
+
+**Authority:** PR #43 comment [5723630213](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5723630213). Narrow exception on existing draft PR #43 / branch `phase-1/pr6-d-order-webhook-import`. One writer. Not independent acceptance of SC-R-01…04. Not D-055.
+
+This is **not** a claim that Git automatic maintenance caused run `35219870613`. Node 22 `fs.rmSync` retry options and Git `fetch --no-auto-maintenance` were consulted as current official docs (Node `latest-v22.x` / Git fetch options, access date **2026-09-18**). Fixture-local `-c gc.auto=0` / `-c maintenance.auto=false` and fetch `--no-auto-maintenance` are **defensive per-invocation / fixture-repo** controls, not a reproduced causal proof.
+
+#### 16.8.1 Preserved failed exact-head CI (do not relabel)
+
+| Field | Value |
+|---|---|
+| Head | `62f7a06064bf9eaa5a4a11145bf5dfd369cef726` |
+| Event | `pull_request` run [`35219870613`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613) attempt 1 **FAILURE** |
+| Classify | [`105197080405`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613/job/105197080405) **SUCCESS** (`docs_only=false` `full_ci=true`) |
+| Heavy | [`105197300810`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613/job/105197300810) **FAILURE** (not SKIPPED). Step “Migration and tenant-backfill tests”: **1** failed / **705** passed / **2** skipped |
+| Failed test | `pr6-c-b-pin-overlay.safety.test.ts` / `pin fetch is not a substitute for the accepted B SHA` |
+| Error | `ENOTEMPTY: directory not empty, rmdir '/tmp/pr6-c-shallow-c-jxvZwT/.git/objects'` |
+| CI Gate | [`105221162585`](https://github.com/Vedang1998/Stocky/actions/runs/35219870613/job/105221162585) **FAILURE** (`VALIDATE_RESULT=failure`) |
+| Starting-head blobs | safety test `223c0df5e163733b12cae04360b8c402d53b00f7` and helper `eb8cae3c8640f06eacac817d1001a09a7f1dcb85` matched **V** (inherited C fixture, not a D applicator change) |
+
+Do **not** rerun `35219870613` to obtain green. Do **not** `workflow_dispatch`.
+
+#### 16.8.2 Identities for this exception
+
+| Field | Value |
+|---|---|
+| Required starting head | `62f7a06064bf9eaa5a4a11145bf5dfd369cef726` |
+| `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Branch / PR | `phase-1/pr6-d-order-webhook-import` / [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED |
+| Runtime/test correction | `54cc1ca51a25e0ca8b7483dbaf0049de5eeeeec9` |
+| Docs evidence commit | **this commit**; SHA is not embedded here |
+| Allowed paths | `scripts/tenant-enforcement/tests/pr6-c-b-pin-overlay.ts`, `scripts/tenant-enforcement/tests/pr6-c-b-pin-overlay.safety.test.ts`, this report. `PR2_TENANT_ACCESS_INVENTORY.md` **not regenerated** (`tenant:access:inventory:check` fresh) |
+| D runtime / scale harness vs `62f7a06…` | **byte-identical** (`git diff` empty for `stocky-plus/app` and D test files) |
+| Immutable reviews | unchanged (`5354111…`, `a72b403…`, `7710758…`, `ec61089…`) |
+
+#### 16.8.3 Correction (owned roots only)
+
+- Delete only exact disposable roots **created and registered** by this test process. A `pr6-c-shallow-c-` prefix is not ownership.
+- Bounded retry: 4 attempts, linear backoff 25 ms × attempt, for `ENOTEMPTY` / `EBUSY` / `EMFILE` / `ENFILE` / `EPERM` (Node 22 `fs.rmSync` transient set). Final absence includes a dangling-symlink `lstat` check.
+- Persistent ENOTEMPTY after the budget, and unexpected codes (example `EIO`), still **fail** teardown. No catch-and-pass on disposable Git roots. `removeRegisteredDisposableGitRoots` continues other roots and then reports failures.
+- Fixture Git: per-invocation `-c gc.auto=0 -c maintenance.auto=false` and `fetch --no-auto-maintenance` when cwd is not the live `REPO_ROOT`. Local fixture `git config gc.auto 0` / `maintenance.auto false` after `init`. No global/system Git config. No process killing. No `/tmp` sweep.
+- Reader/pin/archive/acceptance semantics unchanged (`610ed050…` vs `7338aaa…`, unknown-SHA rejection, nonempty archive, all **15** original safety titles kept).
+
+#### 16.8.4 Reproduction limits
+
+Historical ENOTEMPTY **did not recur** locally. Do not manufacture a reproduction of run `35219870613`.
+
+| Probe | N | Result |
+|---|---|---|
+| Old teardown `rmSync({ recursive: true, force: true })` after `git fetch --depth=1 origin HEAD` into a fresh `/tmp` shallow repo (no retry, no `--no-auto-maintenance`) | **20** | **20/20 ok**, 0 `ENOTEMPTY` |
+| Induced extra writer into `.git/objects` during that `rmSync` | **10** | **10/10 ok**; this is **not** a claim that CI’s writer was this process |
+
+Git automatic maintenance remains a **plausible** source of object-db writes, not a proven cause of job `105197300810`.
+
+#### 16.8.5 Deterministic negative controls
+
+Executed against the cleanup helper (fault seam = injected `removeDirectory`). Restored helper afterwards (`cmp` to pre-mutation file).
+
+| Mutation | Command | Result |
+|---|---|---|
+| `DISPOSABLE_GIT_ROOT_RM_MAX_ATTEMPTS = 1` | `npm run test:migrations -- …/pr6-c-b-pin-overlay.safety.test.ts -t 'retries a transient ENOTEMPTY then proves the owned root is absent'` | **FAIL** `ENOTEMPTY` (1 failed / 25 skipped). Disabling recovery makes the transient-success test fail. |
+| Swallow persistent failure (`return` instead of throw after retries) | same file `-t 'fails teardown after the retry limit for persistent ENOTEMPTY'` | **FAIL** `expected [Function] to throw an error` |
+
+Permanent ENOTEMPTY, unexpected `EIO`, already-removed owned root, unowned prefix, and symlink-root refusal are committed tests that call `removeRegisteredDisposableGitRoot` / `removeRegisteredDisposableGitRoots` directly.
+
+#### 16.8.6 Fixed batch of 10 shallow-fetch/cleanup executions
+
+Predeclared N=10. Recorded every outcome. Not “repeat until green.” Helper: `removeRegisteredDisposableGitRoot` after `isolatedShallowCCheckout` + `ensurePinnedBCommit`. Artifact: `/opt/cursor/artifacts/pr43-ci-cleanup-ten-run.json`.
+
+| i | outcome | ms | pin present | accepted B present | root absent after cleanup |
+|---|---|---|---|---|---|
+| 1 | ok | 383 | true | false | true |
+| 2 | ok | 379 | true | false | true |
+| 3 | ok | 378 | true | false | true |
+| 4 | ok | 369 | true | false | true |
+| 5 | ok | 370 | true | false | true |
+| 6 | ok | 375 | true | false | true |
+| 7 | ok | 383 | true | false | true |
+| 8 | ok | 370 | true | false | true |
+| 9 | ok | 381 | true | false | true |
+| 10 | ok | 371 | true | false | true |
+
+**10/10 ok.** Pin `610ed050…` materialized; accepted B `7338aaa…` remained absent on the shallow fixture.
+
+#### 16.8.7 Cursor local commands (cleanup tree)
+
+Environment: Node `v22.14.0`, npm `11.5.2`, Git `2.43.0`, linux, disposable PostgreSQL accepting, Redis configured. Subject: working tree then runtime `54cc1ca51a25e0ca8b7483dbaf0049de5eeeeec9`.
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npm run test:migrations -- …/pr6-c-b-pin-overlay.safety.test.ts` | 0 | **26** passed / 1 file (original **15** + **11** teardown cases). Nonzero; not a name-filter of zero. |
+| `npm run test:migrations -- …/pr6-c-b-reader-overlay.test.ts` | 0 | **18** passed. Actual integrated-reader PostgreSQL suite. |
+| `npx eslint …/pr6-c-b-pin-overlay.ts …/pr6-c-b-pin-overlay.safety.test.ts` | 0 | focused |
+| `npx tsc --noEmit` | 0 | focused typecheck |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | **40/40** assertions |
+| `git diff --check` | 0 | — |
+| `npm run tenant:access:inventory:check` | 0 | fresh; **no** `PR2_TENANT_ACCESS_INVENTORY.md` rewrite |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+| Tracked B `admin-read` | — | **44** `ls-files -s` paths; `orders.ts` blob `b5ce0d53cf29c8b370065330f1a3e84c55c7096d`; porcelain empty; index identical before/after overlay suite |
+
+`PR6_D_SCALE_1E6` was **not** re-run. Existing §16.5 envelope on `b2471676…` remains the Cursor million-line evidence. D scale harness file is unchanged vs `62f7a06…`.
+
+This exception does **not** independently accept SC-R-01…04. ChatGPT PR43 final control correction review remains required after exact-head Classify + full Heavy + Gate SUCCESS on the cleanup head.
