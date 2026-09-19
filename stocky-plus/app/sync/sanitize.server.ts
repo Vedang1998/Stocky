@@ -26,6 +26,10 @@ export const WEBHOOK_PROJECTION_SCHEMA_VERSIONS = {
   "locations/deactivate": "webhook-projection-locations-deactivate-v1",
   "bulk_operations/finish": "webhook-projection-bulk-operations-finish-v1",
   "app/uninstalled": "webhook-projection-app-uninstalled-v1",
+  "orders/edited": "webhook-projection-orders-edited-v1",
+  "orders/delete": "webhook-projection-orders-delete-v1",
+  "order_transactions/create":
+    "webhook-projection-order-transactions-create-v1",
 } as const;
 
 export type SanitizedWebhookTopic =
@@ -339,6 +343,57 @@ function sanitizeUninstallProjection(
   };
 }
 
+function sanitizeOrdersEditedProjection(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  const edit = isRecord(payload.order_edit) ? payload.order_edit : payload;
+  return {
+    id: assertScalarId(edit.id, "order_edit.id"),
+    order_id: assertScalarId(edit.order_id ?? payload.order_id, "order_id"),
+    committed_at:
+      typeof edit.committed_at === "string"
+        ? edit.committed_at
+        : typeof payload.committed_at === "string"
+          ? payload.committed_at
+          : null,
+    created_at:
+      typeof edit.created_at === "string" ? edit.created_at : null,
+    updated_at:
+      typeof edit.updated_at === "string" ? edit.updated_at : null,
+  };
+}
+
+function sanitizeOrdersDeleteProjection(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  // Official Admin 2026-07 REST sample is `{ "id": <number> }` only.
+  return {
+    id: assertScalarId(payload.id, "id"),
+    admin_graphql_api_id: assertScalarId(
+      payload.admin_graphql_api_id,
+      "admin_graphql_api_id",
+    ),
+  };
+}
+
+function sanitizeOrderTransactionProjection(
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    id: assertScalarId(payload.id, "id"),
+    admin_graphql_api_id: assertScalarId(
+      payload.admin_graphql_api_id,
+      "admin_graphql_api_id",
+    ),
+    order_id: assertScalarId(payload.order_id, "order_id"),
+    status: typeof payload.status === "string" ? payload.status : null,
+    kind: typeof payload.kind === "string" ? payload.kind : null,
+    created_at:
+      typeof payload.created_at === "string" ? payload.created_at : null,
+    // payment_details is never persisted.
+  };
+}
+
 export function isSanitizedWebhookTopic(
   topic: string,
 ): topic is SanitizedWebhookTopic {
@@ -402,6 +457,15 @@ export function sanitizeWebhookPayload(
       break;
     case "app/uninstalled":
       projection = sanitizeUninstallProjection(payload);
+      break;
+    case "orders/edited":
+      projection = sanitizeOrdersEditedProjection(payload);
+      break;
+    case "orders/delete":
+      projection = sanitizeOrdersDeleteProjection(payload);
+      break;
+    case "order_transactions/create":
+      projection = sanitizeOrderTransactionProjection(payload);
       break;
     default: {
       const _exhaustive: never = topic;

@@ -17,6 +17,14 @@ import {
   sanitizeWebhookPayload,
   type SanitizedWebhookTopic,
 } from "./sanitize.server";
+import {
+  isOrderFactsWebhookTopic,
+  ORDER_FACTS_CRON_QUEUE,
+  ORDER_FACTS_RECONCILE_COALESCE_MS,
+  ORDER_FACTS_RECONCILE_JOB_TYPE,
+  ORDER_FACTS_RECONCILE_SCHEMA_VERSION,
+  ORDER_FACTS_RECONCILE_SOURCE,
+} from "../lib/order-facts/sync/constants";
 
 export const DURABLE_JOB_AUTHORITY_VERSION = "tenant-job-envelope-v3" as const;
 
@@ -280,6 +288,29 @@ export async function ingestAuthenticatedWebhook(
         });
         return created;
       });
+      if (
+        err.code === "projection_bounds_exceeded" &&
+        isOrderFactsWebhookTopic(input.topic)
+      ) {
+        const bucket = Math.floor(
+          Date.now() / ORDER_FACTS_RECONCILE_COALESCE_MS,
+        );
+        await createDurableJob({
+          shopId: shopRow.id,
+          jobType: ORDER_FACTS_RECONCILE_JOB_TYPE,
+          source: ORDER_FACTS_RECONCILE_SOURCE,
+          queueName: ORDER_FACTS_CRON_QUEUE,
+          payloadSchemaVersion: ORDER_FACTS_RECONCILE_SCHEMA_VERSION,
+          sanitizedPayload: {
+            reason: "quarantine_projection_bounds",
+            topic: input.topic,
+            deliveryId: delivery.id,
+          },
+          idempotencyKey: `order-facts-reconcile:${shopRow.id}:${bucket}`,
+          correlationId,
+          maxAttempts: 125,
+        });
+      }
       return {
         delivery,
         job: null,

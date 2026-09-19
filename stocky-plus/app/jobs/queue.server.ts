@@ -285,6 +285,65 @@ export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
   await kickDispatcher();
 }
 
+export async function enqueueOrderFactsSync(tenant: TenantAuthority) {
+  const auth = requireAuthority(tenant, "enqueueOrderFactsSync");
+  await createDurableJob({
+    shopId: auth.shopId,
+    jobType: "order-facts-sync",
+    source: "order_facts_sync",
+    queueName: CRON_QUEUE,
+    payloadSchemaVersion: "order-facts-sync-v1",
+    sanitizedPayload: { shopId: auth.shopId },
+    idempotencyKey: `order-facts-sync:${auth.shopId}:${auth.correlationId}`,
+    correlationId: auth.correlationId,
+    causationId: auth.causationId,
+    maxAttempts: 125,
+  });
+  await kickDispatcher();
+}
+
+export async function enqueueOrderFactsReconcile(
+  tenant: TenantAuthority,
+  payload: Record<string, unknown> = {},
+): Promise<{ enqueued: boolean; reason?: string }> {
+  const auth = requireAuthority(tenant, "enqueueOrderFactsReconcile");
+  const prisma = getControlPlanePrisma();
+  const existing = await prisma.durableJob.findFirst({
+    where: {
+      shopId: auth.shopId,
+      jobType: "order-facts-reconcile",
+      state: {
+        in: ["PENDING", "RETRY_WAIT", "DISPATCH_LEASED", "ENQUEUED", "RUNNING"],
+      },
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { enqueued: false, reason: "already_pending" };
+  }
+  const bucket = Math.floor(
+    Date.now() / INVENTORY_RECONCILE_MIN_ENQUEUE_INTERVAL_MS,
+  );
+  await createDurableJob({
+    shopId: auth.shopId,
+    jobType: "order-facts-reconcile",
+    source: "order_facts_reconcile",
+    queueName: CRON_QUEUE,
+    payloadSchemaVersion: "order-facts-reconcile-v1",
+    sanitizedPayload: {
+      shopId: auth.shopId,
+      ...payload,
+      scheduleBucket: bucket,
+    },
+    idempotencyKey: `order-facts-reconcile:${auth.shopId}:${bucket}`,
+    correlationId: auth.correlationId,
+    causationId: auth.causationId,
+    maxAttempts: 125,
+  });
+  await kickDispatcher();
+  return { enqueued: true };
+}
+
 export function createWebhookWorker(
   processor: (job: Job<WebhookJobData>) => Promise<void>,
 ) {

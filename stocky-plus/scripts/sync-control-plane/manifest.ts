@@ -3,7 +3,7 @@
  * CI fails when producers/queues/workers/webhooks/replay paths drift.
  */
 
-export const SYNC_INVENTORY_VERSION = "phase1-pr4-sync-inventory-v3-d048";
+export const SYNC_INVENTORY_VERSION = "phase1-pr4-sync-inventory-v3-d048-pr6d";
 
 export type SyncSurfaceKind =
   | "producer"
@@ -67,6 +67,20 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "app/jobs/queue.server.ts",
     symbol: "enqueueInventoryStateReconcile",
     notes: "Coalesced, webhook-deferred canonical inventory-state reconcile",
+  },
+  {
+    kind: "producer",
+    id: "producer:order-facts-sync",
+    path: "app/jobs/queue.server.ts",
+    symbol: "enqueueOrderFactsSync",
+    notes: "Durable order-facts historical/incremental import producer",
+  },
+  {
+    kind: "producer",
+    id: "producer:order-facts-reconcile",
+    path: "app/jobs/queue.server.ts",
+    symbol: "enqueueOrderFactsReconcile",
+    notes: "Coalesced order-facts window sweep / quarantine recovery producer",
   },
   {
     kind: "producer",
@@ -144,6 +158,20 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
   },
   {
     kind: "worker",
+    id: "worker:order-facts-sync-jobs",
+    path: "app/jobs/workers/order-facts/sync-jobs.ts",
+    symbol: "runOrderFactsSyncJob",
+    notes: "Durable order-facts-sync and order-facts-reconcile job steps",
+  },
+  {
+    kind: "worker",
+    id: "worker:order-facts-control-plane",
+    path: "app/lib/order-facts/sync/control-plane.ts",
+    symbol: "recordOrderFactsDataIssue",
+    notes: "Authorized DataIssue / SyncCursor / SyncHealth for order facts",
+  },
+  {
+    kind: "worker",
     id: "worker:catalog-facts-projection",
     path: "app/jobs/workers/catalog-facts/projection.ts",
     symbol: "projectAppliedCanonicalFacts",
@@ -208,6 +236,27 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
   },
   {
     kind: "webhook_route",
+    id: "webhook:orders/edited",
+    path: "app/routes/webhooks.orders.edited.tsx",
+    symbol: "action",
+    notes: "Durable intake for orders/edited identity-only signal",
+  },
+  {
+    kind: "webhook_route",
+    id: "webhook:orders/delete",
+    path: "app/routes/webhooks.orders.delete.tsx",
+    symbol: "action",
+    notes: "Durable intake for orders/delete identity-only signal",
+  },
+  {
+    kind: "webhook_route",
+    id: "webhook:order_transactions/create",
+    path: "app/routes/webhooks.order_transactions.create.tsx",
+    symbol: "action",
+    notes: "Durable intake for order_transactions/create identity-only signal",
+  },
+  {
+    kind: "webhook_route",
     id: "webhook:inventory_levels/update",
     path: "app/routes/webhooks.inventory_levels.update.tsx",
     symbol: "action",
@@ -255,6 +304,27 @@ export const SYNC_SURFACES: readonly SyncSurface[] = [
     path: "app/sync/sanitize.server.ts",
     symbol: "sanitizeWebhookPayload",
     notes: "Versioned refund projection",
+  },
+  {
+    kind: "sanitizer",
+    id: "sanitizer:orders/edited",
+    path: "app/sync/sanitize.server.ts",
+    symbol: "sanitizeWebhookPayload",
+    notes: "Identity-only orders/edited projection",
+  },
+  {
+    kind: "sanitizer",
+    id: "sanitizer:orders/delete",
+    path: "app/sync/sanitize.server.ts",
+    symbol: "sanitizeWebhookPayload",
+    notes: "Identity-only orders/delete projection",
+  },
+  {
+    kind: "sanitizer",
+    id: "sanitizer:order_transactions/create",
+    path: "app/sync/sanitize.server.ts",
+    symbol: "sanitizeWebhookPayload",
+    notes: "Identity-only order_transactions/create projection; strips payment_details",
   },
   {
     kind: "sanitizer",
