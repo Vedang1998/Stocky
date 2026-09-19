@@ -14,8 +14,14 @@ permission to delete. Unknown leftovers are not proven orphaned.
    `RUNNING` for `order_facts`). Do not treat a stale PID as proof of death
    alone.
 3. Record SyncHealth / DataIssue occupancy: leftover attempt count, unknown
-   count, observed bytes, reserved bytes, oldest age, limits, and
-   `order_facts_scratch_resource`.
+   count, observed bytes, reserved bytes, oldest age, limits,
+   `ledgerIntegrity`, `orphanMetadataPresent`, and
+   `order_facts_scratch_resource`. A missing, corrupt, truncated, unreadable,
+   or wrong-version `quota.reservation` in an initialized namespace is
+   indeterminate capacity, not an empty ledger. Outstanding
+   `quota.reservation.tmp.*` files are orphan metadata, not permission to
+   delete. Admission refuses both states. Do not reset that namespace merely
+   because the live ledger is absent.
 
 ## 2. Inspect without following symlinks
 
@@ -28,12 +34,21 @@ permission to delete. Unknown leftovers are not proven orphaned.
 ## 3. Reclaim only explicitly selected verified D resources
 
 1. Select specific `att-*` basenames (and `quota.lock` if a crash left the mkdir
-   lock). Do not issue a blanket cleanup.
+   lock). Do not issue a blanket cleanup. Do not delete markerless, foreign, or
+   symlink paths. Do not sweep `/tmp`.
 2. After quiescence is confirmed, call the restricted helper
    `reclaimOperatorSelectedDScratch({ scratchRoot, attemptBasenames, quiescenceConfirmed: true })`
    from an operator session. It refuses live in-process writers, symlinks,
-   unverified markers, and names outside the namespace.
-3. There is no HTTP deletion endpoint.
+   unverified markers, and names outside the namespace. Selected `quota.lock`
+   is removed only under that quiescence confirmation (not by admission).
+3. If occupancy still reports `ledgerIntegrity` other than `ok` after every
+   verified attempt directory is gone, call
+   `reinitializeDScratchReservationLedgerAfterQuiescence({ scratchRoot, quiescenceConfirmed: true })`.
+   That writes an empty ledger through the same atomic persist path and may
+   remove owned `quota.reservation.tmp.*` regular files in the namespace. It
+   refuses while `att-*` directories remain. It does not steal a live lock
+   and does not delete foreign files.
+4. There is no HTTP deletion endpoint.
 
 ## 4. Verify and resume
 

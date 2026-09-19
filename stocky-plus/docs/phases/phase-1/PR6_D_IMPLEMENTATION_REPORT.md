@@ -3,7 +3,7 @@
 **Slice:** PR6-D complete §17.2 integration module
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913); SC-R control corrections [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882)
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913); SC-R control corrections [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882); NEW-SCQ-01/02 quota-evidence package after [5737964437](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5737964437)
 **Status:** PR43 SC-R-01…SC-R-04 control correction is on this branch (plan **C3.7** / brief §8 / D-054 subitem — **not D-055**). Immutable reviews `5354111` (blob `48ac291a…`), `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`), source-contract `7710758` (blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`), and SC-recovery `ec61089` (blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8`) are **not** edited. SC subject **H** `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b`. Required main **V** `a3ff480f1477237f8055f10c43298480a05728a1`. Historical SUCCESS `35168858541` is **H only**; `35088765421` is `09029c0` only; `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only. Exact-head SC-R `pull_request` Classify + full Heavy + CI Gate IDs are **pending at this report write** and must not be invented. This report does **not** embed this documentation commit’s own SHA. Cursor does **not** certify independent approval. The next independent review must be a **separate actual Claude Code** session.
 
 **Production:** NOT AUTHORIZED
@@ -866,7 +866,7 @@ R-176 remains **OPEN / P0**. R-164 unchanged. PR 6 / Phase 1 **IN PROGRESS**. No
 | SC-R-03 | P2 | **Repaired.** Sanitized occupancy on `persistOrderFactsCoverageHealth` / `failImport` / SyncHealth. Typed `order_facts_scratch_resource`. Success cannot HEALTHY-clear leftovers. Operator reclaim after quiescence; no auto-reaper. |
 | SC-R-04 | P2 | **Repaired.** Digest v2 binds shop, SyncRun, Bulk GID, fingerprint, API, exact fence, job type, parent GID, content. Logical key stays `order-facts-d-import-src-v1:{jobType}:{durableJobId}:{gid}`. v1/legacy receipts require a fresh logical run. A new SyncRun is a new epoch. |
 | SC-R-05 | P3 | **Retained** disclosed limitation: no full agreement-membership re-pagination. |
-| SC-R-06 | P3 | **Closed with SC-R-01.** Nested B keeps `maxRequests: 250`. Disabling only `dTransportHardStop.throwOnExhaustion` lets nested graphql exceed the wrapper cap; restoring the throw keeps `used` and network attempts ≤ cap. |
+| SC-R-06 | P3 | **Closed with SC-R-01; production bypass removed in NEW-SCQ-02.** Nested B keeps `maxRequests: 250`. Production `consumeDTransportAttempt` always throws at the wrapper cap. The throw-only negative control is a test-local counting wrapper, not a deployed switch. |
 | SC-R-07 | P3 | **Retained** nonblocking; malformed/id-less children already fail staging. |
 | SC-R-08 | P3 | **Confirmatory only.** SIGKILL during staging leaves bytes and does not complete. Not claimed as a newly invented defect or a newly invented fix. |
 | N-08 H-scale/SIGKILL | — | **Preserved** as independent H evidence. Not reopened as missing. New-head envelope is a separate Cursor measurement. |
@@ -1256,3 +1256,125 @@ Fixed batch detail (every outcome recorded; none discarded):
 `PR6_D_SCALE_1E6` was **not** re-run. Existing §16.5 envelope on `b2471676…` remains the Cursor million-line evidence. D scale harness and D application code are unchanged vs `2084aeb…`.
 
 This exception does **not** independently accept SC-R-01…04. Exact-head Classify + full Heavy + Gate on the live head after this evidence commit remain required. Actual Claude Code correction re-review remains required and must include this index-test change. R-176 remains **OPEN / P0**. R-164 unchanged. No D-055.
+
+### 16.10 NEW-SCQ-01 / NEW-SCQ-02 — quota-evidence integrity and hard-stop bypass removal
+
+**Authority:** ChatGPT authorized this package on the **existing** draft PR #43 / branch `phase-1/pr6-d-order-webhook-import` after independent review comment [5737964437](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5737964437). Same writer. Not a new implementation PR. Not a `cursor/` branch. Not independent acceptance of SC-R. Not D-055. Not mark-ready or merge.
+
+The published review at `e20cca5cfa983e516c26980e0ccbaf3a5e00a1cf` is preserved unmodified (sole parent S `dab5accc4cd949bdaf1078fe6240fc602ba1629b`; only added path `stocky-plus/docs/phases/phase-1/PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md`; blob `ee3f625ce2106b893e9018319e19ef2685e6beab`). This report does **not** embed this documentation commit’s own SHA. Cursor does **not** certify independent approval. Actual Claude Code targeted correction re-review remains required.
+
+#### 16.10.1 Identities
+
+| Field | Value |
+|---|---|
+| Starting subject **S** | `dab5accc4cd949bdaf1078fe6240fc602ba1629b` |
+| Required `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Final-control review | `e20cca5cfa983e516c26980e0ccbaf3a5e00a1cf` (ancestor of HEAD; parent S; blob `ee3f625ce2106b893e9018319e19ef2685e6beab`) |
+| NEW-SCQ runtime/test | `e7fb2c94bea507b9a5fd1d3c368a7852527bb808` |
+| NEW-SCQ persist-crash / orphan-temp follow-up | `73939a95c3a93d5a82ee5567f2128b8457e1e76a` |
+| Complete-integration review blob | `48ac291a781b2347cb6017af862f2de9677826a5` preserved |
+| Correction re-review blob | `ba82a3c981cda4bec52ea453c2618319288fa66c` preserved |
+| Source-contract review blob | `1eb18cae44cdf7a6660256e2632ebc8019d6da0d` preserved |
+| SC-recovery final review | `ec61089dcfc0530b81c64bc09fcea7f3b70b7aa5` blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8` preserved |
+| Historical exact-head SUCCESS on **S** | run [`35400320443`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443) — Classify [`105778489865`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443/job/105778489865) SUCCESS; Heavy [`105778526582`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443/job/105778526582) SUCCESS (not skipped); Gate [`105792459915`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443/job/105792459915) SUCCESS. **S only.** Do not relabel as this-head evidence. |
+| Exact-head Classify / Heavy / Gate on this package | **pending at this docs write**; IDs belong after the new `pull_request` run on the live head |
+
+#### 16.10.2 Finding crosswalk
+
+| ID | Severity | Disposition |
+|---|---|---|
+| NEW-SCQ-01 | P2 | **Repaired (Cursor).** Damaged `quota.reservation` no longer collapses to empty. Live-child corrupt/truncated/deleted/wrong-version evidence refuses a second 33,554,432 reservation. First-init is marker-created + no `att-*` + absent ledger only. Atomic persist: exclusive tmp, write, fsync, rename, dirsync. Capacity is not freed before owned files are closed/removed. No lock theft. Orphan `quota.reservation.tmp.*` refuses admission. Sanitized occupancy adds `ledgerIntegrity` / `orphanMetadataPresent`. Recovery only after independently established quiescence. |
+| NEW-SCQ-02 | P3 | **Repaired (Cursor).** Production `dTransportHardStop` removed. `consumeDTransportAttempt` always throws at the cap. Throw-only negative control is a test-local counting wrap (`wrapAdminCountingOnly`) that is not a production export. Nested-B budget-boundary tests remain. |
+| SC-R-01…04 | P2 | Unchanged policy vs S except the NEW-SCQ-01 persist/integrity path and NEW-SCQ-02 bypass removal. Not independently re-accepted here. |
+| SC-R-05 / 07 | P3 | **Retained** disclosed limitations. |
+| SC-R-06 | P3 | Closed with SC-R-01; production bypass removed in NEW-SCQ-02. |
+| SC-R-08 | P3 | Confirmatory SIGKILL during staging preserved. |
+| N-08 / 1e6 | — | Independent S envelope and Cursor §16.5 `b2471676…` preserved; not rerun. |
+
+Original D-R-01/04/05/06/07/08/09/12 remain **RESOLVED**. Overlay C and INDEX-01 harnesses were not edited.
+
+#### 16.10.3 Exact changed paths versus S (`dab5acc…`)
+
+Runtime/test (`e7fb2c9` + `73939a9`):
+
+- `stocky-plus/app/lib/order-facts/sync/constants.ts`
+- `stocky-plus/app/lib/order-facts/sync/control-plane.ts`
+- `stocky-plus/app/lib/order-facts/sync/import.ts`
+- `stocky-plus/app/lib/order-facts/sync/scratch-quota.ts`
+- `stocky-plus/app/lib/order-facts/sync/scratch-quota.test.ts`
+- `stocky-plus/app/lib/order-facts/sync/source-stage.ts`
+- `stocky-plus/app/lib/order-facts/sync/source-stage.test.ts`
+- `stocky-plus/app/lib/order-facts/sync/transport-budget.ts`
+- `stocky-plus/app/lib/order-facts/sync/transport-budget.test.ts`
+- `stocky-plus/app/sync/health.server.ts`
+- `stocky-plus/scripts/tenant-enforcement/tests/pr6-d-sc-recovery.test.ts`
+
+Review (immutable; `e20cca5` only):
+
+- `stocky-plus/docs/phases/phase-1/PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md`
+
+Documentation (this evidence commit; SHA not embedded):
+
+- `stocky-plus/docs/phases/phase-1/PR6_D_IMPLEMENTATION_REPORT.md`
+- `stocky-plus/docs/phases/phase-1/PR6_D_SCRATCH_OPERATOR_RUNBOOK.md`
+- `stocky-plus/docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md` (mechanical regen)
+
+Not edited: Prisma schema, grants, deps, CI workflows, overlay C, INDEX-01 harness, A/B/C internals, scopes/flags, PR45/46, production/store calls.
+
+#### 16.10.4 NEW-SCQ-01 repair
+
+Independent review reproduced four live-child evidence-loss cases (corrupt / truncated / deleted / wrong-version `quota.reservation`) while a child held 33,554,432 unused reserved bytes of a 41,943,040 cap after writing only 4,096 bytes. Prior `loadDScratchReservations` collapsed those states to an empty ledger and admitted a second 33,554,432 reservation (160% of cap). Detection (`unknownAttemptCount`, `operatorInterventionRequired`) did not enforce.
+
+Correction (D-owned quota persist/admission only):
+
+- `readDScratchReservationFile` never returns an empty ledger for missing/corrupt/truncated/unreadable/wrong-version/malformed evidence.
+- Genuine first initialization is only `quota.reservation` absent **and** this lock acquisition created the namespace marker **and** no `att-*` directories. An initialized namespace with a missing ledger is `missing`, not first init.
+- Admission under the quota lock refuses when ledger integrity is failed, `unknownAttemptCount > 0`, or `orphanMetadataPresent`. Measured bytes, PID, age, and lease expiry do not replace a live writer's outstanding reservation.
+- Persist uses an exclusively created same-directory `quota.reservation.tmp.*` file, complete write, `fsync`, rename onto `quota.reservation`, then directory `fsync`. The live ledger is not truncated in place. Temporary names are bounded and ownership-safe. Crash/fail points: `after-temp-write`, `after-temp-sync`, `before-replace`, `after-replace`. Injected `PR6_D_QUOTA_FAIL_SAVE` is an exception; `PR6_D_QUOTA_CRASH` is SIGKILL process death. They are not interchangeable. **No power-loss experiment was executed.**
+- Release removes owned files first, then persists the reduced ledger. A failed persist after file removal stays over-reserved and visible. Pre-replace injected save failures leave the live ledger byte-identical and do not consume capacity. After-replace injected failure leaves an unknown reservation identity and refuses later admission.
+- Occupancy/health/DataIssue sanitized evidence now includes `ledgerIntegrity` and `orphanMetadataPresent`.
+- Admission does not steal `quota.lock`. After independently established quiescence, operator reclaim may remove a selected leftover lock. `reinitializeDScratchReservationLedgerAfterQuiescence` writes an empty ledger only when no `att-*` remain and may remove owned `quota.reservation.tmp.*` regular files. Markerless leftovers and `/tmp` are still not swept.
+
+#### 16.10.5 NEW-SCQ-02 repair
+
+`dTransportHardStop.throwOnExhaustion` is removed from production. `consumeDTransportAttempt` always throws at the cap. The throw-only negative control remains as a **test-local** counting wrapper in `transport-budget.test.ts` (`wrapAdminCountingOnly`) that never exists on the production wrap. No `NODE_ENV` escape hatch. Budget-boundary nested-B tests still prove the production throw is load-bearing.
+
+#### 16.10.6 Scale evidence reuse (not rerun)
+
+Quota persist and the always-on hard-stop do not change reservation arithmetic, JSONL staging, or the parent transport budget used by the S envelope. Changed behavior is the fail-closed ledger/integrity path and removal of a switch that S production never flipped. Independent S envelope (reviewer at `ec61089` / comment 5737964437: 4/4, 2059.25 s on S runtime) and Cursor §16.5 `b2471676d0300487802a6a916eb5546943925cb2` remain attributed to those heads. **`PR6_D_SCALE_1E6` was not re-run.** Not relabelled as new-head execution.
+
+#### 16.10.7 Failed local attempt (not relabelled as a pass)
+
+First focused unit run on the persist-crash follow-up: **4 failed / 51 passed** (3 files). Cause: subsequent-admission assertions treated pre-replace injected save failures and after-replace SIGKILL as if they left indeterminate capacity. Pre-replace injected failures leave the live ledger unchanged so a later under-cap admission is valid. After-replace SIGKILL commits the reservation; after operator lock reclaim an 8,000-byte request still refuses against the leftover 3,000, and leftover `att-*` dirs remain. Assertions corrected; rerun **55 passed / 3 files**.
+
+#### 16.10.8 Cursor local commands (runtime `73939a9…`)
+
+Environment: Node `v22.14.0`, npm `11.5.2`, linux, disposable PostgreSQL accepting (`pg_isready` / `select 1`), Redis `PONG` (not required for the unit files). Commands below are Cursor’s, this working tree.
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npx vitest run app/lib/order-facts/sync/scratch-quota.test.ts app/lib/order-facts/sync/transport-budget.test.ts app/lib/order-facts/sync/source-stage.test.ts --reporter=verbose` | 0 | **55** passed / 3 files. Four live-child evidence-loss modes with files+entitlement intact; malformed/unreadable ledger; first-init vs missing; concurrent under-cap; over-cap; injected vs SIGKILL at all four persist stages; lock non-theft; orphan tmp refuse; test-local throw-only wrap; no `dTransportHardStop` export |
+| `npx vitest run app/lib/order-facts/sync/jsonl.test.ts app/lib/order-facts/sync/import-receipt-binding.test.ts --reporter=verbose` | 0 | **41** passed / 2 files (representative import/receipt regressions) |
+| `npm run test:migrations -- scripts/tenant-enforcement/tests/pr6-d-sc-recovery.test.ts --reporter=verbose` | 0 | **20** passed / 1 file. Leftover occupancy refuses a later admission; leftover bytes remain |
+| `npx eslint` on the D-owned changed TS files listed in §16.10.3 | 0 | focused |
+| `npx tsc --noEmit` | 0 | focused typecheck |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | **40/40** assertions |
+| `git diff --check` | 0 | — |
+
+`PR6_D_SCALE_1E6` was **not** re-run. Overlay C and INDEX-01 harnesses were not edited. Immutable reviews were not rewritten. Live Shopify / store calls / production were **not executed** (forbidden). `npm run graphql-codegen` was **not executed**. Exact-head Classify + full Heavy + Gate on this package remain **pending at this docs write**.
+
+#### 16.10.9 Remaining limitations
+
+| Item | Status |
+|---|---|
+| Independent Claude Code targeted NEW-SCQ re-review | **required**; not this session |
+| ChatGPT technical acceptance / mark-ready / merge | **not authorized** |
+| R-176 | remains **OPEN / P0** |
+| R-164 | unchanged |
+| PR 6 / Phase 1 | **IN PROGRESS** |
+| D-054 / D-055 | D-054 remains authority; **no D-055** |
+| Million-line envelope at this head | **not rerun**; S/`b2471676…` attribution stands |
+| Power-loss / disk-controller durability | **not executed**; SIGKILL vs injected exceptions only |
+| PR #43 | remains OPEN / DRAFT / UNMERGED |
+
+This exception does **not** independently accept SC-R-01…04. R-176 remains **OPEN / P0**. R-164 unchanged. No D-055.
