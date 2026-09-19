@@ -1277,7 +1277,9 @@ The published review at `e20cca5cfa983e516c26980e0ccbaf3a5e00a1cf` is preserved 
 | Source-contract review blob | `1eb18cae44cdf7a6660256e2632ebc8019d6da0d` preserved |
 | SC-recovery final review | `ec61089dcfc0530b81c64bc09fcea7f3b70b7aa5` blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8` preserved |
 | Historical exact-head SUCCESS on **S** | run [`35400320443`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443) — Classify [`105778489865`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443/job/105778489865) SUCCESS; Heavy [`105778526582`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443/job/105778526582) SUCCESS (not skipped); Gate [`105792459915`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443/job/105792459915) SUCCESS. **S only.** Do not relabel as this-head evidence. |
-| Exact-head Classify / Heavy / Gate on this package | **pending at this docs write**; IDs belong after the new `pull_request` run on the live head |
+| Failed exact-head on NEW-SCQ docs head `28d9342…` | run [`35412301750`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750) — Classify [`105814159156`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750/job/105814159156) SUCCESS; full Heavy [`105814186643`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750/job/105814186643) **FAILURE** (not skipped); Gate [`105820587426`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750/job/105820587426) **FAILURE** (`VALIDATE_RESULT=failure`, `CLASSIFY_RESULT=success`, `FULL_CI=true`). **Do not relabel this run as success.** See §16.10.10. |
+| Isolation runtime/test | `58f88f94ba106b4198b354c4f093c56c81082b52` |
+| Exact-head Classify / Heavy / Gate after isolation | **pending at this docs write**; IDs belong after the new `pull_request` run on the live head that includes this documentation commit |
 
 #### 16.10.2 Finding crosswalk
 
@@ -1379,3 +1381,39 @@ Environment: Node `v22.14.0`, npm `11.5.2`, linux, disposable PostgreSQL accepti
 | PR #43 | remains OPEN / DRAFT / UNMERGED |
 
 This exception does **not** independently accept SC-R-01…04. R-176 remains **OPEN / P0**. R-164 unchanged. No D-055.
+
+#### 16.10.10 Exact-head Heavy failure `35412301750` and quota-isolation correction
+
+Exact-head `pull_request` run [`35412301750`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750) on live head `28d93421e27cc035129a9582002ff0244ce772bf` is **FAILURE**. Classify [`105814159156`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750/job/105814159156) SUCCESS. Full Heavy [`105814186643`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750/job/105814186643) FAILURE (job name `Lint, typecheck, test, build, Prisma, GraphQL`; **not SKIPPED**). CI Gate [`105820587426`](https://github.com/Vedang1998/Stocky/actions/runs/35412301750/job/105820587426) FAILURE because `VALIDATE_RESULT=failure` with `CLASSIFY_RESULT=success` `FULL_CI=true`. This run is **not** relabelled as success.
+
+Heavy failed in **Unit tests**. `app/lib/order-facts/sync/jsonl.test.ts` 6 failed / 33:
+
+1. `round-trips multi-byte UTF-8 split on every byte boundary` — timed out in 5000ms
+2. truncated UTF-8 — expected `MALFORMED`, got `SCRATCH_RESOURCE`
+3. malformed UTF-8 — expected `MALFORMED`, got `SCRATCH_RESOURCE`
+4. missing count tokens — expected `/objectCount\/rootObjectCount/`, got `order_facts_scratch_resource: D scratch quota occupied 2147483648 leaves no capacity under 2147483648`
+5. expected nonzero counts with empty bytes — expected `TRUNCATED`, got `SCRATCH_RESOURCE`
+6. proven empty export — expected `COMPLETE`, got `SCRATCH_RESOURCE`
+
+Later jsonl cases in the same file then passed, including the 70_000-root duplicate test at 15161ms. jsonl assertions for `MALFORMED` / `TRUNCATED` / `COMPLETE` were not wrong.
+
+Cause: `assembleOrderFactsJsonl` omitted `scratchRoot` and `reservedBytes`, so every assembly admitted against the process-shared default namespace `{tmpdir}/stocky-pr6-d` and reserved remaining capacity (2 GiB). NEW-SCQ persist (exclusive tmp, write, `fsync`, rename, dirsync) made the UTF-8 byte-boundary loop (~90 sequential admissions) exceed vitest’s 5s default. Vitest marked that test failed while the in-flight 2 GiB reservation remained in the ledger. The next five cases admitted against that occupancy and mapped to sanitized `order_facts_scratch_resource`. `PR6_D_QUOTA_FAIL_SAVE` is an injected exception; `PR6_D_QUOTA_CRASH` is SIGKILL process death. They are not interchangeable. **No power-loss experiment was executed.** `PR6_D_SCALE_1E6` was **not** re-run.
+
+Correction (test isolation only; production admission still does not steal `quota.lock`; no `/tmp` sweep; NEW-SCQ-01/02 contracts unchanged):
+
+- `jsonl.test.ts`: unique scratch root per test under `stocky-pr6-d-jsonl-{pid}-*`; wrapper passes `scratchRoot` without changing fail-closed expected reasons; UTF-8 round-trip timeout 30_000 so the loop can finish; `afterAll` removes only those owned unique roots.
+- `source-stage.test.ts`: track spawned D children; `afterEach` deletes `PR6_D_QUOTA_FAIL_SAVE` / `PR6_D_QUOTA_CRASH` and SIGKILLs leftover children. Unique `stocky-pr6-d-test-*` roots and leftover-lock non-theft assertions remain.
+
+Isolation runtime/test: `58f88f94ba106b4198b354c4f093c56c81082b52`.
+
+Cursor local commands (runtime `58f88f9…`):
+
+Environment: Node `v22.14.0`, npm `11.5.2`, linux. Commands below are Cursor’s, this working tree.
+
+| Command | Exit | Notes |
+|---|---|---|
+| `npx eslint app/lib/order-facts/sync/jsonl.test.ts app/lib/order-facts/sync/source-stage.test.ts` | 0 | focused |
+| `npx tsc --noEmit` | 0 | focused typecheck |
+| `npx vitest run` source-stage + scratch-quota + transport-budget + jsonl, `--fileParallelism=false --maxWorkers=1 --pool=threads --isolate=false`, sequencer source-stage → scratch-quota → transport-budget → jsonl | 0 | **88** passed / 4 files. jsonl **33** passed after NEW-SCQ-01/02 in the same process. UTF-8 round-trip **1501ms**. NEW-SCQ live-child / SIGKILL / lock non-theft / orphan-tmp / test-local throw-only wrap still passed. |
+
+`PR6_D_SCALE_1E6` was **not** re-run. Overlay C and INDEX-01 harnesses were not edited. Immutable reviews were not rewritten. Live Shopify / store calls / production were **not executed** (forbidden). Exact-head Classify + full Heavy + Gate on the live head after this isolation docs commit remain **pending at this docs write**. Claude targeted NEW-SCQ re-review remains required. R-176 remains **OPEN / P0**. PR #43 remains OPEN / DRAFT / UNMERGED. No D-055.
