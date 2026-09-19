@@ -30,7 +30,12 @@ import {
   type ScratchOwnershipHandle,
 } from "./source-stage";
 import { hashFileSha256, verifyValidatedSourceManifest } from "./source-digest";
-import { ORDER_FACTS_SCRATCH_MARKER, ORDER_FACTS_SCRATCH_RESERVATION } from "./constants";
+import {
+  ORDER_FACTS_SCRATCH_MARKER,
+  ORDER_FACTS_SCRATCH_QUOTA_LOCK,
+  ORDER_FACTS_SCRATCH_RESERVATION,
+  ORDER_FACTS_SCRATCH_RESERVATION_TMP_PREFIX,
+} from "./constants";
 import { ORDER_FACTS_SCRATCH_QUOTA_VERSION } from "./scratch-quota";
 
 const APP_ROOT = path.resolve(
@@ -1187,4 +1192,214 @@ describe("PR6-D NEW-SCQ-01 reservation-evidence integrity", () => {
       }),
     ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
   }, 30_000);
+
+  const PERSIST_STAGES = [
+    "after-temp-write",
+    "after-temp-sync",
+    "before-replace",
+    "after-replace",
+  ] as const;
+
+  for (const stage of PERSIST_STAGES) {
+    it(`injected persist exception at ${stage} is not process death and leaves the live ledger`, async () => {
+      const root = scratchRoot();
+      const first = await createOwnedScratchDir({
+        shopId: "shop",
+        syncRunId: "run",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      });
+      const keep = path.join(first.dir, "keep.bin");
+      writeFileSync(keep, "keep-bytes");
+      const beforeHash = sha256(readFileSync(keep));
+      const beforeLedger = readFileSync(ledgerPath(root), "utf8");
+      process.env.PR6_D_QUOTA_FAIL_SAVE = stage;
+      try {
+        await expect(
+          createOwnedScratchDir({
+            shopId: "other",
+            syncRunId: "other",
+            scratchRoot: root,
+            reservedBytes: 3000,
+            maxScratchBytes: 10_000,
+          }),
+        ).rejects.toThrow(/persist failure/);
+      } finally {
+        delete process.env.PR6_D_QUOTA_FAIL_SAVE;
+      }
+      expect(existsSync(first.dir)).toBe(true);
+      expect(sha256(readFileSync(keep))).toBe(beforeHash);
+      if (stage === "after-replace") {
+        const occupancy = await inspectDScratchOccupancy({
+          scratchRoot: root,
+          maxScratchBytes: 10_000,
+        });
+        expect(occupancy.unknownAttemptCount).toBeGreaterThan(0);
+        expect(occupancy.operatorInterventionRequired).toBe(true);
+        await expect(
+          createOwnedScratchDir({
+            shopId: "other",
+            syncRunId: "other",
+            scratchRoot: root,
+            reservedBytes: 3000,
+            maxScratchBytes: 10_000,
+          }),
+        ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+      } else {
+        expect(readFileSync(ledgerPath(root), "utf8")).toBe(beforeLedger);
+        const recovered = await createOwnedScratchDir({
+          shopId: "other",
+          syncRunId: "other",
+          scratchRoot: root,
+          reservedBytes: 3000,
+          maxScratchBytes: 10_000,
+        });
+        await disposeOwnedScratch(recovered, root);
+      }
+      await disposeOwnedScratch(first, root).catch(() => undefined);
+    });
+
+    it(`SIGKILL at ${stage} is process death, not an injected exception, and blocks admission`, async () => {
+      const root = scratchRoot();
+      mkdirSync(root, { recursive: true });
+      const statusPath = path.join(root, `crash-${stage}.json`);
+      const child = spawn(TSX_BIN, [QUOTA_CHILD], {
+        env: {
+          ...process.env,
+          PR6_D_QUOTA_STATUS_PATH: statusPath,
+          PR6_D_QUOTA_SCRATCH_ROOT: root,
+          PR6_D_QUOTA_SHOP_ID: `crash-${stage}`,
+          PR6_D_QUOTA_RUN_ID: `crash-${stage}`,
+          PR6_D_QUOTA_RESERVED_BYTES: "3000",
+          PR6_D_QUOTA_MAX_BYTES: "10000",
+          PR6_D_QUOTA_CRASH: stage,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+      let stderr = "";
+      child.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString("utf8");
+      });
+      const exitCode = await new Promise<number | null>((resolve) => {
+        child.once("exit", (code) => resolve(code));
+      });
+      expect(exitCode).not.toBe(0);
+      expect(stderr).not.toMatch(/persist failure/);
+      await expect(
+        createOwnedScratchDir({
+          shopId: "next",
+          syncRunId: "next",
+          scratchRoot: root,
+          reservedBytes: 3000,
+          maxScratchBytes: 10_000,
+        }),
+      ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+      const lockPath = path.join(root, ORDER_FACTS_SCRATCH_QUOTA_LOCK);
+      expect(existsSync(lockPath)).toBe(true);
+      await reclaimOperatorSelectedDScratch({
+        scratchRoot: root,
+        attemptBasenames: [ORDER_FACTS_SCRATCH_QUOTA_LOCK],
+        quiescenceConfirmed: true,
+      });
+      expect(existsSync(lockPath)).toBe(false);
+      const leftoverAttempts = readdirSync(root).filter((name) =>
+        name.startsWith("att-"),
+      );
+      expect(leftoverAttempts.length).toBeGreaterThan(0);
+      if (stage === "after-replace") {
+        await expect(
+          createOwnedScratchDir({
+            shopId: "next",
+            syncRunId: "next",
+            scratchRoot: root,
+            reservedBytes: 8000,
+            maxScratchBytes: 10_000,
+          }),
+        ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+      } else {
+        await expect(
+          createOwnedScratchDir({
+            shopId: "next",
+            syncRunId: "next",
+            scratchRoot: root,
+            reservedBytes: 3000,
+            maxScratchBytes: 10_000,
+          }),
+        ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+      }
+      expect(
+        leftoverAttempts.every((name) => existsSync(path.join(root, name))),
+      ).toBe(true);
+    }, 30_000);
+  }
+
+  it("does not steal a leftover quota.lock during admission", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    await disposeOwnedScratch(first, root);
+    const lockPath = path.join(root, ORDER_FACTS_SCRATCH_QUOTA_LOCK);
+    mkdirSync(lockPath);
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    expect(existsSync(lockPath)).toBe(true);
+    await reclaimOperatorSelectedDScratch({
+      scratchRoot: root,
+      attemptBasenames: [ORDER_FACTS_SCRATCH_QUOTA_LOCK],
+      quiescenceConfirmed: true,
+    });
+    const restored = await createOwnedScratchDir({
+      shopId: "next",
+      syncRunId: "next",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    await disposeOwnedScratch(restored, root);
+  });
+
+  it("refuses admission while orphan reservation temp metadata remains", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    await disposeOwnedScratch(first, root);
+    const tmp = path.join(root, `${ORDER_FACTS_SCRATCH_RESERVATION_TMP_PREFIX}1.deadbeef`);
+    writeFileSync(tmp, "{not-a-live-ledger}\n");
+    const before = sha256(readFileSync(tmp));
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    expect(existsSync(tmp)).toBe(true);
+    expect(sha256(readFileSync(tmp))).toBe(before);
+    const occupancy = sanitizeDScratchOccupancy(
+      await inspectDScratchOccupancy({ scratchRoot: root, maxScratchBytes: 10_000 }),
+    );
+    expect(occupancy.orphanMetadataPresent).toBe(true);
+    expect(occupancy.operatorInterventionRequired).toBe(true);
+    expect(JSON.stringify(occupancy)).not.toMatch(/shop|att-/);
+  });
 });

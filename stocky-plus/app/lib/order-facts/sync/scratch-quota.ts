@@ -500,6 +500,7 @@ export async function removeAttemptReservation(input: {
 export function refuseIndeterminateScratchQuota(
   integrity: DScratchLedgerIntegrity,
   unknownAttemptCount: number,
+  orphanMetadataPresent = false,
 ): void {
   if (integrity !== "ok" && integrity !== "uninitialized") {
     throw new OrderFactsJsonlError(
@@ -511,6 +512,12 @@ export function refuseIndeterminateScratchQuota(
     throw new OrderFactsJsonlError(
       "scratch_resource_exhausted",
       `D scratch reservation identities are unknown (${unknownAttemptCount}); refusing admission`,
+    );
+  }
+  if (orphanMetadataPresent) {
+    throw new OrderFactsJsonlError(
+      "scratch_resource_exhausted",
+      "D scratch reservation temp metadata is outstanding; refusing admission",
     );
   }
 }

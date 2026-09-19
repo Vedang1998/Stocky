@@ -525,7 +525,11 @@ export async function createOwnedScratchDir(input: {
       );
     }
     const stats = occupiedScratchBytes(inspection, ledger);
-    refuseIndeterminateScratchQuota(resolved.integrity, stats.unknownAttemptCount);
+    refuseIndeterminateScratchQuota(
+      resolved.integrity,
+      stats.unknownAttemptCount,
+      inspection.orphanMetadataPresent,
+    );
     const reservedBytes = decideReservedBytes({
       occupied: stats.occupied,
       maxScratchBytes,

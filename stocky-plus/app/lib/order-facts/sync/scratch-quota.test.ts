@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { OrderFactsJsonlError } from "./errors";
 import {
   emptyDScratchLedger,
+  refuseIndeterminateScratchQuota,
   resolveDScratchLedger,
 } from "./scratch-quota";
 
@@ -45,5 +47,17 @@ describe("PR6-D NEW-SCQ-01 ledger resolution", () => {
         attemptDirCount: 1,
       }),
     ).toEqual({ status: "integrity_failed", integrity: "wrong_version" });
+  });
+
+  it("refuses unknown identities and orphan temp metadata", () => {
+    expect(() => refuseIndeterminateScratchQuota("ok", 0)).not.toThrow();
+    expect(() => refuseIndeterminateScratchQuota("uninitialized", 0)).not.toThrow();
+    expect(() => refuseIndeterminateScratchQuota("ok", 1)).toThrow(OrderFactsJsonlError);
+    expect(() => refuseIndeterminateScratchQuota("ok", 0, true)).toThrow(
+      /temp metadata is outstanding/,
+    );
+    expect(() => refuseIndeterminateScratchQuota("missing", 0)).toThrow(
+      /integrity missing/,
+    );
   });
 });
