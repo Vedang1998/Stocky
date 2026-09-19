@@ -10,12 +10,33 @@ import {
   ORDER_FACTS_IMPORT_LEDGER_QUERY,
   readOrderFactsImportLedger,
 } from "./supplemental-ledger";
+import type { OrderAdminReadClient } from "../admin-read/types";
 import {
   consumeDTransportAttempt,
   createDTransportBudget,
-  dTransportHardStop,
   wrapAdminWithDTransportBudget,
+  type DTransportBudget,
 } from "./transport-budget";
+
+function wrapAdminCountingOnly(
+  admin: OrderAdminReadClient,
+  budget: DTransportBudget,
+): OrderAdminReadClient {
+  return {
+    graphql: async (query, options) => {
+      budget.used += 1;
+      if (budget.lastCallThrottled) budget.classified.retry += 1;
+      else budget.classified[budget.phase] += 1;
+      const response = await admin.graphql(query, options);
+      return {
+        json: async () => {
+          const json = await response.json();
+          return json;
+        },
+      };
+    },
+  };
+}
 
 const GID = "gid://shopify/Order/1";
 const UPDATED = "2026-01-18T00:00:00Z";
@@ -154,28 +175,19 @@ describe("PR6-D transport hard-stop and parent isolation", () => {
       }
       return ledgerEnvelope([{ id: String(refund.id) }]);
     });
-    const previous = dTransportHardStop.throwOnExhaustion;
-    dTransportHardStop.throwOnExhaustion = false;
-    try {
-      const budget = createDTransportBudget(3);
-      const wrapped = wrapAdminWithDTransportBudget(admin, budget, {
-        resourceKind: "Order",
-        requestedGid: GID,
-        phase: "initial",
-      });
-      await readOrderFactsImportLedger({
-        context: { admin: wrapped, shop: SHOP },
-        orderGid: GID,
-        bulkUpdatedAt: UPDATED,
-        bulkCurrencyCode: "USD",
-        pageSize: 1,
-        maxRequests: 250,
-        transportBudget: budget,
-      });
-      expect(admin.calls.length).toBeGreaterThan(3);
-    } finally {
-      dTransportHardStop.throwOnExhaustion = previous;
-    }
+    const budget = createDTransportBudget(3);
+    const wrapped = wrapAdminCountingOnly(admin, budget);
+    await readOrderFactsImportLedger({
+      context: { admin: wrapped, shop: SHOP },
+      orderGid: GID,
+      bulkUpdatedAt: UPDATED,
+      bulkCurrencyCode: "USD",
+      pageSize: 1,
+      maxRequests: 250,
+      transportBudget: budget,
+    });
+    expect(admin.calls.length).toBeGreaterThan(3);
+    expect(budget.used).toBeGreaterThan(3);
   });
 
   it("counts throttled retries and thrown transport errors at the wrapper", async () => {
@@ -208,6 +220,15 @@ describe("PR6-D transport hard-stop and parent isolation", () => {
     expect(budget.used).toBe(3);
     expect(budget.classified.retry).toBe(2);
     expect(budget.classified.initial).toBe(1);
+  });
+
+  it("does not export a production hard-stop bypass", async () => {
+    const mod = await import("./transport-budget");
+    expect(Object.keys(mod)).not.toContain("dTransportHardStop");
+    const budget = createDTransportBudget(1);
+    consumeDTransportAttempt(budget);
+    expect(() => consumeDTransportAttempt(budget)).toThrow(/budget exhausted/);
+    expect(budget.used).toBe(1);
   });
 });
 

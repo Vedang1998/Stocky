@@ -171,6 +171,8 @@ async function failImport(input: {
       maxScratchAttempts: occupancy.maxScratchAttempts,
       maxScratchBytes: occupancy.maxScratchBytes,
       operatorInterventionRequired: occupancy.operatorInterventionRequired,
+      ledgerIntegrity: occupancy.ledgerIntegrity,
+      orphanMetadataPresent: occupancy.orphanMetadataPresent,
     },
   });
   await persistOrderFactsCoverageHealth({

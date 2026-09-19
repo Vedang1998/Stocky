@@ -123,7 +123,9 @@ export async function persistOrderFactsCoverageHealth(input: {
     occupancy.operatorInterventionRequired ||
     occupancy.leftoverAttemptCount > 0 ||
     occupancy.unknownAttemptCount > 0 ||
-    occupancy.observedBytes > 0;
+    occupancy.observedBytes > 0 ||
+    (occupancy.ledgerIntegrity !== "ok" &&
+      occupancy.ledgerIntegrity !== "uninitialized");
   const scratchHold = residual ? 1 : 0;
   await computeSyncHealth(input.shopId, ORDER_FACTS_HEALTH_DOMAIN, {
     catalogEvidence: {

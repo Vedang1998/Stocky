@@ -25,6 +25,8 @@ export type OrderFactsScratchHealthEvidence = {
   maxScratchAttempts: number;
   maxScratchBytes: number;
   operatorInterventionRequired: boolean;
+  ledgerIntegrity?: string;
+  orphanMetadataPresent?: boolean;
   reasonCode: string;
 };
 
@@ -40,6 +42,7 @@ function scratchEvidenceDetail(
     `observedBytes=${evidence.observedBytes} reservedBytes=${evidence.reservedBytes} ` +
     `oldestAgeMs=${oldest} ` +
     `limits=${evidence.maxScratchAttempts}/${evidence.maxScratchBytes}` +
+    ` ledgerIntegrity=${evidence.ledgerIntegrity ?? "ok"}` +
     (evidence.operatorInterventionRequired
       ? "; operator intervention required"
       : "");

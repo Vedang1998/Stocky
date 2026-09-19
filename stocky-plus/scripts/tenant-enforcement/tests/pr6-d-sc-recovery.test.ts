@@ -1087,25 +1087,11 @@ describe("PR6-D SC-R control corrections", () => {
     }
   });
 
-  it("keeps leftover occupancy visible after a successful import in the same namespace", async () => {
+  it("keeps leftover occupancy visible and refuses a later admission in the same namespace", async () => {
     const scratch = mkdtempSync(path.join(os.tmpdir(), "pr6-d-scr03-"));
     mkdirSync(scratch, { recursive: true });
-    const leftover = path.join(scratch, "att-orphan-leftover");
-    mkdirSync(leftover, { recursive: true });
-    writeFileSync(
-      path.join(leftover, ORDER_FACTS_SCRATCH_MARKER),
-      `${JSON.stringify({
-        owned: true,
-        prefix: ORDER_FACTS_SCRATCH_PREFIX,
-        kind: "attempt",
-        token: "orphan",
-        pid: 1,
-        createdAt: new Date().toISOString(),
-      })}\n`,
-    );
-    writeFileSync(path.join(leftover, "fat.bin"), "x".repeat(256));
     const gid = "gid://shopify/Order/scr03-health";
-    const result = await withTxnHost(shopAId, (db) =>
+    const first = await withTxnHost(shopAId, (db) =>
       runOrderFactsImportStep({
         db,
         admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
@@ -1122,12 +1108,46 @@ describe("PR6-D SC-R control corrections", () => {
         scratchRoot: scratch,
       }),
     );
-    expect(result.status, JSON.stringify(result)).toBe("SUCCEEDED");
+    expect(first.status, JSON.stringify(first)).toBe("SUCCEEDED");
+    const leftover = path.join(scratch, "att-orphan-leftover");
+    mkdirSync(leftover, { recursive: true });
+    writeFileSync(
+      path.join(leftover, ORDER_FACTS_SCRATCH_MARKER),
+      `${JSON.stringify({
+        owned: true,
+        prefix: ORDER_FACTS_SCRATCH_PREFIX,
+        kind: "attempt",
+        token: "orphan",
+        pid: 1,
+        createdAt: new Date().toISOString(),
+      })}\n`,
+    );
+    writeFileSync(path.join(leftover, "fat.bin"), "x".repeat(256));
+    const before = readFileSync(path.join(leftover, "fat.bin"));
+    const second = await withTxnHost(shopAId, (db) =>
+      runOrderFactsImportStep({
+        db,
+        admin: createOrderFactsAdmin({ stores: { [gid]: standardStore(gid) } }),
+        shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+        shopId: shopAId,
+        durableJobId: "import-scr03-health-2",
+        correlationId: "import-scr03-health-2",
+        jsonlSource: jsonlLines([
+          bulkARoot(gid, { currentSubtotalLineItemsQuantity: 0 }),
+        ]),
+        pollBulkOperation: false,
+        expectedObjectCount: "1",
+        expectedRootObjectCount: "1",
+        scratchRoot: scratch,
+      }),
+    );
+    expect(second.status).toBe("PARTIAL_FAILURE");
     const occupancy = sanitizeDScratchOccupancy(
       await inspectDScratchOccupancy({ scratchRoot: scratch }),
     );
     expect(occupancy.leftoverAttemptCount).toBeGreaterThan(0);
     expect(occupancy.operatorInterventionRequired).toBe(true);
+    expect(occupancy.unknownAttemptCount).toBeGreaterThan(0);
     expect(JSON.stringify(occupancy)).not.toMatch(/leftover-shop|att-/);
     const health = await getControlPlanePrisma().syncHealth.findUnique({
       where: {
@@ -1141,6 +1161,7 @@ describe("PR6-D SC-R control corrections", () => {
     expect(health?.detailCode).toBe(ORDER_FACTS_SCRATCH_RESOURCE_REASON);
     expect(health?.detailSummary ?? "").not.toMatch(/leftover-shop|att-/);
     expect(existsSync(leftover)).toBe(true);
+    expect(readFileSync(path.join(leftover, "fat.bin"))).toEqual(before);
   });
 
   it("surfaces a typed scratch-resource diagnostic when admission is exhausted", async () => {

@@ -45,15 +45,22 @@ import {
 import { OrderFactsJsonlError } from "./errors";
 import {
   decideReservedBytes,
+  emptyDScratchLedger,
   isAttemptBasename,
-  loadDScratchReservations,
+  isReservationTempName,
   occupiedScratchBytes,
   quotaLockPath,
+  readDScratchReservationFile,
+  refuseIndeterminateScratchQuota,
   removeAttemptReservation,
+  resolveDScratchLedger,
+  saveDScratchReservations,
   snapshotDScratchOccupancy,
   withDScratchQuotaLock,
   writeAttemptReservation,
+  type DScratchLedgerIntegrity,
   type DScratchOccupancySnapshot,
+  type DScratchReservationLedger,
 } from "./scratch-quota";
 import {
   hashFileSha256,
@@ -258,6 +265,7 @@ export type DScratchNamespaceInspection = {
   root: string;
   leftoverAttemptCount: number;
   leftoverBytes: number;
+  orphanMetadataPresent: boolean;
   attemptDirs: Array<{
     dir: string;
     bytes: number;
@@ -280,11 +288,13 @@ export async function inspectDScratchNamespace(
       root: scratchRoot,
       leftoverAttemptCount: 0,
       leftoverBytes: 0,
+      orphanMetadataPresent: false,
       attemptDirs,
     };
   }
   const entries = await readdir(scratchRoot);
   let leftoverBytes = 0;
+  let orphanMetadataPresent = false;
   for (const name of entries) {
     if (
       name === ORDER_FACTS_SCRATCH_QUOTA_LOCK ||
@@ -307,6 +317,9 @@ export async function inspectDScratchNamespace(
     }
     if (!child.isDirectory() || !name.startsWith(ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX)) {
       leftoverBytes += child.isFile() ? child.size : await measureDScratchTreeBytes(full);
+      if (child.isFile() && isReservationTempName(name)) {
+        orphanMetadataPresent = true;
+      }
       continue;
     }
     const bytes = await measureDScratchTreeBytes(full);
@@ -324,6 +337,7 @@ export async function inspectDScratchNamespace(
     root: scratchRoot,
     leftoverAttemptCount: attemptDirs.filter((row) => !row.symlink).length,
     leftoverBytes,
+    orphanMetadataPresent,
     attemptDirs,
   };
 }
@@ -334,11 +348,27 @@ export async function inspectDScratchOccupancy(input: {
   maxScratchAttempts?: number;
 }): Promise<DScratchOccupancySnapshot> {
   const inspection = await inspectDScratchNamespace(input.scratchRoot);
-  const ledger = await loadDScratchReservations(input.scratchRoot);
+  const file = await readDScratchReservationFile(input.scratchRoot);
+  const marker = await readScratchMarker(input.scratchRoot);
+  const namespaceMarkerPresent =
+    marker?.owned === true && marker.prefix === ORDER_FACTS_SCRATCH_PREFIX;
+  let integrity: DScratchLedgerIntegrity;
+  let ledger = emptyDScratchLedger();
+  if (file.kind === "ok") {
+    integrity = "ok";
+    ledger = file.ledger;
+  } else if (file.kind === "integrity_failed") {
+    integrity = file.integrity;
+  } else if (namespaceMarkerPresent || inspection.leftoverAttemptCount > 0) {
+    integrity = "missing";
+  } else {
+    integrity = "uninitialized";
+  }
   const lock = await lstat(quotaLockPath(input.scratchRoot)).catch(() => null);
   return snapshotDScratchOccupancy({
     inspection,
     ledger,
+    ledgerIntegrity: integrity,
     maxScratchBytes: input.maxScratchBytes,
     maxScratchAttempts: input.maxScratchAttempts,
     staleLockPresent: Boolean(lock?.isDirectory()),
@@ -357,6 +387,8 @@ export function sanitizeDScratchOccupancy(
   maxScratchAttempts: number;
   maxScratchBytes: number;
   operatorInterventionRequired: boolean;
+  ledgerIntegrity: DScratchLedgerIntegrity;
+  orphanMetadataPresent: boolean;
   reasonCode: typeof ORDER_FACTS_SCRATCH_RESOURCE_REASON;
 } {
   return {
@@ -369,6 +401,8 @@ export function sanitizeDScratchOccupancy(
     maxScratchAttempts: occupancy.attemptCap,
     maxScratchBytes: occupancy.byteCap,
     operatorInterventionRequired: occupancy.operatorInterventionRequired,
+    ledgerIntegrity: occupancy.ledgerIntegrity,
+    orphanMetadataPresent: occupancy.orphanMetadataPresent,
     reasonCode: ORDER_FACTS_SCRATCH_RESOURCE_REASON,
   };
 }
@@ -403,7 +437,9 @@ function sleep(ms: number): Promise<void> {
   });
 }
 
-async function writeNamespaceMarker(root: string): Promise<void> {
+async function writeNamespaceMarker(
+  root: string,
+): Promise<"created" | "existing"> {
   try {
     await writeFile(
       markerPath(root),
@@ -416,6 +452,7 @@ async function writeNamespaceMarker(root: string): Promise<void> {
       })}\n`,
       { mode: 0o600, flag: "wx" },
     );
+    return "created";
   } catch (error) {
     const code =
       error && typeof error === "object" && "code" in error
@@ -429,7 +466,7 @@ async function writeNamespaceMarker(root: string): Promise<void> {
         existing.owned === true &&
         existing.prefix === ORDER_FACTS_SCRATCH_PREFIX
       ) {
-        return;
+        return "existing";
       }
       await sleep(20);
     }
@@ -460,7 +497,7 @@ export async function createOwnedScratchDir(input: {
   await mkdir(root, { recursive: true, mode: 0o700 });
   await assertOwnedDirectory(root);
   return withDScratchQuotaLock(root, async () => {
-    await writeNamespaceMarker(root);
+    const markerState = await writeNamespaceMarker(root);
     const inspection = await inspectDScratchNamespace(root);
     if (inspection.leftoverAttemptCount >= maxScratchAttempts) {
       throw new OrderFactsJsonlError(
@@ -468,7 +505,18 @@ export async function createOwnedScratchDir(input: {
         `D scratch attempt count ${inspection.leftoverAttemptCount} reached ${maxScratchAttempts}`,
       );
     }
-    const ledger = await loadDScratchReservations(root);
+    const resolved = resolveDScratchLedger({
+      file: await readDScratchReservationFile(root),
+      namespaceMarkerCreated: markerState === "created",
+      attemptDirCount: inspection.leftoverAttemptCount,
+    });
+    if (resolved.status !== "ok") {
+      throw new OrderFactsJsonlError(
+        "scratch_resource_exhausted",
+        `D scratch reservation ledger integrity ${resolved.integrity}; refusing admission`,
+      );
+    }
+    const ledger: DScratchReservationLedger = resolved.ledger;
     const reservationCount = Object.keys(ledger.reservations).length;
     if (reservationCount >= maxScratchAttempts) {
       throw new OrderFactsJsonlError(
@@ -477,6 +525,7 @@ export async function createOwnedScratchDir(input: {
       );
     }
     const stats = occupiedScratchBytes(inspection, ledger);
+    refuseIndeterminateScratchQuota(resolved.integrity, stats.unknownAttemptCount);
     const reservedBytes = decideReservedBytes({
       occupied: stats.occupied,
       maxScratchBytes,
@@ -485,6 +534,7 @@ export async function createOwnedScratchDir(input: {
     const dir = await mkdtemp(
       path.join(root, `${ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX}${shop}-${run}-`),
     );
+    let persisted = false;
     try {
       const created = await lstat(dir);
       if (created.isSymbolicLink()) {
@@ -498,9 +548,11 @@ export async function createOwnedScratchDir(input: {
       const createdAt = new Date().toISOString();
       await writeAttemptReservation({
         root,
+        ledger,
         attemptBasename: path.basename(dir),
         reservedBytes,
       });
+      persisted = true;
       await writeFile(
         markerPath(dir),
         `${JSON.stringify({
@@ -522,9 +574,9 @@ export async function createOwnedScratchDir(input: {
           `refusing symlink ownership marker ${dir}`,
         );
       }
-      const resolved = await realpath(dir);
+      const resolvedPath = await realpath(dir);
       const handle: ScratchOwnershipHandle = Object.freeze({
-        dir: resolved,
+        dir: resolvedPath,
         token,
         shopId: input.shopId ?? "local",
         syncRunId: input.syncRunId ?? run,
@@ -533,14 +585,17 @@ export async function createOwnedScratchDir(input: {
         reservedBytes,
       });
       AUTHENTIC_SCRATCH_HANDLES.add(handle);
-      rememberLiveScratchBasename(path.basename(resolved));
+      rememberLiveScratchBasename(path.basename(resolvedPath));
       return handle;
     } catch (error) {
-      await removeAttemptReservation({
-        root,
-        attemptBasename: path.basename(dir),
-      }).catch(() => undefined);
       await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      if (persisted) {
+        await removeAttemptReservation({
+          root,
+          ledger,
+          attemptBasename: path.basename(dir),
+        }).catch(() => undefined);
+      }
       throw error;
     }
   });
@@ -552,46 +607,55 @@ async function releaseReservationAndDir(
 ): Promise<void> {
   const prefix = scratchRoot ?? defaultDScratchRoot();
   await withDScratchQuotaLock(prefix, async () => {
-    await removeAttemptReservation({
-      root: prefix,
-      attemptBasename: path.basename(handle.dir),
-    });
     const liveStat = await lstat(handle.dir).catch(() => null);
-    if (!liveStat) return;
-    if (liveStat.isSymbolicLink()) {
+    if (liveStat?.isSymbolicLink()) {
       throw new OrderFactsJsonlError(
         "scratch_symlink_refused",
         `refusing to follow symlink scratch ${handle.dir}`,
       );
     }
-    const resolvedPrefix = await realpath(prefix).catch(() => path.resolve(prefix));
-    const resolved = await realpath(handle.dir);
-    if (!resolved.startsWith(resolvedPrefix + path.sep) && resolved !== resolvedPrefix) {
+    if (liveStat) {
+      const resolvedPrefix = await realpath(prefix).catch(() => path.resolve(prefix));
+      const resolved = await realpath(handle.dir);
+      if (!resolved.startsWith(resolvedPrefix + path.sep) && resolved !== resolvedPrefix) {
+        throw new OrderFactsJsonlError(
+          "scratch_unowned",
+          "refusing to delete scratch outside the D prefix",
+        );
+      }
+      if (resolved !== handle.dir && path.resolve(handle.dir) !== resolved) {
+        throw new OrderFactsJsonlError(
+          "scratch_symlink_refused",
+          `refusing path-substituted scratch ${handle.dir}`,
+        );
+      }
+      await assertOwnedDirectory(handle.dir);
+      const marker = await readScratchMarker(handle.dir);
+      if (
+        !marker ||
+        marker.owned !== true ||
+        marker.prefix !== ORDER_FACTS_SCRATCH_PREFIX ||
+        marker.token !== handle.token
+      ) {
+        throw new OrderFactsJsonlError(
+          "scratch_unowned",
+          `refusing scratch without matching ownership token ${handle.dir}`,
+        );
+      }
+      await rm(resolved, { recursive: true, force: false });
+    }
+    const file = await readDScratchReservationFile(prefix);
+    if (file.kind !== "ok") {
       throw new OrderFactsJsonlError(
-        "scratch_unowned",
-        "refusing to delete scratch outside the D prefix",
+        "scratch_resource_exhausted",
+        "D scratch reservation ledger is indeterminate after owned files were removed; capacity stays reserved",
       );
     }
-    if (resolved !== handle.dir && path.resolve(handle.dir) !== resolved) {
-      throw new OrderFactsJsonlError(
-        "scratch_symlink_refused",
-        `refusing path-substituted scratch ${handle.dir}`,
-      );
-    }
-    await assertOwnedDirectory(handle.dir);
-    const marker = await readScratchMarker(handle.dir);
-    if (
-      !marker ||
-      marker.owned !== true ||
-      marker.prefix !== ORDER_FACTS_SCRATCH_PREFIX ||
-      marker.token !== handle.token
-    ) {
-      throw new OrderFactsJsonlError(
-        "scratch_unowned",
-        `refusing scratch without matching ownership token ${handle.dir}`,
-      );
-    }
-    await rm(resolved, { recursive: true, force: false });
+    await removeAttemptReservation({
+      root: prefix,
+      ledger: file.ledger,
+      attemptBasename: path.basename(handle.dir),
+    });
   });
 }
 
@@ -635,13 +699,15 @@ export async function reclaimOperatorSelectedDScratch(input: {
   const resolvedRoot = await realpath(root);
   const reclaimed: string[] = [];
   const skipped: Array<{ name: string; reason: string }> = [];
+  if (input.attemptBasenames.includes(ORDER_FACTS_SCRATCH_QUOTA_LOCK)) {
+    await rm(quotaLockPath(root), { recursive: true, force: true }).catch(
+      () => undefined,
+    );
+    reclaimed.push(ORDER_FACTS_SCRATCH_QUOTA_LOCK);
+  }
   await withDScratchQuotaLock(root, async () => {
     for (const name of input.attemptBasenames) {
       if (name === ORDER_FACTS_SCRATCH_QUOTA_LOCK) {
-        await rm(quotaLockPath(root), { recursive: true, force: true }).catch(
-          () => undefined,
-        );
-        reclaimed.push(name);
         continue;
       }
       if (!isAttemptBasename(name) || name.includes("/") || name.includes("..")) {
@@ -651,7 +717,6 @@ export async function reclaimOperatorSelectedDScratch(input: {
       const full = path.join(root, name);
       const st = await lstat(full).catch(() => null);
       if (!st) {
-        await removeAttemptReservation({ root, attemptBasename: name });
         reclaimed.push(name);
         continue;
       }
@@ -681,12 +746,60 @@ export async function reclaimOperatorSelectedDScratch(input: {
         skipped.push({ name, reason: "live_writer" });
         continue;
       }
-      await removeAttemptReservation({ root, attemptBasename: name });
       await rm(resolved, { recursive: true, force: false });
       reclaimed.push(name);
     }
+    const remaining = await inspectDScratchNamespace(root);
+    const file = await readDScratchReservationFile(root);
+    if (file.kind === "ok") {
+      let changed = false;
+      for (const name of reclaimed) {
+        if (name in file.ledger.reservations) {
+          delete file.ledger.reservations[name];
+          changed = true;
+        }
+      }
+      if (changed) {
+        await saveDScratchReservations(root, file.ledger);
+      }
+    } else if (remaining.leftoverAttemptCount === 0) {
+      await saveDScratchReservations(root, emptyDScratchLedger());
+    }
   });
   return { reclaimed, skipped };
+}
+
+export async function reinitializeDScratchReservationLedgerAfterQuiescence(input: {
+  scratchRoot: string;
+  quiescenceConfirmed: true;
+}): Promise<{ ledgerIntegrity: "ok" }> {
+  if (input.quiescenceConfirmed !== true) {
+    throw new OrderFactsJsonlError(
+      "scratch_unowned",
+      "refusing ledger reinitialization without operator quiescence confirmation",
+    );
+  }
+  const root = input.scratchRoot;
+  await assertOwnedDirectory(root);
+  await withDScratchQuotaLock(root, async () => {
+    const inspection = await inspectDScratchNamespace(root);
+    if (inspection.leftoverAttemptCount > 0) {
+      throw new OrderFactsJsonlError(
+        "scratch_resource_exhausted",
+        "refusing ledger reinitialization while attempt directories remain",
+      );
+    }
+    const entries = await readdir(root);
+    for (const name of entries) {
+      if (!isReservationTempName(name)) continue;
+      const full = path.join(root, name);
+      const st = await lstat(full).catch(() => null);
+      if (!st || st.isSymbolicLink() || !st.isFile()) continue;
+      await rm(full, { force: true });
+    }
+    await saveDScratchReservations(root, emptyDScratchLedger());
+  });
+  return { ledgerIntegrity: "ok" };
 }
 
 function tsvEscape(value: string): string {

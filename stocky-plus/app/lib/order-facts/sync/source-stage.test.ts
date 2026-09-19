@@ -6,6 +6,7 @@ import {
   readdirSync,
   rmSync,
   symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { spawn } from "node:child_process";
@@ -22,13 +23,15 @@ import {
   inspectDScratchOccupancy,
   measureDScratchTreeBytes,
   reclaimOperatorSelectedDScratch,
+  reinitializeDScratchReservationLedgerAfterQuiescence,
   sanitizeDScratchOccupancy,
   stageOrderFactsJsonl,
   writeStreamChunk,
   type ScratchOwnershipHandle,
 } from "./source-stage";
 import { hashFileSha256, verifyValidatedSourceManifest } from "./source-digest";
-import { ORDER_FACTS_SCRATCH_MARKER } from "./constants";
+import { ORDER_FACTS_SCRATCH_MARKER, ORDER_FACTS_SCRATCH_RESERVATION } from "./constants";
+import { ORDER_FACTS_SCRATCH_QUOTA_VERSION } from "./scratch-quota";
 
 const APP_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -851,5 +854,337 @@ describe("PR6-D SC-R-02/03 quota admission and occupancy", () => {
     ]);
     one.kill("SIGKILL");
     two.kill("SIGKILL");
+  }, 30_000);
+});
+
+describe("PR6-D NEW-SCQ-01 reservation-evidence integrity", () => {
+  const LIVE_RESERVED = 33_554_432;
+  const LIVE_CAP = 41_943_040;
+
+  async function spawnLiveReservation(root: string): Promise<{
+    child: ReturnType<typeof spawn>;
+    admitted: Record<string, unknown>;
+  }> {
+    mkdirSync(root, { recursive: true });
+    const statusPath = path.join(root, "live.json");
+    const child = spawn(TSX_BIN, [QUOTA_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_QUOTA_STATUS_PATH: statusPath,
+        PR6_D_QUOTA_SCRATCH_ROOT: root,
+        PR6_D_QUOTA_SHOP_ID: "live-shop",
+        PR6_D_QUOTA_RUN_ID: "live-run",
+        PR6_D_QUOTA_RESERVED_BYTES: String(LIVE_RESERVED),
+        PR6_D_QUOTA_MAX_BYTES: String(LIVE_CAP),
+        PR6_D_QUOTA_HOLD_MS: "120000",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const admitted = await waitStatus(statusPath, "admitted");
+    writeFileSync(
+      path.join(String(admitted.dir), "partial.bin"),
+      "x".repeat(4096),
+    );
+    return { child, admitted };
+  }
+
+  function ledgerPath(root: string): string {
+    return path.join(root, ORDER_FACTS_SCRATCH_RESERVATION);
+  }
+
+  function damageLedger(
+    root: string,
+    mode: "corrupt" | "truncated" | "deleted" | "wrong_version",
+  ): void {
+    const dest = ledgerPath(root);
+    const current = existsSync(dest) ? readFileSync(dest, "utf8") : "";
+    if (mode === "corrupt") {
+      writeFileSync(dest, "{not-json");
+      return;
+    }
+    if (mode === "truncated") {
+      writeFileSync(dest, current.slice(0, Math.max(1, Math.floor(current.length / 2))));
+      return;
+    }
+    if (mode === "deleted") {
+      unlinkSync(dest);
+      return;
+    }
+    writeFileSync(
+      dest,
+      `${JSON.stringify({
+        version: "order-facts-d-quota-v0",
+        reservations: JSON.parse(current).reservations,
+      })}\n`,
+    );
+  }
+
+  for (const mode of ["corrupt", "truncated", "deleted", "wrong_version"] as const) {
+    it(`refuses admission after ${mode} reservation evidence while a live child holds unused reservation`, async () => {
+      const root = scratchRoot();
+      const { child, admitted } = await spawnLiveReservation(root);
+      try {
+        const keep = path.join(String(admitted.dir), "partial.bin");
+        const before = sha256(readFileSync(keep));
+        expect(existsSync(keep)).toBe(true);
+        damageLedger(root, mode);
+        await expect(
+          createOwnedScratchDir({
+            shopId: "second",
+            syncRunId: "second",
+            scratchRoot: root,
+            reservedBytes: LIVE_RESERVED,
+            maxScratchBytes: LIVE_CAP,
+          }),
+        ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+        expect(existsSync(keep)).toBe(true);
+        expect(sha256(readFileSync(keep))).toBe(before);
+        expect(existsSync(String(admitted.dir))).toBe(true);
+        const occupancy = sanitizeDScratchOccupancy(
+          await inspectDScratchOccupancy({
+            scratchRoot: root,
+            maxScratchBytes: LIVE_CAP,
+          }),
+        );
+        expect(occupancy.operatorInterventionRequired).toBe(true);
+        expect(occupancy.ledgerIntegrity).not.toBe("ok");
+        expect(JSON.stringify(occupancy)).not.toMatch(/live-shop|att-/);
+      } finally {
+        child.kill("SIGKILL");
+      }
+    }, 30_000);
+  }
+
+  it("refuses a partially invalid ledger instead of dropping the bad row", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    const parsed = JSON.parse(readFileSync(ledgerPath(root), "utf8")) as {
+      reservations: Record<string, unknown>;
+    };
+    parsed.reservations["att-bad"] = { reservedBytes: "no", createdAt: 1, pid: "x" };
+    writeFileSync(
+      ledgerPath(root),
+      `${JSON.stringify({ version: ORDER_FACTS_SCRATCH_QUOTA_VERSION, reservations: parsed.reservations })}\n`,
+    );
+    await expect(
+      createOwnedScratchDir({
+        shopId: "other",
+        syncRunId: "other",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    expect(existsSync(first.dir)).toBe(true);
+    const occupancy = await inspectDScratchOccupancy({ scratchRoot: root });
+    expect(occupancy.ledgerIntegrity).toBe("malformed_entry");
+    await disposeOwnedScratch(first, root).catch(() => undefined);
+  });
+
+  it("treats a non-file reservation path as unreadable and does not admit", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    unlinkSync(ledgerPath(root));
+    mkdirSync(ledgerPath(root));
+    await expect(
+      createOwnedScratchDir({
+        shopId: "other",
+        syncRunId: "other",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    expect(
+      (await inspectDScratchOccupancy({ scratchRoot: root })).ledgerIntegrity,
+    ).toBe("unreadable");
+    rmSync(ledgerPath(root), { recursive: true, force: true });
+    await disposeOwnedScratch(first, root).catch(() => undefined);
+  });
+
+  it("initializes an empty ledger only on genuine first admission", async () => {
+    const root = scratchRoot();
+    expect(existsSync(ledgerPath(root))).toBe(false);
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 4096,
+      maxScratchBytes: 10_000,
+    });
+    expect(existsSync(ledgerPath(root))).toBe(true);
+    const parsed = JSON.parse(readFileSync(ledgerPath(root), "utf8")) as {
+      version: string;
+      reservations: Record<string, { reservedBytes: number }>;
+    };
+    expect(parsed.version).toBe(ORDER_FACTS_SCRATCH_QUOTA_VERSION);
+    expect(Object.keys(parsed.reservations)).toHaveLength(1);
+    await disposeOwnedScratch(first, root);
+  });
+
+  it("does not treat a missing ledger in an initialized namespace as first init", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 4096,
+      maxScratchBytes: 10_000,
+    });
+    await disposeOwnedScratch(first, root);
+    unlinkSync(ledgerPath(root));
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        reservedBytes: 4096,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    const occupancy = await inspectDScratchOccupancy({ scratchRoot: root });
+    expect(occupancy.ledgerIntegrity).toBe("missing");
+    await reinitializeDScratchReservationLedgerAfterQuiescence({
+      scratchRoot: root,
+      quiescenceConfirmed: true,
+    });
+    const restored = await createOwnedScratchDir({
+      shopId: "next",
+      syncRunId: "next",
+      scratchRoot: root,
+      reservedBytes: 4096,
+      maxScratchBytes: 10_000,
+    });
+    await disposeOwnedScratch(restored, root);
+  });
+
+  it("failed persist during admission leaves the live child's reservation intact", async () => {
+    const root = scratchRoot();
+    const first = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    const before = readFileSync(ledgerPath(root), "utf8");
+    process.env.PR6_D_QUOTA_FAIL_SAVE = "after-temp-write";
+    try {
+      await expect(
+        createOwnedScratchDir({
+          shopId: "other",
+          syncRunId: "other",
+          scratchRoot: root,
+          reservedBytes: 3000,
+          maxScratchBytes: 10_000,
+        }),
+      ).rejects.toThrow(/persist failure/);
+    } finally {
+      delete process.env.PR6_D_QUOTA_FAIL_SAVE;
+    }
+    expect(readFileSync(ledgerPath(root), "utf8")).toBe(before);
+    expect(existsSync(first.dir)).toBe(true);
+    await disposeOwnedScratch(first, root);
+  });
+
+  it("failed persist during release keeps capacity over-reserved after files are gone", async () => {
+    const root = scratchRoot();
+    const handle = await createOwnedScratchDir({
+      shopId: "shop",
+      syncRunId: "run",
+      scratchRoot: root,
+      reservedBytes: 3000,
+      maxScratchBytes: 10_000,
+    });
+    const dir = handle.dir;
+    process.env.PR6_D_QUOTA_FAIL_SAVE = "before-replace";
+    try {
+      await expect(disposeOwnedScratch(handle, root)).rejects.toThrow(/persist failure/);
+    } finally {
+      delete process.env.PR6_D_QUOTA_FAIL_SAVE;
+    }
+    expect(existsSync(dir)).toBe(false);
+    const occupancy = await inspectDScratchOccupancy({
+      scratchRoot: root,
+      maxScratchBytes: 10_000,
+    });
+    expect(occupancy.reservedBytes).toBe(3000);
+    expect(occupancy.unknownAttemptCount).toBeGreaterThan(0);
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+  });
+
+  it("process death during temp write is not an injected exception and blocks the next admission", async () => {
+    const root = scratchRoot();
+    mkdirSync(root, { recursive: true });
+    const statusPath = path.join(root, "crash-temp.json");
+    const child = spawn(TSX_BIN, [QUOTA_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_QUOTA_STATUS_PATH: statusPath,
+        PR6_D_QUOTA_SCRATCH_ROOT: root,
+        PR6_D_QUOTA_SHOP_ID: "crash-temp",
+        PR6_D_QUOTA_RUN_ID: "crash-temp",
+        PR6_D_QUOTA_RESERVED_BYTES: "3000",
+        PR6_D_QUOTA_MAX_BYTES: "10000",
+        PR6_D_QUOTA_CRASH: "after-temp-write",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    await new Promise<void>((resolve) => {
+      child.once("exit", () => resolve());
+    });
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    const occupancy = await inspectDScratchOccupancy({ scratchRoot: root });
+    expect(occupancy.operatorInterventionRequired).toBe(true);
+    await reclaimOperatorSelectedDScratch({
+      scratchRoot: root,
+      attemptBasenames: ["quota.lock"],
+      quiescenceConfirmed: true,
+    });
+    const attempts = readdirSync(root).filter((name) => name.startsWith("att-"));
+    expect(attempts.length).toBeGreaterThan(0);
+    await expect(
+      reinitializeDScratchReservationLedgerAfterQuiescence({
+        scratchRoot: root,
+        quiescenceConfirmed: true,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
+    await expect(
+      createOwnedScratchDir({
+        shopId: "next",
+        syncRunId: "next",
+        scratchRoot: root,
+        reservedBytes: 3000,
+        maxScratchBytes: 10_000,
+      }),
+    ).rejects.toMatchObject({ code: "scratch_resource_exhausted" });
   }, 30_000);
 });

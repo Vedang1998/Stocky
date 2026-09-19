@@ -86,6 +86,8 @@ export const ORDER_FACTS_IMPORT_RECEIPT_DIGEST_VERSION =
   "order-facts-d-import-src-v2" as const;
 export const ORDER_FACTS_SCRATCH_QUOTA_LOCK = "quota.lock" as const;
 export const ORDER_FACTS_SCRATCH_RESERVATION = "quota.reservation" as const;
+export const ORDER_FACTS_SCRATCH_RESERVATION_TMP_PREFIX =
+  "quota.reservation.tmp." as const;
 export const ORDER_FACTS_SCRATCH_METADATA_ALLOWANCE_BYTES = 65_536;
 export const ORDER_FACTS_SCRATCH_RESOURCE_REASON =
   "order_facts_scratch_resource" as const;
