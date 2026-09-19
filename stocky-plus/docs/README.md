@@ -32,7 +32,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable Claude exact-head review (never edit);
 - `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure;
 - `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements.
-- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **ACCEPTED / MERGED / CLOSED** (PR #37). PR6-B is **ACCEPTED / MERGED / CLOSED** (PR #39 squash **U**). PR6-C is **ACCEPTED / MERGED / CLOSED** (PR #40 squash **V**). PR6-D complete integration is **ADMITTED** after the B/C closure checkpoint;
+- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **ACCEPTED / MERGED / CLOSED** (PR #37). PR6-B is **ACCEPTED / MERGED / CLOSED** (PR #39 squash **U**). PR6-C is **ACCEPTED / MERGED / CLOSED** (PR #40 squash **V**). PR6-D is **TECHNICALLY ACCEPTED AND MERGED** (PR #43 squash **W**). Formal PR6 repository closure is **PENDING** this closeout/control PR;
 - `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence;
 - `PR6_A_FOUNDATION_IMPLEMENTATION_REPORT.md` — PR6-A order/refund fact foundation implementation and correction evidence.
 - `PR6_A_FOUNDATION_INDEPENDENT_REVIEW.md` — immutable Claude implementation review of `5f8b2e76…` (never edit). Verdict **CORRECTIONS REQUIRED**.
@@ -41,8 +41,11 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR6_BC_EXECUTION_BRIEF.md` — historical PR6-B/C ownership record after A admission (superseded for live lane status by `PR6_BC_CLOSURE_REPORT.md`).
 - `PR6_BC_CLOSURE_REPORT.md` — B/C repository-lane acceptance, squash identities, preserved review blobs, exact-U/V push CI, accepted residuals, and remaining D-owned risks.
 - `PR6_D_EXECUTION_BRIEF.md` — approved PR6-D complete-integration execution contract after admission.
-- `PR6_D_IMPLEMENTATION_REPORT.md` — PR6-D webhook/import/reconciliation implementation evidence (draft PR #43; not merge authorization).
+- `PR6_D_IMPLEMENTATION_REPORT.md` — PR6-D webhook/import/reconciliation implementation evidence (dated Cursor record; live merge identity is **W**, not this file’s draft-PR header).
 - `PR6_D_COMPLETE_INTEGRATION_INDEPENDENT_REVIEW.md` — immutable Claude complete-integration review of `25226e46…` (never edit). Verdict **CORRECTIONS REQUIRED**.
+- Remaining immutable PR6-D reviews (never edit): `PR6_D_CORRECTION_INDEPENDENT_REVIEW.md`; `PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md`; `PR6_D_SC_RECOVERY_FINAL_INDEPENDENT_REVIEW.md`; `PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md`; `PR6_D_QUOTA_EVIDENCE_INDEX_CORRECTION_INDEPENDENT_REVIEW.md` (verdict **APPROVE PR6-D QUOTA-EVIDENCE AND INDEX CORRECTION**).
+- `PR6_CLOSURE_REPORT.md` — overall PR6 A/B/C/D repository-implementation closeout (formal closure **PENDING** this closeout PR’s independent acceptance and owner merge).
+- `PR6_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted residuals, standing controls, fixed failure instances, source limitations, and unattributed observations.
 
 ## Live project control files
 
