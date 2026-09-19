@@ -196,6 +196,59 @@ function hasShareUpdateExclusiveWithoutAccessExclusive(
   );
 }
 
+const FF03_BUILD_SCAN_PHASE = "building index: scanning table";
+const FF03_VALIDATION_SCAN_PHASE = "index validation: scanning table";
+const FF03_OWNED_CLEANUP_DEADLINE_MS = 8_000;
+/** Bound for completing an in-flight sampler/observer query. Not a write-wait. */
+const FF03_SAMPLER_CATCH_UP_MS = 1_000;
+
+function blockProgressRemaining(sample: Ff03ProgressSample): boolean {
+  if (sample.blocksTotal == null || sample.blocksTotal <= 0) {
+    return false;
+  }
+  const remaining = sample.blocksTotal - (sample.blocksDone ?? 0);
+  const floor = Math.max(32, Math.floor(sample.blocksTotal * 0.1));
+  return remaining > floor;
+}
+
+function tupleProgressRemaining(sample: Ff03ProgressSample): boolean {
+  if (sample.tuplesTotal == null || sample.tuplesTotal <= 0) {
+    return false;
+  }
+  const remaining = sample.tuplesTotal - (sample.tuplesDone ?? 0);
+  const floor = Math.max(1, Math.floor(sample.tuplesTotal * 0.1));
+  return remaining > floor;
+}
+
+function isBlockProgressScanPhase(phase: string | null): boolean {
+  return (
+    phase === FF03_BUILD_SCAN_PHASE ||
+    phase === FF03_VALIDATION_SCAN_PHASE ||
+    phase === "index validation: scanning index"
+  );
+}
+
+/**
+ * Remaining-work predicate used by active-scan overlap.
+ *
+ * PostgreSQL 16 documents heap/index *block* counters for
+ * `building index: scanning table`, `index validation: scanning index`, and
+ * `index validation: scanning table`. `validate_index()` zeros tuples+blocks
+ * when entering the index-scan phase, zeros *only blocks* when entering sort,
+ * then updates *only PHASE* when entering the table scan. Leftover tuple
+ * counters from the index-scan/sort phases must not hide an active table-scan
+ * block walk, and must not be treated as table-scan remaining work.
+ *
+ * Accessed 2026-09-19: https://www.postgresql.org/docs/16/progress-reporting.html
+ * (Table 28.43) and REL_16_STABLE `src/backend/catalog/index.c` `validate_index`.
+ */
+function sampleHasRemainingScanWork(sample: Ff03ProgressSample): boolean {
+  if (isBlockProgressScanPhase(sample.phase)) {
+    return blockProgressRemaining(sample);
+  }
+  return tupleProgressRemaining(sample) || blockProgressRemaining(sample);
+}
+
 /**
  * True when the sample is the requested scan phase, the builder still holds
  * SHARE UPDATE EXCLUSIVE (not ACCESS EXCLUSIVE), CIC is still the builder
@@ -216,17 +269,7 @@ function isActiveScanSample(
   if (!builderStillCreatingConcurrentIndex(sample)) {
     return false;
   }
-  if (sample.tuplesTotal != null && sample.tuplesTotal > 0) {
-    const remaining = sample.tuplesTotal - (sample.tuplesDone ?? 0);
-    const floor = Math.max(1, Math.floor(sample.tuplesTotal * 0.1));
-    return remaining > floor;
-  }
-  if (sample.blocksTotal != null && sample.blocksTotal > 0) {
-    const remaining = sample.blocksTotal - (sample.blocksDone ?? 0);
-    const floor = Math.max(32, Math.floor(sample.blocksTotal * 0.1));
-    return remaining > floor;
-  }
-  return false;
+  return sampleHasRemainingScanWork(sample);
 }
 
 async function waitForNamedIndexPhase(options: {
@@ -332,10 +375,6 @@ function summarizeSample(
     sampledEndNs: sample.sampledEndNs.toString(),
   };
 }
-
-const FF03_BUILD_SCAN_PHASE = "building index: scanning table";
-const FF03_VALIDATION_SCAN_PHASE = "index validation: scanning table";
-const FF03_OWNED_CLEANUP_DEADLINE_MS = 8_000;
 
 function sampleIntersectsWindow(
   sample: Ff03ProgressSample,
@@ -472,6 +511,57 @@ function evaluateActiveScanWriteOverlap(input: {
     independentOverlapCount: independent.length,
     progressEvidence: true,
     blockedWrite: false,
+  };
+}
+
+function samplerCaughtUpPast(
+  samples: Ff03ProgressSample[],
+  endNs: bigint,
+): boolean {
+  return samples.some((sample) => sample.sampledEndNs >= endNs);
+}
+
+function describeOverlapEvaluation(input: {
+  targetPhase: string;
+  evaluation: Ff03OverlapEvaluation;
+  trigger: Ff03ProgressSample;
+  writes: Ff03WriteWindow[];
+  inWindowSamples: Ff03ProgressSample[];
+  after: Ff03ProgressSample | null;
+  buildSettled: boolean;
+  samplerCatchUp: boolean;
+  sampleCountBeforeCatchUp: number;
+  sampleCountAfterCatchUp: number;
+  observerWriteWindowCount: number;
+}): Record<string, unknown> {
+  return {
+    event: "tenant_index_ff03_overlap_evaluation",
+    targetPhase: input.targetPhase,
+    ok: input.evaluation.ok,
+    reason: input.evaluation.reason,
+    independentOverlapCount: input.evaluation.independentOverlapCount,
+    progressEvidence: input.evaluation.progressEvidence,
+    blockedWrite: input.evaluation.blockedWrite,
+    buildSettled: input.buildSettled,
+    samplerCatchUp: input.samplerCatchUp,
+    sampleCountBeforeCatchUp: input.sampleCountBeforeCatchUp,
+    sampleCountAfterCatchUp: input.sampleCountAfterCatchUp,
+    observerWriteWindowCount: input.observerWriteWindowCount,
+    trigger: summarizeSample(input.trigger),
+    writes: input.writes.map((write) => ({
+      op: write.op,
+      startNs: write.startNs,
+      endNs: write.endNs,
+      durationMs: write.durationMs,
+      phaseAtWriteStart: write.phaseAtWriteStart,
+      tuplesDoneAtStart: write.tuplesDoneAtStart,
+      tuplesTotalAtStart: write.tuplesTotalAtStart,
+      blocksDoneAtStart: write.blocksDoneAtStart,
+      blocksTotalAtStart: write.blocksTotalAtStart,
+    })),
+    inWindow: input.inWindowSamples.map(summarizeSample),
+    after: summarizeSample(input.after),
+    builderState: input.after?.builderState ?? input.trigger.builderState,
   };
 }
 
@@ -695,6 +785,44 @@ class Ff03OwnedRuntime {
     void this.samplerLoop.catch(() => {
       // Expected when cleanup ends the sampler during an in-flight sample.
     });
+  }
+
+  /**
+   * Wait until a sampler query that could have overlapped `endNs` has been
+   * appended. Does not wait for a PostgreSQL phase and does not extend the
+   * 15s write bound. If the sampler is stuck, evaluation proceeds with the
+   * samples already collected and remains failure-safe.
+   */
+  async waitForSamplerCatchUp(
+    endNs: bigint,
+    deadlineMs: number,
+  ): Promise<{
+    caughtUp: boolean;
+    countBefore: number;
+    countAfter: number;
+  }> {
+    const countBefore = this.samples.length;
+    const deadline = Date.now() + deadlineMs;
+    while (Date.now() <= deadline) {
+      if (samplerCaughtUpPast(this.samples, endNs)) {
+        return {
+          caughtUp: true,
+          countBefore,
+          countAfter: this.samples.length,
+        };
+      }
+      if (this.samplerStop || this.buildSettled) {
+        break;
+      }
+      await new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      });
+    }
+    return {
+      caughtUp: samplerCaughtUpPast(this.samples, endNs),
+      countBefore,
+      countAfter: this.samples.length,
+    };
   }
 
   async stopSampler(): Promise<void> {
@@ -941,6 +1069,50 @@ async function burstRepresentativeSupplierDml(options: {
   return windows;
 }
 
+/**
+ * Run the representative DML burst while the observer takes independent
+ * progress samples. The observer loop is drained after the writes so an
+ * in-flight catalog read started during the window is not discarded.
+ */
+async function burstRepresentativeSupplierDmlAndObserve(options: {
+  writer: Client;
+  observer: Client;
+  builderPid: number;
+  idSuffix: string;
+}): Promise<{
+  writes: Array<{ op: string; startNs: bigint; endNs: bigint; durationMs: number }>;
+  observerSamples: Ff03ProgressSample[];
+}> {
+  const observerSamples: Ff03ProgressSample[] = [];
+  let stop = false;
+  const loop = (async () => {
+    while (!stop) {
+      observerSamples.push(
+        await sampleConcurrentIndexProgress(options.observer, options.builderPid),
+      );
+    }
+  })();
+  void loop.catch(() => {});
+  try {
+    const writes = await burstRepresentativeSupplierDml({
+      writer: options.writer,
+      idSuffix: options.idSuffix,
+    });
+    return { writes, observerSamples };
+  } finally {
+    stop = true;
+    try {
+      await withDeadline(
+        loop,
+        FF03_SAMPLER_CATCH_UP_MS,
+        "ff03 observer write-window drain",
+      );
+    } catch {
+      // Owned cleanup closes the observer if this drain hits the bound.
+    }
+  }
+}
+
 describe("tenant compatibility index manifest", () => {
   it("lists 44 expected indexes", () => {
     expect(TENANT_COMPATIBILITY_INDEXES).toHaveLength(44);
@@ -1043,6 +1215,35 @@ describe("F-F03 active-scan overlap helper", () => {
       isActiveScanSample(
         ff03HelperSample({ blocksDone: 5300, blocksTotal: 5324 }),
         FF03_HELPER_TARGET,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not let leftover validation-sort tuples hide an active table-scan block walk", () => {
+    const leftover = ff03HelperSample({
+      phase: FF03_VALIDATION_SCAN_PHASE,
+      tuplesDone: 400000,
+      tuplesTotal: 400000,
+      blocksDone: 400,
+      blocksTotal: 5324,
+    });
+    const oldTuplesFirstRemaining =
+      leftover.tuplesTotal != null && leftover.tuplesTotal > 0
+        ? leftover.tuplesTotal - (leftover.tuplesDone ?? 0) >
+          Math.max(1, Math.floor(leftover.tuplesTotal * 0.1))
+        : blockProgressRemaining(leftover);
+    expect(oldTuplesFirstRemaining).toBe(false);
+    expect(isActiveScanSample(leftover, FF03_VALIDATION_SCAN_PHASE)).toBe(true);
+    expect(
+      isActiveScanSample(
+        ff03HelperSample({
+          phase: FF03_VALIDATION_SCAN_PHASE,
+          tuplesDone: 400000,
+          tuplesTotal: 400000,
+          blocksDone: 5324,
+          blocksTotal: 5324,
+        }),
+        FF03_VALIDATION_SCAN_PHASE,
       ),
     ).toBe(false);
   });
@@ -1315,6 +1516,202 @@ describe("F-F03 active-scan overlap helper", () => {
     });
     expect(omitted.ok).toBe(false);
     expect(omitted.reason).toBe("omitted_progress_evidence");
+  });
+
+  it("fails validation overlap when the in-flight window sample is omitted from the snapshot (CI 35415196729)", () => {
+    const trigger = ff03HelperSample({
+      phase: FF03_VALIDATION_SCAN_PHASE,
+      sampledAtNs: 1n,
+      sampledEndNs: 5n,
+      tuplesDone: 400000,
+      tuplesTotal: 400000,
+      blocksDone: 200,
+      blocksTotal: 5324,
+    });
+    const writes: Ff03WriteWindow[] = [
+      {
+        op: "insert",
+        startNs: "10",
+        endNs: "12",
+        durationMs: 1.4,
+        phaseAtWriteStart: null,
+        tuplesDoneAtStart: null,
+        tuplesTotalAtStart: null,
+        blocksDoneAtStart: null,
+        blocksTotalAtStart: null,
+      },
+      {
+        op: "update",
+        startNs: "13",
+        endNs: "14",
+        durationMs: 1.3,
+        phaseAtWriteStart: null,
+        tuplesDoneAtStart: null,
+        tuplesTotalAtStart: null,
+        blocksDoneAtStart: null,
+        blocksTotalAtStart: null,
+      },
+      {
+        op: "delete",
+        startNs: "15",
+        endNs: "16",
+        durationMs: 1.7,
+        phaseAtWriteStart: null,
+        tuplesDoneAtStart: null,
+        tuplesTotalAtStart: null,
+        blocksDoneAtStart: null,
+        blocksTotalAtStart: null,
+      },
+    ];
+    const earlySnapshot: Ff03ProgressSample[] = [
+      ff03HelperSample({
+        phase: FF03_VALIDATION_SCAN_PHASE,
+        sampledAtNs: 1n,
+        sampledEndNs: 4n,
+        blocksDone: 180,
+        blocksTotal: 5324,
+      }),
+    ];
+    expect(samplerCaughtUpPast(earlySnapshot, 16n)).toBe(false);
+    const missed = evaluateActiveScanWriteOverlap({
+      targetPhase: FF03_VALIDATION_SCAN_PHASE,
+      trigger,
+      writes,
+      inWindowSamples: inWindowSamples(earlySnapshot, 10n, 16n),
+      after: ff03HelperSample({
+        phase: "waiting for old snapshots",
+        sampledAtNs: 20n,
+        sampledEndNs: 21n,
+        blocksDone: 0,
+        blocksTotal: 0,
+        tuplesDone: 0,
+        tuplesTotal: 0,
+      }),
+      buildSettled: false,
+    });
+    expect(missed.ok).toBe(false);
+    expect(missed.reason).toBe("no_independent_in_window_sample");
+    const diagnostics = describeOverlapEvaluation({
+      targetPhase: FF03_VALIDATION_SCAN_PHASE,
+      evaluation: missed,
+      trigger,
+      writes,
+      inWindowSamples: inWindowSamples(earlySnapshot, 10n, 16n),
+      after: null,
+      buildSettled: false,
+      samplerCatchUp: false,
+      sampleCountBeforeCatchUp: 1,
+      sampleCountAfterCatchUp: 1,
+      observerWriteWindowCount: 0,
+    });
+    expect(diagnostics.reason).toBe("no_independent_in_window_sample");
+    expect(diagnostics.targetPhase).toBe(FF03_VALIDATION_SCAN_PHASE);
+    expect(diagnostics.ok).toBe(false);
+
+    const drained = ff03HelperSample({
+      phase: FF03_VALIDATION_SCAN_PHASE,
+      sampledAtNs: 9n,
+      sampledEndNs: 18n,
+      tuplesDone: 400000,
+      tuplesTotal: 400000,
+      blocksDone: 900,
+      blocksTotal: 5324,
+    });
+    const afterCatchUp = [...earlySnapshot, drained];
+    expect(samplerCaughtUpPast(afterCatchUp, 16n)).toBe(true);
+    const recovered = evaluateActiveScanWriteOverlap({
+      targetPhase: FF03_VALIDATION_SCAN_PHASE,
+      trigger,
+      writes: attachIndependentWriteObservations(
+        writes.map((write) => ({
+          op: write.op,
+          startNs: BigInt(write.startNs),
+          endNs: BigInt(write.endNs),
+          durationMs: write.durationMs,
+        })),
+        afterCatchUp,
+        FF03_VALIDATION_SCAN_PHASE,
+      ),
+      inWindowSamples: inWindowSamples(afterCatchUp, 10n, 16n),
+      after: ff03HelperSample({
+        phase: "waiting for old snapshots",
+        sampledAtNs: 20n,
+        sampledEndNs: 21n,
+        blocksDone: 0,
+        blocksTotal: 0,
+      }),
+      buildSettled: false,
+    });
+    expect(recovered.ok).toBe(true);
+    expect(recovered.reason).toBe("ok");
+    expect(recovered.independentOverlapCount).toBe(1);
+    expect(recovered.progressEvidence).toBe(true);
+  });
+
+  it("does not treat a drained later-phase spanning sample as validation table-scan overlap", () => {
+    const trigger = ff03HelperSample({
+      phase: FF03_VALIDATION_SCAN_PHASE,
+      sampledAtNs: 1n,
+      sampledEndNs: 5n,
+      blocksDone: 200,
+      blocksTotal: 5324,
+    });
+    const writes: Ff03WriteWindow[] = [
+      {
+        op: "insert",
+        startNs: "10",
+        endNs: "12",
+        durationMs: 1,
+        phaseAtWriteStart: null,
+        tuplesDoneAtStart: null,
+        tuplesTotalAtStart: null,
+        blocksDoneAtStart: null,
+        blocksTotalAtStart: null,
+      },
+      {
+        op: "update",
+        startNs: "13",
+        endNs: "14",
+        durationMs: 1,
+        phaseAtWriteStart: null,
+        tuplesDoneAtStart: null,
+        tuplesTotalAtStart: null,
+        blocksDoneAtStart: null,
+        blocksTotalAtStart: null,
+      },
+      {
+        op: "delete",
+        startNs: "15",
+        endNs: "16",
+        durationMs: 1,
+        phaseAtWriteStart: null,
+        tuplesDoneAtStart: null,
+        tuplesTotalAtStart: null,
+        blocksDoneAtStart: null,
+        blocksTotalAtStart: null,
+      },
+    ];
+    const spanningLater = ff03HelperSample({
+      phase: "waiting for old snapshots",
+      sampledAtNs: 8n,
+      sampledEndNs: 18n,
+      blocksDone: 0,
+      blocksTotal: 0,
+      tuplesDone: 0,
+      tuplesTotal: 0,
+      lockModes: ["ShareUpdateExclusiveLock"],
+    });
+    const stale = evaluateActiveScanWriteOverlap({
+      targetPhase: FF03_VALIDATION_SCAN_PHASE,
+      trigger,
+      writes,
+      inWindowSamples: [spanningLater],
+      after: spanningLater,
+      buildSettled: false,
+    });
+    expect(samplerCaughtUpPast([spanningLater], 16n)).toBe(true);
+    expect(stale.ok).toBe(false);
+    expect(stale.reason).toBe("wrong_or_finished_phase");
   });
 
   it("treats leftover owned CIC activity/progress/locks as a schema-reset blocker", () => {
@@ -2031,15 +2428,23 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
             (trigger.blocksDone ?? 0) < trigger.blocksTotal;
           expect(remainingTuples || remainingBlocks).toBe(true);
 
-          const timedWrites = await burstRepresentativeSupplierDml({
+          const burst = await burstRepresentativeSupplierDmlAndObserve({
             writer,
+            observer,
+            builderPid,
             idSuffix,
           });
+          const timedWrites = burst.writes;
           expect(timedWrites).toHaveLength(3);
           const burstStart = timedWrites[0]!.startNs;
           const burstEnd = timedWrites[2]!.endNs;
+          const catchUp = await runtime.waitForSamplerCatchUp(
+            burstEnd,
+            FF03_SAMPLER_CATCH_UP_MS,
+          );
+          const combinedSamples = [...runtime.samples, ...burst.observerSamples];
           const windowSamples = inWindowSamples(
-            runtime.samples,
+            combinedSamples,
             burstStart,
             burstEnd,
           );
@@ -2068,6 +2473,26 @@ describe("tenant compatibility indexes on PostgreSQL", () => {
             after,
             buildSettled: runtime.buildSettled,
           });
+          const diagnostics = describeOverlapEvaluation({
+            targetPhase,
+            evaluation,
+            trigger,
+            writes: writeWindows,
+            inWindowSamples: windowSamples,
+            after,
+            buildSettled: runtime.buildSettled,
+            samplerCatchUp: catchUp.caughtUp,
+            sampleCountBeforeCatchUp: catchUp.countBefore,
+            sampleCountAfterCatchUp: catchUp.countAfter,
+            observerWriteWindowCount: burst.observerSamples.length,
+          });
+          // eslint-disable-next-line no-console
+          console.log(JSON.stringify(diagnostics));
+          if (!evaluation.ok) {
+            throw new Error(
+              `F-F03 overlap evaluation failed: ${JSON.stringify(diagnostics)}`,
+            );
+          }
           expect(evaluation.ok).toBe(true);
           expect(evaluation.reason).toBe("ok");
           expect(evaluation.independentOverlapCount).toBeGreaterThan(0);

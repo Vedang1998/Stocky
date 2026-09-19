@@ -3,7 +3,7 @@
 **Slice:** PR6-D complete §17.2 integration module
 **Branch:** `phase-1/pr6-d-order-webhook-import`
 **PR:** [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED (do not reuse #39 / #40 / #41 / #42)
-**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913); SC-R control corrections [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882); NEW-SCQ-01/02 quota-evidence package after [5737964437](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5737964437)
+**Authority:** D-054 **EFFECTIVE** (no D-055); ChatGPT owner thread [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675); original work order `PR6_D_Complete_Integration_Work_Order.md` SHA-256 `3cf9d0d752b732836311cafd5072c45a63fa8ea74119b36d3ed06eaa7a0f2f49`; consolidated correction [5686500951](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5686500951); C3 source-contract [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528); SC recovery [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913); SC-R control corrections [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882); NEW-SCQ-01/02 quota-evidence package after [5737964437](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5737964437); PR43-CI-INDEX-02 after blocker [5738991748](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5738991748)
 **Status:** PR43 SC-R-01…SC-R-04 control correction is on this branch (plan **C3.7** / brief §8 / D-054 subitem — **not D-055**). Immutable reviews `5354111` (blob `48ac291a…`), `a72b403` (blob `ba82a3c981cda4bec52ea453c2618319288fa66c`), source-contract `7710758` (blob `1eb18cae44cdf7a6660256e2632ebc8019d6da0d`), and SC-recovery `ec61089` (blob `e8525c2fd2778c8baf118d0008a9213b7af4eca8`) are **not** edited. SC subject **H** `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b`. Required main **V** `a3ff480f1477237f8055f10c43298480a05728a1`. Historical SUCCESS `35168858541` is **H only**; `35088765421` is `09029c0` only; `35044093460` is `7e0329f` only; `35060561603` is `eaf0b73` only; `35065980776` is `74ef385` only. Exact-head SC-R `pull_request` Classify + full Heavy + CI Gate IDs are **pending at this report write** and must not be invented. This report does **not** embed this documentation commit’s own SHA. Cursor does **not** certify independent approval. The next independent review must be a **separate actual Claude Code** session.
 
 **Production:** NOT AUTHORIZED
@@ -1417,3 +1417,135 @@ Environment: Node `v22.14.0`, npm `11.5.2`, linux. Commands below are Cursor’s
 | `npx vitest run` source-stage + scratch-quota + transport-budget + jsonl, `--fileParallelism=false --maxWorkers=1 --pool=threads --isolate=false`, sequencer source-stage → scratch-quota → transport-budget → jsonl | 0 | **88** passed / 4 files. jsonl **33** passed after NEW-SCQ-01/02 in the same process. UTF-8 round-trip **1501ms**. NEW-SCQ live-child / SIGKILL / lock non-theft / orphan-tmp / test-local throw-only wrap still passed. |
 
 `PR6_D_SCALE_1E6` was **not** re-run. Overlay C and INDEX-01 harnesses were not edited. Immutable reviews were not rewritten. Live Shopify / store calls / production were **not executed** (forbidden). Exact-head Classify + full Heavy + Gate on the live head after this isolation docs commit remain **pending at this docs write**. Claude targeted NEW-SCQ re-review remains required. R-176 remains **OPEN / P0**. PR #43 remains OPEN / DRAFT / UNMERGED. No D-055.
+
+### 16.11 PR43-CI-INDEX-02 — validation-scan overlap observation completeness
+
+**Authority:** ChatGPT authorized this as an explicit narrow extension of the existing PR #43 assignment after blocker comment [5738991748](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5738991748). Same writer / same draft PR. Not a new implementation PR. Not a `cursor/` branch. Not independent acceptance of SC-R or NEW-SCQ. Not D-055. Quota persist/transport was **not** reimplemented.
+
+Allowed paths: `scripts/tenant-indexes/tests/indexes.migration.test.ts` (test-local observation completeness, remaining-work selection, diagnostics, regression coverage; helpers remain in EX-IDX-014), this report, and mechanical `PR2_TENANT_ACCESS_INVENTORY.md` regen. Production index helpers, CI/workflows, packages, allowlists, overlay C tests, D runtime/quota, and immutable reviews are unchanged.
+
+#### 16.11.1 Preserved failed exact-head CI (do not relabel)
+
+| Field | Value |
+|---|---|
+| Head | `1e5c18ed7f565903f82c10e77f585fc29a025f68` |
+| Event | `pull_request` run [`35415196729`](https://github.com/Vedang1998/Stocky/actions/runs/35415196729) attempt 1 **FAILURE** |
+| Classify | [`105822352188`](https://github.com/Vedang1998/Stocky/actions/runs/35415196729/job/105822352188) **SUCCESS** |
+| Heavy | [`105822364896`](https://github.com/Vedang1998/Stocky/actions/runs/35415196729/job/105822364896) **FAILURE** (not SKIPPED). Step “Migration and tenant-backfill tests”: `indexes.migration.test.ts` **1 failed / 27**. Step totals: **71** files passed / **1** failed; **723** passed / **1** failed / **2** skipped. Unit tests on this run passed (jsonl isolation held). |
+| CI Gate | [`105830909296`](https://github.com/Vedang1998/Stocky/actions/runs/35415196729/job/105830909296) **FAILURE** (`VALIDATE_RESULT=failure`, `CLASSIFY_RESULT=success`, `FULL_CI=true`) |
+| Historical SUCCESS on **S** (not this head) | run [`35400320443`](https://github.com/Vedang1998/Stocky/actions/runs/35400320443) — do **not** relabel as INDEX-02 or this-head evidence |
+
+Do **not** rerun `35415196729` to obtain green. Do **not** `workflow_dispatch`. Do **not** relabel as INDEX-01 Failure A or Failure B.
+
+#### 16.11.2 What failed
+
+| Field | Observed |
+|---|---|
+| Test | `DML overlaps active build-scan and validation-scan phases (F-F03), 3 iterations` (**6293ms**) |
+| Statement | `AssertionError: expected false to be true` at `expect(evaluation.ok).toBe(true)` `indexes.migration.test.ts:2071` |
+| Caller | `overlapWritesWithActiveScan` at **2123** |
+| `targetPhase` | `index validation: scanning table` |
+| Iteration | **1 of 3**. No `tenant_index_active_phase_write_evidence` event (iteration 1 did not finish). Build-scan overlap had already returned (caller is the validation-scan invocation). |
+| INDEX-01 Failure B | **Did not recur.** Injected teardown **2793ms** passed; dropped-index **2368ms** passed immediately after F-F03. No `40P01` / leftover CIC vs `DROP SCHEMA` on this run. |
+| INDEX-01 Failure A | **Not the same statement.** Failure A was `expect(after.phase).toBe(targetPhase)` on **build-scan** (`loading tuples in tree`). INDEX-02 is `evaluation.ok === false` on **validation table-scan**. Same observation-race family, different phase and predicate. |
+| Evaluation `reason` | **Not present in Heavy logs.** The assertion compared a boolean only. INDEX-02 therefore adds bounded diagnostics *before* the assertion. |
+
+NEW-SCQ quota persist/isolation did **not** cause this failure.
+
+#### 16.11.3 Diagnosis (sampler completion and validation-phase scheduling both investigated)
+
+PostgreSQL 16 `CREATE INDEX CONCURRENTLY` validation order (docs Table 28.43, accessed 2026-09-19; REL_16_STABLE `validate_index` in `src/backend/catalog/index.c`):
+
+1. `waiting for writers before validation`
+2. `index validation: scanning index` (index blocks)
+3. `index validation: sorting tuples` (zeros **blocks only**)
+4. `index validation: scanning table` (updates **PHASE only**, then heap `blocks_total`/`blocks_done`)
+
+The required overlap remains the **table** scan, not the index scan or a waiting phase. On this host a 400k-row `Supplier` heap is **5324** blocks. Local successful traces show the validation table-scan window is short (writes ~4–8ms; scan can finish on the order of tens of milliseconds once the heap is cached after the build scan). Heavy job `105822364896` ran Node `v22.19.0` on linux after the 10-iteration REPEATABLE READ overlap test.
+
+Two incomplete-measurement modes can make `evaluateActiveScanWriteOverlap` return `ok: false` after a valid trigger:
+
+| Condition | `reason` | Mechanism |
+|---|---|---|
+| Sampler completion | `no_independent_in_window_sample` | Dedicated sampler query RTT can exceed the INSERT/UPDATE/DELETE burst. The intersecting sample is still in-flight when `runtime.samples` is snapshotted. `phaseAtWriteStart` is null, so this is **not** `copied_trigger_phase_is_not_independent_overlap`. |
+| Sampler selection / late catalog read | `wrong_or_finished_phase` | An in-window sample exists but `isActiveScanSample(targetPhase)` is false: later phase (`waiting for old snapshots`), finished counters, or leftover tuple counters hiding block progress. |
+| INDEX-01 tuples-first remaining-work | `wrong_or_finished_phase` if leftover tuples are complete | `validate_index()` does not zero `tuples_*` when entering the table scan. A tuples-first predicate can reject an active heap-block walk. Local traces on this host had `tuplesTotal=0` during the table scan (btree `ambulkdelete` reports scan blocks, not CREATE INDEX tuples), so this was **not** observed live here. It is still a documented selection defect. |
+
+The live Heavy assertion did not print `reason`. The helper regression for the empty-window snapshot encodes `no_independent_in_window_sample`. That is the strongest code-level match for “trigger succeeded, writes ran, `evaluation.ok` false, no 40P01.” Scheduling (validation table-scan is last and short) makes the completion race more likely on that phase than on the slower build scan — which is why iteration 1 could pass build-scan and fail validation-scan.
+
+#### 16.11.4 Reproduction limits
+
+The **historical CI schedule** of run `35415196729` / job `105822364896` is **not claimed** to have been replayed. Pre-correction live F-F03 on this host at starting head `1e5c18e…` **passed** once (**5188ms**, 3 evidence events, both required scan phases, `valid_exact`). Helper tests encode the empty-window snapshot and leftover-tuple selection as **failing** overlap / old-predicate cases. That is assertion-level reproduction of the diagnosed conditions, not a claim that this 4-CPU host reproduced GitHub’s Heavy timeline.
+
+#### 16.11.5 Repair (test-local only) — proof equivalence
+
+| Previous | Replacement | Equivalence (not weakened) |
+|---|---|---|
+| Snapshot `runtime.samples` immediately after the DML burst | After the burst, wait until a sampler query has `sampledEndNs >= burstEnd` (1s bound) **or** proceed failure-safe with what was collected | Same independent in-window `isActiveScanSample` predicate. Completing an already-started catalog read is not a waiting-phase substitute and does not extend the 15s write bound. |
+| Observer idle during DML | Observer samples concurrently with real INSERT/UPDATE/DELETE; that loop is drained so its in-flight read is kept | Additional contemporaneous samples, still required to be the named scan with remaining work and lock evidence. Copied trigger labels still fail. |
+| After-burst observer sample used only as `after` (usually outside the write window) | Still taken; still cannot substitute for in-window active-scan samples | Unchanged. A drained later-phase spanning sample is **`wrong_or_finished_phase`**, not success. |
+| Tuples-first remaining work | Documented **block** remaining work for `building index: scanning table`, `index validation: scanning index`, and `index validation: scanning table` | Matches PostgreSQL 16 Table 28.43. Finished block scans still fail. `scanning index` still cannot substitute for `scanning table`. |
+| `evaluation.ok` asserted without `reason` | `tenant_index_ff03_overlap_evaluation` JSON is logged on success and failure; failure throws the JSON | Evidence preservation. Does not change the predicate. |
+| Real INSERT/UPDATE/DELETE; both required scan phases; progress; ShareUpdateExclusiveLock; no AccessExclusiveLock; 15s write bound; 3 iterations; `valid_exact`; owned-builder teardown | **preserved** | Unchanged acceptance. |
+
+Not done: waiting-phase overlap, copied labels as proof, unfinished-builder-as-success, retry-until-green, timeout/allowlist/CI workflow changes, quota/transport edits.
+
+#### 16.11.6 Negative controls
+
+- Early snapshot without the in-flight intersecting sample → `no_independent_in_window_sample` (CI 35415196729 helper).
+- Same sample after catch-up, with block progress vs trigger → `ok` (positive for completion, not a weaker contract).
+- Drained spanning `waiting for old snapshots` sample → `wrong_or_finished_phase` (bypass of “any drained sample”).
+- INDEX-01 copied trigger labels / later `loading tuples` / blocked write / AccessExclusiveLock / omitted progress — retained.
+- Leftover complete tuples with **finished** blocks → still not an active table scan.
+- Leftover complete tuples with **remaining** blocks → old tuples-first remaining-work is false; current `isActiveScanSample` is true.
+- Injected teardown + dropped-index still follow F-F03.
+
+#### 16.11.7 Identities for this exception
+
+| Field | Value |
+|---|---|
+| Required starting head | `1e5c18ed7f565903f82c10e77f585fc29a025f68` |
+| `origin/main` / squash **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Branch / PR | `phase-1/pr6-d-order-webhook-import` / [#43](https://github.com/Vedang1998/Stocky/pull/43) OPEN / DRAFT / UNMERGED |
+| Final-control review | `e20cca5cfa983e516c26980e0ccbaf3a5e00a1cf` sole parent S `dab5accc4cd949bdaf1078fe6240fc602ba1629b`; blob `ee3f625ce2106b893e9018319e19ef2685e6beab`; only added path `stocky-plus/docs/phases/phase-1/PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md` — **not edited** |
+| INDEX-02 runtime/test + docs | **this commit**; SHA is not embedded here |
+| Allowed paths vs `1e5c18e…` | `scripts/tenant-indexes/tests/indexes.migration.test.ts`, this report, mechanical `PR2_TENANT_ACCESS_INVENTORY.md` |
+| D runtime / quota / scale harness / overlay C / immutable reviews vs `1e5c18e…` | **byte-identical** |
+
+#### 16.11.8 Cursor local commands (index-test tree)
+
+Environment: Node `v22.14.0`, npm `11.5.2`, linux, disposable PostgreSQL 16.15 accepting, Redis `PONG`. Subject: working tree on `1e5c18e…` plus this INDEX-02 correction.
+
+Controlled load definition for runs 6–10: two additional Python busy-loop processes (tight integer multiply-add) for the duration of that F-F03 execution; stopped by exact PID afterward. Not a Vitest / `fileParallelism` / CI timeout / allowlist change.
+
+| Command | Exit | Notes |
+|---|---|---|
+| Pre-fix `npm run test:migrations -- …/indexes.migration.test.ts -t "DML overlaps active build-scan and validation-scan phases"` | 0 | **1** passed / 26 skipped. Historical CI schedule **not** reproduced. |
+| `npm run test:migrations -- …/indexes.migration.test.ts -t "F-F03 active-scan overlap helper"` | 0 | **16** passed / **14** skipped (30 in file). Nonzero; not a name-filter of zero. |
+| `npm run test:migrations -- …/indexes.migration.test.ts` (full file, includes dropped-index) | 0 | **30** passed / 1 file / 29.21s. F-F03 **4793ms**, injected teardown **1951ms**, dropped-index **2232ms** immediately after. |
+| Fixed batch of 10 F-F03 executions (5 ordinary + 5 controlled load) | 0 | **10/10** ok; each retained 3 iterations / 3 evidence events / 6 evaluation events. Artifact: `/opt/cursor/artifacts/pr43-ci-index-02-ff03-ten-run.json`. |
+| `npx eslint …/indexes.migration.test.ts` | 0 | focused |
+| `npx tsc --noEmit` | 0 | focused typecheck |
+| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | **40/40** assertions |
+| `git diff --check` | 0 | — |
+| `npm run tenant:access:inventory` then `:check` | 0 | mechanical regen; findings **1761** / violations **0**; digest `813ae4ad26a6c0e91cedf3ca64a5fafa8e14db7a256d05dc0a0e2fce10e7091a` |
+| `npm run tenant:enforcement:inventory:check` | 0 | fresh |
+
+Fixed batch detail (every outcome recorded; none discarded):
+
+| i | mode | exit | ms | evidence events |
+|---|---|---|---|---|
+| 1 | ordinary | 0 | 7073 | 3 |
+| 2 | ordinary | 0 | 6920 | 3 |
+| 3 | ordinary | 0 | 7132 | 3 |
+| 4 | ordinary | 0 | 7236 | 3 |
+| 5 | ordinary | 0 | 7005 | 3 |
+| 6 | 2 CPU busy-loops | 0 | 7760 | 3 |
+| 7 | 2 CPU busy-loops | 0 | 7869 | 3 |
+| 8 | 2 CPU busy-loops | 0 | 7791 | 3 |
+| 9 | 2 CPU busy-loops | 0 | 7780 | 3 |
+| 10 | 2 CPU busy-loops | 0 | 7590 | 3 |
+
+`PR6_D_SCALE_1E6` was **not** re-run. Existing §16.5 envelope on `b2471676d0300487802a6a916eb5546943925cb2` remains the Cursor million-line evidence. D scale harness, D application/quota/transport code, and overlay C were not edited vs `1e5c18e…`.
+
+This exception does **not** independently accept SC-R-01…04 or NEW-SCQ-01/02. Exact-head Classify + full Heavy + Gate on the live head after this correction remain required. Actual Claude Code correction re-review remains required and must include the quota corrections **and** this fixture delta together. R-176 remains **OPEN / P0**. R-164 unchanged. No D-055.
