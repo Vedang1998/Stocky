@@ -1359,6 +1359,7 @@ Environment: Node `v22.14.0`, npm `11.5.2`, linux, disposable PostgreSQL accepti
 | `npx eslint` on the D-owned changed TS files listed in §16.10.3 | 0 | focused |
 | `npx tsc --noEmit` | 0 | focused typecheck |
 | `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | **40/40** assertions |
+| `npm run tenant:access:inventory` / `:check` | 0 | findings **1761**, violations **0**, scannedFiles **507**, digest `f037db3170ac362fe0e66fd5365ae822689595ee9fb94a669ef9f154f1677eb0` |
 | `git diff --check` | 0 | — |
 
 `PR6_D_SCALE_1E6` was **not** re-run. Overlay C and INDEX-01 harnesses were not edited. Immutable reviews were not rewritten. Live Shopify / store calls / production were **not executed** (forbidden). `npm run graphql-codegen` was **not executed**. Exact-head Classify + full Heavy + Gate on this package remain **pending at this docs write**.
