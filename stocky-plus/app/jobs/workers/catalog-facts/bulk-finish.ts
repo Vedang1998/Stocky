@@ -25,7 +25,7 @@ export async function signalBulkOperationContinuation(input: {
     where: {
       shopId: input.shopId,
       correlationId: run.correlationId,
-      jobType: { in: ["catalog-sync", "inventory-state-reconcile"] },
+      jobType: { in: ["catalog-sync", "inventory-state-reconcile", "order-facts-sync", "order-facts-reconcile"] },
       state: "RETRY_WAIT",
     },
     data: { nextEligibleAt: new Date() },

@@ -112,12 +112,206 @@ export function defaultPinOverlayEnv(): PinOverlayEnv {
   };
 }
 
+/**
+ * Per-invocation Git options for disposable fixture repos only.
+ * Never written to global or system Git config. Live REPO_ROOT invocations
+ * do not use these args.
+ */
+export function disposableFixtureGitArgs(args: string[]): string[] {
+  const withConfig = ["-c", "gc.auto=0", "-c", "maintenance.auto=false"];
+  if (args[0] === "fetch" && !args.includes("--no-auto-maintenance")) {
+    return [...withConfig, "fetch", "--no-auto-maintenance", ...args.slice(1)];
+  }
+  return [...withConfig, ...args];
+}
+
 function git(args: string[], cwd: string): Buffer {
-  return execFileSync("git", args, {
+  const invocation =
+    path.resolve(cwd) === path.resolve(REPO_ROOT)
+      ? args
+      : disposableFixtureGitArgs(args);
+  return execFileSync("git", invocation, {
     cwd,
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     maxBuffer: 32 * 1024 * 1024,
   });
+}
+
+/** Initial try plus three retries. Node fs.rmSync default maxRetries is 0. */
+export const DISPOSABLE_GIT_ROOT_RM_MAX_ATTEMPTS = 4;
+/** Linear backoff base; attempt N waits N * this many ms. */
+export const DISPOSABLE_GIT_ROOT_RM_RETRY_DELAY_MS = 25;
+
+const TRANSIENT_DISPOSABLE_RM_CODES = new Set([
+  "ENOTEMPTY",
+  "EBUSY",
+  "EMFILE",
+  "ENFILE",
+  "EPERM",
+]);
+
+export type DisposableGitRootRemovalHooks = {
+  /** Fault seam. Default is recursive rmSync of the exact registered root. */
+  removeDirectory?: (target: string) => void;
+  delay?: (ms: number) => void;
+  maxAttempts?: number;
+  retryDelayMs?: number;
+};
+
+function sleepSync(ms: number): void {
+  if (ms <= 0) return;
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function defaultRemoveDirectory(target: string): void {
+  rmSync(target, { recursive: true, force: true });
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (error && typeof error === "object" && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
+export function isTransientDisposableGitRemovalError(error: unknown): boolean {
+  const code = errorCode(error);
+  return code !== undefined && TRANSIENT_DISPOSABLE_RM_CODES.has(code);
+}
+
+export function pathExistsIncludingDanglingSymlink(target: string): boolean {
+  try {
+    lstatSync(target);
+    return true;
+  } catch (error) {
+    if (errorCode(error) === "ENOENT") return false;
+    throw error;
+  }
+}
+
+function assertDisposableRootNotSymlink(target: string): void {
+  const resolved = path.resolve(target);
+  const tmp = path.resolve(os.tmpdir());
+  let current = resolved;
+  for (let remaining = 64; remaining > 0; remaining -= 1) {
+    if (current === tmp) return;
+    if (pathExistsIncludingDanglingSymlink(current)) {
+      const st = lstatSync(current);
+      if (st.isSymbolicLink()) {
+        throw new UnownedAdminReadPathError(
+          `refusing symlink at ${current} while resolving ${target}`,
+        );
+      }
+    }
+    const parent = path.dirname(current);
+    if (parent === current) return;
+    current = parent;
+  }
+  throw new UnownedAdminReadPathError(
+    `refusing unresolved path walk from ${target} toward tmpdir`,
+  );
+}
+
+/**
+ * Delete one exact disposable Git fixture root registered by this test process.
+ * A filename prefix is not ownership. Persistent ENOTEMPTY and unexpected
+ * errors still fail after the bounded retry budget.
+ */
+export function removeRegisteredDisposableGitRoot(
+  root: string,
+  registeredRoots: ReadonlySet<string>,
+  hooks: DisposableGitRootRemovalHooks = {},
+): void {
+  const resolved = path.resolve(root);
+  const registeredResolved = new Set(
+    [...registeredRoots].map((item) => path.resolve(item)),
+  );
+  if (!registeredResolved.has(resolved)) {
+    throw new UnownedAdminReadPathError(
+      `refusing to delete unregistered path ${root}`,
+    );
+  }
+  if (isUnderDir(resolved, APP_ROOT) || isUnderDir(resolved, REPO_ROOT)) {
+    throw new UnownedAdminReadPathError(
+      `refusing to delete application or repository path ${root}`,
+    );
+  }
+  if (!isUnderDir(resolved, os.tmpdir())) {
+    throw new UnownedAdminReadPathError(
+      `refusing to delete path outside tmpdir ${root}`,
+    );
+  }
+  if (!pathExistsIncludingDanglingSymlink(resolved)) {
+    return;
+  }
+  assertDisposableRootNotSymlink(resolved);
+
+  const maxAttempts = hooks.maxAttempts ?? DISPOSABLE_GIT_ROOT_RM_MAX_ATTEMPTS;
+  if (maxAttempts < 1) {
+    throw new Error("maxAttempts must be >= 1");
+  }
+  const retryDelayMs =
+    hooks.retryDelayMs ?? DISPOSABLE_GIT_ROOT_RM_RETRY_DELAY_MS;
+  const removeDirectory = hooks.removeDirectory ?? defaultRemoveDirectory;
+  const delay = hooks.delay ?? sleepSync;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      if (!pathExistsIncludingDanglingSymlink(resolved)) {
+        return;
+      }
+      assertDisposableRootNotSymlink(resolved);
+      removeDirectory(resolved);
+      if (!pathExistsIncludingDanglingSymlink(resolved)) {
+        return;
+      }
+      lastError = Object.assign(
+        new Error(`ENOTEMPTY: directory not empty, rmdir '${resolved}'`),
+        { code: "ENOTEMPTY" },
+      );
+    } catch (error) {
+      if (error instanceof UnownedAdminReadPathError) throw error;
+      lastError = error;
+      if (!isTransientDisposableGitRemovalError(error)) {
+        throw error;
+      }
+    }
+    if (attempt < maxAttempts) {
+      delay(retryDelayMs * attempt);
+    }
+  }
+
+  if (!pathExistsIncludingDanglingSymlink(resolved)) {
+    return;
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`failed to remove disposable git root ${resolved}`);
+}
+
+/** Attempt every registered root, then report all failures. */
+export function removeRegisteredDisposableGitRoots(
+  roots: readonly string[],
+  hooks: DisposableGitRootRemovalHooks = {},
+): void {
+  const registered = new Set(roots.map((item) => path.resolve(item)));
+  const failures: Error[] = [];
+  for (const root of roots) {
+    try {
+      removeRegisteredDisposableGitRoot(root, registered, hooks);
+    } catch (error) {
+      failures.push(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+  if (failures.length === 1) throw failures[0];
+  if (failures.length > 1) {
+    throw new AggregateError(
+      failures,
+      `failed to remove ${failures.length} disposable git roots`,
+    );
+  }
 }
 
 export function readPinnedBBlob(repoPath: string): string {

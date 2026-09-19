@@ -1,11 +1,11 @@
 # Project Status
 
-**Updated:** 2026-09-14
-**Current stage:** Phase 1 PR6-A FOUNDATION ACCEPTED / MERGED / CLOSED — PR #42 TOOLING ACCEPTED / MERGED (squash **T** current `origin/main`); PR6-B TECHNICALLY ACCEPTED, NOT MERGED (synchronizing onto T); PR6-C IN CORRECTION; PR6-D RUNTIME NOT AUTHORIZED
+**Updated:** 2026-09-16
+**Current stage:** Phase 1 PR6-B AND PR6-C REPOSITORY LANES ACCEPTED / MERGED / CLOSED — squash **V** current `origin/main`; PR6-D COMPLETE INTEGRATION **ADMITTED** on `phase-1/pr6-d-order-webhook-import` after verified exact-V push CI
 **Phase 0 status:** CLOSED
 **Phase 1 planning:** APPROVED AND MERGED
 **Phase 1 implementation authority:** EFFECTIVE
-**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 FORMALLY CLOSED; PR 5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**; PR6-A **ACCEPTED / MERGED / CLOSED**; PR #42 tooling **ACCEPTED / MERGED**; PR6-B **TECHNICALLY ACCEPTED**, **NOT MERGED**; PR6-C **IN CORRECTION**; PR6-D runtime **NOT AUTHORIZED**
+**Phase 1 implementation:** PR 1 MERGED AND CLOSED; PR 2 MERGED AND CLOSED; PR 3 MERGED AND CLOSED; PR 4 FORMALLY CLOSED; PR 5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**; PR6-A **ACCEPTED / MERGED / CLOSED**; PR #42 tooling **ACCEPTED / MERGED**; PR6-B **ACCEPTED / MERGED / CLOSED**; PR6-C **ACCEPTED / MERGED / CLOSED**; PR6-D complete integration **ADMITTED** (repository module only; not production)
 **Phase 1 PR 1:** MERGED AND CLOSED
 **Phase 1 PR 2:** MERGED AND CLOSED
 **Phase 1 PR 3:** MERGED AND CLOSED
@@ -16,18 +16,18 @@
 **PR 5 implementation:** PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F2A ACCEPTED / MERGED; PR5-F2B ACCEPTED / MERGED; PR5-F2C ACCEPTED / MERGED; PR5-F3 ACCEPTED / MERGED; PR5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**
 **PR 5 remaining-integration planning:** MERGED — PR [#32](https://github.com/Vedang1998/Stocky/pull/32) squash `f1201f853b8a42f40e4d3e5565b6406410360c8a`; post-merge CI run `33967677166` SUCCESS; planning / fixtures only; independent correction review `APPROVE PR5-F3 PLANNING CORRECTION`
 **Emergency Continuity Sprint:** CONTROL PACKET MERGED via PR #33 as squash `28c810090394f319e599fc6c501b898befa39cad`; that packet itself did not authorize F3 runtime
-**D-054:** EFFECTIVE — remains the implementation-authority / current-lane record (PR6-A authorized under this heading; **no D-055**)
+**D-054:** EFFECTIVE — remains the implementation-authority / current-lane record (PR6-B/C closed and PR6-D admitted under this heading; **no D-055**)
 **D-055:** NOT CREATED
 **F3 authorization date:** 2026-09-05 — existing **D-054 EFFECTIVE**; **no D-055**
 **PR5-F3 pull request:** [#35](https://github.com/Vedang1998/Stocky/pull/35) — CLOSED / MERGED; squash `36365e2535a2394fa53b0642db4dbf90a438316f` at `2026-09-06T01:33:34Z`
 **PR #36 closeout:** CLOSED / MERGED; squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f` at `2026-09-06T16:51:22Z`; post-merge main CI `34046777505` SUCCESS
 **PR #34:** CLOSED / MERGED; squash `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` at `2026-09-07T00:53:25Z`; post-merge CI run `34071226302` SUCCESS (Classify `101588830168` SUCCESS; Heavy `101588852919` SKIPPED; CI Gate `101588852489` SUCCESS)
 **PR #37:** CLOSED / MERGED; squash **M** / historical `origin/main` `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` at `2026-09-11T20:07:27Z`; exact-M push CI run `34642536795` SUCCESS (Classify `103405479267` SUCCESS; full Heavy `103405514450` SUCCESS; CI Gate `103422700596` SUCCESS)
-**PR #42:** CLOSED / MERGED; squash **T** / current `origin/main` `f5ec7abb01d14d5803e186b3e883fa15defad38f` at `2026-09-14T02:27:29Z`; sole parent **M**; tree `f882c4b31c488c9dcd2e0a1dd6ad8c30c1fab129`. Exact-T post-merge **push** CI run [`34799274517`](https://github.com/Vedang1998/Stocky/actions/runs/34799274517) — Classify `103838454264` SUCCESS; Heavy `103838476115` **IN PROGRESS** at this record (not claimed passed). Failed T remains a shared blocker.
+**PR #42:** CLOSED / MERGED; squash **T** / historical `origin/main` `f5ec7abb01d14d5803e186b3e883fa15defad38f` at `2026-09-14T02:27:29Z`; later superseded by **U** then **V**.
 **PR6 planning:** ACCEPTED / MERGED — independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING`; immutable final review blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`
 **PR6-A:** ACCEPTED / MERGED / CLOSED — PR [#37](https://github.com/Vedang1998/Stocky/pull/37); independent correction verdict `APPROVE PR6-A FOUNDATION CORRECTION` (blob `da388c5d2ffa8bc0e04312de9c14a831b5ba4010`)
-**PR6-B / PR6-C:** AUTHORIZED after admission. PR #39 (B) is **OPEN / DRAFT / UNMERGED**. ChatGPT **ACCEPT PR6-B ADMIN READ CORRECTION** (technical only). Independent correction verdict `APPROVE PR6-B ADMIN READ CORRECTION` (blob `e902a1ce07e30174cd56cea13114be7325195c98`). B is synchronizing onto **T**; **not merged**. C remains **in correction**, not globally unauthorized. C's reader pin `610ed0503a3aa2998aca7228f4fca9617bed23a3` remains valid (B runtime unchanged by this tooling merge).
-**PR6-D runtime:** NOT AUTHORIZED
+**PR6-B / PR6-C:** **ACCEPTED / MERGED / CLOSED** (repository lanes). PR [#39](https://github.com/Vedang1998/Stocky/pull/39) squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`. PR [#40](https://github.com/Vedang1998/Stocky/pull/40) squash **V** / current `origin/main` `a3ff480f1477237f8055f10c43298480a05728a1`. Closure: `phases/phase-1/PR6_BC_CLOSURE_REPORT.md`.
+**PR6-D:** **ADMITTED** for the complete §17.2 integration module after verified exact-V push CI. Brief: `phases/phase-1/PR6_D_EXECUTION_BRIEF.md`. Not production, not merge, not Phase 1 closure.
 **Monday 7 September 2026 target:** missed (not re-dated)
 **Production:** NOT AUTHORIZED
 **Inventory-write flags:** DEFAULT OFF
@@ -118,7 +118,7 @@ D-053 is **not** a PR 4 correction, acceptance, or closure decision. Planning is
 | Production | NOT AUTHORIZED |
 | Inventory-write flags | DEFAULT OFF |
 
-D-054 is **EFFECTIVE** and remains the implementation authority / current-lane record. The PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**. PR5-F2A is **ACCEPTED / MERGED**. PR5-F2B is **ACCEPTED / MERGED**. PR5-F2C is **ACCEPTED / MERGED**. PR5-F3 is **ACCEPTED / MERGED** via PR [#35](https://github.com/Vedang1998/Stocky/pull/35) squash `36365e2535a2394fa53b0642db4dbf90a438316f`. **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION.** Formal PR5 repository-implementation closure is **effective** as of PR [#36](https://github.com/Vedang1998/Stocky/pull/36) squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`. PR [#34](https://github.com/Vedang1998/Stocky/pull/34) is **CLOSED / MERGED** as squash `09feffd3f36eb4698f2ed8a152efe414cd9b77bd`. Independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`). PR6 planning is **ACCEPTED / MERGED**. PR [#37](https://github.com/Vedang1998/Stocky/pull/37) is **CLOSED / MERGED**. Squash **M** / historical `origin/main` `bdbb5bba91ac8af82e49a99e36cce5db8b401c68`. **ChatGPT disposition: ACCEPT PR6-A FOUNDATION.** Independent correction verdict `APPROVE PR6-A FOUNDATION CORRECTION` (blob `da388c5d2ffa8bc0e04312de9c14a831b5ba4010`). PR6-A is **ACCEPTED / MERGED / CLOSED** for the repository-foundation lane. PR [#42](https://github.com/Vedang1998/Stocky/pull/42) is **CLOSED / MERGED**. Squash **T** / current `origin/main` `f5ec7abb01d14d5803e186b3e883fa15defad38f`. Independent tooling verdict `APPROVE PR6 B/C CI RELIABILITY` (blob `5a47f6f8133806848ad71a545e07c030a2137e37`). PR6-B is **TECHNICALLY ACCEPTED** and **NOT MERGED** (PR #39 OPEN / DRAFT / UNMERGED; B runtime/tests remain byte-identical to accepted `57bebc6b…` through this T merge). PR6-C remains **IN CORRECTION**. **PR6-D runtime remains NOT AUTHORIZED.** This is **not D-055**. Do **not** close Phase 1. Production, merchant production data, Shopify inventory mutations, `read_all_orders`, `write_orders`, and inventory-write flags remain unauthorized / **DEFAULT OFF**. `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF**. The Monday 7 September 2026 internal/controlled target is **missed** and is not re-dated.
+D-054 is **EFFECTIVE** and remains the implementation authority / current-lane record. The PR5-F1 foundation is **ACCEPTED / MERGED / FROZEN**. PR5-F2A is **ACCEPTED / MERGED**. PR5-F2B is **ACCEPTED / MERGED**. PR5-F2C is **ACCEPTED / MERGED**. PR5-F3 is **ACCEPTED / MERGED** via PR [#35](https://github.com/Vedang1998/Stocky/pull/35) squash `36365e2535a2394fa53b0642db4dbf90a438316f`. **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION.** Formal PR5 repository-implementation closure is **effective** as of PR [#36](https://github.com/Vedang1998/Stocky/pull/36) squash `58bf62b4d1c5f51dac70ee96fed4ece0a109b25f`. PR [#34](https://github.com/Vedang1998/Stocky/pull/34) is **CLOSED / MERGED** as squash `09feffd3f36eb4698f2ed8a152efe414cd9b77bd`. Independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2`). PR6 planning is **ACCEPTED / MERGED**. PR [#37](https://github.com/Vedang1998/Stocky/pull/37) is **CLOSED / MERGED**. Squash **M** `bdbb5bba91ac8af82e49a99e36cce5db8b401c68`. **ChatGPT disposition: ACCEPT PR6-A FOUNDATION.** Independent correction verdict `APPROVE PR6-A FOUNDATION CORRECTION` (blob `da388c5d2ffa8bc0e04312de9c14a831b5ba4010`). PR6-A is **ACCEPTED / MERGED / CLOSED** for the repository-foundation lane. PR [#42](https://github.com/Vedang1998/Stocky/pull/42) is **CLOSED / MERGED**. Squash **T** `f5ec7abb01d14d5803e186b3e883fa15defad38f`. Independent tooling verdict `APPROVE PR6 B/C CI RELIABILITY` (blob `5a47f6f8133806848ad71a545e07c030a2137e37`). PR [#39](https://github.com/Vedang1998/Stocky/pull/39) is **CLOSED / MERGED**. Squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`. Independent correction verdict `APPROVE PR6-B ADMIN READ CORRECTION` (blob `e902a1ce07e30174cd56cea13114be7325195c98`). PR6-B is **ACCEPTED / MERGED / CLOSED**. PR [#40](https://github.com/Vedang1998/Stocky/pull/40) is **CLOSED / MERGED**. Squash **V** / current `origin/main` `a3ff480f1477237f8055f10c43298480a05728a1`. Independent final verdict `APPROVE PR6-C CANONICAL APPLICATOR FINAL INTEGRATION` (blob `0daa0e5395c69b1fb86508f133f6ade3f8430f56`). PR6-C is **ACCEPTED / MERGED / CLOSED**. Exact-V push CI run [`34921292975`](https://github.com/Vedang1998/Stocky/actions/runs/34921292975) SUCCESS (Classify `104229798042`; full Heavy `104229820630` not SKIPPED; CI Gate `104241657531`). **PR6-D complete integration is ADMITTED** under this same D-054 heading after the published B/C closure checkpoint (`PR6_BC_CLOSURE_REPORT.md`, `PR6_D_EXECUTION_BRIEF.md`). Owner authority: PR #40 comment [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675). This is **not D-055**. Do **not** close Phase 1 or PR 6. R-176 remains **OPEN / P0**. Production, merchant production data, Shopify inventory mutations, `read_all_orders`, `write_orders`, live subscription registration, and inventory-write flags remain unauthorized / **DEFAULT OFF**. `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF**. The Monday 7 September 2026 internal/controlled target is **missed** and is not re-dated.
 
 ## Phase 1 PR 5 repository-implementation closeout (this control PR)
 
@@ -195,6 +195,97 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | R-176 | **OPEN / P0** |
 | R-164 | unchanged / **OPEN** |
 | Phase 1 | **IN PROGRESS** |
+
+## Phase 1 PR6-B / PR6-C repository-lane closeout and PR6-D admission (same D-054)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is **not D-055**. |
+| ChatGPT authority | PR #40 comment [5673830675](https://github.com/Vedang1998/Stocky/pull/40#issuecomment-5673830675) |
+| PR #39 | **CLOSED / MERGED** — squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505` at `2026-09-14T20:15:14Z` |
+| PR #40 | **CLOSED / MERGED** — squash **V** / current `origin/main` `a3ff480f1477237f8055f10c43298480a05728a1` at `2026-09-15T02:28:09Z` |
+| **V** sole parent | **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505` |
+| `V^{tree}` | `ba55f5d5d138911aca83fd715e6f2c8a455e9917` (equals accepted final head `88251df1…`) |
+| B correction verdict | **`APPROVE PR6-B ADMIN READ CORRECTION`** (blob `e902a1ce07e30174cd56cea13114be7325195c98`) |
+| C final verdict | **`APPROVE PR6-C CANONICAL APPLICATOR FINAL INTEGRATION`** (blob `0daa0e5395c69b1fb86508f133f6ade3f8430f56`) |
+| Exact-U push CI | run [`34891789836`](https://github.com/Vedang1998/Stocky/actions/runs/34891789836) SUCCESS — Classify `104136027179`; full Heavy `104136080253`; CI Gate `104154438171` |
+| Exact-V push CI | run [`34921292975`](https://github.com/Vedang1998/Stocky/actions/runs/34921292975) SUCCESS — Classify `104229798042`; full Heavy `104229820630` not SKIPPED; CI Gate `104241657531` |
+| Closure report | `phases/phase-1/PR6_BC_CLOSURE_REPORT.md` |
+| D execution brief | `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` |
+| PR6-B / PR6-C | **ACCEPTED / MERGED / CLOSED** (repository lanes) |
+| PR6-D | **ADMITTED** for complete §17.2 integration on `phase-1/pr6-d-order-webhook-import` |
+| Accepted residuals (not fixed) | C **P3-FINAL-01** (tooling F-F03), **P3-FINAL-02** (fixture hygiene), **P3-FINAL-03** (D at-sale provenance carry-forward); B **NEW-CLAUDE-PR6B-C01** (duplicate fragment names) |
+| R-176 | **OPEN / P0** — D repository evidence exists on draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43); independent review and merge remain required |
+| R-164 | unchanged / **OPEN** |
+| PR #41 | stays parked / unmerged |
+| D-055 | **NOT CREATED** |
+| Phase 1 / PR 6 | **IN PROGRESS** |
+| Production / writes / scopes / flags | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
+
+### D-054 subitem — PR6-D source-contract correction (checkpoint, not D-055)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is a **same-assignment checkpoint**, **not D-055**, not a new planning PR, and not PR 6 / Phase 1 closure. |
+| ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5692110528](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5692110528) |
+| Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §6 |
+| Prior | Quantity-as-closure; 64-root duplicate ring; invented `confirmed` / unqueried empty-complete agreements; edited-or-refund-bearing follow-up; scale = JSONL objects |
+| New | Validated D-owned scratch staging with streaming external sort, content-digest manifests, and on-disk ordinal acks; indexed EOF parent membership; D Bulk A with actual `confirmed` + with-code discounts + selected nullables; queried agreement/sale/refund ledger for every imported order; scale ≥ 1,000,000 canonical order-line facts |
+| Reason | Independent re-review CORRECTIONS REQUIRED: D-R-02 unresolved; D-R-03/10/11 partial. ChatGPT chose staging + actual reads rather than changing C |
+| Merchant impact | Truncated/mis-parented bulk cannot certify; ordinary orders get real ledgers; `confirmed` is Shopify inventory reservation |
+| Technical impact | Per-order Admin reads; worker scratch; new Bulk A fingerprint (old checkpoints not transferable) |
+| Migration impact | None |
+| Tradeoffs | Request and disk cost vs silent incomplete snapshots |
+| Acceptance tests | C3.5 / N-01…N-09 / remaining D-R tests / corrected 1e6 line-fact envelope |
+| Frozen | B documents, C internals, RESOLVED D-R-01/04/05/06/07/08/09/12 |
+| R-176 | **OPEN / P0** |
+| R-164 | unchanged / **OPEN** |
+| D-055 | **NOT CREATED** |
+| Production / writes / flags | **NOT AUTHORIZED** |
+
+### D-054 subitem — PR6-D SC-01…SC-04 recovery correction (checkpoint, not D-055)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is a **same-assignment checkpoint**, **not D-055**, not a new planning PR, and not PR 6 / Phase 1 closure. |
+| ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5705430913](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5705430913) |
+| Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3.6**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §7 |
+| Prior | Deterministic shop/run scratch takeover; positional skip across newly staged bytes; renewable per-reader `maxRequests`; continuation-gated final recheck |
+| New | Unique attempt-owned scratch; conservative replay from ordinal 0; C content-bound D import receipts (`order-facts-d-import-src-v1`); one aggregate Admin transport budget; unconditional post-Refund Order recheck with refund GID membership |
+| Reason | Independent source-contract review SC-01…SC-04. ChatGPT chose conservative replay over a new source-manifest schema |
+| Merchant impact | Restaged/reordered bulk cannot drop unapplied parents; unowned scratch is not deleted; mixed refund lists cannot certify |
+| Technical impact | Per-order final recheck; D-only receipt binding; unique `att-*` scratch dirs |
+| Migration impact | None |
+| Tradeoffs | Replay cost vs a new table; leftovers count toward scratch limits |
+| Acceptance tests | SC-01…SC-04 plus a new ≥1e6 line-fact envelope with positive-checkpoint interruption, SQL, Admin, and scratch-disk accounting |
+| Frozen | B documents, C internals, webhook/reconciliation identity receipts, RESOLVED D-R-01/04/05/06/07/08/09/12, original D-R/N IDs |
+| Review provenance | Review commit `7710758b…` blob `1eb18cae…` preserved unedited. GitHub author/committer metadata is Cursor Agent / cursor[bot] and is **not** ChatGPT-verified independence |
+| R-176 | **OPEN / P0** |
+| R-164 | unchanged / **OPEN** |
+| D-055 | **NOT CREATED** |
+| Production / writes / flags | **NOT AUTHORIZED** |
+
+### D-054 subitem — PR6-D SC-R-01…SC-R-04 control correction (checkpoint, not D-055)
+
+| Field | Value |
+|---|---|
+| Decision | **D-054 remains** the implementation-authority / current-lane record. This is a **same-assignment checkpoint**, **not D-055**, not a new planning PR, and not PR 6 / Phase 1 closure. |
+| ChatGPT authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5713115882](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5713115882) |
+| Plan / brief | `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` **C3.7**; `phases/phase-1/PR6_D_EXECUTION_BRIEF.md` §8 |
+| Prior | Ledger-only budget; snapshot-then-write quota; unsurfaced leftovers; digest omitting fence/run/Bulk |
+| New | Parent wrapper including fallback; atomic scratch reservation; sanitized occupancy diagnostics; epoch-bound digest v2 with stable logical key |
+| Reason | Independent SC recovery review SC-R-01…SC-R-04 |
+| Merchant impact | Fallback cannot exceed the parent cap; concurrent staging cannot exceed 2 GiB; leftovers are visible and operator-reclaimed; changed epoch cannot silently recertify |
+| Technical impact | D Admin wrapper; `quota.lock`/`quota.reservation`; SyncHealth `order_facts_scratch_resource`; receipt digest v2 |
+| Migration impact | None |
+| Tradeoffs | Default one large import per namespace; v1 receipts need a fresh logical job |
+| Acceptance tests | SC-R-01…04 including SC-R-06 mutation, two-process quota, occupancy/health, epoch/v1 receipts, confirmatory process-loss, corrected 1e6 envelope |
+| Frozen | B documents, C internals, webhook/reconciliation identity receipts, RESOLVED D-R/N IDs, SC-R-05 limitation, N-08 H-scale evidence |
+| Review provenance | Review commit `ec61089d…` blob `e8525c2f…` preserved unedited |
+| R-176 | **OPEN / P0** |
+| R-164 | unchanged / **OPEN** |
+| D-055 | **NOT CREATED** |
+| Production / writes / flags | **NOT AUTHORIZED** |
 
 ## Phase 1 PR5-F1 foundation closeout (PR #27)
 
@@ -331,7 +422,7 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 **No production backfill**
 **No ownership repair**
 **No inventory mutation**
-**Next action:** Cursor B returns PR #39 current-main integration onto **T** for ChatGPT merge decision after exact-T push CI **and** new exact-head PR CI both SUCCESS. Cursor C continues F-CR corrections on its own branch. Do **not** start PR6-D runtime. Do **not** create D-055. Production and inventory writes remain unauthorized. All write flags remain **DEFAULT OFF**.
+**Next action:** Cursor published the PR43 SC-01…SC-04 recovery package on draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43) (C3.6). Exact-head Classify + full Heavy + CI Gate IDs belong in PR metadata after that `pull_request` run terminates — they are not stamped here. ChatGPT SC recovery correction review is next after those SUCCESS jobs, then a **separate actual Claude Code** independent review. ChatGPT merge decision remains required. Do **not** create D-055. Production and inventory writes remain unauthorized. All write flags remain **DEFAULT OFF**.
 
 ## Current truth
 
@@ -362,8 +453,10 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Closure report: `phases/phase-1/PR5_CLOSURE_REPORT.md`. Accepted residual backlog: `phases/phase-1/PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`. Immutable F3 review: `phases/phase-1/PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` (never edit). F3 implementation report: `phases/phase-1/PR5_F3_IMPLEMENTATION_REPORT.md`.
 - PR [#34](https://github.com/Vedang1998/Stocky/pull/34) is **CLOSED / MERGED**. Squash merge `09feffd3f36eb4698f2ed8a152efe414cd9b77bd` at `2026-09-07T00:53:25Z`. Post-merge CI run `34071226302` SUCCESS (Classify `101588830168` SUCCESS; Heavy `101588852919` SKIPPED; CI Gate `101588852489` SUCCESS). Independent verdict `APPROVE PR6 CURRENT-MAIN PLANNING`. Immutable final review blob `4f5ea10f6d36175d3540cb977a8f3543f36c15c2` (`PR6_CURRENT_MAIN_FINAL_INDEPENDENT_REVIEW.md` — never edit). PR6 planning is **ACCEPTED / MERGED**.
 - PR [#37](https://github.com/Vedang1998/Stocky/pull/37) is **CLOSED / MERGED**. Accepted subject `f7a39c3664a8a45b7a7cd3055079b4ebc888bb02`. Squash **M** / historical `origin/main` `bdbb5bba91ac8af82e49a99e36cce5db8b401c68` at `2026-09-11T20:07:27Z`. Exact-M push CI run `34642536795` SUCCESS (Classify `103405479267` SUCCESS; full Heavy `103405514450` SUCCESS; CI Gate `103422700596` SUCCESS). Independent correction verdict `APPROVE PR6-A FOUNDATION CORRECTION` (blob `da388c5d2ffa8bc0e04312de9c14a831b5ba4010`). **ChatGPT disposition: ACCEPT PR6-A FOUNDATION.** PR6-A is **ACCEPTED / MERGED / CLOSED**.
-- PR [#42](https://github.com/Vedang1998/Stocky/pull/42) is **CLOSED / MERGED**. Squash **T** / current `origin/main` `f5ec7abb01d14d5803e186b3e883fa15defad38f` at `2026-09-14T02:27:29Z`. Sole parent **M**. Tree `f882c4b31c488c9dcd2e0a1dd6ad8c30c1fab129`. Independent tooling verdict `APPROVE PR6 B/C CI RELIABILITY` (blob `5a47f6f8133806848ad71a545e07c030a2137e37` — never edit). Exact-T push CI run `34799274517` Classify SUCCESS / Heavy **IN PROGRESS** at this record. **Pending is not passed.**
-- PR [#39](https://github.com/Vedang1998/Stocky/pull/39) (PR6-B) is **OPEN / DRAFT / UNMERGED**. ChatGPT **ACCEPT PR6-B ADMIN READ CORRECTION** (technical only). Independent correction verdict `APPROVE PR6-B ADMIN READ CORRECTION` (blob `e902a1ce07e30174cd56cea13114be7325195c98`). Accepted B subject `57bebc6b141e1f5290bbeee6fa75557238cc96f4`. B is history-preserving merging **T**; B `admin-read` runtime/tests remain byte-identical. **Not merged.** C is **in correction**. **PR6-D runtime remains NOT AUTHORIZED.** This is **not D-055**.
+- PR [#42](https://github.com/Vedang1998/Stocky/pull/42) is **CLOSED / MERGED**. Squash **T** / historical `origin/main` `f5ec7abb01d14d5803e186b3e883fa15defad38f` at `2026-09-14T02:27:29Z`. Independent tooling verdict `APPROVE PR6 B/C CI RELIABILITY` (blob `5a47f6f8133806848ad71a545e07c030a2137e37` — never edit). Later superseded by **U** then **V**.
+- PR [#39](https://github.com/Vedang1998/Stocky/pull/39) (PR6-B) is **CLOSED / MERGED**. Squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505` at `2026-09-14T20:15:14Z`. Independent correction verdict `APPROVE PR6-B ADMIN READ CORRECTION` (blob `e902a1ce07e30174cd56cea13114be7325195c98`). Exact-U push CI `34891789836` SUCCESS. **NEW-CLAUDE-PR6B-C01** remains an accepted P3 residual, not fixed.
+- PR [#40](https://github.com/Vedang1998/Stocky/pull/40) (PR6-C) is **CLOSED / MERGED**. Squash **V** / current `origin/main` `a3ff480f1477237f8055f10c43298480a05728a1` at `2026-09-15T02:28:09Z`. Independent final verdict `APPROVE PR6-C CANONICAL APPLICATOR FINAL INTEGRATION` (blob `0daa0e5395c69b1fb86508f133f6ade3f8430f56`). Exact-V push CI `34921292975` SUCCESS (Classify `104229798042`; full Heavy `104229820630` not SKIPPED; CI Gate `104241657531`). C residuals **P3-FINAL-01 / 02 / 03** remain accepted, not fixed.
+- PR6-B and PR6-C repository lanes are **ACCEPTED / MERGED / CLOSED**. Closure: `phases/phase-1/PR6_BC_CLOSURE_REPORT.md`. **PR6-D complete integration is ADMITTED** (`phases/phase-1/PR6_D_EXECUTION_BRIEF.md`) under D-054. This is **not D-055** and is **not** PR 6 or Phase 1 closure.
 - **R-157 / R-159 / R-160 / R-165** are **CLOSED FOR PR5 REPOSITORY IMPLEMENTATION**. **R-163** is **CLOSED FOR PR5 REPOSITORY SCANNER OBLIGATION**, preserving **P3-CLAUDE-F3XH-01** and **P3-CLAUDE-F3XH-02**. **R-158 / R-161 / R-162 / R-164** remain **OPEN** at their original severities. **R-129 through R-156** have individual post-PR5 dispositions in `RISK_REGISTER.md` (15 closed for repository implementation; 13 remain OPEN as surviving production/operational/readiness, later-PR, or standing P0 write-enablement controls). Approved PR6 proposed risks **R-166 through R-185** are now registered in `RISK_REGISTER.md` as **OPEN** (IDs not reused; historical immutable reviews keep old proposed IDs).
 - **P3-CLAUDE-F3XH-06** and **P3-CLAUDE-F3XH-08** are production-readiness requirements despite remaining P3.
 - Remaining-integration planning packet: `phases/phase-1/PR5_EMERGENCY_REMAINING_INTEGRATION_PLAN.md`. Historical planning / fixtures only.
@@ -371,5 +464,5 @@ D-051 architectural truth is unchanged under D-052: deadlock-freedom **correctne
 - Production remains unauthorized. No deployment, backfill, ownership repair, production migration, or inventory mutation is authorized.
 - Every inventory-write flag remains **DEFAULT OFF**. `FEATURE_PR5_ABSENCE_TOMBSTONE` remains **DEFAULT OFF** and is not enabled here.
 - Do **not** state that Phase 1 is complete or that production is ready.
-- Do **not** create D-055. PR6-B is **technically accepted** and **not merged**. PR6-C remains **in correction**. **PR6-D runtime remains NOT AUTHORIZED.** Production, Shopify writes, inventory writes, `read_all_orders`, `write_orders`, and feature-flag enablement remain unauthorized.
-- Next action: PR #39 current-main integration onto **T** awaits exact-T push CI SUCCESS **and** new exact-head PR CI SUCCESS before ChatGPT merge decision. Do **not** start PR6-D runtime.
+- Do **not** create D-055. PR6-B and PR6-C repository lanes are **ACCEPTED / MERGED / CLOSED**. **PR6-D is ADMITTED** for the complete integration module. Production, Shopify writes, inventory writes, `read_all_orders`, `write_orders`, live subscription registration, and feature-flag enablement remain unauthorized.
+- Next action: Cursor published the PR43 SC-01…SC-04 recovery package on draft PR [#43](https://github.com/Vedang1998/Stocky/pull/43). ChatGPT SC recovery correction review is next after exact-head Classify + full Heavy + Gate SUCCESS, then a separate actual Claude Code independent review. ChatGPT merge decision remains required.

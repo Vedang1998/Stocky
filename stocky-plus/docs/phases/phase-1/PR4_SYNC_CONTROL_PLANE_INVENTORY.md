@@ -4,9 +4,9 @@
 **Work unit:** PR 4 — Synchronization control plane
 **Branch:** `phase-1/sync-control-plane`
 **Generator:** `scripts/sync-control-plane/inventory.ts` (deterministic)
-**Inventory version:** `phase1-pr4-sync-inventory-v3-d048`
-**Content digest:** `7363d6d85e84f782136c471088e36bbf5a86584c68f9f4558fc5eb6887e260a8`
-**Surfaces:** 48
+**Inventory version:** `phase1-pr4-sync-inventory-v3-d048-pr6d`
+**Content digest:** `191b83498733a237f4a6fa341e6be0620e718d7c7bd76e467684073500360539`
+**Surfaces:** 58
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run sync:inventory`.
@@ -19,12 +19,12 @@
 | control_plane_table | 12 |
 | dispatcher | 2 |
 | merchant_table | 1 |
-| producer | 6 |
+| producer | 8 |
 | queue | 2 |
 | replay_path | 1 |
-| sanitizer | 6 |
-| webhook_route | 8 |
-| worker | 10 |
+| sanitizer | 9 |
+| webhook_route | 11 |
+| worker | 12 |
 
 ## Surface inventory
 
@@ -36,6 +36,8 @@
 | producer | `producer:catalog-sync` | `app/jobs/queue.server.ts` | `enqueueCatalogSync` | Creates durable job then relies on dispatcher |
 | producer | `producer:after-auth-catalog-sync` | `app/jobs/queue.server.ts` | `enqueueAfterAuthCatalogSync` | AfterAuth durable catalog sync producer |
 | producer | `producer:inventory-state-reconcile` | `app/jobs/queue.server.ts` | `enqueueInventoryStateReconcile` | Coalesced, webhook-deferred canonical inventory-state reconcile |
+| producer | `producer:order-facts-sync` | `app/jobs/queue.server.ts` | `enqueueOrderFactsSync` | Durable order-facts historical/incremental import producer |
+| producer | `producer:order-facts-reconcile` | `app/jobs/queue.server.ts` | `enqueueOrderFactsReconcile` | Coalesced order-facts window sweep / quarantine recovery producer |
 | producer | `producer:abc-analysis-shop` | `app/jobs/queue.server.ts` | `enqueueAbcAnalysisForShop` | Per-shop ABC durable producer |
 | producer | `producer:weekly-abc-tick` | `app/jobs/queue.server.ts` | `scheduleAbcAnalysisCron` | Control-plane weekly tick (no tenant envelope) |
 | dispatcher | `dispatcher:pending-jobs` | `app/sync/dispatcher.server.ts` | `dispatchPendingJobs` | FOR UPDATE SKIP LOCKED claim + BullMQ enqueue |
@@ -46,6 +48,8 @@
 | worker | `worker:catalog-facts-refetch` | `app/jobs/workers/catalog-facts/resource-refetch.ts` | `applyCatalogFactWebhookRefetch` | Authoritative Admin refetch before canonical webhook application |
 | worker | `worker:catalog-facts-bulk-finish` | `app/jobs/workers/catalog-facts/bulk-finish.ts` | `signalBulkOperationContinuation` | CONTROL_ONLY bulk_operations/finish continuation of the persisted GID |
 | worker | `worker:catalog-facts-capacity` | `app/jobs/workers/catalog-facts/capacity.ts` | `assertCanonicalWriterCapacityAtStartup` | F-CLAUDE-PR5F3EC-01 D*max(B, Σ worker concurrency) fail-closed envelope |
+| worker | `worker:order-facts-sync-jobs` | `app/jobs/workers/order-facts/sync-jobs.ts` | `runOrderFactsSyncJob` | Durable order-facts-sync and order-facts-reconcile job steps |
+| worker | `worker:order-facts-control-plane` | `app/lib/order-facts/sync/control-plane.ts` | `recordOrderFactsDataIssue` | Authorized DataIssue / SyncCursor / SyncHealth for order facts |
 | worker | `worker:catalog-facts-projection` | `app/jobs/workers/catalog-facts/projection.ts` | `projectAppliedCanonicalFacts` | Post-commit compatibility projection; live processingEnabled read |
 | worker | `worker:catalog-facts-diagnostic-reconciler` | `app/jobs/workers/catalog-facts/diagnostic-reconciler.ts` | `reconcileCatalogDiagnostics` | Catalog health evidence and diagnostic DataIssue reconcile |
 | worker | `worker:catalog-facts-jsonl-checkpoint` | `app/lib/catalog-facts/ingest/checkpoint.ts` | `acknowledgeJsonlBatch` | Race Y two-phase checkpoint uses the control-plane role only |
@@ -55,6 +59,9 @@
 | webhook_route | `webhook:orders/create` | `app/routes/webhooks.orders.create.tsx` | `action` | Durable intake for orders/create |
 | webhook_route | `webhook:orders/cancelled` | `app/routes/webhooks.orders.cancelled.tsx` | `action` | Durable intake for orders/cancelled |
 | webhook_route | `webhook:refunds/create` | `app/routes/webhooks.refunds.create.tsx` | `action` | Durable intake for refunds/create |
+| webhook_route | `webhook:orders/edited` | `app/routes/webhooks.orders.edited.tsx` | `action` | Durable intake for orders/edited identity-only signal |
+| webhook_route | `webhook:orders/delete` | `app/routes/webhooks.orders.delete.tsx` | `action` | Durable intake for orders/delete identity-only signal |
+| webhook_route | `webhook:order_transactions/create` | `app/routes/webhooks.order_transactions.create.tsx` | `action` | Durable intake for order_transactions/create identity-only signal |
 | webhook_route | `webhook:inventory_levels/update` | `app/routes/webhooks.inventory_levels.update.tsx` | `action` | Durable intake for inventory_levels/update |
 | webhook_route | `webhook:catalog-facts` | `app/routes/webhooks.catalog-facts.tsx` | `action` | Shared durable intake route for PR5 catalog/inventory signal topics |
 | webhook_route | `webhook:compliance` | `app/routes/webhooks.compliance.tsx` | `action` | Authenticate only — PR 7 processors |
@@ -62,6 +69,9 @@
 | sanitizer | `sanitizer:orders/create` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned order projection |
 | sanitizer | `sanitizer:orders/cancelled` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned cancelled-order projection |
 | sanitizer | `sanitizer:refunds/create` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned refund projection |
+| sanitizer | `sanitizer:orders/edited` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Identity-only orders/edited projection |
+| sanitizer | `sanitizer:orders/delete` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Identity-only orders/delete projection |
+| sanitizer | `sanitizer:order_transactions/create` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Identity-only order_transactions/create projection; strips payment_details |
 | sanitizer | `sanitizer:inventory_levels/update` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned inventory projection |
 | sanitizer | `sanitizer:catalog-facts` | `app/sync/sanitize.server.ts` | `sanitizeCatalogIdentityProjection` | Identity and signal metadata only for PR5 resource topics |
 | sanitizer | `sanitizer:app/uninstalled` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Identity/control metadata only |

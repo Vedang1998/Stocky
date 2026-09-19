@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import {
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -23,21 +24,26 @@ import { afterEach, describe, expect, it } from "vitest";
 import { B_TYPED_READ_CONTRACT_PIN } from "./pr6-c-b-compat-mapper";
 import {
   ACCEPTED_B_ADMIN_READ_TREE,
+  DISPOSABLE_GIT_ROOT_RM_MAX_ATTEMPTS,
   TRACKED_ADMIN_READ_PREFIX,
   TrackedAdminReadPresentError,
   UnownedAdminReadPathError,
   archiveAcceptedBAdminRead,
   captureAdminReadWorkingTree,
   defaultPinOverlayEnv,
+  disposableFixtureGitArgs,
   ensureGitCommit,
   ensurePinnedBCommit,
   gitCommitAvailable,
   listGitWorktreePaths,
   listTrackedAdminReadPaths,
   materializePinnedBAdminReadOverlay,
+  pathExistsIncludingDanglingSymlink,
   prepareBAdminReadForCTests,
   productionAdminReadExists,
   removePinnedBAdminReadOverlay,
+  removeRegisteredDisposableGitRoot,
+  removeRegisteredDisposableGitRoots,
   type AdminReadWorkingTreeEvidence,
   type PinOverlayEnv,
 } from "./pr6-c-b-pin-overlay";
@@ -58,22 +64,43 @@ afterEach(() => {
       // already gone or unowned
     }
   }
-  for (const root of disposableGitRoots.splice(0)) {
-    rmSync(root, { recursive: true, force: true });
-  }
+  const gitRoots = disposableGitRoots.splice(0);
+  removeRegisteredDisposableGitRoots(gitRoots);
 });
 
 function git(args: string[], cwd: string): Buffer {
-  return execFileSync("git", args, {
+  const invocation =
+    path.resolve(cwd) === path.resolve(REPO_ROOT)
+      ? args
+      : disposableFixtureGitArgs(args);
+  return execFileSync("git", invocation, {
     cwd,
     env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
     maxBuffer: 32 * 1024 * 1024,
   });
 }
 
+function registerDisposableGitRoot(root: string): string {
+  const resolved = path.resolve(root);
+  disposableGitRoots.push(resolved);
+  return resolved;
+}
+
+function unregisterDisposableGitRoot(root: string): void {
+  const resolved = path.resolve(root);
+  for (let i = disposableGitRoots.length - 1; i >= 0; i -= 1) {
+    if (path.resolve(disposableGitRoots[i]) === resolved) {
+      disposableGitRoots.splice(i, 1);
+    }
+  }
+}
+
 function initTempRepo(): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "pr6-c-overlay-repo-"));
+  registerDisposableGitRoot(root);
   git(["init", "-b", "main"], root);
+  git(["config", "gc.auto", "0"], root);
+  git(["config", "maintenance.auto", "false"], root);
   git(["config", "user.email", "pr6-c-overlay@example.test"], root);
   git(["config", "user.name", "pr6-c-overlay"], root);
   return root;
@@ -107,11 +134,27 @@ function isolatedTrackedBEnv(): PinOverlayEnv {
 /** Depth-1 clone of current HEAD only. Does not contain unrelated B SHAs. */
 function isolatedShallowCCheckout(): string {
   const root = mkdtempSync(path.join(os.tmpdir(), "pr6-c-shallow-c-"));
-  disposableGitRoots.push(root);
+  registerDisposableGitRoot(root);
   git(["init", "-b", "main"], root);
+  git(["config", "gc.auto", "0"], root);
+  git(["config", "maintenance.auto", "false"], root);
   git(["remote", "add", "origin", REPO_ROOT], root);
   git(["fetch", "--depth=1", "origin", "HEAD"], root);
   return root;
+}
+
+function enoempty(target: string): NodeJS.ErrnoException {
+  const err = new Error(
+    `ENOTEMPTY: directory not empty, rmdir '${target}'`,
+  ) as NodeJS.ErrnoException;
+  err.code = "ENOTEMPTY";
+  return err;
+}
+
+function makeOwnedDummyRoot(): { root: string; registered: Set<string> } {
+  const root = mkdtempSync(path.join(os.tmpdir(), "pr6-c-disp-rm-"));
+  writeFileSync(path.join(root, "keep.txt"), "owned");
+  return { root, registered: new Set([path.resolve(root)]) };
 }
 
 function listOwnedScratchDirs(): string[] {
@@ -422,5 +465,206 @@ describe("PR6-C B-reader overlay isolation", () => {
     );
     expect(gitCommitAvailable(unknown, shallow)).toBe(false);
     expect(gitCommitAvailable(ACCEPTED_B_ADMIN_READ_TREE, shallow)).toBe(false);
+  });
+});
+
+describe("PR6-C disposable Git-fixture teardown", () => {
+  it("retries a transient ENOTEMPTY then proves the owned root is absent", () => {
+    const { root, registered } = makeOwnedDummyRoot();
+    let calls = 0;
+    removeRegisteredDisposableGitRoot(root, registered, {
+      delay: () => {},
+      removeDirectory: (target) => {
+        calls += 1;
+        if (calls === 1) throw enoempty(target);
+        rmSync(target, { recursive: true, force: true });
+      },
+    });
+    expect(calls).toBe(2);
+    expect(pathExistsIncludingDanglingSymlink(root)).toBe(false);
+  });
+
+  it("fails teardown after the retry limit for persistent ENOTEMPTY", () => {
+    const { root, registered } = makeOwnedDummyRoot();
+    let calls = 0;
+    try {
+      expect(() =>
+        removeRegisteredDisposableGitRoot(root, registered, {
+          delay: () => {},
+          removeDirectory: (target) => {
+            calls += 1;
+            throw enoempty(target);
+          },
+        }),
+      ).toThrow(/ENOTEMPTY/);
+      expect(calls).toBe(DISPOSABLE_GIT_ROOT_RM_MAX_ATTEMPTS);
+      expect(existsSync(root)).toBe(true);
+      expect(readFileSync(path.join(root, "keep.txt"), "utf8")).toBe("owned");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("propagates unexpected removal errors without retrying", () => {
+    const { root, registered } = makeOwnedDummyRoot();
+    let calls = 0;
+    try {
+      expect(() =>
+        removeRegisteredDisposableGitRoot(root, registered, {
+          delay: () => {},
+          removeDirectory: () => {
+            calls += 1;
+            const err = new Error("EIO: unexpected i/o") as NodeJS.ErrnoException;
+            err.code = "EIO";
+            throw err;
+          },
+        }),
+      ).toThrow(/EIO/);
+      expect(calls).toBe(1);
+      expect(existsSync(root)).toBe(true);
+      expect(readFileSync(path.join(root, "keep.txt"), "utf8")).toBe("owned");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("treats an already-removed owned root as success", () => {
+    const { root, registered } = makeOwnedDummyRoot();
+    rmSync(root, { recursive: true, force: true });
+    let calls = 0;
+    removeRegisteredDisposableGitRoot(root, registered, {
+      removeDirectory: () => {
+        calls += 1;
+        throw new Error("should not remove a missing owned root");
+      },
+    });
+    expect(calls).toBe(0);
+    expect(pathExistsIncludingDanglingSymlink(root)).toBe(false);
+  });
+
+  it("refuses an unowned path even when the filename prefix matches", () => {
+    const owned = makeOwnedDummyRoot();
+    const unowned = mkdtempSync(path.join(os.tmpdir(), "pr6-c-shallow-c-"));
+    writeFileSync(path.join(unowned, "keep.txt"), "unowned");
+    try {
+      expect(() =>
+        removeRegisteredDisposableGitRoot(unowned, owned.registered),
+      ).toThrow(UnownedAdminReadPathError);
+      expect(readFileSync(path.join(unowned, "keep.txt"), "utf8")).toBe(
+        "unowned",
+      );
+      expect(existsSync(owned.root)).toBe(true);
+    } finally {
+      rmSync(unowned, { recursive: true, force: true });
+      rmSync(owned.root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses a symlink root and does not follow it", () => {
+    const real = mkdtempSync(path.join(os.tmpdir(), "pr6-c-disp-real-"));
+    writeFileSync(path.join(real, "keep.txt"), "real");
+    const linkParent = mkdtempSync(path.join(os.tmpdir(), "pr6-c-disp-linkp-"));
+    const link = path.join(linkParent, "link");
+    symlinkSync(real, link);
+    try {
+      expect(() =>
+        removeRegisteredDisposableGitRoot(link, new Set([path.resolve(link)])),
+      ).toThrow(UnownedAdminReadPathError);
+      expect(readFileSync(path.join(real, "keep.txt"), "utf8")).toBe("real");
+      expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    } finally {
+      rmSync(linkParent, { recursive: true, force: true });
+      rmSync(real, { recursive: true, force: true });
+    }
+  });
+
+  it("fails a single transient ENOTEMPTY when bounded retry is disabled", () => {
+    const { root, registered } = makeOwnedDummyRoot();
+    let calls = 0;
+    try {
+      expect(() =>
+        removeRegisteredDisposableGitRoot(root, registered, {
+          maxAttempts: 1,
+          delay: () => {},
+          removeDirectory: (target) => {
+            calls += 1;
+            throw enoempty(target);
+          },
+        }),
+      ).toThrow(/ENOTEMPTY/);
+      expect(calls).toBe(1);
+      expect(existsSync(root)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("attempts every registered root and still reports a persistent failure", () => {
+    const first = makeOwnedDummyRoot();
+    const second = makeOwnedDummyRoot();
+    const seen: string[] = [];
+    try {
+      expect(() =>
+        removeRegisteredDisposableGitRoots([first.root, second.root], {
+          delay: () => {},
+          removeDirectory: (target) => {
+            seen.push(path.resolve(target));
+            if (path.resolve(target) === path.resolve(first.root)) {
+              throw enoempty(target);
+            }
+            rmSync(target, { recursive: true, force: true });
+          },
+        }),
+      ).toThrow(/ENOTEMPTY/);
+      expect(existsSync(first.root)).toBe(true);
+      expect(pathExistsIncludingDanglingSymlink(second.root)).toBe(false);
+      expect(seen).toContain(path.resolve(second.root));
+    } finally {
+      rmSync(first.root, { recursive: true, force: true });
+      if (existsSync(second.root)) {
+        rmSync(second.root, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("deletes an owned dummy root through the default remover", () => {
+    const { root, registered } = makeOwnedDummyRoot();
+    removeRegisteredDisposableGitRoot(root, registered, { delay: () => {} });
+    expect(pathExistsIncludingDanglingSymlink(root)).toBe(false);
+  });
+
+  it("cleans a real shallow fixture through the registered-root helper", () => {
+    const shallow = isolatedShallowCCheckout();
+    expect(existsSync(path.join(shallow, ".git"))).toBe(true);
+    removeRegisteredDisposableGitRoot(
+      shallow,
+      new Set([path.resolve(shallow)]),
+    );
+    unregisterDisposableGitRoot(shallow);
+    expect(pathExistsIncludingDanglingSymlink(shallow)).toBe(false);
+  });
+
+  it("fixture git args suppress auto-maintenance per invocation, not globally", () => {
+    expect(
+      disposableFixtureGitArgs(["fetch", "--depth=1", "origin", "HEAD"]),
+    ).toEqual([
+      "-c",
+      "gc.auto=0",
+      "-c",
+      "maintenance.auto=false",
+      "fetch",
+      "--no-auto-maintenance",
+      "--depth=1",
+      "origin",
+      "HEAD",
+    ]);
+    expect(disposableFixtureGitArgs(["status", "--porcelain"])).toEqual([
+      "-c",
+      "gc.auto=0",
+      "-c",
+      "maintenance.auto=false",
+      "status",
+      "--porcelain",
+    ]);
   });
 });
