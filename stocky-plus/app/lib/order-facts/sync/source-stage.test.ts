@@ -9,12 +9,12 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { spawn } from "node:child_process";
+import { spawn as spawnProcess, type ChildProcess } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { OrderFactsJsonlError } from "./errors";
 import {
   createOwnedScratchDir,
@@ -55,6 +55,26 @@ const QUOTA_CHILD = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
   "source-stage-quota-child.ts",
 );
+
+const trackedScratchChildren: ChildProcess[] = [];
+
+function spawn(...args: Parameters<typeof spawnProcess>): ChildProcess {
+  const child = spawnProcess(...args);
+  trackedScratchChildren.push(child);
+  child.once("exit", () => {
+    const index = trackedScratchChildren.indexOf(child);
+    if (index >= 0) trackedScratchChildren.splice(index, 1);
+  });
+  return child;
+}
+
+afterEach(() => {
+  delete process.env.PR6_D_QUOTA_FAIL_SAVE;
+  delete process.env.PR6_D_QUOTA_CRASH;
+  for (const child of trackedScratchChildren.splice(0)) {
+    child.kill("SIGKILL");
+  }
+});
 
 function scratchRoot(): string {
   return path.join(

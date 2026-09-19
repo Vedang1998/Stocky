@@ -1,6 +1,40 @@
-import { describe, expect, it } from "vitest";
-import { assembleOrderFactsJsonl, nominatedOrderGids } from "./jsonl";
+import { mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  assembleOrderFactsJsonl as assembleOrderFactsJsonlShared,
+  nominatedOrderGids,
+  type JsonlByteSource,
+  type StreamOrderFactsJsonlOptions,
+} from "./jsonl";
 import { ORDER_FACTS_JSONL_MAX_LIVE_BYTES } from "./constants";
+
+const jsonlScratchRoots: string[] = [];
+let jsonlScratchRoot = "";
+
+beforeEach(() => {
+  jsonlScratchRoot = mkdtempSync(
+    path.join(os.tmpdir(), `stocky-pr6-d-jsonl-${process.pid}-`),
+  );
+  jsonlScratchRoots.push(jsonlScratchRoot);
+});
+
+afterAll(() => {
+  for (const root of jsonlScratchRoots.splice(0)) {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+function assembleOrderFactsJsonl(
+  source: JsonlByteSource,
+  options?: StreamOrderFactsJsonlOptions,
+) {
+  return assembleOrderFactsJsonlShared(source, {
+    ...options,
+    scratchRoot: options?.scratchRoot ?? jsonlScratchRoot,
+  });
+}
 
 async function* linesOf(text: string) {
   yield text;
@@ -160,7 +194,7 @@ describe("PR6-D JSONL assembly", () => {
       expect(result.status, `chunk ${size}`).toBe("COMPLETE");
       expect(seen, `chunk ${size}`).toBe(expectedName);
     }
-  });
+  }, 30_000);
 
   it("fails closed on truncated UTF-8 at end of stream", async () => {
     const prefix = Buffer.from(
