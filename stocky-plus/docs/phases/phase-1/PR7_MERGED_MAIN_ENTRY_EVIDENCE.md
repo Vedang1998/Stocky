@@ -338,29 +338,49 @@ Default `redis-server` service remains stopped. Probe scripts remain under `/tmp
 
 ## 10. Docs CI / classification
 
-Local (pre-push, this working tree; GitHub exact-head filled after PR):
+Local (commit `448a20fa0bc649df9c47866cbdff1d74055c15f6`, base **W** `ee193f38491245a10fb2fa60d2cf9a29f3271605`):
 
 ```text
-$ bash .github/scripts/classify-ci-change-set.sh --paths \
-    stocky-plus/docs/phases/phase-1/PR7_MERGED_MAIN_ENTRY_EVIDENCE.md \
-    stocky-plus/docs/phases/phase-1/PR7_IMPLEMENTATION_HANDOFF.md
+$ bash .github/scripts/classify-ci-change-set.sh --from-git \
+    ee193f38491245a10fb2fa60d2cf9a29f3271605 \
+    448a20fa0bc649df9c47866cbdff1d74055c15f6
+compare_base=ee193f38491245a10fb2fa60d2cf9a29f3271605
+compare_head=448a20fa0bc649df9c47866cbdff1d74055c15f6
+range_usable=true
 changed_path_count=2
-changed_path [docs] stocky-plus/docs/phases/phase-1/PR7_MERGED_MAIN_ENTRY_EVIDENCE.md
 changed_path [docs] stocky-plus/docs/phases/phase-1/PR7_IMPLEMENTATION_HANDOFF.md
+changed_path [docs] stocky-plus/docs/phases/phase-1/PR7_MERGED_MAIN_ENTRY_EVIDENCE.md
 classification_reason=every_changed_path_is_docs_allowlist
 docs_only=true
 full_ci=false
 
 $ bash .github/scripts/classify-ci-change-set.sh --eval-gate success skipped false true
 gate_result=SUCCESS docs_only_classify_succeeded
+
+$ bash .github/scripts/classify-ci-change-set.test.sh
+assertions=40 pass=40 fail=0
 ```
 
 Negative control (not this PR’s tree): the same two docs plus `stocky-plus/app/shopify.server.ts` classifies `docs_only=false` / `full_ci=true`.
 
-Required GitHub exact-head `pull_request` evidence (after push): Classify **SUCCESS** / Heavy **SKIPPED** / CI Gate **SUCCESS**. No `workflow_dispatch`. Two-path docs-only scope only:
+Exact-head GitHub `pull_request` run for **that** evidence commit (not a later recording SHA):
+
+| Field | Value |
+|---|---|
+| PR | [#48](https://github.com/Vedang1998/Stocky/pull/48) (DRAFT) |
+| Event | `pull_request` (no `workflow_dispatch`) |
+| Run | [35480755990](https://github.com/Vedang1998/Stocky/actions/runs/35480755990) |
+| `head_sha` | `448a20fa0bc649df9c47866cbdff1d74055c15f6` (matched live PR head at that run) |
+| Classify | **SUCCESS** (`docs_only=true`, `full_ci=false`, `changed_path_count=2`) |
+| Heavy validate | **SKIPPED** |
+| CI Gate | **SUCCESS** (`CI Gate SUCCESS: docs-only classify succeeded`) |
+
+Two-path docs-only scope only:
 
 1. `stocky-plus/docs/phases/phase-1/PR7_MERGED_MAIN_ENTRY_EVIDENCE.md`
 2. `stocky-plus/docs/phases/phase-1/PR7_IMPLEMENTATION_HANDOFF.md`
+
+A later commit that only records this table is **not** SHA `448a20f`. Its own exact-head run must still be Classify SUCCESS / Heavy SKIPPED / Gate SUCCESS before anyone treats that later HEAD as the CI identity.
 
 ## 11. Later integration prerequisites (do not wait)
 
