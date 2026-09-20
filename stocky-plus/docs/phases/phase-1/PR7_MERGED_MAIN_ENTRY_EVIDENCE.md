@@ -63,9 +63,9 @@ Inventory `PREP-C-*` IDs in this packet follow **Helper C** (`HELPER_C_REPORT.md
 | A | `/tmp/pr7-helper-outputs/A/probe-results.json` (mocked token-exchange only) | `9ee6476584946a5f8cced9e73182f6dd8cc008988915d697360faa041bcd3308` |
 | B | `/tmp/pr7-helper-outputs/B/results/00-isolation.json` (16379 pid 4169, porcelain 0) | `207b4af50195182af46899e498bb400bf8c7ca6c55fd6715a472f6fcdacdf7b6` |
 | B | `/tmp/pr7-helper-outputs/B/results/01-bullmq.json` (real BullMQ on 16379) | `5c7204ffcbc01209b94ec020cdf5fe8f6a4e5c10c6c9e956b3c644e7ccff0f2a` |
-| B | `/tmp/pr7-helper-outputs/B/results/01b-inflight-cancel.json` | `227193ac78d65a863e2df36d2c4a8a45fe50efc7a9dd64f32974cf5c4b6bc790` |
+| B | `/tmp/pr7-helper-outputs/B/results/01b-inflight-cancel.json` (active locked `Job.remove`) | `5a846a8c1bdd3e1b62abffc3ef8adcf817d565828a1273e01a430d2cb3067416` |
 | B | `/tmp/pr7-helper-outputs/B/results/02-dscratch.json` | `ba1b2b3503e38d2d891dbb3876ec306ab5837a12efcaaa381ae19efaff51a5fe` |
-| B | `/tmp/pr7-helper-outputs/B/results/03-synthetic.json` | `67fb0fe7a4e374a7f7b23dd2464bb31a37d9bed4bccd6b16d41b5c0cf1459e5f` |
+| B | `/tmp/pr7-helper-outputs/B/results/99-teardown.json` (killed PID **9143**) | `032ad3ab5fdd452d919c35f2f01a1ed174346301fb2627a29fa3ec0873819684` |
 | C | `/tmp/pr7-helper-outputs/C/WRITER_INVENTORY.json` (86 rows: unchanged 32, misnamed 4, behavior_change 4, v_omitted 22, w_only 23, missing 1) | `f7f09cde84067c09675bac8f0ce14d130b520bc9bf5d369fd15a23eb4ab8c7f0` |
 
 Helpers did not commit. Their worktrees stayed detached at **W**.
@@ -240,13 +240,15 @@ Helper B additionally ran **real** BullMQ workers on **16379** (not coordinator 
 | Helper B case | Counterexample |
 |---|---|
 | PREP_B_05 TTL hint | hint TTL → 0 while worker still ticking |
-| PREP_B_06 `Job.remove()` | inspect → MISSING; already-started worker can still write (this run: 0 post-remove ticks, but process stayed alive — cancel ≠ drain) |
+| PREP_B_06 `Job.remove()` (waiting) | **inconclusive** (empty write log / stale `.started`); **do not** treat as drain proof |
+| PREP_B_06b `Job.remove()` of **active** job | throws `locked by another worker`; presence stays `RUNNABLE_EXISTING`/`active`; **11 FS ticks after**; worker PID **9234** still alive. Log SHA-256 `4f22ff2bd905420222de0001d17bb06563d2d933a9eca09879eb1fdec85c1df0`. **Authoritative cancel-is-not-drain.** |
 | PREP_B_07 decoy PID | killed decoy; real worker + Redis `active` job remained |
 | PREP_B_08 SIGKILL worker | leftover file 348 bytes; Redis job still `RUNNABLE_EXISTING`/`active`. **Not** power-loss |
-| PREP_B_09 late publication | in-memory cancel label with `redisRemoved=false`; delayed job stayed runnable |
+| PREP_B_09 / 09b late publication | in-memory cancel label with `redisRemoved=false`; delayed job stayed `RUNNABLE_EXISTING` |
 | PREP_B_10 stale generation | SYNTHETIC `fence=ERASING` on payload; W-shaped worker (`CHECK_GENERATION_FENCE=0`) still ticked |
 | PREP_B_11 positive drain | Worker finished + `.done` file + terminal `completed` — the **only** Redis success shape that counts |
 | PREP_B_12 | W uninstall/dispatcher/webhook **do not** call `Queue.remove`; PG CANCELLED ≠ Redis remove |
+| PREP_B_19 | second process with `quiescenceConfirmed: true` **deleted** live child PID **7164** `att-*` (`dir_exists_after_foreign_reclaim: false`). W `live_writer` skip is **process-local**. The boolean is an operator token, not liveness. |
 
 SYNTHETIC coordinator (`03-synthetic.json`): poll recovers a lost Redis hint (PREP_B_22); stale enumerator leaves keys unchanged (PREP_B_23); unconfigured export is `export_storage_unconfigured` (PREP_B_24); EACCES keeps incomplete (PREP_B_25); **export writer that snapshots fence=LIVE then publishes after ERASING still lands a file** (PREP_B_26) unless it re-reads under the publication lock (PREP_B_27). SYNTHETIC ≠ installed fence.
 
@@ -262,8 +264,8 @@ Proposed PR7 coordinator (plan §7.6.5 Decision B) is **not** a `DurableJob`. Op
 **Minimal viable contract before `COMPLETED` (implementation, not this PR):**
 
 1. Domain / customer-target PG gates as constrained in PR45 §7.6.2 (cooperative; uninstrumented writers must be drained first).
-2. Positive drain **or** stale-generation fence for Redis jobs of that shop/generation (API absent on W — PREP-C-11).
-3. D scratch: occupancy `operatorInterventionRequired=false` **and** no unknown attempts **or** incomplete/visible request (D accepted recovery boundary).
+2. Positive drain **or** stale-generation fence for Redis jobs of that shop/generation (API absent on W — PREP-C-11). Active/locked jobs **cannot** be `Job.remove`d (PREP-B-06b).
+3. D scratch: occupancy `operatorInterventionRequired=false` **and** no unknown attempts **or** incomplete/visible request (D accepted recovery boundary). `quiescenceConfirmed` is **not** cross-process liveness (PREP-B-19); runbook §1 remains mandatory.
 4. Export/object storage: if unconfigured, treat as **no durable export bytes** with an explicit recorded dependency; if configured later, generation-fence or positive delete with residual proof. Do not invent a provider test (PREP-B-06).
 5. Never FLUSHALL. Never blanket `/tmp` delete.
 
@@ -319,7 +321,7 @@ Bounded C tests: only the scratch-quota / source-stage name-filter runs in §5.3
 
 ## 7. Counterexamples (do not treat as green quiescence)
 
-1. BullMQ `remove()` while a file publication exists (PREP-B-01).
+1. BullMQ `remove()` while a file publication exists (PREP-B-01) **or** while the job is `active`/`locked` (PREP-B-06b: 11 ticks after a thrown remove).
 2. Redis TTL still > 0 (PREP-B-02).
 3. Stale-generation job still in Redis (PREP-B-03).
 4. `processingEnabled` re-check on dispatcher after claim — still writes `JobDispatch` / `DurableJob` (W ~1373–1390).
@@ -328,6 +330,7 @@ Bounded C tests: only the scratch-quota / source-stage name-filter runs in §5.3
 7. Zero RLS-visible rows ≠ absence (plan; not re-probed here).
 8. Adjacent wide JWT `sub` values causing **cross-user online session + token reuse** (Helper A PREP-A-09 / `mixedToken: true`).
 9. Returning a cached online session without re-checking `associated_user.id` against current `sub` (Helper A PREP-A-11).
+10. `reclaimOperatorSelectedDScratch({ quiescenceConfirmed: true })` from another process deleting a still-live child’s `att-*` (PREP-B-19).
 
 ## 8. Unexecuted limits
 
@@ -345,7 +348,8 @@ Bounded C tests: only the scratch-quota / source-stage name-filter runs in §5.3
 |---|---|---|
 | Coordinator Redis 16380 pid 4966 | `SIGTERM` then confirm dead | `redis-cli -p 16380` connection refused; probe rec `redis pid terminated` pass |
 | Coordinator scratch `/tmp/pr7-coordinator/scratch` | disposable; not `/workspace` | left in `/tmp` only |
-| Helper B Redis 16379 pid 4169 | `kill -TERM 4169` after helper artifacts copied (exact PID; not `pkill`) | `/proc/4169` gone; `redis-cli -h 127.0.0.1 -p 16379 ping` → connection refused; 6379 still refused |
+| Helper B isolation Redis 16379 pid **4169** | coordinator `kill -TERM 4169` at 01:10:05 **during** Helper B’s locked `Job.remove` (not B teardown) | Redis log `User requested shutdown`; `/proc/4169` gone |
+| Helper B restarted Redis 16379 pid **9143** | Helper B teardown `kill -TERM 9143` (exact PID) | `99-teardown.json`; 16379 and 6379 connection refused; no leftover workers; FLUSHALL not executed |
 | Helper worktrees `/tmp/pr7-helpers/{A,B,C}` | left detached at W; **no** git write | `git rev-parse HEAD` = `ee193f3…` |
 | `/workspace` during probes | no runtime/lockfile edits | `git status --porcelain` empty until these two docs |
 | Application `shopify.server.ts` | unchanged | hash `21b881203e64f30811708fd87cb935eff371a5f79b4c114c7b516c5c4f429b58` |

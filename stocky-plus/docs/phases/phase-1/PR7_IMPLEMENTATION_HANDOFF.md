@@ -23,14 +23,14 @@ Do **not** start PR7 runtime until every row is closed by ChatGPT (or explicitly
 | **D-PR7-07** | Gate merchandising? | **No** | frozen | Frozen **No** |
 | **D-PR7-08** | Audit vs redact | Append-only runtime; restricted DELETE; Q-008 | unchanged | Yes |
 | **D-PR7-09** | Pause | Privacy-local default OFF | unchanged | Frozen home |
-| **D-PR7-10** | Redis / coordinator | Not DurableJob; optional Redis hint; poll recovers; no FLUSHALL | **PREP-B-01…07 executed.** Completeness cannot use cancel/TTL/PID. Generation-fenced Redis API **absent** on W. | **Yes** |
+| **D-PR7-10** | Redis / coordinator | Not DurableJob; optional Redis hint; poll recovers; no FLUSHALL | Completeness cannot use cancel/TTL/PID. **PREP-B-06b:** `Job.remove` of an **active** job throws locked and the worker keeps writing. Generation-fenced Redis API **absent** on W. | **Yes** |
 | **D-PR7-11** | Delete Shop? | Checked finalizer | not re-probed | Yes |
 | **D-PR7-12** | Revoke mid-job | `stocky_authz_lock` + SELECT-only verifier; stable `commandId` | W `replayDeadLetter` still a single CP `$transaction` (FACT V/W) | Yes |
 | **D-PR7-13** | DB roles | Per-topic reader/erasure; complete grants | not installed | Yes |
 | **D-PR7-14** | data_request | Distinct owner download | W export is HTTP CSV only | Align before runtime |
 | **Q-008** | Retention | OPEN; legal review required | unchanged | **Production** blocker |
 | Plan residual 2 | `X-Shopify-Event-Id` on compliance | nullable handling | **UNVERIFIED** | Implementation proof |
-| Plan residual 3 | D scratch reclaim API after D merge | infeasible → named follow-up | **API exists on W** (`reclaimOperatorSelectedDScratch` + occupancy). Not a privacy fence. | Implementation must still refuse COMPLETED while occupancy uncertain |
+| Plan residual 3 | D scratch reclaim API after D merge | infeasible → named follow-up | **API exists on W**. **PREP-B-19:** `quiescenceConfirmed: true` from another process deleted a live child’s `att-*` (process-local `live_writer`). Occupancy still required. | Implementation must still refuse COMPLETED while occupancy uncertain; do not treat the boolean as liveness |
 | **PR45 acceptance** | Plan + matrix after Claude re-review | no unresolved P0/P1/P2 | PR45 still OPEN/DRAFT | **Yes** |
 | **PR47 / §10.3** | Formal PR6 closure on merged main | ChatGPT/owner | PR47 `fde01dc5…` unmerged | Recorded prerequisite; this lane did not wait |
 | **Runtime sentence** | Explicit ChatGPT authority | plan §10.6 | **not issued** | **Yes** |
@@ -183,8 +183,9 @@ Do **not** create those branches in this evidence lane.
 
 Reuse PR45 fixtures FXT-* (shops A/B, two customers, LIVE vs shop-erasure). Add W-specific:
 
-- FXT-D-SCRATCH: owned `att-*` vs symlink vs foreign vs live_writer (already in `source-stage.test.ts`)
+- FXT-D-SCRATCH: owned `att-*` vs symlink vs foreign vs live_writer (already in `source-stage.test.ts`); include **cross-process** `quiescenceConfirmed` deleting a live child’s `att-*` (PREP-B-19)
 - FXT-REDIS-STALE-GEN: job for generation N-1 after N current (SYNTHETIC until remove API exists)
+- FXT-REDIS-ACTIVE-LOCKED: `Job.remove` of an `active` job must not count as drain (PREP-B-06b)
 - FXT-HEALTH-UPSERT: `computeSyncHealth` during ERASING must not look “read-only”
 - FXT-DISABLED-DISPATCH: existing dispatcher disabled-shop path
 - FXT-UNSAFE-USER-ID: `associated_user.id` `9007199254740993` vs `sub` string; include B-then-A `mixedToken` reuse and stale cached `associated_user.id` vs current `sub`
