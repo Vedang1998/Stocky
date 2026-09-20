@@ -9,12 +9,13 @@ Immutable independent reviews (byte-for-byte; do not edit):
 - `stocky-plus/docs/phases/phase-1/PR7_CORRECTED_PLANNING_INDEPENDENT_REVIEW.md` (blob `c1fa5c2fed74bf80d1006267b43d767258895c17`)
 - `stocky-plus/docs/phases/phase-1/PR7_EXECUTABLE_CONTRACT_CORRECTION_INDEPENDENT_REVIEW.md` (blob `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`)
 - `stocky-plus/docs/phases/phase-1/PR7_TOPIC_AUTHORITY_FINALIZATION_INDEPENDENT_REVIEW.md` (blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c`)
+- `stocky-plus/docs/phases/phase-1/PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `e908770d9daea4f963b2fd09e38af79e07274d41`)
 
 These rows are **test-executable in specificity**. They are documentation. They are **not** passing CI on a runtime implementation.
 
 Fixture **values** are **synthetic**. Documented Shopify payload **field names** are not synthetic. No merchant or customer production data.
 
-ChatGPT’s 2026-09-18 topic-authority comment 5729229659 is current for Decisions A–E and supersedes conflicting expected outcomes from comment 5714629032 **only as stated**. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) narrowly supplements it for **F-CLAUDE-PR7TF-01…04**. They do **not** accept the whole plan or authorize PR7 runtime.
+ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains current for Decisions A–E. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) remains the customer-completion/epoch supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) is current for **Decision CC-GEN**, **F-CLAUDE-PR7CC-01…04**, merged-**W** writer refresh, and PR48-informed authentication / Redis / D-scratch entry constraints. None of those comments accept the whole plan or authorize PR7 runtime.
 
 Original fixture and row IDs are preserved. New IDs continue existing prefixes. Designed fixtures are **not** passing processors.
 
@@ -282,7 +283,7 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-ACT-001 | brief actor; PR2 contract | Shop A exists; admin session shop=A | `requireAdminTenant` | `tenant.shopId=shop_a` | using query `shop=B` | existing assertion `"verified Shop A resolves to Shop A authority"` | `authority.test.ts` | PR2 (preserve) | **present-on-V-not-executed** (Postgres blocked this session) |
 | PR7-ACT-002 | client shop cannot create authority | Shop A+B | query/header/JSON/form `shop=B` | `client_shop_conflict` | tenant B | existing | `authority.test.ts` | PR2 | **present-on-V-not-executed** |
 | PR7-ACT-003 | D-PR7-01 | verified `sessionToken.sub="548380009"` | platform action | actor = that **exact** digit string | body `actorId`; `Session.userId`; `String(associated_user.id)` | new | `app/rbac/actor.test.ts` | PR7 | designed |
-| PR7-ACT-004 | D-PR7-01/02 | offline-only session; library may lack `sub` | platform action | actor from `sub` **if** installed library binds it under `useOnlineTokens: true`; else fail closed. **Not** owner. | inventing actor or `shop_owner` from examples | new; **prove library fields at implementation** | `app/rbac/actor.test.ts` | PR7 | designed |
+| PR7-ACT-004 | D-PR7-01/02 | offline-only / online-tokens-OFF session | platform action | actor from verified JWT `sub` **string** when the installed library binds it (Helper A **PREP-A-01** with `useOnlineTokens: false`). **Not** owner. Online tokens are **not** required for actor identity | inventing actor or `shop_owner`; enabling online tokens merely to obtain `sub` | new; **prove library fields at implementation**; live bind remains **UNVERIFIED** | `app/rbac/actor.test.ts` | PR7 | designed |
 | PR7-ACT-005 | D-PR7-01 | neither online user nor `sub` | `platform.replay.execute` | deny + `AUTH_PLATFORM_DENIED` | silent owner fallback | new | `app/rbac/actor.test.ts` | PR7 | designed |
 | PR7-ACT-006 | forged role | assignment `unassigned` | JSON `{role:"shop_owner"}` | deny | grant | new | `app/rbac/require-permission.test.ts` | PR7 | designed |
 | PR7-ACT-007 | same external user id cross-shop | ownerA on A and ownerB same id on B | A request | only A assignments | reading B assignment | new | `app/rbac/assignment.test.ts` | PR7 | designed |
@@ -302,6 +303,8 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-ACT-021 | F-CLAUDE-PR7CP-05 | FXT-WIDE-OWNER-UNSUPPORTED | bootstrap owner proof | persist sub `9007199254740993`; `OWNER_PROOF_UNSUPPORTED`; `unassigned` | `shop_owner`; `String(associated_user.id)` as key | new | assignment.bootstrap.test.ts | PR7 | designed |
 | PR7-ACT-022 | F-CLAUDE-PR7CP-05 adjacent collision | two subs `9007199254740992` and `9007199254740993` | persist/compare | distinct actor rows | collapsing via Number | new | actor.test.ts | PR7 | designed |
 | PR7-ACT-023 | F-CLAUDE-PR7CP-05 mismatch/expiry | sub A; associated_user.id B; or expired session; or shop mismatch | platform / bootstrap | deny / `unassigned` | copying owner boolean onto unrelated sub | new | actor.test.ts | PR7 | designed |
+| PR7-ACT-024 | D-PR7-02 / PR48 mixedToken + stale-cache | Helper A **PREP-A-09** / NC-07 wide-id B then A (`mixedToken: true`); Helper A **PREP-A-11** / NC-09 stale cache (`associated_user.id=111`, **zero** token exchanges) | any online credential use or bootstrap/hook effect | per-user cache isolation and retained original actor binding **before** exchange/effects; reject mixed/stale; unknown stay `unassigned` | enabling current online-session path merely because it produces `associated_user`; after-the-fact actor check undoing an already used wrong token | FACT (PR48) synthetic probes — **not** this session; future implementation tests | `shopify.server.ts` adapter + session cache | PR7 | designed |
+| PR7-ACT-025 | D-PR7-01 dest/iss | signed token with mismatched `iss`/`dest` host | authenticate / exchange | app-code hostname agreement **before** effects (coordinator **PREP-A-04** `destMismatchRejectedByLibrary: false`) | assuming the installed library already rejects dest/iss mismatch | FACT (PR48) coordinator PREP-A-04 | app dest/iss check | PR7 | designed |
 
 ### 6.2 RBAC matrix
 
@@ -449,7 +452,7 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-CUST-011 | F-CLAUDE-PR7CP-08 split | `shop_admin` with `platform.export.operational` | GET data_request artifact | deny | serving privacy export as operational export | new | export vs privacy routes | PR7 | designed |
 | PR7-CUST-012 | F-CLAUDE-PR7CP-08 uninstalled | app uninstalled; no owner session possible | fulfill | operator `scripts/privacy/fulfill-data-request.ts` recorded support path | pretending in-app owner route is reachable; public URL | new | operator fulfill | PR7 | designed |
 | PR7-CUST-013 | F-CLAUDE-PR7CP-10 | authenticated `customers/redact` delivered | intake clock | handle **on arrival**; `deadlineAt=receivedAt+30d`; changelog 2026-03-23 is newer published Shopify send policy | local six-month wait; treating the older six-month page as an implementation pause | new | intake + pause tests | PR7 | designed |
-| PR7-CUST-014 | F-CLAUDE-PR7TF-01 barrier keys | LIVE shop_a; authenticated customer `191167` + order `1001` | `stocky_privacy_install_customer_barrier` | ACTIVE rows on shop/generation + `CUSTOMER_REST_ID`/`ORDER_LEGACY_ID` (not request-id-only) | request-id-only fence; whole-shop exclusive gate | G7 `customer_barrier_installs_target_keys` | barrier helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-014 | F-CLAUDE-PR7TF-01 barrier keys | LIVE shop_a; authenticated customer `191167` + order `1001` | `stocky_privacy_install_customer_barrier` | ACTIVE rows on **canonical domain** × `CUSTOMER_REST_ID`/`ORDER_LEGACY_ID`; generation is evidence (not the lock identity); not request-id-only | request-id-only fence; generation-guessed lock; whole-shop exclusive gate | G7 `customer_barrier_installs_target_keys` | barrier helper | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-015 | F-CLAUDE-PR7TF-01 matching writer | barrier ACTIVE | matching `stocky_customer_write_guard` / audit insert | `customer_target_erasing` deny | silent repopulate of the target | G7 `matching_writer_denied_while_barrier_active` | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-016 | F-CLAUDE-PR7TF-01 unrelated customer | barrier ACTIVE on customer A | write customer B / `of_a2` path | progress (row admitted) | whole-shop freeze | G7 `unrelated_customer_same_shop_progresses` | target lock keys | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-017 | F-CLAUDE-PR7TF-01 unrelated shop | barrier ACTIVE shop_a | write shop_b | progress | global lock / shop disable | G7 `unrelated_shop_progresses_during_customer_barrier` | domain+target keys | PR7 | executed-synthetic-pg16 |
@@ -460,6 +463,33 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-CUST-022 | F-CLAUDE-PR7TF-01 later legitimate write | COMPLETED | `payloadAdmittedAt ≥ completedAt` | allowed | lifetime suppression of that customer | G7 `legitimate_later_customer_data_allowed` | completed-target | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-023 | F-CLAUDE-PR7TF-01 coverage | enumerated `preq_dr` | `stocky_privacy_data_request_coverage` | snapshot key count + `enumerationComplete` at `publicationRevision` | using erasure-empty residual as download coverage | G7 `data_request_coverage_is_snapshot_not_empty_predicate` | coverage helper | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-024 | F-CLAUDE-PR7TF-01 no shop freeze | customer COMPLETED | inspect shop_a | fence `LIVE`; `processingEnabled=true` | exclusive domain freeze; disabling the shop | G7 `customer_request_completed_without_shop_freeze` | classifier | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-025 | CC-GEN / F-CLAUDE-PR7CC-01 lock identity | two LIVE generations `gen_a` then `gen_a_zz` (lexicographically greater); barrier ACTIVE on `gen_a` | matching `stocky_customer_write_guard` | `customer_target_erasing`; two-int lock `pr7-ctgt-v2:` + canonical domain × kind:value; lock **before** lookup | `ORDER BY id DESC`; latest-generation guess; empty SELECT before lock | G11 `cea_two_gen_matching_write_still_denied`; old CE-A | write_guard | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-026 | CC-GEN declared successor cannot bypass ACTIVE | barrier ACTIVE; declared origin `gen_a_zz` | matching write | deny `customer_target_erasing` | admitting because origin is the later LIVE row | G11 `cea_declared_successor_origin_cannot_bypass_active_barrier` | write_guard | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-027 | CC-GEN CE-B restore-denied | COMPLETED on `gen_a`; delayed payload with old origin after `gen_a_zz` exists | write | `customer_target_restore_denied` | admitting delayed pre-erasure payload because a newer generation row exists | G11 `ceb_two_gen_old_origin_still_restore_denied`; old CE-B | completed-target | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-028 | CC-GEN two LIVE undeclared origin | two LIVE bindings; no declared origin | write | `customer_write_origin_ambiguous` / `customer_target_attribution_ambiguous`; **not** admitted | guessing latest id | G11 `two_live_undeclared_origin_ambiguous_not_admitted` | origin helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-029 | CC-GEN queued before successor install | unique LIVE successor; `payloadAdmittedAt` < successor `installedAt` | write | `customer_target_restore_denied` | treating any new generation row as a fresh payload | G11 `queued_payload_before_successor_install_restore_denied` | completed-target | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-030 | CC-GEN genuine successor | unique LIVE origin ≠ completed gen; completed gen **not** LIVE; `payloadAdmittedAt >= origin.installedAt` | write | allowed | lifetime unexplained ban of the customer | G11 `genuine_successor_fresh_payload_allowed` | origin + completed-target | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-031 | CC-GEN missing origin | no declared origin and no unique LIVE binding | write | `customer_write_origin_missing` fail-closed | `ORDER BY id` fallback | G11 `missing_origin_fails_closed` | origin helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-032 | CC-GEN concurrent reinstall vs barrier | barrier install overlapping successor insert | both txns | matching write still denied; no generation-guess bypass | completing/admitting across the race | G11 `concurrent_reinstall_cannot_bypass_namespace_barrier` | exclusive target lock | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-033 | CC-GEN unrelated shop | namespace barrier on shop_a | write shop_b | progress | global freeze | G11 `other_shop_unrelated_to_namespace_progresses` | domain keys | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-034 | CC-GEN NEG resolver | restore `ORDER BY id DESC` / skip applicable-barrier check | CE-A fixture | **must fail this design** (matching write admitted) | crediting the unchanged contract | NEG `generation_guess_restored_defeats_barrier` | load-bearing | PR7 | executed-synthetic-pg16 |
+
+### 6.7.1 Residual own-guard (F-CLAUDE-PR7CC-02)
+
+| ID | Req | Pre-state | Action | Expected | Forbidden | Evidence | Home | Owner | Now |
+|---|---|---|---|---|---|---|---|---|---|
+| PR7-RESID-001 | CC-02 no GUC | remnants exist (`3`) | `stocky_privacy_customer_residual_count` with unset request GUC | `residual_request_guc_mismatch` `42501` — **not** `0` | silent zero treated as empty | G12 `residual_no_guc_raises_42501`; old CE-C | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-002 | CC-02 foreign request GUC | remnants exist | GUC = other shop's request | `42501` — **not** `0` | counting through mismatched GUC | G12 `residual_foreign_request_guc_raises_42501`; old CE-C | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-003 | CC-02 wrong tenant | remnants exist; request GUC matches | tenant GUC = shop_b | `42501` | RLS-filtered zero as success | G12 `residual_wrong_tenant_raises_42501` | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-004 | CC-02 stale attempt | remnants exist | expired/foreign attempt GUC | `42501` | depending on adjacent enumerator | G12 `residual_stale_attempt_raises_42501` | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-005 | CC-02 direct nonzero | full matching GUC/attempt/capability | direct call as erasure | count `3` | requiring enumerate first | G12 `residual_direct_nonzero_with_full_context` | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-006 | CC-02 genuine empty | owner BYPASSRLS deleted remnants | direct call with full context | count `0` | RLS-filtered DELETE credited as drain | G12 `residual_direct_genuine_empty` | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-007 | CC-02 CP EXECUTE | full context | CP calls residual | count returned | PUBLIC EXECUTE | G12 `residual_control_plane_execute_with_context` | grants | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-008 | CC-02 runtime denied | full context | runtime EXECUTE residual | `42501` | runtime residual principal | G12 `residual_runtime_execute_denied` | grants | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-009 | CC-02 reader denied | full context | reader EXECUTE residual | `42501` | reader residual principal | G12 `residual_reader_execute_denied` | grants | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-010 | CC-02 same-shop other request | remnants on `preq_cr` | GUC = other same-shop request | `42501` | sibling-request zero | G12 `residual_same_shop_other_request_guc_raises` | residual helper | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-011 | CC-02 NEG | drop residual GUC/capability guard | missing GUC | **must fail this design** (returns `0`) | crediting the unchanged contract | NEG `residual_guard_removed_returns_zero` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-RESID-012 | CC-02 historical qualification | old TF residual + complete | missing GUC on complete | complete still denied via enumerator; **not** a demonstrated live false-complete | relabelling CE-C as P1 false-complete | old CE-C `CE-C-complete-shielded-by-enumerate` | complete helper | PR7 | executed-synthetic-pg16 |
 
 ### 6.8 Side channels and isolation
 
@@ -493,9 +523,10 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | ID | Req | Pre-state | Action | Expected | Forbidden | Evidence | Home | Owner | Now |
 |---|---|---|---|---|---|---|---|---|---|
 | PR7-CI-001 | brief command | package.json | `npm run test:privacy` | script exists; nonzero tests; fail on zero collect | missing script | prior planning session **failed** as expected (exit 1, missing script) | package.json | PR7 runtime | **executed-prior-planning-head-not-re-run** (absence) |
-| PR7-CI-002 | CI policy | docs-only this planning PR (plan + matrix + **three** preserved reviews) | classify vs V | `docs_only=true`; `full_ci=false`; **five** Markdown paths | full_ci for docs-only; zero tests collected treated as success | classifier after land | classify script | this planning PR | designed until post-commit classify; then executed-this-planning-session |
+| PR7-CI-002 | CI policy | docs-only this planning PR (plan + matrix + **four** preserved reviews) | classify vs **W** | `docs_only=true`; `full_ci=false`; **six** Markdown paths | full_ci for docs-only; classifying vs historical V as this planning delta; zero tests collected treated as success | classifier after land vs `ee193f3…` | classify script | this planning PR | designed until post-commit classify; then executed-this-planning-session |
 | PR7-CI-003 | runtime PR | implementation diff | classify | `full_ci=true`; heavy includes privacy | docs-only on schema change | CI | workflow | PR7 runtime | designed |
 | PR7-CI-004 | F-CLAUDE-PR7TF-04 | disposable driver | query `server_version` / `server_version_num` | actual cluster version recorded; `results.json` class = run log | hardcoded postgres field; treating run-log hash as a verification artifact | G10 `postgres_version_queried_not_hardcoded` | driver | this planning PR | executed-synthetic-pg16 |
+| PR7-CI-005 | F-CLAUDE-PR7CC-04 | reproduction | `PROOF_ROOT` + `PGHOST`/`PGPORT`; stage `01_contract.sql` + `02_seed.sql` beside the driver | self-contained; sha256 of staged files match §14 | hardcoded `/tmp/pr45-tf`; hashing only a driver that cannot find SQL | G10 + §14 commands | driver | this planning PR | executed-synthetic-pg16 |
 
 ---
 
@@ -520,6 +551,9 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-TOP-015 | F-CLAUDE-PR7TF-01 source residual | late matching audit after enumerate | `stocky_privacy_customer_residual_count` | independent of old `PrivacyTargetKey`; remnant counted | manifest-filtered residual 0 | G7; old-model CE-1 | residual helper | PR7 | executed-synthetic-pg16 |
 | PR7-TOP-016 | F-CLAUDE-PR7TF-01 in-flight writer | writer holding shared target lock before barrier | install barrier then complete | in-flight write drains; later matching writes deny; no shop freeze | completing while a matching writer can still commit | G7 `writer_active_before_barrier_admission` | target locks | PR7 | executed-synthetic-pg16 |
 | PR7-TOP-017 | F-CLAUDE-PR7TF-01 NEG complete | drop residual/complete serialization | complete with remnant | **must fail this design** (false COMPLETED) | crediting the unchanged contract | NEG `completion_guard_removed_allows_false_complete` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-TOP-018 | CC-GEN namespace ACTIVE | ACTIVE barrier on `gen_a`; later LIVE `gen_a_zz` | matching write any origin | deny; examine **all** ACTIVE barriers in the canonical namespace | locking only the request's generation | G11 `cea_two_gen_matching_write_still_denied` | `pr7-ctgt-v2` | PR7 | executed-synthetic-pg16 |
+| PR7-TOP-019 | CC-GEN generation_writable | LIVE + ERASING coexistence in one canonical domain | `stocky_generation_writable` | frozen (fail-closed) | writable because a LIVE row still exists / `ORDER BY id` | G5 + G11 fixtures | lifecycle helper | PR7 | executed-synthetic-pg16 |
+| PR7-TOP-020 | CC-GEN no lexicographic resolver | adversarial id `gen_a_zz` > `gen_a` inserted later | origin resolver | unique LIVE/declared only; never `ORDER BY id` / latest timestamp | latest-created timestamp guess | G11 + NEG-4 | origin helper | PR7 | executed-synthetic-pg16 |
 
 ### 6.12 Privilege closure (F-CLAUDE-PR7XC-03)
 
@@ -585,6 +619,9 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-GATE-011 | F-CLAUDE-PR7TF-03 dispatcher disabled | `processingEnabled=false` | `stocky_dispatcher_disabled_shop_write` | still writes `JobDispatch` + `DurableJob`; processingEnabled ≠ drain | treating the disabled-shop re-check as quiescence | G9 `dispatcher_disabled_shop_path_still_writes` | dispatcher.server.ts | PR7 | executed-synthetic-pg16 |
 | PR7-GATE-012 | F-CLAUDE-PR7TF-03 unguarded probe | tenant-linked `probe_unguarded%` without guard | `stocky_detect_unguarded_cp_write` | architecture gate fails | optional wrapper; claiming inventory complete | G9 `inventory_gate_detects_unguarded_tenant_linked_write` | architecture test | PR7 | executed-synthetic-pg16 |
 | PR7-GATE-013 | F-CLAUDE-PR7TF-03 NEG writer gate | drop participating-write guard | freeze vs uninstrumented writer | **must fail this design** (writer skips freeze) | crediting the unchanged contract | NEG `writer_gate_removed_skips_freeze` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-014 | F-CLAUDE-PR7CC-03 W required symbols | W inventory loaded | omit `runOrderFactsSyncJob` or `computeSyncHealth` | `stocky_inventory_is_complete` false | treating family labels as completeness; copying PR48's 86-row count | G9 `inventory_incomplete_when_w_sync_job_removed`; `inventory_incomplete_when_health_upsert_removed` | ParticipatingWriterInventory | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-015 | F-CLAUDE-PR7CC-03 not-86 / historical label | catalog after contract load | `COUNT(*)` and delete historical `getShopHealth` | row count **≠ 86**; completeness remains true without that ABSENT export | completeness = 86; requiring the misnamed V label | G9 `inventory_row_count_is_not_pr48_86`; `completeness_not_tied_to_historical_getShopHealth_row` | inventory helper | PR7 | executed-synthetic-pg16 |
+| PR7-GATE-016 | PR48 Redis/scratch LIMIT | n/a | n/a | **unexecuted LIMIT** — `Job.remove` / TTL / PID / `quiescenceConfirmed` are **not** drain; do not auto-call W `reclaimOperatorSelectedDScratch` from PR7 (Helper B **PREP_B_19**) | certifying a missing cross-system fence from PG proofs | FACT (PR48) PREP-B-*; G5 LIMIT | D recovery boundary | PR7 | not executed |
 
 ## 7. Mapping to current V tests (do not relabel as PR7 complete)
 
@@ -610,8 +647,10 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | Full PRD buyer/receiver matrix | D-PR7-07 | platform matrix |
 | PR8 reconciliation engine | later PR | privacy residual emptiness |
 | Million-line D scratch in PR7 | belongs to D scale; include **unit** leftover probe if D merged | ignoring scratch if files exist on base |
-| Enabling `useOnlineTokens` in **this** planning PR | D-PR7-02 constrained for FUTURE implementation; not authorized here | proving actor id **and** owner proof (`associated_user.account_owner`) plus library bind tests |
-| Live **application** PostgreSQL/Redis suites (`test:db-isolation`, uninstall) in this planning environment | App services not the disposable proof cluster (**BLOCKED** as V suites) | Disposable PG 16 proofs **did** run (G1–G10 + NEG). Implementation must still execute live catalog tests on the app database |
+| Enabling `useOnlineTokens` in **this** planning PR | D-PR7-02: owner proof separately gated; mixedToken/stale-cache must be fenced first; not authorized here | proving actor id from JWT `sub` **without** requiring online tokens; later reviewed adapter + old-session migration |
+| Live Shopify / App Bridge ID-token bind | Helper A PREP-A-16 / coordinator PREP-A-07 **UNVERIFIED**; synthetic library probes are not live tokens | D-PR7-01 actor-string contract; dest/iss in **app** |
+| Redis / export / D-scratch drain | G5 LIMIT; PR48 PREP-B-* are not this session and are not a certified fence | keeping privacy incomplete when quiescence cannot be proven; not auto-calling W reclaim |
+| Live **application** PostgreSQL/Redis suites (`test:db-isolation`, uninstall) in this planning environment | App services not the disposable proof cluster (**BLOCKED** as V suites) | Disposable PG 16 proofs **did** run (G1–G12 + NEG). Implementation must still execute live catalog tests on the app database |
 
 ---
 
@@ -619,18 +658,18 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 
 | Matrix group | Plan anchors |
 |---|---|
-| PR7-ACT-001…023 | §7.1, D-PR7-01/02/04, **P7-C01**, **F-CLAUDE-PR7CP-05** |
+| PR7-ACT-001…025 | §7.1, D-PR7-01/02/04, **P7-C01**, **F-CLAUDE-PR7CP-05**, PR48 PREP-A-* |
 | PR7-RBAC-001…021 | §7.2, §7.10, D-PR7-07/12, **P7-C04**, **F-CLAUDE-PR7CP-06** |
 | PR7-AUD-001…014 | §7.3, §7.7, D-PR7-03/08, **P7-C02**, **F-CLAUDE-PR7CP-02** |
 | PR7-LIFE-001…024 | §7.4, §7.6, D-PR7-05/06, **P7-C03**, **F-CLAUDE-PR7CP-01/04** |
 | PR7-PRIV-001…019 | §7.4, §7.9, §7.11, **P7-C05**, **F-CLAUDE-PR7CP-02/07**, **F-CLAUDE-PR7XC-08** |
-| PR7-TOP-* / GRANT-* / COORD-* / AUTHZ-* / CMD-* / GATE-* / TOMB-* | §7.6.2–7.11, §7.7, Decisions A–E, **F-CLAUDE-PR7XC-01…08**, **F-CLAUDE-PR7TF-01…03** |
+| PR7-TOP-* / GRANT-* / COORD-* / AUTHZ-* / CMD-* / GATE-* / TOMB-* / RESID-* | §7.6.2–7.11, §7.7, Decisions A–E / **CC-GEN**, **F-CLAUDE-PR7XC-01…08**, **F-CLAUDE-PR7TF-01…03**, **F-CLAUDE-PR7CC-01…04** |
 | PR7-RED-001…021 | §7.5–7.6.4, D-PR7-10/11/13, **F-CLAUDE-PR7CP-03/04** |
-| PR7-CUST-001…024 | §3, §7.6.2–7.6.3, §7.13, D-PR7-14, **F-CLAUDE-PR7CP-08/10**, **F-CLAUDE-PR7TF-01** |
+| PR7-CUST-001…034 | §3, §7.6.2–7.6.3, §7.13, D-PR7-14, **F-CLAUDE-PR7CP-08/10**, **F-CLAUDE-PR7TF-01**, **F-CLAUDE-PR7CC-01** / **CC-GEN** |
 | PR7-COORD-PUB-* | §7.6.2 Epoch, §7.7.2, **F-CLAUDE-PR7TF-02** |
 | PR7-ESCL-001…004 | §7.12, **F-CLAUDE-PR7CP-09** |
 | PR7-SIDE-* / ISO-* | §7.7–7.9, **F-CLAUDE-PR7CP-02** |
-| PR7-CI-* | §10, CI_POLICY, **P7-C06**, **F-CLAUDE-PR7TF-04** |
+| PR7-CI-* | §10, CI_POLICY, **P7-C06**, **F-CLAUDE-PR7TF-04**, **F-CLAUDE-PR7CC-04** |
 
 Every constrained decision that can fail a merchant-safety test has at least one matrix row. **D-PR7-09** pause → PR7-PRIV-006. **D-PR7-14** download → PR7-CUST-006/011/012. **P7-C01** first-login → PR7-ACT-013…023. **P7-C03** escalation → PR7-LIFE-008/011…024, PR7-RED-016, PR7-ESCL-*. **P7-C04** revocation → PR7-RBAC-010/013/015…021.
 
@@ -658,22 +697,22 @@ Original D-PR7 IDs are not renamed.
 | `npx vitest run app/lib/shop-domain.test.ts` | 0 | 10 passed | V | **executed-prior-planning-head-not-re-run** |
 | Node IEEE-754 `Number("9007199254740993")===9007199254740992` | 0 | n/a | Node `v22.14.0` | **executed-prior-planning-head-not-re-run** |
 | `npm run test:privacy` | 1 | n/a missing script | V | **executed-prior-planning-head-not-re-run** (absence; implementation gate) |
-| Disposable `python3 /tmp/pr45-proof/03_run_proofs.py` (historical 59-case) | 0 | **59 passed / 0 failed** | PG 16.15 `/tmp/pr45-pg16:5433`; contract sha256 `b29ef463…` (original-run identity) | **executed-this-planning-session** / `executed-synthetic-pg16` (S head; preserved) |
-| Old-model CE-1 / CE-6 on unchanged 59-case scripts | 0 | 2 counterexamples | CE-1 residual `0` while `ae_a3` survived; CE-6 `true,0`/3 keys → `false,1`/0 keys; sha256 `ecfe3a350d8807fb0bdaf217bd9eefa5acf3655f0826b32e17bc35bd0459c960` | **executed-this-planning-session** (defect reproduction, not a passing contract) |
-| Disposable `python3 /tmp/pr45-tf/03_run_proofs.py` (corrected contract) | 0 | **115 passed / 0 failed** (unique G1–G6 = 59; G7–G10 + NEG + clean G7–G9 rerun) | queried `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`; contract `75ab1c02…`; driver `566e0f28…`; run log `006e5799…` (**not** a verification artifact) | **executed-this-planning-session** / `executed-synthetic-pg16` |
-| First corrected-contract driver | 1 | 93 / 111 | ambiguous PL/pgSQL `t.kind`; late-row re-enumerated into manifest | **executed-this-planning-session** (failed; not hidden; contract+driver repaired; clean 115/115) |
-| First disposable driver attempt | 1 | 29 pass / 15 fail | parser + reader TargetKey SELECT | **executed-this-planning-session** (failed; not hidden) |
-| Second disposable driver attempt | 1 | 57 pass / 2 fail | `-q` / shop_b disabled leftover | **executed-this-planning-session** (failed; driver-only repair; clean rerun) |
+| Disposable historical 59-case driver | 0 | **59 passed / 0 failed** | PG 16.15; contract sha256 `b29ef463…` (original-run identity) | **executed-prior-planning-head-not-re-run** / `executed-synthetic-pg16` (S head; preserved) |
+| Old-model CE-1 / CE-6 on unchanged 59-case scripts | 0 | 2 counterexamples | CE-1 residual `0` while `ae_a3` survived; CE-6 `true,0`/3 keys → `false,1`/0 keys | **executed-prior-planning-head-not-re-run** (defect reproduction identity preserved) |
+| Disposable TF corrected contract at S | 0 | **115 records / 89 unique / 26 reruns** | queried `16.15` / `160015`; contract `75ab1c02…`; driver `566e0f28…`; run log `006e5799…` (**not** a verification artifact) | **executed-prior-planning-head-not-re-run** / `executed-synthetic-pg16` (do **not** read 115 unique) |
+| Old-model CE-A / CE-B / CE-C on unchanged TF contract | 0 | 8 counterexample steps all reproduced | host `/tmp/pr45-cc-pg16:5434`; CE log sha256 `c1077d531a435b7536c8e9f07c83743c413fb054b749fa7f5f3fbac52df9991f`; repro `2f732e1c…` | **executed-this-planning-session** (defect reproduction, not a passing contract) |
+| Disposable `python3 /tmp/pr45-cc-new/03_run_proofs.py` (this contract) | 0 | **169 records / 117 unique / 52 declared reruns / 0 failed** | queried `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`; host `/tmp/pr45-cc-pg16:5434`; `PROOF_ROOT=/tmp/pr45-cc-new`; contract `7a1d4611…`; driver `e9bd3c18…`; run log `420ec6e0…` (**not** a verification artifact) | **executed-this-planning-session** / `executed-synthetic-pg16` |
+| First residual G12 without capability EXECUTE on target_owner | 1 | G7/G8/G12 `42501` | GRANT added to declared contract; not credited to an unchanged contract | **executed-this-planning-session** (failed; not hidden) |
+| First G12 genuine-empty via RLS-filtered erasure DELETE | 1 | count stayed `3` | driver now deletes as `pr45owner` BYPASSRLS | **executed-this-planning-session** (failed; not hidden) |
 | `npm run test:sync-uninstall` | **not executed** | — | app Postgres/Redis | **present-on-V-not-executed** / **BLOCKED** |
 | `npm run test:tenant-access` | **not executed** | — | same | **present-on-V-not-executed** / **BLOCKED** |
 | `npm run test:db-isolation` | **not executed** | — | same | **present-on-V-not-executed** / **BLOCKED** |
-| Redis/export/D-scratch fences | **not executed** | — | G5 LIMIT recorded | **not executed**; not claimed complete |
+| Redis/export/D-scratch fences | **not executed** | — | G5 LIMIT; PR48 PREP-B-* are Cursor-reported feasibility, **not** this session | **not executed**; not claimed complete |
+| Live Shopify / online-token bind | **not executed** | — | Helper A PREP-A-16 / coordinator PREP-A-07 **UNVERIFIED** | **not executed**; not claimed complete |
 
-Blocked V suites remain **BLOCKED**, not failed-as-product, and not passing PR7 evidence. Designed fixtures did **not** run against nonexistent PR7 processors. Disposable proofs are **not** application RLS on V.
+Blocked V suites remain **BLOCKED**, not failed-as-product, and not passing PR7 evidence. Designed fixtures did **not** run against nonexistent PR7 processors. Disposable proofs are **not** application RLS on V/W.
 
-Official pages in plan §3 were fetched **2026-09-18**. Store calls were **not** executed.
-
----
+Official pages in plan §3 were fetched **2026-09-18**. Store calls were **not** executed. Leftover TF postgres `/tmp/pr45-pg16:5433` was **not** stopped.
 
 ## 11. F-CLAUDE-PR7CP-01…10 finding crosswalk
 
@@ -698,12 +737,12 @@ No row in this table is a passing privacy processor.
 
 | ID | Sev | Original meaning | Disposition | Matrix / proof |
 |---|---|---|---|---|
-| **F-CLAUDE-PR7XC-01** | P0 | Whole-shop helper unfit for customer topics | **CORRECTED** (Decision A); TF-01 adds completion-integrity | PR7-TOP-001…017; PR7-CUST-014…024; G1 + G7 |
+| **F-CLAUDE-PR7XC-01** | P0 | Whole-shop helper unfit for customer topics | **CORRECTED** (Decision A); TF-01 completion-integrity; **CC-GEN** namespace lock | PR7-TOP-001…020; PR7-CUST-014…034; G1 + G7 + G11 |
 | **F-CLAUDE-PR7XC-02** | P0 | Privacy DurableJob Restrict vs Shop delete | **CORRECTED** (Decision B) | PR7-COORD-001…007; G3 |
 | **F-CLAUDE-PR7XC-03** | P1 | Missing context-helper EXECUTE | **CORRECTED** | PR7-GRANT-001…007; G2 |
 | **F-CLAUDE-PR7XC-04** | P1 | Finalizer generation UPDATE | **CORRECTED** | PR7-COORD-003; G3 no UPDATE grant |
 | **F-CLAUDE-PR7XC-05** | P1 | FOR UPDATE needs UPDATE privilege | **CORRECTED** (Decision C) | PR7-AUTHZ-001…005; G4 |
-| **F-CLAUDE-PR7XC-06** | P1 | No quiescence primitive | **CORRECTED** as plan + PG gate; Redis/FS **LIMIT**; TF-03 exact inventory | PR7-GATE-001…013; G5 + G9 |
+| **F-CLAUDE-PR7XC-06** | P1 | No quiescence primitive | **CORRECTED** as plan + PG gate; Redis/FS **LIMIT** (PR48 not a certified fence); W inventory required-symbol presence | PR7-GATE-001…016; G5 + G9 |
 | **F-CLAUDE-PR7XC-07** | P2 | Fresh UUID idempotency | **CORRECTED** | PR7-CMD-001…003; G4 |
 | **F-CLAUDE-PR7XC-08** | P2 | Prune destroys retry evidence | **CORRECTED**; Q-008 OPEN | PR7-PRIV-019; PR7-TOMB-*; G6 |
 | **F-CLAUDE-PR7XC-09** | P3 | Prune cited as step 7 | **CORRECTED** (named phases; P-PRUNE-PAYLOAD) | plan §7.4 / §7.6.3 |
@@ -718,14 +757,28 @@ Independent review of **this** correction by actual Claude Code remains required
 
 | ID | Sev | Original meaning | Disposition | Matrix / proof |
 |---|---|---|---|---|
-| **F-CLAUDE-PR7TF-01** | P1 | Customer erasure lacks completion-integrity; post-enumeration arrivals survive a manifest-filtered residual | **CORRECTED** (target-scoped barrier + source residual + serialized complete; LIVE shop) | PR7-TOP-015…017; PR7-CUST-014…024; G7; old-model CE-1; NEG complete |
+| **F-CLAUDE-PR7TF-01** | P1 | Customer erasure lacks completion-integrity; post-enumeration arrivals survive a manifest-filtered residual | **CORRECTED** at TF for single-generation target keys + source residual; **CC-GEN** further makes the lock generation-independent | PR7-TOP-015…020; PR7-CUST-014…034; G7 + G11; old CE-1 / CE-A / CE-B; NEG complete + NEG-4 |
 | **F-CLAUDE-PR7TF-02** | P2 | Enumerator not epoch-fenced; stale publisher mutates the new epoch | **CORRECTED** (publication lock shared with claim; pause-then-mutate leaves new epoch unchanged) | PR7-COORD-PUB-001…005; G8; old-model CE-6; NEG epoch |
-| **F-CLAUDE-PR7TF-03** | P2 | Writer inventory omitted retry + dispatcher disabled-shop; db-context optional | **CORRECTED** (26-row inventory; guards required; processingEnabled ≠ drain) | PR7-GATE-009…013; G9; NEG writer gate |
+| **F-CLAUDE-PR7TF-03** | P2 | Writer inventory omitted retry + dispatcher disabled-shop; db-context optional | **CORRECTED** at TF for those V symbols; this packet re-derives **50** W rows; completeness is **required-symbol presence**, not 26/27/86 | PR7-GATE-009…016; G9; NEG writer gate |
 | **F-CLAUDE-PR7TF-04** | P3 | `results.json` hashed as if reproducible; postgres hardcoded | **CORRECTED** (queried version; run log labelled; historical hashes retained as original-run identities) | PR7-CI-004; G10; matrix §14 |
 
 Original CP/XC finding IDs and the independently reproduced 59-case model are preserved. This table does **not** rebuild Decision A–E.
 
 Independent review of **this** customer-completion correction by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
+
+## 12.2 F-CLAUDE-PR7CC-01…04 finding crosswalk
+
+| ID | Sev | Original meaning | Disposition | Matrix / proof |
+|---|---|---|---|---|
+| **F-CLAUDE-PR7CC-01** / **CC-GEN** | P1 | `ORDER BY id DESC` generation guess defeats ACTIVE barrier (CE-A) and restore-denied (CE-B) on multi-gen shops | **CORRECTED** (generation-independent `pr7-ctgt-v2` lock; trusted origin; no latest-generation guess) | PR7-CUST-025…034; PR7-TOP-018…020; G11; NEG-4; old CE-A/CE-B |
+| **F-CLAUDE-PR7CC-02** | P2 | Residual returned `0` on missing/mismatched GUC (true `3`); complete was shielded by re-enumerate | **CORRECTED** (residual owns GUC/tenant/attempt/capability before RLS count). **Not** a demonstrated live false-complete | PR7-RESID-001…012; G12; NEG-5; old CE-C |
+| **F-CLAUDE-PR7CC-03** | P3 | “26” inventory vs 27 seeded; 115 records invited as 115 unique | **CORRECTED** (historical 27 / 89 unique + 26 reruns / 115 records; this packet 50 W rows / 117 unique + 52 reruns / 169 records; completeness ≠ 86) | PR7-GATE-009…015; G9; matrix §14 |
+| **F-CLAUDE-PR7CC-04** | P3 | Driver hardcoded `/tmp/pr45-tf`; §14 never staged scripts | **CORRECTED** (`PROOF_ROOT` + `PGHOST`/`PGPORT`; staged SQL/seed) | PR7-CI-005; §14 |
+
+Original CP/XC/TF finding IDs, the independently reproduced 59-case model, and the TF 89-unique/26-rerun packet are preserved. This table does **not** rebuild Decision A–E.
+
+Independent review of **this** generation / W-integration correction by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
+
 
 ---
 
@@ -736,12 +789,12 @@ Independent review of **this** customer-completion correction by actual Claude C
 | Three identities | Delivery binding ≠ work id ≠ completion receipt. HMAC/body is not a lifetime work key. |
 | Shop DELETE | Only `stocky_privacy_finalize_shop_delete`. Runtime/CP have no bare DELETE. |
 | Completion | Residual empty **then** conditional CP txn. Receipt cannot override remnants. Customer topics: source-derived residual + exclusive target locks in the same complete txn. Stale-manifest count is insufficient. |
-| Customer barrier | Shop/generation + `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID`. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes with `payloadAdmittedAt < completedAt` denied; later legitimate writes allowed. |
+| Customer barrier | Canonical domain × `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID` (`pr7-ctgt-v2`). Generation is evidence, not the lock. Lock before lookup. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes whose origin **is** the completed generation remain restore-denied; genuine unique LIVE successor with `payloadAdmittedAt >= origin.installedAt` allowed. Indistinguishable → visible ambiguous. |
 | Epoch / publication | Enumerator and claim share publication lock. Stale callers leave the new epoch’s keys/flags/revision unchanged. Check-then-act is insufficient. |
-| Actor | `sessionToken.sub` string. Wide id preserved. Unsafe numeric owner blocked. |
+| Actor | Verified JWT `sub` **string**. Online tokens **not** required for actor identity. Wide id preserved. Unsafe numeric owner blocked. mixedToken/stale-cache fenced **before** any online credential. dest/iss in **app**. Live bind **UNVERIFIED**. |
 | Replay | One CP txn + advisory authz lock + SELECT-only verifier + stable commandId. No `FOR UPDATE` helper. No cross-role atomicity slogan. |
 | Privacy execution | `PrivacyRequest`/`PrivacyAttempt` coordinator; per-topic capabilities; no Shop/DurableJob FK. Unknown ordinary jobs denied. Historical PRIV-015…018 path withdrawn as required. |
-| Participating writers | Exact inventory including `completeAttemptRetry` and dispatcher disabled-shop writes. `withTenantBoundTransaction` guard **required**. `processingEnabled` ≠ drain. |
+| Participating writers | Re-derived **50-row** W inventory. Completeness is **required-symbol presence** (`completeAttemptRetry`, `dispatcher_disabled_shop_path`, `withTenantBoundTransaction` **required**, `claimAttempt`, `enqueueWithDispatch`, `runOrderFactsSyncJob`, `computeSyncHealth`) — **not** row-count 86. `processingEnabled` ≠ drain. Residual owns its own GUC. |
 | Download | `platform.privacy.data_request.download` ≠ `platform.export.operational`. Coverage is the published snapshot, not an empty residual. |
 | Escalation | Named owner route + operator CLI. No `retain_live` waiver. |
 | Timing | Changelog newer; handle on arrival; no local 180-day wait. |
@@ -756,14 +809,18 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 
 | | |
 |---|---|
-| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-pg16:5433` |
-| Contract SHA-256 (this correction) | `75ab1c02fc01560d975a78737bccbc7c2fa6330a07100ad98d2b243d349846de` |
-| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (unchanged from 59-case) |
-| Driver SHA-256 (this correction) | `566e0f289f2ca4da526286b3ca831c906030973958318eb60b55a0237823251a` |
-| Results SHA-256 | **run log, not a verification artifact.** This-run digest `006e5799544c0ae2368a75e50fbbfdee77b43b816d9cd490c5c2f5d140e94344` is an original-run identity only |
-| Totals | **115 / 115 PASS / 0 FAIL** (unique G1–G6 = 59 preserved; G7–G10 + NEG + clean G7–G9 rerun) |
+| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-cc-pg16:5434` |
+| Contract SHA-256 (this correction) | `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c` |
+| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (byte-identical from 59-case / TF) |
+| Driver SHA-256 (this correction) | `e9bd3c187451ea989fcf1b0a6c1385f3e4d93281744127d44b46621f97001f34` |
+| Results SHA-256 | **run log, not a verification artifact.** This-run digest `420ec6e0cb231a43bed36dc850c478b3587f097643b477daeb6695318bd094d8` is an original-run identity only |
+| Totals | **169 records / 169 PASS / 0 FAIL** = **117 unique assertions** + **52 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10). Unique G1–G6 = 59 preserved. New unique this packet = 28 |
+| Historical TF 115-record packet (S; **not** this contract) | **115 records ≠ 115 unique**: 89 unique + 26 G7–G9 reruns. Contract `75ab1c02…349846de`; driver `566e0f28…`; run log `006e5799…` |
 | Historical 59-case identities (S; **not** this contract) | contract `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; driver `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; Cursor run log `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8`; reviewer log `185dd1b8…` |
-| Old-model CE-1 / CE-6 | reproduced on unchanged 59-case scripts; sha256 `ecfe3a350d8807fb0bdaf217bd9eefa5acf3655f0826b32e17bc35bd0459c960` |
+| Old-model CE-A / CE-B / CE-C | reproduced on unchanged TF contract at `/tmp/pr45-cc-pg16:5434`; sha256 `c1077d531a435b7536c8e9f07c83743c413fb054b749fa7f5f3fbac52df9991f` |
+| Old-model CE-1 / CE-6 | preserved identities on unchanged 59-case scripts; not re-run this packet |
+
+**Unique assertions only** (first occurrence; reruns are **not** listed here):
 
 | Group | Assertion | Result | SQLSTATE |
 |---|---|---|---|
@@ -852,11 +909,39 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 | `G9-writer-inventory` | `dispatcher_disabled_shop_path_still_writes` | PASS | `—` |
 | `G9-writer-inventory` | `inventory_gate_detects_unguarded_tenant_linked_write` | PASS | `—` |
 | `G9-writer-inventory` | `inventory_incomplete_when_required_writer_removed` | PASS | `—` |
+| `G9-writer-inventory` | `inventory_incomplete_when_w_sync_job_removed` | PASS | `—` |
+| `G9-writer-inventory` | `inventory_incomplete_when_health_upsert_removed` | PASS | `—` |
+| `G9-writer-inventory` | `completeness_not_tied_to_historical_getShopHealth_row` | PASS | `—` |
+| `G9-writer-inventory` | `inventory_row_count_is_not_pr48_86` | PASS | `—` |
 | `G10-evidence-meta` | `postgres_version_queried_not_hardcoded` | PASS | `—` |
+| `G11-generation-namespace` | `cea_baseline_one_gen_still_denies` | PASS | `—` |
+| `G11-generation-namespace` | `cea_two_gen_matching_write_still_denied` | PASS | `—` |
+| `G11-generation-namespace` | `cea_declared_successor_origin_cannot_bypass_active_barrier` | PASS | `—` |
+| `G11-generation-namespace` | `two_gen_unrelated_customer_still_progresses` | PASS | `—` |
+| `G11-generation-namespace` | `ceb_baseline_restore_denied` | PASS | `—` |
+| `G11-generation-namespace` | `ceb_two_gen_old_origin_still_restore_denied` | PASS | `—` |
+| `G11-generation-namespace` | `two_live_undeclared_origin_ambiguous_not_admitted` | PASS | `—` |
+| `G11-generation-namespace` | `queued_payload_before_successor_install_restore_denied` | PASS | `—` |
+| `G11-generation-namespace` | `genuine_successor_fresh_payload_allowed` | PASS | `—` |
+| `G11-generation-namespace` | `missing_origin_fails_closed` | PASS | `—` |
+| `G11-generation-namespace` | `concurrent_reinstall_cannot_bypass_namespace_barrier` | PASS | `—` |
+| `G11-generation-namespace` | `other_shop_unrelated_to_namespace_progresses` | PASS | `—` |
+| `G12-residual-guard` | `residual_no_guc_raises_42501` | PASS | `—` |
+| `G12-residual-guard` | `residual_foreign_request_guc_raises_42501` | PASS | `—` |
+| `G12-residual-guard` | `residual_wrong_tenant_raises_42501` | PASS | `—` |
+| `G12-residual-guard` | `residual_stale_attempt_raises_42501` | PASS | `—` |
+| `G12-residual-guard` | `residual_direct_nonzero_with_full_context` | PASS | `—` |
+| `G12-residual-guard` | `residual_direct_genuine_empty` | PASS | `—` |
+| `G12-residual-guard` | `residual_control_plane_execute_with_context` | PASS | `—` |
+| `G12-residual-guard` | `residual_runtime_execute_denied` | PASS | `42501` |
+| `G12-residual-guard` | `residual_reader_execute_denied` | PASS | `42501` |
+| `G12-residual-guard` | `residual_same_shop_other_request_guc_raises` | PASS | `—` |
 | `NEG-load-bearing` | `completion_guard_removed_allows_false_complete` | PASS | `—` |
 | `NEG-load-bearing` | `epoch_guard_removed_allows_stale_publish` | PASS | `—` |
 | `NEG-load-bearing` | `writer_gate_removed_skips_freeze` | PASS | `—` |
+| `NEG-load-bearing` | `generation_guess_restored_defeats_barrier` | PASS | `—` |
+| `NEG-load-bearing` | `residual_guard_removed_returns_zero` | PASS | `—` |
 
-Unique G1–G6 = 59. Unique G7–G10 + NEG = 30. Clean G7–G9 rerun repeats 26 names. Driver total **115**. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
+Unique = **117**. Declared reruns = **52**. Driver total records = **169**. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
 
-Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` online-token bind; application `test:privacy`. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations.
+Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` online-token bind; application `test:privacy`. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence.

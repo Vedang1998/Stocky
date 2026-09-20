@@ -4,7 +4,7 @@
 
 **Document type:** execution-ready architecture / acceptance contract for the next approved Phase 1 module.
 
-This packet does **not** authorize PR7 runtime, migrations, grants, Shopify configuration, production, inventory writes, flag enablement, or merge. ChatGPT’s 2026-09-18 topic-authority comment 5729229659 is current planning authority for Decisions A–E. It supersedes conflicting proposed wording from comment 5714629032 **only as stated**. Neither comment accepts the whole plan, closes PR6, or starts implementation.
+This packet does **not** authorize PR7 runtime, migrations, grants, Shopify configuration, production, inventory writes, flag enablement, or merge. ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains planning authority for Decisions A–E. Comment 5737038796 remains the customer-completion/epoch/inventory supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) is current for **Decision CC-GEN**, **F-CLAUDE-PR7CC-01…04**, merged-**W** writer refresh, and PR48-informed authentication / Redis / D-scratch entry constraints. None of those comments accept the whole plan, close PR6, or start implementation.
 
 ---
 
@@ -18,7 +18,9 @@ Every claim in this document is one of:
 | **FACT (library)** | Observed in installed TypeScript types under `stocky-plus/node_modules` at V |
 | **OFFICIAL** | Shopify or PostgreSQL documentation fetched on the stated access date; not legal advice |
 | **CONSTRAINED** | ChatGPT product/security planning decision for this packet; not runtime authority |
-| **PROVISIONAL (H)** | Observed on unmerged PR6-D candidate `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b`; not merged authority |
+| **FACT (W)** | Observed on merged main `ee193f38491245a10fb2fa60d2cf9a29f3271605` (PR6-D #43) |
+| **FACT (PR48)** | Cursor-reported feasibility on pinned PR48 head `275292d19b583c04c3afe01ef7d9feb48fee0f6c`; **not** independent security acceptance |
+| **PROVISIONAL (H)** | Dated unmerged PR6-D snapshot `4768033b6b9c09804a6d417f0bb10ab3e8fdab9b`; superseded as merged authority by **W**; keep as historical pin |
 | **PROPOSED** | Remaining implementer specification inside a constrained decision; still not runtime |
 | **UNVERIFIED** | Not executed or not confirmed from an official source |
 | **BLOCKED** | Specified check could not be executed in this planning environment |
@@ -32,6 +34,7 @@ Immutable independent reviews (byte-for-byte; do not edit):
 - `stocky-plus/docs/phases/phase-1/PR7_CORRECTED_PLANNING_INDEPENDENT_REVIEW.md` (blob `c1fa5c2fed74bf80d1006267b43d767258895c17`)
 - `stocky-plus/docs/phases/phase-1/PR7_EXECUTABLE_CONTRACT_CORRECTION_INDEPENDENT_REVIEW.md` (blob `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`)
 - `stocky-plus/docs/phases/phase-1/PR7_TOPIC_AUTHORITY_FINALIZATION_INDEPENDENT_REVIEW.md` (blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c`)
+- `stocky-plus/docs/phases/phase-1/PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `e908770d9daea4f963b2fd09e38af79e07274d41`)
 
 ---
 
@@ -47,14 +50,20 @@ Immutable independent reviews (byte-for-byte; do not edit):
 | Authorization (P7-C01…06) | [PR45 comment 5713121021](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5713121021) |
 | Authorization (executable contract, superseded only as stated) | [PR45 comment 5714629032](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5714629032) |
 | Authorization (topic authority / finalization) | [PR45 comment 5729229659](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5729229659) (`user=Vedang1998`). Decisions A–E remain otherwise intact. **no D-055** |
-| Authorization (customer-completion / epoch — **current**) | [PR45 comment 5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796). Narrowly supplements 5729229659 for **F-CLAUDE-PR7TF-01…04** only |
-| Starting subject **S** (this correction) | `9d9919057992e9c7ba1f7bfcee73d671f2fadbab` |
+| Authorization (customer-completion / epoch) | [PR45 comment 5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796). Narrowly supplements 5729229659 for **F-CLAUDE-PR7TF-01…04** only |
+| Authorization (CC-GEN / W / entry — **current**) | [PR45 comment 5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826). Decision **CC-GEN** + CC-01…04 + merged-W inventory + PR48-informed auth/Redis/scratch. Does **not** accept the plan |
+| Starting subject **S** (this correction) | `a292bc8a6ea26192bc295af7338dd6d653a3e65c` |
+| Historical TF starting subject | `9d9919057992e9c7ba1f7bfcee73d671f2fadbab` |
 | Prior starting subject (topic-authority packet) | `253ab202dbee53dc842bb1389db4a19c6e3fb058` |
-| Prior immutable review #1 | commit `86c1c520e8e7b72742f1061bd261682cf011f758` parent `f1b0364…` blob `c1fa5c2fed74bf80d1006267b43d767258895c17` path `PR7_CORRECTED_PLANNING_INDEPENDENT_REVIEW.md` — **unchanged** |
-| Prior immutable review #2 **R** | branch `claude/pr45-pr7-executable-contract-review-20260918`; commit `64649470475912c3a697585772c0dd336d6daabc`; blob `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`; path `PR7_EXECUTABLE_CONTRACT_CORRECTION_INDEPENDENT_REVIEW.md` — **unchanged** |
-| New immutable review **TF** | branch `claude/pr45-pr7-topic-finalization-rereview-20260918`; commit `dee96cf310e7ee2a45947649ee998ef9fe5b51b3`; sole parent **S**; blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c`; path `PR7_TOPIC_AUTHORITY_FINALIZATION_INDEPENDENT_REVIEW.md` — **fast-forwarded, byte-for-byte** |
-| Review publication PR | [#46](https://github.com/Vedang1998/Stocky/pull/46) already used for the prior review; **do not reopen/reuse as an integration route** |
-| Work order | `PR45_PR7_Topic_Authority_and_Finalization_Corrections.md` |
+| Merged main **W** (history-preserving merge parent) | `ee193f38491245a10fb2fa60d2cf9a29f3271605` — PR6-D (#43). Do not relabel historical V as current main |
+| Merge commit (review FF + exact W, pre-docs) | `0b21604eabff392aa25866732045dfd4b1041bf0` parents `c7b4780…` + `ee193f3…` |
+| Prior immutable review #1 | commit `86c1c520e8e7b72742f1061bd261682cf011f758` blob `c1fa5c2fed74bf80d1006267b43d767258895c17` — **unchanged** |
+| Prior immutable review #2 **R** | commit `64649470475912c3a697585772c0dd336d6daabc`; blob `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f` — **unchanged** |
+| Immutable review **TF** | commit `dee96cf310e7ee2a45947649ee998ef9fe5b51b3`; blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c` — **unchanged** |
+| Immutable review **CC** | branch `claude/pr45-customer-completion-correction-review`; commit `c7b47807083bfad8e7e3a7504e826027e56b7a32`; sole parent **S**; blob `e908770d9daea4f963b2fd09e38af79e07274d41`; path `PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` — **fast-forwarded, byte-for-byte** |
+| Entry-evidence input **PR48** | head `275292d19b583c04c3afe01ef7d9feb48fee0f6c` on `planning/pr7-entry-evidence-20260919-37c6` (latest on that branch at this correction; **no later source-preservation revision**). Blobs: `PR7_MERGED_MAIN_ENTRY_EVIDENCE.md` `59ac3da9a4fd1c559bd641c2953351bf09dfc745` sha256 `5794ba1ae31898933410c9bc7362905458cf976fac8a005a365f5ef1e8599737`; `PR7_IMPLEMENTATION_HANDOFF.md` `05a8a0351387d4d08b2fb05dd49f6428ac20d1fe` sha256 `8c1ae6938a2c9335d6af786ba07f5b5d5a69b18f1fec91569aa657df1d3d68c0`. Cursor-reported feasibility, **not** independent security acceptance |
+| Review publication PR | [#46](https://github.com/Vedang1998/Stocky/pull/46) already used; **do not reopen/reuse as an integration route** |
+| Work order | comment 5747828826 (this packet); prior TF work order remains historical |
 | Decision heading | D-054 **EFFECTIVE** — **no D-055** |
 | R-176 | remains **OPEN / P0** |
 | R-164 | unchanged (privacy physical DELETE is not C apply) |
@@ -123,7 +132,21 @@ Independently reproduced **59/59** model at S is preserved as evidence for that 
 | **F-CLAUDE-PR7TF-03** | P2 | Writer inventory omitted `completeAttemptRetry` and dispatcher disabled-shop writes; `db-context` guard marked optional | Exact V file/symbol inventory; tenant/CP participating-write guard **required**; `processingEnabled` ≠ drain; architecture gate fails when a required writer is omitted or an unguarded tenant-linked probe lands | §7.6.2, §7.9 | PR7-GATE-009…, G9 |
 | **F-CLAUDE-PR7TF-04** | P3 | `results.json` hashed beside scripts but is timing-dependent; postgres field hardcoded | Driver queries `server_version` / `server_version_num`; `results.json` labelled a **run log**, not a verification artifact. Historical hashes retained as original-run identities | §12, §14 | matrix §14 |
 
-Old-model counterexamples **CE-1** (late audit residual 0 while `ae_a3` survived) and **CE-6** (stale enumerator flipped `true,0` / 3 keys → `false,1` / 0 keys) were reproduced on the **unchanged** 59-case scripts before this contract was loaded.
+Old-model counterexamples **CE-1** (late audit residual 0 while `ae_a3` survived) and **CE-6** (stale enumerator flipped `true,0` / 3 keys → `false,1` / 0 keys) were reproduced on the **unchanged** 59-case scripts before the TF contract was loaded.
+
+### 1.5 F-CLAUDE-PR7CC-01…04 dispositions (this correction)
+
+Independently reproduced TF model at S (`115` records = `89` unique + `26` declared G7–G9 reruns) is preserved as **historical** evidence for that head. This packet does **not** rebuild Decision A–E. Completeness is **not** “86 PR48 rows”.
+
+| ID | Sev | Defect | This packet | Plan anchors | Matrix |
+|---|---|---|---|---|---|
+| **F-CLAUDE-PR7CC-01** / **CC-GEN** | P1 | Writer guard resolved generation via `ORDER BY id DESC LIMIT 1`; second generation (`gen_a_zz`) admitted matching writes while barrier ACTIVE on `gen_a` (CE-A) and admitted delayed pre-erasure payloads after complete (CE-B) | **Generation-independent** customer-target lock `pr7-ctgt-v2:` + canonical domain × kind:value. Lock **before** lookup. Examine **all** ACTIVE / completed barriers in the namespace. Writer origin = declared persisted generation **or** unique LIVE `shopRowId`/`targetShopId` binding; fail missing/ambiguous; **never** `ORDER BY id`. Restore-denied vs genuine successor with unique LIVE origin, `payloadAdmittedAt >= origin.installedAt`, completed gen not LIVE. Indistinguishable → `customer_target_attribution_ambiguous`. `stocky_generation_writable`: **ANY** `ERASING`/`FINALIZING` in the namespace freezes (LIVE+ERASING fail-closed) | §7.6.2, Decision CC-GEN | PR7-CUST-025…, PR7-TOP-018…, G11, NEG-4, old CE-A/CE-B |
+| **F-CLAUDE-PR7CC-02** | P2 | Residual counted by parameter but was RLS-visible via GUC; missing/mismatched GUC returned `0` (true `3`). Shielded on the complete path by re-enumerate (not a live false-complete) | Residual owns request GUC / tenant / live attempt / capability **before** any RLS-filtered count. Absent or mismatched GUC → `residual_request_guc_mismatch` `42501`. Direct calls by every EXECUTE grantee | §7.6.2 Residual | PR7-RESID-*, G12, NEG-5, old CE-C |
+| **F-CLAUDE-PR7CC-03** | P3 | §7.9 said 26 inventory rows; contract seeded 27. Headline 115/115 invited reading 115 unique | Historical inventory was **27** rows. Historical proofs: **89 unique / 26 reruns / 115 records**. This packet: **50** inventory rows (27 preserved + 23 W-derived); completeness is **required-symbol presence**, not row-count 86. Corrected model: **117 unique / 52 declared reruns / 169 records** | §7.9, §12, §14 | PR7-GATE-009…016; G9; matrix §14 |
+| **F-CLAUDE-PR7CC-04** | P3 | Driver hardcoded `/tmp/pr45-tf`; §14 never staged scripts | Driver uses `PROOF_ROOT` (default script directory) + `PGHOST`/`PGPORT`. Reproduction stages `01_contract.sql` + `02_seed.sql` beside the driver | §14 | PR7-CI-005 |
+
+Old-model CE-A / CE-B / CE-C were reproduced on the **unchanged** TF contract (`75ab1c02…349846de`) before this contract was loaded.
+
 
 
 ---
@@ -288,9 +311,9 @@ Merchant models, PII-adjacent surfaces, H scratch, and sanitizer facts in the pr
 
 ## 5. V-versus-H integration dependency
 
-**PROVISIONAL (H)** only. Do not wait for PR43. Do not start a competing D writer.
+**FACT (W):** PR6-D is merged at `ee193f3…`. This planning branch history-preserving-merged exact W. Do not chase a later unreviewed main. Do not import unmerged PR47 closeout. Do not start a competing D writer.
 
-Privacy sanitizer stays in `app/privacy/**`, not D’s `sanitize.server.ts`. After D **merges**, refresh named shared files on that main (§7.9). D scratch cleanup consumes the **accepted** D reclamation boundary; do not invent an in-process handle for a dead worker. If that interface is still infeasible on the implementation base, flag it as a remaining integration decision — do not silently skip leftover bytes.
+Privacy sanitizer stays in `app/privacy/**`, not D’s `sanitize.server.ts`. Named shared files in §7.9 are refreshed against **W**. D scratch cleanup consumes the **accepted** W operator helper; **do not auto-call it from PR7** (PREP-B-19). If namespace-wide quiescence cannot be proven, keep the privacy request incomplete — do not silently skip leftover bytes.
 
 R-176 stays OPEN/P0. Physical DELETE of facts is privacy, not C apply (R-164 unchanged).
 
@@ -318,7 +341,24 @@ Labels: **CONSTRAINED** = ChatGPT 2026-09-18 topic-authority assignment (comment
 | First-login | **Forbidden** (P7-C01) |
 | Client-supplied actor/role/`account_owner` | Ignored |
 
-**D-PR7-02 CONSTRAINED:** FUTURE implementation sets `useOnlineTokens: true` via the installed package’s supported `shopifyApp({ useOnlineTokens: true })` configuration for **human platform** sessions, and **keeps offline tokens** for autonomous jobs/webhooks. **No config edit in PR45.** Implementation must add a library/fixture test that `authenticate.admin` actually binds `sessionToken.sub` and online `associated_user` under that flag. If the installed package does not bind `sub`, platform ops and automated owner bootstrap stay fail-closed until a separately reviewed lossless path exists. No dependency upgrade is silently authorized.
+**D-PR7-02 CONSTRAINED (refined by 5747828826 + PR48 FACT):** FUTURE implementation may set `useOnlineTokens: true` **only** after a separately reviewed safe adapter/version and a migration of old cached sessions. **No config edit in PR45.** Owner proof remains **separately gated** from actor identity.
+
+**Authentication entry contract (FACT PR48 / Helper A vs coordinator IDs are distinct):**
+
+| Rule | Evidence label | Must not |
+|---|---|---|
+| Canonical human identity is the verified JWT `sub` **string** with exact digits (`^[0-9]+$`). Persist that string | Helper A **PREP-A-01** (embedded `authenticate.admin` returns `sessionToken.sub` with `useOnlineTokens: false`); coordinator **PREP-A-01** (wide sub `"9007199254740993"` survives decode as that string) | `String(associated_user.id)`; persist a JSON **number** `sub` (Helper A **PREP-A-13** — runtime `sessionToken.sub` can be a number if the JWT JSON `sub` is a number; types say string) |
+| Needing actor identity does **not** justify enabling online tokens | Helper A **PREP-A-01** | treating D-PR7-01 as blocked on `useOnlineTokens: true` |
+| Numeric `associated_user.id` is not recoverable exact evidence. `createSession` online id uses `` `${associated_user.id}` `` | coordinator **PREP-A-02**; Helper A **PREP-A-09** `mixedToken: true` when wide-id B then A | using rounded `9007199254740992` as identity for `…993` |
+| Prisma adapter `userId: (associated_user.id as unknown as bigint)` is a compile-time assertion; runtime remains a JSON number | coordinator **PREP-A-03** | treating `Session.userId` as lossless |
+| Validate signature / audience / time, and **issuer/destination host agreement in app code**, before exchange/effects | coordinator **PREP-A-04** (`decodeSessionToken` does **not** reject `iss`/`dest` hostname mismatch; `destMismatchRejectedByLibrary: false`) | assuming the installed library already enforces dest/iss |
+| W `shopify.server.ts` does not set `useOnlineTokens`; W `requireAdminTenant` uses `session.shop` only | coordinator **PREP-A-05**, **PREP-A-06** | claiming W already persists `sessionToken.sub` |
+| Offline autonomous jobs: `isOnline=false`, id `offline_<shop>`, no `onlineAccessInfo` | coordinator **PREP-A-09** | granting Shopify/app permission from JWT identity alone |
+| Per-user cache isolation **before** any online credential is used or any associated bootstrap/hook effect executes. An after-the-fact actor check cannot undo an already used wrong token | Helper A **PREP-A-09** / NC-07 `mixedToken`; Helper A **PREP-A-11** / NC-09 stale cache (`associated_user.id=111` returned with **zero** token exchanges) | enabling the current online-session path merely because it produces `associated_user` |
+| Reject absent, mismatched, or unsafe evidence; unknown actors stay `unassigned` | Helper A **PREP-A-03** / NC-08 | first-login grant |
+
+These are **synthetic signed-token / installed-library probes** (mocked `POST /admin/oauth/access_token`), **not** evidence of a deployed exploit or live Shopify token contents. Live token exchange remains **UNVERIFIED** (Helper A **PREP-A-16** / coordinator **PREP-A-07**). No token, config, or dependency change now. Unresolved positive owner binding stays an explicit implementation-entry gate. Do not initiate upstream disclosure or publish credentials.
+
 
 Wide sub `9007199254740993`: **preserve the string** for identity tests. **Do not** declare owner grant supported for that user unless a lossless `associated_user` correlation exists (it does not, via IEEE-754). That is `OWNER_PROOF_UNSUPPORTED`, not `shop_owner`.
 
@@ -425,7 +465,7 @@ A boolean `processingEnabled=false` plus RLS in a **stale** transaction is not q
 | Exclusive | `pg_advisory_xact_lock` via `stocky_lifecycle_exclusive_lock(domain)` |
 | Hold | Transaction-scoped. **Never** commit, reacquire later, and call the gap atomic. **No** connection waits for a lock held by a sibling connection in the same orchestration |
 | Durable fence | `ShopInstallGeneration.fence` (`LIVE` \| `UNINSTALLED` \| `ERASING` \| `FINALIZING` \| `ERASED` \| `SUPERSEDED_EVIDENCED`) survives the privacy-erasure and coordinator connections |
-| Check | After shared lock: `stocky_generation_writable(domain)` reads the current generation for that domain. `ERASING`/`FINALIZING` → `generation_frozen` |
+| Check | After shared lock: `stocky_generation_writable(domain)` is true iff **no** generation in that canonical namespace has fence `ERASING` or `FINALIZING`. LIVE + ERASING coexistence is **fail-closed frozen**. **Never** `ORDER BY id` |
 | Owner | nologin `stocky_lifecycle_gate_owner`; `SELECT` on `ShopInstallGeneration` only |
 
 **Writer protocol (participating paths):**
@@ -443,25 +483,38 @@ A boolean `processingEnabled=false` plus RLS in a **stale** transaction is not q
 
 **Topic scope:** the whole-shop exclusive domain barrier is **only** for `shop/redact`. Customer topics must not freeze the shop and must not take that exclusive gate.
 
-**Customer-scoped barrier (F-CLAUDE-PR7TF-01, CONSTRAINED):** `customers/redact` installs a durable **target-scoped** barrier whose keys ordinary writers can compute: verified `shopId` + `generationId` + `CUSTOMER_REST_ID` (`lookupCustomerRestId`) and `ORDER_LEGACY_ID` (each authenticated `lookupOrderLegacyIds` value). It is **not** keyed by a privacy request id. Namespace: two-int advisory locks `hashtext('pr7-ctgt-v1:'\|\|shopId\|\|':'\|\|generationId)` × `hashtext(kind\|\|':'\|\|value)`.
+**Customer-scoped barrier (F-CLAUDE-PR7TF-01 + Decision CC-GEN, CONSTRAINED):** `customers/redact` installs a durable **target-scoped** barrier whose keys ordinary writers can compute: verified **canonical domain** (the physical tenant/data namespace) + `CUSTOMER_REST_ID` (`lookupCustomerRestId`) and `ORDER_LEGACY_ID` (each authenticated `lookupOrderLegacyIds` value). It is **not** keyed by a privacy request id and **not** keyed by a guessed generation. Generation remains **immutable evidence** on `PrivacyCustomerTargetBarrier`, `PrivacyCompletedTarget`, and `PrivacyRequest`. Namespace: two-int advisory locks `hashtext('pr7-ctgt-v2:'||canonicalDomain)` × `hashtext(kind||':'||value)`. PostgreSQL has **no** 3-arg `pg_advisory_xact_lock`.
+
+**Global lock order:** lifecycle domain (`1347573553`) → publication (`1347573556`) → authz (`1347573554`) → customer-target (`1347573555`). **Lock before lookup.** An empty barrier SELECT before the exclusive lock is a publication race and is forbidden.
 
 | Piece | Specification |
 |---|---|
-| Shared | participating target writers: domain **shared** gate, then customer-target **shared** locks in sorted `(kind, value)`, then revalidate |
+| Shared | participating target writers: domain **shared** gate, then customer-target **shared** locks in sorted `(kind, value)`, then revalidate **all** ACTIVE barriers in the canonical namespace |
 | Exclusive | customer-erasure admission / residual+completion: domain **shared** (not exclusive), publication lock, then customer-target **exclusive** locks in the same sort order |
-| Durable row | `PrivacyCustomerTargetBarrier` `ACTIVE` until completion; survives worker death and epoch takeover (`attemptId` rebound by `stocky_privacy_claim_attempt`) |
-| Writer deny | `customer_target_erasing` while ACTIVE; never silently repopulate the target |
-| After COMPLETED | barrier `RELEASED`; `PrivacyCompletedTarget` records minimized `(shop, generation, kind, value, completedAt)`. Queued/replayed payloads with `payloadAdmittedAt < completedAt` raise `customer_target_restore_denied`. Legitimate later writes (`payloadAdmittedAt ≥ completedAt`) are allowed. **Not** lifetime suppression. Q-008 remains OPEN |
+| Durable row | `PrivacyCustomerTargetBarrier` `ACTIVE` until completion; `generationId` is evidence (the request's bound generation), not the lock identity; survives worker death and epoch takeover (`attemptId` rebound by `stocky_privacy_claim_attempt`) |
+| Writer deny | `customer_target_erasing` if **any** ACTIVE barrier in the namespace matches `(kind, value)`; a later LIVE generation row, including lexicographically greater `gen_a_zz`, cannot bypass it; never silently repopulate the target |
+| Writer origin | `stocky_writer_origin_generation`: declared persisted `p_origin_generation_id` (must exist and share the namespace) **or** the **unique** LIVE generation bound by `shopRowId`/`targetShopId`. Missing → `customer_write_origin_missing`. Two LIVE bindings → `customer_write_origin_ambiguous`. **Never** `ORDER BY id`. Old work must not adopt a newer generation on retry |
+| After COMPLETED | barrier `RELEASED`; `PrivacyCompletedTarget` records minimized `(shop, generation, kind, value, completedAt)`. Delayed payloads with `payloadAdmittedAt < completedAt` whose origin **is** the completed generation raise `customer_target_restore_denied`. Genuine successor writes require: unique LIVE origin ≠ completed generation, completed generation **not** LIVE, and `payloadAdmittedAt >= origin.installedAt`. Queued payload before successor `installedAt` remains restore-denied. Indistinguishable shared data → `customer_target_attribution_ambiguous` (visible block/escalate; not a silent admit and not a permanent unexplained ban). Legitimate later writes on a proven unique LIVE successor are allowed. **Not** lifetime suppression. Q-008 remains OPEN |
 | Unrelated progress | other customers (different rest id / order ids) and other shops take different lock keys and continue; `processingEnabled` stays true |
-| Shop supersession | if generation fence is `ERASING`/`FINALIZING`, customer admission/completion returns `superseded_by_shop_erasure` / `superseded`; no fabricated customer COMPLETED download |
+| Shop supersession | if **this request's** generation fence is `ERASING`/`FINALIZING`, customer admission/completion returns `superseded_by_shop_erasure` / `superseded`; no fabricated customer COMPLETED download. Namespace freeze (`stocky_generation_writable`) is separately fail-closed whenever **any** generation in the domain is `ERASING`/`FINALIZING` |
 
-**Residual (not the manifest):** `stocky_privacy_customer_residual_count` is SECURITY DEFINER, source-derived: open-ended `AuditEvent.customerRestId = lookupCustomerRestId`; orders by `shopifyLegacyResourceId = ANY(lookupOrderLegacyIds)`; child lines by reconstructed `gid://shopify/Order/`\|legacyId so a deleted root is not confused with unknown input. Returns only a count. Zero RLS-visible consumer rows still **never** prove absence.
+**Residual (not the manifest):** `stocky_privacy_customer_residual_count` is SECURITY DEFINER and **owns its preconditions** (CC-02) **before** any RLS-filtered count: request GUC must equal `p_request_id` (`residual_request_guc_mismatch` `42501` on absence/mismatch); tenant GUC must equal `targetShopId`; live attempt + capability `READ` required. It does **not** depend on the adjacent enumerator call. Source-derived: open-ended `AuditEvent.customerRestId = lookupCustomerRestId`; orders by `shopifyLegacyResourceId = ANY(lookupOrderLegacyIds)`; child lines by reconstructed `gid://shopify/Order/`||legacyId so a deleted root is not confused with unknown input. Returns only a count. Zero RLS-visible **consumer** rows still **never** prove absence. Historical CE-C: unguarded residual returned `0` on missing/foreign GUC while three rows existed; complete was shielded by re-enumerate — that is a latent P2, not a demonstrated live false-complete.
+
 
 **Completion serialization:** `stocky_privacy_complete_customer_redact` holds publication lock + exclusive target locks, re-enumerates under the live epoch, evaluates residual, then conditionally `COMPLETED` **in the same transaction**. Bounded retries (`completeRetryCount`, max 5) then `ESCALATED` / `budget_exhausted`. Remnants, stale epoch, missing barrier, or shop supersession: **no** receipt.
 
 **Epoch / publication (F-CLAUDE-PR7TF-02):** exactly one `PrivacyRequest.activeAttemptId`. Lost lease → `stocky_privacy_claim_attempt` takes the **same** publication lock (`1347573556` / `pr7-pub-v1:`\|requestId) as the enumerator, marks the old attempt `LOST`, inserts the new epoch, rebinds `activeAttemptId` and ACTIVE barriers. Enumerator: lock, fresh read with `clock_timestamp()`, require GUC request+attempt = live leased attempt, **then** `publicationRevision = publicationRevision + 1` CAS, **then** replace keys. A stale, expired, foreign, or terminal caller raises `enumerator_stale_attempt` and leaves keys/flags/revision unchanged. Check-then-act without the lock is insufficient.
 
-**Honest non-coverage (LIMIT):** PostgreSQL advisory locks and RLS do **not** fence Redis jobs, export publication, or D scratch bytes. Those require generation-fenced publication or positive per-target worker/I/O drain. A TTL, cancelled job label, stale PID, or sampled empty directory is **not** quiescence. Inability to prove reclamation keeps the request incomplete/visible (D’s ultimately accepted recovery boundary). No blanket deletion or cluster-wide kill. A toy database transcription is not an implemented Redis/filesystem fence.
+**Honest non-coverage (LIMIT, informed by PR48 — do not certify a missing fence):** PostgreSQL advisory locks and RLS do **not** fence Redis jobs, export publication, or D scratch bytes. Required future protocol:
+
+1. Target/generation publication fence **and** positive worker/I/O drain acknowledgment, with takeover/death/restart handling and a final residual boundary. No sibling role or worker may evade the barrier via a stale cached observation.
+2. `Job.remove`, CANCELLED, TTL, a decoy PID, process-local `live_writer`, occupancy alone, or `quiescenceConfirmed: true` do **not** prove no late write (**FACT PR48** coordinator PREP-B-01/02/03; Helper B PREP-B-06b — active locked jobs may continue writing after a removal attempt; Helper B **PREP_B_19** — second process with `quiescenceConfirmed: true` deleted a live child PID; W `live_writer` skip is process-local; the boolean is an **operator token**, not liveness).
+3. Accepted W reclamation `reclaimOperatorSelectedDScratch` is **operator-only** with external namespace-wide quiescence as a precondition. Document the integration hazard; **do not** invent a successful execution of that precondition; **do not** silently revoke D acceptance. **Do not auto-call that helper from PR7** until real quiescence of every process able to write its namespace is established. When it cannot be established, keep the privacy request incomplete/escalated.
+4. No blanket stop/delete, FLUSHALL (PREP-B-07 not called), `/tmp` sweep, or directory-current-size substitute for reserved capacity. Unknown export configuration is not proof that historical bytes never existed (PREP-B-06 / PREP-C-12: no S3/R2/GCS module on W).
+5. Customer scope must not silently cancel unrelated customers or whole shops (PREP-B-04 jobId isolation ≠ privacy fence).
+
+Cross-system prerequisites remain explicit future implementation proofs only where this plan specifies a concrete executable protocol and tests. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Temporary feasibility tests may exercise existing real APIs; they must not hide a complete untracked PR7 implementation outside the repo.
+
 
 **Uninstrumented writers:** control-plane tables have **no** RLS on V. A raw CP `INSERT` without the gate still succeeds (**executed** G5). Legacy processes running before the guard is deployed must be **stopped/drained** before privacy execution is enabled. A rollout with uninstrumented active writers is not safe admission. Named FUTURE wrappers (not this PR): `TenantDb` / `withTenantBoundTransaction` participating-write guard is **required, not optional**; CP write helpers for every §7.9 inventoried symbol including `completeAttemptRetry` and the dispatcher disabled-shop path. Do not claim accepted B/C internals automatically honor this gate. `processingEnabled` checks are useful admission filters; they are **not** a transaction drain.
 
@@ -668,14 +721,15 @@ PUBLIC EXECUTE revoked on every helper. FORCE RLS on. No BYPASSRLS. No membershi
 | `stocky_current_tenant_id()` | table/bootstrap owner (V: current SQL owner) | `pg_catalog, pg_temp` | `current_setting` | runtime, CP, privacy_reader, privacy_erasure, all nologin helper owners listed | policies + app `set_config` sessions |
 | `stocky_current_tenant_context_version()` | same | same | `current_setting` | same set | same |
 | `stocky_shop_processing_enabled(text)` | same | same | `SELECT Shop.processingEnabled` | **`stocky_runtime` only** | runtime policies only |
-| `stocky_privacy_capability_allows(text,text)` | `stocky_privacy_capability_owner` | locked | `SELECT PrivacyRequest, PrivacyAttempt, ShopInstallGeneration` | reader, erasure | policies; probes |
+| `stocky_privacy_capability_allows(text,text)` | `stocky_privacy_capability_owner` | locked | `SELECT PrivacyRequest, PrivacyAttempt, ShopInstallGeneration` | reader, erasure, **and** `stocky_privacy_target_owner` (CC-02 residual definer) | policies; residual; probes |
 | `stocky_privacy_row_in_manifest(text,text)` | `stocky_privacy_target_owner` | locked | `SELECT PrivacyTargetKey`; calls `stocky_current_tenant_id` | reader, erasure | policies |
 | `stocky_privacy_enumerate_targets(text)` | `stocky_privacy_target_owner` | locked | publication lock; live attempt/lease; CAS `publicationRevision`; SELECT facts/lines/audit; INSERT/DELETE `PrivacyTargetKey`; UPDATE enumeration columns; sequence `PrivacyTargetKey_id_seq` | reader, erasure, CP | coordinator enumerate only |
 | `stocky_privacy_publication_lock(text)` / `stocky_privacy_live_attempt_ok(text,text)` | invoker (used inside enumerator/claim) | locked | advisory ns `1347573556`; SELECT request/attempt | reader, erasure, CP, target_owner | enumerator; claim/takeover; complete |
 | `stocky_privacy_claim_attempt(text,text,text)` | `stocky_privacy_target_owner` | locked | same publication lock; mark LOST; insert epoch; rebind `activeAttemptId` + ACTIVE barriers | CP | worker-loss takeover |
-| `stocky_privacy_install_customer_barrier(text,text)` / `stocky_customer_targets_for_request(text)` | `stocky_privacy_target_owner` | locked | INSERT/rebind `PrivacyCustomerTargetBarrier` on shop/generation + `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID` | erasure, CP | **P-CUSTOMER-BARRIER** |
-| `stocky_customer_write_guard(...)` / `stocky_fact_write_guard(...)` | `stocky_lifecycle_gate_owner` / invoker | locked | domain shared + target shared; deny `customer_target_erasing` / `customer_target_restore_denied` | runtime, CP | FUTURE TenantDb / apply writers |
-| `stocky_privacy_customer_residual_count(text)` | `stocky_privacy_target_owner` | locked | source-derived count from audit/orders/reconstructed GID children; **not** `PrivacyTargetKey` | erasure, CP | **P-CUSTOMER-RESIDUAL-COMPLETE** |
+| `stocky_privacy_install_customer_barrier(text,text)` / `stocky_customer_targets_for_request(text)` | `stocky_privacy_target_owner` | locked | INSERT/rebind `PrivacyCustomerTargetBarrier`; generation is **evidence**; lock keys are canonical-domain × kind:value (`pr7-ctgt-v2:`) | erasure, CP | **P-CUSTOMER-BARRIER** |
+| `stocky_shop_canonical_domain(text,text)` / `stocky_writer_origin_generation(text,text,text)` / `stocky_customer_target_lock_key1/2` | lifecycle / invoker | locked | unique LIVE/declared origin; two-int `hashtext` pair (not 3-arg). **Never** `ORDER BY id` | runtime, CP, erasure | CC-GEN writer origin |
+| `stocky_customer_write_guard(...)` / `stocky_fact_write_guard(...)` | `stocky_lifecycle_gate_owner` / invoker | locked | lock **before** lookup; examine **all** namespace ACTIVE/completed barriers; deny `customer_target_erasing` / `customer_target_restore_denied` / `customer_target_attribution_ambiguous` / `customer_write_origin_missing` | runtime, CP | FUTURE TenantDb / apply writers |
+| `stocky_privacy_customer_residual_count(text)` | `stocky_privacy_target_owner` | locked | **owns** request GUC / tenant / live attempt / READ capability **before** RLS count (`residual_request_guc_mismatch` `42501`); source-derived; **not** `PrivacyTargetKey` | erasure, CP | **P-CUSTOMER-RESIDUAL-COMPLETE** |
 | `stocky_privacy_complete_customer_redact(text,text)` | `stocky_privacy_target_owner` | locked | publication + exclusive targets; re-enumerate; residual; conditional COMPLETED + `PrivacyCompletedTarget` | erasure, CP | same phase |
 | `stocky_privacy_data_request_coverage(text)` | `stocky_privacy_target_owner` | locked | snapshot key count + `enumerationComplete` at `publicationRevision` | reader, CP | data_request fulfillment; **not** an empty residual |
 | `stocky_cp_participating_write` / `stocky_lifecycle_complete_attempt_retry` / `stocky_dispatcher_disabled_shop_write` | invoker | locked | REQUIRED lifecycle shared then CP DML (`DurableJob` / `JobDispatch`) | CP (retry/dispatcher); CP+runtime (generic) | inventoried lifecycle/dispatcher paths |
@@ -722,7 +776,7 @@ stocky-plus/docs/phases/phase-1/PR7_*IMPLEMENTATION*  # later
 | `app/tenant/after-auth.server.ts` | `runAfterAuthTenantBootstrap` — fence check + participating-write guard; no settings revival on ERASING/FINALIZING/this-generation REDACTED |
 | `app/tenant/bootstrap.server.ts` | `upsertCanonicalShop` — `assertNoErasureFence` / shared gate before create |
 | `app/tenant/db-context.server.ts` / `tenant-db.server.ts` | **REQUIRED** wrapper: `stocky_participating_write_guard` then `stocky_customer_write_guard` on matching kinds. Not optional. Future architecture test fails when a tenant-linked writer bypasses the declared guard |
-| `app/shopify.server.ts` | skip catalog enqueue on fence; `useOnlineTokens: true` **only after** D-PR7-02 implementation authority (not this PR) |
+| `app/shopify.server.ts` | skip catalog enqueue on fence; `useOnlineTokens: true` **only after** a separately reviewed safe adapter/version and old-session migration (D-PR7-02; not this PR). Actor identity does **not** require online tokens |
 | `app/sync/uninstall.server.ts` | `processUninstall` / `cancelAllCancellable` — write generation `UNINSTALLED`; cancel ordinary jobs; **no** privacy DurableJob skip list required |
 | `app/sync/reinstall.server.ts` | keep REDACTED deny; allow new Shop only when fence permits |
 | `app/sync/intake.server.ts` | **unchanged** ordinary `createDurableJob`; privacy does **not** gain `allowWhenProcessingDisabled` |
@@ -738,11 +792,18 @@ stocky-plus/docs/phases/phase-1/PR7_*IMPLEMENTATION*  # later
 | `.github/workflows/ci.yml` | add `test:privacy` distinct command that fails on zero tests |
 | `scripts/sync-control-plane/roles.ts` | no Shop DELETE; EXECUTE verifier (SELECT-only) |
 
-**Exact participating-writer inventory:** the disposable contract table `ParticipatingWriterInventory` lists every V file/symbol inspected for this packet (26 rows), including `completeAttemptRetry`, `dispatcher_disabled_shop_path`, `withTenantBoundTransaction` (**not optional**), claim/heartbeat/success/fail/dead-letter/reaper, apply writers, catalog checkpoint, intake, uninstall, bootstrap, after-auth, webhook-processor, queue, health. Refresh against formally closed PR6 before implementation; do not chase PR43. A future architecture test must fail when a tenant-linked writer is missing from the inventory or persists a probe row (`probe_unguarded%`) without the guard (**executed** G9).
+**Exact participating-writer inventory (re-derived on W `ee193f3…`):** the disposable contract table `ParticipatingWriterInventory` lists **50** rows: the historical **27** V/TF rows (including the misnamed `getShopHealth` label, which is **ABSENT** as an export on W) plus **23** W-derived writers. Completeness (`stocky_inventory_is_complete`) is **required-symbol presence**, not a row count and **not** PR48's 86-row classification table (that table includes nonwriters/read-only entries — **FACT PR48** Helper C). Required symbols: `completeAttemptRetry`, `dispatcher_disabled_shop_path`, `withTenantBoundTransaction` (**not optional**), `claimAttempt`, `enqueueWithDispatch`, `runOrderFactsSyncJob`, `computeSyncHealth` (SyncHealth **upsert**, PREP-C-04 / PREP-C-29). G9 fails when a required W writer is omitted; deleting historical `getShopHealth` still leaves completeness true; row count must not be 86 (**executed**).
 
-**Forbidden now (TF-03):** treating `processingEnabled` / `assertShopProcessingEnabled` as a transaction drain; marking `withTenantBoundTransaction` optional; omitting `completeAttemptRetry` or `dispatcher_disabled_shop_path`; claiming an unguarded tenant-linked `probe_unguarded%` write is complete; using Redis TTL or a cancelled-job label as quiescence.
+W surfaces that **did not change** vs V (TF-03 focus symbols still exact): `lifecycle.server.ts`, `dispatcher.server.ts`. `recoverExpiredDispatchLeases` is **local** (not a module export) and has **no** `processingEnabled` filter (**FACT W** / PREP-C-20). `getShopHealth` does not exist on W.
 
-Paths may sit outside the **customer** barrier only with a precise proof they cannot invalidate this request’s completion (ordinary CP cleanup vs repopulating facts). They still take the **lifecycle** shared gate where inventoried. `health.server.ts` is read-only. Fair-claim `WHERE processingEnabled=true` is admission-only and does not drain in-flight writers.
+**W-derived writers named in this packet (not optional family labels):** `computeSyncHealth`; `runOrderFactsSyncJob` / `runOrderFactsReconcileJob`; `enqueueOrderFactsSync` / `enqueueOrderFactsReconcile`; `recoverStrandedEnqueuedJobs`; `recoverExpiredDispatchLeases`; `applyCanonicalAndLegacy` / `persistIncompleteWithoutReceipt`; `applyNominatedOrderGid`; `persistShopTimezoneCurrencyValues`; `processOrderFactsWebhookJob`; `createOrderFactsSyncRun` / `persistOrderFactsCursor` / `recordOrderFactsDataIssue` / `persistOrderFactsCoverageHealth`; `applyCanonicalFacts` (no explicit PE pre-lock, PREP-C-15); `applyWithApplicationReceipt`; `deleteSessionsForShop`; `signalBulkOperationContinuation`; `insertOrderFact` / `insertReceiptFinal` (actual W exports; `applyOrderFactWriters` / `applyReceipts` remain family labels); `reclaimOperatorSelectedDScratch` (**operator-only**; MUST NOT be auto-called from PR7 — PREP-B-19).
+
+Keep completed A/B/C/D internals unchanged **now**; name required future shared-host integrations honestly. Formal PR6 closeout packaging (PR47) is **unmerged** and is not this packet (PREP-C-23).
+
+**Forbidden now (TF-03 + CC-03 + PR48):** treating `processingEnabled` / `assertShopProcessingEnabled` as a transaction drain; marking `withTenantBoundTransaction` optional; omitting `completeAttemptRetry`, `dispatcher_disabled_shop_path`, `runOrderFactsSyncJob`, or `computeSyncHealth`; copying PR48's 86-row count into the completeness assertion; claiming an unguarded tenant-linked `probe_unguarded%` write is complete; using Redis TTL, `Job.remove`, CANCELLED, a decoy PID, process-local `live_writer`, occupancy, or `quiescenceConfirmed: true` as quiescence.
+
+Paths may sit outside the **customer** barrier only with a precise proof they cannot invalidate this request's completion (ordinary CP cleanup vs repopulating facts). They still take the **lifecycle** shared gate where inventoried. Fair-claim `WHERE processingEnabled=true` is admission-only and does not drain in-flight writers.
+
 
 `BOUNDED_CHECKPOINT_RETRY` remains available as an additive enum for **ordinary** jobs if a later decision needs it. It is **not** the privacy coordinator strategy. Historical matrix rows PR7-PRIV-015…018 that named the DurableJob privacy path retain their original meaning and are **withdrawn as the required path** by Decision B; replacement rows are PR7-COORD-*.
 
@@ -868,8 +929,8 @@ Status `constrained` = ChatGPT assignment. Comment 5729229659 is current for Dec
 
 | ID | Question | Constrained direction | Current → replacement (planning) | Merchant / technical / migration / risks | Blocks runtime start? |
 |---|---|---|---|---|---|
-| **D-PR7-01** | Actor source | Exact verified `sessionToken.sub` string; no recovery from rounded numbers | First online id then stringify number → **sub-only persistence** | Safer identity; requires online/embedded token proof; additive staff table VARCHAR | Yes |
-| **D-PR7-02** | Online tokens | FUTURE `useOnlineTokens: true` for human platform; offline for jobs; prove library; no config now | Optional defer → **selected enablement in implementation PR** | Extra 24h token class; logout revoke; must not break webhooks | Yes until implementation proves bind |
+| **D-PR7-01** | Actor source | Exact verified JWT `sub` **string**; no recovery from rounded numbers; actor identity does **not** require online tokens (Helper A PREP-A-01) | First online id then stringify number → **sub-only persistence**; dest/iss hostname check in **app** (library omits it, coordinator PREP-A-04) | Safer identity; mixedToken/stale-cache must be fenced before any online credential; additive staff table VARCHAR | Yes |
+| **D-PR7-02** | Online tokens | Owner proof separately gated. Do **not** enable current online-session path merely because it produces `associated_user`. Later proposal must prove per-user cache isolation, retained original actor binding, dest/iss, and migration of old cached sessions. No config now | Optional defer → **explicit later enabling proposal**; unresolved positive owner binding stays an entry gate | mixedToken / stale-cache hazards (Helper A PREP-A-09/11); extra 24h token class | Yes until a reviewed adapter proves bind |
 | **D-PR7-03** | Receipts as audit? | **No** | unchanged No | — | Yes |
 | **D-PR7-04** | First owner | Same-context verified `account_owner`; unsafe correlation → unassigned | First-login withdrawn (already) | Recovery pending until owner session | Yes |
 | **D-PR7-05** | redact vs reinstall | Separate delivery/work/generation; old receipts never exempt new work | HMAC work key → **classifier §7.6.1** | Ambiguous cases ESCALATED; 30d clock remains | Yes |
@@ -877,16 +938,17 @@ Status `constrained` = ChatGPT assignment. Comment 5729229659 is current for Dec
 | **D-PR7-07** | Gate merchandising? | **No** in PR7 | unchanged | Avoid 403 during owner_pending | Frozen **No** |
 | **D-PR7-08** | Audit vs redact | Runtime append-only; coordinator while disabled; restricted DELETE; Q-008 limits | In-place UPDATE withdrawn | Privacy policies additive | Yes |
 | **D-PR7-09** | Pause | Privacy-local default OFF; intake/deadlines continue | Flag home specified | Clock not waived | Frozen home |
-| **D-PR7-10** | Redis / coordinator | Privacy coordinator is **not** a Shop-linked DurableJob. Redis hint optional; poll recovers. Ordinary Redis remove remains shop/generation scoped; no flush. Cross-system bytes need separate drain proof | Privacy-through-DurableJob withdrawn (Decision B) | Shared queue risk if FLUSHALL; unproven I/O ≠ COMPLETED | Yes |
+| **D-PR7-10** | Redis / coordinator | Privacy coordinator is **not** a Shop-linked DurableJob. Redis hint optional; poll recovers. `Job.remove`/TTL/PID/`quiescenceConfirmed` are **not** drain (PR48). Do not auto-call D reclaim from PR7. No FLUSHALL | Privacy-through-DurableJob withdrawn (Decision B) | Active locked jobs can write after remove; PREP_B_19 cross-process reclaim hazard | Yes |
 | **D-PR7-11** | Delete Shop? | Checked finalizer function + FK map + recovery | Unspecified DELETE → **named function** | Irreversible | Yes |
 | **D-PR7-12** | Revoke mid-job | Advisory `stocky_authz_lock` + SELECT-only verifier on CP txn; stable `commandId`; no cross-role atomicity | `FOR UPDATE` helper withdrawn (Decision C / XC-05/07) | Cooperative locks; named writers only | Yes |
 | **D-PR7-13** | DB roles | Per-topic reader/erasure policies + complete grant catalogue; no processingEnabled on privacy; no runtime exception | Whole-shop-only helper withdrawn (Decision A / XC-01/03) | New roles/helpers/EXECUTE | Yes |
 | **D-PR7-14** | data_request | Distinct owner-only download; operator fallback if uninstalled; not generic export | shop_admin export contradiction withdrawn | Uninstall fulfillment path | Align before runtime |
+| **CC-GEN** | Customer-target identity | Generation-independent canonical-domain × kind:value lock; trusted origin; no `ORDER BY id` | shop/generation lock + lexicographic resolver → **namespace lock + unique LIVE/declared origin** | Multi-generation shops no longer bypass barriers; successor writes remain possible when uniquely proven | Yes |
 | **Q-008** | Retention language | OPEN | OPEN | Production blocker | Production |
 
 **Remaining explicit residuals (not hidden as “implementation detail”):**
 
-1. Installed-library proof that `sessionToken.sub` + online `associated_user` populate when `useOnlineTokens: true` (**UNVERIFIED** until implementation tests).
+1. Live Shopify / App Bridge ID-token bind and a **reviewed** online-token enabling proposal (per-user cache isolation, dest/iss, old-session migration). Helper A verified `sessionToken.sub` with online tokens **OFF** on mocked transport — that does **not** certify live Shopify or a safe online-token rollout (**UNVERIFIED** PREP-A-16 / PREP-A-07).
 2. Whether every compliance delivery includes `X-Shopify-Event-Id` (**OFFICIAL** general header list vs **UNVERIFIED** on this topic). Missing event id is handled (nullable).
 3. Accepted D scratch reclamation API after D merge; infeasible → named follow-up, not skip.
 4. Q-008 counsel holds.
@@ -900,9 +962,9 @@ Status `constrained` = ChatGPT assignment. Comment 5729229659 is current for Dec
 
 **P7-C06.** This assignment does **not** authorize a V-only alternate base.
 
-1. ChatGPT accepts the **topic-authority / finalization correction** plan + matrix after independent Claude Code re-review of this head with no unresolved P0/P1/P2.
-2. Constrained D-PR7 items remain constrained; residuals in §9 are either accepted as implementation proofs or separately decided.
-3. Phase 1 PR6 independently accepted and formally closed on merged `origin/main` (including D). Implementation branches from that main, not from this planning SHA.
+1. ChatGPT accepts this **CC-GEN / W-integration / entry-evidence** plan + matrix after independent Claude Code re-review of this exact head with no unresolved P0/P1/P2.
+2. Constrained D-PR7 items remain constrained; residuals in §9 are either accepted as implementation proofs or separately decided. Do not certify a missing online binding or cross-system fence.
+3. Phase 1 PR6 independently accepted and formally closed on merged `origin/main`. W is merged D runtime; unmerged PR47 closeout packaging is **not** that formal close. Implementation branches from accepted closed main, not from this planning SHA.
 4. Exact-head CI on that merged main per `CI_POLICY.md`.
 5. Named single writer, exclusive files §7.9, one branch, one chat; **no competing D writer**.
 6. Explicit subsequent ChatGPT **runtime** authority sentence.
@@ -921,32 +983,36 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 
 | Check | Result |
 |---|---|
-| Starting subject **S** | `9d9919057992e9c7ba1f7bfcee73d671f2fadbab` |
-| TF review **FF** | `dee96cf310e7ee2a45947649ee998ef9fe5b51b3`; sole parent S; one-file add; blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c` |
-| Prior review blobs | `c1fa5c2fed74bf80d1006267b43d767258895c17` and `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f` unchanged |
-| Base **V** | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Starting subject **S** | `a292bc8a6ea26192bc295af7338dd6d653a3e65c` |
+| CC review **FF** | `c7b47807083bfad8e7e3a7504e826027e56b7a32`; sole parent S; one-file add of `PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md`; blob `e908770d9daea4f963b2fd09e38af79e07274d41` |
+| W merge (history-preserving, `--no-ff`) | `0b21604eabff392aa25866732045dfd4b1041bf0` parents `c7b4780…` + `ee193f3…` |
+| Prior review blobs | `c1fa5c2fed74bf80d1006267b43d767258895c17`, `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`, `e609e9526ed1ec043551ca68d6b977f5b5935d0c` **unchanged** |
+| Base **V** (historical) | `a3ff480f1477237f8055f10c43298480a05728a1` |
+| Merged main **W** | `ee193f38491245a10fb2fa60d2cf9a29f3271605` |
+| Entry-evidence **PR48** | `275292d19b583c04c3afe01ef7d9feb48fee0f6c` (latest on `planning/pr7-entry-evidence-20260919-37c6` at this correction; **no later source-preservation revision**) |
 | IEEE-754 probe | **executed-prior-planning-head-not-re-run**; `Number("9007199254740993")===9007199254740992` (Node `v22.14.0`) |
 | `npm run test:privacy` | **executed-prior-planning-head-not-re-run** (exit 1, missing script on V). Missing script is an implementation gate, not a planning defect |
-| Old-model CE-1 / CE-6 | **executed-this-planning-session** on the **unchanged** 59-case scripts (hashes `b29ef463…` / `d0d84842…` / `69005537…`) before loading the corrected contract. CE-1: keys `{AuditEvent:ae_a1,ShopifyOrderFact:of_a1,ShopifyOrderLineFact:ol_a1}`, survivor `ae_a3`, erasure residual `0`. CE-6: epoch-2 flags `true,0` / 3 keys → stale enumerator `false,1` / 0 keys |
-| Disposable PostgreSQL 16 proofs (corrected contract) | **executed-this-planning-session** — **115/115 PASS** after clean fixture (§14), including preserved unique G1–G6 **59** assertions, G7–G10, NEG load-bearing, and a clean rerun of G7–G9. Host `/tmp/pr45-pg16:5433`. `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). Not PR7 runtime |
-| Redis / filesystem / Shopify | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted |
+| Old-model CE-1 / CE-6 | **executed-prior-planning-head-not-re-run** on the **unchanged** 59-case scripts (hashes `b29ef463…` / `d0d84842…` / `69005537…`). Preserved identities; not re-run this packet |
+| Old-model CE-A / CE-B / CE-C | **executed-this-planning-session** on the **unchanged** TF contract (`75ab1c02…349846de`) + TF driver (`566e0f28…`) **before** loading this contract. Host `/tmp/pr45-cc-pg16:5434`. Repro script sha256 `2f732e1c1b91aab76e3f715e4f15c1216a5476dd297110b91e6b41fd5ac7f990`. CE log sha256 `c1077d531a435b7536c8e9f07c83743c413fb054b749fa7f5f3fbac52df9991f`. CE-A: baseline deny; after `gen_a_zz` matching write **admitted** (defect). CE-B: baseline restore_denied; delayed pre-erasure payload **admitted** after `gen_a_zz` (defect). CE-C: no-GUC residual `0`, matching GUC `3`, foreign GUC `0`; complete shielded by enumerator (`enumerator_request_guc_mismatch`) — latent P2, **not** a live false-complete |
+| Disposable PostgreSQL 16 proofs (corrected contract) | **executed-this-planning-session** — **169 records / 169 PASS / 0 FAIL** = **117 unique assertions** + **52 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10). Unique G1–G6 = 59 preserved. Host `/tmp/pr45-cc-pg16:5434` (`PROOF_ROOT=/tmp/pr45-cc-new`). `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). Not PR7 runtime. Leftover TF cluster `/tmp/pr45-pg16:5433` was **not** stopped |
+| Redis / filesystem / Shopify / live token exchange | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted; Helper A / coordinator PREP rows are **FACT (PR48)** synthetic probes, not this session |
 | Official fetches | §3 URLs, **2026-09-18** |
 | Store calls | not executed |
 | Review artifacts edited | **No** |
 
-Failed proof attempts (this TF pass, not hidden): first corrected-contract run 93/111 (ambiguous PL/pgSQL `t.kind` in barrier/complete SQL; late-row test re-enumerated the remnant into the manifest). Contract repair entered Appendix A; driver residual sequence fixed; **clean 115/115**. NEG runs replace one function at a time, demonstrate the safety property failing, then `reset()` reloads the declared contract. No hidden GRANT, dropped FK, or repaired driver is credited to an unchanged contract.
+Failed proof attempts (this CC pass, not hidden): residual definer initially lacked `EXECUTE` on `stocky_privacy_capability_allows` (`42501`); GRANT to `stocky_privacy_target_owner` entered the declared contract. G12 genuine-empty first used an RLS-filtered erasure `DELETE` so the count stayed `3`; driver now deletes as `pr45owner` BYPASSRLS then residual-counts `0`. First assemble of the inventory `VALUES` missed `processing_enabled_on_v` (length mismatch) before the clean contract. No hidden GRANT, dropped FK, or repaired driver is credited to an **unchanged** contract. NEG replaces one function at a time, demonstrates the safety property failing, then `reset()` reloads the declared contract.
 
-Historical 59-case script hashes remain original-run identities (not this contract): `01_contract.sql` `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; `02_seed.sql` `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`; `03_run_proofs.py` `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; original `results.json` `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` (run log; reviewer independent log `185dd1b8…`).
+Historical TF 115-record packet remains original-run identity for S (**not** this contract): **115 records = 89 unique + 26 declared G7–G9 reruns** (do **not** read 115 unique). TF contract `75ab1c02fc01560d975a78737bccbc7c2fa6330a07100ad98d2b243d349846de`; TF driver `566e0f289f2ca4da526286b3ca831c906030973958318eb60b55a0237823251a`; TF run log `006e5799544c0ae2368a75e50fbbfdee77b43b816d9cd490c5c2f5d140e94344`.
 
-Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`, port 5433, roles as named principals). System cluster was not used. Teardown: `dropdb pr45_proof`; `pg_ctl stop` is **not** required to leave the disposable cluster for inspection.
+Historical 59-case identities remain original-run identities: `01_contract.sql` `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; `02_seed.sql` `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`; `03_run_proofs.py` `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; original `results.json` `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` (run log; reviewer independent log `185dd1b8…`).
 
----
+Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`, **port 5434**, roles as named principals). System cluster was not used. Teardown: `dropdb pr45_proof`; `pg_ctl stop` of this CC cluster is **not** required to leave it for inspection. Do **not** stop another helper’s leftover TF postgres on 5433.
 
 ## 13. Cross-check to the acceptance matrix
 
 | Plan section | Matrix IDs |
 |---|---|
-| Actor / owner / wide id | PR7-ACT-001…023 |
+| Actor / owner / wide id / mixedToken / dest-iss | PR7-ACT-001…025 |
 | Permission / replay locks / export split | PR7-RBAC-001…021, PR7-CUST-006/011/012 |
 | Audit / coordinator / privacy RLS | PR7-AUD-001…014, PR7-SIDE-009/010 |
 | Classifier / fence / crash | PR7-LIFE-001…024, PR7-RED-001…021 |
@@ -956,12 +1022,11 @@ Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (d
 | Authz lock / command | PR7-AUTHZ-*, PR7-CMD-* |
 | Lifecycle gate / tombstone | PR7-GATE-*, PR7-TOMB-* |
 | Customer completion / epoch / inventory | PR7-TOP-015…, PR7-COORD-PUB-*, PR7-GATE-009…, **F-CLAUDE-PR7TF-01…04** |
+| Generation-independent target / residual own GUC | PR7-CUST-025…, PR7-TOP-018…, PR7-RESID-*, G11, G12, NEG-4/5, **F-CLAUDE-PR7CC-01…04** / **CC-GEN** |
 | Escalation | PR7-ESCL-001…004 |
-| Finding crosswalk | §1.2, §1.3, §1.4 and matrix §11–§12.1 |
+| Finding crosswalk | §1.2, §1.3, §1.4, §1.5 and matrix §11–§12.2 |
 
 If a matrix row cites a path, that path is listed in §4 or §7.9.
-
----
 
 ## 14. Disposable feasibility proof (not repository runtime)
 
@@ -969,35 +1034,45 @@ If a matrix row cites a path, that path is listed in §4 or §7.9.
 
 | File | SHA-256 | Role |
 |---|---|---|
-| `01_contract.sql` | `75ab1c02fc01560d975a78737bccbc7c2fa6330a07100ad98d2b243d349846de` | Proposed DDL/roles/policies/helpers (this correction) |
-| `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (`pr45owner` BYPASSRLS **load only**; **unchanged** from the 59-case packet) |
-| `03_run_proofs.py` | `566e0f289f2ca4da526286b3ca831c906030973958318eb60b55a0237823251a` | Concurrency/permission driver; G1–G6 preserved; G7–G10 + NEG added |
-| `results.json` | **run log, not a verification artifact** (timings/environment). This-run digest `006e5799544c0ae2368a75e50fbbfdee77b43b816d9cd490c5c2f5d140e94344` is an original-run identity only |
+| `01_contract.sql` | `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c` | Proposed DDL/roles/policies/helpers (this CC-GEN / W correction) |
+| `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (`pr45owner` BYPASSRLS **load only**; **byte-identical** to the 59-case and TF packets) |
+| `03_run_proofs.py` | `e9bd3c187451ea989fcf1b0a6c1385f3e4d93281744127d44b46621f97001f34` | Concurrency/permission driver; `PROOF_ROOT` / `PGHOST` / `PGPORT`; G1–G12 + NEG; clean G7–G9/G11/G12 rerun |
+| `results.json` | **run log, not a verification artifact** (timings/environment). This-run digest `420ec6e0cb231a43bed36dc850c478b3587f097643b477daeb6695318bd094d8` is an original-run identity only |
 
-Historical 59-case identities (S / independently reproduced head; **not** this contract): contract `b29ef463…858db054`, seed `d0d84842…4084f632`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
+Historical TF identities (S / independently reproduced head; **not** this contract): contract `75ab1c02…349846de`, seed `d0d84842…4084f632`, driver `566e0f28…7823251a`, Cursor run log `006e5799…`. Historical 59-case identities: contract `b29ef463…858db054`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
 
-Clean-fixture result: **115/115 PASS** (unique G1–G6 = 59). Driver queries `current_setting('server_version')` and `server_version_num`.
+Clean-fixture result: **169 records / 169 PASS / 0 FAIL** = **117 unique** + **52 declared reruns**. Unique G1–G6 = 59. New unique this packet = 28 (G9 +4 W-required-symbol controls; G11 12; G12 10; NEG +2). Driver queries `current_setting('server_version')` and `server_version_num`. Do **not** label 169 or 115 as unique-assertion counts.
 
-Commands (disposable):
+Reproduction is **self-contained**. Stage the three Appendix scripts into an owned `PROOF_ROOT` (the driver defaults to its own directory). Do **not** hardcode `/tmp/pr45-tf`. Do **not** stop a leftover helper cluster on 5433.
 
 ```bash
-initdb -D /tmp/pr45-pg16
-pg_ctl -D /tmp/pr45-pg16 -o "-p 5433 -k /tmp/pr45-pg16" start
-createuser -h /tmp/pr45-pg16 -p 5433 pr45owner
-createdb  -h /tmp/pr45-pg16 -p 5433 -U pr45owner pr45_proof
-psql -h /tmp/pr45-pg16 -p 5433 -U pr45owner -d pr45_proof -v ON_ERROR_STOP=1 -f 01_contract.sql
-psql -h /tmp/pr45-pg16 -p 5433 -U pr45owner -d pr45_proof -v ON_ERROR_STOP=1 -f 02_seed.sql
-python3 03_run_proofs.py   # dropdb/createdb + both files + G1–G10 + NEG + clean G7–G9 rerun
-dropdb -h /tmp/pr45-pg16 -p 5433 -U pr45owner --if-exists pr45_proof
+export PROOF_ROOT=/tmp/pr45-cc-new
+export PGHOST=/tmp/pr45-cc-pg16
+export PGPORT=5434
+# Copy Appendix A/B/C bytes into $PROOF_ROOT/{01_contract.sql,02_seed.sql,03_run_proofs.py}
+# sha256sum must match the table above.
+initdb -D "$PGHOST"
+pg_ctl -D "$PGHOST" -o "-p $PGPORT -k $PGHOST" start
+createuser -h "$PGHOST" -p "$PGPORT" pr45owner
+createdb  -h "$PGHOST" -p "$PGPORT" -U pr45owner pr45_proof
+python3 "$PROOF_ROOT/03_run_proofs.py"   # dropdb/createdb + both SQL files + G1–G12 + NEG + clean rerun
+# Old CE-A/B/C (optional; uses the *unchanged TF* contract, not this one):
+# python3 /path/to/repro_old_ce.py
+dropdb -h "$PGHOST" -p "$PGPORT" -U pr45owner --if-exists pr45_proof
 ```
 
 Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_privacy_reader`, `stocky_privacy_erasure`, `stocky_privacy_operator`. Setup used isolated `pr45owner`. No hidden GRANT, policy drop, or role switch is omitted from Appendix A.
 
-**Unexecuted limits:** Redis job drain, export publication, D scratch reclamation, live Shopify, installed `node_modules` `authenticate.admin` bind, PR7 processors.
+**Unexecuted limits:** Redis job drain, export publication, D scratch reclamation, live Shopify, installed `node_modules` `authenticate.admin` live bind, PR7 processors. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence.
 
 ### Appendix A — `01_contract.sql`
 
 ```sql
+-- PR45 / PR7 disposable PostgreSQL 16 feasibility contract (CC-GEN / W inventory)
+-- Transcribed from the proposed final planning contract. Isolated owner: pr45owner.
+-- search_path locked on every SECURITY DEFINER function. NO hidden GRANT.
+-- PUBLIC EXECUTE revoked. No BYPASSRLS. FORCE RLS on merchant tables.
+
 -- PR45 / PR7 disposable PostgreSQL 16 feasibility contract
 -- Transcribed from the proposed final planning contract.
 -- Isolated owner: pr45owner (setup only). Permission probes use named roles.
@@ -1174,6 +1249,7 @@ CREATE TABLE public."ShopInstallGeneration" (
   "shopRowId" text REFERENCES public."Shop"(id) ON DELETE SET NULL,
   fence text NOT NULL,
   "erasedAt" timestamptz,
+  "installedAt" timestamptz NOT NULL DEFAULT now(),
   "rowVersion" int NOT NULL DEFAULT 1
 );
 
@@ -1723,15 +1799,14 @@ LANGUAGE plpgsql STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
 AS $$
-DECLARE f text;
 BEGIN
-  SELECT fence INTO f
-  FROM public."ShopInstallGeneration"
-  WHERE "canonicalDomain" = p_canonical_domain
-  ORDER BY id DESC
-  LIMIT 1;
-  IF f IS NULL THEN RETURN true; END IF;
-  RETURN f NOT IN ('ERASING','FINALIZING');
+  -- Namespace freeze: ANY ERASING/FINALIZING generation. Never ORDER BY id.
+  -- LIVE + ERASING coexistence is fail-closed frozen (no guessed successor write).
+  RETURN NOT EXISTS (
+    SELECT 1 FROM public."ShopInstallGeneration"
+    WHERE "canonicalDomain" = p_canonical_domain
+      AND fence IN ('ERASING','FINALIZING')
+  );
 END;
 $$;
 
@@ -1852,14 +1927,18 @@ GRANT SELECT ON public."PrivacyRequest", public."PrivacyAttempt", public."ShopIn
 GRANT SELECT ON public."Shop" TO stocky_privacy_reader, stocky_privacy_erasure;
 
 -- ---------------------------------------------------------------------------
--- TF-01 customer-target barrier, source-derived residual, serialized completion
--- ns 1347573555 = customer targets (shop/generation + kind/value writers can compute)
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION public.stocky_customer_target_lock_key1(p_shop_id text, p_generation_id text)
+-- CC-GEN customer-target barrier, trusted origin, source-derived residual
+-- ns 1347573555 = canonical tenant namespace × kind/value (NOT generation)
+-- Generation remains immutable evidence on barrier / completed-target / request.
+-- Global lock order: lifecycle domain (1347573553) → publication (1347573556)
+--   → authz (1347573554) → customer-target (1347573555). Never lookup-then-lock.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.stocky_customer_target_lock_key1(p_canonical_domain text)
 RETURNS integer
 LANGUAGE sql IMMUTABLE PARALLEL SAFE
 SET search_path = pg_catalog, pg_temp
-AS $$ SELECT hashtext('pr7-ctgt-v1:' || p_shop_id || ':' || p_generation_id); $$;
+AS $$ SELECT hashtext('pr7-ctgt-v2:' || p_canonical_domain); $$;
 
 CREATE OR REPLACE FUNCTION public.stocky_customer_target_lock_key2(p_kind text, p_value text)
 RETURNS integer
@@ -1868,44 +1947,111 @@ SET search_path = pg_catalog, pg_temp
 AS $$ SELECT hashtext(p_kind || ':' || p_value); $$;
 
 CREATE OR REPLACE FUNCTION public.stocky_customer_target_lock_shared(
-  p_shop_id text, p_generation_id text, p_kind text, p_value text
+  p_canonical_domain text, p_kind text, p_value text
 ) RETURNS void
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock_shared(
-    public.stocky_customer_target_lock_key1(p_shop_id, p_generation_id),
+    public.stocky_customer_target_lock_key1(p_canonical_domain),
     public.stocky_customer_target_lock_key2(p_kind, p_value)
   );
 END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.stocky_customer_target_lock_exclusive(
-  p_shop_id text, p_generation_id text, p_kind text, p_value text
+  p_canonical_domain text, p_kind text, p_value text
 ) RETURNS void
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
   PERFORM pg_advisory_xact_lock(
-    public.stocky_customer_target_lock_key1(p_shop_id, p_generation_id),
+    public.stocky_customer_target_lock_key1(p_canonical_domain),
     public.stocky_customer_target_lock_key2(p_kind, p_value)
   );
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.stocky_shop_generation_id(p_shop_id text)
-RETURNS text
-LANGUAGE sql STABLE
+-- Unique canonical-namespace resolver. Never ORDER BY id. Fail missing/ambiguous.
+CREATE OR REPLACE FUNCTION public.stocky_shop_canonical_domain(
+  p_shop_id text,
+  p_declared_domain text
+) RETURNS text
+LANGUAGE plpgsql STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
 AS $$
-  SELECT g.id
-  FROM public."ShopInstallGeneration" g
-  WHERE g."targetShopId" = p_shop_id OR g."shopRowId" = p_shop_id
-  ORDER BY g.id DESC
-  LIMIT 1;
+DECLARE
+  v_domain text;
+  n int;
+BEGIN
+  IF p_shop_id IS NULL OR p_shop_id = '' THEN
+    RAISE EXCEPTION 'customer_write_namespace_missing' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT COUNT(DISTINCT d.domain), MIN(d.domain) INTO n, v_domain
+  FROM (
+    SELECT g."canonicalDomain" AS domain
+    FROM public."ShopInstallGeneration" g
+    WHERE g."targetShopId" = p_shop_id OR g."shopRowId" = p_shop_id
+    UNION
+    SELECT s."myshopifyDomain"
+    FROM public."Shop" s
+    WHERE s.id = p_shop_id
+  ) d;
+  IF n = 0 OR v_domain IS NULL THEN
+    RAISE EXCEPTION 'customer_write_namespace_missing' USING ERRCODE = 'P0001';
+  END IF;
+  IF n > 1 THEN
+    RAISE EXCEPTION 'customer_write_namespace_ambiguous' USING ERRCODE = 'P0001';
+  END IF;
+  IF p_declared_domain IS NOT NULL AND p_declared_domain IS DISTINCT FROM v_domain THEN
+    RAISE EXCEPTION 'customer_write_namespace_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN v_domain;
+END;
+$$;
+
+-- Trusted origin: declared persisted generation, or unique LIVE shop binding.
+-- Never ORDER BY id. Old work must not adopt a newer generation.
+CREATE OR REPLACE FUNCTION public.stocky_writer_origin_generation(
+  p_shop_id text,
+  p_declared_generation_id text,
+  p_canonical_domain text
+) RETURNS text
+LANGUAGE plpgsql STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  g public."ShopInstallGeneration"%ROWTYPE;
+  v_id text;
+  n int;
+BEGIN
+  IF p_declared_generation_id IS NOT NULL AND p_declared_generation_id <> '' THEN
+    SELECT * INTO g FROM public."ShopInstallGeneration" WHERE id = p_declared_generation_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'customer_write_origin_missing' USING ERRCODE = 'P0001';
+    END IF;
+    IF g."canonicalDomain" IS DISTINCT FROM p_canonical_domain THEN
+      RAISE EXCEPTION 'customer_write_origin_namespace_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    RETURN g.id;
+  END IF;
+  SELECT COUNT(*), MIN(gg.id) INTO n, v_id
+  FROM public."ShopInstallGeneration" gg
+  WHERE gg."canonicalDomain" = p_canonical_domain
+    AND gg.fence = 'LIVE'
+    AND (gg."shopRowId" = p_shop_id OR gg."targetShopId" = p_shop_id);
+  IF n = 0 THEN
+    RAISE EXCEPTION 'customer_write_origin_missing' USING ERRCODE = 'P0001';
+  END IF;
+  IF n > 1 THEN
+    RAISE EXCEPTION 'customer_write_origin_ambiguous' USING ERRCODE = 'P0001';
+  END IF;
+  RETURN v_id;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.stocky_customer_targets_for_request(p_request_id text)
@@ -1957,10 +2103,11 @@ BEGIN
     RAISE EXCEPTION 'barrier_generation_ineligible' USING ERRCODE = 'P0001';
   END IF;
 
+  -- Lock BEFORE any barrier lookup/insert (no publication race).
   FOR tgt IN
     SELECT src.kind, src.value FROM public.stocky_customer_targets_for_request(r.id) AS src ORDER BY src.kind, src.value
   LOOP
-    PERFORM public.stocky_customer_target_lock_exclusive(r."targetShopId", r."generationId", tgt.kind, tgt.value);
+    PERFORM public.stocky_customer_target_lock_exclusive(g."canonicalDomain", tgt.kind, tgt.value);
   END LOOP;
 
   INSERT INTO public."PrivacyCustomerTargetBarrier"(
@@ -1977,7 +2124,6 @@ BEGIN
       AND b.state = 'ACTIVE'
   );
 
-  -- Unique index is partial; emulate upsert for already-released keys of this request.
   UPDATE public."PrivacyCustomerTargetBarrier" b
     SET state='ACTIVE', "attemptId"=p_attempt_id, "releasedAt"=NULL,
         "publicationRevision"=r."publicationRevision"
@@ -1986,30 +2132,34 @@ END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.stocky_customer_write_guard(
+  p_canonical_domain text,
   p_shop_id text,
   p_kind text,
   p_value text,
-  p_payload_admitted_at timestamptz
+  p_payload_admitted_at timestamptz,
+  p_origin_generation_id text DEFAULT NULL
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
-  v_gen text;
+  v_domain text;
   n int;
-  v_completed timestamptz;
+  ct record;
+  v_origin text;
+  og public."ShopInstallGeneration"%ROWTYPE;
+  cg public."ShopInstallGeneration"%ROWTYPE;
+  live_n int;
 BEGIN
-  v_gen := public.stocky_shop_generation_id(p_shop_id);
-  IF v_gen IS NULL THEN
-    RAISE EXCEPTION 'customer_write_generation_missing' USING ERRCODE = 'P0001';
-  END IF;
-  PERFORM public.stocky_customer_target_lock_shared(p_shop_id, v_gen, p_kind, p_value);
+  v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+  -- Lock BEFORE examining barriers (Decision CC-GEN).
+  PERFORM public.stocky_customer_target_lock_shared(v_domain, p_kind, p_value);
 
   SELECT count(*) INTO n
   FROM public."PrivacyCustomerTargetBarrier" b
-  WHERE b."shopId" = p_shop_id
-    AND b."generationId" = v_gen
+  JOIN public."ShopInstallGeneration" bg ON bg.id = b."generationId"
+  WHERE bg."canonicalDomain" = v_domain
     AND b."targetKind" = p_kind
     AND b."targetValue" = p_value
     AND b.state = 'ACTIVE';
@@ -2017,15 +2167,35 @@ BEGIN
     RAISE EXCEPTION 'customer_target_erasing' USING ERRCODE = 'P0001';
   END IF;
 
-  SELECT max(c."completedAt") INTO v_completed
-  FROM public."PrivacyCompletedTarget" c
-  WHERE c."shopId" = p_shop_id
-    AND c."generationId" = v_gen
-    AND c."targetKind" = p_kind
-    AND c."targetValue" = p_value;
-  IF v_completed IS NOT NULL AND p_payload_admitted_at < v_completed THEN
-    RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
-  END IF;
+  FOR ct IN
+    SELECT c."generationId" AS completed_generation_id, c."completedAt" AS completed_at
+    FROM public."PrivacyCompletedTarget" c
+    JOIN public."ShopInstallGeneration" cg0 ON cg0.id = c."generationId"
+    WHERE cg0."canonicalDomain" = v_domain
+      AND c."targetKind" = p_kind
+      AND c."targetValue" = p_value
+  LOOP
+    IF p_payload_admitted_at >= ct.completed_at THEN
+      CONTINUE;
+    END IF;
+    IF v_origin IS NULL THEN
+      v_origin := public.stocky_writer_origin_generation(p_shop_id, p_origin_generation_id, v_domain);
+    END IF;
+    IF v_origin = ct.completed_generation_id THEN
+      RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
+    END IF;
+    SELECT * INTO og FROM public."ShopInstallGeneration" WHERE id = v_origin;
+    SELECT * INTO cg FROM public."ShopInstallGeneration" WHERE id = ct.completed_generation_id;
+    SELECT count(*) INTO live_n
+    FROM public."ShopInstallGeneration"
+    WHERE "canonicalDomain" = v_domain AND fence = 'LIVE';
+    IF live_n <> 1 OR og.fence IS DISTINCT FROM 'LIVE' OR cg.fence = 'LIVE' THEN
+      RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
+    END IF;
+    IF p_payload_admitted_at < og."installedAt" THEN
+      RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
+    END IF;
+  END LOOP;
 END;
 $$;
 
@@ -2034,15 +2204,17 @@ CREATE OR REPLACE FUNCTION public.stocky_fact_write_guard(
   p_shop_id text,
   p_kind text,
   p_value text,
-  p_payload_admitted_at timestamptz
+  p_payload_admitted_at timestamptz,
+  p_origin_generation_id text DEFAULT NULL
 ) RETURNS void
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
 AS $$
 BEGIN
-  -- Deterministic order: domain shared/generation check, then target-scoped customer gate.
   PERFORM public.stocky_participating_write_guard(p_canonical_domain);
-  PERFORM public.stocky_customer_write_guard(p_shop_id, p_kind, p_value, p_payload_admitted_at);
+  PERFORM public.stocky_customer_write_guard(
+    p_canonical_domain, p_shop_id, p_kind, p_value, p_payload_admitted_at, p_origin_generation_id
+  );
 END;
 $$;
 
@@ -2054,16 +2226,30 @@ SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
   r public."PrivacyRequest"%ROWTYPE;
+  v_req text := NULLIF(current_setting('stocky.privacy_request_id', true), '');
+  v_shop text := NULLIF(current_setting('stocky.current_shop_id', true), '');
+  v_att text := NULLIF(current_setting('stocky.privacy_attempt_id', true), '');
   audit_n bigint := 0;
   order_n bigint := 0;
   line_n bigint := 0;
 BEGIN
+  -- Own preconditions BEFORE any RLS-filtered count (CC-02). Do not depend on enumerate.
+  IF v_req IS DISTINCT FROM p_request_id THEN
+    RAISE EXCEPTION 'residual_request_guc_mismatch' USING ERRCODE = '42501';
+  END IF;
   SELECT * INTO r FROM public."PrivacyRequest" WHERE id = p_request_id;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'residual_request_missing' USING ERRCODE = 'P0001';
   END IF;
-  -- Source-derived. Independent of PrivacyTargetKey / old manifest.
-  -- Open-ended audit predicate: all current rows for the authenticated customer.
+  IF v_shop IS DISTINCT FROM r."targetShopId" THEN
+    RAISE EXCEPTION 'residual_tenant_mismatch' USING ERRCODE = '42501';
+  END IF;
+  IF v_att IS NULL OR NOT public.stocky_privacy_live_attempt_ok(r.id, v_att) THEN
+    RAISE EXCEPTION 'residual_stale_attempt' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.stocky_privacy_capability_allows('READ', r."targetShopId") THEN
+    RAISE EXCEPTION 'residual_capability_denied' USING ERRCODE = '42501';
+  END IF;
   IF r."lookupCustomerRestId" IS NOT NULL THEN
     SELECT count(*) INTO audit_n
     FROM public."AuditEvent" a
@@ -2074,7 +2260,6 @@ BEGIN
   FROM public."ShopifyOrderFact" f
   WHERE f."shopId" = r."targetShopId"
     AND f."shopifyLegacyResourceId" = ANY (COALESCE(r."lookupOrderLegacyIds", '{}'));
-  -- Child lines by reconstructed GID so deleted roots are not confused with unknown input.
   SELECT count(*) INTO line_n
   FROM public."ShopifyOrderLineFact" l
   WHERE l."shopId" = r."targetShopId"
@@ -2116,14 +2301,12 @@ BEGIN
     RETURN 'superseded';
   END IF;
 
-  -- Exclusive target locks (sorted) drain shared writers; residual+completion share this txn.
   FOR tgt IN
     SELECT src.kind, src.value FROM public.stocky_customer_targets_for_request(r.id) AS src ORDER BY src.kind, src.value
   LOOP
-    PERFORM public.stocky_customer_target_lock_exclusive(r."targetShopId", r."generationId", tgt.kind, tgt.value);
+    PERFORM public.stocky_customer_target_lock_exclusive(g."canonicalDomain", tgt.kind, tgt.value);
   END LOOP;
 
-  -- Re-read barriers: admission must still be active for this request/attempt.
   IF EXISTS (
     SELECT 1 FROM public.stocky_customer_targets_for_request(r.id) AS src
     WHERE NOT EXISTS (
@@ -2140,7 +2323,6 @@ BEGIN
     RETURN 'stale';
   END IF;
 
-  -- Bounded re-enumeration under the same epoch/publication lock.
   PERFORM public.stocky_privacy_enumerate_targets(p_request_id);
 
   residual := public.stocky_privacy_customer_residual_count(p_request_id);
@@ -2223,13 +2405,11 @@ BEGIN
   IF r.topic IS DISTINCT FROM 'customers/data_request' THEN
     RETURN 'wrong_topic';
   END IF;
-  -- Coverage is the published snapshot at publicationRevision, NOT an erasure-empty predicate.
   SELECT count(*) INTO key_n FROM public."PrivacyTargetKey" WHERE "requestId" = p_request_id;
   RETURN 'revision='||r."publicationRevision"||',keys='||key_n||',complete='||r."enumerationComplete";
 END;
 $$;
 
--- Required CP participating write (lifecycle shared). Not optional.
 CREATE OR REPLACE FUNCTION public.stocky_cp_participating_write(
   p_canonical_domain text,
   p_shop_id text,
@@ -2245,8 +2425,6 @@ BEGIN
 END;
 $$;
 
--- V completeAttemptRetry analogue: already-running JobAttempt/DurableJob writes.
--- processingEnabled is intentionally not consulted (matches V). Guard is required.
 CREATE OR REPLACE FUNCTION public.stocky_lifecycle_complete_attempt_retry(
   p_job_id text,
   p_shop_id text,
@@ -2262,7 +2440,6 @@ BEGIN
 END;
 $$;
 
--- Dispatcher disabled-shop path analogue: still writes JobDispatch + DurableJob.
 CREATE OR REPLACE FUNCTION public.stocky_dispatcher_disabled_shop_write(
   p_job_id text,
   p_shop_id text,
@@ -2284,6 +2461,7 @@ BEGIN
 END;
 $$;
 
+-- Completeness is required-symbol presence, NOT PR48's 86-row count.
 CREATE OR REPLACE FUNCTION public.stocky_inventory_is_complete()
 RETURNS boolean
 LANGUAGE sql STABLE
@@ -2295,6 +2473,8 @@ AS $$
     AND COUNT(*) FILTER (WHERE symbol = 'withTenantBoundTransaction' AND guard_lock_order LIKE '%REQUIRED%' AND guard_lock_order LIKE '%not optional%') = 1
     AND COUNT(*) FILTER (WHERE symbol = 'claimAttempt' AND guard_lock_order LIKE '%REQUIRED%') = 1
     AND COUNT(*) FILTER (WHERE symbol = 'enqueueWithDispatch' AND guard_lock_order LIKE '%REQUIRED%') = 1
+    AND COUNT(*) FILTER (WHERE symbol = 'runOrderFactsSyncJob' AND guard_lock_order LIKE '%REQUIRED%') = 1
+    AND COUNT(*) FILTER (WHERE symbol = 'computeSyncHealth' AND guard_lock_order LIKE '%REQUIRED%' AND surfaces ILIKE '%SyncHealth%') = 1
   FROM public."ParticipatingWriterInventory";
 $$;
 
@@ -2309,8 +2489,8 @@ AS $$
   );
 $$;
 
+-- Grants / ownership for CC-GEN helpers. PUBLIC EXECUTE revoked.
 ALTER FUNCTION public.stocky_privacy_claim_attempt(text, text, text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_shop_generation_id(text) OWNER TO stocky_lifecycle_gate_owner;
 GRANT INSERT, UPDATE ON public."PrivacyAttempt" TO stocky_privacy_target_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_inventory_is_complete() TO stocky_control_plane, stocky_runtime;
 GRANT EXECUTE ON FUNCTION public.stocky_detect_unguarded_cp_write(text) TO stocky_control_plane, stocky_runtime;
@@ -2318,16 +2498,19 @@ REVOKE ALL ON FUNCTION public.stocky_inventory_is_complete() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_detect_unguarded_cp_write(text) FROM PUBLIC;
 ALTER FUNCTION public.stocky_customer_targets_for_request(text) OWNER TO stocky_privacy_target_owner;
 ALTER FUNCTION public.stocky_privacy_install_customer_barrier(text, text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, timestamptz) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text) OWNER TO stocky_lifecycle_gate_owner;
 ALTER FUNCTION public.stocky_privacy_customer_residual_count(text) OWNER TO stocky_privacy_target_owner;
 ALTER FUNCTION public.stocky_privacy_complete_customer_redact(text, text) OWNER TO stocky_privacy_target_owner;
 ALTER FUNCTION public.stocky_privacy_data_request_coverage(text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_shop_canonical_domain(text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_writer_origin_generation(text, text, text) OWNER TO stocky_lifecycle_gate_owner;
 
-REVOKE ALL ON FUNCTION public.stocky_shop_generation_id(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_shop_canonical_domain(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_writer_origin_generation(text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_customer_targets_for_request(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_install_customer_barrier(text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_customer_write_guard(text, text, text, timestamptz) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, timestamptz) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, timestamptz, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_customer_residual_count(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_complete_customer_redact(text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_claim_attempt(text, text, text) FROM PUBLIC;
@@ -2335,14 +2518,17 @@ REVOKE ALL ON FUNCTION public.stocky_privacy_data_request_coverage(text) FROM PU
 REVOKE ALL ON FUNCTION public.stocky_cp_participating_write(text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_lifecycle_complete_attempt_retry(text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_dispatcher_disabled_shop_write(text, text, text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_customer_target_lock_shared(text, text, text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_customer_target_lock_exclusive(text, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_customer_target_lock_key1(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_customer_target_lock_key2(text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_customer_target_lock_shared(text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_customer_target_lock_exclusive(text, text, text) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION public.stocky_shop_generation_id(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_reader, stocky_lifecycle_gate_owner, stocky_privacy_target_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_shop_canonical_domain(text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_reader, stocky_lifecycle_gate_owner, stocky_privacy_target_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_writer_origin_generation(text, text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_lifecycle_gate_owner, stocky_privacy_target_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_customer_targets_for_request(text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_install_customer_barrier(text, text) TO stocky_privacy_erasure, stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, timestamptz) TO stocky_runtime, stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, timestamptz) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, timestamptz, text) TO stocky_runtime, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_customer_residual_count(text) TO stocky_privacy_erasure, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_complete_customer_redact(text, text) TO stocky_privacy_erasure, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_claim_attempt(text, text, text) TO stocky_control_plane;
@@ -2350,9 +2536,15 @@ GRANT EXECUTE ON FUNCTION public.stocky_privacy_data_request_coverage(text) TO s
 GRANT EXECUTE ON FUNCTION public.stocky_cp_participating_write(text, text, text) TO stocky_control_plane, stocky_runtime;
 GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_complete_attempt_retry(text, text, text) TO stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_dispatcher_disabled_shop_write(text, text, text, text) TO stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_shared(text, text, text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
-GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_exclusive(text, text, text, text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_key1(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_key2(text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_shared(text, text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_exclusive(text, text, text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
 
+-- Residual helper is SECURITY DEFINER as target_owner and must evaluate capability itself (CC-02).
+GRANT EXECUTE ON FUNCTION public.stocky_privacy_capability_allows(text, text) TO stocky_privacy_target_owner;
+
+GRANT SELECT ON public."Shop" TO stocky_lifecycle_gate_owner;
 GRANT SELECT ON public."ShopInstallGeneration" TO stocky_lifecycle_gate_owner;
 GRANT SELECT ON public."PrivacyCustomerTargetBarrier", public."PrivacyCompletedTarget" TO stocky_lifecycle_gate_owner;
 GRANT SELECT, INSERT, UPDATE ON public."PrivacyCustomerTargetBarrier" TO stocky_privacy_target_owner;
@@ -2410,10 +2602,33 @@ INSERT INTO public."ParticipatingWriterInventory"(
 ('app/lib/catalog-facts/ingest/checkpoint.ts','lockSyncRun','CP $queryRaw SELECT SyncRun FOR UPDATE; processingEnabled check','stocky_control_plane','SyncRun,SyncCursor','shopId','REQUIRED lifecycle shared','YES shop_processing_disabled','already-running checkpoint','deny','app/lib/catalog-facts'),
 ('app/jobs/workers/webhook-processor.ts','assertShopProcessingEnabled','ordinary job execution','stocky_runtime','facts via apply','shopId','REQUIRED; privacy coordinator is a separate loop','YES','already-running job','deny new work','app/jobs/workers'),
 ('app/jobs/queue.server.ts','createDurableJob wrappers','CP via intake','stocky_control_plane','DurableJob','shopId','intake gate','via intake','n/a','deny','app/jobs/queue.server.ts'),
-('app/sync/health.server.ts','getShopHealth','CP read','stocky_control_plane','Shop read','n/a','read-only; outside barrier with proof it cannot invalidate completion','reads processingEnabled','n/a','reports disabled','app/sync/health.server.ts');
+('app/sync/health.server.ts','getShopHealth','HISTORICAL label — symbol ABSENT on W','stocky_control_plane','not a writer on W','n/a','HISTORICAL misnamed; NOT required for completeness; W export is computeSyncHealth','n/a','n/a','n/a','app/sync/health.server.ts'),
+('app/sync/health.server.ts','computeSyncHealth','CP SyncHealth.upsert','stocky_control_plane','SyncHealth','shopId + domain','REQUIRED lifecycle shared; reads processingEnabled then STILL upserts (PREP-C-04); not drain','READ then WRITE','n/a','upserts DISABLED health while shop disabled','app/sync/health.server.ts'),
+('app/jobs/workers/order-facts/sync-jobs.ts','runOrderFactsSyncJob','worker + OrderFactsTxnHost + scratch','stocky_runtime','order facts + D scratch bytes','ORDER_LEGACY_ID via apply','REQUIRED both gates; PE via processor is admission not drain','admission via processor; not drain','in-flight import continues','process-loss ≠ privacy drain','app/lib/order-facts/sync + source-stage.test.ts'),
+('app/jobs/workers/order-facts/sync-jobs.ts','runOrderFactsReconcileJob','worker + OrderFactsTxnHost','stocky_runtime','order facts','ORDER_LEGACY_ID via apply','REQUIRED both gates','admission via processor; not drain','in-flight reconcile','same','pr6-d-sc-recovery.test.ts'),
+('app/jobs/queue.server.ts','enqueueOrderFactsSync','CP via createDurableJob','stocky_control_plane','DurableJob','shopId','REQUIRED lifecycle shared PLUS intake PE deny','YES deny new intake','new intake only','deny when disabled — not a drain','app/jobs/queue.server.ts'),
+('app/jobs/queue.server.ts','enqueueOrderFactsReconcile','CP via createDurableJob','stocky_control_plane','DurableJob','shopId','REQUIRED lifecycle shared PLUS intake PE deny','YES deny new intake','new intake only','deny when disabled','app/jobs/queue.server.ts'),
+('app/sync/dispatcher.server.ts','recoverStrandedEnqueuedJobs','CP + queue presence','stocky_control_plane','DurableJob, Redis presence','shopId','REQUIRED lifecycle shared','ABSENT on recovery query','stranded ENQUEUED recovery','may DL/retry while disabled','app/sync/__tests__/sync-dispatch-recovery.test.ts'),
+('app/sync/dispatcher.server.ts','recoverExpiredDispatchLeases','local; CP $queryRaw UPDATE DurableJob PENDING','stocky_control_plane','DurableJob DISPATCH_LEASED','shopId','REQUIRED lifecycle shared; no processingEnabled filter (PREP-C-20)','ABSENT (PREP-C-20)','expired lease of any shop','not a drain','app/sync/__tests__/sync-dispatch-recovery.test.ts'),
+('app/lib/order-facts/sync/apply-composition.ts','applyCanonicalAndLegacy','OrderFactsTxnHost / runtime','stocky_runtime','ShopifyOrderFact / lines / receipts','ORDER_LEGACY_ID','REQUIRED both gates after PE pre-lock','pre-lock helper, not drain','already-open apply txn','disabled denies new apply','app/lib/order-facts/sync'),
+('app/lib/order-facts/sync/apply-composition.ts','persistIncompleteWithoutReceipt','tenant txn','stocky_runtime','observation incomplete row','shop-level','REQUIRED lifecycle shared','none here','in-flight observation','n/a','app/lib/order-facts/sync'),
+('app/lib/order-facts/sync/apply-nominated.ts','applyNominatedOrderGid','tenant + Admin IO','stocky_runtime','order facts','ORDER_LEGACY_ID','REQUIRED both gates','via apply PE pre-lock','nominated GID apply','via apply PE','app/lib/order-facts/sync'),
+('app/lib/order-facts/sync/shop-metadata.ts','persistShopTimezoneCurrencyValues','tenant OrderApplyDb','stocky_runtime','Shop timezone/currency','shop-level; not customer restore','REQUIRED lifecycle shared','tenant GUC match, not drain','metadata write','tenant GUC match','app/lib/order-facts/sync'),
+('app/lib/order-facts/sync/webhook.ts','processOrderFactsWebhookJob','tenant host','stocky_runtime','facts + receipt','ORDER_LEGACY_ID','REQUIRED both gates','via apply','already-running webhook apply','via processor','app/lib/order-facts/sync'),
+('app/lib/order-facts/sync/control-plane.ts','createOrderFactsSyncRun','CP SyncRun create','stocky_control_plane','SyncRun','shopId','REQUIRED lifecycle shared','ABSENT','open SyncRun reuse','writes while disabled','app/lib/order-facts/sync/control-plane.ts'),
+('app/lib/order-facts/sync/control-plane.ts','persistOrderFactsCursor','CP SyncCursor upsert','stocky_control_plane','SyncCursor','shopId','REQUIRED lifecycle shared','ABSENT','cursor advance','writes while disabled','app/lib/order-facts/sync/control-plane.ts'),
+('app/lib/order-facts/sync/control-plane.ts','recordOrderFactsDataIssue','CP DataIssue create','stocky_control_plane','DataIssue','shopId','REQUIRED lifecycle shared','ABSENT','evidence write','writes while disabled','app/lib/order-facts/sync/control-plane.ts'),
+('app/lib/order-facts/sync/control-plane.ts','persistOrderFactsCoverageHealth','CP via computeSyncHealth upsert','stocky_control_plane','SyncHealth','shopId','REQUIRED lifecycle shared','via computeSyncHealth','health wrapper','writes while disabled','app/lib/order-facts/sync/control-plane.ts'),
+('app/lib/catalog-facts/apply/index.ts','applyCanonicalFacts','CanonicalApplyDb tenant txn','stocky_runtime','catalog facts','shop-level; no explicit PE pre-lock (PREP-C-15)','REQUIRED lifecycle shared','NO explicit PE pre-lock (PREP-C-15)','in-flight catalog apply','L still required','catalog apply tests'),
+('app/sync/application-receipt.server.ts','applyWithApplicationReceipt','TenantDb then SyncApplicationReceipt INSERT','stocky_runtime','SyncApplicationReceipt','shop-level','REQUIRED lifecycle shared','none in receipt helper','already-open receipt txn','V-omitted on prior inventory','app/sync/application-receipt.server.ts'),
+('app/tenant/bootstrap.server.ts','deleteSessionsForShop','rawPrisma session.deleteMany','stocky_runtime','Session','domain','REQUIRED shared gate + fence; no FINALIZING revival','none','session wipe','bootstrap vs freeze','app/tenant/__tests__/bootstrap.test.ts'),
+('app/jobs/workers/catalog-facts/bulk-finish.ts','signalBulkOperationContinuation','CP DurableJob.updateMany RETRY_WAIT','stocky_control_plane','DurableJob','shopId','REQUIRED lifecycle shared (PREP-C-28)','none','already RETRY_WAIT children','wakes order-facts jobs on W','bulk-finish tests'),
+('app/lib/order-facts/sync/source-stage.ts','reclaimOperatorSelectedDScratch','filesystem + ledger','operator-only on W','D scratch att-*','shop via basename, not customer','MUST NOT be auto-called from PR7; quiescenceConfirmed is operator token not liveness (PREP-B-19)','n/a filesystem','cross-process live_writer skip is process-local','refuse COMPLETED while occupancy uncertain','source-stage.test.ts + PR6_D_SCRATCH_OPERATOR_RUNBOOK.md'),
+('app/lib/order-facts/apply/writers.ts','insertOrderFact','TenantDb','stocky_runtime','ShopifyOrderFact','ORDER_LEGACY_ID via shopifyLegacyResourceId','REQUIRED both gates; actual W export (applyOrderFactWriters is a family label)','pre-lock helper, not drain','in-flight commit then residual','disabled denies new apply','app/lib/order-facts/apply/__tests__'),
+('app/lib/order-facts/apply/receipts.ts','insertReceiptFinal','TenantDb','stocky_runtime','SyncApplicationReceipt','shop-level','REQUIRED lifecycle shared; actual W export (applyReceipts is a family label)','pre-lock + re-check','already-open receipt txn','disabled denies','app/lib/order-facts/apply/__tests__');
+
 
 COMMIT;
-
 ```
 
 ### Appendix B — `02_seed.sql`
@@ -2492,7 +2707,6 @@ INSERT INTO public."PrivacyRequest"(id,topic,state,"targetShopId","generationId"
 INSERT INTO public."PrivacyAttempt"(id,"privacyRequestId",epoch,state,"leaseUntil",worker) VALUES
   ('patt_sr','preq_sr',1,'RUNNING', now() + interval '1 hour','w1');
 UPDATE public."ShopInstallGeneration" SET fence='ERASING' WHERE id='gen_red';
-
 ```
 
 ### Appendix C — `03_run_proofs.py`
@@ -2510,14 +2724,21 @@ import threading
 import time
 from typing import Any
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROOF_ROOT = os.environ.get("PROOF_ROOT", SCRIPT_DIR)
+PGHOST = os.environ.get("PGHOST", "/tmp/pr45-cc-pg16")
+PGPORT = os.environ.get("PGPORT", "5434")
+PGDATABASE = os.environ.get("PGDATABASE", "pr45_proof")
+OWNER = os.environ.get("PR45_OWNER", "pr45owner")
+
 PSQL = [
     "psql",
     "-h",
-    "/tmp/pr45-pg16",
+    PGHOST,
     "-p",
-    "5433",
+    PGPORT,
     "-d",
-    "pr45_proof",
+    PGDATABASE,
     "-v",
     "ON_ERROR_STOP=1",
     "-X",
@@ -2611,17 +2832,23 @@ def tx(user: str, shop: str, req: str, att: str, body: str, timeout: int = 20) -
 
 
 def reset() -> None:
+    contract = os.path.join(PROOF_ROOT, "01_contract.sql")
+    seed = os.path.join(PROOF_ROOT, "02_seed.sql")
+    if not os.path.isfile(contract) or not os.path.isfile(seed):
+        raise FileNotFoundError(
+            f"stage 01_contract.sql and 02_seed.sql into PROOF_ROOT={PROOF_ROOT}"
+        )
     subprocess.check_call(
-        ["dropdb", "-h", "/tmp/pr45-pg16", "-p", "5433", "-U", "pr45owner", "--if-exists", "pr45_proof"]
+        ["dropdb", "-h", PGHOST, "-p", PGPORT, "-U", OWNER, "--if-exists", PGDATABASE]
     )
     subprocess.check_call(
-        ["createdb", "-h", "/tmp/pr45-pg16", "-p", "5433", "-U", "pr45owner", "pr45_proof"]
+        ["createdb", "-h", PGHOST, "-p", PGPORT, "-U", OWNER, PGDATABASE]
     )
     subprocess.check_call(
-        PSQL + ["-U", "pr45owner", "-f", "/tmp/pr45-tf/01_contract.sql"],
+        PSQL + ["-U", OWNER, "-f", contract],
         stdout=subprocess.DEVNULL,
     )
-    subprocess.check_call(PSQL + ["-U", "pr45owner", "-f", "/tmp/pr45-tf/02_seed.sql"])
+    subprocess.check_call(PSQL + ["-U", OWNER, "-f", seed])
 
 
 def g1() -> None:
@@ -4117,6 +4344,28 @@ def g9() -> None:
     rc, out, _ = psql("pr45owner", "SELECT public.stocky_inventory_is_complete()::text;")
     record(group, "inventory_incomplete_when_required_writer_removed", out.strip() in ("f", "false"), out)
 
+    reset()
+    psql("pr45owner", "DELETE FROM public.\"ParticipatingWriterInventory\" WHERE symbol='runOrderFactsSyncJob';")
+    rc, out, _ = psql("pr45owner", "SELECT public.stocky_inventory_is_complete()::text;")
+    record(group, "inventory_incomplete_when_w_sync_job_removed", out.strip() in ("f", "false"), out)
+
+    reset()
+    psql("pr45owner", "DELETE FROM public.\"ParticipatingWriterInventory\" WHERE symbol='computeSyncHealth';")
+    rc, out, _ = psql("pr45owner", "SELECT public.stocky_inventory_is_complete()::text;")
+    record(group, "inventory_incomplete_when_health_upsert_removed", out.strip() in ("f", "false"), out)
+
+    reset()
+    psql("pr45owner", "DELETE FROM public.\"ParticipatingWriterInventory\" WHERE symbol='getShopHealth';")
+    rc, out, _ = psql("pr45owner", "SELECT public.stocky_inventory_is_complete()::text;")
+    record(
+        group,
+        "completeness_not_tied_to_historical_getShopHealth_row",
+        out.strip() in ("t", "true"),
+        out,
+    )
+    rc, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"ParticipatingWriterInventory\";")
+    record(group, "inventory_row_count_is_not_pr48_86", n.strip() != "86" and int(n.strip()) >= 27, n)
+
 
 def g10() -> None:
     group = "G10-evidence-meta"
@@ -4314,8 +4563,400 @@ def neg_controls() -> None:
         f"rc={rc} err={err} (unguarded guard succeeds on ERASING generation)",
     )
 
+    # NEG-4: restore generation-guessing resolver (CC-01 / CE-A).
+    reset()
+    tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');",
+    )
+    _replace_function(
+        """
+        CREATE OR REPLACE FUNCTION public.stocky_shop_generation_id(p_shop_id text)
+        RETURNS text
+        LANGUAGE sql STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, pg_temp
+        AS $$
+          SELECT g.id FROM public."ShopInstallGeneration" g
+          WHERE g."targetShopId" = p_shop_id OR g."shopRowId" = p_shop_id
+          ORDER BY g.id DESC LIMIT 1;
+        $$;
+        ALTER FUNCTION public.stocky_shop_generation_id(text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_shop_generation_id(text) TO stocky_runtime, stocky_control_plane, stocky_lifecycle_gate_owner;
+        CREATE OR REPLACE FUNCTION public.stocky_customer_write_guard(
+          p_canonical_domain text, p_shop_id text, p_kind text, p_value text,
+          p_payload_admitted_at timestamptz, p_origin_generation_id text DEFAULT NULL
+        ) RETURNS void
+        LANGUAGE plpgsql
+        SECURITY DEFINER
+        SET search_path = pg_catalog, pg_temp
+        AS $$
+        DECLARE v_gen text; n int;
+        BEGIN
+          v_gen := public.stocky_shop_generation_id(p_shop_id);
+          PERFORM public.stocky_customer_target_lock_shared(p_canonical_domain, p_kind, p_value);
+          SELECT count(*) INTO n FROM public."PrivacyCustomerTargetBarrier" b
+            WHERE b."shopId" = p_shop_id AND b."generationId" = v_gen
+              AND b."targetKind" = p_kind AND b."targetValue" = p_value AND b.state = 'ACTIVE';
+          IF n > 0 THEN RAISE EXCEPTION 'customer_target_erasing' USING ERRCODE = 'P0001'; END IF;
+        END;
+        $$;
+        ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text) TO stocky_runtime, stocky_control_plane;
+        """
+    )
+    psql(
+        "pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence) "
+        "VALUES ('gen_a_zz','pr7-a.myshopify.com','shop_a','shop_a','LIVE');",
+    )
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+    )
+    record(
+        group,
+        "generation_guess_restored_defeats_barrier",
+        rc == 0,
+        f"rc={rc} err={err} (ORDER BY id DESC admits while barrier ACTIVE on gen_a)",
+    )
+
+    # NEG-5: residual without its own GUC guard returns 0.
+    reset()
+    _replace_function(
+        """
+        CREATE OR REPLACE FUNCTION public.stocky_privacy_customer_residual_count(p_request_id text)
+        RETURNS bigint
+        LANGUAGE plpgsql STABLE
+        SECURITY DEFINER
+        SET search_path = pg_catalog, pg_temp
+        AS $$
+        DECLARE r public."PrivacyRequest"%ROWTYPE; audit_n bigint := 0; order_n bigint := 0; line_n bigint := 0;
+        BEGIN
+          SELECT * INTO r FROM public."PrivacyRequest" WHERE id = p_request_id;
+          IF r."lookupCustomerRestId" IS NOT NULL THEN
+            SELECT count(*) INTO audit_n FROM public."AuditEvent" a
+              WHERE a."shopId" = r."targetShopId" AND a."customerRestId" = r."lookupCustomerRestId";
+          END IF;
+          SELECT count(*) INTO order_n FROM public."ShopifyOrderFact" f
+            WHERE f."shopId" = r."targetShopId"
+              AND f."shopifyLegacyResourceId" = ANY (COALESCE(r."lookupOrderLegacyIds", '{}'));
+          SELECT count(*) INTO line_n FROM public."ShopifyOrderLineFact" l
+            WHERE l."shopId" = r."targetShopId"
+              AND l."shopifyOrderGid" IN (
+                SELECT 'gid://shopify/Order/' || oid FROM unnest(COALESCE(r."lookupOrderLegacyIds", '{}')) AS oid
+              );
+          RETURN audit_n + order_n + line_n;
+        END;
+        $$;
+        ALTER FUNCTION public.stocky_privacy_customer_residual_count(text) OWNER TO stocky_privacy_target_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_privacy_customer_residual_count(text) TO stocky_privacy_erasure, stocky_control_plane;
+        """
+    )
+    rc, out, err = psql("stocky_privacy_erasure", "SELECT public.stocky_privacy_customer_residual_count('preq_cr');")
+    record(
+        group,
+        "residual_guard_removed_returns_zero",
+        rc == 0 and last_line(out) == "0",
+        f"out={out} err={err} (unguarded residual returns 0; true value 3)",
+    )
+
+
+def g11() -> None:
+    """CC-GEN: generation-independent target locks and trusted origin."""
+    group = "G11-generation-namespace"
+    reset()
+    tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');",
+    )
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+    )
+    record(group, "cea_baseline_one_gen_still_denies", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
+
+    # Adversarial ID: lexicographically higher than gen_a, inserted later.
+    psql(
+        "pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+        "VALUES ('gen_a_zz','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp());",
+    )
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+    )
+    record(group, "cea_two_gen_matching_write_still_denied", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp(), 'gen_a_zz');",
+    )
+    record(group, "cea_declared_successor_origin_cannot_bypass_active_barrier", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','999999', clock_timestamp()); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_other','shop_a','999999'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_other';",
+    )
+    record(group, "two_gen_unrelated_customer_still_progresses", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+    # CE-B: complete, then second generation, delayed payload still restore-denied.
+    reset()
+    tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');"
+        " SELECT public.stocky_privacy_enumerate_targets('preq_cr');"
+        " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
+        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');",
+    )
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');",
+    )
+    record(group, "ceb_baseline_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
+    psql(
+        "pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+        "VALUES ('gen_a_zz','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp());",
+    )
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour', 'gen_a');",
+    )
+    record(group, "ceb_two_gen_old_origin_still_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
+
+    # Two LIVE + delayed payload without declared origin → ambiguous, not a silent admit.
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');",
+    )
+    record(
+        group,
+        "two_live_undeclared_origin_ambiguous_not_admitted",
+        rc != 0 and ("customer_write_origin_ambiguous" in err or "customer_target_attribution_ambiguous" in err or "customer_target_restore_denied" in err),
+        err,
+        sqlstate_from_err(err),
+    )
+
+    # Genuine successor: unique LIVE gen_a_zz, gen_a not LIVE, payload after installedAt.
+    psql("pr45owner", "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a';")
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour', 'gen_a_zz');",
+    )
+    record(group, "queued_payload_before_successor_install_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() + interval '1 second', 'gen_a_zz');"
+        " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_succ','shop_a','191167');"
+        " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_succ';",
+    )
+    record(group, "genuine_successor_fresh_payload_allowed", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+    # Missing origin: no LIVE binding.
+    psql("pr45owner", "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a_zz';")
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');",
+    )
+    record(group, "missing_origin_fails_closed", rc != 0 and ("customer_write_origin_missing" in err or "customer_target_restore_denied" in err), err, sqlstate_from_err(err))
+
+    # Three-generation adversarial order + concurrent reinstall vs barrier.
+    reset()
+    started = threading.Event()
+    outcome: dict[str, str] = {}
+
+    def reinstall() -> None:
+        started.wait(5)
+        psql(
+            "pr45owner",
+            "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+            "VALUES ('aaa_old','pr7-a.myshopify.com','shop_a','shop_a','UNINSTALLED', now() - interval '3 days'),"
+            "       ('gen_a_zz','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp()) "
+            "ON CONFLICT (id) DO NOTHING;",
+        )
+        outcome["insert"] = "ok"
+
+    def barrier() -> None:
+        started.set()
+        rc_b, out_b, err_b = tx(
+            "stocky_privacy_erasure",
+            "shop_a",
+            "preq_cr",
+            "patt_cr",
+            "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');",
+        )
+        outcome["barrier_rc"] = str(rc_b)
+        outcome["barrier_err"] = err_b[:300]
+
+    t1 = threading.Thread(target=reinstall)
+    t2 = threading.Thread(target=barrier)
+    t1.start()
+    t2.start()
+    t1.join(10)
+    t2.join(10)
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+    )
+    record(
+        group,
+        "concurrent_reinstall_cannot_bypass_namespace_barrier",
+        outcome.get("barrier_rc") == "0" and rc != 0 and "customer_target_erasing" in err,
+        f"barrier={outcome} write_err={err[:300]}",
+        sqlstate_from_err(err),
+    )
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_b",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_fact_write_guard('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167', clock_timestamp());"
+        " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_b','shop_b','191167');"
+        " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_b';",
+    )
+    record(group, "other_shop_unrelated_to_namespace_progresses", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+
+def g12() -> None:
+    """CC-02: residual helper owns GUC/attempt/capability/tenant. Direct calls."""
+    group = "G12-residual-guard"
+    reset()
+    rc, out, err = psql("stocky_privacy_erasure", "SELECT public.stocky_privacy_customer_residual_count('preq_cr');")
+    record(group, "residual_no_guc_raises_42501", rc != 0 and "residual_request_guc_mismatch" in err, err, sqlstate_from_err(err))
+
+    rc, out, err = psql(
+        "stocky_privacy_erasure",
+        "BEGIN; SELECT set_config('stocky.privacy_request_id','preq_sr', true);"
+        " SELECT public.stocky_privacy_customer_residual_count('preq_cr'); COMMIT;",
+    )
+    record(group, "residual_foreign_request_guc_raises_42501", rc != 0 and "residual_request_guc_mismatch" in err, err, sqlstate_from_err(err))
+
+    rc, out, err = tx(
+        "stocky_privacy_erasure",
+        "shop_b",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_wrong_tenant_raises_42501", rc != 0 and "residual_tenant_mismatch" in err, err, sqlstate_from_err(err))
+
+    rc, out, err = tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_cr",
+        "patt_lost",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_stale_attempt_raises_42501", rc != 0 and "residual_stale_attempt" in err, err, sqlstate_from_err(err))
+
+    rc, out, err = tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_direct_nonzero_with_full_context", rc == 0 and last_line(out) == "3", f"out={out} err={err}")
+
+    # Genuine empty: source rows are gone (owner/BYPASSRLS), not merely RLS-hidden from the caller.
+    psql(
+        "pr45owner",
+        "DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";",
+    )
+    rc, out, err = tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_direct_genuine_empty", rc == 0 and last_line(out) == "0", f"out={out} err={err}")
+
+    rc, out, err = tx(
+        "stocky_control_plane",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_control_plane_execute_with_context", rc == 0 and last_line(out) in ("0", "3"), f"out={out} err={err}")
+
+    rc, out, err = tx(
+        "stocky_runtime",
+        "shop_a",
+        "preq_cr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_runtime_execute_denied", rc != 0 and sqlstate_from_err(err) == "42501", err, sqlstate_from_err(err))
+
+    rc, out, err = tx(
+        "stocky_privacy_reader",
+        "shop_a",
+        "preq_dr",
+        "patt_dr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_dr');",
+    )
+    record(group, "residual_reader_execute_denied", rc != 0 and sqlstate_from_err(err) == "42501", err, sqlstate_from_err(err))
+
+    # Same-shop different request GUC.
+    rc, out, err = tx(
+        "stocky_privacy_erasure",
+        "shop_a",
+        "preq_dr",
+        "patt_cr",
+        "SELECT public.stocky_privacy_customer_residual_count('preq_cr');",
+    )
+    record(group, "residual_same_shop_other_request_guc_raises", rc != 0 and "residual_request_guc_mismatch" in err, err, sqlstate_from_err(err))
+
+
 
 def main() -> int:
+    os.makedirs(PROOF_ROOT, exist_ok=True)
     reset()
     g1()
     g2()
@@ -4327,22 +4968,48 @@ def main() -> int:
     g8()
     g9()
     g10()
+    g11()
+    g12()
     neg_controls()
-    # Clean rerun of TF cases after function replacements.
+    # Clean rerun after function replacements.
     g7()
     g8()
     g9()
+    g11()
+    g12()
     failed = [r for r in RESULTS if not r["ok"]]
     pg = query_pg_version()
+    pairs = [(r["group"], r["name"]) for r in RESULTS]
+    unique_n = len(set(pairs))
+    rerun_n = len(pairs) - unique_n
+    by_group: dict[str, dict[str, int]] = {}
+    seen: set[tuple[str, str]] = set()
+    for r in RESULTS:
+        g = by_group.setdefault(r["group"], {"records": 0, "unique": 0})
+        g["records"] += 1
+        key = (r["group"], r["name"])
+        if key not in seen:
+            g["unique"] += 1
+            seen.add(key)
     payload = {
         "results_json_class": "run_log_nondeterministic_timings_not_a_verification_artifact",
         "postgres_queried": pg,
-        "host": "/tmp/pr45-pg16:5433",
+        "host": f"{PGHOST}:{PGPORT}",
+        "proof_root": PROOF_ROOT,
         "total": len(RESULTS),
         "pass": len(RESULTS) - len(failed),
         "fail": len(failed),
+        "unique_assertions": unique_n,
+        "declared_reruns": rerun_n,
+        "by_group": by_group,
         "results": RESULTS,
         "failed": failed,
+        "historical_tf_115_record_packet": {
+            "records": 115,
+            "unique": 89,
+            "declared_reruns": 26,
+            "note": "115 records ≠ 115 unique assertions",
+        },
         "historical_original_59_case_script_hashes": {
             "01_contract.sql": "b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054",
             "02_seed.sql": "d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632",
@@ -4350,15 +5017,27 @@ def main() -> int:
             "results.json_original_run_log": "ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8",
             "note": "historical identities only; results.json must not be expected equal across executions",
         },
+        "historical_tf_contract_hashes": {
+            "01_contract.sql": "75ab1c02fc01560d975a78737bccbc7c2fa6330a07100ad98d2b243d349846de",
+            "02_seed.sql": "d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632",
+            "03_run_proofs.py": "566e0f289f2ca4da526286b3ca831c906030973958318eb60b55a0237823251a",
+        },
     }
-    path = "/tmp/pr45-tf/results.json"
+    path = os.path.join(PROOF_ROOT, "results.json")
     with open(path, "w") as f:
         json.dump(payload, f, indent=2)
-    print(json.dumps({"total": payload["total"], "pass": payload["pass"], "fail": payload["fail"], "postgres": pg["server_version"]}, indent=2))
+    print(json.dumps({
+        "total": payload["total"],
+        "pass": payload["pass"],
+        "fail": payload["fail"],
+        "unique_assertions": unique_n,
+        "declared_reruns": rerun_n,
+        "postgres": pg["server_version"],
+        "host": payload["host"],
+    }, indent=2))
     return 0 if not failed else 1
 
 
 if __name__ == "__main__":
     sys.exit(main())
-
 ```
