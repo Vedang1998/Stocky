@@ -65,6 +65,7 @@ Inventory `PREP-C-*` IDs in this packet follow **Helper C** (`HELPER_C_REPORT.md
 | B | `/tmp/pr7-helper-outputs/B/results/01-bullmq.json` (real BullMQ on 16379) | `5c7204ffcbc01209b94ec020cdf5fe8f6a4e5c10c6c9e956b3c644e7ccff0f2a` |
 | B | `/tmp/pr7-helper-outputs/B/results/01b-inflight-cancel.json` (active locked `Job.remove`) | `5a846a8c1bdd3e1b62abffc3ef8adcf817d565828a1273e01a430d2cb3067416` |
 | B | `/tmp/pr7-helper-outputs/B/results/02-dscratch.json` | `ba1b2b3503e38d2d891dbb3876ec306ab5837a12efcaaa381ae19efaff51a5fe` |
+| B | `/tmp/pr7-helper-outputs/B/results/03-synthetic.json` | `67fb0fe7a4e374a7f7b23dd2464bb31a37d9bed4bccd6b16d41b5c0cf1459e5f` |
 | B | `/tmp/pr7-helper-outputs/B/results/99-teardown.json` (killed PID **9143**) | `032ad3ab5fdd452d919c35f2f01a1ed174346301fb2627a29fa3ec0873819684` |
 | C | `/tmp/pr7-helper-outputs/C/WRITER_INVENTORY.json` (86 rows: unchanged 32, misnamed 4, behavior_change 4, v_omitted 22, w_only 23, missing 1) | `f7f09cde84067c09675bac8f0ce14d130b520bc9bf5d369fd15a23eb4ab8c7f0` |
 
