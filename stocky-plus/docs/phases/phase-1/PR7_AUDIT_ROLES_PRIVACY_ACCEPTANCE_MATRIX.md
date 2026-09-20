@@ -11,12 +11,13 @@ Immutable independent reviews (byte-for-byte; do not edit):
 - `stocky-plus/docs/phases/phase-1/PR7_TOPIC_AUTHORITY_FINALIZATION_INDEPENDENT_REVIEW.md` (blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c`)
 - `stocky-plus/docs/phases/phase-1/PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `e908770d9daea4f963b2fd09e38af79e07274d41`)
 - `stocky-plus/docs/phases/phase-1/PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`)
+- `stocky-plus/docs/phases/phase-1/PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md` (blob `b7e8ff338e715c79907aa633c75622958f60b4d4`)
 
 These rows are **test-executable in specificity**. They are documentation. They are **not** passing CI on a runtime implementation.
 
 Fixture **values** are **synthetic**. Documented Shopify payload **field names** are not synthetic. No merchant or customer production data.
 
-ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains current for Decisions A–E. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) remains the customer-completion/epoch supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and closed **F-CLAUDE-PR7CC-01…04**. Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) is current for **F-CLAUDE-PR7GW-01/02** and closed-PR6 main **X**. None of those comments accept the whole plan or authorize PR7 runtime.
+ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains current for Decisions A–E. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) remains the customer-completion/epoch supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and closed **F-CLAUDE-PR7CC-01…04**. Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) remains current for independently closed **F-CLAUDE-PR7GW-02** and the GW-01 overlap defect. Comment [5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329) is current for **F-CLAUDE-PR7TA-01/02**. None of those comments accept the whole plan or authorize PR7 runtime.
 
 Original fixture and row IDs are preserved. New IDs continue existing prefixes. Designed fixtures are **not** passing processors.
 
@@ -475,15 +476,32 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-CUST-033 | CC-GEN unrelated shop | namespace barrier on shop_a | write shop_b | progress | global freeze | G11 `other_shop_unrelated_to_namespace_progresses` | domain keys | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-034 | CC-GEN NEG resolver | restore `ORDER BY id DESC` / skip applicable-barrier check | CE-A fixture | **must fail this design** (matching write admitted) | crediting the unchanged contract | NEG `generation_guess_restored_defeats_barrier` | load-bearing | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-035 | GW-01 CE-D unattributed overlap | unique LIVE successor; prior completion; payload in inclusive overlap; no persisted origin | `stocky_fact_write_guard` | `customer_target_attribution_ambiguous`; no restoring write | unique-LIVE fallback admits successor data | G13 `ced_unattributed_overlap_ambiguous`; old CE-D | write_guard | PR7 | executed-synthetic-pg16 |
-| PR7-CUST-036 | GW-01 persisted old origin | same overlap; `p_origin_persisted=true` origin=`gen_a` | write | `customer_target_restore_denied` | treating attached origin as optional | G13 `ced_persisted_old_origin_restore_denied` | completed-target | PR7 | executed-synthetic-pg16 |
-| PR7-CUST-037 | GW-01 persisted successor | same overlap; persisted origin=`gen_a2` | write | allowed (trusted successor policy) | banning legitimate later data | G13 `ced_persisted_successor_origin_admitted_in_overlap` | origin helper | PR7 | executed-synthetic-pg16 |
-| PR7-CUST-038 | GW-01 newly attached generation | overlap; origin=`gen_a2` `p_origin_persisted=false` | write | `customer_target_attribution_ambiguous` | retry-time restamp trusted as origin | G13 `newly_attached_successor_generation_not_trusted` | origin helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-036 | GW-01 / TA-01 ADMIN old origin | overlap; ADMIN admission recorded while `gen_a` unique LIVE; consumer uses that `work_id` | write | `customer_target_restore_denied` | caller boolean or restamp as origin | G13 `ced_persisted_old_origin_restore_denied` | WriterAdmissionOrigin | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-037 | GW-01 / TA-01 proven successor | overlap; ADMIN admission **after** `gen_a2` LIVE with a **new** digest | write | allowed (BOUND successor policy) | banning genuine proven successor work | G13 `ced_persisted_successor_origin_admitted_in_overlap` | original-admission helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-038 | GW-01 / TA-01 remint old digest | overlap; ADMIN attempt to admit the **old** webhook digest as successor | admission | `admission_digest_conflict`; original row unchanged | retry-time restamp trusted as origin | G13 `newly_attached_successor_generation_not_trusted` | original-admission helper | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-039 | GW-01 inclusive boundaries | payload `=` successor `installedAt` or `=` `completedAt` | write | ambiguous | half-open interval admits boundary | G13 `equality_at_successor_installedAt_ambiguous`; `equality_at_completedAt_ambiguous` | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-040 | GW-01 before / after overlap | unattributed payload before `installedAt` / after `completedAt` | write | restore_denied / allowed successor | lifetime ban or silent overlap admit | G13 `before_overlap_unattributed_restore_denied`; `after_overlap_unattributed_successor_allowed` | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-041 | GW-01 missing time / history / multi-complete | NULL admitted_at; completion without generation row; two completions | write | ambiguous; not a permit | lexicographic latest row | G13 `missing_payload_time_ambiguous`; `missing_generation_history_not_a_permit`; `multiple_applicable_completions_still_ambiguous` | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-042 | GW-01 delayed retry / concurrent reinstall | original admission retried after release; two LIVE during overlap | write | still ambiguous / not admitted | retry-now restamp or unique-LIVE guess | G13 `delayed_retry_preserves_original_admission_still_ambiguous`; `concurrent_reinstall_unattributed_overlap_not_admitted` | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-043 | GW-01 unrelated progress | overlap block on shop_a / customer 191167 | write shop_b or other customer | progress | global freeze | G13 `unrelated_shop_progresses_during_overlap_block`; `unrelated_customer_progresses` | domain keys | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-044 | GW-01 NEG temporal check | remove only GW01_TEMPORAL_OVERLAP block | CE-D fixture | **must fail this design** (unattributed overlap admitted) | crediting the unchanged contract | NEG `temporal_overlap_check_removed_revives_ced_admit` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-045 | TA-01 producer DML deny | empty origin table | runtime/CP INSERT/UPDATE/DELETE `WriterAdmissionOrigin` | `42501` / 0 rows | consumer mint | G15 `runtime_denied_origin_insert`; `control_plane_denied_origin_insert`; `runtime_denied_origin_update`; `runtime_denied_origin_delete` | origin RLS | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-046 | TA-01 helper EXECUTE deny | named helper | runtime/CP `stocky_record_writer_admission` | `42501` | generic registerOrigin; definer escalation | G15 `runtime_denied_helper_execute`; `control_plane_denied_helper_execute` | grants | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-047 | TA-01 SET ROLE / GUC | runtime session | `SET ROLE stocky_original_admission`; `set_config('stocky.origin_generation_id',…)` | SET ROLE denied; GUC ignored by helpers | self-set GUC as authority | G15 `runtime_cannot_set_role_admission`; `guc_is_not_admission_authority` | session | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-048 | TA-01 legitimate admit + use | producer helper then runtime guard | `admit()` then 5-arg `work_id` write | binding created; write allowed | preseeded owner rows as the only proof | G15 `original_admission_helper_creates_binding`; `consumer_uses_persisted_binding` | producer + guard | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-049 | TA-01 retry / digest | existing source+digest | retry same digest later time; changed digest | original time/generation unchanged; `admission_binding_conflict` | restamp into current generation | G15 `retry_same_source_preserves_origin_time`; `changed_digest_conflicts_original_unchanged` | unique source digest | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-050 | TA-01 forged bindings | legit work_id | wrong target / other shop / missing work | `customer_target_binding_mismatch` / `customer_target_attribution_ambiguous` | lookup-by-id-only | G15 `target_substitution_rejected`; `tenant_substitution_rejected`; `missing_binding_fail_closed` | guard lookup | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-051 | TA-01 borrow successor | overlap; successor work vs old webhook work | consumer uses successor `work_id` for new digest; old digest work | successor own binding may proceed; old digest remains ambiguous | interchangeable work ids | G15 `successor_binding_is_not_interchangeable_with_old_digest`; `borrowed_successor_cannot_admit_ced_payload` | work identity | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-052 | TA-01 delayed first-seen webhook | after reinstall; new webhook digest in overlap | WEBHOOK_PROVIDER_AUTH admit then write | `customer_target_attribution_ambiguous` | HMAC-after-reinstall as successor proof | G15 `delayed_first_seen_webhook_not_promoted` | evidence class | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-053 | TA-01 child lineage | trusted parent; foreign vs matching digest | PARENT_LINEAGE admit | foreign digest denied; matching digest inherits | child launders old payload | G15 `child_cannot_launder_old_digest`; `child_inherits_parent_origin` | parentWorkId | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-054 | TA-01 pending / recover | BEGIN + DurableJob | consumer before ack; recover-with-job; consumer after | `customer_admission_not_acked` then allowed | pending treated as BOUND | G15 `begin_pending_link`; `pending_link_not_trusted_for_effects`; `recover_unacked_admission_with_job`; `recovered_admission_allows_consumer` | link protocol | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-055 | TA-01 duplicate concurrent | two sessions same source+digest | concurrent `admit()` | exactly one origin row | two remints | G15 `duplicate_concurrent_admission_reconciles` | unique index | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-056 | TA-01 pruned / missing | binding deleted after admit | consumer `work_id` | `customer_target_attribution_ambiguous` | legacy as successor | G15 `pruned_binding_fail_closed` | fail-closed | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-057 | TA-01 genuine successor after complete | ADMIN new digest `originalAdmittedAt` after `completedAt` | write | allowed | lifetime ban | G15 `genuine_successor_after_completion_progresses` | successor policy | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-058 | TA-01 admission vs barrier | admit then ACTIVE barrier | matching write | `customer_target_erasing` | admission outruns barrier | G15 `admission_cannot_outrun_active_barrier` | target lock | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-059 | TA-01 unrelated shop | shop_a overlap/barrier | shop_b own ADMIN binding | progress | global freeze | G15 `unrelated_shop_progresses_with_own_binding` | domain keys | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-060 | TA-01 NEG lookup bypass | replace guard to unique-LIVE fallback | CE-D webhook work | **must fail this design** (overlap admitted) | crediting the unchanged contract | NEG `lookup_bypass_revives_ta01_admit` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-061 | TA-01 NEG unauthorized mint | strip `session_user` + GRANT EXECUTE to runtime | runtime mints BOUND LIVE then writes CE-D | **must fail this design** (overlap admitted) | crediting the unchanged contract | NEG `unauthorized_mint_revives_ta01_admit` | load-bearing | PR7 | executed-synthetic-pg16 |
 
 ### 6.7.1 Residual own-guard (F-CLAUDE-PR7CC-02)
 
@@ -680,9 +698,9 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-AUD-001…014 | §7.3, §7.7, D-PR7-03/08, **P7-C02**, **F-CLAUDE-PR7CP-02** |
 | PR7-LIFE-001…024 | §7.4, §7.6, D-PR7-05/06, **P7-C03**, **F-CLAUDE-PR7CP-01/04** |
 | PR7-PRIV-001…019 | §7.4, §7.9, §7.11, **P7-C05**, **F-CLAUDE-PR7CP-02/07**, **F-CLAUDE-PR7XC-08** |
-| PR7-TOP-* / GRANT-* / COORD-* / AUTHZ-* / CMD-* / GATE-* / TOMB-* / RESID-* | §7.6.2–7.11, §7.7, Decisions A–E / **CC-GEN**, **F-CLAUDE-PR7XC-01…08**, **F-CLAUDE-PR7TF-01…03**, **F-CLAUDE-PR7CC-01…04**, **F-CLAUDE-PR7GW-01/02** |
+| PR7-TOP-* / GRANT-* / COORD-* / AUTHZ-* / CMD-* / GATE-* / TOMB-* / RESID-* | §7.6.2–7.11, §7.7, Decisions A–E / **CC-GEN**, **F-CLAUDE-PR7XC-01…08**, **F-CLAUDE-PR7TF-01…03**, **F-CLAUDE-PR7CC-01…04**, **F-CLAUDE-PR7GW-01/02**, **F-CLAUDE-PR7TA-01/02** |
 | PR7-RED-001…021 | §7.5–7.6.4, D-PR7-10/11/13, **F-CLAUDE-PR7CP-03/04** |
-| PR7-CUST-001…044 | §3, §7.6.2–7.6.3, §7.13, D-PR7-14, **F-CLAUDE-PR7CP-08/10**, **F-CLAUDE-PR7TF-01**, **F-CLAUDE-PR7CC-01** / **CC-GEN**, **F-CLAUDE-PR7GW-01** |
+| PR7-CUST-001…061 | §3, §7.6.2–7.6.3, §7.13, D-PR7-14, **F-CLAUDE-PR7CP-08/10**, **F-CLAUDE-PR7TF-01**, **F-CLAUDE-PR7CC-01** / **CC-GEN**, **F-CLAUDE-PR7GW-01**, **F-CLAUDE-PR7TA-01** |
 | PR7-COORD-PUB-* | §7.6.2 Epoch, §7.7.2, **F-CLAUDE-PR7TF-02** |
 | PR7-ESCL-001…004 | §7.12, **F-CLAUDE-PR7CP-09** |
 | PR7-SIDE-* / ISO-* | §7.7–7.9, **F-CLAUDE-PR7CP-02** |
@@ -720,8 +738,11 @@ Original D-PR7 IDs are not renamed.
 | Old-model CE-A / CE-B / CE-C on unchanged TF contract | 0 | 8 counterexample steps all reproduced | host `/tmp/pr45-cc-pg16:5434`; CE log sha256 `c1077d531a435b7536c8e9f07c83743c413fb054b749fa7f5f3fbac52df9991f`; repro `2f732e1c…` | **executed-this-planning-session** (defect reproduction, not a passing contract) |
 | Disposable `python3 /tmp/pr45-cc-new/03_run_proofs.py` (CC-GEN contract; historical) | 0 | **169 records / 117 unique / 52 declared reruns / 0 failed** | queried `16.15`; host `/tmp/pr45-cc-pg16:5434`; contract `7a1d4611…`; driver `e9bd3c18…`; run log `420ec6e0…` | **executed-prior-planning-head-not-re-run** / `executed-synthetic-pg16` |
 | Old-model CE-D / CE-E on unchanged d6/CC-GEN contract | 0 | CE-D unattributed overlap ADMITTED; six CE-E misses undetected | host `/tmp/pr45-gw-pg16:5435`; contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`; repro `2e6aaa98bf5a98ca3b6594a33e9f65324217ac2e197d203ac1224217e8ce4b00`; log `c33327bf8b8d64bfc648df4170ef1a5b01d5693683267a33aee244bea0571a82` | **executed-this-planning-session** (defect reproduction, not a passing contract) |
-| Independent `04_discover_writers.py` vs X | 0 | 506 files / 1307 candidates / 219 required / 0 unknown | scanner `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d`; snapshot `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` | **executed-this-planning-session** / read-only source scan |
-| Disposable `python3 /tmp/pr45-gw/new/03_run_proofs.py` (this contract) | 0 | **253 records / 160 unique / 93 declared reruns / 0 failed** | queried `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`; host `/tmp/pr45-gw-pg16:5435`; `PROOF_ROOT=/tmp/pr45-gw/new`; contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`; driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`; run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30` (**not** a verification artifact) | **executed-this-planning-session** / `executed-synthetic-pg16` |
+| Independent `04_discover_writers.py` vs X (GW/P historical JSON) | 0 | 506 / 1307 / 219 / 0 | scanner `666feaa8…`; historical JSON `0ce7a398…` | **executed-prior-planning-head-not-re-run** / read-only source scan |
+| Disposable `python3 /tmp/pr45-gw/new/03_run_proofs.py` (GW/P contract; historical) | 0 | **253 records / 160 unique / 93 declared reruns / 0 failed** | host `/tmp/pr45-gw-pg16:5435`; contract `ec92ac13…`; driver `2b5d92e1…`; run log `0ff616f2…` | **executed-prior-planning-head-not-re-run** / `executed-synthetic-pg16` |
+| TA-01 on unchanged P contract | 0 | persisted=true + gen_a2 **ADMITTED** (defect) | host `/tmp/pr45-ta-pg16:5436`; contract `ec92ac13…`; repro `95955d83…`; log `243eb0bf…` | **executed-this-planning-session** (defect reproduction, not a passing contract) |
+| Independent X archive scan (this session) | 0 | 506 / 1307 / 219 / 0; SQL `9f7aaa26…` equal; JSON `e93b23bf…` envelope-only diff vs `0ce7a398…` | scanner `666feaa8…` unchanged | **executed-this-planning-session** / read-only source scan |
+| Disposable `python3 /tmp/pr45-ta/new/03_run_proofs.py` (this contract) | 0 | **313 records / 191 unique / 122 declared reruns / 0 failed** | queried `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`; host `/tmp/pr45-ta-pg16:5436`; `PROOF_ROOT=/tmp/pr45-ta/new`; contract `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9`; driver `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b`; run log `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63` (**not** a verification artifact) | **executed-this-planning-session** / `executed-synthetic-pg16` |
 | First residual G12 without capability EXECUTE on target_owner | 1 | G7/G8/G12 `42501` | GRANT added to declared contract; not credited to an unchanged contract | **executed-this-planning-session** (failed; not hidden) |
 | First G12 genuine-empty via RLS-filtered erasure DELETE | 1 | count stayed `3` | driver now deletes as `pr45owner` BYPASSRLS | **executed-this-planning-session** (failed; not hidden) |
 | `npm run test:sync-uninstall` | **not executed** | — | app Postgres/Redis | **present-on-V-not-executed** / **BLOCKED** |
@@ -732,7 +753,7 @@ Original D-PR7 IDs are not renamed.
 
 Blocked V suites remain **BLOCKED**, not failed-as-product, and not passing PR7 evidence. Designed fixtures did **not** run against nonexistent PR7 processors. Disposable proofs are **not** application RLS on V/W/X. `authenticate.admin` remains **reused / not independently reproduced**.
 
-Official pages in plan §3 were fetched **2026-09-18**. Store calls were **not** executed. Leftover TF postgres `/tmp/pr45-pg16:5433` and CC postgres `/tmp/pr45-cc-pg16:5434` were **not** stopped.
+Official pages in plan §3 were fetched **2026-09-18**. Store calls were **not** executed. Leftover TF postgres `/tmp/pr45-pg16:5433`, CC postgres `/tmp/pr45-cc-pg16:5434`, and GW postgres `/tmp/pr45-gw-pg16:5435` were **not** stopped.
 
 ## 11. F-CLAUDE-PR7CP-01…10 finding crosswalk
 
@@ -803,10 +824,19 @@ Independent review of **this** generation / W-integration correction by actual C
 
 | ID | Sev | Original meaning | Disposition | Matrix / proof |
 |---|---|---|---|---|
-| **F-CLAUDE-PR7GW-01** | P2 | Unique-LIVE fallback admitted unattributed overlap payloads as successor data (CE-D) | **CORRECTED** (option a: inclusive overlap → `customer_target_attribution_ambiguous`; persisted origin required for trust; locking unchanged) | PR7-CUST-035…044; G13; NEG-6; old CE-D |
-| **F-CLAUDE-PR7GW-02** | P2 | Seven-symbol completeness missed six inventoried writers (CE-E) | **CORRECTED** (independent source-derived required set; unknown blocks complete; seven names are a floor only) | PR7-GATE-017…022; G14; NEG-7; old CE-E |
+| **F-CLAUDE-PR7GW-01** | P2 | Unique-LIVE fallback admitted unattributed overlap payloads as successor data (CE-D) | **CORRECTED** independently (option a: inclusive overlap → `customer_target_attribution_ambiguous`; locking unchanged). Caller-boolean trust is **withdrawn** (TA-01) | PR7-CUST-035…044; G13; NEG-6; old CE-D |
+| **F-CLAUDE-PR7GW-02** | P2 | Seven-symbol completeness missed six inventoried writers (CE-E) | **CORRECTED** independently (independent source-derived required set; unknown blocks complete; seven names are a floor only). Scanner unchanged | PR7-GATE-017…022; G14; NEG-7; old CE-E |
 
-CC-01…04 remain closed. Independent targeted re-review of **this** temporal-attribution / writer-coverage correction by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
+CC-01…04 remain closed. GW-02 remains closed. The GW-01 overlap defect remains independently closed.
+
+## 12.4 F-CLAUDE-PR7TA-01…02 finding crosswalk
+
+| ID | Sev | Original meaning | Disposition | Matrix / proof |
+|---|---|---|---|---|
+| **F-CLAUDE-PR7TA-01** | P2 | `p_origin_persisted` caller boolean admitted CE-D overlap as successor | **CORRECTED** (option a: protected `WriterAdmissionOrigin`; 5-arg work_id guard; producer-only helper; no GUC / registerOrigin) | PR7-CUST-045…061; G15; NEG-8/9; G13 name-preserving crosswalk; old TA-01 on P |
+| **F-CLAUDE-PR7TA-02** | P3 | Candidates JSON digest embeds absolute roots | **CORRECTED** (labeling: JSON is original-run / environment artifact; portable SQL `9f7aaa26…` equal across roots) | PR7-GATE-017…; G14; Appendix E |
+
+Independent targeted correction re-review of **this** durable-origin packet by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
 
 
 ---
@@ -818,7 +848,7 @@ CC-01…04 remain closed. Independent targeted re-review of **this** temporal-at
 | Three identities | Delivery binding ≠ work id ≠ completion receipt. HMAC/body is not a lifetime work key. |
 | Shop DELETE | Only `stocky_privacy_finalize_shop_delete`. Runtime/CP have no bare DELETE. |
 | Completion | Residual empty **then** conditional CP txn. Receipt cannot override remnants. Customer topics: source-derived residual + exclusive target locks in the same complete txn. Stale-manifest count is insufficient. |
-| Customer barrier | Canonical domain × `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID` (`pr7-ctgt-v2`). Generation is evidence, not the lock. Lock before lookup. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes whose **trusted persisted** origin **is** the completed generation remain restore-denied; genuine unique LIVE successor with `payloadAdmittedAt >= origin.installedAt` allowed. Unattributed inclusive overlap → visible `customer_target_attribution_ambiguous`. Unique LIVE is not historical origin. |
+| Customer barrier | Canonical domain × `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID` (`pr7-ctgt-v2`). Generation is evidence, not the lock. Lock before lookup. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes whose **BOUND** origin **is** the completed generation remain restore-denied; genuine unique LIVE successor with `originalAdmittedAt >= origin.installedAt` and a **new** digest allowed. Unattributed inclusive overlap → visible `customer_target_attribution_ambiguous`. Unique LIVE is not historical origin. Guard derives origin from `WriterAdmissionOrigin`; `p_origin_persisted` removed. |
 | Epoch / publication | Enumerator and claim share publication lock. Stale callers leave the new epoch’s keys/flags/revision unchanged. Check-then-act is insufficient. |
 | Actor | Verified JWT `sub` **string**. Online tokens **not** required for actor identity. Wide id preserved. Unsafe numeric owner blocked. mixedToken/stale-cache fenced **before** any online credential. dest/iss in **app**. Live bind **UNVERIFIED**. |
 | Replay | One CP txn + advisory authz lock + SELECT-only verifier + stable commandId. No `FOR UPDATE` helper. No cross-role atomicity slogan. |
@@ -838,14 +868,15 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 
 | | |
 |---|---|
-| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-gw-pg16:5435` |
-| Contract SHA-256 (this correction) | `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d` |
-| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (byte-identical from 59-case / TF / CC-GEN) |
-| Driver SHA-256 (this correction) | `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5` |
-| Discover SHA-256 | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` |
-| Source snapshot SHA-256 | `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` / SQL `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` |
-| Results SHA-256 | **run log, not a verification artifact.** This-run digest `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30` is an original-run identity only |
-| Totals | **253 records / 253 PASS / 0 FAIL** = **160 unique assertions** + **93 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26). Unique G1–G6 = 59 preserved. New unique this packet = 43 |
+| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-ta-pg16:5436` |
+| Contract SHA-256 (this correction) | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` |
+| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (byte-identical from 59-case / TF / CC-GEN / GW) |
+| Driver SHA-256 (this correction) | `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b` |
+| Discover SHA-256 | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` (**unchanged**) |
+| Source SQL SHA-256 | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` (portable; equals P and this-session X regeneration) |
+| Candidates JSON SHA-256 | **environment artifact.** Historical `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd`; this-env X archive `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (envelope roots only) |
+| Results SHA-256 | **run log, not a verification artifact.** This-run digest `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63` is an original-run identity only |
+| Totals | **313 records / 313 PASS / 0 FAIL** = **191 unique assertions** + **122 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26 + G15×29). Unique G1–G6 = 59 preserved. New unique this packet = 31 |
 | Historical TF 115-record packet (S; **not** this contract) | **115 records ≠ 115 unique**: 89 unique + 26 G7–G9 reruns. Contract `75ab1c02…349846de`; driver `566e0f28…`; run log `006e5799…` |
 | Historical 59-case identities (S; **not** this contract) | contract `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; driver `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; Cursor run log `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8`; reviewer log `185dd1b8…` |
 | Old-model CE-A / CE-B / CE-C | reproduced on unchanged TF contract at `/tmp/pr45-cc-pg16:5434`; sha256 `c1077d531a435b7536c8e9f07c83743c413fb054b749fa7f5f3fbac52df9991f` |
@@ -1015,7 +1046,38 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 | `G14-source-coverage` | `historical_getShopHealth_still_not_required` | PASS | `—` |
 | `NEG-load-bearing` | `temporal_overlap_check_removed_revives_ced_admit` | PASS | `—` |
 | `NEG-load-bearing` | `floor_only_completeness_revives_cee_six_misses_undetected` | PASS | `—` |
+| `G15-durable-origin` | `runtime_denied_origin_insert` | PASS | `42501` |
+| `G15-durable-origin` | `control_plane_denied_origin_insert` | PASS | `42501` |
+| `G15-durable-origin` | `runtime_denied_origin_update` | PASS | `42501` |
+| `G15-durable-origin` | `runtime_denied_origin_delete` | PASS | `42501` |
+| `G15-durable-origin` | `runtime_denied_helper_execute` | PASS | `42501` |
+| `G15-durable-origin` | `control_plane_denied_helper_execute` | PASS | `42501` |
+| `G15-durable-origin` | `runtime_cannot_set_role_admission` | PASS | `42501` |
+| `G15-durable-origin` | `guc_is_not_admission_authority` | PASS | `—` |
+| `G15-durable-origin` | `original_admission_helper_creates_binding` | PASS | `—` |
+| `G15-durable-origin` | `consumer_uses_persisted_binding` | PASS | `—` |
+| `G15-durable-origin` | `retry_same_source_preserves_origin_time` | PASS | `—` |
+| `G15-durable-origin` | `changed_digest_conflicts_original_unchanged` | PASS | `—` |
+| `G15-durable-origin` | `target_substitution_rejected` | PASS | `—` |
+| `G15-durable-origin` | `tenant_substitution_rejected` | PASS | `—` |
+| `G15-durable-origin` | `missing_binding_fail_closed` | PASS | `—` |
+| `G15-durable-origin` | `successor_binding_is_not_interchangeable_with_old_digest` | PASS | `—` |
+| `G15-durable-origin` | `borrowed_successor_cannot_admit_ced_payload` | PASS | `—` |
+| `G15-durable-origin` | `delayed_first_seen_webhook_not_promoted` | PASS | `—` |
+| `G15-durable-origin` | `child_cannot_launder_old_digest` | PASS | `—` |
+| `G15-durable-origin` | `child_inherits_parent_origin` | PASS | `—` |
+| `G15-durable-origin` | `begin_pending_link` | PASS | `—` |
+| `G15-durable-origin` | `pending_link_not_trusted_for_effects` | PASS | `—` |
+| `G15-durable-origin` | `recover_unacked_admission_with_job` | PASS | `—` |
+| `G15-durable-origin` | `recovered_admission_allows_consumer` | PASS | `—` |
+| `G15-durable-origin` | `duplicate_concurrent_admission_reconciles` | PASS | `—` |
+| `G15-durable-origin` | `pruned_binding_fail_closed` | PASS | `—` |
+| `G15-durable-origin` | `genuine_successor_after_completion_progresses` | PASS | `—` |
+| `G15-durable-origin` | `admission_cannot_outrun_active_barrier` | PASS | `—` |
+| `G15-durable-origin` | `unrelated_shop_progresses_with_own_binding` | PASS | `—` |
+| `NEG-load-bearing` | `lookup_bypass_revives_ta01_admit` | PASS | `—` |
+| `NEG-load-bearing` | `unauthorized_mint_revives_ta01_admit` | PASS | `—` |
 
-Unique = **160**. Declared reruns = **93**. Driver total records = **253**. Historical CC-GEN unique 117 / 52 reruns / 169 records preserved as original-run identity. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
+Unique = **191**. Declared reruns = **122**. Driver total records = **313**. Historical GW unique 160 / 93 reruns / 253 records preserved as original-run identity. Historical CC-GEN unique 117 / 52 reruns / 169 records preserved as original-run identity. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
 
 Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` online-token bind; application `test:privacy`. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence.

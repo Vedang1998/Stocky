@@ -4,7 +4,7 @@
 
 **Document type:** execution-ready architecture / acceptance contract for the next approved Phase 1 module.
 
-This packet does **not** authorize PR7 runtime, migrations, grants, Shopify configuration, production, inventory writes, flag enablement, or merge. ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains planning authority for Decisions A–E. Comment 5737038796 remains the customer-completion/epoch/inventory supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and **F-CLAUDE-PR7CC-01…04** (closed; do not reopen). Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) is current for **F-CLAUDE-PR7GW-01/02**, ChatGPT option (a) ambiguity rejection, source-derived writer coverage, and synchronization to closed-PR6 main **X**. None of those comments accept the whole plan or start PR7 runtime. PR6 is **CLOSED** on **X**; Phase 1 remains **IN PROGRESS**.
+This packet does **not** authorize PR7 runtime, migrations, grants, Shopify configuration, production, inventory writes, flag enablement, or merge. ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains planning authority for Decisions A–E. Comment 5737038796 remains the customer-completion/epoch/inventory supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and **F-CLAUDE-PR7CC-01…04** (closed; do not reopen). Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) remains current for independently closed **F-CLAUDE-PR7GW-02** and the GW-01 overlap defect (option a). Comment [5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329) is current for **F-CLAUDE-PR7TA-01/02**, ChatGPT option (a) persist-admission-origin, and TA-02 labeling. None of those comments accept the whole plan or start PR7 runtime. PR6 is **CLOSED** on **X**; Phase 1 remains **IN PROGRESS**.
 
 ---
 
@@ -37,6 +37,7 @@ Immutable independent reviews (byte-for-byte; do not edit):
 - `stocky-plus/docs/phases/phase-1/PR7_TOPIC_AUTHORITY_FINALIZATION_INDEPENDENT_REVIEW.md` (blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c`)
 - `stocky-plus/docs/phases/phase-1/PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `e908770d9daea4f963b2fd09e38af79e07274d41`)
 - `stocky-plus/docs/phases/phase-1/PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`)
+- `stocky-plus/docs/phases/phase-1/PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md` (blob `b7e8ff338e715c79907aa633c75622958f60b4d4`)
 
 ---
 
@@ -54,8 +55,10 @@ Immutable independent reviews (byte-for-byte; do not edit):
 | Authorization (topic authority / finalization) | [PR45 comment 5729229659](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5729229659) (`user=Vedang1998`). Decisions A–E remain otherwise intact. **no D-055** |
 | Authorization (customer-completion / epoch) | [PR45 comment 5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796). Narrowly supplements 5729229659 for **F-CLAUDE-PR7TF-01…04** only |
 | Authorization (CC-GEN / W / entry) | [PR45 comment 5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826). Decision **CC-GEN** + CC-01…04 closed. Does **not** accept the plan |
-| Authorization (GW-01/02 / X sync — **current**) | [PR45 comment 5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159). Ambiguity rejection + source-derived coverage + closed-PR6 main **X**. Does **not** accept the plan or authorize runtime |
-| Starting subject **S** (this GW correction) | `d6ac0432bec5e0ee8b586681ee53c1fa7ea4ba79` |
+| Authorization (GW-01/02 / X sync) | [PR45 comment 5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159). Ambiguity rejection + source-derived coverage + closed-PR6 main **X**. GW-02 and the GW-01 overlap defect remain independently closed. Does **not** accept the plan or authorize runtime |
+| Authorization (TA-01/02 durable origin — **current**) | [PR45 comment 5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329). Persist admission origin (option a); label environment-dependent candidates digest. Does **not** accept the plan or authorize runtime |
+| Starting subject **P** (this TA correction) | `500b476ad079de5f6a1282fd65b2576f0afc9a52` |
+| Historical GW starting subject **S** | `d6ac0432bec5e0ee8b586681ee53c1fa7ea4ba79` |
 | Historical CC-GEN starting subject | `a292bc8a6ea26192bc295af7338dd6d653a3e65c` |
 | Historical TF starting subject | `9d9919057992e9c7ba1f7bfcee73d671f2fadbab` |
 | Prior starting subject (topic-authority packet) | `253ab202dbee53dc842bb1389db4a19c6e3fb058` |
@@ -67,10 +70,11 @@ Immutable independent reviews (byte-for-byte; do not edit):
 | Prior immutable review #2 **R** | commit `64649470475912c3a697585772c0dd336d6daabc`; blob `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f` — **unchanged** |
 | Immutable review **TF** | commit `dee96cf310e7ee2a45947649ee998ef9fe5b51b3`; blob `e609e9526ed1ec043551ca68d6b977f5b5935d0c` — **unchanged** |
 | Immutable review **CC** | branch `claude/pr45-customer-completion-correction-review`; commit `c7b47807083bfad8e7e3a7504e826027e56b7a32`; blob `e908770d9daea4f963b2fd09e38af79e07274d41`; path `PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` — **unchanged** |
-| Immutable review **GW** | branch `claude/pr45-generation-w-integration-review`; commit `28b4399c99d54b1a16722418da3a67bfbb84a760`; sole parent **S** `d6ac043…`; blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`; path `PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` — **fast-forwarded, byte-for-byte**; one-file add |
+| Immutable review **GW** | branch `claude/pr45-generation-w-integration-review`; commit `28b4399c99d54b1a16722418da3a67bfbb84a760`; blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`; path `PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` — **unchanged** |
+| Immutable review **TA** | branch `claude/pr45-temporal-attribution-writer-coverage-review`; commit `b0d73cc7a4adc1488461aafdbd64bdb52bb87b8a`; sole parent **P** `500b476…`; blob `b7e8ff338e715c79907aa633c75622958f60b4d4`; path `PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md` — **fast-forwarded, byte-for-byte**; one-file add |
 | Entry-evidence input **PR48** | sealed pin `c97adda285b5625836a582deb03983099a7b3461`. Earlier `275292d19b583c04c3afe01ef7d9feb48fee0f6c` is historical observation only. No new PR48 packaging run. Cursor-reported feasibility, **not** independent security acceptance |
 | Review publication PR | [#46](https://github.com/Vedang1998/Stocky/pull/46) already used; **do not reopen/reuse as an integration route** |
-| Work order | comment 5750220159 (this packet); 5747828826 remains the CC-GEN historical work order |
+| Work order | comment 5751868329 (this packet); 5750220159 remains the GW historical work order; 5747828826 remains the CC-GEN historical work order |
 | Decision heading | D-054 **EFFECTIVE** — **no D-055** |
 | R-176 | remains **OPEN / P0** |
 | R-164 | unchanged (privacy physical DELETE is not C apply) |
@@ -80,7 +84,7 @@ Immutable independent reviews (byte-for-byte; do not edit):
 | PR45 | **OPEN / DRAFT / UNMERGED** — **IN CORRECTION** |
 | Production / inventory-write flags | **NOT AUTHORIZED** / **DEFAULT OFF** |
 
-Shared-control files may receive **only** the six named PR47/current-main/next-action mechanical updates authorized by comment 5750220159. No risk/severity/question/product/historical-review edits.
+Shared-control files keep the **six** named PR47/current-main/next-action mechanical updates already on **P**; this packet does **not** re-edit them. No risk/severity/question/product/historical-review edits.
 
 ### 1.1 P7-C01…06 (still in force)
 
@@ -162,8 +166,17 @@ CC-01…04 remain **closed**. Completeness is **not** seven-symbol presence and 
 
 | ID | Sev | Defect | This packet | Plan anchors | Matrix |
 |---|---|---|---|---|---|
-| **F-CLAUDE-PR7GW-01** | P2 | Unattributed payload in the overlap between successor `installedAt` and prior generation `completedAt` became successor data via unique-LIVE fallback (CE-D) | ChatGPT option **(a)** ambiguity rejection. `p_origin_persisted` distinguishes trusted persisted origin from a newly attached generation / retry-time stamp / restamped envelope. Unattributed work in the **inclusive** overlap of **any** retained completion vs successor `installedAt` raises `customer_target_attribution_ambiguous`. Missing/invalid times, missing history, and multiple applicable completions are not a permit. Trusted persisted old origin remains `restore_denied`. Trusted persisted successor follows existing successor policy. Unique LIVE is **not** historical origin. Locking design unchanged | §7.6.2 After COMPLETED / Writer origin | PR7-CUST-035…; G13; NEG-6; old CE-D |
-| **F-CLAUDE-PR7GW-02** | P2 | Seven-symbol `stocky_inventory_is_complete` reported complete while six inventoried W writers were omitted (CE-E) | Independent source-derived candidate discovery (path+symbol+write-site+operation/surface+blob) reconciled against inventory. Required set is **not** generated from inventory rows. Unknown candidates block completeness. Seven original symbols remain a **regression floor only** (`stocky_inventory_floor_complete`, `>= 1`). Coverage through a named host | §7.9 | PR7-GATE-017…; G14; NEG-7; old CE-E |
+| **F-CLAUDE-PR7GW-01** | P2 | Unattributed payload in the overlap between successor `installedAt` and prior generation `completedAt` became successor data via unique-LIVE fallback (CE-D) | **Overlap defect independently closed.** ChatGPT option **(a)** ambiguity rejection remains: unattributed work in the **inclusive** overlap of **any** retained completion vs successor `installedAt` raises `customer_target_attribution_ambiguous`. Missing/invalid times, missing history, and multiple applicable completions are not a permit. Unique LIVE is **not** historical origin. Locking design unchanged. The P-packet `p_origin_persisted` caller toggle is **withdrawn** as trust authority (see **TA-01**) | §7.6.2 After COMPLETED / Writer origin | PR7-CUST-035…; G13; NEG-6; old CE-D |
+| **F-CLAUDE-PR7GW-02** | P2 | Seven-symbol `stocky_inventory_is_complete` reported complete while six inventoried W writers were omitted (CE-E) | **Independently closed.** Independent source-derived candidate discovery (path+symbol+write-site+operation/surface+blob) reconciled against inventory. Required set is **not** generated from inventory rows. Unknown candidates block completeness. Seven original symbols remain a **regression floor only** (`stocky_inventory_floor_complete`, `>= 1`). Coverage through a named host. Scanner unchanged this packet | §7.9 | PR7-GATE-017…; G14; NEG-7; old CE-E |
+
+### 1.7 F-CLAUDE-PR7TA-01…02 dispositions (this correction)
+
+GW-02 remains **closed**. The GW-01 overlap defect remains **independently closed**. Completeness is **not** seven-symbol presence. `p_origin_persisted` is **removed**; consumers do not supply a trust toggle.
+
+| ID | Sev | Defect | This packet | Plan anchors | Matrix |
+|---|---|---|---|---|---|
+| **F-CLAUDE-PR7TA-01** | P2 | `p_origin_persisted` was a caller-asserted boolean with EXECUTE to runtime/CP, no admission table, and no recording/retry-preservation point; `true` + successor id admitted the CE-D overlap payload | ChatGPT option **(a)** persist-authority. Protected `WriterAdmissionOrigin` + target rows. Guard is 5-arg `(domain, shop, kind, value, work_id)` and **derives** origin from the bound record. Record id is lookup only; tenant, stable source/work, original admission, digest, target/lineage, and proven generation or explicit UNATTRIBUTED must match. Distinct producer `stocky_original_admission` (LOGIN NOINHERIT) is the only EXECUTE grantee of `stocky_record_writer_admission` / `commit` / `recover`; helpers are SECURITY DEFINER owned by nologin `stocky_admission_origin_owner` and check `session_user`. Runtime/CP cannot DML origin, EXECUTE the helper, SET ROLE producer, or use a GUC as authority. No generically callable `registerOrigin`. Record before durable ack; ATOMIC or BEGIN/`PENDING_LINK` + recover-with-job. Retry/replay/coalesce/child keep the original; a new attempt cannot restamp old data into the current generation. Delayed indistinguishable webhook is UNATTRIBUTED even after reinstall. Missing/pruned/legacy stays unattributed; genuine proven ADMIN successor with a **new** digest still progresses. Inclusive overlap, residual guards, locks, and source-coverage preserved | §7.6.2 Writer origin / Producer map; §7.7.4 | PR7-CUST-035…061; G13 interface crosswalk; G15; NEG-8/9; old TA-01 on P |
+| **F-CLAUDE-PR7TA-02** | P3 | `source_derived_candidates.json` SHA-256 embeds absolute `app_root`/`scan_roots`, so the digest is checkout-location identity | **Labeling option.** Historical JSON bytes preserved (`0ce7a398…`). Portable `04_source_derived.sql` is the consumed input and remains `9f7aaa26…`. This-session X archive scan JSON `e93b23bf…` differs **only** in envelope roots (`/workspace/stocky-plus` vs `/tmp/pr45-ta/x-app/stocky-plus`); `candidates`/`required`/`counts`/`scanned_files` equal. Scanner `666feaa8…` unchanged. Do not require the JSON digest to reproduce across checkouts | §14 Appendix E | PR7-GATE-017…; G14 |
 
 
 
@@ -511,10 +524,32 @@ A boolean `processingEnabled=false` plus RLS in a **stale** transaction is not q
 | Exclusive | customer-erasure admission / residual+completion: domain **shared** (not exclusive), publication lock, then customer-target **exclusive** locks in the same sort order |
 | Durable row | `PrivacyCustomerTargetBarrier` `ACTIVE` until completion; `generationId` is evidence (the request's bound generation), not the lock identity; survives worker death and epoch takeover (`attemptId` rebound by `stocky_privacy_claim_attempt`) |
 | Writer deny | `customer_target_erasing` if **any** ACTIVE barrier in the namespace matches `(kind, value)`; a later LIVE generation row, including lexicographically greater `gen_a_zz`, cannot bypass it; never silently repopulate the target |
-| Writer origin | `stocky_writer_origin_generation`: **trusted** only when `p_origin_persisted IS TRUE` and `p_origin_generation_id` exists in the namespace. Otherwise unique LIVE `shopRowId`/`targetShopId` fallback. Missing → `customer_write_origin_missing`. Two LIVE bindings → `customer_write_origin_ambiguous`. **Never** `ORDER BY id`. A newly attached caller-provided generation, retry-time timestamp, or restamped envelope is **not** trusted origin. Preserve original admission/provenance on retry |
-| After COMPLETED | barrier `RELEASED`; `PrivacyCompletedTarget` records minimized `(shop, generation, kind, value, completedAt)`. Delayed payloads with `payloadAdmittedAt <= completedAt` whose **trusted persisted** origin **is** the completed generation raise `customer_target_restore_denied`. Genuine **trusted persisted** successor writes require: unique LIVE origin ≠ completed generation, completed generation **not** LIVE, and `payloadAdmittedAt >= origin.installedAt`. Queued payload before successor `installedAt` remains restore-denied. **GW-01 option (a):** an **unattributed** payload (`p_origin_persisted` is not true) whose `payloadAdmittedAt` falls in the **inclusive** overlap `[successor.installedAt, completedAt]` of **any** applicable retained completion raises `customer_target_attribution_ambiguous` and creates **no** restoring write. Unique LIVE is not proof of historical origin. Equality at either boundary is ambiguous unless a trusted serialized ordering exists. Missing/invalid times, missing generation history, or multiple applicable completions are **not** a permit. Evaluate **all** retained completions, not a lexicographic/latest row. Indistinguishable shared data stays a visible block/escalate. Legitimate later writes **after** `completedAt` on a proven unique LIVE successor remain allowed. **Not** lifetime suppression. Q-008 remains OPEN |
+| Writer origin | Guard **derives** origin from protected `WriterAdmissionOrigin` keyed by `(canonicalDomain, shopId, workId)` plus bound target rows. `v_trusted` is true only when `originStatus='BOUND'` and `originGenerationId` is non-empty. `p_origin_persisted` **does not exist**. Caller generation/time/boolean is not authority. Record id is lookup only. Missing/wrong-tenant/wrong-target/PENDING_LINK/unacked → fail-closed (`customer_target_attribution_ambiguous` / `customer_target_binding_mismatch` / `customer_admission_not_acked`). Unique LIVE fallback is **not** historical origin. **Never** `ORDER BY id`. Retry of the same source+digest returns the original row (time/generation unchanged). A changed digest on the same source raises `admission_binding_conflict`. A new attempt cannot restamp old data into the current generation |
+| After COMPLETED | barrier `RELEASED`; `PrivacyCompletedTarget` records minimized `(shop, generation, kind, value, completedAt)`. Overlap uses **`originalAdmittedAt` from the admission row**, not a caller timestamp. Delayed payloads whose **BOUND** origin **is** the completed generation raise `customer_target_restore_denied`. Genuine **BOUND** successor writes require: unique LIVE origin ≠ completed generation, completed generation **not** LIVE, and `originalAdmittedAt >= origin.installedAt`, and the admission must have been recorded against that LIVE generation with a **new** source digest. Queued payload before successor `installedAt` remains restore-denied. **GW-01 option (a) preserved:** an **unattributed** payload (`BOUND` is not true — WEBHOOK, PENDING_LINK, pruned, missing) whose `originalAdmittedAt` falls in the **inclusive** overlap `[successor.installedAt, completedAt]` of **any** applicable retained completion raises `customer_target_attribution_ambiguous` and creates **no** restoring write. Unique LIVE is not proof of historical origin. Equality at either boundary is ambiguous unless a trusted serialized ordering exists. Missing/invalid times, missing generation history, or multiple applicable completions are **not** a permit. Evaluate **all** retained completions, not a lexicographic/latest row. An authenticated but historically indistinguishable delayed webhook is **not** successor data merely because it arrives after reinstall. Legitimate later writes **after** `completedAt` on a proven unique LIVE successor remain allowed. **Not** lifetime suppression. Q-008 remains OPEN |
 | Unrelated progress | other customers (different rest id / order ids) and other shops take different lock keys and continue; `processingEnabled` stays true |
 | Shop supersession | if **this request's** generation fence is `ERASING`/`FINALIZING`, customer admission/completion returns `superseded_by_shop_erasure` / `superseded`; no fabricated customer COMPLETED download. Namespace freeze (`stocky_generation_writable`) is separately fail-closed whenever **any** generation in the domain is `ERASING`/`FINALIZING` |
+| Shop delete | `WriterAdmissionOrigin.shopId` FK **ON DELETE CASCADE** so origin rows cannot outlive the shop |
+
+**Producer / consumer authority map (PROPOSED disposable contract only; not application grants):**
+
+| Principal | Kind | Exact privileges | Must not |
+|---|---|---|---|
+| `stocky_original_admission` | LOGIN NOINHERIT NOBYPASSRLS **producer** | `EXECUTE` `stocky_record_writer_admission` / `stocky_commit_writer_admission` / `stocky_recover_writer_admission` only. Recording point: **before** durable acknowledgement / enqueue | CREATE/rewrite/DELETE origin rows; remint provenance; upgrade UNATTRIBUTED→BOUND; SET ROLE from runtime/CP |
+| `stocky_admission_origin_owner` | NOLOGIN NOINHERIT **table/function owner** | Owns origin tables and the three SECURITY DEFINER helpers; DML only inside those helpers | Callable by runtime/CP; a generically granted `registerOrigin` |
+| `stocky_lifecycle_gate_owner` | nologin gate | `SELECT` origin tables to derive `v_trusted` inside the 5-arg write guard | Mint or rebind origin |
+| `stocky_runtime` / `stocky_control_plane` | ordinary **consumers** | `EXECUTE` 5-arg `stocky_customer_write_guard` / `stocky_fact_write_guard` with a `work_id` | Origin DML; helper EXECUTE; `SET ROLE stocky_original_admission`; treating a GUC as admission authority |
+
+Helpers check `session_user` (not `current_user`) so SECURITY DEFINER cannot be used as escalation. No self-set GUC is consulted.
+
+**Trustworthy generation evidence (producer only):**
+
+| Evidence class | Source of generation evidence | Result |
+|---|---|---|
+| `ADMIN_SESSION_CURRENT_INSTALL` | Unique `fence='LIVE'` generation in the canonical domain **re-read after** lifecycle + target locks. Historical rows are not the current install. `live_n <> 1` → `admission_generation_ambiguous` | ATOMIC → `BOUND`; BEGIN → `PENDING_LINK` then BOUND on commit |
+| `WEBHOOK_PROVIDER_AUTH` | Provider HMAC proves shop/topic, **not** historical generation of a delayed payload | ATOMIC → `UNATTRIBUTED`; BEGIN → `PENDING_LINK` then UNATTRIBUTED on commit. Never binds LIVE |
+| `PARENT_LINEAGE` / `MANUAL_REPLAY` | Inherit parent work's origin/status; child matching parent digest may inherit BOUND; child cannot adopt a foreign root digest (`admission_digest_conflict`). **Never upgrade** | Inherit or UNATTRIBUTED |
+
+**Linking protocol:** `ATOMIC` inserts origin+target and sets `acked=true` in one statement (before durable ack). `BEGIN` inserts `PENDING_LINK` / `acked=false`; consumers see `customer_admission_not_acked`. `stocky_commit_writer_admission` acks; `stocky_recover_writer_admission` commits only when the linked `DurableJob` exists. Admission **does not INSERT** `DurableJob` (intake remains control-plane). Lost ack recovers via recover-with-job; pending without a job stays untrusted.
 
 **Residual (not the manifest):** `stocky_privacy_customer_residual_count` is SECURITY DEFINER and **owns its preconditions** (CC-02) **before** any RLS-filtered count: request GUC must equal `p_request_id` (`residual_request_guc_mismatch` `42501` on absence/mismatch); tenant GUC must equal `targetShopId`; live attempt + capability `READ` required. It does **not** depend on the adjacent enumerator call. Source-derived: open-ended `AuditEvent.customerRestId = lookupCustomerRestId`; orders by `shopifyLegacyResourceId = ANY(lookupOrderLegacyIds)`; child lines by reconstructed `gid://shopify/Order/`||legacyId so a deleted root is not confused with unknown input. Returns only a count. Zero RLS-visible **consumer** rows still **never** prove absence. Historical CE-C: unguarded residual returned `0` on missing/foreign GUC while three rows existed; complete was shielded by re-enumerate — that is a latent P2, not a demonstrated live false-complete.
 
@@ -745,8 +780,9 @@ PUBLIC EXECUTE revoked on every helper. FORCE RLS on. No BYPASSRLS. No membershi
 | `stocky_privacy_publication_lock(text)` / `stocky_privacy_live_attempt_ok(text,text)` | invoker (used inside enumerator/claim) | locked | advisory ns `1347573556`; SELECT request/attempt | reader, erasure, CP, target_owner | enumerator; claim/takeover; complete |
 | `stocky_privacy_claim_attempt(text,text,text)` | `stocky_privacy_target_owner` | locked | same publication lock; mark LOST; insert epoch; rebind `activeAttemptId` + ACTIVE barriers | CP | worker-loss takeover |
 | `stocky_privacy_install_customer_barrier(text,text)` / `stocky_customer_targets_for_request(text)` | `stocky_privacy_target_owner` | locked | INSERT/rebind `PrivacyCustomerTargetBarrier`; generation is **evidence**; lock keys are canonical-domain × kind:value (`pr7-ctgt-v2:`) | erasure, CP | **P-CUSTOMER-BARRIER** |
-| `stocky_shop_canonical_domain(text,text)` / `stocky_writer_origin_generation(text,text,text)` / `stocky_customer_target_lock_key1/2` | lifecycle / invoker | locked | unique LIVE/declared origin; two-int `hashtext` pair (not 3-arg). **Never** `ORDER BY id` | runtime, CP, erasure | CC-GEN writer origin |
-| `stocky_customer_write_guard(..., p_origin_persisted boolean DEFAULT false)` / `stocky_fact_write_guard(...)` | `stocky_lifecycle_gate_owner` / invoker | locked | lock **before** lookup; examine **all** namespace ACTIVE/completed barriers; GW-01 inclusive overlap ambiguity; deny `customer_target_erasing` / `customer_target_restore_denied` / `customer_target_attribution_ambiguous` / `customer_write_origin_missing` | runtime, CP | FUTURE TenantDb / apply writers |
+| `stocky_shop_canonical_domain(text,text)` / `stocky_writer_origin_generation(text,text,text)` / `stocky_customer_target_lock_key1/2` | lifecycle / invoker | locked | unique LIVE/declared origin; two-int `hashtext` pair (not 3-arg). **Never** `ORDER BY id` | runtime, CP, erasure, original_admission (canonical + locks) | CC-GEN writer origin |
+| `stocky_record_writer_admission(...)` / `stocky_commit_writer_admission(text)` / `stocky_recover_writer_admission(text)` | `stocky_admission_origin_owner` / definer | locked | `session_user` must be `stocky_original_admission`; lock then LIVE re-read; persist origin **before** ack; ATOMIC or PENDING_LINK | **`stocky_original_admission` only** | original-admission producer |
+| `stocky_customer_write_guard(domain, shop, kind, value, work_id)` / `stocky_fact_write_guard(...)` | `stocky_lifecycle_gate_owner` / invoker | locked | lock **before** lookup; derive origin from `WriterAdmissionOrigin`; examine **all** namespace ACTIVE/completed barriers; GW-01 inclusive overlap; deny `customer_target_erasing` / `customer_target_restore_denied` / `customer_target_attribution_ambiguous` / `customer_target_binding_mismatch` / `customer_admission_not_acked` / `customer_write_origin_missing`. **No** `p_origin_persisted` | runtime, CP | FUTURE TenantDb / apply writers |
 | `stocky_privacy_customer_residual_count(text)` | `stocky_privacy_target_owner` | locked | **owns** request GUC / tenant / live attempt / READ capability **before** RLS count (`residual_request_guc_mismatch` `42501`); source-derived; **not** `PrivacyTargetKey` | erasure, CP | **P-CUSTOMER-RESIDUAL-COMPLETE** |
 | `stocky_privacy_complete_customer_redact(text,text)` | `stocky_privacy_target_owner` | locked | publication + exclusive targets; re-enumerate; residual; conditional COMPLETED + `PrivacyCompletedTarget` | erasure, CP | same phase |
 | `stocky_privacy_data_request_coverage(text)` | `stocky_privacy_target_owner` | locked | snapshot key count + `enumerationComplete` at `publicationRevision` | reader, CP | data_request fulfillment; **not** an empty residual |
@@ -964,6 +1000,8 @@ Status `constrained` = ChatGPT assignment. Comment 5729229659 is current for Dec
 | **CC-GEN** | Customer-target identity | Generation-independent canonical-domain × kind:value lock; trusted origin; no `ORDER BY id` | shop/generation lock + lexicographic resolver → **namespace lock + unique LIVE/declared origin** | Multi-generation shops no longer bypass barriers; successor writes remain possible when uniquely proven | Yes |
 | **GW-01** | Overlap attribution | Ambiguity rejection (option a). Unattributed inclusive overlap is `customer_target_attribution_ambiguous`; unique LIVE is not historical origin | residual-risk admission of unattributed overlap → **visible ambiguous block** | No silent restoration of indistinguishable data; legitimate later successor still admitted | Yes |
 | **GW-02** | Writer completeness | Independent source-derived required set reconciled against inventory; unknown blocks complete; seven names are a floor only | seven-symbol allowlist completeness → **source-derived reconciliation** | Omitted inventoried writers cannot report complete | Yes |
+| **TA-01** | Admission origin | Persist origin at original admission. Guard derives trust from `WriterAdmissionOrigin`. No caller boolean / GUC / generic register helper | caller-asserted `p_origin_persisted` → **protected producer-only binding** | Retry cannot restamp old data as successor; delayed webhook stays unattributed; proven ADMIN successor still progresses | Yes |
+| **TA-02** | Candidates digest | Label JSON as original-run / environment artifact; portable SQL is the consumed input | JSON SHA as portable input → **envelope-root metadata vs substantive payload** | Cross-checkout JSON digest may differ without a content change | No (labeling) |
 | **Q-008** | Retention language | OPEN | OPEN | Production blocker | Production |
 
 **Remaining explicit residuals (not hidden as “implementation detail”):**
@@ -982,7 +1020,7 @@ Status `constrained` = ChatGPT assignment. Comment 5729229659 is current for Dec
 
 **P7-C06.** This assignment does **not** authorize a V-only alternate base.
 
-1. ChatGPT accepts this **GW-01/02 + CC-GEN / W-integration / entry-evidence** plan + matrix after independent Claude Code re-review of this exact head with no unresolved P0/P1/P2.
+1. ChatGPT accepts this **TA-01/02 + GW-01/02 + CC-GEN / W-integration / entry-evidence** plan + matrix after independent Claude Code re-review of this exact head with no unresolved P0/P1/P2.
 2. Constrained D-PR7 items remain constrained; residuals in §9 are either accepted as implementation proofs or separately decided. Do not certify a missing online binding or cross-system fence.
 3. Phase 1 PR6 independently accepted and **formally closed** on merged `origin/main` **X** `f057d98…` (PR47 squash; W remains the executable D runtime; W→X docs-only). Implementation branches from accepted closed main, not from this planning SHA.
 4. Exact-head CI on that merged main per `CI_POLICY.md`.
@@ -1003,10 +1041,11 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 
 | Check | Result |
 |---|---|
-| Starting subject **S** | `d6ac0432bec5e0ee8b586681ee53c1fa7ea4ba79` |
-| GW review **FF** | `28b4399c99d54b1a16722418da3a67bfbb84a760`; sole parent S; one-file add of `PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md`; blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70` |
-| X merge (history-preserving, `--no-ff`) | `bfdb4a12594a6ce0c4f9700dc23d9d59bd6a7c94` parents `28b4399…` + `f057d98…` |
-| Prior review blobs | `c1fa5c2fed74bf80d1006267b43d767258895c17`, `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`, `e609e9526ed1ec043551ca68d6b977f5b5935d0c`, `e908770d9daea4f963b2fd09e38af79e07274d41` **unchanged** |
+| Starting subject **P** | `500b476ad079de5f6a1282fd65b2576f0afc9a52` |
+| TA review **FF** | `b0d73cc7a4adc1488461aafdbd64bdb52bb87b8a`; sole parent P; one-file add of `PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md`; blob `b7e8ff338e715c79907aa633c75622958f60b4d4` |
+| X already an ancestor | merge-base = `f057d98c8a321b3e06875a6e9a83b787bcbc101f`; **no** extra main-sync commit |
+| Historical X merge | `bfdb4a12594a6ce0c4f9700dc23d9d59bd6a7c94` parents `28b4399…` + `f057d98…` |
+| Prior review blobs | `c1fa5c2fed74bf80d1006267b43d767258895c17`, `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`, `e609e9526ed1ec043551ca68d6b977f5b5935d0c`, `e908770d9daea4f963b2fd09e38af79e07274d41`, `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70` **unchanged** |
 | Base **V** (historical) | `a3ff480f1477237f8055f10c43298480a05728a1` |
 | Historical executable **W** | `ee193f38491245a10fb2fa60d2cf9a29f3271605` |
 | Current main **X** | `f057d98c8a321b3e06875a6e9a83b787bcbc101f` (docs-only vs W; 10 documentation paths; no application/schema/CI/test delta) |
@@ -1016,23 +1055,27 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 | IEEE-754 probe | **executed-prior-planning-head-not-re-run**; `Number("9007199254740993")===9007199254740992` (Node `v22.14.0`) |
 | `npm run test:privacy` | **executed-prior-planning-head-not-re-run** (exit 1, missing script). Missing script is an implementation gate, not a planning defect |
 | Old-model CE-A / CE-B / CE-C | **executed-prior-planning-head-not-re-run** on unchanged TF contract (`75ab1c02…349846de`). Preserved identities |
-| Old-model CE-D / CE-E | **executed-this-planning-session** on the **unchanged** d6/CC-GEN contract (`7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`) **before** loading this contract. Host `/tmp/pr45-gw-pg16:5435`, database `pr45_old_ce`. Repro sha256 `2e6aaa98bf5a98ca3b6594a33e9f65324217ac2e197d203ac1224217e8ce4b00`. CE log sha256 `c33327bf8b8d64bfc648df4170ef1a5b01d5693683267a33aee244bea0571a82`. CE-D: unattributed overlap **ADMITTED** via unique-LIVE fallback (defect). Declared old origin still restore_denied; declared successor admitted. CE-E: seven-symbol completeness **true** after removing each of `runOrderFactsReconcileJob`, `applyNominatedOrderGid`, `applyWithApplicationReceipt`, `lockSyncRun`, `upsertCanonicalShop`, `processUninstall` (six misses undetected) |
-| Independent writer discovery | **executed-this-planning-session** read-only against X/`stocky-plus` (`app/**`, `scripts/**`). Scanner sha256 `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d`. Snapshot sha256 `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd`. Source SQL sha256 `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa`. **506** files / **1307** candidates / **219** required / **0** unknown. Classification: {"COVERED_THROUGH_HOST": 34, "NONWRITER": 46, "PUBLICATION_SURFACE": 50, "REQUIRED_LIFECYCLE": 191, "REQUIRED_LIFECYCLE_AND_TARGET": 28, "UNREACHABLE_TEST": 957, "WRAPPER_FORWARDER": 1}. Envelope exclusions accounted as UNREACHABLE_TEST / GENERATED_EXCLUDED; not hidden production skips |
-| Disposable PostgreSQL 16 proofs (corrected contract) | **executed-this-planning-session** — **253 records / 253 PASS / 0 FAIL** = **160 unique assertions** + **93 declared reruns**. Unique G1–G6 = 59 preserved. Unique G7–G12 preserved from CC-GEN. New unique this packet = G13 15 + G14 26 + NEG +2. Host `/tmp/pr45-gw-pg16:5435` (`PROOF_ROOT=/tmp/pr45-gw/new`). `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). Not PR7 runtime. Leftover TF cluster `/tmp/pr45-pg16:5433` pid 17427 and CC cluster `/tmp/pr45-cc-pg16:5434` pid 22800 were **not** stopped |
+| Old-model CE-D / CE-E | **executed-prior-planning-head-not-re-run** on the unchanged d6/CC-GEN contract (`7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`). Host `/tmp/pr45-gw-pg16:5435`. Repro `2e6aaa98bf5a98ca3b6594a33e9f65324217ac2e197d203ac1224217e8ce4b00`. CE log `c33327bf8b8d64bfc648df4170ef1a5b01d5693683267a33aee244bea0571a82` |
+| **TA-01 reproduced on unchanged P** | **executed-this-planning-session** on P contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d` **before** loading this contract. Host `/tmp/pr45-ta-pg16:5436`, database `pr45_ta01_repro`. Repro `95955d83b0b9590b825a52407c7b0370c4019aa49a18e60bb58b1f321d2b6934`. Log `243eb0bf35ffc6a99ca570d0ce3e4d7b559bb06a06127fbc03fe0a6f6ba37e1b`. Unattributed overlap → `customer_target_attribution_ambiguous`. Persisted old origin → `customer_target_restore_denied`. **`p_origin_persisted=true` + origin=`gen_a2` ADMITTED** (defect). Newly attached `persisted=false` remains ambiguous |
+| Historical GW 253-record packet | original-run identity for P (**not** this contract): **253 records = 160 unique + 93 declared reruns**. Contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`; driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`; run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30` |
+| Independent writer discovery | **executed-this-planning-session** read-only against X (`git archive` → `/tmp/pr45-ta/x-app/stocky-plus`). Scanner sha256 `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` **unchanged**. Portable SQL sha256 `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` **equals** historical / P appendix. Historical JSON `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` (envelope `/workspace/stocky-plus`). This-env JSON `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (envelope `/tmp/pr45-ta/x-app/stocky-plus`). Substantive `candidates`/`required`/`counts`/`scanned_files` **equal**. **506** files / **1307** candidates / **219** required / **0** unknown. Scanner not redesigned |
+| Disposable PostgreSQL 16 proofs (corrected contract) | **executed-this-planning-session** — **313 records / 313 PASS / 0 FAIL** = **191 unique assertions** + **122 declared reruns**. Unique G1–G6 = 59 preserved. Unique G7–G14 preserved via work_id crosswalk (admit then 5-arg guard; **not** preseeded privileged rows). New unique this packet = G15 29 + NEG +2. Host `/tmp/pr45-ta-pg16:5436` (`PROOF_ROOT=/tmp/pr45-ta/new`). `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). Not PR7 runtime. Leftover TF `/tmp/pr45-pg16:5433` pid 17427, CC `/tmp/pr45-cc-pg16:5434` pid 22800, and GW `/tmp/pr45-gw-pg16:5435` pid 29035 were **not** stopped |
 | Redis / filesystem / Shopify / live token exchange | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted; Helper A / coordinator PREP rows are **FACT (PR48)** synthetic probes, not this session. `authenticate.admin` remains **reused / not independently reproduced** |
 | Official fetches | §3 URLs, **2026-09-18** |
 | Store calls | not executed |
 | Review artifacts edited | **No** |
 
-Failed proof attempts (this GW pass, not hidden): first corrected suite 244/250 because (1) G11 `ceb_two_gen_old_origin_still_restore_denied` passed newly attached `'gen_a'` without `p_origin_persisted=true` and hit `customer_write_origin_ambiguous` under two LIVE rows — driver now passes `true` so trusted old origin remains restore_denied; (2) G13 equality tests used runtime-role subqueries against `ShopInstallGeneration`/`PrivacyCompletedTarget` (`42501`) — timestamps are now fetched as `pr45owner` then passed as `TIMESTAMPTZ` literals. No hidden GRANT, dropped FK, or repaired unpublished script is credited. NEG replaces one function at a time, demonstrates the safety property failing, then `reset()` reloads the declared contract.
+**Interface crosswalk (P 7-arg → this 5-arg):** consumers no longer pass `p_origin_persisted`, `p_origin_generation_id`, or `p_payload_admitted_at`. Driver helper `admit()` runs as `stocky_original_admission` and calls `stocky_record_writer_admission`; `gsql()` / `stocky_fact_write_guard` then take `work_id` only. G13 assertion **names** are preserved; successor overlap admit is ADMIN admission **after** `gen_a2` LIVE with a **new** digest, not a caller boolean. Newly attached old digest is `admission_digest_conflict`, not a restamp. Do **not** weaken proofs with owner-preseeded origin rows.
 
-Historical CC-GEN 169-record packet remains original-run identity for S (**not** this contract): **169 records = 117 unique + 52 declared reruns**. CC-GEN contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`; driver `e9bd3c187451ea989fcf1b0a6c1385f3e4d93281744127d44b46621f97001f34`; run log `420ec6e0cb231a43bed36dc850c478b3587f097643b477daeb6695318bd094d8`.
+Failed proof attempts (this TA pass, not hidden): (1) origin-fragment `GRANT` on `stocky_customer_target_lock_key1/2` was spliced before those functions existed — late GRANTs now follow `lock_shared`; (2) leftover `pr45_ta01_repro` still owned `stocky_runtime` so `DROP ROLE` failed until that DB was dropped; (3) G7 `UnboundLocalError` because local `admit = threading.Event()` shadowed the admission helper — renamed `barrier_admitted`; wait-admit moved **before** completer start so the wait case is a lock timeout rather than restore_denied; (4) first full suite **289/313** because ADMIN `live_n` counted **all** generation history in the domain (`admission_generation_ambiguous` after `gen_a`+`gen_a2`) — LIVE-only `fence='LIVE'` count. No hidden GRANT, dropped FK, or repaired unpublished script is credited. NEG replaces one function at a time (NEG-8 lookup bypass; NEG-9 strip `session_user` + GRANT EXECUTE to runtime), demonstrates the safety property failing, then `reset()` reloads the declared contract.
+
+Historical CC-GEN 169-record packet remains original-run identity (**not** this contract): **169 records = 117 unique + 52 declared reruns**. CC-GEN contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`; driver `e9bd3c187451ea989fcf1b0a6c1385f3e4d93281744127d44b46621f97001f34`; run log `420ec6e0cb231a43bed36dc850c478b3587f097643b477daeb6695318bd094d8`.
 
 Historical TF 115-record packet remains original-run identity (**not** this contract): **115 records = 89 unique + 26 declared G7–G9 reruns**. TF contract `75ab1c02fc01560d975a78737bccbc7c2fa6330a07100ad98d2b243d349846de`; TF driver `566e0f289f2ca4da526286b3ca831c906030973958318eb60b55a0237823251a`; TF run log `006e5799544c0ae2368a75e50fbbfdee77b43b816d9cd490c5c2f5d140e94344`.
 
 Historical 59-case identities remain original-run identities: `01_contract.sql` `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; `02_seed.sql` `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`; `03_run_proofs.py` `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; original `results.json` `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` (run log; reviewer independent log `185dd1b8…`).
 
-Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`, **port 5435**, roles as named principals). System cluster was not used. Teardown: `dropdb pr45_proof`. Do **not** stop leftover helper postgres on 5433 or 5434.
+Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`, **port 5436**, roles as named principals). System cluster was not used. Teardown: `dropdb pr45_proof`. Do **not** stop leftover helper postgres on 5433, 5434, or 5435.
 
 ## 13. Cross-check to the acceptance matrix
 
@@ -1050,8 +1093,9 @@ Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (d
 | Customer completion / epoch / inventory | PR7-TOP-015…, PR7-COORD-PUB-*, PR7-GATE-009…, **F-CLAUDE-PR7TF-01…04** |
 | Generation-independent target / residual own GUC | PR7-CUST-025…, PR7-TOP-018…, PR7-RESID-*, G11, G12, NEG-4/5, **F-CLAUDE-PR7CC-01…04** / **CC-GEN** |
 | Temporal overlap attribution / source-derived coverage | PR7-CUST-035…, PR7-GATE-017…, G13, G14, NEG-6/7, **F-CLAUDE-PR7GW-01/02** |
+| Durable admission origin / labeling | PR7-CUST-045…061, G15, NEG-8/9, **F-CLAUDE-PR7TA-01/02**; G13 names preserved via work_id crosswalk |
 | Escalation | PR7-ESCL-001…004 |
-| Finding crosswalk | §1.2, §1.3, §1.4, §1.5, **§1.6** and matrix §11–§12.3 |
+| Finding crosswalk | §1.2, §1.3, §1.4, §1.5, **§1.6**, **§1.7** and matrix §11–§12.4 |
 
 If a matrix row cites a path, that path is listed in §4 or §7.9.
 
@@ -1061,38 +1105,38 @@ If a matrix row cites a path, that path is listed in §4 or §7.9.
 
 | File | SHA-256 | Role |
 |---|---|---|
-| `01_contract.sql` | `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d` | Proposed DDL/roles/policies/helpers (this GW-01/02 correction) |
-| `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (`pr45owner` BYPASSRLS **load only**; **byte-identical** to the 59-case, TF, and CC-GEN packets) |
-| `03_run_proofs.py` | `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5` | Concurrency/permission driver; `PROOF_ROOT` / `PGHOST` / `PGPORT`; G1–G14 + NEG; clean G7–G9/G11–G14 rerun |
-| `04_discover_writers.py` | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` | Independent source-derived candidate discovery (read-only vs X app sources) |
-| `04_source_derived.sql` | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` | Independent `SourceDerivedCandidate` / `SourceDerivedRequired` snapshot transcribed from the scanner; **not** `SELECT` from inventory |
-| `source_derived_candidates.json` | `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` | Scanner JSON snapshot (required set source of truth for G14) |
-| `results.json` | **run log, not a verification artifact** (timings/environment). This-run digest `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30` is an original-run identity only |
+| `01_contract.sql` | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` | Proposed DDL/roles/policies/helpers (this TA-01/02 correction). Origin fragment `edcc0a8ea3471c28b12459803bcab0b3c902ffe18e3ca15a7d5a3c886b394bc1` |
+| `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (`pr45owner` BYPASSRLS **load only**; **byte-identical** to the 59-case, TF, CC-GEN, and GW packets) |
+| `03_run_proofs.py` | `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b` | Concurrency/permission driver; `PROOF_ROOT` / `PGHOST` / `PGPORT`; G1–G15 + NEG; clean G7–G9/G11–G15 rerun. Calls the **actual** admission helper |
+| `04_discover_writers.py` | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` | Independent source-derived candidate discovery (**unchanged** vs P/GW) |
+| `04_source_derived.sql` | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` | Portable consumed snapshot; **byte-identical** to P/GW and to this-session X regeneration |
+| `source_derived_candidates.json` | **original-run / environment artifact**, not a portable input digest. Historical GW/P bytes `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` (roots `/workspace/stocky-plus`). This-session X archive `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (roots `/tmp/pr45-ta/x-app/stocky-plus`). Substantive payload equal |
+| `results.json` | **run log, not a verification artifact** (timings/environment). This-run digest `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63` is an original-run identity only |
 
-Historical CC-GEN identities (S / independently reproduced head; **not** this contract): contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`, seed `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`, driver `e9bd3c18…97001f34`, Cursor run log `420ec6e0…`. Historical TF identities: contract `75ab1c02…349846de`, driver `566e0f28…7823251a`, Cursor run log `006e5799…`. Historical 59-case identities: contract `b29ef463…858db054`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
+Historical GW identities (P / independently reviewed head; **not** this contract): contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`, seed `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`, driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`, Cursor run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30`. Historical CC-GEN identities: contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`, driver `e9bd3c18…97001f34`, Cursor run log `420ec6e0…`. Historical TF identities: contract `75ab1c02…349846de`, driver `566e0f28…7823251a`, Cursor run log `006e5799…`. Historical 59-case identities: contract `b29ef463…858db054`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
 
-Clean-fixture result: **253 records / 253 PASS / 0 FAIL** = **160 unique** + **93 declared reruns**. Unique G1–G6 = 59. Unique added this packet = 43 (G13 15 + G14 26 + NEG +2). Driver queries `current_setting('server_version')` and `server_version_num`. Do **not** label 253 or 169 or 115 as unique-assertion counts.
+Clean-fixture result: **313 records / 313 PASS / 0 FAIL** = **191 unique** + **122 declared reruns**. Unique G1–G6 = 59. Unique added this packet = 31 (G15 29 + NEG +2). G13 15 + G14 26 remain via interface crosswalk. Driver queries `current_setting('server_version')` and `server_version_num`. Do **not** label 313 or 253 or 169 or 115 as unique-assertion counts.
 
-Reproduction is **self-contained**. Stage Appendix A–E bytes into an owned `PROOF_ROOT` (the driver defaults to its own directory). Do **not** hardcode `/tmp/pr45-tf`. Do **not** stop leftover helper clusters on 5433 or 5434.
+Reproduction is **self-contained**. Stage Appendix A–E bytes into an owned `PROOF_ROOT` (the driver defaults to its own directory). Do **not** hardcode `/tmp/pr45-tf`. Do **not** stop leftover helper clusters on 5433, 5434, or 5435.
 
 ```bash
-export PROOF_ROOT=/tmp/pr45-gw/new
-export PGHOST=/tmp/pr45-gw-pg16
-export PGPORT=5435
+export PROOF_ROOT=/tmp/pr45-ta/new
+export PGHOST=/tmp/pr45-ta-pg16
+export PGPORT=5436
 # Copy Appendix A/B/C/D/E bytes into $PROOF_ROOT/
-# sha256sum must match the table above.
+# sha256sum must match the table above (JSON digest is environment-labeled).
 initdb -D "$PGHOST"
 pg_ctl -D "$PGHOST" -o "-p $PGPORT -k $PGHOST" start
 createuser -h "$PGHOST" -p "$PGPORT" pr45owner
 createdb  -h "$PGHOST" -p "$PGPORT" -U pr45owner pr45_proof
 python3 "$PROOF_ROOT/04_discover_writers.py"   # optional; snapshot already staged
-python3 "$PROOF_ROOT/03_run_proofs.py"   # dropdb/createdb + contract/seed/source SQL + G1–G14 + NEG + clean rerun
-# Old CE-D/CE-E (optional; uses the *unchanged d6/CC-GEN* contract, not this one):
-# python3 /path/to/repro_old_ce_de_ee.py
+python3 "$PROOF_ROOT/03_run_proofs.py"   # dropdb/createdb + contract/seed/source SQL + G1–G15 + NEG + clean rerun
+# TA-01 on unchanged P (optional; uses the *unchanged P* contract, not this one):
+# python3 /path/to/repro_ta01.py
 dropdb -h "$PGHOST" -p "$PGPORT" -U pr45owner --if-exists pr45_proof
 ```
 
-Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_privacy_reader`, `stocky_privacy_erasure`, `stocky_privacy_operator`. Setup used isolated `pr45owner`. No hidden GRANT, policy drop, or role switch is omitted from Appendix A.
+Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_privacy_reader`, `stocky_privacy_erasure`, `stocky_privacy_operator`, and producer `stocky_original_admission`. Setup used isolated `pr45owner`. No hidden GRANT, policy drop, or role switch is omitted from Appendix A.
 
 **Unexecuted limits:** Redis job drain, export publication, D scratch reclamation, live Shopify, installed `node_modules` `authenticate.admin` live bind, PR7 processors. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence. Static analysis cannot prove arbitrary dynamic code; unresolved entries would **block** completeness rather than claim a universal pass.
 
@@ -1100,6 +1144,7 @@ Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_pri
 
 ```sql
 -- PR45 / PR7 disposable PostgreSQL 16 feasibility contract (GW-01/GW-02 / X inventory)
+-- TA-01 durable origin binding / TA-02 labeled candidates digest.
 -- Transcribed from the proposed final planning contract. Isolated owner: pr45owner.
 -- search_path locked on every SECURITY DEFINER function. NO hidden GRANT.
 -- PUBLIC EXECUTE revoked. No BYPASSRLS. FORCE RLS on merchant tables.
@@ -1128,13 +1173,15 @@ BEGIN
     'stocky_privacy_target_owner',
     'stocky_privacy_capability_owner',
     'stocky_assignment_verifier_owner',
-    'stocky_lifecycle_gate_owner'
+    'stocky_lifecycle_gate_owner',
+    'stocky_admission_origin_owner',
+    'stocky_original_admission'
   ]
   LOOP
     EXECUTE format('DROP ROLE IF EXISTS %I', r);
     IF r IN (
       'stocky_runtime','stocky_control_plane','stocky_privacy_reader',
-      'stocky_privacy_erasure','stocky_privacy_operator'
+      'stocky_privacy_erasure','stocky_privacy_operator','stocky_original_admission'
     ) THEN
       EXECUTE format('CREATE ROLE %I LOGIN NOINHERIT NOBYPASSRLS', r);
     ELSE
@@ -1438,6 +1485,302 @@ CREATE TABLE public."PlatformReplayCommand" (
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY ("shopId", "commandId")
 );
+
+-- TA-01 protected WriterAdmissionOrigin (proposed disposable contract only)
+CREATE TABLE public."WriterAdmissionOrigin" (
+  id text PRIMARY KEY,
+  "canonicalDomain" text NOT NULL,
+  "shopId" text NOT NULL REFERENCES public."Shop"(id) ON DELETE CASCADE,
+  "workId" text NOT NULL,
+  "sourceKind" text NOT NULL,
+  "sourceIdentity" text NOT NULL,
+  "originalAdmissionId" text NOT NULL,
+  "originalAdmittedAt" timestamptz,
+  "formatPolicyVersion" text NOT NULL,
+  "sourceContentDigest" text NOT NULL,
+  "originGenerationId" text,
+  "originStatus" text NOT NULL CHECK ("originStatus" IN ('PENDING_LINK','BOUND','UNATTRIBUTED')),
+  "parentWorkId" text,
+  "durableJobId" text,
+  "acked" boolean NOT NULL DEFAULT false,
+  "createdAt" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE ("canonicalDomain", "workId")
+);
+CREATE UNIQUE INDEX writer_admission_source_digest
+  ON public."WriterAdmissionOrigin" ("canonicalDomain", "sourceKind", "sourceIdentity", "sourceContentDigest");
+CREATE UNIQUE INDEX writer_admission_root_digest
+  ON public."WriterAdmissionOrigin" ("canonicalDomain", "sourceContentDigest")
+  WHERE "parentWorkId" IS NULL;
+
+CREATE TABLE public."WriterAdmissionOriginTarget" (
+  "originId" text NOT NULL REFERENCES public."WriterAdmissionOrigin"(id) ON DELETE CASCADE,
+  "targetKind" text NOT NULL,
+  "targetValue" text NOT NULL,
+  PRIMARY KEY ("originId", "targetKind", "targetValue")
+);
+
+ALTER TABLE public."WriterAdmissionOrigin" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."WriterAdmissionOriginTarget" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."WriterAdmissionOrigin" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."WriterAdmissionOrigin" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."WriterAdmissionOriginTarget" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."WriterAdmissionOriginTarget" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY writer_admission_owner_all ON public."WriterAdmissionOrigin"
+  FOR ALL TO stocky_admission_origin_owner
+  USING (true) WITH CHECK (true);
+CREATE POLICY writer_admission_gate_select ON public."WriterAdmissionOrigin"
+  FOR SELECT TO stocky_lifecycle_gate_owner
+  USING (true);
+CREATE POLICY writer_admission_target_owner_all ON public."WriterAdmissionOriginTarget"
+  FOR ALL TO stocky_admission_origin_owner
+  USING (true) WITH CHECK (true);
+CREATE POLICY writer_admission_target_gate_select ON public."WriterAdmissionOriginTarget"
+  FOR SELECT TO stocky_lifecycle_gate_owner
+  USING (true);
+
+REVOKE ALL ON public."WriterAdmissionOrigin" FROM PUBLIC;
+REVOKE ALL ON public."WriterAdmissionOriginTarget" FROM PUBLIC;
+GRANT SELECT, INSERT, UPDATE ON public."WriterAdmissionOrigin" TO stocky_admission_origin_owner;
+GRANT SELECT, INSERT, DELETE ON public."WriterAdmissionOriginTarget" TO stocky_admission_origin_owner;
+GRANT SELECT ON public."WriterAdmissionOrigin", public."WriterAdmissionOriginTarget" TO stocky_lifecycle_gate_owner;
+GRANT SELECT ON public."Shop", public."ShopInstallGeneration", public."DurableJob" TO stocky_admission_origin_owner;
+
+CREATE OR REPLACE FUNCTION public.stocky_record_writer_admission(
+  p_canonical_domain text,
+  p_shop_id text,
+  p_work_id text,
+  p_source_kind text,
+  p_source_identity text,
+  p_source_content_digest text,
+  p_format_policy_version text,
+  p_original_admitted_at timestamptz,
+  p_evidence_class text,
+  p_target_kind text,
+  p_target_value text,
+  p_parent_work_id text DEFAULT NULL,
+  p_durable_job_id text DEFAULT NULL,
+  p_link_mode text DEFAULT 'ATOMIC'
+) RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_domain text;
+  live_n int;
+  live_id text;
+  existing public."WriterAdmissionOrigin"%ROWTYPE;
+  parent public."WriterAdmissionOrigin"%ROWTYPE;
+  v_origin text;
+  v_status text;
+  v_id text;
+  v_mode text;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_original_admission' THEN
+    RAISE EXCEPTION 'admission_principal_required' USING ERRCODE = '42501';
+  END IF;
+  IF p_work_id IS NULL OR p_work_id = '' OR p_source_identity IS NULL OR p_source_identity = ''
+     OR p_source_content_digest IS NULL OR p_source_content_digest = '' THEN
+    RAISE EXCEPTION 'admission_identity_required' USING ERRCODE = 'P0001';
+  END IF;
+  v_mode := COALESCE(NULLIF(p_link_mode, ''), 'ATOMIC');
+  IF v_mode NOT IN ('ATOMIC', 'BEGIN') THEN
+    RAISE EXCEPTION 'admission_link_mode_invalid' USING ERRCODE = 'P0001';
+  END IF;
+  v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+  PERFORM public.stocky_lifecycle_shared_lock(v_domain);
+  IF p_target_kind IS NOT NULL AND p_target_value IS NOT NULL THEN
+    PERFORM public.stocky_customer_target_lock_shared(v_domain, p_target_kind, p_target_value);
+  END IF;
+
+  -- Re-read LIVE generation AFTER locks. Historical rows are not the current install.
+  SELECT count(*), min(id)
+    INTO live_n, live_id
+  FROM public."ShopInstallGeneration"
+  WHERE "canonicalDomain" = v_domain
+    AND fence = 'LIVE';
+
+  SELECT * INTO existing
+  FROM public."WriterAdmissionOrigin"
+  WHERE "canonicalDomain" = v_domain
+    AND "sourceKind" = p_source_kind
+    AND "sourceIdentity" = p_source_identity
+    AND "sourceContentDigest" = p_source_content_digest;
+  IF FOUND THEN
+    IF existing."workId" IS DISTINCT FROM p_work_id AND existing."workId" IS NOT NULL THEN
+      -- same source+digest: retry/coalesce; do not remint
+      NULL;
+    END IF;
+    RETURN existing.id;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public."WriterAdmissionOrigin"
+    WHERE "canonicalDomain" = v_domain
+      AND "sourceKind" = p_source_kind
+      AND "sourceIdentity" = p_source_identity
+      AND "sourceContentDigest" IS DISTINCT FROM p_source_content_digest
+  ) THEN
+    RAISE EXCEPTION 'admission_binding_conflict' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public."WriterAdmissionOrigin"
+    WHERE "canonicalDomain" = v_domain AND "workId" = p_work_id
+  ) THEN
+    RAISE EXCEPTION 'admission_work_conflict' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_parent_work_id IS NULL AND EXISTS (
+    SELECT 1 FROM public."WriterAdmissionOrigin"
+    WHERE "canonicalDomain" = v_domain
+      AND "sourceContentDigest" = p_source_content_digest
+      AND "parentWorkId" IS NULL
+  ) THEN
+    RAISE EXCEPTION 'admission_digest_conflict' USING ERRCODE = 'P0001';
+  END IF;
+
+  IF p_evidence_class = 'ADMIN_SESSION_CURRENT_INSTALL' THEN
+    IF live_n <> 1 OR live_id IS NULL THEN
+      RAISE EXCEPTION 'admission_generation_ambiguous' USING ERRCODE = 'P0001';
+    END IF;
+    v_origin := live_id;
+    v_status := CASE WHEN v_mode = 'BEGIN' THEN 'PENDING_LINK' ELSE 'BOUND' END;
+  ELSIF p_evidence_class = 'WEBHOOK_PROVIDER_AUTH' THEN
+    -- HMAC proves shop/topic, not historical generation of delayed payload.
+    v_origin := NULL;
+    v_status := CASE WHEN v_mode = 'BEGIN' THEN 'PENDING_LINK' ELSE 'UNATTRIBUTED' END;
+  ELSIF p_evidence_class IN ('PARENT_LINEAGE', 'MANUAL_REPLAY') THEN
+    IF p_parent_work_id IS NULL OR p_parent_work_id = '' THEN
+      RAISE EXCEPTION 'admission_parent_required' USING ERRCODE = 'P0001';
+    END IF;
+    SELECT * INTO parent
+    FROM public."WriterAdmissionOrigin"
+    WHERE "canonicalDomain" = v_domain AND "workId" = p_parent_work_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'admission_parent_missing' USING ERRCODE = 'P0001';
+    END IF;
+    IF parent."shopId" IS DISTINCT FROM p_shop_id THEN
+      RAISE EXCEPTION 'admission_parent_tenant_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public."WriterAdmissionOrigin" o
+      WHERE o."canonicalDomain" = v_domain
+        AND o."sourceContentDigest" = p_source_content_digest
+        AND o."parentWorkId" IS NULL
+        AND o."workId" IS DISTINCT FROM p_parent_work_id
+    ) THEN
+      RAISE EXCEPTION 'admission_digest_conflict' USING ERRCODE = 'P0001';
+    END IF;
+    v_origin := parent."originGenerationId";
+    v_status := CASE
+      WHEN parent."originStatus" = 'BOUND' AND v_origin IS NOT NULL
+           AND p_source_content_digest IS NOT DISTINCT FROM parent."sourceContentDigest" THEN
+        CASE WHEN v_mode = 'BEGIN' THEN 'PENDING_LINK' ELSE 'BOUND' END
+      ELSE 'UNATTRIBUTED'
+    END;
+    IF p_evidence_class = 'MANUAL_REPLAY' AND v_origin IS NULL THEN
+      v_status := 'UNATTRIBUTED';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'admission_evidence_unknown' USING ERRCODE = 'P0001';
+  END IF;
+
+  v_id := 'wao_' || replace(p_work_id, '-', '_');
+  INSERT INTO public."WriterAdmissionOrigin"(
+    id, "canonicalDomain", "shopId", "workId", "sourceKind", "sourceIdentity",
+    "originalAdmissionId", "originalAdmittedAt", "formatPolicyVersion", "sourceContentDigest",
+    "originGenerationId", "originStatus", "parentWorkId", "durableJobId", "acked"
+  ) VALUES (
+    v_id, v_domain, p_shop_id, p_work_id, p_source_kind, p_source_identity,
+    v_id, p_original_admitted_at, COALESCE(NULLIF(p_format_policy_version,''), 'pr7-origin-v1'),
+    p_source_content_digest, v_origin, v_status, NULLIF(p_parent_work_id,''), p_durable_job_id,
+    (v_mode = 'ATOMIC')
+  );
+
+  IF p_target_kind IS NOT NULL AND p_target_value IS NOT NULL THEN
+    INSERT INTO public."WriterAdmissionOriginTarget"("originId","targetKind","targetValue")
+    VALUES (v_id, p_target_kind, p_target_value);
+  END IF;
+
+  IF p_durable_job_id IS NOT NULL AND p_durable_job_id <> '' THEN
+    -- Link only. Admission does not mint DurableJob rows (intake remains control-plane).
+    UPDATE public."WriterAdmissionOrigin" SET "durableJobId" = p_durable_job_id WHERE id = v_id;
+  END IF;
+
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.stocky_commit_writer_admission(p_work_id text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE r public."WriterAdmissionOrigin"%ROWTYPE; n int;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_original_admission' THEN
+    RAISE EXCEPTION 'admission_principal_required' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO r FROM public."WriterAdmissionOrigin" WHERE "workId" = p_work_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'admission_missing' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM public.stocky_lifecycle_shared_lock(r."canonicalDomain");
+  IF r."originStatus" = 'PENDING_LINK' THEN
+    UPDATE public."WriterAdmissionOrigin"
+      SET "originStatus" = CASE WHEN "originGenerationId" IS NULL THEN 'UNATTRIBUTED' ELSE 'BOUND' END,
+          "acked" = true
+      WHERE id = r.id AND "originStatus" = 'PENDING_LINK';
+  ELSE
+    UPDATE public."WriterAdmissionOrigin" SET "acked" = true WHERE id = r.id AND "acked" IS NOT TRUE;
+  END IF;
+  GET DIAGNOSTICS n = ROW_COUNT;
+  RETURN r.id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.stocky_recover_writer_admission(p_work_id text)
+RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE r public."WriterAdmissionOrigin"%ROWTYPE; has_job boolean;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_original_admission' THEN
+    RAISE EXCEPTION 'admission_principal_required' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO r FROM public."WriterAdmissionOrigin" WHERE "workId" = p_work_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'admission_missing' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM public.stocky_lifecycle_shared_lock(r."canonicalDomain");
+  has_job := EXISTS (SELECT 1 FROM public."DurableJob" j WHERE j.id = r."durableJobId");
+  IF r."originStatus" = 'PENDING_LINK' AND has_job THEN
+    RETURN public.stocky_commit_writer_admission(p_work_id);
+  END IF;
+  -- No job: leave pending. Consumers must not treat pending as trusted.
+  RETURN r.id;
+END;
+$$;
+
+ALTER FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_commit_writer_admission(text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_recover_writer_admission(text) OWNER TO stocky_admission_origin_owner;
+REVOKE ALL ON FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_commit_writer_admission(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_recover_writer_admission(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) TO stocky_original_admission;
+GRANT EXECUTE ON FUNCTION public.stocky_commit_writer_admission(text) TO stocky_original_admission;
+GRANT EXECUTE ON FUNCTION public.stocky_recover_writer_admission(text) TO stocky_original_admission;
+GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_id() TO stocky_original_admission, stocky_admission_origin_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_context_version() TO stocky_original_admission, stocky_admission_origin_owner;
+-- Remaining lock/canonical GRANTs are applied after those helpers exist (see patch_contract).
+
+
 
 -- ---------------------------------------------------------------------------
 -- FORCE RLS on merchant tables
@@ -2188,17 +2531,20 @@ BEGIN
 END;
 $$;
 
+
 DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, timestamptz, text);
 DROP FUNCTION IF EXISTS public.stocky_fact_write_guard(text, text, text, text, timestamptz, text);
+DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean);
+DROP FUNCTION IF EXISTS public.stocky_fact_write_guard(text, text, text, text, timestamptz, text, boolean);
+DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, text);
+DROP FUNCTION IF EXISTS public.stocky_fact_write_guard(text, text, text, text, text);
 
 CREATE OR REPLACE FUNCTION public.stocky_customer_write_guard(
   p_canonical_domain text,
   p_shop_id text,
   p_kind text,
   p_value text,
-  p_payload_admitted_at timestamptz,
-  p_origin_generation_id text DEFAULT NULL,
-  p_origin_persisted boolean DEFAULT false
+  p_work_id text
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -2213,6 +2559,8 @@ DECLARE
   cg public."ShopInstallGeneration"%ROWTYPE;
   live_n int;
   v_trusted boolean;
+  wa public."WriterAdmissionOrigin"%ROWTYPE;
+  v_payload_admitted_at timestamptz;
 BEGIN
   v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
   -- Lock BEFORE examining barriers (Decision CC-GEN).
@@ -2229,18 +2577,40 @@ BEGIN
     RAISE EXCEPTION 'customer_target_erasing' USING ERRCODE = 'P0001';
   END IF;
 
-  IF p_payload_admitted_at IS NULL THEN
+  -- Derive origin from the protected admission record. Caller generation/time
+  -- is not authority. A record id is a lookup key only.
+  IF p_work_id IS NULL OR p_work_id = '' THEN
+    RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO wa
+  FROM public."WriterAdmissionOrigin"
+  WHERE "workId" = p_work_id
+    AND "canonicalDomain" = v_domain
+    AND "shopId" = p_shop_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
+  END IF;
+  IF wa."originStatus" = 'PENDING_LINK' OR wa."acked" IS NOT TRUE THEN
+    RAISE EXCEPTION 'customer_admission_not_acked' USING ERRCODE = 'P0001';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM public."WriterAdmissionOriginTarget" t
+    WHERE t."originId" = wa.id
+      AND t."targetKind" = p_kind
+      AND t."targetValue" = p_value
+  ) THEN
+    RAISE EXCEPTION 'customer_target_binding_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+
+  v_payload_admitted_at := wa."originalAdmittedAt";
+  IF v_payload_admitted_at IS NULL THEN
     RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
   END IF;
 
-  -- Trusted origin is persisted with the original work. A newly attached
-  -- caller-provided generation, retry-time timestamp, or restamped envelope
-  -- is NOT trusted origin (GW-01).
-  v_trusted := (p_origin_persisted IS TRUE)
-               AND (p_origin_generation_id IS NOT NULL)
-               AND (p_origin_generation_id <> '');
+  v_trusted := (wa."originStatus" = 'BOUND')
+               AND (wa."originGenerationId" IS NOT NULL)
+               AND (wa."originGenerationId" <> '');
 
-  -- Missing generation history or invalid completion times cannot become a permit.
   IF EXISTS (
     SELECT 1
     FROM public."PrivacyCompletedTarget" c
@@ -2264,14 +2634,12 @@ BEGIN
     IF ct.completed_at IS NULL THEN
       RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
     END IF;
-    -- Strictly after this completion is not this completion's restore window.
-    -- Equality at completedAt is an ambiguous boundary for unattributed work.
-    IF p_payload_admitted_at > ct.completed_at THEN
+    IF v_payload_admitted_at > ct.completed_at THEN
       CONTINUE;
     END IF;
     IF v_origin IS NULL THEN
       IF v_trusted THEN
-        v_origin := public.stocky_writer_origin_generation(p_shop_id, p_origin_generation_id, v_domain);
+        v_origin := public.stocky_writer_origin_generation(p_shop_id, wa."originGenerationId", v_domain);
       ELSE
         v_origin := public.stocky_writer_origin_generation(p_shop_id, NULL, v_domain);
       END IF;
@@ -2288,13 +2656,10 @@ BEGIN
       RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
     END IF;
     -- BEGIN GW01_TEMPORAL_OVERLAP
-    -- Unattributed payloads in the inclusive overlap between successor
-    -- installedAt and this completion cannot become successor data via
-    -- unique-LIVE fallback. ChatGPT option (a) / F-CLAUDE-PR7GW-01.
     IF v_trusted IS NOT TRUE THEN
       IF og."installedAt" <= ct.completed_at
-         AND p_payload_admitted_at >= og."installedAt"
-         AND p_payload_admitted_at <= ct.completed_at THEN
+         AND v_payload_admitted_at >= og."installedAt"
+         AND v_payload_admitted_at <= ct.completed_at THEN
         RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
       END IF;
     END IF;
@@ -2308,7 +2673,7 @@ BEGIN
     IF live_n <> 1 OR og.fence IS DISTINCT FROM 'LIVE' OR cg.fence = 'LIVE' THEN
       RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
     END IF;
-    IF p_payload_admitted_at < og."installedAt" THEN
+    IF v_payload_admitted_at < og."installedAt" THEN
       RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
     END IF;
   END LOOP;
@@ -2320,9 +2685,7 @@ CREATE OR REPLACE FUNCTION public.stocky_fact_write_guard(
   p_shop_id text,
   p_kind text,
   p_value text,
-  p_payload_admitted_at timestamptz,
-  p_origin_generation_id text DEFAULT NULL,
-  p_origin_persisted boolean DEFAULT false
+  p_work_id text
 ) RETURNS void
 LANGUAGE plpgsql
 SET search_path = pg_catalog, pg_temp
@@ -2330,10 +2693,11 @@ AS $$
 BEGIN
   PERFORM public.stocky_participating_write_guard(p_canonical_domain);
   PERFORM public.stocky_customer_write_guard(
-    p_canonical_domain, p_shop_id, p_kind, p_value, p_payload_admitted_at, p_origin_generation_id, p_origin_persisted
+    p_canonical_domain, p_shop_id, p_kind, p_value, p_work_id
   );
 END;
 $$;
+
 
 CREATE OR REPLACE FUNCTION public.stocky_privacy_customer_residual_count(p_request_id text)
 RETURNS bigint
@@ -2653,7 +3017,7 @@ REVOKE ALL ON FUNCTION public.stocky_inventory_is_complete() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_detect_unguarded_cp_write(text) FROM PUBLIC;
 ALTER FUNCTION public.stocky_customer_targets_for_request(text) OWNER TO stocky_privacy_target_owner;
 ALTER FUNCTION public.stocky_privacy_install_customer_barrier(text, text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
 ALTER FUNCTION public.stocky_privacy_customer_residual_count(text) OWNER TO stocky_privacy_target_owner;
 ALTER FUNCTION public.stocky_privacy_complete_customer_redact(text, text) OWNER TO stocky_privacy_target_owner;
 ALTER FUNCTION public.stocky_privacy_data_request_coverage(text) OWNER TO stocky_privacy_target_owner;
@@ -2664,8 +3028,8 @@ REVOKE ALL ON FUNCTION public.stocky_shop_canonical_domain(text, text) FROM PUBL
 REVOKE ALL ON FUNCTION public.stocky_writer_origin_generation(text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_customer_targets_for_request(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_install_customer_barrier(text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, timestamptz, text, boolean) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_customer_residual_count(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_complete_customer_redact(text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_claim_attempt(text, text, text) FROM PUBLIC;
@@ -2682,8 +3046,8 @@ GRANT EXECUTE ON FUNCTION public.stocky_shop_canonical_domain(text, text) TO sto
 GRANT EXECUTE ON FUNCTION public.stocky_writer_origin_generation(text, text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_lifecycle_gate_owner, stocky_privacy_target_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_customer_targets_for_request(text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_install_customer_barrier(text, text) TO stocky_privacy_erasure, stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) TO stocky_runtime, stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, timestamptz, text, boolean) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_customer_residual_count(text) TO stocky_privacy_erasure, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_complete_customer_redact(text, text) TO stocky_privacy_erasure, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_claim_attempt(text, text, text) TO stocky_control_plane;
@@ -2694,6 +3058,12 @@ GRANT EXECUTE ON FUNCTION public.stocky_dispatcher_disabled_shop_write(text, tex
 GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_key1(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_key2(text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_shared(text, text, text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_shared_lock(text) TO stocky_admission_origin_owner, stocky_original_admission;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_key1(text) TO stocky_admission_origin_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_key2(text, text) TO stocky_admission_origin_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_shared(text, text, text) TO stocky_admission_origin_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_shop_canonical_domain(text, text) TO stocky_admission_origin_owner, stocky_original_admission;
+
 GRANT EXECUTE ON FUNCTION public.stocky_customer_target_lock_exclusive(text, text, text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner, stocky_lifecycle_gate_owner;
 
 -- Residual helper is SECURITY DEFINER as target_owner and must evaluate capability itself (CC-02).
@@ -4652,8 +5022,8 @@ from typing import Any
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROOF_ROOT = os.environ.get("PROOF_ROOT", SCRIPT_DIR)
-PGHOST = os.environ.get("PGHOST", "/tmp/pr45-gw-pg16")
-PGPORT = os.environ.get("PGPORT", "5435")
+PGHOST = os.environ.get("PGHOST", "/tmp/pr45-ta-pg16")
+PGPORT = os.environ.get("PGPORT", "5436")
 PGDATABASE = os.environ.get("PGDATABASE", "pr45_proof")
 OWNER = os.environ.get("PR45_OWNER", "pr45owner")
 
@@ -4755,6 +5125,40 @@ def tx(user: str, shop: str, req: str, att: str, body: str, timeout: int = 20) -
         + "\nCOMMIT;"
     )
     return psql(user, sql, timeout=timeout)
+
+def admit(
+    shop: str,
+    domain: str,
+    work_id: str,
+    source_kind: str,
+    source_identity: str,
+    digest: str,
+    evidence: str,
+    kind: str,
+    value: str,
+    admitted_at_sql: str = "clock_timestamp()",
+    parent: str | None = None,
+    job: str | None = None,
+    mode: str = "ATOMIC",
+    req: str = "preq_cr",
+    att: str = "patt_cr",
+) -> tuple[int, str, str]:
+    parent_sql = "NULL" if not parent else "'%s'" % parent.replace("'", "''")
+    job_sql = "NULL" if not job else "'%s'" % job.replace("'", "''")
+    sql = (
+        "SELECT public.stocky_record_writer_admission("
+        f"'{domain}','{shop}','{work_id}','{source_kind}','{source_identity}','{digest}',"
+        f"'pr7-origin-v1', {admitted_at_sql}, '{evidence}', '{kind}', '{value}', "
+        f"{parent_sql}, {job_sql}, '{mode}');"
+    )
+    return tx("stocky_original_admission", shop, req, att, sql)
+
+
+def gsql(domain: str, shop: str, kind: str, value: str, work_id: str) -> str:
+    return (
+        "SELECT public.stocky_fact_write_guard("
+        f"'{domain}','{shop}','{kind}','{value}','{work_id}');"
+    )
 
 
 def reset() -> None:
@@ -5808,6 +6212,8 @@ def g7() -> None:
     pre_release = threading.Event()
     pre_fin: dict[str, str] = {}
 
+    admit("shop_a","pr7-a.myshopify.com","work_g7_pre","ADMIN_ACTION","admin_g7_pre","digest_g7_pre",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
     def pre_writer() -> None:
         p = subprocess.Popen(
             PSQL + ["-U", "stocky_runtime"],
@@ -5821,7 +6227,7 @@ def g7() -> None:
             "BEGIN;\n"
             "SELECT set_config('stocky.current_shop_id','shop_a', true);\n"
             "SELECT set_config('stocky.tenant_context_version','phase1-db-tenant-context-v1', true);\n"
-            "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());\n"
+            "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g7_pre');\n"
             "SELECT 'HOLDING_PRE';\n"
         )
         p.stdin.flush()
@@ -5851,7 +6257,7 @@ def g7() -> None:
         pre_release.set()
         tw.join(3)
     else:
-        admit = threading.Event()
+        barrier_admitted = threading.Event()
         admit_res: list[tuple[int, str, str, float]] = []
 
         def admit_barrier() -> None:
@@ -5864,7 +6270,7 @@ def g7() -> None:
                 "SET LOCAL lock_timeout = '2s'; SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');",
             )
             admit_res.append((rc, out, err, time.time() - start))
-            admit.set()
+            barrier_admitted.set()
 
         ta = threading.Thread(target=admit_barrier)
         ta.start()
@@ -5908,21 +6314,25 @@ def g7() -> None:
         f"out={out} err={err}",
     )
 
+    admit("shop_a","pr7-a.myshopify.com","work_g7_blocked","ADMIN_ACTION","admin_g7_blocked","digest_g7_blocked",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp()); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_blocked','shop_a','191167');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g7_blocked'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_blocked','shop_a','191167');",
     )
     record(group, "matching_writer_denied_while_barrier_active", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
 
+    admit("shop_a","pr7-a.myshopify.com","work_g7_other","ADMIN_ACTION","admin_g7_other","digest_g7_other",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','999999', clock_timestamp()); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_other','shop_a','999999'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_other';",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','999999','work_g7_other'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_other','shop_a','999999'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_other';",
     )
     rc_pe, pe, _ = psql("pr45owner", "SELECT \"processingEnabled\"::text FROM public.\"Shop\" WHERE id='shop_a';")
     record(
@@ -5932,12 +6342,14 @@ def g7() -> None:
         f"out={out} err={err} processingEnabled={pe}",
     )
 
+    admit("shop_b","pr7-b.myshopify.com","work_g7_b","ADMIN_ACTION","admin_g7_b","digest_g7_b",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167", req="preq_cr", att="patt_cr")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_b",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167', clock_timestamp()); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_b_progress','shop_b','191167'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_b_progress';",
+        "SELECT public.stocky_fact_write_guard('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167','work_g7_b'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_b_progress','shop_b','191167'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_b_progress';",
     )
     record(group, "unrelated_shop_progresses_during_customer_barrier", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
 
@@ -6028,6 +6440,9 @@ def g7() -> None:
         p.kill()
 
     t = threading.Thread(target=completer)
+    admit("shop_a","pr7-a.myshopify.com","work_g7_wait","WEBHOOK","wh_g7_wait","digest_g7_wait",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '1 hour'")
     t.start()
     if not holding.wait(10):
         record(group, "complete_holds_exclusive_during_residual", False, "completer did not hold")
@@ -6038,7 +6453,7 @@ def g7() -> None:
             """
             BEGIN;
             SET LOCAL lock_timeout = '2s';
-            SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');
+            SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g7_wait');
             COMMIT;
             """,
             timeout=8,
@@ -6062,21 +6477,27 @@ def g7() -> None:
     record(group, "customer_request_completed_without_shop_freeze", st.strip() == "COMPLETED" and pe.strip() == "true", f"state={st} processingEnabled={pe}")
 
     admitted_before = "clock_timestamp() - interval '1 hour'"
+    admit("shop_a","pr7-a.myshopify.com","work_g7_restore","WEBHOOK","wh_g7_restore","digest_g7_restore",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql=admitted_before)
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        f"SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', {admitted_before}); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_restore','shop_a','191167');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g7_restore'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_restore','shop_a','191167');",
     )
     record(group, "delayed_old_write_cannot_restore", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
 
+    admit("shop_a","pr7-a.myshopify.com","work_g7_new","ADMIN_ACTION","admin_g7_new","digest_g7_new",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() + interval '1 second'")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() + interval '1 second'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_new_legit','shop_a','191167'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_new_legit';",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g7_new'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_new_legit','shop_a','191167'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_new_legit';",
     )
     record(group, "legitimate_later_customer_data_allowed", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
 
@@ -6222,12 +6643,15 @@ def g8() -> None:
         "SELECT public.stocky_privacy_enumerate_targets('preq_cr'); SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_lost2');",
     )
     record(group, "epoch_takeover_completes_under_rebound_barrier", rc == 0 and "completed" in proof_lines(out)[-1], f"out={out} err={err}")
+    admit("shop_a","pr7-a.myshopify.com","work_g8_delayed","WEBHOOK","wh_g8_delayed","digest_g8_delayed",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '2 hours'")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '2 hours'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_delayed_old','shop_a','191167');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g8_delayed'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_delayed_old','shop_a','191167');",
     )
     record(group, "delayed_old_write_after_takeover_complete_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
 
@@ -6516,11 +6940,10 @@ def neg_controls() -> None:
         $$;
         ALTER FUNCTION public.stocky_shop_generation_id(text) OWNER TO stocky_lifecycle_gate_owner;
         GRANT EXECUTE ON FUNCTION public.stocky_shop_generation_id(text) TO stocky_runtime, stocky_control_plane, stocky_lifecycle_gate_owner;
-        DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean);
+        DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, text);
         CREATE OR REPLACE FUNCTION public.stocky_customer_write_guard(
           p_canonical_domain text, p_shop_id text, p_kind text, p_value text,
-          p_payload_admitted_at timestamptz, p_origin_generation_id text DEFAULT NULL,
-          p_origin_persisted boolean DEFAULT false
+          p_work_id text
         ) RETURNS void
         LANGUAGE plpgsql
         SECURITY DEFINER
@@ -6536,8 +6959,8 @@ def neg_controls() -> None:
           IF n > 0 THEN RAISE EXCEPTION 'customer_target_erasing' USING ERRCODE = 'P0001'; END IF;
         END;
         $$;
-        ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) OWNER TO stocky_lifecycle_gate_owner;
-        GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) TO stocky_runtime, stocky_control_plane;
+        ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
         """
     )
     psql(
@@ -6545,12 +6968,14 @@ def neg_controls() -> None:
         "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence) "
         "VALUES ('gen_a_zz','pr7-a.myshopify.com','shop_a','shop_a','LIVE');",
     )
+    admit("shop_a","pr7-a.myshopify.com","work_neg4","ADMIN_ACTION","admin_neg4","digest_neg4",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_neg4');",
     )
     record(
         group,
@@ -6603,10 +7028,10 @@ def neg_controls() -> None:
     reset()
     _replace_function(
         """
+
+        DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, text);
         CREATE OR REPLACE FUNCTION public.stocky_customer_write_guard(
-          p_canonical_domain text, p_shop_id text, p_kind text, p_value text,
-          p_payload_admitted_at timestamptz, p_origin_generation_id text DEFAULT NULL,
-          p_origin_persisted boolean DEFAULT false
+          p_canonical_domain text, p_shop_id text, p_kind text, p_value text, p_work_id text
         ) RETURNS void
         LANGUAGE plpgsql
         SECURITY DEFINER
@@ -6617,48 +7042,51 @@ def neg_controls() -> None:
           og public."ShopInstallGeneration"%ROWTYPE;
           cg public."ShopInstallGeneration"%ROWTYPE;
           live_n int; v_trusted boolean;
+          wa public."WriterAdmissionOrigin"%ROWTYPE;
+          v_payload_admitted_at timestamptz;
         BEGIN
           v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
           PERFORM public.stocky_customer_target_lock_shared(v_domain, p_kind, p_value);
           SELECT count(*) INTO n FROM public."PrivacyCustomerTargetBarrier" b
             JOIN public."ShopInstallGeneration" bg ON bg.id = b."generationId"
-            WHERE bg."canonicalDomain" = v_domain AND b."targetKind"=p_kind AND b."targetValue"=p_value AND b.state='ACTIVE';
+            WHERE bg."canonicalDomain" = v_domain AND b."targetKind" = p_kind AND b."targetValue" = p_value AND b.state = 'ACTIVE';
           IF n > 0 THEN RAISE EXCEPTION 'customer_target_erasing' USING ERRCODE = 'P0001'; END IF;
-          IF p_payload_admitted_at IS NULL THEN
-            RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
-          END IF;
-          v_trusted := (p_origin_persisted IS TRUE) AND (p_origin_generation_id IS NOT NULL) AND (p_origin_generation_id <> '');
+          SELECT * INTO wa FROM public."WriterAdmissionOrigin" WHERE "workId"=p_work_id AND "canonicalDomain"=v_domain AND "shopId"=p_shop_id;
+          IF NOT FOUND THEN RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001'; END IF;
+          v_payload_admitted_at := wa."originalAdmittedAt";
+          v_trusted := (wa."originStatus" = 'BOUND') AND (wa."originGenerationId" IS NOT NULL);
           FOR ct IN
             SELECT c."generationId" AS completed_generation_id, c."completedAt" AS completed_at
             FROM public."PrivacyCompletedTarget" c
             JOIN public."ShopInstallGeneration" cg0 ON cg0.id = c."generationId"
-            WHERE cg0."canonicalDomain" = v_domain AND c."targetKind"=p_kind AND c."targetValue"=p_value
+            WHERE cg0."canonicalDomain" = v_domain AND c."targetKind" = p_kind AND c."targetValue" = p_value
           LOOP
-            IF p_payload_admitted_at > ct.completed_at THEN CONTINUE; END IF;
+            IF v_payload_admitted_at > ct.completed_at THEN CONTINUE; END IF;
             IF v_origin IS NULL THEN
-              IF v_trusted THEN
-                v_origin := public.stocky_writer_origin_generation(p_shop_id, p_origin_generation_id, v_domain);
-              ELSE
-                v_origin := public.stocky_writer_origin_generation(p_shop_id, NULL, v_domain);
-              END IF;
-            END IF;
-            IF v_origin = ct.completed_generation_id THEN
-              RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
+              v_origin := public.stocky_writer_origin_generation(p_shop_id, CASE WHEN v_trusted THEN wa."originGenerationId" ELSE NULL END, v_domain);
             END IF;
             SELECT * INTO og FROM public."ShopInstallGeneration" WHERE id = v_origin;
             SELECT * INTO cg FROM public."ShopInstallGeneration" WHERE id = ct.completed_generation_id;
-            SELECT count(*) INTO live_n FROM public."ShopInstallGeneration" WHERE "canonicalDomain"=v_domain AND fence='LIVE';
+            IF v_trusted AND v_origin = ct.completed_generation_id THEN
+              RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
+            END IF;
+            -- GW01_TEMPORAL_OVERLAP intentionally omitted
+            IF v_origin = ct.completed_generation_id THEN
+              RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
+            END IF;
+            SELECT count(*) INTO live_n FROM public."ShopInstallGeneration" WHERE "canonicalDomain" = v_domain AND fence = 'LIVE';
             IF live_n <> 1 OR og.fence IS DISTINCT FROM 'LIVE' OR cg.fence = 'LIVE' THEN
               RAISE EXCEPTION 'customer_target_attribution_ambiguous' USING ERRCODE = 'P0001';
             END IF;
-            IF p_payload_admitted_at < og."installedAt" THEN
+            IF v_payload_admitted_at < og."installedAt" THEN
               RAISE EXCEPTION 'customer_target_restore_denied' USING ERRCODE = 'P0001';
             END IF;
           END LOOP;
         END;
         $$;
-        ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) OWNER TO stocky_lifecycle_gate_owner;
-        GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean) TO stocky_runtime, stocky_control_plane;
+        ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
+
         """
     )
     tx(
@@ -6671,6 +7099,9 @@ def neg_controls() -> None:
         " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
         " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');",
     )
+    admit("shop_a","pr7-a.myshopify.com","work_neg6","WEBHOOK","wh_neg6","digest_neg6",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '150 minutes'")
     psql(
         "pr45owner",
         "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
@@ -6684,9 +7115,8 @@ def neg_controls() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167',"
-        " clock_timestamp() - interval '150 minutes');"
-        " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_neg6','shop_a','191167');",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_neg6")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_neg6','shop_a','191167');",
     )
     record(
         group,
@@ -6694,6 +7124,127 @@ def neg_controls() -> None:
         rc == 0,
         f"rc={rc} err={err} (unattributed overlap admitted after removing only GW01 temporal check)",
     )
+
+
+
+    # NEG-8: bypass persisted lookup (unique LIVE treated as trusted) revives TA-01.
+    reset()
+    _replace_function(
+        """
+        DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, text);
+        CREATE OR REPLACE FUNCTION public.stocky_customer_write_guard(
+          p_canonical_domain text, p_shop_id text, p_kind text, p_value text, p_work_id text
+        ) RETURNS void
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+        AS $$
+        DECLARE v_domain text; n int; ct record; v_origin text;
+          og public."ShopInstallGeneration"%ROWTYPE;
+          cg public."ShopInstallGeneration"%ROWTYPE;
+          live_n int; wa public."WriterAdmissionOrigin"%ROWTYPE; v_payload_admitted_at timestamptz;
+        BEGIN
+          v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+          PERFORM public.stocky_customer_target_lock_shared(v_domain, p_kind, p_value);
+          SELECT count(*) INTO n FROM public."PrivacyCustomerTargetBarrier" b
+            JOIN public."ShopInstallGeneration" bg ON bg.id = b."generationId"
+            WHERE bg."canonicalDomain"=v_domain AND b."targetKind"=p_kind AND b."targetValue"=p_value AND b.state='ACTIVE';
+          IF n > 0 THEN RAISE EXCEPTION 'customer_target_erasing' USING ERRCODE = 'P0001'; END IF;
+          SELECT * INTO wa FROM public."WriterAdmissionOrigin" WHERE "workId"=p_work_id;
+          v_payload_admitted_at := COALESCE(wa."originalAdmittedAt", clock_timestamp());
+          -- LOOKUP BYPASS: treat unique LIVE as trusted regardless of binding.
+          v_origin := public.stocky_writer_origin_generation(p_shop_id, NULL, v_domain);
+          FOR ct IN
+            SELECT c."generationId" AS completed_generation_id, c."completedAt" AS completed_at
+            FROM public."PrivacyCompletedTarget" c
+            JOIN public."ShopInstallGeneration" cg0 ON cg0.id = c."generationId"
+            WHERE cg0."canonicalDomain"=v_domain AND c."targetKind"=p_kind AND c."targetValue"=p_value
+          LOOP
+            IF v_payload_admitted_at > ct.completed_at THEN CONTINUE; END IF;
+            SELECT * INTO og FROM public."ShopInstallGeneration" WHERE id = v_origin;
+            SELECT * INTO cg FROM public."ShopInstallGeneration" WHERE id = ct.completed_generation_id;
+            SELECT count(*) INTO live_n FROM public."ShopInstallGeneration" WHERE "canonicalDomain"=v_domain AND fence='LIVE';
+            IF live_n = 1 AND og.fence = 'LIVE' AND cg.fence IS DISTINCT FROM 'LIVE' AND v_payload_admitted_at >= og."installedAt" THEN
+              RETURN; -- admitted as successor via lookup bypass
+            END IF;
+          END LOOP;
+        END;
+        $$;
+        ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
+        """
+    )
+    tx("stocky_privacy_erasure","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');"
+        " SELECT public.stocky_privacy_enumerate_targets('preq_cr');"
+        " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
+        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');")
+    admit("shop_a","pr7-a.myshopify.com","work_neg8","WEBHOOK","wh_neg8","digest_neg8",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '150 minutes'")
+    psql("pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+        "VALUES ('gen_a2','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp() - interval '3 hours'); "
+        "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a'; "
+        "UPDATE public.\"PrivacyCompletedTarget\" SET \"completedAt\" = clock_timestamp() - interval '2 hours' "
+        "WHERE \"generationId\"='gen_a' AND \"targetKind\"='CUSTOMER_REST_ID' AND \"targetValue\"='191167';")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_neg8"))
+    record(group, "lookup_bypass_revives_ta01_admit", rc == 0, f"rc={rc} err={err}")
+
+    # NEG-9: unauthorized mint — GRANT helper to runtime, mint successor origin for overlap payload.
+    reset()
+    psql("pr45owner", "GRANT EXECUTE ON FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) TO stocky_runtime;")
+    # session_user is still stocky_runtime so helper must still deny — escalate by also replacing session check.
+    _replace_function(
+        """
+        CREATE OR REPLACE FUNCTION public.stocky_record_writer_admission(
+          p_canonical_domain text, p_shop_id text, p_work_id text, p_source_kind text,
+          p_source_identity text, p_source_content_digest text, p_format_policy_version text,
+          p_original_admitted_at timestamptz, p_evidence_class text, p_target_kind text,
+          p_target_value text, p_parent_work_id text DEFAULT NULL, p_durable_job_id text DEFAULT NULL,
+          p_link_mode text DEFAULT 'ATOMIC'
+        ) RETURNS text
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+        AS $$
+        DECLARE live_id text; v_id text; v_domain text;
+        BEGIN
+          -- UNAUTHORIZED MINT: session_user check removed
+          v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+          PERFORM public.stocky_lifecycle_shared_lock(v_domain);
+          SELECT id INTO live_id FROM public."ShopInstallGeneration" WHERE "canonicalDomain"=v_domain AND fence='LIVE';
+          v_id := 'wao_' || replace(p_work_id, '-', '_');
+          INSERT INTO public."WriterAdmissionOrigin"(
+            id,"canonicalDomain","shopId","workId","sourceKind","sourceIdentity","originalAdmissionId",
+            "originalAdmittedAt","formatPolicyVersion","sourceContentDigest","originGenerationId","originStatus","acked"
+          ) VALUES (
+            v_id, v_domain, p_shop_id, p_work_id, p_source_kind, p_source_identity, v_id,
+            p_original_admitted_at, 'pr7-origin-v1', p_source_content_digest, live_id, 'BOUND', true
+          );
+          INSERT INTO public."WriterAdmissionOriginTarget"("originId","targetKind","targetValue")
+            VALUES (v_id, p_target_kind, p_target_value);
+          RETURN v_id;
+        END;
+        $$;
+        ALTER FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) OWNER TO stocky_admission_origin_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) TO stocky_runtime, stocky_original_admission;
+        """
+    )
+    tx("stocky_privacy_erasure","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');"
+        " SELECT public.stocky_privacy_enumerate_targets('preq_cr');"
+        " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
+        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');")
+    psql("pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+        "VALUES ('gen_a2','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp() - interval '3 hours'); "
+        "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a'; "
+        "UPDATE public.\"PrivacyCompletedTarget\" SET \"completedAt\" = clock_timestamp() - interval '2 hours' "
+        "WHERE \"generationId\"='gen_a' AND \"targetKind\"='CUSTOMER_REST_ID' AND \"targetValue\"='191167';")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','work_neg9','WEBHOOK','wh_neg9','digest_neg9','pr7-origin-v1', clock_timestamp() - interval '150 minutes', 'WEBHOOK_PROVIDER_AUTH','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    rc2, out2, err2 = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_neg9"))
+    record(group, "unauthorized_mint_revives_ta01_admit", rc == 0 and rc2 == 0, f"mint_rc={rc} write_rc={rc2} err={err2}")
+    reset()  # restore declared contract
 
     # NEG-7: seven-symbol floor alone revives CE-E (source-derived required check removed).
     reset()
@@ -6729,12 +7280,16 @@ def g11() -> None:
         "patt_cr",
         "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');",
     )
+    admit("shop_a","pr7-a.myshopify.com","work_g11_cea","ADMIN_ACTION","admin_g11_cea","digest_g11_cea",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    admit("shop_a","pr7-a.myshopify.com","work_g11_other","ADMIN_ACTION","admin_g11_other","digest_g11_other",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_cea');",
     )
     record(group, "cea_baseline_one_gen_still_denies", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
 
@@ -6749,7 +7304,7 @@ def g11() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_cea');",
     )
     record(group, "cea_two_gen_matching_write_still_denied", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
     rc, out, err = tx(
@@ -6757,7 +7312,7 @@ def g11() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp(), 'gen_a_zz');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_cea');",
     )
     record(group, "cea_declared_successor_origin_cannot_bypass_active_barrier", rc != 0 and "customer_target_erasing" in err, err, sqlstate_from_err(err))
     rc, out, err = tx(
@@ -6765,7 +7320,7 @@ def g11() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','999999', clock_timestamp()); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_other','shop_a','999999'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_other';",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','999999','work_g11_other'); INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_other','shop_a','999999'); SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_other';",
     )
     record(group, "two_gen_unrelated_customer_still_progresses", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
 
@@ -6781,12 +7336,15 @@ def g11() -> None:
         " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
         " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');",
     )
+    admit("shop_a","pr7-a.myshopify.com","work_g11_old","ADMIN_ACTION","admin_g11_old","digest_g11_old",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '1 hour'")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_old');",
     )
     record(group, "ceb_baseline_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
     psql(
@@ -6799,17 +7357,20 @@ def g11() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour', 'gen_a', true);",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_old');",
     )
     record(group, "ceb_two_gen_old_origin_still_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
 
     # Two LIVE + delayed payload without declared origin → ambiguous, not a silent admit.
+    admit("shop_a","pr7-a.myshopify.com","work_g11_wh","WEBHOOK","wh_g11_wh","digest_g11_wh",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '1 hour'")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_wh');",
     )
     record(
         group,
@@ -6826,15 +7387,18 @@ def g11() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour', 'gen_a_zz');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_wh');",
     )
     record(group, "queued_payload_before_successor_install_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
+    admit("shop_a","pr7-a.myshopify.com","work_g11_succ","ADMIN_ACTION","admin_g11_succ","digest_g11_succ",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() + interval '1 second'")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() + interval '1 second', 'gen_a_zz');"
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_succ');"
         " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_succ','shop_a','191167');"
         " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_succ';",
     )
@@ -6842,14 +7406,17 @@ def g11() -> None:
 
     # Missing origin: no LIVE binding.
     psql("pr45owner", "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a_zz';")
+    admit("shop_a","pr7-a.myshopify.com","work_g11_miss","WEBHOOK","wh_g11_miss","digest_g11_miss",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '1 hour'")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp() - interval '1 hour');",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_miss');",
     )
-    record(group, "missing_origin_fails_closed", rc != 0 and ("customer_write_origin_missing" in err or "customer_target_restore_denied" in err), err, sqlstate_from_err(err))
+    record(group, "missing_origin_fails_closed", rc != 0 and ("customer_write_origin_missing" in err or "customer_target_restore_denied" in err or "customer_target_attribution_ambiguous" in err), err, sqlstate_from_err(err))
 
     # Three-generation adversarial order + concurrent reinstall vs barrier.
     reset()
@@ -6881,6 +7448,8 @@ def g11() -> None:
 
     t1 = threading.Thread(target=reinstall)
     t2 = threading.Thread(target=barrier)
+    admit("shop_a","pr7-a.myshopify.com","work_g11_race","ADMIN_ACTION","admin_g11_race","digest_g11_race",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
     t1.start()
     t2.start()
     t1.join(10)
@@ -6890,7 +7459,7 @@ def g11() -> None:
         "shop_a",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', clock_timestamp());",
+        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','work_g11_race');",
     )
     record(
         group,
@@ -6899,12 +7468,14 @@ def g11() -> None:
         f"barrier={outcome} write_err={err[:300]}",
         sqlstate_from_err(err),
     )
+    admit("shop_b","pr7-b.myshopify.com","work_g11_b","ADMIN_ACTION","admin_g11_b","digest_g11_b",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167", req="preq_cr", att="patt_cr")
     rc, out, err = tx(
         "stocky_runtime",
         "shop_b",
         "preq_cr",
         "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167', clock_timestamp());"
+        "SELECT public.stocky_fact_write_guard('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167','work_g11_b');"
         " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g11_b','shop_b','191167');"
         " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g11_b';",
     )
@@ -7006,8 +7577,9 @@ def g12() -> None:
 
 
 
+
 def g13() -> None:
-    """GW-01 temporal overlap attribution. Inclusive ambiguous boundaries."""
+    """GW-01 overlap preserved; origin is derived from protected admission, not a caller flag."""
     group = "G13-temporal-attribution"
     reset()
     tx(
@@ -7020,6 +7592,13 @@ def g13() -> None:
         " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
         " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');",
     )
+    # Record original admissions WHILE gen_a is still the unique LIVE generation.
+    admit("shop_a","pr7-a.myshopify.com","work_g13_wh_old","WEBHOOK","wh_old_191167","digest_old_191167",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '150 minutes'")
+    admit("shop_a","pr7-a.myshopify.com","work_g13_admin_old","ADMIN_ACTION","admin_old_191167","digest_admin_old",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '5 hours'")
     psql(
         "pr45owner",
         "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
@@ -7029,33 +7608,32 @@ def g13() -> None:
         "WHERE \"generationId\"='gen_a' AND \"targetKind\"='CUSTOMER_REST_ID' AND \"targetValue\"='191167';",
     )
 
-    def guard(payload_sql: str, origin_sql: str = "NULL", persisted: str = "false") -> tuple[int, str, str]:
-        return tx(
-            "stocky_runtime",
-            "shop_a",
-            "preq_cr",
-            "patt_cr",
-            "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167',"
-            f" {payload_sql}, {origin_sql}, {persisted});",
-        )
+    def runtime_guard(work_id: str) -> tuple[int, str, str]:
+        return tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+                  gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167", work_id))
 
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'")
+    rc, out, err = runtime_guard("work_g13_wh_old")
     record(group, "ced_unattributed_overlap_ambiguous", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'", "'gen_a'", "true")
+    rc, out, err = runtime_guard("work_g13_admin_old")
     record(group, "ced_persisted_old_origin_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'", "'gen_a2'", "true")
+    admit("shop_a","pr7-a.myshopify.com","work_g13_admin_succ","ADMIN_ACTION","admin_succ_191167","digest_admin_succ",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '150 minutes'")
+    rc, out, err = runtime_guard("work_g13_admin_succ")
     record(group, "ced_persisted_successor_origin_admitted_in_overlap", rc == 0, f"out={out} err={err}")
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'", "'gen_a2'", "false")
-    record(group, "newly_attached_successor_generation_not_trusted", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
-    rc_i, inst_out, inst_err = psql(
-        "pr45owner",
-        "SELECT g.\"installedAt\"::text FROM public.\"ShopInstallGeneration\" g WHERE g.id='gen_a2';",
-    )
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_g13_upgrade","ADMIN_ACTION","admin_upgrade","digest_old_191167",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    record(group, "newly_attached_successor_generation_not_trusted", rc != 0 and "admission_digest_conflict" in err, err, sqlstate_from_err(err))
+
+    rc_i, inst_out, inst_err = psql("pr45owner", "SELECT g.\"installedAt\"::text FROM public.\"ShopInstallGeneration\" g WHERE g.id='gen_a2';")
     installed_at = inst_out.splitlines()[-1].strip() if rc_i == 0 and inst_out.strip() else ""
     if not installed_at:
         record(group, "equality_at_successor_installedAt_ambiguous", False, f"owner fetch failed rc={rc_i} err={inst_err} out={inst_out}")
     else:
-        rc, out, err = guard("TIMESTAMPTZ '%s'" % installed_at.replace("'", "''"))
+        admit("shop_a","pr7-a.myshopify.com","work_g13_eq_inst","WEBHOOK","wh_eq_inst","digest_eq_inst",
+              "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+              admitted_at_sql="TIMESTAMPTZ '%s'" % installed_at.replace("'", "''"))
+        rc, out, err = runtime_guard("work_g13_eq_inst")
         record(group, "equality_at_successor_installedAt_ambiguous", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
     rc_c, comp_out, comp_err = psql(
         "pr45owner",
@@ -7065,28 +7643,28 @@ def g13() -> None:
     if not completed_at:
         record(group, "equality_at_completedAt_ambiguous", False, f"owner fetch failed rc={rc_c} err={comp_err} out={comp_out}")
     else:
-        rc, out, err = guard("TIMESTAMPTZ '%s'" % completed_at.replace("'", "''"))
+        admit("shop_a","pr7-a.myshopify.com","work_g13_eq_comp","WEBHOOK","wh_eq_comp","digest_eq_comp",
+              "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+              admitted_at_sql="TIMESTAMPTZ '%s'" % completed_at.replace("'", "''"))
+        rc, out, err = runtime_guard("work_g13_eq_comp")
         record(group, "equality_at_completedAt_ambiguous", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
-    rc, out, err = guard("clock_timestamp() - interval '4 hours'")
+
+    admit("shop_a","pr7-a.myshopify.com","work_g13_before","WEBHOOK","wh_before","digest_before",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '4 hours'")
+    rc, out, err = runtime_guard("work_g13_before")
     record(group, "before_overlap_unattributed_restore_denied", rc != 0 and "customer_target_restore_denied" in err, err, sqlstate_from_err(err))
-    rc, out, err = tx(
-        "stocky_runtime",
-        "shop_a",
-        "preq_cr",
-        "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167',"
-        " clock_timestamp() + interval '1 second');"
-        " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g13_after','shop_a','191167');"
-        " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g13_after';",
-    )
+    admit("shop_a","pr7-a.myshopify.com","work_g13_after","WEBHOOK","wh_after","digest_after",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() + interval '1 second'")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_g13_after")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g13_after','shop_a','191167');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g13_after';")
     record(group, "after_overlap_unattributed_successor_allowed", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
-    rc, out, err = tx(
-        "stocky_runtime",
-        "shop_a",
-        "preq_cr",
-        "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167', NULL);",
-    )
+    admit("shop_a","pr7-a.myshopify.com","work_g13_null","WEBHOOK","wh_null","digest_null",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167", admitted_at_sql="NULL")
+    rc, out, err = runtime_guard("work_g13_null")
     record(group, "missing_payload_time_ambiguous", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
 
     psql(
@@ -7095,83 +7673,52 @@ def g13() -> None:
         "VALUES ('shop_a','gen_a2','CUSTOMER_REST_ID','191167','preq_multi', clock_timestamp() - interval '90 minutes') "
         "ON CONFLICT DO NOTHING;",
     )
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'")
+    rc, out, err = runtime_guard("work_g13_wh_old")
     record(group, "multiple_applicable_completions_still_ambiguous", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
-
-    # Delayed retry after release must keep original admission, not retry-now.
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'")
+    rc, out, err = runtime_guard("work_g13_wh_old")
     record(group, "delayed_retry_preserves_original_admission_still_ambiguous", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
 
-    # Concurrent reinstall: two LIVE rows during overlap. Unique-LIVE fallback must not admit.
     psql(
         "pr45owner",
         "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
         "VALUES ('gen_a3','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp() - interval '30 minutes');",
     )
-    rc, out, err = guard("clock_timestamp() - interval '150 minutes'")
-    record(
-        group,
-        "concurrent_reinstall_unattributed_overlap_not_admitted",
-        rc != 0 and ("customer_target_attribution_ambiguous" in err or "customer_write_origin_ambiguous" in err),
-        err,
-        sqlstate_from_err(err),
-    )
+    rc, out, err = runtime_guard("work_g13_wh_old")
+    record(group, "concurrent_reinstall_unattributed_overlap_not_admitted",
+           rc != 0 and ("customer_target_attribution_ambiguous" in err or "customer_write_origin_ambiguous" in err),
+           err, sqlstate_from_err(err))
     psql("pr45owner", "DELETE FROM public.\"ShopInstallGeneration\" WHERE id='gen_a3';")
 
-    rc, out, err = tx(
-        "stocky_runtime",
-        "shop_b",
-        "preq_dr",
-        "patt_dr",
-        "SELECT public.stocky_fact_write_guard('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167', clock_timestamp());"
-        " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g13_b','shop_b','191167');"
-        " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g13_b';",
-    )
+    admit("shop_b","pr7-b.myshopify.com","work_g13_b","ADMIN_ACTION","admin_b","digest_b",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167", req="preq_dr", att="patt_dr")
+    rc, out, err = tx("stocky_runtime","shop_b","preq_dr","patt_dr",
+        gsql("pr7-b.myshopify.com","shop_b","CUSTOMER_REST_ID","191167","work_g13_b")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g13_b','shop_b','191167');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g13_b';")
     record(group, "unrelated_shop_progresses_during_overlap_block", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
-    rc, out, err = tx(
-        "stocky_runtime",
-        "shop_a",
-        "preq_cr",
-        "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','999999',"
-        " clock_timestamp() - interval '150 minutes');"
-        " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g13_other','shop_a','999999');"
-        " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g13_other';",
-    )
+    admit("shop_a","pr7-a.myshopify.com","work_g13_other","ADMIN_ACTION","admin_other","digest_other",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","work_g13_other")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g13_other','shop_a','999999');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g13_other';")
     record(group, "unrelated_customer_progresses", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
 
-    # Missing history: drop completed-generation row.
     reset()
-    tx(
-        "stocky_privacy_erasure",
-        "shop_a",
-        "preq_cr",
-        "patt_cr",
+    tx("stocky_privacy_erasure","shop_a","preq_cr","patt_cr",
         "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');"
         " SELECT public.stocky_privacy_enumerate_targets('preq_cr');"
         " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
-        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');",
-    )
-    psql(
-        "pr45owner",
+        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');")
+    psql("pr45owner",
         "INSERT INTO public.\"PrivacyCompletedTarget\"(\"shopId\",\"generationId\",\"targetKind\",\"targetValue\",\"privacyRequestId\",\"completedAt\") "
-        "VALUES ('shop_a','gen_missing_history','CUSTOMER_REST_ID','191167','preq_missing', clock_timestamp() - interval '1 hour');",
-    )
-    rc, out, err = tx(
-        "stocky_runtime",
-        "shop_a",
-        "preq_cr",
-        "patt_cr",
-        "SELECT public.stocky_fact_write_guard('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167',"
-        " clock_timestamp() - interval '1 hour');",
-    )
-    record(
-        group,
-        "missing_generation_history_not_a_permit",
-        rc != 0 and "customer_target_attribution_ambiguous" in err,
-        err,
-        sqlstate_from_err(err),
-    )
+        "VALUES ('shop_a','gen_missing_history','CUSTOMER_REST_ID','191167','preq_missing', clock_timestamp() - interval '1 hour');")
+    admit("shop_a","pr7-a.myshopify.com","work_g13_hist","WEBHOOK","wh_hist","digest_hist",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '1 hour'")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+                      gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_g13_hist"))
+    record(group, "missing_generation_history_not_a_permit", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
 
 
 def g14() -> None:
@@ -7291,6 +7838,196 @@ def g14() -> None:
 
 
 
+
+def g15() -> None:
+    """TA-01 producer/consumer admission binding."""
+    group = "G15-durable-origin"
+    reset()
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        "INSERT INTO public.\"WriterAdmissionOrigin\"(id,\"canonicalDomain\",\"shopId\",\"workId\",\"sourceKind\",\"sourceIdentity\",\"originalAdmissionId\",\"formatPolicyVersion\",\"sourceContentDigest\",\"originStatus\") "
+        "VALUES ('x','pr7-a.myshopify.com','shop_a','w','ADMIN_ACTION','s','x','pr7-origin-v1','d','BOUND');")
+    record(group, "runtime_denied_origin_insert", is_denied(rc, err), err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "INSERT INTO public.\"WriterAdmissionOrigin\"(id,\"canonicalDomain\",\"shopId\",\"workId\",\"sourceKind\",\"sourceIdentity\",\"originalAdmissionId\",\"formatPolicyVersion\",\"sourceContentDigest\",\"originStatus\") "
+        "VALUES ('y','pr7-a.myshopify.com','shop_a','w2','ADMIN_ACTION','s2','y','pr7-origin-v1','d2','BOUND');")
+    record(group, "control_plane_denied_origin_insert", is_denied(rc, err), err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        "UPDATE public.\"WriterAdmissionOrigin\" SET \"originGenerationId\"='gen_a2';")
+    record(group, "runtime_denied_origin_update", is_denied(rc, err) or "0" in last_line(out), err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        "DELETE FROM public.\"WriterAdmissionOrigin\";")
+    record(group, "runtime_denied_origin_delete", is_denied(rc, err) or last_line(out) in ("0",""), err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_rt','ADMIN_ACTION','s_rt','d_rt','pr7-origin-v1', clock_timestamp(), 'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    record(group, "runtime_denied_helper_execute", is_denied(rc, err), err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_cp','ADMIN_ACTION','s_cp','d_cp','pr7-origin-v1', clock_timestamp(), 'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    record(group, "control_plane_denied_helper_execute", is_denied(rc, err), err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr", "SET ROLE stocky_original_admission;")
+    record(group, "runtime_cannot_set_role_admission", rc != 0, err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        "SELECT set_config('stocky.origin_generation_id','gen_a2', true); SELECT current_setting('stocky.origin_generation_id', true);")
+    record(group, "guc_is_not_admission_authority", rc == 0, "GUC may be set but is ignored by helpers")
+
+    # Legitimate admission then consumer use.
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_legit","ADMIN_ACTION","admin_legit","digest_legit",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    record(group, "original_admission_helper_creates_binding", rc == 0, f"out={out} err={err}")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_legit")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_legit_adm','shop_a','191167');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_legit_adm';")
+    record(group, "consumer_uses_persisted_binding", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+    # Same-source retry preserves origin/time.
+    rc1, orig_at, _ = psql("pr45owner", "SELECT \"originalAdmittedAt\"::text||','||\"originGenerationId\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='work_legit';")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_legit_retry","ADMIN_ACTION","admin_legit","digest_legit",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() + interval '1 day'")
+    rc2, after_at, _ = psql("pr45owner", "SELECT \"originalAdmittedAt\"::text||','||\"originGenerationId\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='work_legit';")
+    record(group, "retry_same_source_preserves_origin_time", rc == 0 and orig_at.strip() == after_at.strip() and orig_at.strip() != "", f"before={orig_at} after={after_at} err={err}")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_legit_changed","ADMIN_ACTION","admin_legit","digest_legit_CHANGED",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc3, after_conflict, _ = psql("pr45owner", "SELECT \"sourceContentDigest\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='work_legit';")
+    record(group, "changed_digest_conflicts_original_unchanged", rc != 0 and "admission_binding_conflict" in err and "digest_legit" in after_conflict, f"err={err} digest={after_conflict}")
+
+    # Tenant / target / work substitution.
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","work_legit"))
+    record(group, "target_substitution_rejected", rc != 0 and "customer_target_binding_mismatch" in err, err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_b","preq_dr","patt_dr",
+        gsql("pr7-b.myshopify.com","shop_b","CUSTOMER_REST_ID","191167","work_legit"))
+    record(group, "tenant_substitution_rejected", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_does_not_exist"))
+    record(group, "missing_binding_fail_closed", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
+
+    # Borrow successor work for CE-D target after overlap fixture.
+    reset()
+    tx("stocky_privacy_erasure","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');"
+        " SELECT public.stocky_privacy_enumerate_targets('preq_cr');"
+        " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
+        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');")
+    admit("shop_a","pr7-a.myshopify.com","work_borrow_old","WEBHOOK","wh_borrow_old","digest_borrow_old",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '150 minutes'")
+    psql("pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+        "VALUES ('gen_a2','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp() - interval '3 hours'); "
+        "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a'; "
+        "UPDATE public.\"PrivacyCompletedTarget\" SET \"completedAt\" = clock_timestamp() - interval '2 hours' "
+        "WHERE \"generationId\"='gen_a' AND \"targetKind\"='CUSTOMER_REST_ID' AND \"targetValue\"='191167';")
+    admit("shop_a","pr7-a.myshopify.com","work_borrow_succ","ADMIN_ACTION","admin_borrow_succ","digest_borrow_succ",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_borrow_succ"))
+    record(group, "successor_binding_is_not_interchangeable_with_old_digest", rc == 0, "successor work may use its own binding")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_borrow_old"))
+    record(group, "borrowed_successor_cannot_admit_ced_payload", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
+
+    # Unknown delayed first-seen webhook after reinstall stays unattributed.
+    admit("shop_a","pr7-a.myshopify.com","work_delayed_wh","WEBHOOK","wh_delayed_new","digest_delayed_new",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() - interval '150 minutes'")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_delayed_wh"))
+    record(group, "delayed_first_seen_webhook_not_promoted", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
+
+    # Child cannot launder old digest via trusted parent.
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_child_launder","CHILD","child_launder","digest_borrow_old",
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","191167", parent="work_borrow_succ")
+    record(group, "child_cannot_launder_old_digest", rc != 0, err, sqlstate_from_err(err))
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_child_ok","CHILD","child_ok","digest_borrow_succ",
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","191167", parent="work_borrow_succ")
+    record(group, "child_inherits_parent_origin", rc == 0, err)
+
+    # Pending link is not trusted until commit; recover after job exists.
+    psql("pr45owner",
+        "INSERT INTO public.\"DurableJob\"(id,\"shopId\",\"jobType\",state) "
+        "VALUES ('job_pend','shop_a','admitted:ADMIN_ACTION','PENDING') ON CONFLICT (id) DO NOTHING;")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","work_pend","ADMIN_ACTION","admin_pend","digest_pend",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999",
+          job="job_pend", mode="BEGIN")
+    record(group, "begin_pending_link", rc == 0, err)
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","work_pend"))
+    record(group, "pending_link_not_trusted_for_effects", rc != 0 and "customer_admission_not_acked" in err, err, sqlstate_from_err(err))
+    rc, out, err = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_recover_writer_admission('work_pend');")
+    record(group, "recover_unacked_admission_with_job", rc == 0, err)
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","work_pend")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_pend','shop_a','999999');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_pend';")
+    record(group, "recovered_admission_allows_consumer", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+    # Duplicate concurrent admission of the same source+digest.
+    def _adm1() -> None:
+        admit("shop_a","pr7-a.myshopify.com","work_dup_a","ADMIN_ACTION","admin_dup","digest_dup",
+              "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    def _adm2() -> None:
+        admit("shop_a","pr7-a.myshopify.com","work_dup_b","ADMIN_ACTION","admin_dup","digest_dup",
+              "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    t1 = threading.Thread(target=_adm1); t2 = threading.Thread(target=_adm2)
+    t1.start(); t2.start(); t1.join(10); t2.join(10)
+    rc, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"WriterAdmissionOrigin\" WHERE \"sourceIdentity\"='admin_dup';")
+    record(group, "duplicate_concurrent_admission_reconciles", n.strip() == "1", n)
+
+    # Pruned binding.
+    psql("pr45owner", "DELETE FROM public.\"WriterAdmissionOriginTarget\" WHERE \"originId\" LIKE 'wao_work_legit%'; DELETE FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='work_legit';")
+    # work_legit was on previous reset; recreate then prune on current fixture:
+    admit("shop_a","pr7-a.myshopify.com","work_prune","ADMIN_ACTION","admin_prune","digest_prune",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    psql("pr45owner", "DELETE FROM public.\"WriterAdmissionOriginTarget\" t USING public.\"WriterAdmissionOrigin\" o WHERE t.\"originId\"=o.id AND o.\"workId\"='work_prune'; DELETE FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='work_prune';")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","work_prune"))
+    record(group, "pruned_binding_fail_closed", rc != 0 and "customer_target_attribution_ambiguous" in err, err, sqlstate_from_err(err))
+
+    # Genuine successor after completion.
+    admit("shop_a","pr7-a.myshopify.com","work_new_succ","ADMIN_ACTION","admin_new_succ","digest_new_succ",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="clock_timestamp() + interval '1 second'")
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_new_succ")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_new_succ','shop_a','191167');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_new_succ';")
+    record(group, "genuine_successor_after_completion_progresses", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+    # Two-session admission vs barrier: barrier still wins on matching target.
+    reset()
+    admit("shop_a","pr7-a.myshopify.com","work_vs_bar","ADMIN_ACTION","admin_vs_bar","digest_vs_bar",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    started = threading.Event(); outcome: dict[str, str] = {}
+    def reinstall() -> None:
+        started.wait(5)
+        psql("pr45owner",
+            "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+            "VALUES ('gen_race','pr7-a.myshopify.com','shop_a','shop_a','LIVE', clock_timestamp()) ON CONFLICT (id) DO NOTHING;")
+        outcome["insert"] = "ok"
+    def barrier() -> None:
+        started.set()
+        rc_b, out_b, err_b = tx("stocky_privacy_erasure","shop_a","preq_cr","patt_cr",
+            "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');")
+        outcome["barrier_rc"] = str(rc_b); outcome["barrier_err"] = err_b[:200]
+    t1 = threading.Thread(target=reinstall); t2 = threading.Thread(target=barrier)
+    t1.start(); t2.start(); t1.join(10); t2.join(10)
+    rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_vs_bar"))
+    record(group, "admission_cannot_outrun_active_barrier",
+           outcome.get("barrier_rc") == "0" and rc != 0 and "customer_target_erasing" in err,
+           f"barrier={outcome} err={err[:300]}", sqlstate_from_err(err))
+
+    admit("shop_b","pr7-b.myshopify.com","work_b_ok","ADMIN_ACTION","admin_b_ok","digest_b_ok",
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167", req="preq_dr", att="patt_dr")
+    rc, out, err = tx("stocky_runtime","shop_b","preq_dr","patt_dr",
+        gsql("pr7-b.myshopify.com","shop_b","CUSTOMER_REST_ID","191167","work_b_ok")
+        + " INSERT INTO public.\"AuditEvent\"(id,\"shopId\",\"customerRestId\") VALUES ('ae_g15_b','shop_b','191167');"
+        + " SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_g15_b';")
+    record(group, "unrelated_shop_progresses_with_own_binding", rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+
+
 def main() -> int:
     os.makedirs(PROOF_ROOT, exist_ok=True)
     reset()
@@ -7308,6 +8045,7 @@ def main() -> int:
     g12()
     g13()
     g14()
+    g15()
     neg_controls()
     # Clean rerun after function replacements.
     g7()
@@ -7317,6 +8055,7 @@ def main() -> int:
     g12()
     g13()
     g14()
+    g15()
     failed = [r for r in RESULTS if not r["ok"]]
     pg = query_pg_version()
     pairs = [(r["group"], r["name"]) for r in RESULTS]
@@ -8035,7 +8774,9 @@ if __name__ == "__main__":
 
 ### Appendix E — independent source snapshot (`04_source_derived.sql` + `source_derived_candidates.json`)
 
-The SQL snapshot is loaded by the driver after seed. It is transcribed from the JSON scanner output and is **not** `SELECT` from `ParticipatingWriterInventory`.
+The SQL snapshot is loaded by the driver after seed. It is transcribed from the JSON scanner output and is **not** `SELECT` from `ParticipatingWriterInventory`. The SQL digest is portable.
+
+`source_derived_candidates.json` is an **original-run / environment artifact** (TA-02 labeling). Absolute `envelope.app_root` / `envelope.scan_roots` are checkout-location metadata, not substantive candidate content. Historical bytes below are the GW/P run at `/workspace/stocky-plus` (digest `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd`). This-session X `git archive` scan at `/tmp/pr45-ta/x-app/stocky-plus` produced digest `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62`. Substantive `candidates`, `required`, `counts`, and `scanned_files` are equal. Do **not** require the JSON digest to reproduce across checkouts. Scanner `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` is unchanged.
 
 ```sql
 -- Source-derived candidate snapshot generated independently of ParticipatingWriterInventory.
