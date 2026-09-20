@@ -12,12 +12,13 @@ Immutable independent reviews (byte-for-byte; do not edit):
 - `stocky-plus/docs/phases/phase-1/PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `e908770d9daea4f963b2fd09e38af79e07274d41`)
 - `stocky-plus/docs/phases/phase-1/PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`)
 - `stocky-plus/docs/phases/phase-1/PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md` (blob `b7e8ff338e715c79907aa633c75622958f60b4d4`)
+- `stocky-plus/docs/phases/phase-1/PR7_DURABLE_ORIGIN_CORRECTION_INDEPENDENT_REVIEW.md` (blob `21b11b4af0adfce8e7044a40131190f001e9756e`)
 
 These rows are **test-executable in specificity**. They are documentation. They are **not** passing CI on a runtime implementation.
 
 Fixture **values** are **synthetic**. Documented Shopify payload **field names** are not synthetic. No merchant or customer production data.
 
-ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains current for Decisions A–E. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) remains the customer-completion/epoch supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and closed **F-CLAUDE-PR7CC-01…04**. Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) remains current for independently closed **F-CLAUDE-PR7GW-02** and the GW-01 overlap defect. Comment [5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329) is current for **F-CLAUDE-PR7TA-01/02**. None of those comments accept the whole plan or authorize PR7 runtime.
+ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains current for Decisions A–E. Comment [5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796) remains the customer-completion/epoch supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and closed **F-CLAUDE-PR7CC-01…04**. Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) remains current for independently closed **F-CLAUDE-PR7GW-02** and the GW-01 overlap defect. Comment [5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329) remains current for independently closed **F-CLAUDE-PR7TA-01** core mechanism and **TA-02**. Comment [5752617452](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5752617452) is current for **F-CLAUDE-PR7DO-01/02**. None of those comments accept the whole plan or authorize PR7 runtime.
 
 Original fixture and row IDs are preserved. New IDs continue existing prefixes. Designed fixtures are **not** passing processors.
 
@@ -477,7 +478,7 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-CUST-034 | CC-GEN NEG resolver | restore `ORDER BY id DESC` / skip applicable-barrier check | CE-A fixture | **must fail this design** (matching write admitted) | crediting the unchanged contract | NEG `generation_guess_restored_defeats_barrier` | load-bearing | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-035 | GW-01 CE-D unattributed overlap | unique LIVE successor; prior completion; payload in inclusive overlap; no persisted origin | `stocky_fact_write_guard` | `customer_target_attribution_ambiguous`; no restoring write | unique-LIVE fallback admits successor data | G13 `ced_unattributed_overlap_ambiguous`; old CE-D | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-036 | GW-01 / TA-01 ADMIN old origin | overlap; ADMIN admission recorded while `gen_a` unique LIVE; consumer uses that `work_id` | write | `customer_target_restore_denied` | caller boolean or restamp as origin | G13 `ced_persisted_old_origin_restore_denied` | WriterAdmissionOrigin | PR7 | executed-synthetic-pg16 |
-| PR7-CUST-037 | GW-01 / TA-01 proven successor | overlap; ADMIN admission **after** `gen_a2` LIVE with a **new** digest | write | allowed (BOUND successor policy) | banning genuine proven successor work | G13 `ced_persisted_successor_origin_admitted_in_overlap` | original-admission helper | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-037 | GW-01 / TA-01 proven successor | overlap; ADMIN admission **after** `gen_a2` LIVE with a **new** digest (DO capture-now; caller `-150 minutes` is **not** provenance — disclose, do not treat the name as overlap-timestamp laundering) | write | allowed (BOUND successor policy) | banning genuine proven successor work | G13 `ced_persisted_successor_origin_admitted_in_overlap` | original-admission helper + capture | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-038 | GW-01 / TA-01 remint old digest | overlap; ADMIN attempt to admit the **old** webhook digest as successor | admission | `admission_digest_conflict`; original row unchanged | retry-time restamp trusted as origin | G13 `newly_attached_successor_generation_not_trusted` | original-admission helper | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-039 | GW-01 inclusive boundaries | payload `=` successor `installedAt` or `=` `completedAt` | write | ambiguous | half-open interval admits boundary | G13 `equality_at_successor_installedAt_ambiguous`; `equality_at_completedAt_ambiguous` | write_guard | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-040 | GW-01 before / after overlap | unattributed payload before `installedAt` / after `completedAt` | write | restore_denied / allowed successor | lifetime ban or silent overlap admit | G13 `before_overlap_unattributed_restore_denied`; `after_overlap_unattributed_successor_allowed` | write_guard | PR7 | executed-synthetic-pg16 |
@@ -502,6 +503,22 @@ Receipt row may contain `privacyRequestId`, `generationId`, `topic`, `completedA
 | PR7-CUST-059 | TA-01 unrelated shop | shop_a overlap/barrier | shop_b own ADMIN binding | progress | global freeze | G15 `unrelated_shop_progresses_with_own_binding` | domain keys | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-060 | TA-01 NEG lookup bypass | replace guard to unique-LIVE fallback | CE-D webhook work | **must fail this design** (overlap admitted) | crediting the unchanged contract | NEG `lookup_bypass_revives_ta01_admit` | load-bearing | PR7 | executed-synthetic-pg16 |
 | PR7-CUST-061 | TA-01 NEG unauthorized mint | strip `session_user` + GRANT EXECUTE to runtime | runtime mints BOUND LIVE then writes CE-D | **must fail this design** (overlap admitted) | crediting the unchanged contract | NEG `unauthorized_mint_revives_ta01_admit` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-062 | DO-01 capture required | ADMIN class; no `OriginalAdminCapture` | `stocky_record_writer_admission` | `admission_admin_capture_required` | class+caller timestamp mints BOUND | G16 `admin_class_without_capture_rejected`; `overlap_caller_timestamp_without_capture_rejected` | capture-to-producer | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-063 | DO-01 capture principal deny | named capture helpers | runtime/CP/producer `stocky_capture_original_admin_command` / `stocky_establish_modeled_admin_session` | `42501` | second auth subsystem; producer self-capture | G16 `runtime_denied_establish_admin_session`; `runtime_denied_capture_execute`; `control_plane_denied_capture_execute`; `producer_denied_capture_execute` | grants | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-064 | DO-01 session/tenant | capture without established session; wrong-shop session | `stocky_capture_original_admin_command` | `admission_admin_session_required` / `admission_session_tenant_mismatch` | forged fresh context | G16 `capture_without_established_session_rejected`; `capture_wrong_shop_session_rejected` | modeled post-requireAdminTenant | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-065 | DO-01 caller timestamp ignored | ADMIN capture; caller overlap timestamp 18:19 | producer admit | `originalAdmittedAt` = server `capturedAt`, not 18:19 | `now()` substitution of queued payload | G16 `caller_overlap_timestamp_does_not_become_captured_at` | capturedAt | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-066 | DO-01 label-only queued webhook | WEBHOOK identity already sighted | capture as ADMIN | `queued_work_cannot_acquire_fresh_admin_origin` | current staff session launders queued work | G16 `label_only_queued_webhook_cannot_capture_admin`; `queued_inbox_cannot_acquire_fresh_admin_origin` | QueuedWorkSighting | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-067 | DO-01 note queued / runtime deny | CP notes queued work; runtime notes | `stocky_note_queued_work` | CP allowed; runtime `42501` | runtime fabricates sightings | G16 `control_plane_can_note_queued_work`; `runtime_denied_note_queued_work` | grants | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-068 | DO-01 retry / changed digest | existing ADMIN capture+origin | retry later time; changed digest | capture/origin time unchanged; `admission_binding_conflict` | time-only restamp | G16 `time_only_retry_does_not_restamp_capture`; `changed_digest_admin_conflicts`; `duplicate_admin_command_preserves_single_capture` | unique source digest | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-069 | DO-01 epoch / install consistency | capture under LIVE; reinstall; capture before install | capture / admit | `admission_capture_epoch_mismatch` / `admission_capture_before_install` | restamp across reinstall | G16 `capture_under_current_live`; `capture_epoch_mismatch_after_reinstall_rejected`; `capture_before_install_consistency_rejected` | supplementary checks | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-070 | DO-01 genuine successor / overlap capture | new ADMIN digest after complete; genuine capture inside overlap window | capture then admit then write | allowed | ban all overlap timestamps | G16 `genuine_admin_after_completion_progresses`; `genuine_admin_capture_inside_overlap_window_progresses` | capture-now | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-071 | DO-01 unrelated shop / child / pending | shop_a overlap; shop_b capture; child inherit; pending recover | admit / recover / host | shop_b progresses; child no fresh capture; origin time unchanged | global freeze; recovery restamp | G16 `unrelated_shop_admin_capture_and_host_progresses`; `child_inherits_without_fresh_admin_capture`; `pending_recovery_does_not_mutate_origin_time` | lineage | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-072 | DO-02 SQL-only substitution (honest) | two valid same-target work ids; SQL guard only | `stocky_fact_write_guard` old digest + new `work_id` | **ADMITTED** (guard cannot inspect later write) | falsifying the SQL-only observation | G16 `sql_honest_old_ambiguous_new_admitted`; `sql_only_old_effect_new_work_id_still_admitted` | 5-arg guard | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-073 | DO-02 effect host digest bind | old same-target digest + newer valid `work_id` | `stocky_apply_bound_customer_effect` | `effect_digest_mismatch` **before** write | branded type / after-the-write log | G16 `effect_host_rejects_old_digest_with_new_work_id` | proposed-boundary host | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-074 | DO-02 matching digest write | bound context + matching digest/tenant/target | apply host | write allowed | host blocks genuine work | G16 `effect_host_accepts_matching_digest_and_writes` | proposed-boundary host | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-075 | DO-02 missing / wrong context | apply without bind; bind wrong tenant | bind / apply | `effect_execution_context_required` / `effect_execution_context_invalid` | interchangeable work ids | G16 `apply_without_execution_context_rejected`; `bind_context_wrong_tenant_rejected` | proposed-boundary host | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-076 | DO-01 NEG capture removed | replace ADMIN branch with Q live_n-only mint | overlap 18:19 ADMIN | **must fail this design** (BOUND+ADMITTED) | crediting the unchanged contract | NEG `capture_requirement_removed_revives_do01_admit` | load-bearing | PR7 | executed-synthetic-pg16 |
+| PR7-CUST-077 | DO-02 NEG digest bind removed | omit digest check in apply | old digest + new work_id through host | **must fail this design** (write admitted) | crediting the unchanged contract | NEG `effect_digest_binding_removed_revives_do02_write` | load-bearing | PR7 | executed-synthetic-pg16 |
 
 ### 6.7.1 Residual own-guard (F-CLAUDE-PR7CC-02)
 
@@ -838,6 +855,15 @@ CC-01…04 remain closed. GW-02 remains closed. The GW-01 overlap defect remains
 
 Independent targeted correction re-review of **this** durable-origin packet by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
 
+## 12.5 F-CLAUDE-PR7DO-01…02 finding crosswalk
+
+| ID | Sev | Original meaning | Disposition | Matrix / proof |
+|---|---|---|---|---|
+| **F-CLAUDE-PR7DO-01** | P2 | ADMIN class bound caller-chosen overlap timestamp 18:19 to successor LIVE | **CORRECTED** (option b: authenticated original-admin capture; class+timestamp cannot mint BOUND; lower-bound-only **executed and still admitted** — not the correction) | PR7-CUST-062…071, 076; G16; NEG-10; old DO-01 on Q |
+| **F-CLAUDE-PR7DO-02** | P3 | SQL guard cannot bind `work_id` to the effect actually written | **CORRECTED** as specification + proposed-boundary model (effect host derives work identity and matches digest before write). SQL-only substitution **still admitted** (honest) | PR7-CUST-072…075, 077; G16; NEG-11; old DO-02 on Q |
+
+TA-01 core, TA-02, GW-02, and the GW-01 overlap rule remain independently closed. Independent targeted correction re-review of **this** admin-origin / effect-binding packet by actual Claude Code remains required. No whole-plan acceptance. PR7 runtime is **not** authorized.
+
 
 ---
 
@@ -848,7 +874,7 @@ Independent targeted correction re-review of **this** durable-origin packet by a
 | Three identities | Delivery binding ≠ work id ≠ completion receipt. HMAC/body is not a lifetime work key. |
 | Shop DELETE | Only `stocky_privacy_finalize_shop_delete`. Runtime/CP have no bare DELETE. |
 | Completion | Residual empty **then** conditional CP txn. Receipt cannot override remnants. Customer topics: source-derived residual + exclusive target locks in the same complete txn. Stale-manifest count is insufficient. |
-| Customer barrier | Canonical domain × `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID` (`pr7-ctgt-v2`). Generation is evidence, not the lock. Lock before lookup. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes whose **BOUND** origin **is** the completed generation remain restore-denied; genuine unique LIVE successor with `originalAdmittedAt >= origin.installedAt` and a **new** digest allowed. Unattributed inclusive overlap → visible `customer_target_attribution_ambiguous`. Unique LIVE is not historical origin. Guard derives origin from `WriterAdmissionOrigin`; `p_origin_persisted` removed. |
+| Customer barrier | Canonical domain × `CUSTOMER_REST_ID` / `ORDER_LEGACY_ID` (`pr7-ctgt-v2`). Generation is evidence, not the lock. Lock before lookup. Not request-id-only. LIVE shop. Unrelated customers/shops progress. Delayed writes whose **BOUND** origin **is** the completed generation remain restore-denied; genuine unique LIVE successor with `originalAdmittedAt >= origin.installedAt` and a **new** digest allowed. Install lower bound is **supplementary**, not provenance. ADMIN requires original-admin capture. Unattributed inclusive overlap → visible `customer_target_attribution_ambiguous`. Unique LIVE is not historical origin. Guard derives origin from `WriterAdmissionOrigin`; `p_origin_persisted` removed. Effect host derives `work_id` from trusted context and matches digest before guard+write. |
 | Epoch / publication | Enumerator and claim share publication lock. Stale callers leave the new epoch’s keys/flags/revision unchanged. Check-then-act is insufficient. |
 | Actor | Verified JWT `sub` **string**. Online tokens **not** required for actor identity. Wide id preserved. Unsafe numeric owner blocked. mixedToken/stale-cache fenced **before** any online credential. dest/iss in **app**. Live bind **UNVERIFIED**. |
 | Replay | One CP txn + advisory authz lock + SELECT-only verifier + stable commandId. No `FOR UPDATE` helper. No cross-role atomicity slogan. |
@@ -868,15 +894,17 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 
 | | |
 |---|---|
-| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-ta-pg16:5436` |
-| Contract SHA-256 (this correction) | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` |
-| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (byte-identical from 59-case / TF / CC-GEN / GW) |
-| Driver SHA-256 (this correction) | `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b` |
+| Postgres (queried) | `server_version` `16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)`; `server_version_num` `160015`; disposable `/tmp/pr45-do-pg16:5439` |
+| Contract SHA-256 (this correction) | `bc0d674afdfe1ed984e7258326e3421a62c24b25ce988281f43885e9fe859ff4` |
+| Seed SHA-256 | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` (byte-identical from 59-case / TF / CC-GEN / GW / Q) |
+| Driver SHA-256 (this correction) | `336b2795914eedccbc677a5da8aefb7d93c950a3b7e1f4aa89387ce917a0bdbc` |
 | Discover SHA-256 | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` (**unchanged**) |
-| Source SQL SHA-256 | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` (portable; equals P and this-session X regeneration) |
+| Source SQL SHA-256 | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` (portable; equals P/Q and this-session X regeneration) |
 | Candidates JSON SHA-256 | **environment artifact.** Historical `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd`; this-env X archive `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (envelope roots only) |
-| Results SHA-256 | **run log, not a verification artifact.** This-run digest `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63` is an original-run identity only |
-| Totals | **313 records / 313 PASS / 0 FAIL** = **191 unique assertions** + **122 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26 + G15×29). Unique G1–G6 = 59 preserved. New unique this packet = 31 |
+| Results SHA-256 | **run log, not a verification artifact.** This-run digest `bb1e3541186a5e82fc6a54b9eaa07bae32d459ecdd277623eb347ad5f69e9317` is an original-run identity only |
+| Q historical packet (**not** this contract) | **313 records / 191 unique / 122 reruns**. Contract `d9bd880f…`; driver `59bf35f5…`; run log `4e88e653…` |
+| Q/DO repro + lower-bound | repro `9872848c…`; log `96aa5649…`; lower-bound SQL `75a16828…`. ADMIN 18:19 **still BOUND+ADMITTED** on option (a) |
+| Totals | **375 records / 375 PASS / 0 FAIL** = **223 unique assertions** + **152 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26 + G15×29 + G16×30). Unique G1–G6 = 59 preserved. New unique this packet = 32 |
 | Historical TF 115-record packet (S; **not** this contract) | **115 records ≠ 115 unique**: 89 unique + 26 G7–G9 reruns. Contract `75ab1c02…349846de`; driver `566e0f28…`; run log `006e5799…` |
 | Historical 59-case identities (S; **not** this contract) | contract `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; driver `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; Cursor run log `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8`; reviewer log `185dd1b8…` |
 | Old-model CE-A / CE-B / CE-C | reproduced on unchanged TF contract at `/tmp/pr45-cc-pg16:5434`; sha256 `c1077d531a435b7536c8e9f07c83743c413fb054b749fa7f5f3fbac52df9991f` |
@@ -1077,7 +1105,39 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 | `G15-durable-origin` | `unrelated_shop_progresses_with_own_binding` | PASS | `—` |
 | `NEG-load-bearing` | `lookup_bypass_revives_ta01_admit` | PASS | `—` |
 | `NEG-load-bearing` | `unauthorized_mint_revives_ta01_admit` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `admin_class_without_capture_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `runtime_denied_establish_admin_session` | PASS | `42501` |
+| `G16-admin-origin-effect-host` | `runtime_denied_capture_execute` | PASS | `42501` |
+| `G16-admin-origin-effect-host` | `control_plane_denied_capture_execute` | PASS | `42501` |
+| `G16-admin-origin-effect-host` | `producer_denied_capture_execute` | PASS | `42501` |
+| `G16-admin-origin-effect-host` | `capture_without_established_session_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `capture_wrong_shop_session_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `caller_overlap_timestamp_does_not_become_captured_at` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `label_only_queued_webhook_cannot_capture_admin` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `control_plane_can_note_queued_work` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `queued_inbox_cannot_acquire_fresh_admin_origin` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `runtime_denied_note_queued_work` | PASS | `42501` |
+| `G16-admin-origin-effect-host` | `time_only_retry_does_not_restamp_capture` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `changed_digest_admin_conflicts` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `capture_under_current_live` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `capture_epoch_mismatch_after_reinstall_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `capture_before_install_consistency_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `overlap_caller_timestamp_without_capture_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `genuine_admin_after_completion_progresses` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `sql_honest_old_ambiguous_new_admitted` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `sql_only_old_effect_new_work_id_still_admitted` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `effect_host_rejects_old_digest_with_new_work_id` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `effect_host_accepts_matching_digest_and_writes` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `apply_without_execution_context_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `bind_context_wrong_tenant_rejected` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `genuine_admin_capture_inside_overlap_window_progresses` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `unrelated_shop_admin_capture_and_host_progresses` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `pending_recovery_does_not_mutate_origin_time` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `child_inherits_without_fresh_admin_capture` | PASS | `—` |
+| `G16-admin-origin-effect-host` | `duplicate_admin_command_preserves_single_capture` | PASS | `—` |
+| `NEG-load-bearing` | `capture_requirement_removed_revives_do01_admit` | PASS | `—` |
+| `NEG-load-bearing` | `effect_digest_binding_removed_revives_do02_write` | PASS | `—` |
 
-Unique = **191**. Declared reruns = **122**. Driver total records = **313**. Historical GW unique 160 / 93 reruns / 253 records preserved as original-run identity. Historical CC-GEN unique 117 / 52 reruns / 169 records preserved as original-run identity. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
+Unique = **223**. Declared reruns = **152**. Driver total records = **375**. Historical Q unique 191 / 122 reruns / 313 records preserved as original-run identity. Historical GW unique 160 / 93 reruns / 253 records preserved as original-run identity. Historical CC-GEN unique 117 / 52 reruns / 169 records preserved as original-run identity. No hidden GRANT, dropped constraint, or repaired driver is credited to an unchanged contract. NEG replaces one function at a time, then `reset()` reloads the declared contract.
 
-Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` online-token bind; application `test:privacy`. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence.
+Unexecuted: Redis/export/D-scratch fences; live Shopify; `node_modules` `authenticate.admin` live bind; application `test:privacy`; proposed `original-admin-capture.server.ts` / `bound-effect.server.ts` runtime. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence.

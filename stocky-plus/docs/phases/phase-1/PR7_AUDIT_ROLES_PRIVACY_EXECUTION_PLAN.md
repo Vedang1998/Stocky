@@ -4,7 +4,7 @@
 
 **Document type:** execution-ready architecture / acceptance contract for the next approved Phase 1 module.
 
-This packet does **not** authorize PR7 runtime, migrations, grants, Shopify configuration, production, inventory writes, flag enablement, or merge. ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains planning authority for Decisions A–E. Comment 5737038796 remains the customer-completion/epoch/inventory supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and **F-CLAUDE-PR7CC-01…04** (closed; do not reopen). Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) remains current for independently closed **F-CLAUDE-PR7GW-02** and the GW-01 overlap defect (option a). Comment [5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329) is current for **F-CLAUDE-PR7TA-01/02**, ChatGPT option (a) persist-admission-origin, and TA-02 labeling. None of those comments accept the whole plan or start PR7 runtime. PR6 is **CLOSED** on **X**; Phase 1 remains **IN PROGRESS**.
+This packet does **not** authorize PR7 runtime, migrations, grants, Shopify configuration, production, inventory writes, flag enablement, or merge. ChatGPT’s 2026-09-18 topic-authority comment 5729229659 remains planning authority for Decisions A–E. Comment 5737038796 remains the customer-completion/epoch/inventory supplement. Comment [5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826) remains current for **Decision CC-GEN** and **F-CLAUDE-PR7CC-01…04** (closed; do not reopen). Comment [5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159) remains current for independently closed **F-CLAUDE-PR7GW-02** and the GW-01 overlap defect (option a). Comment [5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329) remains current for independently closed **F-CLAUDE-PR7TA-01** core mechanism and **TA-02** labeling. Comment [5752617452](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5752617452) is current for **F-CLAUDE-PR7DO-01/02**, ChatGPT option **(b)** authenticated original-admin capture coupled to the DO-02 effect-host invariant. None of those comments accept the whole plan or start PR7 runtime. PR6 is **CLOSED** on **X**; Phase 1 remains **IN PROGRESS**.
 
 ---
 
@@ -38,6 +38,7 @@ Immutable independent reviews (byte-for-byte; do not edit):
 - `stocky-plus/docs/phases/phase-1/PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` (blob `e908770d9daea4f963b2fd09e38af79e07274d41`)
 - `stocky-plus/docs/phases/phase-1/PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`)
 - `stocky-plus/docs/phases/phase-1/PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md` (blob `b7e8ff338e715c79907aa633c75622958f60b4d4`)
+- `stocky-plus/docs/phases/phase-1/PR7_DURABLE_ORIGIN_CORRECTION_INDEPENDENT_REVIEW.md` (blob `21b11b4af0adfce8e7044a40131190f001e9756e`)
 
 ---
 
@@ -56,8 +57,10 @@ Immutable independent reviews (byte-for-byte; do not edit):
 | Authorization (customer-completion / epoch) | [PR45 comment 5737038796](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5737038796). Narrowly supplements 5729229659 for **F-CLAUDE-PR7TF-01…04** only |
 | Authorization (CC-GEN / W / entry) | [PR45 comment 5747828826](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5747828826). Decision **CC-GEN** + CC-01…04 closed. Does **not** accept the plan |
 | Authorization (GW-01/02 / X sync) | [PR45 comment 5750220159](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5750220159). Ambiguity rejection + source-derived coverage + closed-PR6 main **X**. GW-02 and the GW-01 overlap defect remain independently closed. Does **not** accept the plan or authorize runtime |
-| Authorization (TA-01/02 durable origin — **current**) | [PR45 comment 5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329). Persist admission origin (option a); label environment-dependent candidates digest. Does **not** accept the plan or authorize runtime |
-| Starting subject **P** (this TA correction) | `500b476ad079de5f6a1282fd65b2576f0afc9a52` |
+| Authorization (TA-01/02 durable origin) | [PR45 comment 5751868329](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5751868329). Persist admission origin (option a); label environment-dependent candidates digest. TA-01 core + TA-02 remain independently closed. Does **not** accept the plan or authorize runtime |
+| Authorization (DO-01/02 original-admin + effect-host — **current**) | [PR45 comment 5752617452](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5752617452). Authenticated original-admin capture (option b) coupled to the application work-id/effect invariant. Does **not** accept the plan or authorize runtime |
+| Starting subject **Q** (this DO correction) | `5040d5cd63e46e3385f8c692f25d88424311acd2` |
+| Historical starting subject **P** (TA correction) | `500b476ad079de5f6a1282fd65b2576f0afc9a52` |
 | Historical GW starting subject **S** | `d6ac0432bec5e0ee8b586681ee53c1fa7ea4ba79` |
 | Historical CC-GEN starting subject | `a292bc8a6ea26192bc295af7338dd6d653a3e65c` |
 | Historical TF starting subject | `9d9919057992e9c7ba1f7bfcee73d671f2fadbab` |
@@ -72,9 +75,10 @@ Immutable independent reviews (byte-for-byte; do not edit):
 | Immutable review **CC** | branch `claude/pr45-customer-completion-correction-review`; commit `c7b47807083bfad8e7e3a7504e826027e56b7a32`; blob `e908770d9daea4f963b2fd09e38af79e07274d41`; path `PR7_CUSTOMER_COMPLETION_CORRECTION_INDEPENDENT_REVIEW.md` — **unchanged** |
 | Immutable review **GW** | branch `claude/pr45-generation-w-integration-review`; commit `28b4399c99d54b1a16722418da3a67bfbb84a760`; blob `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`; path `PR7_GENERATION_W_INTEGRATION_INDEPENDENT_REVIEW.md` — **unchanged** |
 | Immutable review **TA** | branch `claude/pr45-temporal-attribution-writer-coverage-review`; commit `b0d73cc7a4adc1488461aafdbd64bdb52bb87b8a`; sole parent **P** `500b476…`; blob `b7e8ff338e715c79907aa633c75622958f60b4d4`; path `PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md` — **fast-forwarded, byte-for-byte**; one-file add |
+| Immutable review **DO** | branch `claude/pr45-durable-origin-correction-review`; commit `bfebe412818e42b4c92f87ca1c927f0dda12cad5`; sole parent **Q** `5040d5c…`; blob `21b11b4af0adfce8e7044a40131190f001e9756e`; path `PR7_DURABLE_ORIGIN_CORRECTION_INDEPENDENT_REVIEW.md` — **fast-forwarded, byte-for-byte**; one-file add |
 | Entry-evidence input **PR48** | sealed pin `c97adda285b5625836a582deb03983099a7b3461`. Earlier `275292d19b583c04c3afe01ef7d9feb48fee0f6c` is historical observation only. No new PR48 packaging run. Cursor-reported feasibility, **not** independent security acceptance |
 | Review publication PR | [#46](https://github.com/Vedang1998/Stocky/pull/46) already used; **do not reopen/reuse as an integration route** |
-| Work order | comment 5751868329 (this packet); 5750220159 remains the GW historical work order; 5747828826 remains the CC-GEN historical work order |
+| Work order | comment 5752617452 (this packet); 5751868329 remains the TA historical work order; 5750220159 remains the GW historical work order; 5747828826 remains the CC-GEN historical work order |
 | Decision heading | D-054 **EFFECTIVE** — **no D-055** |
 | R-176 | remains **OPEN / P0** |
 | R-164 | unchanged (privacy physical DELETE is not C apply) |
@@ -178,7 +182,16 @@ GW-02 remains **closed**. The GW-01 overlap defect remains **independently close
 | **F-CLAUDE-PR7TA-01** | P2 | `p_origin_persisted` was a caller-asserted boolean with EXECUTE to runtime/CP, no admission table, and no recording/retry-preservation point; `true` + successor id admitted the CE-D overlap payload | ChatGPT option **(a)** persist-authority. Protected `WriterAdmissionOrigin` + target rows. Guard is 5-arg `(domain, shop, kind, value, work_id)` and **derives** origin from the bound record. Record id is lookup only; tenant, stable source/work, original admission, digest, target/lineage, and proven generation or explicit UNATTRIBUTED must match. Distinct producer `stocky_original_admission` (LOGIN NOINHERIT) is the only EXECUTE grantee of `stocky_record_writer_admission` / `commit` / `recover`; helpers are SECURITY DEFINER owned by nologin `stocky_admission_origin_owner` and check `session_user`. Runtime/CP cannot DML origin, EXECUTE the helper, SET ROLE producer, or use a GUC as authority. No generically callable `registerOrigin`. Record before durable ack; ATOMIC or BEGIN/`PENDING_LINK` + recover-with-job. Retry/replay/coalesce/child keep the original; a new attempt cannot restamp old data into the current generation. Delayed indistinguishable webhook is UNATTRIBUTED even after reinstall. Missing/pruned/legacy stays unattributed; genuine proven ADMIN successor with a **new** digest still progresses. Inclusive overlap, residual guards, locks, and source-coverage preserved | §7.6.2 Writer origin / Producer map; §7.7.4 | PR7-CUST-035…061; G13 interface crosswalk; G15; NEG-8/9; old TA-01 on P |
 | **F-CLAUDE-PR7TA-02** | P3 | `source_derived_candidates.json` SHA-256 embeds absolute `app_root`/`scan_roots`, so the digest is checkout-location identity | **Labeling option.** Historical JSON bytes preserved (`0ce7a398…`). Portable `04_source_derived.sql` is the consumed input and remains `9f7aaa26…`. This-session X archive scan JSON `e93b23bf…` differs **only** in envelope roots (`/workspace/stocky-plus` vs `/tmp/pr45-ta/x-app/stocky-plus`); `candidates`/`required`/`counts`/`scanned_files` equal. Scanner `666feaa8…` unchanged. Do not require the JSON digest to reproduce across checkouts | §14 Appendix E | PR7-GATE-017…; G14 |
 
+### 1.8 F-CLAUDE-PR7DO-01…02 dispositions (this correction)
 
+TA-01’s independently closed core mechanism is **preserved** (protected `WriterAdmissionOrigin`, 5-arg `work_id` guard, producer/owner/`session_user` separation). TA-02, GW-02, and the GW-01 inclusive overlap rule remain **independently closed**. Completeness is **not** seven-symbol presence. Do **not** treat a lower-bound-only `originalAdmittedAt >= installedAt` patch as this correction.
+
+| ID | Sev | Defect | This packet | Plan anchors | Matrix |
+|---|---|---|---|---|---|
+| **F-CLAUDE-PR7DO-01** | P2 | `ADMIN_SESSION_CURRENT_INSTALL` bound a caller-chosen historical timestamp to unique LIVE with no install/session evidence; overlap 18:19 with successor install 17:49 / prior complete 18:49 recorded `BOUND`/`gen_a2` and the 5-arg guard **ADMITTED** | ChatGPT option **(b)** authenticated original-admin capture. Private capture principal `stocky_admin_capture` (LOGIN NOINHERIT) after the modeled same-shop session/actor boundary. `stocky_capture_original_admin_command` records server `clock_timestamp()` as `capturedAt` with immutable command/source/digest/tenant/actor/live-generation/target. Producer `stocky_record_writer_admission` **requires** a matching unconsumed capture for ADMIN class, **derives** `originalAdmittedAt` from `capturedAt`, and ignores caller class+timestamp as provenance. Queued/webhook/replayed/coalesced work cannot capture ADMIN or mint fresh origin from a current login. Retry/duplicate/pending recovery/child inherit original identity. Install/epoch/non-finite/future checks run under existing locks as **supplementary consistency**, not the provenance proof. Genuine successor and unrelated-shop progress preserved. No second general auth subsystem. PostgreSQL does **not** verify Shopify tokens | §7.6.2 Capture / Producer map; §7.7.4; §7.9 | PR7-CUST-062…071, 076; G16; NEG-10; old DO-01 on Q |
+| **F-CLAUDE-PR7DO-02** | P3 | SQL 5-arg guard cannot inspect a later write; independently supplied `work_id` + old same-target payload still admitted | Named application invariant at proposed effect host `applyBoundCustomerEffect` / disposable `stocky_apply_bound_customer_effect`. Host **derives** executing `work_id` from trusted command/job context (`stocky_bind_execution_context`), validates protected binding against actual input/effect digest, tenant, target and lineage, **then** calls the 5-arg guard and writes. Independently supplied `work_id` and payload are not freely interchangeable. Branded type or after-the-write log is insufficient. SQL-only substitution remains **honestly admitted** (guard-alone observation retained). Proposed-boundary evidence, **not** implemented PR7 runtime | §7.6.2 Effect host; §7.9 | PR7-CUST-072…075, 077; G16; NEG-11; old DO-02 on Q |
+
+Lower-bound-only option (a) was executed against the review’s exact 17:49 / 18:19 / 18:49 overlap on a disposable Q variant: 18:19 already satisfies `>= 17:49`, so ADMIN remained **BOUND+ADMITTED**. That variant is **not** the declared contract.
 
 ---
 
@@ -524,8 +537,8 @@ A boolean `processingEnabled=false` plus RLS in a **stale** transaction is not q
 | Exclusive | customer-erasure admission / residual+completion: domain **shared** (not exclusive), publication lock, then customer-target **exclusive** locks in the same sort order |
 | Durable row | `PrivacyCustomerTargetBarrier` `ACTIVE` until completion; `generationId` is evidence (the request's bound generation), not the lock identity; survives worker death and epoch takeover (`attemptId` rebound by `stocky_privacy_claim_attempt`) |
 | Writer deny | `customer_target_erasing` if **any** ACTIVE barrier in the namespace matches `(kind, value)`; a later LIVE generation row, including lexicographically greater `gen_a_zz`, cannot bypass it; never silently repopulate the target |
-| Writer origin | Guard **derives** origin from protected `WriterAdmissionOrigin` keyed by `(canonicalDomain, shopId, workId)` plus bound target rows. `v_trusted` is true only when `originStatus='BOUND'` and `originGenerationId` is non-empty. `p_origin_persisted` **does not exist**. Caller generation/time/boolean is not authority. Record id is lookup only. Missing/wrong-tenant/wrong-target/PENDING_LINK/unacked → fail-closed (`customer_target_attribution_ambiguous` / `customer_target_binding_mismatch` / `customer_admission_not_acked`). Unique LIVE fallback is **not** historical origin. **Never** `ORDER BY id`. Retry of the same source+digest returns the original row (time/generation unchanged). A changed digest on the same source raises `admission_binding_conflict`. A new attempt cannot restamp old data into the current generation |
-| After COMPLETED | barrier `RELEASED`; `PrivacyCompletedTarget` records minimized `(shop, generation, kind, value, completedAt)`. Overlap uses **`originalAdmittedAt` from the admission row**, not a caller timestamp. Delayed payloads whose **BOUND** origin **is** the completed generation raise `customer_target_restore_denied`. Genuine **BOUND** successor writes require: unique LIVE origin ≠ completed generation, completed generation **not** LIVE, and `originalAdmittedAt >= origin.installedAt`, and the admission must have been recorded against that LIVE generation with a **new** source digest. Queued payload before successor `installedAt` remains restore-denied. **GW-01 option (a) preserved:** an **unattributed** payload (`BOUND` is not true — WEBHOOK, PENDING_LINK, pruned, missing) whose `originalAdmittedAt` falls in the **inclusive** overlap `[successor.installedAt, completedAt]` of **any** applicable retained completion raises `customer_target_attribution_ambiguous` and creates **no** restoring write. Unique LIVE is not proof of historical origin. Equality at either boundary is ambiguous unless a trusted serialized ordering exists. Missing/invalid times, missing generation history, or multiple applicable completions are **not** a permit. Evaluate **all** retained completions, not a lexicographic/latest row. An authenticated but historically indistinguishable delayed webhook is **not** successor data merely because it arrives after reinstall. Legitimate later writes **after** `completedAt` on a proven unique LIVE successor remain allowed. **Not** lifetime suppression. Q-008 remains OPEN |
+| Writer origin | Guard **derives** origin from protected `WriterAdmissionOrigin` keyed by `(canonicalDomain, shopId, workId)` plus bound target rows. `v_trusted` is true only when `originStatus='BOUND'` and `originGenerationId` is non-empty. `p_origin_persisted` **does not exist**. Caller generation/time/boolean is not authority. Record id is lookup only. Missing/wrong-tenant/wrong-target/PENDING_LINK/unacked → fail-closed (`customer_target_attribution_ambiguous` / `customer_target_binding_mismatch` / `customer_admission_not_acked`). Unique LIVE fallback is **not** historical origin. **Never** `ORDER BY id`. Retry of the same source+digest returns the original row (time/generation unchanged). A changed digest on the same source raises `admission_binding_conflict`. A new attempt cannot restamp old data into the current generation. **ADMIN class** cannot mint `BOUND` from class + caller timestamp: producer consumes a protected `OriginalAdminCapture` and **derives** time/generation from that capture |
+| After COMPLETED | barrier `RELEASED`; `PrivacyCompletedTarget` records minimized `(shop, generation, kind, value, completedAt)`. Overlap uses **`originalAdmittedAt` from the admission row** (ADMIN: server `capturedAt`), not a caller timestamp. Delayed payloads whose **BOUND** origin **is** the completed generation raise `customer_target_restore_denied`. Genuine **BOUND** successor writes require: unique LIVE origin ≠ completed generation, completed generation **not** LIVE, `originalAdmittedAt >= origin.installedAt` as a **supplementary consistency check** (not the provenance proof), and the admission must have been recorded against that LIVE generation with a **new** source digest **and**, for ADMIN, a matching original-admin capture. Queued payload before successor `installedAt` remains restore-denied. **GW-01 option (a) preserved:** an **unattributed** payload (`BOUND` is not true — WEBHOOK, PENDING_LINK, pruned, missing) whose `originalAdmittedAt` falls in the **inclusive** overlap `[successor.installedAt, completedAt]` of **any** applicable retained completion raises `customer_target_attribution_ambiguous` and creates **no** restoring write. Unique LIVE is not proof of historical origin. Equality at either boundary is ambiguous unless a trusted serialized ordering exists. Missing/invalid times, missing generation history, or multiple applicable completions are **not** a permit. Evaluate **all** retained completions, not a lexicographic/latest row. An authenticated but historically indistinguishable delayed webhook is **not** successor data merely because it arrives after reinstall. Legitimate later writes **after** `completedAt` on a proven unique LIVE successor remain allowed, including ADMIN commands **genuinely captured** during an overlapping installation interval. Relabelled/re-timestamped old effects are **not** that positive control. **Not** lifetime suppression. Q-008 remains OPEN |
 | Unrelated progress | other customers (different rest id / order ids) and other shops take different lock keys and continue; `processingEnabled` stays true |
 | Shop supersession | if **this request's** generation fence is `ERASING`/`FINALIZING`, customer admission/completion returns `superseded_by_shop_erasure` / `superseded`; no fabricated customer COMPLETED download. Namespace freeze (`stocky_generation_writable`) is separately fail-closed whenever **any** generation in the domain is `ERASING`/`FINALIZING` |
 | Shop delete | `WriterAdmissionOrigin.shopId` FK **ON DELETE CASCADE** so origin rows cannot outlive the shop |
@@ -534,20 +547,46 @@ A boolean `processingEnabled=false` plus RLS in a **stale** transaction is not q
 
 | Principal | Kind | Exact privileges | Must not |
 |---|---|---|---|
-| `stocky_original_admission` | LOGIN NOINHERIT NOBYPASSRLS **producer** | `EXECUTE` `stocky_record_writer_admission` / `stocky_commit_writer_admission` / `stocky_recover_writer_admission` only. Recording point: **before** durable acknowledgement / enqueue | CREATE/rewrite/DELETE origin rows; remint provenance; upgrade UNATTRIBUTED→BOUND; SET ROLE from runtime/CP |
-| `stocky_admission_origin_owner` | NOLOGIN NOINHERIT **table/function owner** | Owns origin tables and the three SECURITY DEFINER helpers; DML only inside those helpers | Callable by runtime/CP; a generically granted `registerOrigin` |
-| `stocky_lifecycle_gate_owner` | nologin gate | `SELECT` origin tables to derive `v_trusted` inside the 5-arg write guard | Mint or rebind origin |
-| `stocky_runtime` / `stocky_control_plane` | ordinary **consumers** | `EXECUTE` 5-arg `stocky_customer_write_guard` / `stocky_fact_write_guard` with a `work_id` | Origin DML; helper EXECUTE; `SET ROLE stocky_original_admission`; treating a GUC as admission authority |
+| `stocky_original_admission` | LOGIN NOINHERIT NOBYPASSRLS **producer** | `EXECUTE` `stocky_record_writer_admission` / `stocky_commit_writer_admission` / `stocky_recover_writer_admission` only. Recording point: **before** durable acknowledgement / enqueue. May `stocky_note_queued_work` | CREATE/rewrite/DELETE origin rows; remint provenance; upgrade UNATTRIBUTED→BOUND; SET ROLE from runtime/CP; `EXECUTE` capture helpers |
+| `stocky_admin_capture` | LOGIN NOINHERIT NOBYPASSRLS **capture principal** | `EXECUTE` `stocky_establish_modeled_admin_session` / `stocky_capture_original_admin_command` only. Models the application after `requireAdminTenant` / `authenticate.admin` (PostgreSQL does **not** verify Shopify tokens) | Origin DML; producer helpers; SET ROLE producer; mint BOUND; capture queued/webhook identities |
+| `stocky_admission_origin_owner` | NOLOGIN NOINHERIT **table/function owner** | Owns origin **and** capture tables and the SECURITY DEFINER capture/admission helpers; DML only inside those helpers | Callable by runtime/CP; a generically granted `registerOrigin` |
+| `stocky_lifecycle_gate_owner` | nologin gate | `SELECT` origin/capture tables to derive `v_trusted`; owns effect-host DEFINER helpers | Mint or rebind origin/capture |
+| `stocky_runtime` / `stocky_control_plane` | ordinary **consumers** | `EXECUTE` 5-arg `stocky_customer_write_guard` / `stocky_fact_write_guard` with a `work_id`; `EXECUTE` `stocky_bind_execution_context` / `stocky_apply_bound_customer_effect`. Control-plane may `stocky_note_queued_work` | Origin/capture DML; admission/capture helper EXECUTE; `SET ROLE stocky_original_admission` / `stocky_admin_capture`; treating a GUC as admission authority |
 
-Helpers check `session_user` (not `current_user`) so SECURITY DEFINER cannot be used as escalation. No self-set GUC is consulted.
+Helpers check `session_user` (not `current_user`) so SECURITY DEFINER cannot be used as escalation. No self-set GUC is consulted as provenance. Transaction-local `stocky.trusted_work_id` is **set only** by `stocky_bind_execution_context` after a protected-row lookup; callers cannot mint it as authority.
+
+**Authenticated original-admin capture (DO-01, PROPOSED disposable + FUTURE application):**
+
+| Piece | Specification |
+|---|---|
+| Named private boundary | FUTURE `app/tenant/original-admin-capture.server.ts` export `captureOriginalAdminCommand`. Disposable twin: `stocky_capture_original_admin_command` executed **only** by `stocky_admin_capture` |
+| Callers | Immediately after same-shop session/actor validation at `requireAdminTenant` (`app/tenant/require-admin-tenant.server.ts`, which wraps `authenticate.admin`) and at the first verified admission of a **genuinely new** admin command. Not JWT issue-time, login time, worker retry time, or an arbitrary method argument |
+| Producer access | Capture is consumed by existing `stocky_record_writer_admission` as `stocky_original_admission`. Capture principal **cannot** INSERT origin. Producer **cannot** EXECUTE capture |
+| Trustworthy timestamp | Server `clock_timestamp()` at capture (`capturedAt`). Comparisons are timestamptz; no invented tolerance. Non-finite / NULL / `±infinity` → `admission_capture_time_invalid`. `capturedAt > clock_timestamp()` → `admission_capture_time_future`. `capturedAt < LIVE.installedAt` → `admission_capture_before_install` (**supplementary**; not provenance). Capture `liveGenerationId` must equal LIVE after locks or `admission_capture_epoch_mismatch`. Do not restamp |
+| Immutable binding | Unique `(canonicalDomain, sourceKind, sourceIdentity, sourceContentDigest)`. Duplicate command returns the same capture id. Consume-on-use sets `boundWorkId`. Changed digest → `admission_binding_conflict` |
+| Queued/old work | WEBHOOK admit auto-inserts `QueuedWorkSighting`. Control-plane may `stocky_note_queued_work`. Capture of a sighted identity raises `queued_work_cannot_acquire_fresh_admin_origin`. Label-only ADMIN class without capture → `admission_admin_capture_required` |
+| Authenticated application trust boundary | PostgreSQL does **not** verify Shopify tokens and does **not** execute `authenticate.admin`. The disposable session helper models post-`requireAdminTenant` same-shop/actor context only. Live library bind remains an **implementation-proof obligation** |
+| What is not stored | Raw tokens, customer PII, passwords, session secrets |
+
+**Application work-id/effect invariant (DO-02, PROPOSED):** a named transaction/effect host **derives** the executing work identity from trusted original-command or persisted job/dispatch context, loads the protected `WriterAdmissionOrigin` binding, matches tenant/domain, source/work identity, canonical input/effect digest and allowed target/lineage, **then** calls the 5-arg guard and executes the effect in that same guarded transaction. An independently supplied `work_id` and payload must not be freely interchangeable. A branded TypeScript type or an after-the-write log is insufficient. External publication retains its separately specified pre-publication fence and is **not** claimed atomic with PostgreSQL. Replay/coalesce/child effects reuse or explicitly validate lineage; they do not pick a newer valid `work_id` for old bytes.
+
+| Proposed FUTURE file | Export | X callers / hosts | Connection |
+|---|---|---|---|
+| `app/tenant/original-admin-capture.server.ts` | `captureOriginalAdminCommand` | After `requireAdminTenant` on new admin commands; not webhook/queue replay | modeled `stocky_admin_capture` |
+| `app/sync/writer-admission.server.ts` | `recordWriterAdmission` | `app/sync/intake.server.ts` (`ingestAuthenticatedWebhook` / `createDurableJob`); `app/sync/replay.server.ts` (`replayDeadLetter`); `app/sync/dispatcher.server.ts`; `app/jobs/queue.server.ts`; `app/jobs/workers/webhook-processor.ts` — **before** durable ack | `stocky_original_admission` |
+| `app/tenant/bound-effect.server.ts` | `applyBoundCustomerEffect` | wraps `withTenantBoundTransaction` (`app/tenant/db-context.server.ts`) / `TenantDb` (`app/tenant/tenant-db.server.ts`) | `stocky_runtime` / CP consumers |
+| `app/tenant/__tests__/original-admin-capture.test.ts` | capture tests | FUTURE `test:privacy` home | — |
+| `app/tenant/__tests__/bound-effect.test.ts` | old-effect + new `work_id` rejection before write | FUTURE `test:privacy` home | — |
+
+Error/rollback: digest/tenant/target/context mismatch raises `effect_digest_mismatch` / `effect_tenant_mismatch` / `effect_target_mismatch` / `effect_execution_context_required` / `effect_execution_context_invalid` **before** the modeled write; the transaction rolls back. SQL-only 5-arg guard substitution of old same-target data + newer valid `work_id` remains **admitted** — that observation is retained, not falsified.
 
 **Trustworthy generation evidence (producer only):**
 
 | Evidence class | Source of generation evidence | Result |
 |---|---|---|
-| `ADMIN_SESSION_CURRENT_INSTALL` | Unique `fence='LIVE'` generation in the canonical domain **re-read after** lifecycle + target locks. Historical rows are not the current install. `live_n <> 1` → `admission_generation_ambiguous` | ATOMIC → `BOUND`; BEGIN → `PENDING_LINK` then BOUND on commit |
-| `WEBHOOK_PROVIDER_AUTH` | Provider HMAC proves shop/topic, **not** historical generation of a delayed payload | ATOMIC → `UNATTRIBUTED`; BEGIN → `PENDING_LINK` then UNATTRIBUTED on commit. Never binds LIVE |
-| `PARENT_LINEAGE` / `MANUAL_REPLAY` | Inherit parent work's origin/status; child matching parent digest may inherit BOUND; child cannot adopt a foreign root digest (`admission_digest_conflict`). **Never upgrade** | Inherit or UNATTRIBUTED |
+| `ADMIN_SESSION_CURRENT_INSTALL` | Matching `OriginalAdminCapture` for the same domain/source/digest **and** unique `fence='LIVE'` generation in the canonical domain **re-read after** lifecycle + target locks. `capturedAt` becomes `originalAdmittedAt`. Historical rows are not the current install. Missing capture → `admission_admin_capture_required`. `live_n <> 1` → `admission_generation_ambiguous`. Class + caller timestamp **cannot** independently create BOUND successor provenance | ATOMIC → `BOUND`; BEGIN → `PENDING_LINK` then BOUND on commit |
+| `WEBHOOK_PROVIDER_AUTH` | Provider HMAC proves shop/topic, **not** historical generation of a delayed payload. Auto-notes `QueuedWorkSighting` so the identity cannot later capture ADMIN | ATOMIC → `UNATTRIBUTED`; BEGIN → `PENDING_LINK` then UNATTRIBUTED on commit. Never binds LIVE |
+| `PARENT_LINEAGE` / `MANUAL_REPLAY` | Inherit parent work's origin/status; child matching parent digest may inherit BOUND; child cannot adopt a foreign root digest (`admission_digest_conflict`). **Never upgrade**. No fresh ADMIN capture | Inherit or UNATTRIBUTED |
 
 **Linking protocol:** `ATOMIC` inserts origin+target and sets `acked=true` in one statement (before durable ack). `BEGIN` inserts `PENDING_LINK` / `acked=false`; consumers see `customer_admission_not_acked`. `stocky_commit_writer_admission` acks; `stocky_recover_writer_admission` commits only when the linked `DurableJob` exists. Admission **does not INSERT** `DurableJob` (intake remains control-plane). Lost ack recovers via recover-with-job; pending without a job stays untrusted.
 
@@ -781,8 +820,11 @@ PUBLIC EXECUTE revoked on every helper. FORCE RLS on. No BYPASSRLS. No membershi
 | `stocky_privacy_claim_attempt(text,text,text)` | `stocky_privacy_target_owner` | locked | same publication lock; mark LOST; insert epoch; rebind `activeAttemptId` + ACTIVE barriers | CP | worker-loss takeover |
 | `stocky_privacy_install_customer_barrier(text,text)` / `stocky_customer_targets_for_request(text)` | `stocky_privacy_target_owner` | locked | INSERT/rebind `PrivacyCustomerTargetBarrier`; generation is **evidence**; lock keys are canonical-domain × kind:value (`pr7-ctgt-v2:`) | erasure, CP | **P-CUSTOMER-BARRIER** |
 | `stocky_shop_canonical_domain(text,text)` / `stocky_writer_origin_generation(text,text,text)` / `stocky_customer_target_lock_key1/2` | lifecycle / invoker | locked | unique LIVE/declared origin; two-int `hashtext` pair (not 3-arg). **Never** `ORDER BY id` | runtime, CP, erasure, original_admission (canonical + locks) | CC-GEN writer origin |
-| `stocky_record_writer_admission(...)` / `stocky_commit_writer_admission(text)` / `stocky_recover_writer_admission(text)` | `stocky_admission_origin_owner` / definer | locked | `session_user` must be `stocky_original_admission`; lock then LIVE re-read; persist origin **before** ack; ATOMIC or PENDING_LINK | **`stocky_original_admission` only** | original-admission producer |
-| `stocky_customer_write_guard(domain, shop, kind, value, work_id)` / `stocky_fact_write_guard(...)` | `stocky_lifecycle_gate_owner` / invoker | locked | lock **before** lookup; derive origin from `WriterAdmissionOrigin`; examine **all** namespace ACTIVE/completed barriers; GW-01 inclusive overlap; deny `customer_target_erasing` / `customer_target_restore_denied` / `customer_target_attribution_ambiguous` / `customer_target_binding_mismatch` / `customer_admission_not_acked` / `customer_write_origin_missing`. **No** `p_origin_persisted` | runtime, CP | FUTURE TenantDb / apply writers |
+| `stocky_record_writer_admission(...)` / `stocky_commit_writer_admission(text)` / `stocky_recover_writer_admission(text)` | `stocky_admission_origin_owner` / definer | locked | `session_user` must be `stocky_original_admission`; lock then LIVE re-read; persist origin **before** ack; ATOMIC or PENDING_LINK; ADMIN consumes `OriginalAdminCapture` | **`stocky_original_admission` only** | original-admission producer |
+| `stocky_establish_modeled_admin_session(...)` / `stocky_capture_original_admin_command(...)` | `stocky_admission_origin_owner` / definer | locked | `session_user` must be `stocky_admin_capture`; same-shop session; server `capturedAt`; unique source digest; queued-sighting deny | **`stocky_admin_capture` only** | modeled post-`requireAdminTenant` capture |
+| `stocky_note_queued_work(...)` | `stocky_admission_origin_owner` / definer | locked | `session_user` original_admission or control_plane | original_admission, CP | webhook/inbox sighting |
+| `stocky_bind_execution_context(work_id)` / `stocky_apply_bound_customer_effect(...)` | `stocky_lifecycle_gate_owner` / definer | locked | derive trusted work from protected origin; match digest/tenant/target; **then** 5-arg guard + write | runtime, CP | FUTURE `applyBoundCustomerEffect` / TenantDb |
+| `stocky_customer_write_guard(domain, shop, kind, value, work_id)` / `stocky_fact_write_guard(...)` | `stocky_lifecycle_gate_owner` / invoker | locked | lock **before** lookup; derive origin from `WriterAdmissionOrigin`; examine **all** namespace ACTIVE/completed barriers; GW-01 inclusive overlap; deny `customer_target_erasing` / `customer_target_restore_denied` / `customer_target_attribution_ambiguous` / `customer_target_binding_mismatch` / `customer_admission_not_acked` / `customer_write_origin_missing`. **No** `p_origin_persisted`. Guard **alone** cannot inspect a later switched payload (DO-02 SQL-only observation retained) | runtime, CP | FUTURE TenantDb / apply writers |
 | `stocky_privacy_customer_residual_count(text)` | `stocky_privacy_target_owner` | locked | **owns** request GUC / tenant / live attempt / READ capability **before** RLS count (`residual_request_guc_mismatch` `42501`); source-derived; **not** `PrivacyTargetKey` | erasure, CP | **P-CUSTOMER-RESIDUAL-COMPLETE** |
 | `stocky_privacy_complete_customer_redact(text,text)` | `stocky_privacy_target_owner` | locked | publication + exclusive targets; re-enumerate; residual; conditional COMPLETED + `PrivacyCompletedTarget` | erasure, CP | same phase |
 | `stocky_privacy_data_request_coverage(text)` | `stocky_privacy_target_owner` | locked | snapshot key count + `enumerationComplete` at `publicationRevision` | reader, CP | data_request fulfillment; **not** an empty residual |
@@ -829,7 +871,12 @@ stocky-plus/docs/phases/phase-1/PR7_*IMPLEMENTATION*  # later
 |---|---|
 | `app/tenant/after-auth.server.ts` | `runAfterAuthTenantBootstrap` — fence check + participating-write guard; no settings revival on ERASING/FINALIZING/this-generation REDACTED |
 | `app/tenant/bootstrap.server.ts` | `upsertCanonicalShop` — `assertNoErasureFence` / shared gate before create |
-| `app/tenant/db-context.server.ts` / `tenant-db.server.ts` | **REQUIRED** wrapper: `stocky_participating_write_guard` then `stocky_customer_write_guard` on matching kinds. Not optional. Future architecture test fails when a tenant-linked writer bypasses the declared guard |
+| `app/tenant/db-context.server.ts` / `tenant-db.server.ts` | **REQUIRED** wrapper: `stocky_participating_write_guard` then `stocky_customer_write_guard` on matching kinds. Not optional. Future architecture test fails when a tenant-linked writer bypasses the declared guard. **DO-02:** `applyBoundCustomerEffect` must wrap this host so the executing `work_id` is derived from trusted command/job context before the guard+write |
+| `app/tenant/original-admin-capture.server.ts` | FUTURE **new** file: `captureOriginalAdminCommand` immediately after `requireAdminTenant` for genuinely new admin commands. Not this PR |
+| `app/sync/writer-admission.server.ts` | FUTURE **new** file: `recordWriterAdmission` as the only producer caller of `stocky_record_writer_admission` |
+| `app/tenant/bound-effect.server.ts` | FUTURE **new** file: `applyBoundCustomerEffect` — derive work identity, validate digest/tenant/target/lineage, guard, write |
+| `app/tenant/__tests__/original-admin-capture.test.ts` | FUTURE capture tests (fresh-context, label/time laundering, overlap) |
+| `app/tenant/__tests__/bound-effect.test.ts` | FUTURE old-effect + new `work_id` rejection **before** write |
 | `app/shopify.server.ts` | skip catalog enqueue on fence; `useOnlineTokens: true` **only after** a separately reviewed safe adapter/version and old-session migration (D-PR7-02; not this PR). Actor identity does **not** require online tokens |
 | `app/sync/uninstall.server.ts` | `processUninstall` / `cancelAllCancellable` — write generation `UNINSTALLED`; cancel ordinary jobs; **no** privacy DurableJob skip list required |
 | `app/sync/reinstall.server.ts` | keep REDACTED deny; allow new Shop only when fence permits |
@@ -1020,7 +1067,7 @@ Status `constrained` = ChatGPT assignment. Comment 5729229659 is current for Dec
 
 **P7-C06.** This assignment does **not** authorize a V-only alternate base.
 
-1. ChatGPT accepts this **TA-01/02 + GW-01/02 + CC-GEN / W-integration / entry-evidence** plan + matrix after independent Claude Code re-review of this exact head with no unresolved P0/P1/P2.
+1. ChatGPT accepts this **DO-01/02 + TA-01/02 + GW-01/02 + CC-GEN / W-integration / entry-evidence** plan + matrix after independent Claude Code re-review of this exact head with no unresolved P0/P1/P2.
 2. Constrained D-PR7 items remain constrained; residuals in §9 are either accepted as implementation proofs or separately decided. Do not certify a missing online binding or cross-system fence.
 3. Phase 1 PR6 independently accepted and **formally closed** on merged `origin/main` **X** `f057d98…` (PR47 squash; W remains the executable D runtime; W→X docs-only). Implementation branches from accepted closed main, not from this planning SHA.
 4. Exact-head CI on that merged main per `CI_POLICY.md`.
@@ -1041,11 +1088,13 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 
 | Check | Result |
 |---|---|
-| Starting subject **P** | `500b476ad079de5f6a1282fd65b2576f0afc9a52` |
-| TA review **FF** | `b0d73cc7a4adc1488461aafdbd64bdb52bb87b8a`; sole parent P; one-file add of `PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md`; blob `b7e8ff338e715c79907aa633c75622958f60b4d4` |
+| Starting subject **Q** | `5040d5cd63e46e3385f8c692f25d88424311acd2` |
+| DO review **FF** | `bfebe412818e42b4c92f87ca1c927f0dda12cad5`; sole parent Q; one-file add of `PR7_DURABLE_ORIGIN_CORRECTION_INDEPENDENT_REVIEW.md`; blob `21b11b4af0adfce8e7044a40131190f001e9756e` |
+| Historical starting subject **P** | `500b476ad079de5f6a1282fd65b2576f0afc9a52` |
+| TA review **FF** (historical) | `b0d73cc7a4adc1488461aafdbd64bdb52bb87b8a`; sole parent P; one-file add of `PR7_TEMPORAL_ATTRIBUTION_WRITER_COVERAGE_INDEPENDENT_REVIEW.md`; blob `b7e8ff338e715c79907aa633c75622958f60b4d4` |
 | X already an ancestor | merge-base = `f057d98c8a321b3e06875a6e9a83b787bcbc101f`; **no** extra main-sync commit |
 | Historical X merge | `bfdb4a12594a6ce0c4f9700dc23d9d59bd6a7c94` parents `28b4399…` + `f057d98…` |
-| Prior review blobs | `c1fa5c2fed74bf80d1006267b43d767258895c17`, `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`, `e609e9526ed1ec043551ca68d6b977f5b5935d0c`, `e908770d9daea4f963b2fd09e38af79e07274d41`, `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70` **unchanged** |
+| Prior review blobs | `c1fa5c2fed74bf80d1006267b43d767258895c17`, `0a29e79e1e9ae83c8d9ec4e2400ae0d66c71d50f`, `e609e9526ed1ec043551ca68d6b977f5b5935d0c`, `e908770d9daea4f963b2fd09e38af79e07274d41`, `1d93b85aa8f61a6255fe2408148f1e5ea97c0b70`, `b7e8ff338e715c79907aa633c75622958f60b4d4` **unchanged**; seventh `21b11b4af0adfce8e7044a40131190f001e9756e` integrated byte-for-byte |
 | Base **V** (historical) | `a3ff480f1477237f8055f10c43298480a05728a1` |
 | Historical executable **W** | `ee193f38491245a10fb2fa60d2cf9a29f3271605` |
 | Current main **X** | `f057d98c8a321b3e06875a6e9a83b787bcbc101f` (docs-only vs W; 10 documentation paths; no application/schema/CI/test delta) |
@@ -1059,15 +1108,20 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 | **TA-01 reproduced on unchanged P** | **executed-this-planning-session** on P contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d` **before** loading this contract. Host `/tmp/pr45-ta-pg16:5436`, database `pr45_ta01_repro`. Repro `95955d83b0b9590b825a52407c7b0370c4019aa49a18e60bb58b1f321d2b6934`. Log `243eb0bf35ffc6a99ca570d0ce3e4d7b559bb06a06127fbc03fe0a6f6ba37e1b`. Unattributed overlap → `customer_target_attribution_ambiguous`. Persisted old origin → `customer_target_restore_denied`. **`p_origin_persisted=true` + origin=`gen_a2` ADMITTED** (defect). Newly attached `persisted=false` remains ambiguous |
 | Historical GW 253-record packet | original-run identity for P (**not** this contract): **253 records = 160 unique + 93 declared reruns**. Contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`; driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`; run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30` |
 | Independent writer discovery | **executed-this-planning-session** read-only against X (`git archive` → `/tmp/pr45-ta/x-app/stocky-plus`). Scanner sha256 `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` **unchanged**. Portable SQL sha256 `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` **equals** historical / P appendix. Historical JSON `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` (envelope `/workspace/stocky-plus`). This-env JSON `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (envelope `/tmp/pr45-ta/x-app/stocky-plus`). Substantive `candidates`/`required`/`counts`/`scanned_files` **equal**. **506** files / **1307** candidates / **219** required / **0** unknown. Scanner not redesigned |
-| Disposable PostgreSQL 16 proofs (corrected contract) | **executed-this-planning-session** — **313 records / 313 PASS / 0 FAIL** = **191 unique assertions** + **122 declared reruns**. Unique G1–G6 = 59 preserved. Unique G7–G14 preserved via work_id crosswalk (admit then 5-arg guard; **not** preseeded privileged rows). New unique this packet = G15 29 + NEG +2. Host `/tmp/pr45-ta-pg16:5436` (`PROOF_ROOT=/tmp/pr45-ta/new`). `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). Not PR7 runtime. Leftover TF `/tmp/pr45-pg16:5433` pid 17427, CC `/tmp/pr45-cc-pg16:5434` pid 22800, and GW `/tmp/pr45-gw-pg16:5435` pid 29035 were **not** stopped |
-| Redis / filesystem / Shopify / live token exchange | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted; Helper A / coordinator PREP rows are **FACT (PR48)** synthetic probes, not this session. `authenticate.admin` remains **reused / not independently reproduced** |
+| **DO-01 / SQL-only DO-02 reproduced on unchanged Q** | **executed-this-planning-session** on Q contract `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` **before** loading this contract, using the **real** `stocky_record_writer_admission` as `stocky_original_admission`. Host `/tmp/pr45-do-pg16:5439`, database `pr45_proof`. Repro `9872848ca94f81af77a5bf534148b7d2e05fe713e722badfa87ee6f8d480b9db`. Log `96aa5649c77099bddfe4d78486a9633a12756f73caf5f07b00efc871f8635036`. Review clock faces: installed `2026-09-20 17:49:00+00`, overlap `18:19`, completed `18:49`, preinstall `10:49`. WEBHOOK 18:19 → `UNATTRIBUTED` + `customer_target_attribution_ambiguous`. **ADMIN 18:19 → `BOUND`,`gen_a2`, guard ADMITTED** (defect). Preinstall 10:49 → `restore_denied`. SQL-only old same-target + new `work_id` **ADMITTED** |
+| **Lower-bound-only option (a) on the exact overlap** | **executed-this-planning-session** on a disposable Q variant (`01_lower_bound_only.sql` `75a168288ede88b267a3d08d225b5f4017bead2e40908c2fcac70c22a2ace284`) then **restored**. ADMIN 18:19 remained **`BOUND`,`gen_a2`, guard ADMITTED** because `18:19 >= 17:49`. Preinstall 10:49 is rejected at admission (`admission_generation_ambiguous`) rather than `restore_denied` — expected for option (a), **not** the 18:19 case. Q restored: same 18:19 defect. **Not** the declared correction |
+| Historical Q 313-record packet | original-run identity for Q (**not** this contract): **313 records = 191 unique + 122 declared reruns**. Contract `d9bd880f…`; driver `59bf35f5…`; run log `4e88e653…`. Independently reproduced Q baseline remains Q-only historical evidence |
+| Disposable PostgreSQL 16 proofs (corrected contract) | **executed-this-planning-session** — **375 records / 375 PASS / 0 FAIL** = **223 unique assertions** + **152 declared reruns**. Unique G1–G6 = 59 preserved. Unique G7–G15 preserved via capture-to-producer / work_id crosswalk (**not** preseeded privileged rows). New unique this packet = 32 (G16 30 + NEG +2). Host `/tmp/pr45-do-pg16:5439` pid 45757 (`PROOF_ROOT=/tmp/pr45-do/new`). `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). Not PR7 runtime. Leftover TF `/tmp/pr45-pg16:5433` pid 17427, CC `/tmp/pr45-cc-pg16:5434` pid 22800, GW `/tmp/pr45-gw-pg16:5435` pid 29035, and TA `/tmp/pr45-ta-pg16:5436` pid 37834 were **not** stopped. Ports 5433–5438 were **not** assumed owned |
+| Redis / filesystem / Shopify / live token exchange | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted; Helper A / coordinator PREP rows are **FACT (PR48)** synthetic probes, not this session. `authenticate.admin` remains **reused / not independently reproduced**. This SQL model does **not** execute outstanding real authentication-library, Redis, export or D-scratch integrations |
 | Official fetches | §3 URLs, **2026-09-18** |
 | Store calls | not executed |
 | Review artifacts edited | **No** |
 
-**Interface crosswalk (P 7-arg → this 5-arg):** consumers no longer pass `p_origin_persisted`, `p_origin_generation_id`, or `p_payload_admitted_at`. Driver helper `admit()` runs as `stocky_original_admission` and calls `stocky_record_writer_admission`; `gsql()` / `stocky_fact_write_guard` then take `work_id` only. G13 assertion **names** are preserved; successor overlap admit is ADMIN admission **after** `gen_a2` LIVE with a **new** digest, not a caller boolean. Newly attached old digest is `admission_digest_conflict`, not a restamp. Do **not** weaken proofs with owner-preseeded origin rows.
+**Interface crosswalk (P 7-arg → Q 5-arg, preserved):** consumers no longer pass `p_origin_persisted`, `p_origin_generation_id`, or `p_payload_admitted_at`. Driver helper `admit()` runs as `stocky_original_admission` and calls `stocky_record_writer_admission`; `gsql()` / `stocky_fact_write_guard` then take `work_id` only.
 
-Failed proof attempts (this TA pass, not hidden): (1) origin-fragment `GRANT` on `stocky_customer_target_lock_key1/2` was spliced before those functions existed — late GRANTs now follow `lock_shared`; (2) leftover `pr45_ta01_repro` still owned `stocky_runtime` so `DROP ROLE` failed until that DB was dropped; (3) G7 `UnboundLocalError` because local `admit = threading.Event()` shadowed the admission helper — renamed `barrier_admitted`; wait-admit moved **before** completer start so the wait case is a lock timeout rather than restore_denied; (4) first full suite **289/313** because ADMIN `live_n` counted **all** generation history in the domain (`admission_generation_ambiguous` after `gen_a`+`gen_a2`) — LIVE-only `fence='LIVE'` count. No hidden GRANT, dropped FK, or repaired unpublished script is credited. NEG replaces one function at a time (NEG-8 lookup bypass; NEG-9 strip `session_user` + GRANT EXECUTE to runtime), demonstrates the safety property failing, then `reset()` reloads the declared contract.
+**Interface crosswalk (Q ADMIN caller-timestamp → this capture-to-producer):** `admit()` for `ADMIN_SESSION_CURRENT_INSTALL` first calls `capture_admin()` as `stocky_admin_capture` (`stocky_establish_modeled_admin_session` + `stocky_capture_original_admin_command`); producer then consumes that capture. Caller `admitted_at_sql` **cannot** mint BOUND. G13 assertion **names** are preserved. G11 CE-B / G13 `ced_persisted_old_origin_restore_denied` now admit ADMIN **before** complete so server `capturedAt` precedes `completedAt` (capture-now after complete would skip restore_denied via CONTINUE). G13 `ced_persisted_successor_origin_admitted_in_overlap` is capture-now **after** `gen_a2` LIVE with a **new** digest — **not** proof that overlap-timestamp laundering remains; the `-150 minutes` caller argument is ignored. G13 no longer backdates `completedAt`. Webhook overlap still uses caller historical timestamps. Do **not** treat those names as proof that class+timestamp still mint successor origin. Newly attached old digest is `admission_digest_conflict`. Do **not** weaken proofs with owner-preseeded origin or capture rows.
+
+Failed proof attempts (this DO pass, not hidden): (1) `pr45owner` lacked `CREATEDB`/`CREATEROLE`/`SUPERUSER` on the new cluster — granted for disposable setup only; (2) first Q+LB repro **16/17** because option (a) rejects preinstall 10:49 at admission (`admission_generation_ambiguous`) rather than `restore_denied` — assertion split; (3) first corrected suite **362/375** because G11/G13 admitted ADMIN after complete so capture-now `> completedAt` skipped restore_denied — admit ADMIN before complete; stop backdating G13 `completedAt`; (4) G16 `sql_honest` failed when reconstructing overlap around `now` then moving `completedAt` made 18:19 `<` new `installedAt` — keep the 17:49/18:19/18:49 fixture for SQL-only/host; genuine overlap uses a separate fixture with `completedAt = now+30min`; (5) effect-host write `permission denied for function stocky_participating_write_guard` because apply DEFINER is `stocky_lifecycle_gate_owner` and `fact_write_guard` is INVOKER — `GRANT EXECUTE` participating/fact guards to the gate owner (declared in Appendix F, not a hidden post-hoc GRANT); (6) child inherit used parent `w_new` after that fixture was reset — parent `w_ov_real`. Historical TA failures remain original-run identities and are not re-credited. NEG replaces one function at a time (NEG-10 capture requirement removed; NEG-11 effect digest check omitted), demonstrates the safety property failing, then `reset()` reloads the declared contract.
 
 Historical CC-GEN 169-record packet remains original-run identity (**not** this contract): **169 records = 117 unique + 52 declared reruns**. CC-GEN contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`; driver `e9bd3c187451ea989fcf1b0a6c1385f3e4d93281744127d44b46621f97001f34`; run log `420ec6e0cb231a43bed36dc850c478b3587f097643b477daeb6695318bd094d8`.
 
@@ -1075,7 +1129,7 @@ Historical TF 115-record packet remains original-run identity (**not** this cont
 
 Historical 59-case identities remain original-run identities: `01_contract.sql` `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; `02_seed.sql` `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`; `03_run_proofs.py` `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; original `results.json` `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` (run log; reviewer independent log `185dd1b8…`).
 
-Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`, **port 5436**, roles as named principals). System cluster was not used. Teardown: `dropdb pr45_proof`. Do **not** stop leftover helper postgres on 5433, 5434, or 5435.
+Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`, **port 5439**, roles as named principals, owned datadir `/tmp/pr45-do-pg16` pid 45757). System cluster was not used. Teardown: `dropdb pr45_proof` only. Do **not** stop leftover helper postgres on 5433–5436. Do **not** assume ownership of 5433–5438.
 
 ## 13. Cross-check to the acceptance matrix
 
@@ -1094,8 +1148,9 @@ Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (d
 | Generation-independent target / residual own GUC | PR7-CUST-025…, PR7-TOP-018…, PR7-RESID-*, G11, G12, NEG-4/5, **F-CLAUDE-PR7CC-01…04** / **CC-GEN** |
 | Temporal overlap attribution / source-derived coverage | PR7-CUST-035…, PR7-GATE-017…, G13, G14, NEG-6/7, **F-CLAUDE-PR7GW-01/02** |
 | Durable admission origin / labeling | PR7-CUST-045…061, G15, NEG-8/9, **F-CLAUDE-PR7TA-01/02**; G13 names preserved via work_id crosswalk |
+| Authenticated original-admin capture / effect-host binding | PR7-CUST-062…077, G16, NEG-10/11, **F-CLAUDE-PR7DO-01/02**; G11/G13 names preserved via capture-to-producer crosswalk |
 | Escalation | PR7-ESCL-001…004 |
-| Finding crosswalk | §1.2, §1.3, §1.4, §1.5, **§1.6**, **§1.7** and matrix §11–§12.4 |
+| Finding crosswalk | §1.2, §1.3, §1.4, §1.5, **§1.6**, **§1.7**, **§1.8** and matrix §11–§12.5 |
 
 If a matrix row cites a path, that path is listed in §4 or §7.9.
 
@@ -1105,42 +1160,49 @@ If a matrix row cites a path, that path is listed in §4 or §7.9.
 
 | File | SHA-256 | Role |
 |---|---|---|
-| `01_contract.sql` | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` | Proposed DDL/roles/policies/helpers (this TA-01/02 correction). Origin fragment `edcc0a8ea3471c28b12459803bcab0b3c902ffe18e3ca15a7d5a3c886b394bc1` |
-| `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (`pr45owner` BYPASSRLS **load only**; **byte-identical** to the 59-case, TF, CC-GEN, and GW packets) |
-| `03_run_proofs.py` | `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b` | Concurrency/permission driver; `PROOF_ROOT` / `PGHOST` / `PGPORT`; G1–G15 + NEG; clean G7–G9/G11–G15 rerun. Calls the **actual** admission helper |
-| `04_discover_writers.py` | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` | Independent source-derived candidate discovery (**unchanged** vs P/GW) |
-| `04_source_derived.sql` | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` | Portable consumed snapshot; **byte-identical** to P/GW and to this-session X regeneration |
-| `source_derived_candidates.json` | **original-run / environment artifact**, not a portable input digest. Historical GW/P bytes `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` (roots `/workspace/stocky-plus`). This-session X archive `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (roots `/tmp/pr45-ta/x-app/stocky-plus`). Substantive payload equal |
-| `results.json` | **run log, not a verification artifact** (timings/environment). This-run digest `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63` is an original-run identity only |
+| `01_contract.sql` | `bc0d674afdfe1ed984e7258326e3421a62c24b25ce988281f43885e9fe859ff4` | Proposed DDL/roles/policies/helpers (this DO-01/02 correction). Runnable hashed file; compact delta transcribed in Appendix F |
+| `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (`pr45owner` BYPASSRLS **load only**; **byte-identical** to the 59-case, TF, CC-GEN, GW, and Q packets) |
+| `03_run_proofs.py` | `336b2795914eedccbc677a5da8aefb7d93c950a3b7e1f4aa89387ce917a0bdbc` | Concurrency/permission driver; `PROOF_ROOT` / `PGHOST` / `PGPORT`; G1–G16 + NEG; clean G7–G9/G11–G16 rerun. Calls the **actual** capture-to-producer path |
+| `04_discover_writers.py` | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` | Independent source-derived candidate discovery (**unchanged** vs P/GW/Q) |
+| `04_source_derived.sql` | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` | Portable consumed snapshot; **byte-identical** to P/GW/Q and to this-session X regeneration |
+| `source_derived_candidates.json` | **original-run / environment artifact**, not a portable input digest. Historical GW/P/Q bytes `0ce7a39853eae7cb4808c822b3af66157cd2f59e8f236ec0fdf76205f1546ecd` (roots `/workspace/stocky-plus`). This-session X archive `e93b23bf0d4bf8e1a417f3e248045ff2123306ec77292759730a228ad7a30f62` (roots `/tmp/pr45-ta/x-app/stocky-plus`). Substantive payload equal |
+| `results.json` | **run log, not a verification artifact** (timings/environment). This-run digest `bb1e3541186a5e82fc6a54b9eaa07bae32d459ecdd277623eb347ad5f69e9317` is an original-run identity only |
+| Q historical `01_contract.sql` | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` | Appendix A transcription; **not** the runnable DO contract |
+| Q historical `03_run_proofs.py` | `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b` | Appendix C transcription; **not** the runnable DO driver |
+| Q/DO repro `reproduce_q_do.py` | `9872848ca94f81af77a5bf534148b7d2e05fe713e722badfa87ee6f8d480b9db` | Unchanged-Q + lower-bound-only + restore |
+| Lower-bound-only variant SQL | `75a168288ede88b267a3d08d225b5f4017bead2e40908c2fcac70c22a2ace284` | Disposable option (a) demonstration; **not** declared |
 
-Historical GW identities (P / independently reviewed head; **not** this contract): contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`, seed `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`, driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`, Cursor run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30`. Historical CC-GEN identities: contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`, driver `e9bd3c18…97001f34`, Cursor run log `420ec6e0…`. Historical TF identities: contract `75ab1c02…349846de`, driver `566e0f28…7823251a`, Cursor run log `006e5799…`. Historical 59-case identities: contract `b29ef463…858db054`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
+Historical Q identities (independently reviewed head; **not** this contract): contract `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9`, seed `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`, driver `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b`, Cursor run log `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63`. Historical GW identities: contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`, driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`, Cursor run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30`. Historical CC-GEN identities: contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`, driver `e9bd3c18…97001f34`, Cursor run log `420ec6e0…`. Historical TF identities: contract `75ab1c02…349846de`, driver `566e0f28…7823251a`, Cursor run log `006e5799…`. Historical 59-case identities: contract `b29ef463…858db054`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
 
-Clean-fixture result: **313 records / 313 PASS / 0 FAIL** = **191 unique** + **122 declared reruns**. Unique G1–G6 = 59. Unique added this packet = 31 (G15 29 + NEG +2). G13 15 + G14 26 remain via interface crosswalk. Driver queries `current_setting('server_version')` and `server_version_num`. Do **not** label 313 or 253 or 169 or 115 as unique-assertion counts.
+Clean-fixture result: **375 records / 375 PASS / 0 FAIL** = **223 unique** + **152 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26 + G15×29 + G16×30). Unique G1–G6 = 59. Unique added this packet = 32 (G16 30 + NEG +2). G13 15 + G14 26 + G15 29 remain via interface crosswalk. Driver queries `current_setting('server_version')` and `server_version_num`. Do **not** label 375 or 313 or 253 or 169 or 115 as unique-assertion counts.
 
-Reproduction is **self-contained**. Stage Appendix A–E bytes into an owned `PROOF_ROOT` (the driver defaults to its own directory). Do **not** hardcode `/tmp/pr45-tf`. Do **not** stop leftover helper clusters on 5433, 5434, or 5435.
+Reproduction is **self-contained**. Stage the **hashed runnable files** (this DO contract/driver + Appendix B/D/E bytes) into an owned `PROOF_ROOT`. Appendix A/C remain Q historical transcriptions. Do **not** hardcode `/tmp/pr45-tf`. Do **not** stop leftover helper clusters on 5433–5436. Do **not** assume ownership of 5433–5438.
 
 ```bash
-export PROOF_ROOT=/tmp/pr45-ta/new
-export PGHOST=/tmp/pr45-ta-pg16
-export PGPORT=5436
-# Copy Appendix A/B/C/D/E bytes into $PROOF_ROOT/
+export PROOF_ROOT=/tmp/pr45-do/new
+export PGHOST=/tmp/pr45-do-pg16
+export PGPORT=5439
+# Copy hashed 01_contract.sql / 02_seed.sql / 03_run_proofs.py / 04_* into $PROOF_ROOT/
 # sha256sum must match the table above (JSON digest is environment-labeled).
 initdb -D "$PGHOST"
 pg_ctl -D "$PGHOST" -o "-p $PGPORT -k $PGHOST" start
 createuser -h "$PGHOST" -p "$PGPORT" pr45owner
 createdb  -h "$PGHOST" -p "$PGPORT" -U pr45owner pr45_proof
-python3 "$PROOF_ROOT/04_discover_writers.py"   # optional; snapshot already staged
-python3 "$PROOF_ROOT/03_run_proofs.py"   # dropdb/createdb + contract/seed/source SQL + G1–G15 + NEG + clean rerun
-# TA-01 on unchanged P (optional; uses the *unchanged P* contract, not this one):
-# python3 /path/to/repro_ta01.py
+python3 "$PROOF_ROOT/04_discover_writers.py"   # optional; snapshot already staged; scanner unchanged
+python3 "$PROOF_ROOT/03_run_proofs.py"   # dropdb/createdb + contract/seed/source SQL + G1–G16 + NEG + clean rerun
+# DO-01/DO-02 on unchanged Q + lower-bound-only (optional; uses the *unchanged Q* contract):
+# python3 /tmp/pr45-do/repro/reproduce_q_do.py
 dropdb -h "$PGHOST" -p "$PGPORT" -U pr45owner --if-exists pr45_proof
 ```
 
-Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_privacy_reader`, `stocky_privacy_erasure`, `stocky_privacy_operator`, and producer `stocky_original_admission`. Setup used isolated `pr45owner`. No hidden GRANT, policy drop, or role switch is omitted from Appendix A.
+Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_privacy_reader`, `stocky_privacy_erasure`, `stocky_privacy_operator`, producer `stocky_original_admission`, and capture principal `stocky_admin_capture`. Setup used isolated `pr45owner`. No hidden GRANT, policy drop, or role switch is omitted from the hashed contract / Appendix F.
 
-**Unexecuted limits:** Redis job drain, export publication, D scratch reclamation, live Shopify, installed `node_modules` `authenticate.admin` live bind, PR7 processors. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence. Static analysis cannot prove arbitrary dynamic code; unresolved entries would **block** completeness rather than claim a universal pass.
+**Unexecuted limits:** Redis job drain, export publication, D scratch reclamation, live Shopify, installed `node_modules` `authenticate.admin` live bind, PR7 processors. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Do not certify a missing online binding or cross-system fence. Static analysis cannot prove arbitrary dynamic code; unresolved entries would **block** completeness rather than claim a universal pass. Proposed capture/effect-host files are **not** implemented PR7 runtime.
 
-### Appendix A — `01_contract.sql`
+### Appendix A — `01_contract.sql` (Q historical transcription; **not** the runnable DO contract)
+
+SHA-256 `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9`. Execute the hashed DO file `bc0d674a…` instead. Kept so Q remains independently inspectable.
+
 
 ```sql
 -- PR45 / PR7 disposable PostgreSQL 16 feasibility contract (GW-01/GW-02 / X inventory)
@@ -5005,7 +5067,10 @@ INSERT INTO public."PrivacyAttempt"(id,"privacyRequestId",epoch,state,"leaseUnti
 UPDATE public."ShopInstallGeneration" SET fence='ERASING' WHERE id='gen_red';
 ```
 
-### Appendix C — `03_run_proofs.py`
+### Appendix C — `03_run_proofs.py` (Q historical transcription; **not** the runnable DO driver)
+
+SHA-256 `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b`. Execute the hashed DO driver `336b2795…` instead.
+
 
 ```python
 #!/usr/bin/env python3
@@ -31353,3 +31418,508 @@ INSERT INTO public."SourceDerivedRequired"(source_identity,file_path,symbol,writ
   ]
 }
 ```
+
+### Appendix F — DO-01/DO-02 compact capture / effect-host model (runnable hashes in §14)
+
+**Label:** proposed-boundary evidence, **not** implemented PR7 runtime. The hashed files under `PROOF_ROOT` are the executable contract (`01_contract.sql` `bc0d674a…`, `03_run_proofs.py` `336b2795…`). This appendix transcribes the additive fragments only. Do **not** execute Appendix A as the current contract.
+
+PostgreSQL does **not** verify Shopify tokens. Capture models the application after `requireAdminTenant` / `authenticate.admin`. `authenticate.admin` remains **not independently reproduced**.
+
+#### F.1 Capture tables and producer ADMIN consume (from hashed `01_contract.sql`)
+
+```sql
+-- DO-01 authenticated original-admin capture (proposed disposable contract).
+-- Not a second general auth subsystem. PostgreSQL does not verify Shopify tokens.
+CREATE TABLE public."OriginalAdminSession" (
+  id text PRIMARY KEY,
+  "canonicalDomain" text NOT NULL,
+  "shopId" text NOT NULL REFERENCES public."Shop"(id) ON DELETE CASCADE,
+  "actorIdentity" text NOT NULL,
+  "establishedAt" timestamptz NOT NULL
+);
+CREATE TABLE public."OriginalAdminCapture" (
+  id text PRIMARY KEY,
+  "canonicalDomain" text NOT NULL,
+  "shopId" text NOT NULL REFERENCES public."Shop"(id) ON DELETE CASCADE,
+  "commandId" text NOT NULL,
+  "sourceKind" text NOT NULL,
+  "sourceIdentity" text NOT NULL,
+  "sourceContentDigest" text NOT NULL,
+  "actorIdentity" text NOT NULL,
+  "capturedAt" timestamptz NOT NULL,
+  "liveGenerationId" text NOT NULL,
+  "targetKind" text,
+  "targetValue" text,
+  "consumedAt" timestamptz,
+  "boundWorkId" text,
+  "formatPolicyVersion" text NOT NULL DEFAULT 'pr7-origin-v1',
+  UNIQUE ("canonicalDomain", "sourceKind", "sourceIdentity", "sourceContentDigest")
+);
+CREATE TABLE public."QueuedWorkSighting" (
+  "canonicalDomain" text NOT NULL,
+  "shopId" text NOT NULL,
+  "sourceKind" text NOT NULL,
+  "sourceIdentity" text NOT NULL,
+  "sourceContentDigest" text NOT NULL,
+  "sightedClass" text NOT NULL,
+  "sightedAt" timestamptz NOT NULL,
+  PRIMARY KEY ("canonicalDomain", "sourceKind", "sourceIdentity", "sourceContentDigest")
+);
+ALTER TABLE public."WriterAdmissionOrigin" ADD COLUMN "originalCaptureId" text;
+ALTER TABLE public."OriginalAdminSession" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."OriginalAdminCapture" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."QueuedWorkSighting" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."OriginalAdminSession" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."OriginalAdminSession" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."OriginalAdminCapture" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."OriginalAdminCapture" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."QueuedWorkSighting" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."QueuedWorkSighting" FORCE ROW LEVEL SECURITY;
+CREATE POLICY original_admin_session_owner_all ON public."OriginalAdminSession"
+  FOR ALL TO stocky_admission_origin_owner USING (true) WITH CHECK (true);
+CREATE POLICY original_admin_capture_owner_all ON public."OriginalAdminCapture"
+  FOR ALL TO stocky_admission_origin_owner USING (true) WITH CHECK (true);
+CREATE POLICY queued_work_sighting_owner_all ON public."QueuedWorkSighting"
+  FOR ALL TO stocky_admission_origin_owner USING (true) WITH CHECK (true);
+CREATE POLICY original_admin_capture_gate_select ON public."OriginalAdminCapture"
+  FOR SELECT TO stocky_lifecycle_gate_owner USING (true);
+REVOKE ALL ON public."OriginalAdminSession" FROM PUBLIC;
+REVOKE ALL ON public."OriginalAdminCapture" FROM PUBLIC;
+REVOKE ALL ON public."QueuedWorkSighting" FROM PUBLIC;
+GRANT SELECT, INSERT, UPDATE ON public."OriginalAdminSession" TO stocky_admission_origin_owner;
+GRANT SELECT, INSERT, UPDATE ON public."OriginalAdminCapture" TO stocky_admission_origin_owner;
+GRANT SELECT, INSERT, UPDATE ON public."QueuedWorkSighting" TO stocky_admission_origin_owner;
+GRANT SELECT ON public."OriginalAdminCapture" TO stocky_lifecycle_gate_owner;
+```
+
+```sql
+  v_admitted_at := p_original_admitted_at;
+  IF p_evidence_class = 'ADMIN_SESSION_CURRENT_INSTALL' THEN
+    IF live_n <> 1 OR live_id IS NULL THEN
+      RAISE EXCEPTION 'admission_generation_ambiguous' USING ERRCODE = 'P0001';
+    END IF;
+    SELECT * INTO cap
+    FROM public."OriginalAdminCapture"
+    WHERE "canonicalDomain" = v_domain
+      AND "shopId" = p_shop_id
+      AND "sourceKind" = p_source_kind
+      AND "sourceIdentity" = p_source_identity
+      AND "sourceContentDigest" = p_source_content_digest;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'admission_admin_capture_required' USING ERRCODE = 'P0001';
+    END IF;
+    IF cap."capturedAt" IS NULL
+       OR cap."capturedAt" = '-infinity'::timestamptz
+       OR cap."capturedAt" = 'infinity'::timestamptz THEN
+      RAISE EXCEPTION 'admission_capture_time_invalid' USING ERRCODE = 'P0001';
+    END IF;
+    IF cap."capturedAt" > clock_timestamp() THEN
+      RAISE EXCEPTION 'admission_capture_time_future' USING ERRCODE = 'P0001';
+    END IF;
+    IF cap."liveGenerationId" IS DISTINCT FROM live_id THEN
+      RAISE EXCEPTION 'admission_capture_epoch_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    SELECT g."installedAt" INTO inst_at
+    FROM public."ShopInstallGeneration" g
+    WHERE g.id = live_id;
+    IF inst_at IS NULL OR cap."capturedAt" < inst_at THEN
+      RAISE EXCEPTION 'admission_capture_before_install' USING ERRCODE = 'P0001';
+    END IF;
+    IF (cap."targetKind" IS NOT NULL AND cap."targetKind" IS DISTINCT FROM p_target_kind)
+       OR (cap."targetValue" IS NOT NULL AND cap."targetValue" IS DISTINCT FROM p_target_value) THEN
+      RAISE EXCEPTION 'admission_capture_target_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    IF cap."boundWorkId" IS NOT NULL AND cap."boundWorkId" IS DISTINCT FROM p_work_id THEN
+      RAISE EXCEPTION 'admission_capture_consumed' USING ERRCODE = 'P0001';
+    END IF;
+    UPDATE public."OriginalAdminCapture"
+      SET "consumedAt" = clock_timestamp(),
+          "boundWorkId" = p_work_id
+      WHERE id = cap.id
+        AND ("boundWorkId" IS NULL OR "boundWorkId" = p_work_id);
+    v_origin := live_id;
+    v_admitted_at := cap."capturedAt";
+    v_capture_id := cap.id;
+    v_status := CASE WHEN v_mode = 'BEGIN' THEN 'PENDING_LINK' ELSE 'BOUND' END;
+  ELSIF p_evidence_class = 'WEBHOOK_PROVIDER_AUTH' THEN
+    -- HMAC proves shop/topic, not historical generation of delayed payload.
+    v_origin := NULL;
+    v_status := CASE WHEN v_mode = 'BEGIN' THEN 'PENDING_LINK' ELSE 'UNATTRIBUTED' END;
+  ELSIF p_evidence_class IN ('PARENT_LINEAGE', 'MANUAL_REPLAY') THEN
+    IF p_parent_work_id IS NULL OR p_parent_work_id = '' THEN
+      RAISE EXCEPTION 'admission_parent_required' USING ERRCODE = 'P0001';
+    END IF;
+    SELECT * INTO parent
+    FROM public."WriterAdmissionOrigin"
+    WHERE "canonicalDomain" = v_domain AND "workId" = p_parent_work_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'admission_parent_missing' USING ERRCODE = 'P0001';
+    END IF;
+    IF parent."shopId" IS DISTINCT FROM p_shop_id THEN
+      RAISE EXCEPTION 'admission_parent_tenant_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public."WriterAdmissionOrigin" o
+      WHERE o."canonicalDomain" = v_domain
+        AND o."sourceContentDigest" = p_source_content_digest
+        AND o."parentWorkId" IS NULL
+        AND o."workId" IS DISTINCT FROM p_parent_work_id
+    ) THEN
+      RAISE EXCEPTION 'admission_digest_conflict' USING ERRCODE = 'P0001';
+    END IF;
+    v_origin := parent."originGenerationId";
+    v_status := CASE
+      WHEN parent."originStatus" = 'BOUND' AND v_origin IS NOT NULL
+           AND p_source_content_digest IS NOT DISTINCT FROM parent."sourceContentDigest" THEN
+        CASE WHEN v_mode = 'BEGIN' THEN 'PENDING_LINK' ELSE 'BOUND' END
+      ELSE 'UNATTRIBUTED'
+    END;
+    IF p_evidence_class = 'MANUAL_REPLAY' AND v_origin IS NULL THEN
+      v_status := 'UNATTRIBUTED';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'admission_evidence_unknown' USING ERRCODE = 'P0001';
+  END IF;
+
+  v_id := 'wao_' || replace(p_work_id, '-', '_');
+  INSERT INTO public."WriterAdmissionOrigin"(
+    id, "canonicalDomain", "shopId", "workId", "sourceKind", "sourceIdentity",
+    "originalAdmissionId", "originalAdmittedAt", "formatPolicyVersion", "sourceContentDigest",
+    "originGenerationId", "originStatus", "parentWorkId", "durableJobId", "acked"
+  ) VALUES (
+    v_id, v_domain, p_shop_id, p_work_id, p_source_kind, p_source_identity,
+    v_id, v_admitted_at, COALESCE(NULLIF(p_format_policy_version,''), 'pr7-origin-v1'),
+    p_source_content_digest, v_origin, v_status, NULLIF(p_parent_work_id,''), p_durable_job_id,
+    (v_mode = 'ATOMIC')
+  );
+  IF v_capture_id IS NOT NULL THEN
+    UPDATE public."WriterAdmissionOrigin" SET "originalCaptureId" = v_capture_id WHERE id = v_id;
+  END IF;
+  IF p_evidence_class = 'WEBHOOK_PROVIDER_AUTH' THEN
+    INSERT INTO public."QueuedWorkSighting"(
+      "canonicalDomain","shopId","sourceKind","sourceIdentity","sourceContentDigest","sightedClass","sightedAt"
+    ) VALUES (
+      v_domain, p_shop_id, p_source_kind, p_source_identity, p_source_content_digest, p_evidence_class, clock_timestamp()
+    ) ON CONFLICT DO NOTHING;
+  END IF;
+```
+
+#### F.2 Capture, queued-sighting, and effect-host helpers
+
+```sql
+-- DO-01/DO-02 proposed capture-to-producer and effect-host boundary (disposable).
+-- PostgreSQL does not verify Shopify tokens. This models the application
+-- boundary after requireAdminTenant / authenticate.admin.
+
+REVOKE ALL ON public."OriginalAdminCapture" FROM PUBLIC;
+REVOKE ALL ON public."OriginalAdminSession" FROM PUBLIC;
+REVOKE ALL ON public."QueuedWorkSighting" FROM PUBLIC;
+
+CREATE OR REPLACE FUNCTION public.stocky_establish_modeled_admin_session(
+  p_shop_id text,
+  p_canonical_domain text,
+  p_actor_identity text
+) RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_id text;
+  v_shop text;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_admin_capture' THEN
+    RAISE EXCEPTION 'admission_capture_principal_required' USING ERRCODE = '42501';
+  END IF;
+  IF p_shop_id IS NULL OR p_shop_id = '' OR p_canonical_domain IS NULL OR p_canonical_domain = ''
+     OR p_actor_identity IS NULL OR p_actor_identity = '' THEN
+    RAISE EXCEPTION 'admission_session_identity_required' USING ERRCODE = 'P0001';
+  END IF;
+  v_shop := NULLIF(current_setting('stocky.current_shop_id', true), '');
+  IF v_shop IS DISTINCT FROM p_shop_id THEN
+    RAISE EXCEPTION 'admission_session_tenant_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+  v_id := 'oas_' || replace(p_shop_id, '-', '_') || '_' || replace(clock_timestamp()::text, ' ', '_');
+  INSERT INTO public."OriginalAdminSession"(id, "canonicalDomain", "shopId", "actorIdentity", "establishedAt")
+  VALUES (v_id, p_canonical_domain, p_shop_id, p_actor_identity, clock_timestamp());
+  PERFORM set_config('stocky.admin_session_id', v_id, true);
+  PERFORM set_config('stocky.admin_session_actor', p_actor_identity, true);
+  PERFORM set_config('stocky.admin_session_domain', p_canonical_domain, true);
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.stocky_capture_original_admin_command(
+  p_canonical_domain text,
+  p_shop_id text,
+  p_command_id text,
+  p_source_kind text,
+  p_source_identity text,
+  p_source_content_digest text,
+  p_target_kind text,
+  p_target_value text
+) RETURNS text
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_domain text;
+  v_sid text;
+  sess public."OriginalAdminSession"%ROWTYPE;
+  existing public."OriginalAdminCapture"%ROWTYPE;
+  live_n int;
+  live_id text;
+  v_id text;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_admin_capture' THEN
+    RAISE EXCEPTION 'admission_capture_principal_required' USING ERRCODE = '42501';
+  END IF;
+  IF p_command_id IS NULL OR p_command_id = '' OR p_source_identity IS NULL OR p_source_identity = ''
+     OR p_source_content_digest IS NULL OR p_source_content_digest = '' THEN
+    RAISE EXCEPTION 'admission_identity_required' USING ERRCODE = 'P0001';
+  END IF;
+  v_sid := NULLIF(current_setting('stocky.admin_session_id', true), '');
+  IF v_sid IS NULL THEN
+    RAISE EXCEPTION 'admission_admin_session_required' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO sess FROM public."OriginalAdminSession" WHERE id = v_sid;
+  IF NOT FOUND OR sess."shopId" IS DISTINCT FROM p_shop_id
+     OR sess."canonicalDomain" IS DISTINCT FROM p_canonical_domain THEN
+    RAISE EXCEPTION 'admission_admin_session_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+  v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+  PERFORM public.stocky_lifecycle_shared_lock(v_domain);
+  SELECT count(*), min(id) INTO live_n, live_id
+  FROM public."ShopInstallGeneration"
+  WHERE "canonicalDomain" = v_domain AND fence = 'LIVE';
+  IF live_n <> 1 OR live_id IS NULL THEN
+    RAISE EXCEPTION 'admission_generation_ambiguous' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."QueuedWorkSighting" q
+    WHERE q."canonicalDomain" = v_domain
+      AND q."sourceKind" = p_source_kind
+      AND q."sourceIdentity" = p_source_identity
+      AND q."sourceContentDigest" = p_source_content_digest
+  ) THEN
+    RAISE EXCEPTION 'queued_work_cannot_acquire_fresh_admin_origin' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO existing
+  FROM public."OriginalAdminCapture"
+  WHERE "canonicalDomain" = v_domain
+    AND "sourceKind" = p_source_kind
+    AND "sourceIdentity" = p_source_identity
+    AND "sourceContentDigest" = p_source_content_digest;
+  IF FOUND THEN
+    RETURN existing.id;
+  END IF;
+  v_id := 'oac_' || replace(p_command_id, '-', '_');
+  INSERT INTO public."OriginalAdminCapture"(
+    id, "canonicalDomain", "shopId", "commandId", "sourceKind", "sourceIdentity",
+    "sourceContentDigest", "actorIdentity", "capturedAt", "liveGenerationId",
+    "targetKind", "targetValue"
+  ) VALUES (
+    v_id, v_domain, p_shop_id, p_command_id, p_source_kind, p_source_identity,
+    p_source_content_digest, sess."actorIdentity", clock_timestamp(), live_id,
+    p_target_kind, p_target_value
+  );
+  RETURN v_id;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.stocky_note_queued_work(
+  p_canonical_domain text,
+  p_shop_id text,
+  p_source_kind text,
+  p_source_identity text,
+  p_source_content_digest text,
+  p_sighted_class text DEFAULT 'QUEUED_INBOX'
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_original_admission'
+     AND session_user IS DISTINCT FROM 'stocky_control_plane' THEN
+    RAISE EXCEPTION 'queued_sighting_principal_required' USING ERRCODE = '42501';
+  END IF;
+  INSERT INTO public."QueuedWorkSighting"(
+    "canonicalDomain", "shopId", "sourceKind", "sourceIdentity", "sourceContentDigest",
+    "sightedClass", "sightedAt"
+  ) VALUES (
+    p_canonical_domain, p_shop_id, p_source_kind, p_source_identity, p_source_content_digest,
+    COALESCE(NULLIF(p_sighted_class, ''), 'QUEUED_INBOX'), clock_timestamp()
+  ) ON CONFLICT DO NOTHING;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.stocky_bind_execution_context(p_work_id text)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  wa public."WriterAdmissionOrigin"%ROWTYPE;
+  v_shop text;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_runtime'
+     AND session_user IS DISTINCT FROM 'stocky_control_plane' THEN
+    RAISE EXCEPTION 'effect_host_principal_required' USING ERRCODE = '42501';
+  END IF;
+  IF p_work_id IS NULL OR p_work_id = '' THEN
+    RAISE EXCEPTION 'effect_execution_context_required' USING ERRCODE = 'P0001';
+  END IF;
+  v_shop := NULLIF(current_setting('stocky.current_shop_id', true), '');
+  SELECT * INTO wa FROM public."WriterAdmissionOrigin" WHERE "workId" = p_work_id;
+  IF NOT FOUND OR wa."shopId" IS DISTINCT FROM v_shop THEN
+    RAISE EXCEPTION 'effect_execution_context_invalid' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM set_config('stocky.trusted_work_id', wa."workId", true);
+  PERFORM set_config('stocky.trusted_digest', wa."sourceContentDigest", true);
+  PERFORM set_config('stocky.trusted_domain', wa."canonicalDomain", true);
+  PERFORM set_config('stocky.trusted_shop', wa."shopId", true);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.stocky_apply_bound_customer_effect(
+  p_canonical_domain text,
+  p_shop_id text,
+  p_kind text,
+  p_value text,
+  p_actual_digest text,
+  p_effect_id text
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+DECLARE
+  v_work text;
+  wa public."WriterAdmissionOrigin"%ROWTYPE;
+BEGIN
+  IF session_user IS DISTINCT FROM 'stocky_runtime'
+     AND session_user IS DISTINCT FROM 'stocky_control_plane' THEN
+    RAISE EXCEPTION 'effect_host_principal_required' USING ERRCODE = '42501';
+  END IF;
+  v_work := NULLIF(current_setting('stocky.trusted_work_id', true), '');
+  IF v_work IS NULL OR v_work = '' THEN
+    RAISE EXCEPTION 'effect_execution_context_required' USING ERRCODE = 'P0001';
+  END IF;
+  SELECT * INTO wa
+  FROM public."WriterAdmissionOrigin"
+  WHERE "workId" = v_work
+    AND "canonicalDomain" = p_canonical_domain
+    AND "shopId" = p_shop_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'effect_tenant_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+  IF wa."sourceContentDigest" IS DISTINCT FROM p_actual_digest THEN
+    RAISE EXCEPTION 'effect_digest_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public."WriterAdmissionOriginTarget" t WHERE t."originId" = wa.id
+  ) AND NOT EXISTS (
+    SELECT 1 FROM public."WriterAdmissionOriginTarget" t
+    WHERE t."originId" = wa.id AND t."targetKind" = p_kind AND t."targetValue" = p_value
+  ) THEN
+    RAISE EXCEPTION 'effect_target_mismatch' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM public.stocky_fact_write_guard(p_canonical_domain, p_shop_id, p_kind, p_value, v_work);
+  INSERT INTO public."AuditEvent"(id, "shopId", "customerRestId")
+  VALUES (p_effect_id, p_shop_id, CASE WHEN p_kind = 'CUSTOMER_REST_ID' THEN p_value ELSE NULL END);
+END;
+$$;
+
+ALTER FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_bind_execution_context(text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+
+REVOKE ALL ON FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_bind_execution_context(text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) TO stocky_admin_capture;
+GRANT EXECUTE ON FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) TO stocky_admin_capture;
+GRANT EXECUTE ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text) TO stocky_original_admission, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_bind_execution_context(text) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_id() TO stocky_admin_capture;
+GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_context_version() TO stocky_admin_capture;
+GRANT EXECUTE ON FUNCTION public.stocky_shop_canonical_domain(text, text) TO stocky_admin_capture, stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_shared_lock(text) TO stocky_admin_capture;
+GRANT EXECUTE ON FUNCTION public.stocky_fact_write_guard(text, text, text, text, text) TO stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_participating_write_guard(text) TO stocky_lifecycle_gate_owner;
+GRANT INSERT ON public."AuditEvent" TO stocky_lifecycle_gate_owner;
+
+DROP POLICY IF EXISTS audit_gate_insert ON public."AuditEvent";
+CREATE POLICY audit_gate_insert ON public."AuditEvent"
+  FOR INSERT TO stocky_lifecycle_gate_owner
+  WITH CHECK (true);
+
+```
+
+#### F.3 Driver capture-to-producer crosswalk (from hashed `03_run_proofs.py`)
+
+```python
+def capture_admin(
+    shop: str,
+    domain: str,
+    work_id: str,
+    source_kind: str,
+    source_identity: str,
+    digest: str,
+    kind: str,
+    value: str,
+    req: str = "preq_cr",
+    att: str = "patt_cr",
+) -> tuple[int, str, str]:
+    actor = "actor_b" if shop == "shop_b" else "actor_a"
+    command_id = "cmd_" + work_id
+    sql = (
+        "SELECT public.stocky_establish_modeled_admin_session("
+        f"'{shop}','{domain}','{actor}');"
+        " SELECT public.stocky_capture_original_admin_command("
+        f"'{domain}','{shop}','{command_id}','{source_kind}','{source_identity}','{digest}',"
+        f"'{kind}','{value}');"
+    )
+    return tx("stocky_admin_capture", shop, req, att, sql)
+
+
+def admit(
+    shop: str,
+    domain: str,
+    work_id: str,
+    source_kind: str,
+    source_identity: str,
+    digest: str,
+    evidence: str,
+    kind: str,
+    value: str,
+    admitted_at_sql: str = "clock_timestamp()",
+    parent: str | None = None,
+    job: str | None = None,
+    mode: str = "ATOMIC",
+    req: str = "preq_cr",
+    att: str = "patt_cr",
+) -> tuple[int, str, str]:
+    # Interface crosswalk: ADMIN class must go through capture-to-producer.
+    # Caller admitted_at_sql cannot mint BOUND. WEBHOOK/PARENT/MANUAL unchanged.
+    if evidence == "ADMIN_SESSION_CURRENT_INSTALL":
+        crc, cout, cerr = capture_admin(
+            shop, domain, work_id, source_kind, source_identity, digest, kind, value, req=req, att=att
+        )
+        if crc != 0:
+            return crc, cout, cerr
+    parent_sql = "NULL" if not parent else "'%s'" % parent.replace("'", "''")
+```
+
+Remainder of `admit()` (hashed driver; not re-pasted): `stocky_original_admission` calls `stocky_record_writer_admission(...)`. Caller `admitted_at_sql` is still passed for WEBHOOK/PARENT/MANUAL; ADMIN `originalAdmittedAt` is derived from capture.
+
+G16 unique assertions (30) plus NEG-10/11 are listed in the acceptance matrix §14. SQL-only old-effect + new `work_id` remains **admitted**; the effect host rejects that pair **before** the modeled write.
