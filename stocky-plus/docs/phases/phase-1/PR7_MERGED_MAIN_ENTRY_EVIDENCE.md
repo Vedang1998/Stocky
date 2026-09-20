@@ -474,7 +474,7 @@ Independent `sha256` on this packaging VM. `MATCH` means recovered bytes equal t
 | Helper B result | `/tmp/pr7-helper-outputs/B/results/03-synthetic.json` | `67fb0fe7a4e374a7f7b23dd2464bb31a37d9bed4bccd6b16d41b5c0cf1459e5f` | same | **MATCH recovered** |
 | Helper B result | `/tmp/pr7-helper-outputs/B/results/99-teardown.json` | `032ad3ab5fdd452d919c35f2f01a1ed174346301fb2627a29fa3ec0873819684` | same | **MATCH recovered** |
 | Helper B tick log | PREP_B_06b `log_sha256` | `4f22ff2bd905420222de0001d17bb06563d2d933a9eca09879eb1fdec85c1df0` | — | **MISSING** bytes. Digest only, inside hash-matched 01b JSON. |
-| Helper B report | `/tmp/pr7-helper-outputs/B/HELPER_B_REPORT.md` | *(none recorded)* | `dbeffd5fab77e4bb673dc38c6e80e3e25ab8398795fd0917c6fb86e1bc3c0101` | **NEW recovered digest** |
+| Helper B report | `/tmp/pr7-helper-outputs/B/HELPER_B_REPORT.md` | *(none recorded)* | `dbeffd5fab77e4bb673dc38c6e80e3e25ab8398795fd0917c6fb86e1bc3c0101` | **NEW recovered digest**. Embedded Appendix F copy strips three markdown hard-break trailing spaces so `git diff --check` succeeds; that rendering is not byte-identical. |
 | Helper C inventory | `/tmp/pr7-helper-outputs/C/WRITER_INVENTORY.json` | `f7f09cde84067c09675bac8f0ce14d130b520bc9bf5d369fd15a23eb4ab8c7f0` | same | **MATCH recovered** (86 rows) |
 | Helper C report | `/tmp/pr7-helper-outputs/C/HELPER_C_REPORT.md` | *(none recorded)* | `e49caa8ef640f4d933c76ada393cb7ad81e5fea9cbb76a96072d529fe2075066` | **NEW recovered digest** |
 | Reconstructed-and-re-executed | — | — | — | **None.** No new helper launch. |
@@ -6514,14 +6514,15 @@ Stop. No commit. No PR. No application source edits.
 
 ### Helper B report
 
-SHA-256 `dbeffd5fab77e4bb673dc38c6e80e3e25ab8398795fd0917c6fb86e1bc3c0101`
+Original recovered SHA-256 `dbeffd5fab77e4bb673dc38c6e80e3e25ab8398795fd0917c6fb86e1bc3c0101`.
+The three header lines below had markdown hard-break trailing spaces in that recovered file; those spaces are stripped here so `git diff --check` can succeed. This rendering is **not** byte-identical to the recovered original.
 
 ````markdown
 # Helper B report — Redis / filesystem / privacy-boundary feasibility
 
-**Role:** PR7 entry-evidence Helper B (documentation packet only).  
-**Git writer:** coordinator only. This helper did not commit, push, or edit `/workspace`.  
-**PR7 application runtime:** not implemented.  
+**Role:** PR7 entry-evidence Helper B (documentation packet only).
+**Git writer:** coordinator only. This helper did not commit, push, or edit `/workspace`.
+**PR7 application runtime:** not implemented.
 **Power-loss:** not tested and not claimed.
 
 Pinned identities:
