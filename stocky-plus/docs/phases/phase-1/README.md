@@ -14,8 +14,8 @@
 **PR6-B:** ACCEPTED / MERGED / CLOSED (PR [#39](https://github.com/Vedang1998/Stocky/pull/39) squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`)
 **PR6-C:** ACCEPTED / MERGED / CLOSED (PR [#40](https://github.com/Vedang1998/Stocky/pull/40) squash **V** `a3ff480f1477237f8055f10c43298480a05728a1`)
 **PR6-D:** TECHNICALLY ACCEPTED AND MERGED (PR [#43](https://github.com/Vedang1998/Stocky/pull/43) squash **W** / current `origin/main` `ee193f38491245a10fb2fa60d2cf9a29f3271605`)
-**Next authorized action:** Independent Claude documentary/control review of this PR6 closeout/control PR. Production, write flags, and PR7 runtime remain unauthorized.
-**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (EFFECTIVE)** remains the implementation-authority / current-lane record (**no D-055**); **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION**; **ChatGPT disposition: ACCEPT PR6-A FOUNDATION**; **ChatGPT disposition: ACCEPT PR6-D REPOSITORY IMPLEMENTATION**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR #26 CLOSED / MERGED; PR #27 CLOSED / MERGED; PR #29 F2A CLOSED / MERGED; PR #31 F2B CLOSED / MERGED; PR #30 F2C CLOSED / MERGED; PR #32 remaining-integration planning CLOSED / MERGED; PR #33 control packet CLOSED / MERGED; PR #35 F3 CLOSED / MERGED; PR #36 closeout CLOSED / MERGED; PR #34 planning CLOSED / MERGED; PR #37 PR6-A CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F3 ACCEPTED / MERGED; PR5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**; historical **M** `bdbb5bba91ac8af82e49a99e36cce5db8b401c68`; PR #42 CLOSED / MERGED squash **T** `f5ec7abb01d14d5803e186b3e883fa15defad38f`; PR #39 CLOSED / MERGED squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`; PR #40 CLOSED / MERGED squash **V** `a3ff480f1477237f8055f10c43298480a05728a1`; PR #43 CLOSED / MERGED squash **W** / current `origin/main` `ee193f38491245a10fb2fa60d2cf9a29f3271605`; independent PR6 verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f…`); PR6-A **ACCEPTED / MERGED / CLOSED**; PR6-B **ACCEPTED / MERGED / CLOSED**; PR6-C **ACCEPTED / MERGED / CLOSED**; PR6-D **TECHNICALLY ACCEPTED AND MERGED**; formal PR6 repository closure **PENDING**
+**Next authorized action:** ChatGPT PR47 final merge decision / owner squash-merge of this closeout PR. Independent documentary/control review is recorded (`PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md`, blob `c17e7150…`). Production, write flags, and PR7 runtime remain unauthorized.
+**ChatGPT decisions:** D-025..D-051; **D-052 — Phase 1 PR 4 repository implementation ACCEPTED**; **D-053 — Phase 1 PR 5 planning ACCEPTED AND MERGED**; **D-054 — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 (EFFECTIVE)** remains the implementation-authority / current-lane record (**no D-055**); **ChatGPT disposition: ACCEPT PHASE 1 PR5 REPOSITORY IMPLEMENTATION**; **ChatGPT disposition: ACCEPT PR6-A FOUNDATION**; **ChatGPT disposition: ACCEPT PR6-D REPOSITORY IMPLEMENTATION**; **ChatGPT disposition: ACCEPT PR6 FORMAL REPOSITORY CLOSEOUT (documentary; formal closure pending owner merge of PR #47)**; PR #20 CLOSED / MERGED; PR #22 CLOSED / MERGED; PR #23 CLOSED / MERGED; PR #24 CLOSED / MERGED; PR #26 CLOSED / MERGED; PR #27 CLOSED / MERGED; PR #29 F2A CLOSED / MERGED; PR #31 F2B CLOSED / MERGED; PR #30 F2C CLOSED / MERGED; PR #32 remaining-integration planning CLOSED / MERGED; PR #33 control packet CLOSED / MERGED; PR #35 F3 CLOSED / MERGED; PR #36 closeout CLOSED / MERGED; PR #34 planning CLOSED / MERGED; PR #37 PR6-A CLOSED / MERGED; PR 4 FORMALLY CLOSED; PR5-F1 FOUNDATION ACCEPTED / MERGED / FROZEN; PR5-F3 ACCEPTED / MERGED; PR5 REPOSITORY IMPLEMENTATION **FORMALLY CLOSED**; historical **M** `bdbb5bba91ac8af82e49a99e36cce5db8b401c68`; PR #42 CLOSED / MERGED squash **T** `f5ec7abb01d14d5803e186b3e883fa15defad38f`; PR #39 CLOSED / MERGED squash **U** `1ec7af31f1a6ffd1c0c1d9b4bcd28043c5516505`; PR #40 CLOSED / MERGED squash **V** `a3ff480f1477237f8055f10c43298480a05728a1`; PR #43 CLOSED / MERGED squash **W** / current `origin/main` `ee193f38491245a10fb2fa60d2cf9a29f3271605`; independent PR6 verdict `APPROVE PR6 CURRENT-MAIN PLANNING` (blob `4f5ea10f…`); PR6-A **ACCEPTED / MERGED / CLOSED**; PR6-B **ACCEPTED / MERGED / CLOSED**; PR6-C **ACCEPTED / MERGED / CLOSED**; PR6-D **TECHNICALLY ACCEPTED AND MERGED**; formal PR6 repository closure **PENDING**
 **Production inventory writes:** UNAPPROVED
 **Inventory-write flags:** DEFAULT OFF
 
@@ -303,8 +303,9 @@
 72. `PR6_D_IMPLEMENTATION_REPORT.md` — PR6-D complete integration implementation evidence (dated Cursor record; live merge identity is **W**)
 73. `PR6_D_COMPLETE_INTEGRATION_INDEPENDENT_REVIEW.md` — immutable Claude complete-integration review of `25226e46…` (blob `48ac291a781b2347cb6017af862f2de9677826a5`; never edit); verdict **CORRECTIONS REQUIRED**
 74. Remaining immutable D reviews (never edit): `PR6_D_CORRECTION_INDEPENDENT_REVIEW.md` (blob `ba82a3c9…`); `PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md` (blob `1eb18cae…`); `PR6_D_SC_RECOVERY_FINAL_INDEPENDENT_REVIEW.md` (blob `e8525c2f…`); `PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `ee3f625c…`); `PR6_D_QUOTA_EVIDENCE_INDEX_CORRECTION_INDEPENDENT_REVIEW.md` (blob `74e57479…`; verdict **APPROVE PR6-D QUOTA-EVIDENCE AND INDEX CORRECTION**)
-75. `PR6_CLOSURE_REPORT.md` — overall PR6 A/B/C/D repository-implementation closeout (formal closure **PENDING** this closeout PR)
-76. `PR6_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted residuals, standing controls, fixed instances, source limitations, unattributed observations
+75. `PR6_CLOSURE_REPORT.md` — overall PR6 A/B/C/D repository-implementation closeout (ChatGPT documentary ACCEPT recorded; formal closure **PENDING** owner squash-merge of this PR)
+76. `PR6_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted residuals, standing controls, fixed instances, source limitations, unattributed observations, and accepted P3-CLOSEOUT-01/02/03
+77. `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` — immutable Claude documentary/control review of subject `fde01dc5…` (blob `c17e7150a39afe625f6b90c538a96e08a42e5808`; never edit); verdict **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`**
 
 ## Immutable PR 5 planning (#24) merge evidence
 
@@ -473,8 +474,9 @@
 | Classify job | `105944643820` SUCCESS |
 | Heavy job | `105944660979` SUCCESS (full Heavy; not SKIPPED) |
 | CI Gate job | `105953807735` SUCCESS |
-| Closure report | `PR6_CLOSURE_REPORT.md` (formal closure **PENDING**) |
+| Closure report | `PR6_CLOSURE_REPORT.md` (ChatGPT documentary ACCEPT recorded; formal closure **PENDING** owner merge) |
 | Accepted residual backlog | `PR6_ACCEPTED_RESIDUAL_BACKLOG.md` |
+| Immutable closeout review | `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (blob `c17e7150a39afe625f6b90c538a96e08a42e5808`; never edit) |
 | Phase 1 | **IN PROGRESS** |
 | PR7 runtime | **NOT AUTHORIZED** |
 | Production / inventory writes | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
@@ -508,7 +510,8 @@
 - PR6-D execution brief: `PR6_D_EXECUTION_BRIEF.md` (dated admission/execution contract; not rewritten)
 - PR6-D implementation report: `PR6_D_IMPLEMENTATION_REPORT.md` (dated Cursor record; live merge identity is **W**)
 - Immutable PR6-D reviews (never edit): `PR6_D_COMPLETE_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `48ac291a…`); `PR6_D_CORRECTION_INDEPENDENT_REVIEW.md` (blob `ba82a3c9…`); `PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md` (blob `1eb18cae…`); `PR6_D_SC_RECOVERY_FINAL_INDEPENDENT_REVIEW.md` (blob `e8525c2f…`); `PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md` (blob `ee3f625c…`); `PR6_D_QUOTA_EVIDENCE_INDEX_CORRECTION_INDEPENDENT_REVIEW.md` (blob `74e57479…`)
-- PR6 A/B/C/D closeout (formal closure **PENDING**): `PR6_CLOSURE_REPORT.md`
+- PR6 A/B/C/D closeout (ChatGPT documentary ACCEPT recorded; formal closure **PENDING** owner merge): `PR6_CLOSURE_REPORT.md`
+- Immutable PR6 formal-closeout independent review (never edit): `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (blob `c17e7150a39afe625f6b90c538a96e08a42e5808`)
 - PR6 accepted residuals: `PR6_ACCEPTED_RESIDUAL_BACKLOG.md`
 - Immutable PR6-A implementation review (never edit): `PR6_A_FOUNDATION_INDEPENDENT_REVIEW.md`
 - Immutable PR6-A correction re-review (never edit): `PR6_A_FOUNDATION_CORRECTION_INDEPENDENT_REVIEW.md`

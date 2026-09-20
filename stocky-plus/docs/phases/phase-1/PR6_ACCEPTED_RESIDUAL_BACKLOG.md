@@ -1,9 +1,11 @@
 # Phase 1 PR6 — Accepted Residual Backlog
 
-**Status:** `ACCEPTED RESIDUALS CARRIED FORWARD AFTER PR6 REPOSITORY-IMPLEMENTATION TECHNICAL ACCEPTANCE — FORMAL PR6 CLOSURE PENDING THE CLOSEOUT PR — NOT PRODUCTION-ROLLOUT CLOSED`
+**Status:** `ACCEPTED RESIDUALS CARRIED FORWARD AFTER PR6 REPOSITORY-IMPLEMENTATION TECHNICAL ACCEPTANCE AND CHATGPT DOCUMENTARY CLOSEOUT ACCEPT — FORMAL PR6 CLOSURE PENDING OWNER MERGE — NOT PRODUCTION-ROLLOUT CLOSED`
 
 **Authority:** ChatGPT technical acceptance under **D-054 EFFECTIVE** (post-authorization closeout; **not** D-055)
 **ChatGPT D disposition:** **ACCEPT PR6-D REPOSITORY IMPLEMENTATION** (comment `5744256383`) plus post-merge identity acceptance (comment `5745082755`)
+**ChatGPT documentary closeout ACCEPT:** comment [5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848) — twenty-row risk disposition; P3-CLOSEOUT-01/02/03 accepted nonblocking
+**Independent closeout review:** `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` blob `c17e7150a39afe625f6b90c538a96e08a42e5808` (never edit); verdict **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`**
 **Live main / squash W:** `ee193f38491245a10fb2fa60d2cf9a29f3271605`
 **Accepted D implementation C:** `ca33d9a7871fd0eef77d19d06cbe2bfae47dad0b`
 **Final accepted PR43 head R:** `ef2b98c42c69f76303c44d0809058ca3c7f3052b`
@@ -18,7 +20,7 @@ This backlog carries **exact source IDs**. It distinguishes:
 5. **unattributed observations**;
 6. **later product / cutover / production** obligations that this repository closeout does not discharge.
 
-No runtime fix is included. Severities are not lowered. Formal PR6 closure is **pending** the closeout PR’s independent review, ChatGPT disposition, and owner merge.
+No runtime fix is included. Severities are not lowered. ChatGPT documentary ACCEPT is recorded. Formal PR6 closure remains **pending owner squash-merge**.
 
 ## How to read a row
 
@@ -190,6 +192,55 @@ These remain in `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`. This PR6 closeout **does 
 | **P3-CLAUDE-F3XH-08** | Non-concurrent index rollout before applying F3 migration to populated production tables |
 
 **R-164** remains **OPEN / P3** unchanged (physical DELETE reachable at DB layer; ordinary apply tombstone-only). **R-176** remains **OPEN / P0** as the access-window / tombstone safety control even after D repository evidence is accepted on **W**.
+
+## P3-CLOSEOUT findings (accepted nonblocking; no new hardening assignment)
+
+ChatGPT comment [5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848) accepts these three P3 findings as-is. They do **not** block documentary closeout. No new hardening assignment is required. The out-of-scope PR5 brief named by -02 is **not** edited here.
+
+### P3-CLOSEOUT-01 — risk→evidence traceability is contract-level, not case-level (18 of 20 rows)
+
+| Field | Value |
+|---|---|
+| Original severity | **P3** (unchanged) |
+| Class | **Accepted documentary residual / not fixed** |
+| Source | Closeout independent review blob `c17e7150a39afe625f6b90c538a96e08a42e5808` §6 |
+| Affected scope | `RISK_REGISTER.md` rows R-166…R-185; original closeout recommendation matrix |
+| Evidence | Most rows justified scoped-closure with lane-level assertions rather than specific approved test cases. Mapping is substantively supportable via C review §6 / plan §19 (`T07`/`T08`/`T47`/`T55`, `T27`, `T41`/`T42`/`T43`, `T09`/`T44`/`T45`, `T46`, `T11`/`T12`) plus schema re-verify of R-171 and R-180 on **W**. This packaging records those already-verified pointers; it does **not** invent test names. |
+| Owner | Documentary auditability (not runtime) |
+| Follow-up trigger | Later authorized docs pass if ChatGPT requires case IDs beside every register row |
+| Blocks repository closure? | **No** (accepted as-is) |
+| Blocks PR7 admission? | **No** |
+| Blocks later metrics / cutover / production? | Auditability only |
+
+### P3-CLOSEOUT-02 — one stale live sentence outside the allowlist is not disclosed
+
+| Field | Value |
+|---|---|
+| Original severity | **P3** (unchanged) |
+| Class | **Accepted documentary residual / location recorded; out-of-scope file not edited** |
+| Source | Closeout independent review blob `c17e7150…` §6 |
+| Affected scope | `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` **line 18** and **line 54** |
+| Evidence | Both lines name PR #27 squash `7827e535415c9acbacfbbb4bdedff08be6650d5c` as current `origin/main`. That SHA is the PR5-F1 squash. Live `origin/main` is **W** `ee193f38491245a10fb2fa60d2cf9a29f3271605`. Pre-existing on **W** since PR #29. This closeout must **not** edit that brief. |
+| Owner | Later authorized docs pass (ChatGPT) |
+| Follow-up trigger | A later authorized docs pass that is allowed to touch that PR5 brief |
+| Blocks repository closure? | **No** (accepted as-is; locations identified) |
+| Blocks PR7 admission? | **No** |
+| Blocks later metrics / cutover / production? | None |
+
+### P3-CLOSEOUT-03 — a historical identity is dropped when a T-era row is re-labelled
+
+| Field | Value |
+|---|---|
+| Original severity | **P3** (unchanged) |
+| Class | **Accepted documentary residual / not fixed** |
+| Source | Closeout independent review blob `c17e7150…` §6 |
+| Affected scope | `PROJECT_STATUS.md` PR #42 / T-era snapshot table, PR6-B row |
+| Evidence | Replacement row preserves “technically accepted, not yet merged” but drops identity `57bebc6b…` and the byte-identity statement. The identity remains in four dated source records: `PR6_BC_CI_RELIABILITY_INDEPENDENT_REVIEW.md`, `PR6_BC_CI_RELIABILITY_REPORT.md`, `PR6_BC_EXECUTION_BRIEF.md`, `PR6_B_ADMIN_READ_IMPLEMENTATION_REPORT.md`. |
+| Owner | Historical snapshot hygiene (not runtime) |
+| Follow-up trigger | None required; identity is preserved in dated records |
+| Blocks repository closure? | **No** (accepted as-is) |
+| Blocks PR7 admission? | **No** |
+| Blocks later metrics / cutover / production? | None |
 
 ## Explicit non-authorization
 

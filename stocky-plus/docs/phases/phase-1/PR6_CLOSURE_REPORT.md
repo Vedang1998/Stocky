@@ -1,8 +1,8 @@
 # Phase 1 PR6 — Repository Implementation Closure Report
 
-**Status:** `PR6 REPOSITORY IMPLEMENTATION TECHNICALLY ACCEPTED AND MERGED; FORMAL REPOSITORY CLOSURE PENDING THIS CLOSEOUT PR’S INDEPENDENT ACCEPTANCE AND OWNER MERGE`
+**Status:** `PR6 DOCUMENTARY CLOSEOUT ACCEPTED BY CHATGPT; FORMAL REPOSITORY CLOSURE PENDING OWNER SQUASH-MERGE OF THIS PR`
 **Phase 1:** `IN PROGRESS`
-**PR 6 overall:** `IN PROGRESS` until this closeout PR is independently reviewed, ChatGPT-accepted, and owner-merged
+**PR 6 overall:** `IN PROGRESS` until this closeout PR is owner-squash-merged (independent review and ChatGPT ACCEPT are recorded; merge is **not** authorized)
 **PR6-A:** `ACCEPTED / MERGED / CLOSED` (repository-foundation lane)
 **PR6-B:** `ACCEPTED / MERGED / CLOSED` (repository Admin READ lane)
 **PR6-C:** `ACCEPTED / MERGED / CLOSED` (repository canonical-applicator lane)
@@ -26,9 +26,9 @@ It does **not** state that Phase 1 is complete.
 
 It does **not** authorize PR7 runtime, production, merchant production data, deployment, production migrations, Shopify inventory mutations, live webhook registration, `read_all_orders`, `write_orders`, or any inventory-write / absence-tombstone flag enablement.
 
-**Present state (truthful at publication of this closeout branch):** PR6 repository implementation is **technically accepted and merged**. Formal PR6 repository closure is **pending** this closeout/control PR’s independent Claude documentary/control review, ChatGPT closeout/risk disposition, and owner merge. This file does **not** invent a closeout squash SHA or a premature closure timestamp.
+**Present state (truthful at this packaging commit):** PR6 repository implementation is **technically accepted and merged**. Independent Claude documentary/control review of subject `fde01dc5ba2e0076b1579d6690f0548db749af56` issued **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`** (commit `48b951a782377c55b337e5d50ac5ee7dc20ddf5d`, blob `c17e7150a39afe625f6b90c538a96e08a42e5808`). ChatGPT **ACCEPT**ed the documentary closeout and issued the explicit twenty-row risk disposition ([5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848)). Formal PR6 repository closure is **pending owner squash-merge** of this PR. ChatGPT ACCEPT is **now**; formal closure is **after merge**. This file does **not** invent a closeout squash SHA or a premature closure timestamp. Merge/mark-ready remains **NOT AUTHORIZED**.
 
-**Effective-on-merge clause:** Formal PR6 **repository** closure becomes effective only when this closeout/control PR is independently reviewed, ChatGPT-accepted, and owner-squash-merged to `main`. Until that merge, live wording remains **technically accepted and merged; formal closure pending**. After that merge, later current-main synchronization may record the actual squash identity. Do **not** treat this documentation commit’s own SHA as that future squash.
+**Effective-on-merge clause:** Formal PR6 **repository** closure becomes effective only when this closeout/control PR is independently reviewed, ChatGPT-accepted, and owner-squash-merged to `main`. Independent review and ChatGPT ACCEPT are recorded. Until owner merge, live wording remains **technically accepted and merged; formal closure pending owner merge**. After that merge, later current-main synchronization may record the actual squash identity. Do **not** treat this documentation commit’s own SHA as that future squash.
 
 Do **not** edit any immutable independent-review artifact.
 
@@ -39,6 +39,8 @@ Do **not** edit any immutable independent-review artifact.
 | Implementation authority | **D-054** — Phase 1 PR 5 implementation authorization under Accelerated Safe Delivery v1 — **EFFECTIVE** (PR [#26](https://github.com/Vedang1998/Stocky/pull/26)). PR6 A/B/C/D executed under this same heading. |
 | D-055 | **Not created** |
 | Closeout authority | PR [#43](https://github.com/Vedang1998/Stocky/pull/43) comment [5745082755](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5745082755) — documentation-only closeout/control PR; not a new decision number |
+| Independent closeout review | **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`** — commit `48b951a782377c55b337e5d50ac5ee7dc20ddf5d`; immutable blob `c17e7150a39afe625f6b90c538a96e08a42e5808` (`PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md`; never edit) |
+| ChatGPT documentary closeout ACCEPT | **ACCEPT the documentary closeout** and explicit twenty-row risk disposition — comment [5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848). **Not** merge/mark-ready authority. |
 | D technical acceptance | **ACCEPT PR6-D REPOSITORY IMPLEMENTATION** — comment [5744256383](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5744256383) |
 | Earlier C-head technical acceptance | **ACCEPT PR6-D QUOTA-EVIDENCE AND INDEX CORRECTION** — comment [5743346411](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5743346411) |
 | Owner squash-merge verification | comment [5744321465](https://github.com/Vedang1998/Stocky/pull/43#issuecomment-5744321465) |
@@ -53,7 +55,7 @@ Do **not** edit any immutable independent-review artifact.
 | D implementation report | `PR6_D_IMPLEMENTATION_REPORT.md` (dated Cursor execution record; header still says draft PR #43 — **historical**; not rewritten) |
 | D scratch runbook | `PR6_D_SCRATCH_OPERATOR_RUNBOOK.md` (operator-only; not a production order) |
 
-ChatGPT owns risk-status closure. This closeout **recommends** scoped dispositions; it does **not** autonomously close register rows.
+ChatGPT owns risk-status closure. Comment [5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848) is the explicit twenty-row disposition recorded in `../../RISK_REGISTER.md`. Independent review §7 is the crosswalk. This file does **not** invent additional closures.
 
 ## Frozen identities independently verified for this closeout
 
@@ -82,7 +84,7 @@ This closeout branch: `phase-1/pr6-formal-closeout-b15d` created from exact **W*
 
 ```text
 PR6 planning (#34) → PR6-A M (#37) → PR6-B U (#39) ∥ PR6-C V (#40)
-                                              └─ PR6-D W (#43)  → this closeout (pending)
+                                              └─ PR6-D W (#43)  → this closeout (ChatGPT ACCEPT; pending owner merge)
 ```
 
 Parked PR [#41](https://github.com/Vedang1998/Stocky/pull/41) remains unmerged tooling and is **not** a D writer. PR [#45](https://github.com/Vedang1998/Stocky/pull/45) remains a **separate, unaccepted** PR7 planning lane and is **not** edited or adopted here.
@@ -175,7 +177,7 @@ Accepted residuals **P3-FINAL-01 / 02 / 03** remain **not fixed**. Detail: `PR6_
 | Independent final verdict at C | **`APPROVE PR6-D QUOTA-EVIDENCE AND INDEX CORRECTION`** |
 | Exact-R pre-merge CI | `35454095462` SUCCESS (R-only) |
 | Exact-W post-merge CI | `35460969411` SUCCESS (W-only) |
-| Lane state | **TECHNICALLY ACCEPTED AND MERGED**. Formal PR6 repository closure waits on this closeout PR. |
+| Lane state | **TECHNICALLY ACCEPTED AND MERGED**. Formal PR6 repository closure waits on owner squash-merge of this closeout PR (ChatGPT documentary ACCEPT is recorded). |
 
 **D-owned scope (repository module):** six-topic registration **declarations** (three frozen v1 sanitizers retained; three new identity-only topics), production B→C mapping, legacy exactly-once, >250 quarantine recovery, Bulk A historical/incremental import with C3 staging/EOF/per-order ledgers, reconcile/health, cancellation/off switches, D-owned scratch quota/transport/receipt-digest controls. **Not** live Shopify subscription registration, Partner approval, production, or flag enablement.
 
@@ -194,7 +196,7 @@ Verified `git rev-parse HEAD:<path>` equals the frozen blob IDs. Do **not** edit
 
 **Source-contract provenance qualification (preserved, not resolved):** review commit `7710758b181b5a49f1affa260a56b331adafdf7e` (sole parent `09029c09…`, blob `1eb18cae…`) carries GitHub author/committer metadata `Cursor Agent` / `cursor[bot]`. Later SC-recovery and final reviews re-derived blocking claims independently and recorded that the provenance limitation **stands**. This closeout does not rewrite that artifact or convert the metadata into ChatGPT-verified independence.
 
-Upstream planning / A / B / C / tooling review blobs listed in lineage tables were re-hashed at **W** and match the previously frozen IDs.
+Upstream planning / A / B / C / tooling review blobs listed in lineage tables were re-hashed at **W** and match the previously frozen IDs. The eighteenth preserved blob is this closeout’s independent review `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` at `c17e7150a39afe625f6b90c538a96e08a42e5808` (never edit).
 
 ## D correction families and final independent disposition
 
@@ -310,7 +312,7 @@ Plan source: `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` §17.2 / §18.2 / C3 / C
 | Frozen `net-units-order-date-v1`; independent Order/Refund clocks; snapshot atomicity; unverified-delete / window kinds; unit-event ledger = agreement sales | C | `APPROVE PR6-C CANONICAL APPLICATOR FINAL INTEGRATION`; squash **V**; exact-V push CI | **P3-FINAL-01/02/03** |
 | Webhooks as signals + Admin refetch; six-topic declarations; B→C mapping; legacy v1 retained; Bulk A + C3 staging; reconcile; health; quota/scratch | D | Six D blobs ending in `APPROVE PR6-D QUOTA-EVIDENCE AND INDEX CORRECTION`; ChatGPT ACCEPT; squash **W**; exact-R and exact-W CI | Live registration, Partner `read_all_orders`, production, **R-176** operational control, accepted P3 limitations |
 | Inventory-write flags DEFAULT OFF | all | Unchanged toml/flags; every review’s non-authorization | Production enablement unauthorized |
-| Exact-head CI + independent review + ChatGPT + owner merge | all lanes | Recorded per lane | This closeout still needs its own docs-only exact-head CI + Claude + ChatGPT + owner merge |
+| Exact-head CI + independent review + ChatGPT + owner merge | all lanes | Recorded per lane | This closeout has independent review + ChatGPT ACCEPT; owner merge and this packet’s own exact-head docs CI remain |
 
 §18.2 checkboxes in the **planning** packet remain historical planning text and are **not** rewritten. Live satisfaction is this closeout + the immutable reviews, not a silent edit of the approved brief.
 
@@ -325,42 +327,45 @@ Plan source: `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` §17.2 / §18.2 / C3 / C
 - INDEX-02 historical causal explanation remains inferred.
 - Source-contract GitHub author metadata is not ChatGPT-verified independence.
 - Scratch reclaim is operator-only (`PR6_D_SCRATCH_OPERATOR_RUNBOOK.md`); no automatic reaper; do not run against production.
+- PR [#48](https://github.com/Vedang1998/Stocky/pull/48) operator-quiescence evidence is **not** proof that D’s documented external-quiescence precondition was met. An in-process `live_writer` check or a caller boolean is **not** cross-process drain. PR7’s future orchestration still must prove that boundary. This closeout does **not** adopt PR45 or PR48 and is **not** revoked by them.
 
-## Risk recommendations (ChatGPT disposition required)
+## Risk dispositions (ChatGPT comment 5747824848)
 
-Register **OPEN/CLOSED statuses and severities are preserved** until ChatGPT’s scoped closeout disposition. This matrix is a recommendation, not an autonomous closure. **R-176 stays OPEN/P0. R-164 stays unchanged.** No new risk IDs. No severity reduction.
+Register **severities, IDs, and question statuses are preserved**. Independent review §7 is the disposition crosswalk. Already-verified plan §19 case/section pointers are recorded; **no test names are invented**. **R-176 stays OPEN/P0. R-164 stays unchanged OPEN/P3.** No new risk IDs. No severity reduction. No D-055.
 
-Full row text updates (evidence + follow-up venue only) live in `../../RISK_REGISTER.md`. Detail of accepted residuals: `PR6_ACCEPTED_RESIDUAL_BACKLOG.md`.
+Full row text lives in `../../RISK_REGISTER.md`. Detail of accepted residuals, including P3-CLOSEOUT-01/02/03: `PR6_ACCEPTED_RESIDUAL_BACKLOG.md`.
 
-| Risk | Severity (unchanged) | Register status (unchanged) | Repository obligation | Recommendation pending ChatGPT |
+| Risk | Severity (unchanged) | ChatGPT disposition | Repository obligation | Remainder / standing control |
 |---|---|---|---|---|
-| **R-166** | P1 | OPEN | B LIST/connection gates at **U**; D refetch independently accepted on **W** must not reintroduce REST-delta/`first` truncation | **Scoped closure of the repository obligation**; retain a **standing regression control**. Not live-store proof. |
-| **R-167** | P1 | OPEN | A columns + C existence-kind apply + D webhook/import/reconcile independently accepted on **W** | **Scoped closure of the repository honesty/window-representation obligation.** Operational 60-day / `read_all_orders` limitation remains with **R-176** / **Q-016**. |
-| **R-168** | P1 | OPEN | C net-units contract at **V**; D did not invent a second arithmetic authority (accepted D reviews) | **Scoped repository closure** + standing regression control (no second arithmetic authority). |
-| **R-169** | P1 | OPEN | C location contract at **V**; D must not invent `"default"` | **Scoped repository closure** + standing regression control. |
-| **R-170** | P1 | OPEN | D webhook-as-signal + Admin GraphQL refetch independently accepted | **Scoped repository closure.** Live traffic not observed. |
-| **R-171** | P1 | OPEN | A: no historical line → `ShopifyVariantFact` FK (independent A review). C/D must not add one. | **Scoped closure of the schema/writer repository obligation** + standing schema guard. Stale “until independently verified” language is **corrected as evidence**, not as a silent status close. |
-| **R-172** | P1 | OPEN | A persists both bag sides; C persist/no-FX independently tested (T27). Later ABC labels are **Q-012**. | **Scoped closure of the persist/no-FX repository obligation.** Keep **Q-012** open. Do not invent a new risk. |
-| **R-173** | P2 | OPEN | D toml topic/route/sanitizer/worker **declarations** independently accepted | **Scoped closure of the repository declaration obligation.** **Live subscription registration remains unfulfilled** (same row; production/Partner). |
-| **R-174** | P1 | OPEN | C independent Order/Refund clocks at **V**; D uses them | **Scoped repository closure** + standing regression control. |
-| **R-175** | P1 | OPEN | B schema + bulk-rule gates at **U**; D runs both before any submitter call; Bulk B disabled; Bulk C rejected | **Scoped repository closure.** No live store submission. |
-| **R-176** | **P0** | **OPEN** | A representability + C window/unverified-delete/two-confirmation revival + D webhook/import/reconcile **repository evidence is now independently accepted on merged W** | **KEEP OPEN / P0.** Replace the stale “D review/merge still pending” statement. Retain the access-window / tombstone safety control and future-change obligations. This closeout does **not** imply production safety or risk closure. |
-| **R-177** | P1 | OPEN | C unverified-delete shape at **V**; D `orders/delete` topic/route/sanitizer/worker | **Scoped closure of the repository deletion-signal obligation.** Live registration remains with R-173’s live portion. |
-| **R-178** | P1 | OPEN | C window diagnostics + D reconcile/coverage repository evidence accepted | **Scoped closure of the repository reconcile/diagnostics obligation.** Aged-out history remains unhealable without a later authorized grant (**Q-016** / **R-176**). |
-| **R-179** | P1 | OPEN | C snapshot atomicity at **V**; D maps incomplete parents to no receipt | **Scoped repository closure** + standing regression control. |
-| **R-180** | P1 | OPEN | A ordinal composite unique key independently reviewed | **Scoped closure of the identity repository obligation** + standing schema guard. |
-| **R-181** | P1 | OPEN | C unit-event ledger at **V**; D does not invent a second unit-event writer | **Scoped repository closure** + standing regression control. |
-| **R-182** | P1 | OPEN | D retains frozen v1 projections (PO-02). Cutover date is a **later authorized PR**, not this closeout. | **KEEP OPEN.** Follow-up = later cutover product/runtime authority, **not** the completed D branch and **not** fabricated unfinished D work. |
-| **R-183** | P1 | OPEN | A merchant-durable diagnostic columns; C writers at **V**; D mirrors `DataIssue` via control-plane | **Scoped repository closure.** Not production-ops proof. |
-| **R-184** | P2 | OPEN | C refund-snapshot persist at **V**; D `order_transactions/create` signal code accepted | **Scoped closure of persist/signal-code obligation.** Live registration remaining. |
-| **R-185** | P2 | OPEN | B Bulk C reject + Bulk B disabled at **U**; D does not enable Bulk B or submit Bulk C | **Scoped repository closure.** No live store submission. |
-| **R-164** | P3 | OPEN | Unchanged PR5 residual: tenant-scoped physical DELETE remains reachable; ordinary apply remains tombstone-only | **UNCHANGED.** This closeout does not alter DELETE privilege, RLS, or tombstone contract. |
+| **R-166** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION — live enablement/change requires explicit revalidation** | B LIST/connection gates at **U**; D refetch independently accepted on **W** | Re-arm anti-truncation control on live reader / REST-delta / `first` reintroduction. Not live-store proof. |
+| **R-167** | P1 | **OPEN** (repository honesty **satisfied**) | A columns + C existence-kind apply + D webhook/import/reconcile independently accepted on **W** | Operational 60-day / `read_all_orders` remainder stays with **R-176** / **Q-016**. |
+| **R-168** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | C net-units contract at **V**; D invents no second arithmetic authority. Plan §19 `T07`/`T08`/`T47`/`T55` | Standing no-second-arithmetic-authority guard. |
+| **R-169** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | C location contract at **V**; D must not invent `"default"` | Standing no-`"default"` guard. |
+| **R-170** | P1 | **OPEN** (signal/refetch **satisfied**) | D webhook-as-signal + Admin GraphQL refetch independently accepted | **Live webhook traffic was never observed.** |
+| **R-171** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | Independently re-verified at schema on **W**: no `ShopifyOrderLineFact` FK to `ShopifyVariantFact`. Plan §19 `T11`/`T12` | Standing schema guard. |
+| **R-172** | P1 | **OPEN** (persist/no-FX **satisfied**) | A persists both bag sides; C persist/no-FX independently tested (`T27`) | Later ABC labels remain **Q-012**. Do not invent a new risk. |
+| **R-173** | P2 | **OPEN** (declarations **satisfied**; **must stay OPEN**) | D toml topic/route/sanitizer/worker **declarations** independently accepted | **Live subscription registration remains unfulfilled.** |
+| **R-174** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | C independent Order/Refund clocks at **V**; D uses them | Standing anti-clock-collapse guard. |
+| **R-175** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION — live enablement/change requires explicit revalidation** | B schema + bulk-rule gates at **U**; D runs both before any submitter call; Bulk B disabled; Bulk C rejected | Gates remain mandatory. Not a claim that no D bulk submitter exists. Not live-submission proof. Residual `NEW-CLAUDE-PR6B-C01`. |
+| **R-176** | **P0** | **OPEN / P0** — reject any closure | A representability + C window/unverified-delete/two-confirmation revival + D webhook/import/reconcile **repository evidence** independently accepted on **W**. Plan §19 `T41`/`T42`/`T43` | Access-window / tombstone safety control; `read_all_orders` dependency; future-change obligations. Not production safety. |
+| **R-177** | P1 | **OPEN** (deletion-signal **satisfied**) | C unverified-delete shape at **V**; D `orders/delete` topic/route/sanitizer/worker | Live registration remains with R-173’s live portion. |
+| **R-178** | P1 | **OPEN** (reconcile/diagnostics **satisfied**) | C window diagnostics + D reconcile/coverage repository evidence accepted | **Aged-out history remains unhealable** without a later authorized grant (**Q-016** / **R-176**). |
+| **R-179** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | C snapshot atomicity at **V** (`T09`/`T44`/`T45`); D maps incomplete parents to no receipt | Standing snapshot-atomicity guard. |
+| **R-180** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | Independently re-verified at schema on **W**: non-null `refundLineOrdinal` in composite unique key. Plan §19 `T46` | Standing schema guard. |
+| **R-181** | P1 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION** | C unit-event ledger at **V**; D does not invent a second unit-event writer. Plan §19 `T07`/`T08`/`T47`/`T55` | Standing anti-double-subtraction guard. |
+| **R-182** | P1 | **OPEN** | D retains frozen v1 projections (PO-02) | Later authorized cutover PR. **Not** a new D repair. **Not** an implicit PR7 task. |
+| **R-183** | P1 | **OPEN** (repository **satisfied**) | A merchant-durable diagnostic columns; C writers at **V**; D mirrors `DataIssue` via control-plane | Not production-ops proof. |
+| **R-184** | P2 | **OPEN** (persist/signal **code** satisfied; **must stay OPEN**) | C refund-snapshot persist at **V**; D `order_transactions/create` signal code accepted | Live registration remaining. Status mutability unobservable until registered. |
+| **R-185** | P2 | **CLOSED FOR PR6 REPOSITORY IMPLEMENTATION — live enablement/change requires explicit revalidation** | B Bulk C reject + Bulk B disabled at **U**; D does not enable Bulk B or submit Bulk C | Gates remain mandatory. Not a claim that no D bulk submitter exists. Not live-submission proof. |
+| **R-164** | P3 | **UNCHANGED OPEN / P3** | Unchanged PR5 residual: tenant-scoped physical DELETE remains reachable; ordinary apply remains tombstone-only | This closeout does not alter DELETE privilege, RLS, or tombstone contract. |
 
 Standing PR5 production-readiness residuals **P3-CLAUDE-F3XH-06** and **P3-CLAUDE-F3XH-08** remain in `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md`. This PR6 closeout does **not** discharge them.
 
+Accepted nonblocking documentary findings **P3-CLOSEOUT-01**, **P3-CLOSEOUT-02**, and **P3-CLOSEOUT-03** are recorded in `PR6_ACCEPTED_RESIDUAL_BACKLOG.md`. No new hardening assignment.
+
 ## Remaining Phase 1 / PR7 entry conditions
 
-After **accepted** PR6 formal closeout (this PR independently reviewed, ChatGPT-disposed, owner-merged):
+After **accepted** PR6 formal closeout (this PR independently reviewed, ChatGPT-disposed, **and owner-merged**):
 
 1. Phase 1 remains **IN PROGRESS**. PR 7 (audit / roles / privacy) and PR 8 (reconciliation / performance / exit) remain later Phase 1 units per `PHASE_BRIEF.md`.
 2. PR [#45](https://github.com/Vedang1998/Stocky/pull/45) still owns its planning corrections. It is **OPEN / DRAFT**, unaccepted, and **not** merged, synchronized, or edited from this branch. Its proposed contract is **not** adopted as approved. After accepted PR6 closeout, PR45 still requires **separate** current-main integration and independent planning acceptance, then **explicit ChatGPT runtime authority**.
@@ -370,12 +375,13 @@ After **accepted** PR6 formal closeout (this PR independently reviewed, ChatGPT-
 
 ## Explicit non-authorization
 
-- Formal PR6 repository closure is **not** declared by this file’s publication.
+- Formal PR6 repository closure is **not** declared by this file’s publication. ChatGPT documentary ACCEPT is recorded; owner merge remains **NOT AUTHORIZED**.
 - Phase 1 is **not** complete.
 - Public App Store / production readiness is **not** claimed.
 - No D-055.
 - No PR7 runtime.
 - Cursor did **not** author Claude’s independent closeout review.
+- This packaging commit does **not** edit the immutable closeout review, PROJECT_STATUS, OPEN_QUESTIONS, ACCELERATED_SAFE_DELIVERY, or any historical review.
 
 ## Historical records with stale live-status sentences (not rewritten)
 
@@ -389,12 +395,14 @@ Allowlist forbids editing these. They remain dated source records:
 | `PR6_D_IMPLEMENTATION_REPORT.md` | PR #43 OPEN / DRAFT / UNMERGED; current main **V** |
 | `PR6_BC_EXECUTION_BRIEF.md` | Historical B/C start contract |
 | Six D independent reviews | Each freeze their reviewed head (including “PR #43 remains DRAFT” on the C review) |
+| `PR5_CATALOG_LOCATION_INVENTORY_FACTS_BRIEF.md` | **P3-CLOSEOUT-02 (accepted; not rewritten here).** Lines **18** and **54** both name PR #27 squash `7827e535415c9acbacfbbb4bdedff08be6650d5c` as current `origin/main`. That SHA is the PR5-F1 squash; live `origin/main` is **W** `ee193f38…`. Pre-existing on **W**; out of this closeout allowlist. |
 
 Live status belongs in `../../PROJECT_STATUS.md`, `../../DECISIONS.md` D-054 item 26, `../../ACCELERATED_SAFE_DELIVERY.md` current-authority paragraph, `../../README.md`, and `README.md` in this folder.
 
 ## Related records
 
 - Residuals: `PR6_ACCEPTED_RESIDUAL_BACKLOG.md`
+- Immutable closeout review (never edit): `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` (blob `c17e7150a39afe625f6b90c538a96e08a42e5808`)
 - Risks: `../../RISK_REGISTER.md`
 - Questions: `../../OPEN_QUESTIONS.md`
 - Decisions: `../../DECISIONS.md` D-054 item 26
