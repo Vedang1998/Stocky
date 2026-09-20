@@ -14,8 +14,8 @@ Do **not** start PR7 runtime until every row is closed by ChatGPT (or explicitly
 
 | ID | Question | Constrained direction (PR45) | This packet’s executed delta | Blocks runtime start? |
 |---|---|---|---|---|
-| **D-PR7-01** | Actor source | Persist verified `sessionToken.sub` **string**; no recovery from rounded numbers | **PREP-A-01/02 executed:** JWT `sub` preserves `"9007199254740993"`; `createSession` `` `${id}` `` yields session id `…_9007199254740992`. Smallest contract: persist `sub`, never stringify `associated_user.id`. | **Yes** until implementation bind tests |
-| **D-PR7-02** | Online tokens | FUTURE `useOnlineTokens: true` for human platform only; offline for jobs; **no config now** | W still offline-default. Library exchanges online **only if** the flag is set. Live token exchange **UNVERIFIED** (PREP-A-07). | **Yes** until bind proof |
+| **D-PR7-01** | Actor source | Persist verified `sessionToken.sub` **string**; no recovery from rounded numbers | **Executed (mocked transport):** embedded `authenticate.admin` already returns `sessionToken.sub` with `useOnlineTokens: false` (Helper A PREP-A-01). W `requireAdminTenant` still ignores it. `String(associated_user.id)` is unsafe (collision + **mixedToken** reuse, Helper A PREP-A-09). Implementation must still *read* `sessionToken` and refuse numeric/rounded `sub`. | **Yes** until implementation bind tests (not blocked on enabling online tokens) |
+| **D-PR7-02** | Online tokens | FUTURE `useOnlineTokens: true` for human platform only; offline for jobs; **no config now** | Enabling the flag is what populates `associated_user` (D-PR7-04 owner proof). It is **not** what makes `sub` appear. W still offline-default. Cached online sessions are **not** re-checked against current `sub` (Helper A PREP-A-11). Live token exchange **UNVERIFIED**. | **Yes** for owner/`associated_user` proof; **not** a prerequisite for reading JWT `sub` |
 | **D-PR7-03** | Receipts as audit? | **No** | unchanged | Yes |
 | **D-PR7-04** | First owner | Same-context verified `account_owner`; unsafe correlation → unassigned | Staff vs owner fields exist on `OnlineAccessUser` (PREP-A-10). Numeric correlation is unsafe (PREP-A-02). | Yes |
 | **D-PR7-05** | redact vs reinstall | Classifier §7.6.1; old receipts never exempt new work | not re-probed (PG model already on PR45) | Yes |
@@ -35,7 +35,7 @@ Do **not** start PR7 runtime until every row is closed by ChatGPT (or explicitly
 | **PR47 / §10.3** | Formal PR6 closure on merged main | ChatGPT/owner | PR47 `fde01dc5…` unmerged | Recorded prerequisite; this lane did not wait |
 | **Runtime sentence** | Explicit ChatGPT authority | plan §10.6 | **not issued** | **Yes** |
 
-Smallest remaining auth contract choice (D-PR7-01/02): **persist JWT `sub` as a string (PREP-A-11/12: mocked `authenticate.admin` returns `sessionToken`; a numeric JSON `sub` is already rounded)** + optional dest/iss check in app (library accepted iss/dest mismatch) + online flag only in the implementation PR after live bind tests. Do not enable the flag in this docs lane.
+Smallest remaining auth contract choice: persist JWT `sub` as a **string** from `sessionToken` (available on embedded `authenticate.admin` without enabling online tokens). Never stringify `associated_user.id`. Do not treat a cached online session as corroborated against the current `sub`. `account_owner` still requires D-PR7-02 / online tokens. Add dest/iss hostname equality in **app** code (library accepted mismatch). Do not enable `useOnlineTokens` in this docs lane.
 
 ## 2. Exclusive file ownership (FUTURE implementation PR)
 
@@ -187,7 +187,7 @@ Reuse PR45 fixtures FXT-* (shops A/B, two customers, LIVE vs shop-erasure). Add 
 - FXT-REDIS-STALE-GEN: job for generation N-1 after N current (SYNTHETIC until remove API exists)
 - FXT-HEALTH-UPSERT: `computeSyncHealth` during ERASING must not look “read-only”
 - FXT-DISABLED-DISPATCH: existing dispatcher disabled-shop path
-- FXT-UNSAFE-USER-ID: `associated_user.id` `9007199254740993` vs `sub` string
+- FXT-UNSAFE-USER-ID: `associated_user.id` `9007199254740993` vs `sub` string; include B-then-A `mixedToken` reuse and stale cached `associated_user.id` vs current `sub`
 
 `test:privacy` must be a **distinct** CI command that fails on zero tests. Do not rely on `npm test` name filters that can match nothing.
 

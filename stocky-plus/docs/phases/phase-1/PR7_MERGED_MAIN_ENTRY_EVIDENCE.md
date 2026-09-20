@@ -158,6 +158,20 @@ NODE_PATH=/workspace/stocky-plus/node_modules node /tmp/pr7-coordinator/probes/a
 | Forged signature rejected | threw | yes |
 | iss/dest mismatch accepted by library | **not** thrown | yes (LIMIT vs official docs) |
 | Safe id `42` session suffix | `_42` | yes |
+| Wide-id B then A (`sub` `"…993"` then `"…992"`) | A received **B’s** online session + access token (`mixedToken: true`, `email: b@example.com`, 0 exchanges on A) | yes (Helper A PREP-A-09 / NC-07) |
+| Stale active session `associated_user.id=111` stored at `${shop}_${sub}` | Library returned stale user; **zero** token exchanges | yes (Helper A PREP-A-11 / NC-09) |
+| `sub` vs `associated_user.id` mismatch | Library returned store-key session; second request re-exchanged (lookup miss) | yes (Helper A PREP-A-03 / NC-08) |
+
+Helper A IDs in `/tmp/pr7-helper-outputs/A/HELPER_A_REPORT.md` (`PREP-A-01`…`PREP-A-18`) are **not** the coordinator `PREP-A-*` in §4.2. Material extras from that report, reconciled after helper completion:
+
+| Helper A ID | Packet use |
+|---|---|
+| PREP-A-01 | Embedded `authenticate.admin` returns `sessionToken.sub` with `useOnlineTokens: false`. D-PR7-01 library bind is **not** blocked on enabling online tokens. W still drops `sessionToken`. |
+| PREP-A-07 | `authenticate.webhook` loads the **offline** session only (no `associated_user` / no `sessionToken`). Coordinator PREP-A-07 remains live-Shopify UNVERIFIED. |
+| PREP-A-09 | Collision is not only a colliding session **id**: A reuses B’s **token** (`mixedToken: true`). |
+| PREP-A-11 | Cached online session is returned without corroborating `associated_user.id` against current `sub`. Coordinator PREP-A-11 (sessionToken present when the online flag is on) is a **different** observation. |
+| PREP-A-13 | If JWT JSON `sub` is a number, runtime `sessionToken.sub` is a **number** (types say `string`). |
+| PREP-A-16 | Live token exchange remains UNVERIFIED (same residual as coordinator PREP-A-07). |
 
 ### 4.4 UNVERIFIED (must stay labelled)
 
@@ -180,7 +194,7 @@ Helper A `authenticate.admin` (in-memory `shopifyApp`, `useOnlineTokens` only in
 | client body `account_owner` ignored | true | staff `…_1001` | token `associated_user` wins |
 | non-token-exchange store URL / Partners | threw FAIL-CLOSED | — | — |
 
-**PREP-A-11:** plan residual “library returns `sessionToken` + online `associated_user` when `useOnlineTokens: true`” is **verified on the installed library with mocked transport**. It remains UNVERIFIED against live Shopify.
+**Coordinator PREP-A-11** (distinct from Helper A PREP-A-11 stale-cache): plan residual “library returns `sessionToken` + online `associated_user` when `useOnlineTokens: true`” is **verified on the installed library with mocked transport**. It remains UNVERIFIED against live Shopify.
 
 **PREP-A-12:** a numeric JWT `sub` is already lossy; D-PR7-01 must require a **string** `sub` in the JWT, not merely avoid `String(number)` later.
 
@@ -312,6 +326,8 @@ Bounded C tests: only the scratch-quota / source-stage name-filter runs in §5.3
 5. `computeSyncHealth` “health read” upsert (PREP-C-04).
 6. IEEE-754 owner id stringification (PREP-A-02) looking like a stable actor key.
 7. Zero RLS-visible rows ≠ absence (plan; not re-probed here).
+8. Adjacent wide JWT `sub` values causing **cross-user online session + token reuse** (Helper A PREP-A-09 / `mixedToken: true`).
+9. Returning a cached online session without re-checking `associated_user.id` against current `sub` (Helper A PREP-A-11).
 
 ## 8. Unexecuted limits
 
