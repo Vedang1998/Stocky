@@ -18,6 +18,9 @@ export const WEBHOOK_ATOMIC_TOPICS = new Set([
   "orders/create",
   "orders/cancelled",
   "refunds/create",
+  "orders/edited",
+  "orders/delete",
+  "order_transactions/create",
   "products/create",
   "products/update",
   "products/delete",
@@ -59,6 +62,10 @@ export function executionStrategyForJobType(
       // worker so catalog-sync-v1 cannot execute after the F3 cutover.
       return "REBUILDABLE_IDEMPOTENT";
     case "inventory-state-reconcile":
+      return "REBUILDABLE_IDEMPOTENT";
+    case "order-facts-sync":
+      return "REBUILDABLE_IDEMPOTENT";
+    case "order-facts-reconcile":
       return "REBUILDABLE_IDEMPOTENT";
     case "abc-analysis-shop":
       // Rebuildable: ABC recompute overwrites classification rows.
