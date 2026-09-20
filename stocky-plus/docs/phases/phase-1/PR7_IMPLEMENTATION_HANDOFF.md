@@ -1,12 +1,15 @@
 # Phase 1 PR7 — Implementation handoff (planning / feasibility)
 
-**Status:** `PR7 ENTRY-EVIDENCE PACKAGE COMPLETE — PLANNING/FEASIBILITY ONLY; RUNTIME NOT AUTHORIZED`
-**Companion evidence:** `PR7_MERGED_MAIN_ENTRY_EVIDENCE.md`
+**Status:** `PR48 EVIDENCE SEALED FOR CONSOLIDATED PR45 REVIEW — NO RUNTIME AUTHORIZED`
+**Companion evidence:** `PR7_MERGED_MAIN_ENTRY_EVIDENCE.md` (appendices seal recovered probe sources)
 **Proposal input (not accepted authority):** PR45 `a292bc8a6ea26192bc295af7338dd6d653a3e65c`
-**Implementation base when eventually authorized:** merged **W** `ee193f38491245a10fb2fa60d2cf9a29f3271605` or a later **main** that still contains W’s D module — **not** the PR45 SHA.
+**Measured merged-main snapshot:** W `ee193f38491245a10fb2fa60d2cf9a29f3271605` (contains the D module this packet inspected).
+**Implementation-entry base:** **not automatically W.** The eventual implementation SHA is an entry decision after actual PR6 closure on main, accepted integrated PR45 planning, and later explicit runtime authorization. It is **not** the PR45 SHA.
 **D-054 / no D-055. R-176 OPEN/P0. R-164 unchanged. Q-008 OPEN.**
 
 This handoff does not authorize runtime, migrations, grants, `useOnlineTokens`, flags, mark-ready, or merge. Constrained D-PR7 / Decision A–E / TF items stay constrained. Coordinator does **not** decide open legal/product questions.
+
+**ID qualification:** Helper A `PREP-A-*` ≠ coordinator `PREP-A-*`. Helper B `PREP_B_*` ≠ coordinator `PREP-B-*` / `PREP-COORD-B-*`. Helper C `PREP-C-*` are the inventory IDs used in the packet’s §6 unless labelled otherwise. Load-bearing reproducers are sealed in the evidence appendices; `/tmp` paths are historical execution locations, not durable-only references.
 
 ## 1. Implementation-entry decisions (still OPEN)
 
@@ -23,17 +26,17 @@ Do **not** start PR7 runtime until every row is closed by ChatGPT (or explicitly
 | **D-PR7-07** | Gate merchandising? | **No** | frozen | Frozen **No** |
 | **D-PR7-08** | Audit vs redact | Append-only runtime; restricted DELETE; Q-008 | unchanged | Yes |
 | **D-PR7-09** | Pause | Privacy-local default OFF | unchanged | Frozen home |
-| **D-PR7-10** | Redis / coordinator | Not DurableJob; optional Redis hint; poll recovers; no FLUSHALL | Completeness cannot use cancel/TTL/PID. **PREP-B-06b:** `Job.remove` of an **active** job throws locked and the worker keeps writing. Generation-fenced Redis API **absent** on W. | **Yes** |
+| **D-PR7-10** | Redis / coordinator | Not DurableJob; optional Redis hint; poll recovers; no FLUSHALL | Completeness cannot use cancel/TTL/PID. Helper B `PREP_B_06b` (9143 rerun after 4169 isolation error): `Job.remove` of an **active** job throws locked and the worker keeps writing. Helper B `PREP_B_06` waiting-job remove stays **INCONCLUSIVE**. Generation-fenced Redis API **absent** on W. | **Yes** |
 | **D-PR7-11** | Delete Shop? | Checked finalizer | not re-probed | Yes |
 | **D-PR7-12** | Revoke mid-job | `stocky_authz_lock` + SELECT-only verifier; stable `commandId` | W `replayDeadLetter` still a single CP `$transaction` (FACT V/W) | Yes |
 | **D-PR7-13** | DB roles | Per-topic reader/erasure; complete grants | not installed | Yes |
-| **D-PR7-14** | data_request | Distinct owner download | W export is HTTP CSV only | Align before runtime |
+| **D-PR7-14** | data_request | Distinct owner download | W export is HTTP CSV only on **current source inventory**. That does **not** prove historical object-store bytes never existed. | Align before runtime; residual unknown for historical bytes |
 | **Q-008** | Retention | OPEN; legal review required | unchanged | **Production** blocker |
 | Plan residual 2 | `X-Shopify-Event-Id` on compliance | nullable handling | **UNVERIFIED** | Implementation proof |
-| Plan residual 3 | D scratch reclaim API after D merge | infeasible → named follow-up | **API exists on W**. **PREP-B-19:** `quiescenceConfirmed: true` from another process deleted a live child’s `att-*` (process-local `live_writer`). Occupancy still required. | Implementation must still refuse COMPLETED while occupancy uncertain; do not treat the boolean as liveness |
+| Plan residual 3 | D scratch reclaim API after D merge | infeasible → named follow-up | **API exists on W**. Helper B `PREP_B_19`: `quiescenceConfirmed: true` from another process deleted a live child’s `att-*`. W `live_writer` skip is **process-local** (`isLiveScratchBasename` / `marker.pid === process.pid`), **not** a cross-process PID/liveness guarantee. Occupancy still required. Do not auto-call reclaim from PR7 until real quiescence of every writer process is established. | Implementation must still refuse COMPLETED while occupancy uncertain; do not treat the boolean as liveness |
 | **PR45 acceptance** | Plan + matrix after Claude re-review | no unresolved P0/P1/P2 | PR45 still OPEN/DRAFT | **Yes** |
-| **PR47 / §10.3** | Formal PR6 closure on merged main | ChatGPT/owner | PR47 `fde01dc5…` unmerged | Recorded prerequisite; this lane did not wait |
-| **Runtime sentence** | Explicit ChatGPT authority | plan §10.6 | **not issued** | **Yes** |
+| **PR47 / §10.3** | Formal PR6 closure on merged main | ChatGPT/owner | PR47 `fde01dc5…` unmerged | **Required** later gate. This evidence lane did not wait; that does **not** make the gate optional. |
+| **Runtime sentence** | Explicit ChatGPT authority | plan §10.6 | **not issued** | **Yes**. Also required: the implementation-entry SHA is **not** automatically W. |
 
 Smallest remaining auth contract choice: persist JWT `sub` as a **string** from `sessionToken` (available on embedded `authenticate.admin` without enabling online tokens). Never stringify `associated_user.id`. Do not treat a cached online session as corroborated against the current `sub`. `account_owner` still requires D-PR7-02 / online tokens. Add dest/iss hostname equality in **app** code (library accepted mismatch). Do not enable `useOnlineTokens` in this docs lane.
 
@@ -89,7 +92,7 @@ stocky-plus/docs/phases/phase-1/PR7_*IMPLEMENTATION*
 | `app/jobs/workers/webhook-processor.ts` | keep `assertShopProcessingEnabled`; **separate** coordinator loop at worker bootstrap |
 | `app/jobs/workers/order-facts/sync-jobs.ts` | W-new; long I/O + scratch |
 | `app/sync/envelope-v3.server.ts` | `privacy:*` strings are not authority |
-| `app/routes/app.analytics_.export.tsx` | HTTP CSV today; durable export is a **missing** dependency |
+| `app/routes/app.analytics_.export.tsx` | HTTP CSV today; **current W source inventory** has no object-store adapter. That is **not** proof historical export bytes never existed. Durable export remains a missing dependency plus a residual unknown for historical bytes |
 | `.github/workflows/ci.yml` | add `test:privacy` distinct command that fails on zero tests |
 | `scripts/sync-control-plane/roles.ts` | no Shop DELETE; SELECT-only verifier EXECUTE |
 
@@ -132,7 +135,7 @@ Legend: **L** = lifecycle shared gate required; **C** = customer-target gate whe
 | `webhook-processor.ts` | `processWebhookJob` / `processCronJob`; local `assertShopProcessingEnabled` | runtime + lifecycle | facts via apply | shopId | adm before v3 work | already-running job | `pr6-d-worker.test.ts` |
 | `queue.server.ts` | enqueue* including **order-facts** | CP via intake + dispatcher kick | DurableJob | shopId | via intake | n/a | `queue-redis.test.ts` (needs Redis+PG — not rerun) |
 | `order-facts/sync-jobs.ts` | `runOrderFactsSyncJob`, `runOrderFactsReconcileJob` | worker + scratch + apply | facts + scratch bytes | shop + orders | via processor | process-loss ≠ privacy drain | `source-stage.test.ts`, `pr6-d-sc-recovery.test.ts` |
-| `source-stage.ts` | `createOwnedScratchDir`, `disposeOwnedScratch`, `reclaimOperatorSelectedDScratch`, `inspectDScratchOccupancy`, `stageOrderFactsJsonl` | filesystem | D scratch | shop via basename, **not** customer | symlink/unowned/live refusal | live_writer skip | `source-stage.test.ts` (3 cases executed) |
+| `source-stage.ts` | `createOwnedScratchDir`, `disposeOwnedScratch`, `reclaimOperatorSelectedDScratch`, `inspectDScratchOccupancy`, `stageOrderFactsJsonl` | filesystem | D scratch | shop via basename, **not** customer | symlink/unowned/live refusal; **`live_writer` is process-local** | live_writer skip (same process only) | `source-stage.test.ts` (3 cases executed) |
 | `health.server.ts` | `computeSyncHealth` | CP **upsert** SyncHealth | SyncHealth | shopId + domain | reads processingEnabled then **writes** | n/a | health callers; **must take L** |
 | `app.analytics_.export.tsx` | `loader` | TenantDb read → HTTP CSV | none durable | shop via requireAdminTenant | no object store | n/a | none privacy; **dependency** |
 | `webhooks.compliance.tsx` | `action` | `authenticate.webhook` then empty 200 | **no persist** | n/a | stub | n/a | future privacy intake |
@@ -183,7 +186,7 @@ Do **not** create those branches in this evidence lane.
 
 Reuse PR45 fixtures FXT-* (shops A/B, two customers, LIVE vs shop-erasure). Add W-specific:
 
-- FXT-D-SCRATCH: owned `att-*` vs symlink vs foreign vs live_writer (already in `source-stage.test.ts`); include **cross-process** `quiescenceConfirmed` deleting a live child’s `att-*` (PREP-B-19)
+- FXT-D-SCRATCH: owned `att-*` vs symlink vs foreign vs live_writer (already in `source-stage.test.ts`); include **cross-process** `quiescenceConfirmed` deleting a live child’s `att-*` (Helper B `PREP_B_19`) because W `live_writer` is process-local only
 - FXT-REDIS-STALE-GEN: job for generation N-1 after N current (SYNTHETIC until remove API exists)
 - FXT-REDIS-ACTIVE-LOCKED: `Job.remove` of an `active` job must not count as drain (PREP-B-06b)
 - FXT-HEALTH-UPSERT: `computeSyncHealth` during ERASING must not look “read-only”
@@ -202,11 +205,14 @@ Existing W tests to **extend** (not replace): `sync-attempt-recovery`, `sync-dis
 | Independent review | actual Claude Code | this packet is not that review |
 | Product/legal | ChatGPT + Q-008 counsel | retention window not invented here |
 | PR45 merge onto W | later docs/runtime integration | PR45 is V-based; do not chase in this lane |
-| PR47 closeout | separate docs PR | not reused here |
-| D scratch reclaim | already on W | privacy completion still needs occupancy |
+| PR47 closeout | separate docs PR; **required** later gate, not optional | not reused here |
+| D scratch reclaim | already on W | privacy completion still needs occupancy; do not auto-call reclaim; `live_writer` is process-local |
 | Shopify inventory / flags | unauthorized | remain DEFAULT OFF |
 
 ## 9. Stop line
 
 PR7 application runtime remains **NOT AUTHORIZED**.
 R-176 **OPEN/P0**. R-164 unchanged. Q-008 **OPEN**. D-054 / **no D-055**.
+Formal PR6 closure on merged main remains **required**. Measured W is **not** automatically the implementation-entry base.
+
+`PR48 EVIDENCE SEALED FOR CONSOLIDATED PR45 REVIEW — NO RUNTIME AUTHORIZED`
