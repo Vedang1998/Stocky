@@ -132,7 +132,7 @@ R-028 and R-029 remain open operational gates. Accepted nonblocking residuals R-
 
 **Source:** `phases/phase-1/PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` §20. Registered on current main `58bf62b4…` during PR #34 synchronization. PO-10 and PO-11 are **RESOLVED** and are **not** open questions.
 
-None of these is a PR6-A fact-correctness blocker. PR6 runtime remains **NOT AUTHORIZED**.
+None of these is a PR6-A fact-correctness blocker. PR6 A/B/C/D repository implementation is **technically accepted and merged**; formal PR6 repository closure is pending the closeout PR. Product answers below remain unresolved. PR7 runtime remains **NOT AUTHORIZED**. Production remains **NOT AUTHORIZED**.
 
 ### Q-012 — multi-currency ABC policy
 
