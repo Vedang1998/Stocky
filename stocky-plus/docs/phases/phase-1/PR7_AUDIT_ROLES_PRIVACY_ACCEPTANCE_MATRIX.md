@@ -975,7 +975,7 @@ Scripts and full SQL live in the execution plan §14 appendices (do not duplicat
 | Results SHA-256 | **run log, not a verification artifact.** This-run digest `bb1e3541186a5e82fc6a54b9eaa07bae32d459ecdd277623eb347ad5f69e9317` is an original-run identity only |
 | Q historical packet (**not** this contract) | **313 records / 191 unique / 122 reruns**. Contract `d9bd880f…`; driver `59bf35f5…`; run log `4e88e653…` |
 | Q/DO repro + lower-bound | repro `9872848c…`; log `96aa5649…`; lower-bound SQL `75a16828…`. ADMIN 18:19 **still BOUND+ADMITTED** on option (a) |
-| Totals (S historical) | S **416/244/172** remains independently established. This RE packet authoring **505/290/215** (G16 unique 93, NEG unique 15). Clean-export of the candidate commit is the gate |
+| Totals (this correction) | S **416/244/172** remains independently established. Clean-export of candidate `e7dd4f42…` **505/290/215** (G16 unique 93, NEG unique 15) on `/tmp/pr45-re-gate-pg16:5447`. Authoring `/tmp/pr45-re-pg16:5444` independently 505/290/215 |
 | Contract SHA-256 (this correction) | `d4c21ff9350f4072a907576f80be44b46a210695e8088f467a4f7b49c46b4318` |
 | Driver SHA-256 (this correction) | `d24afa331bde236e6ed59243ada670d14b658bd308541b9263df616040c75d85` |
 | Historical TF 115-record packet (S; **not** this contract) | **115 records ≠ 115 unique**: 89 unique + 26 G7–G9 reruns. Contract `75ab1c02…349846de`; driver `566e0f28…`; run log `006e5799…` |
