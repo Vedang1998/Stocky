@@ -1218,8 +1218,17 @@ rm -rf "$EXPORT" "$EXTRACT_ROOT" "$PGDATA"
 mkdir -p "$EXPORT" "$EXTRACT_ROOT"
 git archive --format=tar COMMIT | tar -x -C "$EXPORT"
 export PLAN="$EXPORT/stocky-plus/docs/phases/phase-1/PR7_AUDIT_ROLES_PRIVACY_EXECUTION_PLAN.md"
-export PROOF_ROOT="$EXTRACT_ROOT"
-python3 -c "from pathlib import Path; import os; plan=Path(os.environ['PLAN']).read_text(encoding='utf-8'); b='<!-- PROOF-EXTRACT:begin path=current/00_extract_proofs.py -->'; e='<!-- PROOF-EXTRACT:end path=current/00_extract_proofs.py -->'; body=plan.split(b,1)[1].split(e,1)[0].lstrip('\n'); Path(os.environ['PROOF_ROOT']).mkdir(parents=True, exist_ok=True); Path(os.environ['PROOF_ROOT']+'/00_extract_proofs.py').write_text(body, encoding='utf-8')"
+python3 <<'PY'
+from pathlib import Path
+import os
+plan = Path(os.environ["PLAN"]).read_text(encoding="utf-8")
+begin = "<!-- PROOF-EXTRACT:begin path=current/00_extract_proofs.py -->"
+end = "<!-- PROOF-EXTRACT:end path=current/00_extract_proofs.py -->"
+body = plan.split(begin, 1)[1].split(end, 1)[0].lstrip("\n")
+root = Path(os.environ["EXTRACT_ROOT"])
+root.mkdir(parents=True, exist_ok=True)
+(root / "00_extract_proofs.py").write_text(body, encoding="utf-8")
+PY
 python3 "$EXTRACT_ROOT/00_extract_proofs.py" --plan "$PLAN" --selftest
 python3 "$EXTRACT_ROOT/00_extract_proofs.py" --plan "$PLAN" --dest "$EXTRACT_ROOT"
 export PROOF_ROOT="$EXTRACT_ROOT/current"
