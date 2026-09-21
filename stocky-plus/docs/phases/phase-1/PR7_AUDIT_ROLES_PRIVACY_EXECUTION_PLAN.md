@@ -1221,10 +1221,15 @@ export PLAN="$EXPORT/stocky-plus/docs/phases/phase-1/PR7_AUDIT_ROLES_PRIVACY_EXE
 python3 <<'PY'
 from pathlib import Path
 import os
-plan = Path(os.environ["PLAN"]).read_text(encoding="utf-8")
+lines = Path(os.environ["PLAN"]).read_text(encoding="utf-8").splitlines()
 begin = "<!-- PROOF-EXTRACT:begin path=current/00_extract_proofs.py -->"
 end = "<!-- PROOF-EXTRACT:end path=current/00_extract_proofs.py -->"
-body = plan.split(begin, 1)[1].split(end, 1)[0].lstrip("\n")
+try:
+    b = lines.index(begin)
+    e = lines.index(end)
+except ValueError as exc:
+    raise SystemExit("bootstrap_extractor_markers_missing") from exc
+body = "\n".join(lines[b + 1 : e]) + "\n"
 root = Path(os.environ["EXTRACT_ROOT"])
 root.mkdir(parents=True, exist_ok=True)
 (root / "00_extract_proofs.py").write_text(body, encoding="utf-8")
