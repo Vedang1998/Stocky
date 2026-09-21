@@ -204,12 +204,24 @@ The accepted capture/role mechanism is **preserved**. TA-01 core, TA-02, GW-02, 
 | ID | Sev | Defect | This packet | Plan anchors | Matrix |
 |---|---|---|---|---|---|
 | **F-CLAUDE-PR7AO-01** | P2 | Runnable DO contract/driver/`reproduce_q_do.py`/lower-bound SQL were named in §14 but unpublished in the F tree; Appendix F transcribed additive fragments only | **CORRECTED.** Complete CURRENT contract (Appendix F), driver (G), extractor (H), manifest (I), regenerator (J), reproducer (K), and lower-bound SQL (L) are transcribed and extractable. Every claimed runnable input is reproducible from this document. F’s missing-file **375/223/152** remains **Cursor-reported unpublished-at-F** (`bc0d674a…` / `336b2795…`); those bytes are **not** recovered as current. Eighth-review reconstruction `cb7958a5…` remains reviewer-built evidence. This reconstruction uses **new** hashes and **new** execution evidence. Lower-bound `75a16828…` is regenerated from Q Appendix A by Appendix J | §14; Appendices F–L | §12.6; extraction selftest |
-| **F-CLAUDE-PR7AO-02** | P2 | `stocky_apply_bound_customer_effect` took caller `p_actual_digest` and wrote the caller payload | **CORRECTED.** Host freezes `(canonicalDomain, shopId, targetKind, targetValue, effectId)`, computes versioned `pr7-effect-v1` UTF-8 LF SHA-256 (`stocky_effect_commitment`), compares that commitment to the protected origin’s `sourceContentDigest`, and writes **the same frozen locals**. No `p_actual_digest`. Canonicalization is explicit: `encode(sha256(convert_to(version\|\|LF\|\|domain\|\|LF\|\|shopId\|\|LF\|\|kind\|\|LF\|\|value\|\|LF\|\|effectId, 'UTF8')), 'hex')`. Python: `"\n".join([...]).encode("utf-8")`. Sample for `pr7-a.myshopify.com` / `shop_a` / `CUSTOMER_REST_ID` / `191167` / `ae_pos` = `959bb90441a81889549f265bd75ef5b84a512486b896023cf4f42f50b2566abd`. Source-to-effect transform for modeled admin-bound writes is **identity**: G16 host path admits with the computed commitment as `sourceContentDigest`. G1–G15 keep synthetic source digest strings for admission+SQL-guard. Valid newer `work_id` with its stored digest but OLD/altered effect input fails **before** any write. After-check mutated callback payloads fail. Honest SQL-guard-only substitution remains **ADMITTED** | §7.6.2 Effect host | PR7-CUST-073, 078–082, 077 |
+| **F-CLAUDE-PR7AO-02** | P2 | `stocky_apply_bound_customer_effect` took caller `p_actual_digest` and wrote the caller payload | **CORRECTED.** Host freezes `(canonicalDomain, shopId, targetKind, targetValue, effectId)`, computes versioned `pr7-effect-v1` UTF-8 LF SHA-256 (`stocky_effect_commitment`), compares that commitment to the protected origin’s `sourceContentDigest`, and writes **the same frozen locals**. No `p_actual_digest`. Canonicalization is explicit: `encode(sha256(convert_to(version\|\|LF\|\|domain\|\|LF\|\|shopId\|\|LF\|\|kind\|\|LF\|\|value\|\|LF\|\|effectId, 'UTF8')), 'hex')`. Python: `"\n".join([...]).encode("utf-8")`. Sample for `pr7-a.myshopify.com` / `shop_a` / `CUSTOMER_REST_ID` / `191167` / `ae_pos` = `959bb90441a81889549f265bd75ef5b84a512486b896023cf4f42f50b2566abd`. Source-to-effect is **not** identity after RE-02: G16 host path admits with computed `pr7-source-v1`; `pr7-effect-v1` remains the write commitment including effectId; `SourceEffectLink` binds them. G1–G15 keep synthetic source digest strings for admission+SQL-guard. Valid newer `work_id` with its stored digest but OLD/altered effect input fails **before** any write. After-check mutated callback payloads fail. Honest SQL-guard-only substitution remains **ADMITTED** | §7.6.2 Effect host | PR7-CUST-073, 078–082, 077 |
 | **F-CLAUDE-PR7AO-03** | P2 | Only WEBHOOK roots were sighted; sighting key included `sourceIdentity`; replayed/child bytes could recapture ADMIN | **CORRECTED.** `QueuedWorkSighting` unique `(canonicalDomain, sourceContentDigest)`. WEBHOOK / PARENT_LINEAGE / MANUAL_REPLAY all sight under `stocky_source_content_lock` (namespace `1347573587` / `PR7S`). Capture reconciles same-command then same-identity first, then denies sighted digest, non-admin origin (`originalCaptureId IS NULL`), or any other admin capture of that digest. Mandatory path WEBHOOK root → unattributed PARENT_LINEAGE child → denied child → new-identity ADMIN capture of the same child content is **denied**. Rename, coalesced retry, MANUAL_REPLAY, and both race orders covered. Legitimate new-digest successor still progresses. NEG-12 reintroduces webhook-only/root-only coverage and must fail this design. No indefinite raw-PII cache and no lifetime digest blacklist | §7.6.2 Capture / Queued work | PR7-CUST-083–090, 098 |
 | **F-CLAUDE-PR7AO-04** | P3 | Plan claimed consumers cannot set `stocky.trusted_work_id`; runtime could | **CORRECTED** by the clarification option. GUC = **untrusted locator**, not authority. Host revalidates protected work and actual frozen input regardless of how the identifier arrived (`p_work_id` or GUC). Consumers **can** set it. No new nonce service or privilege hierarchy for this P3 | §7.6.2 GUC | PR7-CUST-091–093 |
 | **F-CLAUDE-PR7AO-05** | P3 | Capture id derived globally from caller command string (`oac_` + hyphen→underscore); shop B collided | **CORRECTED.** Unique `(canonicalDomain, commandId)`. Surrogate `oac_\|\|sha256(convert_to(domain,'UTF8') \|\| '\x00'::bytea \|\| convert_to(commandId,'UTF8'))` (text NUL is illegal in PostgreSQL). Two shops with the same command ID both succeed; same tenant/same command/same input reconciles; changed input → `admission_command_input_conflict`. Hyphen vs underscore do **not** collide | §7.6.2 Capture id | PR7-CUST-094–097 |
 
 F historical dispositions remain: **F-CLAUDE-PR7DO-01 PARTIALLY CORRECTED** at F (named 18:19 closed; replay class open until AO-03); **F-CLAUDE-PR7DO-02 specified / not demonstrated** at F (model admitted substitution until AO-02). After this packet’s execution, the DO-01 class is closed through AO-03 and DO-02 is demonstrated through AO-02 in the disposable model. Independent Claude targeted re-review remains required. PR7 runtime remains **NOT AUTHORIZED**.
+
+### 1.10 F-CLAUDE-PR7RE-01 / RE-02 / AO-06 dispositions (this correction)
+
+Ninth independent review (`22941f177f48ab95343330a05aac29ea1c9a6d4e`, blob `9596e5b92f6b56d6d1871b87103eebdb8bf54d77`) is integrated **unchanged**. AO-01, AO-02 (effect commitment including effectId), AO-04, AO-05, and supported earlier closures remain established. This packet does **not** rebuild them.
+
+| ID | Sev | Defect | This packet | Plan anchors | Matrix |
+|---|---|---|---|---|---|
+| **F-CLAUDE-PR7RE-01** | P2 | Issued capture never reconciled against a later non-fresh sighting; consume/guard/effect still progressed. Refusing a second capture was treated as enough | **CORRECTED.** Eligibility is a separate `contradictedAt` / `contradictionClass` on `OriginalAdminCapture` (history is not rewritten BOUND→UNATTRIBUTED). Uncorrelated `QueuedWorkSighting` marks captures contradicted under `stocky_source_content_lock`. Consume re-reads provenance **before** digest_conflict and refuses `capture_content_no_longer_fresh`. Duplicate capture/origin return is not a freshness grant. Effect host re-reads after lifecycle→target→source locks and refuses `effect_source_no_longer_fresh` unless `SourceEffectLink` already bound the same effect (historical, not unwritten). Linearization point: source-content lock. Sequential separate transactions; no lock is held across orchestration. Correlated `PARENT_LINEAGE`/`MANUAL_REPLAY` child of the **same** BOUND+acked parent capture + same source digest does not contradict the parent. Uncorrelated historical content cannot manufacture that relationship. Missing/pruned evidence stays ambiguous. NEG-13 (SINGLE: consume re-read removed) revives capture-first admit; effect recheck still holds | §7.6.2 Eligibility / lock order | PR7-CUST-090, 099–110 |
+| **F-CLAUDE-PR7RE-02** | P2 | G16 host used `pr7-effect-v1` (includes effectId) as `sourceContentDigest`, so a new effectId was different content | **CORRECTED.** Keep AO-02: host still computes `pr7-effect-v1` over frozen domain/shop/kind/value/**effectId** and writes those locals. Separately persist `pr7-source-v1` over domain, shop, semantic operation, target kind/value, and canonical original `source_body`. Excludes transport/retry/work/command/effect IDs, generation labels, and regenerated timestamps. `SourceEffectLink` binds the first effect commitment per work under the source key. Same source + new effect/command/work IDs is denied or ambiguous. Genuine new `source_body` and unrelated tenant/target progress. No lifetime content blacklist or raw-PII cache. PostgreSQL `text` cannot contain NUL; STRICT rejects NULL; empty body is omitted-content. Sample source (`pr7-a.myshopify.com` / `shop_a` / `CUSTOMER_WRITE` / `CUSTOMER_REST_ID` / `191167` / `ao02-host-body`) = `71e3d9d38a6ae9c7dd86577a323d2254ffb335f8879ddd9282f4095a80fe14f7`. Effect sample for `ae_pos` remains `959bb90441a81889549f265bd75ef5b84a512486b896023cf4f42f50b2566abd`. NEG-14 (SINGLE: identity source key) revives new-effect-id write after same-body sighting | §7.6.2 Source vs effect | PR7-CUST-073, 078–082, 111–118 |
+| **F-CLAUDE-PR7AO-06** | P3 | §14 table vs embedded manifest vs extracted named inputs not cross-checked | **CORRECTED.** Extractor `--selftest` and `extract_from_plan` compare the three row-for-row. One-sided table-hash and one-sided manifest-hash edits fail. Honest limit: a coordinated in-repository edit of every declaration is not prevented by in-band hashes; the pinned Git commit and independent review establish which package is trusted. No manifest self-hash cycle | §14; Appendix H | extractor `--selftest`; PR7-CUST-119 |
+
+PR49 pin `d63629077fcf29775c69161372c2cf903cfa62c6` is **read-only**. Its AUTH-X / EFF-X rows are Cursor-executed and separately under independent review. They are **not** independently accepted by this packet and are **not** imported as source files. Restrictions carried: (1) FACT/PROPOSED/UNEXECUTED labelled JWT `sub` exact string; reject numeric stringify; iss/dest before token exchange; keep global `useOnlineTokens` disabled on X; (2) read-before-write is not atomic fencing — publication serialized with barrier OR sink fence OR positive drain of that writer. See §7.6.2 PR49 restrictions.
 
 ---
 
@@ -586,7 +598,19 @@ Helpers check `session_user` (not `current_user`) so SECURITY DEFINER cannot be 
 | Authenticated application trust boundary | PostgreSQL does **not** verify Shopify tokens and does **not** execute `authenticate.admin`. The disposable session helper models post-`requireAdminTenant` same-shop/actor context only. Live library bind remains an **implementation-proof obligation** |
 | What is not stored | Raw tokens, customer PII, passwords, session secrets |
 
-**Application work-id/effect invariant (DO-02 / AO-02, PROPOSED):** a named transaction/effect host **computes** the canonical commitment from the exact immutable semantic effect input it is about to write (versioned `pr7-effect-v1` over frozen domain/shop/kind/value/effectId), loads the protected `WriterAdmissionOrigin` binding using `p_work_id` or the untrusted GUC **only as a locator**, revalidates tenant/domain, work identity, that computed commitment, and allowed target/lineage, **then** calls the 5-arg guard and executes **the same frozen snapshot**. The host accepts **no** independent digest argument. A branded TypeScript type or an after-the-write log is insufficient. External publication retains its separately specified pre-publication fence and is **not** claimed atomic with PostgreSQL. Replay/coalesce/child effects reuse or explicitly validate lineage; they do not pick a newer valid `work_id` for old bytes. Source-to-effect transform in this disposable model is identity for modeled admin-bound writes.
+**RE-01 capture eligibility (not origin rewrite):** `OriginalAdminCapture.contradictedAt` / `contradictionClass` invalidate *use* of an already-issued capture without erasing the historical capture row and without rewriting `WriterAdmissionOrigin.originStatus` from BOUND to UNATTRIBUTED. `stocky_note_queued_work` and non-fresh admission classes insert `QueuedWorkSighting` keyed by `(canonicalDomain, sourceContentDigest, sightedClass, sourceIdentity)` and call `stocky_mark_uncorrelated_captures_contradicted`. A sighting is **correlated** only when parent is BOUND, acked, has `originalCaptureId`, and the source digest matches; that parent capture is excluded from contradiction. Consume re-reads under the existing lock order (lifecycle shared → customer target shared → source-content). Duplicate capture/origin return re-checks contradiction and is not a freshness grant. Effect host takes `stocky_fact_write_guard` then `stocky_source_content_lock`, re-reads, and refuses `effect_source_no_longer_fresh` unless `SourceEffectLink` already stores the same effect commitment for that work **or source** (historical committed write). Linearization point = source-content advisory lock (`1347573587` / `pr7-src-v1:`). Proofs use sequential separate transactions so no lock is held across orchestration.
+
+**RE-02 source vs effect:**
+
+| Commitment | Version | Fields (LF UTF-8 SHA-256 hex) | Used for |
+|---|---|---|---|
+| Source | `pr7-source-v1` | canonicalDomain, shopId, semantic operation, targetKind, targetValue, original source_body | sighting, capture freshness, origin conflict, child/replay, consume/effect eligibility |
+| Effect | `pr7-effect-v1` | canonicalDomain, shopId, targetKind, targetValue, **effectId** | exact write snapshot; AO-02 actual-input enforcement |
+
+Python: `"\n".join([version, ...]).encode("utf-8")`. SQL: `encode(sha256(convert_to(version \|\| LF \|\| …, 'UTF8')), 'hex')`. Generated work/command/effect/retry IDs, generation labels, and regenerated timestamps are **excluded** from the source commitment. Empty `source_body` is omitted-content. NULL arguments are STRICT-rejected. PostgreSQL `text` cannot contain NUL (the previous `E'\0'` compile check was invalid). `SourceEffectLink` unique `(canonicalDomain, workId)`, unique `(canonicalDomain, sourceContentDigest)`, plus PK `(canonicalDomain, effectCommitment)` is owned by `stocky_lifecycle_gate_owner`. Same source + new effect id on the real effect lane is denied, including a correlated child work. Same source + same effectId is historical. Byte equality of retained evidence reports ambiguity; it is not a lifetime blacklist.
+
+
+**Application work-id/effect invariant (DO-02 / AO-02, PROPOSED):** a named transaction/effect host **computes** the canonical commitment from the exact immutable semantic effect input it is about to write (versioned `pr7-effect-v1` over frozen domain/shop/kind/value/effectId), loads the protected `WriterAdmissionOrigin` binding using `p_work_id` or the untrusted GUC **only as a locator**, revalidates tenant/domain, work identity, that computed commitment, and allowed target/lineage, **then** calls the 5-arg guard and executes **the same frozen snapshot**. The host accepts **no** independent digest argument. A branded TypeScript type or an after-the-write log is insufficient. External publication retains its separately specified pre-publication fence and is **not** claimed atomic with PostgreSQL. Replay/coalesce/child effects reuse or explicitly validate lineage; they do not pick a newer valid `work_id` for old bytes. Source-to-effect in this disposable model is a protected `SourceEffectLink` from `pr7-source-v1` to `pr7-effect-v1` (effectId remains in the effect commitment). G1–G15 keep synthetic source keys for SQL-guard paths.
 
 | Proposed FUTURE file | Export | X callers / hosts | Connection |
 |---|---|---|---|
@@ -625,6 +649,14 @@ Error/rollback: computed-commitment/tenant/target/context mismatch raises `effec
 
 Cross-system prerequisites remain explicit future implementation proofs only where this plan specifies a concrete executable protocol and tests. This SQL model does **not** execute Redis, filesystem, or authentication implementation obligations. Temporary feasibility tests may exercise existing real APIs; they must not hide a complete untracked PR7 implementation outside the repo.
 
+
+**PR49 integration restrictions (pin `d63629077fcf29775c69161372c2cf903cfa62c6`, read-only; not independently accepted here; sources not imported):**
+
+Classification used below: **FACT** = observed on X / installed libraries; **PROPOSED** = harness or future adapter; **UNEXECUTED** = app integration not done. AUTH-X / EFF-X remain Cursor-executed evidence under separate review.
+
+1. **Actor (FACT/PROPOSED).** Preserve a cryptographically verified JWT `sub` as an exact string. Reject unsupported numeric identity rather than stringify rounded values (IEEE-754 fold of wide ids is FACT on Node). Token signature/algorithm/audience/time and canonical issuer/destination shop agreement must be established **before** token exchange or privileged session/credential use, not merely after returned GraphQL access. Use supported pinned verification primitives; no new home-grown authentication subsystem in this PR. X `app/shopify.server.ts` does **not** set `useOnlineTokens` (library default false) — keep global online mode disabled. Obtaining `sub` does not itself require global online mode. No owner grant from offline token possession, first login, or uncorrelated flags. Unsupported/mismatching IDs remain unassigned/denied. Do not fall back to offline credentials to evade failed user permissions. No configuration/dependency changes in this planning PR.
+2. **Publication fence (FACT/PROPOSED/UNEXECUTED).** A read immediately before an external write is not by itself atomic fencing. The actual publication must be serialized with the privacy barrier, **or** the sink must enforce the generation/target fence, **or** that specific writer and its outstanding I/O must be positively drained. A queue label, last-second GET, TTL, PID, or caller boolean is not that proof. HTTP streaming/export bytes and D scratch need their own named boundaries. Unsupported/unknown drain stays incomplete/visible. Do not reopen accepted D operator-only behavior by violating its stated quiescence precondition. Installing generation-fenced publication in `stocky-webhooks` / `stocky-cron` / privacy processors remains **UNEXECUTED APPLICATION INTEGRATION**.
+3. **Test homes.** Carry remaining actor/fence cases in PR7 `test:privacy` / disposable probes when runtime is authorized. This packet only records the restrictions. Do not pretend PR49 modeled checks prove installed PR7 processors.
 
 **Uninstrumented writers:** control-plane tables have **no** RLS on V. A raw CP `INSERT` without the gate still succeeds (**executed** G5). Legacy processes running before the guard is deployed must be **stopped/drained** before privacy execution is enabled. A rollout with uninstrumented active writers is not safe admission. Named FUTURE wrappers (not this PR): `TenantDb` / `withTenantBoundTransaction` participating-write guard is **required, not optional**; CP write helpers for every §7.9 inventoried symbol including `completeAttemptRetry` and the dispatcher disabled-shop path. Do not claim accepted B/C internals automatically honor this gate. `processingEnabled` checks are useful admission filters; they are **not** a transaction drain.
 
@@ -1121,6 +1153,10 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 | Exact-X push CI | `35513348816` SUCCESS — Classify `106085019367`; Heavy `106085034878` SKIPPED; Gate `106085034298` |
 | PR6 formal closure | effective at PR47 owner merge `2026-09-20T13:23:14Z` (PR47 comment 5750214319) |
 | Entry-evidence **PR48** | sealed `c97adda285b5625836a582deb03983099a7b3461`; historical observation `275292d19b583c04c3afe01ef7d9feb48fee0f6c` only. No new packaging run |
+| Ninth RE review **FF** | `22941f177f48ab95343330a05aac29ea1c9a6d4e`; sole parent S `fd5f7bbd…`; one-file add of `PR7_REPRODUCIBLE_EFFECT_REPLAY_PROVENANCE_INDEPENDENT_REVIEW.md`; blob `9596e5b92f6b56d6d1871b87103eebdb8bf54d77` **unchanged** |
+| PR49 evidence pin (read-only) | `d63629077fcf29775c69161372c2cf903cfa62c6` — two docs only vs X; **not** independently accepted here; sources not imported |
+| Starting subject **S** | `fd5f7bbdf18fa12d75371686d8969d67fe68a158` |
+| Ninth review blob (ninth of nine) | `9596e5b92f6b56d6d1871b87103eebdb8bf54d77` |
 | IEEE-754 probe | **executed-prior-planning-head-not-re-run**; `Number("9007199254740993")===9007199254740992` (Node `v22.14.0`) |
 | `npm run test:privacy` | **executed-prior-planning-head-not-re-run** (exit 1, missing script). Missing script is an implementation gate, not a planning defect |
 | Old-model CE-A / CE-B / CE-C | **executed-prior-planning-head-not-re-run** on unchanged TF contract (`75ab1c02…349846de`). Preserved identities |
@@ -1132,7 +1168,7 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 | **Lower-bound-only option (a) on the exact overlap** | **executed-this-planning-session** on a disposable Q variant (`01_lower_bound_only.sql` `75a168288ede88b267a3d08d225b5f4017bead2e40908c2fcac70c22a2ace284`) then **restored**. ADMIN 18:19 remained **`BOUND`,`gen_a2`, guard ADMITTED** because `18:19 >= 17:49`. Preinstall 10:49 is rejected at admission (`admission_generation_ambiguous`) rather than `restore_denied` — expected for option (a), **not** the 18:19 case. Q restored: same 18:19 defect. **Not** the declared correction |
 | Historical Q 313-record packet | original-run identity for Q (**not** this contract): **313 records = 191 unique + 122 declared reruns**. Contract `d9bd880f…`; driver `59bf35f5…`; run log `4e88e653…`. Independently reproduced Q baseline remains Q-only historical evidence |
 | Historical F 375-record packet | **Cursor-reported unpublished-at-F**, **not independently reproduced**. Declared at F: **375 records / 375 PASS / 0 FAIL** = **223 unique** + **152 declared reruns** against unpublished `bc0d674a…` / `336b2795…`. Eighth review could not extract those files and labelled 375 **declared-but-not-independently-reconciled**. Do **not** treat 375 as this packet’s result. Reviewer reconstruction `cb7958a5…` is separately attributed |
-| Disposable PostgreSQL 16 proofs (CURRENT contract) | **executed-this-planning-session from a clean `git archive` of `df478397282d907e66608b81197b1c02ee17de16`** — **416 records / 416 PASS / 0 FAIL** = **244 unique assertions** + **172 declared reruns**. Unique G1–G6 = 59 preserved. Unique G7–G15 preserved via capture-to-producer / work_id / capture-layer-deny crosswalk (**not** preseeded privileged rows). Unique G16 = 50. Unique NEG = 12. New unique this packet = 21 (G16 +20 + NEG +1). Extractor `--selftest` **extraction_selftest_ok**. Manifest **12/12** listed digests verified. Appendix J regeneration **byte-identical** to Appendix L (`75a16828…`). Host `/tmp/pr45-ao-gate-pg16:5442`. `PROOF_ROOT=/tmp/pr45-ao-gate-extracted/current`. `server_version` / `server_version_num` **queried** (`16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)` / `160015`). results.json **run log** `d140af765f82dd4543f482330174dabbc31b168a218403206ca1b4e8ce94d567`. Q+lower-bound reproducer **17/17 PASS** on the same host (18:19 BOUND+ADMITTED on Q and on option (a)). Not PR7 runtime. Ports 5433–5440 were **not** assumed owned. Authoring-run `/tmp/pr45-ao-pg16:5440` `d2716b8a…` is an original-run identity only and was **not** the mandatory gate |
+| Disposable PostgreSQL 16 proofs (CURRENT contract) | **executed-this-planning-session; mandatory clean-export evidence is recorded after the candidate commit.** Authoring host `/tmp/pr45-re-pg16:5444` ran **505 records / 505 PASS / 0 FAIL** = **290 unique** + **215 declared reruns** (G16 unique = 93, NEG unique = 15, G1–G6 unique = 59 preserved). CURRENT contract `d4c21ff9350f4072a907576f80be44b46a210695e8088f467a4f7b49c46b4318`; driver `d24afa331bde236e6ed59243ada670d14b658bd308541b9263df616040c75d85`; extractor `70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172`; seed `d0d84842…` / scanner `666feaa8…` / portable SQL `9f7aaa26…` **unchanged vs S**. S’s 416/244/172 remains independently established S evidence (`b55bb88e…` / `3edd193b…` / `02b066c3…`). First authoring attempt **489/497** (results.json `4c5a2fbd…`) is preserved as a failed attempt. Helper A internal challenge then wrote a second effect from a correlated child work (`helper_a_attack_results.json` A1); source-level `SourceEffectLink` unique closed it before this 505-record run. Clean-export SHA/host/results are filled from the candidate-commit gate (not this authoring tree). Queried `16.15` / `160015`. Not PR7 runtime. Ports 5433–5442 leftover clusters were **not** stopped |
 | Redis / filesystem / Shopify / live token exchange | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted; Helper A / coordinator PREP rows are **FACT (PR48)** synthetic probes, not this session. `authenticate.admin` remains **reused / not independently reproduced**. This SQL model does **not** execute outstanding real authentication-library, Redis, export or D-scratch integrations |
 | Official fetches | §3 URLs, **2026-09-18** |
 | Store calls | not executed |
@@ -1142,7 +1178,9 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 
 **Interface crosswalk (Q ADMIN caller-timestamp → this capture-to-producer):** `admit()` for `ADMIN_SESSION_CURRENT_INSTALL` first calls `capture_admin()` as `stocky_admin_capture` (`stocky_establish_modeled_admin_session` + `stocky_capture_original_admin_command`); producer then consumes that capture. Caller `admitted_at_sql` **cannot** mint BOUND. G13 assertion **names** are preserved. G11 CE-B / G13 `ced_persisted_old_origin_restore_denied` now admit ADMIN **before** complete so server `capturedAt` precedes `completedAt` (capture-now after complete would skip restore_denied via CONTINUE). G13 `ced_persisted_successor_origin_admitted_in_overlap` is capture-now **after** `gen_a2` LIVE with a **new** digest — **not** proof that overlap-timestamp laundering remains; the `-150 minutes` caller argument is ignored. G13 no longer backdates `completedAt`. Webhook overlap still uses caller historical timestamps. Do **not** treat those names as proof that class+timestamp still mint successor origin. G13 `newly_attached_successor_generation_not_trusted` accepts `admission_digest_conflict` **or** `queued_work_cannot_acquire_fresh_admin_origin` (capture-layer deny of a webhook digest as ADMIN). Do **not** weaken proofs with owner-preseeded origin or capture rows.
 
-**Interface crosswalk (F caller-digest host → this actual-input host):** G1–G15 keep synthetic source digest strings for admission and the SQL-guard path. G16 host path admits with the computed `pr7-effect-v1` commitment as `sourceContentDigest` (source-to-effect transform is identity for modeled admin-bound writes). F’s `effect_host_rejects_old_digest_with_new_work_id` is superseded by `effect_host_rejects_old_effect_with_new_work_id` plus alternate-payload / mutated-callback negatives. Honest SQL-guard-only old-effect/new-work remains **ADMITTED**.
+**Interface crosswalk (S identity source key → this source/effect split):** G1–G15 keep synthetic source digest strings for admission and the SQL-guard path. G16 host path admits with computed `pr7-source-v1` as `sourceContentDigest` and writes under `pr7-effect-v1` plus `SourceEffectLink`. Matching write is exercised **before** alternate-payload denials so the link can refuse a second effect id. F’s `effect_host_rejects_old_digest_with_new_work_id` is superseded by `effect_host_rejects_old_effect_with_new_work_id` plus alternate-payload / mutated-callback negatives. Honest SQL-guard-only old-effect/new-work remains **ADMITTED**.
+
+Failed proof attempts (this RE pass, not hidden): (A) `stocky_source_commitment` could not compile a `position(E'\0' IN text)` check (`invalid byte sequence for encoding UTF8: 0x00`) — PostgreSQL text cannot contain NUL; STRICT rejects NULL; empty body is omitted-content; (B) first authoring suite **489/497** (`4c5a2fbd…`) because GUC foreign-effect ran before `SourceEffectLink` bound the matching write, race consume hit `admission_digest_conflict` before the freshness re-read, and the RE-02 overlap child used `clock_timestamp()` so CONTINUE skipped `customer_target_attribution_ambiguous` — bind matching write first; re-read capture freshness before digest_conflict; admit the child at `2026-09-20 18:19:00+00`; (C) Helper A (`bc-af3916e0…`) produced blocking child-work/new-effect writes while `SourceEffectLink` was unique only per work — add unique `(canonicalDomain, sourceContentDigest)` and re-read that bind before insert; Helper A `consume_new_work_same_identity_digest` was a duplicate-return false positive (`duplicate_admission_return_does_not_remint_new_work`); `runtime_direct_auditevent_insert` is the documented uninstrumented control-plane path, not this packet; (D) authoring then **505/505** = **290 unique** + **215 reruns** on `/tmp/pr45-re-pg16:5444` (run-log `04bc6f0b…`). NEG-13 is SINGLE (consume re-read removed; effect recheck remains). NEG-14 is SINGLE (apply source key set to effect commitment). Do not call a two-defense mutation single.
 
 Failed proof attempts (this AO pass, not hidden): (A) PostgreSQL `text` rejected NUL in surrogate capture id (`null character not permitted` / `invalid byte sequence for encoding UTF8: 0x00`) — use `'\x00'::bytea` between `convert_to(...,'UTF8')` values; (B) first full suite 305/416 because that NUL failure cascaded through ADMIN paths; (C) 408/416 because same-command ADMIN retry was denied before capture reconcile, G13 `newly_attached` expected only `admission_digest_conflict`, and race_capture_then_sighting allowed a follow-up new-identity capture — reconcile first; accept capture-layer deny; follow-up capture of the same digest must be denied; (D) replay child used `clock_timestamp()` so `now > completedAt` skipped overlap deny — admit the child with overlap timestamp `2026-09-20 18:19:00+00`. Historical DO failures remain original-run identities and are not re-credited. NEG replaces one function at a time (NEG-10 capture requirement removed; NEG-11 computed commitment omitted; NEG-12 webhook-only/root-only sighting restored), demonstrates the safety property failing, then `reset()` reloads the declared contract.
 
@@ -1154,7 +1192,7 @@ Historical TF 115-record packet remains original-run identity (**not** this cont
 
 Historical 59-case identities remain original-run identities: `01_contract.sql` `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; `02_seed.sql` `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`; `03_run_proofs.py` `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; original `results.json` `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` (run log; reviewer independent log `185dd1b8…`).
 
-Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`). Mandatory clean-export host **port 5442** datadir `/tmp/pr45-ao-gate-pg16` from `git archive` of `df478397282d907e66608b81197b1c02ee17de16`. Authoring host **port 5440** datadir `/tmp/pr45-ao-pg16` is not the gate. System cluster was not used. Teardown: `dropdb pr45_proof` only. Do **not** stop leftover helper postgres on 5433–5436 or 5439. Do **not** assume ownership of 5433–5440.
+Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`). Mandatory clean-export host **port 5447** datadir `/tmp/pr45-re-gate-pg16` from `git archive` of the candidate commit. Authoring host **port 5444** datadir `/tmp/pr45-re-pg16` is not the gate. Helper clusters 5445/5446 are internal and are not the gate. System cluster was not used. Teardown: `dropdb pr45_proof` only. Do **not** stop leftover helper postgres on 5433–5436, 5439, 5440, or 5442. Do **not** assume ownership of 5433–5442.
 
 ## 13. Cross-check to the acceptance matrix
 
@@ -1175,6 +1213,7 @@ Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (d
 | Durable admission origin / labeling | PR7-CUST-045…061, G15, NEG-8/9, **F-CLAUDE-PR7TA-01/02**; G13 names preserved via work_id crosswalk |
 | Authenticated original-admin capture / effect-host binding | PR7-CUST-062…077, G16, NEG-10/11, **F-CLAUDE-PR7DO-01/02** (F historical); G11/G13 names preserved via capture-to-producer crosswalk |
 | Reproducible actual-input commitment / replay provenance / tenant command ids | PR7-CUST-078…098, G16, NEG-11/12, **F-CLAUDE-PR7AO-01…05** |
+| Capture eligibility at use / source vs effect / publication consistency | PR7-CUST-099…119, G16, NEG-13/14, **F-CLAUDE-PR7RE-01/02**, **F-CLAUDE-PR7AO-06**; PR49 pin `d636290…` restrictions |
 | Escalation | PR7-ESCL-001…004 |
 | Finding crosswalk | §1.2, §1.3, §1.4, §1.5, **§1.6**, **§1.7**, **§1.8**, **§1.9** and matrix §11–§12.6 |
 
@@ -1186,12 +1225,12 @@ If a matrix row cites a path, that path is listed in §4 or §7.9.
 
 | File | SHA-256 | Role |
 |---|---|---|
-| CURRENT `01_contract.sql` | `b55bb88e758e1a7f7c124222af616c84053fbda89e8083839d5648c333e91814` | Declared runnable contract (Appendix F). **New** identity |
-| CURRENT `03_run_proofs.py` | `3edd193bfa18bec375bf020b8ccbabf24c28bee1f8a14bc66930e2a5be4c1f86` | Declared runnable driver (Appendix G). **New** identity |
+| CURRENT `01_contract.sql` | `d4c21ff9350f4072a907576f80be44b46a210695e8088f467a4f7b49c46b4318` | Declared runnable contract (Appendix F). **New** RE identity; S `b55bb88e…` remains S evidence |
+| CURRENT `03_run_proofs.py` | `d24afa331bde236e6ed59243ada670d14b658bd308541b9263df616040c75d85` | Declared runnable driver (Appendix G). **New** RE identity; S `3edd193b…` remains S evidence |
 | `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (**byte-identical** to 59-case, TF, CC-GEN, GW, Q, F) |
 | `04_discover_writers.py` | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` | Independent source-derived candidate discovery (**unchanged**) |
 | `04_source_derived.sql` | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` | Portable consumed snapshot; **byte-identical** to P/GW/Q/F |
-| CURRENT `00_extract_proofs.py` | `02b066c3838b246bd53deb7f6467e31fc7d8b63d7349d1317c21b04ecfdc6177` | Published extractor `pr7-proof-extract-v1` (Appendix H) |
+| CURRENT `00_extract_proofs.py` | `70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172` | Published extractor `pr7-proof-extract-v1` (Appendix H) with AO-06 table/manifest/extracted cross-check |
 | CURRENT `regenerate_lower_bound.py` | `c79b03ad6c75e11fbfece767b33ac61b87820ee81140a5c3ac31553e39b0f23a` | Regenerates option-(a) SQL from Q Appendix A (Appendix J) |
 | CURRENT `reproduce_do01_overlap.py` | `b7c6e6da06e70bbe6216833b7f0a7918794ddd60b1e6ea8dee613faec3f8ae65` | Q + lower-bound reproducer (Appendix K). **New** identity; not `9872848ca94f81af77a5bf534148b7d2e05fe713e722badfa87ee6f8d480b9db` |
 | Q historical `01_contract.sql` | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` | Appendix A; **not** the runnable current contract |
@@ -1205,15 +1244,15 @@ If a matrix row cites a path, that path is listed in §4 or §7.9.
 
 Historical Q identities (independently reviewed head; **not** this contract): contract `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9`, seed `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`, driver `59bf35f541320301c7011ae94566ea28575def299f1d8d5cadb6c8cab18c6a5b`, Cursor run log `4e88e653e8ac30d577c7d85c737297fcedb44313cf9068e86b3cd49ae9819e63`. Historical GW identities: contract `ec92ac13edfe0b7395168e49ee47795bab0ad38379d9797ec11524236ceca61d`, driver `2b5d92e15eb2a48f6384a3175346eeb57e8e55dc37f535c00b0a443a9b16c5d5`, Cursor run log `0ff616f2cf809c00740f19e5b027a0e85f6c74cf146d855c1a8ca70e4257aa30`. Historical CC-GEN identities: contract `7a1d461182ab4b3ab066747cbad73d8d586d19a566cc61dbdebb38452dc4544c`, driver `e9bd3c18…97001f34`, Cursor run log `420ec6e0…`. Historical TF identities: contract `75ab1c02…349846de`, driver `566e0f28…7823251a`, Cursor run log `006e5799…`. Historical 59-case identities: contract `b29ef463…858db054`, driver `69005537…08667ebb4`, Cursor run log `ecc9acd1…`, reviewer run log `185dd1b8…`.
 
-Clean-fixture result (**mandatory clean-export of `df478397282d907e66608b81197b1c02ee17de16`**): **416 records / 416 PASS / 0 FAIL** = **244 unique** + **172 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26 + G15×29 + G16×50). Unique G1–G6 = 59. Unique NEG = 12. Unique added this packet = 21. Do **not** label 416 or 375 or 313 or 253 or 169 or 115 as unique-assertion counts. Do **not** target 375. Host `/tmp/pr45-ao-gate-pg16:5442`. results.json run-log `d140af765f82dd4543f482330174dabbc31b168a218403206ca1b4e8ce94d567`.
+S clean-fixture result remains independently established: **416 records / 416 PASS / 0 FAIL** = **244 unique** + **172 declared reruns** from `df478397…` / S `fd5f7bbd…`. This RE packet’s **authoring** run: **505 records / 505 PASS / 0 FAIL** = **290 unique** + **215 declared reruns** (G7×14 + G8×7 + G9×9 + G11×12 + G12×10 + G13×15 + G14×26 + G15×29 + G16×93; NEG unique = 15). Unique G1–G6 = 59 preserved. Unique added this packet vs S = 46. Do **not** label 505 or 497 or 416 or 375 as unique-assertion counts. Authoring host `/tmp/pr45-re-pg16:5444`, authoring run-log `04bc6f0bb7b43e5a5b7300875880102a05e1df9d50ae52eb2469af093a5cebae`. Mandatory clean-export of the **candidate commit** is the gate; authoring `/tmp` is not substituted for that gate.
 
 Reproduction is **self-contained from a clean export of the candidate COMMIT**. Extract every current input with the **published** extractor. Verify every manifest digest. Execute the complete declared model on clean PostgreSQL 16. No earlier `/tmp` tree or unpublished repair may be used.
 
 ```bash
-EXPORT=/tmp/pr45-ao-export
-EXTRACT_ROOT=/tmp/pr45-ao-extracted
-PGDATA=/tmp/pr45-ao-gate-pg16
-export PGHOST="$PGDATA" PGPORT=5442 EXTRACT_ROOT
+EXPORT=/tmp/pr45-re-export
+EXTRACT_ROOT=/tmp/pr45-re-gate-extracted
+PGDATA=/tmp/pr45-re-gate-pg16
+export PGHOST="$PGDATA" PGPORT=5447 EXTRACT_ROOT
 rm -rf "$EXPORT" "$EXTRACT_ROOT" "$PGDATA"
 mkdir -p "$EXPORT" "$EXTRACT_ROOT"
 git archive --format=tar COMMIT | tar -x -C "$EXPORT"
@@ -1254,7 +1293,7 @@ Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_pri
 
 ### Appendix A — `01_contract.sql` (Q historical transcription; **not** the runnable CURRENT contract)
 
-SHA-256 `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9`. Execute Appendix F (`b55bb88e…`) instead. F’s unpublished-at-F `bc0d674a…` is **not** recovered as current. Kept so Q remains independently inspectable.
+SHA-256 `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9`. Execute Appendix F (`d4c21ff9…`) instead. S’s `b55bb88e…` remains independently established S evidence. F’s unpublished-at-F `bc0d674a…` is **not** recovered as current. Kept so Q remains independently inspectable.
 
 
 <!-- PROOF-EXTRACT:begin path=historical/q/01_contract.sql -->
@@ -31486,7 +31525,7 @@ INSERT INTO public."SourceDerivedRequired"(source_identity,file_path,symbol,writ
 
 ### Appendix F — `01_contract.sql` (CURRENT declared runnable contract)
 
-SHA-256 `b55bb88e758e1a7f7c124222af616c84053fbda89e8083839d5648c333e91814`. This is the executable contract for this AO packet. It is **not** F’s unpublished-at-F `bc0d674afdfe1ed984e7258326e3421a62c24b25ce988281f43885e9fe859ff4` and **not** the eighth-review reconstruction `cb7958a5447ac1febf0e8e9ebd5ae0935dc00cdefb45d69257a336eff3b81371`. Do **not** execute Appendix A as the current contract. Proposed-boundary evidence, **not** implemented PR7 runtime.
+SHA-256 `d4c21ff9350f4072a907576f80be44b46a210695e8088f467a4f7b49c46b4318`. This is the executable contract for this RE packet. S’s `b55bb88e758e1a7f7c124222af616c84053fbda89e8083839d5648c333e91814` remains independently established S evidence. It is **not** F’s unpublished-at-F `bc0d674afdfe1ed984e7258326e3421a62c24b25ce988281f43885e9fe859ff4` and **not** the eighth-review reconstruction `cb7958a5447ac1febf0e8e9ebd5ae0935dc00cdefb45d69257a336eff3b81371`. Do **not** execute Appendix A as the current contract. Proposed-boundary evidence, **not** implemented PR7 runtime.
 
 <!-- PROOF-EXTRACT:begin path=current/01_contract.sql -->
 ```sql
@@ -31497,6 +31536,8 @@ SHA-256 `b55bb88e758e1a7f7c124222af616c84053fbda89e8083839d5648c333e91814`. This
 -- AO-03: sight WEBHOOK/PARENT_LINEAGE/MANUAL_REPLAY; key (canonicalDomain, source digest).
 -- AO-04: stocky.trusted_work_id is an untrusted locator; host revalidates.
 -- AO-05: capture unique (canonicalDomain, commandId); surrogate sha256(domain||NUL||commandId).
+-- RE-01: consume/effect re-read uncorrelated non-fresh sightings; eligibility is separate from capture history.
+-- RE-02: pr7-source-v1 is distinct from pr7-effect-v1; generated ids are not source identity.
 -- search_path locked on every SECURITY DEFINER function. NO hidden GRANT.
 -- PUBLIC EXECUTE revoked. No BYPASSRLS. FORCE RLS on merchant tables.
 
@@ -31922,6 +31963,8 @@ CREATE TABLE public."OriginalAdminCapture" (
   "targetValue" text,
   "consumedAt" timestamptz,
   "boundWorkId" text,
+  "contradictedAt" timestamptz,
+  "contradictionClass" text,
   "formatPolicyVersion" text NOT NULL DEFAULT 'pr7-origin-v1',
   UNIQUE ("canonicalDomain", "sourceKind", "sourceIdentity", "sourceContentDigest"),
   UNIQUE ("canonicalDomain", "commandId")
@@ -31934,12 +31977,26 @@ CREATE TABLE public."QueuedWorkSighting" (
   "sourceContentDigest" text NOT NULL,
   "sightedClass" text NOT NULL,
   "sightedAt" timestamptz NOT NULL,
-  PRIMARY KEY ("canonicalDomain", "sourceContentDigest")
+  "parentWorkId" text,
+  "correlatedCaptureId" text,
+  PRIMARY KEY ("canonicalDomain", "sourceContentDigest", "sightedClass", "sourceIdentity")
+);
+CREATE TABLE public."SourceEffectLink" (
+  "canonicalDomain" text NOT NULL,
+  "sourceContentDigest" text NOT NULL,
+  "effectCommitment" text NOT NULL,
+  "workId" text NOT NULL,
+  "effectId" text NOT NULL,
+  "writtenAt" timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY ("canonicalDomain", "effectCommitment"),
+  UNIQUE ("canonicalDomain", "workId"),
+  UNIQUE ("canonicalDomain", "sourceContentDigest")
 );
 ALTER TABLE public."WriterAdmissionOrigin" ADD COLUMN "originalCaptureId" text;
 ALTER TABLE public."OriginalAdminSession" OWNER TO stocky_admission_origin_owner;
 ALTER TABLE public."OriginalAdminCapture" OWNER TO stocky_admission_origin_owner;
 ALTER TABLE public."QueuedWorkSighting" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."SourceEffectLink" OWNER TO stocky_lifecycle_gate_owner;
 ALTER TABLE public."OriginalAdminSession" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."OriginalAdminSession" FORCE ROW LEVEL SECURITY;
 ALTER TABLE public."OriginalAdminCapture" ENABLE ROW LEVEL SECURITY;
@@ -31952,15 +32009,24 @@ CREATE POLICY original_admin_capture_owner_all ON public."OriginalAdminCapture"
   FOR ALL TO stocky_admission_origin_owner USING (true) WITH CHECK (true);
 CREATE POLICY queued_work_sighting_owner_all ON public."QueuedWorkSighting"
   FOR ALL TO stocky_admission_origin_owner USING (true) WITH CHECK (true);
+CREATE POLICY queued_work_sighting_gate_select ON public."QueuedWorkSighting"
+  FOR SELECT TO stocky_lifecycle_gate_owner USING (true);
 CREATE POLICY original_admin_capture_gate_select ON public."OriginalAdminCapture"
   FOR SELECT TO stocky_lifecycle_gate_owner USING (true);
+ALTER TABLE public."SourceEffectLink" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."SourceEffectLink" FORCE ROW LEVEL SECURITY;
+CREATE POLICY source_effect_link_gate_all ON public."SourceEffectLink"
+  FOR ALL TO stocky_lifecycle_gate_owner USING (true) WITH CHECK (true);
 REVOKE ALL ON public."OriginalAdminSession" FROM PUBLIC;
 REVOKE ALL ON public."OriginalAdminCapture" FROM PUBLIC;
 REVOKE ALL ON public."QueuedWorkSighting" FROM PUBLIC;
+REVOKE ALL ON public."SourceEffectLink" FROM PUBLIC;
 GRANT SELECT, INSERT, UPDATE ON public."OriginalAdminSession" TO stocky_admission_origin_owner;
 GRANT SELECT, INSERT, UPDATE ON public."OriginalAdminCapture" TO stocky_admission_origin_owner;
 GRANT SELECT, INSERT, UPDATE ON public."QueuedWorkSighting" TO stocky_admission_origin_owner;
 GRANT SELECT ON public."OriginalAdminCapture" TO stocky_lifecycle_gate_owner;
+GRANT SELECT ON public."QueuedWorkSighting" TO stocky_lifecycle_gate_owner;
+GRANT SELECT, INSERT, UPDATE ON public."SourceEffectLink" TO stocky_lifecycle_gate_owner;
 
 -- AO-03: serialize capture against non-fresh provenance on (canonicalDomain, source digest).
 -- Namespace 1347573587 = ASCII 'PR7S'. Taken after the lifecycle shared lock.
@@ -31985,6 +32051,100 @@ END;
 $$;
 ALTER FUNCTION public.stocky_source_content_lock(text, text) OWNER TO stocky_admission_origin_owner;
 REVOKE ALL ON FUNCTION public.stocky_source_content_lock(text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.stocky_source_content_lock(text, text) TO stocky_lifecycle_gate_owner;
+
+-- RE-02: source identity excludes generated work/command/effect/retry ids.
+CREATE OR REPLACE FUNCTION public.stocky_source_commitment(
+  p_canonical_domain text,
+  p_shop_id text,
+  p_operation text,
+  p_kind text,
+  p_value text,
+  p_source_body text
+) RETURNS text
+LANGUAGE plpgsql
+IMMUTABLE
+STRICT
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  -- PostgreSQL text cannot contain NUL; omitted/NULL inputs are STRICT-rejected.
+  -- Empty source_body is the canonical omitted-content encoding.
+  RETURN encode(
+    sha256(convert_to(
+      'pr7-source-v1' || E'\n' ||
+      p_canonical_domain || E'\n' ||
+      p_shop_id || E'\n' ||
+      p_operation || E'\n' ||
+      p_kind || E'\n' ||
+      p_value || E'\n' ||
+      p_source_body,
+      'UTF8'
+    )),
+    'hex'
+  );
+END;
+$$;
+ALTER FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+REVOKE ALL ON FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) TO stocky_runtime, stocky_control_plane, stocky_original_admission, stocky_admin_capture, stocky_admission_origin_owner;
+
+-- RE-01: uncorrelated non-fresh evidence invalidates capture *eligibility* without erasing capture history.
+CREATE OR REPLACE FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(
+  p_canonical_domain text,
+  p_source_content_digest text,
+  p_class text,
+  p_correlated_capture_id text
+) RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
+BEGIN
+  IF p_canonical_domain IS NULL OR p_canonical_domain = ''
+     OR p_source_content_digest IS NULL OR p_source_content_digest = '' THEN
+    RAISE EXCEPTION 'admission_identity_required' USING ERRCODE = 'P0001';
+  END IF;
+  UPDATE public."OriginalAdminCapture"
+     SET "contradictedAt" = COALESCE("contradictedAt", clock_timestamp()),
+         "contradictionClass" = COALESCE("contradictionClass", p_class)
+   WHERE "canonicalDomain" = p_canonical_domain
+     AND "sourceContentDigest" = p_source_content_digest
+     AND (p_correlated_capture_id IS NULL OR id IS DISTINCT FROM p_correlated_capture_id);
+END;
+$$;
+ALTER FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text) OWNER TO stocky_admission_origin_owner;
+REVOKE ALL ON FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text)
+  TO stocky_original_admission, stocky_control_plane, stocky_lifecycle_gate_owner;
+
+CREATE OR REPLACE FUNCTION public.stocky_admin_source_contradicted(
+  p_canonical_domain text,
+  p_source_content_digest text,
+  p_capture_id text
+) RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, pg_temp
+AS $$
+  SELECT COALESCE((
+    SELECT true FROM public."OriginalAdminCapture" c
+     WHERE c.id = p_capture_id
+       AND c."contradictedAt" IS NOT NULL
+     LIMIT 1
+  ), (
+    SELECT true FROM public."QueuedWorkSighting" q
+     WHERE q."canonicalDomain" = p_canonical_domain
+       AND q."sourceContentDigest" = p_source_content_digest
+       AND (q."correlatedCaptureId" IS NULL
+            OR q."correlatedCaptureId" IS DISTINCT FROM p_capture_id)
+     LIMIT 1
+  ), false);
+$$;
+ALTER FUNCTION public.stocky_admin_source_contradicted(text, text, text) OWNER TO stocky_admission_origin_owner;
+REVOKE ALL ON FUNCTION public.stocky_admin_source_contradicted(text, text, text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.stocky_admin_source_contradicted(text, text, text)
+  TO stocky_original_admission, stocky_lifecycle_gate_owner, stocky_control_plane;
 
 CREATE OR REPLACE FUNCTION public.stocky_record_writer_admission(
   p_canonical_domain text,
@@ -32020,6 +32180,7 @@ DECLARE
   inst_at timestamptz;
   v_admitted_at timestamptz;
   v_capture_id text;
+  v_corr text;
 BEGIN
   IF session_user IS DISTINCT FROM 'stocky_original_admission' THEN
     RAISE EXCEPTION 'admission_principal_required' USING ERRCODE = '42501';
@@ -32057,6 +32218,13 @@ BEGIN
       -- same source+digest: retry/coalesce; do not remint
       NULL;
     END IF;
+    -- Duplicate-return is not a freshness grant. ADMIN eligibility is re-checked below
+    -- when this path is skipped (no row yet) and at the effect host for consumed rows.
+    IF p_evidence_class = 'ADMIN_SESSION_CURRENT_INSTALL'
+       AND existing."originalCaptureId" IS NOT NULL
+       AND public.stocky_admin_source_contradicted(v_domain, p_source_content_digest, existing."originalCaptureId") THEN
+      RAISE EXCEPTION 'capture_content_no_longer_fresh' USING ERRCODE = 'P0001';
+    END IF;
     RETURN existing.id;
   END IF;
 
@@ -32075,6 +32243,26 @@ BEGIN
     WHERE "canonicalDomain" = v_domain AND "workId" = p_work_id
   ) THEN
     RAISE EXCEPTION 'admission_work_conflict' USING ERRCODE = 'P0001';
+  END IF;
+
+  -- RE-01: a contradicted ADMIN capture is refused before digest_conflict, so
+  -- consume of the issued capture is not closed merely by a competing root.
+  IF p_evidence_class = 'ADMIN_SESSION_CURRENT_INSTALL' THEN
+    SELECT * INTO cap
+    FROM public."OriginalAdminCapture"
+    WHERE "canonicalDomain" = v_domain
+      AND "shopId" = p_shop_id
+      AND "sourceKind" = p_source_kind
+      AND "sourceIdentity" = p_source_identity
+      AND "sourceContentDigest" = p_source_content_digest;
+    IF FOUND AND (
+         cap."contradictedAt" IS NOT NULL
+         OR public.stocky_admin_source_contradicted(v_domain, p_source_content_digest, cap.id)
+       ) THEN
+      PERFORM public.stocky_mark_uncorrelated_captures_contradicted(
+        v_domain, p_source_content_digest, 'CONSUME_RECHECK', NULL);
+      RAISE EXCEPTION 'capture_content_no_longer_fresh' USING ERRCODE = 'P0001';
+    END IF;
   END IF;
 
   IF p_parent_work_id IS NULL AND EXISTS (
@@ -32125,11 +32313,22 @@ BEGIN
     IF cap."boundWorkId" IS NOT NULL AND cap."boundWorkId" IS DISTINCT FROM p_work_id THEN
       RAISE EXCEPTION 'admission_capture_consumed' USING ERRCODE = 'P0001';
     END IF;
+    -- RE-01: re-read current source-provenance before consuming an already-issued capture.
+    IF public.stocky_admin_source_contradicted(v_domain, p_source_content_digest, cap.id)
+       OR cap."contradictedAt" IS NOT NULL THEN
+      PERFORM public.stocky_mark_uncorrelated_captures_contradicted(
+        v_domain, p_source_content_digest, 'CONSUME_RECHECK', NULL);
+      RAISE EXCEPTION 'capture_content_no_longer_fresh' USING ERRCODE = 'P0001';
+    END IF;
     UPDATE public."OriginalAdminCapture"
       SET "consumedAt" = clock_timestamp(),
           "boundWorkId" = p_work_id
       WHERE id = cap.id
-        AND ("boundWorkId" IS NULL OR "boundWorkId" = p_work_id);
+        AND ("boundWorkId" IS NULL OR "boundWorkId" = p_work_id)
+        AND "contradictedAt" IS NULL;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'capture_content_no_longer_fresh' USING ERRCODE = 'P0001';
+    END IF;
     v_origin := live_id;
     v_admitted_at := cap."capturedAt";
     v_capture_id := cap.id;
@@ -32189,11 +32388,26 @@ BEGIN
     UPDATE public."WriterAdmissionOrigin" SET "originalCaptureId" = v_capture_id WHERE id = v_id;
   END IF;
   IF p_evidence_class IN ('WEBHOOK_PROVIDER_AUTH', 'PARENT_LINEAGE', 'MANUAL_REPLAY') THEN
+    v_corr := NULL;
+    IF p_evidence_class IN ('PARENT_LINEAGE', 'MANUAL_REPLAY') AND p_parent_work_id IS NOT NULL THEN
+      -- Correlated only when the parent is the SAME accepted fresh command (BOUND + capture + same source).
+      -- Uncorrelated historical content cannot manufacture that relationship.
+      IF parent."originalCaptureId" IS NOT NULL
+         AND parent."originStatus" = 'BOUND'
+         AND parent."acked" IS TRUE
+         AND parent."sourceContentDigest" IS NOT DISTINCT FROM p_source_content_digest THEN
+        v_corr := parent."originalCaptureId";
+      END IF;
+    END IF;
     INSERT INTO public."QueuedWorkSighting"(
-      "canonicalDomain","shopId","sourceKind","sourceIdentity","sourceContentDigest","sightedClass","sightedAt"
+      "canonicalDomain","shopId","sourceKind","sourceIdentity","sourceContentDigest","sightedClass","sightedAt",
+      "parentWorkId","correlatedCaptureId"
     ) VALUES (
-      v_domain, p_shop_id, p_source_kind, p_source_identity, p_source_content_digest, p_evidence_class, clock_timestamp()
+      v_domain, p_shop_id, p_source_kind, p_source_identity, p_source_content_digest, p_evidence_class, clock_timestamp(),
+      NULLIF(p_parent_work_id,''), v_corr
     ) ON CONFLICT DO NOTHING;
+    PERFORM public.stocky_mark_uncorrelated_captures_contradicted(
+      v_domain, p_source_content_digest, p_evidence_class, v_corr);
   END IF;
 
   IF p_target_kind IS NOT NULL AND p_target_value IS NOT NULL THEN
@@ -35526,6 +35740,10 @@ BEGIN
        OR existing."targetValue" IS DISTINCT FROM p_target_value THEN
       RAISE EXCEPTION 'admission_command_input_conflict' USING ERRCODE = 'P0001';
     END IF;
+    IF existing."contradictedAt" IS NOT NULL
+       OR public.stocky_admin_source_contradicted(v_domain, existing."sourceContentDigest", existing.id) THEN
+      RAISE EXCEPTION 'capture_content_no_longer_fresh' USING ERRCODE = 'P0001';
+    END IF;
     RETURN existing.id;
   END IF;
   SELECT * INTO existing
@@ -35535,6 +35753,10 @@ BEGIN
     AND "sourceIdentity" = p_source_identity
     AND "sourceContentDigest" = p_source_content_digest;
   IF FOUND THEN
+    IF existing."contradictedAt" IS NOT NULL
+       OR public.stocky_admin_source_contradicted(v_domain, existing."sourceContentDigest", existing.id) THEN
+      RAISE EXCEPTION 'capture_content_no_longer_fresh' USING ERRCODE = 'P0001';
+    END IF;
     RETURN existing.id;
   END IF;
   -- AO-03: non-fresh sighting, non-admin origin, or a different identity's
@@ -35580,25 +35802,44 @@ CREATE OR REPLACE FUNCTION public.stocky_note_queued_work(
   p_source_kind text,
   p_source_identity text,
   p_source_content_digest text,
-  p_sighted_class text DEFAULT 'QUEUED_INBOX'
+  p_sighted_class text DEFAULT 'QUEUED_INBOX',
+  p_parent_work_id text DEFAULT NULL
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
 AS $$
+DECLARE
+  v_class text;
+  v_corr text := NULL;
+  parent public."WriterAdmissionOrigin"%ROWTYPE;
 BEGIN
   IF session_user IS DISTINCT FROM 'stocky_original_admission'
      AND session_user IS DISTINCT FROM 'stocky_control_plane' THEN
     RAISE EXCEPTION 'queued_sighting_principal_required' USING ERRCODE = '42501';
   END IF;
   PERFORM public.stocky_source_content_lock(p_canonical_domain, p_source_content_digest);
+  v_class := COALESCE(NULLIF(p_sighted_class, ''), 'QUEUED_INBOX');
+  IF p_parent_work_id IS NOT NULL AND p_parent_work_id <> '' THEN
+    SELECT * INTO parent FROM public."WriterAdmissionOrigin"
+     WHERE "canonicalDomain" = p_canonical_domain AND "workId" = p_parent_work_id;
+    IF FOUND
+       AND parent."originalCaptureId" IS NOT NULL
+       AND parent."originStatus" = 'BOUND'
+       AND parent."acked" IS TRUE
+       AND parent."sourceContentDigest" IS NOT DISTINCT FROM p_source_content_digest THEN
+      v_corr := parent."originalCaptureId";
+    END IF;
+  END IF;
   INSERT INTO public."QueuedWorkSighting"(
     "canonicalDomain", "shopId", "sourceKind", "sourceIdentity", "sourceContentDigest",
-    "sightedClass", "sightedAt"
+    "sightedClass", "sightedAt", "parentWorkId", "correlatedCaptureId"
   ) VALUES (
     p_canonical_domain, p_shop_id, p_source_kind, p_source_identity, p_source_content_digest,
-    COALESCE(NULLIF(p_sighted_class, ''), 'QUEUED_INBOX'), clock_timestamp()
+    v_class, clock_timestamp(), NULLIF(p_parent_work_id,''), v_corr
   ) ON CONFLICT DO NOTHING;
+  PERFORM public.stocky_mark_uncorrelated_captures_contradicted(
+    p_canonical_domain, p_source_content_digest, v_class, v_corr);
 END;
 $$;
 
@@ -35668,7 +35909,9 @@ CREATE OR REPLACE FUNCTION public.stocky_apply_bound_customer_effect(
   p_kind text,
   p_value text,
   p_effect_id text,
-  p_work_id text DEFAULT NULL
+  p_work_id text DEFAULT NULL,
+  p_operation text DEFAULT 'CUSTOMER_WRITE',
+  p_source_body text DEFAULT ''
 ) RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -35681,9 +35924,14 @@ DECLARE
   v_kind text;
   v_value text;
   v_effect text;
-  v_digest text;
+  v_op text;
+  v_body text;
+  v_effect_digest text;
+  v_source_digest text;
   v_work text;
   wa public."WriterAdmissionOrigin"%ROWTYPE;
+  v_bound text;
+  v_capture text;
 BEGIN
   IF session_user IS DISTINCT FROM 'stocky_runtime'
      AND session_user IS DISTINCT FROM 'stocky_control_plane' THEN
@@ -35694,13 +35942,17 @@ BEGIN
   v_kind := p_kind;
   v_value := p_value;
   v_effect := p_effect_id;
+  v_op := COALESCE(p_operation, 'CUSTOMER_WRITE');
+  v_body := COALESCE(p_source_body, '');
   IF v_domain IS NULL OR v_domain = '' OR v_shop IS NULL OR v_shop = ''
      OR v_kind IS NULL OR v_kind = '' OR v_value IS NULL OR v_value = ''
-     OR v_effect IS NULL OR v_effect = '' THEN
+     OR v_effect IS NULL OR v_effect = '' OR v_op IS NULL OR v_op = '' THEN
     RAISE EXCEPTION 'effect_input_required' USING ERRCODE = 'P0001';
   END IF;
-  -- AO-02: compute the commitment from this snapshot. No caller digest argument.
-  v_digest := public.stocky_effect_commitment(v_domain, v_shop, v_kind, v_value, v_effect);
+  -- AO-02: compute the effect commitment from this snapshot. No caller digest argument.
+  v_effect_digest := public.stocky_effect_commitment(v_domain, v_shop, v_kind, v_value, v_effect);
+  -- RE-02: source commitment excludes generated effect/work/command ids.
+  v_source_digest := public.stocky_source_commitment(v_domain, v_shop, v_op, v_kind, v_value, v_body);
   -- AO-04: p_work_id / GUC are untrusted locators. Host revalidates protected work.
   v_work := NULLIF(p_work_id, '');
   IF v_work IS NULL THEN
@@ -35720,7 +35972,10 @@ BEGIN
   IF wa."acked" IS NOT TRUE THEN
     RAISE EXCEPTION 'customer_admission_not_acked' USING ERRCODE = 'P0001';
   END IF;
-  IF wa."sourceContentDigest" IS DISTINCT FROM v_digest THEN
+  -- Provenance key is the source commitment (pr7-source-v1) or an opaque
+  -- G1–G15 synthetic source key. It is NOT pr7-effect-v1. Generated effect
+  -- ids cannot satisfy this comparison.
+  IF wa."sourceContentDigest" IS DISTINCT FROM v_source_digest THEN
     RAISE EXCEPTION 'effect_digest_mismatch' USING ERRCODE = 'P0001';
   END IF;
   IF EXISTS (
@@ -35731,29 +35986,73 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'effect_target_mismatch' USING ERRCODE = 'P0001';
   END IF;
+  -- Lock order: lifecycle + target (fact_write_guard) THEN source content. Same as admission.
   PERFORM public.stocky_fact_write_guard(v_domain, v_shop, v_kind, v_value, v_work);
+  PERFORM public.stocky_source_content_lock(v_domain, wa."sourceContentDigest");
+  -- Re-read origin after locks (pending recovery / contradiction may have landed).
+  SELECT * INTO wa
+  FROM public."WriterAdmissionOrigin"
+  WHERE "workId" = v_work
+    AND "canonicalDomain" = v_domain
+    AND "shopId" = v_shop;
+  -- First effect per work, then first effect per source (RE-02). Historical
+  -- committed writes are not unwritten; a correlated child may retry the same
+  -- effectId but cannot mint a second effect of the same source.
+  SELECT l."effectCommitment" INTO v_bound
+    FROM public."SourceEffectLink" l
+   WHERE l."canonicalDomain" = v_domain AND l."workId" = v_work;
+  IF FOUND THEN
+    IF v_bound IS DISTINCT FROM v_effect_digest THEN
+      RAISE EXCEPTION 'effect_digest_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    RETURN;
+  END IF;
+  SELECT l."effectCommitment" INTO v_bound
+    FROM public."SourceEffectLink" l
+   WHERE l."canonicalDomain" = v_domain
+     AND l."sourceContentDigest" = wa."sourceContentDigest";
+  IF FOUND THEN
+    IF v_bound IS DISTINCT FROM v_effect_digest THEN
+      RAISE EXCEPTION 'effect_digest_mismatch' USING ERRCODE = 'P0001';
+    END IF;
+    RETURN;
+  END IF;
+  v_capture := wa."originalCaptureId";
+  IF v_capture IS NOT NULL
+     AND public.stocky_admin_source_contradicted(v_domain, wa."sourceContentDigest", v_capture) THEN
+    PERFORM public.stocky_mark_uncorrelated_captures_contradicted(
+      v_domain, wa."sourceContentDigest", 'EFFECT_RECHECK', NULL);
+    RAISE EXCEPTION 'effect_source_no_longer_fresh' USING ERRCODE = 'P0001';
+  END IF;
   INSERT INTO public."AuditEvent"(id, "shopId", "customerRestId")
   VALUES (v_effect, v_shop, CASE WHEN v_kind = 'CUSTOMER_REST_ID' THEN v_value ELSE NULL END);
+  INSERT INTO public."SourceEffectLink"(
+    "canonicalDomain", "sourceContentDigest", "effectCommitment", "workId", "effectId"
+  ) VALUES (
+    v_domain, wa."sourceContentDigest", v_effect_digest, v_work, v_effect
+  );
 END;
 $$;
 
 ALTER FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) OWNER TO stocky_admission_origin_owner;
 ALTER FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
-ALTER FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
 ALTER FUNCTION public.stocky_bind_execution_context(text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
 
 REVOKE ALL ON FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_bind_execution_context(text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text, text, text) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) TO stocky_admin_capture;
 GRANT EXECUTE ON FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) TO stocky_admin_capture;
-GRANT EXECUTE ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text) TO stocky_original_admission, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text, text) TO stocky_original_admission, stocky_control_plane;
 GRANT EXECUTE ON FUNCTION public.stocky_bind_execution_context(text) TO stocky_runtime, stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
+GRANT EXECUTE ON FUNCTION public.stocky_source_content_lock(text, text) TO stocky_lifecycle_gate_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_admin_source_contradicted(text, text, text) TO stocky_lifecycle_gate_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_id() TO stocky_admin_capture;
 GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_context_version() TO stocky_admin_capture;
 GRANT EXECUTE ON FUNCTION public.stocky_shop_canonical_domain(text, text) TO stocky_admin_capture, stocky_lifecycle_gate_owner;
@@ -35774,7 +36073,7 @@ COMMIT;
 
 ### Appendix G — `03_run_proofs.py` (CURRENT declared runnable driver)
 
-SHA-256 `3edd193bfa18bec375bf020b8ccbabf24c28bee1f8a14bc66930e2a5be4c1f86`. This is the executable driver for this AO packet. It is **not** F’s unpublished-at-F `336b2795914eedccbc677a5da8aefb7d93c950a3b7e1f4aa89387ce917a0bdbc`. Do **not** execute Appendix C as the current driver.
+SHA-256 `d24afa331bde236e6ed59243ada670d14b658bd308541b9263df616040c75d85`. This is the executable driver for this RE packet. S’s `3edd193bfa18bec375bf020b8ccbabf24c28bee1f8a14bc66930e2a5be4c1f86` remains independently established S evidence. It is **not** F’s unpublished-at-F `336b2795914eedccbc677a5da8aefb7d93c950a3b7e1f4aa89387ce917a0bdbc`. Do **not** execute Appendix C as the current driver.
 
 <!-- PROOF-EXTRACT:begin path=current/03_run_proofs.py -->
 ```python
@@ -35793,8 +36092,8 @@ from typing import Any
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROOF_ROOT = os.environ.get("PROOF_ROOT", SCRIPT_DIR)
-PGHOST = os.environ.get("PGHOST", "/tmp/pr45-ao-pg16")
-PGPORT = os.environ.get("PGPORT", "5440")
+PGHOST = os.environ.get("PGHOST", "/tmp/pr45-re-pg16")
+PGPORT = os.environ.get("PGPORT", "5444")
 PGDATABASE = os.environ.get("PGDATABASE", "pr45_proof")
 OWNER = os.environ.get("PR45_OWNER", "pr45owner")
 
@@ -35900,6 +36199,19 @@ def tx(user: str, shop: str, req: str, att: str, body: str, timeout: int = 20) -
 def effect_commitment(domain: str, shop: str, kind: str, value: str, effect_id: str) -> str:
     """pr7-effect-v1: LF-joined UTF-8 SHA-256 hex of version, domain, shop, kind, value, effect id."""
     payload = "\n".join(["pr7-effect-v1", domain, shop, kind, value, effect_id])
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def source_commitment(
+    domain: str,
+    shop: str,
+    kind: str,
+    value: str,
+    source_body: str = "",
+    operation: str = "CUSTOMER_WRITE",
+) -> str:
+    """pr7-source-v1: excludes work/command/effect/retry ids and generation labels."""
+    payload = "\n".join(["pr7-source-v1", domain, shop, operation, kind, value, source_body])
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -38169,31 +38481,32 @@ def neg_controls() -> None:
     admit("shop_a","pr7-a.myshopify.com","w_neg11_old","WEBHOOK","wh_neg11_old","digest_neg11_old",
           "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
           admitted_at_sql="clock_timestamp() - interval '150 minutes'")
-    dg_neg11 = effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_neg11_ok")
+    dg_neg11 = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","neg11-body")
     admit("shop_a","pr7-a.myshopify.com","w_neg11_new","ADMIN_ACTION","admin_neg11_new",dg_neg11,
           "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
     _replace_function(
         """
         CREATE OR REPLACE FUNCTION public.stocky_apply_bound_customer_effect(
           p_canonical_domain text, p_shop_id text, p_kind text, p_value text,
-          p_effect_id text, p_work_id text DEFAULT NULL
+          p_effect_id text, p_work_id text DEFAULT NULL,
+          p_operation text DEFAULT 'CUSTOMER_WRITE', p_source_body text DEFAULT ''
         ) RETURNS void
         LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
         AS $$
         DECLARE v_work text;
         BEGIN
           v_work := COALESCE(NULLIF(p_work_id,''), NULLIF(current_setting('stocky.trusted_work_id', true), ''));
-          -- ACTUAL-INPUT COMMITMENT INTENTIONALLY OMITTED (writes caller payload)
+          -- ACTUAL-INPUT AND SOURCE COMMITMENTS INTENTIONALLY OMITTED (writes caller payload)
           PERFORM public.stocky_fact_write_guard(p_canonical_domain, p_shop_id, p_kind, p_value, v_work);
           INSERT INTO public."AuditEvent"(id, "shopId", "customerRestId")
           VALUES (p_effect_id, p_shop_id, p_value);
         END;
         $$;
-        ALTER FUNCTION public.stocky_apply_bound_customer_effect(text,text,text,text,text,text) OWNER TO stocky_lifecycle_gate_owner;
-        GRANT EXECUTE ON FUNCTION public.stocky_apply_bound_customer_effect(text,text,text,text,text,text) TO stocky_runtime, stocky_control_plane;
+        ALTER FUNCTION public.stocky_apply_bound_customer_effect(text,text,text,text,text,text,text,text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_apply_bound_customer_effect(text,text,text,text,text,text,text,text) TO stocky_runtime, stocky_control_plane;
         """
     )
-    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_neg11_new","ae_neg11")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_neg11_new","ae_neg11", source_body="neg11-body")
     record(group, "effect_digest_binding_removed_revives_do02_write",
            rc == 0 and last_line(out) == "1", f"out={out} err={err}")
     reset()
@@ -38269,6 +38582,148 @@ def neg_controls() -> None:
            rc == 0, f"cap_rc={rc} err={err} out={out}")
     reset()
 
+
+    # NEG-13 SINGLE: remove consume re-read only. Capture-first + sighting then
+    # consume is revived at admission. Effect-host recheck remains (not this mutation).
+    reset()
+    src_n13 = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","neg13-body")
+    capture_admin("shop_a","pr7-a.myshopify.com","w_neg13","ADMIN_ACTION","admin_neg13",src_n13,
+                  "CUSTOMER_REST_ID","191167", command_id="cmd_neg13")
+    tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_neg13',"
+        f"'{src_n13}','QUEUED_INBOX');")
+    _replace_function(
+        r"""
+        CREATE OR REPLACE FUNCTION public.stocky_record_writer_admission(
+          p_canonical_domain text, p_shop_id text, p_work_id text, p_source_kind text,
+          p_source_identity text, p_source_content_digest text, p_format_policy_version text,
+          p_original_admitted_at timestamptz, p_evidence_class text, p_target_kind text,
+          p_target_value text, p_parent_work_id text DEFAULT NULL, p_durable_job_id text DEFAULT NULL,
+          p_link_mode text DEFAULT 'ATOMIC'
+        ) RETURNS text
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+        AS $$
+        DECLARE
+          v_domain text; live_n int; live_id text;
+          existing public."WriterAdmissionOrigin"%ROWTYPE;
+          v_origin text; v_status text; v_id text; v_mode text;
+          cap public."OriginalAdminCapture"%ROWTYPE;
+          v_admitted_at timestamptz; v_capture_id text;
+        BEGIN
+          IF session_user IS DISTINCT FROM 'stocky_original_admission' THEN
+            RAISE EXCEPTION 'admission_principal_required' USING ERRCODE = '42501';
+          END IF;
+          v_mode := COALESCE(NULLIF(p_link_mode, ''), 'ATOMIC');
+          v_domain := public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+          PERFORM public.stocky_lifecycle_shared_lock(v_domain);
+          PERFORM public.stocky_source_content_lock(v_domain, p_source_content_digest);
+          SELECT count(*), min(id) INTO live_n, live_id
+            FROM public."ShopInstallGeneration" WHERE "canonicalDomain" = v_domain AND fence = 'LIVE';
+          SELECT * INTO existing FROM public."WriterAdmissionOrigin"
+            WHERE "canonicalDomain" = v_domain AND "sourceKind" = p_source_kind
+              AND "sourceIdentity" = p_source_identity AND "sourceContentDigest" = p_source_content_digest;
+          IF FOUND THEN RETURN existing.id; END IF;
+          v_admitted_at := p_original_admitted_at;
+          IF p_evidence_class = 'ADMIN_SESSION_CURRENT_INSTALL' THEN
+            SELECT * INTO cap FROM public."OriginalAdminCapture"
+             WHERE "canonicalDomain" = v_domain AND "shopId" = p_shop_id
+               AND "sourceKind" = p_source_kind AND "sourceIdentity" = p_source_identity
+               AND "sourceContentDigest" = p_source_content_digest;
+            IF NOT FOUND THEN RAISE EXCEPTION 'admission_admin_capture_required' USING ERRCODE = 'P0001'; END IF;
+            -- CONSUME RE-READ INTENTIONALLY OMITTED
+            UPDATE public."OriginalAdminCapture"
+              SET "consumedAt" = clock_timestamp(), "boundWorkId" = p_work_id WHERE id = cap.id;
+            v_origin := live_id; v_admitted_at := cap."capturedAt"; v_capture_id := cap.id;
+            v_status := 'BOUND';
+          ELSE
+            RAISE EXCEPTION 'admission_evidence_unknown' USING ERRCODE = 'P0001';
+          END IF;
+          v_id := 'wao_' || replace(p_work_id, '-', '_');
+          INSERT INTO public."WriterAdmissionOrigin"(
+            id, "canonicalDomain", "shopId", "workId", "sourceKind", "sourceIdentity",
+            "originalAdmissionId", "originalAdmittedAt", "formatPolicyVersion", "sourceContentDigest",
+            "originGenerationId", "originStatus", "parentWorkId", "durableJobId", "acked"
+          ) VALUES (
+            v_id, v_domain, p_shop_id, p_work_id, p_source_kind, p_source_identity,
+            v_id, v_admitted_at, 'pr7-origin-v1', p_source_content_digest, v_origin, v_status,
+            NULL, NULL, true
+          );
+          UPDATE public."WriterAdmissionOrigin" SET "originalCaptureId" = v_capture_id WHERE id = v_id;
+          IF p_target_kind IS NOT NULL THEN
+            INSERT INTO public."WriterAdmissionOriginTarget"("originId","targetKind","targetValue")
+            VALUES (v_id, p_target_kind, p_target_value);
+          END IF;
+          RETURN v_id;
+        END;
+        $$;
+        ALTER FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) OWNER TO stocky_admission_origin_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) TO stocky_original_admission;
+        """
+    )
+    rc, out, err = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_neg13',"
+        f"'ADMIN_ACTION','admin_neg13','{src_n13}','pr7-origin-v1', clock_timestamp(), "
+        "'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    rc2, st, _ = psql("pr45owner", "SELECT \"originStatus\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='w_neg13';")
+    rc3, out3, err3 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_neg13","ae_neg13",
+                                 source_body="neg13-body")
+    record(group, "consume_recheck_removed_revives_capture_first_admit",
+           rc == 0 and st.strip() == "BOUND", f"admit={err} st={st}")
+    record(group, "consume_recheck_removed_effect_recheck_still_holds",
+           rc3 != 0 and "effect_source_no_longer_fresh" in err3, err3, sqlstate_from_err(err3))
+    reset()
+
+    # NEG-14 SINGLE: identity source-to-effect transform (apply uses effect commitment
+    # as the source key). New effectId after same-body sighting writes.
+    reset()
+    src_n14 = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","neg14-body")
+    tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_neg14',"
+        f"'{src_n14}','QUEUED_INBOX');")
+    dg_n14 = effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_neg14")
+    admit("shop_a","pr7-a.myshopify.com","w_neg14","ADMIN_ACTION","admin_neg14",dg_n14,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    _replace_function(
+        r"""
+        CREATE OR REPLACE FUNCTION public.stocky_apply_bound_customer_effect(
+          p_canonical_domain text, p_shop_id text, p_kind text, p_value text,
+          p_effect_id text, p_work_id text DEFAULT NULL,
+          p_operation text DEFAULT 'CUSTOMER_WRITE', p_source_body text DEFAULT ''
+        ) RETURNS void
+        LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+        AS $$
+        DECLARE
+          v_domain text; v_shop text; v_kind text; v_value text; v_effect text;
+          v_effect_digest text; v_source_digest text; v_work text;
+          wa public."WriterAdmissionOrigin"%ROWTYPE;
+        BEGIN
+          v_domain := p_canonical_domain; v_shop := p_shop_id; v_kind := p_kind;
+          v_value := p_value; v_effect := p_effect_id;
+          v_effect_digest := public.stocky_effect_commitment(v_domain, v_shop, v_kind, v_value, v_effect);
+          -- IDENTITY TRANSFORM: source key IS the effect commitment (RE-02 defense removed)
+          v_source_digest := v_effect_digest;
+          v_work := COALESCE(NULLIF(p_work_id,''), NULLIF(current_setting('stocky.trusted_work_id', true), ''));
+          SELECT * INTO wa FROM public."WriterAdmissionOrigin"
+           WHERE "workId" = v_work AND "canonicalDomain" = v_domain AND "shopId" = v_shop;
+          IF NOT FOUND THEN RAISE EXCEPTION 'effect_tenant_mismatch' USING ERRCODE = 'P0001'; END IF;
+          IF wa."acked" IS NOT TRUE THEN RAISE EXCEPTION 'customer_admission_not_acked' USING ERRCODE = 'P0001'; END IF;
+          IF wa."sourceContentDigest" IS DISTINCT FROM v_source_digest THEN
+            RAISE EXCEPTION 'effect_digest_mismatch' USING ERRCODE = 'P0001';
+          END IF;
+          PERFORM public.stocky_fact_write_guard(v_domain, v_shop, v_kind, v_value, v_work);
+          INSERT INTO public."AuditEvent"(id, "shopId", "customerRestId")
+          VALUES (v_effect, v_shop, v_value);
+        END;
+        $$;
+        ALTER FUNCTION public.stocky_apply_bound_customer_effect(text,text,text,text,text,text,text,text) OWNER TO stocky_lifecycle_gate_owner;
+        GRANT EXECUTE ON FUNCTION public.stocky_apply_bound_customer_effect(text,text,text,text,text,text,text,text) TO stocky_runtime, stocky_control_plane;
+        """
+    )
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_neg14","ae_neg14",
+                              source_body="neg14-body")
+    record(group, "identity_source_key_revives_new_effect_id_after_same_body_sighting",
+           rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+    reset()
 
 
 def g11() -> None:
@@ -39046,6 +39501,8 @@ def host_apply(
     *,
     use_guc_locator: bool = False,
     callback_effect_id: str | None = None,
+    source_body: str = "",
+    operation: str = "CUSTOMER_WRITE",
 ) -> tuple[int, str, str]:
     """Freeze the semantic write snapshot and write THAT snapshot.
 
@@ -39068,14 +39525,15 @@ def host_apply(
             f"SELECT set_config('stocky.trusted_work_id', '{snapshot['work_id']}', true);"
             f" SELECT public.stocky_apply_bound_customer_effect("
             f"'{snapshot['domain']}','{snapshot['shop']}','{snapshot['kind']}',"
-            f"'{snapshot['value']}','{write_effect}', NULL);"
+            f"'{snapshot['value']}','{write_effect}', NULL, '{operation}', '{source_body}');"
             f" SELECT count(*) FROM public.\"AuditEvent\" WHERE id='{write_effect}';"
         )
     else:
         sql = (
             f"SELECT public.stocky_apply_bound_customer_effect("
             f"'{snapshot['domain']}','{snapshot['shop']}','{snapshot['kind']}',"
-            f"'{snapshot['value']}','{write_effect}','{snapshot['work_id']}');"
+            f"'{snapshot['value']}','{write_effect}','{snapshot['work_id']}',"
+            f"'{operation}','{source_body}');"
             f" SELECT count(*) FROM public.\"AuditEvent\" WHERE id='{write_effect}';"
         )
     return tx("stocky_runtime", shop, req, att, sql)
@@ -39085,11 +39543,14 @@ def host_apply_mutated_callback(
     shop: str, domain: str, kind: str, value: str, work_id: str,
     snapshot_effect_id: str, callback_effect_id: str,
     req: str = "preq_cr", att: str = "patt_cr",
+    source_body: str = "",
+    operation: str = "CUSTOMER_WRITE",
 ) -> tuple[int, str, str]:
     """Attack helper: pass mutated callback bytes as the effect identity."""
     sql = (
         f"SELECT public.stocky_apply_bound_customer_effect("
-        f"'{domain}','{shop}','{kind}','{value}','{callback_effect_id}','{work_id}');"
+        f"'{domain}','{shop}','{kind}','{value}','{callback_effect_id}','{work_id}',"
+        f"'{operation}','{source_body}');"
         f" SELECT count(*) FROM public.\"AuditEvent\" WHERE id='{callback_effect_id}';"
         f" SELECT count(*) FROM public.\"AuditEvent\" WHERE id='{snapshot_effect_id}';"
     )
@@ -39231,43 +39692,61 @@ def g16() -> None:
     record(group, "sql_only_old_effect_new_work_id_still_admitted",
            rc == 0 and last_line(out) == "1", f"out={out} err={err}")
 
-    # AO-02 interface crosswalk: G16 host path admits with computed effect commitment
-    # as sourceContentDigest. G1–G15 and G16 SQL-guard keep synthetic source digests.
-    dg_ok = effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_host_ok")
-    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_eff_ok","ADMIN_ACTION","admin_eff_ok",dg_ok,
+    # AO-02 + RE-02: G16 host path admits with computed SOURCE commitment.
+    # Effect commitment stays separate (includes effectId). Matching write
+    # lands FIRST so SourceEffectLink can deny later alternate payloads.
+    src_ok = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ao02-host-body")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_eff_ok","ADMIN_ACTION","admin_eff_ok",src_ok,
           "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
-    record(group, "effect_host_admits_computed_commitment_as_source_digest", rc == 0, err)
+    record(group, "effect_host_admits_computed_source_commitment", rc == 0, err)
+    rc, sql_src, _ = psql("pr45owner",
+        "SELECT public.stocky_source_commitment('pr7-a.myshopify.com','shop_a','CUSTOMER_WRITE','CUSTOMER_REST_ID','191167','ao02-host-body');")
+    record(group, "python_and_sql_source_commitment_match",
+           sql_src.strip() == src_ok == source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ao02-host-body"),
+           f"py={src_ok} sql={sql_src}")
     rc, sql_c, _ = psql("pr45owner",
         "SELECT public.stocky_effect_commitment('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','ae_host_ok');")
+    dg_ok = effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_host_ok")
     record(group, "python_and_sql_effect_commitment_match",
-           sql_c.strip() == dg_ok == effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_host_ok"),
+           sql_c.strip() == dg_ok,
            f"py={dg_ok} sql={sql_c}")
-    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_new","ae_host_switch")
+    record(group, "source_and_effect_commitments_are_distinct",
+           src_ok != dg_ok, f"src={src_ok} eff={dg_ok}")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_eff_ok","ae_host_ok",
+                              source_body="ao02-host-body")
+    record(group, "effect_host_accepts_matching_digest_and_writes",
+           rc == 0 and last_line(out) == "1", f"out={out} err={err}")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_eff_ok","ae_host_ok2",
+                              source_body="ao02-host-body")
+    rc_n, n2nd, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_host_ok2';")
+    record(group, "same_work_second_effect_id_denied_while_fresh",
+           rc != 0 and "effect_digest_mismatch" in err and n2nd.strip() == "0",
+           f"err={err} n={n2nd}", sqlstate_from_err(err))
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_new","ae_host_switch",
+                              source_body="ao02-host-body")
     rc_n, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_host_switch';")
     record(group, "effect_host_rejects_old_effect_with_new_work_id",
            rc != 0 and "effect_digest_mismatch" in err and n.strip() == "0",
            f"err={err} n={n}", sqlstate_from_err(err))
-    # Valid newer work with its stored valid digest, but OLD/altered effect fields.
-    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_eff_ok","ae_substituted")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_eff_ok","ae_substituted",
+                              source_body="ao02-host-body")
     rc_n, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_substituted';")
     record(group, "effect_host_rejects_alternate_payload_under_matching_work",
            rc != 0 and "effect_digest_mismatch" in err and n.strip() == "0",
            f"err={err} n={n}", sqlstate_from_err(err))
-    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_eff_ok","ae_host_ok")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_eff_ok","ae_host_ok",
+                              source_body="ao02-host-body")
     rc_n, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_host_ok';")
     record(group, "effect_host_rejects_altered_target_under_matching_work",
-           rc != 0 and n.strip() == "0",
+           rc != 0 and n.strip() == "1",
            f"err={err} n={n}", sqlstate_from_err(err))
     rc, out, err = host_apply_mutated_callback(
         "shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_eff_ok",
-        "ae_host_ok","ae_callback_mut")
+        "ae_host_ok","ae_callback_mut", source_body="ao02-host-body")
     rc_n, nmut, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_callback_mut';")
     record(group, "effect_host_rejects_after_check_mutated_callback_payload",
            rc != 0 and "effect_digest_mismatch" in err and nmut.strip() == "0",
            f"err={err} n={nmut}", sqlstate_from_err(err))
-    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_eff_ok","ae_host_ok")
-    record(group, "effect_host_accepts_matching_digest_and_writes",
-           rc == 0 and last_line(out) == "1", f"out={out} err={err}")
     rc, out, err = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
         "SELECT public.stocky_apply_bound_customer_effect('pr7-a.myshopify.com','shop_a','CUSTOMER_REST_ID','191167','ae_nobind', NULL);")
     record(group, "apply_without_execution_context_rejected",
@@ -39300,7 +39779,7 @@ def g16() -> None:
            rc == 0 and row.strip() == "BOUND,gen_a2" and rc3 == 0, f"admit={err} row={row} guard={gerr}")
 
     # Unrelated shop positive.
-    dg_b = effect_commitment("pr7-b.myshopify.com","shop_b","CUSTOMER_REST_ID","191167","ae_b_do")
+    dg_b = source_commitment("pr7-b.myshopify.com","shop_b","CUSTOMER_REST_ID","191167")
     rc, out, err = admit("shop_b","pr7-b.myshopify.com","work_b_do","ADMIN_ACTION","admin_b_do",dg_b,
           "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167", req="preq_dr", att="patt_dr")
     rc2, out2, err2 = host_apply("shop_b","pr7-b.myshopify.com","CUSTOMER_REST_ID","191167","work_b_do","ae_b_do", req="preq_dr", att="patt_dr")
@@ -39342,19 +39821,19 @@ def g16() -> None:
 
     # AO-04: GUC is a locator. Self-set GUC of valid new work + matching frozen effect writes;
     # self-set GUC of that work + old/foreign effect cannot create a write.
-    dg_guc = effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","ae_guc_ok")
+    dg_guc = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999")
     rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_guc","ADMIN_ACTION","admin_guc",dg_guc,
           "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_guc","ae_guc_ok",
+                              use_guc_locator=True)
+    record(group, "self_set_guc_with_matching_frozen_effect_writes",
+           rc == 0 and last_line(out) == "1", f"out={out} err={err}")
     rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_guc","ae_guc_foreign",
                               use_guc_locator=True)
     rc_n, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_guc_foreign';")
     record(group, "self_set_guc_locator_does_not_bypass_revalidation",
            rc != 0 and "effect_digest_mismatch" in err and n.strip() == "0",
            f"err={err} n={n}", sqlstate_from_err(err))
-    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_guc","ae_guc_ok",
-                              use_guc_locator=True)
-    record(group, "self_set_guc_with_matching_frozen_effect_writes",
-           rc == 0 and last_line(out) == "1", f"out={out} err={err}")
     rc, out, err = tx("stocky_runtime","shop_b","preq_dr","patt_dr",
         "SELECT set_config('stocky.trusted_work_id','w_guc', true);"
         " SELECT public.stocky_apply_bound_customer_effect('pr7-b.myshopify.com','shop_b','CUSTOMER_REST_ID','191167','ae_guc_x','w_guc');")
@@ -39415,10 +39894,11 @@ def g16() -> None:
            rc == 0 and n2.strip() == "1", f"rc={rc} n={n2} err={err}")
 
     # Legitimate independently captured successor (new digest) still progresses.
-    dg_succ = effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_succ_ao")
+    dg_succ = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167", "successor-admin-command")
     rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_succ_ao","ADMIN_ACTION","admin_succ_ao",dg_succ,
           "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
-    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_succ_ao","ae_succ_ao")
+    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_succ_ao","ae_succ_ao",
+                                  source_body="successor-admin-command")
     record(group, "legitimate_successor_new_digest_still_progresses",
            rc == 0 and rc2 == 0 and last_line(out2) == "1", f"admit={err} host={err2}")
 
@@ -39447,9 +39927,15 @@ def g16() -> None:
     rc_f, _, err_f = capture_admin(
         "shop_a","pr7-a.myshopify.com","w_race_follow","ADMIN_ACTION","admin_race_follow",
         "dg_race_capture_first","CUSTOMER_REST_ID","999999")
+    # RE-01: refusing a second capture is not enough — consuming the first must fail.
+    rc_cons, _, err_cons = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_race_cap_capture_first',"
+        "'ADMIN_ACTION','admin_race_capture_first','dg_race_capture_first','pr7-origin-v1', clock_timestamp(), "
+        "'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','999999', NULL, NULL, 'ATOMIC');")
     record(group, "race_capture_then_sighting_does_not_double_bind",
-           o2.get("cap_rc") == "0" and rc_f != 0 and "queued_work_cannot_acquire_fresh_admin_origin" in err_f,
-           f"race={o2} follow={err_f}")
+           o2.get("cap_rc") == "0" and rc_f != 0 and "queued_work_cannot_acquire_fresh_admin_origin" in err_f
+           and rc_cons != 0 and "capture_content_no_longer_fresh" in err_cons,
+           f"race={o2} follow={err_f} consume={err_cons}")
 
     # AO-05 tenant-qualified command reconciliation.
     rc_a, out_a, err_a = capture_admin("shop_a","pr7-a.myshopify.com","w_cmd_a","ADMIN_ACTION","admin_cmd_a","dg_cmd_a",
@@ -39480,6 +39966,346 @@ def g16() -> None:
     record(group, "identifier_normalization_hyphen_underscore_do_not_collide",
            rc == 0 and n_norm.strip() == "2", f"rc={rc} n={n_norm} err={err}")
 
+    # ----- RE-01 capture-first then sighting then consume/effect -----
+    reset()
+    src_re = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","re01-payload")
+    rc, out, err = capture_admin("shop_a","pr7-a.myshopify.com","w_re01","ADMIN_ACTION","admin_re01",src_re,
+                                 "CUSTOMER_REST_ID","191167", command_id="cmd_re01")
+    record(group, "re01_capture_issues_on_clean_source", rc == 0, err)
+    rc, out, err = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_re01',"
+        f"'{src_re}','QUEUED_INBOX');")
+    record(group, "re01_uncorrelated_sighting_after_capture_accepted", rc == 0, err)
+    rc2, n_coexist, _ = psql("pr45owner",
+        "SELECT (SELECT count(*) FROM public.\"OriginalAdminCapture\" WHERE \"sourceContentDigest\"='" + src_re + "')::text"
+        "||','||(SELECT count(*) FROM public.\"QueuedWorkSighting\" WHERE \"sourceContentDigest\"='" + src_re + "');")
+    record(group, "re01_capture_and_sighting_coexist_historically",
+           n_coexist.strip() == "1,1", n_coexist)
+    rc, out, err = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_re01',"
+        f"'ADMIN_ACTION','admin_re01','{src_re}','pr7-origin-v1', clock_timestamp(), "
+        "'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    record(group, "capture_first_then_sighted_digest_cannot_be_consumed",
+           rc != 0 and "capture_content_no_longer_fresh" in err, err, sqlstate_from_err(err))
+    rc_st, st, _ = psql("pr45owner",
+        "SELECT COALESCE(\"originStatus\",'NONE') FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"=\'w_re01\';")
+    record(group, "re01_does_not_mint_bound_origin_after_contradiction",
+           "BOUND" not in st, f"status={st}")
+
+    # Capture, consume/ACK, then contradictory sighting, then effect.
+    reset()
+    src_ack = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","re01-acked")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_re01_ack","ADMIN_ACTION","admin_re01_ack",src_ack,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    record(group, "re01_consume_before_sighting_admits", rc == 0, err)
+    rc2, st2, _ = psql("pr45owner", "SELECT \"originStatus\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"=\'w_re01_ack\';")
+    record(group, "re01_origin_remains_bound_historically", st2.strip() == "BOUND", st2)
+    rc, out, err = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_re01_ack',"
+        f"'{src_ack}','QUEUED_INBOX');")
+    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_re01_ack","ae_re01_ack",
+                                 source_body="re01-acked")
+    rc_n, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_re01_ack';")
+    record(group, "capture_consumed_then_sighted_cannot_effect",
+           rc == 0 and rc2 != 0 and "effect_source_no_longer_fresh" in err2 and n.strip() == "0",
+           f"sight={err} apply={err2} n={n}", sqlstate_from_err(err2))
+    rc_st, st3, _ = psql("pr45owner", "SELECT \"originStatus\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"=\'w_re01_ack\';")
+    record(group, "re01_does_not_rewrite_bound_to_unattributed",
+           st3.strip() == "BOUND", st3)
+
+    # Effect wins, then sighting: historical committed write is not unwritten.
+    reset()
+    src_win = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","re01-win")
+    admit("shop_a","pr7-a.myshopify.com","w_re01_win","ADMIN_ACTION","admin_re01_win",src_win,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_re01_win","ae_re01_win",
+                              source_body="re01-win")
+    record(group, "re01_effect_commits_while_still_fresh", rc == 0 and last_line(out) == "1", err)
+    rc, out, err = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_re01_win',"
+        f"'{src_win}','QUEUED_INBOX');")
+    rc2, n2, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_re01_win';")
+    rc3, out3, err3 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_re01_win","ae_re01_win",
+                                 source_body="re01-win")
+    record(group, "effect_first_then_sighting_is_historical_not_unwritten",
+           n2.strip() == "1" and rc3 == 0,
+           f"n={n2} retry={err3}")
+    rc4, out4, err4 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_re01_win","ae_re01_win2",
+                                 source_body="re01-win")
+    record(group, "historical_effect_retry_new_effect_id_denied",
+           rc4 != 0 and "effect_digest_mismatch" in err4, err4, sqlstate_from_err(err4))
+
+    # Sighting vs effect concurrent: each winner under source lock.
+    reset()
+    src_race = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","re01-racefx")
+    admit("shop_a","pr7-a.myshopify.com","w_re01_rfx","ADMIN_ACTION","admin_re01_rfx",src_race,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    # Sequential schedules (separate transactions; no lock held across orchestration).
+    def _fx_then_sight() -> dict[str, str]:
+        d: dict[str, str] = {}
+        rc_a, _, err_a = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_re01_rfx","ae_rfx_a",
+                                    source_body="re01-racefx")
+        d["apply"] = str(rc_a); d["apply_err"] = err_a[:160]
+        rc_s, _, err_s = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+            "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_rfx',"
+            f"'{src_race}','QUEUED_INBOX');")
+        d["sight"] = str(rc_s); d["sight_err"] = err_s[:160]
+        return d
+    o_fx = _fx_then_sight()
+    rc_n, nfx, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_rfx_a';")
+    record(group, "race_effect_then_sighting_effect_wins",
+           o_fx.get("apply") == "0" and o_fx.get("sight") == "0" and nfx.strip() == "1", str(o_fx)+" n="+nfx)
+
+    reset()
+    src_race2 = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","re01-racefx2")
+    admit("shop_a","pr7-a.myshopify.com","w_re01_rfx2","ADMIN_ACTION","admin_re01_rfx2",src_race2,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc_s, _, err_s = tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_rfx2',"
+        f"'{src_race2}','QUEUED_INBOX');")
+    rc_a, _, err_a = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_re01_rfx2","ae_rfx_b",
+                                source_body="re01-racefx2")
+    rc_n, nfx2, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_rfx_b';")
+    record(group, "race_sighting_then_effect_sighting_wins",
+           rc_s == 0 and rc_a != 0 and "effect_source_no_longer_fresh" in err_a and nfx2.strip() == "0",
+           f"sight={err_s} apply={err_a} n={nfx2}")
+
+    # Correlated child of the SAME accepted fresh command still progresses.
+    reset()
+    src_corr = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","corr-parent")
+    admit("shop_a","pr7-a.myshopify.com","w_corr_p","ADMIN_ACTION","admin_corr_p",src_corr,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_corr_c","CHILD","child_corr",src_corr,
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","999999", parent="w_corr_p")
+    rc2, stc, _ = psql("pr45owner", "SELECT \"originStatus\" FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"=\'w_corr_c\';")
+    rc3, _, gerr = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","w_corr_c"))
+    record(group, "correlated_child_of_fresh_admin_still_progresses",
+           rc == 0 and stc.strip() == "BOUND" and rc3 == 0, f"admit={err} st={stc} guard={gerr}")
+    # Parent capture remains eligible (child is correlated, not contradictory).
+    rc4, out4, err4 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_corr_p","ae_corr_p",
+                                 source_body="corr-parent")
+    record(group, "correlated_child_does_not_contradict_parent_capture",
+           rc4 == 0 and last_line(out4) == "1", err4)
+    rc5, out5, err5 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_corr_c","ae_corr_child",
+                                 source_body="corr-parent")
+    rc_n, n5, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_corr_child';")
+    record(group, "correlated_child_new_effect_id_after_parent_write_denied",
+           rc5 != 0 and "effect_digest_mismatch" in err5 and n5.strip() == "0",
+           f"err={err5} n={n5}", sqlstate_from_err(err5))
+    rc6, out6, err6 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_corr_c","ae_corr_p",
+                                 source_body="corr-parent")
+    rc_n, n6, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_corr_p';")
+    record(group, "correlated_child_same_effect_id_is_historical",
+           rc6 == 0 and n6.strip() == "1", f"err={err6} n={n6}")
+
+    # Child writes first; parent new effectId of the same source is denied.
+    reset()
+    src_cf = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","corr-child-first")
+    admit("shop_a","pr7-a.myshopify.com","w_cf_p","ADMIN_ACTION","admin_cf_p",src_cf,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_cf_c","CHILD","child_cf",src_cf,
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","999999", parent="w_cf_p")
+    rc1, out1, err1 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_cf_c","ae_cf_c",
+                                 source_body="corr-child-first")
+    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_cf_p","ae_cf_p",
+                                 source_body="corr-child-first")
+    rc_n, n_p, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_cf_p';")
+    record(group, "parent_new_effect_id_after_child_write_denied",
+           rc == 0 and rc1 == 0 and last_line(out1) == "1"
+           and rc2 != 0 and "effect_digest_mismatch" in err2 and n_p.strip() == "0",
+           f"child={err1} parent={err2} n_p={n_p}", sqlstate_from_err(err2))
+
+    # Uncorrelated parent cannot manufacture lineage.
+    reset()
+    admit("shop_a","pr7-a.myshopify.com","w_unc_wh","WEBHOOK","wh_unc","dg_unc_parent",
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","999999")
+    src_stolen = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","stolen")
+    rc, out, err = capture_admin("shop_a","pr7-a.myshopify.com","w_stolen","ADMIN_ACTION","admin_stolen",src_stolen,
+                                 "CUSTOMER_REST_ID","999999")
+    rc2, out2, err2 = admit("shop_a","pr7-a.myshopify.com","w_fake_child","CHILD","child_fake",src_stolen,
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","999999", parent="w_unc_wh")
+    # Child of unattributed webhook with a *different* source is not the stolen source.
+    # Manufacture: PARENT_LINEAGE of unattributed parent with the ADMIN source.
+    rc3, out3, err3 = admit("shop_a","pr7-a.myshopify.com","w_fake_child2","CHILD","child_fake2",src_stolen,
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","999999", parent="w_unc_wh")
+    rc4, out4, err4 = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_stolen',"
+        f"'ADMIN_ACTION','admin_stolen','{src_stolen}','pr7-origin-v1', clock_timestamp(), "
+        "'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','999999', NULL, NULL, 'ATOMIC');")
+    record(group, "uncorrelated_parent_cannot_manufacture_freshness",
+           rc == 0 and rc3 == 0 and rc4 != 0 and "capture_content_no_longer_fresh" in err4,
+           f"cap={err} child={err3} consume={err4}")
+
+    # ----- RE-02 same source, new effect id -----
+    reset()
+    tx("stocky_privacy_erasure","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_privacy_install_customer_barrier('preq_cr','patt_cr');"
+        " SELECT public.stocky_privacy_enumerate_targets('preq_cr');"
+        " DELETE FROM public.\"ShopifyOrderLineFact\"; DELETE FROM public.\"ShopifyOrderFact\"; DELETE FROM public.\"AuditEvent\";"
+        " SELECT public.stocky_privacy_complete_customer_redact('preq_cr','patt_cr');")
+    psql("pr45owner",
+        "INSERT INTO public.\"ShopInstallGeneration\"(id,\"canonicalDomain\",\"targetShopId\",\"shopRowId\",fence,\"installedAt\") "
+        "VALUES ('gen_a2','pr7-a.myshopify.com','shop_a','shop_a','LIVE', TIMESTAMPTZ '2026-09-20 17:49:00+00'); "
+        "UPDATE public.\"ShopInstallGeneration\" SET fence='UNINSTALLED', \"shopRowId\"=NULL WHERE id='gen_a'; "
+        "UPDATE public.\"PrivacyCompletedTarget\" SET \"completedAt\" = TIMESTAMPTZ '2026-09-20 18:49:00+00' "
+        "WHERE \"generationId\"=\'gen_a\' AND \"targetKind\"=\'CUSTOMER_REST_ID\' AND \"targetValue\"=\'191167\';")
+    src_child = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","replay-body")
+    admit("shop_a","pr7-a.myshopify.com","work_root_re2","WEBHOOK","wh_root_re2",src_child,
+          "WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167",
+          admitted_at_sql="TIMESTAMPTZ '2026-09-20 18:19:00+00'")
+    rc2, out2, err2 = admit("shop_a","pr7-a.myshopify.com","work_child_re2","CHILD","child_re2",src_child,
+          "PARENT_LINEAGE","CUSTOMER_REST_ID","191167", parent="work_root_re2",
+          admitted_at_sql="TIMESTAMPTZ '2026-09-20 18:19:00+00'")
+    rc3, _, err3 = tx("stocky_runtime","shop_a","preq_cr","patt_cr",
+        gsql("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","work_child_re2"))
+    # New effect id, new command/work/source identity, SAME source body.
+    rc4, out4, err4 = capture_admin("shop_a","pr7-a.myshopify.com","w_relabel","ADMIN_ACTION","admin_relabel",src_child,
+                                 "CUSTOMER_REST_ID","191167", command_id="cmd_relabelled_effect")
+    record(group, "same_source_new_effect_id_cannot_acquire_fresh_admin_capture",
+           rc2 == 0 and rc3 != 0 and "customer_target_attribution_ambiguous" in err3
+           and rc4 != 0 and "queued_work_cannot_acquire_fresh_admin_origin" in err4,
+           f"child={err2} guard={err3} cap={err4}")
+    # Also deny if they try a different effect identity through the host on a
+    # separately captured same-source row that lost the race to sighting.
+    src_fresh = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","replay-body")
+    record(group, "re02_source_digest_stable_across_effect_ids",
+           src_child == src_fresh == source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","replay-body"),
+           src_child)
+    record(group, "re02_effect_digest_changes_with_effect_id",
+           effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_child")
+           != effect_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ae_relabelled"),
+           "ok")
+
+    # Genuinely new source (new body) on same customer target still progresses.
+    src_new = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","brand-new-command")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_brand_new","ADMIN_ACTION","admin_brand_new",src_new,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_brand_new","ae_brand_new",
+                                 source_body="brand-new-command")
+    record(group, "genuine_new_source_same_customer_still_progresses",
+           rc == 0 and rc2 == 0 and last_line(out2) == "1", f"admit={err} host={err2}")
+
+    # Tenant isolation: shop B with same source body is independent.
+    src_b = source_commitment("pr7-b.myshopify.com","shop_b","CUSTOMER_REST_ID","191167","replay-body")
+    rc, out, err = admit("shop_b","pr7-b.myshopify.com","w_b_iso","ADMIN_ACTION","admin_b_iso",src_b,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167", req="preq_dr", att="patt_dr")
+    rc2, out2, err2 = host_apply("shop_b","pr7-b.myshopify.com","CUSTOMER_REST_ID","191167","w_b_iso","ae_b_iso",
+                                 source_body="replay-body", req="preq_dr", att="patt_dr")
+    record(group, "tenant_isolation_same_source_body_progresses",
+           rc == 0 and rc2 == 0 and last_line(out2) == "1" and src_b != src_child,
+           f"admit={err} host={err2}")
+
+    # Pending recovery then sighting then effect.
+    reset()
+    psql("pr45owner",
+        "INSERT INTO public.\"DurableJob\"(id,\"shopId\",\"jobType\",state) "
+        "VALUES ('job_re_pend','shop_a','admitted:ADMIN_ACTION','PENDING') ON CONFLICT (id) DO NOTHING;")
+    src_pend = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","999999","pend-body")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_re_pend","ADMIN_ACTION","admin_re_pend",src_pend,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","999999", job="job_re_pend", mode="BEGIN")
+    tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_recover_writer_admission('w_re_pend');")
+    tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_pend',"
+        f"'{src_pend}','QUEUED_INBOX');")
+    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","999999","w_re_pend","ae_pend",
+                                 source_body="pend-body")
+    record(group, "pending_recovery_then_sighting_cannot_effect",
+           rc == 0 and rc2 != 0 and "effect_source_no_longer_fresh" in err2, err2)
+
+    # Multi-level lineage rename still denied at capture (AO-03 preserved).
+    reset()
+    src_ml = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","ml-body")
+    admit("shop_a","pr7-a.myshopify.com","w_ml0","WEBHOOK","wh_ml0",src_ml,"WEBHOOK_PROVIDER_AUTH","CUSTOMER_REST_ID","191167")
+    admit("shop_a","pr7-a.myshopify.com","w_ml1","CHILD","ch_ml1",src_ml,"PARENT_LINEAGE","CUSTOMER_REST_ID","191167", parent="w_ml0")
+    admit("shop_a","pr7-a.myshopify.com","w_ml2","CHILD","ch_ml2",src_ml,"PARENT_LINEAGE","CUSTOMER_REST_ID","191167", parent="w_ml1")
+    rc, out, err = capture_admin("shop_a","pr7-a.myshopify.com","w_ml_admin","ADMIN_ACTION","admin_ml",src_ml,
+                                 "CUSTOMER_REST_ID","191167", command_id="cmd_ml_renamed")
+    record(group, "multi_level_lineage_same_source_cannot_capture_admin",
+           rc != 0 and "queued_work_cannot_acquire_fresh_admin_origin" in err, err, sqlstate_from_err(err))
+
+    # Missing/pruned evidence: no sighting row remains explicitly non-fresh only when
+    # evidence exists. Absence of a row is not a freshness grant beyond capture.
+    reset()
+    src_miss = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","missing-ev")
+    rc, out, err = admit("shop_a","pr7-a.myshopify.com","w_miss","ADMIN_ACTION","admin_miss",src_miss,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    record(group, "missing_sighting_does_not_invent_nonfreshness", rc == 0, err)
+    rc2, out2, err2 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_miss","ae_miss",
+                                 source_body="missing-ev")
+    record(group, "fresh_admin_without_sighting_still_writes",
+           rc2 == 0 and last_line(out2) == "1", err2)
+
+    # Canonicalization: generated ids excluded; body/operation/tenant included.
+    rec_src = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","canon-body")
+    record(group, "source_commitment_stable_across_generated_ids",
+           rec_src == source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","canon-body"),
+           rec_src)
+    record(group, "source_commitment_changes_with_body",
+           rec_src != source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","canon-body-2"),
+           "ok")
+    record(group, "source_commitment_changes_with_operation",
+           rec_src != source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","canon-body",
+                                        operation="CUSTOMER_EXPORT"),
+           "ok")
+    rc, out_null, err_null = psql("pr45owner",
+        "SELECT public.stocky_source_commitment('pr7-a.myshopify.com','shop_a','CUSTOMER_WRITE','CUSTOMER_REST_ID','191167', NULL);")
+    record(group, "source_commitment_null_input_is_strict_null",
+           rc == 0 and out_null.strip() == "", f"out={out_null!r} err={err_null}")
+
+    # Duplicate capture after contradiction is not a freshness grant.
+    reset()
+    src_dup = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","dup-after")
+    rc, out, err = capture_admin("shop_a","pr7-a.myshopify.com","w_dup_after","ADMIN_ACTION","admin_dup_after",src_dup,
+                                 "CUSTOMER_REST_ID","191167", command_id="cmd_dup_after")
+    record(group, "re01_first_capture_before_sighting_succeeds", rc == 0, err)
+    tx("stocky_control_plane","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_note_queued_work('pr7-a.myshopify.com','shop_a','WEBHOOK','wh_dup_after',"
+        f"'{src_dup}','QUEUED_INBOX');")
+    rc, out, err = capture_admin("shop_a","pr7-a.myshopify.com","w_dup_after2","ADMIN_ACTION","admin_dup_after",src_dup,
+                                 "CUSTOMER_REST_ID","191167", command_id="cmd_dup_after")
+    record(group, "duplicate_capture_after_contradiction_is_not_freshness_grant",
+           rc != 0 and "capture_content_no_longer_fresh" in err, err, sqlstate_from_err(err))
+    rc2, out2, err2 = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_dup_after',"
+        f"'ADMIN_ACTION','admin_dup_after','{src_dup}','pr7-origin-v1', clock_timestamp(), "
+        "'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    record(group, "duplicate_return_cannot_consume_contradicted_capture",
+           rc2 != 0 and "capture_content_no_longer_fresh" in err2, err2, sqlstate_from_err(err2))
+
+    # Same source + new work/command/effect ids still denied on the real effect lane.
+    reset()
+    src_lane = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","lane-body")
+    admit("shop_a","pr7-a.myshopify.com","w_lane1","ADMIN_ACTION","admin_lane1",src_lane,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc, out, err = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_lane1","ae_lane1",
+                              source_body="lane-body")
+    record(group, "re02_first_effect_on_source_commits", rc == 0 and last_line(out) == "1", err)
+    rc2, out2, err2 = admit("shop_a","pr7-a.myshopify.com","w_lane2","ADMIN_ACTION","admin_lane2",src_lane,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    record(group, "same_source_new_work_id_cannot_remint_admin_origin",
+           rc2 != 0, err2, sqlstate_from_err(err2))
+    rc3, out3, err3 = host_apply("shop_a","pr7-a.myshopify.com","CUSTOMER_REST_ID","191167","w_lane1","ae_lane2",
+                                 source_body="lane-body")
+    rc_n, n, _ = psql("pr45owner", "SELECT count(*) FROM public.\"AuditEvent\" WHERE id='ae_lane2';")
+    record(group, "same_source_new_effect_id_denied_on_real_effect_lane",
+           rc3 != 0 and "effect_digest_mismatch" in err3 and n.strip() == "0",
+           f"err={err3} n={n}", sqlstate_from_err(err3))
+    # Duplicate-return of same identity+digest is not a remint of a new work.
+    reset()
+    src_co = source_commitment("pr7-a.myshopify.com","shop_a","CUSTOMER_REST_ID","191167","coalesce-body")
+    admit("shop_a","pr7-a.myshopify.com","w_coal1","ADMIN_ACTION","admin_coal",src_co,
+          "ADMIN_SESSION_CURRENT_INSTALL","CUSTOMER_REST_ID","191167")
+    rc, out, err = tx("stocky_original_admission","shop_a","preq_cr","patt_cr",
+        "SELECT public.stocky_record_writer_admission('pr7-a.myshopify.com','shop_a','w_coal2',"
+        f"'ADMIN_ACTION','admin_coal','{src_co}','pr7-origin-v1', clock_timestamp(), "
+        "'ADMIN_SESSION_CURRENT_INSTALL','CUSTOMER_REST_ID','191167', NULL, NULL, 'ATOMIC');")
+    rc_n, n_o, _ = psql("pr45owner", "SELECT count(*) FROM public.\"WriterAdmissionOrigin\" WHERE \"sourceIdentity\"='admin_coal';")
+    rc_w, w2, _ = psql("pr45owner", "SELECT count(*) FROM public.\"WriterAdmissionOrigin\" WHERE \"workId\"='w_coal2';")
+    record(group, "duplicate_admission_return_does_not_remint_new_work",
+           rc == 0 and n_o.strip() == "1" and w2.strip() == "0",
+           f"admit={err} origins={n_o} w_coal2={w2}")
 
 
 def main() -> int:
@@ -39580,7 +40406,7 @@ if __name__ == "__main__":
 
 ### Appendix H — `00_extract_proofs.py` (published extractor)
 
-SHA-256 `02b066c3838b246bd53deb7f6467e31fc7d8b63d7349d1317c21b04ecfdc6177`. Convention `pr7-proof-extract-v1`. This file is transcribed **without** a markdown fence because it documents fence markers. Bootstrap it from these PROOF-EXTRACT comments, then run it against this plan.
+SHA-256 `70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172`. Convention `pr7-proof-extract-v1`. AO-06 compares §14 table, embedded manifest, and extracted named inputs. S’s `02b066c3838b246bd53deb7f6467e31fc7d8b63d7349d1317c21b04ecfdc6177` remains independently established S evidence. This file is transcribed **without** a markdown fence because it documents fence markers. Bootstrap it from these PROOF-EXTRACT comments, then run it against this plan.
 
 <!-- PROOF-EXTRACT:begin path=current/00_extract_proofs.py -->
 #!/usr/bin/env python3
@@ -39725,6 +40551,112 @@ def verify_and_write(
         man_out.write_bytes(blocks["current/proof_manifest.json"].encode("utf-8"))
 
 
+# AO-06: map embedded-manifest paths to the unique §14 table label that must
+# carry the same hash. Coordinated in-repo edit of every declaration is not
+# prevented; the Git pin and independent review establish which package is trusted.
+SECTION14_LABELS = {
+    "current/01_contract.sql": "CURRENT `01_contract.sql`",
+    "current/03_run_proofs.py": "CURRENT `03_run_proofs.py`",
+    "current/02_seed.sql": "`02_seed.sql`",
+    "current/04_discover_writers.py": "`04_discover_writers.py`",
+    "current/04_source_derived.sql": "`04_source_derived.sql`",
+    "current/00_extract_proofs.py": "CURRENT `00_extract_proofs.py`",
+    "current/regenerate_lower_bound.py": "CURRENT `regenerate_lower_bound.py`",
+    "current/reproduce_do01_overlap.py": "CURRENT `reproduce_do01_overlap.py`",
+    "historical/q/01_contract.sql": "Q historical `01_contract.sql`",
+    "historical/q/03_run_proofs.py": "Q historical `03_run_proofs.py`",
+    "historical/option_a/01_lower_bound_only.sql": "Option-(a) lower-bound SQL",
+    "historical/gw/source_derived_candidates.json": "`source_derived_candidates.json`",
+}
+
+HASH_RE = re.compile(r"`([0-9a-f]{64})`")
+
+
+def parse_section_14_table(markdown: str) -> list[tuple[str, str]]:
+    """Return (label_cell, sha256) rows from the §14 file table only."""
+    start = markdown.find("## 14. Disposable feasibility proof")
+    if start < 0:
+        raise SystemExit("extraction_section14_missing")
+    stop_tokens = (
+        "\nHistorical Q identities",
+        "\nReproduction is **self-contained",
+        "\n```bash",
+    )
+    stop = len(markdown)
+    for tok in stop_tokens:
+        i = markdown.find(tok, start)
+        if 0 <= i < stop:
+            stop = i
+    section = markdown[start:stop]
+    rows: list[tuple[str, str]] = []
+    seen_labels: dict[str, str] = {}
+    for line in section.split("\n"):
+        if not line.startswith("|"):
+            continue
+        if "SHA-256" in line or line.startswith("|---"):
+            continue
+        parts = [p.strip() for p in line.strip().strip("|").split("|")]
+        if len(parts) < 2:
+            continue
+        hashes = HASH_RE.findall(parts[1])
+        if not hashes:
+            continue
+        label = parts[0]
+        digest = hashes[0]
+        if label in seen_labels and seen_labels[label] != digest:
+            raise SystemExit(f"extraction_table_duplicate_label:{label}")
+        seen_labels[label] = digest
+        rows.append((label, digest))
+    if not rows:
+        raise SystemExit("extraction_section14_table_empty")
+    return rows
+
+
+def check_table_manifest_extracted(
+    markdown: str, blocks: dict[str, str], manifest: dict
+) -> None:
+    """Row-for-row: §14 table, embedded manifest, extracted named inputs.
+
+    A coordinated edit of every in-repository declaration is not prevented by
+    in-band hashes. Missing/extra/duplicate/path/version/hash disagreements fail.
+    """
+    rows = parse_section_14_table(markdown)
+    by_label = {label: digest for label, digest in rows}
+    declared = manifest.get("files")
+    if not isinstance(declared, list) or not declared:
+        raise SystemExit("extraction_manifest_empty")
+    listed_paths = []
+    for row in declared:
+        path = row["path"]
+        digest = row["sha256"]
+        listed_paths.append(path)
+        if path not in SECTION14_LABELS:
+            raise SystemExit(f"extraction_table_unmapped_path:{path}")
+        label = SECTION14_LABELS[path]
+        if label not in by_label:
+            raise SystemExit(f"extraction_table_missing_path:{path}")
+        if by_label[label] != digest:
+            raise SystemExit(
+                f"extraction_table_manifest_mismatch:{path}:table={by_label[label]}:manifest={digest}"
+            )
+        if path not in blocks:
+            raise SystemExit(f"extraction_missing_block:{path}")
+        got = sha256_bytes(blocks[path].encode("utf-8"))
+        if got != digest:
+            raise SystemExit(
+                f"extraction_table_extracted_mismatch:{path}:declared={digest}:got={got}"
+            )
+    mapped = set(SECTION14_LABELS)
+    extra = [p for p in listed_paths if p not in mapped]
+    if extra:
+        raise SystemExit("extraction_table_extra_manifest_path:" + ",".join(extra))
+    missing_mapped = [p for p in SECTION14_LABELS if p not in listed_paths]
+    if missing_mapped:
+        raise SystemExit(
+            "extraction_table_missing_manifest_path:" + ",".join(missing_mapped)
+        )
+
+
 def extract_from_plan(plan: Path, dest: Path, *, write: bool = True) -> dict:
     markdown = decode_utf8_lf(plan.read_bytes(), str(plan))
     blocks = extract_blocks(markdown)
@@ -39732,6 +40664,7 @@ def extract_from_plan(plan: Path, dest: Path, *, write: bool = True) -> dict:
     if man_path not in blocks:
         raise SystemExit("extraction_manifest_block_missing")
     manifest = load_manifest(blocks[man_path])
+    check_table_manifest_extracted(markdown, blocks, manifest)
     if write:
         dest.mkdir(parents=True, exist_ok=True)
     verify_and_write(blocks, manifest, dest, write=write)
@@ -39757,12 +40690,14 @@ def selftest(plan: Path) -> None:
     blocks = extract_blocks(markdown)
     man = load_manifest(blocks["current/proof_manifest.json"])
     verify_and_write(blocks, man, Path("/tmp"), write=False)
+    check_table_manifest_extracted(markdown, blocks, man)
 
     def expect_fail(label: str, mutated: str, needle: str) -> None:
         try:
             b = extract_blocks(mutated)
             if "current/proof_manifest.json" in b:
                 m = load_manifest(b["current/proof_manifest.json"])
+                check_table_manifest_extracted(mutated, b, m)
                 verify_and_write(b, m, Path("/tmp"), write=False)
             raise SystemExit(f"extraction_selftest_should_fail:{label}")
         except SystemExit as exc:
@@ -39807,8 +40742,34 @@ def selftest(plan: Path) -> None:
     man_obj = json.loads(bad_man)
     man_obj["files"][0]["sha256"] = "0" * 64
     poisoned_man = json.dumps(man_obj, indent=2) + "\n"
-    poisoned_md = markdown.replace(bad_man, poisoned_man, 1)
-    expect_fail("bad_digest", poisoned_md, "extraction_digest_mismatch")
+    declared = man["files"][0]["sha256"]
+    table_needle = f"| CURRENT `01_contract.sql` | `{declared}` |"
+    table_zero = f"| CURRENT `01_contract.sql` | `{'0' * 64}` |"
+    if table_needle not in markdown:
+        raise SystemExit("extraction_selftest_table_row_missing")
+    poisoned_md = markdown.replace(bad_man, poisoned_man, 1).replace(table_needle, table_zero, 1)
+    expect_fail("bad_digest", poisoned_md, "extraction_table_extracted_mismatch")
+
+    # AO-06 one-sided edits: table vs manifest vs body must agree. A coordinated
+    # edit of every in-repository declaration is not prevented; Git pin +
+    # independent review establish which package is trusted. No manifest self-hash.
+    current_hash = man["files"][0]["sha256"]
+    if len(current_hash) != 64:
+        raise SystemExit("extraction_selftest_current_hash")
+    flipped = ("0" if current_hash[0] != "0" else "1") + current_hash[1:]
+    table_needle = f"| CURRENT `01_contract.sql` | `{current_hash}` |"
+    table_repl = f"| CURRENT `01_contract.sql` | `{flipped}` |"
+    if table_needle not in markdown:
+        raise SystemExit("extraction_selftest_table_row_missing")
+    table_only = markdown.replace(table_needle, table_repl, 1)
+    expect_fail("onesided_table_hash", table_only, "extraction_table_manifest_mismatch")
+
+    man_only_obj = json.loads(bad_man)
+    man_only_obj["files"][0]["sha256"] = flipped
+    man_only_md = markdown.replace(bad_man, json.dumps(man_only_obj, indent=2) + "\n", 1)
+    expect_fail("onesided_manifest_hash", man_only_md, "extraction_")
+
+    print("extraction_authenticity_limit:coordinated_in_repo_edit_not_prevented")
     print("extraction_selftest_ok")
 
 
@@ -39846,7 +40807,7 @@ The extractor loads this block and verifies every listed `sha256` against extrac
 ```json
 {
   "version": "pr7-proof-extract-v1",
-  "note": "This manifest does not hash itself. current/proof_manifest.json is the sole allowed unlisted extracted block.",
+  "note": "This manifest does not hash itself. current/proof_manifest.json is the sole allowed unlisted extracted block. Coordinated in-repo edit of table+manifest+blocks is not prevented by in-band hashes; the Git pin and independent review establish which package is trusted.",
   "historical_unpublished_at_F": {
     "01_contract.sql": "bc0d674afdfe1ed984e7258326e3421a62c24b25ce988281f43885e9fe859ff4",
     "03_run_proofs.py": "336b2795914eedccbc677a5da8aefb7d93c950a3b7e1f4aa89387ce917a0bdbc",
@@ -39860,7 +40821,7 @@ The extractor loads this block and verifies every listed `sha256` against extrac
   "files": [
     {
       "path": "current/01_contract.sql",
-      "sha256": "b55bb88e758e1a7f7c124222af616c84053fbda89e8083839d5648c333e91814",
+      "sha256": "d4c21ff9350f4072a907576f80be44b46a210695e8088f467a4f7b49c46b4318",
       "role": "CURRENT declared runnable contract (new identity; not F unpublished bc0d674a)"
     },
     {
@@ -39870,23 +40831,23 @@ The extractor loads this block and verifies every listed `sha256` against extrac
     },
     {
       "path": "current/03_run_proofs.py",
-      "sha256": "3edd193bfa18bec375bf020b8ccbabf24c28bee1f8a14bc66930e2a5be4c1f86",
+      "sha256": "d24afa331bde236e6ed59243ada670d14b658bd308541b9263df616040c75d85",
       "role": "CURRENT declared runnable driver (new identity; not F unpublished 336b2795)"
     },
     {
       "path": "current/04_discover_writers.py",
       "sha256": "666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d",
-      "role": "Independent writer scanner; unchanged vs P/GW/Q/F"
+      "role": "Independent writer scanner; unchanged vs P/GW/Q/F/S"
     },
     {
       "path": "current/04_source_derived.sql",
       "sha256": "9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa",
-      "role": "Portable consumed snapshot; byte-identical vs P/GW/Q/F"
+      "role": "Portable consumed snapshot; byte-identical vs P/GW/Q/F/S"
     },
     {
       "path": "current/00_extract_proofs.py",
-      "sha256": "02b066c3838b246bd53deb7f6467e31fc7d8b63d7349d1317c21b04ecfdc6177",
-      "role": "Published extractor pr7-proof-extract-v1"
+      "sha256": "70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172",
+      "role": "Published extractor pr7-proof-extract-v1 with AO-06 table/manifest/extracted cross-check"
     },
     {
       "path": "current/regenerate_lower_bound.py",
