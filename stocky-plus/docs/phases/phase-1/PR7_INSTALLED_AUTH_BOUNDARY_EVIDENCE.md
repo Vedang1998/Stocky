@@ -318,8 +318,8 @@ Bootstrap `00_extract_proofs.py` from the HTML comments below, then extract and 
     },
     {
       "path": "attempts/03-ok-without-access-token.mjs",
-      "sha256": "d8127957fba2143a581a36ccefdf851a64bc2fd043b8e94c4b9760071f556301",
-      "bytes": 2719
+      "sha256": "b54e20da4da4a761db9f13a17bbf3c910cf7f2910db52826630d105812d163a0",
+      "bytes": 2718
     },
     {
       "path": "attempts/04-single-consume-Response.mjs",
@@ -789,7 +789,7 @@ mockCtl.status = 200;
 // Force the token-exchange branch to return non-JSON via errorBody unused;
 // instead monkey the fetch by setting status 200 with invalid JSON through a temp flag.
 // We reuse status 200 and replace payload by returning "{not-json" via parse fail:
-// empty body → tokenExchangePayload still runs. Use passthrough then... 
+// empty body → tokenExchangePayload still runs. Use passthrough then...
 // Simpler: status 200 with mocked fetch override by setting error via a 200 HTML:
 mockCtl.status = 299; // not 200, so errorBody path; but 299 is ok-ish? 299 is ok (200-299).
 // Use 200 with empty JSON object by patching error path: status stays 200 and
