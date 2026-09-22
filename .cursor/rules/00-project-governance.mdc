@@ -13,6 +13,10 @@ Legal entity: IVYY LLC (owner supplied)
 Read stocky-plus/docs/agents/PROPO_AUTONOMOUS_DELIVERY_PROTOCOL.md
 with AGENTS.md. Its new rules require the introducing governance PR's
 acceptance and owner merge; do not move a frozen review subject to adopt it.
+Even after that merge, protocol §5 bounded merge delegation stays INACTIVE
+until a separately reviewed activation package is owner-approved. Loading
+this protocol does not activate it, and activation cannot be inferred from
+protocol text.
 If this tool also loads CLAUDE.md, the Claude reviewer role does not make
 Cursor an actual Claude reviewer. Record the real tool/model/run and role.
 
@@ -28,13 +32,18 @@ Authority:
   phase control, merge recommendations and agent coordination.
 - Cursor implements only approved scope.
 - Claude Code independently reviews.
-- The user alone authorizes merges after ChatGPT acceptance.
+- The user alone authorizes merges after ChatGPT acceptance. That is the
+  CURRENT merge rule. Proposed protocol §5 delegation is not active.
 - GitHub is the permanent project record.
 
 Hard boundaries:
 - Never commit directly to main.
 - Never mark a PR ready or merge without explicit authorization.
-- Never begin a later PR or phase early.
+- Never begin a later or dependent PR or phase early. ChatGPT may
+  authorize only contract-frozen, dependency-independent lanes under
+  stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md. Future-phase runtime,
+  migrations, Shopify configuration, production actions, and other
+  dependent work remain gated.
 - Never claim a command, test, CI run, build, migration, repository state,
   deployment or external fact without direct evidence.
 - Never access production or merchant data without explicit authorization.

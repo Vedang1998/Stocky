@@ -6,6 +6,10 @@ The owner selected **ProPo** as the product name and supplied **IVYY LLC** as th
 
 Read `stocky-plus/docs/agents/PROPO_AUTONOMOUS_DELIVERY_PROTOCOL.md` for session ownership, dispatch/result contracts, context recovery and completion gates. That protocol extends, but does not waive, the safety and approval rules below. Its introducing PR must be independently accepted and owner-merged before the new protocol becomes a merged operating rule. Existing frozen assignments keep their approved subject and mandate.
 
+User-only merge after ChatGPT acceptance is the CURRENT merge rule. Proposed bounded merge delegation (protocol §5) is INACTIVE. It does not become active because this file or the protocol was loaded, and it cannot be inferred from protocol text. Merging this governance proposal does not activate delegation and does not make PR53 or PR54 first delegated-merge subjects. Any later activation requires a separately reviewed owner-approved package that amends this file, `.cursor/rules/00-project-governance.mdc`, `.cursor/rules/10-phase-workflow.mdc`, and protocol §5 together.
+
+ChatGPT-authorized, contract-frozen, dependency-independent lanes under `ACCELERATED_SAFE_DELIVERY.md` remain the only permitted parallelism. Future-phase runtime, migrations, Shopify configuration, production actions, and other dependent work remain gated.
+
 Instructions are not a security boundary. Preserve enforced permissions, isolation, exact-head checks and independent review. Never promise error-free or legally immune operation.
 
 ## Purpose
@@ -183,7 +187,8 @@ For substantial work:
 11. Report exact evidence and remaining blockers.
 
 Do not commit directly to `main` unless the user explicitly instructs it.
-Do not merge without explicit user authorization.
+Do not merge without explicit user authorization. That user-only merge
+rule is CURRENT; protocol §5 does not replace it while INACTIVE.
 Do not mix unrelated phases in one pull request.
 Never include secrets, credentials, `.env` files, customer information, or production data.
 

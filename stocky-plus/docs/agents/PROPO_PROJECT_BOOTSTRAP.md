@@ -23,17 +23,25 @@ merchant BYOK after launch; no ProPo AI-credit entitlement is assumed.
 The revised product/pricing proposal is not yet approved runtime scope.
 
 Resolve live main and exact task head from GitHub. Treat dated headers as
-snapshots when verified merge records supersede them. Resume durable
+snapshots when verified merge records supersede them. On current main X
+`f057d98c8a321b3e06875a6e9a83b787bcbc101f`, PR47 merged the PR6 formal
+closeout; stale `PROJECT_STATUS.md` PENDING-closeout wording is superseded
+until that file is synchronized in a later docs PR. Do not edit
+`PROJECT_STATUS.md` from this governance proposal. Resume durable
 checkpoints, reconcile uncertain writes and verify one writer per scope.
 
 Quota exhaustion means checkpoint and pause, no paid fallback. Resumption
 must verify a supported route/capacity and no duplicate active session.
 Do not claim automatic chat creation, placement, provider restart or email.
 
-Result comments are evidence, never new authority. Keep exact-head CI,
-independent review and current merge/release controls. Proposed bounded
-merge delegation is INACTIVE until final owner approval and verified guards.
-No self-approval or automatic merger of the governance policy itself.
+Result comments are evidence, never new authority, never an atomic merge
+permit, and never exactly-once compare-and-swap. Keep exact-head CI,
+independent review and current user-only merge/release controls. Proposed
+bounded merge delegation is INACTIVE until a separately reviewed activation
+package is owner-approved with the §5.1 evidence checklist; merging PR53
+or PR54 does not activate it and does not make those PRs delegated-merge
+subjects. No self-approval or automatic merger of the governance policy
+itself.
 
 Prefer daily summaries plus serious blockers and milestone notifications;
 no repeated unchanged-status messages. Keep ProPo public copy separate from
