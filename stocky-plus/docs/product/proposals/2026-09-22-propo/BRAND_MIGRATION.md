@@ -21,3 +21,5 @@ Safe scope: update forward-looking documentation and reviewed visible copy. Pres
 Later brand rollout requires an occurrence/provider inventory, compatibility classification, current/intended values, legal/listing approval, browser/POS/PDF/email previews and link/callback tests. A source edit is not proof Shopify Partner settings or installed apps changed. Domain purchase, DNS email authentication, provider setup and contact verification remain owner actions or later explicit authorization.
 
 The PR53 instruction adapters and this PR54 dossier do not change a registered Shopify app, deployed UI or account-level project settings. The future IVYY ecosystem stays a strategic direction, not authority to launch extra apps now.
+
+F-P54-13 remains an owner-supplied identity/domain/mailbox limitation, not a branding rollout. No interviews, supported territories, provider pricing, deliverability or legal certification are invented here. Domain purchase, DNS email authentication, provider setup and contact verification remain owner actions or later explicit authorization. This correction does not begin that rollout.

@@ -8,7 +8,7 @@ Default product: the approved six deterministic Stocky-parity methods, correct A
 
 Reports: offer business questions with saved filters rather than algorithm names. A report is read-only and never changes a draft in the background. Smart: later, a separate comparison/scenario experience with one explicit Apply selected suggestions to draft action. It preserves the original draft/parity results and provenance. There are no fifteen interacting merchant toggles. Internal feature flags, versioned policies and kill switches remain engineering controls.
 
-One final quantity resolver uses one versioned variant/location/supplier/currency/UOM snapshot. Analysis modules supply demand estimates, constraints and warnings; they do not each add quantities, create POs or write Shopify. An unavailable input is unknown, not zero. Incoming mirrors deduplicate to one authority; avoid subtracting commitments already excluded from available stock. Pack rules apply only to the supplier/offer/policy that actually requires them.
+One final quantity resolver uses one versioned variant/location/supplier/currency/UOM snapshot. Analysis modules supply demand estimates, constraints and warnings; they do not each add quantities, create POs or write Shopify. An unavailable input is unknown, not zero. Incoming mirrors deduplicate to one authority and are **not physically counted until received**. Do not subtract `committed` reservations from a physical on-hand total, and do not treat `available` as physical stock. Pack rules apply only to the supplier/offer/policy that actually requires them.
 
 ## 2. Fifteen strategies reorganized
 

@@ -48,13 +48,15 @@ Recommended pilot shortlist, not accounts purchased or guaranteed production cap
 | Errors/traces | Sentry, PII scrubbed; session replay off until justified | Official Developer tier $0/one user; team/features/quotas may require paid plan. Do not share one login or assume free API integrations [V18] |
 | Ticketing | Zoho Desk managed email ticketing | Official Free edition advertises three support users; paid API/workflow/knowledge-base capabilities require actual edition verification. Pricing page localized to INR in this fetch; no fabricated USD paid quote [V17] |
 | Transactional mail | Resend adapter | Official free 3,000/month, 100/day; Pro listed $20/month/50,000 with usage terms. This is not sufficient for all merchants; owner approves paid capacity before launch volume exceeds limits [V19] |
-| Marketing lifecycle | Brevo, only consented audience | Official free 300 sends/day; paid starts advertised from $9/month. Do not let campaigns consume the quota reserved for supplier POs/security messages [V20] |
+| Marketing lifecycle | Brevo, only consented audience | Help-center Free-plan and pricing-plan articles **Cloudflare-blocked** this run (Ray `a3f48b29e8ded650`, `a3f48b981aa7e605`). Public pricing FAQ (2026-09-22) still states a Free plan can send **up to 300 emails per day** after sending approval; dollar prices on that marketing page did not extract. Do not treat Free as production-complete or as verified deliverability. Do not let campaigns consume the quota reserved for supplier POs/security messages [V20] |
 | Engineering tracking | Existing GitHub issues/PRs | No new project-management SaaS; no customer PII/secrets in public issues |
 | Runtime/data | Keep approved Node/Postgres/Redis/object storage stack | Provider/region/backup choices need a real quote and production cost model, not a $0 promise |
 
 Proposed choice is separate operational and marketing streams so a promotion cannot exhaust PO delivery. At small scale these may be separate provider accounts/streams, but verify actual quotas, DNS, suppression, data region and failure behavior before choosing. Do not silently install both if one proven service safely covers the required segregation at lower total cost. “Free” still costs setup/support and may omit necessary features.
 
 Build a cost sheet for compute, workers, DB/backups, Redis, storage/egress, email, observability, helpdesk, domain, taxes/payment fees and support time across mixed cohorts. Existing coding-agent overages being disabled does not make these costs disappear. Keep quotas and escalation; no provider purchase or automatic overage authorized by this document.
+
+Free Sentry/Zoho/Resend/Brevo tiers remain **not** production-support proof [F-P54-12]. Peer-review extras (Sentry Team advertised $26/mo annual; Zoho Express vendor AI/BYOK) are vendor marketing, not IVYY quotes, and must not be mixed with merchant BYOK policy. Uninstall does not create marketing consent. Partner API credentials stay operator secrets.
 
 ## 5. Email/event lifecycle
 

@@ -6,7 +6,7 @@
 
 Owner priority is US and Canada, English required. Prepare localization infrastructure now; prioritize Canadian French for the Canada/Quebec assessment, then evaluate Spanish UI. Language availability does not authorize France, Spain, Mexico or other countries. No worldwide-launch promise. French/Spanish release requires reviewed terminology, error messages, PDFs/emails/legal versions, dates/currencies, support readiness and real workflow QA; machine translation alone does not establish legal equivalence.
 
-Quebec requires separate privacy/language applicability assessment. OQLF's adhesion-contract guidance includes French-first delivery obligations with stated exceptions [V23]. Do not infer that a New York entity serving Canadian stores is exempt, or that a language-selector button suffices. If a region is not ready, record a genuine market limitation and assess actual data/customer reach; a listing-country filter alone is not proof no protected residents' data enters the service.
+Quebec requires separate privacy/language applicability assessment. OQLF adhesion-contract guidance was **re-fetched 2026-09-22** (peer review had timed out): French-first delivery for new adhesion contracts since 2023-06-01, with stated exceptions including relations with persons/establishments outside Quebec; last page update 2026-05-20 [V23]. That fetch is not a territorial opinion and does not clear a NY entity serving Canadian stores. A language-selector button does not suffice. If a region is not ready, record a genuine market limitation and assess actual data/customer reach; a listing-country filter alone is not proof no protected residents' data enters the service. Q-008 remains OPEN.
 
 ## 2. Lean legal workflow without pretending certainty
 
@@ -29,6 +29,8 @@ Support consent and ticket information cannot authorize unlimited impersonation 
 Separate operational onboarding/security/billing/PO delivery from promotional offers, upsells, ecosystem cross-selling and win-back campaigns. CAN-SPAM covers business-to-business commercial email and has truthful-identification/opt-out requirements [V16]. CASL guidance requires appropriate consent, sender identification and unsubscribe for covered commercial messages, including messages received in Canada from abroad [V15]. Installation or a historic support ticket is not blanket marketing consent.
 
 Track consent/source/scope/date, suppression and unsubscribe. A transactional subject line does not turn an advertisement into a service message. Uninstall must revoke API access and follow privacy policy; it does not permit a last-minute marketing data grab. Mandatory/necessary notifications should remain narrowly drafted and legally classified. No marketing emails or provider accounts were created by this research.
+
+CASL CRTC FAQ [V15] was **blocked** again on 2026-09-22 (Cloudflare interstitial, Ray IDs `a3f48b14fdcc18b8` and retry `a3f48d480fbb37c5`). P1’s CASL caution is therefore **not independently re-verified** this successor. CAN-SPAM [V16] was previously confirmed by the peer reviewer; this writer did not re-litigate it. These are evidence limits, not a waiver.
 
 ## 5. Pricing, tax, terms and security
 
