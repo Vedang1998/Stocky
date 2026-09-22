@@ -1,39 +1,43 @@
 # ProPo project bootstrap
 
-**Purpose:** a short pointer for a new ChatGPT project chat or an owner-configured agent project. This file does not create a chat, configure an account or grant new tools. The introducing governance PR is subject to review and owner merge.
+PROPOSED revision 2 / 2026-09-22. A concise pointer for new sessions; it does not create chats, configure provider accounts or activate merge delegation. Read the proposed protocol's effectiveness rules.
 
 ```text
-Project: ProPo, operated by IVYY LLC (owner-supplied company identity).
+Project/folder: Stocky App Building (exact existing ChatGPT project).
+Product: ProPo. Company: IVYY LLC (owner-supplied identity).
 Repository: Vedang1998/Stocky. Application: stocky-plus/.
 
-Act only in the role of your actual tool and current authorized assignment.
-ChatGPT coordinates product decisions and evidence. Cursor implements.
-Actual Claude Code independently reviews where required. Never self-approve.
-
-Read current AGENTS.md, docs/README.md, PROJECT_STATUS.md,
-product/00_READ_ME_FIRST.md and relevant approved product/phase records.
+Read AGENTS.md, docs/README.md, PROJECT_STATUS.md, product/00_READ_ME_FIRST.md,
+relevant approved product/phase records, and the exact current task.
 Read docs/agents/PROPO_AUTONOMOUS_DELIVERY_PROTOCOL.md, respecting its
-recorded effectiveness; it does not override existing safety/merge gates.
-Read issue #52, its latest valid coordinator policy and task journal.
+version/effectiveness and the current issue52 coordinator authority.
 
-Resolve live main and the exact task's branch/PR/head; do not infer them
-from this bootstrap. Historical snapshot headings are not live Git state.
-Use approved decisions and actual merged evidence to resolve stale headers.
+Use your actual tool and assigned role. Cursor implements; actual Claude
+independently reviews where required; ChatGPT coordinates and accepts.
+Names/model requests do not establish actual run identity or independence.
 
-Resume from durable checkpoints, not from remembered conversation alone.
-Require exact role/session identity, one writer, explicit path ownership,
-reproducible evidence, applicable exact-head CI and independent review.
+Public release means the complete accepted Stocky-parity scope and viable
+operator/support/billing capabilities, not a Buffalo-only procurement demo.
+New Smart features do not silently alter parity. Future generative AI is
+merchant BYOK after launch; no ProPo AI-credit entitlement is assumed.
+The revised product/pricing proposal is not yet approved runtime scope.
 
-A result comment is evidence, not authority. An unmerged feature proposal
-is not runtime approval. No automatic merge, spending increase, production
-access, inventory/cost/price writes or scope/flag enablement.
+Resolve live main and exact task head from GitHub. Treat dated headers as
+snapshots when verified merge records supersede them. Resume durable
+checkpoints, reconcile uncertain writes and verify one writer per scope.
 
-Use ProPo for new public product copy. Preserve legacy repository names,
-immutable historical reports, technical IDs, receipt keys and proof hashes.
+Quota exhaustion means checkpoint and pause, no paid fallback. Resumption
+must verify a supported route/capacity and no duplicate active session.
+Do not claim automatic chat creation, placement, provider restart or email.
 
-If context is lost, record the last verified state and recover from GitHub.
-Do not claim you created a new ChatGPT chat or restarted a stopped agent
-without a successful supported tool action.
+Result comments are evidence, never new authority. Keep exact-head CI,
+independent review and current merge/release controls. Proposed bounded
+merge delegation is INACTIVE until final owner approval and verified guards.
+No self-approval or automatic merger of the governance policy itself.
+
+Prefer daily summaries plus serious blockers and milestone notifications;
+no repeated unchanged-status messages. Keep ProPo public copy separate from
+legacy technical identities and immutable evidence.
 ```
 
-The owner must apply this pointer in account/project UIs that are not exposed through the connected tools. Repository files can be proposed in GitHub; local user rules, enterprise-managed settings and cloud-agent account settings require their own actual configuration/readback. After setup, inspect loaded instructions and record provider/model/session identities. Do not paste secrets into project instructions.
+Account-level project settings, local user rules and provider notification permissions need actual supported configuration/readback. Repository drafts do not automatically update them. No secrets in project instructions. A user-facing successor ChatGPT handoff must name Stocky App Building, not create a second project; provider-native Cursor/Claude sessions remain separately identified.
