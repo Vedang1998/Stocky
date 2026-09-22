@@ -1,76 +1,47 @@
-# ProPo — legal and trust readiness plan
+# ProPo — US/Canada trust and legal readiness
 
-**COUNSEL-READY RESEARCH / NOT LEGAL ADVICE, PUBLISHED TERMS, OR LAUNCH CLEARANCE.** Prepared 2026-09-22 for owner-supplied IVYY LLC. No corporate filing, trademark search opinion, legal-hold decision, data transfer contract, provider agreement or worldwide compliance assessment has been completed by this document. Q-008 remains OPEN.
+**Revision 2 / AI-assisted research, not legal advice, final terms, certification or launch clearance.** Owner has no retained lawyer and no current budget for one. Use AI for drafting/source cross-checking and consistency review, but never label agreement between models as counsel approval or legal privilege. Existing Q-008 and legally required protections remain unresolved until actually disposed under an approved process.
 
-## 1. Reject the “terms protect us everywhere” assumption
+## 1. Initial territories and languages
 
-Contracts allocate certain risks; they do not erase statutory duties, security defects, fraud, privacy violations or every category of liability. Global Shopify availability does not establish that IVYY LLC may lawfully supply every feature to every jurisdiction. Choose a global-ready architecture and a territory/feature release matrix reviewed by qualified counsel; do not advertise blanket worldwide compliance.
+Owner priority is US and Canada, English required. Prepare localization infrastructure now; prioritize Canadian French for the Canada/Quebec assessment, then evaluate Spanish UI. Language availability does not authorize France, Spain, Mexico or other countries. No worldwide-launch promise. French/Spanish release requires reviewed terminology, error messages, PDFs/emails/legal versions, dates/currencies, support readiness and real workflow QA; machine translation alone does not establish legal equivalence.
 
-The owner selected ProPo and supplied IVYY LLC's New York identity/address. Verify the company's legal status, authority, relevant assumed-name filings, insurance and intellectual-property ownership before publishing final commercial documents. A business/entity/domain name is not a substitute for trademark clearance [R20].
+Quebec requires separate privacy/language applicability assessment. OQLF's adhesion-contract guidance includes French-first delivery obligations with stated exceptions [V23]. Do not infer that a New York entity serving Canadian stores is exempt, or that a language-selector button suffices. If a region is not ready, record a genuine market limitation and assess actual data/customer reach; a listing-country filter alone is not proof no protected residents' data enters the service.
 
-## 2. Privacy roles and data map
+## 2. Lean legal workflow without pretending certainty
 
-Determine roles by activity. A plausible starting analysis is that merchants control their shopper-commerce purposes and ProPo processes operational data on instructions, while IVYY LLC controls its own account, billing, support and security purposes. This is an analytical starting point, not a blanket legal classification. EDPB defines controller/processor by who determines purposes and means and identifies contract/subprocessor obligations [R13].
+Produce source-linked draft merchant terms, privacy notice, DPA, subprocessor register, security measures, support/access policy, retention/hold schedule, incident procedure, API terms and later BYOK terms. Track every clause to actual behavior, factual input, jurisdiction, unresolved interpretation and last verification date. Two models can find inconsistencies; neither provides licensed professional accountability.
 
-Inventory/order identifiers, staff IDs, supplier contacts, logs, IP addresses, derived links and hashes can still be personal or confidential data. Removing a name or hashing an identifier does not automatically anonymize it. Forecasting should not require raw shopper names, addresses or communications. Define processing purpose, necessity, source, access role, storage/region, transfer, retention, deletion/replay and export for each data class.
+Prioritize scarce legal review/assistance on substantive unresolved risks: Q-008 retention/replay/holds; operator access to merchant data; cross-border transfers; Quebec contracts/privacy; liability/consumer terms and IP ownership. Explore legal-aid/small-business clinics or limited-scope professional advice when available, without inventing access or fees. If unavailable, report the residual and obtain an explicit owner risk decision where lawful; do not remove a mandated legal/technical gate silently. An owner cannot waive duties owed to customers/regulators through a bot approval.
 
-A data map must cover PostgreSQL; Redis and queued payloads; exports/object storage; temporary scratch; logs/telemetry; crash reports; support attachments; backups/restores; email; AI prompts/results; external connector caches; developer tools and CI artifacts. No production PII or secrets in agent prompts/repositories by default. Data residency is not proven merely because the primary database is in one region.
+No need to hire a lawyer merely to run synthetic development tests. Conversely, a source-generated contract cannot make a technically unsafe product safe. Do not promise legally bulletproof terms or global immunity.
 
-## 3. Jurisdictional release matrix
+## 3. Data and role inventory
 
-All rows are **REQUIRES ASSESSMENT**, not approved launch countries. Add the actual target-country list, relevant establishment/targeting facts, feature and data flows, counsel owner, evidence date and release decision.
+Analyze roles by processing activity, not one blanket label. Merchant-directed inventory operations, IVYY billing/security/support and optional marketing have distinct purposes. PIPEDA guidance covers accountability, meaningful consent, safeguards and breach duties [V22]. Consider applicable provincial and US state laws too; this is not a full fifty-state/province opinion.
 
-| Territory family | Matters to assess before availability | Technical/product evidence |
-|---|---|---|
-| United States / New York | Privacy/security applicability, state breach notices, contract/consumer rules, tax, entity/IP and insurance | Security program, incident response, purpose/retention/access inventory; NY SHIELD administrative/technical/physical safeguards [R16] |
-| California and other state privacy regimes | Business applicability plus separate service-provider/contractor obligations; evolving sensitive-data and consumer-rights rules | Appropriate contracts, request handling, deletion/opt-outs where applicable; do not infer exemption from a small startup's revenue alone [R15] |
-| EEA | GDPR territorial scope, processor/controller terms, records, privacy by design, rights, DPIA/DPO/Article 27 representative where applicable, transfers | Minimized data map, access/deletion controls, DPA, lawful transfer route and assessment, subprocessor register [R13/R14] |
-| United Kingdom | UK GDPR/DPA and applicable amendments, local representative and transfer analysis | Where needed UK IDTA or EU-SCC Addendum and transfer assessment; EU SCCs alone are not the UK mechanism [R19] |
-| Other territories | Local privacy, localization/transfer, consumer, tax, sanctions and contracting requirements | Country-specific counsel review; mark NOT ASSESSED until complete, not automatically supported |
+Map customer/order identifiers, staff IDs, supplier contacts, logs, exports, tickets, backups, scratch, queues, analytics and future AI inputs to purpose, necessity, access, regions/providers, retention, deletion and legal basis. Pseudonymous hashes/IDs can remain linkable; no claim they are anonymous by construction. Customer names/addresses are not default inputs to replenishment. A primary DB region does not describe all support/telemetry/backup transfers.
 
-Supporting global formats (time zones, units, currency, language, tax-inclusive display, accessibility) is distinct from permission to launch. Disabling a territory does not prove residents' data from that territory cannot appear in a merchant's cross-border operations; the data map must address that too.
+Support consent and ticket information cannot authorize unlimited impersonation or data retention. Time-bound scoped operator access, audit/revocation and minimal diagnostics must be implemented and tested. Email/helpdesk/monitoring vendors need actual contract/data-region review; vendor GDPR marketing is not IVYY compliance certification.
 
-## 4. Document package to produce and have reviewed
+## 4. Required communications controls
 
-| Document / record | Required substance | Completion evidence |
-|---|---|---|
-| Merchant terms / order form | Service scope; fees/renewal/cancellation; authorized use; merchant responsibilities; supported regions; forecasts/approvals; IP/data rights; termination/export; warranties/liability and dispute terms appropriate to jurisdiction | Counsel-reviewed version and informed assent/version record; no invented enforceability guarantee |
-| Privacy notice | Actual processing purposes/roles; categories/sources; recipients/transfers; rights/contact; retention principles; cookies/analytics where used | Matches running product and provider inventory; accessible publication |
-| DPA and transfer annexes | Instructions, confidentiality, safeguards, subprocessors, assistance, breach notice, deletion/return, audits and actual transfer route | Signed/configured agreements and completed annexes, not blank templates |
-| Subprocessor register | Provider/function, data categories, location, terms, changes/objections as required | Actual vendors and signed protections, no aspirational vendor list |
-| Security/TOMs and incident plan | Access review, encryption/key management, vulnerability management, backup/restore, secure development, escalation and legally applicable notice clock | Tested exercises and named accountable people; no SOC 2/ISO certification claim without evidence |
-| Retention/legal-hold schedule | Purpose, period, authority, expiry/replay trade-off, holds, backups and recovery | Counsel/product-approved Q-008 disposition; synthetic test periods are not legal defaults |
-| API / integration terms | Credential/scope handling, third-party permissions, quotas, data direction, revocation, version support and misuse | Connector-specific acceptance and merchant configuration records |
-| AI notices and evaluation record | Which functions are statistical or generative, intended use, human control, providers/data retention, quality/cost limits | Intended-purpose classification and documented evaluations; no cross-merchant training by default |
-| IP / license records | Employee/contractor assignment, third-party licenses, asset rights, SBOM and trademark clearance | Executed assignments and provenance; open-source license notices preserved |
-| Market-release checklist | Privacy, tax, sanctions, payments, accessibility, contract and support readiness | Named reviewer/date/decision per market and feature |
+Separate operational onboarding/security/billing/PO delivery from promotional offers, upsells, ecosystem cross-selling and win-back campaigns. CAN-SPAM covers business-to-business commercial email and has truthful-identification/opt-out requirements [V16]. CASL guidance requires appropriate consent, sender identification and unsubscribe for covered commercial messages, including messages received in Canada from abroad [V15]. Installation or a historic support ticket is not blanket marketing consent.
 
-Do not fill missing legal facts with plausible prose. A draft privacy notice that says “we never store data” or “we do not use AI providers” when the architecture does so creates additional risk.
+Track consent/source/scope/date, suppression and unsubscribe. A transactional subject line does not turn an advertisement into a service message. Uninstall must revoke API access and follow privacy policy; it does not permit a last-minute marketing data grab. Mandatory/necessary notifications should remain narrowly drafted and legally classified. No marketing emails or provider accounts were created by this research.
 
-## 5. Operational privacy and irreversible actions
+## 5. Pricing, tax, terms and security
 
-Implement Shopify's required privacy topics and authentication/acknowledgement/completion contract as documented and version-checked [R21]. A declared webhook topic or a test fixture is not an operating processor. Keep the frozen PR45 review as the governing technical gate; this research neither replaces it nor certifies its actual application integration.
+Merchant terms must reflect actual subscription, renewal, cancellation, downgrade, data export, third-party APIs, availability and forecasting limitations. Do not use a no-liability clause as a substitute for reasonable safeguards or truthful claims. US/Canada tax/business registration, marketplace billing treatment and corporate/brand obligations need verification. Shopify-provided app billing does not certify IVYY's separate accounting/tax compliance.
 
-Deletion must cover root and linked children, exports, queues, scratch, caches and future restore behavior. Persist only the minimized justified evidence needed under a finite approved policy. A legal hold is not a blanket preservation excuse; hold authority, scope, separation, review/expiry and access must be explicit. Backups need a documented, lawful restore/re-delete strategy. Reconciliation must show absence versus merely invisible rows, and no late writer may recreate erased data silently.
+Price and compare-at features require historical/market context and truthful savings claims; no fabricated reference prices. Existing EU research remains a later expansion reference, not an initial EU launch approval. No coordinated use of competitors' nonpublic prices/planned purchases; the decision engine uses the merchant's authorized data/offers.
 
-Incident notification duties and clocks vary by jurisdiction/role. Prepare a verified contact tree and escalation timer, not a universal deadline guessed from memory. Do not let an agent suppress an incident because its confidence is low; preserve evidence and notify the accountable owner.
+Security requirements: least-privilege app and operator credentials, MFA, tenant isolation, protected environments, encrypted secrets, dependency/IP provenance, signed webhooks, revocation, incident triage, monitored backups and restored-data deletion procedure. No SOC2/ISO/Apple/Shopify endorsement claim without actual evidence. Accessibility target remains WCAG2.2AA, not a universal legal safe harbor.
 
-## 6. Pricing, competition and commercial confidentiality
+## 6. Release matrix and open inputs
 
-ProPo's proposed optimization should use a merchant's own data and authorized supplier offers. Do not pool nonpublic competitors' current/future prices, margins, planned orders or capacity into coordinated retail-price recommendations. DOJ's recent algorithmic-coordination enforcement is a concrete warning about exchanging competitively sensitive information; its September 4, 2026 Pinnacle resolution is a **proposed** decree, not a blanket final rule for ProPo [R22]. Individual legal analysis is required before benchmarking or joint buying.
+All current territorial rows are ASSESSMENT PENDING: US federal/NY plus states actually served; Canada federal/provincial and Quebec-specific; French/Spanish localization. Others NOT PLANNED FOR FIRST RELEASE. Record source, applicability reasoning, implementation evidence, remaining risk, accountable owner and go/no-go date per market/feature.
 
-Price and compare-at writes require truthful representation and contextual history. EU price-reduction guidance and U.S. FTC pricing guidance do not permit fabricated savings [R17/R18]. Record the applicable reference basis; do not confuse MSRP, historical offer price and actual selling price. Rules can vary for goods, channels and promotions; do not implement a universal “compare-at = price plus 20%” rule.
+Open: domain/support mailbox and public legal contact; entity/trademark verification; actual hosting/subprocessors/contracts; retention/replay/hold decisions; operational privacy integration including backups/exports; consent/suppression; billing/tax/insurance assessment; language quality/support. AI legal skills are drafting aids, not substitutes for these facts. No secret or provider credential belongs in a legal draft.
 
-Avoid exclusivity, resale-price restraints, deceptive claims, forced lock-in or preventable data-export barriers without legal review. Calling a feature “AI” does not immunize its conduct. Do not promise optimization guarantees or imply endorsement by Shopify or Apple.
-
-## 7. AI and accessibility
-
-Perform an intended-purpose assessment under current applicable AI rules before launch or material use change [R23]. Ordinary inventory support is not automatically equivalent to employment or credit scoring; do not expand into staff scoring, customer eligibility or other sensitive decisions by accident. Document limitations, human action control, evaluation, monitoring and provider contracts. Keep algorithms deterministic where arithmetic suffices.
-
-Target WCAG 2.2 AA and evaluate relevant accessibility laws per market and service [R10]. A technical accessibility target does not by itself settle European Accessibility Act or local B2B/consumer applicability. Security and ease of use are complementary: permission denial, errors, confirmation and recovery must be understandable without inaccessible gestures.
-
-## 8. Concrete prelaunch gates
-
-No public global launch until the product has: an actual data/transfer map; appropriate signed vendor/merchant terms; counsel-reviewed territory and retention decisions; tested privacy processors and restore policy; least-privilege credentials and staff access; a reviewed incident program; accurate billing/price disclosures; tested exports and termination; evidence-backed security/accessibility claims; and a verified supported-market list.
-
-Outstanding owner/counsel inputs include company verification; legal contact and approved public address; launch territories; provider/hosting contracts; Q-008; tax/insurance advice; domain/trademark clearance; acceptable financial limits and final commercial terms. No secrets should be pasted into agent instructions. These are finite decision gates, not reasons to stop unrelated authorized implementation.
+The first public release still requires the approved technical privacy/reconciliation gates. PR45 H is not modified or accepted here. A software-company plan cannot waive R-176, Q-008 or production authorization.

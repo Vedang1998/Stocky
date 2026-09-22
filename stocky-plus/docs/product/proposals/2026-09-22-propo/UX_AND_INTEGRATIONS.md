@@ -1,89 +1,59 @@
-# ProPo — UX, API and integration proposal
+# ProPo — daily experience, permissions and integrations
 
-**PROPOSED / NOT IMPLEMENTATION AUTHORITY.** Research references are in RESEARCH_SOURCES.md. Product principles are informed by public Apple HIG, Shopify App Design Guidelines and WCAG, not by privileged knowledge of Apple's engineering process [R08–R10].
+**Revision 2 / PROPOSED.** Use source register V01–V23. No UI, scopes, Shopify account roles or connectors were changed.
 
-## 1. Product experience principles
+## 1. Default Home: operational attention, not a finance dashboard wall
 
-Be distinctive in useful workflows, not incompatible controls. Use Shopify-native navigation and supported components, exact variant/location identity, clear action hierarchy, progressive disclosure and immediate durable feedback. Do not imitate Apple's branding, copy a glass aesthetic into dense purchasing tables, or add a second sidebar inside Shopify.
+Stocky's documented low-stock reports prioritize variants/vendors at risk, with open-order visibility [V04/V05]. Use that workflow as research input, not a claim that its historical exact home screen has been reconstructed.
 
-Design around jobs: what needs attention, what should I order, where is it, what arrived, what changed and what can I trust? Buyers need a fast keyboard grid; receivers need a resumable scanning workflow; owners need cash/risk summaries; auditors need source evidence. One ornamental dashboard cannot replace these surfaces.
+Proposed Home order: (1) persistent freshness/sync and critical reconciliation banner; (2) Resume my work (draft PO, receipt, active stocktake); (3) Needs attention (stock risk, late POs, receipt/count conflicts) with clear destination; (4) Plan an order and Receive/Count shortcuts; (5) a restrained inventory-value/stock-cover summary and reports link. Scope by permitted location and role; do not expose costs to staff because a card is convenient. Newly installed shops see onboarding progress and missing data, not misleading zero metrics.
 
-The approved PRD currently names twelve top-level areas. Do not silently replace it. Test the following grouping as a proposed information architecture before a change decision:
+Retain the approved information architecture until usability comparison is accepted. Candidate grouping: Home; Plan; Purchase (POs, Receiving, Suppliers/Vendors); Inventory (stock, counts, transfers, labels); Reports; Settings. Receiving/count need direct shortcuts and POS tiles even when grouped. No fifteen strategy menu items or second embedded sidebar.
 
-| Workspace candidate | Pages and responsibilities |
-|---|---|
-| Home | Data health, exceptions needing action, late POs/receipts, recent work; no wall of vanity metrics |
-| Plan | Replenishment, compare scenarios, lifecycle/stock-risk exceptions; saved views |
-| Purchase | Purchase orders, Receiving, Suppliers; destination and cost context always visible |
-| Inventory | Variant/location stock, stocktakes, transfers, labels and aging drilldowns |
-| Reports | Governed report catalog, saved/scheduled exports, definitions and data freshness |
-| Settings | Locations, decision policies, roles, integrations/API, notifications, costs/pricing, billing, privacy |
+Large desktop grid: stable variant identity, supplier SKU/UOM, location, available/incoming, last ordered/received dates, costs where allowed, suggested and final quantity, warnings. Keyboard navigation, saved views/columns, undo-before-commit, unsaved-change protection and explicit partial failures are core. Mobile uses row cards/detail and retained work rather than squeezed desktop columns. Quantities always state units/cases; financial values state currency/tax basis. UI state must not claim confirmed external writes before readback.
 
-Frequent receiving/count tasks need direct links/POS tiles even if grouped. Test the existing twelve-area navigation against this grouping; choose by task completion and findability, not aesthetic preference. “Integrations” means connections/configuration; it is not a second operational source of truth.
+## 2. Surface contract
 
-## 2. Screen and interaction contracts
+Desktop Admin: full purchasing/report-building and bulk review. Mobile Shopify Admin: responsive PO/receiving/lookup/count where embedded browser capabilities permit. POS: separate Receive PO and Stocktake tiles, barcode/camera scanning and staff/location-aware recovery. Browser camera availability is a device/permission capability to verify, not assumed from the POS Scanner API [V07].
 
-The planning grid has sticky identity columns, location/supplier/UOM, editable final quantity, saved column/view configuration, keyboard navigation, non-destructive sort/filter and persistent row errors. An explanation drawer includes source dates, baseline, applied policy, confidence, constraints, cost impact and explicit unknowns. Show units and cases together, not a number that changes meaning by page.
+POS session token represents the authenticated user, not necessarily the staff member currently using a PIN. Shopify explicitly distinguishes these identities [V08]. A client-supplied pinned staff ID is not server authorization. Revalidate staff switch, location change, token expiry and permission change. Unknown binding stays blocked for privileged effects; do not use the logged-in owner's authority for every pinned staff member.
 
-Editing must survive filtering, network retries and refresh where the workflow promises recovery. Distinguish unsaved edits from saved drafts; warn before destructive navigation. Optimistic UI cannot claim a Shopify write succeeded before the operation is confirmed. Partial results keep line-level retry/reconciliation states. Labels and exports read the same price/unit version as the screen.
+Offline may capture scans locally with stable IDs and clear unsynced status only within proven storage/device constraints. Completion, permissions, movement reconciliation and inventory writes require server validation. Duplicate offline replay must not duplicate counts or receipts. Do not promise unlimited offline storage or guaranteed camera support on every device.
 
-Policy setup is outcome-oriented: protect availability, limit cash exposure, avoid obsolete buying. Advanced controls reveal method details, but a merchant can still inspect every formula and resolved setting. “Apply to draft” is separate from “Approve and send.” Bulk actions preview affected entities, quantities, amounts and warnings. Permissions are enforced server-side, including cost visibility in CSVs and background reports.
+## 3. Shopify identity is not a universal role-directory API
 
-Responsive behavior includes touch scanning, large enough targets, readable price/unit labels, focus management and no dependence on hover or color alone. Adopt WCAG 2.2 AA as a design/test target; meeting it is not a blanket legal-accessibility certification [R10]. Prefer a single accessible control over custom gestures. Test zoom, keyboard, screen-reader names, error association, focus restoration, localization expansion and dates/currencies.
+Use Shopify sign-in and app-access controls, with no duplicate ProPo login. The verified ID token carries identity, not all permissions. Online tokens can reflect an individual user's authorized scope, whereas offline credentials do not become staff authorization simply because the request contains a user ID [V02].
 
-Proposed usability acceptance: a buyer can identify a recommendation's source and edit it without losing work; a receiver can pause/resume a partial receipt and identify a failed line; an owner can see why a budget is infeasible; a staff user cannot find privileged data through export/API despite hidden UI; a merchant can locate any policy from the affected recommendation. Baseline timing and error thresholds must be set after real pilot observation, not invented here.
+The StaffMember/read_users API is restricted and requires access approval/eligible contexts. Official GraphQL docs mention Advanced/Plus/finance eligibility; a Shopify staff response also flags public-app restrictions. Do not promise a full staff/role import on Basic/Grow or assume a directory dump is available for this public app [V01]. Role names are not a portable permission contract.
 
-## 3. Market desk research and integration priorities
+Proposed low-friction solution: Shopify determines login/app access; ProPo binds exact staff identity and narrow app-only permissions for purchasing approvals, cost visibility, stock adjustment, report export and support actions. Use proven Shopify user permissions where available, plus simple owner-approved ProPo capability profiles when Shopify exposes no equivalent. No second user account/password system. Unknown/revoked/unassigned actors do not become admins. The existing PR45 owner-proof and online-token hazards are not waived by this product preference; global online-token enablement remains disabled until its accepted binding proof.
 
-Prediko's published help pages cover WMS/3PL, ShipHero, bundles and accounting topics; Inventory Planner lists Shopify, accounting, ERP and fulfillment integrations [R11/R12]. This confirms that integrations and advanced forecasting are not unique claims for ProPo. Vendor pages do not prove connector reliability, actual ROI, market share or that every advertised connector has equal capability.
+Access policy and paid seats are separate. See PRICING_AND_BYOK_CHANGE_PROPOSAL.md. Never count all Shopify users as ProPo users, assume POS-only staff consume Shopify Admin seats, or use billing status to grant owner permissions. An unauthorized actor remains unauthorized even on the highest plan.
 
-Prioritize by merchant job and authority boundary:
+## 4. Reports and dates
 
-| Sequence | Integration | Value and boundary |
-|---|---|---|
-| Core | Shopify Admin/POS, consented catalog/history, documented exports | Existing source of truth and operating surface; never infer native PO/incoming capability from UI alone |
-| Early extension | Shopify Flow triggers/actions; email and controlled report notifications | Replenishment/PO/receipt exceptions; send references/minimal facts, not raw customer payloads |
-| After ledger stability | Accounting export, then a selected QuickBooks Online or Xero adapter | Bills/credits/cost summaries with reconciliation and explicit accounting authority; not a new general ledger |
-| Pilot-driven | ShipHero or another actual pilot WMS/3PL | PO/receiving/stock flow with direction and ownership declared per field; avoid dual inventory writers |
-| Validated need | Shopify Bundles / selected bundle app | Component demand conversion and mappings, never double-count bundle plus components |
-| Later | Supplier price lists/EDI, spreadsheets/BI, public partner API | Cost/offer imports and analytics; exact external IDs, permissions and versioned contracts |
+Launch requires the complete accepted Stocky report catalog, plus a governed custom report builder: dataset, declared metrics/dimensions, filters, grouping, sorting, columns, period/time zone, saved view and CSV export. No arbitrary SQL. Filter joins must not multiply units/costs; totals and drilldowns reconcile. Saved/shared/scheduled reports re-check the requesting actor and export permissions at execution. Larger exports are asynchronous, tenant-scoped, signed/expiring and deletion-aware.
 
-Do not build direct links to every competing inventory system initially. Another app that owns the same inventory/PO/cost state can create loops and duplicate incoming. Support coexistence only with an explicit ownership matrix and echo suppression, or a one-time migration/import path. No real connector was installed or tested in this research.
+Distinguish last ordered date (qualifying committed supplier PO), last received date (posted receipt net of reversal policy) and last sold date. Display last ordered and last received prominently in the buying worksheet and variant detail; last sold is a separate useful metric. Missing pre-migration data is “unknown before coverage”, not “never purchased”. Define cancelled PO, partial receipt, return and backdated-import behavior. Support-assisted variant continuity must show an explicit lineage source and cannot manufacture historical events; see the stocktake/history document.
 
-## 4. Public API roadmap
+## 5. Cost and price writes
 
-Design versioned internal service boundaries now; ship customer-facing API contracts only when stable. First surface read-only operational exports, report definitions and approved event webhooks. Later enable write APIs through the same authorization, command, audit and reconciliation services as the UI. Never expose raw SQL or database table delegates as the public API.
+Stocky maintained average unit cost internally and documented optional sync average costs to Shopify [V03]. Proposed default: internal moving-average/landed-cost ledger updates from posted receipt events; a merchant can deliberately enable a defined Shopify current-cost sync policy. Once the merchant selects an authorized cost update or completes a receipt under that policy, enqueue immediately and show pending/success/failed per line. Possessing write_inventory alone is not consent to change every cost automatically.
 
-Proposed requirements: scoped OAuth/service identities; shop binding independent of supplied IDs; separate read-cost/write-cost/write-price/write-inventory permissions; paginated bounded results; deterministic decimal/currency/UOM encoding; schema versions and deprecation policy; per-tenant quota/cost limits; immutable operation IDs; retry-safe idempotency with payload binding; asynchronous job/result endpoints; signed webhooks with replay protection and retry/dead-letter visibility; secret rotation and uninstall revocation; sandbox examples and contract tests.
+Latest purchase cost, supplier offer, landed cost, moving average, Shopify unitCost and historical COGS remain separate fields. A backdate action for older sales is explicitly approximate, previewed, versioned and auditable; it does not change Shopify history or overwrite actual historical evidence. Negative stock and reversals use the approved parity specification, not an invented generic averaging shortcut.
 
-Use server-side external-ID maps qualified by tenant/provider/type. SKU/barcode is not a unique historical identity. Define webhook delivery as potentially duplicated/out of order; do not promise exactly once. Sender filters and endpoint verification must mitigate SSRF and accidental export. An app token cannot become a merchant's arbitrary other-app token. Redaction/retention applies to API caches, delivery logs and exported objects as well as tables.
+Cost uses inventoryItemUpdate/write_inventory; base price and compare-at use productVariantsBulkUpdate/write_products, with separate ProPo permissions and exact source/version readback. Revalidate against the pinned schema before implementation. Retail-price changes never occur simply because a receipt's cost changed. Market/catalog prices need their own contract. Reference-price claims require truthful history and market rules; no fabricated savings. Scheduled reversals must not overwrite another later editor's change.
 
-Example future resource families: suppliers, offers, purchase orders, receipts, recommendations, policy versions, reports, async operations and audit references. This is a proposal, not published endpoints or a compatibility commitment.
+## 6. Integrations and future ecosystem
 
-## 5. Shopify cost and price write capabilities
+Launch spine: Shopify Admin/POS, required privacy/sync, reliable PO email/PDF/CSV and product-label output. Shopify Flow is a supported operational extension in its owning phase. Include print/export adapters for actual pilot label hardware (PDF/browser; evaluated ZPL where appropriate), not a dependency on an unspecified competing barcode app. A label image/PDF is not proof every printer works.
 
-Current official API documentation checked 2026-09-22 (the versioned 2026-07 route redirected to current documentation). Revalidate against the project's pinned stable schema when implementing [R05–R07].
+Next after ledgers stabilize: one tested QuickBooks Online or Xero purchasing/invoice/credit integration; then the other. Keep vendor bill, PO commitment, receipt, payment and COGS authority explicit. No silent two-way bookkeeping or new general ledger. Pilot-driven WMS/3PL and bundle components follow only with field ownership/echo suppression. Direct integration with competing inventory apps is usually migration/read-only coexistence first, not two simultaneous writers.
 
-| Capability | Documented mutation/fields | Required Shopify scope family | ProPo gate |
-|---|---|---|---|
-| Cost per inventory item | `inventoryItemUpdate` with `InventoryItemInput.cost` | `write_inventory`, plus Shopify user permission where applicable | Cost read/write separation, approved cost authority and bounded sync policy |
-| Base variant selling price | `productVariantsBulkUpdate`, input `price` | `write_products`, plus applicable product permissions | Price-edit role, before/after preview, expected-value conflict checks and readback |
-| Base compare-at price | Same variant mutation, `compareAtPrice` | `write_products` | Reference-price evidence and market/legal policy; null is distinct from zero |
+Public API has three future audiences: compatible Shopify apps; enterprise customers; and ProPo's own later BYOK assistants. Define versioned tenant/app/resource identities, narrow OAuth/service scopes, pagination, idempotent command binding, signed retryable event webhooks, external-ID maps and revocation. Do not share Shopify access tokens with sibling apps. An IVYY ecosystem needs merchant-authorized per-app permissions/consent and contracts, not unrestricted cross-app tables. Event-driven eventual consistency with reconciliation/freshness is the honest target, not absolute realtime across providers.
 
-These scopes are not a claim that the app currently requests, has or is authorized to use them. They are also not separate Shopify grants per individual cost or compare-at field; ProPo must supply narrower application authorization. Optional scopes should be requested only for configured capabilities where Shopify supports that activation pattern. Do not ask for every write scope during onboarding merely because other apps advertise it.
+## 7. Research and acceptance
 
-Shopify `unitCost`, PO purchase cost, landed/average cost and accounting COGS are distinct values. Changing today's Shopify cost must not rewrite past receipt valuations or imply historical COGS was recalculated. Market/catalog price lists and tax-included contexts need their own contract; a base variant price update does not guarantee every contextual price changed.
+Test the proposed Home and grouped navigation against the existing approved navigation with all four merchant cohorts. Validate finding a draft, explaining a quantity, partial receipt recovery, report creation and live-count conflicts. Target WCAG 2.2 AA, keyboard and screen-reader operation, touch targets, focus restoration and locale expansion. Public Apple design principles inform clarity and predictable behavior; no private Apple engineering claims or copied trade dress.
 
-Write workflow: choose source and authority -> preview -> validate decimal/UOM/currency and permission -> capture expected current values -> approve bounded batch -> execute through operation journal -> inspect userErrors and partial results -> read back -> reconcile -> publish accurate status. Preserve another app's concurrent changes rather than last-writer-wins overwrite. A scheduled sale reversal applies only if the current values still match the values the schedule owns. An uncertain response requires readback before retry.
-
-`allowPartialUpdates` on the variant bulk mutation changes failure behavior; do not treat a transport success as all lines updated. Shopify transaction/compare-and-set support varies; identify actual mutation guarantees before promising atomicity. Merchant-facing audit and undo must distinguish safe compensation from irreversible or externally changed state.
-
-## 6. Price-history and legal constraints
-
-Compare-at is data, not legal evidence of a real prior selling price. Capture price history with product/variant, market/channel, currency, tax/display basis, effective dates and source. EU price-reduction rules generally refer to the lowest prior price over the prescribed thirty-day period, subject to applicable exceptions; U.S. price-comparison claims must be truthful [R17/R18]. Never auto-inflate a reference price to manufacture a saving.
-
-A pricing engine is distinct from replenishment optimization. Do not add cross-merchant nonpublic pricing coordination or autonomous competitive repricing to this project through a cost-write feature. Legal and API acceptance are both required before sale automation is enabled.
-
-## 7. Delivery and acceptance
-
-No new UI or connector is implemented by this dossier. Before a corresponding phase starts, create a task-level design: actual routes/components, workflow states, permission/entitlement matrix, field vocabulary, loading/empty/partial/error designs, keyboard/POS behavior and measured performance budgets. Test the full workflow including exports/retries, not just visual screenshots. Reuse existing product navigation until a reviewed change is accepted.
+No usability survey or current application E2E was executed in this revision. Device capability, permission binding, report correctness and write safety remain executable acceptance gates rather than design assertions.

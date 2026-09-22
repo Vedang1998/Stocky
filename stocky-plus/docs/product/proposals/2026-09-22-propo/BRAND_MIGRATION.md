@@ -1,33 +1,23 @@
-# ProPo brand and corporate identity migration
+# ProPo identity and brand migration
 
-**Owner-selected identity; technical migration is proposed and separately gated.** Date: 2026-09-22.
+Revision 2 / 2026-09-22. **Owner-selected identity; provider/runtime migration remains separately gated.**
 
-| Field | Value / evidence class |
+| Field | Current status |
 |---|---|
-| Product spelling | **ProPo** — explicit owner decision |
-| Legal entity | **IVYY LLC** — owner supplied |
-| Registration jurisdiction | New York State — owner attestation, not independently registry-verified |
+| Product | **ProPo** — use this casing in new public copy |
+| Entity | **IVYY LLC** — owner supplied |
+| Registration | New York State — owner attestation, not registry certification |
 | Business address | **20 Fillner Ave, North Tonawanda, NY 14120** — owner supplied |
-| Repository | `Vedang1998/Stocky` — unchanged technical location |
-| Application | `stocky-plus/` — unchanged technical path |
-| Domain/trademark/assumed-name clearance | NOT VERIFIED; do not claim registration or worldwide exclusivity |
+| Domain | NOT ACQUIRED / owner will arrange |
+| Support email | NOT CREATED / do not invent a deliverable address |
+| Approved public legal-contact address | Confirm before publication; supplied address is not automatically a privacy-office designation |
+| Technical repository/application | Vedang1998/Stocky and stocky-plus/ remain unchanged |
+| Trademark/assumed-name clearance | NOT VERIFIED |
 
-“ProPo, operated by IVYY LLC” is proposed plain identity copy, not a legal opinion on assumed-name obligations. Have counsel confirm public legal/contact details and whether this supplied address should be used for notices. Do not invent an EIN, registered-agent designation, company number, privacy officer or support email.
+Current guidance is “ProPo, operated by IVYY LLC”, subject to final legal/publication checks. Do not invent EIN, company number, registered agent, trademark registration, privacy officer or support@ domain.
 
-## 1. Safe staged rename
+Safe scope: update forward-looking documentation and reviewed visible copy. Preserve references to Stocky when they identify the original parity target. Keep historical independent reviews, hashes and records unchanged. Technical IDs, migrations, roles, receipt keys, queue/storage namespaces, API handles, OAuth callbacks, app registrations and billing identities are not global-search-and-replace targets.
 
-First update current shared instruction headings and thin role adapters, with a canonical owner-identity record. Do not duplicate the address in every prompt. New forward-looking product documents use ProPo. Preserve references to Stocky when describing the source product, migration or parity behavior.
+Later brand rollout requires an occurrence/provider inventory, compatibility classification, current/intended values, legal/listing approval, browser/POS/PDF/email previews and link/callback tests. A source edit is not proof Shopify Partner settings or installed apps changed. Domain purchase, DNS email authentication, provider setup and contact verification remain owner actions or later explicit authorization.
 
-After appropriate feature/UI authorization, update current app title, visible navigation copy, help text, emails, document templates and merchant-facing branding with regression checks. Shopify Partner/app listing, domains, URLs, webhooks, OAuth callbacks, billing handles and legal publication require verified configuration and separate authorization. A source search is not proof that every provider-side setting changed.
-
-Technical identifiers are explicitly excluded from a blind rename: database schema/role names; migration files; application IDs; permission keys; queues; Redis/storage namespaces; receipt/idempotency keys; API versions; package names; existing external URLs; integration keys; test vectors; immutable evidence filenames/content; historical decisions and review commits. Classify each occurrence before changing it. A deliberate technical rename needs compatibility, migration and rollback design.
-
-## 2. Audit matrix for a later implementation task
-
-Produce a source-and-provider inventory with occurrence, surface, owner, exact current value, intended value, compatibility impact, historical/immutable status and verification method. Separate current public strings from approved parity terminology and technical constants. Brand change tests must show no key/receipt breakage, no email/link regression, no reset merchant setup, preserved app identity and consistent legal/document headers.
-
-The current research and governance drafts change no registered app, Shopify scope, runtime UI, hosted domain, installed account-level instruction or historical evidence. They do not establish trademark clearance. USPTO explains why business/domain registration and trademark rights are distinct [R20 in RESEARCH_SOURCES.md].
-
-## 3. Approval record
-
-Owner has selected the name and supplied the entity/address. Incorporation verification, domain acquisition, trademark filing, legal-address publication, technical identifiers and runtime/publication changes remain separate decisions. Do not use “registered trademark,” the registration symbol, Apple affiliation or Shopify first-party language without evidence and authorization.
+The PR53 instruction adapters and this PR54 dossier do not change a registered Shopify app, deployed UI or account-level project settings. The future IVYY ecosystem stays a strategic direction, not authority to launch extra apps now.
