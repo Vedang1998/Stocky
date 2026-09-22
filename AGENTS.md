@@ -1,4 +1,12 @@
-# Stocky Migration — Shared Agent Governance
+# ProPo — Shared Agent Governance
+
+## ProPo identity and autonomous handoffs
+
+The owner selected **ProPo** as the product name and supplied **IVYY LLC** as the legal entity. The repository and application paths remain `Vedang1998/Stocky` and `stocky-plus/`; do not rename technical identities or immutable historical evidence as a branding cleanup.
+
+Read `stocky-plus/docs/agents/PROPO_AUTONOMOUS_DELIVERY_PROTOCOL.md` for session ownership, dispatch/result contracts, context recovery and completion gates. That protocol extends, but does not waive, the safety and approval rules below. Its introducing PR must be independently accepted and owner-merged before the new protocol becomes a merged operating rule. Existing frozen assignments keep their approved subject and mandate.
+
+Instructions are not a security boundary. Preserve enforced permissions, isolation, exact-head checks and independent review. Never promise error-free or legally immune operation.
 
 ## Purpose
 

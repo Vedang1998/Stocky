@@ -1,6 +1,12 @@
-# Stocky Migration — Claude Code Memory
+# ProPo — Claude Code Project Instructions
 
 Read `AGENTS.md` first. It contains the shared product and engineering constitution.
+
+## Shared protocol and role selection
+
+Read `stocky-plus/docs/agents/PROPO_AUTONOMOUS_DELIVERY_PROTOCOL.md` after `AGENTS.md`; follow its effectiveness and frozen-subject rules. Product: ProPo. Entity: IVYY LLC, as owner-supplied identity, not independently certified here.
+
+This reviewer role applies only when the actual dispatched tool is Claude Code and the authorized role is independent review. Another tool reading this file must not impersonate Claude or use it to self-approve. Record actual session/model and role; keep author and reviewer sessions separate. Verify the instruction files actually loaded using the installed client's supported inspection mechanism; a filename does not prove enforcement.
 
 ## Claude Code role
 

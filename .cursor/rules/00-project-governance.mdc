@@ -1,12 +1,20 @@
 ---
-description: Permanent Stocky Migration governance and authority boundaries
+description: Permanent ProPo governance and authority boundaries
 alwaysApply: true
 ---
 
-# Stocky Migration governance
+# ProPo governance
 
 Repository: Vedang1998/Stocky
 Application: stocky-plus/
+Product: ProPo
+Legal entity: IVYY LLC (owner supplied)
+
+Read stocky-plus/docs/agents/PROPO_AUTONOMOUS_DELIVERY_PROTOCOL.md
+with AGENTS.md. Its new rules require the introducing governance PR's
+acceptance and owner merge; do not move a frozen review subject to adopt it.
+If this tool also loads CLAUDE.md, the Claude reviewer role does not make
+Cursor an actual Claude reviewer. Record the real tool/model/run and role.
 
 Before substantial work, read:
 1. AGENTS.md
