@@ -1,8 +1,8 @@
 # Phase 1 PR7 — External-effect and recovery boundary evidence
 
-**Status:** `PR7 FINAL BOUNDARY EVIDENCE — EFFECTS PACKET COMPLETE — NO RUNTIME AUTHORIZED`
+**Status:** `PR7 FINAL BOUNDARY EVIDENCE — EFFECTS PACKET CORRECTED FOR F-CLAUDE-PR7PR49-01 — NO RUNTIME AUTHORIZED`
 
-**IDs:** new `EFF-X-*`. Sealed PR48 Helper B `PREP_B_*` / coordinator `PREP-B-*` are prior evidence only.
+**IDs:** new `EFF-X-*`. Sealed PR48 Helper B `PREP_B_*` / coordinator `PREP-B-*` are prior evidence only. `EFF-X-02d` is the published check-to-write interleaving (negative evidence).
 
 **Production / PR7 runtime / Shopify inventory writes:** NOT AUTHORIZED. Private Redis + owned scratch only. No FLUSHALL.
 
@@ -10,18 +10,22 @@
 |---|---|
 | Base X | `f057d98c8a321b3e06875a6e9a83b787bcbc101f` |
 | Branch | `cursor/planning-pr7-final-boundary-evidence-20260920-b58d` |
-| PR45 frozen (read-only) | `fd5f7bbdf18fa12d75371686d8969d67fe68a158` |
+| Starting PR49 E | `d63629077fcf29775c69161372c2cf903cfa62c6` |
+| Prior PR45 S (historical) | `fd5f7bbdf18fa12d75371686d8969d67fe68a158` |
+| Frozen PR45 H (read-only) | `3cc2045107b54601c6b0e43c8690b7d090074b80` |
+| Claude artifact (unchanged) | `0677ef0a283b302e705a1a663d8b26582c239984` sole parent H; blob `4bb936918c65ab6399f080d31b8f3bcf61ac96d1` |
 | PR48 sealed (read-only) | `c97adda285b5625836a582deb03983099a7b3461` |
-| Mandate | PR45 comment `5754395760` |
+| Correction authority | issue52 comments `5794206091` / `5794208220`; finding `F-CLAUDE-PR7PR49-01` P2 |
 | Helper B | `bc-314739fc-ee36-57f8-96d8-3a79b8510352` (isolated checkout; Redis 17379 PID 3114 torn down by that helper) |
-| Coordinator rerun Redis | `127.0.0.1:18379` PID 5533, prefix/queue `pr7finalCoord:` / `pr7finalCoord-effects` |
+| Coordinator rerun Redis | `127.0.0.1:18379` PID 5533, prefix/queue `pr7finalCoord:` / `pr7finalCoord-effects` (historical) |
+| publication-worker.mjs | sha256 `4394d813bff34b8196be9c249b4c325793e60b492682a42c5e3f4fdd76bb53c7` — **byte-unmodified** |
 | Node / Redis / BullMQ | `v22.14.0` / Redis 7.0.15 / `bullmq@5.81.2` / `ioredis@5.11.1` |
 
 Classification:
 
 - **EXISTING X** — current Redis workers have no generation/shop publication fence; D `live_writer` is process-local; export is HTTP CSV.
-- **MODELED PROPOSED** — standalone harness re-reads generation/shop fence immediately before the sink write. Not repository runtime.
-- **UNEXECUTED APPLICATION INTEGRATION** — no installed privacy coordinator, no remote object store, no `removeShopQueueJobsExceptPrivacy`.
+- **MODELED PROPOSED** — standalone harness with `CHECK_*_FENCE=1`. This is **check-then-act**, not an atomic fence: it re-reads generation, then re-reads shop fence, then writes. A check immediately before publication is insufficient across the in-flight window (EFF-X-02d). Not repository runtime.
+- **UNEXECUTED APPLICATION INTEGRATION** — no installed privacy coordinator, no remote object store, no `removeShopQueueJobsExceptPrivacy`. Negative model evidence does **not** prove runtime is fixed.
 
 TTL, queue status, PID death, and `quiescenceConfirmed` are **not** drain. Evidence is **observed writes / residual files / X classifier**, not job exit 0.
 
@@ -73,25 +77,26 @@ Sink SHA-256 includes `Date.now()` and pid and is **not** a portable expected di
 
 ---
 
-## 3. Schedule results (coordinator parameterized rerun)
+## 3. Schedule results
 
-`assert_taxonomy.mjs` against `expected_taxonomy.json`: **ok**, errors `[]`. 01–03 ran once; 04 reran after the park-child fix. Helper B original 18/18 hashes remain historical; this packet's load-bearing proof is the published sources + taxonomy.
+Prior coordinator parameterized rerun established EFF-X-00…13 (23 ids). This correction adds **EFF-X-02d** (24 ids). Portable digest is `expected_taxonomy.json`. Helper B original 18/18 hashes remain historical.
 
 | ID | Schedule | Label | Assertion | Observed residual |
 |---|---|---|---|---|
 | EFF-X-01 | pause before publication | EXISTING X | PASS | Worker at gate with credential/path; sink **absent**; classifier `RUNNABLE_EXISTING`/`active` ≠ drain |
 | EFF-X-01b | then vs now | EXISTING X | PASS | After GO, sink **observed** |
-| EFF-X-02a | barrier **before** write | MODELED PROPOSED | PASS | gen flipped to `gen-2` at gate; refuse marker; sink residual **absent** |
+| EFF-X-02a | barrier **before** check | MODELED PROPOSED | PASS | gen flipped to `gen-2` at the gate, **before** the fence read; refuse marker; sink residual **absent**. Stale at check time. |
 | EFF-X-02b | same ordering | EXISTING X | PASS | Same flip; unfenced worker **landed** |
 | EFF-X-02c | barrier **after** write | MODELED PROPOSED | PASS | Write observed, then gen→`gen-2`; sink **still present** (cannot un-write) |
+| EFF-X-02d | barrier **between** last fence read and sink write | MODELED PROPOSED | PASS | **NEGATIVE evidence.** Shop-fence FIFO holds the worker after the generation check; gen-1→gen-2 then unblock; sink **lands** with payload `generation: "gen-1"` while current is `gen-2`. Worker byte-unmodified (`4394d813…`). Post-flip retry refuses; unrelated shop-B with current generation still writes. |
 | EFF-X-03 | SIGKILL + lost ack | EXISTING X | PASS | Worker PID gone; sink remains; classifier `RUNNABLE_EXISTING`/`active`; **no** `.done`. **Not power-loss.** Cite PREP_B_08 |
 | EFF-X-04a | stale gen-1 vs current gen-2 | EXISTING X | PASS | Unfenced worker wrote gen-1 sink |
-| EFF-X-04b | same payload | MODELED PROPOSED | PASS | Fence refused; no sink |
+| EFF-X-04b | same payload | MODELED PROPOSED | PASS | Stale at **check** time: refuses; no sink. Does not close the in-flight window (EFF-X-02d). |
 | EFF-X-05 | enumerate then write | EXISTING X | PASS | Enumerated zero `.sink` at gate; after GO write **observed** |
 | EFF-X-06a | active `Job.remove` | EXISTING X | PASS | state `active`; throw `locked by another worker`; **11 ticks after**; presence still `RUNNABLE_EXISTING`/`active`. Cite PREP_B_06b |
 | EFF-X-06b | waiting `Job.remove` | EXISTING X | **INCONCLUSIVE** | Waiting remove → `MISSING`; this jobId sink absent. Not converted to drain PASS. Cite PREP_B_06 |
 | EFF-X-07a | both shops | EXISTING X | PASS | shop-A and shop-B sinks **both observed** |
-| EFF-X-07b | shop-A fenced | MODELED PROPOSED | PASS | shop-A refuse marker; shop-B sink **observed** |
+| EFF-X-07b | shop-A fenced | MODELED PROPOSED | PASS | Whole-shop `ERASING` only: shop-A refuse marker; shop-B sink **observed**. **No customer-target fence.** |
 | EFF-X-07c | scoped remove | EXISTING X | PASS | Removed shop-A customer `191167`; shop-B and customer `191168` **wrote**. `flushall_executed: false`. jobId isolation ≠ privacy gate |
 | EFF-X-08 | unknown reclaim | EXISTING X | PASS | markerless skipped `not_verified_d_resource`; live att skipped `live_writer`; `operatorInterventionRequired: true`. Request stays incomplete |
 | EFF-X-09 | foreign reclaim vs live child | EXISTING X | PASS | Child alive; parent `quiescenceConfirmed: true` **deleted** live `att-*`; `dir_exists_after_foreign_reclaim: false`. Process-local `live_writer`. **Do not reopen PR6.** |
@@ -103,7 +108,7 @@ Sink SHA-256 includes `Date.now()` and pid and is **not** a portable expected di
 | EFF-X-13 | positive drain **of that job** | EXISTING X | PASS | `.done` + classifier `TERMINAL_EXISTING`/`completed` + sink present. **Not shop-wide drain.** |
 | EFF-X-00 | export inventory | UNEXECUTED app integration | UNEXECUTED | HTTP CSV after `requireAdminTenant`. No object-store module. Simulator ≠ remote object store |
 
-PostgreSQL advisory locks and RLS do **not** fence Redis jobs, export publication, or D scratch bytes. Completeness needs generation/target-fenced publication **or** positive drain.
+PostgreSQL advisory locks and RLS do **not** fence Redis jobs, export publication, or D scratch bytes. Frozen H §7.6.2 restriction 2: actual publication must be **serialized with the privacy barrier**, **or** the sink must enforce generation/target fencing, **or** that specific writer and outstanding I/O must be **positively drained**. A check immediately before an external write is not by itself atomic fencing. Completeness is not proved by this model.
 
 Not drain: `Job.remove`, CANCELLED labels, TTL, decoy PID, process-local `live_writer`, occupancy alone, `quiescenceConfirmed: true`, `processingEnabled`.
 
@@ -111,7 +116,18 @@ Not drain: `Job.remove`, CANCELLED labels, TTL, decoy PID, process-local `live_w
 
 ## 4. MODELED PROPOSED vs EXISTING X vs UNEXECUTED
 
-The publication worker (`probes/publication-worker.mjs`) is **not** an application processor. When `CHECK_GENERATION_FENCE=0` / `CHECK_SHOP_FENCE=0` it documents EXISTING X (late writes land). When those flags are `1` it documents the already-declared fence **immediately before the sink write**. Installing that fence in `stocky-webhooks` / `stocky-cron` / privacy processors remains **UNEXECUTED APPLICATION INTEGRATION**.
+The publication worker (`probes/publication-worker.mjs`, sha256 `4394d813…`) is **not** an application processor and was **not** modified to close F-CLAUDE-PR7PR49-01. When `CHECK_GENERATION_FENCE=0` / `CHECK_SHOP_FENCE=0` it documents EXISTING X (late writes land). When those flags are `1` it is check-then-act: re-read generation, re-read shop fence, then write. That is **not** an atomic fence.
+
+Controls preserved:
+
+- barrier-before-check refuses (EFF-X-02a);
+- barrier-after-write cannot un-write (EFF-X-02c);
+- post-flip retry refuses when stale at check (EFF-X-04b and EFF-X-02d retry);
+- unrelated tenant can still progress (EFF-X-07b; EFF-X-02d shop-B).
+
+EFF-X-02d is the missing schedule: the generation barrier commits **after** the last modeled fence read and **before** the sink mutation. The stale write lands. The modeled shop fence is `fence[shopId] === "ERASING"` — **whole-shop only**. It does not prove a customer-target fence. EFF-X-06b remains **INCONCLUSIVE**. SIGKILL residual remains a pre-death write (EFF-X-03).
+
+Installing serialized publication, sink-enforced generation/target fencing, or positive drain of that writer in `stocky-webhooks` / `stocky-cron` / privacy processors remains **UNEXECUTED APPLICATION INTEGRATION**. Negative model evidence does not prove runtime is fixed.
 
 X has no generation-fenced Redis API. `Job.remove` of an active locked BullMQ 5.81.2 job throws and the worker keeps writing (EFF-X-06a). Waiting-job remove is INCONCLUSIVE as drain (EFF-X-06b).
 
@@ -157,18 +173,19 @@ bash "$EXTRACT/reproduce.sh"
 
 `check_pins.py` fail-closes on lockfile / X file hash mismatch. Isolation records 6379 `connect_ex`. Unique `PROBE_QUEUE_NAME` avoids `stocky-webhooks` / `stocky-cron`.
 
-Negative controls: extraction self-test; 6379 unused; EFF-X-06a locked throw; EFF-X-11 TTL while ticking; EFF-X-12 decoy PID; EFF-X-09 foreign `quiescenceConfirmed`; EFF-X-00 UNEXECUTED export.
+Negative controls: extraction self-test; 6379 unused; EFF-X-02d stale in-flight write **lands**; EFF-X-02a refuse when stale at check; EFF-X-06a locked throw; EFF-X-11 TTL while ticking; EFF-X-12 decoy PID; EFF-X-09 foreign `quiescenceConfirmed`; EFF-X-00 UNEXECUTED export.
 
 ---
 
 ## 7. Remaining ChatGPT entry decisions (blocked for runtime)
 
-- Generation/target fence immediately before publication, or positive drain of **that** job (`TERMINAL_EXISTING`/`completed` + residual), for privacy completeness.
+- Actual publication must be serialized with the privacy barrier, **or** the sink must enforce generation/target fencing, **or** that specific writer and outstanding I/O must be positively drained (frozen H §7.6.2 restriction 2). Check-then-act proximity is not that contract (EFF-X-02d).
+- Modeled shop fence is whole-shop only; a customer-target fence is not proved and is not implemented here.
 - External (cross-process) quiescence before `reclaimOperatorSelectedDScratch`. Do not treat `quiescenceConfirmed` as liveness.
 - Export residual: HTTP CSV is current X inventory, not proof historical object-store bytes never existed.
 - Do not treat `Job.remove`, TTL, PID, or a caller quiescence boolean as drain.
 
-This packet does not invent those decisions. It does not implement PR7 processors.
+This packet does not invent those decisions. It does not implement PR7 processors. Negative EFF-X-02d evidence does not authorize runtime.
 
 ---
 
@@ -201,8 +218,8 @@ Bootstrap `00_extract_proofs.py` from the HTML comments below, then extract and 
     },
     {
       "path": "expected_taxonomy.json",
-      "sha256": "daf4ddbc81ddb5e59d1c28ebcaa35e59401a364d31ed4862c746fdfce6b6a67f",
-      "bytes": 2290
+      "sha256": "094a05f45e5f9b28d523f2ff9bd63454b2ae0662ea00f40e91a527eb3b80783a",
+      "bytes": 2729
     },
     {
       "path": "probes/00-isolation.sh",
@@ -211,8 +228,8 @@ Bootstrap `00_extract_proofs.py` from the HTML comments below, then extract and 
     },
     {
       "path": "probes/01-publication-boundary.mjs",
-      "sha256": "2b06527b7280085645d91fec638c2f84cd9a78363f6afb09671fa9b8ebc171ad",
-      "bytes": 17916
+      "sha256": "dbdceb363163e6a7c6c4d9c74304277715069c508a0acec4f6a0496c0832db56",
+      "bytes": 25337
     },
     {
       "path": "probes/02-remove-death-ttl-drain.mjs",
@@ -221,8 +238,8 @@ Bootstrap `00_extract_proofs.py` from the HTML comments below, then extract and 
     },
     {
       "path": "probes/03-shop-isolation.mjs",
-      "sha256": "fba822194a3b6e62ad55c70fa3c3726e280ad4a8d9de7b9f4c80d6495204d138",
-      "bytes": 10042
+      "sha256": "64b896c921b15ec3aed3174d2215f8edbac8ddabcbbdbb151a81ea327cc6dbd1",
+      "bytes": 10066
     },
     {
       "path": "probes/04-dscratch.mjs",
@@ -610,6 +627,18 @@ if __name__ == "__main__":
     "EFF-X-02a": { "assertion": "PASS", "label": "MODELED_PROPOSED", "late_write_landed": false },
     "EFF-X-02b": { "assertion": "PASS", "label": "EXISTING_X", "late_write_landed": true },
     "EFF-X-02c": { "assertion": "PASS", "label": "MODELED_PROPOSED", "late_write_landed": true },
+    "EFF-X-02d": {
+      "assertion": "PASS",
+      "label": "MODELED_PROPOSED",
+      "late_write_landed": true,
+      "payload_generation": "gen-1",
+      "current_generation_at_write": "gen-2",
+      "check_then_act_window_open": true,
+      "sink_absent_immediately_before_generation_flip": true,
+      "post_flip_retry_refused": true,
+      "unrelated_shop_b_write_observed": true,
+      "customer_target_fence_modeled": false
+    },
     "EFF-X-03": { "assertion": "PASS", "label": "EXISTING_X", "acknowledgement_lost": true, "classified": "RUNNABLE_EXISTING" },
     "EFF-X-04a": { "assertion": "PASS", "label": "EXISTING_X", "write_observed": true },
     "EFF-X-04b": { "assertion": "PASS", "label": "MODELED_PROPOSED", "write_observed": false, "refuse_observed": true },
@@ -766,7 +795,7 @@ PY
 <!-- PROOF-EXTRACT:begin path=probes/01-publication-boundary.mjs -->
 ```javascript
 /**
- * Helper B — publication-boundary schedules (1, 2, 4, 5).
+ * Helper B — publication-boundary schedules (1, 2, 4, 5) plus 02d.
  *
  * REAL BullMQ 5.81.2 + X classifyExistingQueueJob / inspectQueueDispatchPresence
  * / requireRedisUrl. Unique queue pr7finalB-effects. Not PR7 application code.
@@ -774,15 +803,23 @@ PY
  * Labels:
  *   EXISTING_X — worker CHECK_GENERATION_FENCE=0 (current Redis workers have no
  *                generation publication barrier).
- *   MODELED_PROPOSED — same worker with CHECK_GENERATION_FENCE=1 re-reading
- *                current generation immediately before the sink write.
+ *   MODELED_PROPOSED — same byte-unmodified worker with CHECK_*_FENCE=1.
+ *                That mode is check-then-act: it re-reads generation, then
+ *                re-reads shop fence, then writes. A check immediately before
+ *                publication is not an atomic fence across the in-flight
+ *                window (EFF-X-02d).
  *   UNEXECUTED_APPLICATION_INTEGRATION — X export remains HTTP CSV; no remote
  *                object store; no installed privacy coordinator.
  */
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  readlinkSync,
+  realpathSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
@@ -853,6 +890,31 @@ async function drainProbeQueue() {
 
 function track(pid) {
   if (pid) results.ownedPids.push(pid);
+}
+
+function makeFifo(fifoPath) {
+  execFileSync("mkfifo", ["-m", "600", fifoPath], { stdio: "pipe" });
+}
+
+function pidHasFifoOpen(pid, fifoPath) {
+  if (!pid) return false;
+  let want = fifoPath;
+  try {
+    want = realpathSync(fifoPath);
+  } catch {
+    want = fifoPath;
+  }
+  const dir = `/proc/${pid}/fd`;
+  if (!existsSync(dir)) return false;
+  for (const fd of readdirSync(dir)) {
+    try {
+      const target = readlinkSync(path.join(dir, fd));
+      if (target === want || target === fifoPath) return true;
+    } catch {
+      /* fd raced */
+    }
+  }
+  return false;
 }
 
 async function main() {
@@ -1009,7 +1071,7 @@ async function main() {
         ? "PASS"
         : "FAIL";
     beforeModeled.note =
-      "MODELED PROPOSED: generation re-read immediately before publication. Barrier/fence installed while writer was at the gate; sink residual absent; refuse marker observed. Not installed application code.";
+      "MODELED PROPOSED check-then-act: generation is stale at the check (barrier before the fence read), so the worker refuses. This does not prove atomicity across the later in-flight window (see EFF-X-02d). Not installed application code.";
     results.cases.EFF_X_02a_barrier_before_publication_modeled_refuses = beforeModeled;
     await drainProbeQueue();
 
@@ -1076,6 +1138,157 @@ async function main() {
       note: "Fence applied after the publication boundary cannot retract bytes already on disk. Residual check, not job exit 0, is the evidence.",
     };
     killExact(s2cworker.pid, "SIGKILL");
+    await sleep(40);
+    await drainProbeQueue();
+
+    // ------------------------------------------------------------------
+    // EFF-X-02d — F-CLAUDE-PR7PR49-01: barrier BETWEEN last modeled
+    // fence read and sink mutation. CURRENT modeled worker is
+    // check-then-act. Expected NEGATIVE evidence: the stale write lands.
+    // Do not change publication-worker.mjs to make this case pass.
+    // Pin: sha256 4394d813bff34b8196be9c249b4c325793e60b492682a42c5e3f4fdd76bb53c7
+    // ------------------------------------------------------------------
+    const s2d = path.join(SCRATCH, "s2-between-check-and-write");
+    resetDir(s2d);
+    const s2dstatus = path.join(s2d, "status.json");
+    const s2dbarrier = path.join(s2d, "barrier.txt");
+    const s2dgen = path.join(s2d, "current-gen.txt");
+    const s2dfifo = path.join(s2d, "fence.fifo");
+    writeFileSync(s2dgen, "gen-1");
+    makeFifo(s2dfifo);
+    const s2dworker = spawnWorker(
+      {
+        STATUS_PATH: s2dstatus,
+        SINK_DIR: s2d,
+        TICK_LOG: path.join(s2d, "ticks.log"),
+        BARRIER_PATH: s2dbarrier,
+        CURRENT_GEN_PATH: s2dgen,
+        CURRENT_FENCE_PATH: s2dfifo,
+        CHECK_GENERATION_FENCE: "1",
+        CHECK_SHOP_FENCE: "1",
+        TICKS: "1",
+        TICK_MS: "30",
+      },
+      s2d,
+    );
+    track(s2dworker.pid);
+    await waitStatus(s2dstatus, "ready");
+    const job2d = "effx02-between-check-write__d1";
+    await queue.add(
+      "export-publish",
+      { shopId: "shop-a", generation: "gen-1", probe: "between-check-and-write" },
+      { jobId: job2d },
+    );
+    const gate2d = await waitStatus(s2dstatus, "at_publication_gate");
+    const sinkAtGate = residualFile(String(gate2d.sinkPath));
+    writeFileSync(s2dbarrier, "GO");
+    // After GO the worker's next modeled reads are generation then shop
+    // fence. Generation is a regular file (instant). Shop fence is a FIFO
+    // whose open blocks until we write. Sleep long enough for the
+    // generation check to finish; the worker cannot reach the sink write
+    // without completing the FIFO open.
+    await sleep(150);
+    let wchan = "";
+    try {
+      wchan = readFileSync(`/proc/${s2dworker.pid}/wchan`, "utf8").trim();
+    } catch {
+      wchan = "";
+    }
+    const fifoOpenVisible = pidHasFifoOpen(s2dworker.pid, s2dfifo);
+    const sinkImmediatelyBeforeFlip = residualFile(String(gate2d.sinkPath));
+    const tFlip = Date.now();
+    writeFileSync(s2dgen, "gen-2");
+    const currentGenAtUnblock = readFileSync(s2dgen, "utf8").trim();
+    writeFileSync(s2dfifo, "{}\n");
+    const landed2d = await waitUntil(
+      async () =>
+        existsSync(String(gate2d.sinkPath)) ? residualFile(String(gate2d.sinkPath)) : null,
+      8000,
+    );
+    let sinkBody = null;
+    if (landed2d?.exists) {
+      try {
+        sinkBody = JSON.parse(readFileSync(String(gate2d.sinkPath), "utf8").trim());
+      } catch {
+        sinkBody = null;
+      }
+    }
+    const refused2d = residualFile(`${gate2d.sinkPath}.refused`);
+    try {
+      unlinkSync(s2dfifo);
+    } catch {
+      /* FIFO may still be open; replace below */
+    }
+    writeFileSync(s2dfifo, "{}\n");
+
+    const job2dRetry = "effx02-between-retry-stale__d1";
+    await queue.add(
+      "export-publish",
+      { shopId: "shop-a", generation: "gen-1", probe: "post-flip-retry" },
+      { jobId: job2dRetry },
+    );
+    const retryRefuse = await waitUntil(async () => {
+      const hits = enumerateDir(s2d).entries.filter(
+        (e) => e.name.includes("effx02-between-retry") && e.name.endsWith(".refused"),
+      );
+      return hits.length ? hits[0] : null;
+    }, 8000);
+    const retrySink = residualFile(path.join(s2d, `shop-a.${job2dRetry}.sink`));
+
+    const job2dB = "effx02-between-shop-b__d1";
+    await queue.add(
+      "export-publish",
+      { shopId: "shop-b", generation: "gen-2", probe: "unrelated-tenant" },
+      { jobId: job2dB },
+    );
+    const shopBWrite = await waitUntil(
+      async () => residualFile(path.join(s2d, `shop-b.${job2dB}.sink`)).exists,
+      8000,
+    );
+
+    results.cases.EFF_X_02d_barrier_between_check_and_write_stale_write_lands = {
+      id: "EFF-X-02d",
+      schedule: 2,
+      label: "MODELED_PROPOSED",
+      cites: ["F-CLAUDE-PR7PR49-01"],
+      jobId: job2d,
+      worker_pid: s2dworker.pid,
+      worker_sha256_pin: "4394d813bff34b8196be9c249b4c325793e60b492682a42c5e3f4fdd76bb53c7",
+      worker_unmodified: true,
+      sink_absent_at_gate: sinkAtGate.exists === false,
+      sink_absent_immediately_before_generation_flip: sinkImmediatelyBeforeFlip.exists === false,
+      fifo_open_visible_in_procfd: fifoOpenVisible,
+      wchan_after_go: wchan,
+      t_generation_flip: tFlip,
+      payload_generation: sinkBody?.generation ?? null,
+      current_generation_at_write: currentGenAtUnblock,
+      late_write_landed: Boolean(landed2d?.exists),
+      refuse_absent_for_in_flight: refused2d.exists === false,
+      check_then_act_window_open: Boolean(
+        sinkImmediatelyBeforeFlip.exists === false &&
+          landed2d?.exists &&
+          sinkBody?.generation === "gen-1" &&
+          currentGenAtUnblock === "gen-2",
+      ),
+      post_flip_retry_refused: Boolean(retryRefuse) && retrySink.exists === false,
+      unrelated_shop_b_write_observed: Boolean(shopBWrite),
+      shop_fence_is_whole_shop_only: true,
+      customer_target_fence_modeled: false,
+      application_integration: "UNEXECUTED",
+      assertion:
+        sinkImmediatelyBeforeFlip.exists === false &&
+        landed2d?.exists &&
+        sinkBody?.generation === "gen-1" &&
+        currentGenAtUnblock === "gen-2" &&
+        refused2d.exists === false &&
+        Boolean(retryRefuse) &&
+        retrySink.exists === false &&
+        Boolean(shopBWrite)
+          ? "PASS"
+          : "FAIL",
+      note: "NEGATIVE evidence. The modeled worker is check-then-act, not an atomic fence. Committing gen-1 to gen-2 after the last fence read and before the sink mutation lets the stale gen-1 write land. A later retry of the same stale payload is refused (stale at check). Unrelated shop-B with current generation still writes. Shop fence is whole-shop ERASING only; no customer-target gate. Required contract (frozen H): serialize publication with the privacy barrier, OR sink-enforce generation/target, OR positively drain that writer and outstanding I/O. Application integration remains UNEXECUTED.",
+    };
+    killExact(s2dworker.pid, "SIGKILL");
     await sleep(40);
     await drainProbeQueue();
 
@@ -1149,7 +1362,7 @@ async function main() {
     staleM.cites = ["PREP_B_27"];
     staleM.assertion = !staleM.write_observed && staleM.refuse_observed ? "PASS" : "FAIL";
     staleM.note =
-      "MODELED PROPOSED fence refuses gen-1 while current is gen-2. Labelled proposed — not an X production worker.";
+      "MODELED PROPOSED check-then-act refuses gen-1 when current is already gen-2 at check time. Labelled proposed — not an X production worker. Does not close the in-flight window (EFF-X-02d).";
     results.cases.EFF_X_04b_stale_retry_modeled_fence_refuses = staleM;
     await drainProbeQueue();
 
@@ -1948,7 +2161,7 @@ async function main() {
         aSink.exists === false && Boolean(aRefuse?.exists) && bSink.exists
           ? "PASS"
           : "FAIL",
-      note: "MODELED PROPOSED shop fence refuses shop-A publication while shop-B is observed writing. Not application integration. Unrelated shop must keep writing; customer/shop jobId isolation is still not a privacy gate by itself.",
+      note: "MODELED PROPOSED shop fence is whole-shop only (fence[shopId]==='ERASING'). It refuses shop-A while shop-B is observed writing. It does not prove a customer-target fence. Not application integration. jobId isolation is still not a privacy gate.",
     };
     killExact(mWorker.pid, "SIGKILL");
     await sleep(40);

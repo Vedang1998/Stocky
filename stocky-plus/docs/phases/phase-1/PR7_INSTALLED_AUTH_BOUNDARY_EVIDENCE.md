@@ -10,11 +10,15 @@
 |---|---|
 | Base X | `f057d98c8a321b3e06875a6e9a83b787bcbc101f` |
 | Branch | `cursor/planning-pr7-final-boundary-evidence-20260920-b58d` (platform suffix `-b58d` on requested `planning/pr7-final-boundary-evidence-20260920`) |
-| PR45 frozen (read-only) | `fd5f7bbdf18fa12d75371686d8969d67fe68a158` |
+| Starting PR49 E | `d63629077fcf29775c69161372c2cf903cfa62c6` |
+| Prior PR45 S (historical) | `fd5f7bbdf18fa12d75371686d8969d67fe68a158` |
+| Frozen PR45 H (read-only) | `3cc2045107b54601c6b0e43c8690b7d090074b80` |
+| Claude artifact (unchanged) | `0677ef0a283b302e705a1a663d8b26582c239984` sole parent H; blob `4bb936918c65ab6399f080d31b8f3bcf61ac96d1` |
 | PR48 sealed (read-only) | `c97adda285b5625836a582deb03983099a7b3461` |
-| Mandate | PR45 comment `5754395760` |
+| Mandate | PR45 comment `5754395760`; AUTH taxonomy clarification per issue52 `5794206091` |
 | Helper A | `bc-15bed5ff-b9fd-5bfe-8851-a44b685bc799` (isolated checkout; not a Git writer) |
-| Coordinator rerun | 2026-09-21T10:27:37.058Z, Node `v22.14.0`, 35 cases, 30 PASS / 5 FAIL / 0 other, 73 fetch calls |
+| Coordinator rerun | 2026-09-21T10:27:37.058Z, Node `v22.14.0`, **35 cases / 30 PASS / 5 FAIL** / 0 other, 73 fetch calls |
+| Independently adjudicated library defects | **eight** (Claude Stage A / artifact §7.1 / §8). PASS/FAIL is not the defect count. |
 | Official docs access date | 2026-09-21 |
 
 Classification: **FACT** (executed on X + installed libraries), **OFFICIAL** (Shopify docs fetched 2026-09-21), **PROPOSED** (adapter choice; not implemented), **UNEXECUTED**.
@@ -120,7 +124,9 @@ Attempt 03/04 logs may contain the synthetic probe string `shpat_offline_*`. Tho
 
 ## 6. Matrix (FACT)
 
-PASS/FAIL is the **security / official property**, not “did authenticate return 200”. Coordinator parameterized rerun matched this taxonomy (`assert_taxonomy.mjs` ok). JWT `iat`/`jti`/`generatedAt` are **not** portable expected digests. First-outbound **access-token sha256** values below are constructed from deterministic synthetic token strings and did match on rerun.
+Executed taxonomy is **35 cases / 30 PASS / 5 FAIL**. PASS/FAIL is the **security / official property scored per row**, not “did authenticate return 200”, and is **not** the library-defect count. Four PASS rows (AUTH-X-04, AUTH-X-05, AUTH-X-23, AUTH-X-27) are expected observations of unsafe library behavior. Independently adjudicated library-defect count is **eight** (§8). 30/5 is not a security acceptance target.
+
+Coordinator parameterized rerun matched this taxonomy (`assert_taxonomy.mjs` ok). JWT `iat`/`jti`/`generatedAt` are **not** portable expected digests. First-outbound **access-token sha256** values below are constructed from deterministic synthetic token strings and did match on rerun.
 
 | ID | Case | Result | Notes |
 |---|---|---|---|
@@ -192,14 +198,22 @@ Checking identity after the wrong token was sent is how this FAIL is scored.
 
 New AUTH-X findings. PR48 PREP-A-* is sealed historical evidence, not this run.
 
-1. **Online session id is `${shop}_${associated_user.id}`, lookup is `${shop}_${jwt.sub}`**. Mismatch → re-exchange every request (AUTH-X-21) or cross-user reuse when IEEE-754 collides (AUTH-X-06).
-2. **`associated_user.id` and Prisma `userId` are `number`**. JSON number + `Number(userId)` cannot preserve Shopify user ids above `Number.MAX_SAFE_INTEGER`.
-3. **`decodeSessionToken` does not check iss/dest hostname equality**. AUTH-X-14 accepted `iss` other-shop + `dest` this-shop.
-4. **Cached online session is not rebound to JWT `sub`**. AUTH-X-09: GraphQL sends the stale token; 0 exchanges.
-5. **Missing `associated_user` on an “online” token-exchange body creates an offline session**. AUTH-X-27.
-6. **200 token-exchange JSON without `access_token` still authenticates** (attempt 03) with `accessToken: null`.
-7. **Non-special token-exchange failures become opaque 500** (attempts 01/02/05).
-8. Installed `token-exchange.mjs` logs `config.future.expiringOfflineAccessTokens` to stdout (present in pinned hash).
+Executed taxonomy remains **35 / 30 PASS / 5 FAIL**. Independently adjudicated **eight library defects** (Claude Stage A / artifact §7.1) are listed below. Do not collapse these eight or invent a ninth. FAIL rows AUTH-X-06/07/09/14/21 are five of the eight; the other three are observed on PASS (auth ok) or harness-attempt rows.
+
+| # | Defect | Supporting IDs |
+|---|---|---|
+| 1 | Online session id is `${shop}_${associated_user.id}`; lookup is `${shop}_${jwt.sub}` | AUTH-X-21, AUTH-X-06, AUTH-X-07 |
+| 2 | `associated_user.id` and Prisma `userId` are `number`; IEEE-754 cannot preserve ids above `Number.MAX_SAFE_INTEGER` | AUTH-X-00, AUTH-X-04, AUTH-X-05, AUTH-X-23, AUTH-X-28 |
+| 3 | `decodeSessionToken` does not check iss/dest hostname equality | AUTH-X-14 |
+| 4 | Cached online session is not rebound to JWT `sub` | AUTH-X-09 |
+| 5 | Missing `associated_user` on an “online” token-exchange body creates an offline session | AUTH-X-27 |
+| 6 | 200 token-exchange JSON without `access_token` still authenticates (`accessToken: null`) | attempt 03 |
+| 7 | Non-special token-exchange failures become opaque Response 500 | attempts 01/02/05 |
+| 8 | Installed `token-exchange.mjs` logs `config.future.expiringOfflineAccessTokens` to stdout (present in pinned hash) | AUTH-X-34 (every matrix run) |
+
+PASS rows that intentionally observe unsafe library behavior (not safe application behavior): AUTH-X-04, AUTH-X-05, AUTH-X-23, AUTH-X-27.
+
+X's configured `shopifyApp` / `hooks.afterAuth` / `requireAdminTenant` were **not** driven. Probes build their own `shopifyApp({ apiKey, scopes: ["read_products"], hooks: {} })` with in-memory session storage.
 
 Webhook path **does** load offline-only sessions (AUTH-X-24) — aligned with OFFICIAL background-job guidance.
 
