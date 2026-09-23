@@ -219,7 +219,8 @@ Ninth independent review (`22941f177f48ab95343330a05aac29ea1c9a6d4e`, blob `9596
 |---|---|---|---|---|---|
 | **F-CLAUDE-PR7RE-01** | P2 | Issued capture never reconciled against a later non-fresh sighting; consume/guard/effect still progressed. Refusing a second capture was treated as enough | **CORRECTED.** Eligibility is a separate `contradictedAt` / `contradictionClass` on `OriginalAdminCapture` (history is not rewritten BOUND→UNATTRIBUTED). Uncorrelated `QueuedWorkSighting` marks captures contradicted under `stocky_source_content_lock`. Consume re-reads provenance **before** digest_conflict and refuses `capture_content_no_longer_fresh`. Duplicate capture/origin return is not a freshness grant. Effect host re-reads after lifecycle→target→source locks and refuses `effect_source_no_longer_fresh` unless `SourceEffectLink` already bound the same effect (historical, not unwritten). Linearization point: source-content lock. Sequential separate transactions; no lock is held across orchestration. Correlated `PARENT_LINEAGE`/`MANUAL_REPLAY` child of the **same** BOUND+acked parent capture + same source digest does not contradict the parent. Uncorrelated historical content cannot manufacture that relationship. Missing/pruned evidence stays ambiguous. NEG-13 (SINGLE: consume re-read removed) revives capture-first admit; effect recheck still holds | §7.6.2 Eligibility / lock order | PR7-CUST-090, 099–110 |
 | **F-CLAUDE-PR7RE-02** | P2 | G16 host used `pr7-effect-v1` (includes effectId) as `sourceContentDigest`, so a new effectId was different content | **CORRECTED.** Keep AO-02: host still computes `pr7-effect-v1` over frozen domain/shop/kind/value/**effectId** and writes those locals. Separately persist `pr7-source-v1` over domain, shop, semantic operation, target kind/value, and canonical original `source_body`. Excludes transport/retry/work/command/effect IDs, generation labels, and regenerated timestamps. `SourceEffectLink` binds the first effect commitment per work under the source key. Same source + new effect/command/work IDs is denied or ambiguous. Genuine new `source_body` and unrelated tenant/target progress. No lifetime content blacklist or raw-PII cache. PostgreSQL `text` cannot contain NUL; STRICT rejects NULL; empty body is omitted-content. Sample source (`pr7-a.myshopify.com` / `shop_a` / `CUSTOMER_WRITE` / `CUSTOMER_REST_ID` / `191167` / `ao02-host-body`) = `71e3d9d38a6ae9c7dd86577a323d2254ffb335f8879ddd9282f4095a80fe14f7`. Effect sample for `ae_pos` remains `959bb90441a81889549f265bd75ef5b84a512486b896023cf4f42f50b2566abd`. NEG-14 (SINGLE: identity source key) revives new-effect-id write after same-body sighting | §7.6.2 Source vs effect | PR7-CUST-073, 078–082, 111–118 |
-| **F-CLAUDE-PR7AO-06** | P3 | §14 table vs embedded manifest vs extracted named inputs not cross-checked | **CORRECTED.** Extractor `--selftest` and `extract_from_plan` compare the three row-for-row. One-sided table-hash and one-sided manifest-hash edits fail. Honest limit: a coordinated in-repository edit of every declaration is not prevented by in-band hashes; the pinned Git commit and independent review establish which package is trusted. No manifest self-hash cycle | §14; Appendix H | extractor `--selftest`; PR7-CUST-119 |
+| **F-CLAUDE-PR7AO-06** | P3 | §14 table vs embedded manifest vs extracted named inputs not cross-checked | **CORRECTED.** Extractor `--selftest` and `extract_from_plan` compare the three row-for-row. One-sided table-hash and one-sided manifest-hash edits fail. Duplicate `files[]` paths fail by path identity even when every duplicate row is byte-for-byte/hash-identical; hash disagreement is not required. Conflicting duplicate paths fail in either order. Table-row removal, extra unmapped entries, and version changes fail. Honest limit: a coordinated in-repository edit of every declaration is not prevented by in-band hashes; the pinned Git commit and independent review establish which package is trusted. No manifest self-hash cycle | §14; Appendix H | extractor `--selftest`; PR7-CUST-119, 124 |
+| **F-CLAUDE-PR7SP-01** | P3 | Exact byte-identical duplicate `files[]` row was accepted although duplicate paths must fail | **CORRECTED.** `load_manifest` / table-manifest check / `verify_and_write` reject a repeated `files[]` path by path identity. Published `--selftest` constructs an exact byte-identical duplicate in either order and requires `extraction_manifest_duplicate_path`. Conflicting-hash duplicates remain failures. Honest authenticity limit unchanged | §14; Appendix H | extractor `--selftest`; PR7-CUST-124 |
 
 PR49 pin `d63629077fcf29775c69161372c2cf903cfa62c6` is **read-only**. Its AUTH-X / EFF-X rows are Cursor-executed and separately under independent review. They are **not** independently accepted by this packet and are **not** imported as source files. Restrictions carried: (1) FACT/PROPOSED/UNEXECUTED labelled JWT `sub` exact string; reject numeric stringify; iss/dest before token exchange; keep global `useOnlineTokens` disabled on X; (2) read-before-write is not atomic fencing — publication serialized with barrier OR sink fence OR positive drain of that writer. See §7.6.2 PR49 restrictions.
 
@@ -1169,6 +1170,7 @@ Unchanged: PR8 needs privacy-safe residual emptiness, audit diagnostics, enumera
 | Historical Q 313-record packet | original-run identity for Q (**not** this contract): **313 records = 191 unique + 122 declared reruns**. Contract `d9bd880f…`; driver `59bf35f5…`; run log `4e88e653…`. Independently reproduced Q baseline remains Q-only historical evidence |
 | Historical F 375-record packet | **Cursor-reported unpublished-at-F**, **not independently reproduced**. Declared at F: **375 records / 375 PASS / 0 FAIL** = **223 unique** + **152 declared reruns** against unpublished `bc0d674a…` / `336b2795…`. Eighth review could not extract those files and labelled 375 **declared-but-not-independently-reconciled**. Do **not** treat 375 as this packet’s result. Reviewer reconstruction `cb7958a5…` is separately attributed |
 | Disposable PostgreSQL 16 proofs (CURRENT contract) | **executed-this-planning-session from a clean `git archive` of candidate `e7dd4f42487409f2c5ebd026c7be5b8d70c3764e`.** Gate host `/tmp/pr45-re-gate-pg16:5447` ran **505 records / 505 PASS / 0 FAIL** = **290 unique** + **215 declared reruns** (G16 unique = 93, NEG unique = 15, G1–G6 unique = 59 preserved). results.json `f01b2dec26f6d50494ec3a57cd73491172f5ab68c47d8a7d06ab2302a04abdee`; run-log `2a3f1d6a6cc0f6c88d6c1d083ded77b8a4027b5335e4031a42e82ea3f2b997c3`. Extractor `--selftest` printed `extraction_authenticity_limit:coordinated_in_repo_edit_not_prevented` then `extraction_selftest_ok`. Regenerator reproduced option-(a) `75a16828…`. CURRENT contract `d4c21ff9350f4072a907576f80be44b46a210695e8088f467a4f7b49c46b4318`; driver `d24afa331bde236e6ed59243ada670d14b658bd308541b9263df616040c75d85`; extractor `70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172`; seed `d0d84842…` / scanner `666feaa8…` / portable SQL `9f7aaa26…` **unchanged vs S**. S’s 416/244/172 remains independently established S evidence (`b55bb88e…` / `3edd193b…` / `02b066c3…`). Authoring host `/tmp/pr45-re-pg16:5444` independently **505/290/215** (run-log `04bc6f0b…`) and is not substituted for the gate. First authoring attempt **489/497** (results.json `4c5a2fbd…`) is preserved. Helper A child-work second effect is closed by source-level `SourceEffectLink`. Queried `16.15` / `160015`. Not PR7 runtime. Ports 5433–5442 leftover clusters were **not** stopped |
+| F-CLAUDE-PR7SP-01 duplicate-path extractor correction | **executed-this-planning-session** by Cursor run `bc-96502db7-e903-4000-bb3d-798eefa757d3` (model `cursor-grok-4.6-xhigh`). On frozen H `3cc2045107b54601c6b0e43c8690b7d090074b80` the published extractor `70684794…` **accepted** an exact byte-identical duplicate `files[]` row and **rejected** conflicting duplicate paths in either order (`extraction_table_manifest_mismatch`). After this correction, extractor `4b31d5663d3c20e39180758625b0d6a9a6a93f971d4a87ac56c9d1b78aa7d068` `--selftest` prints `extraction_authenticity_limit:coordinated_in_repo_edit_not_prevented` then `extraction_selftest_ok`, and the published byte-identical duplicate control rejects with `extraction_manifest_duplicate_path:current/01_contract.sql`. Regenerator reproduced option-(a) `75a16828…`. Working-tree disposable host `/tmp/pr45-sp01-pg16:5448` ran **505 records / 505 PASS / 0 FAIL** = **290 unique** + **215 declared reruns** (G16 unique = 93, NEG unique = 15, G1–G6 unique = 59 preserved). results.json `7c36abe0c880d619241257008202391af3c8753f1f28f7dfc41c9c8ca0b14f61` (run log, not a verification artifact). Contract `d4c21ff9…` / driver `d24afa33…` / seed `d0d84842…` / scanner `666feaa8…` / portable SQL `9f7aaa26…` remain the declared CURRENT inputs and were hash-verified on extract. Queried `16.15` / `160015`. This cell does **not** invent a future successor SHA; clean `git archive` of the successor is the return-gate confirmation. Honest authenticity limit unchanged. Not PR7 runtime |
 | Redis / filesystem / Shopify / live token exchange | **not executed** — G5 still records CP uninstrumented-write LIMIT; I/O fences remain unexecuted; Helper A / coordinator PREP rows are **FACT (PR48)** synthetic probes, not this session. `authenticate.admin` remains **reused / not independently reproduced**. This SQL model does **not** execute outstanding real authentication-library, Redis, export or D-scratch integrations |
 | Official fetches | §3 URLs, **2026-09-18** |
 | Store calls | not executed |
@@ -1192,7 +1194,7 @@ Historical TF 115-record packet remains original-run identity (**not** this cont
 
 Historical 59-case identities remain original-run identities: `01_contract.sql` `b29ef463c26a9a3ad745fc7a56bc40901ced1c55429a59c441d89634858db054`; `02_seed.sql` `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632`; `03_run_proofs.py` `6900553779c3d2e8237fc189fcad42a1810262d3110ab60f30ab32208667ebb4`; original `results.json` `ecc9acd1d59cda2d9d5910b46e9ffa1766c4e29c3671ceda270dea98d80303b8` (run log; reviewer independent log `185dd1b8…`).
 
-Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`). Mandatory clean-export host **port 5447** datadir `/tmp/pr45-re-gate-pg16` from `git archive` of the candidate commit. Authoring host **port 5444** datadir `/tmp/pr45-re-pg16` is not the gate. Helper clusters 5445/5446 are internal and are not the gate. System cluster was not used. Teardown: `dropdb pr45_proof` only. Do **not** stop leftover helper postgres on 5433–5436, 5439, 5440, or 5442. Do **not** assume ownership of 5433–5442.
+Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (disposable `initdb` / `pg_ctl`). Historical RE clean-export host **port 5447** datadir `/tmp/pr45-re-gate-pg16` from `git archive` of candidate `e7dd4f42…`. Historical authoring host **port 5444** datadir `/tmp/pr45-re-pg16` is not this gate. This SP-01 working-tree host **port 5448** datadir `/tmp/pr45-sp01-pg16`. Helper clusters 5445/5446 are internal and are not the gate. System cluster was not used. Teardown: `dropdb pr45_proof` only. Do **not** stop leftover helper postgres on 5433–5436, 5439, 5440, 5442, or 5447. Do **not** assume ownership of 5433–5442.
 
 ## 13. Cross-check to the acceptance matrix
 
@@ -1213,7 +1215,7 @@ Environment: Node `v22.14.0`, Python `3.12.3`, PostgreSQL **queried** `16.15` (d
 | Durable admission origin / labeling | PR7-CUST-045…061, G15, NEG-8/9, **F-CLAUDE-PR7TA-01/02**; G13 names preserved via work_id crosswalk |
 | Authenticated original-admin capture / effect-host binding | PR7-CUST-062…077, G16, NEG-10/11, **F-CLAUDE-PR7DO-01/02** (F historical); G11/G13 names preserved via capture-to-producer crosswalk |
 | Reproducible actual-input commitment / replay provenance / tenant command ids | PR7-CUST-078…098, G16, NEG-11/12, **F-CLAUDE-PR7AO-01…05** |
-| Capture eligibility at use / source vs effect / publication consistency | PR7-CUST-099…119, G16, NEG-13/14, **F-CLAUDE-PR7RE-01/02**, **F-CLAUDE-PR7AO-06**; PR49 pin `d636290…` restrictions |
+| Capture eligibility at use / source vs effect / publication consistency | PR7-CUST-099…124, G16, NEG-13/14, **F-CLAUDE-PR7RE-01/02**, **F-CLAUDE-PR7AO-06**, **F-CLAUDE-PR7SP-01**; PR49 pin `d636290…` restrictions |
 | Escalation | PR7-ESCL-001…004 |
 | Finding crosswalk | §1.2, §1.3, §1.4, §1.5, **§1.6**, **§1.7**, **§1.8**, **§1.9** and matrix §11–§12.6 |
 
@@ -1230,7 +1232,7 @@ If a matrix row cites a path, that path is listed in §4 or §7.9.
 | `02_seed.sql` | `d0d848427a7a9913461b378bc667114d0728320e61d2c6722e2cb9ac4084f632` | Synthetic two-shop / two-customer fixture (**byte-identical** to 59-case, TF, CC-GEN, GW, Q, F) |
 | `04_discover_writers.py` | `666feaa8f77359d75f70ffca5bb84bc91fc9d0e0891656f17d195ef92990220d` | Independent source-derived candidate discovery (**unchanged**) |
 | `04_source_derived.sql` | `9f7aaa26ecdbdf953b284b0813fb81f2693962c64870d7c2e61ea084c0bf6baa` | Portable consumed snapshot; **byte-identical** to P/GW/Q/F |
-| CURRENT `00_extract_proofs.py` | `70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172` | Published extractor `pr7-proof-extract-v1` (Appendix H) with AO-06 table/manifest/extracted cross-check |
+| CURRENT `00_extract_proofs.py` | `4b31d5663d3c20e39180758625b0d6a9a6a93f971d4a87ac56c9d1b78aa7d068` | Published extractor `pr7-proof-extract-v1` (Appendix H) with AO-06 table/manifest/extracted cross-check and duplicate-path rejection |
 | CURRENT `regenerate_lower_bound.py` | `c79b03ad6c75e11fbfece767b33ac61b87820ee81140a5c3ac31553e39b0f23a` | Regenerates option-(a) SQL from Q Appendix A (Appendix J) |
 | CURRENT `reproduce_do01_overlap.py` | `b7c6e6da06e70bbe6216833b7f0a7918794ddd60b1e6ea8dee613faec3f8ae65` | Q + lower-bound reproducer (Appendix K). **New** identity; not `9872848ca94f81af77a5bf534148b7d2e05fe713e722badfa87ee6f8d480b9db` |
 | Q historical `01_contract.sql` | `d9bd880f7eb8e584b5e2139ce0d5fbc052a3b6ef61c1e9e59716fb3b285ec9c9` | Appendix A; **not** the runnable current contract |
@@ -1285,7 +1287,7 @@ python3 "$EXTRACT_ROOT/current/regenerate_lower_bound.py" \
 dropdb -h "$PGDATA" -p "$PGPORT" -U pr45owner --if-exists pr45_proof
 ```
 
-The bootstrap reads Appendix H from this document. Extraction negatives (`--selftest`: missing / truncated / unlisted / bad digest) must fail before proofs. `reset()` restores the complete declared contract after NEG mutations.
+The bootstrap reads Appendix H from this document. Extraction negatives (`--selftest`: missing / truncated / unlisted / bad digest / one-sided table or manifest hash / table-row removal / extra unmapped entry / version change / conflicting duplicate path in either order / exact byte-identical duplicate path in either order) must fail before proofs. A duplicate `files[]` path fails by path identity; disagreement is not required. `reset()` restores the complete declared contract after NEG mutations.
 
 Permission assertions used `stocky_runtime`, `stocky_control_plane`, `stocky_privacy_reader`, `stocky_privacy_erasure`, `stocky_privacy_operator`, producer `stocky_original_admission`, and capture principal `stocky_admin_capture`. Setup used isolated `pr45owner`. No hidden GRANT, policy drop, or role switch is omitted from the hashed contract / Appendix F.
 
@@ -40406,7 +40408,7 @@ if __name__ == "__main__":
 
 ### Appendix H — `00_extract_proofs.py` (published extractor)
 
-SHA-256 `70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172`. Convention `pr7-proof-extract-v1`. AO-06 compares §14 table, embedded manifest, and extracted named inputs. S’s `02b066c3838b246bd53deb7f6467e31fc7d8b63d7349d1317c21b04ecfdc6177` remains independently established S evidence. This file is transcribed **without** a markdown fence because it documents fence markers. Bootstrap it from these PROOF-EXTRACT comments, then run it against this plan.
+SHA-256 `4b31d5663d3c20e39180758625b0d6a9a6a93f971d4a87ac56c9d1b78aa7d068`. Convention `pr7-proof-extract-v1`. AO-06 compares §14 table, embedded manifest, and extracted named inputs. Duplicate `files[]` paths fail by path identity even when every duplicate row is byte-identical. S’s `02b066c3838b246bd53deb7f6467e31fc7d8b63d7349d1317c21b04ecfdc6177` remains independently established S evidence. This file is transcribed **without** a markdown fence because it documents fence markers. Bootstrap it from these PROOF-EXTRACT comments, then run it against this plan.
 
 <!-- PROOF-EXTRACT:begin path=current/00_extract_proofs.py -->
 #!/usr/bin/env python3
@@ -40507,6 +40509,16 @@ def extract_blocks(markdown: str) -> dict[str, str]:
     return blocks
 
 
+def reject_duplicate_manifest_paths(files) -> None:
+    """Duplicate files[] paths fail by path identity; hash disagreement is not required."""
+    seen: set[str] = set()
+    for row in files:
+        path = row["path"]
+        if path in seen:
+            raise SystemExit(f"extraction_manifest_duplicate_path:{path}")
+        seen.add(path)
+
+
 def load_manifest(text: str) -> dict:
     try:
         man = json.loads(text)
@@ -40517,12 +40529,14 @@ def load_manifest(text: str) -> dict:
     files = man.get("files")
     if not isinstance(files, list) or not files:
         raise SystemExit("extraction_manifest_empty")
+    reject_duplicate_manifest_paths(files)
     return man
 
 
 def verify_and_write(
     blocks: dict[str, str], manifest: dict, dest: Path, *, write: bool
 ) -> None:
+    reject_duplicate_manifest_paths(manifest["files"])
     declared = []
     for row in manifest["files"]:
         path = row["path"]
@@ -40619,12 +40633,15 @@ def check_table_manifest_extracted(
 
     A coordinated edit of every in-repository declaration is not prevented by
     in-band hashes. Missing/extra/duplicate/path/version/hash disagreements fail.
+    Duplicate files[] paths fail by path identity even when every duplicate row
+    is byte-for-byte/hash-identical. Hash disagreement is not required.
     """
     rows = parse_section_14_table(markdown)
     by_label = {label: digest for label, digest in rows}
     declared = manifest.get("files")
     if not isinstance(declared, list) or not declared:
         raise SystemExit("extraction_manifest_empty")
+    reject_duplicate_manifest_paths(declared)
     listed_paths = []
     for row in declared:
         path = row["path"]
@@ -40769,6 +40786,80 @@ def selftest(plan: Path) -> None:
     man_only_md = markdown.replace(bad_man, json.dumps(man_only_obj, indent=2) + "\n", 1)
     expect_fail("onesided_manifest_hash", man_only_md, "extraction_")
 
+    def poison_manifest(mutate) -> str:
+        obj = json.loads(bad_man)
+        mutate(obj)
+        return markdown.replace(bad_man, json.dumps(obj, indent=2) + "\n", 1)
+
+    def add_duplicate(files, *, identical: bool, first: bool) -> None:
+        row = dict(files[0])
+        if not identical:
+            h = row["sha256"]
+            row["sha256"] = ("0" if h[0] != "0" else "1") + h[1:]
+        if first:
+            files.insert(0, row)
+        else:
+            files.append(row)
+
+    ident_second = poison_manifest(
+        lambda o: add_duplicate(o["files"], identical=True, first=False)
+    )
+    expect_fail(
+        "byte_identical_duplicate_path_second",
+        ident_second,
+        "extraction_manifest_duplicate_path",
+    )
+    ident_first = poison_manifest(
+        lambda o: add_duplicate(o["files"], identical=True, first=True)
+    )
+    expect_fail(
+        "byte_identical_duplicate_path_first",
+        ident_first,
+        "extraction_manifest_duplicate_path",
+    )
+    conf_second = poison_manifest(
+        lambda o: add_duplicate(o["files"], identical=False, first=False)
+    )
+    expect_fail(
+        "conflicting_duplicate_path_second",
+        conf_second,
+        "extraction_manifest_duplicate_path",
+    )
+    conf_first = poison_manifest(
+        lambda o: add_duplicate(o["files"], identical=False, first=True)
+    )
+    expect_fail(
+        "conflicting_duplicate_path_first",
+        conf_first,
+        "extraction_manifest_duplicate_path",
+    )
+
+    table_line = None
+    for line in markdown.split("\n"):
+        if line.startswith("| CURRENT `01_contract.sql` |"):
+            table_line = line
+            break
+    if not table_line:
+        raise SystemExit("extraction_selftest_table_row_missing")
+    table_removed = markdown.replace(table_line + "\n", "", 1)
+    expect_fail("table_row_removal", table_removed, "extraction_table_missing_path")
+
+    extra_unmapped = poison_manifest(
+        lambda o: o["files"].append(
+            {
+                "path": "current/unmapped-extra.sql",
+                "sha256": "0" * 64,
+                "role": "unmapped",
+            }
+        )
+    )
+    expect_fail("extra_unmapped_entry", extra_unmapped, "extraction_table_unmapped_path")
+
+    version_changed = poison_manifest(
+        lambda o: o.__setitem__("version", "pr7-proof-extract-v0-invalid")
+    )
+    expect_fail("version_change", version_changed, "extraction_manifest_version")
+
     print("extraction_authenticity_limit:coordinated_in_repo_edit_not_prevented")
     print("extraction_selftest_ok")
 
@@ -40846,8 +40937,8 @@ The extractor loads this block and verifies every listed `sha256` against extrac
     },
     {
       "path": "current/00_extract_proofs.py",
-      "sha256": "70684794504734faacf651a09a4f996d20215a1da7e99af9b34684fe8d7d8172",
-      "role": "Published extractor pr7-proof-extract-v1 with AO-06 table/manifest/extracted cross-check"
+      "sha256": "4b31d5663d3c20e39180758625b0d6a9a6a93f971d4a87ac56c9d1b78aa7d068",
+      "role": "Published extractor pr7-proof-extract-v1 with AO-06 cross-check and duplicate-path rejection"
     },
     {
       "path": "current/regenerate_lower_bound.py",
