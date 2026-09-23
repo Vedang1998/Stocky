@@ -1,14 +1,14 @@
 # Phase 1 PR6 — Repository Implementation Closure Report
 
-**Status:** `PR6 DOCUMENTARY CLOSEOUT ACCEPTED BY CHATGPT; FORMAL REPOSITORY CLOSURE PENDING OWNER SQUASH-MERGE OF THIS PR`
+**Status:** `PR6 FORMALLY CLOSED` — squash **X** `f057d98c8a321b3e06875a6e9a83b787bcbc101f` at `2026-09-20T13:23:14Z`
 **Phase 1:** `IN PROGRESS`
-**PR 6 overall:** `IN PROGRESS` until this closeout PR is owner-squash-merged (independent review and ChatGPT ACCEPT are recorded; merge is **not** authorized)
+**PR 6 overall:** `CLOSED` (repository closeout; not production; not Phase 1 closure)
 **PR6-A:** `ACCEPTED / MERGED / CLOSED` (repository-foundation lane)
 **PR6-B:** `ACCEPTED / MERGED / CLOSED` (repository Admin READ lane)
 **PR6-C:** `ACCEPTED / MERGED / CLOSED` (repository canonical-applicator lane)
 **PR6-D:** `TECHNICALLY ACCEPTED AND MERGED` (repository webhook / import / reconciliation module)
 **PR7 runtime:** `NOT AUTHORIZED`
-**PR45:** separate unaccepted planning assignment — **not** closeout authority
+**PR45:** **OPEN / DRAFT / UNMERGED** — **IN CORRECTION** for F-CLAUDE-PR7GW-01/02 — **not** closeout authority
 **Production:** `NOT AUTHORIZED`
 **Merchant production data:** `NOT AUTHORIZED`
 **Shopify writes / inventory writes:** `NOT AUTHORIZED`
@@ -26,9 +26,9 @@ It does **not** state that Phase 1 is complete.
 
 It does **not** authorize PR7 runtime, production, merchant production data, deployment, production migrations, Shopify inventory mutations, live webhook registration, `read_all_orders`, `write_orders`, or any inventory-write / absence-tombstone flag enablement.
 
-**Present state (truthful at this packaging commit):** PR6 repository implementation is **technically accepted and merged**. Independent Claude documentary/control review of subject `fde01dc5ba2e0076b1579d6690f0548db749af56` issued **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`** (commit `48b951a782377c55b337e5d50ac5ee7dc20ddf5d`, blob `c17e7150a39afe625f6b90c538a96e08a42e5808`). ChatGPT **ACCEPT**ed the documentary closeout and issued the explicit twenty-row risk disposition ([5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848)). Formal PR6 repository closure is **pending owner squash-merge** of this PR. ChatGPT ACCEPT is **now**; formal closure is **after merge**. This file does **not** invent a closeout squash SHA or a premature closure timestamp. Merge/mark-ready remains **NOT AUTHORIZED**.
+**Present state (truthful after owner merge):** PR6 repository implementation is **technically accepted and merged**, and formal PR6 **repository** closure is **effective**. Independent Claude documentary/control review of subject `fde01dc5ba2e0076b1579d6690f0548db749af56` issued **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`** (commit `48b951a782377c55b337e5d50ac5ee7dc20ddf5d`, blob `c17e7150a39afe625f6b90c538a96e08a42e5808`). ChatGPT **ACCEPT**ed the documentary closeout and issued the explicit twenty-row risk disposition ([5747824848](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5747824848)). Owner squash-merge of PR [#47](https://github.com/Vedang1998/Stocky/pull/47) produced **X** `f057d98c8a321b3e06875a6e9a83b787bcbc101f` at `2026-09-20T13:23:14Z` (comment [5750214319](https://github.com/Vedang1998/Stocky/pull/47#issuecomment-5750214319)). Exact-X push CI `35513348816` SUCCESS. Dated acceptance/effective-on-merge history above is preserved. This is **not** production, **not** Phase 1 closure, and **not** PR7 runtime authority.
 
-**Effective-on-merge clause:** Formal PR6 **repository** closure becomes effective only when this closeout/control PR is independently reviewed, ChatGPT-accepted, and owner-squash-merged to `main`. Independent review and ChatGPT ACCEPT are recorded. Until owner merge, live wording remains **technically accepted and merged; formal closure pending owner merge**. After that merge, later current-main synchronization may record the actual squash identity. Do **not** treat this documentation commit’s own SHA as that future squash.
+**Effective-on-merge clause (dated history, now executed):** Formal PR6 **repository** closure becomes effective only when this closeout/control PR is independently reviewed, ChatGPT-accepted, and owner-squash-merged to `main`. Independent review and ChatGPT ACCEPT were recorded before merge. That merge is now **X** `f057d98c8a321b3e06875a6e9a83b787bcbc101f` at `2026-09-20T13:23:14Z`. Live wording is **PR6 FORMALLY CLOSED**. The closeout packaging commit’s own SHA was never treated as the squash identity.
 
 Do **not** edit any immutable independent-review artifact.
 
@@ -63,7 +63,8 @@ Verified at closeout start against `origin/main` after `git fetch origin main`, 
 
 | Identity | Value | Evidence class |
 |---|---|---|
-| Required current `origin/main` / squash **W** | `ee193f38491245a10fb2fa60d2cf9a29f3271605` | Git `origin/main` HEAD |
+| Historical executable `origin/main` / squash **W** | `ee193f38491245a10fb2fa60d2cf9a29f3271605` | Git object; PR6-D squash |
+| Required current `origin/main` / squash **X** | `f057d98c8a321b3e06875a6e9a83b787bcbc101f` | Git `origin/main` HEAD after PR47 |
 | **W** sole parent **V** | `a3ff480f1477237f8055f10c43298480a05728a1` | `git log -1 --format='%P'` |
 | **W** tree | `b24d75b56a6b371608c450c87bcd887dd4a056c1` | `git rev-parse W^{tree}` |
 | Final accepted PR43 head **R** | `ef2b98c42c69f76303c44d0809058ca3c7f3052b` | Git object; PR #43 merged source |
