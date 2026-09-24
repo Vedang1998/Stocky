@@ -11,6 +11,7 @@ jobs:
     if: >-
       github.repository == 'Vedang1998/Stocky' &&
       github.event.comment.user.login == 'Vedang1998' &&
+      github.event.comment.user.id == 278831488 &&
       github.event.comment.user.type == 'User' &&
       startsWith(github.event.comment.body, '@claude ')
 
@@ -28,17 +29,79 @@ jobs:
       id-token: write
       actions: read
 
+    env:
+      STOCKY_REVIEW_RUNNER_ACTIVATED: ${{ vars.STOCKY_CLAUDE_REVIEW_RUNNER }}
+
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+      - name: Checkout trusted workflow ref
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Run Claude Code
-        uses: anthropics/claude-code-action@v1
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.19.0"
+
+      - name: Pin npm
+        run: npm install -g npm@11.5.2
+
+      - name: Verify Node and npm
+        run: |
+          node --version
+          test "$(node --version)" = "v22.19.0"
+          npm --version
+          test "$(npm --version)" = "11.5.2"
+
+      - name: Validate work order
+        id: dispatch
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_ID: ${{ github.event.comment.id }}
+          ACTOR_LOGIN: ${{ github.event.comment.user.login }}
+          ACTOR_ID: ${{ github.event.comment.user.id }}
+          ACTOR_TYPE: ${{ github.event.comment.user.type }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_TOKEN: ${{ github.token }}
+          STOCKY_REVIEW_STATE_DIR: ${{ runner.temp }}/stocky-review
+        run: node .github/scripts/claude-review/bin/dispatch.mjs --phase validate
+
+      - name: Run Claude Code (simple communication)
+        if: steps.dispatch.outputs.invoke_claude == 'true' && steps.dispatch.outputs.mode == 'simple'
+        uses: anthropics/claude-code-action@8cf3482550831fb35a4fc3fbf7ca139cf8028b4c # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           additional_permissions: "actions: read"
-          claude_args: "--max-turns 40"
           show_full_output: false
+          settings: .github/scripts/claude-review/settings/simple-route.json
+          prompt: ${{ steps.dispatch.outputs.prompt }}
+          claude_args: >-
+            --max-turns 40
+            --permission-mode dontAsk
+            --allowedTools ${{ steps.dispatch.outputs.allowed_tools }}
+            --disallowedTools ${{ steps.dispatch.outputs.disallowed_tools }}
+
+      - name: Run Claude Code (executable review)
+        if: steps.dispatch.outputs.invoke_claude == 'true' && steps.dispatch.outputs.mode == 'executable_review'
+        uses: anthropics/claude-code-action@8cf3482550831fb35a4fc3fbf7ca139cf8028b4c # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          additional_permissions: "actions: read"
+          show_full_output: false
+          settings: .github/scripts/claude-review/settings/executable-review.json
+          prompt: ${{ steps.dispatch.outputs.prompt }}
+          claude_args: >-
+            --max-turns 40
+            --permission-mode dontAsk
+            --allowedTools ${{ steps.dispatch.outputs.allowed_tools }}
+            --disallowedTools ${{ steps.dispatch.outputs.disallowed_tools }}
+            --mcp-config ${{ runner.temp }}/stocky-review/mcp.json
+
+      - name: Publish rejection or stop without model
+        if: always() && steps.dispatch.outputs.invoke_claude != 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STOCKY_REVIEW_STATE_DIR: ${{ runner.temp }}/stocky-review
+        run: node .github/scripts/claude-review/bin/dispatch.mjs --phase publish-reject

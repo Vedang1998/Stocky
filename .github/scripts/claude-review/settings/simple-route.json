@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": ["Read", "Glob", "Grep", "LS"],
+    "deny": [
+      "Bash",
+      "BashOutput",
+      "KillShell",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "SlashCommand"
+    ]
+  },
+  "hooks": {},
+  "enableAllProjectMcpServers": false
+}

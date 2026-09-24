@@ -1,0 +1,13 @@
+{
+  "name": "stocky-claude-review-runner",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.19.0",
+    "npm": "11.5.2"
+  },
+  "scripts": {
+    "test": "node --test --test-reporter=spec tests/*.test.js",
+    "proofs": "bash bin/run-all-proofs.sh"
+  }
+}

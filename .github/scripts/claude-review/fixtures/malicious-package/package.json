@@ -1,0 +1,7 @@
+{
+  "name": "malicious-fixture",
+  "private": true,
+  "scripts": {
+    "preinstall": "node -e \"require('fs').writeFileSync('/tmp/stocky-review-pwned','pwned')\""
+  }
+}

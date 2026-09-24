@@ -1,0 +1,98 @@
+name: Claude review execution (secret-free)
+
+# Operator replay of a validated probe after STOCKY_CLAUDE_REVIEW_RUNNER=admitted.
+# Not auto-triggered. No pull_request_target, workflow_run, or issue_comment.
+# Does not receive CLAUDE_CODE_OAUTH_TOKEN.
+
+on:
+  workflow_dispatch:
+    inputs:
+      probe_kind:
+        description: "sql | redis | node_script | zero_test_control"
+        required: true
+        default: "sql"
+      probe_sql:
+        description: "Single allowlisted SQL statement when kind=sql"
+        required: false
+        default: "SELECT 1 AS ok"
+      max_sandbox_seconds:
+        description: "Per-probe ceiling (max 1200)"
+        required: false
+        default: "60"
+
+permissions: {}
+
+jobs:
+  sandbox:
+    if: >-
+      github.repository == 'Vedang1998/Stocky' &&
+      vars.STOCKY_CLAUDE_REVIEW_RUNNER == 'admitted'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: stocky_review
+          POSTGRES_PASSWORD: stocky_review_ci_only
+          POSTGRES_DB: stocky_review_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stocky_review -d stocky_review_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: stocky_review
+      PGPASSWORD: stocky_review_ci_only
+      PGDATABASE: stocky_review_ci
+    steps:
+      - name: Checkout trusted ref
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.19.0"
+
+      - name: Pin npm
+        run: npm install -g npm@11.5.2
+
+      - name: Verify versions
+        run: |
+          node --version
+          test "$(node --version)" = "v22.19.0"
+          npm --version
+          test "$(npm --version)" = "11.5.2"
+          psql --version
+          redis-cli ping
+
+      - name: Record image versions
+        run: |
+          echo "postgres_image=postgres:16-alpine"
+          echo "redis_image=redis:7-alpine"
+          docker images --digests || true
+
+      - name: Run typed probe
+        env:
+          PROBE_KIND: ${{ inputs.probe_kind }}
+          PROBE_SQL: ${{ inputs.probe_sql }}
+          PROBE_TIMEOUT: ${{ inputs.max_sandbox_seconds }}
+        run: node .github/scripts/claude-review/bin/sandbox.mjs
