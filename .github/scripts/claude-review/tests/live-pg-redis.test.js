@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
-import { runProbe } from "../lib/sandbox.js";
+import { runProbe as runProbeImpl } from "../lib/sandbox.js";
 import { classifyExecutorResult } from "../lib/verdict.js";
+
+function runProbe(probe, options = {}) {
+  return runProbeImpl(probe, { isolationMode: "host-unit", ...options });
+}
 
 function havePsql() {
   return spawnSync("psql", ["--version"], { encoding: "utf8" }).status === 0;

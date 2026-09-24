@@ -231,8 +231,19 @@ describe("mcp broker", () => {
     const broker = createBroker({
       evidenceDir: path.join(dir, "evidence"),
       subjectRoot: path.join(dir, "evidence"),
-      workDir: dir,
+      workDir: path.join(dir, "work"),
       maxProbes: 2,
+      provenance: {
+        task_id: "rev-pr45-test",
+        attempt: "local-test",
+        dispatch_key: "propo:issue61-v1:REVIEW:test:claude-review",
+        authority_comment_id: 5806012938,
+        head: HEAD,
+        base: BASE,
+        pr: 45,
+        max_probes: 2,
+        max_sandbox_seconds: 60,
+      },
     });
     const listed = handleJsonRpc(broker, { jsonrpc: "2.0", id: 1, method: "tools/list" });
     assert.equal(listed.result.tools.length, 4);
@@ -253,8 +264,19 @@ describe("mcp broker", () => {
     const broker = createBroker({
       evidenceDir: path.join(dir, "evidence"),
       subjectRoot: dir,
-      workDir: dir,
+      workDir: path.join(dir, "work"),
       maxProbes: 1,
+      provenance: {
+        task_id: "rev-pr45-test",
+        attempt: "local-test",
+        dispatch_key: "propo:issue61-v1:REVIEW:test:claude-review",
+        authority_comment_id: 5806012938,
+        head: HEAD,
+        base: BASE,
+        pr: 45,
+        max_probes: 1,
+        max_sandbox_seconds: 60,
+      },
     });
     const first = broker.tools.run_probe({ kind: "zero_test_control" });
     assert.equal(first.ok, true);

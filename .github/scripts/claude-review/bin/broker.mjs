@@ -2,20 +2,39 @@
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import { createBroker, handleJsonRpc } from "../lib/mcp-broker.js";
+import { createBroker, handleJsonRpc, scrubBrokerEnv } from "../lib/mcp-broker.js";
 
 const stateDir = process.env.STOCKY_REVIEW_STATE_DIR || argValue("--state-dir") || "/tmp/stocky-review";
 const decisionPath = path.join(stateDir, "decision.json");
 const decision = fs.existsSync(decisionPath)
   ? JSON.parse(fs.readFileSync(decisionPath, "utf8"))
   : {};
+const provenancePath = path.join(stateDir, "provenance.json");
+const provenanceFile = fs.existsSync(provenancePath)
+  ? JSON.parse(fs.readFileSync(provenancePath, "utf8"))
+  : {};
+
+scrubBrokerEnv(process.env);
 
 const broker = createBroker({
   evidenceDir: path.join(stateDir, "evidence"),
   subjectRoot: path.join(stateDir, "subject"),
   workDir: path.join(stateDir, "work"),
-  maxProbes: decision.work_order?.max_probes ?? 2,
-  maxSandboxSeconds: decision.work_order?.max_sandbox_seconds ?? 1200,
+  maxProbes: decision.work_order?.max_probes ?? provenanceFile.max_probes ?? 2,
+  maxSandboxSeconds: decision.work_order?.max_sandbox_seconds ?? provenanceFile.max_sandbox_seconds ?? 1200,
+  provenance: {
+    task_id: provenanceFile.task_id || decision.work_order?.task_id,
+    attempt: provenanceFile.attempt || decision.lease?.attempt,
+    dispatch_key: provenanceFile.dispatch_key || decision.work_order?.dispatch_key,
+    authority_comment_id:
+      provenanceFile.authority_comment_id || decision.work_order?.authority_comment_id,
+    head: provenanceFile.head || decision.work_order?.subject?.head,
+    base: provenanceFile.base || decision.work_order?.subject?.base,
+    pr: provenanceFile.pr || decision.work_order?.subject?.pr,
+    max_probes: provenanceFile.max_probes || decision.work_order?.max_probes || 2,
+    max_sandbox_seconds:
+      provenanceFile.max_sandbox_seconds || decision.work_order?.max_sandbox_seconds || 1200,
+  },
 });
 
 if (process.argv.includes("--call")) {

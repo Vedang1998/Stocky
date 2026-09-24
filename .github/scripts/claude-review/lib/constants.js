@@ -100,6 +100,81 @@ export const SETUP_NODE_PIN = Object.freeze({
   sha: "49933ea5288caeca8642d1e84afbd3f7d6820020",
 });
 
+export const UPLOAD_ARTIFACT_PIN = Object.freeze({
+  uses: "actions/upload-artifact",
+  tag: "v4",
+  sha: "ea165f8d65b6e75b540449e92b4886f43607fa02",
+});
+
+export const DOWNLOAD_ARTIFACT_PIN = Object.freeze({
+  uses: "actions/download-artifact",
+  tag: "v4",
+  sha: "d3f86a106a0bac45b974a628896c90dbdf5c8093",
+});
+
+/**
+ * Digest pins from Docker Hub tag API on 2026-09-24 (UTC).
+ * `digest` is the tag's manifest-list digest (immutable pull name@digest).
+ * `amd64_digest` is the linux/amd64 image digest from the same response.
+ * Mutable tags are locators only and must not be used by the executor.
+ */
+export const IMAGE_PINS = Object.freeze({
+  postgres: Object.freeze({
+    locator: "postgres:16-alpine",
+    digest: "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea",
+    amd64_digest: "sha256:1a66d744c1b459e13b05a8fca341da84cb63383e99ce262210efee5a319d4551",
+    recorded_at: "2026-09-24",
+    source: "https://hub.docker.com/v2/repositories/library/postgres/tags/16-alpine",
+  }),
+  redis: Object.freeze({
+    locator: "redis:7-alpine",
+    digest: "sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499",
+    amd64_digest: "sha256:ca0acbb137c1dc3339c8b147a58fd6f42775d4599327b50e7b116c23de501af2",
+    recorded_at: "2026-09-24",
+    source: "https://hub.docker.com/v2/repositories/library/redis/tags/7-alpine",
+  }),
+  node: Object.freeze({
+    locator: "node:22.19.0-bookworm-slim",
+    digest: "sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90",
+    amd64_digest: "sha256:cff78eb5aa1cf27dc2b6aeea9d31366415a43e9a9ea0ddec00d780b2b66fad0f",
+    recorded_at: "2026-09-24",
+    source: "https://hub.docker.com/v2/repositories/library/node/tags/22.19.0-bookworm-slim",
+  }),
+});
+
+export function pinnedImage(pin) {
+  const name = pin.locator.split(":")[0];
+  return `${name}@${pin.digest}`;
+}
+
+export const SECRET_ENV_DENY = Object.freeze([
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
+  "SSH_AUTH_SOCK",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SESSION_TOKEN",
+  "CANARY_TOKEN",
+  "ACTIONS_RUNTIME_TOKEN",
+  "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
+]);
+
+export const PUBLISH_STATE_FILES = Object.freeze([
+  "decision.json",
+  "lease.json",
+  "probes.json",
+  "checkpoint.json",
+  "model-result.md",
+  "executor-summary.json",
+]);
+
+export const HOST_ISOLATION_MODES = Object.freeze([
+  "host-unit",
+  "host-enforcement-control",
+]);
+
 export const DISALLOWED_CLAUDE_TOOLS = Object.freeze([
   "Bash",
   "BashOutput",

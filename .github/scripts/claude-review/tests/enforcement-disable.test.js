@@ -51,7 +51,7 @@ describe("disable production enforcement then restore", () => {
           source: `const fs=require('fs'); fs.readFileSync(${JSON.stringify(canary)},'utf8'); process.exit(0);`,
         },
       },
-      { workDir, disablePreload: true, subjectRoot: workDir },
+      { workDir, disablePreload: true, subjectRoot: workDir, isolationMode: "host-enforcement-control" },
     );
     assert.equal(disabled.executor.exit_code, 0, "disabled jail should allow the canary read");
     const workDir2 = fs.mkdtempSync(path.join(os.tmpdir(), "stocky-probe-"));
@@ -64,7 +64,7 @@ describe("disable production enforcement then restore", () => {
         },
         expect: { outcome: "fail" },
       },
-      { workDir: workDir2, subjectRoot: workDir2 },
+      { workDir: workDir2, subjectRoot: workDir2, isolationMode: "host-unit" },
     );
     assert.notEqual(enabled.executor.exit_code, 0);
     assert.equal(hashFile(preload), originalHash);

@@ -4,28 +4,20 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
+  HOST_ISOLATION_MODES,
   MAX_PROBE_OUTPUT_BYTES,
   NODE_VERSION,
+  SECRET_ENV_DENY,
   SYNTHETIC_PG,
   SYNTHETIC_REDIS,
 } from "./constants.js";
 import { validateProbe } from "./probe.js";
 import { outputHash } from "./verdict.js";
 import { resultErr } from "./util.js";
+import { runIsolatedProbe } from "./isolated-executor.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD_SRC = path.resolve(HERE, "../sandbox/preload-jail.cjs");
-
-const SECRET_ENV_DENY = [
-  "CLAUDE_CODE_OAUTH_TOKEN",
-  "ANTHROPIC_API_KEY",
-  "GITHUB_TOKEN",
-  "GH_TOKEN",
-  "SSH_AUTH_SOCK",
-  "AWS_SECRET_ACCESS_KEY",
-  "AWS_ACCESS_KEY_ID",
-  "CANARY_TOKEN",
-];
 
 export function dockerNetworkCreateArgs(name) {
   return ["network", "create", "--internal", name];
@@ -156,8 +148,8 @@ function executorResult(partial) {
 function spawnTimed(command, args, options) {
   const started = Date.now();
   const r = spawnSync(command, args, options);
-    const timed_out =
-      r.error?.code === "ETIMEDOUT" || r.signal === "SIGTERM" || r.signal === "SIGKILL";
+  const timed_out =
+    r.error?.code === "ETIMEDOUT" || r.signal === "SIGTERM" || r.signal === "SIGKILL";
   return { r, duration_ms: Date.now() - started, timed_out };
 }
 
@@ -305,6 +297,38 @@ export function buildSandboxEnv({
   return env;
 }
 
+export function runHostProbe(probe, options = {}) {
+  const workDir = options.workDir || fs.mkdtempSync(path.join(os.tmpdir(), "stocky-probe-"));
+  fs.mkdirSync(workDir, { recursive: true });
+  const env = buildSandboxEnv({
+    subjectRoot: options.subjectRoot || workDir,
+    probeRoot: workDir,
+    pg: options.pg,
+    redis: options.redis,
+    extra: options.extraEnv,
+  });
+  let executor;
+  if (probe.kind === "sql") executor = runSqlProbe(probe, env);
+  else if (probe.kind === "redis") executor = runRedisProbe(probe, env);
+  else if (probe.kind === "node_script") {
+    executor = runNodeScriptProbe(probe, {
+      env,
+      workDir,
+      disablePreload: options.disablePreload === true,
+    });
+  } else if (probe.kind === "zero_test_control") executor = runZeroTestControl();
+  else {
+    return { ok: false, validation: resultErr("unknown_probe_kind", probe.kind) };
+  }
+  executor.isolation = isolationLabel(options.isolationMode);
+  executor.backend = executor.backend || "process";
+  return { ok: true, probe, executor, workDir };
+}
+
+function isolationLabel(mode) {
+  return mode === "host-enforcement-control" ? "host-enforcement-control" : "host-unit";
+}
+
 export function runProbe(rawProbe, options = {}) {
   const validated = validateProbe(rawProbe, options.limits);
   if (!validated.ok) {
@@ -322,30 +346,12 @@ export function runProbe(rawProbe, options = {}) {
     };
   }
   const probe = validated.probe;
-  const workDir = options.workDir || fs.mkdtempSync(path.join(os.tmpdir(), "stocky-probe-"));
-  fs.mkdirSync(workDir, { recursive: true });
-  const env = buildSandboxEnv({
-    subjectRoot: options.subjectRoot || workDir,
-    probeRoot: workDir,
-    pg: options.pg,
-    redis: options.redis,
-    extra: options.extraEnv,
+  const isolationMode = options.isolationMode || "docker";
+  if (HOST_ISOLATION_MODES.includes(isolationMode)) {
+    return runHostProbe(probe, options);
+  }
+  return runIsolatedProbe(probe, {
+    ...options,
+    requireProvenance: options.requireProvenance === true,
   });
-  if (options.injectCanaryEnv) {
-    // Canary must NOT be copied into child env. Intentionally omitted.
-  }
-  let executor;
-  if (probe.kind === "sql") executor = runSqlProbe(probe, env);
-  else if (probe.kind === "redis") executor = runRedisProbe(probe, env);
-  else if (probe.kind === "node_script") {
-    executor = runNodeScriptProbe(probe, {
-      env,
-      workDir,
-      disablePreload: options.disablePreload === true,
-    });
-  } else if (probe.kind === "zero_test_control") executor = runZeroTestControl();
-  else {
-    return { ok: false, validation: resultErr("unknown_probe_kind", probe.kind) };
-  }
-  return { ok: true, probe, executor, workDir };
 }

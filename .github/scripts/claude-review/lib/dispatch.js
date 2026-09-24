@@ -209,10 +209,20 @@ export function prepareStateDir(baseDir, decision) {
   writeEvidencePack(path.join(baseDir, "evidence"), {
     "README.txt": "Trusted evidence pack. Broker may only read these files.",
   });
-  fs.writeFileSync(
-    path.join(baseDir, "mcp.json"),
-    JSON.stringify(mcpConfig({ brokerPath: BROKER_BIN, stateDir: baseDir }), null, 2),
-  );
+  if (decision.work_order && decision.lease) {
+    files["provenance.json"] = {
+      task_id: decision.work_order.task_id,
+      attempt: decision.lease.attempt,
+      dispatch_key: decision.work_order.dispatch_key,
+      authority_comment_id: decision.work_order.authority_comment_id,
+      head: decision.work_order.subject?.head,
+      base: decision.work_order.subject?.base,
+      pr: decision.work_order.subject?.pr,
+      max_probes: decision.work_order.max_probes,
+      max_sandbox_seconds: decision.work_order.max_sandbox_seconds,
+    };
+  }
+  rewriteMcpConfig(baseDir);
   for (const [name, value] of Object.entries(files)) {
     if (value == null) continue;
     const dest = path.join(baseDir, name);
@@ -222,6 +232,13 @@ export function prepareStateDir(baseDir, decision) {
     );
   }
   return baseDir;
+}
+
+export function rewriteMcpConfig(stateDir) {
+  fs.mkdirSync(stateDir, { recursive: true });
+  const cfg = mcpConfig({ brokerPath: BROKER_BIN, stateDir });
+  fs.writeFileSync(path.join(stateDir, "mcp.json"), JSON.stringify(cfg, null, 2));
+  return cfg;
 }
 
 function finalize(decision, event) {

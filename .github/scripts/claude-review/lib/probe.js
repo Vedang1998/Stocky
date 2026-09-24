@@ -13,6 +13,11 @@ export function validateProbe(probe, limits = {}) {
   if (!probe || typeof probe !== "object" || Array.isArray(probe)) {
     return resultErr("invalid_probe", "probe must be an object");
   }
+  const allowed = new Set(["kind", "timeout_seconds", "sql", "redis", "node_script", "expect"]);
+  const extra = Object.keys(probe).filter((k) => !allowed.has(k));
+  if (extra.length) {
+    return resultErr("probe_extra_keys", "probe contains disallowed keys", { extra });
+  }
   const kind = probe.kind;
   const timeout = probe.timeout_seconds ?? limits.max_sandbox_seconds ?? MAX_SANDBOX_SECONDS;
   if (!Number.isInteger(timeout) || timeout < 1 || timeout > MAX_SANDBOX_SECONDS) {

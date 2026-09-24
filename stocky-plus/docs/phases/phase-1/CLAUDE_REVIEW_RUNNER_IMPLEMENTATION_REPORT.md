@@ -1,8 +1,8 @@
-# CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01
+# CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01 / R1
 
-**Status:** Implementation complete — independent tooling review not started
-**Implementer:** Cursor (cloud agent)
-**Label:** `READY FOR INDEPENDENT RUNNER REVIEW` is withheld from this documentation-sync commit. It may be applied only after exact-head Classify + full Heavy + CI Gate SUCCESS on the live PR head that includes this file. Do not treat this commit as self-certifying.
+**Status:** R1 security-boundary correction implemented on PR #62. `READY FOR INDEPENDENT RUNNER REVIEW` is withheld from this file until exact-head Classify + full Heavy + CI Gate **and** the `isolation_proof` job have SUCCESS on the live PR head that includes this correction. Do not treat this commit as self-certifying. Do not embed this commit's own SHA here.
+
+**Implementer:** Cursor (cloud agent), same writer as original RUNNER-01 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`). No competing writers.
 
 ## Identity
 
@@ -11,29 +11,32 @@
 | Tool | Cursor |
 | Actual model | cursor-grok-4.6-xhigh |
 | Actual run | https://cursor.com/agents/bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`) |
-| Dispatch-Key | `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation` |
-| Chat | NEW dedicated Issue61 / RUNNER-01 implementation (not PR45/50/53/54/issue60) |
+| Original Dispatch-Key | `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation` |
+| R1 Dispatch-Key | `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R1:1433281753670762394a44ee9c25514a8b1d86bc:cursor-correction` |
+| Authority | issue61 work order `5806021611` + admission `5806012938`; R1 intent/journal `5807860348` |
+| Chat | EXISTING RUNNER-01 author role/session (same run id as original implementation) |
 | Working location | isolated repository-root checkout; application `stocky-plus/` |
-| Branch | `cursor/tooling-claude-executable-review-runner-61-7492` (requested `tooling/claude-executable-review-runner-61` plus required platform `cursor/` prefix and `-7492` suffix) |
+| Branch | `cursor/tooling-claude-executable-review-runner-61-7492` |
 | Base M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` |
 | Pull request | [#62](https://github.com/Vedang1998/Stocky/pull/62) draft against `main` |
-| Activation | **not** performed. Live Claude workflow / workflow_dispatch / credentialed e2e **not executed** |
+| R1 input head | `1433281753670762394a44ee9c25514a8b1d86bc` (parent of this correction) |
+| Activation | **not** performed. Live Claude / `workflow_dispatch` of this runner / credentialed e2e **not executed** |
 
-This documentation-sync commit records CI identities for the last full-Heavy implementation head. It does **not** embed its own future SHA.
+This documentation records CI identities for already-observed heads. It does **not** embed its own future SHA.
 
 ## Git head distinction
 
 | Role | SHA | Notes |
 |---|---|---|
-| Starting main / authorized M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` | PR58 squash; live `origin/main` when this packet was written |
-| Runtime/test implementation | `a1c52735f91727cdb76f0a7ffebeb56b96241bd0` | dispatcher, workflows, sandbox, tests |
-| Last full-Heavy implementation head | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | includes runtime plus authoring docs; exact-head CI below |
+| Starting main / authorized M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` | live `origin/main` at R1 start |
+| Runtime/test implementation (original) | `a1c52735f91727cdb76f0a7ffebeb56b96241bd0` | first dispatcher/workflows/sandbox/tests |
+| Last full-Heavy head before docs sync | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | exact-head CI run 35946198137 |
+| Documentation finalization / R1 input | `1433281753670762394a44ee9c25514a8b1d86bc` | exact-head CI run 35950974549 |
+| R1 runtime/test correction | this correction commit after it exists | parent is `1433281`; do not claim this commit's SHA here |
 | Reviewed implementation head | none | independent Claude tooling review has not started |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
-| Documentation finalization | this commit after it exists | live PR head will differ from `7139a10`; do not claim this commit's SHA here |
-| Live PR head at `7139a10` CI | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | matched run `35946198137` |
 
-### Commit classification since M
+### Commit classification since M (including R1 parent)
 
 | SHA | Class | Headline |
 |---|---|---|
@@ -41,146 +44,131 @@ This documentation-sync commit records CI identities for the last full-Heavy imp
 | `a1c52735f91727cdb76f0a7ffebeb56b96241bd0` | runtime + test | add bounded Claude executable review runner |
 | `7548f439b3c54013ed579a2ffa50926ac5cfb5f8` | documentation | record RUNNER-01 authoring evidence packet |
 | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | documentation | strip trailing whitespace from runner runbook and report |
-| this documentation sync | documentation | record PR62 / exact-head CI identities for `7139a10` |
+| `1433281753670762394a44ee9c25514a8b1d86bc` | documentation | record PR62 / exact-head CI identities for `7139a10` |
+| this R1 correction | runtime + test + documentation | security-boundary repair (isolation, provenance, publication) |
 
 No empty retrigger. No independent review report. No schema/migration. No `ci.yml` change.
 
-## Summary
+## R1 blocking findings (reproduced on `1433281`)
 
-Implemented the bounded executable Claude review runner inside the frozen envelope in `stocky-plus/docs/agents/CLAUDE_EXECUTABLE_REVIEW_RUNNER.md`.
+Direct inspection of live-head code before this correction:
 
-The owner `@claude ` communication route is preserved and hardened: immutable numeric actor bind (`278831488`), write-authority check, full-length action SHA pins, `show_full_output: false`, no paid API fallback, no `allowed_bots` / `allowed_non_write_users`, agent-mode prompts so tag-mode git Bash is not auto-attached, comment body passed only as `COMMENT_BODY` env into Node (never interpolated into `run:`).
+1. MCP `run_probe` called `runProbe` → host `spawnSync` (`lib/sandbox.js`). Docker helpers were argv-only. `bin/sandbox.mjs` used the host executor. Model-requested Node probes would run in the OAuth/write job.
+2. `claude-review-execution.yml` was a parallel `workflow_dispatch` path, not the broker boundary, and lacked task/head/attempt/authority/lease provenance.
+3. `publisher.js` validators existed, but `main.yml` ran the vendor action in a write-capable job with no post-model trusted publication step.
+4. Final result `5807668161` recorded Docker/image-digest/kernel isolation as **not executed** and still labeled READY.
+5. Mutable `postgres:16-alpine` / `redis:7-alpine` tags were not immutable digest evidence.
 
-Executable review is a separate structured work order (`STOCKY_REVIEW_TASK_V1`) that remains **inactive** until repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`. Claude, when later admitted, gets only the task-local MCP broker (`get_evidence`, `read_subject`, `run_probe`, `checkpoint`). Probes run in a secret-stripped sandbox with a userland preload jail (and a Docker argv contract for GitHub-hosted runners). Publication is a trusted Node path with sole-parent / allowlisted-path checks.
+These were not relabeled P3.
 
-This is tooling, not PR7 / application runtime.
+## R1 correction (what now enforces the contract)
 
-## Requirements completed
+### Finding 1 — probe isolation on the accepted path
 
-Mapped to issue61 / RUNNER-01 command:
+- `runProbe` production default is `isolationMode: "docker"` → `runIsolatedProbe`.
+- Host `spawnSync` remains only for `HOST_ISOLATION_MODES` (`host-unit`, `host-enforcement-control`) used by unit tests and the disable-control.
+- MCP broker always passes `isolationMode: "docker"` and `requireProvenance: true`, and rejects model-supplied `isolationMode` / `dockerBin` / `disablePreload`.
+- Untrusted Node runs in `node@sha256:…` with `--cap-drop ALL`, `--read-only`, user `65534:65534`, subject `:ro`, `--internal` network. Docker CLI is invoked with `dockerCliEnv()` so controller OAuth/GitHub tokens are not inherited.
+- Missing Docker is `isolation_unavailable` (provisioning failed / BLOCKED), not a host-process fallback.
 
-1. Evidence access — dispatcher fetches permission, PR, authority comment via read-only GitHub client; locators are not proof.
-2. Reproducible profile — Node 22.19.0 / npm 11.5.2 / PostgreSQL 16 / Redis 7; synthetic credentials distinct from `ci.yml`.
-3. Credential and write separation — OAuth only on Claude steps; execution workflow has no OAuth; sandbox strips tokens; publisher is separate.
-4. Residual hardening — actor id bind, SHA pins, debug-off, restricted publication.
-5. Bounds — 60m/40 turns, 20m sandbox job, ≤2 probes, 1200s probe ceiling, checkpoints, no paid fallback.
-6. Session/dedup — dispatch_key lease, STOP, lost-ACK readback; GitHub concurrency is not treated as exactly-once.
-7. Return/proof — result comments carry executor metadata; model PASS is ignored as a gate.
-8. Authoring proofs — 70 node:test cases + actionlint + YAML + classifier; live Claude **not** run.
+### Finding 2 — one real secret-free executor
 
-## Files changed
+- MCP `run_probe` **is** `lib/isolated-executor.js`. It does not dispatch `claude-review-execution.yml`.
+- `claude-review-execution.yml` `pull_request` job `isolation_proof` is the credential-free kernel/container proof of that same executor.
+- `workflow_dispatch` `operator_replay` is **non-authoritative**, activation-gated, provenance-bound (`--require-provenance`), and checks out the **trusted workflow ref**, not `inputs.subject_head`. Missing SHA/task fields fail closed.
+- Executable job rewrites `mcp.json` (`--phase rewrite-mcp`) so broker paths bind to **this job's** `runner.temp`, not the ingress job's.
 
-### Workflows
+### Finding 3 — trusted publication
 
-- `.github/workflows/main.yml` blob at `7139a10`: `2a73aca804117ad742f51acc1c6922ad9f39f79f`
-- `.github/workflows/claude-review-execution.yml` blob at `7139a10`: `d2e338f8d050ed8935278300963dd23996f51fae`
+- Jobs split: `ingress` (no OAuth) → `executable` (`contents: read`, no `id-token: write`, OAuth + explicit `github_token: ${{ github.token }}`) → `publish` (write, **no OAuth**, `publish-from-state`).
+- Inspected vendor `src/github/token.ts` at `8cf34825…`: empty `OVERRIDE_GITHUB_TOKEN` mints an App token with contents/issues/PR **write**, bypassing job permissions. R1 therefore always passes `github.token` and omits `id-token: write` on the executable job.
+- Publisher loads only `PUBLISH_STATE_FILES`, separates executor metadata from model text, rejects host-process backends, gate-override text, stale head, malformed JSON, oversized artifacts, foreign parent, and `main` writes. Only the publisher posts the result comment.
 
-### Helper / tests
+### Finding 4 — isolation proof
 
-- `.github/scripts/claude-review/**` (dispatcher, authority, evidence, sandbox, MCP broker, publisher, fixtures, tests)
+- `bin/isolation-proof.mjs`: disable-control (`host-enforcement-control` + `disablePreload`) must revive a host-canary read; production Docker path must fail canary/`docker.sock`/secret-env reads; SQL positive + negative + zero-test; image inspect; hash-check `isolated-executor.js` and `sandbox.js`.
+- Authoring VM: Docker missing → exit 2 `BLOCKED` (recorded, not treated as production proof).
+- Production proof is the GHA `isolation_proof` job on this PR (ubuntu-latest has Docker). READY is not claimed without that job SUCCESS.
 
-### Documentation (allowed)
+### Finding 5 — image provenance
 
-- `stocky-plus/docs/agents/CLAUDE_EXECUTABLE_REVIEW_RUNNER.md` blob at `7139a10`: `ff9dda2cec19f43794ee03b66a924668e3aeea51`
-- `stocky-plus/docs/phases/phase-1/CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT.md` blob at `7139a10`: `712968aa16b48846b87f07b21a99f1930562bd8d` (superseded by this documentation sync)
+`IMAGE_PINS` (Docker Hub tag API, 2026-09-24 UTC). Executor uses `name@sha256:…` only:
 
-No `ci.yml`, app, Prisma, product, or governance-file edits. Forty paths vs M at `7139a10`.
+| Image | Locator (not used to pull) | Manifest-list digest |
+|---|---|---|
+| postgres | `postgres:16-alpine` | `sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea` |
+| redis | `redis:7-alpine` | `sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499` |
+| node | `node:22.19.0-bookworm-slim` | `sha256:4a4884e8a44826194dff92ba316264f392056cbe243dcc9fd3551e71cea02b90` |
 
-## Database and migration work
+`sandbox/Dockerfile` is explicitly non-authoritative and is not built.
 
-None (synthetic local PostgreSQL/Redis for authoring probes only).
+## Files changed (allowed envelope only)
 
-## Safety and tenancy evidence
+- `.github/workflows/main.yml`
+- `.github/workflows/claude-review-execution.yml`
+- `.github/scripts/claude-review/**`
+- `stocky-plus/docs/agents/CLAUDE_EXECUTABLE_REVIEW_RUNNER.md`
+- `stocky-plus/docs/phases/phase-1/CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT.md`
 
-- Owner bind: login + numeric id `278831488` + `User` + write permission.
-- Subject snapshot is data; hooks/`.npmrc`/Makefile of the subject are not executed on the controller.
-- Probe kinds `npm_install` / `shell` / `http` denied.
-- Preload jail denies host canaries, docker.sock, fetch, and non-allowlisted modules.
-- Docker socket is not in docker run argv; networks requested with `--internal`.
-- Publisher refuses `main`, `..` paths, gate-override text, missing parent SHA.
-- Enforcement-disable tests mutate a **copy** of `isInsideRoot` / disable preload, revive the prohibited outcome, then hash-check the original files.
+No `ci.yml`, app, Prisma, product, or governance-file edits.
 
-### Honest residuals
+## Safety residuals (honest)
 
-- `claude-code-action@8cf34825…` still injects git credentials in agent mode. Isolation of that token from the model depends on tool deny, not a credential-free model plane.
-- Authoring host: Docker missing; `unshare -n` Operation not permitted. Process jail + argv contract executed; kernel/container isolation **not executed** here.
-- Live authenticated coordinator→runner→readback e2e **not executed** (gated).
+- Vendor action still calls `configureGitAuth` in agent mode. On the **executable** path the injected token is the job-scoped `github.token` with `contents: read` and cannot be upgraded via OIDC because `id-token: write` is omitted. A Bash jailbreak still could not contents-write; it is not a credential-free model plane.
+- Simple `@claude` communication remains a write-capable job (not the executable-review path).
+- Authoring host has no Docker and cannot `unshare -n`. Local isolation-proof is BLOCKED; GHA `isolation_proof` is the accepted mechanism.
+- Live authenticated coordinator→runner→readback e2e remains gated (activation unset).
 
-## Commands executed (authoring host)
+## Commands executed (authoring host, R1) — fill after proofs
 
-| Command | Exit | Status | Notes |
-|---|---:|---|---|
-| `actionlint -shellcheck= .github/workflows/main.yml .github/workflows/claude-review-execution.yml` | 0 | executed and passed | actionlint 1.7.7 |
-| `python3` YAML `safe_load_all` both workflows | 0 | executed and passed | PyYAML |
-| `node --test tests/*.test.js` | 0 | executed and passed | **70 pass / 0 fail** (re-run after CI on `7139a10`: same 70/0) |
-| `bash .github/scripts/claude-review/bin/run-all-proofs.sh` | 0 | executed and passed | includes classifier self-test 40/40 |
-| `bash .github/scripts/classify-ci-change-set.test.sh` | 0 | executed and passed | unmodified |
-| `bash .github/scripts/classify-ci-change-set.sh --from-git M 7139a10` | 0 | executed and passed | `docs_only=false` `full_ci=true` `changed_path_count=40` `classification_reason=non_docs_or_unknown_path` |
-| `git diff --check M 7139a10` | 0 | executed and passed | no whitespace errors |
-| Live Claude / `workflow_dispatch` of this runner | — | **not executed** | activation gated |
-| Docker image digest pin | — | **not executed** | docker missing |
+Historical proofs on `7139a10` / `1433281` remain valid for those SHAs only. R1 re-runs task-local tests and classifier on the working tree. Exact commands/exits are recorded in the R1 `STOCKY_TASK_RESULT_V1` after execution.
 
-Observed authoring versions: Node `v22.19.0`, npm `11.5.2`, PostgreSQL `16.15`, Redis `7.0.15`.
+Planned vs executed distinction for R1 proofs:
 
-## Exact-head CI on implementation head `7139a10`
+| Check | Plan |
+|---|---|
+| `node --test tests/*.test.js` | execute on authoring host |
+| `actionlint` + YAML parse | execute on authoring host |
+| classifier self-test 40/40 | execute (unmodified) |
+| `classify-ci-change-set.sh --from-git M <working tree>` | execute; expect `full_ci=true` |
+| `git diff --check` | execute |
+| `isolation-proof.mjs` locally | expected BLOCKED (no Docker) |
+| GHA `isolation_proof` | execute automatically on push; required for READY |
+| Exact-head Classify + Heavy + CI Gate | wait; pending is not success |
+| Live Claude / runner `workflow_dispatch` | **not executed** |
 
-Observed after draft PR #62 opened. No stamp-only retry. No cancelled or failed runs on this SHA.
+## Historical exact-head CI (preserved; not R1 live head)
+
+### Implementation head `7139a10`
 
 | Item | Value |
 |---|---|
 | Event | `pull_request` |
-| Workflow | CI |
-| Run | [35946198137](https://github.com/Vedang1998/Stocky/actions/runs/35946198137) |
-| `head_sha` | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` (equals live PR head at that time) |
-| Conclusion | `success` |
-| Classify job | [107464562947](https://github.com/Vedang1998/Stocky/actions/runs/35946198137/job/107464562947) SUCCESS |
-| Heavy job | [107464591535](https://github.com/Vedang1998/Stocky/actions/runs/35946198137/job/107464591535) SUCCESS (not skipped) |
-| CI Gate job | [107478064855](https://github.com/Vedang1998/Stocky/actions/runs/35946198137/job/107478064855) SUCCESS |
+| Run | [35946198137](https://github.com/Vedang1998/Stocky/actions/runs/35946198137) SUCCESS |
+| Classify | [107464562947](https://github.com/Vedang1998/Stocky/actions/runs/35946198137/job/107464562947) SUCCESS |
+| Heavy | [107464591535](https://github.com/Vedang1998/Stocky/actions/runs/35946198137/job/107464591535) SUCCESS (not skipped) |
+| Gate | [107478064855](https://github.com/Vedang1998/Stocky/actions/runs/35946198137/job/107478064855) SUCCESS `full_ci=true` |
 
-Classify log (job 107464562947):
+### Docs-finalization / R1 input `1433281`
 
-- `pr_base_sha=c0dd99c5641692098b7a08dce3a53d21e22391a8`
-- `pr_head_sha=7139a10e3e9e3f1184ff56d7cc8d68f458a63d68`
-- `changed_path_count=40`
-- `classification_reason=non_docs_or_unknown_path`
-- `docs_only=false`
-- `full_ci=true`
+| Item | Value |
+|---|---|
+| Event | `pull_request` |
+| Run | [35950974549](https://github.com/Vedang1998/Stocky/actions/runs/35950974549) SUCCESS |
+| Classify | [107479243890](https://github.com/Vedang1998/Stocky/actions/runs/35950974549/job/107479243890) SUCCESS (`changed_path_count=40`, `full_ci=true`) |
+| Heavy | [107479268816](https://github.com/Vedang1998/Stocky/actions/runs/35950974549/job/107479268816) SUCCESS (not skipped) |
+| Gate | [107492660014](https://github.com/Vedang1998/Stocky/actions/runs/35950974549/job/107492660014) SUCCESS |
 
-CI Gate log (job 107478064855):
+R1 live-head CI identities are recorded in the task result after the correction push; they are not this file's own SHA.
 
-```
-classify_result=success
-validate_result=success
-full_ci=true
-docs_only=false
-CI Gate SUCCESS: full validate succeeded
-```
+## Original RUNNER-01 authoring (pre-R1, SHA-bound)
 
-Superseded failed/cancelled CI on this branch: none observed (`gh run list` returned only run `35946198137` for this SHA).
-
-A later documentation-sync commit moves the live PR head. Exact-head CI for that new head is required before the READY label. Classification vs M remains `full_ci=true` because `.github/**` paths are still in the PR.
-
-## Tests added
-
-70 `node:test` cases covering: owner/task vs wrong actor/role/repo/head; fetched vs claimed; edited authority; stale head; duplicate dispatch; STOP; concurrent lease; malicious JSON/shell text; hook/package fixtures; path/symlink/tar escapes; canary env/file; docker.sock; blocked fetch; positive SQL+Redis+node; failing SQL; zero-test control; timeout; oversized source; false claimed success; publisher local remote; foreign/missing parent; enforcement disable + restore hash.
-
-## Deviations
-
-- Branch name uses required platform prefix/suffix rather than the bare requested name; disclosed above.
-- Secret-free execution workflow is `workflow_dispatch` only (no auto chain), as required.
-
-## Known failures and unresolved findings
-
-- Exact-head Classify + Heavy + CI Gate on the live head **after this documentation sync**: pending at write time of this file.
-- Docker-backed sandbox on GHA: implemented as argv/Dockerfile, **not executed** on the authoring host.
-- Vendor action git-credential residual: documented, not closed.
-- Historical PR58 Heavy timing benchmark: **not repaired** (out of scope).
-- Live authenticated coordinator→runner→readback e2e: **not executed**.
+On `7139a10`: `node --test` **70 pass / 0 fail**; actionlint 1.7.7 exit 0; YAML parse exit 0; classifier 40/40; Node v22.19.0; npm 11.5.2; PostgreSQL 16.15; Redis 7.0.15. Those counts do not describe the R1 tree.
 
 ## Claude review handoff
 
-Review the exact live PR head after green exact-head CI on that head. Do not let this runner review itself. Verify pins, tool isolation, sandbox, publisher, and that activation remains off. Treat `7139a10` as the last full-Heavy **implementation** head already observed; re-verify the documentation-sync head separately.
+Review the exact live PR head after green exact-head CI **and** green `isolation_proof` on that head. Do not let this runner review itself. Verify Docker is the MCP `run_probe` executor, publisher is a separate no-OAuth job, image refs are digest-pinned, and activation remains off.
 
 ## Explicit stop
 
-No other PR was started, merged, or closed. Application runtime, Shopify, `ci.yml`, and production were not touched. The PR remains draft. The runner is not activated.
+No other PR was started, merged, or closed. Application runtime, Shopify, `ci.yml`, and production were not touched. The PR remains draft. The runner is not activated. `STOCKY_CLAUDE_REVIEW_RUNNER` was not set.

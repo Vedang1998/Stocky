@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { MAX_EVIDENCE_FILE_BYTES } from "./constants.js";
 import { resolveContained, walkAndRejectEscapes } from "./fs-guard.js";
-import { resultErr, resultOk, sha256Hex } from "./util.js";
+import { resultErr, resultOk, sha256Hex, isFullSha } from "./util.js";
 import { sanitizePublicText } from "./sanitize.js";
 
 export function writeEvidencePack(dir, files) {
@@ -90,6 +90,27 @@ export function extractSubjectTarball(tarballPath, dest) {
   const walk = walkAndRejectEscapes(dest);
   if (!walk.ok) return walk;
   return resultOk({ dest, entries: names.length });
+}
+
+export async function snapshotSubjectTarball(github, { owner, repo, sha, dest }) {
+  if (!isFullSha(sha)) {
+    return resultErr("invalid_subject_sha", "subject sha must be full length");
+  }
+  const buf = await github.getBuffer(`/repos/${owner}/${repo}/tarball/${sha}`, {
+    Accept: "application/vnd.github+json",
+  });
+  const tarPath = path.join(path.dirname(dest), `subject-${sha}.tar.gz`);
+  fs.writeFileSync(tarPath, buf);
+  const extracted = extractSubjectTarball(tarPath, dest);
+  if (!extracted.ok) return extracted;
+  const entries = fs.readdirSync(dest);
+  if (entries.length === 1) {
+    const inner = path.join(dest, entries[0]);
+    if (fs.statSync(inner).isDirectory()) {
+      return resultOk({ dest: inner, sha, wrapped: true });
+    }
+  }
+  return resultOk({ dest, sha, wrapped: false });
 }
 
 export function copySubjectFixture(src, dest) {

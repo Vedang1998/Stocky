@@ -7,11 +7,18 @@ import { fileURLToPath } from "node:url";
 import {
   CHECKOUT_PIN,
   CLAUDE_ACTION_PIN,
+  DOWNLOAD_ARTIFACT_PIN,
+  IMAGE_PINS,
   OWNER_ID,
   SETUP_NODE_PIN,
+  UPLOAD_ARTIFACT_PIN,
 } from "../lib/constants.js";
-import { runProbe } from "../lib/sandbox.js";
+import { runProbe as runProbeImpl } from "../lib/sandbox.js";
 import { classifyExecutorResult } from "../lib/verdict.js";
+
+function runProbe(probe, options = {}) {
+  return runProbeImpl(probe, { isolationMode: "host-unit", ...options });
+}
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -25,6 +32,8 @@ describe("workflow pins and comment isolation", () => {
     assert.match(main, new RegExp(CLAUDE_ACTION_PIN.sha));
     assert.match(main, new RegExp(CHECKOUT_PIN.sha));
     assert.match(main, new RegExp(SETUP_NODE_PIN.sha));
+    assert.match(main, new RegExp(UPLOAD_ARTIFACT_PIN.sha));
+    assert.match(main, new RegExp(DOWNLOAD_ARTIFACT_PIN.sha));
     assert.match(main, new RegExp(String(OWNER_ID)));
     assert.equal(main.includes("allowed_bots:"), false);
     assert.equal(main.includes("allowed_non_write_users:"), false);
@@ -39,11 +48,29 @@ describe("workflow pins and comment isolation", () => {
         `run: line interpolates comment body: ${line}`,
       );
     }
+    assert.match(main, /github_token: \$\{\{ github\.token \}\}/);
+    assert.match(main, /^  executable:/m);
+    assert.match(main, /^  publish:/m);
+    assert.match(main, /^  simple:/m);
+    const execJob = main.split(/^  executable:/m)[1].split(/^  publish:/m)[0];
+    assert.match(execJob, /contents: read/);
+    assert.equal(execJob.includes("contents: write"), false);
+    assert.equal(execJob.includes("id-token: write"), false);
+    assert.equal(execJob.includes("secrets.CLAUDE_CODE_OAUTH_TOKEN"), true);
+    const publishJob = main.split(/^  publish:/m)[1].split(/^  publish_reject:/m)[0];
+    assert.equal(publishJob.includes("secrets.CLAUDE_CODE_OAUTH_TOKEN"), false);
+    assert.match(publishJob, /contents: write/);
+    assert.match(publishJob, /publish-from-state/);
     assert.match(exec, /workflow_dispatch/);
+    assert.match(exec, /pull_request:/);
     assert.equal(/^\s+pull_request_target:/m.test(exec), false);
     assert.equal(/^\s+workflow_run:/m.test(exec), false);
     assert.equal(exec.includes("secrets.CLAUDE_CODE_OAUTH_TOKEN"), false);
-    assert.match(exec, /stocky_review_ci_only/);
+    assert.match(exec, /isolation-proof/);
+    assert.match(main, /rewrite-mcp/);
+    assert.equal(exec.includes("ref: ${{ inputs.subject_head }}"), false);
+    const iso = fs.readFileSync(path.join(ROOT, "scripts/claude-review/lib/constants.js"), "utf8");
+    assert.match(iso, new RegExp(IMAGE_PINS.postgres.digest.replace("sha256:", "sha256:")));
     assert.doesNotMatch(exec, /stocky_plus_ci/);
   });
 });

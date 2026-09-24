@@ -1,12 +1,37 @@
-name: Claude review execution (secret-free)
+name: Claude review isolated executor
 
-# Operator replay of a validated probe after STOCKY_CLAUDE_REVIEW_RUNNER=admitted.
-# Not auto-triggered. No pull_request_target, workflow_run, or issue_comment.
-# Does not receive CLAUDE_CODE_OAUTH_TOKEN.
+# Secret-free isolation proof and provenance-bound operator replay.
+# This workflow is NOT the comment-ingress controller and does not receive
+# CLAUDE_CODE_OAUTH_TOKEN. MCP run_probe uses lib/isolated-executor.js; this
+# workflow calls the same executor. workflow_dispatch without provenance fails.
+# No pull_request_target, no workflow_run.
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/claude-review-execution.yml"
+      - ".github/workflows/main.yml"
+      - ".github/scripts/claude-review/**"
   workflow_dispatch:
     inputs:
+      subject_head:
+        description: "Full 40-hex subject HEAD (required provenance)"
+        required: true
+      subject_base:
+        description: "Full 40-hex subject BASE"
+        required: true
+      task_id:
+        description: "Admitted task_id"
+        required: true
+      attempt:
+        description: "Lease attempt id"
+        required: true
+      authority_comment_id:
+        description: "Authority comment numeric id"
+        required: true
+      dispatch_key:
+        description: "Dispatch-key bound to the task"
+        required: true
       probe_kind:
         description: "sql | redis | node_script | zero_test_control"
         required: true
@@ -23,45 +48,14 @@ on:
 permissions: {}
 
 jobs:
-  sandbox:
-    if: >-
-      github.repository == 'Vedang1998/Stocky' &&
-      vars.STOCKY_CLAUDE_REVIEW_RUNNER == 'admitted'
+  isolation_proof:
+    if: github.repository == 'Vedang1998/Stocky' && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: stocky_review
-          POSTGRES_PASSWORD: stocky_review_ci_only
-          POSTGRES_DB: stocky_review_ci
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U stocky_review -d stocky_review_ci"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PGHOST: 127.0.0.1
-      PGPORT: "5432"
-      PGUSER: stocky_review
-      PGPASSWORD: stocky_review_ci_only
-      PGDATABASE: stocky_review_ci
     steps:
-      - name: Checkout trusted ref
+      - name: Checkout PR head as data (read-only credentials)
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 1
@@ -75,24 +69,45 @@ jobs:
       - name: Pin npm
         run: npm install -g npm@11.5.2
 
-      - name: Verify versions
-        run: |
-          node --version
-          test "$(node --version)" = "v22.19.0"
-          npm --version
-          test "$(npm --version)" = "11.5.2"
-          psql --version
-          redis-cli ping
-
-      - name: Record image versions
-        run: |
-          echo "postgres_image=postgres:16-alpine"
-          echo "redis_image=redis:7-alpine"
-          docker images --digests || true
-
-      - name: Run typed probe
+      - name: Isolated executor proof
         env:
+          SUBJECT_HEAD: ${{ github.event.pull_request.head.sha }}
+          SUBJECT_BASE: ${{ github.event.pull_request.base.sha }}
+        run: node .github/scripts/claude-review/bin/isolation-proof.mjs
+
+  operator_replay:
+    if: >-
+      github.repository == 'Vedang1998/Stocky' &&
+      github.event_name == 'workflow_dispatch' &&
+      vars.STOCKY_CLAUDE_REVIEW_RUNNER == 'admitted'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout trusted workflow ref (never the untrusted subject SHA)
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22.19.0"
+
+      - name: Pin npm
+        run: npm install -g npm@11.5.2
+
+      - name: Provenance-bound isolated probe
+        env:
+          SUBJECT_HEAD: ${{ inputs.subject_head }}
+          SUBJECT_BASE: ${{ inputs.subject_base }}
+          TASK_ID: ${{ inputs.task_id }}
+          ATTEMPT: ${{ inputs.attempt }}
+          AUTHORITY_COMMENT_ID: ${{ inputs.authority_comment_id }}
+          DISPATCH_KEY: ${{ inputs.dispatch_key }}
           PROBE_KIND: ${{ inputs.probe_kind }}
           PROBE_SQL: ${{ inputs.probe_sql }}
           PROBE_TIMEOUT: ${{ inputs.max_sandbox_seconds }}
-        run: node .github/scripts/claude-review/bin/sandbox.mjs
+        run: node .github/scripts/claude-review/bin/sandbox.mjs --require-provenance

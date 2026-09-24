@@ -4,12 +4,17 @@ import { spawnSync } from "node:child_process";
 import {
   EXPECTED_ARTIFACT_NAME,
   MAX_ARTIFACT_BYTES,
+  OWNER_LOGIN,
+  PUBLISH_STATE_FILES,
+  REPOSITORY,
   REVIEW_BRANCH_PREFIX,
   REVIEW_PATH_PREFIX,
 } from "./constants.js";
 import { looksLikeGateOverride, sanitizePublicText } from "./sanitize.js";
 import { parseLockMarker, readbackMatches, renderLockMarker } from "./session.js";
 import { isFullSha, resultErr, resultOk, sha256Hex } from "./util.js";
+import { detectStaleHead, fetchPull } from "./authority.js";
+import { combineTaskVerdict } from "./verdict.js";
 
 export function validateArtifact({ name, content, taskId }) {
   if (name !== EXPECTED_ARTIFACT_NAME) {
@@ -161,4 +166,132 @@ export function publisherReadback(body, lease) {
   return readbackMatches(body, marker);
 }
 
-export { parseLockMarker };
+export function loadPublisherInput(stateDir) {
+  const allow = new Set(PUBLISH_STATE_FILES);
+  const loaded = {};
+  for (const name of allow) {
+    const abs = path.join(stateDir, name);
+    if (!fs.existsSync(abs)) continue;
+    const buf = fs.readFileSync(abs);
+    if (name.endsWith(".json")) {
+      try {
+        loaded[name] = JSON.parse(buf.toString("utf8"));
+      } catch {
+        return resultErr("malformed_publisher_input", `${name} is not valid JSON`);
+      }
+    } else {
+      loaded[name] = buf.toString("utf8");
+    }
+  }
+  return resultOk({ loaded });
+}
+
+export function separateExecutorAndModel(loaded) {
+  const probes = Array.isArray(loaded["probes.json"]) ? loaded["probes.json"] : [];
+  const executor = probes.map((p) => ({
+    kind: p.probe?.kind,
+    backend: p.executor?.backend,
+    isolation: p.executor?.isolation,
+    exit_code: p.executor?.exit_code,
+    timed_out: p.executor?.timed_out,
+    tests_run: p.executor?.tests_run,
+    stdout_sha256: p.executor?.stdout_sha256,
+    classified: p.classified,
+  }));
+  const modelText = typeof loaded["model-result.md"] === "string" ? loaded["model-result.md"] : "";
+  const modelClaimsPass = /\bPASS\b/.test(modelText) || /"status"\s*:\s*"PASS"/i.test(modelText);
+  return { executor, modelText, modelClaimsPass };
+}
+
+export async function publishFromState({
+  stateDir,
+  github,
+  issueNumber,
+  repoDir,
+  publishBranch = false,
+}) {
+  const input = loadPublisherInput(stateDir);
+  if (!input.ok) return input;
+  const decision = input.loaded["decision.json"] || {};
+  const lease = input.loaded["lease.json"] || decision.lease;
+  if (!lease) {
+    return resultErr("missing_lease", "publisher requires lease provenance");
+  }
+  if (decision.work_order?.subject?.head) {
+    if (github) {
+      const [owner, repoName] = REPOSITORY.split("/");
+      const pr = await fetchPull(github, {
+        owner,
+        repo: repoName,
+        pr: decision.work_order.subject.pr,
+      });
+      const stale = detectStaleHead(decision.work_order.subject.head, pr.head);
+      if (!stale.ok) return stale;
+    }
+  }
+  const split = separateExecutorAndModel(input.loaded);
+  if (looksLikeGateOverride(split.modelText)) {
+    return resultErr("artifact_gate_override", "model output tries to alter gates");
+  }
+  const hostProbe = split.executor.find(
+    (p) =>
+      p.backend === "process" ||
+      (typeof p.isolation === "string" && p.isolation.startsWith("host-")),
+  );
+  if (hostProbe) {
+    return resultErr(
+      "host_backend_denied",
+      "trusted publication refuses host-process probe execution",
+    );
+  }
+  const combined = combineTaskVerdict({
+    activation: decision.admitted === true,
+    staleHead: false,
+    lease,
+    probes: split.executor.map((p) => p.classified || { verdict: "BLOCKED" }),
+    modelClaimsPass: split.modelClaimsPass,
+  });
+  const body = buildResultComment({
+    lease: { ...lease, status: combined.status },
+    status: combined.status,
+    body: [
+      "STOCKY_TASK_RESULT_V1",
+      `Status: ${combined.status}`,
+      `Reason: ${combined.reason}`,
+      "Executor metadata (trusted):",
+      JSON.stringify(split.executor, null, 2),
+      "Model narrative is not a gate and is not PASS.",
+      sanitizePublicText(split.modelText, 8000),
+    ].join("\n"),
+  });
+  fs.writeFileSync(path.join(stateDir, "result-comment.md"), body);
+  let comment = null;
+  if (github && issueNumber) {
+    const [owner, repoName] = REPOSITORY.split("/");
+    comment = await github.mutate("POST", `/repos/${owner}/${repoName}/issues/${issueNumber}/comments`, {
+      body,
+    });
+    const readback = await github.getJson(
+      `/repos/${owner}/${repoName}/issues/comments/${comment.id}`,
+    );
+    const ack = publisherReadback(readback.body, { ...lease, status: combined.status });
+    if (!ack.ok) return { ...ack, combined, posted: comment };
+  }
+  let branch = null;
+  if (publishBranch && decision.work_order?.publish_review_branch && repoDir) {
+    const named = validateBranchName(decision.work_order.task_id, lease.attempt);
+    if (!named.ok) return named;
+    const main = refuseMainWrite(named.branch);
+    if (!main.ok) return main;
+    branch = publishReviewBranch({
+      repoDir,
+      remote: "",
+      subjectSha: decision.work_order.subject.head,
+      taskId: decision.work_order.task_id,
+      attempt: lease.attempt,
+      artifactContent: split.modelText || "# review\n",
+    });
+    if (!branch.ok) return branch;
+  }
+  return resultOk({ combined, body, comment, branch, owner: OWNER_LOGIN });
+}

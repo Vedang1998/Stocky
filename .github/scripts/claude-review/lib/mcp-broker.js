@@ -4,13 +4,26 @@ import { readEvidence, readSubjectFile } from "./evidence.js";
 import { runProbe } from "./sandbox.js";
 import { checkpoint } from "./session.js";
 import { classifyExecutorResult } from "./verdict.js";
-import { MAX_PROBES } from "./constants.js";
+import { MAX_PROBES, SECRET_ENV_DENY } from "./constants.js";
 
 /**
  * Minimal MCP stdio broker. Tools only. No GitHub token. No OAuth.
+ * run_probe always uses the digest-pinned Docker executor.
  */
+export function scrubBrokerEnv(env = process.env) {
+  for (const key of SECRET_ENV_DENY) {
+    if (key in env) delete env[key];
+  }
+}
+
 export function createBroker(state) {
   const probes = [];
+  function persist() {
+    if (!state.workDir) return;
+    fs.mkdirSync(state.workDir, { recursive: true });
+    const dest = path.join(path.dirname(state.workDir), "probes.json");
+    fs.writeFileSync(dest, JSON.stringify(probes, null, 2));
+  }
   function getEvidence(args) {
     const name = String(args?.name ?? "");
     if (!name) return { ok: false, code: "missing_evidence_name" };
@@ -21,22 +34,35 @@ export function createBroker(state) {
     return readSubjectFile(state.subjectRoot, rel);
   }
   function run(args) {
+    if (
+      args &&
+      typeof args === "object" &&
+      ("isolationMode" in args || "dockerBin" in args || "disablePreload" in args)
+    ) {
+      return { ok: false, code: "probe_extra_keys", message: "model cannot select isolation mode" };
+    }
     if (probes.length >= (state.maxProbes ?? MAX_PROBES)) {
       return { ok: false, code: "probe_quota", message: "max_probes exhausted" };
     }
     const result = runProbe(args, {
+      isolationMode: "docker",
+      requireProvenance: true,
+      provenance: state.provenance,
+      probe_index: probes.length + 1,
+      maxProbes: state.maxProbes ?? MAX_PROBES,
       subjectRoot: state.subjectRoot,
       workDir: path.join(state.workDir, `probe-${probes.length + 1}`),
       limits: { max_sandbox_seconds: state.maxSandboxSeconds },
-      pg: state.pg,
-      redis: state.redis,
+      dockerBin: state.dockerBin,
     });
     if (result.ok) {
       const classified = classifyExecutorResult(result.probe, result.executor);
       probes.push({ ...result, classified });
+      persist();
       return { ok: true, probe: result.probe, executor: result.executor, classified };
     }
     probes.push(result);
+    persist();
     return result;
   }
   function saveCheckpoint(args) {
@@ -101,7 +127,7 @@ export function handleJsonRpc(broker, message) {
           },
           {
             name: "run_probe",
-            description: "Run one typed sandbox probe",
+            description: "Run one typed sandbox probe in the isolated executor",
             inputSchema: { type: "object" },
           },
           {

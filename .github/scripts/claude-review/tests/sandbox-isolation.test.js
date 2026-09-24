@@ -11,11 +11,15 @@ import {
   dockerArgsAreIsolated,
   dockerNetworkCreateArgs,
   dockerRunArgs,
-  runProbe,
+  runProbe as runProbeImpl,
   stripSecretEnv,
 } from "../lib/sandbox.js";
 import { validateProbe } from "../lib/probe.js";
 import { classifyExecutorResult } from "../lib/verdict.js";
+
+function runProbe(probe, options = {}) {
+  return runProbeImpl(probe, { isolationMode: "host-unit", ...options });
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES = path.resolve(HERE, "../fixtures");
@@ -25,6 +29,10 @@ describe("typed probe validation", () => {
     assert.equal(validateProbe({ kind: "npm_install" }).code, "probe_kind_denied");
     assert.equal(validateProbe({ kind: "shell" }).code, "probe_kind_denied");
     assert.equal(validateProbe({ kind: "http" }).code, "probe_kind_denied");
+    assert.equal(
+      validateProbe({ kind: "sql", sql: { text: "SELECT 1" }, isolationMode: "host" }).code,
+      "probe_extra_keys",
+    );
     assert.equal(
       validateProbe({ kind: "sql", sql: { text: "SELECT 1; DROP TABLE x" } }).code,
       "sql_multi_statement",

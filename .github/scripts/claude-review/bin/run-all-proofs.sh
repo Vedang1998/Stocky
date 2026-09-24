@@ -59,6 +59,19 @@ else
   pass "node:test"
 fi
 
+echo "=== isolated executor proof (Docker when present) ==="
+set +e
+node "${CR}/bin/isolation-proof.mjs"
+ISO_RC=$?
+set -e
+if [[ "${ISO_RC}" -eq 0 ]]; then
+  pass "isolation-proof executed"
+elif [[ "${ISO_RC}" -eq 2 ]]; then
+  echo "BLOCKED: isolation-proof docker unavailable on this host (GHA pull_request job is the production proof)"
+  pass "isolation-proof recorded BLOCKED locally"
+else
+  fail "isolation-proof exit ${ISO_RC}"
+fi
 echo "=== classifier self-test (unmodified) ==="
 bash "${ROOT}/.github/scripts/classify-ci-change-set.test.sh"
 pass "classifier self-test"
