@@ -123,7 +123,8 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(sqlRun, /--add-host pg:10\.29\.0\.2/);
     assert.match(sqlRun, /-e HOME=\/tmp/);
     assert.doesNotMatch(sqlRun, /--read-only/);
-    assert.match(sqlRun, /-h 10\.29\.0\.2/);
+    assert.match(argv, /pg_isready/);
+    assert.match(argv, /exec .* psql .* SELECT 1/);
     assert.doesNotMatch(argv, /docker\.sock/);
     assert.doesNotMatch(argv, /--privileged/);
     assert.doesNotMatch(argv, /GITHUB_TOKEN/);

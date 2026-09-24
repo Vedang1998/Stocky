@@ -492,12 +492,39 @@ export function runIsolatedProbe(probe, options = {}) {
     }
 
     if (
-      !waitForExec(dockerBin, ["exec", pgName, "pg_isready", "-U", SYNTHETIC_PG.user, "-d", SYNTHETIC_PG.database], 45_000)
+      !waitForExec(dockerBin, ["exec", pgName, "pg_isready", "-h", "127.0.0.1", "-U", SYNTHETIC_PG.user, "-d", SYNTHETIC_PG.database], 45_000)
     ) {
       return {
         ok: true,
         probe,
         executor: isolationUnavailable("postgres did not become ready"),
+      };
+    }
+    if (
+      !waitForExec(
+        dockerBin,
+        [
+          "exec",
+          "-e",
+          `PGPASSWORD=${SYNTHETIC_PG.password}`,
+          pgName,
+          "psql",
+          "-h",
+          "127.0.0.1",
+          "-U",
+          SYNTHETIC_PG.user,
+          "-d",
+          SYNTHETIC_PG.database,
+          "-c",
+          "SELECT 1",
+        ],
+        45_000,
+      )
+    ) {
+      return {
+        ok: true,
+        probe,
+        executor: isolationUnavailable("postgres did not accept sql"),
       };
     }
     if (

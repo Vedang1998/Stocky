@@ -211,7 +211,12 @@ GHA job [107629155252](https://github.com/Vedang1998/Stocky/actions/runs/3599851
 - `gateway_mutation_revived=false` — stdout `ECONNREFUSED` with an empty IP because the mutation still used `--internal` (no default route) and never passed the inspected gateway.
 - `sqlOk=false` — `sql_exit=2` empty stdout. Production SQL/Redis client containers inherited `--read-only` from `commonProbeArgs` (postgres/redis images declare VOLUME dirs). Sidecar readiness used `docker exec`, so ICC/DNS failures were hidden.
 
-This follow-up (same R2 scope): SQL/Redis clients are not `--read-only`; `HOME=/tmp`; sidecar IPv4 via `--add-host` and `-h <ip>`; `sql_stderr` recorded. Do not embed this follow-up commit's own SHA here.
+GHA job [107648297810](https://github.com/Vedang1998/Stocky/actions/runs/36004274002/job/107648297810) on `11693a6`:
+- `gateway_mutation_revived=true` — `CONNECTED 172.18.0.1 via env`
+- `gateway_production_not_connected=true` — `NO_GATEWAY`
+- `sqlOk=false` — first SQL client hit `172.18.0.1:5432` with `FATAL: the database system is starting up`. The following negative SQL probe connected and returned `relation does not exist` (exit 1), so ICC/SQL worked; `pg_isready` via unix socket was a false-ready.
+
+This follow-up waits for `psql -h 127.0.0.1 -c 'SELECT 1'` inside the sidecar before starting the client. Do not embed this follow-up commit's own SHA here.
 
 ### R62-05 — publish_reject gating
 
