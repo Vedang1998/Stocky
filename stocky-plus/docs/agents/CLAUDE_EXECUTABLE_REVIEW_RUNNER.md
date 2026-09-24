@@ -21,7 +21,8 @@
 | Last full-Heavy implementation head (pre-R1) | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` |
 | R1 input head | `1433281753670762394a44ee9c25514a8b1d86bc` |
 | R1 output / R2 input | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` |
-| R2 output head | later correction commit; do not embed that commit's own SHA here |
+| R2 first correction | `df6759278059e4d9899259d5e7c0d118db3bda2c` |
+| R2 isolation-proof follow-up | later commit; do not embed that commit's own SHA here |
 | Instruction loading | `AGENTS.md`, issue61, issue52 `5806012938`, this runbook, implementation report |
 
 This document freezes the file list, job/tool contract, command schema, and trust assumptions for RUNNER-01. Implementation must stay inside this envelope.
@@ -326,7 +327,7 @@ Executable concurrency: `claude-review-exec-<dispatch_key>`. Publish concurrency
 | Docker daemon (when present) | Trusted; **not** mounted into the probe container | Authoring VM has no Docker; GHA `isolation_proof` job is the kernel/container proof |
 | `claude-code-action` at pinned SHA | Reviewed; still calls `configureGitAuth` in agent mode | Mitigated on the executable path by passing `github_token: ${{ github.token }}` with `contents: read` and omitting `id-token: write` so the action cannot mint an App write token. Residual: a read-only job token is still injected into git config. Not equivalent to a credential-free model plane. Simple communication still uses a write-capable job. |
 | Node `--require` preload jail | Defense in depth inside the container; host-unit tests only | `process.binding` / native addons could bypass userland jail; Docker is the production plane |
-| Network `--internal` + `gateway_mode_ipv4=isolated` | Blocks default egress and host-bridge gateway from probe code | Image pulls happen on the trusted host docker network before sandbox create. Synthetic PG/Redis remain on the same ICC network. |
+| Network `--internal` + `gateway_mode_ipv4=isolated` | Blocks default egress and host-bridge gateway from probe code | Image pulls happen on the trusted host docker network before sandbox create. Synthetic PG/Redis remain on the same ICC network; SQL/Redis clients use inspected sidecar IPs (`--add-host` / `-h <ip>`) and are not `--read-only`. |
 | Evidence APIs | Dispatcher token can read the repo | Comment text is untrusted input |
 | Image digests | Manifest-list pins in `IMAGE_PINS`; executor pulls `name@sha256:…` | Pins recorded from Docker Hub tag API 2026-09-24. GHA `isolation_proof` must `docker image inspect` the resolved refs. Mutable tags are locators only. |
 
@@ -386,7 +387,7 @@ Independent review `5813026207` of `bbd3bbe` required these production-path repa
 | R62-01 | Named `--init --stop-timeout 1` detached `docker run -d`. Inspect-poll until exit or deadline, then `docker kill -s KILL`, logs, `rm -f`. `finally` removes `pg`/`redis`/`probe` + network. `timed_out` is persisted. Fake-docker busy-loop unit test is wall-clock bounded. |
 | R62-02 | MCP `submit_result` writes size-capped `stateDir/model-result.md`. Checkpoint writes `stateDir/checkpoint.json`. Publisher already loads those files into `result-comment.md`. |
 | R62-03 | `dispatch.mjs --phase validate` fetches comments, binds authority, POSTs lock. `--phase assert-lease` before Claude. STOP/duplicate/stale/edited-authority covered by mock-GitHub tests through the production entry. |
-| R62-04 | Network create adds `enable_ip_masquerade=false` and `gateway_mode_ipv4=isolated`. Isolation proof uses a host-listener canary with `new net.Socket` (preload is not the layer). Mutation `omit-gateway-isolated` must revive CONNECTED. |
+| R62-04 | Production network is `--internal` plus `enable_ip_masquerade=false` and `gateway_mode_ipv4=isolated`. Inspected bridge Gateway is passed as `STOCKY_BRIDGE_GATEWAY`. Mutation `omit-gateway-isolated` also drops `--internal` so a host-listener canary can revive CONNECTED. |
 | R62-05 | `publish_reject` requires `needs.ingress.result == 'success'` so skipped ingress (non-owner comments) does not start a write job. |
 | R62-06 | Exact-SHA snapshot runs before `invoke_claude` is written to `GITHUB_OUTPUT`. Extract failure sets `invoke_claude=false` and a deterministic rejection code. |
 | R62-07 | `isolation-proof.mjs` records per-control oracles: timeout/orphan, host-gateway + mutation, egress/IMDS, jail-bypass canary/socket/secrets, image pin inspect, file-hash restoration. Generic non-zero is not PASS. |

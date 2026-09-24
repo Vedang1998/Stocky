@@ -55,6 +55,9 @@ case "$1" in
   logs) echo ok; exit 0 ;;
   ps) exit 0 ;;
   inspect)
+    args="$*"
+    if echo "$args" | grep -q IPAddress; then echo "10.29.0.2"; exit 0; fi
+    if echo "$args" | grep -q Gateway; then echo "10.29.0.1"; exit 0; fi
     if [ -f "${hangFlag}" ]; then echo "true 0"; exit 0; fi
     echo "false 0"
     exit 0
@@ -108,12 +111,19 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(first.executor.backend, "docker");
     assert.equal(first.executor.isolation, "docker");
     const argv = fs.readFileSync(fake.log, "utf8");
-    assert.match(argv, /network create --driver bridge --internal/);
+    assert.match(argv, /network create --driver bridge --label/);
+    assert.match(argv, /--internal/);
     assert.match(argv, /gateway_mode_ipv4=isolated/);
     assert.match(argv, /--init/);
     assert.match(argv, /--name/);
     assert.match(argv, /postgres@sha256:/);
     assert.match(argv, /redis@sha256:/);
+    const sqlRun = argv.split("\n").find((line) => line.includes("entrypoint") && line.includes("psql")) || "";
+    assert.match(sqlRun, /--entrypoint psql/);
+    assert.match(sqlRun, /--add-host pg:10\.29\.0\.2/);
+    assert.match(sqlRun, /-e HOME=\/tmp/);
+    assert.doesNotMatch(sqlRun, /--read-only/);
+    assert.match(sqlRun, /-h 10\.29\.0\.2/);
     assert.doesNotMatch(argv, /docker\.sock/);
     assert.doesNotMatch(argv, /--privileged/);
     assert.doesNotMatch(argv, /GITHUB_TOKEN/);
@@ -125,6 +135,31 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(fs.existsSync(persisted), true);
     delete process.env.GITHUB_TOKEN;
     delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  });
+
+  it("omit-gateway-isolated mutation omits --internal from docker network create", () => {
+    const fake = writeFakeDocker();
+    process.env.STOCKY_ISOLATION_PROOF = "1";
+    process.env.STOCKY_ISOLATION_PROOF_MUTATION = "omit-gateway-isolated";
+    try {
+      const result = runProbe(
+        { kind: "sql", timeout_seconds: 15, sql: { text: "SELECT 1 AS ok" } },
+        {
+          isolationMode: "docker",
+          requireProvenance: true,
+          provenance: PROVENANCE,
+          probe_index: 1,
+          dockerBin: fake.bin,
+        },
+      );
+      assert.equal(result.executor.backend, "docker");
+      const argv = fs.readFileSync(fake.log, "utf8");
+      assert.doesNotMatch(argv, /network create .* --internal /);
+      assert.doesNotMatch(argv, /gateway_mode_ipv4=isolated/);
+    } finally {
+      delete process.env.STOCKY_ISOLATION_PROOF_MUTATION;
+      delete process.env.STOCKY_ISOLATION_PROOF;
+    }
   });
 
   it("default runProbe without host mode does not use host node spawn for untrusted scripts when docker is missing", () => {
@@ -180,6 +215,9 @@ describe("production run_probe uses isolated docker executor", () => {
     const argv = fs.readFileSync(fake.log, "utf8");
     assert.match(argv, /--init/);
     assert.match(argv, /kill -s KILL/);
+    const nodeRun = argv.split("\n").find((line) => line.includes("preload-jail.cjs")) || "";
+    assert.match(nodeRun, /--read-only/);
+    assert.match(nodeRun, /STOCKY_BRIDGE_GATEWAY=10\.29\.0\.1/);
     assert.doesNotMatch(argv, /docker\.sock/);
   });
 });

@@ -116,6 +116,8 @@ describe("path / archive / symlink attacks", () => {
 
 describe("docker argv isolation contract", () => {
   it("uses --internal networks and never mounts the docker socket", () => {
+    delete process.env.STOCKY_ISOLATION_PROOF;
+    delete process.env.STOCKY_ISOLATION_PROOF_MUTATION;
     const net = dockerNetworkCreateArgs("stocky-review-test");
     assert.equal(net.includes("--internal"), true);
     assert.equal(net.join(" ").includes("gateway_mode_ipv4=isolated"), true);
@@ -131,6 +133,23 @@ describe("docker argv isolation contract", () => {
     assert.equal(args.includes("--cap-drop"), true);
     assert.equal(dockerArgsAreIsolated(args), true);
     assert.equal(dockerArgsAreIsolated(["run", "--privileged"]), false);
+  });
+
+  it("omit-gateway-isolated mutation drops --internal and isolated gateway opts", () => {
+    process.env.STOCKY_ISOLATION_PROOF = "1";
+    process.env.STOCKY_ISOLATION_PROOF_MUTATION = "omit-gateway-isolated";
+    try {
+      const mutated = dockerNetworkCreateArgs("stocky-review-mut");
+      assert.equal(mutated.includes("--internal"), false);
+      assert.equal(mutated.join(" ").includes("gateway_mode_ipv4=isolated"), false);
+      assert.equal(mutated.includes("stocky-review-mut"), true);
+    } finally {
+      delete process.env.STOCKY_ISOLATION_PROOF_MUTATION;
+      delete process.env.STOCKY_ISOLATION_PROOF;
+    }
+    const restored = dockerNetworkCreateArgs("stocky-review-prod");
+    assert.equal(restored.includes("--internal"), true);
+    assert.equal(restored.join(" ").includes("gateway_mode_ipv4=isolated"), true);
   });
 });
 

@@ -78,29 +78,42 @@ function parseGateway(text) {
   }
   return "";
 }
-function probe(ip) {
+function ipv4(s) {
+  return /^(?:\\d{1,3}\\.){3}\\d{1,3}$/.test(String(s || ""));
+}
+function probe(ip, src) {
   const port = Number(process.env.STOCKY_HOST_LISTENER_PORT);
   const sock = new net.Socket();
   sock.setTimeout(2000);
   sock.connect(port, ip, () => {
-    process.stdout.write("CONNECTED " + ip);
+    process.stdout.write("CONNECTED " + ip + " via " + src);
     process.exit(0);
   });
   sock.on("timeout", () => {
-    process.stdout.write("TIMEOUT " + ip);
+    process.stdout.write("TIMEOUT " + ip + " via " + src);
     process.exit(2);
   });
   sock.on("error", (e) => {
-    process.stdout.write(String(e.code || e.message) + " " + ip);
+    process.stdout.write(String(e.code || e.message) + " " + ip + " via " + src);
     process.exit(2);
   });
 }
-fs.promises.readFile("/proc/net/route", "utf8").then((text) => {
-  probe(parseGateway(text));
-}).catch((e) => {
-  process.stdout.write("ROUTE " + String(e.code || e.message));
-  process.exit(2);
-});
+const fromEnv = process.env.STOCKY_BRIDGE_GATEWAY;
+if (ipv4(fromEnv)) {
+  probe(fromEnv, "env");
+} else {
+  fs.promises.readFile("/proc/net/route", "utf8").then((text) => {
+    const ip = parseGateway(text);
+    if (!ipv4(ip)) {
+      process.stdout.write("NO_GATEWAY");
+      process.exit(2);
+    }
+    probe(ip, "route");
+  }).catch((e) => {
+    process.stdout.write("ROUTE " + String(e.code || e.message));
+    process.exit(2);
+  });
+}
 `;
 
 const JAIL_BYPASS = `
@@ -247,6 +260,7 @@ proof.gateway_production = {
   backend: gwProd.executor.backend,
   exit: gwProd.executor.exit_code,
   stdout: (gwProd.executor.stdout || "").slice(0, 200),
+  stderr: (gwProd.executor.stderr || "").slice(0, 200),
   provisioning_failed: gwProd.executor.provisioning_failed,
 };
 
@@ -264,6 +278,7 @@ proof.gateway_mutation = {
   backend: gwMut.executor.backend,
   exit: gwMut.executor.exit_code,
   stdout: (gwMut.executor.stdout || "").slice(0, 200),
+  stderr: (gwMut.executor.stderr || "").slice(0, 200),
 };
 delete process.env.STOCKY_ISOLATION_PROOF_MUTATION;
 listener.server.close();
@@ -313,6 +328,8 @@ const sql = runProbe(
 proof.sql_backend = sql.executor.backend;
 proof.sql_exit = sql.executor.exit_code;
 proof.sql_stdout = (sql.executor.stdout || "").slice(0, 200);
+proof.sql_stderr = (sql.executor.stderr || "").slice(0, 400);
+proof.sql_provisioning_failed = sql.executor.provisioning_failed;
 proof.sql_image_pins = sql.executor.image_pins;
 
 const failSql = runProbe(
@@ -325,6 +342,7 @@ const failSql = runProbe(
   dockerOpts(),
 );
 proof.fail_sql_exit = failSql.executor.exit_code;
+proof.fail_sql_stderr = (failSql.executor.stderr || "").slice(0, 200);
 
 const zero = runProbe(
   { kind: "zero_test_control", timeout_seconds: 5, expect: { outcome: "fail" } },
@@ -365,7 +383,7 @@ const checks = {
     (proof.timeout.leftovers.networks || []).length === 0,
   orphan_mutation_revived: (proof.orphan_mutation.leftovers_before_restore.containers || []).length > 0,
   orphan_restored: (proof.orphan_mutation.after_restore?.containers || []).length === 0,
-  sqlOk: sql.executor.backend === "docker" && sql.executor.exit_code === 0,
+  sqlOk: sql.executor.backend === "docker" && sql.executor.exit_code === 0 && !sql.executor.provisioning_failed,
   failOk: failSql.executor.exit_code !== 0,
   zeroOk: zero.executor.tests_run === 0,
   pinsUsed: Boolean(sql.executor.image_pins?.postgres?.includes("@sha256:")),

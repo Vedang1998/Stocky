@@ -166,18 +166,24 @@ function waitForExec(dockerBin, args, timeoutMs, ok = (r) => r.status === 0) {
   return false;
 }
 
+export function isIpv4(value) {
+  return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value || ""));
+}
+
 export function dockerNetworkCreateArgs(name) {
   const args = [
     "network",
     "create",
     "--driver",
     "bridge",
-    "--internal",
     "--label",
     `stocky.review=${name}`,
   ];
+  // omit-gateway-isolated drops both --internal and isolated-gateway opts so
+  // a host-listener canary can revive CONNECTED. Production keeps both.
   if (proofMutation() !== "omit-gateway-isolated") {
     args.push(
+      "--internal",
       "--opt",
       "com.docker.network.bridge.enable_ip_masquerade=false",
       "--opt",
@@ -186,6 +192,12 @@ export function dockerNetworkCreateArgs(name) {
   }
   args.push(name);
   return args;
+}
+
+function dockerInspectFormat(dockerBin, name, format) {
+  const r = docker(dockerBin, ["inspect", "-f", format, name], { timeout: 5_000 });
+  if (r.status !== 0) return "";
+  return (r.stdout || "").trim();
 }
 
 export function leftoverResources(dockerBin, prefix) {
@@ -302,8 +314,8 @@ function sidecarArgs(network, name, alias, envPairs, image) {
   return args;
 }
 
-function commonProbeArgs({ name, network }) {
-  return [
+function commonProbeArgs({ name, network, readOnly = true, extraHosts = [] }) {
+  const args = [
     "run",
     "-d",
     "--name",
@@ -315,7 +327,6 @@ function commonProbeArgs({ name, network }) {
     network,
     "--user",
     "65534:65534",
-    "--read-only",
     "--tmpfs",
     "/tmp:rw,nosuid,size=64m",
     "--cap-drop",
@@ -331,11 +342,20 @@ function commonProbeArgs({ name, network }) {
     "--label",
     `stocky.review=${network}`,
   ];
+  if (readOnly) {
+    args.push("--read-only");
+  }
+  for (const [host, ip] of extraHosts) {
+    if (host && isIpv4(ip)) {
+      args.push("--add-host", `${host}:${ip}`);
+    }
+  }
+  return args;
 }
 
-function probeNodeArgs({ name, network, subjectDir, probeDir, envPairs, image }) {
+function probeNodeArgs({ name, network, subjectDir, probeDir, envPairs, image, extraHosts }) {
   const args = [
-    ...commonProbeArgs({ name, network }),
+    ...commonProbeArgs({ name, network, readOnly: true, extraHosts }),
     "-v",
     `${subjectDir}:/subject:ro`,
     "-v",
@@ -495,19 +515,41 @@ export function runIsolatedProbe(probe, options = {}) {
       };
     }
 
+    const extraHosts = [];
+    const pgIp = dockerInspectFormat(
+      dockerBin,
+      pgName,
+      "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+    );
+    const redisIp = dockerInspectFormat(
+      dockerBin,
+      redisName,
+      "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}",
+    );
+    const bridgeGateway = dockerInspectFormat(
+      dockerBin,
+      pgName,
+      "{{range .NetworkSettings.Networks}}{{.Gateway}}{{end}}",
+    );
+    if (isIpv4(pgIp)) extraHosts.push(["pg", pgIp]);
+    if (isIpv4(redisIp)) extraHosts.push(["redis", redisIp]);
+
     const timeoutMs = probe.timeout_seconds * 1000;
     let r;
     if (probe.kind === "sql") {
       r = runDetachedThenWait(
         dockerBin,
         [
-          ...commonProbeArgs({ name: probeName, network }),
+          ...commonProbeArgs({ name: probeName, network, readOnly: false, extraHosts }),
+          "--entrypoint",
+          "psql",
+          "-e",
+          "HOME=/tmp",
           "-e",
           `PGPASSWORD=${SYNTHETIC_PG.password}`,
           pinnedImage(IMAGE_PINS.postgres),
-          "psql",
           "-h",
-          "pg",
+          isIpv4(pgIp) ? pgIp : "pg",
           "-U",
           SYNTHETIC_PG.user,
           "-d",
@@ -529,11 +571,14 @@ export function runIsolatedProbe(probe, options = {}) {
       r = runDetachedThenWait(
         dockerBin,
         [
-          ...commonProbeArgs({ name: probeName, network }),
-          pinnedImage(IMAGE_PINS.redis),
+          ...commonProbeArgs({ name: probeName, network, readOnly: false, extraHosts }),
+          "--entrypoint",
           "redis-cli",
+          "-e",
+          "HOME=/tmp",
+          pinnedImage(IMAGE_PINS.redis),
           "-h",
-          "redis",
+          isIpv4(redisIp) ? redisIp : "redis",
           ...redisArgs,
         ],
         { name: probeName, timeoutMs },
@@ -560,12 +605,16 @@ export function runIsolatedProbe(probe, options = {}) {
       if (options.hostListenerPort) {
         envPairs.push(["STOCKY_HOST_LISTENER_PORT", String(options.hostListenerPort)]);
       }
+      if (isIpv4(bridgeGateway)) {
+        envPairs.push(["STOCKY_BRIDGE_GATEWAY", bridgeGateway]);
+      }
       const nodeArgs = probeNodeArgs({
         name: probeName,
         network,
         subjectDir,
         probeDir,
         envPairs,
+        extraHosts,
         image: pinnedImage(IMAGE_PINS.node),
       });
       for (const key of SECRET_ENV_DENY) {

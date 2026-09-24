@@ -20,7 +20,7 @@
 | Branch | `cursor/tooling-claude-executable-review-runner-61-7492` |
 | Base M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` |
 | Pull request | [#62](https://github.com/Vedang1998/Stocky/pull/62) draft against `main` |
-| R2 input head | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` (parent of this correction) |
+| R2 input head | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` |
 | Activation | **not** performed. Live Claude / `workflow_dispatch` of this runner / credentialed e2e **not executed** |
 
 This documentation records CI identities for already-observed heads. It does **not** embed its own future SHA.
@@ -34,7 +34,7 @@ This documentation records CI identities for already-observed heads. It does **n
 | Last full-Heavy head before docs sync | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | exact-head CI run 35946198137 |
 | Documentation finalization / R1 input | `1433281753670762394a44ee9c25514a8b1d86bc` | exact-head CI run 35950974549 |
 | R1 runtime/test correction | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` | parent is `1433281`; exact-head CI run 35958752653 |
-| R2 runtime/test correction | this correction commit after it exists | parent is `bbd3bbe`; do not claim this commit's SHA here |
+| R2 runtime/test correction | `df6759278059e4d9899259d5e7c0d118db3bda2c` | parent is `bbd3bbe`; exact-head CI run 35998517064 SUCCESS; isolation_proof run 35998517100 FAILURE |
 | Reviewed implementation head | none | independent Claude tooling review has not started |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
 
@@ -47,7 +47,8 @@ This documentation records CI identities for already-observed heads. It does **n
 | `7548f439b3c54013ed579a2ffa50926ac5cfb5f8` | documentation | record RUNNER-01 authoring evidence packet |
 | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | documentation | strip trailing whitespace from runner runbook and report |
 | `1433281753670762394a44ee9c25514a8b1d86bc` | documentation | record PR62 / exact-head CI identities for `7139a10` |
-| this R1 correction | runtime + test + documentation | security-boundary repair (isolation, provenance, publication) |
+| `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` | runtime + test + documentation | R1 security-boundary repair |
+| `df6759278059e4d9899259d5e7c0d118db3bda2c` | runtime + test + documentation | R2 timeout/model-result/dispatch/isolation oracles |
 
 No empty retrigger. No independent review report. No schema/migration. No `ci.yml` change.
 
@@ -200,8 +201,17 @@ These were not relabeled P3. R62-08/R62-09 preserved as observations.
 
 ### R62-04 — host-gateway
 
-- `docker network create --internal --opt enable_ip_masquerade=false --opt gateway_mode_ipv4=isolated`.
-- Isolation proof host listener + `new net.Socket` (not preload). Mutation `omit-gateway-isolated` must revive CONNECTED.
+- Production: `docker network create --internal --opt enable_ip_masquerade=false --opt gateway_mode_ipv4=isolated`.
+- After sidecars start, inspect the bridge `Gateway` and pass `STOCKY_BRIDGE_GATEWAY` into node probes. The host-listener canary uses `new net.Socket` against that IP (preload is not the layer). `--internal` networks often have no default route, so `/proc/net/route` is not the oracle.
+- Mutation `omit-gateway-isolated` drops **both** `--internal` and isolated-gateway opts so CONNECTED can revive on a normal bridge.
+
+### R62-04/R62-07 follow-up after `df67592` isolation_proof FAILURE
+
+GHA job [107629155252](https://github.com/Vedang1998/Stocky/actions/runs/35998517100/job/107629155252) on `df67592`:
+- `gateway_mutation_revived=false` — stdout `ECONNREFUSED` with an empty IP because the mutation still used `--internal` (no default route) and never passed the inspected gateway.
+- `sqlOk=false` — `sql_exit=2` empty stdout. Production SQL/Redis client containers inherited `--read-only` from `commonProbeArgs` (postgres/redis images declare VOLUME dirs). Sidecar readiness used `docker exec`, so ICC/DNS failures were hidden.
+
+This follow-up (same R2 scope): SQL/Redis clients are not `--read-only`; `HOME=/tmp`; sidecar IPv4 via `--add-host` and `-h <ip>`; `sql_stderr` recorded. Do not embed this follow-up commit's own SHA here.
 
 ### R62-05 — publish_reject gating
 
@@ -219,7 +229,8 @@ Per-control checks in `bin/isolation-proof.mjs`. Local authoring VM remains exit
 
 | Check | Result |
 |---|---|
-| `node --test tests/*.test.js` | **92 pass / 0 fail** (Node v22.19.0) |
+| `node --test tests/*.test.js` on `df67592` | **92 pass / 0 fail** (Node v22.19.0) |
+| `node --test tests/*.test.js proofs/*.test.js` (this follow-up, pre-push) | **95 pass / 0 fail** (Node v22.19.0, npm 11.5.2, PostgreSQL 16.15, Redis 7.0.15) |
 | `actionlint` 1.7.7 | exit 0 |
 | YAML parse | exit 0 |
 | classifier self-test | 40/40 |
@@ -227,7 +238,14 @@ Per-control checks in `bin/isolation-proof.mjs`. Local authoring VM remains exit
 | `isolation-proof.mjs` locally | exit 2 `isolation_unavailable_docker_missing` (expected) |
 | Live Claude / runner `workflow_dispatch` | **not executed** |
 
-Exact-head Classify + Heavy + CI Gate and GHA isolation_proof: pending push; recorded in the task result, not this commit's own SHA.
+Exact-head CI on `df67592` (event `pull_request`, `head_sha` equals that commit):
+
+| Job | Result |
+|---|---|
+| Classify + Heavy + Gate run [35998517064](https://github.com/Vedang1998/Stocky/actions/runs/35998517064) | SUCCESS |
+| Isolation proof run [35998517100](https://github.com/Vedang1998/Stocky/actions/runs/35998517100) job [107629155252](https://github.com/Vedang1998/Stocky/actions/runs/35998517100/job/107629155252) | **FAILURE** (`gateway_mutation_revived=false`, `sqlOk=false`; timeout/orphan/jail/pins/hash passed) |
+
+Follow-up exact-head Classify + Heavy + Gate + isolation_proof: recorded in the task result after push; not this commit's own SHA.
 
 ## Original RUNNER-01 authoring (pre-R1, SHA-bound)
 
