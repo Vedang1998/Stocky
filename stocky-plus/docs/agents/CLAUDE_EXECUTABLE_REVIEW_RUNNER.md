@@ -7,6 +7,20 @@
 **Activation:** blocked until independent runner review, ChatGPT acceptance, owner merge, **and** repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`
 **This runner must not certify itself.**
 
+### Recorded draft identity
+
+| Item | Value |
+|---|---|
+| Tool / model / run | Cursor / cursor-grok-4.6-xhigh / `bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492` |
+| Draft PR | [#62](https://github.com/Vedang1998/Stocky/pull/62) against `main` |
+| Branch | `cursor/tooling-claude-executable-review-runner-61-7492` |
+| Base M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` |
+| Runtime/test implementation | `a1c52735f91727cdb76f0a7ffebeb56b96241bd0` |
+| Last full-Heavy implementation head | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` |
+| Exact-head CI on that head | `pull_request` run [35946198137](https://github.com/Vedang1998/Stocky/actions/runs/35946198137) SUCCESS (Classify 107464562947, Heavy 107464591535 not skipped, Gate 107478064855 `full_ci=true`) |
+| Documentation finalization | later sync commit; do not embed that commit's own SHA here |
+| Instruction loading | `AGENTS.md`, issue61, issue52 `5806012938`, this runbook, implementation report |
+
 This document freezes the file list, job/tool contract, command schema, and trust assumptions for RUNNER-01. Implementation must stay inside this envelope.
 
 ---
