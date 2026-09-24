@@ -1,8 +1,8 @@
-# CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01 / R1
+# CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01 / R2
 
-**Status:** R1 security-boundary correction implemented on PR #62. `READY FOR INDEPENDENT RUNNER REVIEW` is withheld from this file until exact-head Classify + full Heavy + CI Gate **and** the `isolation_proof` job have SUCCESS on the live PR head that includes this correction. Do not treat this commit as self-certifying. Do not embed this commit's own SHA here.
+**Status:** R2 security-boundary correction implemented on PR #62. `READY FOR INDEPENDENT RUNNER RE-REVIEW` is withheld from this file until exact-head Classify + full Heavy + CI Gate **and** the strengthened `isolation_proof` job have SUCCESS on the live PR head that includes this correction. Do not treat this commit as self-certifying. Do not embed this commit's own SHA here.
 
-**Implementer:** Cursor (cloud agent), same writer as original RUNNER-01 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`). No competing writers.
+**Implementer:** Cursor (cloud agent), same writer as original RUNNER-01 / R1 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`). No competing writers.
 
 ## Identity
 
@@ -13,13 +13,14 @@
 | Actual run | https://cursor.com/agents/bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`) |
 | Original Dispatch-Key | `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation` |
 | R1 Dispatch-Key | `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R1:1433281753670762394a44ee9c25514a8b1d86bc:cursor-correction` |
-| Authority | issue61 work order `5806021611` + admission `5806012938`; R1 intent/journal `5807860348` |
-| Chat | EXISTING RUNNER-01 author role/session (same run id as original implementation) |
+| R2 Dispatch-Key | `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R2:bbd3bbedf7951a043aaaf51d84a0fc0b93595c97:cursor-correction` |
+| Authority | issue61 `5806021611` + admission `5806012938`; R1 `5807860348`; R2 intent `5813474882`; independent review `5813026207` |
+| Chat | EXISTING RUNNER-01 author role/session (same run id) |
 | Working location | isolated repository-root checkout; application `stocky-plus/` |
 | Branch | `cursor/tooling-claude-executable-review-runner-61-7492` |
 | Base M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` |
 | Pull request | [#62](https://github.com/Vedang1998/Stocky/pull/62) draft against `main` |
-| R1 input head | `1433281753670762394a44ee9c25514a8b1d86bc` (parent of this correction) |
+| R2 input head | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` (parent of this correction) |
 | Activation | **not** performed. Live Claude / `workflow_dispatch` of this runner / credentialed e2e **not executed** |
 
 This documentation records CI identities for already-observed heads. It does **not** embed its own future SHA.
@@ -32,7 +33,8 @@ This documentation records CI identities for already-observed heads. It does **n
 | Runtime/test implementation (original) | `a1c52735f91727cdb76f0a7ffebeb56b96241bd0` | first dispatcher/workflows/sandbox/tests |
 | Last full-Heavy head before docs sync | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` | exact-head CI run 35946198137 |
 | Documentation finalization / R1 input | `1433281753670762394a44ee9c25514a8b1d86bc` | exact-head CI run 35950974549 |
-| R1 runtime/test correction | this correction commit after it exists | parent is `1433281`; do not claim this commit's SHA here |
+| R1 runtime/test correction | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` | parent is `1433281`; exact-head CI run 35958752653 |
+| R2 runtime/test correction | this correction commit after it exists | parent is `bbd3bbe`; do not claim this commit's SHA here |
 | Reviewed implementation head | none | independent Claude tooling review has not started |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
 
@@ -159,7 +161,73 @@ Planned vs executed distinction for R1 proofs:
 | Heavy | [107479268816](https://github.com/Vedang1998/Stocky/actions/runs/35950974549/job/107479268816) SUCCESS (not skipped) |
 | Gate | [107492660014](https://github.com/Vedang1998/Stocky/actions/runs/35950974549/job/107492660014) SUCCESS |
 
-R1 live-head CI identities are recorded in the task result after the correction push; they are not this file's own SHA.
+R1 live-head CI identities are recorded below. R2 live-head CI identities are recorded in the task result after the correction push; they are not this file's own SHA.
+
+## R2 blocking findings (reproduced on `bbd3bbe`)
+
+Direct inspection of live-head code (and independent review `5813026207`) before this correction:
+
+1. **R62-01 P1** `runIsolatedProbe` used attached `spawnSync(..., {timeout})` for `docker run` of untrusted Node. SIGTERM hits docker CLI sig-proxy; container PID 1 ignores SIGTERM; unnamed container so `finally` cannot kill it. Independent reproduction: 150s hang, leftover probe/pg/redis.
+2. **R62-02 P1** No typed model-result route. Checkpoint wrote `workDir/checkpoint.json`; publisher reads `stateDir/checkpoint.json`. `collect-executor` only copied `work/model-result.md` if the model happened to write it.
+3. **R62-03 P1** `dispatch.mjs` called `dispatchValidate({ github })` without comments/lease. Authority hash compared the live body to itself. `applyStop(undefined)` fabricated success. No lock POST, no `assert-lease`.
+4. **R62-04 P2** `--internal` still has a bridge gateway. Reviewer: host listener at gateway CONNECTED with jail bypassed.
+5. **R62-05 P2** `publish_reject` `if: always() && invoke_claude != 'true'` fired when ingress was skipped.
+6. **R62-06 P2** `invoke_claude` was true before snapshot extract. A failed tarball would still invoke Claude.
+7. **R62-07 P2** Isolation proof treated any Docker non-zero as blocked; disable-control was host-preload, not a Docker mutation; no timeout/orphan/host-gateway oracles.
+
+These were not relabeled P3. R62-08/R62-09 preserved as observations.
+
+## R2 correction (what now enforces the contract)
+
+### R62-01 — timeout/orphan
+
+- Probe containers: `docker run -d --name --init --stop-timeout 1`. Wait is `docker inspect` poll. Deadline sends `docker kill -s KILL`, then `logs` + `rm -f`.
+- `finally` always `cleanupPrefix` (probe + pg + redis + network) unless gated mutation `skip-cleanup`.
+- Fake-docker busy-loop unit test: `timed_out=true`, wall clock under 15s, argv includes `--init` and `kill -s KILL`.
+
+### R62-02 — trusted model result
+
+- MCP tool `submit_result({markdown})` writes `stateDir/model-result.md` (32 KiB cap, extra keys denied, gate-override denied).
+- `checkpoint` writes `stateDir/checkpoint.json`.
+- Publisher `separateExecutorAndModel` includes that markdown in `result-comment.md`. End-to-end mock: submit → publishFromState → comment contains narrative.
+
+### R62-03 — live dispatch controls
+
+- Validate fetches issue comments, `leaseFromComments` / `stopFromComments`, `bindAuthorityComment` (body must contain task/dispatch/head; `created_at` vs `updated_at`).
+- STOP without a fetched lease is `stop_without_lease`.
+- Ingress POSTs lock marker after acquire. Executable job `assert-lease` before Claude. Publisher re-fetches STOP.
+- Production entry tests (`dispatch-entry.test.js`) cover snapshot fail-closed, duplicate lock, STOP assert-lease, successful snapshot+lock.
+
+### R62-04 — host-gateway
+
+- `docker network create --internal --opt enable_ip_masquerade=false --opt gateway_mode_ipv4=isolated`.
+- Isolation proof host listener + `new net.Socket` (not preload). Mutation `omit-gateway-isolated` must revive CONNECTED.
+
+### R62-05 — publish_reject gating
+
+- `if: needs.ingress.result == 'success' && needs.ingress.outputs.invoke_claude != 'true'`.
+
+### R62-06 — snapshot fail-closed
+
+- Snapshot runs before `GITHUB_OUTPUT` `invoke_claude`. Failure sets `invoke_claude=false` and `code` from tar/snapshot.
+
+### R62-07 — isolation-proof oracles
+
+Per-control checks in `bin/isolation-proof.mjs`. Local authoring VM remains exit 2 (`docker` missing). GHA `isolation_proof` is the production proof.
+
+## Commands executed (authoring host, R2)
+
+| Check | Result |
+|---|---|
+| `node --test tests/*.test.js` | **92 pass / 0 fail** (Node v22.19.0) |
+| `actionlint` 1.7.7 | exit 0 |
+| YAML parse | exit 0 |
+| classifier self-test | 40/40 |
+| `git diff --check` | exit 0 |
+| `isolation-proof.mjs` locally | exit 2 `isolation_unavailable_docker_missing` (expected) |
+| Live Claude / runner `workflow_dispatch` | **not executed** |
+
+Exact-head Classify + Heavy + CI Gate and GHA isolation_proof: pending push; recorded in the task result, not this commit's own SHA.
 
 ## Original RUNNER-01 authoring (pre-R1, SHA-bound)
 

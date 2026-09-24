@@ -1,4 +1,5 @@
 import { OWNER_ID, OWNER_LOGIN, OWNER_TYPE, REPOSITORY } from "./constants.js";
+import { bodySha256 } from "./sanitize.js";
 import { isFullSha, resultErr, resultOk } from "./util.js";
 
 export { OWNER_ID, OWNER_LOGIN, OWNER_TYPE, REPOSITORY };
@@ -130,4 +131,49 @@ export async function fetchIssueComment(client, { owner, repo, commentId }) {
     created_at: data.created_at,
     html_url: data.html_url,
   };
+}
+
+export async function fetchIssueComments(client, { owner, repo, issueNumber }) {
+  if (!issueNumber) return [];
+  const data = await client.getJson(
+    `/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`,
+  );
+  return Array.isArray(data) ? data : [];
+}
+
+/**
+ * Authority body must contain the task/dispatch/head locators. GitHub
+ * created_at vs updated_at is durable edit evidence (not a self-hash).
+ */
+export function bindAuthorityComment(workOrder, comment) {
+  if (!comment || typeof comment.body !== "string" || comment.body.length === 0) {
+    return resultErr("authority_missing", "authority comment could not be fetched");
+  }
+  if (Number(comment.id) !== Number(workOrder.authority_comment_id)) {
+    return resultErr("authority_id_mismatch", "authority comment id mismatch");
+  }
+  if (comment.user?.id && Number(comment.user.id) !== OWNER_ID) {
+    return resultErr("authority_wrong_author", "authority comment author is not the owner");
+  }
+  const body = comment.body;
+  if (!body.includes(workOrder.task_id)) {
+    return resultErr("authority_unbound_task", "authority body does not contain task_id");
+  }
+  if (!body.includes(workOrder.dispatch_key)) {
+    return resultErr("authority_unbound_dispatch", "authority body does not contain dispatch_key");
+  }
+  if (!body.includes(workOrder.subject.head)) {
+    return resultErr("authority_unbound_head", "authority body does not contain subject head");
+  }
+  if (comment.created_at && comment.updated_at && comment.created_at !== comment.updated_at) {
+    return resultErr("authority_edited", "authority comment was edited after creation");
+  }
+  return resultOk({
+    comment,
+    captured: {
+      id: comment.id,
+      body_sha256: bodySha256(body),
+      created_at: comment.created_at || null,
+    },
+  });
 }

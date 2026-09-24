@@ -19,6 +19,11 @@ import { resultErr, sha256Hex } from "./util.js";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD_SRC = path.resolve(HERE, "../sandbox/preload-jail.cjs");
 
+export function proofMutation() {
+  if (process.env.STOCKY_ISOLATION_PROOF !== "1") return "";
+  return String(process.env.STOCKY_ISOLATION_PROOF_MUTATION || "");
+}
+
 export function dockerAvailable(dockerBin = "docker") {
   const r = spawnSync(dockerBin, ["info"], {
     encoding: "utf8",
@@ -75,6 +80,7 @@ export function executorResult(partial) {
     stdout_sha256: outputHash(stdout.text, stderr.text),
     duration_ms: partial.duration_ms ?? 0,
     image_pins: partial.image_pins,
+    leftovers: partial.leftovers,
   };
 }
 
@@ -103,7 +109,7 @@ function docker(dockerBin, args, options = {}) {
   }
   return spawnSync(dockerBin, args, {
     encoding: "utf8",
-    timeout: options.timeout ?? 120_000,
+    timeout: options.timeout ?? 30_000,
     env: options.env || dockerCliEnv(),
   });
 }
@@ -145,14 +151,132 @@ export function inspectPinnedImages(dockerBin = "docker") {
   return observed;
 }
 
+function sleepMs(ms) {
+  const sab = new SharedArrayBuffer(4);
+  Atomics.wait(new Int32Array(sab), 0, 0, ms);
+}
+
 function waitForExec(dockerBin, args, timeoutMs, ok = (r) => r.status === 0) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     const r = docker(dockerBin, args, { timeout: 15_000 });
     if (ok(r)) return true;
-    spawnSync("sleep", ["1"]);
+    sleepMs(250);
   }
   return false;
+}
+
+export function dockerNetworkCreateArgs(name) {
+  const args = [
+    "network",
+    "create",
+    "--driver",
+    "bridge",
+    "--internal",
+    "--label",
+    `stocky.review=${name}`,
+  ];
+  if (proofMutation() !== "omit-gateway-isolated") {
+    args.push(
+      "--opt",
+      "com.docker.network.bridge.enable_ip_masquerade=false",
+      "--opt",
+      "com.docker.network.bridge.gateway_mode_ipv4=isolated",
+    );
+  }
+  args.push(name);
+  return args;
+}
+
+export function leftoverResources(dockerBin, prefix) {
+  const ps = docker(
+    dockerBin,
+    ["ps", "-a", "--filter", `name=${prefix}`, "--format", "{{.Names}}"],
+    { timeout: 10_000 },
+  );
+  const nets = docker(
+    dockerBin,
+    ["network", "ls", "--filter", `name=${prefix}`, "--format", "{{.Name}}"],
+    { timeout: 10_000 },
+  );
+  const labeled = docker(
+    dockerBin,
+    ["ps", "-a", "--filter", `label=stocky.review=${prefix}`, "--format", "{{.Names}}"],
+    { timeout: 10_000 },
+  );
+  const containers = new Set(
+    `${ps.stdout || ""}\n${labeled.stdout || ""}`
+      .split("\n")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  );
+  const networks = (nets.stdout || "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return { containers: [...containers], networks };
+}
+
+export function cleanupPrefix(dockerBin, prefix) {
+  docker(dockerBin, ["rm", "-f", `${prefix}pg`, `${prefix}rd`, `${prefix}pr`], { timeout: 20_000 });
+  const left = leftoverResources(dockerBin, prefix);
+  if (left.containers.length) {
+    docker(dockerBin, ["rm", "-f", ...left.containers], { timeout: 20_000 });
+  }
+  docker(dockerBin, ["network", "rm", prefix], { timeout: 20_000 });
+  return leftoverResources(dockerBin, prefix);
+}
+
+function waitNamedContainer(dockerBin, name, timeoutMs) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const r = docker(
+      dockerBin,
+      ["inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", name],
+      { timeout: 5_000 },
+    );
+    if (r.status === 0) {
+      const [running, exitCode] = (r.stdout || "").trim().split(/\s+/);
+      if (running === "false") {
+        return { timed_out: false, exit_code: Number(exitCode) || 0 };
+      }
+    }
+    sleepMs(200);
+  }
+  return { timed_out: true, exit_code: 124 };
+}
+
+/**
+ * Detached named run + inspect poll + SIGKILL. Do not use attached spawnSync
+ * timeout against `docker run` of untrusted PID 1 (sig-proxy hang).
+ */
+export function runDetachedThenWait(dockerBin, args, { name, timeoutMs }) {
+  const started = docker(dockerBin, args, { timeout: 30_000 });
+  if (started.status !== 0) {
+    return {
+      status: started.status ?? 1,
+      stdout: "",
+      stderr: started.stderr || started.error?.message || "docker run -d failed",
+      timed_out: false,
+      provisioning_failed: true,
+    };
+  }
+  const wait = waitNamedContainer(dockerBin, name, timeoutMs);
+  const mutation = proofMutation();
+  if (wait.timed_out && mutation !== "skip-kill") {
+    docker(dockerBin, ["kill", "-s", "KILL", name], { timeout: 10_000 });
+  }
+  const logs = docker(dockerBin, ["logs", name], { timeout: 15_000 });
+  if (mutation !== "skip-cleanup") {
+    docker(dockerBin, ["rm", "-f", name], { timeout: 15_000 });
+  }
+  return {
+    status: wait.timed_out ? 124 : wait.exit_code,
+    stdout: logs.stdout,
+    stderr: logs.stderr,
+    timed_out: wait.timed_out,
+    provisioning_failed: false,
+  };
 }
 
 function sidecarArgs(network, name, alias, envPairs, image) {
@@ -168,6 +292,8 @@ function sidecarArgs(network, name, alias, envPairs, image) {
     alias,
     "--security-opt",
     "no-new-privileges",
+    "--label",
+    `stocky.review=${network}`,
   ];
   for (const [k, v] of envPairs) {
     args.push("-e", `${k}=${v}`);
@@ -176,10 +302,15 @@ function sidecarArgs(network, name, alias, envPairs, image) {
   return args;
 }
 
-function probeNodeArgs({ network, subjectDir, probeDir, envPairs, image }) {
-  const args = [
+function commonProbeArgs({ name, network }) {
+  return [
     "run",
-    "--rm",
+    "-d",
+    "--name",
+    name,
+    "--init",
+    "--stop-timeout",
+    "1",
     "--network",
     network,
     "--user",
@@ -197,6 +328,14 @@ function probeNodeArgs({ network, subjectDir, probeDir, envPairs, image }) {
     "1",
     "--pids-limit",
     "128",
+    "--label",
+    `stocky.review=${network}`,
+  ];
+}
+
+function probeNodeArgs({ name, network, subjectDir, probeDir, envPairs, image }) {
+  const args = [
+    ...commonProbeArgs({ name, network }),
     "-v",
     `${subjectDir}:/subject:ro`,
     "-v",
@@ -211,10 +350,18 @@ function probeNodeArgs({ network, subjectDir, probeDir, envPairs, image }) {
   return args;
 }
 
+function imagePins() {
+  return {
+    postgres: pinnedImage(IMAGE_PINS.postgres),
+    redis: pinnedImage(IMAGE_PINS.redis),
+    node: pinnedImage(IMAGE_PINS.node),
+  };
+}
+
 /**
  * Production executor. Untrusted probe code runs only inside digest-pinned
- * containers on an --internal network. Host spawnSync is used solely for the
- * trusted `docker` CLI.
+ * containers on an --internal isolated-gateway network. Host spawnSync is used
+ * solely for the trusted `docker` CLI and never as the probe timeout mechanism.
  */
 export function runIsolatedProbe(probe, options = {}) {
   const dockerBin = options.dockerBin || "docker";
@@ -268,6 +415,7 @@ export function runIsolatedProbe(probe, options = {}) {
   const network = id;
   const pgName = `${id}pg`;
   const redisName = `${id}rd`;
+  const probeName = `${id}pr`;
   const workDir = options.workDir || fs.mkdtempSync(path.join(os.tmpdir(), "stocky-iso-"));
   fs.mkdirSync(workDir, { recursive: true });
   const subjectDir = options.subjectRoot || path.join(workDir, "subject");
@@ -281,10 +429,10 @@ export function runIsolatedProbe(probe, options = {}) {
     fs.writeFileSync(path.join(probeDir, "script.js"), "process.exit(0);\n");
   }
 
-  const created = [];
   const started = Date.now();
+  const mutation = proofMutation();
   try {
-    const net = docker(dockerBin, ["network", "create", "--internal", "--driver", "bridge", network]);
+    const net = docker(dockerBin, dockerNetworkCreateArgs(network));
     if (net.status !== 0) {
       return {
         ok: true,
@@ -292,7 +440,6 @@ export function runIsolatedProbe(probe, options = {}) {
         executor: isolationUnavailable(`network create failed: ${net.stderr}`),
       };
     }
-    created.push(["network", network]);
 
     const pgArgs = sidecarArgs(
       network,
@@ -313,7 +460,6 @@ export function runIsolatedProbe(probe, options = {}) {
         executor: isolationUnavailable(`postgres sidecar failed: ${pg.stderr}`),
       };
     }
-    created.push(["container", pgName]);
 
     const rdArgs = sidecarArgs(network, redisName, "redis", [], pinnedImage(IMAGE_PINS.redis));
     const rd = docker(dockerBin, rdArgs, { timeout: 60_000 });
@@ -324,7 +470,6 @@ export function runIsolatedProbe(probe, options = {}) {
         executor: isolationUnavailable(`redis sidecar failed: ${rd.stderr}`),
       };
     }
-    created.push(["container", redisName]);
 
     if (
       !waitForExec(dockerBin, ["exec", pgName, "pg_isready", "-U", SYNTHETIC_PG.user, "-d", SYNTHETIC_PG.database], 45_000)
@@ -350,21 +495,13 @@ export function runIsolatedProbe(probe, options = {}) {
       };
     }
 
+    const timeoutMs = probe.timeout_seconds * 1000;
     let r;
     if (probe.kind === "sql") {
-      r = docker(
+      r = runDetachedThenWait(
         dockerBin,
         [
-          "run",
-          "--rm",
-          "--network",
-          network,
-          "--user",
-          "65534:65534",
-          "--cap-drop",
-          "ALL",
-          "--security-opt",
-          "no-new-privileges",
+          ...commonProbeArgs({ name: probeName, network }),
           "-e",
           `PGPASSWORD=${SYNTHETIC_PG.password}`,
           pinnedImage(IMAGE_PINS.postgres),
@@ -380,7 +517,7 @@ export function runIsolatedProbe(probe, options = {}) {
           "-c",
           probe.sql.text,
         ],
-        { timeout: probe.timeout_seconds * 1000 + 5000 },
+        { name: probeName, timeoutMs },
       );
     } else if (probe.kind === "redis") {
       const redisArgs =
@@ -389,26 +526,17 @@ export function runIsolatedProbe(probe, options = {}) {
           : probe.redis.op === "GET"
             ? ["GET", probe.redis.key]
             : ["SET", probe.redis.key, probe.redis.value];
-      r = docker(
+      r = runDetachedThenWait(
         dockerBin,
         [
-          "run",
-          "--rm",
-          "--network",
-          network,
-          "--user",
-          "65534:65534",
-          "--cap-drop",
-          "ALL",
-          "--security-opt",
-          "no-new-privileges",
+          ...commonProbeArgs({ name: probeName, network }),
           pinnedImage(IMAGE_PINS.redis),
           "redis-cli",
           "-h",
           "redis",
           ...redisArgs,
         ],
-        { timeout: probe.timeout_seconds * 1000 + 5000 },
+        { name: probeName, timeoutMs },
       );
     } else if (probe.kind === "node_script") {
       const envPairs = [
@@ -429,7 +557,11 @@ export function runIsolatedProbe(probe, options = {}) {
       if (options.hostCanaryPath) {
         envPairs.push(["STOCKY_CANARY_PATH", options.hostCanaryPath]);
       }
+      if (options.hostListenerPort) {
+        envPairs.push(["STOCKY_HOST_LISTENER_PORT", String(options.hostListenerPort)]);
+      }
       const nodeArgs = probeNodeArgs({
+        name: probeName,
         network,
         subjectDir,
         probeDir,
@@ -445,7 +577,7 @@ export function runIsolatedProbe(probe, options = {}) {
           };
         }
       }
-      r = docker(dockerBin, nodeArgs, { timeout: probe.timeout_seconds * 1000 + 5000 });
+      r = runDetachedThenWait(dockerBin, nodeArgs, { name: probeName, timeoutMs });
     } else {
       return {
         ok: true,
@@ -461,7 +593,8 @@ export function runIsolatedProbe(probe, options = {}) {
       };
     }
 
-    const timed_out = r.error?.code === "ETIMEDOUT" || r.signal === "SIGTERM" || r.signal === "SIGKILL";
+    const leftovers =
+      mutation === "skip-cleanup" ? leftoverResources(dockerBin, id) : { containers: [], networks: [] };
     return {
       ok: true,
       probe,
@@ -469,23 +602,23 @@ export function runIsolatedProbe(probe, options = {}) {
         backend: "docker",
         isolation: "docker",
         exit_code: r.status ?? 1,
-        timed_out,
+        timed_out: r.timed_out,
+        provisioning_failed: Boolean(r.provisioning_failed),
         stdout: r.stdout,
         stderr: r.stderr,
         tests_run: 1,
         duration_ms: Date.now() - started,
-        image_pins: {
-          postgres: pinnedImage(IMAGE_PINS.postgres),
-          redis: pinnedImage(IMAGE_PINS.redis),
-          node: pinnedImage(IMAGE_PINS.node),
-        },
+        image_pins: imagePins(),
+        leftovers,
       }),
       workDir,
+      prefix: id,
     };
   } finally {
-    docker(dockerBin, ["rm", "-f", pgName, redisName], { timeout: 20_000 });
-    docker(dockerBin, ["network", "rm", network], { timeout: 20_000 });
+    if (mutation !== "skip-cleanup") {
+      cleanupPrefix(dockerBin, id);
+    }
   }
 }
 
-export { PRELOAD_SRC, REDIS_KEY_PREFIX };
+export { PRELOAD_SRC, REDIS_KEY_PREFIX, SYNTHETIC_REDIS };

@@ -83,6 +83,10 @@ describe("session lease and STOP", () => {
     assert.equal(acquireLease(stopped.lease, incoming).code, "stopped");
   });
 
+  it("does not apply STOP without a fetched existing lease", () => {
+    assert.equal(applyStop(null, { dispatch_key: "propo:a", task_id: "t1" }).code, "stop_without_lease");
+  });
+
   it("detects lost ACK readback", () => {
     const lease = makeLease({
       dispatchKey: "propo:a",

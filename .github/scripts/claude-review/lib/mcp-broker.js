@@ -4,11 +4,14 @@ import { readEvidence, readSubjectFile } from "./evidence.js";
 import { runProbe } from "./sandbox.js";
 import { checkpoint } from "./session.js";
 import { classifyExecutorResult } from "./verdict.js";
-import { MAX_PROBES, SECRET_ENV_DENY } from "./constants.js";
+import { looksLikeGateOverride, sanitizePublicText } from "./sanitize.js";
+import { MAX_MODEL_RESULT_BYTES, MAX_PROBES, SECRET_ENV_DENY } from "./constants.js";
 
 /**
  * Minimal MCP stdio broker. Tools only. No GitHub token. No OAuth.
  * run_probe always uses the digest-pinned Docker executor.
+ * submit_result writes a bounded file for the trusted publisher; it does not
+ * call the GitHub API.
  */
 export function scrubBrokerEnv(env = process.env) {
   for (const key of SECRET_ENV_DENY) {
@@ -16,13 +19,19 @@ export function scrubBrokerEnv(env = process.env) {
   }
 }
 
+function persistDirOf(state) {
+  if (state.stateDir) return state.stateDir;
+  if (state.workDir) return path.dirname(state.workDir);
+  return null;
+}
+
 export function createBroker(state) {
   const probes = [];
+  const persistDir = persistDirOf(state);
   function persist() {
-    if (!state.workDir) return;
-    fs.mkdirSync(state.workDir, { recursive: true });
-    const dest = path.join(path.dirname(state.workDir), "probes.json");
-    fs.writeFileSync(dest, JSON.stringify(probes, null, 2));
+    if (!persistDir) return;
+    fs.mkdirSync(persistDir, { recursive: true });
+    fs.writeFileSync(path.join(persistDir, "probes.json"), JSON.stringify(probes, null, 2));
   }
   function getEvidence(args) {
     const name = String(args?.name ?? "");
@@ -51,7 +60,7 @@ export function createBroker(state) {
       probe_index: probes.length + 1,
       maxProbes: state.maxProbes ?? MAX_PROBES,
       subjectRoot: state.subjectRoot,
-      workDir: path.join(state.workDir, `probe-${probes.length + 1}`),
+      workDir: path.join(state.workDir || persistDir || "/tmp", `probe-${probes.length + 1}`),
       limits: { max_sandbox_seconds: state.maxSandboxSeconds },
       dockerBin: state.dockerBin,
     });
@@ -70,9 +79,36 @@ export function createBroker(state) {
       { note: String(args?.note ?? "").slice(0, 1000), probes: probes.length },
       args?.reason || "manual",
     );
-    const dest = path.join(state.workDir, "checkpoint.json");
-    fs.writeFileSync(dest, JSON.stringify(cp, null, 2));
+    if (persistDir) {
+      fs.mkdirSync(persistDir, { recursive: true });
+      fs.writeFileSync(path.join(persistDir, "checkpoint.json"), JSON.stringify(cp, null, 2));
+    }
     return { ok: true, checkpoint: cp };
+  }
+  function submitResult(args) {
+    if (!args || typeof args !== "object" || Array.isArray(args)) {
+      return { ok: false, code: "invalid_submit_result", message: "submit_result requires an object" };
+    }
+    const extra = Object.keys(args).filter((k) => k !== "markdown");
+    if (extra.length) {
+      return { ok: false, code: "submit_result_extra_keys", extra };
+    }
+    const markdown = String(args.markdown ?? "");
+    const bytes = Buffer.byteLength(markdown, "utf8");
+    if (bytes > MAX_MODEL_RESULT_BYTES) {
+      return { ok: false, code: "model_result_too_large", bytes };
+    }
+    if (looksLikeGateOverride(markdown)) {
+      return { ok: false, code: "artifact_gate_override", message: "model result tries to alter gates" };
+    }
+    if (!persistDir) {
+      return { ok: false, code: "missing_state_dir", message: "submit_result needs a state directory" };
+    }
+    fs.mkdirSync(persistDir, { recursive: true });
+    const dest = path.join(persistDir, "model-result.md");
+    fs.writeFileSync(dest, sanitizePublicText(markdown, MAX_MODEL_RESULT_BYTES));
+    persist();
+    return { ok: true, bytes, path: "model-result.md" };
   }
   return {
     tools: {
@@ -80,8 +116,10 @@ export function createBroker(state) {
       read_subject: readSubject,
       run_probe: run,
       checkpoint: saveCheckpoint,
+      submit_result: submitResult,
     },
     probes,
+    persistDir,
   };
 }
 
@@ -136,6 +174,17 @@ export function handleJsonRpc(broker, message) {
             inputSchema: {
               type: "object",
               properties: { note: { type: "string" }, reason: { type: "string" } },
+            },
+          },
+          {
+            name: "submit_result",
+            description:
+              "Submit bounded markdown findings for trusted publication. Does not write to GitHub.",
+            inputSchema: {
+              type: "object",
+              properties: { markdown: { type: "string" } },
+              required: ["markdown"],
+              additionalProperties: false,
             },
           },
         ],

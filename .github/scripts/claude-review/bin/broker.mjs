@@ -19,6 +19,7 @@ scrubBrokerEnv(process.env);
 const broker = createBroker({
   evidenceDir: path.join(stateDir, "evidence"),
   subjectRoot: path.join(stateDir, "subject"),
+  stateDir,
   workDir: path.join(stateDir, "work"),
   maxProbes: decision.work_order?.max_probes ?? provenanceFile.max_probes ?? 2,
   maxSandboxSeconds: decision.work_order?.max_sandbox_seconds ?? provenanceFile.max_sandbox_seconds ?? 1200,

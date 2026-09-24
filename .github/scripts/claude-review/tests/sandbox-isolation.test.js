@@ -118,6 +118,7 @@ describe("docker argv isolation contract", () => {
   it("uses --internal networks and never mounts the docker socket", () => {
     const net = dockerNetworkCreateArgs("stocky-review-test");
     assert.equal(net.includes("--internal"), true);
+    assert.equal(net.join(" ").includes("gateway_mode_ipv4=isolated"), true);
     const args = dockerRunArgs({
       network: "stocky-review-test",
       subjectDir: "/tmp/subject",

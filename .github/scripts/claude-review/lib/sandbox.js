@@ -14,14 +14,12 @@ import {
 import { validateProbe } from "./probe.js";
 import { outputHash } from "./verdict.js";
 import { resultErr } from "./util.js";
-import { runIsolatedProbe } from "./isolated-executor.js";
+import { dockerNetworkCreateArgs, runIsolatedProbe } from "./isolated-executor.js";
+
+export { dockerNetworkCreateArgs };
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD_SRC = path.resolve(HERE, "../sandbox/preload-jail.cjs");
-
-export function dockerNetworkCreateArgs(name) {
-  return ["network", "create", "--internal", name];
-}
 
 export function dockerRunArgs({
   image = `node:${NODE_VERSION}-bookworm-slim`,

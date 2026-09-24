@@ -31,15 +31,42 @@ function taskBody(over = {}) {
   return `@claude STOCKY_REVIEW_TASK_V1\n${JSON.stringify(wo)}\n`;
 }
 
-function startMock({ head = HEAD, commentBody = AUTH_BODY, permission = "admin" } = {}) {
+function startMock({
+  head = HEAD,
+  commentBody = taskBody(),
+  permission = "admin",
+  created_at = "2026-09-24T00:00:00Z",
+  updated_at = "2026-09-24T00:00:00Z",
+  comments = [],
+  tarball = Buffer.from("not-a-tar"),
+} = {}) {
+  const posted = [];
   const server = http.createServer((req, res) => {
     const url = req.url || "";
+    if (url.includes("/tarball/")) {
+      res.statusCode = 200;
+      res.end(tarball);
+      return;
+    }
+    if (req.method === "POST" && /\/issues\/\d+\/comments/.test(url) && !/\/comments\/\d+/.test(url)) {
+      let raw = "";
+      req.on("data", (c) => {
+        raw += c;
+      });
+      req.on("end", () => {
+        const body = JSON.parse(raw || "{}");
+        posted.push(body);
+        res.setHeader("Content-Type", "application/json");
+        res.end(JSON.stringify({ id: 9000 + posted.length, body: body.body, user: { login: OWNER_LOGIN, id: OWNER_ID } }));
+      });
+      return;
+    }
     let payload;
     if (url.includes("/collaborators/")) {
       payload = { permission };
-    } else if (url.includes("/pulls/45")) {
+    } else if (url.includes("/pulls/45") || url.includes("/pulls/62")) {
       payload = {
-        number: 45,
+        number: url.includes("/pulls/62") ? 62 : 45,
         head: { sha: head },
         base: { sha: BASE },
         state: "open",
@@ -47,14 +74,17 @@ function startMock({ head = HEAD, commentBody = AUTH_BODY, permission = "admin" 
         title: "subject",
         html_url: "https://github.com/Vedang1998/Stocky/pull/45",
       };
-    } else if (url.includes("/issues/comments/5806012938")) {
+    } else if (/\/issues\/comments\/5806012938/.test(url)) {
       payload = {
         id: 5806012938,
         user: { login: OWNER_LOGIN, id: OWNER_ID, type: "User" },
         body: commentBody,
-        updated_at: "2026-09-24T00:00:00Z",
-        created_at: "2026-09-24T00:00:00Z",
+        updated_at,
+        created_at,
+        html_url: "https://github.com/Vedang1998/Stocky/issues/comments/5806012938",
       };
+    } else if (/\/issues\/\d+\/comments/.test(url)) {
+      payload = comments;
     } else {
       res.statusCode = 404;
       res.end("{}");
@@ -65,7 +95,7 @@ function startMock({ head = HEAD, commentBody = AUTH_BODY, permission = "admin" 
   });
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      resolve({ server, baseUrl: `http://127.0.0.1:${server.address().port}` });
+      resolve({ server, baseUrl: `http://127.0.0.1:${server.address().port}`, posted });
     });
   });
 }
@@ -149,13 +179,41 @@ describe("dispatch with mocked GitHub", () => {
   });
 
   it("rejects edited authority comment when captured hash differs", async () => {
-    const mock = await startMock({ commentBody: "changed later" });
+    const mock = await startMock();
     servers.push(mock.server);
     const github = createGithubClient({ baseUrl: mock.baseUrl });
     const decision = await dispatchValidate({
       env: { ...envBase, COMMENT_BODY: taskBody() },
       github,
       capturedAuthority: { id: 5806012938, body_sha256: "deadbeef" },
+    });
+    assert.equal(decision.ok, false);
+    assert.equal(decision.code, "authority_edited");
+  });
+
+  it("rejects authority body that does not bind task/dispatch/head", async () => {
+    const mock = await startMock({ commentBody: AUTH_BODY });
+    servers.push(mock.server);
+    const github = createGithubClient({ baseUrl: mock.baseUrl });
+    const decision = await dispatchValidate({
+      env: { ...envBase, COMMENT_BODY: taskBody() },
+      github,
+    });
+    assert.equal(decision.ok, false);
+    assert.equal(decision.code, "authority_unbound_task");
+  });
+
+  it("rejects authority comment edited in place via timestamps", async () => {
+    const mock = await startMock({
+      commentBody: taskBody(),
+      created_at: "2026-09-24T00:00:00Z",
+      updated_at: "2026-09-24T01:00:00Z",
+    });
+    servers.push(mock.server);
+    const github = createGithubClient({ baseUrl: mock.baseUrl });
+    const decision = await dispatchValidate({
+      env: { ...envBase, COMMENT_BODY: taskBody() },
+      github,
     });
     assert.equal(decision.ok, false);
     assert.equal(decision.code, "authority_edited");
@@ -211,6 +269,38 @@ describe("dispatch with mocked GitHub", () => {
     assert.equal(decision.lease.status, "stopped");
   });
 
+  it("does not fabricate STOP success without a fetched lease", async () => {
+    const decision = await dispatchValidate({
+      env: {
+        ...envBase,
+        COMMENT_BODY:
+          '@claude STOCKY_REVIEW_STOP_V1 {"task_id":"rev-pr45-test","dispatch_key":"propo:issue61-v1:REVIEW:test:claude-review"}',
+      },
+    });
+    assert.equal(decision.ok, false);
+    assert.equal(decision.code, "stop_without_lease");
+    assert.equal(decision.invoke_claude, false);
+  });
+
+  it("reads STOP from persisted issue comments on the executable path", async () => {
+    const mock = await startMock({
+      comments: [
+        {
+          id: 11,
+          body: '@claude STOCKY_REVIEW_STOP_V1 {"task_id":"rev-pr45-test","dispatch_key":"propo:issue61-v1:REVIEW:test:claude-review"}',
+        },
+      ],
+    });
+    servers.push(mock.server);
+    const github = createGithubClient({ baseUrl: mock.baseUrl });
+    const decision = await dispatchValidate({
+      env: { ...envBase, COMMENT_BODY: taskBody() },
+      github,
+    });
+    assert.equal(decision.invoke_claude, false);
+    assert.equal(decision.code, "stopped");
+  });
+
   it("rejects read permission", async () => {
     const mock = await startMock({ permission: "read" });
     servers.push(mock.server);
@@ -246,7 +336,8 @@ describe("mcp broker", () => {
       },
     });
     const listed = handleJsonRpc(broker, { jsonrpc: "2.0", id: 1, method: "tools/list" });
-    assert.equal(listed.result.tools.length, 4);
+    assert.equal(listed.result.tools.length, 5);
+    assert.equal(listed.result.tools.some((t) => t.name === "submit_result"), true);
     const missing = handleJsonRpc(broker, {
       jsonrpc: "2.0",
       id: 2,

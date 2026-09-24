@@ -24,6 +24,7 @@ export const MAX_PROBE_SOURCE_BYTES = 32 * 1024;
 export const MAX_PROBE_OUTPUT_BYTES = 256 * 1024;
 export const MAX_ARTIFACT_BYTES = 512 * 1024;
 export const MAX_EVIDENCE_FILE_BYTES = 1024 * 1024;
+export const MAX_MODEL_RESULT_BYTES = 32 * 1024;
 
 export const EXPECTED_ARTIFACT_NAME = "review-report.md";
 export const ROLE_INDEPENDENT_REVIEWER = "independent_reviewer";
@@ -195,6 +196,7 @@ export const EXECUTABLE_ALLOWED_TOOLS = Object.freeze([
   "mcp__stocky_review__read_subject",
   "mcp__stocky_review__run_probe",
   "mcp__stocky_review__checkpoint",
+  "mcp__stocky_review__submit_result",
 ]);
 
 export const SYNTHETIC_PG = Object.freeze({

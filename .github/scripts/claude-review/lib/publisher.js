@@ -13,7 +13,8 @@ import {
 import { looksLikeGateOverride, sanitizePublicText } from "./sanitize.js";
 import { parseLockMarker, readbackMatches, renderLockMarker } from "./session.js";
 import { isFullSha, resultErr, resultOk, sha256Hex } from "./util.js";
-import { detectStaleHead, fetchPull } from "./authority.js";
+import { detectStaleHead, fetchIssueComments, fetchPull } from "./authority.js";
+import { stopFromComments } from "./session.js";
 import { combineTaskVerdict } from "./verdict.js";
 
 export function validateArtifact({ name, content, taskId }) {
@@ -227,6 +228,20 @@ export async function publishFromState({
       });
       const stale = detectStaleHead(decision.work_order.subject.head, pr.head);
       if (!stale.ok) return stale;
+      if (issueNumber) {
+        const comments = await fetchIssueComments(github, {
+          owner,
+          repo: repoName,
+          issueNumber,
+        });
+        const stopped = stopFromComments(comments, {
+          dispatchKey: lease.dispatch_key,
+          taskId: lease.task_id,
+        });
+        if (stopped) {
+          return resultErr("stopped", "STOP observed at trusted publication");
+        }
+      }
     }
   }
   const split = separateExecutorAndModel(input.loaded);

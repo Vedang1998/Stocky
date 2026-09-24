@@ -56,6 +56,8 @@ describe("workflow pins and comment isolation", () => {
     assert.match(execJob, /contents: read/);
     assert.equal(execJob.includes("contents: write"), false);
     assert.equal(execJob.includes("id-token: write"), false);
+    assert.equal(execJob.includes("issues: write"), false);
+    assert.match(execJob, /issues: read/);
     assert.equal(execJob.includes("secrets.CLAUDE_CODE_OAUTH_TOKEN"), true);
     const publishJob = main.split(/^  publish:/m)[1].split(/^  publish_reject:/m)[0];
     assert.equal(publishJob.includes("secrets.CLAUDE_CODE_OAUTH_TOKEN"), false);
@@ -68,6 +70,12 @@ describe("workflow pins and comment isolation", () => {
     assert.equal(exec.includes("secrets.CLAUDE_CODE_OAUTH_TOKEN"), false);
     assert.match(exec, /isolation-proof/);
     assert.match(main, /rewrite-mcp/);
+    assert.match(main, /assert-lease/);
+    assert.match(main, /submit_result/);
+    assert.match(main, /dispatch_key:/);
+    assert.match(main, /claude-review-exec-/);
+    assert.match(main, /claude-review-pub-/);
+    assert.match(main, /needs\.ingress\.result == 'success'/);
     assert.equal(exec.includes("ref: ${{ inputs.subject_head }}"), false);
     const iso = fs.readFileSync(path.join(ROOT, "scripts/claude-review/lib/constants.js"), "utf8");
     assert.match(iso, new RegExp(IMAGE_PINS.postgres.digest.replace("sha256:", "sha256:")));

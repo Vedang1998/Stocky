@@ -14,16 +14,26 @@ import {
   assertImmutableOwnerActor,
   assertRepository,
   assertWritePermission,
+  bindAuthorityComment,
   compareFetchedVsClaimed,
   detectEditedAuthorityComment,
   detectStaleHead,
   fetchIssueComment,
+  fetchIssueComments,
   fetchPermissionLevel,
   fetchPull,
   isActivationAdmitted,
 } from "./authority.js";
 import { parseCommentBody } from "./parse-work-order.js";
-import { acquireLease, applyStop, makeLease, renderLockMarker } from "./session.js";
+import {
+  acquireLease,
+  applyStop,
+  leaseFromComments,
+  makeLease,
+  makeStoppedLease,
+  renderLockMarker,
+  stopFromComments,
+} from "./session.js";
 import { bodySha256 } from "./sanitize.js";
 import { buildTrustedPrompt, writeEvidencePack } from "./evidence.js";
 import { mcpConfig } from "./mcp-broker.js";
@@ -61,7 +71,30 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
   if (!parsed.ok) return finalize(parsed, event);
 
   if (parsed.mode === "stop") {
-    const stopped = applyStop(existingLease, parsed);
+    let existing = existingLease;
+    if (github && event.issue_number) {
+      const [owner, repoName] = REPOSITORY.split("/");
+      const comments = await fetchIssueComments(github, {
+        owner,
+        repo: repoName,
+        issueNumber: event.issue_number,
+      });
+      existing = existing || leaseFromComments(comments, {
+        dispatchKey: parsed.dispatch_key,
+        taskId: parsed.task_id,
+      });
+    }
+    if (!existing) {
+      if (!github) {
+        return finalize(resultErr("stop_without_lease", "STOP requires a fetched lease"), event);
+      }
+      const lease = makeStoppedLease(parsed);
+      return finalize(
+        { ok: true, mode: "stop", invoke_claude: false, lease, post_lock: true },
+        event,
+      );
+    }
+    const stopped = applyStop(existing, parsed);
     if (!stopped.ok) return finalize(stopped, event);
     return finalize(
       {
@@ -69,6 +102,7 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
         mode: "stop",
         invoke_claude: false,
         lease: stopped.lease,
+        post_lock: true,
       },
       event,
     );
@@ -130,6 +164,9 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
       : resultErr("permission_unverified", "write permission not fetched");
   if (!perm.ok) return finalize(perm, event);
 
+  let captured = capturedAuthority || null;
+  let comments = [];
+  let leaseState = existingLease;
   if (github) {
     const [owner, repoName] = REPOSITORY.split("/");
     const pr = await fetchPull(github, {
@@ -144,18 +181,54 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
       repo: repoName,
       commentId: parsed.work_order.authority_comment_id,
     });
-    const expected = capturedAuthority || {
-      id: parsed.work_order.authority_comment_id,
-      body_sha256: bodySha256(comment.body),
-    };
-    const auth = detectEditedAuthorityComment(expected, {
-      ...comment,
-      body_sha256: bodySha256(comment.body),
-    });
-    if (!auth.ok) return finalize(auth, event);
+    const bound = bindAuthorityComment(parsed.work_order, comment);
+    if (!bound.ok) return finalize(bound, event);
+    if (captured) {
+      const auth = detectEditedAuthorityComment(captured, {
+        ...comment,
+        body_sha256: bodySha256(comment.body),
+      });
+      if (!auth.ok) return finalize(auth, event);
+    }
+    captured = captured || bound.captured;
     const liveHead = pr.head;
     const stale = detectStaleHead(parsed.work_order.subject.head, liveHead);
     if (!stale.ok) return finalize(stale, event);
+    if (event.issue_number) {
+      comments = await fetchIssueComments(github, {
+        owner,
+        repo: repoName,
+        issueNumber: event.issue_number,
+      });
+    }
+    const stopped = stopFromComments(comments, {
+      dispatchKey: parsed.work_order.dispatch_key,
+      taskId: parsed.work_order.task_id,
+    });
+    if (stopped) {
+      return finalize(
+        {
+          ok: true,
+          mode: "executable_review",
+          invoke_claude: false,
+          rejected: true,
+          code: "stopped",
+          message: "STOP marker or stopped lease is present",
+          work_order: parsed.work_order,
+          lease: makeStoppedLease({
+            dispatch_key: parsed.work_order.dispatch_key,
+            task_id: parsed.work_order.task_id,
+          }),
+        },
+        event,
+      );
+    }
+    leaseState =
+      leaseState ||
+      leaseFromComments(comments, {
+        dispatchKey: parsed.work_order.dispatch_key,
+        taskId: parsed.work_order.task_id,
+      });
   }
 
   const attempt = `${event.run_id}-${sha256Hex(parsed.work_order.dispatch_key).slice(0, 8)}`;
@@ -167,7 +240,7 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
     head: parsed.work_order.subject.head,
     status: "leased",
   });
-  const lease = acquireLease(existingLease, incoming);
+  const lease = acquireLease(leaseState, incoming);
   if (!lease.ok) return finalize(lease, event);
 
   return finalize(
@@ -178,6 +251,8 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
       admitted: true,
       work_order: parsed.work_order,
       lease: lease.lease,
+      captured_authority: captured,
+      post_lock: true,
       allowed_tools: EXECUTABLE_ALLOWED_TOOLS.join(","),
       disallowed_tools: DISALLOWED_CLAUDE_TOOLS.join(","),
       max_turns: MAX_TURNS,
@@ -222,6 +297,9 @@ export function prepareStateDir(baseDir, decision) {
       max_sandbox_seconds: decision.work_order.max_sandbox_seconds,
     };
   }
+  if (decision.captured_authority) {
+    files["authority-capture.json"] = decision.captured_authority;
+  }
   rewriteMcpConfig(baseDir);
   for (const [name, value] of Object.entries(files)) {
     if (value == null) continue;
@@ -242,19 +320,32 @@ export function rewriteMcpConfig(stateDir) {
 }
 
 function finalize(decision, event) {
+  const dispatchKey =
+    decision.work_order?.dispatch_key ||
+    decision.lease?.dispatch_key ||
+    (decision.dispatch_key ?? "");
+  const invoke = Boolean(decision.invoke_claude);
   const outputs = {
     ok: String(Boolean(decision.ok)),
     mode: decision.mode || "rejected",
-    invoke_claude: String(Boolean(decision.invoke_claude)),
+    invoke_claude: String(invoke),
+    admitted: String(Boolean(decision.admitted)),
     code: decision.code || "",
     message: decision.message || "",
+    dispatch_key: dispatchKey,
     lock_marker: decision.lease ? renderLockMarker(decision.lease) : "",
     at: nowIso(),
   };
   if (decision.allowed_tools) outputs.allowed_tools = decision.allowed_tools;
   if (decision.disallowed_tools) outputs.disallowed_tools = decision.disallowed_tools;
   if (decision.prompt) outputs.prompt = decision.prompt;
-  return { ...decision, event, outputs, github_output: Object.entries(outputs).map(([k, v]) => githubOutput(k, v)).join("") };
+  return {
+    ...decision,
+    invoke_claude: invoke,
+    event,
+    outputs,
+    github_output: Object.entries(outputs).map(([k, v]) => githubOutput(k, v)).join(""),
+  };
 }
 
 export { writeGithubOutput };

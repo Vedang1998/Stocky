@@ -1,5 +1,6 @@
 import { bodySha256, sanitizePublicText } from "./sanitize.js";
-import { LOCK_MARKER_PREFIX, LOCK_MARKER_SUFFIX } from "./constants.js";
+import { LOCK_MARKER_PREFIX, LOCK_MARKER_SUFFIX, TRIGGER_PREFIX } from "./constants.js";
+import { parseCommentBody } from "./parse-work-order.js";
 import { nowIso, resultErr, resultOk, sha256Hex } from "./util.js";
 
 export function makeLease({ dispatchKey, taskId, attempt, runId, head, status }) {
@@ -82,15 +83,7 @@ export function acquireLease(existing, incoming) {
 
 export function applyStop(existing, stop) {
   if (!existing) {
-    return resultOk({
-      lease: makeLease({
-        dispatchKey: stop.dispatch_key,
-        taskId: stop.task_id,
-        attempt: "stop",
-        head: "0".repeat(40),
-        status: "stopped",
-      }),
-    });
+    return resultErr("stop_without_lease", "STOP requires a fetched lease");
   }
   if (existing.dispatch_key !== stop.dispatch_key || existing.task_id !== stop.task_id) {
     return resultErr("stop_mismatch", "STOP does not match the leased task");
@@ -98,6 +91,57 @@ export function applyStop(existing, stop) {
   return resultOk({
     lease: { ...existing, status: "stopped", updated_at: nowIso() },
   });
+}
+
+export function makeStoppedLease(stop) {
+  return makeLease({
+    dispatchKey: stop.dispatch_key,
+    taskId: stop.task_id,
+    attempt: "stop",
+    head: "0".repeat(40),
+    status: "stopped",
+  });
+}
+
+export function leaseFromComments(comments, { dispatchKey, taskId } = {}) {
+  if (!Array.isArray(comments)) return null;
+  let found = null;
+  for (const c of comments) {
+    const parsed = parseLockMarker(c?.body);
+    if (!parsed.ok) continue;
+    if (dispatchKey && parsed.lease.dispatch_key !== dispatchKey) continue;
+    if (taskId && parsed.lease.task_id !== taskId) continue;
+    found = parsed.lease;
+  }
+  return found;
+}
+
+export function stopFromComments(comments, { dispatchKey, taskId } = {}) {
+  if (!Array.isArray(comments)) return null;
+  for (const c of comments) {
+    const body = String(c?.body || "");
+    if (body.startsWith(TRIGGER_PREFIX)) {
+      const parsed = parseCommentBody(body);
+      if (
+        parsed.ok &&
+        parsed.mode === "stop" &&
+        parsed.dispatch_key === dispatchKey &&
+        parsed.task_id === taskId
+      ) {
+        return parsed;
+      }
+    }
+    const lock = parseLockMarker(body);
+    if (
+      lock.ok &&
+      lock.lease.status === "stopped" &&
+      lock.lease.dispatch_key === dispatchKey &&
+      lock.lease.task_id === taskId
+    ) {
+      return { mode: "stop", dispatch_key: dispatchKey, task_id: taskId, lease: lock.lease };
+    }
+  }
+  return null;
 }
 
 export function checkpoint(state, reason) {

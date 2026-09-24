@@ -1,11 +1,12 @@
 # Bounded executable Claude review runner
 
 **Status:** IMPLEMENTATION DRAFT — not activated, not production, not a substitute for independent review
-**Authority:** issue61 + issue52 comment `5806012938` + owner command `5806021611` + R1 `5807860348`
+**Authority:** issue61 + issue52 comment `5806012938` + owner command `5806021611` + R1 `5807860348` + R2 `5813474882` / review `5813026207`
 **Dispatch-Key (original):** `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation`
 **Dispatch-Key (R1):** `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R1:1433281753670762394a44ee9c25514a8b1d86bc:cursor-correction`
+**Dispatch-Key (R2):** `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R2:bbd3bbedf7951a043aaaf51d84a0fc0b93595c97:cursor-correction`
 **Risk tier:** A (credentials, publication, untrusted subject execution)
-**Activation:** blocked until independent runner review, ChatGPT acceptance, owner merge, **and** repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`
+**Activation:** blocked until independent runner re-review, ChatGPT acceptance, owner merge, **and** repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`
 **This runner must not certify itself.**
 
 ### Recorded draft identity
@@ -19,9 +20,8 @@
 | Runtime/test implementation | `a1c52735f91727cdb76f0a7ffebeb56b96241bd0` |
 | Last full-Heavy implementation head (pre-R1) | `7139a10e3e9e3f1184ff56d7cc8d68f458a63d68` |
 | R1 input head | `1433281753670762394a44ee9c25514a8b1d86bc` |
-| Exact-head CI on `7139a10` | `pull_request` run [35946198137](https://github.com/Vedang1998/Stocky/actions/runs/35946198137) SUCCESS |
-| Exact-head CI on docs-finalization `1433281` | `pull_request` run [35950974549](https://github.com/Vedang1998/Stocky/actions/runs/35950974549) SUCCESS |
-| R1 output head | later correction commit; do not embed that commit's own SHA here |
+| R1 output / R2 input | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` |
+| R2 output head | later correction commit; do not embed that commit's own SHA here |
 | Instruction loading | `AGENTS.md`, issue61, issue52 `5806012938`, this runbook, implementation report |
 
 This document freezes the file list, job/tool contract, command schema, and trust assumptions for RUNNER-01. Implementation must stay inside this envelope.
@@ -127,9 +127,9 @@ Shared `if:` (all jobs inherit via `ingress`): repository + owner login + numeri
 |---|---|---|---|
 | `ingress` | `contents: read`, `issues: write`, `pull-requests: write`, `actions: read` | `GITHUB_TOKEN` only | Parse/bind/fetch/snapshot subject tarball. No OAuth. No model. |
 | `simple` | `contents: write`, `issues: write`, `pull-requests: write`, `id-token: write`, `actions: read` | OAuth + `github_token: ${{ github.token }}` | Preserved owner communication. Not executable review. |
-| `executable` | **`contents: read` only** + `actions: read`. **No `id-token: write`.** | OAuth for Claude API + **explicit** `github_token: ${{ github.token }}` (job-scoped, read-only contents). | Model + MCP. Probes run in Docker via `isolated-executor.js`. |
-| `publish` | `contents: write`, `issues: write`, `pull-requests: write` | `GITHUB_TOKEN` only. **No OAuth.** | Trusted `publish-from-state`. |
-| `publish_reject` | `issues: write`, `pull-requests: write`, `contents: read` | `GITHUB_TOKEN` only | Rejection/STOP without model. |
+| `executable` | **`contents: read`**, `actions: read`, `issues: read`, `pull-requests: read`. **No `id-token: write`.** No `contents: write` / `issues: write`. | OAuth for Claude API + **explicit** `github_token: ${{ github.token }}` (job-scoped, read-only contents). | Model + MCP. `assert-lease` before Claude. Probes run in Docker via `isolated-executor.js`. `submit_result` writes a file; model cannot GitHub-write. |
+| `publish` | `contents: write`, `issues: write`, `pull-requests: write` | `GITHUB_TOKEN` only. **No OAuth.** | Trusted `publish-from-state`. Re-checks STOP. Concurrency `claude-review-pub-<dispatch_key>`. |
+| `publish_reject` | `issues: write`, `pull-requests: write`, `contents: read` | `GITHUB_TOKEN` only | Rejection/STOP without model. **Only when `needs.ingress.result == 'success'` and `invoke_claude != 'true'`.** |
 
 Passing `github_token: ${{ github.token }}` is mandatory on Claude steps. Inspected `src/github/token.ts` at action SHA `8cf34825…`: if `OVERRIDE_GITHUB_TOKEN` is empty, the action exchanges OIDC for a GitHub App token with default `contents: write`, `pull_requests: write`, `issues: write` — **bypassing job permissions**. R1 therefore sets the override and omits `id-token: write` on the executable job so that minting cannot succeed if the override is dropped. `classify_inline_comments: false` skips the action's post-session comment writer.
 
@@ -152,7 +152,8 @@ A. Trusted controller (ingress) — GITHUB_TOKEN read, no OAuth, no untrusted co
         ├─ simple job: OAuth + write token (communication only; no run_probe)
         │
         └─ executable job: OAuth + read-only GITHUB_TOKEN
-                MCP run_probe → isolated-executor.js (Docker --internal, digest pins)
+                MCP run_probe → isolated-executor.js (detached named Docker, isolated gateway, digest pins)
+                MCP submit_result → stateDir/model-result.md (publisher loads this; model has no GitHub write)
                 │ executor metadata files
                 ▼
 B. Secret-free sandbox (same executor as isolation_proof job)
@@ -173,7 +174,8 @@ Claude **effective** tools for executable review (allowlist). Anything else is d
 | `mcp__stocky_review__get_evidence` | read local evidence pack | broker → files written by dispatcher |
 | `mcp__stocky_review__read_subject` | read file under snapshot root | broker → `fs-guard` realpath jail |
 | `mcp__stocky_review__run_probe` | typed probe | broker → `runIsolatedProbe` (digest-pinned Docker). Model cannot select `isolationMode`. |
-| `mcp__stocky_review__checkpoint` | persist bounded checkpoint | broker → session store |
+| `mcp__stocky_review__checkpoint` | persist bounded checkpoint | broker → `stateDir/checkpoint.json` |
+| `mcp__stocky_review__submit_result` | bounded markdown findings | broker → `stateDir/model-result.md`. Size-capped. No GitHub API. |
 
 Explicitly denied (settings + `--disallowedTools` + not installed):
 
@@ -185,10 +187,10 @@ Simple route allowlist: `Read`, `Glob`, `Grep`, `LS` on the **trusted checkout o
 
 1. agent mode so tag-mode git Bash is not auto-attached;
 2. GitHub MCP servers not installed;
-3. MCP broker implements only the four tools and never receives OAuth;
+3. MCP broker implements only the five tools and never receives OAuth;
 4. subject is a tarball/data snapshot, not the workspace used to run the action;
-5. probes run only in `lib/isolated-executor.js` (digest-pinned Docker, `--internal` network). Host `spawnSync` for Node/SQL/Redis exists solely behind `HOST_ISOLATION_MODES` (`host-unit`, `host-enforcement-control`) and is unreachable from MCP;
-6. publisher job (no OAuth) consumes executor metadata files; model PASS is ignored; host-process backends are refused.
+5. probes run only in `lib/isolated-executor.js` (digest-pinned Docker, `--internal` + `gateway_mode_ipv4=isolated`). Timeout uses detached `--name --init` + `docker kill -s KILL`, not attached `spawnSync` SIGTERM. Host `spawnSync` for Node/SQL/Redis exists solely behind `HOST_ISOLATION_MODES` and is unreachable from MCP;
+6. publisher job (no OAuth) consumes executor metadata and `submit_result` markdown; model PASS is ignored; host-process backends are refused.
 
 ---
 
@@ -310,7 +312,9 @@ States: `leased`, `running`, `checkpointed`, `completed`, `rejected`, `stopped`,
 
 A new Actions job is **not** the prior Claude cloud conversation. Checkpoints are attributed evidence files, not session resume unless `continuation_of` names them in a new admitted order.
 
-Concurrent contenders: first writer to store the lease in the tracking comment wins; others reject `duplicate_dispatch`. GitHub concurrency does not provide this.
+Ingress fetches issue comments, parses lock markers, and binds the authority comment body to `task_id` / `dispatch_key` / subject head. `created_at !== updated_at` is durable edit evidence. A captured `authority-capture.json` hash is compared on `assert-lease`. STOP without a fetched lease is `stop_without_lease` (no fabricated success). After acquire, ingress POSTs a lock marker. Executable job re-runs `assert-lease` before Claude. Publisher re-fetches STOP.
+
+Executable concurrency: `claude-review-exec-<dispatch_key>`. Publish concurrency: `claude-review-pub-<dispatch_key>`. `cancel-in-progress: false`. GitHub concurrency is not exactly-once; the lock comment is.
 
 ---
 
@@ -322,7 +326,7 @@ Concurrent contenders: first writer to store the lease in the tracking comment w
 | Docker daemon (when present) | Trusted; **not** mounted into the probe container | Authoring VM has no Docker; GHA `isolation_proof` job is the kernel/container proof |
 | `claude-code-action` at pinned SHA | Reviewed; still calls `configureGitAuth` in agent mode | Mitigated on the executable path by passing `github_token: ${{ github.token }}` with `contents: read` and omitting `id-token: write` so the action cannot mint an App write token. Residual: a read-only job token is still injected into git config. Not equivalent to a credential-free model plane. Simple communication still uses a write-capable job. |
 | Node `--require` preload jail | Defense in depth inside the container; host-unit tests only | `process.binding` / native addons could bypass userland jail; Docker is the production plane |
-| Network `--internal` (Docker) | Blocks default egress from probe/sidecar network | Image pulls happen on the trusted host docker network before sandbox create |
+| Network `--internal` + `gateway_mode_ipv4=isolated` | Blocks default egress and host-bridge gateway from probe code | Image pulls happen on the trusted host docker network before sandbox create. Synthetic PG/Redis remain on the same ICC network. |
 | Evidence APIs | Dispatcher token can read the repo | Comment text is untrusted input |
 | Image digests | Manifest-list pins in `IMAGE_PINS`; executor pulls `name@sha256:…` | Pins recorded from Docker Hub tag API 2026-09-24. GHA `isolation_proof` must `docker image inspect` the resolved refs. Mutable tags are locators only. |
 
@@ -369,4 +373,22 @@ Publisher/status values:
 
 `REJECTED` `BLOCKED` `UNKNOWN` `EXPECTED_FAILURE` `COMPLETED_NO_VERDICT`
 
-The runner **never** emits `PASS` for application implementation or merge. A completed comment is not ChatGPT acceptance. Label `READY FOR INDEPENDENT RUNNER REVIEW` is a Cursor authoring label on the **tooling PR**, not live adoption.
+The runner **never** emits `PASS` for application implementation or merge. A completed comment is not ChatGPT acceptance. Label `READY FOR INDEPENDENT RUNNER RE-REVIEW` is a Cursor authoring label on the **tooling PR**, not live adoption.
+
+---
+
+## 14. R2 security correction (R62-01..07)
+
+Independent review `5813026207` of `bbd3bbe` required these production-path repairs. R62-08/R62-09 remain non-blocking observations (simple route still write-capable; vendor `configureGitAuth` residual).
+
+| ID | Repair |
+|---|---|
+| R62-01 | Named `--init --stop-timeout 1` detached `docker run -d`. Inspect-poll until exit or deadline, then `docker kill -s KILL`, logs, `rm -f`. `finally` removes `pg`/`redis`/`probe` + network. `timed_out` is persisted. Fake-docker busy-loop unit test is wall-clock bounded. |
+| R62-02 | MCP `submit_result` writes size-capped `stateDir/model-result.md`. Checkpoint writes `stateDir/checkpoint.json`. Publisher already loads those files into `result-comment.md`. |
+| R62-03 | `dispatch.mjs --phase validate` fetches comments, binds authority, POSTs lock. `--phase assert-lease` before Claude. STOP/duplicate/stale/edited-authority covered by mock-GitHub tests through the production entry. |
+| R62-04 | Network create adds `enable_ip_masquerade=false` and `gateway_mode_ipv4=isolated`. Isolation proof uses a host-listener canary with `new net.Socket` (preload is not the layer). Mutation `omit-gateway-isolated` must revive CONNECTED. |
+| R62-05 | `publish_reject` requires `needs.ingress.result == 'success'` so skipped ingress (non-owner comments) does not start a write job. |
+| R62-06 | Exact-SHA snapshot runs before `invoke_claude` is written to `GITHUB_OUTPUT`. Extract failure sets `invoke_claude=false` and a deterministic rejection code. |
+| R62-07 | `isolation-proof.mjs` records per-control oracles: timeout/orphan, host-gateway + mutation, egress/IMDS, jail-bypass canary/socket/secrets, image pin inspect, file-hash restoration. Generic non-zero is not PASS. |
+
+`STOCKY_ISOLATION_PROOF=1` plus `STOCKY_ISOLATION_PROOF_MUTATION` (`omit-gateway-isolated`, `skip-cleanup`, `skip-kill`) is the gated disable-control. Production callers never set it.

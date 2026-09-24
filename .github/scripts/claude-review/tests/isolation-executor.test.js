@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { createBroker, scrubBrokerEnv } from "../lib/mcp-broker.js";
 import { runProbe } from "../lib/sandbox.js";
 import { assertIsolatedDockerArgs, dockerCliEnv } from "../lib/isolated-executor.js";
-import { IMAGE_PINS, MAX_ARTIFACT_BYTES, pinnedImage } from "../lib/constants.js";
+import { IMAGE_PINS, MAX_ARTIFACT_BYTES, MAX_MODEL_RESULT_BYTES, pinnedImage } from "../lib/constants.js";
 import { bindProbeRequest, validateProvenance } from "../lib/provenance.js";
 import {
   loadPublisherInput,
@@ -33,11 +33,13 @@ const PROVENANCE = {
   max_sandbox_seconds: 60,
 };
 
-function writeFakeDocker() {
+function writeFakeDocker({ hang = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stocky-docker-"));
   const bin = path.join(dir, "docker");
   const log = path.join(dir, "argv.log");
   const envLog = path.join(dir, "env.log");
+  const hangFlag = path.join(dir, "hang");
+  if (hang) fs.writeFileSync(hangFlag, "1");
   fs.writeFileSync(
     bin,
     `#!/bin/sh
@@ -49,13 +51,21 @@ case "$1" in
   network) exit 0 ;;
   pull) exit 0 ;;
   rm) exit 0 ;;
+  kill) echo killed >> "${log}"; exit 0 ;;
+  logs) echo ok; exit 0 ;;
+  ps) exit 0 ;;
+  inspect)
+    if [ -f "${hangFlag}" ]; then echo "true 0"; exit 0; fi
+    echo "false 0"
+    exit 0
+    ;;
   exec) echo PONG; exit 0 ;;
   image) echo '["postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"]'; exit 0 ;;
   run)
     if echo "$@" | grep -q docker.sock; then echo sock; exit 9; fi
     if echo "$@" | grep -q -- '--privileged'; then echo priv; exit 9; fi
     if echo "$@" | grep -q -- '--network=host'; then echo hostnet; exit 9; fi
-    echo ok
+    echo cid123
     exit 0
     ;;
 esac
@@ -98,7 +108,10 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(first.executor.backend, "docker");
     assert.equal(first.executor.isolation, "docker");
     const argv = fs.readFileSync(fake.log, "utf8");
-    assert.match(argv, /network create --internal/);
+    assert.match(argv, /network create --driver bridge --internal/);
+    assert.match(argv, /gateway_mode_ipv4=isolated/);
+    assert.match(argv, /--init/);
+    assert.match(argv, /--name/);
     assert.match(argv, /postgres@sha256:/);
     assert.match(argv, /redis@sha256:/);
     assert.doesNotMatch(argv, /docker\.sock/);
@@ -140,6 +153,34 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(pinnedImage(IMAGE_PINS.redis), /^redis@sha256:[0-9a-f]{64}$/);
     assert.match(pinnedImage(IMAGE_PINS.node), /^node@sha256:[0-9a-f]{64}$/);
     assert.equal(pinnedImage(IMAGE_PINS.postgres).includes(":16-alpine"), false);
+  });
+
+  it("busy-loop timeout uses named kill rather than attached spawnSync hang", () => {
+    const fake = writeFakeDocker({ hang: true });
+    const started = Date.now();
+    const result = runProbe(
+      {
+        kind: "node_script",
+        timeout_seconds: 1,
+        node_script: { source: "while (true) {}" },
+        expect: { outcome: "timeout" },
+      },
+      {
+        isolationMode: "docker",
+        requireProvenance: true,
+        provenance: PROVENANCE,
+        probe_index: 1,
+        dockerBin: fake.bin,
+      },
+    );
+    const elapsed = Date.now() - started;
+    assert.equal(result.executor.backend, "docker");
+    assert.equal(result.executor.timed_out, true);
+    assert.ok(elapsed < 15_000, `timeout wall clock ${elapsed}ms`);
+    const argv = fs.readFileSync(fake.log, "utf8");
+    assert.match(argv, /--init/);
+    assert.match(argv, /kill -s KILL/);
+    assert.doesNotMatch(argv, /docker\.sock/);
   });
 });
 
@@ -271,6 +312,55 @@ describe("execution and publication provenance", () => {
     );
     const gated = await publishFromState({ stateDir: gateDir, github: null });
     assert.equal(gated.code, "artifact_gate_override");
+  });
+
+  it("submit_result writes stateDir model-result.md and publisher includes it", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stocky-submit-"));
+    fs.mkdirSync(path.join(dir, "evidence"));
+    const broker = createBroker({
+      evidenceDir: path.join(dir, "evidence"),
+      subjectRoot: dir,
+      stateDir: dir,
+      workDir: path.join(dir, "work"),
+      maxProbes: 2,
+      provenance: PROVENANCE,
+      dockerBin: writeFakeDocker().bin,
+    });
+    const tooBig = broker.tools.submit_result({ markdown: "x".repeat(MAX_MODEL_RESULT_BYTES + 8) });
+    assert.equal(tooBig.code, "model_result_too_large");
+    const extra = broker.tools.submit_result({ markdown: "ok", isolationMode: "host-unit" });
+    assert.equal(extra.code, "submit_result_extra_keys");
+    const saved = broker.tools.submit_result({
+      markdown: "# findings\nR62-02 model narrative survives trusted publication.\n",
+    });
+    assert.equal(saved.ok, true);
+    assert.equal(fs.existsSync(path.join(dir, "model-result.md")), true);
+    const cp = broker.tools.checkpoint({ note: "after submit" });
+    assert.equal(cp.ok, true);
+    assert.equal(fs.existsSync(path.join(dir, "checkpoint.json")), true);
+    fs.writeFileSync(
+      path.join(dir, "decision.json"),
+      JSON.stringify({
+        admitted: true,
+        lease: { dispatch_key: "propo:test", task_id: "rev-test", attempt: "a1", head: PROVENANCE.head },
+        work_order: { subject: { pr: 62, head: PROVENANCE.head, base: PROVENANCE.base } },
+      }),
+    );
+    fs.writeFileSync(
+      path.join(dir, "probes.json"),
+      JSON.stringify([
+        {
+          probe: { kind: "sql" },
+          executor: { backend: "docker", isolation: "docker", exit_code: 0, tests_run: 1, timed_out: false },
+          classified: { verdict: "COMPLETED_NO_VERDICT" },
+        },
+      ]),
+    );
+    const published = await publishFromState({ stateDir: dir, github: null });
+    assert.equal(published.ok, true, published.message);
+    const comment = fs.readFileSync(path.join(dir, "result-comment.md"), "utf8");
+    assert.match(comment, /R62-02 model narrative survives trusted publication/);
+    assert.match(comment, /Executor metadata \(trusted\)/);
   });
 });
 

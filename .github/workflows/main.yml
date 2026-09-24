@@ -32,6 +32,8 @@ jobs:
       mode: ${{ steps.dispatch.outputs.mode }}
       invoke_claude: ${{ steps.dispatch.outputs.invoke_claude }}
       admitted: ${{ steps.dispatch.outputs.admitted }}
+      dispatch_key: ${{ steps.dispatch.outputs.dispatch_key }}
+      code: ${{ steps.dispatch.outputs.code }}
 
     env:
       STOCKY_REVIEW_RUNNER_ACTIVATED: ${{ vars.STOCKY_CLAUDE_REVIEW_RUNNER }}
@@ -138,9 +140,14 @@ jobs:
     if: needs.ingress.outputs.invoke_claude == 'true' && needs.ingress.outputs.mode == 'executable_review'
     runs-on: ubuntu-latest
     timeout-minutes: 50
+    concurrency:
+      group: claude-review-exec-${{ needs.ingress.outputs.dispatch_key || github.run_id }}
+      cancel-in-progress: false
     permissions:
       contents: read
       actions: read
+      issues: read
+      pull-requests: read
     steps:
       - name: Checkout trusted workflow ref
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -167,6 +174,13 @@ jobs:
           STOCKY_REVIEW_STATE_DIR: ${{ runner.temp }}/stocky-review
         run: node .github/scripts/claude-review/bin/dispatch.mjs --phase rewrite-mcp
 
+      - name: Assert lease still valid
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          STOCKY_REVIEW_STATE_DIR: ${{ runner.temp }}/stocky-review
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: node .github/scripts/claude-review/bin/dispatch.mjs --phase assert-lease
+
       - name: Load prompt
         id: prompt
         env:
@@ -192,7 +206,7 @@ jobs:
           claude_args: >-
             --max-turns 40
             --permission-mode dontAsk
-            --allowedTools mcp__stocky_review__get_evidence,mcp__stocky_review__read_subject,mcp__stocky_review__run_probe,mcp__stocky_review__checkpoint
+            --allowedTools mcp__stocky_review__get_evidence,mcp__stocky_review__read_subject,mcp__stocky_review__run_probe,mcp__stocky_review__checkpoint,mcp__stocky_review__submit_result
             --disallowedTools Bash,BashOutput,KillShell,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,SlashCommand
             --mcp-config ${{ runner.temp }}/stocky-review/mcp.json
 
@@ -216,6 +230,9 @@ jobs:
     if: always() && needs.ingress.outputs.invoke_claude == 'true' && needs.ingress.outputs.mode == 'executable_review'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency:
+      group: claude-review-pub-${{ needs.ingress.outputs.dispatch_key || github.run_id }}
+      cancel-in-progress: false
     permissions:
       contents: write
       issues: write
@@ -248,7 +265,7 @@ jobs:
 
   publish_reject:
     needs: ingress
-    if: always() && needs.ingress.outputs.invoke_claude != 'true'
+    if: needs.ingress.result == 'success' && needs.ingress.outputs.invoke_claude != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
