@@ -1,10 +1,10 @@
 # Bounded executable Claude review runner
 
-**Status:** IMPLEMENTATION DRAFT — not activated, not production, not a substitute for independent review  
-**Authority:** issue61 + issue52 comment `5806012938` + owner command `5806021611`  
-**Dispatch-Key:** `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation`  
-**Risk tier:** A (credentials, publication, untrusted subject execution)  
-**Activation:** blocked until independent runner review, ChatGPT acceptance, owner merge, **and** repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`  
+**Status:** IMPLEMENTATION DRAFT — not activated, not production, not a substitute for independent review
+**Authority:** issue61 + issue52 comment `5806012938` + owner command `5806021611`
+**Dispatch-Key:** `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation`
+**Risk tier:** A (credentials, publication, untrusted subject execution)
+**Activation:** blocked until independent runner review, ChatGPT acceptance, owner merge, **and** repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`
 **This runner must not certify itself.**
 
 This document freezes the file list, job/tool contract, command schema, and trust assumptions for RUNNER-01. Implementation must stay inside this envelope.

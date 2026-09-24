@@ -1,7 +1,7 @@
 # CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01
 
-**Status:** Implementation complete — pending independent verification  
-**Implementer:** Cursor (cloud agent)  
+**Status:** Implementation complete — pending independent verification
+**Implementer:** Cursor (cloud agent)
 **Label:** not yet `READY FOR INDEPENDENT RUNNER REVIEW` (exact-head CI pending at first push)
 
 ## Identity
