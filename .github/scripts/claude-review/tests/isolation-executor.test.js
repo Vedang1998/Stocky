@@ -145,8 +145,8 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(sqlRun, /-e HOME=\/tmp/);
     assert.doesNotMatch(sqlRun, /--read-only/);
     assert.match(argv, /create /);
-    assert.match(argv, /start /);
-    assert.match(argv, /logs --follow/);
+    assert.match(argv, /start -a --sig-proxy=false/);
+    assert.doesNotMatch(argv, /logs --follow/);
     assert.match(argv, /pg_isready/);
     assert.match(argv, /exec .* psql .* SELECT 1/);
     assert.doesNotMatch(argv, /docker\.sock/);
@@ -274,7 +274,8 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(argv, /--init/);
     assert.match(argv, /kill -s KILL/);
     assert.match(argv, /create /);
-    assert.match(argv, /logs --follow/);
+    assert.match(argv, /start -a --sig-proxy=false/);
+    assert.doesNotMatch(argv, /logs --follow/);
     const nodeRun = argv.split("\n").find((line) => line.includes("preload-jail.cjs")) || "";
     assert.match(nodeRun, /--read-only/);
     assert.match(nodeRun, /STOCKY_BRIDGE_GATEWAY=10\.29\.0\.1/);

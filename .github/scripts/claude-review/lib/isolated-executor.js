@@ -165,6 +165,22 @@ function sleepMs(ms) {
   Atomics.wait(new Int32Array(sab), 0, 0, ms);
 }
 
+function childExited(child) {
+  if (!child) return true;
+  if (child.exitCode != null || child.signalCode != null || child.killed) return true;
+  if (!child.pid) return true;
+  try {
+    const stat = fs.readFileSync(`/proc/${child.pid}/stat`, "utf8");
+    const idx = stat.lastIndexOf(")");
+    const state = idx >= 0 ? stat.slice(idx + 2, idx + 3) : "";
+    if (state === "Z") return true;
+    process.kill(child.pid, 0);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function waitForExec(dockerBin, args, timeoutMs, ok = (r) => r.status === 0) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
@@ -281,8 +297,10 @@ export function cleanupPrefix(dockerBin, prefix) {
   return leftoverResources(dockerBin, prefix);
 }
 
-function waitNamedContainer(dockerBin, name, timeoutMs) {
+function waitNamedContainer(dockerBin, name, timeoutMs, follower = null) {
   const started = Date.now();
+  let sawRunning = false;
+  const startChild = follower?.child || null;
   while (Date.now() - started < timeoutMs) {
     const r = docker(
       dockerBin,
@@ -291,11 +309,22 @@ function waitNamedContainer(dockerBin, name, timeoutMs) {
     );
     if (r.status === 0) {
       const [running, exitCode] = (r.stdout || "").trim().split(/\s+/);
+      if (running === "true") sawRunning = true;
       if (running === "false") {
-        return { timed_out: false, exit_code: Number(exitCode) || 0 };
+        const childDone = childExited(startChild);
+        if (sawRunning) {
+          return { timed_out: false, exit_code: Number(exitCode) || 0 };
+        }
+        if (startChild && childDone && startChild.exitCode != null && startChild.exitCode !== 0) {
+          return { timed_out: false, exit_code: startChild.exitCode || 1, start_failed: true };
+        }
+        if (childDone) {
+          return { timed_out: false, exit_code: Number(exitCode) || 0 };
+        }
       }
     }
-    sleepMs(200);
+    follower?.pollCap?.();
+    sleepMs(50);
   }
   return { timed_out: true, exit_code: 124 };
 }
@@ -309,84 +338,91 @@ export function toCreateArgs(runArgs) {
   return out;
 }
 
-function startLogFollower(dockerBin, name) {
-  const child = spawn(dockerBin, ["logs", "--follow", name], {
+function startAttachFollower(dockerBin, name) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stocky-attach-"));
+  const outPath = path.join(dir, "stdout");
+  const errPath = path.join(dir, "stderr");
+  const outFd = fs.openSync(outPath, "w");
+  const errFd = fs.openSync(errPath, "w");
+  const child = spawn(dockerBin, ["start", "-a", "--sig-proxy=false", name], {
     env: dockerCliEnv(),
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", outFd, errFd],
   });
   const cap = MAX_COLLECTOR_BUFFER_BYTES;
-  const stdoutChunks = [];
-  const stderrChunks = [];
-  let stdoutStored = 0;
-  let stderrStored = 0;
-  let stdoutBytes = 0;
-  let stderrBytes = 0;
   let truncated = false;
   let stopped = false;
+  function fileSize(p) {
+    try {
+      return fs.statSync(p).size;
+    } catch {
+      return 0;
+    }
+  }
+  function sizes() {
+    const o = fileSize(outPath);
+    const e = fileSize(errPath);
+    return { o, e, t: o + e };
+  }
+  function pollCap() {
+    if (stopped || truncated) return;
+    if (sizes().t >= cap) {
+      truncated = true;
+      stopReading();
+    }
+  }
   function stopReading() {
     if (stopped) return;
     stopped = true;
-    try {
-      child.stdout?.destroy();
-    } catch {
-      /* ignore */
-    }
-    try {
-      child.stderr?.destroy();
-    } catch {
-      /* ignore */
-    }
     try {
       child.kill("SIGKILL");
     } catch {
       /* ignore */
     }
   }
-  function onData(kind, chunk) {
-    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    if (kind === "stdout") {
-      stdoutBytes += buf.length;
-      if (stdoutStored < cap) {
-        const room = cap - stdoutStored;
-        stdoutChunks.push(room < buf.length ? buf.subarray(0, room) : buf);
-        stdoutStored += Math.min(buf.length, room);
-      }
-    } else {
-      stderrBytes += buf.length;
-      if (stderrStored < cap) {
-        const room = cap - stderrStored;
-        stderrChunks.push(room < buf.length ? buf.subarray(0, room) : buf);
-        stderrStored += Math.min(buf.length, room);
-      }
-    }
-    if (stdoutBytes + stderrBytes >= cap) {
-      truncated = true;
-      stopReading();
+  function readCapped(p) {
+    try {
+      return fs.readFileSync(p).subarray(0, cap).toString("utf8");
+    } catch {
+      return "";
     }
   }
-  child.stdout?.on("data", (c) => onData("stdout", c));
-  child.stderr?.on("data", (c) => onData("stderr", c));
-  child.on("error", () => {
-    truncated = true;
-  });
-  return {
-    stopReading,
-    snapshot() {
-      return {
-        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
-        stderr: Buffer.concat(stderrChunks).toString("utf8"),
-        output_incomplete: truncated || stdoutBytes + stderrBytes >= cap,
-        log_bytes: stdoutBytes + stderrBytes,
-      };
-    },
-  };
+  function snapshot() {
+    pollCap();
+    const { t } = sizes();
+    return {
+      stdout: readCapped(outPath),
+      stderr: readCapped(errPath),
+      output_incomplete: truncated || t >= cap,
+      log_bytes: t,
+    };
+  }
+  function cleanup() {
+    stopReading();
+    try {
+      fs.closeSync(outFd);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.closeSync(errFd);
+    } catch {
+      /* ignore */
+    }
+    try {
+      fs.rmSync(dir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+  return { child, pollCap, stopReading, snapshot, cleanup };
 }
 
 /**
- * Named create + follow logs from before start + inspect poll + SIGKILL.
+ * Named create + attached start (-a, sig-proxy off) + inspect poll + SIGKILL.
  * Do not use attached spawnSync timeout against untrusted PID 1 (sig-proxy hang).
- * The follow reader is destroyed at MAX_COLLECTOR_BUFFER_BYTES so rotation plus a
- * small tail cannot look complete, and omit-log-limits cannot fill host RAM.
+ * Attach reads container stdout directly so json-file max-file=1 rotation cannot
+ * replace a 2MiB write with a small tail that looks complete. The attach reader
+ * is destroyed at MAX_COLLECTOR_BUFFER_BYTES so omit-log-limits cannot fill RAM.
  */
 export function runDetachedThenWait(dockerBin, args, { name, timeoutMs, options = {} }) {
   const mutation = proofMutation(options);
@@ -401,44 +437,47 @@ export function runDetachedThenWait(dockerBin, args, { name, timeoutMs, options 
       output_incomplete: false,
     };
   }
-  const follower = startLogFollower(dockerBin, name);
-  const started = docker(dockerBin, ["start", name], { timeout: 30_000 });
-  if (started.status !== 0) {
+  const follower = startAttachFollower(dockerBin, name);
+  try {
+    const wait = waitNamedContainer(dockerBin, name, timeoutMs, follower);
+    if (wait.start_failed) {
+      const followed = follower.snapshot();
+      follower.stopReading();
+      return {
+        status: wait.exit_code || 1,
+        stdout: followed.stdout,
+        stderr: followed.stderr || "docker start -a failed",
+        timed_out: false,
+        provisioning_failed: true,
+        output_incomplete: followed.output_incomplete,
+      };
+    }
+    if (wait.timed_out && mutation !== "skip-kill") {
+      docker(dockerBin, ["kill", "-s", "KILL", name], { timeout: 10_000 });
+    }
     const followed = follower.snapshot();
     follower.stopReading();
+    const collected = collectContainerLogs(dockerBin, name, options);
+    if (mutation !== "skip-cleanup") {
+      docker(dockerBin, ["rm", "-f", name], { timeout: 15_000 });
+    }
     return {
-      status: started.status ?? 1,
-      stdout: followed.stdout,
-      stderr: started.stderr || followed.stderr || "docker start failed",
-      timed_out: false,
-      provisioning_failed: true,
-      output_incomplete: followed.output_incomplete,
+      status: wait.timed_out ? 124 : wait.exit_code,
+      stdout: followed.stdout || collected.stdout,
+      stderr: followed.stderr || collected.stderr,
+      timed_out: wait.timed_out,
+      provisioning_failed: false,
+      output_incomplete: Boolean(
+        followed.output_incomplete ||
+          collected.output_incomplete ||
+          (followed.log_bytes || 0) >= MAX_COLLECTOR_BUFFER_BYTES,
+      ),
+      log_driver: collected.log_driver,
+      log_bytes: Math.max(followed.log_bytes || 0, collected.log_bytes || 0),
     };
+  } finally {
+    follower.cleanup();
   }
-  const wait = waitNamedContainer(dockerBin, name, timeoutMs);
-  if (wait.timed_out && mutation !== "skip-kill") {
-    docker(dockerBin, ["kill", "-s", "KILL", name], { timeout: 10_000 });
-  }
-  const followed = follower.snapshot();
-  follower.stopReading();
-  const collected = collectContainerLogs(dockerBin, name, options);
-  if (mutation !== "skip-cleanup") {
-    docker(dockerBin, ["rm", "-f", name], { timeout: 15_000 });
-  }
-  return {
-    status: wait.timed_out ? 124 : wait.exit_code,
-    stdout: followed.stdout || collected.stdout,
-    stderr: followed.stderr || collected.stderr,
-    timed_out: wait.timed_out,
-    provisioning_failed: false,
-    output_incomplete: Boolean(
-      followed.output_incomplete ||
-        collected.output_incomplete ||
-        (followed.log_bytes || 0) >= MAX_COLLECTOR_BUFFER_BYTES,
-    ),
-    log_driver: collected.log_driver,
-    log_bytes: Math.max(followed.log_bytes || 0, collected.log_bytes || 0),
-  };
 }
 
 function collectContainerLogs(dockerBin, name, options = {}) {

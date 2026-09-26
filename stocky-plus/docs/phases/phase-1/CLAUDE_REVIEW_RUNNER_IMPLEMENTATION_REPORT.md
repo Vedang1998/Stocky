@@ -39,7 +39,8 @@ This documentation records CI identities for already-observed heads. It does **n
 | R2 runtime/test correction | `df6759278059e4d9899259d5e7c0d118db3bda2c` | parent is `bbd3bbe`; exact-head CI run 35998517064 SUCCESS; isolation_proof run 35998517100 FAILURE |
 | R2 isolation-proof follow-ups | `11693a661c622536a0ab745a69829bf8ead757ab`, `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | live R2 head `4e5eefb`; exact-head CI run 36005015430 SUCCESS; isolation_proof run 36005015425 PASS_ISOLATION_PROOF |
 | Stabilization runtime/test | `6ac5ec9f5246cf0730f745d115573000ef979028` | parent is `4e5eefb`; exact-head CI run 36207918474 SUCCESS; isolation_proof run 36207918476 FAILURE |
-| Stabilization isolation-proof oracle follow-up | this commit (SHA in live PR description; not self-embedded) | parent is `6ac5ec9`. Fixes jail `STOCKY_JAIL` classification + flood stdout drain. |
+| Stabilization isolation-proof oracle follow-up | `2149ac099bac09d6a756cfb9e4dabc2a49b39100` | parent is `6ac5ec9`; Classify+Heavy+Gate run 36211907116 SUCCESS; isolation_proof run 36211907059 FAILURE (`rotation_incomplete=false`) |
+| Stabilization attach-collector follow-up | this commit (SHA in live PR description; not self-embedded) | parent is `2149ac0`. `docker start -a --sig-proxy=false` completeness vs json-file rotation. |
 | Reviewed implementation head | none for this stabilization | independent Claude tooling re-review has not started on the stabilization head |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
 
@@ -57,6 +58,7 @@ This documentation records CI identities for already-observed heads. It does **n
 | `11693a661c622536a0ab745a69829bf8ead757ab` | runtime + test | restore isolation-proof SQL and host-gateway oracles |
 | `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | runtime + test | wait for sidecar SELECT 1 before SQL probes |
 | `6ac5ec9f5246cf0730f745d115573000ef979028` | runtime + test + documentation | stabilize control history, inert publish, and proofs |
+| `2149ac099bac09d6a756cfb9e4dabc2a49b39100` | runtime + test + documentation | classify jail denials and drain isolation-proof flood output |
 
 No empty retrigger. No independent review report. No schema/migration. No `ci.yml` change.
 
@@ -79,7 +81,7 @@ R62-08/R62-09 remain observations (simple route write-capable; vendor `configure
 - `lib/session.js`: `parseTopLevelLockEnvelope`; owner-id STOP; workflow-bot locks; sticky STOP/completed; ignore released; missing identity fail-closed.
 - `lib/dispatch.js` + `lib/dispatch-cli.js`: canonical thread from `issue_url`; snapshot before running lease; blocked lock on snapshot failure; `continuation_of`; production `bin/dispatch.mjs` refuses mock/proof env and exits 2 on `ok === false` (phase runner does not set `process.exitCode`).
 - `lib/inert.js` + publisher: one trusted envelope + inert opinion; lost POST readback is UNKNOWN without retry; publication re-fetches complete history.
-- `lib/isolated-executor.js`: json-file 1m/1 on probe and sidecars; `docker create` + follow-logs-from-before-start destroyed at 256 KiB; `output_incomplete` → BLOCKED; mutations only via `allowProofHooks`.
+- `lib/isolated-executor.js`: json-file 1m/1 on probe and sidecars; `docker create` + `docker start -a --sig-proxy=false` attach reader destroyed at 256 KiB; `output_incomplete` → BLOCKED; mutations only via `allowProofHooks`.
 - `bin/isolation-proof.mjs`: child host-listener; harness candidates even when Gateway empty; `attempts>0`; wrapped + `fs.promises` bypass FS denials classified as `ENOENT`/`EACCES`/`EPERM`/`STOCKY_JAIL` (generic `ERR` cannot pass); flood/rotation-tail/omit-log-limits drain stdout; hash restore.
 - Tests: `tests/comment-history.test.js`, `tests/control-auth.test.js`, `tests/inert-publish.test.js`, `tests/production-hooks.test.js`, `tests/dispatch-pagination.test.js` plus updates. Recorded separately from `proofs/*.test.js` (1 docker-presence assertion; isolation-proof.mjs is the real-container proof).
 
@@ -287,6 +289,16 @@ GHA job [108308268034](https://github.com/Vedang1998/Stocky/actions/runs/3620791
 
 - `canary_denied`/`sock_denied`/`fake_sock_denied`=false because preload `deny()` throws `Error("STOCKY_JAIL:…")` with no `e.code`, and the oracle treated generic `"ERR"` as failure. This follow-up classifies `STOCKY_JAIL` and requires a separate `fs.promises` bypass attempt (`ENOENT`/`EACCES`/`EPERM`/`STOCKY_JAIL`). Generic `"ERR"` / `"untried"` still cannot PASS.
 - `flood_incomplete`/`rotation_incomplete`/`omit_limits_incomplete`=false because the probe scripts called `process.exit(0)` after `stdout.write`, dropping unflushed bytes (`output_bytes` 163840 / 98317 / 131072). This follow-up drains via `writeFully` and marks collector cap / ENOBUFS as incomplete.
+
+Do not embed that follow-up commit's own SHA here.
+
+### Stabilization isolation_proof FAILURE on `2149ac0`
+
+GHA job [108320032979](https://github.com/Vedang1998/Stocky/actions/runs/36211907059/job/108320032979) on `2149ac0` (Classify+Heavy+Gate run [36211907116](https://github.com/Vedang1998/Stocky/actions/runs/36211907116) SUCCESS):
+
+- Jail/flood/omit oracles **passed** (`canary_denied=true`, `flood_incomplete=true`, `omit_limits_incomplete=true`).
+- `rotation_incomplete=false` and `rotation_not_tail_only_complete=false`: json-file `max-file=1` rotated away `START-MARKER`; `docker logs --follow` then returned only a 98316-byte tail (`stdout_has_tail=true`, `stdout_has_start=false`) that looked complete.
+- This follow-up collects probe stdout via `docker start -a --sig-proxy=false` so completeness is not the rotated json-file tail. Host disk still uses json-file 1m/1.
 
 Do not embed this follow-up commit's own SHA here.
 
