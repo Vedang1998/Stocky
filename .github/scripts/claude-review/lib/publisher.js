@@ -11,11 +11,11 @@ import {
   REVIEW_PATH_PREFIX,
 } from "./constants.js";
 import { looksLikeGateOverride, sanitizePublicText } from "./sanitize.js";
-import { parseLockMarker, readbackMatches, renderLockMarker } from "./session.js";
+import { parseTopLevelLockEnvelope, readbackMatches, reduceControlState, renderLockMarker } from "./session.js";
 import { isFullSha, resultErr, resultOk, sha256Hex } from "./util.js";
-import { detectStaleHead, fetchIssueComments, fetchPull } from "./authority.js";
-import { stopFromComments } from "./session.js";
-import { combineTaskVerdict } from "./verdict.js";
+import { detectStaleHead, fetchCommentHistory, fetchPull } from "./authority.js";
+import { combineTaskVerdict, leaseStatusFromVerdict } from "./verdict.js";
+import { renderInertOpinion } from "./inert.js";
 
 export function validateArtifact({ name, content, taskId }) {
   if (name !== EXPECTED_ARTIFACT_NAME) {
@@ -157,9 +157,27 @@ export function refuseMainWrite(branch) {
 }
 
 export function buildResultComment({ lease, status, body }) {
+  return buildTrustedResultComment({
+    lease: { ...lease, status },
+    combined: { status, reason: "" },
+    executor: [],
+    modelText: body,
+  });
+}
+
+export function buildTrustedResultComment({ lease, combined, executor, modelText }) {
+  const status = leaseStatusFromVerdict(combined, lease);
   const marker = renderLockMarker({ ...lease, status });
-  const sanitized = sanitizePublicText(body, 32_000);
-  return `${marker}\n\n${sanitized}\n`;
+  const machine = [
+    "STOCKY_TASK_RESULT_V1",
+    `Status: ${status}`,
+    `Reason: ${combined?.reason || ""}`,
+    "Opinion: not a gate",
+    "Executor metadata (trusted):",
+    JSON.stringify(executor || [], null, 2),
+  ].join("\n");
+  const opinion = renderInertOpinion(modelText || "");
+  return `${marker}\n${machine}\n\nReviewer opinion (inert, not a gate):\n${opinion}\n`;
 }
 
 export function publisherReadback(body, lease) {
@@ -229,17 +247,23 @@ export async function publishFromState({
       const stale = detectStaleHead(decision.work_order.subject.head, pr.head);
       if (!stale.ok) return stale;
       if (issueNumber) {
-        const comments = await fetchIssueComments(github, {
+        const history = await fetchCommentHistory(github, {
           owner,
           repo: repoName,
           issueNumber,
         });
-        const stopped = stopFromComments(comments, {
+        if (!history.ok) return history;
+        const control = reduceControlState(history.comments, {
           dispatchKey: lease.dispatch_key,
           taskId: lease.task_id,
+          thread: issueNumber,
         });
-        if (stopped) {
+        if (!control.ok) return control;
+        if (control.stopped) {
           return resultErr("stopped", "STOP observed at trusted publication");
+        }
+        if (control.completed && control.lease?.attempt && control.lease.attempt !== lease.attempt) {
+          return resultErr("stale_attempt", "completed attempt cannot be overwritten by publication");
         }
       }
     }
@@ -266,31 +290,51 @@ export async function publishFromState({
     probes: split.executor.map((p) => p.classified || { verdict: "BLOCKED" }),
     modelClaimsPass: split.modelClaimsPass,
   });
-  const body = buildResultComment({
-    lease: { ...lease, status: combined.status },
-    status: combined.status,
-    body: [
-      "STOCKY_TASK_RESULT_V1",
-      `Status: ${combined.status}`,
-      `Reason: ${combined.reason}`,
-      "Executor metadata (trusted):",
-      JSON.stringify(split.executor, null, 2),
-      "Model narrative is not a gate and is not PASS.",
-      sanitizePublicText(split.modelText, 8000),
-    ].join("\n"),
+  const leaseStatus = leaseStatusFromVerdict(combined, lease);
+  const body = buildTrustedResultComment({
+    lease: { ...lease, status: leaseStatus },
+    combined,
+    executor: split.executor,
+    modelText: split.modelText,
   });
   fs.writeFileSync(path.join(stateDir, "result-comment.md"), body);
   let comment = null;
   if (github && issueNumber) {
     const [owner, repoName] = REPOSITORY.split("/");
-    comment = await github.mutate("POST", `/repos/${owner}/${repoName}/issues/${issueNumber}/comments`, {
-      body,
-    });
-    const readback = await github.getJson(
-      `/repos/${owner}/${repoName}/issues/comments/${comment.id}`,
-    );
-    const ack = publisherReadback(readback.body, { ...lease, status: combined.status });
-    if (!ack.ok) return { ...ack, combined, posted: comment };
+    try {
+      comment = await github.mutate("POST", `/repos/${owner}/${repoName}/issues/${issueNumber}/comments`, {
+        body,
+      });
+    } catch (err) {
+      return resultErr("publication_post_unknown", err?.message || "publication POST failed", {
+        combined,
+      });
+    }
+    try {
+      const readback = await github.getJson(
+        `/repos/${owner}/${repoName}/issues/comments/${comment.id}`,
+      );
+      const ack = publisherReadback(readback.body, { ...lease, status: leaseStatus });
+      if (!ack.ok) {
+        return {
+          ok: false,
+          code: "publication_readback_unknown",
+          message: ack.message || "publication POST succeeded but readback did not match",
+          combined,
+          posted: comment,
+          body,
+        };
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        code: "publication_readback_unknown",
+        message: err?.message || "publication POST succeeded but readback was lost",
+        combined,
+        posted: comment,
+        body,
+      };
+    }
   }
   let branch = null;
   if (publishBranch && decision.work_order?.publish_review_branch && repoDir) {

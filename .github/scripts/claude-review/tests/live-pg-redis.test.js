@@ -18,8 +18,7 @@ function haveRedis() {
 describe("live Node + PostgreSQL + Redis probes", () => {
   it("runs a permitted SELECT against synthetic PostgreSQL", () => {
     if (!havePsql()) {
-      assert.ok(true, "BLOCKED: psql missing — recorded as skip in live suite");
-      return;
+      assert.fail("required live PostgreSQL evidence missing: psql not found (no silent skip)");
     }
     const result = runProbe({
       kind: "sql",
@@ -27,8 +26,7 @@ describe("live Node + PostgreSQL + Redis probes", () => {
       sql: { text: "SELECT current_user, current_database()" },
     });
     if (result.executor.provisioning_failed) {
-      assert.ok(true, "BLOCKED: postgres not accepting connections");
-      return;
+      assert.fail("required live PostgreSQL evidence missing: postgres not accepting connections");
     }
     assert.equal(result.executor.exit_code, 0, result.executor.stderr);
     assert.match(result.executor.stdout, /stocky_review/);
@@ -36,14 +34,18 @@ describe("live Node + PostgreSQL + Redis probes", () => {
   });
 
   it("fails an actual negative SQL probe", () => {
-    if (!havePsql()) return;
+    if (!havePsql()) {
+      assert.fail("required live PostgreSQL evidence missing: psql not found (no silent skip)");
+    }
     const result = runProbe({
       kind: "sql",
       timeout_seconds: 15,
       sql: { text: "SELECT * FROM definitely_missing_table_stocky_review" },
       expect: { outcome: "fail" },
     });
-    if (result.executor.provisioning_failed) return;
+    if (result.executor.provisioning_failed) {
+      assert.fail("required live PostgreSQL evidence missing: postgres not accepting connections");
+    }
     assert.notEqual(result.executor.exit_code, 0);
     const classified = classifyExecutorResult(result.probe, result.executor);
     assert.equal(classified.verdict, "EXPECTED_FAILURE");
@@ -51,27 +53,32 @@ describe("live Node + PostgreSQL + Redis probes", () => {
 
   it("PINGs synthetic Redis", () => {
     if (!haveRedis()) {
-      assert.ok(true, "BLOCKED: redis-cli ping failed");
-      return;
+      assert.fail("required live Redis evidence missing: redis-cli ping failed (no silent skip)");
     }
     const result = runProbe({
       kind: "redis",
       timeout_seconds: 10,
       redis: { op: "PING" },
     });
-    if (result.executor.provisioning_failed) return;
+    if (result.executor.provisioning_failed) {
+      assert.fail("required live Redis evidence missing: redis not accepting connections");
+    }
     assert.equal(result.executor.exit_code, 0, result.executor.stderr);
     assert.match(result.executor.stdout, /PONG/i);
   });
 
   it("SET/GET with allowlisted key", () => {
-    if (!haveRedis()) return;
+    if (!haveRedis()) {
+      assert.fail("required live Redis evidence missing: redis-cli ping failed (no silent skip)");
+    }
     const result = runProbe({
       kind: "redis",
       timeout_seconds: 10,
       redis: { op: "SET", key: "stocky-review:live", value: "ok" },
     });
-    if (result.executor.provisioning_failed) return;
+    if (result.executor.provisioning_failed) {
+      assert.fail("required live Redis evidence missing: redis not accepting connections");
+    }
     assert.equal(result.executor.exit_code, 0);
     const get = runProbe({
       kind: "redis",
@@ -82,7 +89,9 @@ describe("live Node + PostgreSQL + Redis probes", () => {
   });
 
   it("node_script talks to postgres via allowlisted psql spawn", () => {
-    if (!havePsql()) return;
+    if (!havePsql()) {
+      assert.fail("required live PostgreSQL evidence missing: psql not found (no silent skip)");
+    }
     const result = runProbe({
       kind: "node_script",
       timeout_seconds: 15,
@@ -95,7 +104,9 @@ describe("live Node + PostgreSQL + Redis probes", () => {
         `,
       },
     });
-    if (result.executor.provisioning_failed) return;
+    if (result.executor.provisioning_failed) {
+      assert.fail("required live PostgreSQL evidence missing: postgres not accepting connections");
+    }
     assert.equal(result.executor.exit_code, 0, result.executor.stderr);
     assert.match(result.executor.stdout, /ok/);
   });

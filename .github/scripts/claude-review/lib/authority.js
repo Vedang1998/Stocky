@@ -1,4 +1,5 @@
 import { OWNER_ID, OWNER_LOGIN, OWNER_TYPE, REPOSITORY } from "./constants.js";
+import { assertCanonicalThread, fetchCommentHistory } from "./comment-history.js";
 import { bodySha256 } from "./sanitize.js";
 import { isFullSha, resultErr, resultOk } from "./util.js";
 
@@ -130,16 +131,15 @@ export async function fetchIssueComment(client, { owner, repo, commentId }) {
     updated_at: data.updated_at,
     created_at: data.created_at,
     html_url: data.html_url,
+    issue_url: data.issue_url,
   };
 }
 
 export async function fetchIssueComments(client, { owner, repo, issueNumber }) {
-  if (!issueNumber) return [];
-  const data = await client.getJson(
-    `/repos/${owner}/${repo}/issues/${issueNumber}/comments?per_page=100`,
-  );
-  return Array.isArray(data) ? data : [];
+  return fetchCommentHistory(client, { owner, repo, issueNumber });
 }
+
+export { assertCanonicalThread, fetchCommentHistory };
 
 /**
  * Authority body must contain the task/dispatch/head locators. GitHub
@@ -152,8 +152,11 @@ export function bindAuthorityComment(workOrder, comment) {
   if (Number(comment.id) !== Number(workOrder.authority_comment_id)) {
     return resultErr("authority_id_mismatch", "authority comment id mismatch");
   }
-  if (comment.user?.id && Number(comment.user.id) !== OWNER_ID) {
+  if (!comment.user?.id || Number(comment.user.id) !== OWNER_ID) {
     return resultErr("authority_wrong_author", "authority comment author is not the owner");
+  }
+  if (!comment.user?.type || comment.user.type !== OWNER_TYPE) {
+    return resultErr("authority_wrong_author", "authority comment author type is not User");
   }
   const body = comment.body;
   if (!body.includes(workOrder.task_id)) {

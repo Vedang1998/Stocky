@@ -1,10 +1,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
+  DOCKER_LOG_DRIVER,
+  DOCKER_LOG_MAX_FILE,
+  DOCKER_LOG_MAX_SIZE,
+  DOCKER_LOG_NEAR_CAP_BYTES,
   IMAGE_PINS,
+  MAX_COLLECTOR_BUFFER_BYTES,
   MAX_PROBE_OUTPUT_BYTES,
   REDIS_KEY_PREFIX,
   SECRET_ENV_DENY,
@@ -15,13 +20,13 @@ import {
 import { bindProbeRequest } from "./provenance.js";
 import { outputHash } from "./verdict.js";
 import { resultErr, sha256Hex } from "./util.js";
+import { resolveProofMutation } from "./production-hooks.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PRELOAD_SRC = path.resolve(HERE, "../sandbox/preload-jail.cjs");
 
-export function proofMutation() {
-  if (process.env.STOCKY_ISOLATION_PROOF !== "1") return "";
-  return String(process.env.STOCKY_ISOLATION_PROOF_MUTATION || "");
+export function proofMutation(options = {}) {
+  return resolveProofMutation(options);
 }
 
 export function dockerAvailable(dockerBin = "docker") {
@@ -76,11 +81,14 @@ export function executorResult(partial) {
     stdout: stdout.text,
     stderr: stderr.text,
     output_truncated: stdout.truncated || stderr.truncated,
+    output_incomplete: Boolean(partial.output_incomplete) || stdout.truncated || stderr.truncated,
     output_bytes: stdout.bytes + stderr.bytes,
     stdout_sha256: outputHash(stdout.text, stderr.text),
     duration_ms: partial.duration_ms ?? 0,
     image_pins: partial.image_pins,
     leftovers: partial.leftovers,
+    log_driver: partial.log_driver || null,
+    log_bytes: partial.log_bytes ?? null,
   };
 }
 
@@ -110,6 +118,7 @@ function docker(dockerBin, args, options = {}) {
   return spawnSync(dockerBin, args, {
     encoding: "utf8",
     timeout: options.timeout ?? 30_000,
+    maxBuffer: options.maxBuffer ?? MAX_COLLECTOR_BUFFER_BYTES,
     env: options.env || dockerCliEnv(),
   });
 }
@@ -170,7 +179,28 @@ export function isIpv4(value) {
   return /^(?:\d{1,3}\.){3}\d{1,3}$/.test(String(value || ""));
 }
 
-export function dockerNetworkCreateArgs(name) {
+export function deriveHostGatewayCandidates({ extra = [] } = {}) {
+  const ips = new Set(["127.0.0.1", "172.17.0.1", "172.18.0.1"]);
+  const ifaces = os.networkInterfaces() || {};
+  for (const addrs of Object.values(ifaces)) {
+    for (const a of addrs || []) {
+      if (a.family === "IPv4" || a.family === 4) {
+        if (a.address) ips.add(a.address);
+        const parts = String(a.address || "").split(".").map(Number);
+        if (parts.length === 4 && parts.every((n) => n >= 0 && n <= 255)) {
+          ips.add(`${parts[0]}.${parts[1]}.${parts[2]}.1`);
+          ips.add(`${parts[0]}.${parts[1]}.${parts[2]}.254`);
+        }
+      }
+    }
+  }
+  for (const item of extra) {
+    if (isIpv4(item)) ips.add(item);
+  }
+  return [...ips];
+}
+
+export function dockerNetworkCreateArgs(name, options = {}) {
   const args = [
     "network",
     "create",
@@ -181,7 +211,7 @@ export function dockerNetworkCreateArgs(name) {
   ];
   // omit-gateway-isolated drops both --internal and isolated-gateway opts so
   // a host-listener canary can revive CONNECTED. Production keeps both.
-  if (proofMutation() !== "omit-gateway-isolated") {
+  if (proofMutation(options) !== "omit-gateway-isolated") {
     args.push(
       "--internal",
       "--opt",
@@ -192,6 +222,18 @@ export function dockerNetworkCreateArgs(name) {
   }
   args.push(name);
   return args;
+}
+
+export function dockerLogDriverArgs(options = {}) {
+  if (proofMutation(options) === "omit-log-limits") return [];
+  return [
+    "--log-driver",
+    DOCKER_LOG_DRIVER,
+    "--log-opt",
+    `max-size=${DOCKER_LOG_MAX_SIZE}`,
+    "--log-opt",
+    `max-file=${DOCKER_LOG_MAX_FILE}`,
+  ];
 }
 
 function dockerInspectFormat(dockerBin, name, format) {
@@ -258,40 +300,192 @@ function waitNamedContainer(dockerBin, name, timeoutMs) {
   return { timed_out: true, exit_code: 124 };
 }
 
+export function toCreateArgs(runArgs) {
+  const out = ["create"];
+  for (let i = 1; i < runArgs.length; i += 1) {
+    if (runArgs[i] === "-d" || runArgs[i] === "--detach") continue;
+    out.push(runArgs[i]);
+  }
+  return out;
+}
+
+function startLogFollower(dockerBin, name) {
+  const child = spawn(dockerBin, ["logs", "--follow", name], {
+    env: dockerCliEnv(),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const cap = MAX_COLLECTOR_BUFFER_BYTES;
+  const stdoutChunks = [];
+  const stderrChunks = [];
+  let stdoutStored = 0;
+  let stderrStored = 0;
+  let stdoutBytes = 0;
+  let stderrBytes = 0;
+  let truncated = false;
+  let stopped = false;
+  function stopReading() {
+    if (stopped) return;
+    stopped = true;
+    try {
+      child.stdout?.destroy();
+    } catch {
+      /* ignore */
+    }
+    try {
+      child.stderr?.destroy();
+    } catch {
+      /* ignore */
+    }
+    try {
+      child.kill("SIGKILL");
+    } catch {
+      /* ignore */
+    }
+  }
+  function onData(kind, chunk) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    if (kind === "stdout") {
+      stdoutBytes += buf.length;
+      if (stdoutStored < cap) {
+        const room = cap - stdoutStored;
+        stdoutChunks.push(room < buf.length ? buf.subarray(0, room) : buf);
+        stdoutStored += Math.min(buf.length, room);
+      }
+    } else {
+      stderrBytes += buf.length;
+      if (stderrStored < cap) {
+        const room = cap - stderrStored;
+        stderrChunks.push(room < buf.length ? buf.subarray(0, room) : buf);
+        stderrStored += Math.min(buf.length, room);
+      }
+    }
+    if (stdoutBytes + stderrBytes > cap) {
+      truncated = true;
+      stopReading();
+    }
+  }
+  child.stdout?.on("data", (c) => onData("stdout", c));
+  child.stderr?.on("data", (c) => onData("stderr", c));
+  child.on("error", () => {
+    truncated = true;
+  });
+  return {
+    stopReading,
+    snapshot() {
+      return {
+        stdout: Buffer.concat(stdoutChunks).toString("utf8"),
+        stderr: Buffer.concat(stderrChunks).toString("utf8"),
+        output_incomplete: truncated || stdoutBytes + stderrBytes > cap,
+        log_bytes: stdoutBytes + stderrBytes,
+      };
+    },
+  };
+}
+
 /**
- * Detached named run + inspect poll + SIGKILL. Do not use attached spawnSync
- * timeout against `docker run` of untrusted PID 1 (sig-proxy hang).
+ * Named create + follow logs from before start + inspect poll + SIGKILL.
+ * Do not use attached spawnSync timeout against untrusted PID 1 (sig-proxy hang).
+ * The follow reader is destroyed at MAX_COLLECTOR_BUFFER_BYTES so rotation plus a
+ * small tail cannot look complete, and omit-log-limits cannot fill host RAM.
  */
-export function runDetachedThenWait(dockerBin, args, { name, timeoutMs }) {
-  const started = docker(dockerBin, args, { timeout: 30_000 });
-  if (started.status !== 0) {
+export function runDetachedThenWait(dockerBin, args, { name, timeoutMs, options = {} }) {
+  const mutation = proofMutation(options);
+  const created = docker(dockerBin, toCreateArgs(args), { timeout: 30_000 });
+  if (created.status !== 0) {
     return {
-      status: started.status ?? 1,
+      status: created.status ?? 1,
       stdout: "",
-      stderr: started.stderr || started.error?.message || "docker run -d failed",
+      stderr: created.stderr || created.error?.message || "docker create failed",
       timed_out: false,
       provisioning_failed: true,
+      output_incomplete: false,
+    };
+  }
+  const follower = startLogFollower(dockerBin, name);
+  const started = docker(dockerBin, ["start", name], { timeout: 30_000 });
+  if (started.status !== 0) {
+    const followed = follower.snapshot();
+    follower.stopReading();
+    return {
+      status: started.status ?? 1,
+      stdout: followed.stdout,
+      stderr: started.stderr || followed.stderr || "docker start failed",
+      timed_out: false,
+      provisioning_failed: true,
+      output_incomplete: followed.output_incomplete,
     };
   }
   const wait = waitNamedContainer(dockerBin, name, timeoutMs);
-  const mutation = proofMutation();
   if (wait.timed_out && mutation !== "skip-kill") {
     docker(dockerBin, ["kill", "-s", "KILL", name], { timeout: 10_000 });
   }
-  const logs = docker(dockerBin, ["logs", name], { timeout: 15_000 });
+  const followed = follower.snapshot();
+  follower.stopReading();
+  const collected = collectContainerLogs(dockerBin, name, options);
   if (mutation !== "skip-cleanup") {
     docker(dockerBin, ["rm", "-f", name], { timeout: 15_000 });
   }
   return {
     status: wait.timed_out ? 124 : wait.exit_code,
-    stdout: logs.stdout,
-    stderr: logs.stderr,
+    stdout: followed.stdout || collected.stdout,
+    stderr: followed.stderr || collected.stderr,
     timed_out: wait.timed_out,
     provisioning_failed: false,
+    output_incomplete: Boolean(
+      followed.output_incomplete || collected.output_incomplete || followed.log_bytes > MAX_COLLECTOR_BUFFER_BYTES,
+    ),
+    log_driver: collected.log_driver,
+    log_bytes: Math.max(followed.log_bytes || 0, collected.log_bytes || 0),
   };
 }
 
-function sidecarArgs(network, name, alias, envPairs, image) {
+function collectContainerLogs(dockerBin, name, options = {}) {
+  const inspect = docker(
+    dockerBin,
+    ["inspect", "-f", "{{json .HostConfig.LogConfig}}", name],
+    { timeout: 5_000 },
+  );
+  let logConfig = {};
+  try {
+    logConfig = JSON.parse((inspect.stdout || "").trim() || "{}");
+  } catch {
+    logConfig = {};
+  }
+  const logs = docker(dockerBin, ["logs", name], {
+    timeout: 15_000,
+    maxBuffer: MAX_COLLECTOR_BUFFER_BYTES,
+  });
+  const collectorExhausted =
+    logs.error?.code === "ENOBUFS" ||
+    /maxBuffer/i.test(String(logs.error?.message || ""));
+  const stdout = logs.stdout || "";
+  const stderr = logs.stderr || "";
+  const logBytes = Buffer.byteLength(stdout, "utf8") + Buffer.byteLength(stderr, "utf8");
+  const type = logConfig.Type || logConfig.type || "";
+  const cfg = logConfig.Config || logConfig.config || {};
+  const maxSize = cfg["max-size"] || cfg.maxSize || "";
+  const nearCap = logBytes >= DOCKER_LOG_NEAR_CAP_BYTES;
+  const missingRequiredDriver =
+    proofMutation(options) !== "omit-log-limits" &&
+    (type !== DOCKER_LOG_DRIVER || maxSize !== DOCKER_LOG_MAX_SIZE);
+  const output_incomplete = Boolean(
+    collectorExhausted ||
+      nearCap ||
+      (missingRequiredDriver && inspect.status === 0 && Boolean(type)),
+  );
+  return {
+    stdout,
+    stderr: collectorExhausted
+      ? `${stderr}\ncollector_buffer_exhausted`
+      : stderr,
+    output_incomplete: output_incomplete || collectorExhausted,
+    log_driver: type || null,
+    log_bytes: logBytes,
+    log_config: logConfig,
+  };
+}
+
+function sidecarArgs(network, name, alias, envPairs, image, options = {}) {
   const args = [
     "run",
     "-d",
@@ -306,6 +500,7 @@ function sidecarArgs(network, name, alias, envPairs, image) {
     "no-new-privileges",
     "--label",
     `stocky.review=${network}`,
+    ...dockerLogDriverArgs(options),
   ];
   for (const [k, v] of envPairs) {
     args.push("-e", `${k}=${v}`);
@@ -314,7 +509,7 @@ function sidecarArgs(network, name, alias, envPairs, image) {
   return args;
 }
 
-function commonProbeArgs({ name, network, readOnly = true, extraHosts = [] }) {
+function commonProbeArgs({ name, network, readOnly = true, extraHosts = [], options = {} }) {
   const args = [
     "run",
     "-d",
@@ -341,6 +536,7 @@ function commonProbeArgs({ name, network, readOnly = true, extraHosts = [] }) {
     "128",
     "--label",
     `stocky.review=${network}`,
+    ...dockerLogDriverArgs(options),
   ];
   if (readOnly) {
     args.push("--read-only");
@@ -353,9 +549,9 @@ function commonProbeArgs({ name, network, readOnly = true, extraHosts = [] }) {
   return args;
 }
 
-function probeNodeArgs({ name, network, subjectDir, probeDir, envPairs, image, extraHosts }) {
+function probeNodeArgs({ name, network, subjectDir, probeDir, envPairs, image, extraHosts, options }) {
   const args = [
-    ...commonProbeArgs({ name, network, readOnly: true, extraHosts }),
+    ...commonProbeArgs({ name, network, readOnly: true, extraHosts, options }),
     "-v",
     `${subjectDir}:/subject:ro`,
     "-v",
@@ -450,9 +646,9 @@ export function runIsolatedProbe(probe, options = {}) {
   }
 
   const started = Date.now();
-  const mutation = proofMutation();
+  const mutation = proofMutation(options);
   try {
-    const net = docker(dockerBin, dockerNetworkCreateArgs(network));
+    const net = docker(dockerBin, dockerNetworkCreateArgs(network, options));
     if (net.status !== 0) {
       return {
         ok: true,
@@ -471,6 +667,7 @@ export function runIsolatedProbe(probe, options = {}) {
         ["POSTGRES_DB", SYNTHETIC_PG.database],
       ],
       pinnedImage(IMAGE_PINS.postgres),
+      options,
     );
     const pg = docker(dockerBin, pgArgs, { timeout: 60_000 });
     if (pg.status !== 0) {
@@ -481,7 +678,14 @@ export function runIsolatedProbe(probe, options = {}) {
       };
     }
 
-    const rdArgs = sidecarArgs(network, redisName, "redis", [], pinnedImage(IMAGE_PINS.redis));
+    const rdArgs = sidecarArgs(
+      network,
+      redisName,
+      "redis",
+      [],
+      pinnedImage(IMAGE_PINS.redis),
+      options,
+    );
     const rd = docker(dockerBin, rdArgs, { timeout: 60_000 });
     if (rd.status !== 0) {
       return {
@@ -567,7 +771,7 @@ export function runIsolatedProbe(probe, options = {}) {
       r = runDetachedThenWait(
         dockerBin,
         [
-          ...commonProbeArgs({ name: probeName, network, readOnly: false, extraHosts }),
+          ...commonProbeArgs({ name: probeName, network, readOnly: false, extraHosts, options }),
           "--entrypoint",
           "psql",
           "-e",
@@ -586,7 +790,7 @@ export function runIsolatedProbe(probe, options = {}) {
           "-c",
           probe.sql.text,
         ],
-        { name: probeName, timeoutMs },
+        { name: probeName, timeoutMs, options },
       );
     } else if (probe.kind === "redis") {
       const redisArgs =
@@ -598,7 +802,7 @@ export function runIsolatedProbe(probe, options = {}) {
       r = runDetachedThenWait(
         dockerBin,
         [
-          ...commonProbeArgs({ name: probeName, network, readOnly: false, extraHosts }),
+          ...commonProbeArgs({ name: probeName, network, readOnly: false, extraHosts, options }),
           "--entrypoint",
           "redis-cli",
           "-e",
@@ -608,7 +812,7 @@ export function runIsolatedProbe(probe, options = {}) {
           isIpv4(redisIp) ? redisIp : "redis",
           ...redisArgs,
         ],
-        { name: probeName, timeoutMs },
+        { name: probeName, timeoutMs, options },
       );
     } else if (probe.kind === "node_script") {
       const envPairs = [
@@ -629,11 +833,17 @@ export function runIsolatedProbe(probe, options = {}) {
       if (options.hostCanaryPath) {
         envPairs.push(["STOCKY_CANARY_PATH", options.hostCanaryPath]);
       }
+      if (options.fakeDockerSockPath) {
+        envPairs.push(["STOCKY_FAKE_DOCKER_SOCK", options.fakeDockerSockPath]);
+      }
       if (options.hostListenerPort) {
         envPairs.push(["STOCKY_HOST_LISTENER_PORT", String(options.hostListenerPort)]);
       }
       if (isIpv4(bridgeGateway)) {
         envPairs.push(["STOCKY_BRIDGE_GATEWAY", bridgeGateway]);
+      }
+      if (Array.isArray(options.gatewayCandidates) && options.gatewayCandidates.length) {
+        envPairs.push(["STOCKY_GATEWAY_CANDIDATES", options.gatewayCandidates.filter(isIpv4).join(",")]);
       }
       const nodeArgs = probeNodeArgs({
         name: probeName,
@@ -643,6 +853,7 @@ export function runIsolatedProbe(probe, options = {}) {
         envPairs,
         extraHosts,
         image: pinnedImage(IMAGE_PINS.node),
+        options,
       });
       for (const key of SECRET_ENV_DENY) {
         if (nodeArgs.some((a) => String(a).includes(key))) {
@@ -653,7 +864,7 @@ export function runIsolatedProbe(probe, options = {}) {
           };
         }
       }
-      r = runDetachedThenWait(dockerBin, nodeArgs, { name: probeName, timeoutMs });
+      r = runDetachedThenWait(dockerBin, nodeArgs, { name: probeName, timeoutMs, options });
     } else {
       return {
         ok: true,
@@ -686,6 +897,9 @@ export function runIsolatedProbe(probe, options = {}) {
         duration_ms: Date.now() - started,
         image_pins: imagePins(),
         leftovers,
+        output_incomplete: Boolean(r.output_incomplete),
+        log_driver: r.log_driver,
+        log_bytes: r.log_bytes,
       }),
       workDir,
       prefix: id,

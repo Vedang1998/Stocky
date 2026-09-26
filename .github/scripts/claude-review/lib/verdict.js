@@ -44,11 +44,15 @@ export function classifyExecutorResult(probe, executor) {
       reason: "malformed_output",
     };
   }
-  if (executor.output_truncated || executor.output_bytes > MAX_PROBE_OUTPUT_BYTES) {
+  if (
+    executor.output_incomplete ||
+    executor.output_truncated ||
+    executor.output_bytes > MAX_PROBE_OUTPUT_BYTES
+  ) {
     return {
       evidence_state: "blocked",
       verdict: "BLOCKED",
-      reason: "oversized_output",
+      reason: executor.output_incomplete ? "incomplete_output" : "oversized_output",
     };
   }
   if (probe.kind === "zero_test_control" || executor.tests_run === 0) {
@@ -94,6 +98,14 @@ export function classifyExecutorResult(probe, executor) {
     verdict: "COMPLETED_NO_VERDICT",
     reason: "probe_executed",
   };
+}
+
+export function leaseStatusFromVerdict(combined, lease) {
+  if (lease?.status === "stopped" || combined?.reason === "stopped") return "stopped";
+  if (combined?.status === "BLOCKED") return "blocked";
+  if (combined?.status === "UNKNOWN") return "unknown";
+  if (combined?.status === "REJECTED" || combined?.status === "COMPLETED_NO_VERDICT") return "completed";
+  return lease?.status || "unknown";
 }
 
 export function combineTaskVerdict({ activation, staleHead, lease, probes, modelClaimsPass }) {

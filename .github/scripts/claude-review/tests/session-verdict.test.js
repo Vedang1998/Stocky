@@ -5,6 +5,7 @@ import {
   applyStop,
   makeLease,
   parseLockMarker,
+  parseTopLevelLockEnvelope,
   readbackMatches,
   renderLockMarker,
 } from "../lib/session.js";
@@ -101,6 +102,20 @@ describe("session lease and STOP", () => {
     const parsed = parseLockMarker(`${marker}\nhello`);
     assert.equal(parsed.ok, true);
     assert.equal(parsed.lease.dispatch_key, "propo:a");
+  });
+
+  it("does not treat an embedded lock marker as a top-level envelope", () => {
+    const lease = makeLease({
+      dispatchKey: "propo:a",
+      taskId: "t1",
+      attempt: "1",
+      head: HEAD,
+      status: "completed",
+    });
+    const marker = renderLockMarker(lease);
+    const embedded = `narrative\n${marker}\nmore`;
+    assert.equal(parseTopLevelLockEnvelope(embedded).ok, false);
+    assert.equal(parseTopLevelLockEnvelope(`${marker}\nmore`).ok, true);
   });
 });
 

@@ -5,6 +5,22 @@ export const OWNER_LOGIN = "Vedang1998";
 export const OWNER_ID = 278831488;
 export const OWNER_TYPE = "User";
 
+/** github-actions[bot] — the only principal that may author lease lock envelopes. */
+export const WORKFLOW_BOT_LOGIN = "github-actions[bot]";
+export const WORKFLOW_BOT_ID = 41898282;
+export const WORKFLOW_BOT_TYPE = "Bot";
+
+export const COMMENT_PAGE_SIZE = 100;
+export const COMMENT_HISTORY_MAX_PAGES = 10;
+export const COMMENT_HISTORY_MAX_BYTES = 2 * 1024 * 1024;
+export const COMMENT_HISTORY_MAX_MS = 15_000;
+
+export const DOCKER_LOG_DRIVER = "json-file";
+export const DOCKER_LOG_MAX_SIZE = "1m";
+export const DOCKER_LOG_MAX_FILE = "1";
+export const DOCKER_LOG_NEAR_CAP_BYTES = 900_000;
+export const MAX_COLLECTOR_BUFFER_BYTES = 256 * 1024;
+
 export const TRIGGER_PREFIX = "@claude ";
 export const TASK_MARKER = "STOCKY_REVIEW_TASK_V1";
 export const STOP_MARKER = "STOCKY_REVIEW_STOP_V1";

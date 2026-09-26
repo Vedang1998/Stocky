@@ -1,8 +1,8 @@
-# CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01 / R2
+# CLAUDE_REVIEW_RUNNER_IMPLEMENTATION_REPORT — RUNNER-01 / stabilization
 
-**Status:** R2 security-boundary correction implemented on PR #62. `READY FOR INDEPENDENT RUNNER RE-REVIEW` is withheld from this file until exact-head Classify + full Heavy + CI Gate **and** the strengthened `isolation_proof` job have SUCCESS on the live PR head that includes this correction. Do not treat this commit as self-certifying. Do not embed this commit's own SHA here.
+**Status:** ONE bounded stabilization package on PR #62 after ChatGPT re-admission `5841639793`. `READY_FOR_INDEPENDENT_STABILIZATION_REVIEW` is withheld from this file until exact-head Classify + full Heavy + CI Gate **and** the strengthened `isolation_proof` job have SUCCESS on the live PR head that includes this correction. Do not treat this commit as self-certifying. Do not embed this commit's own SHA here. R1/R2 remain exhausted; this is not an automatic R3.
 
-**Implementer:** Cursor (cloud agent), same writer as original RUNNER-01 / R1 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`). No competing writers.
+**Implementer:** Cursor (cloud agent), same writer as original RUNNER-01 / R1 / R2 (`bc-b1e90a6c-c9b7-46bf-bcb8-22e276027492`). No competing writers. Planning-only run `bc-4e9564b0-0bf3-4927-ad33-093f192ab3c8` was not used.
 
 ## Identity
 
@@ -14,13 +14,15 @@
 | Original Dispatch-Key | `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation` |
 | R1 Dispatch-Key | `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R1:1433281753670762394a44ee9c25514a8b1d86bc:cursor-correction` |
 | R2 Dispatch-Key | `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R2:bbd3bbedf7951a043aaaf51d84a0fc0b93595c97:cursor-correction` |
-| Authority | issue61 `5806021611` + admission `5806012938`; R1 `5807860348`; R2 intent `5813474882`; independent review `5813026207` |
+| Stabilization Dispatch-Key | `propo:5841639793:RUNNER01_STABILIZATION:4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a:cursor-correction` |
+| Authority | issue61 `5806021611` + admission `5806012938`; R1 `5807860348`; R2 `5813474882` / review `5813026207`; reassessment `5825863075`; issue63 check `5825878310`; re-admission `5841639793`; journal `5841643706` |
 | Chat | EXISTING RUNNER-01 author role/session (same run id) |
 | Working location | isolated repository-root checkout; application `stocky-plus/` |
 | Branch | `cursor/tooling-claude-executable-review-runner-61-7492` |
 | Base M | `c0dd99c5641692098b7a08dce3a53d21e22391a8` |
 | Pull request | [#62](https://github.com/Vedang1998/Stocky/pull/62) draft against `main` |
 | R2 input head | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` |
+| Stabilization input S | `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` |
 | Activation | **not** performed. Live Claude / `workflow_dispatch` of this runner / credentialed e2e **not executed** |
 
 This documentation records CI identities for already-observed heads. It does **not** embed its own future SHA.
@@ -35,7 +37,9 @@ This documentation records CI identities for already-observed heads. It does **n
 | Documentation finalization / R1 input | `1433281753670762394a44ee9c25514a8b1d86bc` | exact-head CI run 35950974549 |
 | R1 runtime/test correction | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` | parent is `1433281`; exact-head CI run 35958752653 |
 | R2 runtime/test correction | `df6759278059e4d9899259d5e7c0d118db3bda2c` | parent is `bbd3bbe`; exact-head CI run 35998517064 SUCCESS; isolation_proof run 35998517100 FAILURE |
-| Reviewed implementation head | none | independent Claude tooling review has not started |
+| R2 isolation-proof follow-ups | `11693a661c622536a0ab745a69829bf8ead757ab`, `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | live R2 head `4e5eefb`; exact-head CI run 36005015430 SUCCESS; isolation_proof run 36005015425 PASS_ISOLATION_PROOF |
+| Stabilization runtime/test | this commit (SHA in live PR description; not self-embedded) | parent is `4e5eefb` |
+| Reviewed implementation head | none for this stabilization | independent Claude tooling re-review has not started on the stabilization head |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
 
 ### Commit classification since M (including R1 parent)
@@ -49,8 +53,51 @@ This documentation records CI identities for already-observed heads. It does **n
 | `1433281753670762394a44ee9c25514a8b1d86bc` | documentation | record PR62 / exact-head CI identities for `7139a10` |
 | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` | runtime + test + documentation | R1 security-boundary repair |
 | `df6759278059e4d9899259d5e7c0d118db3bda2c` | runtime + test + documentation | R2 timeout/model-result/dispatch/isolation oracles |
+| `11693a661c622536a0ab745a69829bf8ead757ab` | runtime + test | restore isolation-proof SQL and host-gateway oracles |
+| `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | runtime + test | wait for sidecar SELECT 1 before SQL probes |
 
 No empty retrigger. No independent review report. No schema/migration. No `ci.yml` change.
+
+## Stabilization blocking findings (reproduced on `4e5eefb`)
+
+Independent re-review `5824165909` (same independent chat as `5813026207`). R62-01/02/04-code/05/06 closed. Open:
+
+1. **R62-10 P1** `fetchIssueComments` returned one page of 100. Lease/STOP on page 2+ were invisible. Incomplete history was treated as absence.
+2. **R62-11 P2** Markers were trusted from anyone. Outsider STOP/lock lookalikes could change state. Released text could clear a live lease. Model narrative inside a bot comment could forge envelopes.
+3. **R62-12 P2** Docker json-file logs were uncapped. Timeout/orphan was fixed, but host disk could fill. Post-exit `docker logs` of a rotated small tail could look complete.
+4. **R62-13 P2** Published model text could contain actionable `@claude` mentions and additional lock/STOP text. Parser read those if not top-level-only.
+5. **R62-07 residual** Production gateway oracle printed `NO_GATEWAY` and returned without dialling. Zero-attempt fixtures could pass.
+6. **R62-14 deps** Lease-before-snapshot and continuation boolean were residual risks for the A–C contracts.
+
+R62-08/R62-09 remain observations (simple route write-capable; vendor `configureGitAuth`).
+
+## Stabilization correction (what now enforces the contract)
+
+- `lib/comment-history.js`: paginated fetch, Link-only same-origin same-path next, byte/time/page budgets, duplicate-id and malformed fail-closed. Unsafe next URLs never receive credentials.
+- `lib/session.js`: `parseTopLevelLockEnvelope`; owner-id STOP; workflow-bot locks; sticky STOP/completed; ignore released; missing identity fail-closed.
+- `lib/dispatch.js` + `lib/dispatch-cli.js`: canonical thread from `issue_url`; snapshot before running lease; blocked lock on snapshot failure; `continuation_of`; production `bin/dispatch.mjs` refuses mock/proof env and exits 2 on `ok === false` (phase runner does not set `process.exitCode`).
+- `lib/inert.js` + publisher: one trusted envelope + inert opinion; lost POST readback is UNKNOWN without retry; publication re-fetches complete history.
+- `lib/isolated-executor.js`: json-file 1m/1 on probe and sidecars; `docker create` + follow-logs-from-before-start destroyed at 256 KiB; `output_incomplete` → BLOCKED; mutations only via `allowProofHooks`.
+- `bin/isolation-proof.mjs`: child host-listener; harness candidates even when Gateway empty; `attempts>0`; precise FS/net/DNS denials; flood/rotation-tail/omit-log-limits (512 KiB) oracles; hash restore.
+- Tests: `tests/comment-history.test.js`, `tests/control-auth.test.js`, `tests/inert-publish.test.js`, `tests/production-hooks.test.js`, `tests/dispatch-pagination.test.js` plus updates. Recorded separately from `proofs/*.test.js` (1 docker-presence assertion; isolation-proof.mjs is the real-container proof).
+
+## Commands executed (authoring host, stabilization)
+
+| Check | Result |
+|---|---|
+| `node --test --test-reporter=spec tests/*.test.js` | **118 pass / 0 fail** (Node v22.19.0, npm 11.5.2, PostgreSQL 16.15, Redis 7.0.15) |
+| `node --test --test-reporter=spec proofs/*.test.js` | **1 pass / 0 fail** (docker-absence detection; not a silent skip of the GHA proof) |
+| `actionlint` 1.7.7 | exit 0 |
+| YAML parse of `main.yml` + `claude-review-execution.yml` | exit 0 |
+| classifier self-test | 40/40 |
+| `classify-ci-change-set.sh --from-git M <R2 head 4e5eefb>` | `full_ci=true` `docs_only=false` (46 paths at R2; new workflow/helper paths still full_ci) |
+| `git diff --check` | exit 0 |
+| `isolation-proof.mjs` locally | exit 2 `isolation_unavailable_docker_missing` (expected; authoring VM has no Docker) |
+| Live Claude / runner `workflow_dispatch` | **not executed** |
+
+Exact-head CI and hosted isolation proof on the stabilization head: recorded in the live PR description / task result after push; not this commit's own SHA.
+
+The prior 94+1 vs 95 count difference was source-derived at R2, not a mandate to keep 95. Stabilization adds named tests; 118 is the tests/*.test.js count on this tree.
 
 ## R1 blocking findings (reproduced on `1433281`)
 

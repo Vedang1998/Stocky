@@ -1,10 +1,11 @@
 # Bounded executable Claude review runner
 
 **Status:** IMPLEMENTATION DRAFT — not activated, not production, not a substitute for independent review
-**Authority:** issue61 + issue52 comment `5806012938` + owner command `5806021611` + R1 `5807860348` + R2 `5813474882` / review `5813026207`
+**Authority:** issue61 + issue52 comment `5806012938` + owner command `5806021611` + R1 `5807860348` + R2 `5813474882` / review `5813026207` + reassessment `5825863075` + stabilization re-admission `5841639793`
 **Dispatch-Key (original):** `propo:issue61-v1:RUNNER01:c0dd99c5641692098b7a08dce3a53d21e22391a8:cursor-implementation`
 **Dispatch-Key (R1):** `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R1:1433281753670762394a44ee9c25514a8b1d86bc:cursor-correction`
 **Dispatch-Key (R2):** `propo:5806021611:RUNNER01_SECURITY_CORRECTION_R2:bbd3bbedf7951a043aaaf51d84a0fc0b93595c97:cursor-correction`
+**Dispatch-Key (stabilization):** `propo:5841639793:RUNNER01_STABILIZATION:4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a:cursor-correction`
 **Risk tier:** A (credentials, publication, untrusted subject execution)
 **Activation:** blocked until independent runner re-review, ChatGPT acceptance, owner merge, **and** repository variable `STOCKY_CLAUDE_REVIEW_RUNNER=admitted`
 **This runner must not certify itself.**
@@ -22,7 +23,9 @@
 | R1 input head | `1433281753670762394a44ee9c25514a8b1d86bc` |
 | R1 output / R2 input | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` |
 | R2 first correction | `df6759278059e4d9899259d5e7c0d118db3bda2c` |
-| R2 isolation-proof follow-up | later commit; do not embed that commit's own SHA here |
+| R2 output / R2 re-review subject | `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` |
+| Stabilization input S | `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` |
+| Stabilization output | recorded in the live PR description after push; not self-embedded |
 | Instruction loading | `AGENTS.md`, issue61, issue52 `5806012938`, this runbook, implementation report |
 
 This document freezes the file list, job/tool contract, command schema, and trust assumptions for RUNNER-01. Implementation must stay inside this envelope.
@@ -289,8 +292,10 @@ Rules:
 
 Publisher (trusted Node, `GITHUB_TOKEN`) may:
 
-1. create or update **one** tracking comment on the triggering issue/PR, identified by HTML marker `<!-- STOCKY_REVIEW_LOCK ... -->`;
+1. create or update **one** tracking comment on the triggering issue/PR, identified by a designated **top-level** HTML envelope `<!-- STOCKY_REVIEW_LOCK ... -->` generated only from validated controller/executor state;
 2. if and only if `publish_review_branch: true` **and** activation is admitted: create **one new** branch `claude-review/{task_id}/{attempt}` whose sole parent is the **subject head SHA**, containing only `stocky-plus/docs/phases/phase-1/reviews/{task_id}/REVIEW_ARTIFACT.md`.
+
+The machine envelope is generated from trusted evidence. Model text, subject strings, probe stdout/stderr, and diagnostics are rendered as **inert quoted opinion** (`renderInertOpinion`: line prefix `| `, neutralized `@`, HTML comments, and `STOCKY_*` markers). Findings are preserved; they cannot mint a second parsed envelope, an actionable `@claude` / `@cursor` mention, or an HTML lock. Review opinion cannot stamp CI success, merge authority, or activation. Markdown fences alone are not treated as sufficient.
 
 Publisher must refuse:
 
@@ -298,24 +303,31 @@ Publisher must refuse:
 - trees with a different parent;
 - paths outside the allowlist;
 - artifacts that try to change workflows, gates, or dispatch other agents;
-- PASS when evidence is missing, tests_run=0, head moved, lease STOPPED, or executor status is timeout/unknown;
+- PASS when evidence is missing, tests_run=0, head moved, lease STOPPED, output incomplete, or executor status is timeout/unknown;
 - using the model's JSON as proof of test results.
 
-After posting, publisher **reads the comment back**. If the body/marker does not match, status is `UNKNOWN` (lost ACK).
+After a successful POST, publisher **reads the comment back**. If GET fails or the marker does not match, status is `UNKNOWN` (`publication_readback_unknown`) and the publisher **must not POST again**. Incomplete comment history at publication is `BLOCKED`, never “no STOP”.
 
 ---
 
 ## 10. Session / dedup
 
-Stable key = `dispatch_key`. Attempt id = `run_id` + monotonic nonce.
+Stable key = `dispatch_key`. Attempt id = `run_id` + hash nonce. Canonical thread = the fetched owner authority comment's `issue_url`. Copied requests on a different issue/PR are `canonical_thread_mismatch`.
 
-States: `leased`, `running`, `checkpointed`, `completed`, `rejected`, `stopped`, `unknown`.
+Comment history is retrieved with GitHub pagination metadata only: at most 10 pages, 2 MiB decoded bytes, 15 s elapsed, with actual response-size and timeout limits. Incomplete, malformed, capped, failed, or unsafe-next retrieval is `incomplete_comment_history` / BLOCKED, never an empty array. Credentials do not follow off-origin or off-path next URLs. Comments are not a transactional snapshot; revalidate at pre-invocation (`assert-lease`) and publication.
 
-A new Actions job is **not** the prior Claude cloud conversation. Checkpoints are attributed evidence files, not session resume unless `continuation_of` names them in a new admitted order.
+Control records are authenticated from fetched GitHub metadata, not marker text:
 
-Ingress fetches issue comments, parses lock markers, and binds the authority comment body to `task_id` / `dispatch_key` / subject head. `created_at !== updated_at` is durable edit evidence. A captured `authority-capture.json` hash is compared on `assert-lease`. STOP without a fetched lease is `stop_without_lease` (no fabricated success). After acquire, ingress POSTs a lock marker. Executable job re-runs `assert-lease` before Claude. Publisher re-fetches STOP.
+- Dedicated leading STOP (`@claude STOCKY_REVIEW_STOP_V1` at body start) is accepted only from immutable owner id `278831488` / type `User`. Owner discussion that merely contains a stopped marker is not a STOP command.
+- Lease lock envelopes are accepted only as a designated **top-level** `<!-- STOCKY_REVIEW_LOCK` from workflow bot id `41898282` / type `Bot`, bound to task/thread/authority/head/attempt/run. Missing identity or ambiguous trusted envelopes fail closed. Outsider lookalikes are inert diagnostics.
+- `released` text never clears a live or sticky STOP/completed state.
+- Continuation requires `continuation_of` equal to the prior attempt id and a verified `blocked` / `unknown` / `checkpointed` (non-running) state. A caller boolean is not authority. Uncertain POST/invocation/publication is UNKNOWN and cannot silently become released.
 
-Executable concurrency: `claude-review-exec-<dispatch_key>`. Publish concurrency: `claude-review-pub-<dispatch_key>`. `cancel-in-progress: false`. GitHub concurrency is not exactly-once; the lock comment is.
+States: `leased`, `running`, `checkpointed`, `blocked`, `completed`, `rejected`, `stopped`, `unknown`. `released` is not a control state.
+
+Exact-SHA snapshot runs **before** a running/leased lock can authorize invocation. Known pre-model snapshot failure is BLOCKED (retryable only via explicit continuation). Ingress concurrency groups serialize jobs; they are **not** exactly-once coordination.
+
+Executable concurrency: `claude-review-exec-<dispatch_key>`. Publish concurrency: `claude-review-pub-<dispatch_key>`. `cancel-in-progress: false`.
 
 ---
 
@@ -392,4 +404,21 @@ Independent review `5813026207` of `bbd3bbe` required these production-path repa
 | R62-06 | Exact-SHA snapshot runs before `invoke_claude` is written to `GITHUB_OUTPUT`. Extract failure sets `invoke_claude=false` and a deterministic rejection code. |
 | R62-07 | `isolation-proof.mjs` records per-control oracles: timeout/orphan, host-gateway + mutation, egress/IMDS, jail-bypass canary/socket/secrets, image pin inspect, file-hash restoration. Generic non-zero is not PASS. |
 
-`STOCKY_ISOLATION_PROOF=1` plus `STOCKY_ISOLATION_PROOF_MUTATION` (`omit-gateway-isolated`, `skip-cleanup`, `skip-kill`) is the gated disable-control. Production callers never set it.
+`STOCKY_ISOLATION_PROOF` / `STOCKY_ISOLATION_PROOF_MUTATION` / `STOCKY_REVIEW_MOCK_GITHUB_URL` are **not** production authority. Production `bin/dispatch.mjs` rejects those env keys. Isolation-proof mutations (`omit-gateway-isolated`, `skip-cleanup`, `skip-kill`, `omit-log-limits`) require explicit `allowProofHooks: true` DI; ambient env cannot change Docker argv.
+
+---
+
+## 15. Stabilization (R62-03/07/10/11/12/13)
+
+Independent re-review `5824165909` of `4e5eefb` plus ChatGPT decision `5841639793`. R1/R2 remain exhausted; this is one admitted post-reassessment package, not an automatic R3. R62-01/02/04-code/05/06 stay closed. R62-08/09/14 observations remain visible.
+
+| ID | Repair |
+|---|---|
+| R62-10 / R62-03 | `fetchCommentHistory` pages with Link, 10/2MiB/15s budgets, fail-closed incomplete history. Dispatch entry tests honor owner STOP at 101 and bot lease at 201. |
+| R62-11 | `reduceControlState` authenticates owner STOP and workflow-bot locks; outsider/missing-identity/forged-in-narrative cannot change state. Sticky STOP/completed. Ignore `released`. |
+| R62-12 | Probe + sidecar `--log-driver json-file --log-opt max-size=1m --log-opt max-file=1`. Follow collector from `docker create`/`start` destroyed at 256 KiB. Incomplete output is BLOCKED even if exit=0. Rotation threshold is **not** an exact host-disk bound. `omit-log-limits` is a tightly volume-bounded proof hook (512 KiB write). |
+| R62-13 | Publisher emits one trusted envelope + inert opinion. `submit_result` → collect → `publish-from-state` → parser tests. Lost readback after POST does not retry. |
+| R62-07 | Isolation proof dials harness-derived candidates even when Gateway is empty (`attempts>0`). Independent host-listener process. Precise FS/net/DNS denial oracles. Zero-attempt/generic-ERR cannot PASS. Mutations are DI. |
+| R62-14 deps | Snapshot-before-running-lease; blocked lock on snapshot failure; `continuation_of` required. |
+
+Probe resource notes: returned stdout/stderr stay at 256 KiB; json-file `max-size=1m` is rotation; permitted overshoot is daemon logging of the last rotated file plus collector cap, not gigabytes. Test-only removed-limit writes 512 KiB only.

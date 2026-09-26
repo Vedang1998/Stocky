@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createBroker, scrubBrokerEnv } from "../lib/mcp-broker.js";
 import { runProbe } from "../lib/sandbox.js";
-import { assertIsolatedDockerArgs, dockerCliEnv } from "../lib/isolated-executor.js";
+import { assertIsolatedDockerArgs, dockerCliEnv, dockerLogDriverArgs, toCreateArgs } from "../lib/isolated-executor.js";
 import { IMAGE_PINS, MAX_ARTIFACT_BYTES, MAX_MODEL_RESULT_BYTES, pinnedImage } from "../lib/constants.js";
 import { bindProbeRequest, validateProvenance } from "../lib/provenance.js";
 import {
@@ -53,12 +53,19 @@ case "$1" in
   rm) exit 0 ;;
   kill) echo killed >> "${log}"; exit 0 ;;
   logs) echo ok; exit 0 ;;
+  create) echo cidcreate; exit 0 ;;
+  start) echo started; exit 0 ;;
   ps) exit 0 ;;
   inspect)
     args="$*"
+    if echo "$args" | grep -q LogConfig; then echo '{"Type":"json-file","Config":{"max-size":"1m","max-file":"1"}}'; exit 0; fi
     if echo "$args" | grep -q IPAddress; then echo "10.29.0.2"; exit 0; fi
     if echo "$args" | grep -q Gateway; then echo "10.29.0.1"; exit 0; fi
-    if [ -f "${hangFlag}" ]; then echo "true 0"; exit 0; fi
+    if echo "$args" | grep -q State.Running; then
+      if [ -f "${hangFlag}" ]; then echo "true 0"; exit 0; fi
+      echo "false 0"
+      exit 0
+    fi
     echo "false 0"
     exit 0
     ;;
@@ -112,6 +119,8 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(first.executor.isolation, "docker");
     const argv = fs.readFileSync(fake.log, "utf8");
     assert.match(argv, /network create --driver bridge --label/);
+    assert.match(argv, /--log-driver json-file/);
+    assert.match(argv, /max-size=1m/);
     assert.match(argv, /--internal/);
     assert.match(argv, /gateway_mode_ipv4=isolated/);
     assert.match(argv, /--init/);
@@ -123,6 +132,9 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(sqlRun, /--add-host pg:10\.29\.0\.2/);
     assert.match(sqlRun, /-e HOME=\/tmp/);
     assert.doesNotMatch(sqlRun, /--read-only/);
+    assert.match(argv, /create /);
+    assert.match(argv, /start /);
+    assert.match(argv, /logs --follow/);
     assert.match(argv, /pg_isready/);
     assert.match(argv, /exec .* psql .* SELECT 1/);
     assert.doesNotMatch(argv, /docker\.sock/);
@@ -138,12 +150,12 @@ describe("production run_probe uses isolated docker executor", () => {
     delete process.env.CLAUDE_CODE_OAUTH_TOKEN;
   });
 
-  it("omit-gateway-isolated mutation omits --internal from docker network create", () => {
+  it("omit-gateway-isolated mutation requires explicit proof hooks, not ambient env", () => {
     const fake = writeFakeDocker();
     process.env.STOCKY_ISOLATION_PROOF = "1";
     process.env.STOCKY_ISOLATION_PROOF_MUTATION = "omit-gateway-isolated";
     try {
-      const result = runProbe(
+      const denied = runProbe(
         { kind: "sql", timeout_seconds: 15, sql: { text: "SELECT 1 AS ok" } },
         {
           isolationMode: "docker",
@@ -153,8 +165,24 @@ describe("production run_probe uses isolated docker executor", () => {
           dockerBin: fake.bin,
         },
       );
+      assert.equal(denied.executor.backend, "docker");
+      const argvDenied = fs.readFileSync(fake.log, "utf8");
+      assert.match(argvDenied, /gateway_mode_ipv4=isolated/);
+      const fake2 = writeFakeDocker();
+      const result = runProbe(
+        { kind: "sql", timeout_seconds: 15, sql: { text: "SELECT 1 AS ok" } },
+        {
+          isolationMode: "docker",
+          requireProvenance: true,
+          provenance: PROVENANCE,
+          probe_index: 1,
+          dockerBin: fake2.bin,
+          allowProofHooks: true,
+          proofMutation: "omit-gateway-isolated",
+        },
+      );
       assert.equal(result.executor.backend, "docker");
-      const argv = fs.readFileSync(fake.log, "utf8");
+      const argv = fs.readFileSync(fake2.log, "utf8");
       assert.doesNotMatch(argv, /network create .* --internal /);
       assert.doesNotMatch(argv, /gateway_mode_ipv4=isolated/);
     } finally {
@@ -182,6 +210,23 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(assertIsolatedDockerArgs(["run", "--privileged"]).ok, false);
     assert.equal(assertIsolatedDockerArgs(["run", "--network=host"]).ok, false);
     assert.equal(assertIsolatedDockerArgs(["run", "--rm", "--network", "sr1", "--cap-drop", "ALL"]).ok, true);
+  });
+
+  it("log-driver args and create conversion are production defaults unless proof hooks are explicit", () => {
+    const prod = dockerLogDriverArgs();
+    assert.deepEqual(prod, ["--log-driver", "json-file", "--log-opt", "max-size=1m", "--log-opt", "max-file=1"]);
+    process.env.STOCKY_ISOLATION_PROOF_MUTATION = "omit-log-limits";
+    try {
+      assert.deepEqual(dockerLogDriverArgs(), prod);
+      const omitted = dockerLogDriverArgs({ allowProofHooks: true, proofMutation: "omit-log-limits" });
+      assert.deepEqual(omitted, []);
+    } finally {
+      delete process.env.STOCKY_ISOLATION_PROOF_MUTATION;
+    }
+    const create = toCreateArgs(["run", "-d", "--name", "sr1pr", "--init", "node"]);
+    assert.equal(create[0], "create");
+    assert.equal(create.includes("-d"), false);
+    assert.equal(create.includes("--name"), true);
   });
 
   it("image refs are digest-pinned, not mutable tags", () => {
@@ -216,6 +261,8 @@ describe("production run_probe uses isolated docker executor", () => {
     const argv = fs.readFileSync(fake.log, "utf8");
     assert.match(argv, /--init/);
     assert.match(argv, /kill -s KILL/);
+    assert.match(argv, /create /);
+    assert.match(argv, /logs --follow/);
     const nodeRun = argv.split("\n").find((line) => line.includes("preload-jail.cjs")) || "";
     assert.match(nodeRun, /--read-only/);
     assert.match(nodeRun, /STOCKY_BRIDGE_GATEWAY=10\.29\.0\.1/);

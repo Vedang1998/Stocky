@@ -47,16 +47,27 @@ else
   fail "actionlint missing"
 fi
 
-echo "=== node:test ==="
+echo "=== node:test tests/*.test.js ==="
 cd "${CR}"
 set +e
 node --test --test-reporter=spec tests/*.test.js
 TEST_RC=$?
 set -e
 if [[ "${TEST_RC}" -ne 0 ]]; then
-  fail "node:test exit ${TEST_RC}"
+  fail "node:test tests/*.test.js exit ${TEST_RC}"
 else
-  pass "node:test"
+  pass "node:test tests/*.test.js"
+fi
+
+echo "=== node:test proofs/*.test.js ==="
+set +e
+node --test --test-reporter=spec proofs/*.test.js
+PROOF_RC=$?
+set -e
+if [[ "${PROOF_RC}" -ne 0 ]]; then
+  fail "node:test proofs/*.test.js exit ${PROOF_RC}"
+else
+  pass "node:test proofs/*.test.js"
 fi
 
 echo "=== isolated executor proof (Docker when present) ==="

@@ -11,6 +11,7 @@ import {
   REPOSITORY,
 } from "./constants.js";
 import {
+  assertCanonicalThread,
   assertImmutableOwnerActor,
   assertRepository,
   assertWritePermission,
@@ -19,7 +20,7 @@ import {
   detectEditedAuthorityComment,
   detectStaleHead,
   fetchIssueComment,
-  fetchIssueComments,
+  fetchCommentHistory,
   fetchPermissionLevel,
   fetchPull,
   isActivationAdmitted,
@@ -28,11 +29,10 @@ import { parseCommentBody } from "./parse-work-order.js";
 import {
   acquireLease,
   applyStop,
-  leaseFromComments,
   makeLease,
   makeStoppedLease,
+  reduceControlState,
   renderLockMarker,
-  stopFromComments,
 } from "./session.js";
 import { bodySha256 } from "./sanitize.js";
 import { buildTrustedPrompt, writeEvidencePack } from "./evidence.js";
@@ -74,21 +74,30 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
     let existing = existingLease;
     if (github && event.issue_number) {
       const [owner, repoName] = REPOSITORY.split("/");
-      const comments = await fetchIssueComments(github, {
+      const history = await fetchCommentHistory(github, {
         owner,
         repo: repoName,
         issueNumber: event.issue_number,
       });
-      existing = existing || leaseFromComments(comments, {
+      if (!history.ok) return finalize(history, event);
+      const control = reduceControlState(history.comments, {
         dispatchKey: parsed.dispatch_key,
         taskId: parsed.task_id,
+        thread: event.issue_number,
       });
+      if (!control.ok) return finalize(control, event);
+      existing = existing || control.lease;
+    } else if (github && !event.issue_number) {
+      return finalize(
+        resultErr("incomplete_comment_history", "STOP requires a canonical issue thread"),
+        event,
+      );
     }
     if (!existing) {
       if (!github) {
         return finalize(resultErr("stop_without_lease", "STOP requires a fetched lease"), event);
       }
-      const lease = makeStoppedLease(parsed);
+      const lease = makeStoppedLease({ ...parsed, thread: event.issue_number });
       return finalize(
         { ok: true, mode: "stop", invoke_claude: false, lease, post_lock: true },
         event,
@@ -191,21 +200,34 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
       if (!auth.ok) return finalize(auth, event);
     }
     captured = captured || bound.captured;
+    const thread = assertCanonicalThread({
+      issueUrl: comment.issue_url,
+      eventIssueNumber: event.issue_number,
+    });
+    if (!thread.ok) return finalize(thread, event);
     const liveHead = pr.head;
     const stale = detectStaleHead(parsed.work_order.subject.head, liveHead);
     if (!stale.ok) return finalize(stale, event);
-    if (event.issue_number) {
-      comments = await fetchIssueComments(github, {
-        owner,
-        repo: repoName,
-        issueNumber: event.issue_number,
-      });
+    if (!event.issue_number) {
+      return finalize(
+        resultErr("incomplete_comment_history", "executable review requires a canonical issue thread"),
+        event,
+      );
     }
-    const stopped = stopFromComments(comments, {
+    const history = await fetchCommentHistory(github, {
+      owner,
+      repo: repoName,
+      issueNumber: event.issue_number,
+    });
+    if (!history.ok) return finalize(history, event);
+    comments = history.comments;
+    const control = reduceControlState(comments, {
       dispatchKey: parsed.work_order.dispatch_key,
       taskId: parsed.work_order.task_id,
+      thread: event.issue_number,
     });
-    if (stopped) {
+    if (!control.ok) return finalize(control, event);
+    if (control.stopped) {
       return finalize(
         {
           ok: true,
@@ -213,22 +235,18 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
           invoke_claude: false,
           rejected: true,
           code: "stopped",
-          message: "STOP marker or stopped lease is present",
+          message: "authenticated STOP or stopped lease is present",
           work_order: parsed.work_order,
           lease: makeStoppedLease({
             dispatch_key: parsed.work_order.dispatch_key,
             task_id: parsed.work_order.task_id,
+            thread: event.issue_number,
           }),
         },
         event,
       );
     }
-    leaseState =
-      leaseState ||
-      leaseFromComments(comments, {
-        dispatchKey: parsed.work_order.dispatch_key,
-        taskId: parsed.work_order.task_id,
-      });
+    leaseState = leaseState || control.lease;
   }
 
   const attempt = `${event.run_id}-${sha256Hex(parsed.work_order.dispatch_key).slice(0, 8)}`;
@@ -239,7 +257,12 @@ export async function dispatchValidate({ env = process.env, github, existingLeas
     runId: event.run_id,
     head: parsed.work_order.subject.head,
     status: "leased",
+    thread: event.issue_number,
+    authorityCommentId: parsed.work_order.authority_comment_id,
   });
+  if (parsed.work_order.continuation_of) {
+    incoming.continuation_of = parsed.work_order.continuation_of;
+  }
   const lease = acquireLease(leaseState, incoming);
   if (!lease.ok) return finalize(lease, event);
 
