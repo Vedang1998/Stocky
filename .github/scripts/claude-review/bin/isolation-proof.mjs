@@ -121,12 +121,62 @@ const JAIL_BYPASS = `
 const fs = require("fs");
 const net = require("net");
 const { execFileSync } = require("child_process");
-const out = { uid: process.getuid(), canary: "ENOENT", sock: "ENOENT", secrets: false, egress: "untried" };
-try { fs.promises.readFile(process.env.STOCKY_CANARY_PATH).then(() => {}).catch(() => {}); } catch (e) {}
-try { fs.readFileSync(process.env.STOCKY_CANARY_PATH, "utf8"); out.canary = "READ"; } catch (e) { out.canary = e.code || "ERR"; }
-try { fs.openSync("/var/run/docker.sock"); out.sock = "OPEN"; } catch (e) { out.sock = e.code || "ERR"; }
-try { fs.openSync("/run/docker.sock"); out.sock2 = "OPEN"; } catch (e) { out.sock2 = e.code || "ERR"; }
-try { fs.openSync(process.env.STOCKY_FAKE_DOCKER_SOCK || "/tmp/stocky-fake-docker.sock"); out.fake_sock = "OPEN"; } catch (e) { out.fake_sock = e.code || "ERR"; }
+function classify(e) {
+  if (!e) return "ERR";
+  if (e.code) return String(e.code);
+  const msg = String(e.message || "");
+  if (msg.indexOf("STOCKY_JAIL") >= 0) return "STOCKY_JAIL";
+  const m = msg.match(/\\b(ENOENT|EACCES|EPERM)\\b/);
+  return m ? m[1] : "ERR";
+}
+const out = {
+  uid: process.getuid(),
+  canary: "untried",
+  canary_attempted: false,
+  canary_bypass: "untried",
+  canary_bypass_attempted: false,
+  sock: "untried",
+  sock_attempted: false,
+  sock_bypass: "untried",
+  sock_bypass_attempted: false,
+  fake_sock: "untried",
+  fake_sock_attempted: false,
+  fake_sock_bypass: "untried",
+  fake_sock_bypass_attempted: false,
+  secrets: false,
+  egress: "untried",
+  exec: "untried"
+};
+try {
+  fs.readFileSync(process.env.STOCKY_CANARY_PATH, "utf8");
+  out.canary = "READ";
+  out.canary_attempted = true;
+} catch (e) {
+  out.canary_attempted = true;
+  out.canary = classify(e);
+}
+try {
+  fs.openSync("/var/run/docker.sock");
+  out.sock = "OPEN";
+  out.sock_attempted = true;
+} catch (e) {
+  out.sock_attempted = true;
+  out.sock = classify(e);
+}
+try {
+  fs.openSync("/run/docker.sock");
+  out.sock2 = "OPEN";
+} catch (e) {
+  out.sock2 = classify(e);
+}
+try {
+  fs.openSync(process.env.STOCKY_FAKE_DOCKER_SOCK || "/tmp/stocky-fake-docker.sock");
+  out.fake_sock = "OPEN";
+  out.fake_sock_attempted = true;
+} catch (e) {
+  out.fake_sock_attempted = true;
+  out.fake_sock = classify(e);
+}
 out.secrets = Boolean(process.env.GITHUB_TOKEN || process.env.CLAUDE_CODE_OAUTH_TOKEN || process.env.ANTHROPIC_API_KEY);
 function tryConn(host, port, key) {
   return new Promise((resolve) => {
@@ -134,16 +184,36 @@ function tryConn(host, port, key) {
     s.setTimeout(1500);
     s.connect(port, host, () => { s.destroy(); resolve("CONNECTED"); });
     s.on("timeout", () => { s.destroy(); resolve("TIMEOUT"); });
-    s.on("error", (e) => resolve(e.code || e.message));
+    s.on("error", (e) => { s.destroy(); resolve(e.code || e.message); });
   }).then((v) => { out[key] = v; });
+}
+function bypassRead(p, field, attemptedField) {
+  return fs.promises.readFile(p).then(function () {
+    out[attemptedField] = true;
+    out[field] = "READ";
+  }, function (e) {
+    out[attemptedField] = true;
+    out[field] = classify(e);
+  });
+}
+function bypassStat(p, field, attemptedField) {
+  return fs.promises.stat(p).then(function () {
+    out[attemptedField] = true;
+    out[field] = "OPEN";
+  }, function (e) {
+    out[attemptedField] = true;
+    out[field] = classify(e);
+  });
 }
 Promise.all([
   tryConn("1.1.1.1", 443, "egress_443"),
   tryConn("169.254.169.254", 80, "imds"),
+  bypassRead(process.env.STOCKY_CANARY_PATH, "canary_bypass", "canary_bypass_attempted"),
+  bypassStat("/var/run/docker.sock", "sock_bypass", "sock_bypass_attempted"),
+  bypassStat(process.env.STOCKY_FAKE_DOCKER_SOCK || "/tmp/stocky-fake-docker.sock", "fake_sock_bypass", "fake_sock_bypass_attempted"),
 ]).then(() => {
-  try { execFileSync("id", { encoding: "utf8" }); out.exec = "RAN"; } catch (e) { out.exec = e.code || "ERR"; }
+  try { execFileSync("id", { encoding: "utf8" }); out.exec = "RAN"; } catch (e) { out.exec = classify(e); }
   process.stdout.write(JSON.stringify(out));
-  process.exit(2);
 });
 `;
 
@@ -165,24 +235,38 @@ Promise.all([lookup("example.invalid"), lookup("one.one.one.one")]).then(() => {
 });
 `;
 
+const DRAIN_WRITE_HELPER = `
+function writeFully(buf) {
+  return new Promise((resolve, reject) => {
+    process.stdout.write(buf, (err) => (err ? reject(err) : resolve()));
+  });
+}
+`;
+
 const FLOOD_SCRIPT = `
+${DRAIN_WRITE_HELPER}
 const chunk = Buffer.alloc(64 * 1024, 0x41);
-for (let i = 0; i < 40; i++) process.stdout.write(chunk);
-process.exit(0);
+(async () => {
+  for (let i = 0; i < 40; i++) await writeFully(chunk);
+})().catch(() => { process.exitCode = 1; });
 `;
 
 const ROTATION_TAIL_SCRIPT = `
-process.stdout.write("START-MARKER\\n");
-const chunk = Buffer.alloc(64 * 1024, 0x41);
-for (let i = 0; i < 32; i++) process.stdout.write(chunk);
-process.stdout.write("TAIL-MARKER\\n");
-process.exit(0);
+${DRAIN_WRITE_HELPER}
+(async () => {
+  await writeFully("START-MARKER\\n");
+  const chunk = Buffer.alloc(64 * 1024, 0x41);
+  for (let i = 0; i < 32; i++) await writeFully(chunk);
+  await writeFully("TAIL-MARKER\\n");
+})().catch(() => { process.exitCode = 1; });
 `;
 
 const OMIT_LIMIT_SCRIPT = `
+${DRAIN_WRITE_HELPER}
 const chunk = Buffer.alloc(64 * 1024, 0x42);
-for (let i = 0; i < 8; i++) process.stdout.write(chunk);
-process.exit(0);
+(async () => {
+  for (let i = 0; i < 8; i++) await writeFully(chunk);
+})().catch(() => { process.exitCode = 1; });
 `;
 
 function startHostListener() {
@@ -528,7 +612,12 @@ const prodConnected = (proof.gateway_production.results || []).some((r) => r.res
 const mutConnected = (proof.gateway_mutation.results || []).some((r) => r.result === "CONNECTED");
 const dnsAttempts = proof.dns.parsed?.attempts || 0;
 const dnsResults = proof.dns.parsed?.results || [];
-const FS_DENY = new Set(["ENOENT", "EACCES", "EPERM"]);
+const SPECIFIC_FS_DENY = new Set(["ENOENT", "EACCES", "EPERM", "STOCKY_JAIL"]);
+function specificFsDenied(attempted, outcome, successTokens) {
+  if (attempted !== true) return false;
+  if (successTokens.includes(outcome) || outcome === "untried" || outcome === "ERR") return false;
+  return SPECIFIC_FS_DENY.has(outcome);
+}
 const NET_DENY = new Set([
   "ENETUNREACH",
   "EHOSTUNREACH",
@@ -552,9 +641,15 @@ const checks = {
   disabledRevived: disabled.executor.exit_code === 0,
   image_inspect_ok: proof.image_inspect_ok,
   jail_backend_docker: jail.executor.backend === "docker" && !jail.executor.provisioning_failed,
-  canary_denied: FS_DENY.has(jailParsed.canary),
-  sock_denied: FS_DENY.has(jailParsed.sock),
-  fake_sock_denied: FS_DENY.has(jailParsed.fake_sock),
+  canary_denied:
+    specificFsDenied(jailParsed.canary_attempted, jailParsed.canary, ["READ"]) &&
+    specificFsDenied(jailParsed.canary_bypass_attempted, jailParsed.canary_bypass, ["READ"]),
+  sock_denied:
+    specificFsDenied(jailParsed.sock_attempted, jailParsed.sock, ["OPEN"]) &&
+    specificFsDenied(jailParsed.sock_bypass_attempted, jailParsed.sock_bypass, ["OPEN"]),
+  fake_sock_denied:
+    specificFsDenied(jailParsed.fake_sock_attempted, jailParsed.fake_sock, ["OPEN"]) &&
+    specificFsDenied(jailParsed.fake_sock_bypass_attempted, jailParsed.fake_sock_bypass, ["OPEN"]),
   secrets_denied: jailParsed.secrets === false && proof.env_denied.oauth && proof.env_denied.github,
   egress_denied: NET_DENY.has(jailParsed.egress_443),
   imds_denied: NET_DENY.has(jailParsed.imds),

@@ -8,7 +8,13 @@ import { fileURLToPath } from "node:url";
 import { createBroker, scrubBrokerEnv } from "../lib/mcp-broker.js";
 import { runProbe } from "../lib/sandbox.js";
 import { assertIsolatedDockerArgs, dockerCliEnv, dockerLogDriverArgs, toCreateArgs } from "../lib/isolated-executor.js";
-import { IMAGE_PINS, MAX_ARTIFACT_BYTES, MAX_MODEL_RESULT_BYTES, pinnedImage } from "../lib/constants.js";
+import {
+  IMAGE_PINS,
+  MAX_ARTIFACT_BYTES,
+  MAX_COLLECTOR_BUFFER_BYTES,
+  MAX_MODEL_RESULT_BYTES,
+  pinnedImage,
+} from "../lib/constants.js";
 import { bindProbeRequest, validateProvenance } from "../lib/provenance.js";
 import {
   loadPublisherInput,
@@ -33,13 +39,15 @@ const PROVENANCE = {
   max_sandbox_seconds: 60,
 };
 
-function writeFakeDocker({ hang = false } = {}) {
+function writeFakeDocker({ hang = false, floodLogs = false } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stocky-docker-"));
   const bin = path.join(dir, "docker");
   const log = path.join(dir, "argv.log");
   const envLog = path.join(dir, "env.log");
   const hangFlag = path.join(dir, "hang");
+  const floodFile = path.join(dir, "flood.txt");
   if (hang) fs.writeFileSync(hangFlag, "1");
+  if (floodLogs) fs.writeFileSync(floodFile, "A".repeat(300_000));
   fs.writeFileSync(
     bin,
     `#!/bin/sh
@@ -52,7 +60,11 @@ case "$1" in
   pull) exit 0 ;;
   rm) exit 0 ;;
   kill) echo killed >> "${log}"; exit 0 ;;
-  logs) echo ok; exit 0 ;;
+  logs)
+    if [ -f "${floodFile}" ]; then cat "${floodFile}"; exit 0; fi
+    echo ok
+    exit 0
+    ;;
   create) echo cidcreate; exit 0 ;;
   start) echo started; exit 0 ;;
   ps) exit 0 ;;
@@ -267,6 +279,40 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(nodeRun, /--read-only/);
     assert.match(nodeRun, /STOCKY_BRIDGE_GATEWAY=10\.29\.0\.1/);
     assert.doesNotMatch(argv, /docker\.sock/);
+  });
+
+  it("oversized docker logs mark output_incomplete and bound returned bytes", () => {
+    const fake = writeFakeDocker({ floodLogs: true });
+    const result = runProbe(
+      {
+        kind: "node_script",
+        timeout_seconds: 5,
+        node_script: { source: "process.stdout.write('ok')" },
+      },
+      {
+        isolationMode: "docker",
+        requireProvenance: true,
+        provenance: PROVENANCE,
+        probe_index: 1,
+        dockerBin: fake.bin,
+      },
+    );
+    assert.equal(result.executor.backend, "docker");
+    assert.equal(result.executor.output_incomplete, true);
+    assert.ok(Buffer.byteLength(result.executor.stdout || "", "utf8") <= MAX_COLLECTOR_BUFFER_BYTES);
+  });
+
+  it("isolation-proof flood scripts drain stdout instead of process.exit", () => {
+    const src = fs.readFileSync(path.join(HERE, "../bin/isolation-proof.mjs"), "utf8");
+    for (const name of ["FLOOD_SCRIPT", "ROTATION_TAIL_SCRIPT", "OMIT_LIMIT_SCRIPT"]) {
+      const match = src.match(new RegExp(`const ${name} = \`([\\s\\S]*?)\`;`));
+      assert.ok(match, `${name} missing`);
+      assert.match(match[1], /writeFully/);
+      assert.doesNotMatch(match[1], /process\.exit\(/);
+    }
+    assert.match(src, /STOCKY_JAIL/);
+    assert.match(src, /canary_bypass_attempted/);
+    assert.doesNotMatch(src, /FS_DENY\.has\(jailParsed\.canary\)/);
   });
 });
 

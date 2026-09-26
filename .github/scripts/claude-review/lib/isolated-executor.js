@@ -359,7 +359,7 @@ function startLogFollower(dockerBin, name) {
         stderrStored += Math.min(buf.length, room);
       }
     }
-    if (stdoutBytes + stderrBytes > cap) {
+    if (stdoutBytes + stderrBytes >= cap) {
       truncated = true;
       stopReading();
     }
@@ -375,7 +375,7 @@ function startLogFollower(dockerBin, name) {
       return {
         stdout: Buffer.concat(stdoutChunks).toString("utf8"),
         stderr: Buffer.concat(stderrChunks).toString("utf8"),
-        output_incomplete: truncated || stdoutBytes + stderrBytes > cap,
+        output_incomplete: truncated || stdoutBytes + stderrBytes >= cap,
         log_bytes: stdoutBytes + stderrBytes,
       };
     },
@@ -432,7 +432,9 @@ export function runDetachedThenWait(dockerBin, args, { name, timeoutMs, options 
     timed_out: wait.timed_out,
     provisioning_failed: false,
     output_incomplete: Boolean(
-      followed.output_incomplete || collected.output_incomplete || followed.log_bytes > MAX_COLLECTOR_BUFFER_BYTES,
+      followed.output_incomplete ||
+        collected.output_incomplete ||
+        (followed.log_bytes || 0) >= MAX_COLLECTOR_BUFFER_BYTES,
     ),
     log_driver: collected.log_driver,
     log_bytes: Math.max(followed.log_bytes || 0, collected.log_bytes || 0),
@@ -451,36 +453,54 @@ function collectContainerLogs(dockerBin, name, options = {}) {
   } catch {
     logConfig = {};
   }
-  const logs = docker(dockerBin, ["logs", name], {
-    timeout: 15_000,
-    maxBuffer: MAX_COLLECTOR_BUFFER_BYTES,
-  });
+  let logs;
+  try {
+    logs = docker(dockerBin, ["logs", name], {
+      timeout: 15_000,
+      maxBuffer: MAX_COLLECTOR_BUFFER_BYTES,
+    });
+  } catch (e) {
+    logs = {
+      status: null,
+      stdout: "",
+      stderr: String(e && e.message ? e.message : e),
+      error: e,
+    };
+  }
   const collectorExhausted =
     logs.error?.code === "ENOBUFS" ||
-    /maxBuffer/i.test(String(logs.error?.message || ""));
-  const stdout = logs.stdout || "";
-  const stderr = logs.stderr || "";
-  const logBytes = Buffer.byteLength(stdout, "utf8") + Buffer.byteLength(stderr, "utf8");
+    /maxBuffer/i.test(String(logs.error?.message || "")) ||
+    (logs.status == null && Boolean(logs.error));
+  const stdoutRaw = logs.stdout || "";
+  const stderrRaw = logs.stderr || "";
+  const stdoutBuf = Buffer.from(stdoutRaw, "utf8");
+  const stderrBuf = Buffer.from(stderrRaw, "utf8");
+  const logBytesObserved = stdoutBuf.length + stderrBuf.length;
+  const stdout = stdoutBuf.subarray(0, Math.min(stdoutBuf.length, MAX_COLLECTOR_BUFFER_BYTES)).toString("utf8");
+  let stderr = stderrBuf.subarray(0, Math.min(stderrBuf.length, MAX_COLLECTOR_BUFFER_BYTES)).toString("utf8");
   const type = logConfig.Type || logConfig.type || "";
   const cfg = logConfig.Config || logConfig.config || {};
   const maxSize = cfg["max-size"] || cfg.maxSize || "";
-  const nearCap = logBytes >= DOCKER_LOG_NEAR_CAP_BYTES;
+  const nearCap = logBytesObserved >= DOCKER_LOG_NEAR_CAP_BYTES;
+  const atCollectorCap = logBytesObserved >= MAX_COLLECTOR_BUFFER_BYTES;
   const missingRequiredDriver =
     proofMutation(options) !== "omit-log-limits" &&
     (type !== DOCKER_LOG_DRIVER || maxSize !== DOCKER_LOG_MAX_SIZE);
   const output_incomplete = Boolean(
     collectorExhausted ||
+      atCollectorCap ||
       nearCap ||
       (missingRequiredDriver && inspect.status === 0 && Boolean(type)),
   );
+  if (collectorExhausted) {
+    stderr = `${stderr}\ncollector_buffer_exhausted`;
+  }
   return {
     stdout,
-    stderr: collectorExhausted
-      ? `${stderr}\ncollector_buffer_exhausted`
-      : stderr,
+    stderr,
     output_incomplete: output_incomplete || collectorExhausted,
     log_driver: type || null,
-    log_bytes: logBytes,
+    log_bytes: logBytesObserved,
     log_config: logConfig,
   };
 }

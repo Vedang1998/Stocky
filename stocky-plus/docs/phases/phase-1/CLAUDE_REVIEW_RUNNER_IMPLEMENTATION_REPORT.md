@@ -38,7 +38,8 @@ This documentation records CI identities for already-observed heads. It does **n
 | R1 runtime/test correction | `bbd3bbedf7951a043aaaf51d84a0fc0b93595c97` | parent is `1433281`; exact-head CI run 35958752653 |
 | R2 runtime/test correction | `df6759278059e4d9899259d5e7c0d118db3bda2c` | parent is `bbd3bbe`; exact-head CI run 35998517064 SUCCESS; isolation_proof run 35998517100 FAILURE |
 | R2 isolation-proof follow-ups | `11693a661c622536a0ab745a69829bf8ead757ab`, `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | live R2 head `4e5eefb`; exact-head CI run 36005015430 SUCCESS; isolation_proof run 36005015425 PASS_ISOLATION_PROOF |
-| Stabilization runtime/test | this commit (SHA in live PR description; not self-embedded) | parent is `4e5eefb` |
+| Stabilization runtime/test | `6ac5ec9f5246cf0730f745d115573000ef979028` | parent is `4e5eefb`; exact-head CI run 36207918474 SUCCESS; isolation_proof run 36207918476 FAILURE |
+| Stabilization isolation-proof oracle follow-up | this commit (SHA in live PR description; not self-embedded) | parent is `6ac5ec9`. Fixes jail `STOCKY_JAIL` classification + flood stdout drain. |
 | Reviewed implementation head | none for this stabilization | independent Claude tooling re-review has not started on the stabilization head |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
 
@@ -55,6 +56,7 @@ This documentation records CI identities for already-observed heads. It does **n
 | `df6759278059e4d9899259d5e7c0d118db3bda2c` | runtime + test + documentation | R2 timeout/model-result/dispatch/isolation oracles |
 | `11693a661c622536a0ab745a69829bf8ead757ab` | runtime + test | restore isolation-proof SQL and host-gateway oracles |
 | `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | runtime + test | wait for sidecar SELECT 1 before SQL probes |
+| `6ac5ec9f5246cf0730f745d115573000ef979028` | runtime + test + documentation | stabilize control history, inert publish, and proofs |
 
 No empty retrigger. No independent review report. No schema/migration. No `ci.yml` change.
 
@@ -78,14 +80,14 @@ R62-08/R62-09 remain observations (simple route write-capable; vendor `configure
 - `lib/dispatch.js` + `lib/dispatch-cli.js`: canonical thread from `issue_url`; snapshot before running lease; blocked lock on snapshot failure; `continuation_of`; production `bin/dispatch.mjs` refuses mock/proof env and exits 2 on `ok === false` (phase runner does not set `process.exitCode`).
 - `lib/inert.js` + publisher: one trusted envelope + inert opinion; lost POST readback is UNKNOWN without retry; publication re-fetches complete history.
 - `lib/isolated-executor.js`: json-file 1m/1 on probe and sidecars; `docker create` + follow-logs-from-before-start destroyed at 256 KiB; `output_incomplete` → BLOCKED; mutations only via `allowProofHooks`.
-- `bin/isolation-proof.mjs`: child host-listener; harness candidates even when Gateway empty; `attempts>0`; precise FS/net/DNS denials; flood/rotation-tail/omit-log-limits (512 KiB) oracles; hash restore.
+- `bin/isolation-proof.mjs`: child host-listener; harness candidates even when Gateway empty; `attempts>0`; wrapped + `fs.promises` bypass FS denials classified as `ENOENT`/`EACCES`/`EPERM`/`STOCKY_JAIL` (generic `ERR` cannot pass); flood/rotation-tail/omit-log-limits drain stdout; hash restore.
 - Tests: `tests/comment-history.test.js`, `tests/control-auth.test.js`, `tests/inert-publish.test.js`, `tests/production-hooks.test.js`, `tests/dispatch-pagination.test.js` plus updates. Recorded separately from `proofs/*.test.js` (1 docker-presence assertion; isolation-proof.mjs is the real-container proof).
 
 ## Commands executed (authoring host, stabilization)
 
 | Check | Result |
 |---|---|
-| `node --test --test-reporter=spec tests/*.test.js` | **118 pass / 0 fail** (Node v22.19.0, npm 11.5.2, PostgreSQL 16.15, Redis 7.0.15) |
+| `node --test --test-reporter=spec tests/*.test.js` | **120 pass / 0 fail** on this follow-up tree (Node v22.19.0, npm 11.5.2, PostgreSQL 16.15, Redis 7.0.15). Prior stabilization commit `6ac5ec9` recorded 118/0. |
 | `node --test --test-reporter=spec proofs/*.test.js` | **1 pass / 0 fail** (docker-absence detection; not a silent skip of the GHA proof) |
 | `actionlint` 1.7.7 | exit 0 |
 | YAML parse of `main.yml` + `claude-review-execution.yml` | exit 0 |
@@ -95,9 +97,11 @@ R62-08/R62-09 remain observations (simple route write-capable; vendor `configure
 | `isolation-proof.mjs` locally | exit 2 `isolation_unavailable_docker_missing` (expected; authoring VM has no Docker) |
 | Live Claude / runner `workflow_dispatch` | **not executed** |
 
-Exact-head CI and hosted isolation proof on the stabilization head: recorded in the live PR description / task result after push; not this commit's own SHA.
+Exact-head CI and hosted isolation proof on the stabilization follow-up head: recorded in the live PR description / task result after push; not this commit's own SHA.
 
-The prior 94+1 vs 95 count difference was source-derived at R2, not a mandate to keep 95. Stabilization adds named tests; 118 is the tests/*.test.js count on this tree.
+Observed on `6ac5ec9` (not this follow-up): Classify+Heavy+Gate SUCCESS run 36207918474; isolation_proof FAILURE run 36207918476 (`canary_denied=false`, `flood_incomplete=false`). That SHA is not READY.
+
+The prior 94+1 vs 95 count difference was source-derived at R2, not a mandate to keep 95. Stabilization named tests: 118 on `6ac5ec9`, 120 on this follow-up (`tests/*.test.js` only).
 
 ## R1 blocking findings (reproduced on `1433281`)
 
@@ -276,6 +280,15 @@ This follow-up waits for `psql -h 127.0.0.1 -c 'SELECT 1'` inside the sidecar be
 ### R62-07 — isolation-proof oracles
 
 Per-control checks in `bin/isolation-proof.mjs`. Local authoring VM remains exit 2 (`docker` missing). GHA `isolation_proof` is the production proof.
+
+### Stabilization isolation_proof FAILURE on `6ac5ec9`
+
+GHA job [108308268034](https://github.com/Vedang1998/Stocky/actions/runs/36207918476/job/108308268034) on `6ac5ec9` (exact-head Classify/Heavy/Gate run [36207918474](https://github.com/Vedang1998/Stocky/actions/runs/36207918474) SUCCESS):
+
+- `canary_denied`/`sock_denied`/`fake_sock_denied`=false because preload `deny()` throws `Error("STOCKY_JAIL:…")` with no `e.code`, and the oracle treated generic `"ERR"` as failure. This follow-up classifies `STOCKY_JAIL` and requires a separate `fs.promises` bypass attempt (`ENOENT`/`EACCES`/`EPERM`/`STOCKY_JAIL`). Generic `"ERR"` / `"untried"` still cannot PASS.
+- `flood_incomplete`/`rotation_incomplete`/`omit_limits_incomplete`=false because the probe scripts called `process.exit(0)` after `stdout.write`, dropping unflushed bytes (`output_bytes` 163840 / 98317 / 131072). This follow-up drains via `writeFully` and marks collector cap / ENOBUFS as incomplete.
+
+Do not embed this follow-up commit's own SHA here.
 
 ## Commands executed (authoring host, R2)
 
