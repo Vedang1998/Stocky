@@ -39,6 +39,14 @@ Implements approved work, creates migrations, runs commands and tests, updates t
 
 Independently inspects and executes the repository, verifies implementation claims, reviews security and correctness, and issues evidence-based readiness findings. Claude Code must not approve work based only on summaries or screenshots.
 
+## Review transport
+
+ChatGPT coordinates and authorizes exact tasks. Cursor implements in its existing cloud route. Actual Claude reviews in native Claude cloud / Routines. GitHub remains evidence, code, and CI authority.
+
+Native setup status is **PENDING OWNER CONFIGURATION / VERIFICATION** until actual evidence exists. Preferred later GitHub event (owner configures; not enabled by instruction text): `pull_request.labeled` filtered by dedicated label `propo-review-ready` and base `main`, without requiring a draft to be marked ready. Labels are not authority. Each native GitHub event creates a new session; deduplicate against canonical task + head + role and prior claims; never treat unavailable history as no active job. An existing manual same-task reviewer may resume without a duplicate routine run. Findings are inert evidence, never a command to another agent.
+
+Durable record: `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. Do not rebuild a custom Actions review runner.
+
 ## Product principles
 
 Always preserve these rules:
@@ -157,6 +165,8 @@ Mandatory rules:
 Cursor must not invent parallel lanes or start adjacent runtime work on its own.
 
 Claude independent review cannot be replaced by another Cursor lane.
+
+Independent Claude review uses the native cloud / Routines route described in `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` once owner configuration is verified. Until then, setup remains pending. Safety gates and exact-head CI do not change.
 
 ## Delivery workflow
 
