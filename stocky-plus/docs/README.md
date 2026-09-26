@@ -14,6 +14,8 @@ Start with `product/00_READ_ME_FIRST.md` and follow its reading order. Product r
 
 This contains the reusable ChatGPT, Cursor, and Claude prompts. Do not create a new permanent agent prompt for every phase.
 
+Native Claude review transport (pending owner configuration / verification): `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements in its existing cloud route; actual Claude reviews in native Claude cloud / Routines; GitHub remains evidence, code, and CI authority. That record does not by itself configure Routines or prove a native review.
+
 ## Phase work
 
 `stocky-plus/docs/phases/`
@@ -56,6 +58,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `RISK_REGISTER.md` — active risks and owners;
 - `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules;
 - `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward;
+- `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` — native Claude review transport; setup remains pending until actual evidence exists;
 - `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue after Stocky sunset; does not change product rules or relax safety gates; that packet itself did not authorize F3 runtime).
 
 Open `PROJECT_STATUS.md` first whenever the project feels confusing.

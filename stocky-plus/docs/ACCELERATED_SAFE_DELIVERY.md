@@ -221,6 +221,8 @@ The user should not be required to manually relay enormous agent transcripts whe
 
 Chat summaries are convenience only.
 
+Independent Claude review uses native Claude cloud / Routines. Cursor implements in its existing cloud route. ChatGPT coordinates exact tasks. GitHub remains evidence, code, and CI authority. Native setup is **PENDING OWNER CONFIGURATION / VERIFICATION** until a real native review is evidenced. Preferred later GitHub event (owner configures; not enabled here): `pull_request.labeled` filtered by dedicated label `propo-review-ready` and base `main`, without requiring a draft to be marked ready. Labels are not authority. Durable record: `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. Safety gates in this document are unchanged.
+
 ---
 
 ## 11. CI
@@ -263,6 +265,7 @@ Future-phase **planning** one dependency level ahead is permitted under this doc
 - Try to discover the whole material finding set in one pass.
 - Final exact-head review remains mandatory.
 - Independent review cannot be replaced by another Cursor lane.
+- Native cloud / Routines is the intended review route; setup remains pending until actual evidence exists (`stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`).
 
 ## ChatGPT mandatory summary
 
@@ -270,3 +273,4 @@ Future-phase **planning** one dependency level ahead is permitted under this doc
 - Issue one consolidated correction package where practical.
 - Keep GitHub as the durable handoff.
 - Do not weaken safety gates to accelerate calendar delivery.
+- Coordinate exact native-review tasks; labels are notifications, not merge or scope authority.
