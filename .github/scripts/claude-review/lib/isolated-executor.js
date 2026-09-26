@@ -297,6 +297,19 @@ export function cleanupPrefix(dockerBin, prefix) {
   return leftoverResources(dockerBin, prefix);
 }
 
+function parseContainerState(stdout) {
+  const parts = String(stdout || "").trim().split(/\s+/);
+  const status = String(parts[0] || "").toLowerCase();
+  const running = parts[1] === "true" || status === "running";
+  const rawExit = parts.length >= 3 ? parts[2] : "";
+  const exitCode = Number(rawExit);
+  return {
+    status,
+    running,
+    exitCode: Number.isFinite(exitCode) ? exitCode : 0,
+  };
+}
+
 function waitNamedContainer(dockerBin, name, timeoutMs, follower = null) {
   const started = Date.now();
   let sawRunning = false;
@@ -304,23 +317,25 @@ function waitNamedContainer(dockerBin, name, timeoutMs, follower = null) {
   while (Date.now() - started < timeoutMs) {
     const r = docker(
       dockerBin,
-      ["inspect", "-f", "{{.State.Running}} {{.State.ExitCode}}", name],
+      ["inspect", "-f", "{{.State.Status}} {{.State.Running}} {{.State.ExitCode}}", name],
       { timeout: 5_000 },
     );
     if (r.status === 0) {
-      const [running, exitCode] = (r.stdout || "").trim().split(/\s+/);
-      if (running === "true") sawRunning = true;
-      if (running === "false") {
-        const childDone = childExited(startChild);
-        if (sawRunning) {
-          return { timed_out: false, exit_code: Number(exitCode) || 0 };
-        }
-        if (startChild && childDone && startChild.exitCode != null && startChild.exitCode !== 0) {
-          return { timed_out: false, exit_code: startChild.exitCode || 1, start_failed: true };
-        }
-        if (childDone) {
-          return { timed_out: false, exit_code: Number(exitCode) || 0 };
-        }
+      const state = parseContainerState(r.stdout);
+      if (state.running) sawRunning = true;
+      if (state.status === "exited" || (sawRunning && !state.running)) {
+        return { timed_out: false, exit_code: state.exitCode };
+      }
+      // Created-but-not-started plus a dead attach CLI is start failure, not
+      // a successful exit 0. GHA docker start has no --sig-proxy; treating a
+      // leftover created container as success hid empty probe stdout.
+      if ((state.status === "created" || state.status === "dead") && startChild && childExited(startChild)) {
+        const cliExit = startChild.exitCode;
+        return {
+          timed_out: false,
+          exit_code: cliExit != null && cliExit !== 0 ? cliExit : 1,
+          start_failed: true,
+        };
       }
     }
     follower?.pollCap?.();
@@ -338,13 +353,20 @@ export function toCreateArgs(runArgs) {
   return out;
 }
 
+export function dockerStartAttachArgs(name) {
+  // `docker start` on GitHub-hosted runners rejects `--sig-proxy` (unknown
+  // flag). Timeout uses named inspect + `docker kill -s KILL`, not spawnSync
+  // SIGTERM through CLI sig-proxy, so the unsupported flag is not required.
+  return ["start", "-a", name];
+}
+
 function startAttachFollower(dockerBin, name) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stocky-attach-"));
   const outPath = path.join(dir, "stdout");
   const errPath = path.join(dir, "stderr");
   const outFd = fs.openSync(outPath, "w");
   const errFd = fs.openSync(errPath, "w");
-  const child = spawn(dockerBin, ["start", "-a", "--sig-proxy=false", name], {
+  const child = spawn(dockerBin, dockerStartAttachArgs(name), {
     env: dockerCliEnv(),
     stdio: ["ignore", outFd, errFd],
   });
@@ -418,11 +440,13 @@ function startAttachFollower(dockerBin, name) {
 }
 
 /**
- * Named create + attached start (-a, sig-proxy off) + inspect poll + SIGKILL.
- * Do not use attached spawnSync timeout against untrusted PID 1 (sig-proxy hang).
- * Attach reads container stdout directly so json-file max-file=1 rotation cannot
- * replace a 2MiB write with a small tail that looks complete. The attach reader
- * is destroyed at MAX_COLLECTOR_BUFFER_BYTES so omit-log-limits cannot fill RAM.
+ * Named create + attached `docker start -a` + inspect poll + SIGKILL.
+ * Do not use attached spawnSync timeout against untrusted PID 1 (CLI sig-proxy
+ * hang). Do not pass `--sig-proxy` to `docker start`; GHA CLI rejects it and
+ * leaves the container in created with empty stdout. Attach reads container
+ * stdout directly so json-file max-file=1 rotation cannot replace a 2MiB write
+ * with a small tail that looks complete. The attach reader is destroyed at
+ * MAX_COLLECTOR_BUFFER_BYTES so omit-log-limits cannot fill RAM.
  */
 export function runDetachedThenWait(dockerBin, args, { name, timeoutMs, options = {} }) {
   const mutation = proofMutation(options);
@@ -443,6 +467,9 @@ export function runDetachedThenWait(dockerBin, args, { name, timeoutMs, options 
     if (wait.start_failed) {
       const followed = follower.snapshot();
       follower.stopReading();
+      if (mutation !== "skip-cleanup") {
+        docker(dockerBin, ["rm", "-f", name], { timeout: 15_000 });
+      }
       return {
         status: wait.exit_code || 1,
         stdout: followed.stdout,

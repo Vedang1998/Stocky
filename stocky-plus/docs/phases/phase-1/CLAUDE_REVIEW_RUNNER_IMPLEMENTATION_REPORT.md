@@ -40,7 +40,8 @@ This documentation records CI identities for already-observed heads. It does **n
 | R2 isolation-proof follow-ups | `11693a661c622536a0ab745a69829bf8ead757ab`, `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | live R2 head `4e5eefb`; exact-head CI run 36005015430 SUCCESS; isolation_proof run 36005015425 PASS_ISOLATION_PROOF |
 | Stabilization runtime/test | `6ac5ec9f5246cf0730f745d115573000ef979028` | parent is `4e5eefb`; exact-head CI run 36207918474 SUCCESS; isolation_proof run 36207918476 FAILURE |
 | Stabilization isolation-proof oracle follow-up | `2149ac099bac09d6a756cfb9e4dabc2a49b39100` | parent is `6ac5ec9`; Classify+Heavy+Gate run 36211907116 SUCCESS; isolation_proof run 36211907059 FAILURE (`rotation_incomplete=false`) |
-| Stabilization attach-collector follow-up | this commit (SHA in live PR description; not self-embedded) | parent is `2149ac0`. `docker start -a --sig-proxy=false` completeness vs json-file rotation. |
+| Stabilization attach-collector follow-up | `697ca90e50ce7d8484c39dc6217aeb92390ccafb` | parent is `2149ac0`. Classify+Heavy+Gate run 36216559716 SUCCESS; isolation_proof run 36216559720 FAILURE (`unknown flag: --sig-proxy`) |
+| Stabilization GHA-compatible attach | this commit (SHA in live PR description; not self-embedded) | parent is `697ca90`. `docker start -a` without `--sig-proxy`; created+dead attach is start_failed |
 | Reviewed implementation head | none for this stabilization | independent Claude tooling re-review has not started on the stabilization head |
 | Review-report-only commit | none | this file is author documentation, not an independent review |
 
@@ -59,6 +60,7 @@ This documentation records CI identities for already-observed heads. It does **n
 | `4e5eefb18c4bbaa58f94951d2ba6748dd49ff73a` | runtime + test | wait for sidecar SELECT 1 before SQL probes |
 | `6ac5ec9f5246cf0730f745d115573000ef979028` | runtime + test + documentation | stabilize control history, inert publish, and proofs |
 | `2149ac099bac09d6a756cfb9e4dabc2a49b39100` | runtime + test + documentation | classify jail denials and drain isolation-proof flood output |
+| `697ca90e50ce7d8484c39dc6217aeb92390ccafb` | runtime + test + documentation | attach collector via `docker start -a --sig-proxy=false` |
 
 No empty retrigger. No independent review report. No schema/migration. No `ci.yml` change.
 
@@ -81,7 +83,7 @@ R62-08/R62-09 remain observations (simple route write-capable; vendor `configure
 - `lib/session.js`: `parseTopLevelLockEnvelope`; owner-id STOP; workflow-bot locks; sticky STOP/completed; ignore released; missing identity fail-closed.
 - `lib/dispatch.js` + `lib/dispatch-cli.js`: canonical thread from `issue_url`; snapshot before running lease; blocked lock on snapshot failure; `continuation_of`; production `bin/dispatch.mjs` refuses mock/proof env and exits 2 on `ok === false` (phase runner does not set `process.exitCode`).
 - `lib/inert.js` + publisher: one trusted envelope + inert opinion; lost POST readback is UNKNOWN without retry; publication re-fetches complete history.
-- `lib/isolated-executor.js`: json-file 1m/1 on probe and sidecars; `docker create` + `docker start -a --sig-proxy=false` attach reader destroyed at 256 KiB; `output_incomplete` → BLOCKED; mutations only via `allowProofHooks`.
+- `lib/isolated-executor.js`: json-file 1m/1 on probe and sidecars; `docker create` + `docker start -a` (no `--sig-proxy`; GHA CLI rejects that flag) into size-capped files; created-but-not-started + dead attach CLI is `start_failed`, not exit 0; attach reader destroyed at 256 KiB; `output_incomplete` → BLOCKED; mutations only via `allowProofHooks`.
 - `bin/isolation-proof.mjs`: child host-listener; harness candidates even when Gateway empty; `attempts>0`; wrapped + `fs.promises` bypass FS denials classified as `ENOENT`/`EACCES`/`EPERM`/`STOCKY_JAIL` (generic `ERR` cannot pass); flood/rotation-tail/omit-log-limits drain stdout; hash restore.
 - Tests: `tests/comment-history.test.js`, `tests/control-auth.test.js`, `tests/inert-publish.test.js`, `tests/production-hooks.test.js`, `tests/dispatch-pagination.test.js` plus updates. Recorded separately from `proofs/*.test.js` (1 docker-presence assertion; isolation-proof.mjs is the real-container proof).
 
@@ -89,12 +91,12 @@ R62-08/R62-09 remain observations (simple route write-capable; vendor `configure
 
 | Check | Result |
 |---|---|
-| `node --test --test-reporter=spec tests/*.test.js` | **120 pass / 0 fail** on this follow-up tree (Node v22.19.0, npm 11.5.2, PostgreSQL 16.15, Redis 7.0.15). Prior stabilization commit `6ac5ec9` recorded 118/0. |
+| `node --test --test-reporter=spec tests/*.test.js` | **120 pass / 0 fail** on this GHA-compatible attach follow-up (Node v22.19.0, npm 11.5.2, PostgreSQL 16.15, Redis 7.0.15). Same named count as `697ca90`; prior `6ac5ec9` recorded 118/0. |
 | `node --test --test-reporter=spec proofs/*.test.js` | **1 pass / 0 fail** (docker-absence detection; not a silent skip of the GHA proof) |
 | `actionlint` 1.7.7 | exit 0 |
 | YAML parse of `main.yml` + `claude-review-execution.yml` | exit 0 |
 | classifier self-test | 40/40 |
-| `classify-ci-change-set.sh --from-git M <R2 head 4e5eefb>` | `full_ci=true` `docs_only=false` (46 paths at R2; new workflow/helper paths still full_ci) |
+| `classify-ci-change-set.sh --from-git M <live head>` | `full_ci=true` `docs_only=false` (`changed_path_count=56` at `697ca90`; this follow-up adds no new paths) |
 | `git diff --check` | exit 0 |
 | `isolation-proof.mjs` locally | exit 2 `isolation_unavailable_docker_missing` (expected; authoring VM has no Docker) |
 | Live Claude / runner `workflow_dispatch` | **not executed** |
@@ -103,7 +105,7 @@ Exact-head CI and hosted isolation proof on the stabilization follow-up head: re
 
 Observed on `6ac5ec9` (not this follow-up): Classify+Heavy+Gate SUCCESS run 36207918474; isolation_proof FAILURE run 36207918476 (`canary_denied=false`, `flood_incomplete=false`). That SHA is not READY.
 
-The prior 94+1 vs 95 count difference was source-derived at R2, not a mandate to keep 95. Stabilization named tests: 118 on `6ac5ec9`, 120 on this follow-up (`tests/*.test.js` only).
+The prior 94+1 vs 95 count difference was source-derived at R2, not a mandate to keep 95. Stabilization named tests: 118 on `6ac5ec9`, 120 on `2149ac0`/`697ca90`/this follow-up (`tests/*.test.js` only).
 
 ## R1 blocking findings (reproduced on `1433281`)
 
@@ -298,7 +300,17 @@ GHA job [108320032979](https://github.com/Vedang1998/Stocky/actions/runs/3621190
 
 - Jail/flood/omit oracles **passed** (`canary_denied=true`, `flood_incomplete=true`, `omit_limits_incomplete=true`).
 - `rotation_incomplete=false` and `rotation_not_tail_only_complete=false`: json-file `max-file=1` rotated away `START-MARKER`; `docker logs --follow` then returned only a 98316-byte tail (`stdout_has_tail=true`, `stdout_has_start=false`) that looked complete.
-- This follow-up collects probe stdout via `docker start -a --sig-proxy=false` so completeness is not the rotated json-file tail. Host disk still uses json-file 1m/1.
+- This follow-up collected probe stdout via `docker start -a --sig-proxy=false`. That flag is **not** valid on GitHub-hosted `docker start` (see `697ca90` below). Host disk still uses json-file 1m/1.
+
+Do not embed this follow-up commit's own SHA here.
+
+### Stabilization isolation_proof FAILURE on `697ca90`
+
+GHA job [108333555968](https://github.com/Vedang1998/Stocky/actions/runs/36216559720/job/108333555968) on `697ca90` (Classify+Heavy+Gate run [36216559716](https://github.com/Vedang1998/Stocky/actions/runs/36216559716) SUCCESS):
+
+- `sql_stderr` / attach stderr: `unknown flag: --sig-proxy` (exit 125). Probe containers stayed `created`. Attach files captured the CLI error (~131 bytes), not probe stdout.
+- `waitNamedContainer` treated created + dead attach CLI as success (`sql_exit=0`, `provisioning_failed=false`, empty `jail_stdout`, `gateway_production.attempts=0`, `timeout.timed_out=false`).
+- This follow-up drops `--sig-proxy` on `docker start -a` (timeout still uses named `docker kill -s KILL`) and fails closed when Status remains `created` after the attach CLI exits. `sqlOk` now requires stdout to contain `1`; `failOk` requires a real non-zero SQL exit without provisioning failure. Fake docker in tests rejects `--sig-proxy` the same way GHA does.
 
 Do not embed this follow-up commit's own SHA here.
 

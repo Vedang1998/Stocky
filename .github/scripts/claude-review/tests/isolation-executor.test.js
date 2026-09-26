@@ -7,7 +7,13 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createBroker, scrubBrokerEnv } from "../lib/mcp-broker.js";
 import { runProbe } from "../lib/sandbox.js";
-import { assertIsolatedDockerArgs, dockerCliEnv, dockerLogDriverArgs, toCreateArgs } from "../lib/isolated-executor.js";
+import {
+  assertIsolatedDockerArgs,
+  dockerCliEnv,
+  dockerLogDriverArgs,
+  dockerStartAttachArgs,
+  toCreateArgs,
+} from "../lib/isolated-executor.js";
 import {
   IMAGE_PINS,
   MAX_ARTIFACT_BYTES,
@@ -66,19 +72,33 @@ case "$1" in
     exit 0
     ;;
   create) echo cidcreate; exit 0 ;;
-  start) echo started; exit 0 ;;
+  start)
+    for arg in "$@"; do
+      case "$arg" in
+        --sig-proxy|--sig-proxy=*)
+          echo "unknown flag: --sig-proxy" >&2
+          exit 125
+          ;;
+      esac
+    done
+    echo started > "${dir}/started"
+    echo started
+    if [ -f "${hangFlag}" ]; then sleep 60; fi
+    exit 0
+    ;;
   ps) exit 0 ;;
   inspect)
     args="$*"
     if echo "$args" | grep -q LogConfig; then echo '{"Type":"json-file","Config":{"max-size":"1m","max-file":"1"}}'; exit 0; fi
     if echo "$args" | grep -q IPAddress; then echo "10.29.0.2"; exit 0; fi
     if echo "$args" | grep -q Gateway; then echo "10.29.0.1"; exit 0; fi
-    if echo "$args" | grep -q State.Running; then
-      if [ -f "${hangFlag}" ]; then echo "true 0"; exit 0; fi
-      echo "false 0"
+    if echo "$args" | grep -q State.Status || echo "$args" | grep -q State.Running; then
+      if [ -f "${hangFlag}" ]; then echo "running true 0"; exit 0; fi
+      if [ -f "${dir}/started" ]; then echo "exited false 0"; exit 0; fi
+      echo "created false 0"
       exit 0
     fi
-    echo "false 0"
+    echo "created false 0"
     exit 0
     ;;
   exec) echo PONG; exit 0 ;;
@@ -129,6 +149,7 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(first.ok, true);
     assert.equal(first.executor.backend, "docker");
     assert.equal(first.executor.isolation, "docker");
+    assert.equal(first.executor.provisioning_failed, false, first.executor.stderr);
     const argv = fs.readFileSync(fake.log, "utf8");
     assert.match(argv, /network create --driver bridge --label/);
     assert.match(argv, /--log-driver json-file/);
@@ -145,7 +166,8 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(sqlRun, /-e HOME=\/tmp/);
     assert.doesNotMatch(sqlRun, /--read-only/);
     assert.match(argv, /create /);
-    assert.match(argv, /start -a --sig-proxy=false/);
+    assert.match(argv, /start -a /);
+    assert.doesNotMatch(argv, /--sig-proxy/);
     assert.doesNotMatch(argv, /logs --follow/);
     assert.match(argv, /pg_isready/);
     assert.match(argv, /exec .* psql .* SELECT 1/);
@@ -239,6 +261,10 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.equal(create[0], "create");
     assert.equal(create.includes("-d"), false);
     assert.equal(create.includes("--name"), true);
+    const startArgs = dockerStartAttachArgs("sr1pr");
+    assert.deepEqual(startArgs, ["start", "-a", "sr1pr"]);
+    assert.equal(startArgs.includes("--sig-proxy=false"), false);
+    assert.equal(startArgs.some((a) => String(a).startsWith("--sig-proxy")), false);
   });
 
   it("image refs are digest-pinned, not mutable tags", () => {
@@ -274,7 +300,8 @@ describe("production run_probe uses isolated docker executor", () => {
     assert.match(argv, /--init/);
     assert.match(argv, /kill -s KILL/);
     assert.match(argv, /create /);
-    assert.match(argv, /start -a --sig-proxy=false/);
+    assert.match(argv, /start -a /);
+    assert.doesNotMatch(argv, /--sig-proxy/);
     assert.doesNotMatch(argv, /logs --follow/);
     const nodeRun = argv.split("\n").find((line) => line.includes("preload-jail.cjs")) || "";
     assert.match(nodeRun, /--read-only/);
@@ -299,6 +326,7 @@ describe("production run_probe uses isolated docker executor", () => {
       },
     );
     assert.equal(result.executor.backend, "docker");
+    assert.equal(result.executor.provisioning_failed, false, result.executor.stderr);
     assert.equal(result.executor.output_incomplete, true);
     assert.ok(Buffer.byteLength(result.executor.stdout || "", "utf8") <= MAX_COLLECTOR_BUFFER_BYTES);
   });
@@ -311,8 +339,12 @@ describe("production run_probe uses isolated docker executor", () => {
       assert.match(match[1], /writeFully/);
       assert.doesNotMatch(match[1], /process\.exit\(/);
     }
+    const executorSrc = fs.readFileSync(path.join(HERE, "../lib/isolated-executor.js"), "utf8");
+    assert.match(executorSrc, /dockerStartAttachArgs/);
+    assert.doesNotMatch(executorSrc, /start", "-a", "--sig-proxy/);
     assert.match(src, /STOCKY_JAIL/);
     assert.match(src, /canary_bypass_attempted/);
+    assert.match(src, /String\(sql\.executor\.stdout \|\| ""\)\.includes\("1"\)/);
     assert.doesNotMatch(src, /FS_DENY\.has\(jailParsed\.canary\)/);
   });
 });

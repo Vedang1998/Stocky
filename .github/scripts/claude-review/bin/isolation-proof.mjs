@@ -689,9 +689,16 @@ const checks = {
     !(proof.rotation_tail.stdout_has_tail && !proof.rotation_tail.stdout_has_start),
   omit_limits_incomplete: omitLimits.executor.output_incomplete === true,
   omit_limits_bounded: omitReturned <= MAX_COLLECTOR_BUFFER_BYTES,
-  sqlOk: sql.executor.backend === "docker" && sql.executor.exit_code === 0 && !sql.executor.provisioning_failed,
+  sqlOk:
+    sql.executor.backend === "docker" &&
+    sql.executor.exit_code === 0 &&
+    !sql.executor.provisioning_failed &&
+    String(sql.executor.stdout || "").includes("1"),
   sqlComplete: sql.executor.output_incomplete !== true,
-  failOk: failSql.executor.exit_code !== 0,
+  failOk:
+    failSql.executor.backend === "docker" &&
+    failSql.executor.exit_code !== 0 &&
+    !failSql.executor.provisioning_failed,
   zeroOk: zero.executor.tests_run === 0,
   pinsUsed: Boolean(sql.executor.image_pins?.postgres?.includes("@sha256:")),
   ambient_hooks_not_authority: proof.ambient_hooks_denied === true,
