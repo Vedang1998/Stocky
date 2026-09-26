@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "defaultMode": "dontAsk",
+    "allow": [
+      "mcp__stocky_review__get_evidence",
+      "mcp__stocky_review__read_subject",
+      "mcp__stocky_review__run_probe",
+      "mcp__stocky_review__checkpoint",
+      "mcp__stocky_review__submit_result"
+    ],
+    "deny": [
+      "Bash",
+      "BashOutput",
+      "KillShell",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "SlashCommand",
+      "Read",
+      "Glob",
+      "Grep",
+      "LS"
+    ]
+  },
+  "hooks": {},
+  "enableAllProjectMcpServers": false
+}
