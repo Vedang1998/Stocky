@@ -1,8 +1,8 @@
 # Native Claude review — operating record
 
-**Status:** PENDING OWNER CONFIGURATION / VERIFICATION  
-**Date:** 2026-09-26  
-**Authority:** issue [#52](https://github.com/Vedang1998/Stocky/issues/52) comment [`5847826072`](https://github.com/Vedang1998/Stocky/issues/52#issuecomment-5847826072); cleanup issue [#64](https://github.com/Vedang1998/Stocky/issues/64)  
+**Status:** PENDING OWNER CONFIGURATION / VERIFICATION
+**Date:** 2026-09-26
+**Authority:** issue [#52](https://github.com/Vedang1998/Stocky/issues/52) comment [`5847826072`](https://github.com/Vedang1998/Stocky/issues/52#issuecomment-5847826072); cleanup issue [#64](https://github.com/Vedang1998/Stocky/issues/64)
 **This file is transport/operating instruction only.** It does not change product rules, pricing, merge authority, or phase gates.
 
 Official facts below were read from primary sources on **2026-09-26**. Product decisions are labeled separately from those facts.
