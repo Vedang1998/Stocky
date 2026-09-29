@@ -14,7 +14,7 @@ Start with `product/00_READ_ME_FIRST.md` and follow its reading order. Product r
 
 This contains the reusable ChatGPT, Cursor, and Claude prompts. Do not create a new permanent agent prompt for every phase.
 
-Native Claude review transport (pending owner configuration / verification): `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements in its existing cloud route; actual Claude reviews in native Claude cloud / Routines; GitHub remains evidence, code, and CI authority. That record does not by itself configure Routines or prove a native review.
+Native Claude review transport: `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements in its existing cloud route; actual Claude reviews in native Claude cloud / Routines; GitHub remains evidence, code, and CI authority. Native **manual** reviews have executed and published (PR65 and the paired PR45/PR49 boundary review). GitHub-label automatic launch remains unresolved. That record does not by itself prove token deletion or automatic event delivery.
 
 ## Phase work
 
@@ -34,7 +34,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR5_F3_EXACT_HEAD_INDEPENDENT_REVIEW.md` — immutable Claude exact-head review (never edit);
 - `PR5_CLOSURE_REPORT.md` — overall PR5 repository-implementation closure;
 - `PR5_F3_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted P3 residuals, including pre-production requirements.
-- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **ACCEPTED / MERGED / CLOSED** (PR #37). PR6-B is **ACCEPTED / MERGED / CLOSED** (PR #39 squash **U**). PR6-C is **ACCEPTED / MERGED / CLOSED** (PR #40 squash **V**). PR6-D is **TECHNICALLY ACCEPTED AND MERGED** (PR #43 squash **W**). ChatGPT documentary closeout ACCEPT is recorded; formal PR6 repository closure is **PENDING** owner squash-merge of this closeout/control PR;
+- `PR6_EMERGENCY_ORDER_REFUND_FACTS_PLAN.md` — PR6 planning packet (**ACCEPTED / MERGED** via PR #34). PR6-A is **ACCEPTED / MERGED / CLOSED** (PR #37). PR6-B is **ACCEPTED / MERGED / CLOSED** (PR #39 squash **U**). PR6-C is **ACCEPTED / MERGED / CLOSED** (PR #40 squash **V**). PR6-D is **TECHNICALLY ACCEPTED AND MERGED** (PR #43 squash **W**). Formal PR6 repository closure is **effective** on PR #47 squash **X** `f057d98c8a321b3e06875a6e9a83b787bcbc101f`. Live `origin/main` is PR #65 **N** `ee77e4bf1e2fa3bf9642ec6b2e51657533ca0298`. PR45 current-main integration: `PR7_CURRENT_MAIN_INTEGRATION_REPORT.md`;
 - `PR6_CURRENT_MAIN_SYNC_REPORT.md` — PR #34 current-main synchronization evidence;
 - `PR6_A_FOUNDATION_IMPLEMENTATION_REPORT.md` — PR6-A order/refund fact foundation implementation and correction evidence.
 - `PR6_A_FOUNDATION_INDEPENDENT_REVIEW.md` — immutable Claude implementation review of `5f8b2e76…` (never edit). Verdict **CORRECTIONS REQUIRED**.
@@ -46,7 +46,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `PR6_D_IMPLEMENTATION_REPORT.md` — PR6-D webhook/import/reconciliation implementation evidence (dated Cursor record; live merge identity is **W**, not this file’s draft-PR header).
 - `PR6_D_COMPLETE_INTEGRATION_INDEPENDENT_REVIEW.md` — immutable Claude complete-integration review of `25226e46…` (never edit). Verdict **CORRECTIONS REQUIRED**.
 - Remaining immutable PR6-D reviews (never edit): `PR6_D_CORRECTION_INDEPENDENT_REVIEW.md`; `PR6_D_SOURCE_CONTRACT_INDEPENDENT_REVIEW.md`; `PR6_D_SC_RECOVERY_FINAL_INDEPENDENT_REVIEW.md`; `PR6_D_FINAL_CONTROL_INTEGRATION_INDEPENDENT_REVIEW.md`; `PR6_D_QUOTA_EVIDENCE_INDEX_CORRECTION_INDEPENDENT_REVIEW.md` (verdict **APPROVE PR6-D QUOTA-EVIDENCE AND INDEX CORRECTION**).
-- `PR6_CLOSURE_REPORT.md` — overall PR6 A/B/C/D repository-implementation closeout (ChatGPT documentary ACCEPT recorded; formal closure **PENDING** owner squash-merge of this PR).
+- `PR6_CLOSURE_REPORT.md` — overall PR6 A/B/C/D repository-implementation closeout (ChatGPT documentary ACCEPT recorded; formal closure **effective** on PR #47 squash **X**).
 - `PR6_FORMAL_CLOSEOUT_INDEPENDENT_REVIEW.md` — immutable Claude documentary/control review of subject `fde01dc5…` (never edit; blob `c17e7150a39afe625f6b90c538a96e08a42e5808`). Verdict **`APPROVE PR6 FORMAL REPOSITORY CLOSEOUT`**.
 - `PR6_ACCEPTED_RESIDUAL_BACKLOG.md` — accepted residuals, standing controls, fixed failure instances, source limitations, unattributed observations, and accepted P3-CLOSEOUT-01/02/03.
 
@@ -58,7 +58,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `RISK_REGISTER.md` — active risks and owners;
 - `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules;
 - `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward;
-- `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` — native Claude review transport; setup remains pending until actual evidence exists;
+- `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` — native Claude review transport; manual reviews have published; GitHub-label automatic launch remains unresolved;
 - `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue after Stocky sunset; does not change product rules or relax safety gates; that packet itself did not authorize F3 runtime).
 
 Open `PROJECT_STATUS.md` first whenever the project feels confusing.
