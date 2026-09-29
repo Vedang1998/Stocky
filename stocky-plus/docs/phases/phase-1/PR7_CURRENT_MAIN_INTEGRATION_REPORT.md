@@ -2,9 +2,9 @@
 
 **Status:** `PR45 CURRENT-MAIN INTEGRATION READY FOR CHATGPT — NO PR7 RUNTIME AUTHORIZED`
 
-**Date:** 2026-09-29  
-**Authority:** PR45 [5881526575](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5881526575); issue52 [5881550822](https://github.com/Vedang1998/Stocky/issues/52#issuecomment-5881550822); issue [#66](https://github.com/Vedang1998/Stocky/issues/66).  
-**Writer:** Cursor Cloud Agent run `bc-573551f4-25ae-4678-938f-178fa4dadb64`; reported model `cursor-grok-4.6-xhigh`.  
+**Date:** 2026-09-29
+**Authority:** PR45 [5881526575](https://github.com/Vedang1998/Stocky/pull/45#issuecomment-5881526575); issue52 [5881550822](https://github.com/Vedang1998/Stocky/issues/52#issuecomment-5881550822); issue [#66](https://github.com/Vedang1998/Stocky/issues/66).
+**Writer:** Cursor Cloud Agent run `bc-573551f4-25ae-4678-938f-178fa4dadb64`; reported model `cursor-grok-4.6-xhigh`.
 **This file does not invent its own commit SHA.** Final candidate identity belongs in PR45 metadata after push.
 
 This is documentation packaging. It does **not** accept the whole PR7 plan, authorize PR7 runtime, merge PR45 into main, create D-055, waive Q-008 or R-176, or start the next agent.
@@ -34,8 +34,8 @@ N, I, R, and P are ancestors of the packaging branch. No rebase, reset, or force
 
 The only content conflict was `stocky-plus/docs/PROJECT_STATUS.md`.
 
-Kept from PR45: evidenced PR6 **FORMALLY CLOSED** on **X** (PR #47); no PR6 reopen; no D-055.  
-Kept from N: native-review transport, PR58 historical comment-trigger, PR65 retirement of `.github/workflows/main.yml`, PR62 **RETIRED / NOT ADOPTED**, PR53/54 unmerged.  
+Kept from PR45: evidenced PR6 **FORMALLY CLOSED** on **X** (PR #47); no PR6 reopen; no D-055.
+Kept from N: native-review transport, PR58 historical comment-trigger, PR65 retirement of `.github/workflows/main.yml`, PR62 **RETIRED / NOT ADOPTED**, PR53/54 unmerged.
 Live identity: **N** is current main; **W** and **X** are historical. Two boundary corrections **ACCEPTED**; overall PR7 planning/merge **PENDING**. Native **manual** reviews have published (PR65 and paired PR45/PR49 review). GitHub-label automatic launch remains unresolved. Workflow-disable / secret-removal remain owner reports, not an API-verified token audit.
 
 `README.md` and `ACCELERATED_SAFE_DELIVERY.md` auto-merged; live wording was reconciled in the same allowed-control set. `DECISIONS.md` uses existing D-054 item 26 only (dated 2026-09-29 packaging note; no new decision heading).
@@ -74,13 +74,13 @@ Proposed/unresolved **D-PR7-*** items stay proposed (plan §7). This writer supp
 
 ## 7. Remaining gates (compact)
 
-1. ChatGPT whole-plan / current-main decision on this packet.  
-2. Independent targeted review of the **new integration delta** only, if required.  
-3. Owner merge authorization (separate).  
-4. PR7 **runtime** still unauthorized (schema/grants/processors/flags).  
-5. **Q-008 OPEN** (legal/privacy policy). **R-176 OPEN / P0**. **R-164** unchanged.  
-6. GitHub-label automatic launch unresolved; do not restore Actions credentials or adopt PR62.  
-7. Production, Shopify writes, inventory writes, `read_all_orders`, `write_orders`, live subscription registration, and write flags remain unauthorized / DEFAULT OFF.  
+1. ChatGPT whole-plan / current-main decision on this packet.
+2. Independent targeted review of the **new integration delta** only, if required.
+3. Owner merge authorization (separate).
+4. PR7 **runtime** still unauthorized (schema/grants/processors/flags).
+5. **Q-008 OPEN** (legal/privacy policy). **R-176 OPEN / P0**. **R-164** unchanged.
+6. GitHub-label automatic launch unresolved; do not restore Actions credentials or adopt PR62.
+7. Production, Shopify writes, inventory writes, `read_all_orders`, `write_orders`, live subscription registration, and write flags remain unauthorized / DEFAULT OFF.
 8. PR49 P3 prose; PR48/50/53/54 remain unchanged peers.
 
 **Next action:** ChatGPT evaluates this integration. Do **not** start PR7 runtime.
