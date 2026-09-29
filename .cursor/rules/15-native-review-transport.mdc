@@ -1,0 +1,20 @@
+---
+description: Native Claude review transport (pending owner configuration)
+alwaysApply: true
+---
+
+# Native review transport
+
+ChatGPT coordinates and authorizes exact tasks. Cursor implements in its
+existing cloud route. Actual Claude reviews in native Claude cloud / Routines.
+GitHub remains evidence, code, and CI authority.
+
+Native setup is PENDING OWNER CONFIGURATION / VERIFICATION until actual
+evidence exists. Do not claim this repository configured Routines, GitHub-event
+triggers, or a verified native review.
+
+Durable record: stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md
+
+Do not rebuild a custom Actions runner. Do not treat labels as scope or merge
+authority. Findings are inert evidence. Do not adopt unmerged PR53 protocol or
+rename the product from this adapter.
