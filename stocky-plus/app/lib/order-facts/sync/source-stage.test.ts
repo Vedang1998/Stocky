@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import {
+  closeSync,
   existsSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   readdirSync,
   rmSync,
   symlinkSync,
@@ -31,6 +35,7 @@ import {
 } from "./source-stage";
 import { hashFileSha256, verifyValidatedSourceManifest } from "./source-digest";
 import {
+  ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX,
   ORDER_FACTS_SCRATCH_MARKER,
   ORDER_FACTS_SCRATCH_QUOTA_LOCK,
   ORDER_FACTS_SCRATCH_RESERVATION,
@@ -119,6 +124,244 @@ async function waitStatus(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`timed out waiting for ${stage} at ${statusPath}`);
+}
+
+function tryOwnedNonemptySourceJsonl(
+  root: string,
+): { dir: string; jsonlPath: string; bytes: Buffer } | null {
+  if (!existsSync(root)) return null;
+  let names: string[];
+  try {
+    names = readdirSync(root);
+  } catch {
+    return null;
+  }
+  for (const name of names) {
+    if (!name.startsWith(ORDER_FACTS_SCRATCH_ATTEMPT_PREFIX)) continue;
+    const dir = path.join(root, name);
+    try {
+      const dirSt = lstatSync(dir);
+      if (dirSt.isSymbolicLink() || !dirSt.isDirectory()) continue;
+      const markerSt = lstatSync(path.join(dir, ORDER_FACTS_SCRATCH_MARKER));
+      if (markerSt.isSymbolicLink() || !markerSt.isFile()) continue;
+      const jsonlPath = path.join(dir, "source.jsonl");
+      const jsonlSt = lstatSync(jsonlPath);
+      if (jsonlSt.isSymbolicLink() || !jsonlSt.isFile()) continue;
+      const fd = openSync(jsonlPath, "r");
+      try {
+        const length = Math.max(1, jsonlSt.size);
+        const buf = Buffer.alloc(length);
+        const n = readSync(fd, buf, 0, buf.length, 0);
+        if (n <= 0) continue;
+        return { dir, jsonlPath, bytes: buf.subarray(0, n) };
+      } finally {
+        closeSync(fd);
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+async function waitOwnedNonemptySourceJsonl(
+  root: string,
+  timeoutMs = 20_000,
+): Promise<{ dir: string; jsonlPath: string; bytes: Buffer }> {
+  const started = Date.now();
+  let lastLen = -1;
+  while (Date.now() - started < timeoutMs) {
+    const found = tryOwnedNonemptySourceJsonl(root);
+    if (found && found.bytes.length > 0) {
+      if (found.bytes.length === lastLen) return found;
+      lastLen = found.bytes.length;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`timed out waiting for nonempty source.jsonl under ${root}`);
+}
+
+function readStatusFile(statusPath: string): Record<string, unknown> | null {
+  if (!existsSync(statusPath)) return null;
+  try {
+    return JSON.parse(readFileSync(statusPath, "utf8").trim()) as Record<
+      string,
+      unknown
+    >;
+  } catch {
+    return null;
+  }
+}
+
+async function waitProcessLossReady(
+  statusPath: string,
+  root: string,
+  timeoutMs = 20_000,
+): Promise<{
+  status: Record<string, unknown>;
+  dir: string;
+  jsonlPath: string;
+  bytes: Buffer;
+}> {
+  const started = Date.now();
+  let lastLen = -1;
+  while (Date.now() - started < timeoutMs) {
+    const parsed = readStatusFile(statusPath);
+    if (parsed?.stage === "error") {
+      throw new Error(
+        `process-loss child error: ${String(parsed.error ?? "unknown")}`,
+      );
+    }
+    if (parsed?.stage === "completed") {
+      throw new Error(
+        "process-loss child completed staging before the kill window",
+      );
+    }
+    const found = tryOwnedNonemptySourceJsonl(root);
+    if (parsed?.stage === "parked" && found && found.bytes.length > 0) {
+      if (found.bytes.length === lastLen) {
+        return { status: parsed, ...found };
+      }
+      lastLen = found.bytes.length;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(
+    `timed out waiting for parked child and nonempty source.jsonl under ${root}`,
+  );
+}
+
+type OwnedProcessLoss = {
+  wrapper: ChildProcess;
+  wrapperPid: number;
+  innerPid: number;
+};
+
+function readPpid(pid: number): number | null {
+  try {
+    const raw = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const endComm = raw.lastIndexOf(")");
+    if (endComm < 0) return null;
+    const parts = raw.slice(endComm + 2).split(" ");
+    const ppid = Number(parts[1]);
+    return Number.isInteger(ppid) && ppid >= 0 ? ppid : null;
+  } catch {
+    return null;
+  }
+}
+
+function pidIsDescendantOf(candidate: number, ancestor: number): boolean {
+  let current = candidate;
+  const seen = new Set<number>();
+  while (current > 1 && !seen.has(current)) {
+    if (current === ancestor) return true;
+    seen.add(current);
+    const ppid = readPpid(current);
+    if (ppid === null) return false;
+    current = ppid;
+  }
+  return current === ancestor;
+}
+
+function processLossCmdline(pid: number): string | null {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function assertOwnedProcessLoss(
+  wrapper: ChildProcess,
+  statusPid: unknown,
+): OwnedProcessLoss {
+  if (typeof wrapper.pid !== "number") {
+    throw new Error("process-loss wrapper has no pid");
+  }
+  if (typeof statusPid !== "number") {
+    throw new Error(`process-loss status pid is not a number: ${String(statusPid)}`);
+  }
+  if (statusPid !== wrapper.pid && !pidIsDescendantOf(statusPid, wrapper.pid)) {
+    throw new Error(
+      `status.pid ${statusPid} is not this test's spawned process ${wrapper.pid} or a descendant`,
+    );
+  }
+  const cmdline = processLossCmdline(statusPid);
+  if (!cmdline || !cmdline.includes("source-stage-process-loss-child")) {
+    throw new Error(
+      `status.pid ${statusPid} cmdline is not this test's process-loss child`,
+    );
+  }
+  return { wrapper, wrapperPid: wrapper.pid, innerPid: statusPid };
+}
+
+async function waitObservedExit(
+  child: ChildProcess,
+  ownedWrapperPid: number,
+  timeoutMs = 20_000,
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  if (child.pid !== ownedWrapperPid) {
+    throw new Error(
+      `refusing to wait on a pid that is not this test's wrapper (child.pid=${child.pid} owned=${ownedWrapperPid})`,
+    );
+  }
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return { code: child.exitCode, signal: child.signalCode };
+  }
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        new Error(`timed out waiting for observed exit of pid ${ownedWrapperPid}`),
+      );
+    }, timeoutMs);
+    child.once("exit", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+  });
+}
+
+async function waitPidGone(pid: number, timeoutMs = 20_000): Promise<void> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`timed out waiting for pid ${pid} to disappear`);
+}
+
+function killOwnedProcessLoss(owned: OwnedProcessLoss): void {
+  if (owned.wrapper.pid !== owned.wrapperPid) {
+    throw new Error("refusing to signal a wrapper pid that is not this test's child");
+  }
+  try {
+    process.kill(owned.innerPid, "SIGKILL");
+  } catch {
+    /* already gone */
+  }
+  if (owned.wrapper.exitCode === null && owned.wrapper.signalCode === null) {
+    owned.wrapper.kill("SIGKILL");
+  }
+}
+
+async function stopOwnedProcessLoss(
+  wrapper: ChildProcess,
+  owned: OwnedProcessLoss | undefined,
+): Promise<void> {
+  if (owned) {
+    killOwnedProcessLoss(owned);
+    await waitObservedExit(owned.wrapper, owned.wrapperPid).catch(() => undefined);
+    await waitPidGone(owned.innerPid).catch(() => undefined);
+    return;
+  }
+  if (typeof wrapper.pid === "number") {
+    wrapper.kill("SIGKILL");
+    await waitObservedExit(wrapper, wrapper.pid).catch(() => undefined);
+  }
 }
 
 describe("PR6-D source staging ownership", () => {
@@ -494,61 +737,71 @@ describe("PR6-D scratch integrity and resource failure", () => {
         `${JSON.stringify({ stage: "error", error: error.message })}\n`,
       );
     });
-    const parked = await waitStatus(statusPath, "parked");
-    const leftover = String(parked.dir);
-    expect(existsSync(path.join(leftover, ORDER_FACTS_SCRATCH_MARKER))).toBe(true);
-    const jsonlPath = path.join(leftover, "source.jsonl");
-    expect(existsSync(jsonlPath)).toBe(true);
-    const beforeHash = sha256(readFileSync(jsonlPath));
-    const beforeInventory = inventoryFiles(leftover);
-    const pid = parked.pid;
-    expect(typeof pid).toBe("number");
-    if (typeof pid === "number") {
-      process.kill(pid, "SIGKILL");
-    }
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(existsSync(jsonlPath)).toBe(true);
-    expect(sha256(readFileSync(jsonlPath))).toBe(beforeHash);
-    const rebuilt = await createOwnedScratchDir({
-      shopId: "pl-shop",
-      syncRunId: "pl-run",
-      scratchRoot: root,
-      reservedBytes: 262144,
-    });
-    expect(rebuilt.dir).not.toBe(leftover);
-    expect(existsSync(jsonlPath)).toBe(true);
-    expect(inventoryFiles(leftover)).toEqual(beforeInventory);
-    const inspected = await inspectDScratchNamespace(root);
-    expect(inspected.attemptDirs.some((row) => row.dir === leftover)).toBe(true);
-    expect(await measureDScratchTreeBytes(leftover)).toBeGreaterThan(0);
-    const restaged = await stageOrderFactsJsonl(
-      (async function* () {
-        yield `${JSON.stringify({
-          id: "gid://shopify/Order/pl-rebuild",
-          currentSubtotalLineItemsQuantity: 0,
-        })}\n`;
-      })(),
-      {
+    let owned: OwnedProcessLoss | undefined;
+    try {
+      const ready = await waitProcessLossReady(statusPath, root);
+      expect(ready.status.stage).toBe("parked");
+      expect(ready.status.stage).not.toBe("completed");
+      expect(ready.status.readiness).toBe("generator_only");
+      expect(ready.bytes.length).toBeGreaterThan(0);
+      const leftover = ready.dir;
+      expect(existsSync(path.join(leftover, ORDER_FACTS_SCRATCH_MARKER))).toBe(
+        true,
+      );
+      const jsonlPath = ready.jsonlPath;
+      const beforeHash = sha256(readFileSync(jsonlPath));
+      const beforeInventory = inventoryFiles(leftover);
+      owned = assertOwnedProcessLoss(child, ready.status.pid);
+      killOwnedProcessLoss(owned);
+      await waitObservedExit(owned.wrapper, owned.wrapperPid);
+      await waitPidGone(owned.innerPid);
+      expect(existsSync(jsonlPath)).toBe(true);
+      expect(sha256(readFileSync(jsonlPath))).toBe(beforeHash);
+      const rebuilt = await createOwnedScratchDir({
         shopId: "pl-shop",
-        syncRunId: "pl-run-2",
+        syncRunId: "pl-run",
         scratchRoot: root,
-        expectedObjectCount: "1",
-        expectedRootObjectCount: "1",
-      },
-    );
-    expect(restaged.status).toBe("COMPLETE");
-    if (restaged.status === "COMPLETE") {
-      await disposeOwnedScratch(restaged.ownership, root);
+        reservedBytes: 262144,
+      });
+      expect(rebuilt.dir).not.toBe(leftover);
+      expect(existsSync(jsonlPath)).toBe(true);
+      expect(inventoryFiles(leftover)).toEqual(beforeInventory);
+      const inspected = await inspectDScratchNamespace(root);
+      expect(inspected.attemptDirs.some((row) => row.dir === leftover)).toBe(
+        true,
+      );
+      expect(await measureDScratchTreeBytes(leftover)).toBeGreaterThan(0);
+      const restaged = await stageOrderFactsJsonl(
+        (async function* () {
+          yield `${JSON.stringify({
+            id: "gid://shopify/Order/pl-rebuild",
+            currentSubtotalLineItemsQuantity: 0,
+          })}\n`;
+        })(),
+        {
+          shopId: "pl-shop",
+          syncRunId: "pl-run-2",
+          scratchRoot: root,
+          expectedObjectCount: "1",
+          expectedRootObjectCount: "1",
+        },
+      );
+      expect(restaged.status).toBe("COMPLETE");
+      if (restaged.status === "COMPLETE") {
+        await disposeOwnedScratch(restaged.ownership, root);
+      }
+      await disposeOwnedScratch(rebuilt, root);
+      expect(inventoryFiles(leftover)).toEqual(beforeInventory);
+      const occupancy = await inspectDScratchOccupancy({
+        scratchRoot: root,
+        maxScratchBytes: 32 * 1024 * 1024,
+      });
+      expect(
+        occupancy.activeAttemptCount + occupancy.unknownAttemptCount,
+      ).toBeGreaterThan(0);
+    } finally {
+      await stopOwnedProcessLoss(child, owned);
     }
-    await disposeOwnedScratch(rebuilt, root);
-    expect(inventoryFiles(leftover)).toEqual(beforeInventory);
-    const occupancy = await inspectDScratchOccupancy({
-      scratchRoot: root,
-      maxScratchBytes: 32 * 1024 * 1024,
-    });
-    expect(occupancy.activeAttemptCount + occupancy.unknownAttemptCount).toBeGreaterThan(
-      0,
-    );
   }, 30_000);
 
   it("SC-R-08 confirmatory: SIGKILL during staging leaves bytes and does not complete the killed attempt", async () => {
@@ -565,23 +818,135 @@ describe("PR6-D scratch integrity and resource failure", () => {
       },
       stdio: ["ignore", "ignore", "pipe"],
     });
-    const parked = await waitStatus(statusPath, "parked");
-    expect(parked.stage).toBe("parked");
-    expect(parked.stage).not.toBe("completed");
-    const leftover = String(parked.dir);
-    const jsonlPath = path.join(leftover, "source.jsonl");
-    const before = sha256(readFileSync(jsonlPath));
-    if (typeof parked.pid === "number") process.kill(parked.pid, "SIGKILL");
-    child.kill("SIGKILL");
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    expect(existsSync(jsonlPath)).toBe(true);
-    expect(sha256(readFileSync(jsonlPath))).toBe(before);
-    const occupancy = sanitizeDScratchOccupancy(
-      await inspectDScratchOccupancy({ scratchRoot: root }),
-    );
-    expect(occupancy.leftoverAttemptCount).toBeGreaterThan(0);
-    expect(occupancy.observedBytes).toBeGreaterThan(0);
-    expect(occupancy.reservedBytes).toBeGreaterThan(0);
+    let owned: OwnedProcessLoss | undefined;
+    try {
+      const ready = await waitProcessLossReady(statusPath, root);
+      expect(ready.status.stage).toBe("parked");
+      expect(ready.status.stage).not.toBe("completed");
+      expect(ready.status.readiness).toBe("generator_only");
+      expect(ready.bytes.length).toBeGreaterThan(0);
+      const jsonlPath = ready.jsonlPath;
+      const before = sha256(readFileSync(jsonlPath));
+      owned = assertOwnedProcessLoss(child, ready.status.pid);
+      killOwnedProcessLoss(owned);
+      await waitObservedExit(owned.wrapper, owned.wrapperPid);
+      await waitPidGone(owned.innerPid);
+      expect(existsSync(jsonlPath)).toBe(true);
+      expect(sha256(readFileSync(jsonlPath))).toBe(before);
+      const occupancy = sanitizeDScratchOccupancy(
+        await inspectDScratchOccupancy({ scratchRoot: root }),
+      );
+      expect(occupancy.leftoverAttemptCount).toBeGreaterThan(0);
+      expect(occupancy.observedBytes).toBeGreaterThan(0);
+      expect(occupancy.reservedBytes).toBeGreaterThan(0);
+    } finally {
+      await stopOwnedProcessLoss(child, owned);
+    }
+  }, 30_000);
+
+  it("DISPOSABLE NEGATIVE: delayed source.jsonl creation — parked is premature; repaired wait observes nonempty bytes", async () => {
+    const root = scratchRoot();
+    const statusPath = path.join(root, "delayed.json");
+    const releasePath = path.join(root, "release.json");
+    mkdirSync(root, { recursive: true });
+    const child = spawn(TSX_BIN, [PROCESS_LOSS_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_CHILD_MODE: "delayed-write",
+        PR6_D_CHILD_STATUS_PATH: statusPath,
+        PR6_D_CHILD_SCRATCH_ROOT: root,
+        PR6_D_CHILD_SHOP_ID: "delayed-shop",
+        PR6_D_CHILD_RUN_ID: "delayed-run",
+        PR6_D_CHILD_RELEASE_PATH: releasePath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let owned: OwnedProcessLoss | undefined;
+    try {
+      const parked = await waitStatus(statusPath, "parked");
+      expect(parked.stage).toBe("parked");
+      expect(parked.readiness).toBe("generator_only");
+      expect(parked.dir).toBe(null);
+      expect(tryOwnedNonemptySourceJsonl(root)).toBeNull();
+      owned = assertOwnedProcessLoss(child, parked.pid);
+      const readyPromise = waitOwnedNonemptySourceJsonl(root);
+      expect(tryOwnedNonemptySourceJsonl(root)).toBeNull();
+      writeFileSync(releasePath, "go\n");
+      const ready = await readyPromise;
+      expect(ready.bytes.length).toBeGreaterThan(0);
+      expect(readFileSync(ready.jsonlPath).length).toBeGreaterThan(0);
+      killOwnedProcessLoss(owned);
+      await waitObservedExit(owned.wrapper, owned.wrapperPid);
+      await waitPidGone(owned.innerPid);
+    } finally {
+      await stopOwnedProcessLoss(child, owned);
+    }
+  }, 30_000);
+
+  it("DISPOSABLE NEGATIVE: never-ready source.jsonl fails within the existing 20s bound", async () => {
+    const root = scratchRoot();
+    const statusPath = path.join(root, "never-ready.json");
+    mkdirSync(root, { recursive: true });
+    const child = spawn(TSX_BIN, [PROCESS_LOSS_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_CHILD_MODE: "never-ready",
+        PR6_D_CHILD_STATUS_PATH: statusPath,
+        PR6_D_CHILD_SCRATCH_ROOT: root,
+        PR6_D_CHILD_SHOP_ID: "never-shop",
+        PR6_D_CHILD_RUN_ID: "never-run",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let owned: OwnedProcessLoss | undefined;
+    try {
+      const parked = await waitStatus(statusPath, "parked");
+      expect(parked.readiness).toBe("generator_only");
+      expect(tryOwnedNonemptySourceJsonl(root)).toBeNull();
+      owned = assertOwnedProcessLoss(child, parked.pid);
+      const started = Date.now();
+      await expect(waitOwnedNonemptySourceJsonl(root)).rejects.toThrow(
+        /timed out waiting for nonempty source.jsonl/,
+      );
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeGreaterThanOrEqual(20_000);
+      expect(elapsed).toBeLessThan(30_000);
+      expect(tryOwnedNonemptySourceJsonl(root)).toBeNull();
+    } finally {
+      await stopOwnedProcessLoss(child, owned);
+    }
+  }, 30_000);
+
+  it("DISPOSABLE NEGATIVE: child-error fails within the existing bound rather than hanging or passing", async () => {
+    const root = scratchRoot();
+    const statusPath = path.join(root, "child-error.json");
+    mkdirSync(root, { recursive: true });
+    const child = spawn(TSX_BIN, [PROCESS_LOSS_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_CHILD_MODE: "error",
+        PR6_D_CHILD_STATUS_PATH: statusPath,
+        PR6_D_CHILD_SCRATCH_ROOT: root,
+        PR6_D_CHILD_SHOP_ID: "error-shop",
+        PR6_D_CHILD_RUN_ID: "error-run",
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    try {
+      const started = Date.now();
+      await expect(waitProcessLossReady(statusPath, root)).rejects.toThrow(
+        /process-loss child error: injected process-loss child error/,
+      );
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeLessThan(20_000);
+      expect(tryOwnedNonemptySourceJsonl(root)).toBeNull();
+      if (typeof child.pid === "number") {
+        const exited = await waitObservedExit(child, child.pid);
+        expect(exited.code).toBe(1);
+      }
+    } finally {
+      await stopOwnedProcessLoss(child, undefined);
+    }
   }, 30_000);
 });
 
