@@ -10,6 +10,7 @@ export default defineConfig({
     exclude: [
       "app/tenant/**/*.test.ts",
       "app/sync/__tests__/**/*.test.ts",
+      "app/rbac/**/*.test.ts",
       "**/node_modules/**",
     ],
   },

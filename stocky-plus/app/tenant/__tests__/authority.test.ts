@@ -61,6 +61,7 @@ describe("tenant authority (PR 2)", () => {
     expect(ctx.tenant.myshopifyDomain).toBe(SHOP_A_DOMAIN);
     expect(ctx.tenant.source).toBe("verified_admin_request");
     expect(isTenantAuthority(ctx.tenant)).toBe(true);
+    expect(ctx.actor.status).toBe("absent");
   });
 
   it("malformed authenticated domain fails closed", async () => {

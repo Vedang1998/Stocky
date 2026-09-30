@@ -709,6 +709,9 @@ jobs:
       - name: PR5-F3 scale completeness
         run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts
 
+      - name: PR7 privacy actor/owner-proof tests
+        run: npm run test:privacy
+
       - name: Unit tests
         run: npm test
 

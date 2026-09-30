@@ -3,9 +3,19 @@
  *
  * Authority derives only from Shopify authenticate.admin + canonical Shop.
  * Client-supplied shop identifiers never establish or replace authority.
+ *
+ * PR7 checkpoint A: when an embedded ID token is present, cryptographic
+ * claims and iss/dest agreement are checked BEFORE authenticate.admin.
+ * Actor identity is attached for platform powers; merchandising remains
+ * tenant-only (D-PR7-07). Owner proof is not consumed here.
  */
 
 import type { Session } from "@shopify/shopify-api";
+import {
+  gateAdminRequestIdentity,
+  type ShopifyVerifier,
+} from "../rbac/admin-auth-boundary.server";
+import type { ActorResolution } from "../rbac/actor.server";
 import {
   issueTenantAuthority,
   type TenantAuthority,
@@ -42,12 +52,16 @@ export type AdminTenantContext = {
   shop: CanonicalShopIdentity;
   tenant: TenantAuthority;
   db: TenantDb;
+  /** Verified actor or absent/unsupported. Not an owner grant. */
+  actor: ActorResolution;
 };
 
 export type RequireAdminTenantInput = {
   request: Request;
   params?: Record<string, string | undefined>;
   authenticateAdmin?: AuthenticateAdmin;
+  /** Test override for ID-token verification. Production uses env secrets. */
+  identityVerifier?: ShopifyVerifier;
 };
 
 /**
@@ -57,7 +71,13 @@ export type RequireAdminTenantInput = {
 export async function requireAdminTenant(
   input: RequireAdminTenantInput,
 ): Promise<AdminTenantContext> {
-  const { request, params, authenticateAdmin } = input;
+  const { request, params, authenticateAdmin, identityVerifier } = input;
+
+  const identity = await gateAdminRequestIdentity({
+    request,
+    verifier: identityVerifier,
+  });
+
   const authenticate =
     authenticateAdmin ??
     (await import("../shopify.server")).authenticate.admin;
@@ -88,5 +108,5 @@ export async function requireAdminTenant(
 
   const db = createTenantDb(tenant);
 
-  return { admin, session, redirect, shop, tenant, db };
+  return { admin, session, redirect, shop, tenant, db, actor: identity.actor };
 }
