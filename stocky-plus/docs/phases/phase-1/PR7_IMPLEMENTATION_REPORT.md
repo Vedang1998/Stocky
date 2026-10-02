@@ -151,4 +151,33 @@ This section does not embed its own future commit SHA.
 - Full tenant-access / migration / sync suites: not re-run locally; Heavy CI is the attributed execution when that run succeeds on the R1 head.
 - Historical C success `36791202683` and A0 failure `36662919664` are retained; not rerun-to-green.
 
+### Exact-head CI on `5470d69` (failed; not rerun-to-green)
+
+Automatic `pull_request` run [36954009774](https://github.com/Vedang1998/Stocky/actions/runs/36954009774) · `head_sha=5470d695a789a1ae6b263e74712a6c39da75199c`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `110672836583` | SUCCESS |
+| Heavy | `110672865306` | FAILURE at **Tenant enforcement preflight** (`npm run tenant:enforcement:preflight`) |
+| Gate | `110673754492` | FAILURE |
+
+Preflight JSON: merchant tables all `ok:true`; `globalFailures:["tenant:access:inventory:check_failed_exit_1"]`; `driftClass:known_safe_partial_state`. Step 15 Tenant enforcement inventory freshness was SUCCESS. Privacy, unit, lint, typecheck, and build on that job were skipped after preflight.
+
+Local `npm run tenant:access:inventory:check` on that same tree: exit 1, `PR2_TENANT_ACCESS_INVENTORY.md is stale`. Fresh `--stdout` vs checked-in:
+
+| Field | Checked-in (`5470d69`) | Fresh scan |
+|---|---|---|
+| Content digest | `813ae4ad26a6c0e91cedf3ca64a5fafa8e14db7a256d05dc0a0e2fce10e7091a` | `efb65bb46f4f0b545036d7581cb09d70b333b7fa640065b98c992aeeaaf12361` |
+| Scanned files | 521 | 522 |
+| Findings | 1761 | 1764 |
+| Approved exception findings | 1229 | 1232 |
+| Violations | 0 | 0 |
+
+Exact drifted paths (reported before expanding inventory scope):
+
+1. `app/rbac/__tests__/require-admin-tenant-boundary.test.ts` — new R1 test home; scannedFiles +1; **no** Prisma findings.
+2. `app/tenant/__tests__/authority.test.ts` — already EX-TEST-002. Existing write sites 37/38/43 moved to 52/53/58 (import/header growth). F-02 success describe added the same fixture at 202/203/207 (`shopSettings.deleteMany`, `supplier.deleteMany`, `shopSettings.createMany`).
+
+No new exception IDs. No production Prisma/schema change. Regenerated only `docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md`. After regen, `npm run tenant:access:inventory:check` printed `tenant_access_inventory_fresh` and exited 0. Findings **1764**, violations **0**, scannedFiles **522**, digest `efb65bb46f4f0b545036d7581cb09d70b333b7fa640065b98c992aeeaaf12361`.
+
 Checkpoint B, mark-ready, merge, production, and owner-proof consumption remain forbidden.
