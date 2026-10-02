@@ -1,0 +1,32 @@
+# PR7 checkpoint A — test-to-requirement map
+
+Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Historical 505-row feasibility counts are **not** application coverage. Checkpoint B rows remain unmet by design.
+
+| Matrix / AUTH-X ID | Requirement | Test home | Expected (A) |
+|---|---|---|---|
+| PR7-ACT-003 | exact string `sub` | `app/rbac/__tests__/actor.test.ts` | actor `548380009` |
+| PR7-ACT-004 | actor without online tokens | `installed-auth-boundary.test.ts` | `useOnlineTokens` unset; `sessionToken.sub` present; not owner |
+| PR7-ACT-005 | no sub → platform deny | `actor.test.ts` | `AUTH_PLATFORM_DENIED` |
+| PR7-ACT-012 | ID token ≠ access token | `installed-auth-boundary.test.ts` | GraphQL `X-Shopify-Access-Token` is not the JWT |
+| PR7-ACT-015 | `sub` is not owner | `owner-proof.test.ts` | no `shop_owner` from sub/offline |
+| PR7-ACT-016 / AUTH-X-14 | iss/dest mismatch | `id-token.test.ts`, `installed-auth-boundary.test.ts` | deny **before** token-exchange fetch |
+| PR7-ACT-018 / AUTH-X-00 | wide sub string preserved | `actor.test.ts` | `9007199254740993` |
+| PR7-ACT-020 | safe-integer owner | `owner-proof.test.ts` | `status=owner` |
+| PR7-ACT-021 / AUTH-X-23 | wide owner unsupported | `owner-proof.test.ts` | `OWNER_PROOF_UNSUPPORTED` |
+| PR7-ACT-022 | adjacent wide ids distinct | `actor.test.ts` | `…992` ≠ `…993` |
+| PR7-ACT-023 | sub vs associated_user mismatch | `owner-proof.test.ts` | unsupported/denied; token unused |
+| PR7-ACT-024 / AUTH-X-06/07/09 | mixedToken / stale cache / concurrent | `installed-auth-boundary.test.ts` | adapter does not adopt cache; no wrong first GraphQL |
+| AUTH-X-01 | offline embedded | `installed-auth-boundary.test.ts` | offline session; GraphQL offline token |
+| AUTH-X-03 | numeric JWT sub | `actor.test.ts` | unsupported actor; not rounded recovery |
+| AUTH-X-05 | wide numeric JWT sub | `actor.test.ts` | unsupported |
+| AUTH-X-08 | same sub two shops | `installed-auth-boundary.test.ts` | dest-bound; no cross-shop GraphQL |
+| AUTH-X-10/11/12/15 | exp / malformed / sig / aud | `id-token.test.ts` | 401-class deny; zero exchange |
+| AUTH-X-13 | expired stored online | `owner-proof.test.ts` | fresh exchange or deny; not expired token |
+| AUTH-X-17/18/19 | owner / staff / collaborator flags | `owner-proof.test.ts` | owner only when `account_owner` and not collaborator |
+| AUTH-X-20 | client body `account_owner` | `owner-proof.test.ts` | ignored |
+| AUTH-X-21 | lookup/store id mismatch | `installed-auth-boundary.test.ts` | fail closed; no wrong credential use |
+| AUTH-X-27 | missing `associated_user` | `owner-proof.test.ts` | `OWNER_PROOF_UNSUPPORTED` |
+| AUTH-X-31 | `id_token` query without Bearer | `installed-auth-boundary.test.ts` | document URL with `embedded=1`+`host`; adapter extracts query token; GraphQL uses offline token |
+| AUTH-X-32 | bot UA | `installed-auth-boundary.test.ts` | library 410; not treated as owner |
+| D-PR7-07 / PR7-RBAC-008 | merchandising ungated | `app/tenant/__tests__/authority.test.ts` | tenant authority with `actor.status=absent` |
+| CI | distinct privacy command | `vitest.privacy.config.ts` + `ci.yml` | nonzero tests; fail on zero collection |

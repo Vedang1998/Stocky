@@ -23,6 +23,7 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
     "test": "vitest run",
+    "test:privacy": "vitest run --config vitest.privacy.config.ts",
     "test:migrations": "vitest run --config vitest.migrations.config.ts",
     "test:migrations-name-filter-probes": "vitest run --config vitest.migrations-name-filter-probes.config.ts",
     "test:vitest-reporters": "vitest run --config vitest.reporters.config.ts",
