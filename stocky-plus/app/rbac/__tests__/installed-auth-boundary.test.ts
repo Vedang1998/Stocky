@@ -142,25 +142,24 @@ describe("installed authenticate.admin boundary (PR49 AUTH-X regressions)", () =
     const verifier = testVerifier();
     const actorB = verifiedActorFromExactSub(WIDE_SUB, SHOP_A);
     const actorA = verifiedActorFromExactSub(WIDE_ROUNDED, SHOP_A);
+    const requestA = adminRequest({ token: tokenA });
     const proofB = await proveShopOwner({
       request: adminRequest({ token: tokenB }),
       verifier,
       actor: actorB,
       idToken: tokenB,
-      fresh: true,
     });
     const proofA = await proveShopOwner({
-      request: adminRequest({ token: tokenA }),
+      request: requestA,
       verifier,
       actor: actorA,
       idToken: tokenA,
-      fresh: true,
     });
     expect(proofB.status).toBe("unsupported");
     expect(proofA.status).toBe("unsupported");
     expect(authxGraphql()).toHaveLength(0);
     expect(() =>
-      withProvenOwnerAccessToken(proofA, () => "used"),
+      withProvenOwnerAccessToken(proofA, { request: requestA, actor: actorA }, () => "used"),
     ).toThrow(ActorBoundaryError);
   });
 
@@ -174,14 +173,12 @@ describe("installed authenticate.admin boundary (PR49 AUTH-X regressions)", () =
         verifier,
         actor: verifiedActorFromExactSub(WIDE_SUB, SHOP_A),
         idToken: tokenB,
-        fresh: true,
       }),
       proveShopOwner({
         request: adminRequest({ token: tokenA }),
         verifier,
         actor: verifiedActorFromExactSub(WIDE_ROUNDED, SHOP_A),
         idToken: tokenA,
-        fresh: true,
       }),
     ]);
     expect(proofB.status).toBe("unsupported");
@@ -239,23 +236,28 @@ describe("installed authenticate.admin boundary (PR49 AUTH-X regressions)", () =
       locale: "en",
       collaborator: false,
     }));
+    const proofRequest = adminRequest({ token: current });
+    const proofActor = verifiedActorFromExactSub(SAFE_SUB, SHOP_A);
     const proof = await proveShopOwner({
-      request: adminRequest({ token: current }),
+      request: proofRequest,
       verifier: testVerifier(),
-      actor: verifiedActorFromExactSub(SAFE_SUB, SHOP_A),
+      actor: proofActor,
       idToken: current,
-      fresh: true,
     });
     expect(proof.status).toBe("owner");
     expect(authxExchanges().length).toBeGreaterThan(0);
-    await withProvenOwnerAccessToken(proof, async (accessToken) => {
-      setAuthxGraphqlCapture(true);
-      await fetch(`https://${SHOP_A}/admin/api/2026-07/graphql.json`, {
-        method: "POST",
-        headers: { "X-Shopify-Access-Token": accessToken },
-        body: "{}",
-      });
-    });
+    await withProvenOwnerAccessToken(
+      proof,
+      { request: proofRequest, actor: proofActor },
+      async (accessToken) => {
+        setAuthxGraphqlCapture(true);
+        await fetch(`https://${SHOP_A}/admin/api/2026-07/graphql.json`, {
+          method: "POST",
+          headers: { "X-Shopify-Access-Token": accessToken },
+          body: "{}",
+        });
+      },
+    );
     expect(authxGraphql()[0]?.accessTokenSha256).toBe(
       onlineTokenSha256(SHOP_A, SAFE_SUB),
     );
@@ -297,6 +299,9 @@ describe("installed authenticate.admin boundary (PR49 AUTH-X regressions)", () =
       app.authenticate.admin(adminRequest({ token })),
     );
     expect(response.status).toBe(401);
+    expect(response.headers.get("x-shopify-retry-invalid-session-request")).toBe(
+      "1",
+    );
     expect(authxExchanges()).toHaveLength(0);
   });
 

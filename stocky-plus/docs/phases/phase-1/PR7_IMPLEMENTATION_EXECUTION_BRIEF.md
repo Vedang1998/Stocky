@@ -61,3 +61,13 @@ This is the durable scope record for the admitted PR7 runtime assignment. It doe
 Owned now: `app/rbac/**`; narrow `app/tenant/require-admin-tenant.server.ts` + types/tests; `vitest.privacy.config.ts`; `package.json` `test:privacy` only; `.github/workflows/ci.yml` additive privacy step; `.env.example` named nonsecret PR7 defaults; PR7 execution brief/report/test map; latest-state entries in `PROJECT_STATUS.md`, `docs/README.md`, `phases/phase-1/README.md`; one dated D-054 subitem (no D-055).
 
 Do not edit: accepted plan/matrix appendices, immutable reviews, `AGENTS.md`/`CLAUDE.md`/`.cursor` rules, `CI_POLICY.md`, product strategy, PR49/53/54 branches, `package-lock.json`.
+
+## 5. R1 correction contract (additive)
+
+**Dispatch-Key:** `propo:issue67:PR68_CHECKPOINT_A_R1:51c4b701b79249833ec22ed6bc96415fa8d8f3a4:cursor`
+
+Checkpoint-A reviewer-correction round 1 of maximum 2. Not checkpoint B.
+
+Immutable independent review R `12c7a709da01f28c739a5698ec040a5faceedbcb` (blob `5ff31d304a5806e0b6640f7070ef7e595fffb106`) is preserved as original history. Corrections bind memoization to request+token+actor+shop+verifier, store owner credentials only in a module-private WeakMap, recheck private expiry at last use, convert invalid embedded credentials at the HTTP wrapper to the library 401+retry / document-bounce contract without sending those tokens through `authenticate.admin`, compare verified dest with `session.shop` before issuing tenant authority, and document F-06 Linux `/proc` plus sampled-length limits. Dead `blocksAuthentication` / `assertIdentityDoesNotBlock` / test-only `clientAccountOwner` / `fresh` bypass / invented 24h expiry are removed.
+
+Mutable scope remains: `app/rbac/**`; `app/tenant/require-admin-tenant.server.ts` and focused `app/tenant/__tests__/`; process-loss test/helper files only for F-06 evidence; this brief and `PR7_IMPLEMENTATION_REPORT.md`.

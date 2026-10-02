@@ -129,6 +129,9 @@ async function waitStatus(
 function tryOwnedNonemptySourceJsonl(
   root: string,
 ): { dir: string; jsonlPath: string; bytes: Buffer } | null {
+  // Test-readiness observation only: a readable nonempty prefix. This is NOT
+  // fsync, durability, cross-process quiescence, or production drain proof.
+  // Sampled stable length in the waiter below is the same class of observation.
   if (!existsSync(root)) return null;
   let names: string[];
   try {
@@ -168,6 +171,8 @@ async function waitOwnedNonemptySourceJsonl(
   root: string,
   timeoutMs = 20_000,
 ): Promise<{ dir: string; jsonlPath: string; bytes: Buffer }> {
+  // Sampled stable length is a test-readiness observation, not fsync /
+  // durability / cross-process quiescence / production drain proof.
   const started = Date.now();
   let lastLen = -1;
   while (Date.now() - started < timeoutMs) {
@@ -275,6 +280,8 @@ function assertOwnedProcessLoss(
   wrapper: ChildProcess,
   statusPid: unknown,
 ): OwnedProcessLoss {
+  // Linux /proc ownership: ppid walk plus cmdline containing
+  // source-stage-process-loss-child. Not portable to hosts without /proc.
   if (typeof wrapper.pid !== "number") {
     throw new Error("process-loss wrapper has no pid");
   }
@@ -839,6 +846,50 @@ describe("PR6-D scratch integrity and resource failure", () => {
       expect(occupancy.leftoverAttemptCount).toBeGreaterThan(0);
       expect(occupancy.observedBytes).toBeGreaterThan(0);
       expect(occupancy.reservedBytes).toBeGreaterThan(0);
+    } finally {
+      await stopOwnedProcessLoss(child, owned);
+    }
+  }, 30_000);
+
+  it("DISPOSABLE NEGATIVE CONTROL (F-06): parked-only premature readiness fails the delayed-write file oracle; restored wait succeeds", async () => {
+    const root = scratchRoot();
+    const statusPath = path.join(root, "f06-premature.json");
+    const releasePath = path.join(root, "f06-release.json");
+    mkdirSync(root, { recursive: true });
+    const child = spawn(TSX_BIN, [PROCESS_LOSS_CHILD], {
+      env: {
+        ...process.env,
+        PR6_D_CHILD_MODE: "delayed-write",
+        PR6_D_CHILD_STATUS_PATH: statusPath,
+        PR6_D_CHILD_SCRATCH_ROOT: root,
+        PR6_D_CHILD_SHOP_ID: "f06-shop",
+        PR6_D_CHILD_RUN_ID: "f06-run",
+        PR6_D_CHILD_RELEASE_PATH: releasePath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let owned: OwnedProcessLoss | undefined;
+    try {
+      const parked = await waitStatus(statusPath, "parked");
+      expect(parked.stage).toBe("parked");
+      expect(parked.readiness).toBe("generator_only");
+      owned = assertOwnedProcessLoss(child, parked.pid);
+      expect(tryOwnedNonemptySourceJsonl(root)).toBeNull();
+      const prematureJsonl = path.join(
+        root,
+        typeof parked.dir === "string" && parked.dir.length > 0
+          ? parked.dir
+          : "att-missing",
+        "source.jsonl",
+      );
+      expect(() => readFileSync(prematureJsonl)).toThrow(/ENOENT/);
+      writeFileSync(releasePath, "go\n");
+      const ready = await waitOwnedNonemptySourceJsonl(root);
+      expect(ready.bytes.length).toBeGreaterThan(0);
+      expect(readFileSync(ready.jsonlPath).length).toBeGreaterThan(0);
+      killOwnedProcessLoss(owned);
+      await waitObservedExit(owned.wrapper, owned.wrapperPid);
+      await waitPidGone(owned.innerPid);
     } finally {
       await stopOwnedProcessLoss(child, owned);
     }

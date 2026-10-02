@@ -4,7 +4,8 @@
  *
  * Default mode runs real stageOrderFactsJsonl and parks the generator after
  * record 40. `stage: "parked"` is generator progress only — it does not mean
- * the asynchronous consumer has created or flushed source.jsonl.
+ * the asynchronous consumer has created or flushed source.jsonl. Sampled
+ * parent readiness is a test observation, not fsync or production drain.
  */
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";

@@ -25,6 +25,14 @@ export type VerifiedIdToken = {
   readonly actorSub: string;
 };
 
+export type DecodedIdToken = {
+  readonly payload: JwtPayload;
+  readonly destHost: string;
+  readonly issHost: string;
+  readonly actorSub: string | null;
+  readonly subUnsupported: boolean;
+};
+
 export function extractIdTokenFromRequest(
   request: Request,
 ): ExtractedIdToken | null {
@@ -80,10 +88,10 @@ export function canonicalActorSub(sub: unknown): string | null {
   return sub;
 }
 
-export async function verifyEmbeddedIdToken(
+async function decodeVerifiedClaims(
   verifier: ShopifyVerifier,
   token: string,
-): Promise<VerifiedIdToken> {
+): Promise<{ payload: JwtPayload; destHost: string; issHost: string }> {
   let payload: JwtPayload;
   try {
     payload = await verifier.api.session.decodeSessionToken(token, {
@@ -118,16 +126,7 @@ export async function verifyEmbeddedIdToken(
     );
   }
 
-  const actorSub = canonicalActorSub(payload.sub);
-  if (!actorSub) {
-    throw new ActorBoundaryError(
-      "ACTOR_SUB_UNSUPPORTED",
-      "Embedded ID token sub is not an exact digit string",
-      401,
-    );
-  }
-
-  return { payload, destHost, issHost, actorSub };
+  return { payload, destHost, issHost };
 }
 
 /**
@@ -138,47 +137,11 @@ export async function verifyEmbeddedIdToken(
 export async function decodeIdTokenAllowingUnsupportedSub(
   verifier: ShopifyVerifier,
   token: string,
-): Promise<{
-  payload: JwtPayload;
-  destHost: string;
-  issHost: string;
-  actorSub: string | null;
-  subUnsupported: boolean;
-}> {
-  let payload: JwtPayload;
-  try {
-    payload = await verifier.api.session.decodeSessionToken(token, {
-      checkAudience: true,
-    });
-  } catch (error) {
-    if (error instanceof InvalidJwtError) {
-      throw new ActorBoundaryError(
-        "ID_TOKEN_INVALID",
-        "Embedded ID token failed cryptographic or audience verification",
-        401,
-      );
-    }
-    throw error;
-  }
-
-  if (!issuerDestinationHostsAgree(payload.iss, payload.dest)) {
-    throw new ActorBoundaryError(
-      "ID_TOKEN_ISS_DEST_MISMATCH",
-      "Embedded ID token issuer and destination hostnames do not agree",
-      401,
-    );
-  }
-
-  const destHost = hostnameOf(String(payload.dest));
-  const issHost = hostnameOf(String(payload.iss));
-  if (!destHost || !issHost) {
-    throw new ActorBoundaryError(
-      "ID_TOKEN_ISS_DEST_MISMATCH",
-      "Embedded ID token issuer or destination host is unusable",
-      401,
-    );
-  }
-
+): Promise<DecodedIdToken> {
+  const { payload, destHost, issHost } = await decodeVerifiedClaims(
+    verifier,
+    token,
+  );
   const actorSub = canonicalActorSub(payload.sub);
   return {
     payload,
@@ -186,5 +149,25 @@ export async function decodeIdTokenAllowingUnsupportedSub(
     issHost,
     actorSub,
     subUnsupported: actorSub == null,
+  };
+}
+
+export async function verifyEmbeddedIdToken(
+  verifier: ShopifyVerifier,
+  token: string,
+): Promise<VerifiedIdToken> {
+  const decoded = await decodeIdTokenAllowingUnsupportedSub(verifier, token);
+  if (decoded.actorSub == null) {
+    throw new ActorBoundaryError(
+      "ACTOR_SUB_UNSUPPORTED",
+      "Embedded ID token sub is not an exact digit string",
+      401,
+    );
+  }
+  return {
+    payload: decoded.payload,
+    destHost: decoded.destHost,
+    issHost: decoded.issHost,
+    actorSub: decoded.actorSub,
   };
 }

@@ -31,6 +31,7 @@ export type TokenExchangePlan = {
 type AuthxState = {
   calls: AuthxCall[];
   allowGraphql: boolean;
+  exchangeDelayMs: number;
   onlineAssociatedUser: (
     payload: Record<string, unknown>,
   ) => Record<string, unknown> | null;
@@ -46,6 +47,7 @@ type AuthxState = {
 const state: AuthxState = {
   calls: [],
   allowGraphql: false,
+  exchangeDelayMs: 0,
   onlineAssociatedUser: defaultAssociatedUser,
   offlineTokenFor: (shop) => `shpat_offline_${shop}`,
   onlineTokenFor: (shop, sub) => `shpat_online_${shop}_${sub}`,
@@ -174,6 +176,12 @@ export async function authxFetch(
       }
     }
 
+    if (state.exchangeDelayMs > 0) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, state.exchangeDelayMs);
+      });
+    }
+
     state.calls.push({
       kind: "token_exchange",
       url,
@@ -219,6 +227,7 @@ export async function authxFetch(
 export function resetAuthxMock(): void {
   state.calls = [];
   state.allowGraphql = false;
+  state.exchangeDelayMs = 0;
   state.onlineAssociatedUser = defaultAssociatedUser;
   state.offlineTokenFor = (shop) => `shpat_offline_${shop}`;
   state.onlineTokenFor = (shop, sub) => `shpat_online_${shop}_${sub}`;
@@ -249,6 +258,10 @@ export function setOnlineAssociatedUser(
 
 export function setExchangeOverride(handler: AuthxState["exchangeOverride"]): void {
   state.exchangeOverride = handler;
+}
+
+export function setExchangeDelayMs(ms: number): void {
+  state.exchangeDelayMs = Number.isFinite(ms) && ms > 0 ? ms : 0;
 }
 
 export function offlineTokenSha256(shop: string): string {

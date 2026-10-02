@@ -98,4 +98,57 @@ Failed attempt (recorded, then corrected): first focused run after the wait-for-
 | `npx tsc --noEmit` | executed and passed, exit 0 |
 | `npx prisma validate` | executed and passed, schema valid |
 | `npm run build` | executed and passed, exit 0 |
-| Exact-head Classify / Heavy / Gate on the repaired head | pending automatic `pull_request` run after push; historical `36662919664` retained |
+| Exact-head Classify / Heavy / Gate on the repaired head | historical success on C: `pull_request` `36791202683` (Classify `110144259801`, Heavy `110144293456`, Gate `110161831666`); A0 failure `36662919664` retained |
+
+## 5. R1 correction (F-01…F-07)
+
+**Dispatch-Key:** `propo:issue67:PR68_CHECKPOINT_A_R1:51c4b701b79249833ec22ed6bc96415fa8d8f3a4:cursor`
+
+**Subject C:** `51c4b701b79249833ec22ed6bc96415fa8d8f3a4` · **Review R:** `12c7a709da01f28c739a5698ec040a5faceedbcb` (sole parent C; tree `0710c9ccbeee170b82e9f6882a55de359311365c`; blob `5ff31d304a5806e0b6640f7070ef7e595fffb106` for `PR7_CHECKPOINT_A_INDEPENDENT_REVIEW.md`). R is original history; this section is additive author evidence, not a rewrite of that review.
+
+Round 1 of maximum 2. Not checkpoint B. Owner proof is still not consumed downstream. `useOnlineTokens` remains unset.
+
+### Crosswalk
+
+| Finding | Disposition |
+|---|---|
+| F-01 | Invalid/expired/malformed embedded credentials are converted at `requireAdminTenant` into the library refresh contract: Authorization present → thrown `Response` 401 + `X-Shopify-Retry-Invalid-Session-Request: 1`; document request → bounce `/auth/session-token`. The invalid token is **not** sent through `authenticate.admin`. Inner `gateAdminRequestIdentity` still throws `ActorBoundaryError` (not a route response). |
+| F-02 | Executed `requireAdminTenant` tests call installed `shopifyApp().authenticate.admin` with synthetic tokens and mocked outbound transport (`require-admin-tenant-boundary.test.ts`). Source-text regex remains supplementary only. Success + dest/`session.shop` agreement with canonical Shop is in `authority.test.ts` (tenant-access / Heavy). |
+| F-03 | Memo slot is `{binding, pending}` keyed by `Request`. Binding is request + idToken + actorSub + destShop + verifier apiKey, captured synchronously before any await. Identical concurrent calls coalesce. Changed inputs return `BINDING_CONFLICT` with no extra exchange and no cached owner. Production `fresh` bypass removed. Ordinary cached path is exercised without a test-only skip. |
+| F-04 | Access token lives only in a module-private `WeakMap` on an authentic issued handle. No credential own-property/Symbol. Spread/clone/forged status cannot use the token. `toJSON` / `util.inspect.custom` redact. This does **not** stop a trusted callback that already received the string from logging it. |
+| F-05 | Missing/non-finite provider expiry is `MISSING_EXPIRY` (unsupported). Invented now+24h default removed. Private `expiresAtMs` is rechecked at last protected use. Test clock is `__setOwnerProofNowMsForTests` only. Exact expiry boundary (`<=`) fails closed. Expiry during exchange await denies. Synthetic 401/403 remain; live Shopify revocation is UNEXECUTED. |
+| F-06 | OPEN independent-evidence item, not a production-stager defect. Linux `/proc` ppid+cmdline ownership and sampled stable length (test-readiness, **not** fsync/durability/cross-process quiescence/production drain) are stated in the process-loss waiter comments and this section. Disposable premature parked-only control is in `source-stage.test.ts` (`DISPOSABLE NEGATIVE CONTROL (F-06)`): `readFileSync` of `source.jsonl` is `ENOENT` at `parked`; restored `waitOwnedNonemptySourceJsonl` then observes nonempty bytes. The next independent reviewer must execute that control; this author's run is not a substitute. |
+| F-07 | Removed always-false `blocksAuthentication` and no-op `assertIdentityDoesNotBlock`. `verifyEmbeddedIdToken` now calls `decodeIdTokenAllowingUnsupportedSub`. Test-only `clientAccountOwner` input removed; forged body/JWT `account_owner` is ignored; grant still requires exchange `associated_user.account_owner === true` and not collaborator. `destHost` vs `session.shop` is compared in `requireAdminTenant` after auth and before tenant issuance. Intentionally retained: `ActorBoundaryError.toResponse()` JSON helper (unused by merchandising routes; HTTP path is `denyInvalidEmbeddedSession`). |
+
+### Failed attempt (recorded)
+
+First `npm run test:privacy` after the adapter change: 1 failed / 68 passed. `expires_in: Number.NaN` JSON-serializes as `null`, so Shopify session construction treated it as `expires_in=0` (`EXPIRED`) rather than `MISSING_EXPIRY`. Corrected the case to a malformed string `expires_in` (`"not-a-number"`). Privacy then 69/69.
+
+### Local evidence (Node v22.14.0, vitest 3.2.7)
+
+This section does not embed its own future commit SHA.
+
+| Check | Result |
+|---|---|
+| `npm run test:privacy` | executed and passed — 6 files, **69 tests**, exit 0 |
+| `npx vitest run --config vitest.privacy.config.ts -t "this-pattern-matches-zero-tests-on-purpose"` | executed and failed closed — 69 skipped, `[ci-guard]` zero-match, exit 1 |
+| `npx vitest run app/lib/order-facts/sync/source-stage.test.ts` | executed and passed — **50 tests**, exit 0 (includes F-06 control; never-ready ~20216–20260ms) |
+| process-loss + disposable subset | executed and passed — 6 passed / 44 skipped |
+| `npx vitest run app/lib/order-facts` | executed and passed — 33 files, **343 tests**, exit 0 |
+| `npm test` (after `graphql-codegen`) | executed and passed — 72 files, **716 tests**, exit 0 |
+| `npx eslint` on R1 TS paths; `npm run lint` | executed and passed, exit 0 |
+| `npx tsc --noEmit` | executed and passed, exit 0 |
+| `npx prisma validate` | executed and passed |
+| `npm run graphql-codegen` | executed and passed, exit 0 |
+| `npm run build` | executed and passed, exit 0 |
+| `authority.test.ts` installed-auth describe (local disposable Postgres) | authenticate.admin **did run** (offline token-exchange logs for `phase1-pr2-shop-a.myshopify.com`); dest vs `session.shop` check did not 401. Tenant issuance then failed `runtime_identity_rejected` (`expected=stocky_runtime:got=stocky`) because this environment is not the CI restricted-runtime catalog. **Not** counted as tenant-suite pass. Exact-head Heavy `test:tenant-access` is the required execution of that describe. |
+
+### Limits (honest)
+
+- Live Shopify / App Bridge tokens: UNEXECUTED.
+- Real-provider revocation: UNEXECUTED (synthetic 401/403 only).
+- F-06 independent re-execution: required of the next reviewer; author execution recorded above is not a substitute.
+- Full tenant-access / migration / sync suites: not re-run locally; Heavy CI is the attributed execution when that run succeeds on the R1 head.
+- Historical C success `36791202683` and A0 failure `36662919664` are retained; not rerun-to-green.
+
+Checkpoint B, mark-ready, merge, production, and owner-proof consumption remain forbidden.

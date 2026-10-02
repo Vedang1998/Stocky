@@ -6,8 +6,11 @@
  *
  * PR7 checkpoint A: when an embedded ID token is present, cryptographic
  * claims and iss/dest agreement are checked BEFORE authenticate.admin.
- * Actor identity is attached for platform powers; merchandising remains
- * tenant-only (D-PR7-07). Owner proof is not consumed here.
+ * Invalid/expired/malformed credentials are denied with the library refresh
+ * contract (401 + retry header, or document bounce) without sending the
+ * invalid token through authenticate.admin. Actor identity is attached for
+ * platform powers; merchandising remains tenant-only (D-PR7-07). Owner proof
+ * is not consumed here.
  */
 
 import type { Session } from "@shopify/shopify-api";
@@ -16,6 +19,11 @@ import {
   type ShopifyVerifier,
 } from "../rbac/admin-auth-boundary.server";
 import type { ActorResolution } from "../rbac/actor.server";
+import {
+  denyInvalidEmbeddedSession,
+  isInvalidEmbeddedSessionError,
+} from "../rbac/errors.server";
+import { hostnameOf } from "../rbac/id-token.server";
 import {
   issueTenantAuthority,
   type TenantAuthority,
@@ -64,6 +72,13 @@ export type RequireAdminTenantInput = {
   identityVerifier?: ShopifyVerifier;
 };
 
+function denySessionShopMismatch(): never {
+  throw new Response(undefined, {
+    status: 401,
+    statusText: "Unauthorized",
+  });
+}
+
 /**
  * Derive branded tenant authority from a verified admin request.
  * Pass route `params` so conflicting shop identifiers in the path are denied.
@@ -73,10 +88,18 @@ export async function requireAdminTenant(
 ): Promise<AdminTenantContext> {
   const { request, params, authenticateAdmin, identityVerifier } = input;
 
-  const identity = await gateAdminRequestIdentity({
-    request,
-    verifier: identityVerifier,
-  });
+  let identity;
+  try {
+    identity = await gateAdminRequestIdentity({
+      request,
+      verifier: identityVerifier,
+    });
+  } catch (error) {
+    if (isInvalidEmbeddedSessionError(error)) {
+      denyInvalidEmbeddedSession(request);
+    }
+    throw error;
+  }
 
   const authenticate =
     authenticateAdmin ??
@@ -88,6 +111,13 @@ export async function requireAdminTenant(
     "redirect" in auth
       ? (auth as { redirect: AdminRedirect }).redirect
       : undefined;
+
+  if (identity.destHost != null) {
+    const sessionHost = hostnameOf(session.shop);
+    if (sessionHost == null || sessionHost !== identity.destHost) {
+      denySessionShopMismatch();
+    }
+  }
 
   const normalizedDomain = normalizeVerifiedShopifyDomain(session.shop);
   const shop = await resolveCanonicalShopByDomain(normalizedDomain);

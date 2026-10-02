@@ -8,7 +8,6 @@
 
 import type { ActorResolution, VerifiedActor } from "./actor.server";
 import { classifyUnsupportedSub, verifiedActorFromExactSub } from "./actor.server";
-import { ActorBoundaryError } from "./errors.server";
 import {
   decodeIdTokenAllowingUnsupportedSub,
   extractIdTokenFromRequest,
@@ -20,7 +19,6 @@ import {
 } from "./shopify-verifier.server";
 
 export type AdminIdentityGate = {
-  readonly blocksAuthentication: boolean;
   readonly idToken: string | null;
   readonly actor: ActorResolution;
   readonly verifiedActor: VerifiedActor | null;
@@ -38,7 +36,6 @@ export async function gateAdminRequestIdentity(
   const extracted = extractIdTokenFromRequest(input.request);
   if (!extracted) {
     return {
-      blocksAuthentication: false,
       idToken: null,
       actor: { status: "absent", reason: "NO_ID_TOKEN" },
       verifiedActor: null,
@@ -54,7 +51,6 @@ export async function gateAdminRequestIdentity(
 
   if (decoded.subUnsupported) {
     return {
-      blocksAuthentication: false,
       idToken: extracted.token,
       actor: classifyUnsupportedSub(decoded.payload.sub),
       verifiedActor: null,
@@ -64,27 +60,11 @@ export async function gateAdminRequestIdentity(
 
   const actor = verifiedActorFromExactSub(decoded.actorSub!, decoded.destHost);
   return {
-    blocksAuthentication: false,
     idToken: extracted.token,
     actor: { status: "verified", actor },
     verifiedActor: actor,
     destHost: decoded.destHost,
   };
-}
-
-/**
- * Convert identity denials into thrown boundary errors. Callers that want
- * merchandising to continue on unsupported sub should use the gate result
- * without this helper.
- */
-export function assertIdentityDoesNotBlock(gate: AdminIdentityGate): void {
-  if (gate.blocksAuthentication) {
-    throw new ActorBoundaryError(
-      "AUTH_PLATFORM_DENIED",
-      "Admin identity gate blocked authentication",
-      401,
-    );
-  }
 }
 
 export type { ShopifyVerifier } from "./shopify-verifier.server";

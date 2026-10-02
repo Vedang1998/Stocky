@@ -163,3 +163,25 @@ export async function caughtResponse<T>(
     throw error;
   }
 }
+
+export const RETRY_INVALID_SESSION_HEADER =
+  "x-shopify-retry-invalid-session-request";
+
+export function assertRetryInvalidSessionResponse(response: Response): void {
+  if (response.status !== 401) {
+    throw new Error(`expected 401, received ${response.status}`);
+  }
+  if (response.headers.get(RETRY_INVALID_SESSION_HEADER) !== "1") {
+    throw new Error("expected X-Shopify-Retry-Invalid-Session-Request: 1");
+  }
+}
+
+export function assertBounceSessionTokenResponse(response: Response): void {
+  if (response.status < 300 || response.status >= 400) {
+    throw new Error(`expected redirect, received ${response.status}`);
+  }
+  const location = response.headers.get("location") ?? "";
+  if (!location.includes("session-token")) {
+    throw new Error(`expected bounce Location with session-token, got ${location}`);
+  }
+}

@@ -29,7 +29,6 @@ describe("merchandising compatibility (D-PR7-07)", () => {
       request: adminRequest({}),
       verifier: testVerifier(),
     });
-    expect(gate.blocksAuthentication).toBe(false);
     expect(gate.actor.status).toBe("absent");
     expect(authxCalls()).toEqual([]);
     expect(() => requirePlatformActor(gate.actor)).toThrow(ActorBoundaryError);
@@ -42,12 +41,11 @@ describe("merchandising compatibility (D-PR7-07)", () => {
       verifier: testVerifier(),
     });
     expect(gate.actor.status).toBe("verified");
-    expect(gate.blocksAuthentication).toBe(false);
     expect(authxCalls()).toEqual([]);
     expect(requirePlatformActor(gate.actor).shopifyUserId).toBe(SAFE_SUB);
   });
 
-  it("requireAdminTenant gates identity before authenticate.admin and does not consume owner proof", () => {
+  it("supplementary: requireAdminTenant source still gates before authenticate and does not consume owner proof", () => {
     const src = readFileSync(
       path.join(APP_ROOT, "app/tenant/require-admin-tenant.server.ts"),
       "utf8",
@@ -58,6 +56,9 @@ describe("merchandising compatibility (D-PR7-07)", () => {
     expect(authAt).toBeGreaterThan(gateAt);
     expect(src).not.toMatch(/proveShopOwner/);
     expect(src).not.toMatch(/withProvenOwnerAccessToken/);
+    expect(src).toMatch(/denyInvalidEmbeddedSession/);
+    expect(src).not.toMatch(/blocksAuthentication/);
+    expect(src).not.toMatch(/assertIdentityDoesNotBlock/);
   });
 
   it("forged ID token denies before any outbound credential use", async () => {
