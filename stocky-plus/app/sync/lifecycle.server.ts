@@ -11,6 +11,7 @@ import {
   tryResolveApplicationKey,
 } from "./execution-strategy.server";
 import { assertTransition } from "./state-machine.server";
+import { assertParticipatingWriteGuardForShop } from "../tenant/participating-write.server";
 
 const DEFAULT_BACKOFF_MS = 1000;
 export const DEFAULT_ATTEMPT_LEASE_MS = 60_000;
@@ -52,6 +53,7 @@ export async function claimAttempt(input: {
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
   return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const job = await lockDurableJob(tx, input.durableJobId, input.shopId);
     if (!job) {
       throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
@@ -145,7 +147,9 @@ export async function renewAttemptHeartbeat(input: {
     return null;
   }
 
-  const updated = await prisma.jobAttempt.updateMany({
+  const updated = await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
+    const result = await tx.jobAttempt.updateMany({
     where: {
       id: attempt.id,
       shopId: input.shopId,
@@ -157,9 +161,9 @@ export async function renewAttemptHeartbeat(input: {
       leaseExpiresAt,
     },
   });
-  if (updated.count === 0) return null;
+  if (result.count === 0) return { count: 0 };
 
-  await prisma.durableJob.updateMany({
+  await tx.durableJob.updateMany({
     where: {
       id: attempt.durableJobId,
       shopId: input.shopId,
@@ -167,6 +171,8 @@ export async function renewAttemptHeartbeat(input: {
       leaseOwner: input.workerId,
     },
     data: { leaseExpiresAt, leaseOwner: input.workerId },
+  });
+    return result;
   });
 
   return prisma.jobAttempt.findUnique({ where: { id: attempt.id } });
@@ -181,6 +187,7 @@ export async function completeAttemptSuccess(input: {
 }): Promise<DurableJob> {
   const prisma = getControlPlanePrisma();
   return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const job = await lockDurableJob(tx, input.durableJobId, input.shopId);
     if (!job) {
       throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
@@ -268,6 +275,7 @@ export async function completeAttemptRetry(input: {
 }): Promise<DurableJob> {
   const prisma = getControlPlanePrisma();
   return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const job = await lockDurableJob(tx, input.durableJobId, input.shopId);
     if (!job) {
       throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
@@ -349,6 +357,7 @@ export async function completeAttemptFail(input: {
   // in one transaction. No caller-controlled deadLetter bypass.
   const prisma = getControlPlanePrisma();
   return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const job = await lockDurableJob(tx, input.durableJobId, input.shopId);
     if (!job) {
       throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
@@ -373,6 +382,7 @@ export async function completeAttemptDeadLetter(input: {
 }): Promise<DurableJob> {
   const prisma = getControlPlanePrisma();
   return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const job = await lockDurableJob(tx, input.durableJobId, input.shopId);
     if (!job) {
       throw new SyncControlPlaneError("job_not_found", "DurableJob not found");
@@ -547,6 +557,7 @@ export async function recoverExpiredRunningAttempts(options?: {
     try {
       const outcome = await prisma.$transaction(async (tx) => {
         const job = await lockDurableJob(tx, attempt.durableJobId, attempt.shopId);
+        await assertParticipatingWriteGuardForShop(tx, attempt.shopId);
         if (!job || job.state !== "RUNNING") {
           await tx.jobAttempt.updateMany({
             where: { id: attempt.id, finishedAt: null },

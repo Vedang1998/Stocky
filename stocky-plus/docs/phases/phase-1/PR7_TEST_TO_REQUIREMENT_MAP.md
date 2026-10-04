@@ -30,3 +30,20 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | AUTH-X-32 | bot UA | `installed-auth-boundary.test.ts` | library 410; not treated as owner |
 | D-PR7-07 / PR7-RBAC-008 | merchandising ungated | `app/tenant/__tests__/authority.test.ts` | tenant authority with `actor.status=absent` |
 | CI | distinct privacy command | `vitest.privacy.config.ts` + `ci.yml` | nonzero tests; fail on zero collection |
+
+## Checkpoint B requirement-to-test map (in progress)
+
+| Requirement | Test home | Status |
+|---|---|---|
+| R1-02 same-apiKey/different-secret | `app/rbac/__tests__/owner-proof.test.ts` | implemented |
+| R1-03 production clock inert | `owner-proof.test.ts` | implemented |
+| R1-01 no B cross-origin wrapper caller | `app/privacy/__tests__/consumer-gates.test.ts` | documented/deferred |
+| Schema/FORCE RLS/helpers | `scripts/tenant-enforcement/tests/pr7-privacy-foundation.test.ts` | implemented |
+| PUBLIC / runtime BYPASSRLS / reader-not-erasure | same | implemented |
+| ERASING freeze | same | implemented |
+| Three processors while disabled | same | implemented; execute on disposable PG |
+| Writer source coverage + omission | `scripts/privacy/__tests__/participating-writers.test.ts` | implemented |
+| Pause default off | `app/privacy/__tests__/pause.test.ts` | implemented |
+| Fresh/upgrade migrations | enforcement apply in foundation + existing apply/partial-apply suites | reuse with PR7 step |
+| Redis drain / D-scratch leftover | `assertShopExternalResidualClear` + foundation shop/redact path | residual fail-closed; live Redis races still required in Heavy |
+| Q-008 | production decision | OPEN / unmet as legal default |

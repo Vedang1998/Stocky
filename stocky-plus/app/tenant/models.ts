@@ -3,9 +3,11 @@
  * Do not silently expand these lists.
  */
 
-/** Pre-PR6-A inventories. PR6-A tests must derive 20+4 / 6+5 / 26+9. */
+/** Pre-PR6-A inventories. PR6-A tests must derive 20+4 / 6+5 / 26+9. PR7 adds AuditEvent. */
 export const PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT = 20;
 export const PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT = 6;
+
+export const PR7_DIRECT_MERCHANT_MODELS = ["AuditEvent"] as const;
 
 export const PR6_A_DIRECT_MERCHANT_MODELS = [
   "ShopifyOrderFact",
@@ -44,6 +46,7 @@ export const DIRECT_MERCHANT_MODELS = [
   "ShopifyInventoryLevelFact",
   "CatalogObservationInFlight",
   ...PR6_A_DIRECT_MERCHANT_MODELS,
+  ...PR7_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -112,6 +115,7 @@ export const MERCHANT_DELEGATE_NAMES = {
   POLineItem: "pOLineItem",
   TransferLineItem: "transferLineItem",
   StocktakeLineItem: "stocktakeLineItem",
+  AuditEvent: "auditEvent",
 } as const satisfies Record<MerchantOwnedModel, string>;
 
 export const DIRECT_MODEL_SET = new Set<string>(DIRECT_MERCHANT_MODELS);

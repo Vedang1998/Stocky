@@ -1,6 +1,6 @@
 # PR7 implementation execution brief — checkpoint A
 
-**Status:** `CHECKPOINT_A IMPLEMENTATION IN PROGRESS` (not complete-module acceptance)
+**Status:** `CHECKPOINT_B IMPLEMENTATION IN PROGRESS` (not complete-module acceptance; not B0 READY)
 
 **Date:** 2026-09-30
 
@@ -73,3 +73,42 @@ Immutable independent review R `12c7a709da01f28c739a5698ec040a5faceedbcb` (blob 
 Mutable scope remains: `app/rbac/**`; `app/tenant/require-admin-tenant.server.ts` and focused `app/tenant/__tests__/`; process-loss test/helper files only for F-06 evidence; this brief and `PR7_IMPLEMENTATION_REPORT.md`.
 
 Mechanical inventory dependency (reported before expanding): exact-head Heavy `36954009774` failed `tenant:access:inventory:check` because R1 added `app/rbac/__tests__/require-admin-tenant-boundary.test.ts` (scannedFiles 521→522, no Prisma findings) and shifted/added EX-TEST-002 write sites in already-allowlisted `app/tenant/__tests__/authority.test.ts` (37/38/43 → 52/53/58 plus 202/203/207). The one additional regenerated path is `docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md`. No new exception IDs. No schema/CI/lockfile change.
+
+## 6. Checkpoint B (CONTINUE `PROPO_PR68_CONTINUE_B_V1`)
+
+**Dispatch-Key:** `propo:issue67:PR68_CHECKPOINT_B:02defc9233c4f8da66194eabad0cb77d30079e91:cursor`
+
+**Status:** checkpoint B implementation in progress on this branch. Not READY until complete matrix + exact-head Classify/Heavy/Gate.
+
+Accepted A head H1 `02defc9233c4f8da66194eabad0cb77d30079e91`. RA `43c93e5136c080c82d1f344aba31d5cac0bcaff0` fast-forwarded. Base M unchanged.
+
+### B prerequisites (R1 residuals)
+
+- **R1-02:** owner-proof memo binds `verifier.identity` (SHA-256 of apiKey+secret+hostName), not apiKey alone.
+- **R1-03:** `__setOwnerProofNowMsForTests` is inert unless `VITEST=true` and `NODE_ENV!==production`.
+- **R1-01:** no B cross-origin/POS/extension caller adopts `requireAdminTenant`. Platform replay/escalation/download are same-origin embedded admin. CORS parity deferred; do not widen origins.
+
+### Source-derived participating-site ownership (listed before shared integration)
+
+Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
+
+| File | Symbol | Guard |
+|---|---|---|
+| `app/tenant/after-auth.server.ts` | `runAfterAuthTenantBootstrap` | erasure fence + LIVE generation |
+| `app/tenant/bootstrap.server.ts` | `upsertCanonicalShop` | `stocky_participating_write_guard` |
+| `app/tenant/db-context.server.ts` / `tenant-db.server.ts` | tenant transaction hosts | required participating-write guard |
+| `app/sync/uninstall.server.ts` | `processUninstall` | guard + LIVE→UNINSTALLED |
+| `app/sync/reinstall.server.ts` | `reactivateShopAfterVerifiedReinstall` | guard; REDACTED still denied |
+| `app/sync/dispatcher.server.ts` | `ensureDispatchRecord`, disabled-shop path, `recoverExpiredDispatchLeases`, `recoverStrandedEnqueuedJobs` | guard in the write transaction |
+| `app/sync/lifecycle.server.ts` | claim/heartbeat/success/retry/fail/dead-letter/reaper | guard |
+| `app/sync/replay.server.ts` | `replayDeadLetter` | guard + authz lock/verify |
+| `app/sync/health.server.ts` | `computeSyncHealth` | guard on upsert |
+| `app/lib/order-facts/apply/writers.ts` | `requireProcessingEnabled` | processingEnabled **and** participating-write |
+| `app/lib/catalog-facts/ingest/checkpoint.ts` | checkpoint persist/ack/complete | both gates |
+| `app/jobs/queue.server.ts` | `drainOrdinaryQueueJobsForShop` | shop-scoped `job.remove`; never FLUSHALL |
+| `app/jobs/workers/index.ts` | worker bootstrap | separate privacy coordinator loop |
+| `app/privacy/execute.server.ts` | three processors | publication lock; Redis/D-scratch residual; no participating-write during ERASING |
+
+Newly created owned files: `app/audit/**`, `app/privacy/**`, `app/rbac/assignment.server.ts`, capture/admission/bound-effect, platform routes, `scripts/privacy/**`.
+
+`app/sync/intake.server.ts` and `execution-strategy.server.ts` remain unchanged ordinary paths. No `useOnlineTokens`. Q-008 remains OPEN.

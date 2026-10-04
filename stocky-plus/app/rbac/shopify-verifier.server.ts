@@ -3,8 +3,12 @@
  *
  * Uses lockfile-pinned `@shopify/shopify-api` decodeSessionToken / tokenExchange.
  * This instance has no session store and is not the configured shopifyApp.
+ *
+ * `identity` is a non-reversible digest of apiKey + apiSecretKey + hostName.
+ * The secret itself is not stored on the object and is not logged.
  */
 
+import { createHash } from "node:crypto";
 import "@shopify/shopify-app-react-router/adapters/node";
 import {
   ApiVersion,
@@ -22,7 +26,24 @@ export type ShopifyVerifierConfig = {
 export type ShopifyVerifier = {
   readonly api: Shopify;
   readonly apiKey: string;
+  readonly identity: string;
 };
+
+function verifierIdentity(
+  apiKey: string,
+  apiSecretKey: string,
+  hostName: string,
+): string {
+  return createHash("sha256")
+    .update("pr7-verifier-v1")
+    .update("\0")
+    .update(apiKey)
+    .update("\0")
+    .update(apiSecretKey)
+    .update("\0")
+    .update(hostName)
+    .digest("hex");
+}
 
 export function createShopifyVerifier(
   config: ShopifyVerifierConfig,
@@ -33,16 +54,21 @@ export function createShopifyVerifier(
     throw new Error("Shopify verifier requires apiKey and apiSecretKey");
   }
 
+  const hostName = config.hostName ?? "example.com";
   const api = shopifyApi({
     apiKey,
     apiSecretKey,
     apiVersion: ApiVersion.July26,
-    hostName: config.hostName ?? "example.com",
+    hostName,
     isEmbeddedApp: true,
     logger: { level: LogSeverity.Error },
   });
 
-  return { api, apiKey };
+  return Object.freeze({
+    api,
+    apiKey,
+    identity: verifierIdentity(apiKey, apiSecretKey, hostName),
+  });
 }
 
 export function verifierFromEnv(

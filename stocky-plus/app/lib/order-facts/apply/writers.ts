@@ -1453,4 +1453,8 @@ export async function requireProcessingEnabled(
   if (!asBool(rows[0]?.processingEnabled, false)) {
     throw new OrderApplyProcessingDisabledError();
   }
+  await queryRows(db)`
+    SELECT stocky_participating_write_guard(
+      stocky_shop_canonical_domain(${shopId}, NULL)
+    )`;
 }

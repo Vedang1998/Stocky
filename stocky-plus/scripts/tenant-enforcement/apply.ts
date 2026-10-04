@@ -36,6 +36,7 @@ import {
   revokeMerchantDml,
 } from "./roles";
 import { fkActionCode } from "./catalog-expect";
+import { applyPr7PrivacyHelpers } from "./pr7-privacy";
 import { readFkCatalogDefinition, verifyEnforcement } from "./verify";
 
 export type EnforcementStep = {
@@ -528,6 +529,14 @@ function buildStepList(): EnforcementStep[] {
   }
 
   steps.push({
+    id: "pr7_privacy_helpers",
+    description:
+      "PR7 privacy/admission helpers, FORCE RLS extras, and additive privacy policies",
+    expectedLockMode: "none (catalog / function DDL)",
+    status: "pending",
+  });
+
+  steps.push({
     id: "definitions_verified",
     description: "Verify exact policy/FK/trigger/constraint definitions",
     expectedLockMode: "none (catalog read)",
@@ -633,6 +642,7 @@ export function majorInterruptionCheckpoints(): string[] {
     lastFk ? `cfk_validate:${lastFk}` : "roles_prepared",
     `rls:${tables[0]}`,
     `rls:${tables[tables.length - 1]}`,
+    "pr7_privacy_helpers",
     "definitions_verified",
     "runtime_grants_applied",
     "final_verified",
@@ -922,6 +932,15 @@ export async function applyEnforcement(
         result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
       return result;
       }
+    }
+
+    if (
+      !(await runStep("pr7_privacy_helpers", async () => {
+        await applyPr7PrivacyHelpers(client);
+      }))
+    ) {
+      result = await failSafe(client, steps, true, maxObservedLockHoldMs, durations);
+      return result;
     }
 
     if (

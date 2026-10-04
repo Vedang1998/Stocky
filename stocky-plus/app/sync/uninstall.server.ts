@@ -16,6 +16,8 @@
 import { randomUUID } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 import { deleteSessionsForShop } from "../tenant/bootstrap.server";
+import { markGenerationUninstalledInTx } from "../privacy/generation.server";
+import { assertParticipatingWriteGuard } from "../tenant/participating-write.server";
 import { normalizeShopDomain } from "../tenant/shop-domain";
 import { resolveApiVersionForPersistence } from "./api-version.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
@@ -77,15 +79,18 @@ export async function processUninstall(
     },
   });
   if (!shop) {
-    shop = await prisma.shop.create({
-      data: { myshopifyDomain: norm.normalized },
-      select: {
-        id: true,
-        myshopifyDomain: true,
-        processingEnabled: true,
-        processingDisabledAt: true,
-        uninstalledAt: true,
-      },
+    shop = await prisma.$transaction(async (tx) => {
+      await assertParticipatingWriteGuard(tx, norm.normalized);
+      return tx.shop.create({
+        data: { myshopifyDomain: norm.normalized },
+        select: {
+          id: true,
+          myshopifyDomain: true,
+          processingEnabled: true,
+          processingDisabledAt: true,
+          uninstalledAt: true,
+        },
+      });
     });
   }
 
@@ -100,6 +105,12 @@ export async function processUninstall(
       : null;
 
   const result = await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuard(tx, shop!.myshopifyDomain);
+    await markGenerationUninstalledInTx(tx, {
+      shopId: shop!.id,
+      canonicalDomain: shop!.myshopifyDomain,
+      now,
+    });
     const existing = webhookId
       ? await tx.webhookDelivery.findFirst({
           where: { shopId: shop!.id, shopifyWebhookId: webhookId },

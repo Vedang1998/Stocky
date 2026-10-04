@@ -22,6 +22,7 @@ import {
   setTransactionLocalTenantContext,
 } from "./db-context.server";
 import { TenantAccessError } from "./errors";
+import { assertParticipatingWriteGuard } from "./participating-write.server";
 import {
   CHILD_MODEL_SET,
   DIRECT_MODEL_SET,
@@ -1344,6 +1345,7 @@ async function withTenantBoundTransactionState<T>(
         async (tx) => {
           await setTransactionLocalTenantContext(tx, state.authority);
           await assertTransactionLocalTenantContext(tx, state.authority);
+          await assertParticipatingWriteGuard(tx, state.authority.myshopifyDomain);
           return fn({
             client: tx,
             authority: state.authority,

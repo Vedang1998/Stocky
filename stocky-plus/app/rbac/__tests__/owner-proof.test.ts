@@ -651,6 +651,118 @@ describe("owner-proof adapter (D-PR7-02/04)", () => {
     ).toThrow(ActorBoundaryError);
   });
 
+  it("same-apiKey different-secret verifier cannot reuse the memoized proof", async () => {
+    setOnlineAssociatedUser(() => ownerUser(548380009));
+    const token = await signIdToken({ sub: SAFE_SUB });
+    const request = adminRequest({ token });
+    const actor = verifiedActorFromExactSub(SAFE_SUB, SHOP_A);
+    const first = await proveShopOwner({
+      request,
+      verifier,
+      actor,
+      idToken: token,
+    });
+    expect(first.status).toBe("owner");
+    expect(authxExchanges()).toHaveLength(1);
+
+    const sameKeyDifferentSecret = createShopifyVerifier({
+      apiKey: TEST_API_KEY,
+      apiSecretKey: "pr7-a-other-api-secret",
+    });
+    expect(sameKeyDifferentSecret.apiKey).toBe(verifier.apiKey);
+    expect(sameKeyDifferentSecret.identity).not.toBe(verifier.identity);
+
+    const conflicted = await proveShopOwner({
+      request,
+      verifier: sameKeyDifferentSecret,
+      actor,
+      idToken: token,
+    });
+    expect(conflicted).toMatchObject({
+      status: "denied",
+      reason: "BINDING_CONFLICT",
+    });
+    expect(ownerProofAccessTokenPresent(conflicted)).toBe(false);
+    expect(authxExchanges()).toHaveLength(1);
+  });
+
+  it("concurrent same-apiKey different-secret calls never coalesce to the other verifier", async () => {
+    setOnlineAssociatedUser(() => ownerUser(548380009));
+    setExchangeDelayMs(40);
+    const token = await signIdToken({ sub: SAFE_SUB });
+    const request = adminRequest({ token });
+    const actor = verifiedActorFromExactSub(SAFE_SUB, SHOP_A);
+    const otherVerifier = createShopifyVerifier({
+      apiKey: TEST_API_KEY,
+      apiSecretKey: "pr7-a-other-api-secret",
+    });
+    const [first, second] = await Promise.all([
+      proveShopOwner({
+        request,
+        verifier,
+        actor,
+        idToken: token,
+      }),
+      proveShopOwner({
+        request,
+        verifier: otherVerifier,
+        actor,
+        idToken: token,
+      }),
+    ]);
+    const statuses = [first.status, second.status].sort();
+    expect(statuses).toEqual(["denied", "owner"]);
+    const owner = first.status === "owner" ? first : second;
+    const deniedProof = first.status === "denied" ? first : second;
+    expect(owner.status === "owner" && owner.associatedUserId).toBe(SAFE_SUB);
+    expect(deniedProof).toMatchObject({ reason: "BINDING_CONFLICT" });
+    expect(authxExchanges()).toHaveLength(1);
+  });
+
+  it("production-mode clock override cannot revive an expired proof", async () => {
+    setOnlineAssociatedUser(() => ownerUser(548380009));
+    setExchangeOverride(() => ({
+      status: 200,
+      body: {
+        access_token: `shpat_online_${SHOP_A}_${SAFE_SUB}`,
+        scope: "read_products",
+        expires_in: 1,
+        associated_user_scope: "read_products",
+        associated_user: ownerUser(548380009),
+      },
+    }));
+    const token = await signIdToken({ sub: SAFE_SUB });
+    const request = adminRequest({ token });
+    const actor = verifiedActorFromExactSub(SAFE_SUB, SHOP_A);
+    const proof = await proveShopOwner({
+      request,
+      verifier,
+      actor,
+      idToken: token,
+    });
+    expect(proof.status).toBe("owner");
+    const expiresAtMs = __ownerProofExpiresAtMsForTests(proof);
+    expect(expiresAtMs).toBeGreaterThan(0);
+    const waitMs = Math.max(0, expiresAtMs! - Date.now()) + 50;
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+    expect(() =>
+      withProvenOwnerAccessToken(proof, { request, actor }, () => "used"),
+    ).toThrow(ActorBoundaryError);
+
+    const previousNodeEnv = process.env.NODE_ENV;
+    try {
+      process.env.NODE_ENV = "production";
+      __setOwnerProofNowMsForTests(expiresAtMs! - 60_000);
+      expect(() =>
+        withProvenOwnerAccessToken(proof, { request, actor }, () => "revived"),
+      ).toThrow(ActorBoundaryError);
+      expect(authxGraphql()).toHaveLength(0);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      __setOwnerProofNowMsForTests(null);
+    }
+  });
+
   it("changed actor at use is denied with zero outbound effect", async () => {
     setOnlineAssociatedUser(() => ownerUser(548380009));
     setAuthxGraphqlCapture(true);

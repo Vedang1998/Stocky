@@ -34,7 +34,7 @@ type FrozenOwnerBinding = {
   readonly idToken: string;
   readonly actorSub: string;
   readonly destShop: string;
-  readonly verifierApiKey: string;
+  readonly verifierIdentity: string;
 };
 
 type OwnerProofMemoSlot = {
@@ -53,7 +53,18 @@ const OWNER_CREDENTIALS = new WeakMap<object, StoredOwnerCredential>();
 
 let nowMsForTests: number | null = null;
 
+function testClockEnabled(): boolean {
+  return process.env.VITEST === "true" && process.env.NODE_ENV !== "production";
+}
+
+/**
+ * Test-only validation clock. No-op when `NODE_ENV=production` or when not
+ * running under Vitest. Production callers cannot rewind expiry.
+ */
 export function __setOwnerProofNowMsForTests(ms: number | null): void {
+  if (!testClockEnabled()) {
+    return;
+  }
   nowMsForTests = ms;
 }
 
@@ -65,7 +76,10 @@ export function __ownerProofExpiresAtMsForTests(
 }
 
 function currentTimeMs(): number {
-  return nowMsForTests ?? Date.now();
+  if (!testClockEnabled() || nowMsForTests == null) {
+    return Date.now();
+  }
+  return nowMsForTests;
 }
 
 export type OwnerProofSuccess = {
@@ -150,7 +164,7 @@ function freezeOwnerBinding(input: OwnerProofInput): FrozenOwnerBinding {
     idToken: String(input.idToken),
     actorSub: String(input.actor.shopifyUserId),
     destShop: String(input.actor.destShop),
-    verifierApiKey: String(input.verifier.apiKey),
+    verifierIdentity: String(input.verifier.identity),
   };
 }
 
@@ -163,7 +177,7 @@ function ownerBindingsEqual(
     left.idToken === right.idToken &&
     left.actorSub === right.actorSub &&
     left.destShop === right.destShop &&
-    left.verifierApiKey === right.verifierApiKey
+    left.verifierIdentity === right.verifierIdentity
   );
 }
 
@@ -315,9 +329,9 @@ async function exchangeOnlineAndBind(
  * returned object.
  *
  * Memoization is bound to request + token + actor + dest shop + verifier
- * apiKey. Identical concurrent calls coalesce. Changed inputs on the same
- * Request fail closed without a cached owner result and without a second
- * exchange.
+ * identity (digest of apiKey, secret, and host — not apiKey alone). Identical
+ * concurrent calls coalesce. Changed inputs on the same Request fail closed
+ * without a cached owner result and without a second exchange.
  */
 export function proveShopOwner(input: OwnerProofInput): Promise<OwnerProofResult> {
   const tokenExchange = input.verifier.api.auth.tokenExchange.bind(

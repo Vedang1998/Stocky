@@ -15,6 +15,7 @@ import {
 } from "./authority.server";
 import { TenantAccessError, TenantAuthorityError } from "./errors";
 import { normalizeShopDomain } from "./shop-domain";
+import { assertParticipatingWriteGuard } from "./participating-write.server";
 
 export type CanonicalShopIdentity = {
   readonly id: string;
@@ -62,11 +63,14 @@ export async function upsertCanonicalShop(
   verifiedDomain: string,
 ): Promise<CanonicalShopIdentity> {
   const myshopifyDomain = normalizeVerifiedShopifyDomain(verifiedDomain);
-  const shop = await rawPrisma.shop.upsert({
-    where: { myshopifyDomain },
-    create: { myshopifyDomain },
-    update: {},
-    select: { id: true, myshopifyDomain: true },
+  const shop = await rawPrisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuard(tx, myshopifyDomain);
+    return tx.shop.upsert({
+      where: { myshopifyDomain },
+      create: { myshopifyDomain },
+      update: {},
+      select: { id: true, myshopifyDomain: true },
+    });
   });
   return shop;
 }

@@ -36,7 +36,12 @@ function failOnZeroCollected(): Reporter {
 export default defineConfig({
   test: {
     environment: "node",
-    include: ["app/rbac/**/*.test.ts"],
+    include: [
+      "app/rbac/**/*.test.ts",
+      "app/privacy/**/*.test.ts",
+      "app/audit/**/*.test.ts",
+      "scripts/privacy/**/*.test.ts",
+    ],
     exclude: ["**/node_modules/**"],
     passWithNoTests: false,
     setupFiles: ["app/rbac/__tests__/setup-fetch-mock.ts"],

@@ -17,10 +17,16 @@ import {
   CONTROL_TABLES,
   IMMUTABILITY_TRIGGER_FN,
   MERCHANT_SQL_TABLES,
+  MERCHANT_TABLES,
   PLATFORM_CONTROL_PLANE_SQL_TABLES,
   TENANT_CONTEXT_HELPER_FN,
   TENANT_CONTEXT_VERSION_FN,
 } from "./manifest";
+import {
+  PR7_APPLICATION_FUNCTIONS,
+  PR7_RUNTIME_EXECUTABLE_FUNCTIONS,
+  PR7_SECURITY_DEFINER_FUNCTIONS,
+} from "./pr7-privacy";
 import { grantHelpersToRuntimeSql, helperFunctionsSql, quoteIdent } from "./sql";
 import {
   defaultMigrationRoleName,
@@ -60,6 +66,7 @@ const APPROVED_RUNTIME_EXECUTABLE_FUNCTIONS = new Set([
   `${TENANT_CONTEXT_VERSION_FN}()`,
   // Checked via proname() form in collectFunctionPrivilegeFailures.
   "stocky_shop_processing_enabled()",
+  ...PR7_RUNTIME_EXECUTABLE_FUNCTIONS,
 ]);
 
 const APPROVED_APPLICATION_FUNCTIONS = new Set([
@@ -79,12 +86,25 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   CATALOG_OBSERVATION_SET_LEASE_FN,
   ORDER_OBSERVATION_LIFECYCLE_GUARD_FN,
   ORDER_OBSERVATION_SET_LEASE_FN,
+  ...PR7_APPLICATION_FUNCTIONS,
+  "stocky_privacy_shop_residual_count",
+  "stocky_privacy_enumerate_shop_surfaces",
 ]);
 
 /** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
 const APPROVED_SECURITY_DEFINER_FUNCTIONS = new Set([
   "stocky_has_application_receipt",
+  ...PR7_SECURITY_DEFINER_FUNCTIONS,
+  "stocky_privacy_shop_residual_count",
+  "stocky_privacy_enumerate_shop_surfaces",
 ]);
+
+/** Control-plane USAGE/SELECT on PR7 autoincrement sequences (not runtime). */
+const PR7_CONTROL_PLANE_SEQUENCE_PRIVS: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  PrivacyCoordinatorEvent_id_seq: new Set(["USAGE", "SELECT"]),
+};
 
 type DefaultAclObjType = "r" | "S" | "f";
 
@@ -493,7 +513,10 @@ export async function collectSequencePrivilegeFailures(
           [role, seq.seqname, priv],
         );
         const allowedUsage =
-          seq.seqname === CATALOG_OBSERVATION_GEN_SEQ && priv === "USAGE";
+          (seq.seqname === CATALOG_OBSERVATION_GEN_SEQ && priv === "USAGE") ||
+          (role === controlPlaneRole &&
+            (PR7_CONTROL_PLANE_SEQUENCE_PRIVS[seq.seqname]?.has(priv) ??
+              false));
         if (roleHas.rows[0]?.has && !allowedUsage) {
           failures.push(
             `excess_sequence_priv:${seq.seqname}:${role}:${priv}:${seq.owner}:public`,
@@ -610,11 +633,13 @@ export async function grantMerchantDml(
   runtimeRole: string,
 ): Promise<string[]> {
   const grants: string[] = [];
-  for (const table of MERCHANT_SQL_TABLES) {
+  for (const table of MERCHANT_TABLES) {
+    const privs = table.expectedRuntimePrivileges;
+    if (privs.length === 0) continue;
     await client.query(
-      `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${quoteIdent(table)} TO ${quoteIdent(runtimeRole)}`,
+      `GRANT ${privs.join(", ")} ON TABLE ${quoteIdent(table.sqlTable)} TO ${quoteIdent(runtimeRole)}`,
     );
-    grants.push(`${table}:DML`);
+    grants.push(`${table.sqlTable}:${privs.join(",")}`);
   }
   return grants;
 }
@@ -1485,14 +1510,19 @@ export async function verifyRoles(
   }
 
   // Exact allowlist for runtime merchant privileges
-  for (const table of MERCHANT_SQL_TABLES) {
+  for (const tableSpec of MERCHANT_TABLES) {
+    const table = tableSpec.sqlTable;
+    const expected = new Set(tableSpec.expectedRuntimePrivileges);
     for (const priv of ["SELECT", "INSERT", "UPDATE", "DELETE"] as const) {
       const res = await client.query<{ has: boolean }>(
         `SELECT has_table_privilege($1, format('%I.%I', 'public', $2::text), $3) AS has`,
         [runtimeRole, table, priv],
       );
-      if (requireMerchantDml && !res.rows[0]?.has) {
+      if (requireMerchantDml && expected.has(priv) && !res.rows[0]?.has) {
         failures.push(`missing_priv:${table}:${priv}`);
+      }
+      if (requireMerchantDml && !expected.has(priv) && res.rows[0]?.has) {
+        failures.push(`excess_priv:${table}:${priv}`);
       }
       if (
         !requireMerchantDml &&

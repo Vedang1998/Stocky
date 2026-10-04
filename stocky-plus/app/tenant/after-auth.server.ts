@@ -14,6 +14,8 @@ import type { TenantAuthority } from "./authority.server";
 import { resolveAuthorityAfterVerifiedAuth } from "./bootstrap.server";
 import { createTenantDb } from "./tenant-db.server";
 import { reactivateShopAfterVerifiedReinstall } from "../sync/reinstall.server";
+import { ensureLiveInstallGeneration } from "../privacy/generation.server";
+import { assertNoErasureFence } from "../privacy/generation.server";
 
 export type AfterAuthResult = {
   shopId: string;
@@ -29,6 +31,12 @@ export async function runAfterAuthTenantBootstrap(
     verifiedDomain: session.shop,
     source: "verified_scheduler",
     createIfMissing: true,
+  });
+
+  await assertNoErasureFence(shop.myshopifyDomain);
+  await ensureLiveInstallGeneration({
+    shopId: shop.id,
+    canonicalDomain: shop.myshopifyDomain,
   });
 
   let reactivated = false;

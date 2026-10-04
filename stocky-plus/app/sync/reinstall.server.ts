@@ -3,6 +3,7 @@
  */
 import type { Shop } from "@prisma/client";
 import { normalizeShopDomain } from "../tenant/shop-domain";
+import { assertParticipatingWriteGuard } from "../tenant/participating-write.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
 import { SyncControlPlaneError } from "./errors";
 
@@ -88,21 +89,24 @@ export async function reactivateShopAfterVerifiedReinstall(input: {
     );
   }
 
-  const updated = await prisma.shop.update({
-    where: { id: shop.id },
-    data: {
-      processingEnabled: true,
-      processingDisabledReason: null,
-      processingDisabledAt: null,
-      reinstalledAt: new Date(),
-    },
-    select: {
-      id: true,
-      myshopifyDomain: true,
-      processingEnabled: true,
-      processingDisabledReason: true,
-      reinstalledAt: true,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuard(tx, shop.myshopifyDomain);
+    return tx.shop.update({
+      where: { id: shop.id },
+      data: {
+        processingEnabled: true,
+        processingDisabledReason: null,
+        processingDisabledAt: null,
+        reinstalledAt: new Date(),
+      },
+      select: {
+        id: true,
+        myshopifyDomain: true,
+        processingEnabled: true,
+        processingDisabledReason: true,
+        reinstalledAt: true,
+      },
+    });
   });
 
   return { shop: updated, reactivated: true };

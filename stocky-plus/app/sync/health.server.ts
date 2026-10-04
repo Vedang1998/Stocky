@@ -5,6 +5,7 @@
  */
 import type { SyncHealth, SyncHealthState } from "@prisma/client";
 import { getControlPlanePrisma } from "./control-plane-db.server";
+import { assertParticipatingWriteGuardForShop } from "../tenant/participating-write.server";
 
 const RUNNING_JOB_STATES = ["RUNNING", "DISPATCH_LEASED", "ENQUEUED"] as const;
 const DEGRADED_JOB_STATES = ["RETRY_WAIT"] as const;
@@ -131,7 +132,7 @@ export async function computeSyncHealth(
   const prisma = getControlPlanePrisma();
   const shop = await prisma.shop.findUnique({
     where: { id: shopId },
-    select: { id: true, processingEnabled: true },
+    select: { id: true, processingEnabled: true, myshopifyDomain: true },
   });
 
   let state: SyncHealthState = "NEVER_STARTED";
@@ -284,7 +285,13 @@ export async function computeSyncHealth(
     detailSummary = scratchDetail.summary;
   }
 
-  const health = await prisma.syncHealth.upsert({
+  const health = await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(
+      tx,
+      shopId,
+      shop?.myshopifyDomain ?? null,
+    );
+    return tx.syncHealth.upsert({
     where: {
       shopId_syncDomain: { shopId, syncDomain },
     },
@@ -302,6 +309,7 @@ export async function computeSyncHealth(
       detailSummary: detailSummary?.slice(0, 512),
       computedAt: new Date(),
     },
+    });
   });
 
   return { health, state, detailCode, detailSummary };

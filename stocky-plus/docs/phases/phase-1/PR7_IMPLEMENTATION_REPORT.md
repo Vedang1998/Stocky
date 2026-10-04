@@ -1,6 +1,6 @@
 # PR7 implementation report — checkpoint A
 
-**Status:** `CHECKPOINT_A IMPLEMENTATION IN PROGRESS` (author evidence; not independent acceptance)
+**Status:** `CHECKPOINT_B IMPLEMENTATION IN PROGRESS` (author evidence; not independent acceptance)
 
 **Date:** 2026-09-30
 
@@ -180,4 +180,22 @@ Exact drifted paths (reported before expanding inventory scope):
 
 No new exception IDs. No production Prisma/schema change. Regenerated only `docs/phases/phase-1/PR2_TENANT_ACCESS_INVENTORY.md`. After regen, `npm run tenant:access:inventory:check` printed `tenant_access_inventory_fresh` and exited 0. Findings **1764**, violations **0**, scannedFiles **522**, digest `efb65bb46f4f0b545036d7581cb09d70b333b7fa640065b98c992aeeaaf12361`.
 
-Checkpoint B, mark-ready, merge, production, and owner-proof consumption remain forbidden.
+Checkpoint B mark-ready, merge, production, and live Shopify certification remain forbidden until a complete B0 READY packet.
+
+## 5. Checkpoint B implementation (author evidence; not independent acceptance)
+
+**Dispatch-Key:** `propo:issue67:PR68_CHECKPOINT_B:02defc9233c4f8da66194eabad0cb77d30079e91:cursor`
+
+RA `43c93e5` is the local parent of this B work. Exact-head CI and READY are recorded only after complete B proof.
+
+Implemented in this pass (local coherent checkpoint, not B0 READY):
+
+- R1-02/R1-03 owner-proof residuals.
+- Additive Prisma models + `20260918120000_pr7_audit_roles_privacy` + helper SQL/roles/apply/verify.
+- Audit emit, assignment grant/revoke, original-admin capture, writer admission, bound-effect host.
+- Compliance intake + three processors + coordinator loop + owner download / escalation (same-origin; R1-01 deferred).
+- Participating-write guards on named §7.9/W-derived hosts listed in the execution brief.
+- Redis shop-scoped drain and D-scratch leftover fail-closed residual (no operator reclaim).
+- Source scanner `scripts/privacy/participating-writers.ts` with omission controls.
+
+This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and the remaining matrix executions are still required.
