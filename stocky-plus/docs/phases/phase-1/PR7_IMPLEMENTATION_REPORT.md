@@ -267,3 +267,15 @@ Automatic `pull_request` [37228299326](https://github.com/Vedang1998/Stocky/acti
 | Gate | `111518204798` | FAILURE |
 
 `renewAttemptHeartbeat` wrapped the H1 `updateMany` in a participating-write transaction and dropped `if (updated.count === 0) return null`. Restored that lost-race return and combined the after-auth generation imports. Local eslint on those two files exit 0. Mechanical inventory digest `e931ed84…` → `036c0696…`; scanned files 554 / findings 1806 / violations 0; EX-SYNC-003 / after-auth upsert line shifts only.
+
+### Exact-head zero-collection-guard failure on `a526b39` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37230450492](https://github.com/Vedang1998/Stocky/actions/runs/37230450492) · `head_sha=a526b3998fcc096c2a6a198e3035600326965a33`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111518812266` | SUCCESS · `full_ci=true` |
+| Heavy | `111518834064` | FAILURE at **PR7 privacy zero-collection guard** (raw `vitest -t this-pattern-matches-zero-tests-on-purpose` exit 1 as designed). Lint, typecheck, codegen, PR5-F3, and `test:privacy` **81/81** SUCCESS. Queue/Redis SUCCESS. Foundation/races/unit/build skipped. |
+| Gate | `111528129048` | FAILURE |
+
+The intended fail-closed probe was wired as a normal Actions step, so the first Heavy run that reached it always failed. Wrapper `scripts/privacy/assert-zero-name-filter-guard.ts` / `npm run test:privacy:zero-name-filter-guard` exits 0 only when vitest exits 1 **and** prints `[ci-guard] testNamePattern`. Local: raw vitest exit 1 + guard text; wrapper exit 0. Vacuous vitest success remains a wrapper failure. Reporter behavior is not weakened.

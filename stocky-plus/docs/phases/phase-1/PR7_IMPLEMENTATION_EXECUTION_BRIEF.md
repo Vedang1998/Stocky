@@ -114,6 +114,7 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 | `app/jobs/workers/index.ts` | worker bootstrap | separate privacy coordinator loop |
 | `app/privacy/execute.server.ts` | three processors | publication lock; Redis/D-scratch residual; customer child-first DELETE; no participating-write during ERASING |
 | `scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts` | races / provenance / residual / Redis / D-scratch | focused `test:migrations` file |
+| `scripts/privacy/assert-zero-name-filter-guard.ts` | CI zero-name-filter wrapper | exits 0 only when vitest `-t` zero-match exits 1 with `[ci-guard] testNamePattern`; does not weaken the reporter |
 
 Newly created owned files: `app/audit/**`, `app/privacy/**`, `app/rbac/assignment.server.ts`, capture/admission/bound-effect, platform routes, `scripts/privacy/**`.
 

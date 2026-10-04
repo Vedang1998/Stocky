@@ -713,7 +713,7 @@ jobs:
         run: npm run test:privacy
 
       - name: PR7 privacy zero-collection guard
-        run: npx vitest run --config vitest.privacy.config.ts -t "this-pattern-matches-zero-tests-on-purpose"
+        run: npm run test:privacy:zero-name-filter-guard
 
       - name: PR7 privacy foundation (PostgreSQL)
         run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr7-privacy-foundation.test.ts
