@@ -150,30 +150,31 @@ export async function renewAttemptHeartbeat(input: {
   const updated = await prisma.$transaction(async (tx) => {
     await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const result = await tx.jobAttempt.updateMany({
-    where: {
-      id: attempt.id,
-      shopId: input.shopId,
-      finishedAt: null,
-      leaseOwner: input.workerId,
-    },
-    data: {
-      heartbeatAt: now,
-      leaseExpiresAt,
-    },
-  });
-  if (result.count === 0) return { count: 0 };
+      where: {
+        id: attempt.id,
+        shopId: input.shopId,
+        finishedAt: null,
+        leaseOwner: input.workerId,
+      },
+      data: {
+        heartbeatAt: now,
+        leaseExpiresAt,
+      },
+    });
+    if (result.count === 0) return result;
 
-  await tx.durableJob.updateMany({
-    where: {
-      id: attempt.durableJobId,
-      shopId: input.shopId,
-      state: "RUNNING",
-      leaseOwner: input.workerId,
-    },
-    data: { leaseExpiresAt, leaseOwner: input.workerId },
-  });
+    await tx.durableJob.updateMany({
+      where: {
+        id: attempt.durableJobId,
+        shopId: input.shopId,
+        state: "RUNNING",
+        leaseOwner: input.workerId,
+      },
+      data: { leaseExpiresAt, leaseOwner: input.workerId },
+    });
     return result;
   });
+  if (updated.count === 0) return null;
 
   return prisma.jobAttempt.findUnique({ where: { id: attempt.id } });
 }

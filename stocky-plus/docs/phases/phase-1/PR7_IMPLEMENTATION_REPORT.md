@@ -255,3 +255,15 @@ Automatic `pull_request` [37225240141](https://github.com/Vedang1998/Stocky/acti
 Non-superuser apply, preflight, drift, and inventories **passed** on this SHA. Injection and reject-envelope tests passed. `enqueueCatalogSync` and concurrent `abc-analysis-shop` produced DurableJob rows but no BullMQ jobs: `kickDispatcher` swallows errors, and `assertParticipatingWriteGuardForShop` requires `stocky_shop_canonical_domain`, which existed only in enforcement helper SQL — not in migrate-only `resetPublicSchema` catalogs. `20261004180000` also revoked PUBLIC execute on the participating-write trio without granting `stocky_control_plane` (CI dispatcher identity). Local recreate with `DATABASE_CONTROL_PLANE_URL` as `stocky_control_plane`: same 2 failed / 2 passed before the additive migration.
 
 Correction (owned §7.9 shared-host path, not a test disable): additive `20261004200000_pr7_shop_canonical_domain` plus `grantMigratedLifecycleHelpersToRuntime` to the control-plane role after it exists. Old-migration rewrite remains forbidden.
+
+### Exact-head lint failure on `a8e56fc` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37228299326](https://github.com/Vedang1998/Stocky/actions/runs/37228299326) · `head_sha=a8e56fc9c93d08a537d76897446ed4e90b0ba2f8`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111512445760` | SUCCESS · `full_ci=true` |
+| Heavy | `111512464363` | FAILURE at **Lint** (`lifecycle.server.ts` unused `updated`; `after-auth.server.ts` duplicate generation import warnings). Tenant queue/Redis step 95 **SUCCESS**. Steps 10–126 including drift, non-superuser, inventories, preflight, sync, and tenant-access **SUCCESS**. Typecheck/privacy/unit/build skipped after lint. |
+| Gate | `111518204798` | FAILURE |
+
+`renewAttemptHeartbeat` wrapped the H1 `updateMany` in a participating-write transaction and dropped `if (updated.count === 0) return null`. Restored that lost-race return and combined the after-auth generation imports. Local eslint on those two files exit 0. Mechanical inventory digest `e931ed84…` → `036c0696…`; scanned files 554 / findings 1806 / violations 0; EX-SYNC-003 / after-auth upsert line shifts only.

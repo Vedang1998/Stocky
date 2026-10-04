@@ -14,8 +14,10 @@ import type { TenantAuthority } from "./authority.server";
 import { resolveAuthorityAfterVerifiedAuth } from "./bootstrap.server";
 import { createTenantDb } from "./tenant-db.server";
 import { reactivateShopAfterVerifiedReinstall } from "../sync/reinstall.server";
-import { ensureLiveInstallGeneration } from "../privacy/generation.server";
-import { assertNoErasureFence } from "../privacy/generation.server";
+import {
+  assertNoErasureFence,
+  ensureLiveInstallGeneration,
+} from "../privacy/generation.server";
 
 export type AfterAuthResult = {
   shopId: string;

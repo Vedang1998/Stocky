@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `e931ed84273f61ccf1745817930fb8017880e96c3c13c3e541276f6713f1bfa8`
+**Content digest:** `036c0696b62ab956eaf5237c417d49e9eb66cd89879b3cfb3156db1bbc0fc3bf`
 **Scanned files:** 554
 **Findings:** 1806
 **Converted paths:** 544
@@ -796,12 +796,12 @@ All 36 approved merchant-owned models must appear below.
 | `app/sync/intake.server.ts` | 327 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-002 | — |
 | `app/sync/lifecycle.server.ts` | 55 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
 | `app/sync/lifecycle.server.ts` | 150 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
-| `app/sync/lifecycle.server.ts` | 189 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
-| `app/sync/lifecycle.server.ts` | 277 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
-| `app/sync/lifecycle.server.ts` | 359 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
-| `app/sync/lifecycle.server.ts` | 384 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
-| `app/sync/lifecycle.server.ts` | 558 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
-| `app/sync/lifecycle.server.ts` | 628 / `$queryRawUnsafe` | other | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, AuditEvent, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit | EX-SYNC-003 | Phase 1 PR 4 durable sync control-plane uses dedicated control-plane Prisma + $transaction (not merchant TenantDb) |
+| `app/sync/lifecycle.server.ts` | 190 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
+| `app/sync/lifecycle.server.ts` | 278 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
+| `app/sync/lifecycle.server.ts` | 360 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
+| `app/sync/lifecycle.server.ts` | 385 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
+| `app/sync/lifecycle.server.ts` | 559 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-003 | — |
+| `app/sync/lifecycle.server.ts` | 629 / `$queryRawUnsafe` | other | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, AuditEvent, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-SYNC-003 | pr4_sync_control_plane | approved exception | tenant:access:audit | EX-SYNC-003 | Phase 1 PR 4 durable sync control-plane uses dedicated control-plane Prisma + $transaction (not merchant TenantDb) |
 | `app/sync/reinstall.server.ts` | 92 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-010 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-010 | — |
 | `app/sync/replay.server.ts` | 35 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-004 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-004 | — |
 | `app/sync/uninstall.server.ts` | 82 / `$transaction` | other | — | Prisma $transaction | approved exception EX-SYNC-005 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-005 | — |
@@ -1734,7 +1734,7 @@ All 36 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/write-atomicity.test.ts` | 57 / `dbA.supplierSkuMapping.create` | test | SupplierSkuMapping | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/write-atomicity.test.ts` | 66 / `prisma.supplier.update` | test | Supplier | direct prisma delegate | approved exception EX-TEST-012 | migration_tests | approved exception | allowlist EX-TEST-012 | EX-TEST-012 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/write-atomicity.test.ts` | 78 / `prisma.supplierSkuMapping.findMany` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-012 | migration_tests | approved exception | allowlist EX-TEST-012 | EX-TEST-012 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/after-auth.server.ts` | 54 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/after-auth.server.ts` | 56 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/bootstrap.server.ts` | 11 / `rawPrisma` | bootstrap | — | value import of app/db.server | approved exception EX-BOOT-001 | restricted_bootstrap | approved exception | allowlist EX-BOOT-001 | EX-BOOT-001 | Session + Shop bootstrap and session-storage adapter |
 | `app/tenant/bootstrap.server.ts` | 66 / `$transaction` | bootstrap | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/tenant/db-context.server.ts` | 108 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
@@ -2228,6 +2228,6 @@ All 36 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "e931ed84273f61ccf1745817930fb8017880e96c3c13c3e541276f6713f1bfa8"
+  "contentDigest": "036c0696b62ab956eaf5237c417d49e9eb66cd89879b3cfb3156db1bbc0fc3bf"
 }
 ```
