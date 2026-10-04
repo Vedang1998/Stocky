@@ -227,4 +227,16 @@ Automatic `pull_request` [37221810539](https://github.com/Vedang1998/Stocky/acti
 
 Prisma schema drift **passed** on this SHA. Cluster-global PR7 roles from the earlier same-job catalog apply are not administrable by a later CREATEROLE fixture owner. Not rerun-to-green.
 
+### Exact-head preflight inventory failure on `e8188a4` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37224835898](https://github.com/Vedang1998/Stocky/actions/runs/37224835898) · `head_sha=e8188a4477ad7dedce44dae1912822847c051b6f`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111502240635` | SUCCESS |
+| Heavy | `111502270234` | FAILURE at **Tenant enforcement preflight** (`tenant:access:inventory:check_failed_exit_1`) |
+| Gate | `111502961014` | FAILURE |
+
+Prisma schema drift **passed**. Non-superuser step was skipped because preflight failed first. Inventory delta is mechanical: `helpers.ts` site lines 175–179 → 180–184 (same `EX-ENF-014`); content digest `5fa968bd…` → `4770fe85…`; scanned files 554 / findings 1806 unchanged. Regenerated with `npm run tenant:access:inventory`; local `tenant:access:inventory:check` then exit 0.
+
 This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and remaining matrix executions are still required.
