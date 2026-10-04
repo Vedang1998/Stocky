@@ -293,6 +293,7 @@ const MIGRATED_LIFECYCLE_HELPERS = [
   "stocky_lifecycle_shared_lock(text)",
   "stocky_generation_writable(text)",
   "stocky_participating_write_guard(text)",
+  "stocky_shop_canonical_domain(text, text)",
 ] as const;
 
 function isInsufficientPrivilege(message: string): boolean {

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { Queue } from "bullmq";
 import IORedis from "ioredis";
+import { Client } from "pg";
 import { issueTenantAuthority } from "../authority.server";
 import {
   createTenantJobEnvelope,
@@ -20,6 +21,7 @@ import {
 import { TenantAuthorityError } from "../errors";
 import {
   createPrisma,
+  requireDatabaseUrl,
   resetPublicSchema,
   seedTwoShops,
   wipeSyncControlPlaneTables,
@@ -147,5 +149,72 @@ describe("tenant queue/Redis envelope integration (C-03)", () => {
     const ids = new Set(contexts.map((c) => c.tenant.shopId));
     expect(ids.has(shopAId)).toBe(true);
     expect(ids.has(shopBId)).toBe(true);
+  });
+
+  it("migrate-only catalog exposes canonical domain to the control-plane role (positive)", async () => {
+    const url =
+      process.env.DATABASE_CONTROL_PLANE_URL?.trim() || requireDatabaseUrl();
+    const client = new Client({ connectionString: url });
+    await client.connect();
+    try {
+      const resolved = await client.query<{ domain: string }>(
+        `SELECT stocky_shop_canonical_domain($1, $2) AS domain`,
+        [shopAId, SHOP_A_DOMAIN],
+      );
+      expect(resolved.rows[0]?.domain).toBe(SHOP_A_DOMAIN);
+      await client.query(`SELECT stocky_participating_write_guard($1)`, [
+        SHOP_A_DOMAIN,
+      ]);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("ERASING generation freezes participating writes (negative)", async () => {
+    await prisma.shopInstallGeneration.create({
+      data: {
+        canonicalDomain: SHOP_A_DOMAIN,
+        targetShopId: shopAId,
+        shopRowId: shopAId,
+        fence: "ERASING",
+      },
+    });
+    try {
+      await expect(
+        prisma.$executeRaw`SELECT stocky_participating_write_guard(${SHOP_A_DOMAIN})`,
+      ).rejects.toThrow(/generation_frozen/);
+    } finally {
+      await prisma.shopInstallGeneration.deleteMany({
+        where: { canonicalDomain: SHOP_A_DOMAIN },
+      });
+    }
+  });
+
+  it("declared domain mismatch is denied (bypass)", async () => {
+    await expect(
+      prisma.$queryRaw`SELECT stocky_shop_canonical_domain(${shopAId}, ${"evil.myshopify.com"}) AS domain`,
+    ).rejects.toThrow(/customer_write_namespace_mismatch/);
+  });
+
+  it("role without EXECUTE cannot resolve canonical domain (bypass)", async () => {
+    const client = new Client({ connectionString: requireDatabaseUrl() });
+    const role = "stocky_qredis_noexec";
+    await client.connect();
+    try {
+      await client.query(`DROP ROLE IF EXISTS ${role}`);
+      await client.query(`CREATE ROLE ${role} NOLOGIN NOINHERIT`);
+      await client.query(`GRANT USAGE ON SCHEMA public TO ${role}`);
+      await client.query(`SET ROLE ${role}`);
+      await expect(
+        client.query(`SELECT stocky_shop_canonical_domain($1, $2)`, [
+          shopAId,
+          SHOP_A_DOMAIN,
+        ]),
+      ).rejects.toThrow(/permission denied/);
+    } finally {
+      await client.query("RESET ROLE").catch(() => undefined);
+      await client.query(`DROP ROLE IF EXISTS ${role}`).catch(() => undefined);
+      await client.end();
+    }
   });
 });

@@ -1026,6 +1026,20 @@ export async function provisionRoles(
       detectedDrift.push(`control_plane_role:${message.split("\n")[0]}`);
     }
 
+    // Dispatcher / JobDispatch hosts run as the control-plane role on migrate-only
+    // catalogs (PUBLIC execute is revoked). Grant after the role exists.
+    const controlPlaneRole = defaultControlPlaneRoleName();
+    const cpRoleExists = await client.query(
+      `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+      [controlPlaneRole],
+    );
+    if ((cpRoleExists.rowCount ?? 0) > 0) {
+      await grantMigratedLifecycleHelpersToRuntime(client, controlPlaneRole);
+      grantsApplied.push(
+        `EXECUTE ON migrated lifecycle helpers TO ${controlPlaneRole}`,
+      );
+    }
+
     // _prisma_migrations — revoke if present
     const prismaMig = await client.query(
       `SELECT 1 FROM information_schema.tables

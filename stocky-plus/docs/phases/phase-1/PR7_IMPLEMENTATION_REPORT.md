@@ -201,6 +201,7 @@ Implemented in this pass (local coherent checkpoint, not B0 READY):
 - `noteQueuedWork` source commitment uses operation+target+body (same `stocky_source_commitment` as capture/admission).
 - Focused Heavy steps for foundation, races, and privacy zero-collection guard.
 - Additive `20261004190000_pr7_timestamptz_index_names` (does **not** rewrite `20260918120000`): PR7 `TIMESTAMP(3)` columns become `TIMESTAMPTZ(3)` with UTC `USING`; truncated `OriginalAdminCapture` unique and `PrivacyCustomerTargetBarrier` index names renamed to Prisma 63-char identifiers. `PrivacyAttempt.updatedAt` remains `TIMESTAMP(3)` to match `@updatedAt`.
+- Additive `20261004200000_pr7_shop_canonical_domain` (does **not** rewrite `20261004180000`): migrate-only catalogs expose `stocky_shop_canonical_domain(text,text)` and GRANT EXECUTE on the ForShop helper set to existing `stocky_runtime` / `stocky_control_plane`. Tenant-access `provisionRoles` repeats that grant after control-plane role provision.
 - Non-superuser CREATEROLE apply: existing cluster-global PR7 roles are granted to the fixture/migration owner with `INHERIT FALSE` and no `ADMIN OPTION`. `pr7PrivacyRolesSql` skips `GRANT … TO CURRENT_USER` when already a member and fails closed with `pr7_role_grant_denied` otherwise. `REVOKE`/`GRANT EXECUTE` on PR7 helpers run while the migration owner still owns the function; `ALTER FUNCTION … OWNER TO` is last. Default privileges use `SET ROLE` plus a schema-CREATE window; table policies are created before table ownership transfer. Duplicate post-OWNER `REVOKE` on capture tables was removed. Fixture-local runtime roles receive EXECUTE via `grantPr7RuntimeExecutableFunctions` / `grantMigratedLifecycleHelpersToRuntime` before ownership transfer. Idempotent re-apply uses `SET ROLE` for privilege DDL and default-privilege establishment on already-transferred owners. Local `non-superuser-migration-owner.test.ts` **3 passed / 3** (`completed_steps=298`) after these corrections; exact-head CI on this SHA is not yet this evidence.
 
 ### Exact-head drift failure on `90a3d77` (recorded; not rerun-to-green)
@@ -240,3 +241,17 @@ Automatic `pull_request` [37224835898](https://github.com/Vedang1998/Stocky/acti
 Prisma schema drift **passed**. Non-superuser step was skipped because preflight failed first. Inventory delta is mechanical: `helpers.ts` site lines 175–179 → 180–184 (same `EX-ENF-014`); content digest `5fa968bd…` → `4770fe85…`; scanned files 554 / findings 1806 unchanged. Regenerated with `npm run tenant:access:inventory`; local `tenant:access:inventory:check` then exit 0.
 
 This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and remaining matrix executions are still required.
+
+### Exact-head queue/Redis failure on `c37212d` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37225240141](https://github.com/Vedang1998/Stocky/actions/runs/37225240141) · `head_sha=c37212d40f75410b6051b6ce212e0ffb9f6915fe`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111503428241` | SUCCESS · `full_ci=true` |
+| Heavy | `111503457656` | FAILURE at **Tenant queue/Redis tests** (`app/tenant/__tests__/queue-redis.test.ts` 2 failed / 2 passed) |
+| Gate | `111510754603` | FAILURE |
+
+Non-superuser apply, preflight, drift, and inventories **passed** on this SHA. Injection and reject-envelope tests passed. `enqueueCatalogSync` and concurrent `abc-analysis-shop` produced DurableJob rows but no BullMQ jobs: `kickDispatcher` swallows errors, and `assertParticipatingWriteGuardForShop` requires `stocky_shop_canonical_domain`, which existed only in enforcement helper SQL — not in migrate-only `resetPublicSchema` catalogs. `20261004180000` also revoked PUBLIC execute on the participating-write trio without granting `stocky_control_plane` (CI dispatcher identity). Local recreate with `DATABASE_CONTROL_PLANE_URL` as `stocky_control_plane`: same 2 failed / 2 passed before the additive migration.
+
+Correction (owned §7.9 shared-host path, not a test disable): additive `20261004200000_pr7_shop_canonical_domain` plus `grantMigratedLifecycleHelpersToRuntime` to the control-plane role after it exists. Old-migration rewrite remains forbidden.

@@ -55,4 +55,5 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | Restricted principal SET ROLE / EXECUTE admission | `pr7-privacy-races.test.ts` + foundation | implemented |
 | Intake validate-before-persist; duplicate webhook reuses delivery/work/generation | `pr7-privacy-foundation.test.ts` | implemented |
 | TenantDb participating-write after migrate-only reset (empty writable; ERASING freeze) | `app/tenant/__tests__/tenant-db.test.ts` | implemented |
+| Dispatcher ForShop helpers on migrate-only catalog (canonical domain + CP EXECUTE; enqueue publishes) | `app/tenant/__tests__/queue-redis.test.ts` | implemented; exact-head `c37212d` Heavy `37225240141` failed before this additive migration |
 | Q-008 | production decision | OPEN / unmet as legal default |

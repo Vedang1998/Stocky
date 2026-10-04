@@ -97,9 +97,10 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 | `app/tenant/after-auth.server.ts` | `runAfterAuthTenantBootstrap` | erasure fence + LIVE generation |
 | `app/tenant/bootstrap.server.ts` | `upsertCanonicalShop` | `stocky_participating_write_guard` |
 | `app/tenant/db-context.server.ts` / `tenant-db.server.ts` | tenant transaction hosts | required participating-write guard |
-| `prisma/migrations/20261004180000_pr7_participating_write_guard/` | migrate-deploy catalog | guard functions exist before enforcement apply |
+| `prisma/migrations/20261004180000_pr7_participating_write_guard/` | migrate-deploy catalog | lifecycle/generation/participating-write functions exist before enforcement apply |
 | `prisma/migrations/20261004190000_pr7_timestamptz_index_names/` | migrate-deploy catalog | PR7 DateTime columns TIMESTAMPTZ(3); truncated unique/index names match Prisma |
-| `scripts/tenant-enforcement/sql.ts` `grantHelpersToRuntimeSql` + `grantMigratedLifecycleHelpersToRuntime` | runtime EXECUTE | tenant helpers always; lifecycle/generation/participating-write granted to the actual runtime role (SET ROLE when already re-owned) |
+| `prisma/migrations/20261004200000_pr7_shop_canonical_domain/` | migrate-deploy catalog | `stocky_shop_canonical_domain(text,text)` plus EXECUTE for `stocky_runtime` / `stocky_control_plane` on the ForShop helpers (PUBLIC remains revoked) |
+| `scripts/tenant-enforcement/sql.ts` `grantHelpersToRuntimeSql` + `grantMigratedLifecycleHelpersToRuntime` | runtime + control-plane EXECUTE | tenant helpers always; lifecycle/generation/participating-write/canonical-domain granted to the actual runtime role and, when present, `stocky_control_plane` (SET ROLE when already re-owned) |
 | `app/tenant/__tests__/helpers.ts` `resetPublicSchema` | tenant-access migrate deploy | now receives guard functions via the PR7 migration; no FORCE RLS |
 | `app/sync/uninstall.server.ts` | `processUninstall` | guard + LIVE→UNINSTALLED |
 | `app/sync/reinstall.server.ts` | `reactivateShopAfterVerifiedReinstall` | guard; REDACTED still denied |

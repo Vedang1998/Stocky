@@ -4,7 +4,7 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `4770fe85b39c51ae43d947cbbb20f9c25c89c8a64e5d74c6cd555125fcfc9746`
+**Content digest:** `e931ed84273f61ccf1745817930fb8017880e96c3c13c3e541276f6713f1bfa8`
 **Scanned files:** 554
 **Findings:** 1806
 **Converted paths:** 544
@@ -1451,7 +1451,7 @@ All 36 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 2265 / `prisma.shopifyInventoryLevelFact.findFirst` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 2271 / `prisma.shopifyLocationFact.findFirst` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 2340 / `prisma.catalogObservationInFlight.create` | test | CatalogObservationInFlight | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/queue-redis.test.ts` | 50 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-015 | migration_tests | approved exception | allowlist EX-TEST-015 | EX-TEST-015 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/queue-redis.test.ts` | 52 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-015 | migration_tests | approved exception | allowlist EX-TEST-015 | EX-TEST-015 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/relation-isolation.test.ts` | 26 / `prisma.stocktakeLineItem.deleteMany` | test | StocktakeLineItem | direct prisma delegate | approved exception EX-TEST-007 | migration_tests | approved exception | allowlist EX-TEST-007 | EX-TEST-007 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/relation-isolation.test.ts` | 27 / `prisma.transferLineItem.deleteMany` | test | TransferLineItem | direct prisma delegate | approved exception EX-TEST-007 | migration_tests | approved exception | allowlist EX-TEST-007 | EX-TEST-007 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/relation-isolation.test.ts` | 28 / `prisma.pOLineItem.deleteMany` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-007 | migration_tests | approved exception | allowlist EX-TEST-007 | EX-TEST-007 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -2228,6 +2228,6 @@ All 36 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "4770fe85b39c51ae43d947cbbb20f9c25c89c8a64e5d74c6cd555125fcfc9746"
+  "contentDigest": "e931ed84273f61ccf1745817930fb8017880e96c3c13c3e541276f6713f1bfa8"
 }
 ```
