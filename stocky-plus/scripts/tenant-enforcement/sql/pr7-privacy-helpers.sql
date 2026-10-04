@@ -2271,5 +2271,3 @@ DROP POLICY IF EXISTS audit_gate_insert ON public."AuditEvent";
 CREATE POLICY audit_gate_insert ON public."AuditEvent"
   FOR INSERT TO stocky_lifecycle_gate_owner
   WITH CHECK (true);
-
-
