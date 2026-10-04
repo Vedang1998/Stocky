@@ -31,7 +31,9 @@ export async function withAdmissionPrincipal<T>(
       if (process.env.NODE_ENV === "production") {
         throw new Error(`admission_principal_url_required:${role}`);
       }
-      await client.query(`SET ROLE ${role}`);
+      // SECURITY DEFINER helpers authenticate the login via session_user.
+      // SET ROLE does not change session_user; SET SESSION AUTHORIZATION does.
+      await client.query(`SET SESSION AUTHORIZATION ${role}`);
     }
     return await fn(client);
   } finally {

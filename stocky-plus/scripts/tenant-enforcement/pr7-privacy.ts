@@ -136,10 +136,17 @@ IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${quoteLiteral(role)}) THE
 END IF;`;
   });
   const grantList = PR7_ALL_ROLES.map((role) => quoteIdent(role)).join(", ");
-  const loginList = PR7_LOGIN_ROLES.map((role) => quoteIdent(role)).join(", ");
-  return `DO $$ BEGIN\n${stmts.join("\n")}\nEND$$;
-GRANT USAGE ON SCHEMA public TO ${grantList};
-GRANT ${loginList} TO CURRENT_USER;`;
+  const cpPassword = process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD?.trim();
+  const cpPasswordSql = cpPassword
+    ? ` PASSWORD ${quoteLiteral(cpPassword)}`
+    : "";
+  const peer = `
+IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') THEN
+  CREATE ROLE stocky_control_plane LOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE${cpPasswordSql};
+END IF;`;
+  return `DO $$ BEGIN\n${stmts.join("\n")}\n${peer}\nEND$$;
+GRANT USAGE ON SCHEMA public TO ${grantList}, stocky_control_plane;
+GRANT ${grantList}, stocky_control_plane TO CURRENT_USER;`;
 }
 
 function quoteLiteral(value: string): string {
@@ -165,7 +172,7 @@ BEGIN
     RAISE EXCEPTION 'audit_event_immutable'
       USING ERRCODE = 'integrity_constraint_violation';
   END IF;
-  IF TG_OP = 'DELETE' AND session_user IS DISTINCT FROM 'stocky_privacy_erasure' THEN
+  IF TG_OP = 'DELETE' AND current_user IS DISTINCT FROM 'stocky_privacy_erasure' THEN
     RAISE EXCEPTION 'audit_event_immutable'
       USING ERRCODE = 'integrity_constraint_violation';
   END IF;
@@ -308,6 +315,19 @@ const PR7_IDEMPOTENT_DROP_POLICIES: ReadonlyArray<{
   { table: "AuditEvent", policy: "audit_gate_insert" },
   { table: "ShopRoleAssignment", policy: "assignment_runtime_all" },
   { table: "ShopRoleAssignment", policy: "assignment_verifier_select" },
+  { table: "PrivacyRequest", policy: "privacy_request_target_owner_all" },
+  { table: "PrivacyRequest", policy: "privacy_request_definer_select" },
+  { table: "PrivacyAttempt", policy: "privacy_attempt_target_owner_all" },
+  { table: "PrivacyAttempt", policy: "privacy_attempt_definer_select" },
+  {
+    table: "ShopInstallGeneration",
+    policy: "shop_install_generation_definer_select",
+  },
+  {
+    table: "PrivacyCompletionReceipt",
+    policy: "completion_receipt_definer_all",
+  },
+  { table: "DurableJob", policy: "durable_job_admission_select" },
   {
     table: "PrivacyCustomerTargetBarrier",
     policy: "customer_barrier_definer_all",
@@ -358,6 +378,21 @@ END$$;
 
 export async function applyPr7PrivacyHelpers(client: Client): Promise<void> {
   await client.query(pr7PrivacyRolesSql());
+  const defaultOwners = [...PR7_ALL_ROLES, "stocky_control_plane"];
+  for (const owner of defaultOwners) {
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(owner)}`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(owner)}`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    );
+  }
   await client.query(pr7IdempotentDropPoliciesSql());
   await client.query(pr7PrivacyHelpersFileSql());
   await client.query(pr7AuditAppendOnlySql());

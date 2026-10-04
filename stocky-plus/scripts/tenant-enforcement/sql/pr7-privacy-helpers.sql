@@ -853,6 +853,50 @@ GRANT INSERT, DELETE ON public."PrivacyTargetKey" TO stocky_privacy_target_owner
 GRANT UPDATE ON public."PrivacyRequest" TO stocky_privacy_target_owner;
 GRANT USAGE, SELECT ON SEQUENCE public."PrivacyTargetKey_id_seq" TO stocky_privacy_target_owner;
 
+-- Coordinator tables are platform_control_plane (rlsRequired false in the
+-- manifest) but provisionControlPlaneRole ENABLE+FORCE RLS on every CP table.
+-- SECURITY DEFINER owners are not table owners; without policies, SELECT
+-- returns 0 rows (enumerator_request_missing; generation_writable treats
+-- ERASING as absent). USING(true) is limited to named definer/gate roles.
+ALTER TABLE public."PrivacyRequest" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."PrivacyRequest" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."PrivacyAttempt" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."PrivacyAttempt" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."ShopInstallGeneration" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."ShopInstallGeneration" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."PrivacyCompletionReceipt" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."PrivacyCompletionReceipt" FORCE ROW LEVEL SECURITY;
+ALTER TABLE public."DurableJob" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public."DurableJob" FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY privacy_request_target_owner_all ON public."PrivacyRequest"
+  FOR ALL TO stocky_privacy_target_owner
+  USING (true) WITH CHECK (true);
+CREATE POLICY privacy_request_definer_select ON public."PrivacyRequest"
+  FOR SELECT TO stocky_privacy_capability_owner, stocky_privacy_finalizer_owner
+  USING (true);
+
+CREATE POLICY privacy_attempt_target_owner_all ON public."PrivacyAttempt"
+  FOR ALL TO stocky_privacy_target_owner
+  USING (true) WITH CHECK (true);
+CREATE POLICY privacy_attempt_definer_select ON public."PrivacyAttempt"
+  FOR SELECT TO stocky_privacy_capability_owner, stocky_privacy_finalizer_owner
+  USING (true);
+
+CREATE POLICY shop_install_generation_definer_select ON public."ShopInstallGeneration"
+  FOR SELECT TO stocky_lifecycle_gate_owner, stocky_privacy_target_owner,
+    stocky_privacy_capability_owner, stocky_privacy_finalizer_owner,
+    stocky_admission_origin_owner
+  USING (true);
+
+CREATE POLICY completion_receipt_definer_all ON public."PrivacyCompletionReceipt"
+  FOR ALL TO stocky_privacy_target_owner
+  USING (true) WITH CHECK (true);
+
+CREATE POLICY durable_job_admission_select ON public."DurableJob"
+  FOR SELECT TO stocky_admission_origin_owner
+  USING (true);
+
 -- Publisher privilege: only the enumerator definer may write keys.
 -- Callers cannot enlarge scope by inserting arbitrary row IDs.
 ALTER TABLE public."PrivacyTargetKey" ENABLE ROW LEVEL SECURITY;
@@ -1015,12 +1059,15 @@ BEGIN
 END;
 $$;
 
+ALTER FUNCTION public.stocky_lifecycle_lock_key(text) OWNER TO stocky_lifecycle_gate_owner;
 ALTER FUNCTION public.stocky_lifecycle_shared_lock(text) OWNER TO stocky_lifecycle_gate_owner;
 ALTER FUNCTION public.stocky_lifecycle_exclusive_lock(text) OWNER TO stocky_lifecycle_gate_owner;
 ALTER FUNCTION public.stocky_generation_writable(text) OWNER TO stocky_lifecycle_gate_owner;
+REVOKE ALL ON FUNCTION public.stocky_lifecycle_lock_key(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_lifecycle_shared_lock(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_lifecycle_exclusive_lock(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_generation_writable(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_lock_key(text) TO stocky_lifecycle_gate_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_shared_lock(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_reader, stocky_privacy_target_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_exclusive_lock(text) TO stocky_control_plane, stocky_privacy_erasure;
 GRANT EXECUTE ON FUNCTION public.stocky_generation_writable(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_reader;

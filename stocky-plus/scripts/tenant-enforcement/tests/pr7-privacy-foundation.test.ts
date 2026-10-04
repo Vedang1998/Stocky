@@ -103,6 +103,54 @@ describe("PR7 privacy/roles/audit foundation", () => {
     } finally {
       await client.end();
     }
+
+    const runtime = await getRuntimeClient();
+    try {
+      await expect(
+        runtime.query(`SELECT stocky_participating_write_guard($1)`, [domain]),
+      ).rejects.toThrow(/generation_frozen/);
+      await expect(
+        runtime.query(`SELECT stocky_lifecycle_lock_key($1)`, [domain]),
+      ).rejects.toThrow(/permission denied/);
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("privacy reader cannot see coordinator rows under FORCE RLS (negative)", async () => {
+    const client = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    const requestId = randomUUID();
+    try {
+      await client.query(
+        `INSERT INTO "PrivacyRequest"
+          (id, topic, state, "targetShopId", "generationId", "canonicalDomain",
+           "deadlineAt", "workId")
+         VALUES ($1, 'customers/data_request', 'RECEIVED', $2, $3, $4,
+                 now() + interval '1 day', $5)`,
+        [
+          requestId,
+          randomUUID(),
+          randomUUID(),
+          `pr7-hidden-${requestId}.myshopify.com`,
+          randomUUID(),
+        ],
+      );
+      const visible = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM "PrivacyRequest" WHERE id = $1`,
+        [requestId],
+      );
+      expect(visible.rows[0]?.n).toBe("1");
+      await client.query("SET ROLE stocky_privacy_reader");
+      const hidden = await client.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM "PrivacyRequest" WHERE id = $1`,
+        [requestId],
+      );
+      expect(hidden.rows[0]?.n).toBe("0");
+    } finally {
+      await client.end();
+    }
   });
 
   it("runtime cannot BYPASSRLS or inherit PRIVACY erasure (restricted principal)", async () => {

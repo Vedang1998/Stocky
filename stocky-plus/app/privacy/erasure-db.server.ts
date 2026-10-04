@@ -1,6 +1,6 @@
 /**
  * Restricted privacy principals. Production requires an explicit erasure URL.
- * Disposable tests may SET ROLE from the migration owner.
+ * Disposable tests may SET SESSION AUTHORIZATION from the migration owner.
  */
 import { Client } from "pg";
 
@@ -39,7 +39,11 @@ export async function withPrivacyPrincipal<T>(
       if (process.env.NODE_ENV === "production") {
         throw new Error(`privacy_principal_url_required:${role}`);
       }
-      await client.query(`SET ROLE ${role}`);
+      try {
+        await client.query(`SET SESSION AUTHORIZATION ${role}`);
+      } catch {
+        await client.query(`SET ROLE ${role}`);
+      }
     }
     return await fn(client);
   } finally {
