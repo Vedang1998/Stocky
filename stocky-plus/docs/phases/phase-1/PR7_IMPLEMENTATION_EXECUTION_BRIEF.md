@@ -99,7 +99,7 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 | `app/tenant/db-context.server.ts` / `tenant-db.server.ts` | tenant transaction hosts | required participating-write guard |
 | `prisma/migrations/20261004180000_pr7_participating_write_guard/` | migrate-deploy catalog | guard functions exist before enforcement apply |
 | `prisma/migrations/20261004190000_pr7_timestamptz_index_names/` | migrate-deploy catalog | PR7 DateTime columns TIMESTAMPTZ(3); truncated unique/index names match Prisma |
-| `scripts/tenant-enforcement/sql.ts` `grantHelpersToRuntimeSql` | runtime EXECUTE | participating-write / lifecycle / generation_writable |
+| `scripts/tenant-enforcement/sql.ts` `grantHelpersToRuntimeSql` + `grantMigratedLifecycleHelpersToRuntime` | runtime EXECUTE | tenant helpers always; lifecycle/generation/participating-write granted to the actual runtime role (SET ROLE when already re-owned) |
 | `app/tenant/__tests__/helpers.ts` `resetPublicSchema` | tenant-access migrate deploy | now receives guard functions via the PR7 migration; no FORCE RLS |
 | `app/sync/uninstall.server.ts` | `processUninstall` | guard + LIVE→UNINSTALLED |
 | `app/sync/reinstall.server.ts` | `reactivateShopAfterVerifiedReinstall` | guard; REDACTED still denied |

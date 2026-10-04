@@ -6,6 +6,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Client } from "pg";
+import { defaultRuntimeRoleName } from "./connection";
 import { MERCHANT_SQL_TABLES } from "./manifest";
 import { quoteIdent } from "./sql";
 
@@ -29,6 +30,12 @@ export const PR7_NOLOGIN_ROLES = [
 ] as const;
 
 export const PR7_ALL_ROLES = [...PR7_LOGIN_ROLES, ...PR7_NOLOGIN_ROLES] as const;
+
+/** Roles the migration owner must belong to (NOINHERIT) to ALTER OWNER / default privileges. */
+export const PR7_OWNERSHIP_ROLES = [
+  ...PR7_ALL_ROLES,
+  "stocky_control_plane",
+] as const;
 
 export const PR7_APPLICATION_FUNCTIONS = [
   "stocky_admin_source_contradicted",
@@ -144,13 +151,263 @@ END IF;`;
 IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_control_plane') THEN
   CREATE ROLE stocky_control_plane LOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE${cpPasswordSql};
 END IF;`;
-  return `DO $$ BEGIN\n${stmts.join("\n")}\n${peer}\nEND$$;
-GRANT USAGE ON SCHEMA public TO ${grantList}, stocky_control_plane;
-GRANT ${grantList}, stocky_control_plane TO CURRENT_USER;`;
+  // Membership is required to ALTER OWNER / default privileges. Skip GRANT when
+  // already a member (shared-cluster roles created by another catalog). INHERIT
+  // stays false so a NOINHERIT migration owner cannot acquire erasure power.
+  const membership = PR7_OWNERSHIP_ROLES.map(
+    (role) => `
+IF NOT pg_has_role(current_user, ${quoteLiteral(role)}, 'MEMBER') THEN
+  BEGIN
+    EXECUTE format('GRANT %I TO CURRENT_USER WITH INHERIT FALSE', ${quoteLiteral(role)});
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE EXCEPTION 'pr7_role_grant_denied:%', ${quoteLiteral(role)}
+      USING ERRCODE = '42501';
+  END;
+END IF;`,
+  ).join("\n");
+  return `DO $$ BEGIN\n${stmts.join("\n")}\n${peer}\n${membership}\nEND$$;
+GRANT USAGE ON SCHEMA public TO ${grantList}, stocky_control_plane;`;
+}
+
+/**
+ * Bootstrap/superuser grant of existing cluster-global PR7 roles onto a
+ * CREATEROLE migration owner. Does not grant ADMIN OPTION (no membership
+ * escalation). INHERIT remains false.
+ */
+export async function grantExistingPr7RolesToMigrationOwner(
+  client: Client,
+  migrationOwner: string,
+): Promise<void> {
+  for (const role of PR7_OWNERSHIP_ROLES) {
+    const exists = await client.query(
+      `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+      [role],
+    );
+    if (!exists.rowCount) continue;
+    await client.query(
+      `GRANT ${quoteIdent(role)} TO ${quoteIdent(migrationOwner)} WITH INHERIT FALSE`,
+    );
+  }
 }
 
 function quoteLiteral(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/** Split SQL on top-level semicolons, preserving $$ function bodies. */
+export function splitSqlStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let buf = "";
+  let i = 0;
+  while (i < sql.length) {
+    if (sql[i] === "-" && sql[i + 1] === "-") {
+      const nl = sql.indexOf("\n", i);
+      i = nl === -1 ? sql.length : nl + 1;
+      continue;
+    }
+    if (sql[i] === "$" && sql[i + 1] === "$") {
+      const end = sql.indexOf("$$", i + 2);
+      if (end === -1) {
+        buf += sql.slice(i);
+        break;
+      }
+      buf += sql.slice(i, end + 2);
+      i = end + 2;
+      continue;
+    }
+    if (sql[i] === ";") {
+      const stmt = buf.trim();
+      if (stmt) statements.push(stmt);
+      buf = "";
+      i += 1;
+      continue;
+    }
+    buf += sql[i];
+    i += 1;
+  }
+  const tail = buf.trim();
+  if (tail) statements.push(tail);
+  return statements;
+}
+
+export const PR7_FUNCTION_OWNER_TRANSFER_MARKER =
+  "-- Function ownership is transferred AFTER REVOKE/GRANT EXECUTE.";
+
+/**
+ * GRANT EXECUTE on PR7 runtime-callable helpers to the actual runtime role
+ * (may be a fixture-local name, not hardcoded stocky_runtime). Must run while
+ * the migration owner still owns the functions.
+ */
+export async function grantPr7RuntimeExecutableFunctions(
+  client: Client,
+  runtimeRole: string,
+): Promise<void> {
+  const role = quoteIdent(runtimeRole);
+  const names = PR7_RUNTIME_EXECUTABLE_FUNCTIONS.map((entry) =>
+    entry.endsWith("()") ? entry.slice(0, -2) : entry,
+  );
+  const found = await client.query<{
+    proname: string;
+    identity_args: string;
+    oid: string;
+  }>(
+    `SELECT p.proname,
+            pg_catalog.pg_get_function_identity_arguments(p.oid) AS identity_args,
+            p.oid::text AS oid
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public'
+        AND p.proname = ANY($1::text[])`,
+    [names],
+  );
+  const foundNames = new Set(found.rows.map((row) => row.proname));
+  const missing = names.filter((name) => !foundNames.has(name));
+  if (missing.length > 0) {
+    throw new Error(`pr7_runtime_grant_missing_function:${missing.join(",")}`);
+  }
+  const identity = await client.query<{ current_user: string }>(
+    `SELECT current_user`,
+  );
+  const currentUser = identity.rows[0]?.current_user;
+  for (const row of found.rows) {
+    const already = await client.query<{ has: boolean }>(
+      `SELECT has_function_privilege($1, $2::oid, 'EXECUTE') AS has`,
+      [runtimeRole, row.oid],
+    );
+    if (already.rows[0]?.has) continue;
+    const owner = await lookupFunctionOwner(client, row.proname);
+    try {
+      if (owner && owner !== currentUser) {
+        await client.query(`SET ROLE ${quoteIdent(owner)}`);
+      }
+      await client.query(
+        `GRANT EXECUTE ON FUNCTION public.${quoteIdent(row.proname)}(${row.identity_args}) TO ${role}`,
+      );
+    } finally {
+      await client.query("RESET ROLE");
+    }
+  }
+}
+
+const MIGRATED_LIFECYCLE_HELPERS = [
+  "stocky_lifecycle_shared_lock(text)",
+  "stocky_generation_writable(text)",
+  "stocky_participating_write_guard(text)",
+] as const;
+
+function isInsufficientPrivilege(message: string): boolean {
+  return /permission denied|must be owner/i.test(message);
+}
+
+async function lookupFunctionOwner(
+  client: Client,
+  proname: string,
+): Promise<string | null> {
+  const row = await client.query<{ rolname: string }>(
+    `SELECT r.rolname
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       JOIN pg_roles r ON r.oid = p.proowner
+      WHERE n.nspname = 'public' AND p.proname = $1
+      LIMIT 1`,
+    [proname],
+  );
+  return row.rows[0]?.rolname ?? null;
+}
+
+async function lookupRelationOwner(
+  client: Client,
+  relname: string,
+): Promise<string | null> {
+  const row = await client.query<{ rolname: string }>(
+    `SELECT r.rolname
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       JOIN pg_roles r ON r.oid = c.relowner
+      WHERE n.nspname = 'public' AND c.relname = $1
+      LIMIT 1`,
+    [relname],
+  );
+  return row.rows[0]?.rolname ?? null;
+}
+
+async function resolveStatementOwner(
+  client: Client,
+  sql: string,
+): Promise<string | null> {
+  const normalized = sql.replace(/\s+/g, " ").trim();
+  const fn = normalized.match(
+    /FUNCTION\s+(?:public\.)?"?([A-Za-z_][A-Za-z0-9_]*)"?\s*\(/i,
+  );
+  if (fn?.[1]) {
+    return lookupFunctionOwner(client, fn[1]);
+  }
+  const table = normalized.match(
+    /(?:ALTER\s+TABLE|POLICY\s+\S+\s+ON|ON\s+TABLE|ON|FROM)\s+(?:public\.)?"([A-Za-z_][A-Za-z0-9_]*)"/i,
+  );
+  if (table?.[1]) {
+    return lookupRelationOwner(client, table[1]);
+  }
+  return null;
+}
+
+async function queryAsOwnerIfNeeded(
+  client: Client,
+  sql: string,
+): Promise<void> {
+  try {
+    await client.query(sql);
+    return;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!isInsufficientPrivilege(message)) throw err;
+    const owner = await resolveStatementOwner(client, sql);
+    const identity = await client.query<{ current_user: string }>(
+      `SELECT current_user`,
+    );
+    if (!owner || owner === identity.rows[0]?.current_user) throw err;
+    try {
+      await client.query(`SET ROLE ${quoteIdent(owner)}`);
+      await client.query(sql);
+    } finally {
+      await client.query("RESET ROLE");
+    }
+  }
+}
+
+/**
+ * GRANT EXECUTE on migrate-created lifecycle helpers to the actual runtime
+ * role. Skips missing functions. Uses SET ROLE when the helper was already
+ * transferred to a PR7 owner (idempotent CREATEROLE apply).
+ */
+export async function grantMigratedLifecycleHelpersToRuntime(
+  client: Client,
+  runtimeRole: string,
+): Promise<void> {
+  const role = quoteIdent(runtimeRole);
+  for (const spec of MIGRATED_LIFECYCLE_HELPERS) {
+    const proname = spec.slice(0, spec.indexOf("("));
+    const owner = await lookupFunctionOwner(client, proname);
+    if (!owner) continue;
+    const has = await client.query<{ has: boolean }>(
+      `SELECT has_function_privilege($1, $2::regprocedure, 'EXECUTE') AS has`,
+      [runtimeRole, `public.${spec}`],
+    );
+    if (has.rows[0]?.has) continue;
+    const identity = await client.query<{ current_user: string }>(
+      `SELECT current_user`,
+    );
+    try {
+      if (owner !== identity.rows[0]?.current_user) {
+        await client.query(`SET ROLE ${quoteIdent(owner)}`);
+      }
+      await client.query(
+        `GRANT EXECUTE ON FUNCTION public.${spec} TO ${role}`,
+      );
+    } finally {
+      await client.query("RESET ROLE");
+    }
+  }
 }
 
 export function pr7PrivacyHelpersFileSql(): string {
@@ -247,9 +504,9 @@ ${MERCHANT_SQL_TABLES.map(
   RETURN n;
 END;
 $$;
-ALTER FUNCTION public.stocky_privacy_shop_residual_count(text) OWNER TO stocky_privacy_target_owner;
 REVOKE ALL ON FUNCTION public.stocky_privacy_shop_residual_count(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_shop_residual_count(text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_shop_residual_count(text) OWNER TO stocky_privacy_target_owner;
 `);
   parts.push(`
 CREATE OR REPLACE FUNCTION public.stocky_privacy_enumerate_shop_surfaces(p_request_id text)
@@ -271,9 +528,9 @@ BEGIN
 ${shopInserts}
 END;
 $$;
-ALTER FUNCTION public.stocky_privacy_enumerate_shop_surfaces(text) OWNER TO stocky_privacy_target_owner;
 REVOKE ALL ON FUNCTION public.stocky_privacy_enumerate_shop_surfaces(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_enumerate_shop_surfaces(text) TO stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_enumerate_shop_surfaces(text) OWNER TO stocky_privacy_target_owner;
 `);
   return parts.join("\n");
 }
@@ -380,22 +637,125 @@ export async function applyPr7PrivacyHelpers(client: Client): Promise<void> {
   await client.query(pr7PrivacyRolesSql());
   const defaultOwners = [...PR7_ALL_ROLES, "stocky_control_plane"];
   for (const owner of defaultOwners) {
-    await client.query(
-      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(owner)}`,
-    );
-    await client.query(
-      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
-    );
-    await client.query(
-      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(owner)}`,
-    );
-    await client.query(
-      `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    try {
+      // FOR ROLE requires inheriting the target role. A NOINHERIT CREATEROLE
+      // owner SET ROLEs after granting schema CREATE (revoked after).
+      await client.query(
+        `GRANT USAGE, CREATE ON SCHEMA public TO ${quoteIdent(owner)}`,
+      );
+      await client.query(`SET ROLE ${quoteIdent(owner)}`);
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(owner)}`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(owner)}`,
+      );
+      await client.query(
+        `ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`pr7_default_privileges_failed:${owner}:${message}`);
+    } finally {
+      await client.query("RESET ROLE");
+      await client.query(
+        `REVOKE CREATE ON SCHEMA public FROM ${quoteIdent(owner)}`,
+      );
+    }
+  }
+  const identity = await client.query<{
+    current_user: string;
+    session_user: string;
+  }>(`SELECT current_user, session_user`);
+  if (identity.rows[0].current_user !== identity.rows[0].session_user) {
+    throw new Error(
+      `pr7_role_not_reset:${identity.rows[0].current_user}:${identity.rows[0].session_user}`,
     );
   }
-  await client.query(pr7IdempotentDropPoliciesSql());
-  await client.query(pr7PrivacyHelpersFileSql());
-  await client.query(pr7AuditAppendOnlySql());
-  await client.query(pr7AdditionalMerchantPrivacyPoliciesSql());
-  await client.query(pr7ControlPlaneTableGrantsSql());
+  // ALTER TABLE/FUNCTION OWNER TO a role requires that role to have CREATE
+  // on the schema. Keep it only for the ownership-transfer window.
+  const ownershipRoles = [...PR7_OWNERSHIP_ROLES];
+  try {
+    for (const owner of ownershipRoles) {
+      await client.query(
+        `GRANT USAGE, CREATE ON SCHEMA public TO ${quoteIdent(owner)}`,
+      );
+    }
+    try {
+      const drops = splitSqlStatements(pr7IdempotentDropPoliciesSql());
+      for (const drop of drops) {
+        await queryAsOwnerIfNeeded(client, drop);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`pr7_drop_policies_failed:${message}`);
+    }
+    const helpersSql = pr7PrivacyHelpersFileSql();
+    const markerAt = helpersSql.indexOf(PR7_FUNCTION_OWNER_TRANSFER_MARKER);
+    if (markerAt < 0) {
+      throw new Error("pr7_helpers_owner_marker_missing");
+    }
+    const beforeOwner = splitSqlStatements(helpersSql.slice(0, markerAt));
+    const ownerTransfer = splitSqlStatements(helpersSql.slice(markerAt));
+    const executeHelpers = async (
+      statements: string[],
+      indexOffset: number,
+    ): Promise<void> => {
+      for (let index = 0; index < statements.length; index += 1) {
+        try {
+          await queryAsOwnerIfNeeded(client, statements[index]!);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          const preview = statements[index]!.replace(/\s+/g, " ").slice(0, 160);
+          throw new Error(
+            `pr7_helpers_sql_failed:${indexOffset + index}:${preview}:${message}`,
+          );
+        }
+      }
+    };
+    await executeHelpers(beforeOwner, 0);
+    try {
+      await grantPr7RuntimeExecutableFunctions(
+        client,
+        defaultRuntimeRoleName(),
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`pr7_runtime_execute_grant_failed:${message}`);
+    }
+    await executeHelpers(ownerTransfer, beforeOwner.length);
+    try {
+      for (const stmt of splitSqlStatements(pr7AuditAppendOnlySql())) {
+        await queryAsOwnerIfNeeded(client, stmt);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`pr7_audit_append_only_failed:${message}`);
+    }
+    try {
+      for (const stmt of splitSqlStatements(
+        pr7AdditionalMerchantPrivacyPoliciesSql(),
+      )) {
+        await queryAsOwnerIfNeeded(client, stmt);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`pr7_additional_policies_failed:${message}`);
+    }
+    try {
+      await client.query(pr7ControlPlaneTableGrantsSql());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`pr7_control_plane_grants_failed:${message}`);
+    }
+  } finally {
+    for (const owner of ownershipRoles) {
+      await client.query(
+        `REVOKE CREATE ON SCHEMA public FROM ${quoteIdent(owner)}`,
+      );
+    }
+  }
 }

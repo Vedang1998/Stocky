@@ -26,6 +26,7 @@ import {
   PR7_APPLICATION_FUNCTIONS,
   PR7_RUNTIME_EXECUTABLE_FUNCTIONS,
   PR7_SECURITY_DEFINER_FUNCTIONS,
+  grantMigratedLifecycleHelpersToRuntime,
 } from "./pr7-privacy";
 import { grantHelpersToRuntimeSql, helperFunctionsSql, quoteIdent } from "./sql";
 import {
@@ -59,6 +60,61 @@ function assertSafeRoleName(name: string): string {
     throw new Error(`Unsafe role name rejected: ${name}`);
   }
   return name;
+}
+
+/**
+ * Run default-privilege DDL as `creatorRole`. NOINHERIT members cannot use
+ * `ALTER DEFAULT PRIVILEGES FOR ROLE` and must SET ROLE after a schema CREATE
+ * window (same pattern as PR7 helper apply).
+ */
+async function withCreatorRole(
+  client: Client,
+  creatorRole: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  assertSafeRoleName(creatorRole);
+  const session = await client.query<{ u: string }>(
+    `SELECT current_user::text AS u`,
+  );
+  const current = session.rows[0]?.u;
+  const switched = current !== creatorRole;
+  try {
+    if (switched) {
+      await client.query(
+        `GRANT USAGE, CREATE ON SCHEMA public TO ${quoteIdent(creatorRole)}`,
+      );
+      await client.query(`SET ROLE ${quoteIdent(creatorRole)}`);
+    }
+    await fn();
+  } finally {
+    if (switched) {
+      await client.query("RESET ROLE");
+      await client.query(
+        `REVOKE CREATE ON SCHEMA public FROM ${quoteIdent(creatorRole)}`,
+      );
+    }
+  }
+}
+
+async function revokeUnsafeDefaultTableSequencePrivs(
+  client: Client,
+  owner: string,
+  runtimeRole: string,
+): Promise<void> {
+  await withCreatorRole(client, owner, async () => {
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+    );
+  });
 }
 
 const APPROVED_RUNTIME_EXECUTABLE_FUNCTIONS = new Set([
@@ -413,15 +469,17 @@ export async function establishSafeFunctionDefaultPrivileges(
   assertSafeRoleName(creatorRole);
   const actions: string[] = [];
   const statements = [
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    `ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
+    `ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
   ];
-  for (const sql of statements) {
-    await client.query(sql);
-    actions.push(sql);
-  }
+  await withCreatorRole(client, creatorRole, async () => {
+    for (const sql of statements) {
+      await client.query(sql);
+      actions.push(sql);
+    }
+  });
   return actions;
 }
 
@@ -911,6 +969,7 @@ export async function provisionRoles(
     revokesApplied.push("CREATE ON SCHEMA public FROM PUBLIC");
 
     await client.query(grantHelpersToRuntimeSql(runtimeRole));
+    await grantMigratedLifecycleHelpersToRuntime(client, runtimeRole);
     grantsApplied.push(`EXECUTE ON ${TENANT_CONTEXT_HELPER_FN}`);
     grantsApplied.push(`EXECUTE ON ${TENANT_CONTEXT_VERSION_FN}`);
 
@@ -1011,17 +1070,10 @@ export async function provisionRoles(
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
         try {
           await establishSafeFunctionDefaultPrivileges(client, owner);
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+          await revokeUnsafeDefaultTableSequencePrivs(
+            client,
+            owner,
+            runtimeRole,
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -1047,24 +1099,19 @@ export async function provisionRoles(
       } else {
         for (const owner of creators) {
           if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
+          await revokeUnsafeDefaultTableSequencePrivs(
+            client,
+            owner,
+            runtimeRole,
           );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(runtimeRole)}`,
-          );
+          await withCreatorRole(client, owner, async () => {
+            await client.query(
+              `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC`,
+            );
+            await client.query(
+              `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(runtimeRole)}`,
+            );
+          });
           await establishSafeFunctionDefaultPrivileges(client, owner);
         }
         const after = await collectDefaultAclFailures(client, runtimeRole);
@@ -1090,17 +1137,10 @@ export async function provisionRoles(
       for (const owner of creators) {
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
         try {
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+          await revokeUnsafeDefaultTableSequencePrivs(
+            client,
+            owner,
+            runtimeRole,
           );
           await establishSafeFunctionDefaultPrivileges(client, owner);
         } catch (err) {

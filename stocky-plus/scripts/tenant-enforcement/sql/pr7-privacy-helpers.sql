@@ -16,7 +16,6 @@
 -- search_path locked on every SECURITY DEFINER function.
 -- NO hidden GRANT. PUBLIC EXECUTE revoked. No BYPASSRLS. FORCE RLS on merchant tables.
 
-
 -- roles provisioned by tenant-enforcement pr7PrivacyRolesSql()
 
 -- ---------------------------------------------------------------------------
@@ -61,42 +60,14 @@ $$;
 REVOKE ALL ON FUNCTION public.stocky_shop_processing_enabled(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_shop_processing_enabled(text) TO stocky_runtime;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 -- Target-scoped customer-erasure barrier. Keys are shop/generation + customer/order
 -- identities ordinary writers can compute. Not keyed by privacy request id.
 
 -- Minimized post-completion suppression for queued/replayed pre-erasure payloads.
 -- Not lifetime suppression of legitimate later customer data (Q-008 OPEN).
 
-
-
-
-
-
-
-
-
 -- TA-01 protected WriterAdmissionOrigin (proposed disposable contract only)
 
-
-ALTER TABLE public."WriterAdmissionOrigin" OWNER TO stocky_admission_origin_owner;
-ALTER TABLE public."WriterAdmissionOriginTarget" OWNER TO stocky_admission_origin_owner;
 ALTER TABLE public."WriterAdmissionOrigin" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."WriterAdmissionOrigin" FORCE ROW LEVEL SECURITY;
 ALTER TABLE public."WriterAdmissionOriginTarget" ENABLE ROW LEVEL SECURITY;
@@ -121,13 +92,11 @@ GRANT SELECT, INSERT, UPDATE ON public."WriterAdmissionOrigin" TO stocky_admissi
 GRANT SELECT, INSERT, DELETE ON public."WriterAdmissionOriginTarget" TO stocky_admission_origin_owner;
 GRANT SELECT ON public."WriterAdmissionOrigin", public."WriterAdmissionOriginTarget" TO stocky_lifecycle_gate_owner;
 GRANT SELECT ON public."Shop", public."ShopInstallGeneration", public."DurableJob" TO stocky_admission_origin_owner;
+ALTER TABLE public."WriterAdmissionOrigin" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."WriterAdmissionOriginTarget" OWNER TO stocky_admission_origin_owner;
 
 -- DO-01 authenticated original-admin capture (proposed disposable contract).
 -- Not a second general auth subsystem. PostgreSQL does not verify Shopify tokens.
-ALTER TABLE public."OriginalAdminSession" OWNER TO stocky_admission_origin_owner;
-ALTER TABLE public."OriginalAdminCapture" OWNER TO stocky_admission_origin_owner;
-ALTER TABLE public."QueuedWorkSighting" OWNER TO stocky_admission_origin_owner;
-ALTER TABLE public."SourceEffectLink" OWNER TO stocky_lifecycle_gate_owner;
 ALTER TABLE public."OriginalAdminSession" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."OriginalAdminSession" FORCE ROW LEVEL SECURITY;
 ALTER TABLE public."OriginalAdminCapture" ENABLE ROW LEVEL SECURITY;
@@ -158,6 +127,10 @@ GRANT SELECT, INSERT, UPDATE ON public."QueuedWorkSighting" TO stocky_admission_
 GRANT SELECT ON public."OriginalAdminCapture" TO stocky_lifecycle_gate_owner;
 GRANT SELECT ON public."QueuedWorkSighting" TO stocky_lifecycle_gate_owner;
 GRANT SELECT, INSERT, UPDATE ON public."SourceEffectLink" TO stocky_lifecycle_gate_owner;
+ALTER TABLE public."OriginalAdminSession" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."OriginalAdminCapture" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."QueuedWorkSighting" OWNER TO stocky_admission_origin_owner;
+ALTER TABLE public."SourceEffectLink" OWNER TO stocky_lifecycle_gate_owner;
 
 -- AO-03: serialize capture against non-fresh provenance on (canonicalDomain, source digest).
 -- Namespace 1347573587 = ASCII 'PR7S'. Taken after the lifecycle shared lock.
@@ -180,7 +153,6 @@ BEGIN
   );
 END;
 $$;
-ALTER FUNCTION public.stocky_source_content_lock(text, text) OWNER TO stocky_admission_origin_owner;
 REVOKE ALL ON FUNCTION public.stocky_source_content_lock(text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_source_content_lock(text, text) TO stocky_lifecycle_gate_owner;
 
@@ -216,7 +188,6 @@ BEGIN
   );
 END;
 $$;
-ALTER FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
 REVOKE ALL ON FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) TO stocky_runtime, stocky_control_plane, stocky_original_admission, stocky_admin_capture, stocky_admission_origin_owner;
 
@@ -244,7 +215,6 @@ BEGIN
      AND (p_correlated_capture_id IS NULL OR id IS DISTINCT FROM p_correlated_capture_id);
 END;
 $$;
-ALTER FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text) OWNER TO stocky_admission_origin_owner;
 REVOKE ALL ON FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text)
   TO stocky_original_admission, stocky_control_plane, stocky_lifecycle_gate_owner;
@@ -272,7 +242,6 @@ AS $$
      LIMIT 1
   ), false);
 $$;
-ALTER FUNCTION public.stocky_admin_source_contradicted(text, text, text) OWNER TO stocky_admission_origin_owner;
 REVOKE ALL ON FUNCTION public.stocky_admin_source_contradicted(text, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_admin_source_contradicted(text, text, text)
   TO stocky_original_admission, stocky_lifecycle_gate_owner, stocky_control_plane;
@@ -609,9 +578,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) OWNER TO stocky_admission_origin_owner;
-ALTER FUNCTION public.stocky_commit_writer_admission(text) OWNER TO stocky_admission_origin_owner;
-ALTER FUNCTION public.stocky_recover_writer_admission(text) OWNER TO stocky_admission_origin_owner;
 REVOKE ALL ON FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_commit_writer_admission(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_recover_writer_admission(text) FROM PUBLIC;
@@ -621,9 +587,6 @@ GRANT EXECUTE ON FUNCTION public.stocky_recover_writer_admission(text) TO stocky
 GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_id() TO stocky_original_admission, stocky_admission_origin_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_current_tenant_context_version() TO stocky_original_admission, stocky_admission_origin_owner;
 -- Remaining lock/canonical GRANTs are applied after those helpers exist (see patch_contract).
-
-
-
 
 ALTER TABLE public."ShopRoleAssignment" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public."ShopRoleAssignment" FORCE ROW LEVEL SECURITY;
@@ -830,10 +793,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.stocky_privacy_capability_allows(text, text) OWNER TO stocky_privacy_capability_owner;
-ALTER FUNCTION public.stocky_privacy_row_in_manifest(text, text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_privacy_enumerate_targets(text) OWNER TO stocky_privacy_target_owner;
-
 REVOKE ALL ON FUNCTION public.stocky_privacy_capability_allows(text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_row_in_manifest(text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_privacy_enumerate_targets(text) FROM PUBLIC;
@@ -1000,7 +959,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.stocky_privacy_finalize_shop_delete(text,text,text,text) OWNER TO stocky_privacy_finalizer_owner;
 REVOKE ALL ON FUNCTION public.stocky_privacy_finalize_shop_delete(text,text,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_finalize_shop_delete(text,text,text,text) TO stocky_privacy_erasure;
 GRANT SELECT, DELETE ON public."Shop" TO stocky_privacy_finalizer_owner;
@@ -1059,10 +1017,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.stocky_lifecycle_lock_key(text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_lifecycle_shared_lock(text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_lifecycle_exclusive_lock(text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_generation_writable(text) OWNER TO stocky_lifecycle_gate_owner;
 REVOKE ALL ON FUNCTION public.stocky_lifecycle_lock_key(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_lifecycle_shared_lock(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_lifecycle_exclusive_lock(text) FROM PUBLIC;
@@ -1148,7 +1102,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.stocky_verify_platform_assignment(text,text,text) OWNER TO stocky_assignment_verifier_owner;
 REVOKE ALL ON FUNCTION public.stocky_verify_platform_assignment(text,text,text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_verify_platform_assignment(text,text,text) TO stocky_control_plane, stocky_runtime;
 GRANT SELECT ON public."ShopRoleAssignment" TO stocky_assignment_verifier_owner;
@@ -1381,7 +1334,6 @@ BEGIN
 END;
 $$;
 
-
 DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, timestamptz, text);
 DROP FUNCTION IF EXISTS public.stocky_fact_write_guard(text, text, text, text, timestamptz, text);
 DROP FUNCTION IF EXISTS public.stocky_customer_write_guard(text, text, text, text, timestamptz, text, boolean);
@@ -1547,7 +1499,6 @@ BEGIN
   );
 END;
 $$;
-
 
 CREATE OR REPLACE FUNCTION public.stocky_privacy_customer_residual_count(p_request_id text)
 RETURNS bigint
@@ -1756,16 +1707,7 @@ $$;
 -- omitted disposable stocky_detect_unguarded_cp_write
 
 -- Grants / ownership for CC-GEN helpers. PUBLIC EXECUTE revoked.
-ALTER FUNCTION public.stocky_privacy_claim_attempt(text, text, text) OWNER TO stocky_privacy_target_owner;
 GRANT INSERT, UPDATE ON public."PrivacyAttempt" TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_customer_targets_for_request(text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_privacy_install_customer_barrier(text, text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_privacy_customer_residual_count(text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_privacy_complete_customer_redact(text, text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_privacy_data_request_coverage(text) OWNER TO stocky_privacy_target_owner;
-ALTER FUNCTION public.stocky_shop_canonical_domain(text, text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_writer_origin_generation(text, text, text) OWNER TO stocky_lifecycle_gate_owner;
 
 REVOKE ALL ON FUNCTION public.stocky_shop_canonical_domain(text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_writer_origin_generation(text, text, text) FROM PUBLIC;
@@ -1840,14 +1782,10 @@ CREATE POLICY completed_target_gate_select ON public."PrivacyCompletedTarget"
 -- Independent source-derived snapshot (scanner output; not SELECT FROM inventory).
 -- Pinned to X application sources. Completeness must reconcile against these rows.
 
-
 -- DO-01/DO-02 proposed capture-to-producer and effect-host boundary (disposable).
 -- PostgreSQL does not verify Shopify tokens. This models the application
 -- boundary after requireAdminTenant / authenticate.admin.
-
-REVOKE ALL ON public."OriginalAdminCapture" FROM PUBLIC;
-REVOKE ALL ON public."OriginalAdminSession" FROM PUBLIC;
-REVOKE ALL ON public."QueuedWorkSighting" FROM PUBLIC;
+-- PUBLIC table revoke for these relations already ran before OWNER transfer.
 
 CREATE OR REPLACE FUNCTION public.stocky_establish_modeled_admin_session(
   p_shop_id text,
@@ -2105,7 +2043,6 @@ AS $$
     'hex'
   );
 $$;
-ALTER FUNCTION public.stocky_effect_commitment(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
 REVOKE ALL ON FUNCTION public.stocky_effect_commitment(text, text, text, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_effect_commitment(text, text, text, text, text) TO stocky_runtime, stocky_control_plane;
 
@@ -2240,12 +2177,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) OWNER TO stocky_admission_origin_owner;
-ALTER FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
-ALTER FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
-ALTER FUNCTION public.stocky_bind_execution_context(text) OWNER TO stocky_lifecycle_gate_owner;
-ALTER FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
-
 REVOKE ALL ON FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text, text) FROM PUBLIC;
@@ -2271,3 +2202,37 @@ DROP POLICY IF EXISTS audit_gate_insert ON public."AuditEvent";
 CREATE POLICY audit_gate_insert ON public."AuditEvent"
   FOR INSERT TO stocky_lifecycle_gate_owner
   WITH CHECK (true);
+
+-- Function ownership is transferred AFTER REVOKE/GRANT EXECUTE.
+-- Non-superuser CREATEROLE owners cannot REVOKE/GRANT on a function they no longer own.
+ALTER FUNCTION public.stocky_source_content_lock(text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_source_commitment(text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_mark_uncorrelated_captures_contradicted(text, text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_admin_source_contradicted(text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_record_writer_admission(text,text,text,text,text,text,text,timestamptz,text,text,text,text,text,text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_commit_writer_admission(text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_recover_writer_admission(text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_privacy_capability_allows(text, text) OWNER TO stocky_privacy_capability_owner;
+ALTER FUNCTION public.stocky_privacy_row_in_manifest(text, text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_enumerate_targets(text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_finalize_shop_delete(text,text,text,text) OWNER TO stocky_privacy_finalizer_owner;
+ALTER FUNCTION public.stocky_lifecycle_lock_key(text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_lifecycle_shared_lock(text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_lifecycle_exclusive_lock(text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_generation_writable(text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_verify_platform_assignment(text,text,text) OWNER TO stocky_assignment_verifier_owner;
+ALTER FUNCTION public.stocky_privacy_claim_attempt(text, text, text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_customer_targets_for_request(text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_install_customer_barrier(text, text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_customer_write_guard(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_privacy_customer_residual_count(text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_complete_customer_redact(text, text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_privacy_data_request_coverage(text) OWNER TO stocky_privacy_target_owner;
+ALTER FUNCTION public.stocky_shop_canonical_domain(text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_writer_origin_generation(text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_effect_commitment(text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_establish_modeled_admin_session(text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_capture_original_admin_command(text, text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_note_queued_work(text, text, text, text, text, text, text) OWNER TO stocky_admission_origin_owner;
+ALTER FUNCTION public.stocky_bind_execution_context(text) OWNER TO stocky_lifecycle_gate_owner;
+ALTER FUNCTION public.stocky_apply_bound_customer_effect(text, text, text, text, text, text, text, text) OWNER TO stocky_lifecycle_gate_owner;

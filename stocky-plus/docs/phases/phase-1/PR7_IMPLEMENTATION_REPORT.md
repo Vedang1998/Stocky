@@ -201,6 +201,7 @@ Implemented in this pass (local coherent checkpoint, not B0 READY):
 - `noteQueuedWork` source commitment uses operation+target+body (same `stocky_source_commitment` as capture/admission).
 - Focused Heavy steps for foundation, races, and privacy zero-collection guard.
 - Additive `20261004190000_pr7_timestamptz_index_names` (does **not** rewrite `20260918120000`): PR7 `TIMESTAMP(3)` columns become `TIMESTAMPTZ(3)` with UTC `USING`; truncated `OriginalAdminCapture` unique and `PrivacyCustomerTargetBarrier` index names renamed to Prisma 63-char identifiers. `PrivacyAttempt.updatedAt` remains `TIMESTAMP(3)` to match `@updatedAt`.
+- Non-superuser CREATEROLE apply: existing cluster-global PR7 roles are granted to the fixture/migration owner with `INHERIT FALSE` and no `ADMIN OPTION`. `pr7PrivacyRolesSql` skips `GRANT … TO CURRENT_USER` when already a member and fails closed with `pr7_role_grant_denied` otherwise. `REVOKE`/`GRANT EXECUTE` on PR7 helpers run while the migration owner still owns the function; `ALTER FUNCTION … OWNER TO` is last. Default privileges use `SET ROLE` plus a schema-CREATE window; table policies are created before table ownership transfer. Duplicate post-OWNER `REVOKE` on capture tables was removed. Fixture-local runtime roles receive EXECUTE via `grantPr7RuntimeExecutableFunctions` / `grantMigratedLifecycleHelpersToRuntime` before ownership transfer. Idempotent re-apply uses `SET ROLE` for privilege DDL and default-privilege establishment on already-transferred owners. Local `non-superuser-migration-owner.test.ts` **3 passed / 3** (`completed_steps=298`) after these corrections; exact-head CI on this SHA is not yet this evidence.
 
 ### Exact-head drift failure on `90a3d77` (recorded; not rerun-to-green)
 
@@ -213,5 +214,17 @@ Automatic `pull_request` [37221129407](https://github.com/Vedang1998/Stocky/acti
 | Gate | `111492251646` | FAILURE |
 
 Local recreate after `DROP SCHEMA public CASCADE` + `prisma migrate deploy`: `prisma migrate diff` exit 2. Observed `[*] Changed` type changes on the PR7 DateTime columns listed above plus the two truncated-index renames. Drift parser reports no allowlisted SQL statements → fail-closed. Prior Heavy `37220280203` on `d8764a9` failed the same step. Old-migration rewrite remains forbidden.
+
+### Exact-head non-superuser apply failure on `ca48393` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37221810539](https://github.com/Vedang1998/Stocky/actions/runs/37221810539) · `head_sha=ca483930264b5e4aab56127a41062b55c72974ae`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111493494090` | SUCCESS · `full_ci=true` |
+| Heavy | `111493511602` | FAILURE at **Tenant non-superuser migration-owner full enforcement** (`firstApply.ok` false; `pr7_privacy_helpers` `permission denied to grant role "stocky_privacy_reader"`) |
+| Gate | `111497823136` | FAILURE |
+
+Prisma schema drift **passed** on this SHA. Cluster-global PR7 roles from the earlier same-job catalog apply are not administrable by a later CREATEROLE fixture owner. Not rerun-to-green.
 
 This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and remaining matrix executions are still required.
