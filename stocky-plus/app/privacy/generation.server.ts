@@ -27,7 +27,7 @@ const BLOCK_CREATE = new Set<string>([
 export async function ensureLiveInstallGeneration(input: {
   shopId: string;
   canonicalDomain: string;
-}): Promise<{ id: string; fence: string }> {
+}): Promise<{ id: string; fence: string; targetShopId: string }> {
   const prisma = getControlPlanePrisma();
   return prisma.$transaction(async (tx) => {
     await assertParticipatingWriteGuard(tx, input.canonicalDomain);
@@ -50,7 +50,7 @@ export async function ensureLiveInstallGeneration(input: {
       },
     });
     if (live) {
-      return { id: live.id, fence: live.fence };
+      return { id: live.id, fence: live.fence, targetShopId: live.targetShopId };
     }
     const created = await tx.shopInstallGeneration.create({
       data: {
@@ -61,7 +61,11 @@ export async function ensureLiveInstallGeneration(input: {
         fence: GENERATION_FENCE.LIVE,
       },
     });
-    return { id: created.id, fence: created.fence };
+    return {
+      id: created.id,
+      fence: created.fence,
+      targetShopId: created.targetShopId,
+    };
   });
 }
 
