@@ -4,11 +4,11 @@
 **Work unit:** PR 3 — Database enforcement
 **Branch:** `phase-1/tenant-enforcement`
 **Generator:** `scripts/tenant-enforcement/inventory.ts` (deterministic)
-**Content digest:** `11bc7084bf0ed567`
-**Merchant-owned tables:** 35
+**Content digest:** `5d8027ca0ad8f2ee`
+**Merchant-owned tables:** 36
 **Bootstrap tables:** 2
 **Control/maintenance tables:** 4
-**Composite parent keys:** 35
+**Composite parent keys:** 36
 **Composite foreign keys:** 19
 
 > This file is mechanically generated. Do not edit by hand.
@@ -78,6 +78,7 @@
 | ShopifyOrderAgreementFact | `ShopifyOrderAgreementFact` | non-null in Prisma (no expand/backfill) | — | ShopifyOrderFact | ShopifyOrderAgreementSaleFact | — | `ShopifyOrderAgreementFact_shopId_id_key` (PR1) | `ShopifyOrderAgreementFact_shopId_id_key` | `ShopifyOrderAgreementFact_shopId_shopifyOrderGid_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyOrderAgreementFact_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ShopifyOrderAgreementSaleFact | `ShopifyOrderAgreementSaleFact` | non-null in Prisma (no expand/backfill) | — | ShopifyOrderAgreementFact | — | — | `ShopifyOrderAgreementSaleFact_shopId_id_key` (PR1) | `ShopifyOrderAgreementSaleFact_shopId_id_key` | `ShopifyOrderAgreementSaleFact_shopId_shopifyAgreementGid_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyOrderAgreementSaleFact_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ShopifyOrderRefundTransactionFact | `ShopifyOrderRefundTransactionFact` | non-null in Prisma (no expand/backfill) | — | ShopifyOrderRefundFact | — | — | `ShopifyOrderRefundTransactionFact_shopId_id_key` (PR1) | `ShopifyOrderRefundTransactionFact_shopId_id_key` | `ShopifyOrderRefundTransactionFact_shopId_shopifyRefundGid_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyOrderRefundTransactionFact_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| AuditEvent | `AuditEvent` | non-null in Prisma (no expand/backfill) | — | — | — | — | `AuditEvent_shopId_id_key` (PR1) | `AuditEvent_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_AuditEvent_shopId_immutable` | no | SELECT/INSERT | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 
 ## Composite parent keys (`shopId`, `id`)
 
@@ -118,6 +119,7 @@
 | `ShopifyOrderAgreementFact_shopId_id_key` | `ShopifyOrderAgreementFact` | (shopId, id) |
 | `ShopifyOrderAgreementSaleFact_shopId_id_key` | `ShopifyOrderAgreementSaleFact` | (shopId, id) |
 | `ShopifyOrderRefundTransactionFact_shopId_id_key` | `ShopifyOrderRefundTransactionFact` | (shopId, id) |
+| `AuditEvent_shopId_id_key` | `AuditEvent` | (shopId, id) |
 
 ## Composite tenant foreign keys
 
@@ -182,7 +184,8 @@
 | `ShopifyOrderAgreementFact` | `ShopifyOrderAgreementFact_shopId_not_null` | `ShopifyOrderAgreementFact_shopId_fkey_shop` | `ShopifyOrderAgreementFact_shopId_id_key` | `ShopifyOrderAgreementFact_tenant_select`, `ShopifyOrderAgreementFact_tenant_insert`, `ShopifyOrderAgreementFact_tenant_update`, `ShopifyOrderAgreementFact_tenant_delete` | `trg_ShopifyOrderAgreementFact_shopId_immutable` |
 | `ShopifyOrderAgreementSaleFact` | `ShopifyOrderAgreementSaleFact_shopId_not_null` | `ShopifyOrderAgreementSaleFact_shopId_fkey_shop` | `ShopifyOrderAgreementSaleFact_shopId_id_key` | `ShopifyOrderAgreementSaleFact_tenant_select`, `ShopifyOrderAgreementSaleFact_tenant_insert`, `ShopifyOrderAgreementSaleFact_tenant_update`, `ShopifyOrderAgreementSaleFact_tenant_delete` | `trg_ShopifyOrderAgreementSaleFact_shopId_immutable` |
 | `ShopifyOrderRefundTransactionFact` | `ShopifyOrderRefundTransactionFact_shopId_not_null` | `ShopifyOrderRefundTransactionFact_shopId_fkey_shop` | `ShopifyOrderRefundTransactionFact_shopId_id_key` | `ShopifyOrderRefundTransactionFact_tenant_select`, `ShopifyOrderRefundTransactionFact_tenant_insert`, `ShopifyOrderRefundTransactionFact_tenant_update`, `ShopifyOrderRefundTransactionFact_tenant_delete` | `trg_ShopifyOrderRefundTransactionFact_shopId_immutable` |
+| `AuditEvent` | `AuditEvent_shopId_not_null` | `AuditEvent_shopId_fkey_shop` | `AuditEvent_shopId_id_key` | `AuditEvent_tenant_select`, `AuditEvent_tenant_insert`, `AuditEvent_tenant_update`, `AuditEvent_tenant_delete` | `trg_AuditEvent_shopId_immutable` |
 
 ## Schema verification note
 
-Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **35**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.
+Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **36**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.

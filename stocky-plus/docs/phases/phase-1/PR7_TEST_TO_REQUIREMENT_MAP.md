@@ -51,4 +51,5 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | GUC locator is not capability | `pr7-privacy-races.test.ts` | implemented |
 | Customer residual visible vs RLS-empty; then child-first erase completes | `pr7-privacy-races.test.ts` | implemented |
 | Restricted principal SET ROLE / EXECUTE admission | `pr7-privacy-races.test.ts` + foundation | implemented |
+| Intake validate-before-persist; duplicate webhook reuses delivery/work/generation | `pr7-privacy-foundation.test.ts` | implemented |
 | Q-008 | production decision | OPEN / unmet as legal default |
