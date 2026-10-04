@@ -45,6 +45,7 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | Writer source coverage + omission | `scripts/privacy/__tests__/participating-writers.test.ts` | implemented |
 | Pause default off | `app/privacy/__tests__/pause.test.ts` | implemented |
 | Fresh/upgrade migrations | enforcement apply in foundation + existing apply/partial-apply suites | reuse with PR7 step |
+| Prisma schema drift after PR7 tables (timestamptz + untruncated index names) | `scripts/tenant-indexes/tests/schema-drift.migration.test.ts` + `npm run tenant:schema:drift` | additive `20261004190000`; TIMESTAMP(3) on `90a3d77` failed Heavy `37221129407` |
 | Redis drain / D-scratch leftover | `scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts` | implemented; requires REDIS_URL |
 | Assignment revoke/effect winners + response-loss retry | `pr7-privacy-races.test.ts` | implemented |
 | Provenance: webhook cannot mint ADMIN; matching effect; second effectId/tamper deny; UNATTRIBUTED no upgrade | `pr7-privacy-races.test.ts` | implemented |

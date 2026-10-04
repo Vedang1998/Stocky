@@ -200,5 +200,18 @@ Implemented in this pass (local coherent checkpoint, not B0 READY):
 - Customer-redact child-first DELETE of enumerated line/order/audit rows after committed APPLYING+manifest; complete uses SQL status (does not treat RLS-empty as absent).
 - `noteQueuedWork` source commitment uses operation+target+body (same `stocky_source_commitment` as capture/admission).
 - Focused Heavy steps for foundation, races, and privacy zero-collection guard.
+- Additive `20261004190000_pr7_timestamptz_index_names` (does **not** rewrite `20260918120000`): PR7 `TIMESTAMP(3)` columns become `TIMESTAMPTZ(3)` with UTC `USING`; truncated `OriginalAdminCapture` unique and `PrivacyCustomerTargetBarrier` index names renamed to Prisma 63-char identifiers. `PrivacyAttempt.updatedAt` remains `TIMESTAMP(3)` to match `@updatedAt`.
+
+### Exact-head drift failure on `90a3d77` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37221129407](https://github.com/Vedang1998/Stocky/actions/runs/37221129407) · `head_sha=90a3d77d7a362c785db7d84ff576e6b23ac70d69`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111491582794` | SUCCESS · `full_ci=true` |
+| Heavy | `111491602716` | FAILURE at **Prisma schema drift** (`npm run tenant:schema:drift`) |
+| Gate | `111492251646` | FAILURE |
+
+Local recreate after `DROP SCHEMA public CASCADE` + `prisma migrate deploy`: `prisma migrate diff` exit 2. Observed `[*] Changed` type changes on the PR7 DateTime columns listed above plus the two truncated-index renames. Drift parser reports no allowlisted SQL statements → fail-closed. Prior Heavy `37220280203` on `d8764a9` failed the same step. Old-migration rewrite remains forbidden.
 
 This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and remaining matrix executions are still required.

@@ -74,6 +74,65 @@ describe("prisma schema drift check", () => {
     const diff = runPrismaSchemaDriftDiff(DATABASE_URL);
     expect(diff.exitCode).toBe(0);
     expect(() => assertNoPrismaSchemaDrift(DATABASE_URL)).not.toThrow();
+
+    const typeClient = new Client({ connectionString: DATABASE_URL });
+    await typeClient.connect();
+    try {
+      const types = await typeClient.query<{
+        table_name: string;
+        column_name: string;
+        data_type: string;
+        datetime_precision: number | null;
+      }>(
+        `SELECT table_name, column_name, data_type, datetime_precision
+         FROM information_schema.columns
+         WHERE table_schema = 'public'
+           AND (table_name, column_name) IN (
+             ('AuditEvent', 'createdAt'),
+             ('PrivacyAttempt', 'createdAt'),
+             ('PrivacyAttempt', 'updatedAt'),
+             ('OriginalAdminCapture', 'capturedAt')
+           )
+         ORDER BY table_name, column_name`,
+      );
+      const byCol = Object.fromEntries(
+        types.rows.map((r) => [`${r.table_name}.${r.column_name}`, r]),
+      );
+      expect(byCol["AuditEvent.createdAt"]?.data_type).toBe(
+        "timestamp with time zone",
+      );
+      expect(byCol["AuditEvent.createdAt"]?.datetime_precision).toBe(3);
+      expect(byCol["PrivacyAttempt.createdAt"]?.data_type).toBe(
+        "timestamp with time zone",
+      );
+      expect(byCol["OriginalAdminCapture.capturedAt"]?.data_type).toBe(
+        "timestamp with time zone",
+      );
+      expect(byCol["PrivacyAttempt.updatedAt"]?.data_type).toBe(
+        "timestamp without time zone",
+      );
+
+      const indexes = await typeClient.query<{ relname: string }>(
+        `SELECT c.relname
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         WHERE n.nspname = 'public'
+           AND c.relkind = 'i'
+           AND c.relname IN (
+             'OriginalAdminCapture_canonicalDomain_sourceKind_sourceIdent_key',
+             'OriginalAdminCapture_canonicalDomain_sourceKind_sourceIdentity_',
+             'PrivacyCustomerTargetBarrier_shopId_generationId_targetKind_idx',
+             'PrivacyCustomerTargetBarrier_shopId_generationId_targetKind_tar'
+           )`,
+      );
+      const names = indexes.rows.map((r) => r.relname).sort();
+      expect(names).toEqual([
+        "OriginalAdminCapture_canonicalDomain_sourceKind_sourceIdent_key",
+        "PrivacyCustomerTargetBarrier_shopId_generationId_targetKind_idx",
+      ]);
+    } finally {
+      await typeClient.end();
+    }
   }, 300_000);
 
   it("dropping one expected compatibility index fails both verify and prisma drift", async () => {
@@ -119,6 +178,28 @@ describe("prisma schema drift check", () => {
       const verifyAfter = await verifyIndexes(client);
       expect(verifyAfter.ok).toBe(true);
       expect(TENANT_COMPATIBILITY_INDEXES.length).toBe(44);
+    } finally {
+      await client.end();
+    }
+
+    const diff = runPrismaSchemaDriftDiff(DATABASE_URL);
+    expect(diff.exitCode).toBe(2);
+    expect(() => assertNoPrismaSchemaDrift(DATABASE_URL)).toThrow(/drift/i);
+  }, 300_000);
+
+  it("reverting a PR7 timestamptz column to timestamp fails prisma drift", async () => {
+    await resetPublicSchema(prisma);
+    run("npx", ["prisma", "migrate", "deploy"]);
+
+    const client = new Client({ connectionString: DATABASE_URL });
+    await client.connect();
+    try {
+      await applyIndexes(client, { apply: true });
+      await client.query(
+        `ALTER TABLE "AuditEvent"
+         ALTER COLUMN "createdAt" TYPE TIMESTAMP(3)
+         USING "createdAt" AT TIME ZONE 'UTC'`,
+      );
     } finally {
       await client.end();
     }
