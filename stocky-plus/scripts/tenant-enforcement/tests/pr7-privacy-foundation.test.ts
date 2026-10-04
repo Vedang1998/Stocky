@@ -9,6 +9,8 @@ import { randomUUID } from "node:crypto";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import { resetSchemaAndApplyEnforcement } from "./helpers";
 import { processPrivacyRequest } from "../../../app/privacy/execute.server";
+import { intakeComplianceWebhook } from "../../../app/privacy/intake.server";
+import { PrivacyBoundaryError } from "../../../app/privacy/errors.server";
 import { isPrivacyPauseEnabled } from "../../../app/privacy/pause.server";
 import { evaluateWriterCompleteness } from "../../privacy/participating-writers";
 import { resetControlPlanePrismaForTests } from "../../../app/sync/control-plane-db.server";
@@ -283,5 +285,70 @@ describe("PR7 privacy/roles/audit foundation", () => {
       await client.end();
     }
   });
-});
 
+  it("intake persists distinct delivery/work/generation ids (positive)", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-intake-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: {
+        id: shopId,
+        myshopifyDomain: domain,
+        processingEnabled: false,
+        processingDisabledReason: "UNINSTALLED",
+      },
+    });
+    const webhookId = `wh_${randomUUID()}`;
+    const first = await intakeComplianceWebhook({
+      shop: domain,
+      topic: "customers/data_request",
+      payload: { customer: { id: "4242" } },
+      webhookId,
+    });
+    expect(first.duplicate).toBe(false);
+    expect(first.state).toBe("RECEIVED");
+    expect(new Set([first.deliveryId, first.workId, first.generationId]).size).toBe(
+      3,
+    );
+    const retry = await intakeComplianceWebhook({
+      shop: domain,
+      topic: "customers/data_request",
+      payload: { customer: { id: "4242" } },
+      webhookId,
+    });
+    expect(retry.duplicate).toBe(true);
+    expect(retry.requestId).toBe(first.requestId);
+    expect(retry.workId).toBe(first.workId);
+    expect(retry.deliveryId).toBe(first.deliveryId);
+    const stored = await prisma.privacyRequest.findUniqueOrThrow({
+      where: { id: first.requestId },
+    });
+    expect(stored.duplicateCount).toBe(1);
+    expect(stored.deliveryId).not.toBe(stored.workId);
+  });
+
+  it("intake rejects unknown topic and missing customer before persist (negative)", async () => {
+    const before = await prisma.privacyRequest.count();
+    await expect(
+      intakeComplianceWebhook({
+        shop: "pr7-intake-deny.myshopify.com",
+        topic: "orders/create",
+        payload: { customer: { id: "1" } },
+        webhookId: `wh_${randomUUID()}`,
+      }),
+    ).rejects.toBeInstanceOf(PrivacyBoundaryError);
+    await expect(
+      intakeComplianceWebhook({
+        shop: "pr7-intake-deny.myshopify.com",
+        topic: "customers/redact",
+        payload: { customer: {} },
+        webhookId: `wh_${randomUUID()}`,
+      }),
+    ).rejects.toMatchObject({ code: "customer_target_missing" });
+    expect(await prisma.privacyRequest.count()).toBe(before);
+    expect(
+      await prisma.shopInstallGeneration.count({
+        where: { canonicalDomain: "pr7-intake-deny.myshopify.com" },
+      }),
+    ).toBe(0);
+  });
+});

@@ -97,6 +97,19 @@ export async function intakeComplianceWebhook(
     );
   }
 
+  const customerRestId = lookupCustomerRestId(input.payload);
+  const orderLegacyIds = lookupOrderLegacyIds(input.payload);
+  if (
+    (input.topic === "customers/data_request" ||
+      input.topic === "customers/redact") &&
+    !customerRestId
+  ) {
+    throw new PrivacyBoundaryError(
+      "customer_target_missing",
+      "Customer compliance webhook missing exact customer rest id",
+    );
+  }
+
   const prisma = getControlPlanePrisma();
   const digest = payloadDigest(input.payload);
   const pauseHonored = isPrivacyPauseEnabled();
@@ -167,19 +180,6 @@ export async function intakeComplianceWebhook(
   const requestId = randomUUID();
   const workId = randomUUID();
   const deliveryId = randomUUID();
-  const customerRestId = lookupCustomerRestId(input.payload);
-  const orderLegacyIds = lookupOrderLegacyIds(input.payload);
-
-  if (
-    (input.topic === "customers/data_request" ||
-      input.topic === "customers/redact") &&
-    !customerRestId
-  ) {
-    throw new PrivacyBoundaryError(
-      "customer_target_missing",
-      "Customer compliance webhook missing exact customer rest id",
-    );
-  }
 
   const created = await prisma.$transaction(async (tx) => {
     const request = await tx.privacyRequest.create({
