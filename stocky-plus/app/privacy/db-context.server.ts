@@ -29,3 +29,40 @@ export async function setPrivacyExecutionContext(
     await tx.$executeRaw`SELECT set_config(${GUC_TRUSTED_WORK_ID}, ${input.workId}, true)`;
   }
 }
+
+type PgQueryClient = {
+  query: (text: string, values?: unknown[]) => Promise<unknown>;
+};
+
+/** Same locators on a raw pg Client (erasure SET ROLE connection). */
+export async function setPrivacyExecutionContextOnClient(
+  client: PgQueryClient,
+  input: {
+    shopId: string;
+    requestId: string;
+    attemptId: string;
+    workId?: string | null;
+  },
+): Promise<void> {
+  await client.query("SELECT set_config('stocky.current_shop_id', $1, true)", [
+    input.shopId,
+  ]);
+  await client.query(
+    "SELECT set_config('stocky.tenant_context_version', $1, true)",
+    ["phase1-db-tenant-context-v1"],
+  );
+  await client.query("SELECT set_config($1, $2, true)", [
+    GUC_PRIVACY_REQUEST_ID,
+    input.requestId,
+  ]);
+  await client.query("SELECT set_config($1, $2, true)", [
+    GUC_PRIVACY_ATTEMPT_ID,
+    input.attemptId,
+  ]);
+  if (input.workId) {
+    await client.query("SELECT set_config($1, $2, true)", [
+      GUC_TRUSTED_WORK_ID,
+      input.workId,
+    ]);
+  }
+}

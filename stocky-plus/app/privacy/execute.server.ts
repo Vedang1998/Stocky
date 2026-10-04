@@ -3,13 +3,19 @@
  * Processors never re-enable processing. Unknown/incomplete evidence stays visible.
  */
 import { getControlPlanePrisma } from "../sync/control-plane-db.server";
-import { setPrivacyExecutionContext } from "./db-context.server";
+import {
+  setPrivacyExecutionContext,
+  setPrivacyExecutionContextOnClient,
+} from "./db-context.server";
 import { withPrivacyPrincipal } from "./erasure-db.server";
 import { PrivacyBoundaryError } from "./errors.server";
 import { assertShopExternalResidualClear } from "./external-residual.server";
 import { GENERATION_FENCE } from "./generation.server";
 import { isPrivacyPauseEnabled } from "./pause.server";
-import { PRIVACY_MERCHANT_DELETE_ORDER } from "./surfaces.server";
+import {
+  CUSTOMER_REDACT_DELETE_ORDER,
+  PRIVACY_MERCHANT_DELETE_ORDER,
+} from "./surfaces.server";
 
 export type ProcessorResult = {
   requestId: string;
@@ -92,6 +98,10 @@ async function processCustomerDataRequest(
       attemptId,
       workId: request.workId,
     });
+    await tx.privacyRequest.update({
+      where: { id: request.id },
+      data: { state: "ENUMERATING", activeAttemptId: attemptId },
+    });
     await tx.$executeRaw`SELECT stocky_privacy_enumerate_targets(${request.id})`;
     const coverage = await tx.$queryRaw<Array<{ coverage: string }>>`
       SELECT stocky_privacy_data_request_coverage(${request.id}) AS coverage
@@ -120,11 +130,94 @@ async function processCustomerRedact(
   requestId: string,
   attemptId: string,
 ): Promise<ProcessorResult> {
-  return prisma.$transaction(async (tx) => {
+  const loaded = await prisma.privacyRequest.findUniqueOrThrow({
+    where: { id: requestId },
+  });
+  if (!loaded.lookupCustomerRestId) {
+    await prisma.privacyRequest.update({
+      where: { id: loaded.id },
+      data: { state: "INCOMPLETE" },
+    });
+    return {
+      requestId: loaded.id,
+      topic: loaded.topic,
+      state: "INCOMPLETE",
+      residualCount: null,
+      incomplete: true,
+      detail: "customer_target_missing",
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
     const request = await tx.privacyRequest.findUniqueOrThrow({
       where: { id: requestId },
     });
-    if (!request.lookupCustomerRestId) {
+    await setPrivacyExecutionContext(tx, {
+      shopId: request.targetShopId,
+      requestId: request.id,
+      attemptId,
+      workId: request.workId,
+    });
+    await tx.privacyRequest.update({
+      where: { id: request.id },
+      data: { state: "ENUMERATING", activeAttemptId: attemptId },
+    });
+    await tx.$executeRaw`SELECT stocky_privacy_install_customer_barrier(${request.id}, ${attemptId})`;
+    await tx.$executeRaw`SELECT stocky_privacy_enumerate_targets(${request.id})`;
+    await tx.privacyRequest.update({
+      where: { id: request.id },
+      data: { state: "APPLYING" },
+    });
+  });
+
+  const request = await prisma.privacyRequest.findUniqueOrThrow({
+    where: { id: requestId },
+  });
+  await withPrivacyPrincipal("stocky_privacy_erasure", async (client) => {
+    await client.query("BEGIN");
+    try {
+      await setPrivacyExecutionContextOnClient(client, {
+        shopId: request.targetShopId,
+        requestId: request.id,
+        attemptId,
+        workId: request.workId,
+      });
+      for (const table of CUSTOMER_REDACT_DELETE_ORDER) {
+        await client.query(`DELETE FROM ${quoteIdent(table)}`);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    }
+  });
+
+  return prisma.$transaction(async (tx) => {
+    await setPrivacyExecutionContext(tx, {
+      shopId: request.targetShopId,
+      requestId: request.id,
+      attemptId,
+      workId: request.workId,
+    });
+    const statusRows = await tx.$queryRaw<Array<{ status: string }>>`
+      SELECT stocky_privacy_complete_customer_redact(${request.id}, ${attemptId}) AS status
+    `;
+    const status = statusRows[0]?.status ?? "stale";
+    if (status === "completed") {
+      await tx.privacyRequest.update({
+        where: { id: request.id },
+        data: { state: "COMPLETED" },
+      });
+      return {
+        requestId: request.id,
+        topic: request.topic,
+        state: "COMPLETED",
+        residualCount: 0,
+        incomplete: false,
+        detail: "customer_redact_complete",
+      };
+    }
+    if (status === "budget_exhausted") {
       await tx.privacyRequest.update({
         where: { id: request.id },
         data: { state: "INCOMPLETE" },
@@ -135,34 +228,24 @@ async function processCustomerRedact(
         state: "INCOMPLETE",
         residualCount: null,
         incomplete: true,
-        detail: "customer_target_missing",
+        detail: "budget_exhausted",
       };
     }
-    await setPrivacyExecutionContext(tx, {
-      shopId: request.targetShopId,
-      requestId: request.id,
-      attemptId,
-      workId: request.workId,
-    });
-    await tx.$executeRaw`SELECT stocky_privacy_install_customer_barrier(${request.id}, ${attemptId})`;
-    await tx.$executeRaw`SELECT stocky_privacy_enumerate_targets(${request.id})`;
-    await tx.$executeRaw`SELECT stocky_privacy_complete_customer_redact(${request.id}, ${attemptId})`;
     const residual = await tx.$queryRaw<Array<{ n: bigint }>>`
       SELECT stocky_privacy_customer_residual_count(${request.id}) AS n
     `;
     const n = Number(residual[0]?.n ?? -1);
-    const complete = n === 0;
     await tx.privacyRequest.update({
       where: { id: request.id },
-      data: { state: complete ? "COMPLETED" : "INCOMPLETE" },
+      data: { state: "INCOMPLETE" },
     });
     return {
       requestId: request.id,
       topic: request.topic,
-      state: complete ? "COMPLETED" : "INCOMPLETE",
+      state: "INCOMPLETE",
       residualCount: n,
-      incomplete: !complete,
-      detail: complete ? "customer_redact_complete" : "residual_visible",
+      incomplete: true,
+      detail: status === "remnants" ? "residual_visible" : status,
     };
   });
 }
@@ -197,23 +280,21 @@ async function processShopRedact(
   });
 
   await withPrivacyPrincipal("stocky_privacy_erasure", async (client) => {
-    await client.query("SELECT set_config('stocky.current_shop_id', $1, true)", [
-      request.targetShopId,
-    ]);
-    await client.query(
-      "SELECT set_config('stocky.tenant_context_version', $1, true)",
-      ["phase1-db-tenant-context-v1"],
-    );
-    await client.query(
-      "SELECT set_config('stocky.privacy_request_id', $1, true)",
-      [request.id],
-    );
-    await client.query(
-      "SELECT set_config('stocky.privacy_attempt_id', $1, true)",
-      [attemptId],
-    );
-    for (const table of PRIVACY_MERCHANT_DELETE_ORDER) {
-      await client.query(`DELETE FROM ${quoteIdent(table)}`);
+    await client.query("BEGIN");
+    try {
+      await setPrivacyExecutionContextOnClient(client, {
+        shopId: request.targetShopId,
+        requestId: request.id,
+        attemptId,
+        workId: request.workId,
+      });
+      for (const table of PRIVACY_MERCHANT_DELETE_ORDER) {
+        await client.query(`DELETE FROM ${quoteIdent(table)}`);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
     }
   });
 
@@ -255,6 +336,14 @@ async function processShopRedact(
     };
   }
 
+  await prisma.shop.updateMany({
+    where: { id: request.targetShopId },
+    data: {
+      processingEnabled: false,
+      processingDisabledReason: "REDACTED",
+      processingDisabledAt: new Date(),
+    },
+  });
   await prisma.privacyRequest.update({
     where: { id: request.id },
     data: { state: "FINALIZING" },

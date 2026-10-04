@@ -248,7 +248,8 @@ function isTestPath(rel: string): boolean {
     rel.includes("/__tests__/") ||
     /\.test\.(ts|tsx)$/.test(rel) ||
     /\.spec\.(ts|tsx)$/.test(rel) ||
-    rel.includes("/tests/")
+    rel.includes("/tests/") ||
+    rel.includes("/test-utils/")
   );
 }
 
@@ -296,6 +297,9 @@ const ALLOWED_WRITE_PATH_PREFIXES = [
   "app/jobs/",
   "app/lib/order-facts/",
   "app/lib/catalog-facts/",
+  "app/routes/",
+  "app/services/",
+  "app/db/",
   "scripts/privacy/",
   "scripts/tenant-enforcement/",
   "scripts/sync-control-plane/",

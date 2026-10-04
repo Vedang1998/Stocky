@@ -135,7 +135,11 @@ IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = ${quoteLiteral(role)}) THE
   CREATE ROLE ${quoteIdent(role)} ${kind} NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
 END IF;`;
   });
-  return `DO $$ BEGIN\n${stmts.join("\n")}\nEND$$;`;
+  const grantList = PR7_ALL_ROLES.map((role) => quoteIdent(role)).join(", ");
+  const loginList = PR7_LOGIN_ROLES.map((role) => quoteIdent(role)).join(", ");
+  return `DO $$ BEGIN\n${stmts.join("\n")}\nEND$$;
+GRANT USAGE ON SCHEMA public TO ${grantList};
+GRANT ${loginList} TO CURRENT_USER;`;
 }
 
 function quoteLiteral(value: string): string {
