@@ -197,5 +197,8 @@ Implemented in this pass (local coherent checkpoint, not B0 READY):
 - Participating-write guards on named §7.9/W-derived hosts listed in the execution brief.
 - Redis shop-scoped drain and D-scratch leftover fail-closed residual (no operator reclaim).
 - Source scanner `scripts/privacy/participating-writers.ts` with omission controls.
+- Customer-redact child-first DELETE of enumerated line/order/audit rows after committed APPLYING+manifest; complete uses SQL status (does not treat RLS-empty as absent).
+- `noteQueuedWork` source commitment uses operation+target+body (same `stocky_source_commitment` as capture/admission).
+- Focused Heavy steps for foundation, races, and privacy zero-collection guard.
 
-This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and the remaining matrix executions are still required.
+This is **not** `PR7_IMPLEMENTATION_READY_FOR_INDEPENDENT_REVIEW`. Exact-head Classify+FULL Heavy+Gate and remaining matrix executions are still required.

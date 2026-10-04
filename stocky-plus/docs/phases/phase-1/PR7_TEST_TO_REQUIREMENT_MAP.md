@@ -45,5 +45,10 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | Writer source coverage + omission | `scripts/privacy/__tests__/participating-writers.test.ts` | implemented |
 | Pause default off | `app/privacy/__tests__/pause.test.ts` | implemented |
 | Fresh/upgrade migrations | enforcement apply in foundation + existing apply/partial-apply suites | reuse with PR7 step |
-| Redis drain / D-scratch leftover | `assertShopExternalResidualClear` + foundation shop/redact path | residual fail-closed; live Redis races still required in Heavy |
+| Redis drain / D-scratch leftover | `scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts` | implemented; requires REDIS_URL |
+| Assignment revoke/effect winners + response-loss retry | `pr7-privacy-races.test.ts` | implemented |
+| Provenance: webhook cannot mint ADMIN; matching effect; second effectId/tamper deny; UNATTRIBUTED no upgrade | `pr7-privacy-races.test.ts` | implemented |
+| GUC locator is not capability | `pr7-privacy-races.test.ts` | implemented |
+| Customer residual visible vs RLS-empty; then child-first erase completes | `pr7-privacy-races.test.ts` | implemented |
+| Restricted principal SET ROLE / EXECUTE admission | `pr7-privacy-races.test.ts` + foundation | implemented |
 | Q-008 | production decision | OPEN / unmet as legal default |

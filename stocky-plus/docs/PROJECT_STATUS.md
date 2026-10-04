@@ -327,7 +327,7 @@ D-054 is **EFFECTIVE** and remains the implementation authority / current-lane r
 | Branch | `phase-1/pr7-audit-roles-privacy-fff3` |
 | Scope now | Checkpoint A only: authenticated exact-string actors and request-bound owner-proof adapter; `test:privacy`; no global `useOnlineTokens`; no owner-role bootstrap or owner-only download |
 | Brief / report | `phases/phase-1/PR7_IMPLEMENTATION_EXECUTION_BRIEF.md`; `PR7_IMPLEMENTATION_REPORT.md`; `PR7_TEST_TO_REQUIREMENT_MAP.md` |
-| Checkpoint B | **not started** — requires independent A review with no unresolved P0/P1/P2 and coordinator CONTINUE |
+| Checkpoint B | **IMPLEMENTATION IN PROGRESS** on this branch (CONTINUE `PROPO_PR68_CONTINUE_B_V1`). Not complete-module acceptance, not B0 READY, not merge. |
 | Q-008 | **OPEN** |
 | D-055 | **NOT CREATED** |
 | Production / writes / flags | **NOT AUTHORIZED** / flags **DEFAULT OFF** |
