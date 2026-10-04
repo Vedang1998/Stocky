@@ -6,6 +6,9 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import { resetSchemaAndApplyEnforcement } from "./helpers";
 import { processPrivacyRequest } from "../../../app/privacy/execute.server";
@@ -14,6 +17,18 @@ import { PrivacyBoundaryError } from "../../../app/privacy/errors.server";
 import { isPrivacyPauseEnabled } from "../../../app/privacy/pause.server";
 import { evaluateWriterCompleteness } from "../../privacy/participating-writers";
 import { resetControlPlanePrismaForTests } from "../../../app/sync/control-plane-db.server";
+import {
+  provisionControlPlaneRole,
+  verifyControlPlaneRole,
+} from "../../sync-control-plane/roles";
+
+const HELPERS_SQL = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../sql/pr7-privacy-helpers.sql",
+  ),
+  "utf8",
+);
 
 describe("PR7 privacy/roles/audit foundation", () => {
   let prisma: PrismaClient;
@@ -411,5 +426,73 @@ describe("PR7 privacy/roles/audit foundation", () => {
         where: { canonicalDomain: "pr7-intake-deny.myshopify.com" },
       }),
     ).toBe(0);
+  });
+
+  it("verifyControlPlaneRole is clean after apply (positive)", async () => {
+    const client = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      const verified = await verifyControlPlaneRole(client);
+      expect(verified.errors).toEqual([]);
+      expect(verified.ok).toBe(true);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("PR7 helpers SQL does not table-GRANT Shop UPDATE or Session/receipt DML to control-plane (negative)", () => {
+    expect(HELPERS_SQL).not.toMatch(
+      /GRANT[\s\S]{0,240}ON\s+public\."Shop"\s+TO\s+stocky_control_plane/,
+    );
+    const jobFamily =
+      HELPERS_SQL.match(
+        /GRANT SELECT, INSERT, UPDATE, DELETE ON\s+public\."DurableJob"[\s\S]*?TO stocky_control_plane;/,
+      )?.[0] ?? "";
+    expect(jobFamily.length).toBeGreaterThan(0);
+    expect(jobFamily).toContain("PrivacyRequest");
+    expect(jobFamily).not.toMatch(/\bSession\b/);
+    expect(jobFamily).not.toContain("SyncApplicationReceipt");
+  });
+
+  it("injected Shop UPDATE and Session DML fail verify until classified provision restores (bypass)", async () => {
+    const client = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      await client.query(
+        `GRANT UPDATE ON TABLE public."Shop" TO stocky_control_plane`,
+      );
+      await client.query(
+        `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public."Session" TO stocky_control_plane`,
+      );
+      const injected = await verifyControlPlaneRole(client);
+      expect(injected.ok).toBe(false);
+      expect(injected.errors).toContain(
+        "control_plane_shop_update_forbidden:ianaTimezone",
+      );
+      expect(injected.errors).toContain(
+        "control_plane_shop_update_forbidden:currencyCode",
+      );
+      expect(
+        injected.errors.some((e) =>
+          e.startsWith("control_plane_merchant_privilege:Session:"),
+        ),
+      ).toBe(true);
+      const restored = await provisionControlPlaneRole(client, {
+        apply: true,
+        password: process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD,
+      });
+      expect(restored.ok).toBe(true);
+      const verified = await verifyControlPlaneRole(client);
+      expect(verified.errors).toEqual([]);
+      expect(verified.ok).toBe(true);
+    } finally {
+      await provisionControlPlaneRole(client, {
+        apply: true,
+        password: process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD,
+      }).catch(() => undefined);
+      await client.end();
+    }
   });
 });

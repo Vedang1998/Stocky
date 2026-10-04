@@ -108,7 +108,10 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 | `app/sync/lifecycle.server.ts` | claim/heartbeat/success/retry/fail/dead-letter/reaper | guard |
 | `app/sync/replay.server.ts` | `replayDeadLetter` | guard + authz lock/verify |
 | `app/sync/health.server.ts` | `computeSyncHealth` | guard on upsert |
-| `app/lib/order-facts/apply/writers.ts` | `requireProcessingEnabled` | processingEnabled **and** participating-write |
+| `app/lib/order-facts/apply/writers.ts` | `requireProcessingEnabled` | processingEnabled **and** participating-write; void `stocky_participating_write_guard` is wrapped as `SELECT 1::int` via `$queryRaw` because Prisma cannot deserialize `void` and TenantDb forbids `$executeRaw` (`raw_client_escape`) |
+| `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | `ALL_MIGRATION_NAMES` | fail-closed on-disk allowlist; parks PR6-A successor **and later PR7 folders** so Prisma cannot apply PR7 before `20260907020000` |
+| `scripts/tenant-enforcement/sql/pr7-privacy-helpers.sql` | Shop/job-family GRANTs | runtime Shop DML only; no table-level Shop UPDATE or Session/`SyncApplicationReceipt` DML to `stocky_control_plane` |
+| `scripts/tenant-enforcement/roles.ts` | `provisionRoles` phase `grants`/`full` | re-`provisionControlPlaneRole` after PR7 helpers and before merchant DML |
 | `app/lib/catalog-facts/ingest/checkpoint.ts` | checkpoint persist/ack/complete | both gates |
 | `app/jobs/queue.server.ts` | `drainOrdinaryQueueJobsForShop` | shop-scoped `job.remove`; never FLUSHALL |
 | `app/jobs/workers/index.ts` | worker bootstrap | separate privacy coordinator loop |

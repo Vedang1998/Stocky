@@ -57,4 +57,7 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | TenantDb participating-write after migrate-only reset (empty writable; ERASING freeze) | `app/tenant/__tests__/tenant-db.test.ts` | implemented |
 | Dispatcher ForShop helpers on migrate-only catalog (canonical domain + CP EXECUTE; enqueue publishes) | `app/tenant/__tests__/queue-redis.test.ts` | implemented; exact-head `c37212d` Heavy `37225240141` failed before this additive migration |
 | Privacy zero-name-filter fail-closed (CI wrapper) | `scripts/privacy/assert-zero-name-filter-guard.ts` + `npm run test:privacy:zero-name-filter-guard` | implemented; raw `-t` exit 1 required; `a526b39` Heavy `37230450492` failed before wrapper |
+| Migration allowlist includes additive PR7 folders | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | implemented; `13f39db` Heavy `37233863071` fail-closed before allowlist |
+| Classified CP matrix after PR7 helpers | `pr7-privacy-foundation.test.ts` + pr5/pr6-a `verifyControlPlaneRole` | implemented; helpers must not table-GRANT Shop UPDATE / Session / receipt DML; grants-phase restore |
+| Void participating-write on Prisma apply | `apply-safety.test.ts`, `requireProcessingEnabled` typed `$queryRaw` wrap | implemented; TenantDb `$executeRaw` remains forbidden; `$queryRaw` deserialize of void is the recorded 13f39db pr6-d failure |
 | Q-008 | production decision | OPEN / unmet as legal default |

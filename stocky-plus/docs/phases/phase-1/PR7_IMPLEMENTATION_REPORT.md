@@ -279,3 +279,19 @@ Automatic `pull_request` [37230450492](https://github.com/Vedang1998/Stocky/acti
 | Gate | `111528129048` | FAILURE |
 
 The intended fail-closed probe was wired as a normal Actions step, so the first Heavy run that reached it always failed. Wrapper `scripts/privacy/assert-zero-name-filter-guard.ts` / `npm run test:privacy:zero-name-filter-guard` exits 0 only when vitest exits 1 **and** prints `[ci-guard] testNamePattern`. Local: raw vitest exit 1 + guard text; wrapper exit 0. Vacuous vitest success remains a wrapper failure. Reporter behavior is not weakened.
+
+### Exact-head migration/backfill failure on `13f39db` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37233863071](https://github.com/Vedang1998/Stocky/actions/runs/37233863071) · `head_sha=13f39db10a394c6e3c2ecec0b8a6afeb256970b8`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111528998980` | SUCCESS · `full_ci=true` |
+| Heavy | `111529028306` | FAILURE at step 146 **Migration and tenant-backfill tests** (`npm run test:migrations`: 19 failed / 735 passed / 2 skipped in 4 files). Steps 10–145 SUCCESS including drift, inventories, preflight, non-superuser, queue/Redis, lint, typecheck, codegen, PR5-F3, `test:privacy`, zero-collection wrapper, foundation, races, unit. C07 / subject-memory / build skipped. |
+| Gate | `111543907808` | FAILURE |
+
+Four failed files:
+
+1. `tenant-expansion.migration.test.ts` — `ALL_MIGRATION_NAMES` omitted the four on-disk PR7 folders. Fail-closed by design. Allowlist + park-later-migrations updated; old-migration rewrite remains forbidden.
+2. `pr5-catalog-fact-foundation.test.ts` and `pr6-a-order-fact-foundation.test.ts` — `verifyControlPlaneRole` false: helpers table-GRANTed Shop UPDATE and Session/`SyncApplicationReceipt` DML to `stocky_control_plane` after prepare; grants phase did not re-provision. Dual fix: narrow helper GRANTs and restore classified CP in grants/`full`.
+3. `pr6-d-worker.test.ts` — Prisma `$queryRaw` of void `stocky_participating_write_guard` (`Failed to deserialize column of type 'void'`). `$executeRaw` is **not** the fix: TenantDb throws `raw_client_escape` on that key (executed). `requireProcessingEnabled` wraps the void call as `WITH _guard … SELECT 1::int AS ok` so tagged `$queryRaw` deserializes a typed row. TenantDb raw-escape policy is unchanged.

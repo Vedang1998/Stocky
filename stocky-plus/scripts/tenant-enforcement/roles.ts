@@ -1171,6 +1171,24 @@ export async function provisionRoles(
     grantsApplied.push(...(await grantMerchantDml(client, runtimeRole)));
     merchantDmlGranted = true;
   } else if (options.apply && (phase === "grants" || phase === "full")) {
+    // Restore the classified CP matrix after PR7 helpers and before merchant
+    // DML. Helpers must not table-GRANT Shop UPDATE or Session/receipt DML to
+    // stocky_control_plane; this re-provision is the last classified restore.
+    try {
+      const cp = await provisionControlPlaneRole(client, {
+        apply: true,
+        password: process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD,
+      });
+      if (cp.ok) {
+        grantsApplied.push(...cp.grantsApplied);
+      } else {
+        detectedDrift.push(...cp.errors);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      detectedDrift.push(`control_plane_role:${message.split("\n")[0]}`);
+    }
+
     const rlsOk = await isRlsFullyForced(client);
     if (!rlsOk) {
       if (phase === "grants") {

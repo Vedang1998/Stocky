@@ -964,9 +964,11 @@ GRANT EXECUTE ON FUNCTION public.stocky_privacy_finalize_shop_delete(text,text,t
 GRANT SELECT, DELETE ON public."Shop" TO stocky_privacy_finalizer_owner;
 GRANT SELECT ON public."PrivacyRequest", public."ShopInstallGeneration", public."PrivacyAttempt" TO stocky_privacy_finalizer_owner;
 
--- Runtime/CP: Shop SELECT/INSERT/UPDATE, no DELETE
+-- Runtime: Shop SELECT/INSERT/UPDATE, no DELETE.
+-- Control-plane Shop access stays column-classified in provisionControlPlaneRole
+-- (lifecycle UPDATE; timezone/currency SELECT-only). Table-level UPDATE would
+-- revive ianaTimezone/currencyCode writes.
 GRANT SELECT, INSERT, UPDATE ON public."Shop" TO stocky_runtime;
-GRANT SELECT, UPDATE ON public."Shop" TO stocky_control_plane;
 
 -- ---------------------------------------------------------------------------
 -- Lifecycle gate (versioned, domain-keyed, valid when Shop is absent)
@@ -1115,11 +1117,13 @@ CREATE POLICY assignment_verifier_select ON public."ShopRoleAssignment" FOR SELE
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."ShopRoleAssignment" TO stocky_runtime;
 GRANT SELECT ON public."ShopRoleAssignment" TO stocky_control_plane;
 
--- Control-plane ordinary job family
+-- Control-plane ordinary job family plus PR7 coordinator tables.
+-- SyncApplicationReceipt is merchant-domain; Session is bootstrap. Neither
+-- may receive table DML here (verifyControlPlaneRole fails closed).
 GRANT SELECT, INSERT, UPDATE, DELETE ON
   public."DurableJob", public."JobAttempt", public."DeadLetter", public."JobReplay",
-  public."WebhookDelivery", public."JobDispatch", public."SyncApplicationReceipt", public."DispatchReadyShop",
-  public."Session", public."PrivacyRequest", public."PrivacyAttempt",
+  public."WebhookDelivery", public."JobDispatch", public."DispatchReadyShop",
+  public."PrivacyRequest", public."PrivacyAttempt",
   public."PrivacyCoordinatorEvent", public."PrivacyCompletionReceipt",
   public."PrivacyDeliveryTombstone", public."PlatformReplayCommand"
 TO stocky_control_plane;
