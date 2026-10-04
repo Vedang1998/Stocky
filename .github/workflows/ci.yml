@@ -712,6 +712,15 @@ jobs:
       - name: PR7 privacy actor/owner-proof tests
         run: npm run test:privacy
 
+      - name: PR7 privacy zero-collection guard
+        run: npx vitest run --config vitest.privacy.config.ts -t "this-pattern-matches-zero-tests-on-purpose"
+
+      - name: PR7 privacy foundation (PostgreSQL)
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr7-privacy-foundation.test.ts
+
+      - name: PR7 privacy races, provenance, and external sinks
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts
+
       - name: Unit tests
         run: npm test
 

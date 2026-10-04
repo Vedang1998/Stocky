@@ -11,16 +11,20 @@ import { resetSchemaAndApplyEnforcement } from "./helpers";
 import { processPrivacyRequest } from "../../../app/privacy/execute.server";
 import { isPrivacyPauseEnabled } from "../../../app/privacy/pause.server";
 import { evaluateWriterCompleteness } from "../../privacy/participating-writers";
+import { resetControlPlanePrismaForTests } from "../../../app/sync/control-plane-db.server";
 
 describe("PR7 privacy/roles/audit foundation", () => {
   let prisma: PrismaClient;
 
   beforeAll(async () => {
     process.env.STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK ??= "1";
-    prisma = await resetSchemaAndApplyEnforcement();
+    process.env.NODE_ENV ??= "test";
+    ({ prisma } = await resetSchemaAndApplyEnforcement());
+    await resetControlPlanePrismaForTests();
   }, 240_000);
 
   afterAll(async () => {
+    await resetControlPlanePrismaForTests();
     await prisma?.$disconnect();
   });
 
@@ -195,6 +199,10 @@ describe("PR7 privacy/roles/audit foundation", () => {
       const shop = await prisma.shop.findUnique({ where: { id: shopId } });
       if (topic !== "shop/redact") {
         expect(shop?.processingEnabled).toBe(false);
+      } else {
+        expect(result.state).toBe("COMPLETED");
+        expect(result.incomplete).toBe(false);
+        expect(shop).toBeNull();
       }
     }
   });
