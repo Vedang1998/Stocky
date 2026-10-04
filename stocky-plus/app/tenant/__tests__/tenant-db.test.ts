@@ -76,6 +76,7 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.purchaseOrder.deleteMany();
     await prisma.supplier.deleteMany();
     await prisma.auditEvent.deleteMany();
+    await prisma.shopInstallGeneration.deleteMany();
     await prisma.shop.deleteMany();
 
     const shops = await seedTwoShops(prisma);
@@ -233,6 +234,22 @@ describe("tenant-bound database contract (PR 2)", () => {
         },
       }),
     ).rejects.toMatchObject({ code: "foreign_selector_tenant" });
+  });
+
+  it("ERASING generation freezes TenantDb writes; sibling shop remains writable", async () => {
+    await prisma.shopInstallGeneration.create({
+      data: {
+        canonicalDomain: SHOP_A_DOMAIN,
+        targetShopId: shopAId,
+        shopRowId: shopAId,
+        fence: "ERASING",
+      },
+    });
+    await expect(
+      dbA.supplier.create({ data: { name: "frozen" } }),
+    ).rejects.toThrow(/generation_frozen/);
+    const sibling = await dbB.supplier.create({ data: { name: "live" } });
+    expect(sibling.shopId).toBe(shopBId);
   });
 
   it("missing tenant authority cannot create a tenant database client", () => {

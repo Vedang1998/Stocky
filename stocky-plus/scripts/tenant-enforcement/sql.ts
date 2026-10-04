@@ -83,6 +83,9 @@ export function grantHelpersToRuntimeSql(runtimeRole: string): string {
 GRANT EXECUTE ON FUNCTION ${TENANT_CONTEXT_HELPER_FN}() TO ${role};
 GRANT EXECUTE ON FUNCTION ${TENANT_CONTEXT_VERSION_FN}() TO ${role};
 GRANT EXECUTE ON FUNCTION stocky_shop_processing_enabled(text) TO ${role};
+GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_shared_lock(text) TO ${role};
+GRANT EXECUTE ON FUNCTION public.stocky_generation_writable(text) TO ${role};
+GRANT EXECUTE ON FUNCTION public.stocky_participating_write_guard(text) TO ${role};
 `.trim();
 }
 
