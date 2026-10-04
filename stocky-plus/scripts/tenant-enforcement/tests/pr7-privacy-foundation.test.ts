@@ -155,6 +155,67 @@ describe("PR7 privacy/roles/audit foundation", () => {
     }
   });
 
+  it("AuditEvent is append-only for runtime and table owner; erasure without context cannot delete", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-audit-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: { id: shopId, myshopifyDomain: domain },
+    });
+    const eventId = randomUUID();
+    await prisma.auditEvent.create({
+      data: {
+        id: eventId,
+        shopId,
+        action: "recorded",
+        outcome: "succeeded",
+      },
+    });
+
+    const runtime = await getRuntimeClient();
+    try {
+      await expect(
+        runtime.query(`UPDATE "AuditEvent" SET outcome = 'tampered' WHERE id = $1`, [
+          eventId,
+        ]),
+      ).rejects.toThrow(/permission denied|audit_event_immutable/i);
+      await expect(
+        runtime.query(`DELETE FROM "AuditEvent" WHERE id = $1`, [eventId]),
+      ).rejects.toThrow(/permission denied|audit_event_immutable/i);
+    } finally {
+      await runtime.end();
+    }
+
+    const owner = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      await expect(
+        owner.query(`UPDATE "AuditEvent" SET outcome = 'tampered' WHERE id = $1`, [
+          eventId,
+        ]),
+      ).rejects.toThrow(/audit_event_immutable/);
+      await expect(
+        owner.query(`DELETE FROM "AuditEvent" WHERE id = $1`, [eventId]),
+      ).rejects.toThrow(/audit_event_immutable/);
+
+      try {
+        await owner.query("SET SESSION AUTHORIZATION stocky_privacy_erasure");
+      } catch {
+        await owner.query("SET ROLE stocky_privacy_erasure");
+      }
+      const erased = await owner.query(
+        `DELETE FROM "AuditEvent" WHERE id = $1`,
+        [eventId],
+      );
+      expect(erased.rowCount).toBe(0);
+    } finally {
+      await owner.end();
+    }
+
+    const still = await prisma.auditEvent.findUnique({ where: { id: eventId } });
+    expect(still?.id).toBe(eventId);
+  });
+
   it("runtime cannot BYPASSRLS or inherit PRIVACY erasure (restricted principal)", async () => {
     const runtime = await getRuntimeClient();
     try {

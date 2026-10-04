@@ -12,6 +12,7 @@ import {
   PR6_A_DIRECT_MERCHANT_MODELS,
   PR7_DIRECT_MERCHANT_MODELS,
 } from "../models";
+import { emitAuditEvent } from "../../audit/emit.server";
 import {
   createTenantDb,
   tenantDbExposesRawClient,
@@ -74,6 +75,7 @@ describe("tenant-bound database contract (PR 2)", () => {
     await prisma.shopifyLocationFact.deleteMany();
     await prisma.purchaseOrder.deleteMany();
     await prisma.supplier.deleteMany();
+    await prisma.auditEvent.deleteMany();
     await prisma.shop.deleteMany();
 
     const shops = await seedTwoShops(prisma);
@@ -146,6 +148,91 @@ describe("tenant-bound database contract (PR 2)", () => {
         data: { name: "Evil", shopId: shopBId },
       }),
     ).rejects.toMatchObject({ code: "foreign_shop_id" });
+  });
+
+  it("AuditEvent create injects shopId and isolates overlapping emit keys", async () => {
+    const key = "emit-shared-key";
+    const a = await dbA.auditEvent.create({
+      data: {
+        action: "recorded",
+        outcome: "succeeded",
+        emitIdempotency: key,
+      },
+    });
+    const b = await dbB.auditEvent.create({
+      data: {
+        action: "recorded",
+        outcome: "succeeded",
+        emitIdempotency: key,
+      },
+    });
+    expect(a.shopId).toBe(shopAId);
+    expect(b.shopId).toBe(shopBId);
+
+    const aRows = await dbA.auditEvent.findMany({
+      where: { emitIdempotency: key },
+    });
+    const bRows = await dbB.auditEvent.findMany({
+      where: { emitIdempotency: key },
+    });
+    expect(aRows).toHaveLength(1);
+    expect(aRows[0].id).toBe(a.id);
+    expect(bRows).toHaveLength(1);
+    expect(bRows[0].id).toBe(b.id);
+
+    await expect(
+      dbA.auditEvent.create({
+        data: { action: "evil", outcome: "succeeded", shopId: shopBId },
+      }),
+    ).rejects.toMatchObject({ code: "foreign_shop_id" });
+  });
+
+  it("emitAuditEvent is idempotent per tenant and does not leak foreign rows", async () => {
+    const first = await emitAuditEvent(dbA, {
+      actorKind: "system",
+      action: "role.grant",
+      outcome: "succeeded",
+      emitIdempotency: "grant-1",
+    });
+    const retry = await emitAuditEvent(dbA, {
+      actorKind: "system",
+      action: "role.grant",
+      outcome: "succeeded",
+      emitIdempotency: "grant-1",
+    });
+    expect(first.duplicate).toBe(false);
+    expect(retry.duplicate).toBe(true);
+    expect(retry.id).toBe(first.id);
+
+    const foreign = await emitAuditEvent(dbB, {
+      actorKind: "system",
+      action: "role.grant",
+      outcome: "succeeded",
+      emitIdempotency: "grant-1",
+    });
+    expect(foreign.duplicate).toBe(false);
+    expect(foreign.id).not.toBe(first.id);
+
+    const viaCompound = await dbA.auditEvent.findUnique({
+      where: {
+        shopId_emitIdempotency: {
+          shopId: shopAId,
+          emitIdempotency: "grant-1",
+        },
+      },
+    });
+    expect(viaCompound?.id).toBe(first.id);
+
+    await expect(
+      dbA.auditEvent.findUnique({
+        where: {
+          shopId_emitIdempotency: {
+            shopId: shopBId,
+            emitIdempotency: "grant-1",
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "foreign_selector_tenant" });
   });
 
   it("missing tenant authority cannot create a tenant database client", () => {

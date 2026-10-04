@@ -32,7 +32,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     requestId,
     owner: proof,
   });
-  return new Response(artifact.body, {
+  return new Response(new Uint8Array(artifact.body), {
     headers: {
       "content-type": "application/octet-stream",
       "x-artifact-expires-at": artifact.expiresAt.toISOString(),

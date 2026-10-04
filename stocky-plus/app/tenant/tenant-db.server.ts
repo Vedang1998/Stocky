@@ -1877,6 +1877,7 @@ export type TenantDb = {
   pOLineItem: TenantModelDelegate;
   transferLineItem: TenantModelDelegate;
   stocktakeLineItem: TenantModelDelegate;
+  auditEvent: TenantModelDelegate;
   $transaction: <T>(
     fn: (db: TenantDb) => Promise<T>,
     options?: {
