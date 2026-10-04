@@ -153,6 +153,19 @@ function scanFile(abs: string): Finding[] {
   approvedControlPlaneImporters.add("app/sync/replay.server.ts");
   approvedControlPlaneImporters.add("app/jobs/workers/webhook-processor.ts");
   approvedControlPlaneImporters.add("app/jobs/queue.server.ts");
+  // PR7 exclusive privacy/audit/platform consumers (checkpoint B).
+  for (const relPath of [
+    "app/privacy/coordinator.server.ts",
+    "app/privacy/execute.server.ts",
+    "app/privacy/fulfillment.server.ts",
+    "app/privacy/generation.server.ts",
+    "app/privacy/intake.server.ts",
+    "app/privacy/operator-resolve.server.ts",
+    "app/rbac/assignment.server.ts",
+    "app/routes/app.platform.replay.tsx",
+  ]) {
+    approvedControlPlaneImporters.add(relPath);
+  }
 
   function add(node: ts.Node, kind: string, detail: string) {
     const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));

@@ -35,6 +35,18 @@ export async function replayDeadLetter(input: {
   return prisma.$transaction(async (tx) => replayDeadLetterInTx(tx, input));
 }
 
+/** Platform replay route host. Keeps replayDeadLetter inside this module. */
+export async function applyPlatformDeadLetterReplay(
+  input: {
+    deadLetterId: string;
+    shopId: string;
+    reason: string;
+    tx?: Prisma.TransactionClient;
+  },
+): Promise<ReplayDeadLetterResult> {
+  return replayDeadLetter(input);
+}
+
 async function replayDeadLetterInTx(
   tx: Prisma.TransactionClient,
   input: {

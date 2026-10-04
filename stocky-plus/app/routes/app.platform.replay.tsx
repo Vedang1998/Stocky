@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs } from "react-router";
 import { createHash, randomUUID } from "node:crypto";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { replayDeadLetter } from "../sync/replay.server";
+import { applyPlatformDeadLetterReplay } from "../sync/replay.server";
 import { getControlPlanePrisma } from "../sync/control-plane-db.server";
 import { assertParticipatingWriteGuardForShop } from "../tenant/participating-write.server";
 
@@ -54,7 +54,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         replayId: existing.replayId,
       };
     }
-    const result = await replayDeadLetter({
+    const result = await applyPlatformDeadLetterReplay({
       deadLetterId,
       shopId: ctx.shop.id,
       reason: body.reason || "platform_replay",
