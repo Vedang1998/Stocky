@@ -3,6 +3,7 @@
  * Truthful outcome; disabled-shop-safe coordinator records stay on CP tables.
  */
 import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import type { TenantDb } from "../tenant/tenant-db.server";
 
 export type AuditEmitInput = {
@@ -51,4 +52,34 @@ export async function emitAuditEvent(
     }
     throw error;
   }
+}
+
+/**
+ * Same-transaction merchant audit for role writes. Caller must already hold
+ * tenant-bound GUC on `tx` and pass the branded shop id (not client input).
+ */
+export async function emitAuditEventInTransaction(
+  tx: Prisma.TransactionClient,
+  shopId: string,
+  input: AuditEmitInput,
+): Promise<{ id: string }> {
+  const id = randomUUID();
+  const row = await tx.auditEvent.create({
+    data: {
+      id,
+      shopId,
+      actorKind: input.actorKind,
+      actorId: input.actorId ?? null,
+      action: input.action,
+      decision: input.decision ?? input.outcome,
+      resourceType: input.resourceType ?? null,
+      resourceId: input.resourceId ?? null,
+      customerRestId: input.customerRestId ?? null,
+      correlationId: input.correlationId ?? null,
+      emitIdempotency: input.emitIdempotency ?? null,
+      outcome: input.outcome,
+      detail: input.detail ?? null,
+    },
+  });
+  return { id: row.id };
 }

@@ -1,7 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { proveShopOwner } from "../rbac/owner-proof.server";
-import { gateAdminRequestIdentity, verifierFromEnv } from "../rbac/admin-auth-boundary.server";
+import { requirePlatformOwner } from "../rbac/assignment.server";
 import { operatorInspectPrivacyRequest } from "../privacy/operator-resolve.server";
 
 /**
@@ -9,23 +7,11 @@ import { operatorInspectPrivacyRequest } from "../privacy/operator-resolve.serve
  * R1-01: this route is same-origin embedded admin, not a POS/extension caller.
  */
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const ctx = await requireAdminTenant({ request, params });
-  if (ctx.actor.status !== "verified") {
-    throw new Response("platform_denied", { status: 403 });
-  }
-  const identity = await gateAdminRequestIdentity({ request });
-  if (!identity.idToken || !identity.verifiedActor) {
-    throw new Response("owner_proof_required", { status: 403 });
-  }
-  const proof = await proveShopOwner({
+  const { ctx } = await requirePlatformOwner({
     request,
-    verifier: verifierFromEnv(),
-    actor: identity.verifiedActor,
-    idToken: identity.idToken,
+    params,
+    auditAction: "privacy.escalation.view",
   });
-  if (proof.status !== "owner") {
-    throw new Response(proof.code, { status: 403 });
-  }
   return { shop: ctx.shop.myshopifyDomain, owner: true };
 }
 

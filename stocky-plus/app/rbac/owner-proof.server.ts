@@ -410,3 +410,29 @@ export function withProvenOwnerAccessToken<T>(
 export function ownerProofAccessTokenPresent(proof: OwnerProofResult): boolean {
   return proof.status === "owner" && OWNER_CREDENTIALS.has(proof);
 }
+
+/**
+ * Last-use authenticity check for platform consumers. A forged `{status:"owner"}`
+ * object cannot satisfy this: the credential WeakMap is populated only by a
+ * successful exchange. `expectedDestShop` is the server-derived tenant domain.
+ */
+export function assertAuthenticOwnerProof(
+  proof: OwnerProofResult,
+  context: OwnerProofUseContext & { readonly expectedDestShop: string },
+): asserts proof is OwnerProofSuccess {
+  withProvenOwnerAccessToken(proof, context, () => undefined);
+  if (proof.status !== "owner") {
+    throw new ActorBoundaryError(
+      "OWNER_PROOF_UNSUPPORTED",
+      "No proven owner credential is available",
+      403,
+    );
+  }
+  if (proof.actor.destShop !== context.expectedDestShop) {
+    throw new ActorBoundaryError(
+      "OWNER_PROOF_DENIED",
+      "Owner proof shop mismatch",
+      403,
+    );
+  }
+}

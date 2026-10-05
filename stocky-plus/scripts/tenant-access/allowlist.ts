@@ -115,6 +115,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/db-isolation/helpers.ts",
   "app/tenant/__tests__/db-isolation/isolation.test.ts",
   "app/tenant/__tests__/db-isolation/worker-surfaces.test.ts",
+  "app/tenant/__tests__/db-isolation/pr7-platform-authorization.test.ts",
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
 ] as const;
@@ -249,10 +250,12 @@ function pr7PrivacyExceptions(): AccessException[] {
     "app/privacy/generation.server.ts",
     "app/privacy/erasure-db.server.ts",
     "app/privacy/fulfillment.server.ts",
+    "app/privacy/artifact-crypto.server.ts",
     "app/privacy/operator-resolve.server.ts",
     "app/privacy/db-context.server.ts",
     "app/privacy/external-residual.server.ts",
     "app/rbac/assignment.server.ts",
+    "app/rbac/replay-digest.server.ts",
     "app/tenant/participating-write.server.ts",
     "app/tenant/original-admin-capture.server.ts",
     "app/tenant/bound-effect.server.ts",
@@ -268,6 +271,10 @@ function pr7PrivacyExceptions(): AccessException[] {
     "scripts/privacy/fulfill-data-request.ts",
     "app/privacy/__tests__/consumer-gates.test.ts",
     "app/privacy/__tests__/pause.test.ts",
+    "app/privacy/__tests__/fulfillment.test.ts",
+    "app/privacy/__tests__/operator-resolve.test.ts",
+    "app/privacy/__tests__/replay-digest.test.ts",
+    "app/rbac/__tests__/assignment.test.ts",
     "scripts/privacy/__tests__/participating-writers.test.ts",
   ] as const;
   return files.map((path, i) => ({

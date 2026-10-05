@@ -1,41 +1,40 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { proveShopOwner } from "../rbac/owner-proof.server";
-import { gateAdminRequestIdentity, verifierFromEnv } from "../rbac/admin-auth-boundary.server";
+import { requirePlatformOwner } from "../rbac/assignment.server";
 import { downloadDataRequestArtifact } from "../privacy/fulfillment.server";
+import { PrivacyBoundaryError } from "../privacy/errors.server";
 
 /**
  * Owner-only data-request download. Authorization at use. Expiry is synthetic
- * fixture TTL, not a legal Q008 default.
+ * fixture TTL, not a legal Q008 default. Same-origin embedded admin
+ * (R1-01 deferred: no POS/extension/cross-origin caller).
  */
 export async function loader({ request, params }: LoaderFunctionArgs) {
-  const ctx = await requireAdminTenant({ request, params });
-  if (ctx.actor.status !== "verified") {
-    throw new Response("platform_denied", { status: 403 });
-  }
-  const identity = await gateAdminRequestIdentity({ request });
-  if (!identity.idToken || !identity.verifiedActor) {
-    throw new Response("owner_proof_required", { status: 403 });
-  }
-  const proof = await proveShopOwner({
+  const { ctx, proof } = await requirePlatformOwner({
     request,
-    verifier: verifierFromEnv(),
-    actor: identity.verifiedActor,
-    idToken: identity.idToken,
+    params,
+    auditAction: "privacy.data_request.download",
   });
-  if (proof.status !== "owner") {
-    throw new Response(proof.code, { status: 403 });
-  }
   const url = new URL(request.url);
   const requestId = url.searchParams.get("requestId") ?? "";
-  const artifact = await downloadDataRequestArtifact({
-    requestId,
-    owner: proof,
-  });
-  return new Response(new Uint8Array(artifact.body), {
-    headers: {
-      "content-type": "application/octet-stream",
-      "x-artifact-expires-at": artifact.expiresAt.toISOString(),
-    },
-  });
+  try {
+    const artifact = await downloadDataRequestArtifact({
+      requestId,
+      owner: proof,
+      shopId: ctx.shop.id,
+      canonicalDomain: ctx.shop.myshopifyDomain,
+      tenant: ctx.tenant,
+      request,
+    });
+    return new Response(new Uint8Array(artifact.body), {
+      headers: {
+        "content-type": "application/octet-stream",
+        "x-artifact-expires-at": artifact.expiresAt.toISOString(),
+      },
+    });
+  } catch (error) {
+    if (error instanceof PrivacyBoundaryError) {
+      throw new Response(error.code, { status: 403 });
+    }
+    throw error;
+  }
 }

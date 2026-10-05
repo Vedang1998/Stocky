@@ -60,4 +60,10 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | Migration allowlist includes additive PR7 folders | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | implemented; `13f39db` Heavy `37233863071` fail-closed before allowlist |
 | Classified CP matrix after PR7 helpers | `pr7-privacy-foundation.test.ts` + pr5/pr6-a `verifyControlPlaneRole` | implemented; helpers must not table-GRANT Shop UPDATE / Session / receipt DML; grants-phase restore |
 | Void participating-write on Prisma apply | `apply-safety.test.ts`, `requireProcessingEnabled` typed `$queryRaw` wrap | implemented; TenantDb `$executeRaw` remains forbidden; `$queryRaw` deserialize of void is the recorded 13f39db pr6-d failure |
+| B0-01 owner-only grant/revoke; last-owner deny; forged handle | `app/rbac/__tests__/assignment.test.ts`, `owner-proof.test.ts`, `app/tenant/__tests__/db-isolation/pr7-platform-authorization.test.ts` | implemented |
+| B0-02 shop-bound download; cross-tenant missing | `app/privacy/__tests__/fulfillment.test.ts`, db-isolation platform-authorization | implemented |
+| B0-03 AES-256-GCM artifact; missing key deny | `app/privacy/__tests__/fulfillment.test.ts` + db-isolation | implemented; fixture key only |
+| B0-04 same-tx role audit; zero-row revoke failed | db-isolation platform-authorization | implemented |
+| B0-05 replay digest match | `app/privacy/__tests__/replay-digest.test.ts` + consumer-gates | implemented |
+| B0-06 operator timingSafeEqual | `app/privacy/__tests__/operator-resolve.test.ts` | implemented |
 | Q-008 | production decision | OPEN / unmet as legal default |

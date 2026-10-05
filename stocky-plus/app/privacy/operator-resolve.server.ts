@@ -2,8 +2,18 @@
  * Restricted operator fallback. Token checked at use. Does not reclaim
  * operator-only D-scratch and does not guess quiescence.
  */
+import { createHash, timingSafeEqual } from "node:crypto";
 import { getControlPlanePrisma } from "../sync/control-plane-db.server";
 import { PrivacyBoundaryError } from "./errors.server";
+
+export function operatorTokenAgrees(
+  expected: string,
+  provided: string,
+): boolean {
+  const a = createHash("sha256").update(expected, "utf8").digest();
+  const b = createHash("sha256").update(provided, "utf8").digest();
+  return timingSafeEqual(a, b);
+}
 
 export async function operatorInspectPrivacyRequest(input: {
   requestId: string;
@@ -16,7 +26,7 @@ export async function operatorInspectPrivacyRequest(input: {
   generationId: string;
 }> {
   const expected = process.env.STOCKY_PRIVACY_OPERATOR_TOKEN;
-  if (!expected || input.operatorToken !== expected) {
+  if (!expected || !operatorTokenAgrees(expected, input.operatorToken)) {
     throw new PrivacyBoundaryError("operator_denied", "Operator token rejected");
   }
   const prisma = getControlPlanePrisma();

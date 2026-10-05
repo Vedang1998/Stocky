@@ -1,6 +1,6 @@
 # PR7 implementation report — checkpoint A
 
-**Status:** `CHECKPOINT_B IMPLEMENTATION IN PROGRESS` (author evidence; not independent acceptance)
+**Status:** `CHECKPOINT_B B1 CORRECTION IN PROGRESS` (author evidence; not independent acceptance)
 
 **Date:** 2026-09-30
 
@@ -295,3 +295,20 @@ Four failed files:
 1. `tenant-expansion.migration.test.ts` — `ALL_MIGRATION_NAMES` omitted the four on-disk PR7 folders. Fail-closed by design. Allowlist + park-later-migrations updated; old-migration rewrite remains forbidden.
 2. `pr5-catalog-fact-foundation.test.ts` and `pr6-a-order-fact-foundation.test.ts` — `verifyControlPlaneRole` false: helpers table-GRANTed Shop UPDATE and Session/`SyncApplicationReceipt` DML to `stocky_control_plane` after prepare; grants phase did not re-provision. Dual fix: narrow helper GRANTs and restore classified CP in grants/`full`.
 3. `pr6-d-worker.test.ts` — Prisma `$queryRaw` of void `stocky_participating_write_guard` (`Failed to deserialize column of type 'void'`). `$executeRaw` is **not** the fix: TenantDb throws `raw_client_escape` on that key (executed). `requireProcessingEnabled` wraps the void call as `WITH _guard … SELECT 1::int AS ok` so tagged `$queryRaw` deserializes a typed row. TenantDb raw-escape policy is unchanged.
+
+## 6. B1 correction (B0 findings; not B1 READY)
+
+**round=B1.** Input: HB0 `52f846224c7ad88e7058a9d5962b7ace106009c4` plus original B0 review artifact `3244477b8c8ecf76dcef3a76a656d6ab97e03043` (blob `5e00df930c2cf9f8104740796ecc4ead71c16438`). Claim `5985854561` / result `5986284231`. Review file not re-authored.
+
+| ID | Change |
+|---|---|
+| B0-01 | `requirePlatformOwner` + `assertAuthenticOwnerProof` (WeakMap handle) on grant/revoke; last-owner revoke denied; no `grantedBy` string |
+| B0-02 | Download passes server `shopId` + `canonicalDomain`; mismatch uses `data_request_missing` |
+| B0-03 | AES-256-GCM; `STOCKY_PRIVACY_ARTIFACT_KEY` fail-closed; BYTEA retained |
+| B0-04 | `emitAuditEventInTransaction` in the same tenant tx; zero-row revoke `ASSIGNMENT_NOT_FOUND` / `failed` |
+| B0-05 | `replayRequestDigestAgrees` on existing `(shopId, commandId)` |
+| B0-06 | SHA-256 then `timingSafeEqual` for operator token |
+
+Local (this working tree, not exact-head CI): `npm run test:privacy` 13 files **102/102** exit 0; `pr7-platform-authorization.test.ts` **6/6** exit 0; `npx tsc --noEmit` exit 0; eslint on B1 files exit 0. Mechanical inventory regen: scanned files **562**, findings **1812**, violations **0**. Exact-head Classify+FULL Heavy+Gate for HB1 is recorded after push.
+
+R1-01 remains deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, or merge.

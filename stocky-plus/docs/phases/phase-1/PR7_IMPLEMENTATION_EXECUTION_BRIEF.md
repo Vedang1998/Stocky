@@ -1,6 +1,6 @@
 # PR7 implementation execution brief — checkpoint A
 
-**Status:** `CHECKPOINT_B IMPLEMENTATION IN PROGRESS` (not complete-module acceptance; not B0 READY)
+**Status:** `CHECKPOINT_B B1 CORRECTION IN PROGRESS` (not complete-module acceptance; not B1 READY)
 
 **Date:** 2026-09-30
 
@@ -118,6 +118,19 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 | `app/privacy/execute.server.ts` | three processors | publication lock; Redis/D-scratch residual; customer child-first DELETE; no participating-write during ERASING |
 | `scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts` | races / provenance / residual / Redis / D-scratch | focused `test:migrations` file |
 | `scripts/privacy/assert-zero-name-filter-guard.ts` | CI zero-name-filter wrapper | exits 0 only when vitest `-t` zero-match exits 1 with `[ci-guard] testNamePattern`; does not weaken the reporter |
+| `scripts/tenant-access/allowlist.ts` | exact-file exceptions | B1 listed before adding `artifact-crypto` / `replay-digest` / assignment and fulfillment tests / db-isolation platform-authorization file |
+| `app/tenant/__tests__/db-isolation/pr7-platform-authorization.test.ts` | B1 last-owner / shop-bind / AEAD | enforced catalog; authentic owner proof |
+
+### B1 correction (B0 findings)
+
+**round=B1.** Input HB0 `52f8462` + review artifact `3244477`. R1-01 still deferred (same-origin only). Q-008 OPEN.
+
+- B0-01: `requirePlatformOwner` + authentic WeakMap owner proof on grant/revoke; last-owner revoke denied.
+- B0-02: download binds server `shopId` + `canonicalDomain`; mismatch ≡ missing.
+- B0-03: AES-256-GCM via `STOCKY_PRIVACY_ARTIFACT_KEY`; fail closed if missing.
+- B0-04: role write and audit in the same tenant transaction; zero-row revoke is `failed`.
+- B0-05: existing replay commandId requires digest match.
+- B0-06: operator token hash-then-`timingSafeEqual`.
 
 Newly created owned files: `app/audit/**`, `app/privacy/**`, `app/rbac/assignment.server.ts`, capture/admission/bound-effect, platform routes, `scripts/privacy/**`.
 

@@ -5,6 +5,7 @@ import { ActorBoundaryError } from "../errors.server";
 import {
   __ownerProofExpiresAtMsForTests,
   __setOwnerProofNowMsForTests,
+  assertAuthenticOwnerProof,
   associatedUserIdCorroboration,
   ownerProofAccessTokenPresent,
   proveShopOwner,
@@ -790,5 +791,49 @@ describe("owner-proof adapter (D-PR7-02/04)", () => {
       ),
     ).toThrow(ActorBoundaryError);
     expect(authxGraphql()).toHaveLength(0);
+  });
+
+  it("assertAuthenticOwnerProof rejects a forged owner handle (B0-01)", async () => {
+    const token = await signIdToken({ sub: SAFE_SUB });
+    const request = adminRequest({ token });
+    const actor = verifiedActorFromExactSub(SAFE_SUB, SHOP_A);
+    const forged = {
+      status: "owner" as const,
+      actor,
+      associatedUserId: SAFE_SUB,
+    };
+    expect(() =>
+      assertAuthenticOwnerProof(forged, {
+        request,
+        actor,
+        expectedDestShop: SHOP_A,
+      }),
+    ).toThrow(ActorBoundaryError);
+  });
+
+  it("assertAuthenticOwnerProof accepts a live handle and denies dest mismatch (B0-01)", async () => {
+    setOnlineAssociatedUser(() => ownerUser(548380009));
+    const token = await signIdToken({ sub: SAFE_SUB });
+    const request = adminRequest({ token });
+    const actor = verifiedActorFromExactSub(SAFE_SUB, SHOP_A);
+    const proof = await proveShopOwner({
+      request,
+      verifier,
+      actor,
+      idToken: token,
+    });
+    expect(proof.status).toBe("owner");
+    assertAuthenticOwnerProof(proof, {
+      request,
+      actor,
+      expectedDestShop: SHOP_A,
+    });
+    expect(() =>
+      assertAuthenticOwnerProof(proof, {
+        request,
+        actor,
+        expectedDestShop: SHOP_B,
+      }),
+    ).toThrow(/shop mismatch/);
   });
 });

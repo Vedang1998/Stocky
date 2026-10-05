@@ -4,6 +4,7 @@ import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { applyPlatformDeadLetterReplay } from "../sync/replay.server";
 import { getControlPlanePrisma } from "../sync/control-plane-db.server";
 import { assertParticipatingWriteGuardForShop } from "../tenant/participating-write.server";
+import { replayRequestDigestAgrees } from "../rbac/replay-digest.server";
 
 /**
  * Human replay enqueue. Same CP transaction: lifecycle guard, authz lock,
@@ -47,6 +48,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
       },
     });
     if (existing) {
+      if (!replayRequestDigestAgrees(existing.requestDigest, digest)) {
+        throw new Response("replay_digest_mismatch", { status: 409 });
+      }
       return {
         commandId,
         reconcile: true,

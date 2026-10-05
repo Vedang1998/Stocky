@@ -54,6 +54,8 @@ export default defineConfig({
       SHOPIFY_API_KEY: "pr7-a-test-api-key",
       SHOPIFY_API_SECRET: "pr7-a-test-api-secret",
       SHOPIFY_APP_URL: "https://example.com",
+      STOCKY_PRIVACY_ARTIFACT_KEY:
+        "0000000000000000000000000000000000000000000000000000000000000000",
     },
   },
 });

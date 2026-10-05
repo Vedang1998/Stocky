@@ -15,10 +15,48 @@ describe("PR7 B consumer gates", () => {
       path.join(ROOT, "app/routes/app.platform.replay.tsx"),
       "utf8",
     );
+    const roles = readFileSync(
+      path.join(ROOT, "app/routes/app.platform.roles.tsx"),
+      "utf8",
+    );
+    const download = readFileSync(
+      path.join(ROOT, "app/routes/app.platform.privacy.download.tsx"),
+      "utf8",
+    );
     expect(escalation).toMatch(/R1-01/);
     expect(replay).toMatch(/R1-01/);
+    expect(roles).toMatch(/R1-01/);
+    expect(download).toMatch(/R1-01/);
     expect(escalation).not.toMatch(/Access-Control-Allow-Origin/);
     expect(replay).not.toMatch(/Access-Control-Allow-Origin/);
+    expect(roles).not.toMatch(/Access-Control-Allow-Origin/);
+    expect(download).not.toMatch(/Access-Control-Allow-Origin/);
+  });
+
+  it("platform role and download routes require authentic owner proof and shop bind", () => {
+    const roles = readFileSync(
+      path.join(ROOT, "app/routes/app.platform.roles.tsx"),
+      "utf8",
+    );
+    const download = readFileSync(
+      path.join(ROOT, "app/routes/app.platform.privacy.download.tsx"),
+      "utf8",
+    );
+    expect(roles).toMatch(/requirePlatformOwner/);
+    expect(roles).toMatch(/grantShopRole/);
+    expect(roles).not.toMatch(/grantedBy:/);
+    expect(download).toMatch(/requirePlatformOwner/);
+    expect(download).toMatch(/shopId: ctx\.shop\.id/);
+    expect(download).toMatch(/canonicalDomain: ctx\.shop\.myshopifyDomain/);
+  });
+
+  it("replay route compares requestDigest on existing commandId", () => {
+    const replay = readFileSync(
+      path.join(ROOT, "app/routes/app.platform.replay.tsx"),
+      "utf8",
+    );
+    expect(replay).toMatch(/replayRequestDigestAgrees/);
+    expect(replay).toMatch(/replay_digest_mismatch/);
   });
 
   it("shopify.server still does not enable useOnlineTokens", () => {
