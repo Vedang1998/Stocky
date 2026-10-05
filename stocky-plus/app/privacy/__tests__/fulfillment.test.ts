@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   decryptPrivacyArtifact,
   encryptPrivacyArtifact,
@@ -7,7 +7,26 @@ import {
 import { PrivacyBoundaryError } from "../errors.server";
 import { privacyRequestVisibleToShop } from "../fulfillment.server";
 
+/** Synthetic fixture only. Default `npm test` does not inherit vitest.privacy.config env. */
+const FIXTURE_ARTIFACT_KEY =
+  "0000000000000000000000000000000000000000000000000000000000000000";
+
 describe("data-request artifact AEAD (B0-03)", () => {
+  let previousKey: string | undefined;
+
+  beforeEach(() => {
+    previousKey = process.env.STOCKY_PRIVACY_ARTIFACT_KEY;
+    process.env.STOCKY_PRIVACY_ARTIFACT_KEY = FIXTURE_ARTIFACT_KEY;
+  });
+
+  afterEach(() => {
+    if (previousKey === undefined) {
+      delete process.env.STOCKY_PRIVACY_ARTIFACT_KEY;
+    } else {
+      process.env.STOCKY_PRIVACY_ARTIFACT_KEY = previousKey;
+    }
+  });
+
   it("round-trips plaintext and does not store it in the ciphertext (positive)", () => {
     const plaintext = JSON.stringify({ shop: "a.myshopify.com", keys: [1] });
     const stored = encryptPrivacyArtifact(plaintext);
@@ -25,21 +44,14 @@ describe("data-request artifact AEAD (B0-03)", () => {
   });
 
   it("missing key fails closed (bypass)", () => {
-    const previous = process.env.STOCKY_PRIVACY_ARTIFACT_KEY;
     delete process.env.STOCKY_PRIVACY_ARTIFACT_KEY;
+    let thrown: unknown;
     try {
-      let thrown: unknown;
-      try {
-        parsePrivacyArtifactKey();
-      } catch (error) {
-        thrown = error;
-      }
-      expect(thrown).toMatchObject({ code: "artifact_key_missing" });
-    } finally {
-      if (previous !== undefined) {
-        process.env.STOCKY_PRIVACY_ARTIFACT_KEY = previous;
-      }
+      parsePrivacyArtifactKey();
+    } catch (error) {
+      thrown = error;
     }
+    expect(thrown).toMatchObject({ code: "artifact_key_missing" });
   });
 });
 

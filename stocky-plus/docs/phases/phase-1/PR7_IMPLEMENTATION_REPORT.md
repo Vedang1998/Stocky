@@ -309,6 +309,18 @@ Four failed files:
 | B0-05 | `replayRequestDigestAgrees` on existing `(shopId, commandId)` |
 | B0-06 | SHA-256 then `timingSafeEqual` for operator token |
 
-Local (this working tree, not exact-head CI): `npm run test:privacy` 13 files **102/102** exit 0; `pr7-platform-authorization.test.ts` **6/6** exit 0; `npx tsc --noEmit` exit 0; eslint on B1 files exit 0. Mechanical inventory regen: scanned files **562**, findings **1812**, violations **0**. Exact-head Classify+FULL Heavy+Gate for HB1 is recorded after push.
+Local (pre-CI, not exact-head): `npm run test:privacy` 13 files **102/102** exit 0; `pr7-platform-authorization.test.ts` **6/6** exit 0; `npx tsc --noEmit` exit 0; eslint on B1 files exit 0. Mechanical inventory regen: scanned files **562**, findings **1812**, violations **0**.
+
+### Exact-head unit failure on `6bfff95` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37250417114](https://github.com/Vedang1998/Stocky/actions/runs/37250417114) · `head_sha=6bfff956ac337de97f9e9ba95826fedb237e85a9`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111576717856` | SUCCESS |
+| Heavy | `111576742731` | FAILURE at step 145 **Unit tests** (`npm test`: 2 failed / 734 passed in `app/privacy/__tests__/fulfillment.test.ts`). Steps 10–144 SUCCESS including enforcement, inventories, queue/Redis, lint, typecheck, codegen, PR5-F3, `test:privacy` 13 files **102/102**, zero-collection wrapper, foundation, races. Migrations / C07 / subject-memory / build skipped. |
+| Gate | `111586820517` | FAILURE · `validate_result=failure` |
+
+Cause: default `vitest.config.ts` excludes `app/rbac` but includes `app/privacy/**/*.test.ts` and does **not** inject `STOCKY_PRIVACY_ARTIFACT_KEY`. Privacy-config AEAD tests passed; the same encrypt/decrypt cases failed closed under `npm test` with `artifact_key_missing`. Missing-key bypass still passed. Correction: fulfillment AEAD tests set a synthetic fixture key themselves and still delete it for the missing-key case. `vitest.config.ts` is not in exclusive B scope and is unchanged.
 
 R1-01 remains deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, or merge.

@@ -127,7 +127,7 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 
 - B0-01: `requirePlatformOwner` + authentic WeakMap owner proof on grant/revoke; last-owner revoke denied.
 - B0-02: download binds server `shopId` + `canonicalDomain`; mismatch ≡ missing.
-- B0-03: AES-256-GCM via `STOCKY_PRIVACY_ARTIFACT_KEY`; fail closed if missing.
+- B0-03: AES-256-GCM via `STOCKY_PRIVACY_ARTIFACT_KEY`; fail closed if missing. AEAD tests set a synthetic fixture key so default `npm test` (no privacy-config env) still encrypts; missing-key case deletes it. `6bfff95` Heavy unit step failed before this.
 - B0-04: role write and audit in the same tenant transaction; zero-row revoke is `failed`.
 - B0-05: existing replay commandId requires digest match.
 - B0-06: operator token hash-then-`timingSafeEqual`.

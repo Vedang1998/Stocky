@@ -62,7 +62,7 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | Void participating-write on Prisma apply | `apply-safety.test.ts`, `requireProcessingEnabled` typed `$queryRaw` wrap | implemented; TenantDb `$executeRaw` remains forbidden; `$queryRaw` deserialize of void is the recorded 13f39db pr6-d failure |
 | B0-01 owner-only grant/revoke; last-owner deny; forged handle | `app/rbac/__tests__/assignment.test.ts`, `owner-proof.test.ts`, `app/tenant/__tests__/db-isolation/pr7-platform-authorization.test.ts` | implemented |
 | B0-02 shop-bound download; cross-tenant missing | `app/privacy/__tests__/fulfillment.test.ts`, db-isolation platform-authorization | implemented |
-| B0-03 AES-256-GCM artifact; missing key deny | `app/privacy/__tests__/fulfillment.test.ts` + db-isolation | implemented; fixture key only |
+| B0-03 AES-256-GCM artifact; missing key deny | `app/privacy/__tests__/fulfillment.test.ts` + db-isolation | implemented; tests set fixture key (default `npm test` has no privacy-config env); `6bfff95` Heavy `37250417114` failed 2 encrypt cases before that |
 | B0-04 same-tx role audit; zero-row revoke failed | db-isolation platform-authorization | implemented |
 | B0-05 replay digest match | `app/privacy/__tests__/replay-digest.test.ts` + consumer-gates | implemented |
 | B0-06 operator timingSafeEqual | `app/privacy/__tests__/operator-resolve.test.ts` | implemented |
