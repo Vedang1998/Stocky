@@ -151,7 +151,13 @@ export async function materializeDataRequestArtifact(input: {
     actor: input.owner.actor.shopifyUserId,
     keys,
   });
-  const ciphertext = new Uint8Array(encryptPrivacyArtifact(plaintext));
+  const ciphertext = new Uint8Array(
+    encryptPrivacyArtifact(plaintext, {
+      shopId: request.targetShopId,
+      canonicalDomain: request.canonicalDomain,
+      requestId: request.id,
+    }),
+  );
   const expiresAt = new Date(Date.now() + SYNTHETIC_TTL_MS);
   const row = await prisma.privacyDataRequestArtifact.upsert({
     where: { privacyRequestId: request.id },
@@ -187,7 +193,11 @@ export async function downloadDataRequestArtifact(input: {
     });
     throw new PrivacyBoundaryError("artifact_expired", "Download expired");
   }
-  const body = decryptPrivacyArtifact(Buffer.from(row.ciphertext));
+  const body = decryptPrivacyArtifact(Buffer.from(row.ciphertext), {
+    shopId: input.shopId,
+    canonicalDomain: input.canonicalDomain,
+    requestId: input.requestId,
+  });
   await prisma.privacyDataRequestArtifact.update({
     where: { id: row.id },
     data: { downloadedAt: new Date() },

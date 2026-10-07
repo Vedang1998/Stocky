@@ -5,6 +5,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { ingestAuthenticatedWebhook } from "../intake.server";
 import { processUninstall } from "../uninstall.server";
+import { reactivateShopAfterVerifiedReinstall } from "../reinstall.server";
+import { SyncControlPlaneError } from "../errors";
 import { resetControlPlanePrismaForTests } from "../control-plane-db.server";
 import {
   CANCELLABLE_DURABLE_JOB_STATES,
@@ -150,5 +152,32 @@ describe("test:sync-uninstall", () => {
       },
     });
     expect(remaining).toBe(0);
+  });
+
+  it("uninstall does not overwrite REDACTED and reinstall stays denied (F-06)", async () => {
+    const shop = await prisma.shop.findUniqueOrThrow({
+      where: { myshopifyDomain: SHOP },
+    });
+    await prisma.shop.update({
+      where: { id: shop.id },
+      data: {
+        processingEnabled: false,
+        processingDisabledReason: "REDACTED",
+        processingDisabledAt: new Date("2026-01-01T00:00:00Z"),
+      },
+    });
+    await processUninstall({
+      verifiedShop: SHOP,
+      webhookId: "uninstall-redacted",
+      apiVersion: "2026-07",
+    });
+    const after = await prisma.shop.findUniqueOrThrow({
+      where: { myshopifyDomain: SHOP },
+    });
+    expect(after.processingEnabled).toBe(false);
+    expect(after.processingDisabledReason).toBe("REDACTED");
+    await expect(
+      reactivateShopAfterVerifiedReinstall({ verifiedDomain: SHOP }),
+    ).rejects.toBeInstanceOf(SyncControlPlaneError);
   });
 });

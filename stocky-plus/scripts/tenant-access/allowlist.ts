@@ -165,6 +165,7 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts",
   "scripts/tenant-enforcement/tests/pr7-privacy-foundation.test.ts",
   "scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts",
+  "scripts/tenant-enforcement/tests/pr7-shop-residual-leftover.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {

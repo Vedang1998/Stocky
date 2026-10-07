@@ -27,25 +27,26 @@ export async function assertShopExternalResidualClear(input: {
   shopId: string;
   canonicalDomain: string;
 }): Promise<{ ok: boolean; detail: string }> {
-  if (process.env.REDIS_URL && process.env.REDIS_URL.trim() !== "") {
-    try {
-      const drain = await drainOrdinaryQueueJobsForShop(input);
-      if (drain.remainingForShop > 0) {
-        return {
-          ok: false,
-          detail: `redis_jobs_remaining:${drain.remainingForShop}`,
-        };
-      }
-      const leftover = await countOrdinaryQueueJobsForShop(input);
-      if (leftover > 0) {
-        return { ok: false, detail: `redis_jobs_remaining:${leftover}` };
-      }
-    } catch (err) {
+  if (!process.env.REDIS_URL || process.env.REDIS_URL.trim() === "") {
+    return { ok: false, detail: "redis_url_missing" };
+  }
+  try {
+    const drain = await drainOrdinaryQueueJobsForShop(input);
+    if (drain.remainingForShop > 0) {
       return {
         ok: false,
-        detail: `redis_drain_failed:${err instanceof Error ? err.message : "unknown"}`,
+        detail: `redis_jobs_remaining:${drain.remainingForShop}`,
       };
     }
+    const leftover = await countOrdinaryQueueJobsForShop(input);
+    if (leftover > 0) {
+      return { ok: false, detail: `redis_jobs_remaining:${leftover}` };
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      detail: `redis_drain_failed:${err instanceof Error ? err.message : "unknown"}`,
+    };
   }
   const scratch = await countShopDScratchLeftovers(input.shopId);
   if (scratch > 0) {

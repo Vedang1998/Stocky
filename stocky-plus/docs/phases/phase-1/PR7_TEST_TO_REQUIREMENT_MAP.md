@@ -68,3 +68,14 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | B0-06 operator timingSafeEqual | `app/privacy/__tests__/operator-resolve.test.ts` | implemented |
 | Q-008 | production decision | OPEN / unmet as legal default |
 | D-051 no-global-convoy (B1 test-only amendment `6044918346`) | `app/sync/__tests__/d051-corrections.test.ts` | HOL commit-before-holder-release for intake/retry/recovery/enabled + 100-shop holder; same-shop wait; owned global-lock blocked-before-release + restore + rerun; benchmark TPS diagnostic only (deadlock/error still fail). Not a PR8 throughput gate. |
+| F-01 leftover residual cannot fail-open | `pr7-shop-residual-leftover.test.ts` + races no-GUC residual | implemented; skipped-delete mock; raise without GUCs |
+| F-02/F-10 frozen dispatcher isolation | `sync-dispatch-recovery.test.ts` | implemented; per-shop txs; two stranded guards |
+| F-03 writer-discovery fail-closed | `participating-writers.test.ts` | extraWrites + minGuard 99 bypass + host prefix |
+| F-04 exclusive lock on shop erasure | `execute.server.ts` + foundation processors | implemented; finalizer EXECUTE grant |
+| F-05 bound effect tenant match | `pr7-privacy-races.test.ts` | runtime cross-tenant `effect_tenant_mismatch` |
+| F-06 uninstall/reinstall reason | `sync-uninstall.test.ts` | REDACTED/MANUAL preserved; reinstall FOR UPDATE |
+| F-07 assignment/artifact purge | foundation F-07 | implemented |
+| F-08 AAD + zero key | `fulfillment.test.ts` | foreign AAD fail; all-zero key fail |
+| F-09 installed redact / HOL / Redis | foundation F-09 + races missing REDIS_URL | implemented |
+| F-11 append-only CP + admission fallback | foundation F-11 + `admission-fallback.test.ts` | implemented |
+| F-12 P3 | dispositions in brief/report | not claimed fixed |

@@ -495,9 +495,29 @@ SECURITY DEFINER
 SET search_path = pg_catalog, pg_temp
 AS $$
 DECLARE
+  r public."PrivacyRequest"%ROWTYPE;
+  v_req text := NULLIF(current_setting('stocky.privacy_request_id', true), '');
+  v_shop text := NULLIF(current_setting('stocky.current_shop_id', true), '');
+  v_att text := NULLIF(current_setting('stocky.privacy_attempt_id', true), '');
   n bigint := 0;
   t bigint;
 BEGIN
+  IF v_req IS NULL OR v_req = '' THEN
+    RAISE EXCEPTION 'residual_request_guc_mismatch' USING ERRCODE = '42501';
+  END IF;
+  SELECT * INTO r FROM public."PrivacyRequest" WHERE id = v_req;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'residual_request_missing' USING ERRCODE = 'P0001';
+  END IF;
+  IF v_shop IS DISTINCT FROM p_shop_id OR r."targetShopId" IS DISTINCT FROM p_shop_id THEN
+    RAISE EXCEPTION 'residual_tenant_mismatch' USING ERRCODE = '42501';
+  END IF;
+  IF v_att IS NULL OR NOT public.stocky_privacy_live_attempt_ok(r.id, v_att) THEN
+    RAISE EXCEPTION 'residual_stale_attempt' USING ERRCODE = '42501';
+  END IF;
+  IF NOT public.stocky_privacy_capability_allows('READ', p_shop_id) THEN
+    RAISE EXCEPTION 'residual_capability_denied' USING ERRCODE = '42501';
+  END IF;
 ${MERCHANT_SQL_TABLES.map(
   (table) => `  SELECT count(*) INTO t FROM public.${quoteIdent(table)} WHERE "shopId" = p_shop_id;
   n := n + t;`,
@@ -573,6 +593,8 @@ const PR7_IDEMPOTENT_DROP_POLICIES: ReadonlyArray<{
   { table: "AuditEvent", policy: "audit_gate_insert" },
   { table: "ShopRoleAssignment", policy: "assignment_runtime_all" },
   { table: "ShopRoleAssignment", policy: "assignment_verifier_select" },
+  { table: "ShopRoleAssignment", policy: "assignment_control_plane_select" },
+  { table: "ShopRoleAssignment", policy: "assignment_control_plane_delete" },
   { table: "PrivacyRequest", policy: "privacy_request_target_owner_all" },
   { table: "PrivacyRequest", policy: "privacy_request_definer_select" },
   { table: "PrivacyAttempt", policy: "privacy_attempt_target_owner_all" },
@@ -629,6 +651,10 @@ BEGIN
     EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${quoteIdent("PrivacyDeletionManifest")} TO stocky_control_plane';
     EXECUTE 'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${quoteIdent("PrivacyDataRequestArtifact")} TO stocky_control_plane';
     EXECUTE 'GRANT SELECT, INSERT ON TABLE ${quoteIdent("PrivacyCoordinatorEvent")} TO stocky_control_plane';
+    EXECUTE 'REVOKE UPDATE, DELETE ON TABLE ${quoteIdent("PrivacyCoordinatorEvent")} FROM stocky_control_plane';
+    EXECUTE 'GRANT SELECT, INSERT ON TABLE ${quoteIdent("PrivacyCompletionReceipt")} TO stocky_control_plane';
+    EXECUTE 'REVOKE UPDATE, DELETE ON TABLE ${quoteIdent("PrivacyCompletionReceipt")} FROM stocky_control_plane';
+    EXECUTE 'GRANT SELECT, DELETE ON TABLE ${quoteIdent("ShopRoleAssignment")} TO stocky_control_plane';
   END IF;
 END$$;
 `.trim();

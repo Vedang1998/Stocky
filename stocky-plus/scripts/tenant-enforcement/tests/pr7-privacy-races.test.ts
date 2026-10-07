@@ -657,4 +657,149 @@ describe("PR7 privacy races, provenance, and external sinks", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it("shop residual raises without GUC and counts leftover AuditEvent with GUC (F-01)", async () => {
+    const { shopId, domain, generationId } = await seedShop(prisma, false);
+    await prisma.shopInstallGeneration.update({
+      where: { id: generationId },
+      data: { fence: "ERASING" },
+    });
+    await prisma.auditEvent.create({
+      data: { shopId, customerRestId: "77", action: "leftover" },
+    });
+    const requestId = randomUUID();
+    const attemptId = randomUUID();
+    await prisma.privacyRequest.create({
+      data: {
+        id: requestId,
+        topic: "shop/redact",
+        state: "APPLYING",
+        targetShopId: shopId,
+        generationId,
+        shopRowId: shopId,
+        canonicalDomain: domain,
+        workId: randomUUID(),
+        deadlineAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await prisma.privacyAttempt.create({
+      data: {
+        id: attemptId,
+        privacyRequestId: requestId,
+        epoch: 1,
+        state: "RUNNING",
+        leaseUntil: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await prisma.privacyRequest.update({
+      where: { id: requestId },
+      data: { activeAttemptId: attemptId },
+    });
+    const holder = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      await expect(
+        holder.query(`SELECT stocky_privacy_shop_residual_count($1)`, [shopId]),
+      ).rejects.toThrow(/residual_request_guc_mismatch/);
+      await holder.query("BEGIN");
+      await holder.query("SELECT set_config('stocky.current_shop_id', $1, true)", [
+        shopId,
+      ]);
+      await holder.query(
+        "SELECT set_config('stocky.tenant_context_version', $1, true)",
+        ["phase1-db-tenant-context-v1"],
+      );
+      await holder.query(
+        "SELECT set_config('stocky.privacy_request_id', $1, true)",
+        [requestId],
+      );
+      await holder.query(
+        "SELECT set_config('stocky.privacy_attempt_id', $1, true)",
+        [attemptId],
+      );
+      const residual = await holder.query<{ n: string }>(
+        `SELECT stocky_privacy_shop_residual_count($1)::text AS n`,
+        [shopId],
+      );
+      expect(Number(residual.rows[0]?.n)).toBeGreaterThan(0);
+      await holder.query("COMMIT");
+    } catch (err) {
+      await holder.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      await holder.end();
+    }
+  });
+
+  it("runtime cannot apply bound effect for a different tenant (F-05)", async () => {
+    const a = await seedShop(prisma, true);
+    const b = await seedShop(prisma, true);
+    const body = "cross-tenant-body";
+    const capture = await captureOriginalAdminCommand({
+      shopId: a.shopId,
+      canonicalDomain: a.domain,
+      actor: { kind: "human", shopifyUserId: ACTOR, destShop: a.domain },
+      sourceKind: "ADMIN",
+      sourceIdentity: "platform.note",
+      sourceBody: body,
+      targetKind: "CUSTOMER_REST_ID",
+      targetValue: "9001",
+    });
+    const admitted = await recordWriterAdmission({
+      canonicalDomain: a.domain,
+      shopId: a.shopId,
+      sourceKind: "ADMIN",
+      sourceIdentity: "platform.note",
+      sourceBody: body,
+      targetKind: "CUSTOMER_REST_ID",
+      targetValue: "9001",
+    });
+    expect(capture.captureId).toBeTruthy();
+    const runtime = await getRuntimeClient();
+    try {
+      await runtime.query("BEGIN");
+      await runtime.query("SELECT set_config('stocky.current_shop_id', $1, true)", [
+        a.shopId,
+      ]);
+      await runtime.query(
+        "SELECT set_config('stocky.tenant_context_version', $1, true)",
+        ["phase1-db-tenant-context-v1"],
+      );
+      await expect(
+        runtime.query(
+          `SELECT stocky_apply_bound_customer_effect($1,$2,$3,$4,$5,$6,$7,$8)`,
+          [
+            b.domain,
+            b.shopId,
+            "CUSTOMER_REST_ID",
+            "9001",
+            randomUUID(),
+            admitted.workId,
+            "CUSTOMER_WRITE",
+            body,
+          ],
+        ),
+      ).rejects.toThrow(/effect_tenant_mismatch/);
+      await runtime.query("ROLLBACK").catch(() => undefined);
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("missing REDIS_URL fails shop residual closed (F-09)", async () => {
+    const previous = process.env.REDIS_URL;
+    delete process.env.REDIS_URL;
+    try {
+      const blocked = await assertShopExternalResidualClear({
+        shopId: "shop-no-redis",
+        canonicalDomain: "shop-no-redis.myshopify.com",
+      });
+      expect(blocked.ok).toBe(false);
+      expect(blocked.detail).toBe("redis_url_missing");
+    } finally {
+      if (previous === undefined) delete process.env.REDIS_URL;
+      else process.env.REDIS_URL = previous;
+    }
+  });
 });

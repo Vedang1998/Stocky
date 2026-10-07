@@ -136,24 +136,51 @@ function resolveQueue(job: ClaimedJobRow): Queue {
     : getCronQueue();
 }
 
-async function recoverExpiredDispatchLeases(
+function isGenerationFrozenError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /generation_frozen/i.test(message);
+}
+
+export async function recoverExpiredDispatchLeases(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   now: Date,
   limit: number = DEFAULT_EXPIRED_LEASE_RECOVERY_LIMIT,
 ): Promise<number> {
-  // Bounded deterministic recovery: FOR UPDATE SKIP LOCKED + LIMIT.
-  // Guard is held in the same transaction as the UPDATE so a freeze rolls back
-  // recovered leases (processingEnabled is admission, not this drain).
-  return prisma.$transaction(async (tx) => {
-    const recovered = await tx.$queryRaw<Array<{ id: string; shopId: string }>>(
-      buildExpiredDispatchLeaseRecoverySql({ now, limit }),
-    );
-    const shops = [...new Set(recovered.map((row) => row.shopId))];
-    for (const shopId of shops) {
-      await assertParticipatingWriteGuardForShop(tx, shopId);
+  // Per-shop transactions so one frozen namespace cannot roll back every tenant.
+  const candidates = await prisma.$queryRaw<Array<{ shopId: string }>>`
+    SELECT d."shopId"
+    FROM "DurableJob" d
+    WHERE d.state = 'DISPATCH_LEASED'
+      AND d."leaseExpiresAt" IS NOT NULL
+      AND d."leaseExpiresAt" < ${now}
+    ORDER BY d."leaseExpiresAt" ASC, d.id ASC
+    LIMIT ${limit}
+  `;
+  const shops = [...new Set(candidates.map((row) => row.shopId))];
+  let recovered = 0;
+  let remaining = limit;
+  for (const shopId of shops) {
+    if (remaining < 1) break;
+    try {
+      const n = await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, shopId);
+        const rows = await tx.$queryRaw<Array<{ id: string; shopId: string }>>(
+          buildExpiredDispatchLeaseRecoverySql({
+            now,
+            limit: remaining,
+            shopId,
+          }),
+        );
+        return rows.length;
+      });
+      recovered += n;
+      remaining -= n;
+    } catch (err) {
+      if (isGenerationFrozenError(err)) continue;
+      throw err;
     }
-    return recovered.length;
-  });
+  }
+  return recovered;
 }
 
 /**
@@ -177,83 +204,93 @@ async function claimBatchFair(
 ): Promise<ClaimedJobRow[]> {
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
-  return prisma.$transaction(async (tx) => {
-    const claimed: ClaimedJobRow[] = [];
-    const claimedIds = new Set<string>();
+  const claimed: ClaimedJobRow[] = [];
+  const claimedIds = new Set<string>();
 
-    for (let round = 0; round < FAIR_CLAIM_MAX_REFILL_ROUNDS; round++) {
-      const remaining = batchSize - claimed.length;
-      if (remaining <= 0) break;
+  for (let round = 0; round < FAIR_CLAIM_MAX_REFILL_ROUNDS; round++) {
+    const remaining = batchSize - claimed.length;
+    if (remaining <= 0) break;
 
-      const shopCap = shopCapForFairClaim(remaining);
-      const lockedShops = await tx.$queryRaw<FairClaimSchedulerShop[]>(
+    const shopCap = shopCapForFairClaim(remaining);
+    const lockedShops = await prisma.$transaction(async (tx) =>
+      tx.$queryRaw<FairClaimSchedulerShop[]>(
         buildFairClaimSchedulerLockSql({ now, shopCap }),
-      );
+      ),
+    );
 
-      if (lockedShops.length === 0) {
-        break;
-      }
+    if (lockedShops.length === 0) {
+      break;
+    }
 
-      const rows = await tx.$queryRaw<ClaimedJobRow[]>(
-        buildFairClaimJobCandidateSql({
-          now,
-          batchSize: remaining,
-          maxPerShop,
-          shops: lockedShops.map((s) => ({
-            shopId: s.shopId,
-            ordinal: Number(s.ordinal),
-          })),
-        }),
-      );
-
-      let leasedThisRound = 0;
-      for (const row of rows) {
-        if (claimedIds.has(row.id)) continue;
-        assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
-        await assertParticipatingWriteGuardForShop(tx, row.shopId);
-        const updated = await tx.$queryRaw<Array<{ id: string }>>`
-          UPDATE "DurableJob"
-          SET
-            state = 'DISPATCH_LEASED',
-            "leaseOwner" = ${workerId},
-            "leaseExpiresAt" = ${leaseExpiresAt},
-            "updatedAt" = ${now}
-          WHERE id = ${row.id}
-            AND state = CAST(${row.state} AS "DurableJobState")
-          RETURNING id
-        `;
-        if (updated.length === 0) continue;
-        claimedIds.add(row.id);
-        claimed.push({ ...row, state: "DISPATCH_LEASED" });
-        leasedThisRound += 1;
-        if (claimed.length >= batchSize) break;
-      }
-
-      // D. Fresh-snapshot reconciliation while readiness locks still held.
-      await tx.$queryRaw(
-        buildFairClaimReadinessReconcileSql({
-          now,
-          shopIds: lockedShops.map((s) => s.shopId),
-        }),
-      );
-
-      // If this round locked readiness but leased nothing, reconciliation may
-      // have healed stale rows — continue bounded refill while capacity remains.
-      if (leasedThisRound === 0) {
-        const moreDue = await tx.$queryRaw<Array<{ ok: number }>>`
-          SELECT 1 AS ok
-          FROM "DispatchReadyShop"
-          WHERE "processingEnabled" = true
-            AND "nextDispatchAt" <= ${now}
-          LIMIT 1
-        `;
-        if (moreDue.length === 0) break;
-        continue;
+    let leasedThisRound = 0;
+    for (const shop of lockedShops) {
+      if (claimed.length >= batchSize) break;
+      try {
+        const leased = await prisma.$transaction(async (tx) => {
+          await assertParticipatingWriteGuardForShop(tx, shop.shopId);
+          const rows = await tx.$queryRaw<ClaimedJobRow[]>(
+            buildFairClaimJobCandidateSql({
+              now,
+              batchSize: batchSize - claimed.length,
+              maxPerShop,
+              shops: [
+                {
+                  shopId: shop.shopId,
+                  ordinal: Number(shop.ordinal),
+                },
+              ],
+            }),
+          );
+          const out: ClaimedJobRow[] = [];
+          for (const row of rows) {
+            if (claimedIds.has(row.id)) continue;
+            assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
+            const updated = await tx.$queryRaw<Array<{ id: string }>>`
+              UPDATE "DurableJob"
+              SET
+                state = 'DISPATCH_LEASED',
+                "leaseOwner" = ${workerId},
+                "leaseExpiresAt" = ${leaseExpiresAt},
+                "updatedAt" = ${now}
+              WHERE id = ${row.id}
+                AND state = CAST(${row.state} AS "DurableJobState")
+              RETURNING id
+            `;
+            if (updated.length === 0) continue;
+            out.push({ ...row, state: "DISPATCH_LEASED" });
+          }
+          await tx.$queryRaw(
+            buildFairClaimReadinessReconcileSql({
+              now,
+              shopIds: [shop.shopId],
+            }),
+          );
+          return out;
+        });
+        for (const row of leased) {
+          claimedIds.add(row.id);
+          claimed.push(row);
+          leasedThisRound += 1;
+        }
+      } catch (err) {
+        if (isGenerationFrozenError(err)) continue;
+        throw err;
       }
     }
 
-    return claimed;
-  });
+    if (leasedThisRound === 0) {
+      const moreDue = await prisma.$queryRaw<Array<{ ok: number }>>`
+        SELECT 1 AS ok
+        FROM "DispatchReadyShop"
+        WHERE "processingEnabled" = true
+          AND "nextDispatchAt" <= ${now}
+        LIMIT 1
+      `;
+      if (moreDue.length === 0) break;
+    }
+  }
+
+  return claimed;
 }
 
 async function ensureDispatchRecord(
@@ -1249,6 +1286,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
       // Confirmed MISSING or TERMINAL_EXISTING.
       const decision = shouldDeadLetterStranded(outcome.live);
       const txResult = await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, outcome.live.shopId);
         if (decision.deadLetter) {
           return terminalizeStrandedEnqueuedJob(tx, {
             job: outcome.live,
@@ -1472,16 +1510,19 @@ export async function dispatchPendingJobs(options?: {
       } else {
         skippedNotRunnable += 1;
         // Return to PENDING so a later cycle can allocate a fresh sequence.
-        await prisma.$executeRaw`
-          UPDATE "DurableJob"
-          SET
-            state = 'PENDING',
-            "leaseOwner" = NULL,
-            "leaseExpiresAt" = NULL,
-            "updatedAt" = ${new Date()}
-          WHERE id = ${job.id}
-            AND state = 'DISPATCH_LEASED'
-        `;
+        await prisma.$transaction(async (tx) => {
+          await assertParticipatingWriteGuardForShop(tx, job.shopId);
+          await tx.$executeRaw`
+            UPDATE "DurableJob"
+            SET
+              state = 'PENDING',
+              "leaseOwner" = NULL,
+              "leaseExpiresAt" = NULL,
+              "updatedAt" = ${new Date()}
+            WHERE id = ${job.id}
+              AND state = 'DISPATCH_LEASED'
+          `;
+        });
       }
     } catch (err) {
       failed += 1;

@@ -1,6 +1,6 @@
 # PR7 implementation execution brief — checkpoint A
 
-**Status:** `CHECKPOINT_B B1 CORRECTION IN PROGRESS` (not complete-module acceptance; not B1 READY)
+**Status:** `CHECKPOINT_B B2 CORRECTION IN PROGRESS` (not complete-module acceptance; not B2 READY; not B1 READY)
 
 **Date:** 2026-09-30
 
@@ -145,3 +145,24 @@ The no-global-convoy requirement is the HOL/commit-before-holder-release invaria
 Diagnosis `6041369118` qualifications (must not be restated as six parent/current checkouts): the six local baseline repetitions used the **E working tree** with P/E-labelled slots after inspecting that the D-051 **test file blob** and `app/sync`/`prisma` D-051 lock functions matched P for those paths. That is relevant-input equivalence on those files, **not** identity of all main/PR7 schema/runtime trees. Local runs did not reproduce the CI invert; connection-outside-window did not establish the cause.
 
 Mechanical `PR2_TENANT_ACCESS_INVENTORY.md` refresh under CONTINUE B standing inventory admission: the allowed D-051 **test** file shifted existing EX-SYNC-TEST-017 line sites. Exception IDs unchanged; findings 1812; violations 0; digest `3421a59d…`. No new exception. Not a sync-runtime edit.
+
+### B2 correction (B1 findings F-01…F-11; F-12 P3 dispositions)
+
+**round=B2 (last of max two).** Input HB1 `8818e3d5544eda139a03538cd4705c69dc0b48c0` + review artifact `9fb83c1070f9b5ad78ed49d8cd94db940fa1f059` (ff-only locally; not a review-only push). Work order `PROPO_PR68_B_CORRECTIONS_REQUIRED` / comments `6048388890` + `6048441677`. No B3. D-051 production lock SQL remains frozen; diagnosis qualifications in the D-051 section stand (six E-tree repetitions, not six parent/current checkouts).
+
+| ID | Change |
+|---|---|
+| F-01 | `stocky_privacy_shop_residual_count` raises without request/attempt/shop GUCs; processor counts inside the GUC transaction; leftover AuditEvent with skipped DELETE is INCOMPLETE |
+| F-02 | `recoverStrandedEnqueuedJobs` guards both pre-Redis and post-Redis write txs; freeze then recover does not mutate the frozen shop |
+| F-03 | Host prefixes fail-closed for new write files; `extraWrites` omission control; `createManyAndReturn` / `pg` `.query` writes; in-function `minGuardOccurrences` (object-param extraction, not the first `{` in a type) |
+| F-04 | Shop redact takes `stocky_lifecycle_exclusive_lock` then publication lock before fence flip and again in the erasure DELETE tx |
+| F-05 | `stocky_apply_bound_customer_effect` binds `stocky_current_tenant_id()` for `stocky_runtime` |
+| F-06 | Uninstall FOR UPDATE preserves REDACTED/MANUAL; reinstall re-checks reason inside FOR UPDATE |
+| F-07 | Shop redact purges `ShopRoleAssignment` and `PrivacyDataRequestArtifact` before finalize |
+| F-08 | AES-256-GCM `setAAD(shopId, domain, requestId)` VERSION 2; all-zero 32-byte keys rejected |
+| F-09 | Installed shop/redact → `shop_still_installed`; coordinator max epoch 5 + skip foreign live leases; `REDIS_URL` missing → `redis_url_missing` |
+| F-10 | Per-shop transactions in `recoverExpiredDispatchLeases` / `claimBatchFair` so one `generation_frozen` cannot abort other tenants |
+| F-11 | Coordinator journals append-only; finalize exclusive+publication+live_attempt; verifier/note_queued_work tenant bind; admission URL fallback only when `STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK=1` |
+| F-12 | P3 dispositions only (not claimed fixed): NULL lock no-ops; non-constant advisory keys; disabled-shop `cancelled` semantics; HMAC-labelled plaintext shop id column; invalid-intake 5xx without durable evidence; no HTTP route tests |
+
+R1-01 still deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, merge, or B2→B3.

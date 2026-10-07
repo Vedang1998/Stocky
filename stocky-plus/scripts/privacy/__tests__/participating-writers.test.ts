@@ -42,4 +42,27 @@ describe("PR7 participating-writer source coverage", () => {
     expect(result.unknownWrites).not.toContain("app/shopify.server.ts");
     expect(result.complete).toBe(true);
   });
+
+  it("injecting an unlisted host write fails closed (omission control)", () => {
+    const result = evaluateWriterCompleteness(REQUIRED_WRITER_INVENTORY, {
+      extraWrites: ["app/sync/unlisted-host-writer.server.ts"],
+    });
+    expect(result.unknownWrites).toContain(
+      "app/sync/unlisted-host-writer.server.ts",
+    );
+    expect(result.complete).toBe(false);
+  });
+
+  it("stranded recovery requires two in-function guards (bypass)", () => {
+    const inflated = REQUIRED_WRITER_INVENTORY.map((row) =>
+      row.source_identity === "dispatcher.server.ts:recoverStrandedEnqueuedJobs"
+        ? { ...row, minGuardOccurrences: 99 }
+        : row,
+    );
+    const result = evaluateWriterCompleteness(inflated);
+    expect(result.missingGuards).toContain(
+      "dispatcher.server.ts:recoverStrandedEnqueuedJobs",
+    );
+    expect(result.complete).toBe(false);
+  });
 });

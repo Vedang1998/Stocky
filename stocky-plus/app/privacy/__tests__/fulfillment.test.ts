@@ -9,7 +9,14 @@ import { privacyRequestVisibleToShop } from "../fulfillment.server";
 
 /** Synthetic fixture only. Default `npm test` does not inherit vitest.privacy.config env. */
 const FIXTURE_ARTIFACT_KEY =
+  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const ZERO_ARTIFACT_KEY =
   "0000000000000000000000000000000000000000000000000000000000000000";
+const BINDING = {
+  shopId: "shop-a",
+  canonicalDomain: "a.myshopify.com",
+  requestId: "req-1",
+};
 
 describe("data-request artifact AEAD (B0-03)", () => {
   let previousKey: string | undefined;
@@ -29,18 +36,34 @@ describe("data-request artifact AEAD (B0-03)", () => {
 
   it("round-trips plaintext and does not store it in the ciphertext (positive)", () => {
     const plaintext = JSON.stringify({ shop: "a.myshopify.com", keys: [1] });
-    const stored = encryptPrivacyArtifact(plaintext);
-    expect(stored[0]).toBe(1);
+    const stored = encryptPrivacyArtifact(plaintext, BINDING);
+    expect(stored[0]).toBe(2);
     expect(stored.subarray(1 + 12 + 16).equals(Buffer.from(plaintext, "utf8"))).toBe(
       false,
     );
-    expect(decryptPrivacyArtifact(stored).toString("utf8")).toBe(plaintext);
+    expect(decryptPrivacyArtifact(stored, BINDING).toString("utf8")).toBe(
+      plaintext,
+    );
   });
 
   it("tampered ciphertext fails closed (negative)", () => {
-    const stored = encryptPrivacyArtifact("secret-payload");
+    const stored = encryptPrivacyArtifact("secret-payload", BINDING);
     stored[stored.length - 1] ^= 0xff;
-    expect(() => decryptPrivacyArtifact(stored)).toThrow(PrivacyBoundaryError);
+    expect(() => decryptPrivacyArtifact(stored, BINDING)).toThrow(
+      PrivacyBoundaryError,
+    );
+  });
+
+  it("foreign shop AAD fails closed (bypass)", () => {
+    const stored = encryptPrivacyArtifact("secret-payload", BINDING);
+    expect(() =>
+      decryptPrivacyArtifact(stored, { ...BINDING, shopId: "shop-b" }),
+    ).toThrow(PrivacyBoundaryError);
+  });
+
+  it("all-zero artifact key is rejected (bypass)", () => {
+    process.env.STOCKY_PRIVACY_ARTIFACT_KEY = ZERO_ARTIFACT_KEY;
+    expect(() => parsePrivacyArtifactKey()).toThrow(PrivacyBoundaryError);
   });
 
   it("missing key fails closed (bypass)", () => {

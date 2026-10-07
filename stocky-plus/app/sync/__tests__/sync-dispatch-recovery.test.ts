@@ -11,6 +11,7 @@ import {
   dispatchPendingJobs,
   enqueueWithDispatch,
   formatQueueJobId,
+  recoverExpiredDispatchLeases,
   recoverStrandedEnqueuedJobs,
 } from "../dispatcher.server";
 import {
@@ -1448,5 +1449,129 @@ describe("test:sync-dispatch-recovery", () => {
     `;
     expect(defs.length).toBeGreaterThanOrEqual(1);
     expect(defs[0].def).toMatch(/ENQUEUED['"]?\s*,\s*['"]FAILED/);
+  });
+
+  it("frozen shop does not abort stranded recovery for other shops (F-02/F-10)", async () => {
+    const frozenDomain = `pr7-frozen-${Date.now()}.myshopify.com`;
+    const liveDomain = SHOP;
+    const frozen = await prisma.shop.create({
+      data: { myshopifyDomain: frozenDomain, processingEnabled: true },
+    });
+    await prisma.shopInstallGeneration.create({
+      data: {
+        canonicalDomain: frozenDomain,
+        targetShopId: frozen.id,
+        shopRowId: frozen.id,
+        fence: "ERASING",
+      },
+    });
+    const ingestedLive = await ingestAuthenticatedWebhook({
+      verifiedShop: liveDomain,
+      topic: "orders/create",
+      webhookId: "wh-f02-live",
+      apiVersion: "2026-07",
+      payload: {
+        id: 901,
+        line_items: [{ variant_id: 1, quantity: 1, price: "1.00" }],
+      },
+    });
+    expect((await dispatchPendingJobs({ batchSize: 10 })).enqueued).toBeGreaterThanOrEqual(1);
+    const liveJob = ingestedLive.job!;
+    await prisma.durableJob.update({
+      where: { id: liveJob.id },
+      data: { enqueuedAt: new Date(Date.now() - 10 * 60_000) },
+    });
+    const q = new Queue(WEBHOOK_QUEUE, { connection: redis.duplicate() });
+    const liveDispatch = await prisma.jobDispatch.findFirst({
+      where: { durableJobId: liveJob.id },
+    });
+    if (liveDispatch) {
+      const qj = await q.getJob(liveDispatch.queueJobId);
+      if (qj) await qj.remove();
+    }
+
+    const frozenJobId = `frozen-stranded-${frozen.id}`;
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "DurableJob" (
+        id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+        "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+        "authorityVersion", "executionStrategy", state, "enqueuedAt",
+        "createdAt", "updatedAt"
+      ) VALUES (
+        '${frozenJobId}','${frozen.id}','webhook:orders/create','webhook:orders/create','${WEBHOOK_QUEUE}','v1',
+        '{}','${"f".repeat(64)}','idem-${frozenJobId}','corr-${frozenJobId}',
+        'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','ENQUEUED',
+        NOW() - interval '10 minutes', NOW(), NOW()
+      )
+    `);
+
+    const result = await recoverStrandedEnqueuedJobs({
+      olderThanMs: 60_000,
+      limit: 20,
+    });
+    expect(result.isolatedFailures).toBeGreaterThanOrEqual(1);
+    const stillFrozen = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: frozenJobId },
+    });
+    expect(stillFrozen.state).toBe("ENQUEUED");
+    const recoveredLive = await prisma.durableJob.findUniqueOrThrow({
+      where: { id: liveJob.id },
+    });
+    expect(recoveredLive.state).not.toBe("ENQUEUED");
+    await q.close();
+  });
+
+  it("frozen shop does not abort expired-lease recovery for other shops (F-10)", async () => {
+    const frozenDomain = `pr7-lease-frozen-${Date.now()}.myshopify.com`;
+    const frozen = await prisma.shop.create({
+      data: { myshopifyDomain: frozenDomain, processingEnabled: true },
+    });
+    await prisma.shopInstallGeneration.create({
+      data: {
+        canonicalDomain: frozenDomain,
+        targetShopId: frozen.id,
+        shopRowId: frozen.id,
+        fence: "ERASING",
+      },
+    });
+    const liveShop = await prisma.shop.findUniqueOrThrow({
+      where: { myshopifyDomain: SHOP },
+    });
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "DurableJob" (
+        id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+        "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+        "authorityVersion", "executionStrategy", state, "leaseOwner", "leaseExpiresAt",
+        "createdAt", "updatedAt"
+      ) VALUES (
+        'live-lease-${liveShop.id}','${liveShop.id}','webhook:orders/create','webhook:orders/create','${WEBHOOK_QUEUE}','v1',
+        '{}','${"a".repeat(64)}','idem-live-lease-${liveShop.id}','corr-live-lease',
+        'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','DISPATCH_LEASED',
+        'w1', NOW() - interval '1 minute', NOW(), NOW()
+      )
+    `);
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO "DurableJob" (
+        id, "shopId", "jobType", source, "queueName", "payloadSchemaVersion",
+        "sanitizedPayload", "payloadDigest", "idempotencyKey", "correlationId",
+        "authorityVersion", "executionStrategy", state, "leaseOwner", "leaseExpiresAt",
+        "createdAt", "updatedAt"
+      ) VALUES (
+        'frozen-lease-${frozen.id}','${frozen.id}','webhook:orders/create','webhook:orders/create','${WEBHOOK_QUEUE}','v1',
+        '{}','${"b".repeat(64)}','idem-frozen-lease-${frozen.id}','corr-frozen-lease',
+        'tenant-job-envelope-v3','ATOMIC_APPLICATION_RECEIPT','DISPATCH_LEASED',
+        'w1', NOW() - interval '1 minute', NOW(), NOW()
+      )
+    `);
+    const recovered = await recoverExpiredDispatchLeases(prisma, new Date(), 20);
+    expect(recovered).toBeGreaterThanOrEqual(1);
+    const frozenLeft = await prisma.durableJob.count({
+      where: { shopId: frozen.id, state: "DISPATCH_LEASED" },
+    });
+    expect(frozenLeft).toBe(1);
+    const livePending = await prisma.durableJob.count({
+      where: { shopId: liveShop.id, state: "PENDING" },
+    });
+    expect(livePending).toBeGreaterThanOrEqual(1);
   });
 });

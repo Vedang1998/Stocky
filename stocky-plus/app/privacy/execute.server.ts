@@ -10,7 +10,10 @@ import {
 import { withPrivacyPrincipal } from "./erasure-db.server";
 import { PrivacyBoundaryError } from "./errors.server";
 import { assertShopExternalResidualClear } from "./external-residual.server";
-import { GENERATION_FENCE } from "./generation.server";
+import {
+  GENERATION_FENCE,
+  markGenerationUninstalledInTx,
+} from "./generation.server";
 import { isPrivacyPauseEnabled } from "./pause.server";
 import {
   CUSTOMER_REDACT_DELETE_ORDER,
@@ -259,14 +262,32 @@ async function processShopRedact(
     where: { id: requestId },
   });
 
-  await prisma.$transaction(async (tx) => {
-    await setPrivacyExecutionContext(tx, {
-      shopId: request.targetShopId,
-      requestId: request.id,
-      attemptId,
-      workId: request.workId,
-    });
+  const privacyCtx = {
+    shopId: request.targetShopId,
+    requestId: request.id,
+    attemptId,
+    workId: request.workId,
+  };
+
+  const gated = await prisma.$transaction(async (tx) => {
+    await setPrivacyExecutionContext(tx, privacyCtx);
+    await tx.$executeRaw`SELECT stocky_lifecycle_exclusive_lock(${request.canonicalDomain})`;
     await tx.$executeRaw`SELECT stocky_privacy_publication_lock(${request.id})`;
+    const shop = await tx.shop.findUnique({
+      where: { id: request.targetShopId },
+      select: { processingEnabled: true },
+    });
+    if (shop?.processingEnabled) {
+      await tx.privacyRequest.update({
+        where: { id: request.id },
+        data: { state: "INCOMPLETE" },
+      });
+      return { blocked: true as const, detail: "shop_still_installed" };
+    }
+    await markGenerationUninstalledInTx(tx, {
+      shopId: request.targetShopId,
+      canonicalDomain: request.canonicalDomain,
+    });
     await tx.shopInstallGeneration.updateMany({
       where: { id: request.generationId },
       data: { fence: GENERATION_FENCE.ERASING },
@@ -277,7 +298,18 @@ async function processShopRedact(
     });
     await tx.$executeRaw`SELECT stocky_privacy_enumerate_shop_surfaces(${request.id})`;
     await tx.$executeRaw`SELECT stocky_privacy_enumerate_targets(${request.id})`;
+    return { blocked: false as const };
   });
+  if (gated.blocked) {
+    return {
+      requestId: request.id,
+      topic: request.topic,
+      state: "INCOMPLETE",
+      residualCount: null,
+      incomplete: true,
+      detail: gated.detail,
+    };
+  }
 
   await withPrivacyPrincipal("stocky_privacy_erasure", async (client) => {
     await client.query("BEGIN");
@@ -288,6 +320,12 @@ async function processShopRedact(
         attemptId,
         workId: request.workId,
       });
+      await client.query("SELECT stocky_lifecycle_exclusive_lock($1)", [
+        request.canonicalDomain,
+      ]);
+      await client.query("SELECT stocky_privacy_publication_lock($1)", [
+        request.id,
+      ]);
       for (const table of PRIVACY_MERCHANT_DELETE_ORDER) {
         await client.query(`DELETE FROM ${quoteIdent(table)}`);
       }
@@ -298,9 +336,12 @@ async function processShopRedact(
     }
   });
 
-  const residual = await prisma.$queryRaw<Array<{ n: bigint }>>`
-    SELECT stocky_privacy_shop_residual_count(${request.targetShopId}) AS n
-  `;
+  const residual = await prisma.$transaction(async (tx) => {
+    await setPrivacyExecutionContext(tx, privacyCtx);
+    return tx.$queryRaw<Array<{ n: bigint }>>`
+      SELECT stocky_privacy_shop_residual_count(${request.targetShopId}) AS n
+    `;
+  });
   const n = Number(residual[0]?.n ?? -1);
   if (n !== 0) {
     await prisma.privacyRequest.update({
@@ -336,13 +377,27 @@ async function processShopRedact(
     };
   }
 
-  await prisma.shop.updateMany({
-    where: { id: request.targetShopId },
-    data: {
-      processingEnabled: false,
-      processingDisabledReason: "REDACTED",
-      processingDisabledAt: new Date(),
-    },
+  await prisma.$transaction(async (tx) => {
+    await setPrivacyExecutionContext(tx, privacyCtx);
+    await tx.$executeRaw`SELECT stocky_lifecycle_exclusive_lock(${request.canonicalDomain})`;
+    await tx.shopRoleAssignment.deleteMany({
+      where: { shopId: request.targetShopId },
+    });
+    const related = await tx.privacyRequest.findMany({
+      where: { targetShopId: request.targetShopId },
+      select: { id: true },
+    });
+    await tx.privacyDataRequestArtifact.deleteMany({
+      where: { privacyRequestId: { in: related.map((row) => row.id) } },
+    });
+    await tx.shop.updateMany({
+      where: { id: request.targetShopId },
+      data: {
+        processingEnabled: false,
+        processingDisabledReason: "REDACTED",
+        processingDisabledAt: new Date(),
+      },
+    });
   });
   await prisma.privacyRequest.update({
     where: { id: request.id },

@@ -1,6 +1,6 @@
 # PR7 implementation report — checkpoint A
 
-**Status:** `CHECKPOINT_B B1 CORRECTION IN PROGRESS` (author evidence; not independent acceptance)
+**Status:** `CHECKPOINT_B B2 CORRECTION IN PROGRESS` (author evidence; not independent acceptance; not B2 READY)
 
 **Date:** 2026-09-30
 
@@ -351,4 +351,45 @@ Replacement for the wall-TPS proxy:
 
 Mechanical inventory (CONTINUE B standing admission, not a new exclusive runtime file): `PR2_TENANT_ACCESS_INVENTORY.md` regenerated after the D-051 test-file line shift. Findings **1812**, violations **0**, exception IDs unchanged, digest `3421a59d8e9ab9864dced1bc1bff3ea8c3442a28654d06249a28a44b6d969144`.
 
-PR8 load/query-plan/product throughput gates remain open. No B2. No mark-ready / merge / production from this section.
+PR8 load/query-plan/product throughput gates remain open. No mark-ready / merge / production from this section.
+
+## 7. B2 correction (B1 findings; not B2 READY)
+
+**round=B2 (last of max two).** Input HB1 `8818e3d5544eda139a03538cd4705c69dc0b48c0` plus original B1 review artifact `9fb83c1070f9b5ad78ed49d8cd94db940fa1f059` (blob of `PR7_CHECKPOINT_B_R1_INDEPENDENT_REVIEW.md` unchanged). Fast-forwarded locally; not a review-only push. Claim/result `6048388890`. No B3.
+
+D-051 qualifications retained: six local baseline repetitions used the **E tree** with P/E-labelled slots after inspecting D-051 test/lock-path equivalence, **not** six parent/current checkouts, and **not** identity of all main/PR7 schema/runtime trees. Local runs did not reproduce the CI TPS invert.
+
+| ID | Severity | Change |
+|---|---|---|
+| F-01 | P1 | Residual count requires request/attempt/shop GUCs + live attempt + READ capability (raise, not 0). Processor calls it inside the GUC tx. Leftover test mocks erasure so DELETE cannot hide `AuditEvent`. SQL no-GUC negative in races. |
+| F-02 | P1 | Stranded recovery guards the post-Redis terminalize tx (two in-function guards). Frozen shop + live shop: frozen stays ENQUEUED; live recovers. |
+| F-03 | P1 | `HOST_WRITE_PREFIXES` fail-closed; `EXISTING_NON_HOST_WRITE_PATHS` is the grandfather set; `extraWrites` injects an unlisted host path; WRITE_RE includes `createManyAndReturn`; PG_CLIENT_WRITE_RE; `minGuardOccurrences` counts inside the extracted function body (parameter object-types are not the body). |
+| F-04 | P1 | Exclusive then publication lock in the fence-flip tx; exclusive+publication again in the erasure DELETE session; finalize already took exclusive+publication+live_attempt (GRANT EXECUTE to `stocky_privacy_finalizer_owner`). |
+| F-05 | P1 | Runtime `stocky_apply_bound_customer_effect` compares `stocky_current_tenant_id()` to `p_shop_id`. |
+| F-06 | P1 | `applyUninstalledShopDisablement` FOR UPDATE; preserves REDACTED/MANUAL. Reinstall re-reads reason inside FOR UPDATE. |
+| F-07 | P2 | Purge assignments (CP SELECT/DELETE RLS) and data-request artifacts before REDACTED/finalize. |
+| F-08 | P2 | AEAD AAD binds shop+domain+requestId; VERSION 2; all-zero keys rejected. Privacy vitest fixture key is 32 non-zero bytes. |
+| F-09 | P2 | `processingEnabled` shop/redact → INCOMPLETE `shop_still_installed`. Coordinator skips foreign live leases and max-epoch HOL (`MAX_PRIVACY_ATTEMPT_EPOCHS=5`). Missing `REDIS_URL` → `{ok:false, detail:"redis_url_missing"}`. |
+| F-10 | P2 | Expired-lease recovery and fair-claim lease/reconcile are per-shop txs; `generation_frozen` continues to the next shop. |
+| F-11 | P2 | Append-only CP grants + provision/verify forbidden UPDATE/DELETE on coordinator journals. Finalize lock/live-attempt. Verifier and `stocky_note_queued_work` tenant/domain bind. Admission elevated-URL fallback is `STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK===1`, not `NODE_ENV`. |
+| F-12 | P3 | Dispositions only — not claimed fixed. NULL lock no-ops; non-constant advisory keys; disabled-shop `cancelled` flag; HMAC-labelled column stores plaintext shop id; invalid-intake 5xx without durable evidence; no behavioural HTTP route tests. |
+
+Local (pre-CI, not exact-head; disposable PG `127.0.0.1:55432` / Redis `6379`, synthetic data):
+
+| Check | Result |
+|---|---|
+| `npx tsc --noEmit` | exit 0 |
+| eslint on B2 TS files | exit 0 |
+| `npm run test:privacy` | 14 files **108/108** exit 0 |
+| leftover processor | **2/2** (`pr7-shop-residual-leftover.test.ts`) |
+| foundation | **22/22** |
+| races | **14/14** |
+| sync-uninstall | **9/9** |
+| sync-dispatch-recovery | **31/31** |
+| participating-writers + admission-fallback + fulfillment | **16/16** (included in privacy) |
+| `npm test` | 77 files **738/738** exit 0 |
+| `tenant:access:inventory` / `:check` | scanned files **564**, findings **1821**, violations **0**, digest `1996b661…` |
+
+First foundation attempt on this tree: 3 failed / 19 passed. Failures retained: (1) `stocky_privacy_finalize_shop_delete` SECURITY DEFINER owner lacked EXECUTE on exclusive/publication/live-attempt helpers — GRANTed to `stocky_privacy_finalizer_owner`; (2) coordinator steal test expected `claimNextPrivacyAttempt("worker-b")` null while other claimable requests existed — assertion is now request-scoped (foreign worker must not mint a second attempt on the fenced request). Re-run after those fixes: 22/22.
+
+R1-01 deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, merge, or production. Exact-head Classify + FULL Heavy + Gate required on the B2 head before any READY packet.

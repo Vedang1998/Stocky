@@ -28,7 +28,7 @@ export async function withAdmissionPrincipal<T>(
   await client.connect();
   try {
     if (!dedicated) {
-      if (process.env.NODE_ENV === "production") {
+      if (process.env.STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK !== "1") {
         throw new Error(`admission_principal_url_required:${role}`);
       }
       // SECURITY DEFINER helpers authenticate the login via session_user.

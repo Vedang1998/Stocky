@@ -1465,6 +1465,12 @@ export const PLATFORM_CONTROL_PLANE_TABLES: readonly NonMerchantTableSpec[] = [
 export const PLATFORM_CONTROL_PLANE_SQL_TABLES =
   PLATFORM_CONTROL_PLANE_TABLES.map((t) => t.sqlTable);
 
+/** Append-only coordinator journals: SELECT/INSERT, never UPDATE/DELETE. */
+export const PLATFORM_CONTROL_PLANE_APPEND_ONLY_SQL_TABLES = [
+  "PrivacyCoordinatorEvent",
+  "PrivacyCompletionReceipt",
+] as const;
+
 // Silence unused — DML list documents intended control-plane privileges.
 void CONTROL_PLANE_DML;
 

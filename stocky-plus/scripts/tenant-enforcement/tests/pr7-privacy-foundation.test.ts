@@ -12,6 +12,10 @@ import { fileURLToPath } from "node:url";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import { resetSchemaAndApplyEnforcement } from "./helpers";
 import { processPrivacyRequest } from "../../../app/privacy/execute.server";
+import {
+  claimNextPrivacyAttempt,
+  MAX_PRIVACY_ATTEMPT_EPOCHS,
+} from "../../../app/privacy/coordinator.server";
 import { intakeComplianceWebhook } from "../../../app/privacy/intake.server";
 import { PrivacyBoundaryError } from "../../../app/privacy/errors.server";
 import { isPrivacyPauseEnabled } from "../../../app/privacy/pause.server";
@@ -494,5 +498,335 @@ describe("PR7 privacy/roles/audit foundation", () => {
       }).catch(() => undefined);
       await client.end();
     }
+  });
+
+  it("shop/redact of an installed shop stays INCOMPLETE (F-09)", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-installed-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: {
+        id: shopId,
+        myshopifyDomain: domain,
+        processingEnabled: true,
+      },
+    });
+    const generationId = randomUUID();
+    await prisma.shopInstallGeneration.create({
+      data: {
+        id: generationId,
+        canonicalDomain: domain,
+        targetShopId: shopId,
+        shopRowId: shopId,
+        fence: "LIVE",
+      },
+    });
+    const requestId = randomUUID();
+    const attemptId = randomUUID();
+    await prisma.privacyRequest.create({
+      data: {
+        id: requestId,
+        topic: "shop/redact",
+        state: "RECEIVED",
+        targetShopId: shopId,
+        generationId,
+        shopRowId: shopId,
+        canonicalDomain: domain,
+        workId: randomUUID(),
+        deadlineAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await prisma.privacyAttempt.create({
+      data: {
+        id: attemptId,
+        privacyRequestId: requestId,
+        epoch: 1,
+        state: "RUNNING",
+        leaseUntil: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await prisma.privacyRequest.update({
+      where: { id: requestId },
+      data: { activeAttemptId: attemptId },
+    });
+    const result = await processPrivacyRequest(requestId, attemptId);
+    expect(result.state).toBe("INCOMPLETE");
+    expect(result.detail).toBe("shop_still_installed");
+    const shop = await prisma.shop.findUnique({ where: { id: shopId } });
+    expect(shop?.processingEnabled).toBe(true);
+  });
+
+  it("shop/redact purges artifacts and role assignments (F-07)", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-purge-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: {
+        id: shopId,
+        myshopifyDomain: domain,
+        processingEnabled: false,
+        processingDisabledReason: "UNINSTALLED",
+      },
+    });
+    const generationId = randomUUID();
+    await prisma.shopInstallGeneration.create({
+      data: {
+        id: generationId,
+        canonicalDomain: domain,
+        targetShopId: shopId,
+        shopRowId: shopId,
+        fence: "LIVE",
+      },
+    });
+    const requestId = randomUUID();
+    const attemptId = randomUUID();
+    await prisma.privacyRequest.create({
+      data: {
+        id: requestId,
+        topic: "shop/redact",
+        state: "RECEIVED",
+        targetShopId: shopId,
+        generationId,
+        shopRowId: shopId,
+        canonicalDomain: domain,
+        workId: randomUUID(),
+        deadlineAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await prisma.privacyAttempt.create({
+      data: {
+        id: attemptId,
+        privacyRequestId: requestId,
+        epoch: 1,
+        state: "RUNNING",
+        leaseUntil: new Date(Date.now() + 3_600_000),
+      },
+    });
+    await prisma.privacyRequest.update({
+      where: { id: requestId },
+      data: { activeAttemptId: attemptId },
+    });
+    await prisma.shopRoleAssignment.create({
+      data: {
+        shopId,
+        shopifyUserId: "548380009",
+        role: "shop_owner",
+      },
+    });
+    await prisma.privacyDataRequestArtifact.create({
+      data: {
+        privacyRequestId: requestId,
+        ciphertext: Buffer.from("not-a-real-blob"),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const result = await processPrivacyRequest(requestId, attemptId);
+    expect(result.state).toBe("COMPLETED");
+    expect(
+      await prisma.shopRoleAssignment.count({ where: { shopId } }),
+    ).toBe(0);
+    expect(
+      await prisma.privacyDataRequestArtifact.count({
+        where: { privacyRequestId: requestId },
+      }),
+    ).toBe(0);
+  });
+
+  it("control-plane coordinator journals are append-only (F-11)", async () => {
+    const client = await getMigrationClient({
+      requireExplicitMigrationUrl: true,
+    });
+    try {
+      const grants = await client.query<{ table_name: string; privilege_type: string }>(
+        `SELECT table_name, privilege_type
+         FROM information_schema.role_table_grants
+         WHERE grantee = 'stocky_control_plane'
+           AND table_schema = 'public'
+           AND table_name IN ('PrivacyCoordinatorEvent', 'PrivacyCompletionReceipt')
+         ORDER BY table_name, privilege_type`,
+      );
+      const byTable = new Map<string, string[]>();
+      for (const row of grants.rows) {
+        const list = byTable.get(row.table_name) ?? [];
+        list.push(row.privilege_type);
+        byTable.set(row.table_name, list);
+      }
+      expect(byTable.get("PrivacyCoordinatorEvent")?.sort()).toEqual([
+        "INSERT",
+        "SELECT",
+      ]);
+      expect(byTable.get("PrivacyCompletionReceipt")?.sort()).toEqual([
+        "INSERT",
+        "SELECT",
+      ]);
+    } finally {
+      await client.end();
+    }
+  });
+
+  it("runtime assignment verifier is tenant-bound (F-11)", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-asg-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: { id: shopId, myshopifyDomain: domain },
+    });
+    await prisma.shopRoleAssignment.create({
+      data: {
+        shopId,
+        shopifyUserId: "548380009",
+        role: "shop_owner",
+      },
+    });
+    const runtime = await getRuntimeClient();
+    try {
+      const unbound = await runtime.query<{ allowed: boolean }>(
+        `SELECT stocky_verify_platform_assignment($1, $2, $3) AS allowed`,
+        [shopId, "548380009", "platform.replay.execute"],
+      );
+      expect(unbound.rows[0]?.allowed).toBe(false);
+      await runtime.query("BEGIN");
+      await runtime.query("SELECT set_config('stocky.current_shop_id', $1, true)", [
+        shopId,
+      ]);
+      await runtime.query(
+        "SELECT set_config('stocky.tenant_context_version', $1, true)",
+        ["phase1-db-tenant-context-v1"],
+      );
+      const bound = await runtime.query<{ allowed: boolean }>(
+        `SELECT stocky_verify_platform_assignment($1, $2, $3) AS allowed`,
+        [shopId, "548380009", "platform.replay.execute"],
+      );
+      expect(bound.rows[0]?.allowed).toBe(true);
+      const cross = await runtime.query<{ allowed: boolean }>(
+        `SELECT stocky_verify_platform_assignment($1, $2, $3) AS allowed`,
+        ["other-shop", "548380009", "platform.replay.execute"],
+      );
+      expect(cross.rows[0]?.allowed).toBe(false);
+      await runtime.query("ROLLBACK");
+    } finally {
+      await runtime.end();
+    }
+  });
+
+  it("coordinator does not steal another worker's live lease (F-09)", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-coord-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: {
+        id: shopId,
+        myshopifyDomain: domain,
+        processingEnabled: false,
+        processingDisabledReason: "UNINSTALLED",
+      },
+    });
+    const generationId = randomUUID();
+    await prisma.shopInstallGeneration.create({
+      data: {
+        id: generationId,
+        canonicalDomain: domain,
+        targetShopId: shopId,
+        shopRowId: shopId,
+        fence: "LIVE",
+      },
+    });
+    const requestId = randomUUID();
+    const attemptId = randomUUID();
+    await prisma.privacyRequest.create({
+      data: {
+        id: requestId,
+        topic: "customers/data_request",
+        state: "APPLYING",
+        targetShopId: shopId,
+        generationId,
+        shopRowId: shopId,
+        canonicalDomain: domain,
+        workId: randomUUID(),
+        deadlineAt: new Date(Date.now() + 86_400_000),
+        activeAttemptId: attemptId,
+      },
+    });
+    await prisma.privacyAttempt.create({
+      data: {
+        id: attemptId,
+        privacyRequestId: requestId,
+        epoch: 1,
+        state: "RUNNING",
+        leaseUntil: new Date(Date.now() + 3_600_000),
+        worker: "worker-a",
+      },
+    });
+    const stolen = await claimNextPrivacyAttempt("worker-b");
+    expect(stolen?.requestId).not.toBe(requestId);
+    const live = await prisma.privacyAttempt.findUniqueOrThrow({
+      where: { id: attemptId },
+    });
+    expect(live.worker).toBe("worker-a");
+    expect(live.state).toBe("RUNNING");
+    await claimNextPrivacyAttempt("worker-a");
+    const still = await prisma.privacyAttempt.findMany({
+      where: { privacyRequestId: requestId },
+    });
+    expect(still).toHaveLength(1);
+    expect(still[0]?.id).toBe(attemptId);
+  });
+
+  it("coordinator skips requests at max epoch (F-09 HOL)", async () => {
+    const shopId = randomUUID();
+    const domain = `pr7-hol-${shopId}.myshopify.com`;
+    await prisma.shop.create({
+      data: {
+        id: shopId,
+        myshopifyDomain: domain,
+        processingEnabled: false,
+        processingDisabledReason: "UNINSTALLED",
+      },
+    });
+    const generationId = randomUUID();
+    await prisma.shopInstallGeneration.create({
+      data: {
+        id: generationId,
+        canonicalDomain: domain,
+        targetShopId: shopId,
+        shopRowId: shopId,
+        fence: "LIVE",
+      },
+    });
+    const stuckId = randomUUID();
+    const laterId = randomUUID();
+    await prisma.privacyRequest.create({
+      data: {
+        id: stuckId,
+        topic: "customers/data_request",
+        state: "INCOMPLETE",
+        targetShopId: shopId,
+        generationId,
+        shopRowId: shopId,
+        canonicalDomain: domain,
+        workId: randomUUID(),
+        receivedAt: new Date("2026-01-01T00:00:00Z"),
+        deadlineAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await prisma.privacyAttempt.create({
+      data: {
+        privacyRequestId: stuckId,
+        epoch: MAX_PRIVACY_ATTEMPT_EPOCHS,
+        state: "FAILED",
+      },
+    });
+    await prisma.privacyRequest.create({
+      data: {
+        id: laterId,
+        topic: "customers/data_request",
+        state: "RECEIVED",
+        targetShopId: shopId,
+        generationId,
+        shopRowId: shopId,
+        canonicalDomain: domain,
+        workId: randomUUID(),
+        receivedAt: new Date("2026-01-02T00:00:00Z"),
+        deadlineAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    const claimed = await claimNextPrivacyAttempt("worker-c");
+    expect(claimed?.requestId).toBe(laterId);
   });
 });

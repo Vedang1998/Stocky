@@ -207,6 +207,12 @@ BEGIN
      OR p_source_content_digest IS NULL OR p_source_content_digest = '' THEN
     RAISE EXCEPTION 'admission_identity_required' USING ERRCODE = 'P0001';
   END IF;
+  IF NULLIF(current_setting('stocky.current_shop_id', true), '') IS NOT NULL THEN
+    PERFORM public.stocky_shop_canonical_domain(
+      current_setting('stocky.current_shop_id', true),
+      p_canonical_domain
+    );
+  END IF;
   UPDATE public."OriginalAdminCapture"
      SET "contradictedAt" = COALESCE("contradictedAt", clock_timestamp()),
          "contradictionClass" = COALESCE("contradictionClass", p_class)
@@ -802,8 +808,8 @@ REVOKE ALL ON FUNCTION public.stocky_privacy_live_attempt_ok(text, text) FROM PU
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_capability_allows(text, text) TO stocky_privacy_reader, stocky_privacy_erasure;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_row_in_manifest(text, text) TO stocky_privacy_reader, stocky_privacy_erasure;
 GRANT EXECUTE ON FUNCTION public.stocky_privacy_enumerate_targets(text) TO stocky_privacy_reader, stocky_privacy_erasure, stocky_control_plane;
-GRANT EXECUTE ON FUNCTION public.stocky_privacy_publication_lock(text) TO stocky_privacy_reader, stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner;
-GRANT EXECUTE ON FUNCTION public.stocky_privacy_live_attempt_ok(text, text) TO stocky_privacy_reader, stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_privacy_publication_lock(text) TO stocky_privacy_reader, stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner, stocky_privacy_finalizer_owner;
+GRANT EXECUTE ON FUNCTION public.stocky_privacy_live_attempt_ok(text, text) TO stocky_privacy_reader, stocky_privacy_erasure, stocky_control_plane, stocky_privacy_target_owner, stocky_privacy_finalizer_owner;
 
 GRANT SELECT ON public."PrivacyRequest", public."PrivacyAttempt", public."ShopInstallGeneration" TO stocky_privacy_capability_owner;
 GRANT SELECT ON public."PrivacyRequest", public."PrivacyAttempt", public."PrivacyTargetKey", public."ShopInstallGeneration" TO stocky_privacy_target_owner;
@@ -926,6 +932,15 @@ BEGIN
   IF NOT FOUND THEN RAISE EXCEPTION 'finalizer_request_missing' USING ERRCODE = 'P0001'; END IF;
   SELECT * INTO g FROM public."ShopInstallGeneration" WHERE id = p_generation_id;
   IF NOT FOUND THEN RAISE EXCEPTION 'finalizer_generation_missing' USING ERRCODE = 'P0001'; END IF;
+  PERFORM public.stocky_lifecycle_exclusive_lock(g."canonicalDomain");
+  PERFORM public.stocky_privacy_publication_lock(p_request_id);
+  SELECT * INTO r FROM public."PrivacyRequest" WHERE id = p_request_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'finalizer_request_missing' USING ERRCODE = 'P0001'; END IF;
+  SELECT * INTO g FROM public."ShopInstallGeneration" WHERE id = p_generation_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'finalizer_generation_missing' USING ERRCODE = 'P0001'; END IF;
+  IF NOT public.stocky_privacy_live_attempt_ok(p_request_id, p_attempt_id) THEN
+    RAISE EXCEPTION 'finalizer_stale_attempt' USING ERRCODE = '42501';
+  END IF;
   IF r.state <> 'FINALIZING' OR g.fence <> 'FINALIZING' THEN
     RAISE EXCEPTION 'finalizer_not_finalizing' USING ERRCODE = 'P0001';
   END IF;
@@ -1025,7 +1040,7 @@ REVOKE ALL ON FUNCTION public.stocky_lifecycle_exclusive_lock(text) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.stocky_generation_writable(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_lock_key(text) TO stocky_lifecycle_gate_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_shared_lock(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_reader, stocky_privacy_target_owner;
-GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_exclusive_lock(text) TO stocky_control_plane, stocky_privacy_erasure;
+GRANT EXECUTE ON FUNCTION public.stocky_lifecycle_exclusive_lock(text) TO stocky_control_plane, stocky_privacy_erasure, stocky_privacy_finalizer_owner;
 GRANT EXECUTE ON FUNCTION public.stocky_generation_writable(text) TO stocky_runtime, stocky_control_plane, stocky_privacy_erasure, stocky_privacy_reader;
 GRANT SELECT ON public."ShopInstallGeneration" TO stocky_lifecycle_gate_owner;
 
@@ -1093,6 +1108,10 @@ BEGIN
   IF p_permission IS DISTINCT FROM 'platform.replay.execute' THEN
     RETURN false;
   END IF;
+  IF session_user = 'stocky_runtime'
+     AND public.stocky_current_tenant_id() IS DISTINCT FROM p_shop_id THEN
+    RETURN false;
+  END IF;
   SELECT EXISTS (
     SELECT 1 FROM public."ShopRoleAssignment" a
     WHERE a."shopId" = p_shop_id
@@ -1113,9 +1132,13 @@ CREATE POLICY assignment_runtime_all ON public."ShopRoleAssignment" FOR ALL TO s
   WITH CHECK ("shopId" = stocky_current_tenant_id() AND stocky_current_tenant_context_version() = 'phase1-db-tenant-context-v1');
 CREATE POLICY assignment_verifier_select ON public."ShopRoleAssignment" FOR SELECT TO stocky_assignment_verifier_owner
   USING (true);
+CREATE POLICY assignment_control_plane_select ON public."ShopRoleAssignment" FOR SELECT TO stocky_control_plane
+  USING (true);
+CREATE POLICY assignment_control_plane_delete ON public."ShopRoleAssignment" FOR DELETE TO stocky_control_plane
+  USING (true);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public."ShopRoleAssignment" TO stocky_runtime;
-GRANT SELECT ON public."ShopRoleAssignment" TO stocky_control_plane;
+GRANT SELECT, DELETE ON public."ShopRoleAssignment" TO stocky_control_plane;
 
 -- Control-plane ordinary job family plus PR7 coordinator tables.
 -- SyncApplicationReceipt is merchant-domain; Session is bootstrap. Neither
@@ -1124,9 +1147,13 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON
   public."DurableJob", public."JobAttempt", public."DeadLetter", public."JobReplay",
   public."WebhookDelivery", public."JobDispatch", public."DispatchReadyShop",
   public."PrivacyRequest", public."PrivacyAttempt",
-  public."PrivacyCoordinatorEvent", public."PrivacyCompletionReceipt",
   public."PrivacyDeliveryTombstone", public."PlatformReplayCommand"
 TO stocky_control_plane;
+GRANT SELECT, INSERT ON public."PrivacyCoordinatorEvent", public."PrivacyCompletionReceipt"
+  TO stocky_control_plane;
+REVOKE UPDATE, DELETE ON public."PrivacyCoordinatorEvent", public."PrivacyCompletionReceipt"
+  FROM stocky_control_plane;
+GRANT SELECT, DELETE ON public."ShopRoleAssignment" TO stocky_control_plane;
 GRANT SELECT ON public."PrivacyTargetKey" TO stocky_control_plane;
 GRANT USAGE, SELECT ON SEQUENCE public."PrivacyCoordinatorEvent_id_seq" TO stocky_control_plane;
 
@@ -1966,6 +1993,14 @@ BEGIN
      AND session_user IS DISTINCT FROM 'stocky_control_plane' THEN
     RAISE EXCEPTION 'queued_sighting_principal_required' USING ERRCODE = '42501';
   END IF;
+  IF p_shop_id IS NULL OR p_shop_id = '' OR p_canonical_domain IS NULL OR p_canonical_domain = '' THEN
+    RAISE EXCEPTION 'queued_work_identity_required' USING ERRCODE = 'P0001';
+  END IF;
+  PERFORM public.stocky_shop_canonical_domain(p_shop_id, p_canonical_domain);
+  IF NULLIF(current_setting('stocky.current_shop_id', true), '') IS NOT NULL
+     AND current_setting('stocky.current_shop_id', true) IS DISTINCT FROM p_shop_id THEN
+    RAISE EXCEPTION 'queued_work_tenant_mismatch' USING ERRCODE = '42501';
+  END IF;
   PERFORM public.stocky_source_content_lock(p_canonical_domain, p_source_content_digest);
   v_class := COALESCE(NULLIF(p_sighted_class, ''), 'QUEUED_INBOX');
   IF p_parent_work_id IS NOT NULL AND p_parent_work_id <> '' THEN
@@ -2086,6 +2121,10 @@ BEGIN
   END IF;
   v_domain := p_canonical_domain;
   v_shop := p_shop_id;
+  IF session_user = 'stocky_runtime'
+     AND public.stocky_current_tenant_id() IS DISTINCT FROM v_shop THEN
+    RAISE EXCEPTION 'effect_tenant_mismatch' USING ERRCODE = '42501';
+  END IF;
   v_kind := p_kind;
   v_value := p_value;
   v_effect := p_effect_id;
