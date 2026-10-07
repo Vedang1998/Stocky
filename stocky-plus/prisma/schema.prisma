@@ -90,6 +90,12 @@ model Shop {
   shopifyOrderAgreementSaleFacts ShopifyOrderAgreementSaleFact[]
   shopifyOrderRefundTransactionFacts ShopifyOrderRefundTransactionFact[]
   orderFactObservationsInFlight OrderFactObservationInFlight[]
+  auditEvents               AuditEvent[]
+  shopInstallGenerations    ShopInstallGeneration[]
+  privacyRequests           PrivacyRequest[]
+  writerAdmissionOrigins    WriterAdmissionOrigin[]
+  originalAdminSessions     OriginalAdminSession[]
+  originalAdminCaptures     OriginalAdminCapture[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -2119,4 +2125,342 @@ model OrderFactObservationInFlight {
   @@index([shopId, leaseExpiresAt, lifecycleState])
   @@index([shopId, observationRequestGen])
   @@index([shopId, resourceKind, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal])
+}
+
+// ─── Phase 1 PR7 audit / roles / privacy / admission ─────────────────────────
+// Additive. Privacy coordinator tables do not FK DurableJob or require Shop.
+// Ordinary processingEnabled policies remain on merchant facts; privacy policies
+// are additive and omit processingEnabled.
+
+model AuditEvent {
+  id               String   @id @default(cuid())
+  shopId           String
+  actorKind        String   @default("system")
+  actorId          String?
+  action           String   @default("recorded")
+  decision         String   @default("recorded")
+  resourceType     String?
+  resourceId       String?
+  customerRestId   String?
+  correlationId    String?
+  emitIdempotency  String?
+  outcome          String   @default("recorded")
+  detail           String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, emitIdempotency])
+  @@index([shopId, createdAt])
+  @@index([shopId, customerRestId])
+}
+
+model ShopRoleAssignment {
+  id            String    @id @default(cuid())
+  shopId        String
+  shopifyUserId String
+  role          String
+  grantedBy     String?
+  grantedAt     DateTime  @default(now()) @db.Timestamptz(3)
+  revokedAt     DateTime? @db.Timestamptz(3)
+  revokedBy     String?
+  rowVersion    Int       @default(1)
+
+  @@unique([shopId, shopifyUserId, role])
+  @@index([shopId, shopifyUserId])
+}
+
+model ShopInstallGeneration {
+  id              String    @id @default(cuid())
+  canonicalDomain String
+  targetShopId    String
+  shopRowId       String?
+  fence           String
+  installedAt     DateTime  @default(now()) @db.Timestamptz(3)
+  uninstalledAt   DateTime? @db.Timestamptz(3)
+  erasedAt        DateTime? @db.Timestamptz(3)
+  rowVersion      Int       @default(1)
+
+  shop Shop? @relation(fields: [shopRowId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@index([canonicalDomain, fence])
+  @@index([targetShopId])
+}
+
+model PrivacyRequest {
+  id                    String    @id @default(cuid())
+  topic                 String
+  state                 String
+  targetShopId          String
+  generationId          String
+  shopRowId             String?
+  canonicalDomain       String
+  lookupCustomerRestId  String?
+  lookupOrderLegacyIds  String[]  @default([])
+  enumerationComplete   Boolean   @default(false)
+  missingLinkages       Int       @default(0)
+  activeAttemptId       String?
+  rowVersion            Int       @default(1)
+  publicationRevision   BigInt    @default(0)
+  completeRetryCount    Int       @default(0)
+  receivedAt            DateTime  @default(now()) @db.Timestamptz(3)
+  deadlineAt            DateTime  @db.Timestamptz(3)
+  duplicateCount        Int       @default(0)
+  payloadDigest         String?
+  deliveryId            String?
+  workId                String    @unique
+  shopifyWebhookId      String?
+  shopifyEventId        String?
+  pauseHonored          Boolean   @default(false)
+
+  shop     Shop?            @relation(fields: [shopRowId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  attempts PrivacyAttempt[]
+  events   PrivacyCoordinatorEvent[]
+  artifact PrivacyDataRequestArtifact?
+
+  @@index([targetShopId, state])
+  @@index([generationId])
+  @@index([canonicalDomain, topic, state])
+}
+
+model PrivacyAttempt {
+  id               String    @id @default(cuid())
+  privacyRequestId String
+  epoch            Int
+  state            String
+  leaseUntil       DateTime? @db.Timestamptz(3)
+  worker           String?
+  checkpoint       Json?
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt
+
+  request PrivacyRequest @relation(fields: [privacyRequestId], references: [id], onDelete: Restrict)
+
+  @@unique([privacyRequestId, epoch])
+}
+
+model PrivacyTargetKey {
+  id        BigInt @id @default(autoincrement())
+  requestId String
+  shopId    String
+  surface   String
+  rowId     String
+
+  @@unique([requestId, surface, rowId])
+  @@index([requestId, shopId])
+}
+
+model PrivacyCustomerTargetBarrier {
+  id                  BigInt    @id @default(autoincrement())
+  shopId              String
+  generationId        String
+  targetKind          String
+  targetValue         String
+  privacyRequestId    String
+  attemptId           String
+  publicationRevision BigInt    @default(0)
+  state               String
+  installedAt         DateTime  @default(now()) @db.Timestamptz(3)
+  releasedAt          DateTime? @db.Timestamptz(3)
+
+  @@index([privacyRequestId, state])
+  @@index([shopId, generationId, targetKind, targetValue])
+}
+
+model PrivacyCompletedTarget {
+  shopId           String
+  generationId     String
+  targetKind       String
+  targetValue      String
+  privacyRequestId String
+  completedAt      DateTime @db.Timestamptz(3)
+
+  @@id([shopId, generationId, targetKind, targetValue, privacyRequestId])
+}
+
+model PrivacyCoordinatorEvent {
+  id               BigInt   @id @default(autoincrement())
+  privacyRequestId String
+  kind             String
+  detail           String?
+  at               DateTime @default(now()) @db.Timestamptz(3)
+
+  request PrivacyRequest @relation(fields: [privacyRequestId], references: [id], onDelete: Restrict)
+
+  @@index([privacyRequestId, at])
+}
+
+model PrivacyCompletionReceipt {
+  id                String   @id @default(cuid())
+  privacyRequestId  String   @unique
+  generationId      String
+  targetShopIdHmac  String
+  shopDomainHmac    String?
+  manifestDigest    String?
+  topic             String?
+  completedAt       DateTime @default(now()) @db.Timestamptz(3)
+}
+
+model PrivacyDeliveryBinding {
+  id                 String   @id @default(cuid())
+  canonicalDomain    String
+  shopifyWebhookId   String?  @unique
+  shopifyEventId     String?
+  topic              String
+  payloadDigest      String
+  privacyRequestId   String
+  receivedAt         DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([canonicalDomain, payloadDigest])
+}
+
+model PrivacyDeliveryTombstone {
+  shopifyWebhookId String   @id
+  topic            String
+  privacyRequestId String
+  generationId     String
+  resultState      String
+  expiresAt        DateTime @db.Timestamptz(3)
+
+  @@index([expiresAt])
+}
+
+model PrivacyDeletionManifest {
+  id               String   @id @default(cuid())
+  privacyRequestId String
+  attemptId        String
+  surface          String
+  rowCount         Int
+  digest           String
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  @@unique([privacyRequestId, attemptId, surface])
+}
+
+model PrivacyDataRequestArtifact {
+  id               String    @id @default(cuid())
+  privacyRequestId String    @unique
+  ciphertext       Bytes
+  expiresAt        DateTime  @db.Timestamptz(3)
+  downloadedAt     DateTime? @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @db.Timestamptz(3)
+
+  request PrivacyRequest @relation(fields: [privacyRequestId], references: [id], onDelete: Restrict)
+}
+
+model PlatformReplayCommand {
+  commandId     String
+  shopId        String
+  actorId       String
+  deadLetterId  String
+  originalJobId String
+  requestDigest String
+  newJobId      String?
+  replayId      String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([shopId, commandId])
+  @@index([shopId, actorId])
+}
+
+model WriterAdmissionOrigin {
+  id                   String    @id
+  canonicalDomain      String
+  shopId               String
+  workId               String
+  sourceKind           String
+  sourceIdentity       String
+  originalAdmissionId  String
+  originalAdmittedAt   DateTime? @db.Timestamptz(3)
+  formatPolicyVersion  String
+  sourceContentDigest  String
+  originGenerationId   String?
+  originStatus         String
+  parentWorkId         String?
+  durableJobId         String?
+  acked                Boolean   @default(false)
+  originalCaptureId    String?
+  createdAt            DateTime  @default(now()) @db.Timestamptz(3)
+
+  shop    Shop                         @relation(fields: [shopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  targets WriterAdmissionOriginTarget[]
+
+  @@unique([canonicalDomain, workId])
+  @@unique([canonicalDomain, sourceKind, sourceIdentity, sourceContentDigest], map: "writer_admission_source_digest")
+  @@index([canonicalDomain, sourceContentDigest])
+}
+
+model WriterAdmissionOriginTarget {
+  originId    String
+  targetKind  String
+  targetValue String
+
+  origin WriterAdmissionOrigin @relation(fields: [originId], references: [id], onDelete: Cascade)
+
+  @@id([originId, targetKind, targetValue])
+}
+
+model OriginalAdminSession {
+  id              String   @id @default(cuid())
+  canonicalDomain String
+  shopId          String
+  actorIdentity   String
+  establishedAt   DateTime @db.Timestamptz(3)
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([canonicalDomain, shopId])
+}
+
+model OriginalAdminCapture {
+  id                  String    @id
+  canonicalDomain     String
+  shopId              String
+  commandId           String
+  sourceKind          String
+  sourceIdentity      String
+  sourceContentDigest String
+  actorIdentity       String
+  capturedAt          DateTime  @db.Timestamptz(3)
+  liveGenerationId    String
+  targetKind          String?
+  targetValue         String?
+  consumedAt          DateTime? @db.Timestamptz(3)
+  boundWorkId         String?
+  contradictedAt      DateTime? @db.Timestamptz(3)
+  contradictionClass  String?
+  formatPolicyVersion String    @default("pr7-origin-v1")
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([canonicalDomain, commandId])
+  @@unique([canonicalDomain, sourceKind, sourceIdentity, sourceContentDigest])
+}
+
+model QueuedWorkSighting {
+  canonicalDomain     String
+  shopId              String
+  sourceKind          String
+  sourceIdentity      String
+  sourceContentDigest String
+  sightedClass        String
+  sightedAt           DateTime @db.Timestamptz(3)
+  parentWorkId        String?
+  correlatedCaptureId String?
+
+  @@id([canonicalDomain, sourceContentDigest, sightedClass, sourceIdentity])
+}
+
+model SourceEffectLink {
+  canonicalDomain     String
+  sourceContentDigest String
+  effectCommitment    String
+  workId              String
+  effectId            String
+  writtenAt           DateTime @default(now()) @db.Timestamptz(3)
+
+  @@id([canonicalDomain, effectCommitment])
+  @@unique([canonicalDomain, workId])
+  @@unique([canonicalDomain, sourceContentDigest])
 }

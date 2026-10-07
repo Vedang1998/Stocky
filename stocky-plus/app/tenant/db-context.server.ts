@@ -13,6 +13,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { assertTenantAuthority, type TenantAuthority } from "./authority.server";
 import { TenantAccessError } from "./errors";
+import { assertParticipatingWriteGuard } from "./participating-write.server";
 
 export const TENANT_DB_CONTEXT_VERSION = "phase1-db-tenant-context-v1";
 export const GUC_SHOP_ID = "stocky.current_shop_id";
@@ -108,6 +109,7 @@ export async function withTenantBoundTransaction<T>(
     async (tx) => {
       await setTransactionLocalTenantContext(tx, authority);
       await assertTransactionLocalTenantContext(tx, authority);
+      await assertParticipatingWriteGuard(tx, authority.myshopifyDomain);
       return fn(tx);
     },
     {

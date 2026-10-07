@@ -157,13 +157,63 @@ describe.sequential("non-superuser migration-owner full enforcement", () => {
       expect(preflight.ok).toBe(true);
 
       const firstApply = await applyEnforcement(mig, { apply: true });
+      if (!firstApply.ok) {
+        // eslint-disable-next-line no-console
+        console.log(
+          JSON.stringify({
+            event: "non_superuser_first_apply_failed",
+            failed: firstApply.steps
+              .filter((s) => s.status === "failed")
+              .map((s) => ({ id: s.id, error: s.error })),
+          }),
+        );
+      }
       expect(firstApply.ok).toBe(true);
       expect(firstApply.unsafe_runtime_access).toBe(false);
       const completed = firstApply.steps.filter((s) => s.status === "completed");
       expect(completed.length).toBe(firstApply.steps.length);
       expect(completed.length).toBeGreaterThan(100);
 
+      const fixtureRuntimeExec = await mig.query<{ has: boolean }>(
+        `SELECT has_function_privilege($1, 'stocky_authz_lock(text,text)', 'EXECUTE') AS has`,
+        [fixture.runtimeRole],
+      );
+      expect(fixtureRuntimeExec.rows[0]?.has).toBe(true);
+      const fixtureEffectExec = await mig.query<{ has: boolean }>(
+        `SELECT has_function_privilege($1, 'stocky_apply_bound_customer_effect(text,text,text,text,text,text,text,text)', 'EXECUTE') AS has`,
+        [fixture.runtimeRole],
+      );
+      expect(fixtureEffectExec.rows[0]?.has).toBe(true);
+
+      const erasureGrant = await mig.query<{
+        admin_option: boolean;
+        inherit_option: boolean;
+      }>(
+        `SELECT m.admin_option, m.inherit_option
+         FROM pg_auth_members m
+         JOIN pg_roles r ON r.oid = m.roleid
+         JOIN pg_roles u ON u.oid = m.member
+         WHERE r.rolname = 'stocky_privacy_erasure'
+           AND u.rolname = $1`,
+        [fixture.migrationOwner],
+      );
+      expect(erasureGrant.rows[0]).toEqual({
+        admin_option: false,
+        inherit_option: false,
+      });
+
       const secondApply = await applyEnforcement(mig, { apply: true });
+      if (!secondApply.ok) {
+        // eslint-disable-next-line no-console
+        console.log(
+          JSON.stringify({
+            event: "non_superuser_second_apply_failed",
+            failed: secondApply.steps
+              .filter((s) => s.status === "failed")
+              .map((s) => ({ id: s.id, error: s.error })),
+          }),
+        );
+      }
       expect(secondApply.ok).toBe(true);
 
       const roles = await verifyRoles(mig, { requireMerchantDml: true });
@@ -369,6 +419,81 @@ describe.sequential("non-superuser migration-owner full enforcement", () => {
         expect(
           memberFail.failures.some((f) =>
             f.includes(`member_of:${local.migrationOwner}`),
+          ),
+        ).toBe(true);
+      } finally {
+        await mig.end();
+      }
+    } finally {
+      await destroyNonSuperuserMigrationOwnerFixture(local);
+    }
+  }, 600_000);
+
+  it("PR7 helper apply fails closed when existing privacy roles are not granted to the migration owner", async () => {
+    requireRuntimeRolePassword();
+    const boot = await getBootstrapClient();
+    try {
+      await boot.query(`
+        DO $$ BEGIN
+          IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'stocky_privacy_reader') THEN
+            CREATE ROLE stocky_privacy_reader LOGIN NOINHERIT NOBYPASSRLS NOSUPERUSER NOCREATEDB NOCREATEROLE;
+          END IF;
+        END$$;
+      `);
+    } finally {
+      await boot.end();
+    }
+
+    const local = await createNonSuperuserMigrationOwnerFixture("nogrant", {
+      grantExistingPr7Roles: false,
+    });
+    try {
+      const env = {
+        ...process.env,
+        DATABASE_URL: local.migrationUrl,
+        DATABASE_MIGRATION_URL: local.migrationUrl,
+        TENANT_MAINTENANCE_DATABASE_URL: local.migrationUrl,
+        DATABASE_RUNTIME_URL: local.runtimeUrl,
+        STOCKY_RUNTIME_ROLE: local.runtimeRole,
+        STOCKY_RUNTIME_ROLE_PASSWORD: local.runtimePassword,
+        STOCKY_MIGRATION_ROLE: local.migrationOwner,
+        STOCKY_REQUIRE_NONSUPERUSER_OWNER: "1",
+        STOCKY_PREFLIGHT_SKIP_ACCESS_INVENTORY: "1",
+      };
+      Object.assign(process.env, env);
+      execFileSync("npx", ["prisma", "migrate", "deploy"], {
+        cwd: APP_ROOT,
+        env,
+        stdio: "pipe",
+      });
+      execFileSync("npm", ["run", "tenant:indexes:apply", "--", "--apply"], {
+        cwd: APP_ROOT,
+        env,
+        stdio: "pipe",
+      });
+
+      const mig = new Client({ connectionString: local.migrationUrl });
+      await mig.connect();
+      try {
+        const prep = await provisionRoles(mig, {
+          apply: true,
+          phase: "prepare",
+          runtimePassword: local.runtimePassword,
+        });
+        expect(prep.ok).toBe(true);
+        await mig.query(
+          `GRANT CONNECT ON DATABASE ${local.databaseName} TO ${local.runtimeRole}`,
+        );
+        const apply = await applyEnforcement(mig, { apply: true });
+        expect(apply.ok).toBe(false);
+        const failed = apply.steps.filter((s) => s.status === "failed");
+        expect(
+          failed.some(
+            (s) =>
+              s.id === "pr7_privacy_helpers" &&
+              (s.error ?? "").includes(
+                "pr7_role_grant_denied:stocky_privacy_reader",
+              ),
           ),
         ).toBe(true);
       } finally {

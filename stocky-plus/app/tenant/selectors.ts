@@ -381,6 +381,18 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       },
     ],
   },
+  AuditEvent: {
+    model: "AuditEvent",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_emitIdempotency",
+        fields: ["shopId", "emitIdempotency"],
+      },
+    ],
+  },
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

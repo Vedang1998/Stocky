@@ -8,6 +8,7 @@ import { getControlPlanePrisma } from "./control-plane-db.server";
 import { DURABLE_JOB_AUTHORITY_VERSION } from "./intake.server";
 import { executionStrategyForJobType } from "./execution-strategy.server";
 import { SyncControlPlaneError } from "./errors";
+import { assertParticipatingWriteGuardForShop } from "../tenant/participating-write.server";
 
 export type ReplayDeadLetterResult = {
   deadLetter: DeadLetter;
@@ -25,17 +26,47 @@ export async function replayDeadLetter(input: {
   deadLetterId: string;
   shopId: string;
   reason: string;
+  tx?: Prisma.TransactionClient;
 }): Promise<ReplayDeadLetterResult> {
   const prisma = getControlPlanePrisma();
+  if (input.tx) {
+    return replayDeadLetterInTx(input.tx, input);
+  }
+  return prisma.$transaction(async (tx) => replayDeadLetterInTx(tx, input));
+}
 
-  return prisma.$transaction(async (tx) => {
+/** Platform replay route host. Keeps replayDeadLetter inside this module. */
+export async function applyPlatformDeadLetterReplay(
+  input: {
+    deadLetterId: string;
+    shopId: string;
+    reason: string;
+    tx?: Prisma.TransactionClient;
+  },
+): Promise<ReplayDeadLetterResult> {
+  return replayDeadLetter(input);
+}
+
+async function replayDeadLetterInTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    deadLetterId: string;
+    shopId: string;
+    reason: string;
+  },
+): Promise<ReplayDeadLetterResult> {
     const shop = await tx.shop.findUnique({
       where: { id: input.shopId },
-      select: { id: true, processingEnabled: true },
+      select: { id: true, myshopifyDomain: true, processingEnabled: true },
     });
     if (!shop) {
       throw new SyncControlPlaneError("shop_missing", "Shop not found");
     }
+    await assertParticipatingWriteGuardForShop(
+      tx,
+      shop.id,
+      shop.myshopifyDomain,
+    );
     if (!shop.processingEnabled) {
       throw new SyncControlPlaneError(
         "replay_denied_disabled_shop",
@@ -140,5 +171,4 @@ export async function replayDeadLetter(input: {
       newJob,
       replay,
     };
-  });
 }

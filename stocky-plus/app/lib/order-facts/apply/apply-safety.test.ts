@@ -11,8 +11,10 @@ import {
   OrderApplyAccessScopeMismatchError,
   OrderApplyLeaseInvalidError,
   OrderApplyPhysicalDeleteError,
+  OrderApplyProcessingDisabledError,
   OrderApplyRequestGenerationMismatchError,
 } from "./errors";
+import { requireProcessingEnabled } from "./writers";
 
 const DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -85,8 +87,58 @@ describe("PR6-C apply surface safety (R-164)", () => {
     expect(index).toMatch(/MUST start a fresh[\s*]+PostgreSQL transaction/);
     const writers = readFileSync(path.join(DIR, "writers.ts"), "utf8");
     expect(writers).not.toMatch(/ON CONFLICT[\s\n]+(?:\([^;]+\)\s*)?DO UPDATE/);
+    expect(writers).toMatch(
+      /WITH _guard AS \([\s\S]*stocky_participating_write_guard/,
+    );
+    expect(writers).toMatch(/SELECT 1::int AS ok FROM _guard/);
+    expect(writers).not.toMatch(
+      /queryRows(?:<[^>]+>)?\(db\)`\s*SELECT\s+stocky_participating_write_guard/,
+    );
+    expect(writers).not.toMatch(
+      /\$executeRaw`[\s\S]*stocky_participating_write_guard/,
+    );
     const receipts = readFileSync(path.join(DIR, "receipts.ts"), "utf8");
     expect(receipts).toMatch(/ON CONFLICT \("shopId", "applicationKey"\) DO NOTHING/);
     expect(receipts).not.toMatch(/ON CONFLICT[\s\n]+(?:\([^;]+\)\s*)?DO UPDATE/);
+  });
+
+  it("requireProcessingEnabled queries a typed participating-write wrap and skips it when disabled", async () => {
+    const calls: string[] = [];
+    const enabled = {
+      $queryRaw: async (strings: TemplateStringsArray) => {
+        const sql = strings.join("?");
+        calls.push(`query:${sql}`);
+        if (sql.includes("stocky_shop_processing_enabled")) {
+          return [{ processingEnabled: true }];
+        }
+        if (
+          sql.includes("stocky_participating_write_guard") &&
+          sql.includes("1::int")
+        ) {
+          return [{ ok: 1 }];
+        }
+        throw new Error(`unexpected query ${sql}`);
+      },
+    };
+    await requireProcessingEnabled(enabled, "shop_1");
+    expect(
+      calls.some(
+        (c) =>
+          c.includes("participating_write_guard") && c.includes("1::int"),
+      ),
+    ).toBe(true);
+    expect(calls.some((c) => c.includes("$executeRaw"))).toBe(false);
+
+    const disabledCalls: string[] = [];
+    const disabled = {
+      $queryRaw: async () => {
+        disabledCalls.push("query");
+        return [{ processingEnabled: false }];
+      },
+    };
+    await expect(
+      requireProcessingEnabled(disabled, "shop_1"),
+    ).rejects.toBeInstanceOf(OrderApplyProcessingDisabledError);
+    expect(disabledCalls).toEqual(["query"]);
   });
 });

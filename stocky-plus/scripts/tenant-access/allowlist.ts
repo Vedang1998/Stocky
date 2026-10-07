@@ -115,6 +115,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/db-isolation/helpers.ts",
   "app/tenant/__tests__/db-isolation/isolation.test.ts",
   "app/tenant/__tests__/db-isolation/worker-surfaces.test.ts",
+  "app/tenant/__tests__/db-isolation/pr7-platform-authorization.test.ts",
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
 ] as const;
@@ -129,6 +130,7 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/preflight.ts",
   "scripts/tenant-enforcement/roles.ts",
   "scripts/tenant-enforcement/sql.ts",
+  "scripts/tenant-enforcement/pr7-privacy.ts",
   "scripts/tenant-enforcement/timeouts.ts",
   "scripts/tenant-enforcement/verify.ts",
   "scripts/tenant-enforcement/tests/enforcement.migration.test.ts",
@@ -161,6 +163,9 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts",
   "scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts",
+  "scripts/tenant-enforcement/tests/pr7-privacy-foundation.test.ts",
+  "scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts",
+  "scripts/tenant-enforcement/tests/pr7-shop-residual-leftover.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {
@@ -237,6 +242,69 @@ function testExceptions(): AccessException[] {
   }));
 }
 
+function pr7PrivacyExceptions(): AccessException[] {
+  const files = [
+    "app/audit/emit.server.ts",
+    "app/privacy/intake.server.ts",
+    "app/privacy/execute.server.ts",
+    "app/privacy/coordinator.server.ts",
+    "app/privacy/generation.server.ts",
+    "app/privacy/erasure-db.server.ts",
+    "app/privacy/fulfillment.server.ts",
+    "app/privacy/artifact-crypto.server.ts",
+    "app/privacy/operator-resolve.server.ts",
+    "app/privacy/db-context.server.ts",
+    "app/privacy/external-residual.server.ts",
+    "app/rbac/assignment.server.ts",
+    "app/rbac/replay-digest.server.ts",
+    "app/tenant/participating-write.server.ts",
+    "app/tenant/original-admin-capture.server.ts",
+    "app/tenant/bound-effect.server.ts",
+    "app/jobs/queue.server.ts",
+    "app/jobs/workers/index.ts",
+    "app/routes/webhooks.compliance.tsx",
+    "app/routes/app.platform.replay.tsx",
+    "app/routes/app.platform.roles.tsx",
+    "app/routes/app.platform.privacy.escalation.tsx",
+    "app/routes/app.platform.privacy.download.tsx",
+    "scripts/privacy/participating-writers.ts",
+    "scripts/privacy/resolve-escalation.ts",
+    "scripts/privacy/fulfill-data-request.ts",
+    "app/privacy/__tests__/consumer-gates.test.ts",
+    "app/privacy/__tests__/pause.test.ts",
+    "app/privacy/__tests__/fulfillment.test.ts",
+    "app/privacy/__tests__/operator-resolve.test.ts",
+    "app/privacy/__tests__/replay-digest.test.ts",
+    "app/rbac/__tests__/assignment.test.ts",
+    "scripts/privacy/__tests__/participating-writers.test.ts",
+  ] as const;
+  return files.map((path, i) => ({
+    id: `EX-PR7-${String(i + 1).padStart(3, "0")}`,
+    path,
+    category: path.includes("__tests__")
+      ? ("migration_tests" as const)
+      : path.startsWith("scripts/")
+        ? ("pr3_database_enforcement" as const)
+        : ("pr4_sync_control_plane" as const),
+    reason:
+      "PR7 audit/roles/privacy/admission hosts, scanners, and same-origin platform routes",
+    permittedModelsOrOperations: [
+      "PrivacyRequest / PrivacyAttempt / ShopInstallGeneration",
+      "AuditEvent via TenantDb",
+      "ShopRoleAssignment / PlatformReplayCommand",
+      "WriterAdmissionOrigin / SourceEffectLink",
+      "pg Client SET ROLE for privacy principals",
+      "control-plane Prisma writes with participating-write guard",
+    ],
+    productionRuntime: path.includes("__tests__")
+      ? ("no" as const)
+      : ("yes" as const),
+    owner: "phase-1-pr7-audit-roles-privacy",
+    expirationPhaseOrRemovalCondition:
+      "Retained while PR7 privacy coordinator and platform routes remain the implementation",
+  }));
+}
+
 function syncControlPlaneExceptions(): AccessException[] {
   const files = [
     "app/sync/control-plane-db.server.ts",
@@ -247,6 +315,10 @@ function syncControlPlaneExceptions(): AccessException[] {
     "app/sync/dispatcher.server.ts",
     "app/sync/fair-claim-query.server.ts",
     "app/lib/catalog-facts/ingest/checkpoint.ts",
+    "app/sync/health.server.ts",
+    "app/sync/reinstall.server.ts",
+    "app/sync/writer-admission.server.ts",
+    "app/sync/admission-principal.server.ts",
   ] as const;
   return files.map((path, i) => ({
     id: `EX-SYNC-${String(i + 1).padStart(3, "0")}`,
@@ -308,7 +380,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     category: "tenant_bound_access",
     reason: "Tenant-bound DB contract wraps raw client; never returns it to callers",
     permittedModelsOrOperations: [
-      "All 35 merchant-owned models via scoped delegates",
+      "All 36 merchant-owned models via scoped delegates",
     ],
     productionRuntime: "yes",
     owner: "phase-1-pr2-tenant-access",
@@ -597,6 +669,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
       "Retain while PR 4 D-051 correction suite requires disposable fixtures",
   },
   ...syncControlPlaneExceptions(),
+  ...pr7PrivacyExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),
   ...enforcementExceptions(),

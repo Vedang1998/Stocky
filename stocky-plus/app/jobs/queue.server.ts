@@ -361,6 +361,86 @@ export function createCronWorker(processor: (job: Job) => Promise<void>) {
 }
 
 /**
+ * Generation-fenced shop-scoped remove of ordinary BullMQ jobs. Never FLUSHALL.
+ */
+export async function drainOrdinaryQueueJobsForShop(input: {
+  shopId: string;
+  canonicalDomain: string;
+}): Promise<{ removed: number; remainingForShop: number }> {
+  const queues = [getWebhookQueue(), getCronQueue()];
+  const states = [
+    "waiting",
+    "delayed",
+    "paused",
+    "active",
+    "completed",
+    "failed",
+    "wait",
+  ] as const;
+  let removed = 0;
+  for (const queue of queues) {
+    const jobs = await queue.getJobs([...states]);
+    for (const job of jobs) {
+      const data = (job.data ?? {}) as {
+        tenant?: { shopId?: string };
+        payloadShop?: string;
+      };
+      const jobShop =
+        typeof data.tenant?.shopId === "string" ? data.tenant.shopId : "";
+      const payloadShop =
+        typeof data.payloadShop === "string" ? data.payloadShop : "";
+      const matches =
+        jobShop === input.shopId || payloadShop === input.canonicalDomain;
+      if (!matches) continue;
+      try {
+        await job.remove();
+        removed += 1;
+      } catch {
+        // Leave the job; remainingForShop is measured after drain.
+      }
+    }
+  }
+  return {
+    removed,
+    remainingForShop: await countOrdinaryQueueJobsForShop(input),
+  };
+}
+
+export async function countOrdinaryQueueJobsForShop(input: {
+  shopId: string;
+  canonicalDomain: string;
+}): Promise<number> {
+  const queues = [getWebhookQueue(), getCronQueue()];
+  const states = [
+    "waiting",
+    "delayed",
+    "paused",
+    "active",
+    "completed",
+    "failed",
+    "wait",
+  ] as const;
+  let remaining = 0;
+  for (const queue of queues) {
+    const jobs = await queue.getJobs([...states]);
+    for (const job of jobs) {
+      const data = (job.data ?? {}) as {
+        tenant?: { shopId?: string };
+        payloadShop?: string;
+      };
+      const jobShop =
+        typeof data.tenant?.shopId === "string" ? data.tenant.shopId : "";
+      const payloadShop =
+        typeof data.payloadShop === "string" ? data.payloadShop : "";
+      if (jobShop === input.shopId || payloadShop === input.canonicalDomain) {
+        remaining += 1;
+      }
+    }
+  }
+  return remaining;
+}
+
+/**
  * Test-only: close shared BullMQ clients so a subsequent REDIS_URL change
  * (e.g. outage simulation) creates fresh connections.
  */

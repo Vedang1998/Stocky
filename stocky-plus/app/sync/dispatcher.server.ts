@@ -23,6 +23,7 @@ import {
 } from "./execution-strategy.server";
 import { assertTransition } from "./state-machine.server";
 import { SyncControlPlaneError } from "./errors";
+import { assertParticipatingWriteGuardForShop } from "../tenant/participating-write.server";
 import {
   classifyAfterQueueAdd,
   inspectQueueDispatchPresence,
@@ -135,18 +136,51 @@ function resolveQueue(job: ClaimedJobRow): Queue {
     : getCronQueue();
 }
 
-async function recoverExpiredDispatchLeases(
+function isGenerationFrozenError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /generation_frozen/i.test(message);
+}
+
+export async function recoverExpiredDispatchLeases(
   prisma: ReturnType<typeof getControlPlanePrisma>,
   now: Date,
   limit: number = DEFAULT_EXPIRED_LEASE_RECOVERY_LIMIT,
 ): Promise<number> {
-  // Bounded deterministic recovery: FOR UPDATE SKIP LOCKED + LIMIT.
-  // Statement-level readiness triggers process all affected shops safely
-  // (D-050 / F-CLAUDE-D049-02). Concurrent dispatchers do not duplicate.
-  const recovered = await prisma.$queryRaw<Array<{ id: string; shopId: string }>>(
-    buildExpiredDispatchLeaseRecoverySql({ now, limit }),
-  );
-  return recovered.length;
+  // Per-shop transactions so one frozen namespace cannot roll back every tenant.
+  const candidates = await prisma.$queryRaw<Array<{ shopId: string }>>`
+    SELECT d."shopId"
+    FROM "DurableJob" d
+    WHERE d.state = 'DISPATCH_LEASED'
+      AND d."leaseExpiresAt" IS NOT NULL
+      AND d."leaseExpiresAt" < ${now}
+    ORDER BY d."leaseExpiresAt" ASC, d.id ASC
+    LIMIT ${limit}
+  `;
+  const shops = [...new Set(candidates.map((row) => row.shopId))];
+  let recovered = 0;
+  let remaining = limit;
+  for (const shopId of shops) {
+    if (remaining < 1) break;
+    try {
+      const n = await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, shopId);
+        const rows = await tx.$queryRaw<Array<{ id: string; shopId: string }>>(
+          buildExpiredDispatchLeaseRecoverySql({
+            now,
+            limit: remaining,
+            shopId,
+          }),
+        );
+        return rows.length;
+      });
+      recovered += n;
+      remaining -= n;
+    } catch (err) {
+      if (isGenerationFrozenError(err)) continue;
+      throw err;
+    }
+  }
+  return recovered;
 }
 
 /**
@@ -170,82 +204,93 @@ async function claimBatchFair(
 ): Promise<ClaimedJobRow[]> {
   const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
-  return prisma.$transaction(async (tx) => {
-    const claimed: ClaimedJobRow[] = [];
-    const claimedIds = new Set<string>();
+  const claimed: ClaimedJobRow[] = [];
+  const claimedIds = new Set<string>();
 
-    for (let round = 0; round < FAIR_CLAIM_MAX_REFILL_ROUNDS; round++) {
-      const remaining = batchSize - claimed.length;
-      if (remaining <= 0) break;
+  for (let round = 0; round < FAIR_CLAIM_MAX_REFILL_ROUNDS; round++) {
+    const remaining = batchSize - claimed.length;
+    if (remaining <= 0) break;
 
-      const shopCap = shopCapForFairClaim(remaining);
-      const lockedShops = await tx.$queryRaw<FairClaimSchedulerShop[]>(
+    const shopCap = shopCapForFairClaim(remaining);
+    const lockedShops = await prisma.$transaction(async (tx) =>
+      tx.$queryRaw<FairClaimSchedulerShop[]>(
         buildFairClaimSchedulerLockSql({ now, shopCap }),
-      );
+      ),
+    );
 
-      if (lockedShops.length === 0) {
-        break;
-      }
+    if (lockedShops.length === 0) {
+      break;
+    }
 
-      const rows = await tx.$queryRaw<ClaimedJobRow[]>(
-        buildFairClaimJobCandidateSql({
-          now,
-          batchSize: remaining,
-          maxPerShop,
-          shops: lockedShops.map((s) => ({
-            shopId: s.shopId,
-            ordinal: Number(s.ordinal),
-          })),
-        }),
-      );
-
-      let leasedThisRound = 0;
-      for (const row of rows) {
-        if (claimedIds.has(row.id)) continue;
-        assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
-        const updated = await tx.$queryRaw<Array<{ id: string }>>`
-          UPDATE "DurableJob"
-          SET
-            state = 'DISPATCH_LEASED',
-            "leaseOwner" = ${workerId},
-            "leaseExpiresAt" = ${leaseExpiresAt},
-            "updatedAt" = ${now}
-          WHERE id = ${row.id}
-            AND state = CAST(${row.state} AS "DurableJobState")
-          RETURNING id
-        `;
-        if (updated.length === 0) continue;
-        claimedIds.add(row.id);
-        claimed.push({ ...row, state: "DISPATCH_LEASED" });
-        leasedThisRound += 1;
-        if (claimed.length >= batchSize) break;
-      }
-
-      // D. Fresh-snapshot reconciliation while readiness locks still held.
-      await tx.$queryRaw(
-        buildFairClaimReadinessReconcileSql({
-          now,
-          shopIds: lockedShops.map((s) => s.shopId),
-        }),
-      );
-
-      // If this round locked readiness but leased nothing, reconciliation may
-      // have healed stale rows — continue bounded refill while capacity remains.
-      if (leasedThisRound === 0) {
-        const moreDue = await tx.$queryRaw<Array<{ ok: number }>>`
-          SELECT 1 AS ok
-          FROM "DispatchReadyShop"
-          WHERE "processingEnabled" = true
-            AND "nextDispatchAt" <= ${now}
-          LIMIT 1
-        `;
-        if (moreDue.length === 0) break;
-        continue;
+    let leasedThisRound = 0;
+    for (const shop of lockedShops) {
+      if (claimed.length >= batchSize) break;
+      try {
+        const leased = await prisma.$transaction(async (tx) => {
+          await assertParticipatingWriteGuardForShop(tx, shop.shopId);
+          const rows = await tx.$queryRaw<ClaimedJobRow[]>(
+            buildFairClaimJobCandidateSql({
+              now,
+              batchSize: batchSize - claimed.length,
+              maxPerShop,
+              shops: [
+                {
+                  shopId: shop.shopId,
+                  ordinal: Number(shop.ordinal),
+                },
+              ],
+            }),
+          );
+          const out: ClaimedJobRow[] = [];
+          for (const row of rows) {
+            if (claimedIds.has(row.id)) continue;
+            assertTransition(row.state as DurableJob["state"], "DISPATCH_LEASED");
+            const updated = await tx.$queryRaw<Array<{ id: string }>>`
+              UPDATE "DurableJob"
+              SET
+                state = 'DISPATCH_LEASED',
+                "leaseOwner" = ${workerId},
+                "leaseExpiresAt" = ${leaseExpiresAt},
+                "updatedAt" = ${now}
+              WHERE id = ${row.id}
+                AND state = CAST(${row.state} AS "DurableJobState")
+              RETURNING id
+            `;
+            if (updated.length === 0) continue;
+            out.push({ ...row, state: "DISPATCH_LEASED" });
+          }
+          await tx.$queryRaw(
+            buildFairClaimReadinessReconcileSql({
+              now,
+              shopIds: [shop.shopId],
+            }),
+          );
+          return out;
+        });
+        for (const row of leased) {
+          claimedIds.add(row.id);
+          claimed.push(row);
+          leasedThisRound += 1;
+        }
+      } catch (err) {
+        if (isGenerationFrozenError(err)) continue;
+        throw err;
       }
     }
 
-    return claimed;
-  });
+    if (leasedThisRound === 0) {
+      const moreDue = await prisma.$queryRaw<Array<{ ok: number }>>`
+        SELECT 1 AS ok
+        FROM "DispatchReadyShop"
+        WHERE "processingEnabled" = true
+          AND "nextDispatchAt" <= ${now}
+        LIMIT 1
+      `;
+      if (moreDue.length === 0) break;
+    }
+  }
+
+  return claimed;
 }
 
 async function ensureDispatchRecord(
@@ -255,39 +300,42 @@ async function ensureDispatchRecord(
   leaseMs: number,
   now: Date,
 ): Promise<JobDispatch> {
-  // Reuse unacknowledged PENDING_ENQUEUE dispatch for the same sequence (ack-loss recovery).
-  const existingPending = await prisma.jobDispatch.findFirst({
-    where: {
-      durableJobId: job.id,
-      shopId: job.shopId,
-      state: "PENDING_ENQUEUE",
-    },
-    orderBy: { dispatchSequence: "desc" },
-  });
-  if (existingPending) {
-    return existingPending;
-  }
+  return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, job.shopId);
+    // Reuse unacknowledged PENDING_ENQUEUE dispatch for the same sequence (ack-loss recovery).
+    const existingPending = await tx.jobDispatch.findFirst({
+      where: {
+        durableJobId: job.id,
+        shopId: job.shopId,
+        state: "PENDING_ENQUEUE",
+      },
+      orderBy: { dispatchSequence: "desc" },
+    });
+    if (existingPending) {
+      return existingPending;
+    }
 
-  const last = await prisma.jobDispatch.findFirst({
-    where: { durableJobId: job.id, shopId: job.shopId },
-    orderBy: { dispatchSequence: "desc" },
-  });
-  const nextSeq = (last?.dispatchSequence ?? 0) + 1;
-  const queueJobId = formatQueueJobId(job.id, nextSeq);
-  const leaseExpiresAt = new Date(now.getTime() + leaseMs);
+    const last = await tx.jobDispatch.findFirst({
+      where: { durableJobId: job.id, shopId: job.shopId },
+      orderBy: { dispatchSequence: "desc" },
+    });
+    const nextSeq = (last?.dispatchSequence ?? 0) + 1;
+    const queueJobId = formatQueueJobId(job.id, nextSeq);
+    const leaseExpiresAt = new Date(now.getTime() + leaseMs);
 
-  return prisma.jobDispatch.create({
-    data: {
-      shopId: job.shopId,
-      durableJobId: job.id,
-      dispatchSequence: nextSeq,
-      queueName: job.queueName,
-      queueJobId,
-      state: "PENDING_ENQUEUE",
-      leaseOwner: workerId,
-      leaseExpiresAt,
-      payloadDigest: job.payloadDigest,
-    },
+    return tx.jobDispatch.create({
+      data: {
+        shopId: job.shopId,
+        durableJobId: job.id,
+        dispatchSequence: nextSeq,
+        queueName: job.queueName,
+        queueJobId,
+        state: "PENDING_ENQUEUE",
+        leaseOwner: workerId,
+        leaseExpiresAt,
+        payloadDigest: job.payloadDigest,
+      },
+    });
   });
 }
 
@@ -297,18 +345,50 @@ async function supersedeTerminalDispatch(
   reason: string,
   now: Date,
 ): Promise<void> {
-  await prisma.jobDispatch.update({
+  await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, dispatch.shopId);
+    await tx.jobDispatch.update({
+      where: { id: dispatch.id },
+      data: {
+        state: "SUPERSEDED",
+        completedAt: now,
+        leaseOwner: null,
+        leaseExpiresAt: null,
+      },
+    });
+    await tx.dataIssue.create({
+      data: {
+        shopId: dispatch.shopId,
+        reasonCode: reason.slice(0, 64),
+        severity: "WARNING",
+        redactedEvidence: {
+          durableJobId: dispatch.durableJobId,
+          dispatchId: dispatch.id,
+          dispatchSequence: dispatch.dispatchSequence,
+          queueJobId: dispatch.queueJobId,
+          reason,
+        },
+      },
+    });
+  });
+}
+
+async function markDispatchFailedInTx(
+  tx: Prisma.TransactionClient,
+  dispatch: JobDispatch,
+  reason: string,
+  now: Date,
+): Promise<void> {
+  await tx.jobDispatch.update({
     where: { id: dispatch.id },
     data: {
-      state: "SUPERSEDED",
+      state: "FAILED",
       completedAt: now,
-      // Persist bounded reason on failureSummary-equivalent fields when present —
-      // JobDispatch has no failureSummary; use leaseOwner clear + DataIssue separately.
       leaseOwner: null,
       leaseExpiresAt: null,
     },
   });
-  await prisma.dataIssue.create({
+  await tx.dataIssue.create({
     data: {
       shopId: dispatch.shopId,
       reasonCode: reason.slice(0, 64),
@@ -330,28 +410,9 @@ async function markDispatchFailed(
   reason: string,
   now: Date,
 ): Promise<void> {
-  await prisma.jobDispatch.update({
-    where: { id: dispatch.id },
-    data: {
-      state: "FAILED",
-      completedAt: now,
-      leaseOwner: null,
-      leaseExpiresAt: null,
-    },
-  });
-  await prisma.dataIssue.create({
-    data: {
-      shopId: dispatch.shopId,
-      reasonCode: reason.slice(0, 64),
-      severity: "WARNING",
-      redactedEvidence: {
-        durableJobId: dispatch.durableJobId,
-        dispatchId: dispatch.id,
-        dispatchSequence: dispatch.dispatchSequence,
-        queueJobId: dispatch.queueJobId,
-        reason,
-      },
-    },
+  await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, dispatch.shopId);
+    await markDispatchFailedInTx(tx, dispatch, reason, now);
   });
 }
 
@@ -434,10 +495,12 @@ export async function enqueueWithDispatch(
   });
 
   if (!shop || !shop.processingEnabled) {
-    await markDispatchFailed(prisma, dispatch, "shop_processing_disabled", now);
-    let cancelled = false;
-    if (shop?.uninstalledAt) {
-      const cancelledRows = await prisma.$queryRaw<Array<{ id: string }>>`
+    const domain = shop?.myshopifyDomain ?? null;
+    await prisma.$transaction(async (tx) => {
+      await assertParticipatingWriteGuardForShop(tx, job.shopId, domain);
+      await markDispatchFailedInTx(tx, dispatch, "shop_processing_disabled", now);
+      if (shop?.uninstalledAt) {
+        await tx.$queryRaw<Array<{ id: string }>>`
         UPDATE "DurableJob"
         SET
           state = 'CANCELLED',
@@ -449,10 +512,8 @@ export async function enqueueWithDispatch(
           AND state = 'DISPATCH_LEASED'
         RETURNING id
       `;
-      cancelled = cancelledRows.length > 0;
-    } else {
-      // Processing disabled without uninstall — return to PENDING; do not ack ENQUEUED.
-      await prisma.$executeRaw`
+      } else {
+        await tx.$executeRaw`
         UPDATE "DurableJob"
         SET
           state = 'PENDING',
@@ -462,7 +523,9 @@ export async function enqueueWithDispatch(
         WHERE id = ${job.id}
           AND state = 'DISPATCH_LEASED'
       `;
-    }
+      }
+    });
+    const cancelled = Boolean(shop?.uninstalledAt);
     return { outcome: "shop_disabled", dispatch, cancelled };
   }
 
@@ -553,23 +616,26 @@ export async function enqueueWithDispatch(
     // so it creates nextSeq. If somehow same id returned, force create.
     let newDispatch = next;
     if (newDispatch.id === dispatch.id || newDispatch.dispatchSequence === dispatch.dispatchSequence) {
-      const last = await prisma.jobDispatch.findFirst({
-        where: { durableJobId: job.id, shopId: job.shopId },
-        orderBy: { dispatchSequence: "desc" },
-      });
-      const nextSeq = (last?.dispatchSequence ?? 0) + 1;
-      newDispatch = await prisma.jobDispatch.create({
-        data: {
-          shopId: job.shopId,
-          durableJobId: job.id,
-          dispatchSequence: nextSeq,
-          queueName: job.queueName,
-          queueJobId: formatQueueJobId(job.id, nextSeq),
-          state: "PENDING_ENQUEUE",
-          leaseOwner: workerId,
-          leaseExpiresAt: new Date(now.getTime() + leaseMs),
-          payloadDigest: job.payloadDigest,
-        },
+      newDispatch = await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, job.shopId);
+        const last = await tx.jobDispatch.findFirst({
+          where: { durableJobId: job.id, shopId: job.shopId },
+          orderBy: { dispatchSequence: "desc" },
+        });
+        const nextSeq = (last?.dispatchSequence ?? 0) + 1;
+        return tx.jobDispatch.create({
+          data: {
+            shopId: job.shopId,
+            durableJobId: job.id,
+            dispatchSequence: nextSeq,
+            queueName: job.queueName,
+            queueJobId: formatQueueJobId(job.id, nextSeq),
+            state: "PENDING_ENQUEUE",
+            leaseOwner: workerId,
+            leaseExpiresAt: new Date(now.getTime() + leaseMs),
+            payloadDigest: job.payloadDigest,
+          },
+        });
       });
     }
 
@@ -726,7 +792,9 @@ async function recordIndeterminateDispatchEvidence(
   const reasonCode = input.reasonCode.slice(0, 64);
 
   // SyncHealth is always the current-state signal.
-  await prisma.syncHealth.upsert({
+  await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
+    await tx.syncHealth.upsert({
     where: {
       shopId_syncDomain: {
         shopId: input.shopId,
@@ -753,10 +821,12 @@ async function recordIndeterminateDispatchEvidence(
       ),
       computedAt: now,
     },
+    });
   });
 
   // Bounded DataIssue: first observation or after cooldown, under advisory lock.
   await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const lockKey = `indet:${input.shopId}:${input.durableJobId}:${input.dispatchSequence}:${reasonCode}`;
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(hashtext(${lockKey}))
@@ -812,6 +882,7 @@ async function ackEnqueued(
   },
 ): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const jobAck = await tx.$queryRaw<Array<{ id: string }>>`
       UPDATE "DurableJob"
       SET
@@ -1066,6 +1137,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
   for (const job of candidates) {
     try {
       const outcome = await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, job.shopId);
         const locked = await tx.$queryRaw<DurableJob[]>`
           SELECT * FROM "DurableJob"
           WHERE id = ${job.id} AND "shopId" = ${job.shopId} AND state = 'ENQUEUED'
@@ -1214,6 +1286,7 @@ export async function recoverStrandedEnqueuedJobs(options?: {
       // Confirmed MISSING or TERMINAL_EXISTING.
       const decision = shouldDeadLetterStranded(outcome.live);
       const txResult = await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, outcome.live.shopId);
         if (decision.deadLetter) {
           return terminalizeStrandedEnqueuedJob(tx, {
             job: outcome.live,
@@ -1362,9 +1435,12 @@ export async function dispatchPendingJobs(options?: {
   for (const job of claimed) {
     if (!job.executionStrategy) {
       const strategy = executionStrategyForJobType(job.jobType);
-      await prisma.durableJob.update({
-        where: { id: job.id },
-        data: { executionStrategy: strategy },
+      await prisma.$transaction(async (tx) => {
+        await assertParticipatingWriteGuardForShop(tx, job.shopId);
+        await tx.durableJob.update({
+          where: { id: job.id },
+          data: { executionStrategy: strategy },
+        });
       });
       job.executionStrategy = strategy;
     }
@@ -1434,16 +1510,19 @@ export async function dispatchPendingJobs(options?: {
       } else {
         skippedNotRunnable += 1;
         // Return to PENDING so a later cycle can allocate a fresh sequence.
-        await prisma.$executeRaw`
-          UPDATE "DurableJob"
-          SET
-            state = 'PENDING',
-            "leaseOwner" = NULL,
-            "leaseExpiresAt" = NULL,
-            "updatedAt" = ${new Date()}
-          WHERE id = ${job.id}
-            AND state = 'DISPATCH_LEASED'
-        `;
+        await prisma.$transaction(async (tx) => {
+          await assertParticipatingWriteGuardForShop(tx, job.shopId);
+          await tx.$executeRaw`
+            UPDATE "DurableJob"
+            SET
+              state = 'PENDING',
+              "leaseOwner" = NULL,
+              "leaseExpiresAt" = NULL,
+              "updatedAt" = ${new Date()}
+            WHERE id = ${job.id}
+              AND state = 'DISPATCH_LEASED'
+          `;
+        });
       }
     } catch (err) {
       failed += 1;

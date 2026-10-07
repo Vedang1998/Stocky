@@ -1,8 +1,9 @@
 /**
  * Verified reinstall reactivation — only when disabled reason was UNINSTALLED.
  */
-import type { Shop } from "@prisma/client";
+import type { Shop, ShopProcessingDisabledReason } from "@prisma/client";
 import { normalizeShopDomain } from "../tenant/shop-domain";
+import { assertParticipatingWriteGuard } from "../tenant/participating-write.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
 import { SyncControlPlaneError } from "./errors";
 
@@ -88,22 +89,68 @@ export async function reactivateShopAfterVerifiedReinstall(input: {
     );
   }
 
-  const updated = await prisma.shop.update({
-    where: { id: shop.id },
-    data: {
-      processingEnabled: true,
-      processingDisabledReason: null,
-      processingDisabledAt: null,
-      reinstalledAt: new Date(),
-    },
-    select: {
-      id: true,
-      myshopifyDomain: true,
-      processingEnabled: true,
-      processingDisabledReason: true,
-      reinstalledAt: true,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuard(tx, shop.myshopifyDomain);
+    const locked = await tx.$queryRaw<
+      Array<{
+        id: string;
+        myshopifyDomain: string;
+        processingEnabled: boolean;
+        processingDisabledReason: ShopProcessingDisabledReason | null;
+        reinstalledAt: Date | null;
+      }>
+    >`
+      SELECT id, "myshopifyDomain", "processingEnabled", "processingDisabledReason", "reinstalledAt"
+      FROM "Shop"
+      WHERE id = ${shop.id}
+      FOR UPDATE
+    `;
+    const live = locked[0];
+    if (!live) {
+      throw new SyncControlPlaneError("shop_missing", "Shop row missing");
+    }
+    if (live.processingEnabled) {
+      return { shop: live, already: true as const };
+    }
+    if (live.processingDisabledReason === "REDACTED") {
+      throw new SyncControlPlaneError(
+        "reinstall_denied",
+        "Cannot reactivate a redacted shop",
+      );
+    }
+    if (live.processingDisabledReason === "MANUAL") {
+      throw new SyncControlPlaneError(
+        "reinstall_denied",
+        "Cannot auto-reactivate a manually disabled shop",
+      );
+    }
+    if (live.processingDisabledReason !== "UNINSTALLED") {
+      throw new SyncControlPlaneError(
+        "reinstall_denied",
+        `Cannot reactivate shop disabled for ${live.processingDisabledReason ?? "unknown"}`,
+      );
+    }
+    const row = await tx.shop.update({
+      where: { id: live.id },
+      data: {
+        processingEnabled: true,
+        processingDisabledReason: null,
+        processingDisabledAt: null,
+        reinstalledAt: new Date(),
+      },
+      select: {
+        id: true,
+        myshopifyDomain: true,
+        processingEnabled: true,
+        processingDisabledReason: true,
+        reinstalledAt: true,
+      },
+    });
+    return { shop: row, already: false as const };
   });
 
-  return { shop: updated, reactivated: true };
+  if (updated.already) {
+    return { shop: updated.shop, reactivated: false };
+  }
+  return { shop: updated.shop, reactivated: true };
 }

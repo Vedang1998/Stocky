@@ -13,6 +13,7 @@ import {
   resolveBootstrapDatabaseUrl,
   resolveMigrationDatabaseUrl,
 } from "../connection";
+import { grantExistingPr7RolesToMigrationOwner } from "../pr7-privacy";
 import { provisionRoles } from "../roles";
 
 const APP_ROOT = path.resolve(
@@ -66,6 +67,7 @@ export type NonSuperuserOwnerFixture = {
  */
 export async function createNonSuperuserMigrationOwnerFixture(
   label: string,
+  options?: { grantExistingPr7Roles?: boolean },
 ): Promise<NonSuperuserOwnerFixture> {
   const runtimePassword = requireRuntimeRolePassword();
   const bootstrapUrl = resolveBootstrapDatabaseUrl();
@@ -95,6 +97,9 @@ export async function createNonSuperuserMigrationOwnerFixture(
     await bootstrap.query(
       `GRANT CONNECT, CREATE, TEMP ON DATABASE ${databaseName} TO ${migrationOwner}`,
     );
+    if (options?.grantExistingPr7Roles !== false) {
+      await grantExistingPr7RolesToMigrationOwner(bootstrap, migrationOwner);
+    }
   } finally {
     await bootstrap.end();
   }

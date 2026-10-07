@@ -5,6 +5,7 @@ import {
 } from "../queue.server";
 import { processCronJob, processWebhookJob } from "./webhook-processor";
 import { dispatchPendingJobs } from "../../sync/dispatcher.server";
+import { startPrivacyCoordinatorLoop } from "../../privacy/coordinator.server";
 import { assertCanonicalWriterCapacityAtStartup } from "./catalog-facts/capacity";
 
 async function main() {
@@ -42,6 +43,14 @@ async function main() {
       });
     }, dispatcherIntervalMs);
     console.log(`Dispatcher loop every ${dispatcherIntervalMs}ms`);
+  }
+
+  const privacyIntervalMs = Number(
+    process.env.STOCKY_PRIVACY_COORDINATOR_INTERVAL_MS ?? "5000",
+  );
+  if (privacyIntervalMs > 0) {
+    await startPrivacyCoordinatorLoop(privacyIntervalMs);
+    console.log(`Privacy coordinator loop every ${privacyIntervalMs}ms`);
   }
 
   console.log("Workers running. Press Ctrl+C to stop.");

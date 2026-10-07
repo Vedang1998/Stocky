@@ -14,8 +14,10 @@
  *   cancellation of an already completed statement.
  */
 import { randomUUID } from "node:crypto";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, ShopProcessingDisabledReason } from "@prisma/client";
 import { deleteSessionsForShop } from "../tenant/bootstrap.server";
+import { markGenerationUninstalledInTx } from "../privacy/generation.server";
+import { assertParticipatingWriteGuard } from "../tenant/participating-write.server";
 import { normalizeShopDomain } from "../tenant/shop-domain";
 import { resolveApiVersionForPersistence } from "./api-version.server";
 import { getControlPlanePrisma } from "./control-plane-db.server";
@@ -43,6 +45,50 @@ export type ProcessUninstallResult = {
   deliveryId: string;
   duplicate: boolean;
 };
+
+const PRESERVED_DISABLE_REASONS = new Set<ShopProcessingDisabledReason>([
+  "REDACTED",
+  "MANUAL",
+]);
+
+async function applyUninstalledShopDisablement(
+  tx: Prisma.TransactionClient,
+  shopId: string,
+  now: Date,
+): Promise<void> {
+  const locked = await tx.$queryRaw<
+    Array<{
+      processingDisabledReason: ShopProcessingDisabledReason | null;
+      processingDisabledAt: Date | null;
+      uninstalledAt: Date | null;
+    }>
+  >`
+    SELECT "processingDisabledReason", "processingDisabledAt", "uninstalledAt"
+    FROM "Shop"
+    WHERE id = ${shopId}
+    FOR UPDATE
+  `;
+  const row = locked[0];
+  if (!row) {
+    throw new SyncControlPlaneError("shop_missing", "Shop row missing during uninstall");
+  }
+  const preserve =
+    row.processingDisabledReason != null &&
+    PRESERVED_DISABLE_REASONS.has(row.processingDisabledReason);
+  await tx.shop.update({
+    where: { id: shopId },
+    data: {
+      processingEnabled: false,
+      processingDisabledReason: preserve
+        ? row.processingDisabledReason
+        : "UNINSTALLED",
+      processingDisabledAt: preserve
+        ? (row.processingDisabledAt ?? now)
+        : now,
+      uninstalledAt: row.uninstalledAt ?? now,
+    },
+  });
+}
 
 /**
  * Durable uninstall sequence. Always disables processing even when jobs are
@@ -77,15 +123,18 @@ export async function processUninstall(
     },
   });
   if (!shop) {
-    shop = await prisma.shop.create({
-      data: { myshopifyDomain: norm.normalized },
-      select: {
-        id: true,
-        myshopifyDomain: true,
-        processingEnabled: true,
-        processingDisabledAt: true,
-        uninstalledAt: true,
-      },
+    shop = await prisma.$transaction(async (tx) => {
+      await assertParticipatingWriteGuard(tx, norm.normalized);
+      return tx.shop.create({
+        data: { myshopifyDomain: norm.normalized },
+        select: {
+          id: true,
+          myshopifyDomain: true,
+          processingEnabled: true,
+          processingDisabledAt: true,
+          uninstalledAt: true,
+        },
+      });
     });
   }
 
@@ -100,6 +149,12 @@ export async function processUninstall(
       : null;
 
   const result = await prisma.$transaction(async (tx) => {
+    await assertParticipatingWriteGuard(tx, shop!.myshopifyDomain);
+    await markGenerationUninstalledInTx(tx, {
+      shopId: shop!.id,
+      canonicalDomain: shop!.myshopifyDomain,
+      now,
+    });
     const existing = webhookId
       ? await tx.webhookDelivery.findFirst({
           where: { shopId: shop!.id, shopifyWebhookId: webhookId },
@@ -114,15 +169,7 @@ export async function processUninstall(
           lastSeenAt: now,
         },
       });
-      await tx.shop.update({
-        where: { id: shop!.id },
-        data: {
-          processingEnabled: false,
-          processingDisabledReason: "UNINSTALLED",
-          processingDisabledAt: shop!.processingDisabledAt ?? now,
-          uninstalledAt: shop!.uninstalledAt ?? now,
-        },
-      });
+      await applyUninstalledShopDisablement(tx, shop!.id, now);
       // Still cancel any remaining non-terminal jobs (idempotent).
       const cancelled = await cancelAllCancellable(tx, shop!.id, now);
       return {
@@ -154,15 +201,7 @@ export async function processUninstall(
     });
 
     // 1. Durably disable processing first inside the same transaction.
-    await tx.shop.update({
-      where: { id: shop!.id },
-      data: {
-        processingEnabled: false,
-        processingDisabledReason: "UNINSTALLED",
-        processingDisabledAt: now,
-        uninstalledAt: now,
-      },
-    });
+    await applyUninstalledShopDisablement(tx, shop!.id, now);
 
     // 2–4. Cancel every cancellable non-terminal job; close active attempts.
     const cancelled = await cancelAllCancellable(tx, shop!.id, now);

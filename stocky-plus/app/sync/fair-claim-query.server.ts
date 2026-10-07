@@ -412,11 +412,15 @@ SELECT "shopId", action FROM served
 export function buildExpiredDispatchLeaseRecoverySql(params: {
   now: Date;
   limit: number;
+  shopId?: string;
 }): Prisma.Sql {
-  const { now, limit } = params;
+  const { now, limit, shopId } = params;
   if (!Number.isInteger(limit) || limit < 1) {
     throw new Error("expired_lease_recovery_limit_invalid");
   }
+  const shopFilter = shopId
+    ? Prisma.sql`AND d."shopId" = ${shopId}`
+    : Prisma.empty;
   return Prisma.sql`
 WITH expired AS (
   SELECT d.id
@@ -424,6 +428,7 @@ WITH expired AS (
   WHERE d.state = 'DISPATCH_LEASED'
     AND d."leaseExpiresAt" IS NOT NULL
     AND d."leaseExpiresAt" < ${now}
+    ${shopFilter}
   ORDER BY d."leaseExpiresAt" ASC, d.id ASC
   FOR UPDATE OF d SKIP LOCKED
   LIMIT ${limit}

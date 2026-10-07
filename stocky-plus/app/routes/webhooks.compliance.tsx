@@ -1,19 +1,19 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
+import { intakeComplianceWebhook } from "../privacy/intake.server";
 
 /**
  * Mandatory App Store compliance webhooks.
- * Topics: customers/data_request, customers/redact, shop/redact.
- *
- * Phase 0: authenticate + acknowledge. Full redaction/export workflows are
- * Phase 1 (requires Shop entity, retention policy, and operational runbook).
+ * Authenticate, then durable-ack. Processors run independently while ordinary
+ * processing may stay disabled.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic } = await authenticate.webhook(request);
-
-  console.log(`Received compliance webhook ${topic} for ${shop}`);
-
-  // Acknowledge immediately. Do not claim customer/shop data was erased until
-  // the Phase 1 retention/redaction pipeline exists and is tested.
+  const { shop, topic, payload, webhookId } = await authenticate.webhook(request);
+  await intakeComplianceWebhook({
+    shop,
+    topic,
+    payload,
+    webhookId,
+  });
   return new Response();
 };

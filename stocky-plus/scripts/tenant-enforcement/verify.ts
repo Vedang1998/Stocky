@@ -32,11 +32,51 @@ import {
  * policy for stocky_receipt_probe_owner only. The SECURITY DEFINER probe binds
  * both shopId and applicationKey in fixed SQL; this policy must not be treated
  * as tenant-runtime drift.
+ *
+ * PR7 additive privacy policies omit processingEnabled and target privacy
+ * principals. Ordinary runtime tenant predicates are unchanged.
  */
 const APPROVED_EXTRA_RLS_POLICIES: Readonly<Record<string, readonly string[]>> =
   {
     SyncApplicationReceipt: ["stocky_receipt_probe_select"],
+    ShopifyOrderFact: [
+      "order_privacy_read",
+      "order_privacy_delete_customer",
+      "order_privacy_delete_shop",
+      "order_enumerate",
+    ],
+    ShopifyOrderLineFact: [
+      "line_privacy_read",
+      "line_privacy_delete_customer",
+      "line_privacy_delete_shop",
+      "line_enumerate",
+    ],
+    AuditEvent: [
+      "audit_privacy_read",
+      "audit_privacy_delete_customer",
+      "audit_privacy_delete_shop",
+      "audit_enumerate",
+      "audit_gate_insert",
+    ],
   };
+
+function approvedExtraPoliciesFor(table: string): readonly string[] {
+  const named = APPROVED_EXTRA_RLS_POLICIES[table] ?? [];
+  if (
+    table === "ShopifyOrderFact" ||
+    table === "ShopifyOrderLineFact" ||
+    table === "AuditEvent"
+  ) {
+    return named;
+  }
+  return [
+    ...named,
+    `${table}_privacy_read`,
+    `${table}_privacy_delete_customer`,
+    `${table}_privacy_delete_shop`,
+    `${table}_privacy_enumerate`,
+  ];
+}
 
 export type VerifyIssue = {
   code: string;
@@ -281,7 +321,7 @@ async function checkPolicies(
   for (const row of res.rows) {
     const allowed = [
       ...expected.map((c) => rlsPolicyName(table, c)),
-      ...(APPROVED_EXTRA_RLS_POLICIES[table] ?? []),
+      ...approvedExtraPoliciesFor(table),
     ];
     if (!allowed.includes(row.polname)) {
       issues.push({

@@ -17,10 +17,17 @@ import {
   CONTROL_TABLES,
   IMMUTABILITY_TRIGGER_FN,
   MERCHANT_SQL_TABLES,
+  MERCHANT_TABLES,
   PLATFORM_CONTROL_PLANE_SQL_TABLES,
   TENANT_CONTEXT_HELPER_FN,
   TENANT_CONTEXT_VERSION_FN,
 } from "./manifest";
+import {
+  PR7_APPLICATION_FUNCTIONS,
+  PR7_RUNTIME_EXECUTABLE_FUNCTIONS,
+  PR7_SECURITY_DEFINER_FUNCTIONS,
+  grantMigratedLifecycleHelpersToRuntime,
+} from "./pr7-privacy";
 import { grantHelpersToRuntimeSql, helperFunctionsSql, quoteIdent } from "./sql";
 import {
   defaultMigrationRoleName,
@@ -55,11 +62,67 @@ function assertSafeRoleName(name: string): string {
   return name;
 }
 
+/**
+ * Run default-privilege DDL as `creatorRole`. NOINHERIT members cannot use
+ * `ALTER DEFAULT PRIVILEGES FOR ROLE` and must SET ROLE after a schema CREATE
+ * window (same pattern as PR7 helper apply).
+ */
+async function withCreatorRole(
+  client: Client,
+  creatorRole: string,
+  fn: () => Promise<void>,
+): Promise<void> {
+  assertSafeRoleName(creatorRole);
+  const session = await client.query<{ u: string }>(
+    `SELECT current_user::text AS u`,
+  );
+  const current = session.rows[0]?.u;
+  const switched = current !== creatorRole;
+  try {
+    if (switched) {
+      await client.query(
+        `GRANT USAGE, CREATE ON SCHEMA public TO ${quoteIdent(creatorRole)}`,
+      );
+      await client.query(`SET ROLE ${quoteIdent(creatorRole)}`);
+    }
+    await fn();
+  } finally {
+    if (switched) {
+      await client.query("RESET ROLE");
+      await client.query(
+        `REVOKE CREATE ON SCHEMA public FROM ${quoteIdent(creatorRole)}`,
+      );
+    }
+  }
+}
+
+async function revokeUnsafeDefaultTableSequencePrivs(
+  client: Client,
+  owner: string,
+  runtimeRole: string,
+): Promise<void> {
+  await withCreatorRole(client, owner, async () => {
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
+    );
+    await client.query(
+      `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+    );
+  });
+}
+
 const APPROVED_RUNTIME_EXECUTABLE_FUNCTIONS = new Set([
   `${TENANT_CONTEXT_HELPER_FN}()`,
   `${TENANT_CONTEXT_VERSION_FN}()`,
   // Checked via proname() form in collectFunctionPrivilegeFailures.
   "stocky_shop_processing_enabled()",
+  ...PR7_RUNTIME_EXECUTABLE_FUNCTIONS,
 ]);
 
 const APPROVED_APPLICATION_FUNCTIONS = new Set([
@@ -79,12 +142,25 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   CATALOG_OBSERVATION_SET_LEASE_FN,
   ORDER_OBSERVATION_LIFECYCLE_GUARD_FN,
   ORDER_OBSERVATION_SET_LEASE_FN,
+  ...PR7_APPLICATION_FUNCTIONS,
+  "stocky_privacy_shop_residual_count",
+  "stocky_privacy_enumerate_shop_surfaces",
 ]);
 
 /** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
 const APPROVED_SECURITY_DEFINER_FUNCTIONS = new Set([
   "stocky_has_application_receipt",
+  ...PR7_SECURITY_DEFINER_FUNCTIONS,
+  "stocky_privacy_shop_residual_count",
+  "stocky_privacy_enumerate_shop_surfaces",
 ]);
+
+/** Control-plane USAGE/SELECT on PR7 autoincrement sequences (not runtime). */
+const PR7_CONTROL_PLANE_SEQUENCE_PRIVS: Readonly<
+  Record<string, ReadonlySet<string>>
+> = {
+  PrivacyCoordinatorEvent_id_seq: new Set(["USAGE", "SELECT"]),
+};
 
 type DefaultAclObjType = "r" | "S" | "f";
 
@@ -393,15 +469,17 @@ export async function establishSafeFunctionDefaultPrivileges(
   assertSafeRoleName(creatorRole);
   const actions: string[] = [];
   const statements = [
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
-    `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(creatorRole)} REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
+    `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
+    `ALTER DEFAULT PRIVILEGES GRANT EXECUTE ON FUNCTIONS TO ${quoteIdent(creatorRole)}`,
+    `ALTER DEFAULT PRIVILEGES REVOKE EXECUTE ON FUNCTIONS FROM PUBLIC`,
   ];
-  for (const sql of statements) {
-    await client.query(sql);
-    actions.push(sql);
-  }
+  await withCreatorRole(client, creatorRole, async () => {
+    for (const sql of statements) {
+      await client.query(sql);
+      actions.push(sql);
+    }
+  });
   return actions;
 }
 
@@ -493,7 +571,10 @@ export async function collectSequencePrivilegeFailures(
           [role, seq.seqname, priv],
         );
         const allowedUsage =
-          seq.seqname === CATALOG_OBSERVATION_GEN_SEQ && priv === "USAGE";
+          (seq.seqname === CATALOG_OBSERVATION_GEN_SEQ && priv === "USAGE") ||
+          (role === controlPlaneRole &&
+            (PR7_CONTROL_PLANE_SEQUENCE_PRIVS[seq.seqname]?.has(priv) ??
+              false));
         if (roleHas.rows[0]?.has && !allowedUsage) {
           failures.push(
             `excess_sequence_priv:${seq.seqname}:${role}:${priv}:${seq.owner}:public`,
@@ -610,11 +691,13 @@ export async function grantMerchantDml(
   runtimeRole: string,
 ): Promise<string[]> {
   const grants: string[] = [];
-  for (const table of MERCHANT_SQL_TABLES) {
+  for (const table of MERCHANT_TABLES) {
+    const privs = table.expectedRuntimePrivileges;
+    if (privs.length === 0) continue;
     await client.query(
-      `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${quoteIdent(table)} TO ${quoteIdent(runtimeRole)}`,
+      `GRANT ${privs.join(", ")} ON TABLE ${quoteIdent(table.sqlTable)} TO ${quoteIdent(runtimeRole)}`,
     );
-    grants.push(`${table}:DML`);
+    grants.push(`${table.sqlTable}:${privs.join(",")}`);
   }
   return grants;
 }
@@ -886,6 +969,7 @@ export async function provisionRoles(
     revokesApplied.push("CREATE ON SCHEMA public FROM PUBLIC");
 
     await client.query(grantHelpersToRuntimeSql(runtimeRole));
+    await grantMigratedLifecycleHelpersToRuntime(client, runtimeRole);
     grantsApplied.push(`EXECUTE ON ${TENANT_CONTEXT_HELPER_FN}`);
     grantsApplied.push(`EXECUTE ON ${TENANT_CONTEXT_VERSION_FN}`);
 
@@ -942,6 +1026,20 @@ export async function provisionRoles(
       detectedDrift.push(`control_plane_role:${message.split("\n")[0]}`);
     }
 
+    // Dispatcher / JobDispatch hosts run as the control-plane role on migrate-only
+    // catalogs (PUBLIC execute is revoked). Grant after the role exists.
+    const controlPlaneRole = defaultControlPlaneRoleName();
+    const cpRoleExists = await client.query(
+      `SELECT 1 FROM pg_roles WHERE rolname = $1`,
+      [controlPlaneRole],
+    );
+    if ((cpRoleExists.rowCount ?? 0) > 0) {
+      await grantMigratedLifecycleHelpersToRuntime(client, controlPlaneRole);
+      grantsApplied.push(
+        `EXECUTE ON migrated lifecycle helpers TO ${controlPlaneRole}`,
+      );
+    }
+
     // _prisma_migrations — revoke if present
     const prismaMig = await client.query(
       `SELECT 1 FROM information_schema.tables
@@ -986,17 +1084,10 @@ export async function provisionRoles(
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
         try {
           await establishSafeFunctionDefaultPrivileges(client, owner);
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+          await revokeUnsafeDefaultTableSequencePrivs(
+            client,
+            owner,
+            runtimeRole,
           );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
@@ -1022,24 +1113,19 @@ export async function provisionRoles(
       } else {
         for (const owner of creators) {
           if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
+          await revokeUnsafeDefaultTableSequencePrivs(
+            client,
+            owner,
+            runtimeRole,
           );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(runtimeRole)}`,
-          );
+          await withCreatorRole(client, owner, async () => {
+            await client.query(
+              `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC`,
+            );
+            await client.query(
+              `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM ${quoteIdent(runtimeRole)}`,
+            );
+          });
           await establishSafeFunctionDefaultPrivileges(client, owner);
         }
         const after = await collectDefaultAclFailures(client, runtimeRole);
@@ -1065,17 +1151,10 @@ export async function provisionRoles(
       for (const owner of creators) {
         if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(owner)) continue;
         try {
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON TABLES FROM ${quoteIdent(runtimeRole)}`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM PUBLIC`,
-          );
-          await client.query(
-            `ALTER DEFAULT PRIVILEGES FOR ROLE ${quoteIdent(owner)} IN SCHEMA public REVOKE ALL ON SEQUENCES FROM ${quoteIdent(runtimeRole)}`,
+          await revokeUnsafeDefaultTableSequencePrivs(
+            client,
+            owner,
+            runtimeRole,
           );
           await establishSafeFunctionDefaultPrivileges(client, owner);
         } catch (err) {
@@ -1092,6 +1171,24 @@ export async function provisionRoles(
     grantsApplied.push(...(await grantMerchantDml(client, runtimeRole)));
     merchantDmlGranted = true;
   } else if (options.apply && (phase === "grants" || phase === "full")) {
+    // Restore the classified CP matrix after PR7 helpers and before merchant
+    // DML. Helpers must not table-GRANT Shop UPDATE or Session/receipt DML to
+    // stocky_control_plane; this re-provision is the last classified restore.
+    try {
+      const cp = await provisionControlPlaneRole(client, {
+        apply: true,
+        password: process.env.STOCKY_CONTROL_PLANE_ROLE_PASSWORD,
+      });
+      if (cp.ok) {
+        grantsApplied.push(...cp.grantsApplied);
+      } else {
+        detectedDrift.push(...cp.errors);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      detectedDrift.push(`control_plane_role:${message.split("\n")[0]}`);
+    }
+
     const rlsOk = await isRlsFullyForced(client);
     if (!rlsOk) {
       if (phase === "grants") {
@@ -1485,14 +1582,19 @@ export async function verifyRoles(
   }
 
   // Exact allowlist for runtime merchant privileges
-  for (const table of MERCHANT_SQL_TABLES) {
+  for (const tableSpec of MERCHANT_TABLES) {
+    const table = tableSpec.sqlTable;
+    const expected = new Set(tableSpec.expectedRuntimePrivileges);
     for (const priv of ["SELECT", "INSERT", "UPDATE", "DELETE"] as const) {
       const res = await client.query<{ has: boolean }>(
         `SELECT has_table_privilege($1, format('%I.%I', 'public', $2::text), $3) AS has`,
         [runtimeRole, table, priv],
       );
-      if (requireMerchantDml && !res.rows[0]?.has) {
+      if (requireMerchantDml && expected.has(priv) && !res.rows[0]?.has) {
         failures.push(`missing_priv:${table}:${priv}`);
+      }
+      if (requireMerchantDml && !expected.has(priv) && res.rows[0]?.has) {
+        failures.push(`excess_priv:${table}:${priv}`);
       }
       if (
         !requireMerchantDml &&

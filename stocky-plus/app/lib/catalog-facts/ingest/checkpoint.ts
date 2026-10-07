@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, SyncRun } from "@prisma/client";
 import { getControlPlanePrisma } from "../../../sync/control-plane-db.server";
+import { assertParticipatingWriteGuardForShop } from "../../../tenant/participating-write.server";
 
 type ControlPlaneClient = Pick<
   PrismaClient,
@@ -81,6 +82,7 @@ async function persistFence(
   }
   return prisma.$transaction(async (tx) => {
     await requireProcessingEnabled(tx, input.shopId);
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     await lockSyncRun(tx, input.syncRunId, input.shopId);
     const generated = await tx.$queryRaw<
       Array<{ generation: bigint; observed_at: Date }>
@@ -144,6 +146,7 @@ export async function attachBulkOperationGid(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await requireProcessingEnabled(tx, input.shopId);
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const run = await lockSyncRun(tx, input.syncRunId, input.shopId);
     if (run.bulkOperationGid === input.bulkOperationGid) return;
     await tx.syncRun.update({
@@ -184,6 +187,7 @@ export async function acknowledgeJsonlBatch(
   requireOrdinal(input.endLineOrdinal);
   await prisma.$transaction(async (tx) => {
     await requireProcessingEnabled(tx, input.shopId);
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     const run = await lockSyncRun(tx, input.syncRunId, input.shopId);
     assertPolledBulkOperationMatches(
       run.bulkOperationGid,
@@ -288,6 +292,7 @@ export async function completeSyncRunAndCursor(
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await requireProcessingEnabled(tx, input.shopId);
+    await assertParticipatingWriteGuardForShop(tx, input.shopId);
     await lockSyncRun(tx, input.syncRunId, input.shopId);
     const now = new Date();
     await tx.syncRun.update({

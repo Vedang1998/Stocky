@@ -1453,4 +1453,13 @@ export async function requireProcessingEnabled(
   if (!asBool(rows[0]?.processingEnabled, false)) {
     throw new OrderApplyProcessingDisabledError();
   }
+  // Prisma $queryRaw cannot deserialize PostgreSQL void. TenantDb forbids
+  // $executeRaw (raw_client_escape). Wrap the guard as a typed row.
+  await queryRows<{ ok: number }>(db)`
+    WITH _guard AS (
+      SELECT stocky_participating_write_guard(
+        stocky_shop_canonical_domain(${shopId}, NULL)
+      )
+    )
+    SELECT 1::int AS ok FROM _guard`;
 }

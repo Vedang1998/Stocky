@@ -50,6 +50,10 @@ const ALL_MIGRATION_NAMES = [
   "20260905173500_pr5_f3_remaining_integration",
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
+  "20260918120000_pr7_audit_roles_privacy",
+  "20261004180000_pr7_participating_write_guard",
+  "20261004190000_pr7_timestamptz_index_names",
+  "20261004200000_pr7_shop_canonical_domain",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
@@ -306,18 +310,33 @@ function assertMigrationAllowlistMatchesDisk(): void {
 const PR6_A_SUCCESSOR_MIGRATION =
   "20260907020000_pr6_a_order_refund_existence_coherence";
 
+function migrationsFrom(name: string): readonly string[] {
+  const idx = (ALL_MIGRATION_NAMES as readonly string[]).indexOf(name);
+  if (idx < 0) {
+    throw new Error(`unknown migration ${name}`);
+  }
+  return ALL_MIGRATION_NAMES.slice(idx);
+}
+
 function withParkedPr6aSuccessor<T>(fn: () => T): T {
   assertMigrationAllowlistMatchesDisk();
   const parkedRoot = join(APP_ROOT, ".tmp-parked-pr6a-successor");
-  const src = join(MIGRATIONS_DIR, PR6_A_SUCCESSOR_MIGRATION);
-  const dest = join(parkedRoot, PR6_A_SUCCESSOR_MIGRATION);
   mkdirSync(parkedRoot, { recursive: true });
+  const parked = migrationsFrom(PR6_A_SUCCESSOR_MIGRATION).map((name) => ({
+    name,
+    src: join(MIGRATIONS_DIR, name),
+    dest: join(parkedRoot, name),
+  }));
   try {
-    if (existsSync(src)) moveDir(src, dest);
+    for (const p of parked) {
+      if (existsSync(p.src)) moveDir(p.src, p.dest);
+    }
     return fn();
   } finally {
-    if (existsSync(dest) && !existsSync(src)) {
-      moveDir(dest, src);
+    for (const p of parked) {
+      if (existsSync(p.dest) && !existsSync(p.src)) {
+        moveDir(p.dest, p.src);
+      }
     }
     if (existsSync(parkedRoot)) {
       rmSync(parkedRoot, { recursive: true, force: true });
@@ -379,6 +398,10 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     await prisma.$disconnect();
   });
 
+  it("ALL_MIGRATION_NAMES matches on-disk prisma/migrations (fail-closed)", () => {
+    expect(() => assertMigrationAllowlistMatchesDisk()).not.toThrow();
+  });
+
   it("applies migrations from an empty database", async () => {
     await resetPublicSchema(prisma);
     const out = migrateDeploy();
@@ -389,6 +412,10 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(out).toContain("20260905173500_pr5_f3_remaining_integration");
     expect(out).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
     expect(out).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
+    expect(out).toContain("20260918120000_pr7_audit_roles_privacy");
+    expect(out).toContain("20261004180000_pr7_participating_write_guard");
+    expect(out).toContain("20261004190000_pr7_timestamptz_index_names");
+    expect(out).toContain("20261004200000_pr7_shop_canonical_domain");
   }, 120_000);
 
   it("applies new migrations on top of current-main init schema", async () => {
@@ -413,11 +440,19 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
     expect(initOut).not.toContain("20260907010000_pr6_a_order_refund_fact_foundation");
     expect(initOut).not.toContain("20260907020000_pr6_a_order_refund_existence_coherence");
+    expect(initOut).not.toContain("20260918120000_pr7_audit_roles_privacy");
+    expect(initOut).not.toContain("20261004180000_pr7_participating_write_guard");
+    expect(initOut).not.toContain("20261004190000_pr7_timestamptz_index_names");
+    expect(initOut).not.toContain("20261004200000_pr7_shop_canonical_domain");
     expect(restOut).toContain("20260816193000_pr5_catalog_fact_foundation");
     expect(restOut).toContain("20260905173000_pr5_f3_projection_pending_enum");
     expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
     expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
     expect(restOut).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
+    expect(restOut).toContain("20260918120000_pr7_audit_roles_privacy");
+    expect(restOut).toContain("20261004180000_pr7_participating_write_guard");
+    expect(restOut).toContain("20261004190000_pr7_timestamptz_index_names");
+    expect(restOut).toContain("20261004200000_pr7_shop_canonical_domain");
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
@@ -441,6 +476,10 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
         "20260905173500_pr5_f3_remaining_integration",
         "20260907010000_pr6_a_order_refund_fact_foundation",
         "20260907020000_pr6_a_order_refund_existence_coherence",
+        "20260918120000_pr7_audit_roles_privacy",
+        "20261004180000_pr7_participating_write_guard",
+        "20261004190000_pr7_timestamptz_index_names",
+        "20261004200000_pr7_shop_canonical_domain",
         "migration_lock.toml",
       ]),
     );
@@ -490,6 +529,8 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(initOut).not.toContain("20260905173500_pr5_f3_remaining_integration");
       expect(initOut).not.toContain("20260907010000_pr6_a_order_refund_fact_foundation");
       expect(initOut).not.toContain("20260907020000_pr6_a_order_refund_existence_coherence");
+      expect(initOut).not.toContain("20260918120000_pr7_audit_roles_privacy");
+      expect(initOut).not.toContain("20261004200000_pr7_shop_canonical_domain");
 
       expect(restOut).toContain("20260804180000_sync_control_plane");
       expect(restOut).toContain("20260804210000_sync_control_plane_correction");
@@ -525,6 +566,10 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
       expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
       expect(restOut).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
+      expect(restOut).toContain("20260918120000_pr7_audit_roles_privacy");
+      expect(restOut).toContain("20261004180000_pr7_participating_write_guard");
+      expect(restOut).toContain("20261004190000_pr7_timestamptz_index_names");
+      expect(restOut).toContain("20261004200000_pr7_shop_canonical_domain");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 
@@ -584,6 +629,10 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       expect(restOut).toContain("20260905173500_pr5_f3_remaining_integration");
       expect(restOut).toContain("20260907010000_pr6_a_order_refund_fact_foundation");
       expect(restOut).toContain("20260907020000_pr6_a_order_refund_existence_coherence");
+      expect(restOut).toContain("20260918120000_pr7_audit_roles_privacy");
+      expect(restOut).toContain("20261004180000_pr7_participating_write_guard");
+      expect(restOut).toContain("20261004190000_pr7_timestamptz_index_names");
+      expect(restOut).toContain("20261004200000_pr7_shop_canonical_domain");
 
       await assertMigrationRecordedExactlyOnce(prisma);
 

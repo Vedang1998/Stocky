@@ -7,6 +7,7 @@ import type { Client } from "pg";
 import {
   CATALOG_OBSERVATION_GEN_SEQ,
   MERCHANT_SQL_TABLES,
+  PLATFORM_CONTROL_PLANE_APPEND_ONLY_SQL_TABLES,
   PLATFORM_CONTROL_PLANE_SQL_TABLES,
 } from "../tenant-enforcement/manifest";
 import { quoteIdent } from "../tenant-enforcement/sql";
@@ -169,6 +170,7 @@ export async function provisionControlPlaneRole(
       ).catch(() => undefined);
     }
 
+    const appendOnly = new Set<string>(PLATFORM_CONTROL_PLANE_APPEND_ONLY_SQL_TABLES);
     for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
       const exists = await client.query(
         `SELECT 1 FROM information_schema.tables
@@ -176,6 +178,16 @@ export async function provisionControlPlaneRole(
         [table],
       );
       if ((exists.rowCount ?? 0) === 0) continue;
+      if (appendOnly.has(table)) {
+        await client.query(
+          `REVOKE ALL ON TABLE ${quoteIdent(table)} FROM ${quoteIdent(role)}`,
+        ).catch(() => undefined);
+        await client.query(
+          `GRANT SELECT, INSERT ON TABLE ${quoteIdent(table)} TO ${quoteIdent(role)}`,
+        );
+        grantsApplied.push(`${table}:APPEND_ONLY`);
+        continue;
+      }
       await client.query(
         `GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE ${quoteIdent(table)} TO ${quoteIdent(role)}`,
       );
@@ -323,6 +335,7 @@ export async function verifyControlPlaneRole(
     errors.push(`control_plane_owns_table:${row.relname}`);
   }
 
+  const appendOnly = new Set<string>(PLATFORM_CONTROL_PLANE_APPEND_ONLY_SQL_TABLES);
   for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
     const exists = await client.query(
       `SELECT 1 FROM information_schema.tables
@@ -331,7 +344,13 @@ export async function verifyControlPlaneRole(
     );
     if ((exists.rowCount ?? 0) === 0) continue;
 
-    for (const priv of ["SELECT", "INSERT", "UPDATE", "DELETE"] as const) {
+    const requiredPrivs = appendOnly.has(table)
+      ? (["SELECT", "INSERT"] as const)
+      : (["SELECT", "INSERT", "UPDATE", "DELETE"] as const);
+    const forbiddenPrivs = appendOnly.has(table)
+      ? (["UPDATE", "DELETE"] as const)
+      : [];
+    for (const priv of requiredPrivs) {
       const grants = await client.query(
         `SELECT 1 FROM information_schema.role_table_grants
          WHERE grantee = $1 AND table_schema = 'public'
@@ -340,6 +359,17 @@ export async function verifyControlPlaneRole(
       );
       if ((grants.rowCount ?? 0) === 0) {
         errors.push(`control_plane_missing_grant:${table}:${priv}`);
+      }
+    }
+    for (const priv of forbiddenPrivs) {
+      const grants = await client.query(
+        `SELECT 1 FROM information_schema.role_table_grants
+         WHERE grantee = $1 AND table_schema = 'public'
+           AND table_name = $2 AND privilege_type = $3`,
+        [role, table, priv],
+      );
+      if ((grants.rowCount ?? 0) > 0) {
+        errors.push(`control_plane_forbidden_grant:${table}:${priv}`);
       }
     }
 

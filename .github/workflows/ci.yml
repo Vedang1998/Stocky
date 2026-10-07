@@ -709,6 +709,18 @@ jobs:
       - name: PR5-F3 scale completeness
         run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts
 
+      - name: PR7 privacy actor/owner-proof tests
+        run: npm run test:privacy
+
+      - name: PR7 privacy zero-collection guard
+        run: npm run test:privacy:zero-name-filter-guard
+
+      - name: PR7 privacy foundation (PostgreSQL)
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr7-privacy-foundation.test.ts
+
+      - name: PR7 privacy races, provenance, and external sinks
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr7-privacy-races.test.ts
+
       - name: Unit tests
         run: npm test
 
