@@ -67,3 +67,4 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | B0-05 replay digest match | `app/privacy/__tests__/replay-digest.test.ts` + consumer-gates | implemented |
 | B0-06 operator timingSafeEqual | `app/privacy/__tests__/operator-resolve.test.ts` | implemented |
 | Q-008 | production decision | OPEN / unmet as legal default |
+| D-051 no-global-convoy (B1 test-only amendment `6044918346`) | `app/sync/__tests__/d051-corrections.test.ts` | HOL commit-before-holder-release for intake/retry/recovery/enabled + 100-shop holder; same-shop wait; owned global-lock blocked-before-release + restore + rerun; benchmark TPS diagnostic only (deadlock/error still fail). Not a PR8 throughput gate. |

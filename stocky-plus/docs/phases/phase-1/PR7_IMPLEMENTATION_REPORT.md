@@ -324,3 +324,31 @@ Automatic `pull_request` [37250417114](https://github.com/Vedang1998/Stocky/acti
 Cause: default `vitest.config.ts` excludes `app/rbac` but includes `app/privacy/**/*.test.ts` and does **not** inject `STOCKY_PRIVACY_ARTIFACT_KEY`. Privacy-config AEAD tests passed; the same encrypt/decrypt cases failed closed under `npm test` with `artifact_key_missing`. Missing-key bypass still passed. Correction: fulfillment AEAD tests set a synthetic fixture key themselves and still delete it for the missing-key case. `vitest.config.ts` is not in exclusive B scope and is unchanged.
 
 R1-01 remains deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, or merge.
+
+### Exact-head D-051 TPS invert on `edf7ac9` (recorded; not rerun-to-green; not a CI waiver)
+
+Automatic `pull_request` [37254141900](https://github.com/Vedang1998/Stocky/actions/runs/37254141900) · `head_sha=edf7ac9e17464782115dc9e85b893985f77cf210`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `111587567896` | SUCCESS |
+| Heavy | `111587589581` | FAILURE step 55 Sync control-plane integration — `d051-corrections.test.ts` `intake10.tps` 765.85 ≰ `intake1.tps` 1188.08; deadlocks 0 / errors 0; `advisoryGrantedMax=10` / `advisoryWaitMax=0`; independent-shop HOL tests passed. Privacy/unit/build skipped. |
+| Gate | `111594481199` | FAILURE |
+
+Parent P `6bfff956ac337de97f9e9ba95826fedb237e85a9` run [37250417114](https://github.com/Vedang1998/Stocky/actions/runs/37250417114) step 55 **passed** the same inequality (and again in `test:sync-performance`). E−P tracked diff on that SHA was the AEAD fixture-key setup plus three phase-1 docs; the D-051 **test blob** and D-051 lock functions under `app/sync`/`prisma` were unchanged on that pair. That is **not** a claim that every main/PR7 schema/runtime tree is identical.
+
+Diagnosis `6041369118`: six serial local committed-benchmark repetitions **all used the E tree** with P/E-labelled slots (inspected relevant-input equivalence on the D-051 test/lock paths, not six parent/current checkouts). All six passed locally; the CI invert was **not** reproduced; moving connect outside the measurement window did **not** establish the cause.
+
+### B1 D-051 gate repair (test-only; not B1 READY until new exact-head Classify+FULL Heavy+Gate)
+
+Coordinator amendment `6044918346`. Exclusive files: `d051-corrections.test.ts` plus this report, the execution brief, and the requirement map.
+
+Replacement for the wall-TPS proxy:
+
+1. HOL families (intake / retry / recovery / `processingEnabled`) and the 100-shop holder case require unrelated-shop **row commit while the holder remains idle-in-transaction and still holds the shop-maintain advisory**. `lock_timeout=2000ms` on the unrelated writer: timeout is failure, not success. Same-shop serialization still waits on the holder.
+2. Owned disposable `CREATE OR REPLACE` of the three maintain functions to the D-050 **global** key must observe **blocked-before-release** (Lock wait, no shop-B job/readiness row until the holder commits). Then restore `pg_get_functiondef` byte-for-byte and rerun the per-shop HOL control. Production lock SQL and migrations are not edited.
+3. Benchmark still runs control/intake/retry/recovery/mixed × configured concurrency, still asserts deadlocks=0 and errors=0, and still prints TPS/latency JSON. `intake10.tps > intake1.tps` is no longer pass/fail. Sampler fields remain supplemental.
+
+Mechanical inventory (CONTINUE B standing admission, not a new exclusive runtime file): `PR2_TENANT_ACCESS_INVENTORY.md` regenerated after the D-051 test-file line shift. Findings **1812**, violations **0**, exception IDs unchanged, digest `3421a59d8e9ab9864dced1bc1bff3ea8c3442a28654d06249a28a44b6d969144`.
+
+PR8 load/query-plan/product throughput gates remain open. No B2. No mark-ready / merge / production from this section.

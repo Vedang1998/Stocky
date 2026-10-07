@@ -135,3 +135,13 @@ Named §7.9 hosts receiving the lifecycle shared guard or equivalent:
 Newly created owned files: `app/audit/**`, `app/privacy/**`, `app/rbac/assignment.server.ts`, capture/admission/bound-effect, platform routes, `scripts/privacy/**`.
 
 `app/sync/intake.server.ts` and `execution-strategy.server.ts` remain unchanged ordinary paths. No `useOnlineTokens`. Q-008 remains OPEN.
+
+### B1 D-051 no-convoy gate repair (test-only scope amendment)
+
+**Task-Key:** `propo:issue67:PR68_D051_GATE_REPAIR:edf7ac9e17464782115dc9e85b893985f77cf210:cursor` (work order `6044918346`). This adds `app/sync/__tests__/d051-corrections.test.ts` to B1 exclusive files. Sync runtime, schema, migrations, workflows, and historical review blobs stay frozen.
+
+The no-global-convoy requirement is the HOL/commit-before-holder-release invariant plus an owned disposable global-lock negative that must observe **blocked-before-release**, then restore `pg_get_functiondef` and rerun the per-shop control. Wall-clock `intake10.tps > intake1.tps` is diagnostic telemetry only. Sampler counters (`advisoryWaitMax` / `advisoryGrantedMax`) are supplemental, not the gate.
+
+Diagnosis `6041369118` qualifications (must not be restated as six parent/current checkouts): the six local baseline repetitions used the **E working tree** with P/E-labelled slots after inspecting that the D-051 **test file blob** and `app/sync`/`prisma` D-051 lock functions matched P for those paths. That is relevant-input equivalence on those files, **not** identity of all main/PR7 schema/runtime trees. Local runs did not reproduce the CI invert; connection-outside-window did not establish the cause.
+
+Mechanical `PR2_TENANT_ACCESS_INVENTORY.md` refresh under CONTINUE B standing inventory admission: the allowed D-051 **test** file shifted existing EX-SYNC-TEST-017 line sites. Exception IDs unchanged; findings 1812; violations 0; digest `3421a59d…`. No new exception. Not a sync-runtime edit.
