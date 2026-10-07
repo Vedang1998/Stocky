@@ -75,7 +75,7 @@ Maps checkpoint A acceptance-matrix actor/owner rows to repository tests. Histor
 | F-05 bound effect tenant match | `pr7-privacy-races.test.ts` | runtime cross-tenant `effect_tenant_mismatch` |
 | F-06 uninstall/reinstall reason | `sync-uninstall.test.ts` | REDACTED/MANUAL preserved; reinstall FOR UPDATE |
 | F-07 assignment/artifact purge | foundation F-07 | implemented |
-| F-08 AAD + zero key | `fulfillment.test.ts` | foreign AAD fail; all-zero key fail |
+| F-08 AAD + zero key | `fulfillment.test.ts` + db-isolation platform-authorization | foreign AAD fail; all-zero key fail; stored blob version byte 2 (`13620d6` Heavy `37702208149` still expected 1) |
 | F-09 installed redact / HOL / Redis | foundation F-09 + races missing REDIS_URL | implemented |
 | F-11 append-only CP + admission fallback | foundation F-11 + `admission-fallback.test.ts` | implemented |
 | F-12 P3 | dispositions in brief/report | not claimed fixed |

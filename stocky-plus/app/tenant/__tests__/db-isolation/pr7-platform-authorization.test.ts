@@ -320,7 +320,7 @@ describe("PR7 B1 platform authorization", () => {
     });
     expect(stored).not.toBeNull();
     const blob = Buffer.from(stored!.ciphertext);
-    expect(blob[0]).toBe(1);
+    expect(blob[0]).toBe(2);
     expect(blob.includes(Buffer.from(shopA.domain, "utf8"))).toBe(false);
   });
 });

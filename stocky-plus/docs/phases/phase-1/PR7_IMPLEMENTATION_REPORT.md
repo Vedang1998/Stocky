@@ -392,4 +392,16 @@ Local (pre-CI, not exact-head; disposable PG `127.0.0.1:55432` / Redis `6379`, s
 
 First foundation attempt on this tree: 3 failed / 19 passed. Failures retained: (1) `stocky_privacy_finalize_shop_delete` SECURITY DEFINER owner lacked EXECUTE on exclusive/publication/live-attempt helpers — GRANTed to `stocky_privacy_finalizer_owner`; (2) coordinator steal test expected `claimNextPrivacyAttempt("worker-b")` null while other claimable requests existed — assertion is now request-scoped (foreign worker must not mint a second attempt on the fenced request). Re-run after those fixes: 22/22.
 
-R1-01 deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, merge, or production. Exact-head Classify + FULL Heavy + Gate required on the B2 head before any READY packet.
+### Exact-head db-isolation version-byte failure on `13620d6` (recorded; not rerun-to-green)
+
+Automatic `pull_request` [37702208149](https://github.com/Vedang1998/Stocky/actions/runs/37702208149) · `head_sha=13620d63c548ec072d2f60a7d9ab9973333b2d1c`.
+
+| Job | ID | Result |
+|---|---|---|
+| Classify | `113068075814` | SUCCESS · `full_ci=true` |
+| Heavy | `113068109921` | FAILURE at **Tenant database isolation full suite** — `pr7-platform-authorization.test.ts:323` expected AEAD version byte `1`, stored blob started with `2`. Drift, enforcement apply/verify, inventories, and later steps skipped. |
+| Gate | `113069700551` | FAILURE |
+
+Cause: F-08 ciphertext VERSION is 2 (AAD-bound). The B1 download test still asserted version 1. Correction: expect `blob[0] === 2`; plaintext-absence check unchanged. Local after the assertion: `pr7-platform-authorization.test.ts` **6/6** exit 0. Not a product lock or migration change.
+
+R1-01 deferred. Q-008 OPEN. No `useOnlineTokens`, old-migration rewrite, mark-ready, merge, or production. Exact-head Classify + FULL Heavy + Gate required on the descendant B2 head before any READY packet.
