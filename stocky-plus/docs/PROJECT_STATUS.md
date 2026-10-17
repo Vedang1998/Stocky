@@ -1,5 +1,7 @@
 # Project Status
 
+> **2026-10-17 proposed workflow migration (not active):** Owner authorized a documentation-only PR proposing Claude Code as primary builder, a distinct independent reviewer, GitHub-centered low-touch coordination, and a verified pilot. No merge, live settings, runtime implementation, production, Shopify write, migration, or phase authority was authorized. This note does not re-date or override the 2026-09-29 verified project state below. Before any PR7 dispatch, reconcile live PRs, main SHA, reviews, CI and explicit authorization. Details: `agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md`.
+
 **Updated:** 2026-09-29
 **Live origin/main:** `ee77e4bf1e2fa3bf9642ec6b2e51657533ca0298` — PR [#65](https://github.com/Vedang1998/Stocky/pull/65) native-review cleanup (legacy comment-trigger workflow retired). Last product-runtime squash remains **W** `ee193f38491245a10fb2fa60d2cf9a29f3271605`. Historical PR6 closeout squash remains **X** `f057d98c8a321b3e06875a6e9a83b787bcbc101f`. Native Claude **manual** reviews have executed and published (PR65 and the paired PR45/PR49 boundary review). GitHub-label automatic launch remains **unresolved**. Owner workflow-disable and secret-removal reports are not an API-verified token audit.
 **Current stage:** Phase 1 PR6 **CLOSED** (PR #47 squash **X**); PR45 two boundary corrections **ACCEPTED**; overall PR7 planning/merge **PENDING**; PR7 runtime **NOT AUTHORIZED**

@@ -3,10 +3,12 @@
 Each phase follows the same simple loop:
 
 1. **ChatGPT plans** the phase and approves `PHASE_BRIEF.md`.
-2. **Cursor builds** focused tasks on named branches and writes `IMPLEMENTATION_REPORT.md`.
-3. **Claude reviews** the pull request and writes `REVIEW_REPORT.md`.
+2. **Builder implements** approved focused tasks on named branches and writes `IMPLEMENTATION_REPORT.md`. Historical phases used Cursor; the proposed future primary builder is Claude Code after governance merge and a verified autonomy pilot.
+3. **An independent reviewer** inspects the exact-head PR and writes `REVIEW_REPORT.md`. Historical phases used Claude; the Claude-first proposal requires a reviewer separate from the Claude builder.
 4. **ChatGPT decides** whether corrections are required or the phase is accepted.
 5. The approved pull request is merged and `PROJECT_STATUS.md` is updated.
+
+**Migration notice (2026-10-17):** The Claude-first builder and independent-reviewer changes in this document are **proposed, not active** until this governance PR is independently reviewed, owner-approved, merged, and configured. See `../agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md`. Historical phase records remain unchanged.
 
 ## Required files per phase
 
@@ -44,7 +46,7 @@ A phase cannot begin until:
 A phase is not complete merely because code was merged. It closes only when:
 
 - implementation evidence is recorded;
-- Claude's independent review is recorded;
+- a genuinely independent exact-head review is recorded;
 - mandatory corrections are resolved or explicitly deferred by decision;
 - `PROJECT_STATUS.md`, risks, decisions, and open questions are updated;
 - the next phase is not silently started early.
@@ -59,8 +61,9 @@ Planning ahead is not implementation authorization. Safety gates do not change.
 ## Chat organization
 
 - One ChatGPT planning/decision chat per phase.
-- One fresh Cursor chat per focused implementation task or pull request.
-- One fresh Claude chat per important pull request review.
+- One task/branch/PR per authorized implementation agent (proposed future default: Claude Code).
+- One separately identified independent reviewer/session per important PR; do not treat Claude self-review as independent.
+- GitHub tasks and evidence replace routine owner copy/paste only after verified automation.
 
 Chats may be closed after their results are stored in GitHub.
 

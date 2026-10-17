@@ -8,6 +8,10 @@ Use this file when you are unsure where something belongs.
 
 Start with `product/00_READ_ME_FIRST.md` and follow its reading order. Product rules, formulas, pricing principles, architecture direction, and release gates live there.
 
+## Proposed governance migration (not yet active)
+
+`agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md` records the owner-authorized documentation-only proposal to make Claude Code the primary builder, establish independent review, and eliminate routine manual handoffs through verified event-driven automation. **No live configuration or runtime authorization is implied.** Historical Claude native-review records remain authoritative for historical reviews, not evidence of a future Claude-builder review loop.
+
 ## Permanent agent instructions
 
 `stocky-plus/docs/agents/`
@@ -23,8 +27,8 @@ Native Claude review transport: `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGP
 Each phase gets its own folder containing:
 
 - `PHASE_BRIEF.md` — what is approved before work begins;
-- `IMPLEMENTATION_REPORT.md` — what Cursor built and verified;
-- `REVIEW_REPORT.md` — what Claude independently found and the final verdict.
+- `IMPLEMENTATION_REPORT.md` — what the authorized builder implemented and verified (historically Cursor; proposed future Claude Code);
+- `REVIEW_REPORT.md` — what a genuinely independent reviewer found and the final verdict (historically Claude; future reviewer must be separate from the Claude builder).
 
 Reusable copies are under `phases/_templates/`.
 
