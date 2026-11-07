@@ -8,13 +8,19 @@ Use this file when you are unsure where something belongs.
 
 Start with `product/00_READ_ME_FIRST.md` and follow its reading order. Product rules, formulas, pricing principles, architecture direction, and release gates live there.
 
+## Proposed Claude-first migration — pending activation
+
+The Claude-first operating model is not active until the explicit activation record required by [`agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published in GitHub. Merge alone is not activation.
+
+`agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md` records the owner-authorized documentation-only proposal to make Claude Code the primary builder, establish independent review, and eliminate routine manual handoffs through verified event-driven automation. **No live configuration or runtime authorization is implied.** Historical Claude native-review records remain authoritative for historical reviews, not evidence of a future Claude-builder review loop.
+
 ## Permanent agent instructions
 
 `stocky-plus/docs/agents/`
 
 This contains the reusable ChatGPT, Cursor, and Claude prompts. Do not create a new permanent agent prompt for every phase.
 
-Native Claude review transport: `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements in its existing cloud route; actual Claude reviews in native Claude cloud / Routines; GitHub remains evidence, code, and CI authority. Native **manual** reviews have executed and published (PR65 and the paired PR45/PR49 boundary review). GitHub-label automatic launch remains unresolved. That record does not by itself prove token deletion or automatic event delivery.
+Native Claude review transport (current effective model until recorded activation; dated transport details are subject to later task-specific GitHub dispositions): `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements in its existing cloud route; actual Claude reviews in native Claude cloud / Routines; GitHub remains evidence, code, and CI authority. Native **manual** reviews have executed and published (PR65 and the paired PR45/PR49 boundary review). GitHub-label automatic launch remains unresolved. That record does not by itself prove token deletion or automatic event delivery.
 
 ## Phase work
 
@@ -23,8 +29,8 @@ Native Claude review transport: `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGP
 Each phase gets its own folder containing:
 
 - `PHASE_BRIEF.md` — what is approved before work begins;
-- `IMPLEMENTATION_REPORT.md` — what Cursor built and verified;
-- `REVIEW_REPORT.md` — what Claude independently found and the final verdict.
+- `IMPLEMENTATION_REPORT.md` — what the authorized builder implemented and verified (historically Cursor; proposed future Claude Code);
+- `REVIEW_REPORT.md` — what a genuinely independent reviewer found and the final verdict (historically Claude; future reviewer must be separate from the Claude builder).
 
 Reusable copies are under `phases/_templates/`.
 

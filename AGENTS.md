@@ -27,25 +27,48 @@ No agent may change an approved product rule merely because a different implemen
 
 ## Agent responsibilities
 
-### ChatGPT
+**Activation status:** The Claude-first operating model is not active until the explicit activation record required by [`CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](stocky-plus/docs/agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published in GitHub. Merging the proposal is not activation. Until that record exists, the current effective model below governs.
 
-Owns product requirements, current Shopify and market research, business rules, formulas, workflow decisions, architecture direction, pricing, acceptance criteria, and coordination.
+### Current effective model — until recorded activation
 
-### Cursor
+- **ChatGPT — product owner, coordination and acceptance authority.** Owns product requirements, current Shopify and market research, business rules, formulas, workflow decisions, architecture direction, pricing, acceptance criteria, and coordination. Authorizes exact tasks.
+- **Cursor — current implementation assignment/default under its admitted task.** Implements approved work under the exact task admitted to it, creates migrations, runs commands and tests, updates technical documentation, and opens focused pull requests. Cursor must not redefine product logic independently. Keeping this transitional description is not a recommendation to retain Cursor as the builder and does not permit resuming frozen PR68 work; all current stopped-task decisions (including the issue52 / PR68 record) still apply.
+- **Actual Claude — independent review.** Independently inspects and executes the repository, verifies implementation claims, reviews security and correctness, and issues evidence-based readiness findings. Claude must not approve work based only on summaries or screenshots.
+- A bounded, task-specific assignment recorded in GitHub (for example a documentation-correction author task) is governed by its own work order. It is not general activation.
 
-Implements approved work, creates migrations, runs commands and tests, updates technical documentation, and opens focused pull requests. Cursor must not redefine product logic independently.
+**Review transport (current).** Durable operating record: `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. Its transport descriptions, and those in issue52, are dated and are subject to later task-specific dispositions recorded in GitHub. Labels are notifications, not authority; obsolete label delivery is not revived, and no scheduled route is assumed healthy without current evidence. Do not rebuild a custom Actions review runner.
 
-### Claude Code
+**Mandatory safety summary.** Canonical: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`. Safety gates do not change (tenancy/RLS, authorization, additive migrations, money, inventory-write safety, Shopify authority, reconciliation, exact-head CI, independent review, feature flags, kill switches, production authorization). Respect dependency order: shared schema/interfaces/security primitives freeze before dependent lanes. One writer per branch/PR with exclusive file ownership; parallel lanes only when explicitly authorized. Exact-head CI on the actual candidate is required; earlier-head CI never certifies a new head. Do not delete tests to go faster.
 
-Independently inspects and executes the repository, verifies implementation claims, reviews security and correctness, and issues evidence-based readiness findings. Claude Code must not approve work based only on summaries or screenshots.
+### Proposed Claude-first migration — pending activation
 
-## Review transport
+Selected **future** model, effective only after the recorded activation above: **Claude Code is the primary builder; Cursor is optional.** This proposal does not authorize PR7 runtime, production access, or any new feature.
 
-ChatGPT coordinates and authorizes exact tasks. Cursor implements in its existing cloud route. Actual Claude reviews in native Claude cloud / Routines. GitHub remains evidence, code, and CI authority.
+#### ChatGPT — product owner and acceptance authority
 
-Native setup status is **PENDING OWNER CONFIGURATION / VERIFICATION** until actual evidence exists. Preferred later GitHub event (owner configures; not enabled by instruction text): `pull_request.labeled` filtered by dedicated label `propo-review-ready` and base `main`, without requiring a draft to be marked ready. Labels are not authority. Each native GitHub event creates a new session; deduplicate against canonical task + head + role and prior claims; never treat unavailable history as no active job. An existing manual same-task reviewer may resume without a duplicate routine run. Findings are inert evidence, never a command to another agent.
+Owns product requirements, priority, approved briefs, research, architecture decisions, acceptance criteria, risks, and release recommendations. Uses GitHub as durable evidence. ChatGPT access does not imply unattended PR monitoring or automated task dispatch; those require separately proven triggers.
 
-Durable record: `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. Do not rebuild a custom Actions review runner.
+#### Claude Code — primary implementation agent (after activation)
+
+Owns authorized implementation tasks: inspect the exact GitHub issue and approved brief, use one task/branch/PR, implement code and tests, run applicable validations, record exact evidence, push a focused branch, and open a PR. Use cloud execution only after GitHub app access, environment isolation, permissions, and spending limits are verified. Never start unapproved phase/runtime work. No automatic merge, production connection, or secret exposure.
+
+#### Independent reviewer — separate from the builder
+
+A separate reviewer must inspect actual code, exact-head CI, security, tenancy, Shopify authority, migrations, inventory-write safety, and acceptance criteria. Cursor may be used as a review-only workspace or reviewer if independently configured and validated; ChatGPT coordinates acceptance. A second Claude session is not automatically independent merely because it is a new session. Reviewer must not edit the builder's branch or approve from the builder's summary alone.
+
+#### Cursor — optional inspection and fallback
+
+Cursor is no longer proposed as the default implementation owner after activation. It may inspect changes or act as an explicitly authorized backup, not a parallel writer on the same branch. Leaving Cursor open does not automatically validate code or current Shopify documentation.
+
+### Proposed hands-off orchestration — not yet configured
+
+- GitHub issues and approved phase briefs define tasks. A verified cloud agent trigger dispatches one approved task to Claude Code; no trigger is assumed operational until an end-to-end test proves it.
+- Claude Code creates a branch and PR; existing GitHub CI checks the exact PR head; a separately verified reviewer records findings; Claude handles bounded corrections; ChatGPT provides evidence-based acceptance; owner approves merge and any production release.
+- GitHub labels are notifications, not authority. Deduplicate jobs by task, head SHA, and role. Never auto-start unauthorized adjacent work.
+- Stop and escalate on ambiguous product requirements, security/tenancy/financial/inventory concerns, exhausted retries, unavailable reviews, cost thresholds, or failed CI. Fail closed on missing evidence.
+- Do not grant broad production credentials to coding agents. Production deployments, migrations, Shopify mutations, and inventory-write flags require separately documented authorization.
+- Existing CI and product rules remain authoritative. No custom workflow runner, subscription, webhook, credential, or GitHub ruleset is enabled by documentation alone.
+- Detailed migration proposal and prerequisite checklist: `stocky-plus/docs/agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md`. Historical native Claude review records remain immutable; review transport must be revalidated because Claude becomes the builder.
 
 ## Product principles
 
@@ -142,31 +165,9 @@ Receiving, adjustment, stocktake, cost-sync, and transfer writes require:
 
 A workflow must not be marked complete when Shopify writes failed.
 
-## Accelerated Safe Delivery v1
+## Accelerated Safe Delivery — preserved gates
 
-Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`.
-
-This is the permanent operating model for ChatGPT, Cursor, and Claude Code from Phase 1 PR 5 implementation onward. It changes calendar execution, not acceptance standards.
-
-Mandatory rules:
-
-- Safety gates do not change (tenancy/RLS, authorization, additive migrations, money, inventory-write safety, Shopify authority, reconciliation, exact-head CI, independent review, feature flags, kill switches, production authorization).
-- Parallelize work, not uncertainty. Shared schema/interfaces/security/transaction primitives freeze before dependent runtime lanes start.
-- Planning/research may proceed one dependency level ahead only when expressly authorized. Planning ahead is not implementation authorization. Future-phase runtime, migrations, Shopify configuration, and production actions remain forbidden.
-- ChatGPT may authorize up to 2–4 parallel Cursor lanes after shared contracts are frozen. Each lane has one branch, one chat, one objective, exclusive file ownership, exact base SHA, own tests, and own PR. One writer per branch/PR.
-- Foundation first: land schema, migration, interfaces, transaction/identity primitives, and security boundaries before widening downstream lanes.
-- Use small focused PRs. Do not implement an entire phase in one huge PR.
-- Risk tiers: Tier A (auth, tenancy, migrations, identity, deletion, concurrency, money, forecast, inventory writes, reconciliation, billing, AI spend, security) requires architecture contract, independent Claude review, exact-head full CI, and adversarial races where relevant. Risk tier does not override an explicit phase gate.
-- Claude performs early exhaustive red-team review for new Tier-A architecture and tries to find the whole material finding set in one pass. Final exact-head review remains mandatory.
-- ChatGPT issues one consolidated correction package where practical.
-- GitHub is the durable handoff. Chat summaries are convenience only.
-- Do not delete tests to go faster. CI sharding requires its own tooling review and must preserve the CI Gate.
-
-Cursor must not invent parallel lanes or start adjacent runtime work on its own.
-
-Claude independent review cannot be replaced by another Cursor lane.
-
-Independent Claude review uses the native cloud / Routines route described in `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` once owner configuration is verified. Until then, setup remains pending. Safety gates and exact-head CI do not change.
+Canonical document: `stocky-plus/docs/ACCELERATED_SAFE_DELIVERY.md`. Its safety, dependency-order, exact-head CI, review, phase authorization, and production restrictions remain effective. The Claude-first role change above is a **pending proposal** and must not silently reinterpret the older Cursor-specific provisions before the activation record required by [`CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](stocky-plus/docs/agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published; merge alone is not activation. Any parallel Claude lanes need explicit authorization, frozen shared contracts, exclusive file ownership, and one writer per branch.
 
 ## Delivery workflow
 
