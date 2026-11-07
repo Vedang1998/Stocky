@@ -3,12 +3,12 @@
 Each phase follows the same simple loop:
 
 1. **ChatGPT plans** the phase and approves `PHASE_BRIEF.md`.
-2. **Builder implements** approved focused tasks on named branches and writes `IMPLEMENTATION_REPORT.md`. Historical phases used Cursor; the proposed future primary builder is Claude Code after governance merge and a verified autonomy pilot.
+2. **Builder implements** approved focused tasks on named branches and writes `IMPLEMENTATION_REPORT.md`. Historical phases used Cursor, which remains the current implementation default under its admitted task until recorded activation; the proposed future primary builder is Claude Code (see the notice below).
 3. **An independent reviewer** inspects the exact-head PR and writes `REVIEW_REPORT.md`. Historical phases used Claude; the Claude-first proposal requires a reviewer separate from the Claude builder.
 4. **ChatGPT decides** whether corrections are required or the phase is accepted.
 5. The approved pull request is merged and `PROJECT_STATUS.md` is updated.
 
-**Migration notice (2026-10-17):** The Claude-first builder and independent-reviewer changes in this document are **proposed, not active** until this governance PR is independently reviewed, owner-approved, merged, and configured. See `../agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md`. Historical phase records remain unchanged.
+**Proposed Claude-first migration — pending activation (proposed 2026-10-17):** The Claude-first builder and independent-reviewer changes in this document are proposed, not active. The Claude-first operating model is not active until the explicit activation record required by [`CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](../agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published in GitHub. Merge alone is not activation. Historical phase records remain unchanged.
 
 ## Required files per phase
 

@@ -1,7 +1,7 @@
 # Claude-first autonomy migration — proposed operating contract
 
-**Status:** OWNER-APPROVED DIRECTION / DOCUMENTATION REVIEW PENDING / ACTIVATION BLOCKED.
-**Original proposal:** 2026-10-17. **Read-only prerequisite reconciliation:** 2026-11-07.
+**Status:** PROPOSED CLAUDE-FIRST MIGRATION — PENDING ACTIVATION. Owner-approved direction; activation blocked until the §6 activation record is published.
+**Original proposal:** 2026-10-17. **Read-only prerequisite reconciliation:** 2026-11-07. **Review correction R1:** 2026-11-07.
 **Repository:** `Vedang1998/Stocky`; application `stocky-plus/`.
 **Change vehicle:** draft PR [#69](https://github.com/Vedang1998/Stocky/pull/69), branch `governance/claude-first-autonomy-2026-10`.
 
@@ -20,7 +20,15 @@ The September 29 header in `PROJECT_STATUS.md`, the dated Phase 1 brief and pre-
 | PR69 before this correction | OPEN / DRAFT / UNMERGED; head `4e914c1d9b09a033727a46d34291ea78116a8e00`; five documentation paths; no discussion comments at inspection. |
 | [PR69 CI run 39066899106](https://github.com/Vedang1998/Stocky/actions/runs/39066899106) | At that OLD exact head: Classify `117496348684` SUCCESS; CI Gate `117496374755` SUCCESS; Heavy `117496375145` SKIPPED. Correct for docs-only work. This does not certify a subsequent correction commit. |
 | Live PR53 metadata | Still OPEN / DRAFT / UNMERGED at `541ba6f5dc750813e5d173d36d7f09a11ad87596`. Overlapping autonomy proposal, not adopted by PR69. Its merge delegation remains inactive. |
-| Main branch-protection read | `GET /repos/Vedang1998/Stocky/branches/main/protection` returned 403, `Resource not accessible by integration`. Enforcement is UNVERIFIED, not absent and not passed. No permissions were expanded. |
+| Classic branch-protection reads (attributed, historical) | The original author's `GET /repos/Vedang1998/Stocky/branches/main/protection` returned 403, `Resource not accessible by integration`. The 2026-11-07 reviewer's read of the same endpoint returned 404 `Branch not protected`, as did the R1 correction author's re-read. Classic protection is not the mechanism protecting `main`; neither observation disproves the ruleset below. No permissions were expanded. |
+| `GET /repos/Vedang1998/Stocky/rulesets?includes_parents=true&per_page=100` | One active ruleset in the accessible response: `20012314` "Protect main", source type Repository. The repository is user-owned. |
+| `GET /repos/Vedang1998/Stocky/rulesets/20012314` | Target branch, include `~DEFAULT_BRANCH`, enforcement `active`, updated 2026-08-15. Rules: `deletion`; `non_fast_forward`; `pull_request` with `allowed_merge_methods: [squash]`, `required_review_thread_resolution: true`, `required_approving_review_count: 0`, `dismiss_stale_reviews_on_push: false`, `require_code_owner_review: false`, `require_last_push_approval: false`, `required_reviewers: []`, `require_extra_approval_for_unattributed_changes: true`; strict `required_status_checks` on `CI Gate` and `Lint, typecheck, test, build, Prisma, GraphQL`. `bypass_actors: []`; `current_user_can_bypass: never` for the reading identity. |
+| `GET /repos/Vedang1998/Stocky/rules/branches/main`; `GET …/branches/main`; repository metadata | Aggregate branch rules list only ruleset `20012314` (deletion, non_fast_forward, pull_request, required_status_checks). `protected: true`. Default branch `main`; `allow_auto_merge: false`. ChatGPT's connector rejected the aggregate rules URL as an unsupported fetch; that is a connector limitation, not GitHub reporting no rules. |
+| Reading identity and limits | Ruleset reads above used the owner's connected GitHub account (`Vedang1998`) through Claude Code cloud and, independently, ChatGPT's public API reads. They show what that identity can read; they do not prove that no other, inaccessible rule layer exists. |
+
+**Enforcement gap (stated plainly).** Ruleset `20012314` does not guarantee a general non-author independent-review approval or a Vedang-only merge approval: zero approvals are required. Those gates are currently **procedural**. The conditional `require_extra_approval_for_unattributed_changes` field is not a general independent-review requirement. A SKIPPED Heavy job on a legitimately docs-only change is expected under `CI_POLICY.md`, not evidence of a missing runtime test run; `CI Gate` remains intact and required. This documentation does not change approvals, rules or identities.
+
+A future technical review gate needs a separately approved design. Today the PR author and Claude comments both appear as `Vedang1998`, and GitHub does not let a PR author approve their own PR, so a different AI session is not a different GitHub approval identity. That is an unresolved activation prerequisite; this document creates no runner or service and selects no credential.
 
 No application tests, builds, migrations, Shopify requests or live deployment checks were executed for this documentation reconciliation. GitHub CI evidence above was inspected, not locally reproduced. R-176, Q-008, D-054 and other product/release controls are unchanged.
 
@@ -42,7 +50,7 @@ PR68 stays frozen under its existing execution record. Do not restart Cursor, la
 
 A future PR68 takeover by Claude requires one explicit owner-approved handoff: frozen input head, prior writer stopped, existing findings/evidence retained, revised task scope/design gate, one named Claude writer and separate reviewer. No restart of completed phases or blanket rewrite is allowed. Future new tasks may use Claude only after the activation gate below.
 
-Issue52 is the existing coordination journal. Its recorded `ProPo Independent Reviewer` native routine, `trig_01Dc9YmAKTSwRx7pcGYYQbhi`, remains review-only. Historical scheduled/manual reviews do not prove current provider login, quota or trigger health. Reuse the documented queue protocol for a new eligible documentation review; do not recreate the routine, add a second coordinator, revive retired PR62/Actions runners, restore old credentials or repurpose the reviewer into a builder.
+Issue52 is the existing coordination journal. Its recorded `ProPo Independent Reviewer` native routine, `trig_01Dc9YmAKTSwRx7pcGYYQbhi`, remains review-only. Historical scheduled/manual reviews do not prove current provider login, quota or trigger health. Reuse the documented queue protocol, as amended by later task-specific transport dispositions recorded in GitHub, for a new eligible documentation review; do not recreate the routine, add a second coordinator, revive retired PR62/Actions runners, restore old credentials or repurpose the reviewer into a builder.
 
 For any queue entry: exact task + head + role key; full work order; read existing claims first; publish one intent and one work order. A posted order is QUEUED, not RUNNING. A matching actual-agent ACK is required to establish execution. Missing ACK is UNKNOWN delivery, not permission for a duplicate launch or repeated relabeling. The existing PR68 coordinator assignment is not displaced by foreground PR69 work.
 
@@ -70,7 +78,7 @@ Before activating a builder, verify the actual account's paid access, selected r
 
 ### GitHub and ChatGPT
 
-Repository content/PR/issue reads and the documentation write route are available in this foreground interaction. That does not prove unattended scheduling or administration access. Main protection remains blocked for inspection by the 403 above. An authorized administrator must supply nonsecret evidence of effective main rules, required `CI Gate`, bypass actors, and force-push/deletion controls; a second credential or weakened permission policy is not the remedy here.
+Repository content/PR/issue reads and the documentation write route are available in this foreground interaction. That does not prove unattended scheduling or administration access. The repository ruleset governing `main` is readable without administrator access; §1 records the observed rules, the reading identity and its limits, and the procedural review/merge-approval gap. Rules that remain unreadable are not claimed absent. A second credential or weakened permission policy is not the remedy for any remaining gap.
 
 No new scheduler is created. Use issue52's existing coordination record and do not claim that ChatGPT automatically senses PR events. Subscription, app-permission, GitHub App installation and billing settings were not changed.
 
@@ -89,17 +97,35 @@ This PR is the documentation proposal, not an installed instruction update. The 
 | Surface | Required treatment |
 |---|---|
 | `AGENTS.md`, docs map, phases workflow | Proposed future role change in PR69; preserve all product/security/phase controls. |
-| `ACCELERATED_SAFE_DELIVERY.md` and agent prompts | Reconcile current Cursor-specific role clauses against the approved Claude-first contract; preserve safety/dependency gates. Do not silently claim this has happened. |
-| `product/06_ROADMAP_AND_RELEASE_GATES.md` | Its agent-role section still names Cursor/Claude. A later explicit role-only amendment must resolve precedence; product scope, formulas, phase gates and releases stay unchanged. |
-| Root `CLAUDE.md`, `.cursor/rules/**` | Separate reviewed adapter/configuration change. These paths require full CI under current `CI_POLICY.md`; do not sneak them into a lightweight docs-only change. |
+| `ACCELERATED_SAFE_DELIVERY.md` | Reconcile current Cursor-specific role clauses against the approved Claude-first contract; preserve safety/dependency gates. Not updated by PR69. |
+| `stocky-plus/docs/agents/README.md` | Still describes Cursor as implementer, Claude as independent reviewer, and the old native-review transport. Later role-only update required; not updated by PR69. |
+| `stocky-plus/docs/agents/CHATGPT_PROJECT_INSTRUCTIONS.md` | Copy-ready ChatGPT instructions still assign implementation to Cursor and review to Claude. Later update required; not updated by PR69. |
+| `stocky-plus/docs/agents/07_CURSOR_MASTER_PROMPT.md` | Defines Cursor as the implementation agent. Later treatment: retire to optional/fallback role or mark historical. Not updated by PR69. |
+| `stocky-plus/docs/agents/08_CLAUDE_CODE_MASTER_REVIEW_PROMPT.md` | Defines Claude as reviewer. Later treatment: separate Claude-builder and independent-reviewer prompts so a Claude builder is never treated as its own reviewer. Not updated by PR69. |
+| `stocky-plus/docs/agents/CLAUDE_PROJECT_INSTRUCTIONS.md` | Copy-ready Claude Project instructions for the review role. Later update required; not updated by PR69. |
+| `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` | Current native-review transport record. Revalidate because Claude becomes the builder; keep historical review records immutable. Not updated by PR69. |
+| `.cursor/rules/15-native-review-transport.mdc` | Cursor-side copy of the old transport. Requires full CI under `CI_POLICY.md`; separate reviewed change. Not updated by PR69. |
+| `product/06_ROADMAP_AND_RELEASE_GATES.md` | Its agent-role section still names Cursor/Claude and stays authoritative until a separately approved role-only amendment. That amendment must resolve precedence; product scope, formulas, phase gates and releases stay unchanged. |
+| Root `CLAUDE.md`, other `.cursor/rules/**` | Retained as-is. Separate reviewed adapter/configuration change. These paths require full CI under current `CI_POLICY.md`; do not sneak them into a lightweight docs-only change. |
 | Phase1 / issue67 / PR68 work ownership | Preserve historical author attribution and stopped active-lane authority. Transfer only by a separate exact-task handoff. |
-| ChatGPT `Stocky App Building`, Claude project instructions, Cursor account rules | Align to approved canonical repository instructions through supported owner/account access. No claim these external settings were edited here. |
+| ChatGPT `Stocky App Building`, Claude project instructions, Cursor account rules | User-managed external text. Align to approved canonical repository instructions through supported owner/account access. User-pasted project instructions are not proof of repository-wide activation. No claim these external settings were edited here. |
 | PR53 / other overlapping proposals | Preserve as unmerged evidence; no automatic adoption, closure or delegation. Reconcile only overlapping instructions, not unrelated pricing/product proposals. |
 
-Activation requires: independently reviewed governance; owner-authorized merge; consistent instruction adapters; verified non-production builder environment and budget; effective repository protections; independently identified review route; and a successful bounded documentation pilot. Record the evidence and explicit activation decision in GitHub. A merged proposal alone does not meet these conditions.
+**Canonical activation gate.** This section is the single normative activation gate. Shorter statements in `AGENTS.md`, `docs/README.md`, `phases/README.md` and `PROJECT_STATUS.md` refer here and do not define a shorter checklist. The Claude-first operating model is not active until the explicit activation record required here is published in GitHub. Activation requires all of:
 
-## 7. Immediate permitted next step and stop
+1. independently reviewed governance;
+2. owner-authorized merge;
+3. consistent instruction adapters (the surfaces in the table above);
+4. a verified non-production builder environment and budget;
+5. effective repository controls, with the review-enforcement gap in §1 resolved by a separately approved technical arrangement;
+6. an independently identified reviewer route for a Claude builder;
+7. a successful bounded documentation pilot; and
+8. the explicit activation record in GitHub, citing the evidence for 1–7.
 
-Correct and review PR69 as documentation only. After its corrected exact-head docs CI is verified, admit ONE fresh actual-Claude review of this ChatGPT-authored proposal through the existing review queue, with no source edits and no PR68 review/restart. Record the exact work order and ACK/result separately. No approval of this author's self-check substitutes for that review.
+None of these prerequisites is recorded as complete by this document. Merge alone is never activation. A current procedural owner/manual gate may protect this inactive documentation proposal; it is not evidence of an enforced autonomous review pipeline. The documentation pilot (7) is separately admitted and runs under the current effective model; it does not itself depend on general runtime activation.
+
+## 7. 2026-11-07 pre-merge review/correction checkpoint
+
+This section is bounded to the 2026-11-07 pre-merge checkpoint for PR69: the independent documentation review ([6709792959](https://github.com/Vedang1998/Stocky/pull/69#issuecomment-6709792959)), the single documentation correction round R1 ([6709965325](https://github.com/Vedang1998/Stocky/pull/69#issuecomment-6709965325)), and at most one conditional exact-head re-review by the original non-author reviewer. No author self-check substitutes for that review, and no PR68 review or restart is part of it. Once that checkpoint's completion is recorded in GitHub, this section is historical: it is not an instruction to restart review. Later readers follow the current PR69 / issue52 dispositions and the §6 activation record requirement. This section does not assert that PR69 has merged.
 
 Safe automation setup has been approved in direction; prerequisites are being verified rather than repeatedly asking the owner to approve the same direction. Any concrete permission/spending increase, writer transfer, runtime implementation, merge or production action still requires its own explicit authority. Do not change accounts, routines, secrets, workflows, application code, migrations, Shopify configuration or Railway deployment settings in this documentation pass.
