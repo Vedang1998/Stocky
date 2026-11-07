@@ -117,6 +117,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/db-isolation/worker-surfaces.test.ts",
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
+  "app/tenant/__tests__/compound-shopid-upsert.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [
