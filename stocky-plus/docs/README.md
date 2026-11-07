@@ -8,11 +8,11 @@ Use this file when you are unsure where something belongs.
 
 Start with `product/00_READ_ME_FIRST.md` and follow its reading order. Product rules, formulas, pricing principles, architecture direction, and release gates live there.
 
-## Proposed Claude-first migration — pending activation
+## Claude-first migration — selected, pending activation
 
 The Claude-first operating model is not active until the explicit activation record required by [`agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published in GitHub. Merge alone is not activation.
 
-`agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md` records the owner-authorized documentation-only proposal to make Claude Code the primary builder, establish independent review, and eliminate routine manual handoffs through verified event-driven automation. **No live configuration or runtime authorization is implied.** Historical Claude native-review records remain authoritative for historical reviews, not evidence of a future Claude-builder review loop.
+`agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md` records the owner-selected model: Claude Code as primary builder, ChatGPT as product owner and acceptance authority, a specifically admitted non-author reviewer, and Cursor as optional inspection or explicitly authorized fallback. PR [#69](https://github.com/Vedang1998/Stocky/pull/69) merged it on 2026-11-07 as **inactive documentation**. Its §8 maps each instruction surface aligned on 2026-11-07. **No live configuration or runtime authorization is implied.** Historical Claude native-review records remain authoritative for historical reviews, not evidence of a future Claude-builder review loop.
 
 ## Permanent agent instructions
 
@@ -20,7 +20,7 @@ The Claude-first operating model is not active until the explicit activation rec
 
 This contains the reusable ChatGPT, Cursor, and Claude prompts. Do not create a new permanent agent prompt for every phase.
 
-Native Claude review transport (current effective model until recorded activation; dated transport details are subject to later task-specific GitHub dispositions): `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements in its existing cloud route; actual Claude reviews in native Claude cloud / Routines; GitHub remains evidence, code, and CI authority. Native **manual** reviews have executed and published (PR65 and the paired PR45/PR49 boundary review). GitHub-label automatic launch remains unresolved. That record does not by itself prove token deletion or automatic event delivery.
+Native Claude review transport (current effective model until recorded activation; dated transport details are subject to later task-specific GitHub dispositions): `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`. ChatGPT coordinates exact tasks; Cursor implements under its admitted task; actual Claude reviews in native Claude cloud sessions; GitHub remains evidence, code, and CI authority. Native **manual** reviews have executed and published (PR65 and the paired PR45/PR49 boundary review). GitHub-label automatic launch remains unresolved. That record does not by itself prove token deletion or automatic event delivery.
 
 ## Phase work
 
@@ -29,7 +29,7 @@ Native Claude review transport (current effective model until recorded activatio
 Each phase gets its own folder containing:
 
 - `PHASE_BRIEF.md` — what is approved before work begins;
-- `IMPLEMENTATION_REPORT.md` — what the authorized builder implemented and verified (historically Cursor; proposed future Claude Code);
+- `IMPLEMENTATION_REPORT.md` — what the authorized builder implemented and verified (historically Cursor; selected future Claude Code after recorded activation);
 - `REVIEW_REPORT.md` — what a genuinely independent reviewer found and the final verdict (historically Claude; future reviewer must be separate from the Claude builder).
 
 Reusable copies are under `phases/_templates/`.
@@ -63,7 +63,7 @@ Phase 1 PR 5 repository-implementation closeout records live under `phases/phase
 - `OPEN_QUESTIONS.md` — unresolved product or technical questions;
 - `RISK_REGISTER.md` — active risks and owners;
 - `CI_POLICY.md` — GitHub Actions evidence, docs-only classification, and CI Gate rules;
-- `ACCELERATED_SAFE_DELIVERY.md` — permanent ChatGPT / Cursor / Claude operating model from PR 5 implementation onward;
+- `ACCELERATED_SAFE_DELIVERY.md` — permanent safe-delivery controls from PR 5 implementation onward (its Cursor/Claude role terms map to builder/reviewer; see its **Role terms** note);
 - `agents/PROPO_NATIVE_REVIEW_WORKFLOW.md` — native Claude review transport; manual reviews have published; GitHub-label automatic launch remains unresolved;
 - `EMERGENCY_DELIVERY_DIRECTIVE_2026-09-01.md` — Emergency Continuity Sprint control packet (internal/controlled rescue after Stocky sunset; does not change product rules or relax safety gates; that packet itself did not authorize F3 runtime).
 

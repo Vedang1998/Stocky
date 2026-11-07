@@ -5,20 +5,26 @@ alwaysApply: true
 
 # Required workflow
 
+"Builder" is the one writer admitted for the task: currently Cursor under its
+admitted task; Claude Code only by explicit task assignment now, or by default
+after the activation record in CLAUDE_FIRST_AUTONOMY_MIGRATION.md section 6.
+"Reviewer" is the specifically admitted non-author reviewer (currently actual
+Claude); never the builder's self-review.
+
 Each implementation unit follows this sequence:
 
 1. ChatGPT authorizes a focused PR.
-2. Cursor verifies exact main, branch and clean working tree.
-3. Cursor reads the required records.
-4. Cursor implements only approved scope.
-5. Cursor runs focused tests while implementing.
-6. Cursor performs adversarial self-review.
-7. Cursor runs the full required suite.
-8. Cursor opens or updates a draft PR.
-9. Cursor records exact implementation and CI evidence.
-10. Claude Code independently reviews the exact implementation head.
-11. Cursor implements approved corrections.
-12. Claude independently re-reviews.
+2. Builder verifies exact main, branch and clean working tree.
+3. Builder reads the required records.
+4. Builder implements only approved scope.
+5. Builder runs focused tests while implementing.
+6. Builder performs adversarial self-review (not independent review).
+7. Builder runs the full required suite.
+8. Builder opens or updates a draft PR.
+9. Builder records exact implementation and CI evidence.
+10. Reviewer independently reviews the exact implementation head.
+11. Builder implements approved corrections.
+12. Reviewer independently re-reviews.
 13. ChatGPT makes the technical acceptance decision.
 14. User explicitly authorizes merge.
 15. PR is merged.

@@ -7,7 +7,14 @@
 
 Official facts below were read from primary sources on **2026-09-26**. Product decisions are labeled separately from those facts.
 
-## 1. Active contract
+## 0. Operative status (added 2026-11-07; §§1–8 below are the dated 2026-09-26 record)
+
+- **Current effective model (until the activation record required by [`CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate)):** ChatGPT coordinates exact tasks; Cursor implements under its admitted task; actual Claude reviews; GitHub remains evidence, code and CI authority. Merge alone is not activation.
+- **Transport in use:** owner-started Claude cloud sessions. Task-specific dispositions recorded in issue52 govern their own tasks (for example the 2026-11-07 direct Claude Project start amendment [6709372981](https://github.com/Vedang1998/Stocky/issues/52#issuecomment-6709372981) for the PR69 review). Automatic label/event launch is **not verified**; the issue52 routine `trig_01Dc9YmAKTSwRx7pcGYYQbhi` is review-only and its current health is unproven.
+- **After activation:** Claude Code is the builder. This record then describes the review route only for a **separately identified, specifically admitted non-author** reviewer; a Claude builder never reviews its own candidate. That reviewer route, technical review enforcement and the shared `Vedang1998` GitHub identity are unresolved activation prerequisites ([migration §1, §6](CLAUDE_FIRST_AUTONOMY_MIGRATION.md#1-verified-current-state-not-the-stale-status-header)).
+- Historical native reviews and the dated sections below remain immutable evidence; do not rewrite them to match the new model.
+
+## 1. Active contract (dated 2026-09-26)
 
 - ChatGPT coordinates and authorizes exact tasks.
 - Cursor implements in its existing cloud route.

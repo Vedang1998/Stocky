@@ -15,13 +15,23 @@ Before substantial work, read:
 4. Active phase records
 5. Relevant approved product documents
 
-Authority:
+Authority (current effective model, until the activation record required by
+stocky-plus/docs/agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md section 6 exists):
 - ChatGPT owns product decisions, architecture, scope, acceptance criteria,
   phase control, merge recommendations and agent coordination.
-- Cursor implements only approved scope.
+- Cursor implements only approved scope under its admitted task.
 - Claude Code independently reviews.
+- One-off task assignments need explicit owner authorization, or ChatGPT
+  acting within owner-delegated scope, recorded in GitHub. No agent may
+  self-grant owner-reserved powers.
 - The user alone authorizes merges after ChatGPT acceptance.
 - GitHub is the permanent project record.
+
+Selected future model (inactive until that recorded activation; merge alone
+is not activation): Claude Code is the primary builder; ChatGPT keeps product
+and acceptance authority; Cursor is optional inspection or explicitly
+authorized fallback; review is by a specifically admitted non-author, never
+the builder's self-review. See AGENTS.md.
 
 Hard boundaries:
 - Never commit directly to main.
