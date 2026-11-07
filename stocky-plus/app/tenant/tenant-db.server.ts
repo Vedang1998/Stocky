@@ -50,6 +50,7 @@ import {
   assertSelectorTenantIntent,
   flattenUniqueSelectorPredicate,
   globalUniqueSelectorExists,
+  MODEL_UNIQUE_SELECTORS,
   normalizeToArray,
   resolveOwnedRelationSelector,
   resolveOwnedRelationSelectors,
@@ -280,6 +281,29 @@ function hasTenantBearingUnique(
     typeof where.shopId_id.id === "string"
   ) {
     return true;
+  }
+
+  // Registered compound unique selectors that include `shopId` (for example
+  // ShopifyProductCollectionMembership's shopId_shopifyProductGid_shopifyCollectionGid)
+  // are tenant-bearing when shopId is the authenticated shop and every
+  // component is present. Only selectors enumerated in MODEL_UNIQUE_SELECTORS
+  // qualify; unknown keys still fail closed.
+  if (MERCHANT_MODEL_SET.has(model)) {
+    const meta = MODEL_UNIQUE_SELECTORS[model as MerchantOwnedModel];
+    for (const selector of meta.selectors) {
+      if (selector.kind !== "compound") continue;
+      if (!selector.fields.includes("shopId")) continue;
+      const value = where[selector.name];
+      if (!isPlainObject(value)) continue;
+      if (value.shopId !== authority.shopId) continue;
+      if (
+        selector.fields.every(
+          (field) => value[field] !== undefined && value[field] !== null,
+        )
+      ) {
+        return true;
+      }
+    }
   }
 
   if (DIRECT_MODEL_SET.has(model)) {

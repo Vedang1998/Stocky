@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `813ae4ad26a6c0e91cedf3ca64a5fafa8e14db7a256d05dc0a0e2fce10e7091a`
-**Scanned files:** 507
-**Findings:** 1761
-**Converted paths:** 532
-**Approved exception findings:** 1229
+**Content digest:** `3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697`
+**Scanned files:** 508
+**Findings:** 1774
+**Converted paths:** 534
+**Approved exception findings:** 1240
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -34,8 +34,8 @@ All 35 approved merchant-owned models must appear below.
 | BomComponent | 259 |
 | LowStockAlert | 255 |
 | SyncApplicationReceipt | 275 |
-| ShopifyProductFact | 302 |
-| ShopifyProductCollectionMembership | 245 |
+| ShopifyProductFact | 304 |
+| ShopifyProductCollectionMembership | 256 |
 | ShopifyVariantFact | 276 |
 | ShopifyInventoryItemFact | 265 |
 | ShopifyLocationFact | 259 |
@@ -67,7 +67,7 @@ All 35 approved merchant-owned models must appear below.
 | script | 51 |
 | service | 33 |
 | tenant_infra | 5 |
-| test | 1464 |
+| test | 1477 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -228,6 +228,7 @@ All 35 approved merchant-owned models must appear below.
 | EX-TEST-033 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-034 | `scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-035 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-036 | `app/tenant/__tests__/compound-shopid-upsert.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 
 ## Access path inventory
 
@@ -749,6 +750,19 @@ All 35 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/authority.test.ts` | 37 / `prisma.shopSettings.deleteMany` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-002 | migration_tests | approved exception | allowlist EX-TEST-002 | EX-TEST-002 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/authority.test.ts` | 38 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-002 | migration_tests | approved exception | allowlist EX-TEST-002 | EX-TEST-002 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/authority.test.ts` | 43 / `prisma.shopSettings.createMany` | test | ShopSettings | direct prisma delegate | approved exception EX-TEST-002 | migration_tests | approved exception | allowlist EX-TEST-002 | EX-TEST-002 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 39 / `prisma.shopifyProductCollectionMembership.deleteMany` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 40 / `prisma.shopifyProductFact.deleteMany` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 46 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 87 / `db.shopifyProductCollectionMembership.upsert` | test | ShopifyProductCollectionMembership | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 98 / `db.shopifyProductCollectionMembership.upsert` | test | ShopifyProductCollectionMembership | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 110 / `prisma.shopifyProductCollectionMembership.count` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 117 / `prisma.shopifyProductCollectionMembership.create` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 127 / `createTenantDb(authorityA()).shopifyProductCollectionMembership.upsert` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 138 / `prisma.shopifyProductCollectionMembership.findUnique` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 143 / `prisma.shopifyProductCollectionMembership.count` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 151 / `createTenantDb(authorityA()).shopifyProductCollectionMembership.upsert` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 166 / `prisma.shopifyProductCollectionMembership.count` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/compound-shopid-upsert.test.ts` | 182 / `prisma.shopifyProductCollectionMembership.findMany` | test | ShopifyProductCollectionMembership | direct prisma delegate | approved exception EX-TEST-036 | migration_tests | approved exception | allowlist EX-TEST-036 | EX-TEST-036 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 29 / `prisma.leadTimeSnapshot.deleteMany` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 30 / `prisma.purchaseOrder.deleteMany` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 31 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1665,8 +1679,8 @@ All 35 approved merchant-owned models must appear below.
 | `app/tenant/bootstrap.server.ts` | 11 / `rawPrisma` | bootstrap | — | value import of app/db.server | approved exception EX-BOOT-001 | restricted_bootstrap | approved exception | allowlist EX-BOOT-001 | EX-BOOT-001 | Session + Shop bootstrap and session-storage adapter |
 | `app/tenant/db-context.server.ts` | 107 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/tenant/tenant-db.server.ts` | 18 / `rawPrisma` | tenant_infra | — | value import of app/db.server | approved exception EX-TDB-001 | tenant_bound_access | approved exception | allowlist EX-TDB-001 | EX-TDB-001 | Tenant-bound DB contract wraps raw client; never returns it to callers |
-| `app/tenant/tenant-db.server.ts` | 1343 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/tenant/tenant-db.server.ts` | 1947 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/tenant-db.server.ts` | 1367 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/tenant-db.server.ts` | 1971 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `prisma/seed.ts` | 1 / `prisma` | script | — | value import of app/db.server | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 33 / `prisma.shopSettings.upsert` | script | ShopSettings | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
 | `prisma/seed.ts` | 50 / `prisma.supplier.upsert` | script | Supplier | direct prisma delegate | approved exception EX-SEED-001 | dev_seed | approved exception | allowlist EX-SEED-001 | EX-SEED-001 | Development seed creates Shop/ShopSettings/Supplier for local demos |
@@ -1999,8 +2013,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 507,
-  "findings": 1761,
+  "scannedFiles": 508,
+  "findings": 1774,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2097,7 +2111,8 @@ All 35 approved merchant-owned models must appear below.
     "EX-TEST-031",
     "EX-TEST-032",
     "EX-TEST-033",
-    "EX-TEST-035"
+    "EX-TEST-035",
+    "EX-TEST-036"
   ],
   "modelsCovered": [
     "BomComponent",
@@ -2136,6 +2151,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "813ae4ad26a6c0e91cedf3ca64a5fafa8e14db7a256d05dc0a0e2fce10e7091a"
+  "contentDigest": "3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697"
 }
 ```
