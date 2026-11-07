@@ -13,8 +13,9 @@ alwaysApply: false
   correction-review report.
 - Preserve superseded CI runs and earlier verdicts.
 - Do not erase an incorrect prior report; record the correction separately.
-- Do not mark findings independently verified based on Cursor's own tests.
-- Cursor status language:
+- Do not mark findings independently verified based on the builder's own
+  tests (Cursor or Claude).
+- Builder status language:
   "Implementation complete — pending independent verification"
   or
   "Correction implemented — pending independent verification"
