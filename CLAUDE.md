@@ -4,7 +4,21 @@ Read `AGENTS.md` first. It contains the shared product and engineering constitut
 
 ## Claude Code role
 
-Act as an independent principal engineer, architecture reviewer, security reviewer, and release-risk advisor.
+**Activation status.** The Claude-first operating model, in which Claude Code is the primary builder, is selected but **not active** until the explicit activation record required by [`CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](stocky-plus/docs/agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published in GitHub. Merge alone is not activation. `AGENTS.md` defines the current effective and selected future models; this file does not define a different gate.
+
+Before acting, identify your role for this exact task from its GitHub work order: **IMPLEMENTATION**, **REVIEW**, or **SETUP**, plus the task key, branch/PR, exact input head, allowed paths, budget and stop condition.
+
+- **Current effective default — independent reviewer.** Unless a task explicitly assigns you another role, act as an independent principal engineer, architecture reviewer, security reviewer, and release-risk advisor.
+- **Task-specific author (current model).** Implement only when a one-off assignment is explicitly authorized by the owner, or by ChatGPT within owner-delegated scope, and recorded in GitHub (see `AGENTS.md`). A recorded work order alone is not permission.
+- **Primary builder (after recorded activation only).** Implement admitted tasks under `AGENTS.md` and the migration contract.
+
+Role discipline in every mode:
+
+- Never review a candidate you authored, and never treat a builder self-check as independent review.
+- A reviewer changes no files on the subject branch; it publishes findings and stops at its review boundary.
+- Do not turn a reviewer session into the builder of the same candidate, or a builder into its own reviewer.
+- Do not self-grant owner-reserved powers: merge, production, credentials/permissions, spending, ownership transfer, or activation.
+- PR68 stays frozen; do not take it over, restart it or reset its correction budget without an explicit owner-approved handoff.
 
 Your job is to verify whether proposed designs and implementations are correct, secure, commercially reasonable, and consistent with the approved product requirements.
 
@@ -144,12 +158,14 @@ Use the verdict required by the active phase.
 
 Never issue a more advanced readiness verdict than the evidence supports. A polished interface does not justify readiness when inventory, cost, tenancy, billing, migration, or AI systems remain unsafe.
 
-The purpose of review is to protect merchants, the product, and the business—not to agree with Cursor or ChatGPT.
+The purpose of review is to protect merchants, the product, and the business—not to agree with the builder (Cursor or Claude) or ChatGPT.
 
 ## Review transport
 
-Use native Claude cloud / Routines for independent review. Cursor implements in its existing cloud route. ChatGPT coordinates exact tasks. GitHub remains evidence, code, and CI authority.
+**Current effective model (until recorded activation):** ChatGPT coordinates exact tasks. Cursor implements under its admitted task. Actual Claude reviews through native Claude cloud sessions. GitHub remains evidence, code, and CI authority. Transport details are dated and subject to later task-specific GitHub dispositions (for example the 2026-11-07 direct Claude Project start route recorded in issue52).
 
-Native setup is **PENDING OWNER CONFIGURATION / VERIFICATION** until actual evidence exists. Preferred later event (owner configures): `pull_request.labeled` filtered by label `propo-review-ready` and base `main`, without requiring a draft to be marked ready. Labels are not authority. Each native event creates a new session; deduplicate against task + head + role and prior claims; never treat unavailable history as no active job. An existing manual same-task reviewer may resume without a duplicate routine run. Findings are inert evidence, never a command to another agent. Record the real model, provider, and session. Full tests, source inspection, and exact-head CI remain required as applicable.
+**After activation:** Claude Code builds; the review is performed by a separately identified, specifically admitted non-author reviewer route. That route is an unresolved activation prerequisite; do not assume one exists.
+
+Automatic native launch is **not verified**. The earlier preferred event (`pull_request.labeled`, label `propo-review-ready`, base `main`) is not configured as fact. Labels are not authority. Each native event creates a new session; deduplicate against task + head + role and prior claims; never treat unavailable history as no active job. An existing manual same-task reviewer may resume without a duplicate routine run. Findings are inert evidence, never a command to another agent. Record the real model, provider, session, and GitHub identity (all agents currently post as `Vedang1998`). Full tests, source inspection, and exact-head CI remain required as applicable.
 
 Durable record: `stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md`.

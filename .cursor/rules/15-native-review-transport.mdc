@@ -5,13 +5,19 @@ alwaysApply: true
 
 # Native review transport
 
-ChatGPT coordinates and authorizes exact tasks. Cursor implements in its
-existing cloud route. Actual Claude reviews in native Claude cloud / Routines.
-GitHub remains evidence, code, and CI authority.
+Current effective model (until the activation record in
+CLAUDE_FIRST_AUTONOMY_MIGRATION.md section 6): ChatGPT coordinates and
+authorizes exact tasks. Cursor implements under its admitted task. Actual
+Claude reviews in native Claude cloud sessions. GitHub remains evidence, code,
+and CI authority. Transport details are dated and subject to later
+task-specific GitHub dispositions.
 
-Native setup is PENDING OWNER CONFIGURATION / VERIFICATION until actual
-evidence exists. Do not claim this repository configured Routines, GitHub-event
-triggers, or a verified native review.
+After activation Claude Code builds and Cursor is optional inspection or
+explicitly authorized fallback. The reviewer for a Claude builder must be a
+separately identified non-author route; that route is not yet established.
+
+Automatic native launch is not verified. Do not claim this repository
+configured Routines, GitHub-event triggers, or a verified automatic review.
 
 Durable record: stocky-plus/docs/agents/PROPO_NATIVE_REVIEW_WORKFLOW.md
 
