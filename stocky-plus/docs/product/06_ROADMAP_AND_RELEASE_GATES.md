@@ -165,7 +165,13 @@ No “smart” recommendation until:
 
 ## Agent operating model
 
-### ChatGPT — product/R&D authority
+**Role-only amendment (2026-11-07).** This section is agent-role text only. Product scope, formulas, business rules, phases, release gates and pricing above are unchanged. Canonical role statement: root `AGENTS.md` and [`../agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md`](../agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md). Precedence: on agent roles, those canonical records govern; on product behavior, this document governs.
+
+**Activation status:** The owner-selected Claude-first model is not active until the explicit activation record required by [migration §6](../agents/CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate) is published in GitHub. Merge alone is not activation. Until then the current effective model below governs.
+
+### Current effective model — until recorded activation
+
+#### ChatGPT — product/R&D authority
 
 - requirements;
 - research;
@@ -174,7 +180,7 @@ No “smart” recommendation until:
 - scope and decisions;
 - acceptance criteria.
 
-### Cursor — implementation
+#### Cursor — implementation under its admitted task
 
 - code;
 - migrations;
@@ -183,7 +189,7 @@ No “smart” recommendation until:
 - deployment;
 - PRs.
 
-### Claude Code — independent senior reviewer
+#### Claude Code — independent senior reviewer
 
 - run commands;
 - validate claims;
@@ -191,5 +197,14 @@ No “smart” recommendation until:
 - review Shopify compliance;
 - reproduce defects;
 - approve release gates.
+
+### Selected future model — after recorded activation
+
+- **ChatGPT** — unchanged product/R&D and acceptance authority.
+- **Claude Code — primary builder** of admitted tasks, with the implementation duties listed above.
+- **Independent reviewer — a specifically admitted non-author** with the reviewer duties listed above; not automatically Cursor and never the builder's self-review.
+- **Cursor** — optional inspection or explicitly authorized fallback.
+
+Production deployment and release continue to require separate explicit owner authority in both models.
 
 No agent changes business logic without an architecture/decision record.

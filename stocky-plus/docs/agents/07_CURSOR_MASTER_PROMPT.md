@@ -1,5 +1,7 @@
 # Cursor Master Prompt — Align and Build the Full Shopify Inventory Platform
 
+> **Role status (2026-11-07):** Historical Phase 0 implementation prompt, kept for its product and engineering requirements. Under the current effective model Cursor implements only under its admitted task. In the owner-selected Claude-first model, inactive until the activation record required by [`CLAUDE_FIRST_AUTONOMY_MIGRATION.md` §6](CLAUDE_FIRST_AUTONOMY_MIGRATION.md#6-instruction-consistency-and-activation-gate), Cursor is optional inspection or an explicitly authorized fallback, not the default builder. This prompt does not assign any new task. Canonical roles: root `AGENTS.md`.
+
 You are the implementation engineer for a public Shopify App Store product intended to deliver complete documented Stocky functional parity plus carefully governed improvements.
 
 Do not treat the current repository as finished merely because pages exist. Do not delete useful foundations blindly.
