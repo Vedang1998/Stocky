@@ -448,10 +448,11 @@ describe.sequential("PR6-A order / refund fact foundation", () => {
     );
     expect(MERCHANT_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
     expect(MERCHANT_SQL_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
-    // 24 direct after PR6-A, plus the two replenishment planning tables.
-    expect(DIRECT_MERCHANT_MODELS).toHaveLength(26);
+    // 24 direct after PR6-A, plus four replenishment tables (planning inputs
+    // and worksheets).
+    expect(DIRECT_MERCHANT_MODELS).toHaveLength(28);
     expect(CHILD_MERCHANT_MODELS).toHaveLength(11);
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(37);
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(39);
   });
 
   it("registers each approved PR6-A merchant table exactly once with delegates", () => {

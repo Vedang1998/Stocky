@@ -561,6 +561,42 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     enforcementStepGroup: "merchant_direct",
   },
   {
+    prismaModel: "ReplenishmentWorksheet",
+    sqlTable: "ReplenishmentWorksheet",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: ["ReplenishmentWorksheetLine"],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "ReplenishmentWorksheetLine",
+    sqlTable: "ReplenishmentWorksheetLine",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["ReplenishmentWorksheet"],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
     prismaModel: "SupplierSkuMapping",
     sqlTable: "SupplierSkuMapping",
     classification: "merchant_domain",
@@ -1069,6 +1105,16 @@ export const COMPOSITE_FOREIGN_KEYS: readonly CompositeForeignKey[] = [
     onUpdate: "NO ACTION",
     purpose: "child_parent",
   },
+  {
+    name: "ReplenishmentWorksheetLine_shopId_worksheetId_fkey",
+    childTable: "ReplenishmentWorksheetLine",
+    childColumns: ["shopId", "worksheetId"],
+    parentTable: "ReplenishmentWorksheet",
+    parentColumns: ["shopId", "id"],
+    onDelete: "CASCADE",
+    onUpdate: "NO ACTION",
+    purpose: "child_parent",
+  },
 ] as const;
 
 /** Supporting indexes required before composite FK validation. */
@@ -1260,7 +1306,7 @@ void CONTROL_PLANE_DML;
 
 export const PRE_PR6_A_MERCHANT_TABLE_COUNT = 26;
 export const PR6_A_ADDED_MERCHANT_TABLE_COUNT = 9;
-export const REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT = 2;
+export const REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT = 4;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
   PRE_PR6_A_MERCHANT_TABLE_COUNT +
   PR6_A_ADDED_MERCHANT_TABLE_COUNT +

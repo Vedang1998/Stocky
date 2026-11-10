@@ -4,12 +4,12 @@
 **Work unit:** PR 3 — Database enforcement
 **Branch:** `phase-1/tenant-enforcement`
 **Generator:** `scripts/tenant-enforcement/inventory.ts` (deterministic)
-**Content digest:** `3ab9698478188c53`
-**Merchant-owned tables:** 37
+**Content digest:** `d2104974a6474a1e`
+**Merchant-owned tables:** 39
 **Bootstrap tables:** 2
 **Control/maintenance tables:** 4
-**Composite parent keys:** 37
-**Composite foreign keys:** 19
+**Composite parent keys:** 39
+**Composite foreign keys:** 20
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run tenant:enforcement:inventory`.
@@ -69,6 +69,8 @@
 | OrderFactObservationInFlight | `OrderFactObservationInFlight` | non-null in Prisma (no expand/backfill) | — | — | — | — | `OrderFactObservationInFlight_shopId_id_key` (PR1) | `OrderFactObservationInFlight_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_OrderFactObservationInFlight_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ReplenishmentSettings | `ReplenishmentSettings` | non-null in Prisma (no expand/backfill) | — | — | — | — | `ReplenishmentSettings_shopId_id_key` (PR1) | `ReplenishmentSettings_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ReplenishmentSettings_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ReplenishmentVariantRule | `ReplenishmentVariantRule` | non-null in Prisma (no expand/backfill) | — | — | — | — | `ReplenishmentVariantRule_shopId_id_key` (PR1) | `ReplenishmentVariantRule_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ReplenishmentVariantRule_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| ReplenishmentWorksheet | `ReplenishmentWorksheet` | non-null in Prisma (no expand/backfill) | — | — | ReplenishmentWorksheetLine | — | `ReplenishmentWorksheet_shopId_id_key` (PR1) | `ReplenishmentWorksheet_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ReplenishmentWorksheet_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| ReplenishmentWorksheetLine | `ReplenishmentWorksheetLine` | non-null in Prisma (no expand/backfill) | — | ReplenishmentWorksheet | — | — | `ReplenishmentWorksheetLine_shopId_id_key` (PR1) | `ReplenishmentWorksheetLine_shopId_id_key` | `ReplenishmentWorksheetLine_shopId_worksheetId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ReplenishmentWorksheetLine_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | SupplierSkuMapping | `SupplierSkuMapping` | nullable in Prisma (DB NOT NULL after enforcement) | — | Supplier | — | — | compatibility shopId idx only | `SupplierSkuMapping_shopId_id_key` | `SupplierSkuMapping_shopId_supplierId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_SupplierSkuMapping_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | VolumePriceTier | `VolumePriceTier` | nullable in Prisma (DB NOT NULL after enforcement) | — | Supplier | — | — | compatibility shopId idx only | `VolumePriceTier_shopId_id_key` | `VolumePriceTier_shopId_supplierId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_VolumePriceTier_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | LeadTimeSnapshot | `LeadTimeSnapshot` | nullable in Prisma (DB NOT NULL after enforcement) | — | Supplier | — | PurchaseOrder | compatibility shopId idx only | `LeadTimeSnapshot_shopId_id_key` | `LeadTimeSnapshot_shopId_supplierId_fkey`, `LeadTimeSnapshot_shopId_purchaseOrderId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_LeadTimeSnapshot_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
@@ -111,6 +113,8 @@
 | `OrderFactObservationInFlight_shopId_id_key` | `OrderFactObservationInFlight` | (shopId, id) |
 | `ReplenishmentSettings_shopId_id_key` | `ReplenishmentSettings` | (shopId, id) |
 | `ReplenishmentVariantRule_shopId_id_key` | `ReplenishmentVariantRule` | (shopId, id) |
+| `ReplenishmentWorksheet_shopId_id_key` | `ReplenishmentWorksheet` | (shopId, id) |
+| `ReplenishmentWorksheetLine_shopId_id_key` | `ReplenishmentWorksheetLine` | (shopId, id) |
 | `SupplierSkuMapping_shopId_id_key` | `SupplierSkuMapping` | (shopId, id) |
 | `VolumePriceTier_shopId_id_key` | `VolumePriceTier` | (shopId, id) |
 | `LeadTimeSnapshot_shopId_id_key` | `LeadTimeSnapshot` | (shopId, id) |
@@ -146,6 +150,7 @@
 | `ShopifyOrderAgreementFact_shopId_shopifyOrderGid_fkey` | `ShopifyOrderAgreementFact` | (shopId, shopifyOrderGid) | `ShopifyOrderFact` | (shopId, shopifyGid) | RESTRICT | child_parent |
 | `ShopifyOrderAgreementSaleFact_shopId_shopifyAgreementGid_fkey` | `ShopifyOrderAgreementSaleFact` | (shopId, shopifyAgreementGid) | `ShopifyOrderAgreementFact` | (shopId, shopifyGid) | RESTRICT | child_parent |
 | `ShopifyOrderRefundTransactionFact_shopId_shopifyRefundGid_fkey` | `ShopifyOrderRefundTransactionFact` | (shopId, shopifyRefundGid) | `ShopifyOrderRefundFact` | (shopId, shopifyGid) | RESTRICT | child_parent |
+| `ReplenishmentWorksheetLine_shopId_worksheetId_fkey` | `ReplenishmentWorksheetLine` | (shopId, worksheetId) | `ReplenishmentWorksheet` | (shopId, id) | CASCADE | child_parent |
 
 ## Per-table enforcement artifacts
 
@@ -177,6 +182,8 @@
 | `OrderFactObservationInFlight` | `OrderFactObservationInFlight_shopId_not_null` | `OrderFactObservationInFlight_shopId_fkey_shop` | `OrderFactObservationInFlight_shopId_id_key` | `OrderFactObservationInFlight_tenant_select`, `OrderFactObservationInFlight_tenant_insert`, `OrderFactObservationInFlight_tenant_update`, `OrderFactObservationInFlight_tenant_delete` | `trg_OrderFactObservationInFlight_shopId_immutable` |
 | `ReplenishmentSettings` | `ReplenishmentSettings_shopId_not_null` | `ReplenishmentSettings_shopId_fkey_shop` | `ReplenishmentSettings_shopId_id_key` | `ReplenishmentSettings_tenant_select`, `ReplenishmentSettings_tenant_insert`, `ReplenishmentSettings_tenant_update`, `ReplenishmentSettings_tenant_delete` | `trg_ReplenishmentSettings_shopId_immutable` |
 | `ReplenishmentVariantRule` | `ReplenishmentVariantRule_shopId_not_null` | `ReplenishmentVariantRule_shopId_fkey_shop` | `ReplenishmentVariantRule_shopId_id_key` | `ReplenishmentVariantRule_tenant_select`, `ReplenishmentVariantRule_tenant_insert`, `ReplenishmentVariantRule_tenant_update`, `ReplenishmentVariantRule_tenant_delete` | `trg_ReplenishmentVariantRule_shopId_immutable` |
+| `ReplenishmentWorksheet` | `ReplenishmentWorksheet_shopId_not_null` | `ReplenishmentWorksheet_shopId_fkey_shop` | `ReplenishmentWorksheet_shopId_id_key` | `ReplenishmentWorksheet_tenant_select`, `ReplenishmentWorksheet_tenant_insert`, `ReplenishmentWorksheet_tenant_update`, `ReplenishmentWorksheet_tenant_delete` | `trg_ReplenishmentWorksheet_shopId_immutable` |
+| `ReplenishmentWorksheetLine` | `ReplenishmentWorksheetLine_shopId_not_null` | `ReplenishmentWorksheetLine_shopId_fkey_shop` | `ReplenishmentWorksheetLine_shopId_id_key` | `ReplenishmentWorksheetLine_tenant_select`, `ReplenishmentWorksheetLine_tenant_insert`, `ReplenishmentWorksheetLine_tenant_update`, `ReplenishmentWorksheetLine_tenant_delete` | `trg_ReplenishmentWorksheetLine_shopId_immutable` |
 | `SupplierSkuMapping` | `SupplierSkuMapping_shopId_not_null` | `SupplierSkuMapping_shopId_fkey_shop` | `SupplierSkuMapping_shopId_id_key` | `SupplierSkuMapping_tenant_select`, `SupplierSkuMapping_tenant_insert`, `SupplierSkuMapping_tenant_update`, `SupplierSkuMapping_tenant_delete` | `trg_SupplierSkuMapping_shopId_immutable` |
 | `VolumePriceTier` | `VolumePriceTier_shopId_not_null` | `VolumePriceTier_shopId_fkey_shop` | `VolumePriceTier_shopId_id_key` | `VolumePriceTier_tenant_select`, `VolumePriceTier_tenant_insert`, `VolumePriceTier_tenant_update`, `VolumePriceTier_tenant_delete` | `trg_VolumePriceTier_shopId_immutable` |
 | `LeadTimeSnapshot` | `LeadTimeSnapshot_shopId_not_null` | `LeadTimeSnapshot_shopId_fkey_shop` | `LeadTimeSnapshot_shopId_id_key` | `LeadTimeSnapshot_tenant_select`, `LeadTimeSnapshot_tenant_insert`, `LeadTimeSnapshot_tenant_update`, `LeadTimeSnapshot_tenant_delete` | `trg_LeadTimeSnapshot_shopId_immutable` |
@@ -191,4 +198,4 @@
 
 ## Schema verification note
 
-Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **37**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.
+Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **39**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.

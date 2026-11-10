@@ -303,6 +303,25 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       },
     ],
   },
+  ReplenishmentWorksheet: {
+    model: "ReplenishmentWorksheet",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
+  ReplenishmentWorksheetLine: {
+    model: "ReplenishmentWorksheetLine",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_worksheetId_variantGid",
+        fields: ["shopId", "worksheetId", "variantGid"],
+      },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [

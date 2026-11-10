@@ -92,6 +92,8 @@ model Shop {
   orderFactObservationsInFlight OrderFactObservationInFlight[]
   replenishmentSettings ReplenishmentSettings[]
   replenishmentVariantRules ReplenishmentVariantRule[]
+  replenishmentWorksheets ReplenishmentWorksheet[]
+  replenishmentWorksheetLines ReplenishmentWorksheetLine[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -2184,4 +2186,105 @@ model ReplenishmentVariantRule {
   @@unique([shopId, id])
   @@unique([shopId, variantGid, scopeKey])
   @@index([shopId, scopeKey])
+}
+
+enum ReplenishmentStockStatus {
+  OUT_OF_STOCK
+  LOW
+  OK
+  UNKNOWN
+}
+
+/// A generated worksheet: the settings of one run and when it was computed.
+/// Lines are a snapshot of that moment; "regenerate" creates a new worksheet.
+model ReplenishmentWorksheet {
+  id            String              @id @default(cuid())
+  shopId        String
+  method        ReplenishmentMethod
+  scopeKey      String              @db.VarChar(256)
+  /// Location name when generated, so the title survives a rename.
+  scopeName     String?
+  /// The run as the merchant chose it: method parameters, incoming source,
+  /// supplier rounding and the product selection.
+  settings      Json
+  asOfLocalDate String              @db.VarChar(10)
+  timeZone      String              @db.VarChar(64)
+  windowStart   String?             @db.VarChar(10)
+  windowEnd     String?             @db.VarChar(10)
+  /// Sales-history coverage and exclusions for the run, shown with the results.
+  summary       Json?
+  lineCount     Int                 @default(0)
+  generatedAt   DateTime
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  shop  Shop                         @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lines ReplenishmentWorksheetLine[]
+
+  @@unique([shopId, id])
+  @@index([shopId, createdAt])
+}
+
+/// One variant on a worksheet: the inputs used, the suggestion and the
+/// merchant's final quantity. `orderQuantity` is the final quantity when the
+/// merchant set one, otherwise the suggestion.
+model ReplenishmentWorksheetLine {
+  id                    String                   @id @default(cuid())
+  shopId                String
+  worksheetId           String
+  variantGid            String                   @db.VarChar(256)
+  productGid            String                   @db.VarChar(256)
+  productTitle          String
+  variantTitle          String
+  sku                   String?
+  barcode               String?
+  vendor                String?
+  productType           String?
+  imageUrl              String?
+  priceAmount           Decimal?                 @db.Decimal(20, 6)
+  priceCurrencyCode     String?                  @db.VarChar(8)
+  unitCostAmount        Decimal?                 @db.Decimal(20, 6)
+  unitCostCurrencyCode  String?                  @db.VarChar(8)
+  supplierId            String?
+  supplierName          String?
+  vendorSku             String?
+  minimumOrderQuantity  Int?
+  packSize              Int?
+  supplierCount         Int                      @default(0)
+  tracked               Boolean
+  availableQuantity     Int?
+  onHandQuantity        Int?
+  committedQuantity     Int?
+  incomingQuantity      Int?
+  netUnits              Int?
+  distinctOrders        Int?
+  revenueAmount         Decimal?                 @db.Decimal(20, 6)
+  unitsPerDay           Decimal?                 @db.Decimal(20, 4)
+  stockStatus           ReplenishmentStockStatus
+  daysOfStock           Decimal?                 @db.Decimal(20, 1)
+  depletionDate         String?                  @db.VarChar(10)
+  leadTimeDays          Int?
+  leadTimeSource        String?                  @db.VarChar(32)
+  reorderPoint          Int?
+  reorderPointSource    String?                  @db.VarChar(16)
+  forecastDemand        Decimal?                 @db.Decimal(20, 4)
+  parityQuantity        Int?
+  suggestedQuantity     Int?
+  finalQuantity         Int?
+  orderQuantity         Int                      @default(0)
+  warningCodes          String[]
+  /// Explanation trace, stock-health trace, warnings and rule adjustments.
+  detail                Json
+  purchaseOrderId       String?
+  purchaseOrderNumber   String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  shop      Shop                   @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  worksheet ReplenishmentWorksheet @relation(fields: [shopId, worksheetId], references: [shopId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, worksheetId, variantGid])
+  @@index([shopId, worksheetId, orderQuantity])
+  @@index([shopId, worksheetId, stockStatus])
 }

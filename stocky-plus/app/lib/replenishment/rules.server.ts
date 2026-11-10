@@ -12,13 +12,10 @@
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { isUniqueViolation } from "./db-errors.server";
 import { MAX_LEAD_TIME_DAYS, parseWholeNumber, type FieldErrors } from "./form";
+import { isScopeKey, isVariantGid, SHOP_SCOPE } from "./scope";
 import { MAX_QUANTITY } from "./types";
 
-export const SHOP_SCOPE = "SHOP";
-
-// Shopify ids are 64-bit integers, so at most 20 digits.
-const VARIANT_GID = /^gid:\/\/shopify\/ProductVariant\/\d{1,20}$/;
-const LOCATION_GID = /^gid:\/\/shopify\/Location\/\d{1,20}$/;
+export { isScopeKey, isVariantGid, SHOP_SCOPE };
 
 /** Largest IN list sent in one query. */
 const QUERY_CHUNK = 1000;
@@ -74,17 +71,6 @@ export class ReplenishmentRuleError extends Error {
     super(message);
     this.name = "ReplenishmentRuleError";
   }
-}
-
-export function isVariantGid(value: unknown): value is string {
-  return typeof value === "string" && VARIANT_GID.test(value);
-}
-
-export function isScopeKey(value: unknown): value is string {
-  return (
-    value === SHOP_SCOPE ||
-    (typeof value === "string" && LOCATION_GID.test(value))
-  );
 }
 
 function isEmptyRule(values: VariantRuleValues): boolean {
