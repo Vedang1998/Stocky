@@ -4,10 +4,10 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697`
-**Scanned files:** 508
-**Findings:** 1774
-**Converted paths:** 534
+**Content digest:** `a9fb619c44bb20b5d7d432679288681faf837e4c0c0223dfbfb6deb5f84a6b32`
+**Scanned files:** 522
+**Findings:** 1780
+**Converted paths:** 540
 **Approved exception findings:** 1240
 **Violations:** 0
 
@@ -22,13 +22,13 @@ All 35 approved merchant-owned models must appear below.
 | Model | Finding count |
 |---|---|
 | Supplier | 632 |
-| PurchaseOrder | 344 |
+| PurchaseOrder | 345 |
 | ShopifyVariantCache | 362 |
 | InventorySnapshot | 317 |
 | VariantAbcClass | 259 |
 | ForecastOverride | 258 |
 | SalesDailyAggregate | 320 |
-| ShopSettings | 286 |
+| ShopSettings | 290 |
 | TransferOrder | 262 |
 | Stocktake | 259 |
 | BomComponent | 259 |
@@ -38,7 +38,7 @@ All 35 approved merchant-owned models must appear below.
 | ShopifyProductCollectionMembership | 256 |
 | ShopifyVariantFact | 276 |
 | ShopifyInventoryItemFact | 265 |
-| ShopifyLocationFact | 259 |
+| ShopifyLocationFact | 260 |
 | ShopifyInventoryLevelFact | 277 |
 | CatalogObservationInFlight | 252 |
 | ShopifyOrderFact | 241 |
@@ -62,7 +62,7 @@ All 35 approved merchant-owned models must appear below.
 | Category | Count |
 |---|---|
 | bootstrap | 1 |
-| other | 78 |
+| other | 84 |
 | route | 85 |
 | script | 51 |
 | service | 33 |
@@ -234,6 +234,12 @@ All 35 approved merchant-owned models must appear below.
 
 | File | Line or symbol | Execution category | Models touched | Old access method | New access method | Authority source | Conversion status | Test evidence | Exception ID | Exception justification |
 |---|---|---|---|---|---|---|---|---|---|---|
+| `app/billing/entitlements.server.ts` | 69 / `db.shopSettings.findUnique` | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/billing/entitlements.server.ts` | 81 / `db.shopSettings.update` | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/billing/entitlements.server.ts` | 86 / `db.shopSettings.create` | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/billing/entitlements.server.ts` | 89 / `db.shopSettings.update` | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/billing/usage.server.ts` | 22 / `db.shopifyLocationFact.count` | other | ShopifyLocationFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/billing/usage.server.ts` | 26 / `db.purchaseOrder.count` | other | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/db/runtime-identity.server.ts` | 427 / `$queryRawUnsafe` | other | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-RAW-002 | raw_prisma_construction | approved exception | tenant:access:audit | EX-RAW-002 | Shared runtime connected-identity verification (F-PR3C-01); constructs verified Prisma clients and runs catalog identity queries before merchant processing |
 | `app/db/runtime-identity.server.ts` | 463 / `new PrismaClient` | other | — | PrismaClient construction | approved exception EX-RAW-002 | infrastructure | approved exception | tenant:access:audit | EX-RAW-002 | Shared runtime connected-identity verification (F-PR3C-01); constructs verified Prisma clients and runs catalog identity queries before merchant processing |
 | `app/jobs/workers/catalog-facts/absence.ts` | 75 / `db.shopifyProductFact.count` | worker | ShopifyProductFact | global prisma + shop string | TenantDb scoped by TenantAuthority | tenant-job-envelope-v1 | converted | test:tenant-access | — | — |
@@ -2013,8 +2019,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 508,
-  "findings": 1774,
+  "scannedFiles": 522,
+  "findings": 1780,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2151,6 +2157,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697"
+  "contentDigest": "a9fb619c44bb20b5d7d432679288681faf837e4c0c0223dfbfb6deb5f84a6b32"
 }
 ```
