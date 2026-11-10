@@ -1,49 +1,41 @@
-import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { useState } from "react";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
+import { useLoaderData } from "react-router";
+
+import { LoginErrorType } from "@shopify/shopify-app-react-router/server";
 
 import { login } from "../../shopify.server";
-import { loginErrorMessage } from "./error.server";
 
+import styles from "../_index/styles.module.css";
+
+// The Shopify library sends unauthenticated, non-embedded requests here.
+// With a ?shop= parameter, login() redirects to Shopify's own install/grant
+// screen. Without one there is nothing to authenticate: the merchant is told to
+// open ProPo from their Shopify admin. The app never asks merchants to type a
+// store domain (App Store requirement 2.3.1).
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
+  const result = await login(request);
 
-  return { errors };
-};
-
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const errors = loginErrorMessage(await login(request));
-
-  return {
-    errors,
-  };
+  return { invalidShop: result.shop === LoginErrorType.InvalidShop };
 };
 
 export default function Auth() {
-  const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const [shop, setShop] = useState("");
-  const { errors } = actionData || loaderData;
+  const { invalidShop } = useLoaderData<typeof loader>();
 
   return (
-    <AppProvider embedded={false}>
-      <s-page>
-        <Form method="post">
-        <s-section heading="Log in">
-          <s-text-field
-            name="shop"
-            label="Shop domain"
-            details="example.myshopify.com"
-            value={shop}
-            onChange={(e) => setShop(e.currentTarget.value)}
-            autocomplete="on"
-            error={errors.shop}
-          ></s-text-field>
-          <s-button type="submit">Log in</s-button>
-        </s-section>
-        </Form>
-      </s-page>
-    </AppProvider>
+    <main className={styles.index}>
+      <div className={styles.content}>
+        <h1 className={styles.heading}>Open ProPo from Shopify</h1>
+        {invalidShop ? (
+          <p className={styles.text} role="alert">
+            That link doesn&apos;t point to a valid Shopify store.
+          </p>
+        ) : null}
+        <p className={styles.note}>
+          ProPo runs inside your Shopify admin. Go to <strong>Apps</strong> in
+          your Shopify admin and select <strong>ProPo</strong>. To add ProPo to
+          a store, install it from the Shopify App Store.
+        </p>
+      </div>
+    </main>
   );
 }
