@@ -7,6 +7,10 @@ import {
 import { shopifySessionStorage } from "./tenant/bootstrap.server";
 import { runAfterAuthTenantBootstrap } from "./tenant/after-auth.server";
 import { enqueueAfterAuthCatalogSync } from "./jobs/queue.server";
+import {
+  readBoundedRequest,
+  WEBHOOK_MAX_BODY_BYTES,
+} from "./lib/http/bounded-request.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -39,7 +43,19 @@ const shopify = shopifyApp({
 export default shopify;
 export const apiVersion = ApiVersion.July26;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
-export const authenticate = shopify.authenticate;
+
+/**
+ * Webhook routes are reachable without credentials and the library buffers the
+ * full body before it can reject a bad HMAC, so every webhook request is
+ * size-bounded here before verification (413 above WEBHOOK_MAX_BODY_BYTES).
+ */
+export const authenticate: typeof shopify.authenticate = {
+  ...shopify.authenticate,
+  webhook: async (request) =>
+    shopify.authenticate.webhook(
+      await readBoundedRequest(request, WEBHOOK_MAX_BODY_BYTES),
+    ),
+};
 export const unauthenticated = shopify.unauthenticated;
 export const login = shopify.login;
 export const registerWebhooks = shopify.registerWebhooks;
