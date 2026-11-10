@@ -72,7 +72,9 @@ function metered(
 
 /**
  * The limits and allowances a plan includes. When `usage` is given, measured
- * dimensions read "used of limit" instead of the bare limit.
+ * dimensions read "used of limit" instead of the bare limit. AI credits are in
+ * the catalog but not listed: no AI feature exists for a merchant to spend
+ * them on yet.
  */
 export function planTermRows(
   plan: SelfServePlan,
@@ -113,12 +115,6 @@ export function planTermRows(
           ? "Unlimited, subject to fair use"
           : capped(limits.monthlyPurchaseOrders, " per billing month"),
       ),
-    },
-    {
-      key: "aiCredits",
-      label: "AI credits",
-      value: `${count.format(plan.aiCreditsPerMonth)} per month`,
-      overLimit: false,
     },
     {
       key: "reportingHistory",

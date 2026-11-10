@@ -56,7 +56,6 @@ describe("planTermRows", () => {
       "activeVariants",
       "users",
       "monthlyPurchaseOrders",
-      "aiCredits",
       "reportingHistory",
       "support",
     ]);
@@ -72,16 +71,14 @@ describe("planTermRows", () => {
     expect(valueOf(rows, "monthlyPurchaseOrders").value).toBe(
       "Up to 50 per billing month",
     );
-    expect(valueOf(rows, "aiCredits").value).toBe("100 per month");
     expect(valueOf(rows, "reportingHistory").value).toBe("24 months");
     expect(rows.every((row) => !row.overLimit)).toBe(true);
   });
 
-  it("never describes AI credits as unlimited", () => {
+  it("does not advertise AI credits before an AI feature exists", () => {
     for (const plan of SELF_SERVE_PLANS) {
-      const ai = valueOf(planTermRows(plan), "aiCredits");
-      expect(ai.value).toMatch(/^[\d,]+ per month$/);
-      expect(ai.value).not.toMatch(/unlimited/i);
+      const rows = planTermRows(plan);
+      expect(rows.some((row) => /\bAI\b/i.test(row.label))).toBe(false);
     }
   });
 
