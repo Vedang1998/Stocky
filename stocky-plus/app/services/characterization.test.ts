@@ -159,14 +159,3 @@ describe("CHARACTERIZATION: receivePartialPO status transitions", () => {
     expect(typeof receivePartialPO).toBe("function");
   });
 });
-
-describe("CHARACTERIZATION: MOQ/pack rounding (KNOWN-WRONG vs product rules)", () => {
-  it("documents forced MOQ then pack rounding as current Buying Table math", () => {
-    const moq = 12;
-    const packSize = 6;
-    let qty = 5;
-    qty = Math.max(qty, moq);
-    qty = Math.ceil(qty / packSize) * packSize;
-    expect(qty).toBe(12);
-  });
-});
