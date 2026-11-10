@@ -119,6 +119,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
   "app/tenant/__tests__/compound-shopid-upsert.test.ts",
   "app/tenant/__tests__/pos-tenant.test.ts",
+  "app/tenant/__tests__/admin-inventory-lookup.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [

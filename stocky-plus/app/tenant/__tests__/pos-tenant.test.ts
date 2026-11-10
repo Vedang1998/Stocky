@@ -8,8 +8,10 @@ import { requirePosTenant } from "../require-pos-tenant.server";
 import { resolveScannedCode } from "../../services/barcode-lookup.server";
 import { getVariantStock } from "../../services/stock-lookup.server";
 import {
+  clearCatalogFacts,
   createPrisma,
   resetPublicSchema,
+  seedCatalogVariant,
   seedTwoShops,
   SHOP_A_DOMAIN,
   SHOP_B_DOMAIN,
@@ -20,7 +22,6 @@ const API_KEY = "pos-test-api-key";
 const API_SECRET = "pos-test-api-secret"; // pragma: allowlist secret
 const APP_URL = "https://propo-app.example.com";
 const POS_ORIGIN = "https://extensions.shopifycdn.com";
-const OBSERVED_AT = new Date("2026-11-01T12:00:00.000Z");
 
 // The routes authenticate through app/shopify.server. Replace only its
 // configuration (test credentials, no session storage or queue) so the real
@@ -105,96 +106,6 @@ function posRequest(url = "https://example.com/api/pos/scan?code=1") {
   return new Request(url, { headers: { Authorization: "Bearer token" } });
 }
 
-async function seedVariant(
-  prisma: PrismaClient,
-  shopId: string,
-  suffix: string,
-  barcode: string,
-  options: { absent?: boolean; available?: number } = {},
-) {
-  const productGid = `gid://shopify/Product/${suffix}`;
-  const variantGid = `gid://shopify/ProductVariant/${suffix}`;
-  const itemGid = `gid://shopify/InventoryItem/${suffix}`;
-  const locationGid = `gid://shopify/Location/${suffix}`;
-  const live = {
-    existenceState: "LIVE" as const,
-    existenceKind: "LIVE_FULL_SYNC_PRESENT" as const,
-    existenceObservedAt: OBSERVED_AT,
-    sourceKind: "FULL_SYNC" as const,
-  };
-
-  await prisma.shopifyProductFact.create({
-    data: {
-      shopId,
-      shopifyGid: productGid,
-      title: `Product ${suffix}`,
-      handle: `product-${suffix}`,
-      tags: [],
-      status: "ACTIVE",
-      ...live,
-    },
-  });
-  await prisma.shopifyVariantFact.create({
-    data: {
-      shopId,
-      shopifyGid: variantGid,
-      shopifyProductGid: productGid,
-      title: "Default Title",
-      selectedOptions: [],
-      sku: `SKU-${suffix}`,
-      barcode,
-      priceAmount: "10.00",
-      currencyCode: "USD",
-      ...live,
-      ...(options.absent
-        ? {
-            existenceState: "ABSENT" as const,
-            existenceKind: "ABSENT_CONFIRMED_QUERY" as const,
-            existenceRequestGen: 10n,
-            existenceResponseGen: 11n,
-            deletedAt: OBSERVED_AT,
-            deletionSource: "CONFIRMED_QUERY" as const,
-          }
-        : {}),
-    },
-  });
-  await prisma.shopifyInventoryItemFact.create({
-    data: {
-      shopId,
-      shopifyGid: itemGid,
-      shopifyVariantGid: variantGid,
-      tracked: true,
-      requiresShipping: true,
-      unitCostAccess: "NULL",
-      ...live,
-    },
-  });
-  await prisma.shopifyLocationFact.create({
-    data: {
-      shopId,
-      shopifyGid: locationGid,
-      name: `Store ${suffix}`,
-      isActive: true,
-      fulfillsOnlineOrders: true,
-      shipsInventory: true,
-      isFulfillmentService: false,
-      hasActiveInventory: true,
-      ...live,
-    },
-  });
-  await prisma.shopifyInventoryLevelFact.create({
-    data: {
-      shopId,
-      inventoryItemGid: itemGid,
-      locationGid,
-      availableQuantity: options.available ?? 5,
-      availableQuantityUpdatedAt: OBSERVED_AT,
-      ...live,
-    },
-  });
-  return { variantGid, locationGid };
-}
-
 describe("POS tenant authority", () => {
   let prisma: PrismaClient;
   let shopAId: string;
@@ -206,12 +117,7 @@ describe("POS tenant authority", () => {
   });
 
   beforeEach(async () => {
-    await prisma.shopifyInventoryLevelFact.deleteMany();
-    await prisma.shopifyLocationFact.deleteMany();
-    await prisma.shopifyInventoryItemFact.deleteMany();
-    await prisma.shopifyVariantFact.deleteMany();
-    await prisma.shopifyProductFact.deleteMany();
-    await prisma.shop.deleteMany();
+    await clearCatalogFacts(prisma);
     const shops = await seedTwoShops(prisma);
     shopAId = shops.shopA.id;
     shopBId = shops.shopB.id;
@@ -348,13 +254,13 @@ describe("POS tenant authority", () => {
   });
 
   it("scan lookup and stock never cross into another shop", async () => {
-    const a = await seedVariant(prisma, shopAId, "1001", "036000291452", {
+    const a = await seedCatalogVariant(prisma, shopAId, "1001", "036000291452", {
       available: 3,
     });
-    const b = await seedVariant(prisma, shopBId, "2001", "036000291452", {
+    const b = await seedCatalogVariant(prisma, shopBId, "2001", "036000291452", {
       available: 99,
     });
-    await seedVariant(prisma, shopBId, "2002", "SHOP-B-ONLY");
+    await seedCatalogVariant(prisma, shopBId, "2002", "SHOP-B-ONLY");
 
     const { db } = await requirePosTenant({
       request: posRequest(),
@@ -383,7 +289,7 @@ describe("POS tenant authority", () => {
   });
 
   it("does not resolve variants Shopify reported as deleted", async () => {
-    await seedVariant(prisma, shopAId, "1002", "DELETED-ITEM", { absent: true });
+    await seedCatalogVariant(prisma, shopAId, "1002", "DELETED-ITEM", { absent: true });
     const { db } = await requirePosTenant({
       request: posRequest(),
       authenticatePos: posAuth(),
@@ -412,8 +318,8 @@ describe("POS tenant authority", () => {
     });
 
     it("returns the calling shop's match and stock, never the other shop's", async () => {
-      const a = await seedVariant(prisma, shopAId, "1001", BARCODE, { available: 3 });
-      const b = await seedVariant(prisma, shopBId, "2001", BARCODE, { available: 99 });
+      const a = await seedCatalogVariant(prisma, shopAId, "1001", BARCODE, { available: 3 });
+      const b = await seedCatalogVariant(prisma, shopBId, "2001", BARCODE, { available: 99 });
 
       const responseA = await scan(
         signedRequest(`/api/pos/scan?code=${BARCODE}&location=1001`, signSessionToken(SHOP_A_DOMAIN)),
@@ -458,7 +364,7 @@ describe("POS tenant authority", () => {
         return `${base64url({ alg: "none", typ: "JWT" })}.${payload}.`;
       }],
     ])("rejects %s with a CORS-readable 401", async (_label, token) => {
-      await seedVariant(prisma, shopAId, "1001", BARCODE);
+      await seedCatalogVariant(prisma, shopAId, "1001", BARCODE);
       const response = await scan(signedRequest(`/api/pos/scan?code=${BARCODE}`, token()));
       expect(response.status).toBe(401);
       expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
@@ -478,7 +384,7 @@ describe("POS tenant authority", () => {
     });
 
     it("refuses an uninstalled shop even with a still-valid token", async () => {
-      await seedVariant(prisma, shopAId, "1001", BARCODE);
+      await seedCatalogVariant(prisma, shopAId, "1001", BARCODE);
       await prisma.shop.update({
         where: { id: shopAId },
         data: {

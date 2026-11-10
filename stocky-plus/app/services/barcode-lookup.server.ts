@@ -1,6 +1,7 @@
 import type { TenantDb } from "../tenant/tenant-db.server";
 import {
   barcodeLookupKeys,
+  MAX_SCANNED_CODE_LENGTH,
   normalizeScannedCode,
   type ScanNormalizationFailure,
 } from "../lib/scanning/barcode";
@@ -161,6 +162,47 @@ export async function resolveScannedCode(
 
   const described = await describeVariants(db, skuRows);
   return toResolution(code, "sku", skuRows, described);
+}
+
+/** Shortest text worth searching; a single character matches most of a catalog. */
+export const MIN_SEARCH_LENGTH = 2;
+export const MAX_SEARCH_RESULTS = 20;
+
+export type VariantSearchResult = {
+  variants: ResolvedVariant[];
+  truncated: boolean;
+};
+
+/** Prisma passes LIKE wildcards through, so escape them to match input literally. */
+function likeLiteral(text: string): string {
+  return text.replace(/[\\%_]/g, "\\$&");
+}
+
+/**
+ * Find live variants whose name, SKU or barcode contains the typed text.
+ * For people typing part of a product name; scans go through
+ * resolveScannedCode, which matches whole codes only.
+ */
+export async function searchLiveVariants(
+  db: TenantDb,
+  text: string,
+): Promise<VariantSearchResult> {
+  const term = text.trim().slice(0, MAX_SCANNED_CODE_LENGTH);
+  if (term.length < MIN_SEARCH_LENGTH) return { variants: [], truncated: false };
+
+  const contains = { contains: likeLiteral(term), mode: "insensitive" } as const;
+  const rows: VariantRow[] = await db.shopifyVariantFact.findMany({
+    where: {
+      ...LIVE,
+      OR: [{ displayName: contains }, { sku: contains }, { barcode: contains }],
+    },
+    select: VARIANT_SELECT,
+    orderBy: [{ displayName: "asc" }, { shopifyGid: "asc" }],
+    take: MAX_SEARCH_RESULTS + 1,
+  });
+
+  const variants = await describeVariants(db, rows.slice(0, MAX_SEARCH_RESULTS));
+  return { variants, truncated: rows.length > MAX_SEARCH_RESULTS };
 }
 
 /** Describe one live variant by GID, e.g. after the operator picks a candidate. */

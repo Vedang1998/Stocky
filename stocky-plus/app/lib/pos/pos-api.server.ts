@@ -3,6 +3,7 @@ import {
   type PosTenantContext,
 } from "../../tenant/require-pos-tenant.server";
 import { TenantAccessError } from "../../tenant/errors";
+import { isProductVariantGid } from "../shopify-gid";
 
 /** Header POS reads to know it must re-authenticate the user. */
 const REAUTHORIZE_URL_HEADER = "X-Shopify-API-Request-Failure-Reauthorize-Url";
@@ -108,7 +109,6 @@ export async function handlePosApiRequest(
 }
 
 const LOCATION_ID = /^\d{1,20}$/;
-const VARIANT_GID = /^gid:\/\/shopify\/ProductVariant\/\d{1,20}$/;
 
 /** POS sessions expose the numeric location ID; facts are keyed by GID. */
 export function parsePosLocation(value: string | null): string | null {
@@ -120,7 +120,7 @@ export function parsePosLocation(value: string | null): string | null {
 }
 
 export function parseVariantGid(value: string | null): string {
-  if (!value || !VARIANT_GID.test(value)) {
+  if (!value || !isProductVariantGid(value)) {
     throw new PosApiError(400, "bad_request", "variant must be a ProductVariant GID");
   }
   return value;
