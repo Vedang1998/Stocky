@@ -4,10 +4,10 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `e7cffefe6dfa94b25a539ed71a7781c7184ec207e41a1934af83f9b9f7eb080a`
-**Scanned files:** 527
-**Findings:** 1801
-**Converted paths:** 552
+**Content digest:** `87b1ef418cab8852a69b6387e7f8ecd9a5b5922b9067137e3688268dc0fe3f11`
+**Scanned files:** 545
+**Findings:** 1805
+**Converted paths:** 556
 **Approved exception findings:** 1249
 **Violations:** 0
 
@@ -38,11 +38,11 @@ All 35 approved merchant-owned models must appear below.
 | ShopifyProductCollectionMembership | 256 |
 | ShopifyVariantFact | 279 |
 | ShopifyInventoryItemFact | 267 |
-| ShopifyLocationFact | 259 |
-| ShopifyInventoryLevelFact | 277 |
+| ShopifyLocationFact | 260 |
+| ShopifyInventoryLevelFact | 279 |
 | CatalogObservationInFlight | 252 |
 | ShopifyOrderFact | 246 |
-| ShopifyOrderLineFact | 243 |
+| ShopifyOrderLineFact | 244 |
 | ShopifyOrderRefundFact | 241 |
 | OrderFactObservationInFlight | 244 |
 | SupplierSkuMapping | 320 |
@@ -62,7 +62,7 @@ All 35 approved merchant-owned models must appear below.
 | Category | Count |
 |---|---|
 | bootstrap | 1 |
-| other | 90 |
+| other | 94 |
 | route | 85 |
 | script | 51 |
 | service | 33 |
@@ -285,14 +285,18 @@ All 35 approved merchant-owned models must appear below.
 | `app/lib/analytics/catalog.server.ts` | 108 / `db.shopifyVariantFact.findMany` | other | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/analytics/catalog.server.ts` | 139 / `db.shopifyProductFact.findMany` | other | ShopifyProductFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/analytics/catalog.server.ts` | 157 / `db.shopifyInventoryItemFact.findMany` | other | ShopifyInventoryItemFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 202 / `db.shopifyOrderLineFact.findMany` | other | ShopifyOrderLineFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 216 / `db.shopifyOrderAgreementFact.findMany` | other | ShopifyOrderAgreementFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 225 / `db.shopifyOrderAgreementSaleFact.findMany` | other | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 281 / `db.shopifyOrderFact.aggregate` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 286 / `db.shopifyOrderFact.aggregate` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 350 / `db.shopifyOrderFact.findMany` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 388 / `db.shopifyOrderAgreementSaleFact.findMany` | other | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/analytics/sales-history.server.ts` | 410 / `db.shopifyOrderFact.findMany` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 231 / `db.shopifyOrderLineFact.findMany` | other | ShopifyOrderLineFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 249 / `db.shopifyOrderAgreementFact.findMany` | other | ShopifyOrderAgreementFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 258 / `db.shopifyOrderAgreementSaleFact.findMany` | other | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 321 / `db.shopifyOrderFact.aggregate` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 326 / `db.shopifyOrderFact.aggregate` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 413 / `db.shopifyOrderFact.findMany` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 451 / `db.shopifyOrderAgreementSaleFact.findMany` | other | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/sales-history.server.ts` | 473 / `db.shopifyOrderFact.findMany` | other | ShopifyOrderFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/stock-levels.server.ts` | 66 / `db.shopifyLocationFact.findMany` | other | ShopifyLocationFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/stock-levels.server.ts` | 97 / `db.shopifyInventoryLevelFact.findMany` | other | ShopifyInventoryLevelFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/stock-levels.server.ts` | 109 / `db.shopifyInventoryLevelFact.findMany` | other | ShopifyInventoryLevelFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/analytics/stock-levels.server.ts` | 137 / `db.shopifyOrderLineFact.groupBy` | other | ShopifyOrderLineFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/catalog-facts/compatibility-projection/legacy-writer.ts` | 36 / `db.shopifyVariantCache.upsert` | other | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/catalog-facts/compatibility-projection/legacy-writer.ts` | 68 / `db.shopifyVariantCache.deleteMany` | other | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/catalog-facts/compatibility-projection/legacy-writer.ts` | 120 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
@@ -361,8 +365,8 @@ All 35 approved merchant-owned models must appear below.
 | `app/routes/app.buying-table.tsx` | 212 / `db.supplier.findFirst` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.buying-table.tsx` | 230 / `db.supplierSkuMapping.findFirst` | route | SupplierSkuMapping | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.buying-table.tsx` | 256 / `db.purchaseOrder.create` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app.purchase-orders_.$id.receiver.tsx` | 12 / `db.purchaseOrder.findFirst` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app.purchase-orders_.$id.receiver.tsx` | 19 / `db.shopifyVariantCache.findMany` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app.purchase-orders_.$id.receiver.tsx` | 13 / `db.purchaseOrder.findFirst` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app.purchase-orders_.$id.receiver.tsx` | 20 / `db.shopifyVariantCache.findMany` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.purchase-orders.tsx` | 23 / `db.purchaseOrder.findMany` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.purchase-orders.tsx` | 29 / `db.supplier.findMany` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.purchase-orders.tsx` | 34 / `db.shopifyVariantCache.findMany` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -417,7 +421,7 @@ All 35 approved merchant-owned models must appear below.
 | `app/routes/app.transfers.tsx` | 187 / `tx.transferLineItem.update` | route | TransferLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.transfers.tsx` | 194 / `tx.transferOrder.update` | route | TransferOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.transfers.tsx` | 211 / `db.transferOrder.updateMany` | route | TransferOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app.warehouse_.labels.tsx` | 37 / `db.shopifyVariantCache.findUnique` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app.warehouse_.labels.tsx` | 23 / `db.shopifyVariantCache.findMany` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 17 / `db.purchaseOrder.findMany` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 26 / `db.shopifyVariantCache.findMany` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 54 / `db.shopifyVariantCache.findFirst` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -2041,8 +2045,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 527,
-  "findings": 1801,
+  "scannedFiles": 545,
+  "findings": 1805,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2180,6 +2184,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "e7cffefe6dfa94b25a539ed71a7781c7184ec207e41a1934af83f9b9f7eb080a"
+  "contentDigest": "87b1ef418cab8852a69b6387e7f8ecd9a5b5922b9067137e3688268dc0fe3f11"
 }
 ```
