@@ -57,6 +57,7 @@ const ALL_MIGRATION_NAMES = [
   "20261110235000_privacy_requests_and_shop_erasure",
   "20261111100000_purchase_order_receipts",
   "20261111230000_stocktake_workflow",
+  "20261111000000_replenishment_worksheets",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
