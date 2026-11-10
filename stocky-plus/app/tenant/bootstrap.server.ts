@@ -81,6 +81,26 @@ export async function resolveCanonicalShopByDomain(
   });
 }
 
+/**
+ * Canonical Shop plus whether it still accepts work. Processing is disabled
+ * after uninstall, privacy redaction or a manual stop; callers that are not
+ * backed by a live offline session (e.g. POS extension requests) must check it.
+ */
+export async function resolveCanonicalShopProcessingState(
+  verifiedDomain: string,
+): Promise<{ shop: CanonicalShopIdentity; processingEnabled: boolean } | null> {
+  const myshopifyDomain = normalizeVerifiedShopifyDomain(verifiedDomain);
+  const row = await rawPrisma.shop.findUnique({
+    where: { myshopifyDomain },
+    select: { id: true, myshopifyDomain: true, processingEnabled: true },
+  });
+  if (!row) return null;
+  return {
+    shop: { id: row.id, myshopifyDomain: row.myshopifyDomain },
+    processingEnabled: row.processingEnabled,
+  };
+}
+
 export async function resolveCanonicalShopById(
   shopId: string,
 ): Promise<CanonicalShopIdentity | null> {

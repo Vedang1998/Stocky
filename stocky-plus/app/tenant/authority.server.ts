@@ -12,6 +12,7 @@ const issuedAuthorities = new WeakSet<object>();
 
 export type TenantAuthoritySource =
   | "verified_admin_request"
+  | "verified_pos_request"
   | "verified_webhook"
   | "verified_job"
   | "verified_scheduler";

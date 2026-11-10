@@ -19,6 +19,7 @@ export {
   upsertCanonicalShop,
   resolveCanonicalShopByDomain,
   resolveCanonicalShopById,
+  resolveCanonicalShopProcessingState,
   requireCanonicalShopMatch,
   resolveAuthorityAfterVerifiedAuth,
   enumerateCanonicalShopsForScheduler,
@@ -29,6 +30,11 @@ export {
 } from "./bootstrap.server";
 
 export { requireAdminTenant, type AdminTenantContext } from "./require-admin-tenant.server";
+export {
+  requirePosTenant,
+  type PosActor,
+  type PosTenantContext,
+} from "./require-pos-tenant.server";
 export {
   createTenantDb,
   tenantDbExposesRawClient,
