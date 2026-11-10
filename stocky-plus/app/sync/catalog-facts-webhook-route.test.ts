@@ -7,10 +7,10 @@ const ingestAuthenticatedWebhook = vi.hoisted(() => vi.fn());
 const dispatchPendingJobs = vi.hoisted(() => vi.fn());
 
 vi.mock("../shopify.server", () => ({ authenticate: { webhook } }));
-vi.mock("../sync/intake.server", () => ({ ingestAuthenticatedWebhook }));
-vi.mock("../sync/dispatcher.server", () => ({ dispatchPendingJobs }));
+vi.mock("./intake.server", () => ({ ingestAuthenticatedWebhook }));
+vi.mock("./dispatcher.server", () => ({ dispatchPendingJobs }));
 
-import { action } from "./webhooks.catalog-facts";
+import { action } from "../routes/webhooks.catalog-facts";
 
 const ROUTE_URI = "/webhooks/catalog-facts";
 const SHOP = "catalog-topics.myshopify.com";
