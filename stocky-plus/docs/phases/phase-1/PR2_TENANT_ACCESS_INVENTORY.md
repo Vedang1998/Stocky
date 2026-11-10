@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697`
-**Scanned files:** 508
-**Findings:** 1774
-**Converted paths:** 534
-**Approved exception findings:** 1240
+**Content digest:** `8e6ef67d1df747e037ff892c4948ba4b10359bf38f79b16a9bd976e51d179855`
+**Scanned files:** 519
+**Findings:** 1792
+**Converted paths:** 542
+**Approved exception findings:** 1250
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -34,12 +34,12 @@ All 35 approved merchant-owned models must appear below.
 | BomComponent | 259 |
 | LowStockAlert | 255 |
 | SyncApplicationReceipt | 275 |
-| ShopifyProductFact | 304 |
+| ShopifyProductFact | 307 |
 | ShopifyProductCollectionMembership | 256 |
-| ShopifyVariantFact | 276 |
-| ShopifyInventoryItemFact | 265 |
-| ShopifyLocationFact | 259 |
-| ShopifyInventoryLevelFact | 277 |
+| ShopifyVariantFact | 282 |
+| ShopifyInventoryItemFact | 268 |
+| ShopifyLocationFact | 262 |
+| ShopifyInventoryLevelFact | 280 |
 | CatalogObservationInFlight | 252 |
 | ShopifyOrderFact | 241 |
 | ShopifyOrderLineFact | 241 |
@@ -65,9 +65,9 @@ All 35 approved merchant-owned models must appear below.
 | other | 78 |
 | route | 85 |
 | script | 51 |
-| service | 33 |
+| service | 41 |
 | tenant_infra | 5 |
-| test | 1477 |
+| test | 1487 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -229,6 +229,7 @@ All 35 approved merchant-owned models must appear below.
 | EX-TEST-034 | `scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-035 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-036 | `app/tenant/__tests__/compound-shopid-upsert.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-037 | `app/tenant/__tests__/pos-tenant.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 
 ## Access path inventory
 
@@ -410,6 +411,10 @@ All 35 approved merchant-owned models must appear below.
 | `app/routes/app.warehouse.tsx` | 54 / `db.shopifyVariantCache.findFirst` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 61 / `db.purchaseOrder.findFirst` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 80 / `db.purchaseOrder.findFirst` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/services/barcode-lookup.server.ts` | 81 / `db.shopifyProductFact.findMany` | service | ShopifyProductFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/barcode-lookup.server.ts` | 139 / `db.shopifyVariantFact.findMany` | service | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/barcode-lookup.server.ts` | 154 / `db.shopifyVariantFact.findMany` | service | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/barcode-lookup.server.ts` | 171 / `db.shopifyVariantFact.findFirst` | service | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 64 / `db.inventorySnapshot.findMany` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 85 / `db.salesDailyAggregate.findMany` | service | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 102 / `db.purchaseOrder.findMany` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
@@ -443,6 +448,10 @@ All 35 approved merchant-owned models must appear below.
 | `app/services/landed-cost.server.ts` | 239 / `db.supplier.update` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/shopify-sync.server.ts` | 164 / `db.bomComponent.findMany` | service | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/shopify-sync.server.ts` | 180 / `db.shopSettings.findUnique` | service | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/stock-lookup.server.ts` | 82 / `db.shopifyVariantFact.findFirst` | service | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/stock-lookup.server.ts` | 89 / `db.shopifyInventoryItemFact.findFirst` | service | ShopifyInventoryItemFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/stock-lookup.server.ts` | 109 / `db.shopifyInventoryLevelFact.findMany` | service | ShopifyInventoryLevelFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/stock-lookup.server.ts` | 131 / `db.shopifyLocationFact.findMany` | service | ShopifyLocationFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 71 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-015 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 80 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 109 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
@@ -1255,6 +1264,16 @@ All 35 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/partial-select-update.test.ts` | 186 / `dbA().supplier.update` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/partial-select-update.test.ts` | 195 / `prisma.supplier.findUnique` | test | Supplier | direct prisma delegate | approved exception EX-TEST-011 | migration_tests | approved exception | allowlist EX-TEST-011 | EX-TEST-011 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/partial-select-update.test.ts` | 197 / `prisma.supplierSkuMapping.findUnique` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-011 | migration_tests | approved exception | allowlist EX-TEST-011 | EX-TEST-011 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 126 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 137 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 161 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 172 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 185 / `prisma.shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 209 / `prisma.shopifyInventoryLevelFact.deleteMany` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 210 / `prisma.shopifyLocationFact.deleteMany` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 211 / `prisma.shopifyInventoryItemFact.deleteMany` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 212 / `prisma.shopifyVariantFact.deleteMany` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/pos-tenant.test.ts` | 213 / `prisma.shopifyProductFact.deleteMany` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 60 / `prisma.lowStockAlert.deleteMany` | test | LowStockAlert | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 61 / `prisma.forecastOverride.deleteMany` | test | ForecastOverride | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts` | 62 / `prisma.variantAbcClass.deleteMany` | test | VariantAbcClass | direct prisma delegate | approved exception EX-TEST-035 | migration_tests | approved exception | allowlist EX-TEST-035 | EX-TEST-035 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -2013,8 +2032,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 508,
-  "findings": 1774,
+  "scannedFiles": 519,
+  "findings": 1792,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2112,7 +2131,8 @@ All 35 approved merchant-owned models must appear below.
     "EX-TEST-032",
     "EX-TEST-033",
     "EX-TEST-035",
-    "EX-TEST-036"
+    "EX-TEST-036",
+    "EX-TEST-037"
   ],
   "modelsCovered": [
     "BomComponent",
@@ -2151,6 +2171,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697"
+  "contentDigest": "8e6ef67d1df747e037ff892c4948ba4b10359bf38f79b16a9bd976e51d179855"
 }
 ```

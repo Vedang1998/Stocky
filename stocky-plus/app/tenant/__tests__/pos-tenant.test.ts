@@ -15,8 +15,9 @@ import {
   SHOP_B_DOMAIN,
 } from "./helpers";
 
+// Placeholder credentials for the test-only Shopify app instance below.
 const API_KEY = "pos-test-api-key";
-const API_SECRET = "pos-test-api-secret";
+const API_SECRET = "pos-test-api-secret"; // pragma: allowlist secret
 const APP_URL = "https://propo-app.example.com";
 const POS_ORIGIN = "https://extensions.shopifycdn.com";
 const OBSERVED_AT = new Date("2026-11-01T12:00:00.000Z");
@@ -32,7 +33,7 @@ vi.mock("../../shopify.server", async () => {
   const unused = () => Promise.reject(new Error("session storage is not used"));
   const app = shopifyApp({
     apiKey: "pos-test-api-key",
-    apiSecretKey: "pos-test-api-secret",
+    apiSecretKey: "pos-test-api-secret", // pragma: allowlist secret
     apiVersion: ApiVersion.July26,
     appUrl: "https://propo-app.example.com",
     scopes: ["read_products"],
