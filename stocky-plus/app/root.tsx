@@ -1,6 +1,17 @@
-import { Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import type { ReactNode } from "react";
+import {
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  useRouteError,
+} from "react-router";
 
-export default function App() {
+import { RouteErrorPage } from "./components/RouteErrorPage";
+import { describeRouteError } from "./lib/route-error";
+
+export function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <head>
@@ -15,10 +26,18 @@ export default function App() {
         <Links />
       </head>
       <body>
-        <Outlet />
+        {children}
         <ScrollRestoration />
         <Scripts />
       </body>
     </html>
   );
+}
+
+export default function App() {
+  return <Outlet />;
+}
+
+export function ErrorBoundary() {
+  return <RouteErrorPage view={describeRouteError(useRouteError())} />;
 }
