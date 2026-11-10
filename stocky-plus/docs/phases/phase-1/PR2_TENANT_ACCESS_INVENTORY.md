@@ -4,10 +4,10 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `a9fb619c44bb20b5d7d432679288681faf837e4c0c0223dfbfb6deb5f84a6b32`
+**Content digest:** `f2fc84b9b7ed3bca4aadf51e991e781aa8f4bd8c25a3b9b3a2b0ab53cc40244b`
 **Scanned files:** 522
-**Findings:** 1780
-**Converted paths:** 540
+**Findings:** 1778
+**Converted paths:** 538
 **Approved exception findings:** 1240
 **Violations:** 0
 
@@ -28,7 +28,7 @@ All 35 approved merchant-owned models must appear below.
 | VariantAbcClass | 259 |
 | ForecastOverride | 258 |
 | SalesDailyAggregate | 320 |
-| ShopSettings | 290 |
+| ShopSettings | 288 |
 | TransferOrder | 262 |
 | Stocktake | 259 |
 | BomComponent | 259 |
@@ -63,9 +63,9 @@ All 35 approved merchant-owned models must appear below.
 |---|---|
 | bootstrap | 1 |
 | other | 84 |
-| route | 85 |
+| route | 84 |
 | script | 51 |
-| service | 33 |
+| service | 32 |
 | tenant_infra | 5 |
 | test | 1477 |
 | worker | 44 |
@@ -337,7 +337,6 @@ All 35 approved merchant-owned models must appear below.
 | `app/routes/app._index.tsx` | 29 / `db.shopifyVariantCache.count` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 52 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.analytics.tsx` | 47 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app.billing.tsx` | 68 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.bundles.tsx` | 14 / `db.bomComponent.findMany` | route | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.bundles.tsx` | 18 / `db.shopifyVariantCache.findMany` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.bundles.tsx` | 39 / `db.bomComponent.upsert` | route | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -448,7 +447,6 @@ All 35 approved merchant-owned models must appear below.
 | `app/services/landed-cost.server.ts` | 229 / `db.leadTimeSnapshot.findMany` | service | LeadTimeSnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/landed-cost.server.ts` | 239 / `db.supplier.update` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/shopify-sync.server.ts` | 164 / `db.bomComponent.findMany` | service | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/shopify-sync.server.ts` | 180 / `db.shopSettings.findUnique` | service | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 71 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-015 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 80 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | 109 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-015 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-015 | PR 4 D-049 readiness concurrency / heal / immutability / deadlock disposable harness |
@@ -2020,7 +2018,7 @@ All 35 approved merchant-owned models must appear below.
 ```json
 {
   "scannedFiles": 522,
-  "findings": 1780,
+  "findings": 1778,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2157,6 +2155,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "a9fb619c44bb20b5d7d432679288681faf837e4c0c0223dfbfb6deb5f84a6b32"
+  "contentDigest": "f2fc84b9b7ed3bca4aadf51e991e781aa8f4bd8c25a3b9b3a2b0ab53cc40244b"
 }
 ```
