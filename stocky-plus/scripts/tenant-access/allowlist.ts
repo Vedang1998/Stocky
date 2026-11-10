@@ -118,6 +118,7 @@ const TEST_FILES = [
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
   "app/tenant/__tests__/compound-shopid-upsert.test.ts",
+  "app/tenant/__tests__/db-isolation/analytics-sales.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
 ] as const;
 
