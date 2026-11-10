@@ -97,8 +97,8 @@ const CAPABILITY_NOT_INCLUDED_MESSAGE =
 
 /**
  * Server-side capability gate for loaders and actions. Throws a 403 Response;
- * hiding a button is not authorization. Messages are static because the
- * embedded-app error boundary renders the response body as HTML.
+ * hiding a button is not authorization. The app error boundary shows the
+ * short plain-text body to the merchant (see lib/route-error.ts).
  */
 export function requireCapability(
   entitlements: ShopEntitlements,

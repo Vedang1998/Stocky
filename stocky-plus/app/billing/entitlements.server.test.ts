@@ -1,5 +1,7 @@
 import { Prisma } from "@prisma/client";
+import { UNSAFE_ErrorResponseImpl as ErrorResponseImpl } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { describeRouteError } from "../lib/route-error";
 import type { TenantDb } from "../tenant/tenant-db.server";
 import type { ShopEntitlements, SubscriptionRecord } from "./entitlements";
 import {
@@ -135,6 +137,17 @@ describe("requireCapability", () => {
     expect(await response.text()).toBe(
       "An active ProPo plan is required for this feature. You can choose a plan from Billing.",
     );
+  });
+
+  it("produces a denial the app error boundary shows to the merchant", async () => {
+    const response = await denial(() =>
+      requireCapability(onEssentials, "forecast.smart"),
+    );
+    const message = await response.text();
+
+    expect(
+      describeRouteError(new ErrorResponseImpl(response.status, "", message)),
+    ).toEqual({ status: 403, title: "Access not available", message });
   });
 
   it("denies everything on an unrecognized plan", async () => {
