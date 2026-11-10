@@ -1,15 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
 
-const { authenticateWebhook, updateSessionScope } = vi.hoisted(() => ({
+const { authenticateWebhook, updateOfflineSessionScope } = vi.hoisted(() => ({
   authenticateWebhook: vi.fn(),
-  updateSessionScope: vi.fn(),
+  updateOfflineSessionScope: vi.fn(),
 }));
 
 vi.mock("../shopify.server", () => ({
   authenticate: { webhook: authenticateWebhook },
 }));
-vi.mock("../tenant/bootstrap.server", () => ({ updateSessionScope }));
+vi.mock("../tenant/bootstrap.server", () => ({
+  updateOfflineSessionScope,
+  normalizeVerifiedShopifyDomain: (domain: string) => domain.toLowerCase(),
+}));
 
 import { action } from "../routes/webhooks.app.scopes_update";
 
@@ -24,30 +27,40 @@ function args(): ActionFunctionArgs {
 }
 
 function verified(payload: Record<string, unknown>) {
+  // Webhook authentication carries no session; the route must not need one.
   authenticateWebhook.mockResolvedValue({
     payload,
-    session: { id: "offline_shop-a.myshopify.com" },
+    session: undefined,
+    admin: undefined,
     topic: "APP_SCOPES_UPDATE",
-    shop: "shop-a.myshopify.com",
+    shop: "Shop-A.myshopify.com",
   });
 }
 
 describe("app/scopes_update webhook", () => {
   beforeEach(() => {
     authenticateWebhook.mockReset();
-    updateSessionScope.mockReset();
+    updateOfflineSessionScope.mockReset();
+    updateOfflineSessionScope.mockResolvedValue(1);
   });
 
-  it("stores the granted scopes on the offline session", async () => {
+  it("stores the granted scopes on the shop's offline session", async () => {
     verified({ previous: ["read_products"], current: ["read_products", "read_orders"] });
 
     const response = await action(args());
 
     expect(response.status).toBe(200);
-    expect(updateSessionScope).toHaveBeenCalledWith({
-      sessionId: "offline_shop-a.myshopify.com",
+    expect(updateOfflineSessionScope).toHaveBeenCalledWith({
+      shopDomain: "shop-a.myshopify.com",
       scope: "read_products,read_orders",
     });
+  });
+
+  it("acknowledges the delivery when the shop has no stored session", async () => {
+    verified({ current: ["read_products"] });
+    updateOfflineSessionScope.mockResolvedValue(0);
+
+    expect((await action(args())).status).toBe(200);
   });
 
   it.each([
@@ -61,6 +74,6 @@ describe("app/scopes_update webhook", () => {
     const response = await action(args());
 
     expect(response.status).toBe(400);
-    expect(updateSessionScope).not.toHaveBeenCalled();
+    expect(updateOfflineSessionScope).not.toHaveBeenCalled();
   });
 });

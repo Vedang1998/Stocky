@@ -1,9 +1,12 @@
 import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
-import { updateSessionScope } from "../tenant/bootstrap.server";
+import {
+  normalizeVerifiedShopifyDomain,
+  updateOfflineSessionScope,
+} from "../tenant/bootstrap.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { payload, session, topic, shop } = await authenticate.webhook(request);
+  const { payload, topic, shop } = await authenticate.webhook(request);
   console.log(`Received ${topic} webhook for ${shop}`);
 
   const current: unknown = payload.current;
@@ -14,11 +17,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response("Invalid scopes payload", { status: 400 });
   }
 
-  if (session) {
-    await updateSessionScope({
-      sessionId: session.id,
-      scope: current.join(","),
-    });
-  }
+  // The offline session is looked up by the verified shop; webhook
+  // authentication does not load sessions. No stored session is not an error.
+  await updateOfflineSessionScope({
+    shopDomain: normalizeVerifiedShopifyDomain(shop),
+    scope: current.join(","),
+  });
   return new Response();
 };
