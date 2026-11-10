@@ -22,6 +22,12 @@ export const PR6_A_CHILD_MERCHANT_MODELS = [
   "ShopifyOrderRefundTransactionFact",
 ] as const;
 
+/** Replenishment planning inputs (Stocky Parity worksheet). */
+export const REPLENISHMENT_DIRECT_MERCHANT_MODELS = [
+  "ReplenishmentSettings",
+  "ReplenishmentVariantRule",
+] as const;
+
 export const DIRECT_MERCHANT_MODELS = [
   "Supplier",
   "PurchaseOrder",
@@ -44,6 +50,7 @@ export const DIRECT_MERCHANT_MODELS = [
   "ShopifyInventoryLevelFact",
   "CatalogObservationInFlight",
   ...PR6_A_DIRECT_MERCHANT_MODELS,
+  ...REPLENISHMENT_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -101,6 +108,8 @@ export const MERCHANT_DELEGATE_NAMES = {
   ShopifyOrderLineFact: "shopifyOrderLineFact",
   ShopifyOrderRefundFact: "shopifyOrderRefundFact",
   OrderFactObservationInFlight: "orderFactObservationInFlight",
+  ReplenishmentSettings: "replenishmentSettings",
+  ReplenishmentVariantRule: "replenishmentVariantRule",
   SupplierSkuMapping: "supplierSkuMapping",
   ShopifyOrderRefundLineFact: "shopifyOrderRefundLineFact",
   ShopifyOrderAdjustmentFact: "shopifyOrderAdjustmentFact",

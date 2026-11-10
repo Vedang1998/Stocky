@@ -50,6 +50,7 @@ const ALL_MIGRATION_NAMES = [
   "20260905173500_pr5_f3_remaining_integration",
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
+  "20261110230000_replenishment_planning_inputs",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);

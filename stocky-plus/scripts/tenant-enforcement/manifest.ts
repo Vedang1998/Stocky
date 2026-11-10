@@ -525,6 +525,42 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     enforcementStepGroup: "merchant_direct",
   },
   {
+    prismaModel: "ReplenishmentSettings",
+    sqlTable: "ReplenishmentSettings",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "ReplenishmentVariantRule",
+    sqlTable: "ReplenishmentVariantRule",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
     prismaModel: "SupplierSkuMapping",
     sqlTable: "SupplierSkuMapping",
     classification: "merchant_domain",
@@ -1224,13 +1260,16 @@ void CONTROL_PLANE_DML;
 
 export const PRE_PR6_A_MERCHANT_TABLE_COUNT = 26;
 export const PR6_A_ADDED_MERCHANT_TABLE_COUNT = 9;
+export const REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT = 2;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
-  PRE_PR6_A_MERCHANT_TABLE_COUNT + PR6_A_ADDED_MERCHANT_TABLE_COUNT;
+  PRE_PR6_A_MERCHANT_TABLE_COUNT +
+  PR6_A_ADDED_MERCHANT_TABLE_COUNT +
+  REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== EXPECTED_MERCHANT_TABLE_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
+      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
     );
   }
 }

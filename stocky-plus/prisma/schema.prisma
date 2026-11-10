@@ -90,6 +90,8 @@ model Shop {
   shopifyOrderAgreementSaleFacts ShopifyOrderAgreementSaleFact[]
   shopifyOrderRefundTransactionFacts ShopifyOrderRefundTransactionFact[]
   orderFactObservationsInFlight OrderFactObservationInFlight[]
+  replenishmentSettings ReplenishmentSettings[]
+  replenishmentVariantRules ReplenishmentVariantRule[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -2119,4 +2121,67 @@ model OrderFactObservationInFlight {
   @@index([shopId, leaseExpiresAt, lifecycleState])
   @@index([shopId, observationRequestGen])
   @@index([shopId, resourceKind, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal])
+}
+
+// ─── Replenishment planning (Stocky Parity) ─────────────────────────────────
+// Merchant planning inputs only. Forecast results are computed on demand from
+// order and inventory facts and are not stored here.
+
+enum ReplenishmentMethod {
+  LAST_X_DAYS
+  CUSTOM_RANGE
+  SAME_PERIOD_LAST_YEAR
+  FILL_SHELVES
+  FILL_SHELVES_IF_BELOW_MIN
+  TARGET_STOCK_LEVEL
+}
+
+enum ReplenishmentIncomingSource {
+  SHOPIFY_INCOMING
+  APP_PURCHASE_ORDERS
+  NONE
+}
+
+/// One row per shop: the defaults a new replenishment worksheet opens with.
+model ReplenishmentSettings {
+  id                        String                      @id @default(cuid())
+  shopId                    String
+  defaultMethod             ReplenishmentMethod         @default(LAST_X_DAYS)
+  sampleDays                Int                         @default(30)
+  suggestDays               Int                         @default(30)
+  targetQuantity            Int?
+  incomingSource            ReplenishmentIncomingSource @default(SHOPIFY_INCOMING)
+  /// Store-wide fallback lead time. Null means no lead time is assumed.
+  defaultLeadTimeDays       Int?
+  applyMinimumOrderQuantity Boolean                     @default(false)
+  roundUpToPackSize         Boolean                     @default(false)
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId])
+}
+
+/// Optional per-variant planning levels. `scopeKey` is "SHOP" for levels that
+/// apply to stock across all locations, or a Shopify Location GID.
+model ReplenishmentVariantRule {
+  id                   String   @id @default(cuid())
+  shopId               String
+  variantGid           String   @db.VarChar(256)
+  scopeKey             String   @db.VarChar(256)
+  minimumQuantity      Int?
+  shelfLimitQuantity   Int?
+  reorderPointQuantity Int?
+  safetyStockQuantity  Int?
+  leadTimeDays         Int?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, variantGid, scopeKey])
+  @@index([shopId, scopeKey])
 }
