@@ -50,6 +50,28 @@ export type RequireAdminTenantInput = {
   authenticateAdmin?: AuthenticateAdmin;
 };
 
+const SHOP_BOOTSTRAP_WAIT_MS = 2_000;
+const SHOP_BOOTSTRAP_POLL_MS = 100;
+
+/**
+ * Resolve the canonical Shop, allowing a short bounded wait for afterAuth.
+ *
+ * On a first install the layout and page loaders authenticate in parallel.
+ * Only one of them runs afterAuth (which creates the Shop); the other can get
+ * here a few milliseconds before that commit (issue #73). This only re-reads:
+ * it never creates a Shop, and a Shop that does not appear still fails closed.
+ */
+async function resolveShopAwaitingBootstrap(
+  normalizedDomain: string,
+): Promise<CanonicalShopIdentity | null> {
+  const deadline = Date.now() + SHOP_BOOTSTRAP_WAIT_MS;
+  for (;;) {
+    const shop = await resolveCanonicalShopByDomain(normalizedDomain);
+    if (shop || Date.now() >= deadline) return shop;
+    await new Promise((resolve) => setTimeout(resolve, SHOP_BOOTSTRAP_POLL_MS));
+  }
+}
+
 /**
  * Derive branded tenant authority from a verified admin request.
  * Pass route `params` so conflicting shop identifiers in the path are denied.
@@ -70,7 +92,7 @@ export async function requireAdminTenant(
       : undefined;
 
   const normalizedDomain = normalizeVerifiedShopifyDomain(session.shop);
-  const shop = await resolveCanonicalShopByDomain(normalizedDomain);
+  const shop = await resolveShopAwaitingBootstrap(normalizedDomain);
   if (!shop) {
     throw new TenantAuthorityError(
       "canonical_shop_missing",
