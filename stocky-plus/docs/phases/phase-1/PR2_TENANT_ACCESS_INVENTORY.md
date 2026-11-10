@@ -4,10 +4,10 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697`
-**Scanned files:** 508
-**Findings:** 1774
-**Converted paths:** 534
+**Content digest:** `6b663982961ca6641447875acbc51f1971b28bdf4329a74e326f0fc839ff566b`
+**Scanned files:** 510
+**Findings:** 1775
+**Converted paths:** 535
 **Approved exception findings:** 1240
 **Violations:** 0
 
@@ -28,7 +28,7 @@ All 35 approved merchant-owned models must appear below.
 | VariantAbcClass | 259 |
 | ForecastOverride | 258 |
 | SalesDailyAggregate | 320 |
-| ShopSettings | 286 |
+| ShopSettings | 287 |
 | TransferOrder | 262 |
 | Stocktake | 259 |
 | BomComponent | 259 |
@@ -63,11 +63,11 @@ All 35 approved merchant-owned models must appear below.
 |---|---|
 | bootstrap | 1 |
 | other | 78 |
-| route | 85 |
+| route | 84 |
 | script | 51 |
 | service | 33 |
-| tenant_infra | 5 |
-| test | 1477 |
+| tenant_infra | 6 |
+| test | 1478 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -325,11 +325,10 @@ All 35 approved merchant-owned models must appear below.
 | `app/lib/order-facts/sync/webhook.ts` | 254 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 277 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 316 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 19 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 25 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 28 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 29 / `db.shopifyVariantCache.count` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 52 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 21 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 24 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 25 / `db.shopifyVariantCache.count` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 48 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.analytics.tsx` | 47 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.billing.tsx` | 68 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.bundles.tsx` | 14 / `db.bomComponent.findMany` | route | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -789,6 +788,7 @@ All 35 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 219 / `prisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 243 / `prisma.leadTimeSnapshot.count` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 246 / `prisma.leadTimeSnapshot.findUnique` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/first-install-race.test.ts` | 91 / `db.shopSettings.findMany` | test | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/db-isolation/helpers.ts` | 49 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-031 | infrastructure | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/helpers.ts` | 55 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-031 | infrastructure | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/helpers.ts` | 78 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-TEST-031 | migration_tests | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -1675,9 +1675,10 @@ All 35 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/write-atomicity.test.ts` | 57 / `dbA.supplierSkuMapping.create` | test | SupplierSkuMapping | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/write-atomicity.test.ts` | 66 / `prisma.supplier.update` | test | Supplier | direct prisma delegate | approved exception EX-TEST-012 | migration_tests | approved exception | allowlist EX-TEST-012 | EX-TEST-012 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/write-atomicity.test.ts` | 78 / `prisma.supplierSkuMapping.findMany` | test | SupplierSkuMapping | direct prisma delegate | approved exception EX-TEST-012 | migration_tests | approved exception | allowlist EX-TEST-012 | EX-TEST-012 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/after-auth.server.ts` | 46 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/bootstrap.server.ts` | 11 / `rawPrisma` | bootstrap | — | value import of app/db.server | approved exception EX-BOOT-001 | restricted_bootstrap | approved exception | allowlist EX-BOOT-001 | EX-BOOT-001 | Session + Shop bootstrap and session-storage adapter |
 | `app/tenant/db-context.server.ts` | 107 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/tenant/shop-settings.server.ts` | 25 / `db.shopSettings.upsert` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/shop-settings.server.ts` | 32 / `db.shopSettings.findUnique` | tenant_infra | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/tenant-db.server.ts` | 18 / `rawPrisma` | tenant_infra | — | value import of app/db.server | approved exception EX-TDB-001 | tenant_bound_access | approved exception | allowlist EX-TDB-001 | EX-TDB-001 | Tenant-bound DB contract wraps raw client; never returns it to callers |
 | `app/tenant/tenant-db.server.ts` | 1367 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/tenant/tenant-db.server.ts` | 1971 / `$transaction` | tenant_infra | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
@@ -2013,8 +2014,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 508,
-  "findings": 1774,
+  "scannedFiles": 510,
+  "findings": 1775,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2151,6 +2152,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697"
+  "contentDigest": "6b663982961ca6641447875acbc51f1971b28bdf4329a74e326f0fc839ff566b"
 }
 ```
