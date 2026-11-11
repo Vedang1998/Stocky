@@ -29,6 +29,13 @@ function saveBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
+/** The export route answers 409 while the shop's reporting profile is missing. */
+function failureMessage(status: number): string {
+  return status === 409
+    ? "This report is not ready yet. Your store's time zone and currency are still being imported."
+    : "The download could not be prepared. Try again in a moment.";
+}
+
 /**
  * Downloads a CSV through `fetch`, which App Bridge signs with the session
  * token. A plain link or a new tab would reach the server unauthenticated.
@@ -41,13 +48,9 @@ export function CsvDownloadButton({ href, fallbackFilename }: Props) {
     try {
       const response = await fetch(href, { headers: { Accept: "text/csv" } });
       if (!response.ok) {
-        const detail =
-          response.status < 500 ? (await response.text()).slice(0, 200) : "";
         setState({
           status: "failed",
-          message:
-            detail ||
-            "The download could not be prepared. Try again in a moment.",
+          message: failureMessage(response.status),
         });
         return;
       }
