@@ -5,39 +5,37 @@ import {
   getDeadStock,
   getInventoryValuation,
 } from "../services/forecasting.server";
-
-function toCsv(headers: string[], rows: Array<Array<string | number>>): string {
-  const escape = (v: string | number) => {
-    const s = String(v);
-    return s.includes(",") || s.includes('"') || s.includes("\n")
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
-  };
-  return [headers, ...rows].map((r) => r.map(escape).join(",")).join("\n");
-}
+import { fetchLocations } from "../services/shopify-gql.server";
+import { csvDownloadResponse, toCsv } from "../lib/csv.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request });
+  const { admin, db } = await requireAdminTenant({ request });
   const report = new URL(request.url).searchParams.get("report");
 
   if (report === "valuation") {
-    const { lines } = await getInventoryValuation(db);
+    const [{ lines }, locations] = await Promise.all([
+      getInventoryValuation(db),
+      fetchLocations(admin),
+    ]);
+    // Merchants read locations by name; the GID is kept only when Shopify no
+    // longer returns the location (deleted, or beyond the fetched page).
+    const locationNames = new Map(
+      locations.map((location) => [location.id, location.name]),
+    );
     const csv = toCsv(
       ["Variant", "Location", "Quantity", "Unit landed cost", "Value"],
       lines.map((l) => [
         l.title,
-        l.locationId,
+        locationNames.get(l.locationId) ?? l.locationId,
         l.quantity,
         l.unitCost.toFixed(4),
         l.value.toFixed(2),
       ]),
     );
-    return new Response(csv, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="valuation-${new Date().toISOString().slice(0, 10)}.csv"`,
-      },
-    });
+    return csvDownloadResponse(
+      csv,
+      `valuation-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
   }
 
   if (report === "deadstock") {
@@ -51,12 +49,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         d.tiedUpCapital.toFixed(2),
       ]),
     );
-    return new Response(csv, {
-      headers: {
-        "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="deadstock-${new Date().toISOString().slice(0, 10)}.csv"`,
-      },
-    });
+    return csvDownloadResponse(
+      csv,
+      `deadstock-${new Date().toISOString().slice(0, 10)}.csv`,
+    );
   }
 
   return new Response("Unknown report", { status: 400 });
