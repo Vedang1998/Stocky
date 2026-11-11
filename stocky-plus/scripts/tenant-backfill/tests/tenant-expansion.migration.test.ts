@@ -50,6 +50,7 @@ const ALL_MIGRATION_NAMES = [
   "20260905173500_pr5_f3_remaining_integration",
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
+  "20261110220000_inventory_operation_ledger",
   "20261110230000_replenishment_planning_inputs",
 ] as const;
 
@@ -750,8 +751,11 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
        ORDER BY conname`,
     );
     // PR1–PR4 left zero composite FKs. PR5-F1 adds tenant-leading identity FKs
-    // on canonical fact tables only. Legacy merchant tables stay free of them.
+    // on canonical fact tables, and the inventory operation ledger ties each
+    // line to an operation of the same shop. Legacy merchant tables stay free
+    // of them.
     expect(compositeFks.map((row) => row.conname)).toEqual([
+      "InventoryOperationLine_shopId_operationId_fkey",
       "ShopifyInventoryItemFact_shopId_shopifyVariantGid_fkey",
       "ShopifyInventoryLevelFact_shopId_inventoryItemGid_fkey",
       "ShopifyInventoryLevelFact_shopId_locationGid_fkey",

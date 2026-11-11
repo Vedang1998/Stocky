@@ -58,6 +58,8 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   ShopifyOrderLineFact: "ShopifyOrderLineFact",
   ShopifyOrderRefundFact: "ShopifyOrderRefundFact",
   OrderFactObservationInFlight: "OrderFactObservationInFlight",
+  InventoryOperation: "InventoryOperation",
+  InventoryOperationLine: "InventoryOperationLine",
   ReplenishmentSettings: "ReplenishmentSettings",
   ReplenishmentVariantRule: "ReplenishmentVariantRule",
 };
@@ -76,6 +78,8 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "ShopifyOrderLineFact",
   "ShopifyOrderRefundFact",
   "OrderFactObservationInFlight",
+  "InventoryOperation",
+  "InventoryOperationLine",
   "ReplenishmentSettings",
   "ReplenishmentVariantRule",
 ]);

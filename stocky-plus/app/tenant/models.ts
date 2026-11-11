@@ -22,6 +22,16 @@ export const PR6_A_CHILD_MERCHANT_MODELS = [
   "ShopifyOrderRefundTransactionFact",
 ] as const;
 
+/**
+ * Inventory-control operation ledger (app-initiated Shopify inventory writes).
+ * Both tables are shopId-only direct models; lines carry a composite FK to
+ * their operation.
+ */
+export const INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS = [
+  "InventoryOperation",
+  "InventoryOperationLine",
+] as const;
+
 /** Replenishment planning inputs (Stocky Parity worksheet). */
 export const REPLENISHMENT_DIRECT_MERCHANT_MODELS = [
   "ReplenishmentSettings",
@@ -50,6 +60,7 @@ export const DIRECT_MERCHANT_MODELS = [
   "ShopifyInventoryLevelFact",
   "CatalogObservationInFlight",
   ...PR6_A_DIRECT_MERCHANT_MODELS,
+  ...INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS,
   ...REPLENISHMENT_DIRECT_MERCHANT_MODELS,
 ] as const;
 
@@ -108,6 +119,8 @@ export const MERCHANT_DELEGATE_NAMES = {
   ShopifyOrderLineFact: "shopifyOrderLineFact",
   ShopifyOrderRefundFact: "shopifyOrderRefundFact",
   OrderFactObservationInFlight: "orderFactObservationInFlight",
+  InventoryOperation: "inventoryOperation",
+  InventoryOperationLine: "inventoryOperationLine",
   ReplenishmentSettings: "replenishmentSettings",
   ReplenishmentVariantRule: "replenishmentVariantRule",
   SupplierSkuMapping: "supplierSkuMapping",

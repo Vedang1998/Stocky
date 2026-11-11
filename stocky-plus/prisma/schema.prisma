@@ -90,6 +90,8 @@ model Shop {
   shopifyOrderAgreementSaleFacts ShopifyOrderAgreementSaleFact[]
   shopifyOrderRefundTransactionFacts ShopifyOrderRefundTransactionFact[]
   orderFactObservationsInFlight OrderFactObservationInFlight[]
+  inventoryOperations InventoryOperation[]
+  inventoryOperationLines InventoryOperationLine[]
   replenishmentSettings ReplenishmentSettings[]
   replenishmentVariantRules ReplenishmentVariantRule[]
 }
@@ -598,6 +600,137 @@ model StocktakeLineItem {
   @@index([shopId])
   @@index([shopId, stocktakeId])
   @@unique([shopId, id])
+}
+
+// ─── Inventory control: operation ledger ─────────────────────────────────────
+// Every app-initiated Shopify inventory quantity write (adjustment, stocktake
+// result, receipt, reversal) is recorded here before it is sent. One operation
+// is one business action keyed by a caller-stable idempotency key; its lines
+// are the per item/location deltas. Request columns are immutable after insert
+// (guarded by stocky_inventory_operation_guard); only execution and result
+// columns change, and terminal statuses never change again.
+
+enum InventoryOperationKind {
+  ADJUSTMENT
+  STOCKTAKE
+  RECEIPT
+  TRANSFER
+  REVERSAL
+}
+
+enum InventoryOperationStatus {
+  /// Recorded; nothing sent to Shopify yet.
+  PENDING
+  /// An executor holds the lease and may be sending batches.
+  APPLYING
+  /// Some lines are in flight with an unconfirmed outcome; resend with the same keys.
+  RETRY_PENDING
+  /// The write capability's kill switch was off at execution time; nothing sent.
+  BLOCKED
+  /// Every line confirmed applied by Shopify.
+  APPLIED
+  /// Some lines applied and others failed or conflicted. Terminal.
+  PARTIALLY_APPLIED
+  /// No line applied; every line failed or conflicted. Terminal.
+  FAILED
+}
+
+enum InventoryOperationLineStatus {
+  PENDING
+  /// Sent (or about to be sent) under batchKey; outcome not yet confirmed.
+  IN_FLIGHT
+  APPLIED
+  /// Shopify rejected the change for a reason other than a stale quantity.
+  FAILED
+  /// changeFromQuantity no longer matched Shopify (CHANGE_FROM_QUANTITY_STALE).
+  CONFLICT
+}
+
+enum InventoryActorChannel {
+  ADMIN
+  POS
+  SYSTEM
+}
+
+model InventoryOperation {
+  id                   String                   @id @default(cuid())
+  shopId               String
+  idempotencyKey       String                   @db.VarChar(200)
+  /// sha256 of the canonical inventory-affecting payload; a replayed key must match.
+  payloadDigest        String                   @db.VarChar(64)
+  kind                 InventoryOperationKind
+  /// Kill-switch capability checked before any Shopify call (lib/feature-flags).
+  writeCapability      String                   @db.VarChar(64)
+  sourceType           String                   @db.VarChar(64)
+  sourceId             String                   @db.VarChar(191)
+  /// Shopify inventory adjustment reason code, e.g. correction, cycle_count_available.
+  reason               String                   @db.VarChar(64)
+  /// Shopify quantity name adjusted, e.g. available, damaged.
+  quantityName         String                   @db.VarChar(32)
+  referenceDocumentUri String?                  @db.VarChar(512)
+  actorShopifyUserId   String?                  @db.VarChar(64)
+  actorDisplayName     String?                  @db.VarChar(255)
+  actorChannel         InventoryActorChannel
+  note                 String?                  @db.VarChar(2000)
+  /// Operation whose applied lines this operation reverses (kind REVERSAL).
+  reversesOperationId  String?
+  status               InventoryOperationStatus @default(PENDING)
+  lineCount            Int
+  appliedLineCount     Int                      @default(0)
+  failedLineCount      Int                      @default(0)
+  conflictLineCount    Int                      @default(0)
+  batchSequence        Int                      @default(0)
+  attemptCount         Int                      @default(0)
+  leaseOwner           String?                  @db.VarChar(64)
+  leaseExpiresAt       DateTime?
+  lastAttemptAt        DateTime?
+  lastErrorCode        String?                  @db.VarChar(64)
+  lastErrorMessage     String?                  @db.VarChar(1000)
+  completedAt          DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  shop  Shop                     @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lines InventoryOperationLine[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, idempotencyKey])
+  @@index([shopId, sourceType, sourceId])
+  @@index([shopId, status, createdAt])
+  @@index([shopId, createdAt])
+  @@index([shopId, reversesOperationId])
+}
+
+model InventoryOperationLine {
+  id                        String                       @id @default(cuid())
+  shopId                    String
+  operationId               String
+  lineNumber                Int
+  inventoryItemGid          String                       @db.VarChar(256)
+  variantGid                String?                      @db.VarChar(256)
+  locationGid               String                       @db.VarChar(256)
+  delta                     Int
+  /// Shopify compare-and-swap quantity; null opts out of the check.
+  changeFromQuantity        Int?
+  status                    InventoryOperationLineStatus @default(PENDING)
+  /// Idempotency key of the Shopify request that carries (or carried) this line.
+  batchKey                  String?                      @db.VarChar(128)
+  shopifyAdjustmentGroupGid String?                      @db.VarChar(256)
+  quantityAfterChange       Int?
+  errorCode                 String?                      @db.VarChar(64)
+  errorMessage              String?                      @db.VarChar(1000)
+  appliedAt                 DateTime?
+  createdAt                 DateTime                     @default(now())
+  updatedAt                 DateTime                     @updatedAt
+
+  shop      Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  operation InventoryOperation @relation(fields: [shopId, operationId], references: [shopId, id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, operationId, lineNumber])
+  @@index([shopId, operationId, status])
+  @@index([shopId, inventoryItemGid, locationGid])
+  @@index([shopId, batchKey])
 }
 
 // ─── Module 9: Bill of Materials ──────────────────────────────────────────────

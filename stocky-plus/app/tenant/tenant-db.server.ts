@@ -1888,6 +1888,8 @@ export type TenantDb = {
   shopifyOrderLineFact: TenantModelDelegate;
   shopifyOrderRefundFact: TenantModelDelegate;
   orderFactObservationInFlight: TenantModelDelegate;
+  inventoryOperation: TenantModelDelegate;
+  inventoryOperationLine: TenantModelDelegate;
   replenishmentSettings: TenantModelDelegate;
   replenishmentVariantRule: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
