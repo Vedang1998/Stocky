@@ -641,7 +641,6 @@ export async function listAdjustments(
       canReverse:
         operation.kind === "ADJUSTMENT" &&
         reversedByOperationId === null &&
-        own.some((line) => line.status === "APPLIED") &&
         (operation.status === "APPLIED" ||
           operation.status === "PARTIALLY_APPLIED"),
       canResume: !TERMINAL_OPERATION_STATUSES.has(operation.status),

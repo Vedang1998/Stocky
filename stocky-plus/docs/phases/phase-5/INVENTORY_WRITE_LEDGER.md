@@ -149,6 +149,45 @@ A transfer that carries a `shopifyTransferId` from the earlier native path is
 not received by the app. Using Shopify's native transfer objects needs
 transfer scopes the app does not request and is an owner decision.
 
+## Adjustments
+
+A manual adjustment (`app/services/adjustments/`, page `/app/adjustments`) has
+no table of its own: it is one ledger operation of kind `ADJUSTMENT` with
+source type `InventoryAdjustment`, and the ledger is its history.
+
+- **One form, one adjustment.** The page issues a submission ID with every
+  load. It is the operation's source ID and its idempotency key
+  (`adjustment:<id>`), so a form submitted twice, or twice at once, is recorded
+  and sent once. The second request is answered from the ledger without
+  reading or changing anything else.
+- **Input.** One item per line: a SKU, barcode or variant ID, then a quantity
+  (comma, tab or semicolon separated, so two spreadsheet columns paste as they
+  are). Up to 250 items. Every line must match exactly one variant of the
+  shop with a linked inventory item; otherwise nothing is recorded and each
+  bad line is named.
+- **Add or remove** sends the signed amount as a relative change.
+- **Set** reads Shopify's `available` for each item at the location just
+  before recording, records the difference, and sends it with
+  `changeFromQuantity`, so a sale made in between makes Shopify refuse that
+  line instead of being overwritten. An item that is not stocked at the
+  location is refused, never treated as 0. Items already at the target are
+  left out.
+- **Reasons** are a fixed list of codes Shopify accepts for `available`
+  (correction, recount, damaged, theft or loss, received, returned to stock,
+  promotion or donation, other), so the reason also shows in Shopify's own
+  inventory history.
+- **Reversal** applies the opposite of the applied lines, once per
+  adjustment, by a named staff member; a reversal cannot be reversed.
+- **Report.** The history lists every adjustment and reversal with its
+  staff ID, location, note and the result Shopify gave for each line, and
+  exports the chosen period as CSV (one row per line). An export refuses a
+  period of more than 2,000 adjustments rather than returning part of it.
+- Gated by `FEATURE_ADJUSTMENT_WRITES`. While it is off nothing is recorded.
+
+Not built yet: merchant-defined reasons, attachments, approval before an
+adjustment is applied, and shop-timezone dates (the history and the export use
+UTC).
+
 ## Limits and known gaps
 
 - 5,000 lines per operation, 250 changes per Shopify request (default batch

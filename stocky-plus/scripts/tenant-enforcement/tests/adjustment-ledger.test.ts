@@ -17,6 +17,7 @@ import {
   type AdjustmentResult,
   type SubmitAdjustmentInput,
 } from "../../../app/services/adjustments/adjustment.server";
+import { recordInventoryOperation } from "../../../app/services/inventory-writes/ledger.server";
 import type { ReadAvailableQuantities } from "../../../app/services/inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../../../app/services/inventory-writes/types";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
@@ -77,7 +78,9 @@ describe("inventory adjustments on the inventory ledger", () => {
     );
   };
 
-  const enabled = (extra: Partial<AdjustmentOptions> = {}): AdjustmentOptions => ({
+  const enabled = (
+    extra: Partial<AdjustmentOptions> = {},
+  ): AdjustmentOptions => ({
     sendBatch: shopify.send,
     isCapabilityEnabled: () => true,
     readAvailable,
@@ -272,10 +275,10 @@ describe("inventory adjustments on the inventory ledger", () => {
     it("applies each signed change once and records the reason, the staff member and the note", async () => {
       const submissionId = randomUUID();
 
-      const result = await submit(
-        "RED-75, -3\n0000000000024, 4",
-        { submissionId, note: "  Dropped a case  " },
-      );
+      const result = await submit("RED-75, -3\n0000000000024, 4", {
+        submissionId,
+        note: "  Dropped a case  ",
+      });
 
       expect(result).toMatchObject({
         ok: true,
@@ -389,10 +392,11 @@ describe("inventory adjustments on the inventory ledger", () => {
 
     it.each([
       ["no submission ID", { submissionId: null }],
-      ["a submission ID that is not one the page issues", { submissionId: "1" }],
+      [
+        "a submission ID that is not one the page issues",
+        { submissionId: "1" },
+      ],
       ["no location", { locationId: null }],
-      ["a deactivated location", { locationId: INACTIVE }],
-      ["another shop's location", { locationId: OTHER_SHOPS_LOCATION }],
       ["a reason the app does not offer", { reason: "movement_created" }],
       ["no reason", { reason: "" }],
       ["an unknown mode", { mode: "MULTIPLY" }],
@@ -400,6 +404,18 @@ describe("inventory adjustments on the inventory ledger", () => {
     ])("refuses %s", async (_label, extra) => {
       await expectNothingRecorded(
         await submit("RED-75, -3", extra as Partial<SubmitAdjustmentInput>),
+      );
+    });
+
+    it.each([
+      ["a deactivated location", INACTIVE],
+      ["another shop's location", OTHER_SHOPS_LOCATION],
+    ])("refuses %s and says how to fix it", async (_label, locationId) => {
+      const failure = await expectNothingRecorded(
+        await submit("RED-75, -3", { locationId }),
+      );
+      expect(failure.error).toBe(
+        "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.",
       );
     });
 
@@ -479,7 +495,11 @@ describe("inventory adjustments on the inventory ledger", () => {
       options: AdjustmentOptions = enabled(),
       extra: Partial<SubmitAdjustmentInput> = {},
     ) =>
-      submit(linesText, { mode: "SET", reason: "cycle_count_available", ...extra }, options);
+      submit(
+        linesText,
+        { mode: "SET", reason: "cycle_count_available", ...extra },
+        options,
+      );
 
     it("moves each quantity to its target from what Shopify holds now", async () => {
       const result = await set("RED-75, 12\nWHT-75, 0");
@@ -576,6 +596,24 @@ describe("inventory adjustments on the inventory ledger", () => {
         "CONFLICT",
         "APPLIED",
       ]);
+    });
+
+    it("answers a resubmitted form from the ledger without reading Shopify again", async () => {
+      const again = input("RED-75, 12", {
+        mode: "SET",
+        reason: "cycle_count_available",
+      });
+      await submitAdjustment(dbA, null, STAFF, again, enabled());
+
+      const second = await submitAdjustment(dbA, null, STAFF, again, enabled());
+
+      expect(second).toMatchObject({
+        ok: true,
+        changedLineCount: 1,
+        alreadySubmitted: true,
+      });
+      expect(liveReads).toBe(1);
+      expect(shopify.requests).toHaveLength(1);
     });
 
     it("keeps the first targets when the same form is submitted twice at once", async () => {
@@ -706,7 +744,13 @@ describe("inventory adjustments on the inventory ledger", () => {
 
     it("sends nothing more when an adjustment is reversed again", async () => {
       const operationId = applied(await submit("RED-75, -3"));
-      await reverseAdjustment(dbA, null, STAFF, { operationId, note: null }, enabled());
+      await reverseAdjustment(
+        dbA,
+        null,
+        STAFF,
+        { operationId, note: null },
+        enabled(),
+      );
 
       const again = await reverseAdjustment(
         dbA,
@@ -740,7 +784,13 @@ describe("inventory adjustments on the inventory ledger", () => {
 
     it("refuses to reverse a reversal", async () => {
       const operationId = applied(await submit("RED-75, -3"));
-      await reverseAdjustment(dbA, null, STAFF, { operationId, note: null }, enabled());
+      await reverseAdjustment(
+        dbA,
+        null,
+        STAFF,
+        { operationId, note: null },
+        enabled(),
+      );
       const [, reversal] = await operations();
 
       const result = failed(
@@ -819,7 +869,9 @@ describe("inventory adjustments on the inventory ledger", () => {
       const first = applied(await submit("RED-75, -3", { note: "Breakage" }));
       await tick();
       shopify.loseNextResponse();
-      const unfinished = failed(await submit("WHT-75, 2", { reason: "received" }));
+      const unfinished = failed(
+        await submit("WHT-75, 2", { reason: "received" }),
+      );
       await tick();
       await reverseAdjustment(
         dbA,
@@ -901,6 +953,35 @@ describe("inventory adjustments on the inventory ledger", () => {
       expect(seen).toEqual(ids);
     });
 
+    it("pages correctly through adjustments recorded in the same millisecond", async () => {
+      for (let i = 0; i < 3; i += 1) await submit("RED-75, 1");
+      // The ledger freezes createdAt, so the tie is forced with its guard
+      // trigger out of the way for this one statement.
+      await prisma.$transaction([
+        prisma.$executeRawUnsafe(
+          `SET LOCAL session_replication_role = replica`,
+        ),
+        prisma.$executeRawUnsafe(
+          `UPDATE "InventoryOperation" SET "createdAt" = '2026-11-11 12:00:00.000'`,
+        ),
+      ]);
+
+      const seen: string[] = [];
+      let after = null;
+      for (let page = 0; page < 4; page += 1) {
+        const entries = await listAdjustments(dbA, { after, take: 1 });
+        if (entries.length === 0) break;
+        seen.push(entries[0].operationId);
+        after = {
+          createdAt: entries[0].createdAt,
+          operationId: entries[0].operationId,
+        };
+      }
+
+      expect(seen).toHaveLength(3);
+      expect(new Set(seen).size).toBe(3);
+    });
+
     it("filters by the period the adjustment was recorded in", async () => {
       const operationId = applied(await submit("RED-75, 1"));
       const { createdAt } = await prisma.inventoryOperation.findUniqueOrThrow({
@@ -909,34 +990,58 @@ describe("inventory adjustments on the inventory ledger", () => {
       const before = new Date(createdAt.getTime() - 1);
       const later = new Date(createdAt.getTime() + 1);
 
-      expect(await listAdjustments(dbA, { from: createdAt, to: createdAt })).toHaveLength(1);
+      expect(
+        await listAdjustments(dbA, { from: createdAt, to: createdAt }),
+      ).toHaveLength(1);
       expect(await listAdjustments(dbA, { to: before })).toEqual([]);
       expect(await listAdjustments(dbA, { from: later })).toEqual([]);
     });
 
-    it("leaves stocktake and transfer operations out of the adjustment history", async () => {
+    it("leaves stocktake and transfer operations out of the history and out of reach of its controls", async () => {
       await submit("RED-75, 1");
-      const shopA = await prisma.shop.findUniqueOrThrow({
-        where: { myshopifyDomain: SHOP_A },
-      });
-      await prisma.inventoryOperation.create({
-        data: {
-          shopId: shopA.id,
-          kind: "STOCKTAKE",
-          status: "PENDING",
-          capability: "stocktakeInventoryWrites",
-          idempotencyKey: "Stocktake:x:1",
-          sourceType: "Stocktake",
-          sourceId: "x",
-          reason: "cycle_count_available",
-          quantityName: "available",
-          actorChannel: "ADMIN",
-          payloadDigest: "0".repeat(64),
-          lineCount: 0,
-        },
+      await recordInventoryOperation(dbA, {
+        kind: "STOCKTAKE",
+        idempotencyKey: "Stocktake:count-1:1",
+        source: { type: "Stocktake", id: "count-1" },
+        reason: "cycle_count_available",
+        quantityName: "available",
+        referenceDocumentUri: null,
+        actor: STAFF,
+        note: null,
+        lines: [
+          {
+            inventoryItemId: item(102),
+            variantId: WHITE,
+            locationId: SHELF,
+            delta: 1,
+            changeFromQuantity: null,
+          },
+        ],
       });
 
+      const { id: stocktakeOperationId } =
+        await prisma.inventoryOperation.findFirstOrThrow({
+          where: { kind: "STOCKTAKE" },
+        });
+
       expect(await listAdjustments(dbA)).toHaveLength(1);
+      expect(
+        failed(
+          await resumeAdjustment(dbA, null, stocktakeOperationId, enabled()),
+        ).error,
+      ).toBe("Adjustment not found");
+      expect(
+        failed(
+          await reverseAdjustment(
+            dbA,
+            null,
+            STAFF,
+            { operationId: stocktakeOperationId, note: null },
+            enabled(),
+          ),
+        ).error,
+      ).toBe("Adjustment not found");
+      expect(shopify.level(102)).toBe(20);
     });
 
     it("collects a whole period for the report and says when it holds more than the limit", async () => {
@@ -945,8 +1050,16 @@ describe("inventory adjustments on the inventory ledger", () => {
         await tick();
       }
 
-      const whole = await listAdjustmentsForExport(dbA, {}, { limit: 5, pageSize: 2 });
-      const cut = await listAdjustmentsForExport(dbA, {}, { limit: 4, pageSize: 2 });
+      const whole = await listAdjustmentsForExport(
+        dbA,
+        {},
+        { limit: 5, pageSize: 2 },
+      );
+      const cut = await listAdjustmentsForExport(
+        dbA,
+        {},
+        { limit: 4, pageSize: 2 },
+      );
 
       expect(whole.truncated).toBe(false);
       expect(whole.entries).toHaveLength(5);

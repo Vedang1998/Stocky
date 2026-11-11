@@ -204,6 +204,13 @@ const LINE_RESULT: Record<InventoryOperationLineStatus, string> = {
   IN_FLIGHT: "Waiting for Shopify to confirm",
 };
 
+/**
+ * Marks the option a select starts on. A Polaris select ignores a `value`
+ * attribute in server-rendered markup, and picks its first option unless one
+ * is marked.
+ */
+const chosen = (isChosen: boolean) => (isChosen ? { selected: true } : {});
+
 const signed = (delta: number) => (delta > 0 ? `+${delta}` : String(delta));
 
 /** `2026-11-11 21:40 UTC`; the same text on the server and in the browser. */
@@ -402,38 +409,35 @@ export default function Adjustments() {
             <input type="hidden" name="submissionId" value={submissionId} />
             <s-stack direction="block" gap="base">
               <s-stack direction="inline" gap="base">
-                <s-select
-                  label="Location"
-                  name="locationId"
-                  value={values.locationId ?? locations[0].id}
-                  required
-                >
+                <s-select label="Location" name="locationId" required>
                   {locations.map((l) => (
-                    <s-option key={l.id} value={l.id}>
+                    <s-option
+                      key={l.id}
+                      value={l.id}
+                      {...chosen(l.id === values.locationId)}
+                    >
                       {l.name}
                     </s-option>
                   ))}
                 </s-select>
-                <s-select
-                  label="Reason"
-                  name="reason"
-                  value={values.reason ?? ADJUSTMENT_REASONS[0].code}
-                  required
-                >
+                <s-select label="Reason" name="reason" required>
                   {ADJUSTMENT_REASONS.map((reason) => (
-                    <s-option key={reason.code} value={reason.code}>
+                    <s-option
+                      key={reason.code}
+                      value={reason.code}
+                      {...chosen(reason.code === values.reason)}
+                    >
                       {reason.label}
                     </s-option>
                   ))}
                 </s-select>
-                <s-select
-                  label="Quantities below"
-                  name="mode"
-                  value={values.mode ?? ADJUSTMENT_MODES[0]}
-                  required
-                >
+                <s-select label="Quantities below" name="mode" required>
                   {ADJUSTMENT_MODES.map((mode) => (
-                    <s-option key={mode} value={mode}>
+                    <s-option
+                      key={mode}
+                      value={mode}
+                      {...chosen(mode === values.mode)}
+                    >
                       {MODE_LABEL[mode]}
                     </s-option>
                   ))}
@@ -443,7 +447,7 @@ export default function Adjustments() {
                 label="Items"
                 name="lines"
                 rows={8}
-                defaultValue={values.lines ?? ""}
+                value={values.lines ?? ""}
                 placeholder={"ABC-123, 5\n0123456789012, -2"}
                 details={`One item per line: its SKU or barcode, a comma, then the quantity. Use a minus sign to remove units. Two columns copied from a spreadsheet can be pasted as they are. Up to ${MAX_ADJUSTMENT_LINES} items.`}
                 required
@@ -451,7 +455,7 @@ export default function Adjustments() {
               <s-text-field
                 label="Note (optional)"
                 name="note"
-                defaultValue={values.note ?? ""}
+                value={values.note ?? ""}
                 maxLength={MAX_ADJUSTMENT_NOTE_LENGTH}
               />
               <s-stack direction="inline" gap="small" alignItems="center">
@@ -481,13 +485,9 @@ export default function Adjustments() {
               <s-date-field
                 label="From (UTC)"
                 name="from"
-                defaultValue={filter.from}
+                value={filter.from}
               />
-              <s-date-field
-                label="To (UTC)"
-                name="to"
-                defaultValue={filter.to}
-              />
+              <s-date-field label="To (UTC)" name="to" value={filter.to} />
               <s-button type="submit" variant="secondary">
                 Show
               </s-button>

@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `e505dd314ae69abafdc161f4f97f17c295823b48d348704b77f1df3390534b50`
-**Scanned files:** 555
-**Findings:** 1872
-**Converted paths:** 581
-**Approved exception findings:** 1291
+**Content digest:** `9dd2970d19ffcbe1b7c1049e165b6ba6fef8314ec1a48df430eead3e570935de`
+**Scanned files:** 565
+**Findings:** 1893
+**Converted paths:** 588
+**Approved exception findings:** 1305
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,43 +21,43 @@ All 37 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 642 |
-| PurchaseOrder | 354 |
-| ShopifyVariantCache | 373 |
-| InventorySnapshot | 328 |
-| VariantAbcClass | 269 |
-| ForecastOverride | 268 |
-| SalesDailyAggregate | 330 |
-| ShopSettings | 296 |
-| TransferOrder | 277 |
-| Stocktake | 275 |
-| BomComponent | 269 |
-| LowStockAlert | 265 |
-| SyncApplicationReceipt | 285 |
-| ShopifyProductFact | 314 |
-| ShopifyProductCollectionMembership | 266 |
-| ShopifyVariantFact | 286 |
-| ShopifyInventoryItemFact | 278 |
-| ShopifyLocationFact | 273 |
-| ShopifyInventoryLevelFact | 287 |
-| CatalogObservationInFlight | 262 |
-| ShopifyOrderFact | 251 |
-| ShopifyOrderLineFact | 251 |
-| ShopifyOrderRefundFact | 251 |
-| OrderFactObservationInFlight | 254 |
-| InventoryOperation | 280 |
-| InventoryOperationLine | 268 |
-| SupplierSkuMapping | 330 |
-| VolumePriceTier | 259 |
-| LeadTimeSnapshot | 282 |
-| POLineItem | 281 |
-| TransferLineItem | 269 |
-| StocktakeLineItem | 270 |
-| ShopifyOrderRefundLineFact | 251 |
-| ShopifyOrderAdjustmentFact | 251 |
-| ShopifyOrderAgreementFact | 251 |
-| ShopifyOrderAgreementSaleFact | 251 |
-| ShopifyOrderRefundTransactionFact | 251 |
+| Supplier | 645 |
+| PurchaseOrder | 357 |
+| ShopifyVariantCache | 380 |
+| InventorySnapshot | 331 |
+| VariantAbcClass | 272 |
+| ForecastOverride | 271 |
+| SalesDailyAggregate | 333 |
+| ShopSettings | 299 |
+| TransferOrder | 280 |
+| Stocktake | 278 |
+| BomComponent | 272 |
+| LowStockAlert | 268 |
+| SyncApplicationReceipt | 288 |
+| ShopifyProductFact | 317 |
+| ShopifyProductCollectionMembership | 269 |
+| ShopifyVariantFact | 289 |
+| ShopifyInventoryItemFact | 282 |
+| ShopifyLocationFact | 277 |
+| ShopifyInventoryLevelFact | 290 |
+| CatalogObservationInFlight | 265 |
+| ShopifyOrderFact | 254 |
+| ShopifyOrderLineFact | 254 |
+| ShopifyOrderRefundFact | 254 |
+| OrderFactObservationInFlight | 257 |
+| InventoryOperation | 293 |
+| InventoryOperationLine | 272 |
+| SupplierSkuMapping | 333 |
+| VolumePriceTier | 262 |
+| LeadTimeSnapshot | 285 |
+| POLineItem | 284 |
+| TransferLineItem | 272 |
+| StocktakeLineItem | 273 |
+| ShopifyOrderRefundLineFact | 254 |
+| ShopifyOrderAdjustmentFact | 254 |
+| ShopifyOrderAgreementFact | 254 |
+| ShopifyOrderAgreementSaleFact | 254 |
+| ShopifyOrderRefundTransactionFact | 254 |
 
 ## Counts by execution category
 
@@ -67,9 +67,9 @@ All 37 approved merchant-owned models must appear below.
 | other | 78 |
 | route | 61 |
 | script | 51 |
-| service | 104 |
+| service | 110 |
 | tenant_infra | 5 |
-| test | 1528 |
+| test | 1543 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -197,6 +197,7 @@ All 37 approved merchant-owned models must appear below.
 | EX-ENF-040 | `scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
 | EX-ENF-041 | `scripts/tenant-enforcement/tests/inventory-operation-ledger.test.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
 | EX-ENF-042 | `scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
+| EX-ENF-043 | `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | pr3_database_enforcement | maintenance_only | phase-1-pr3-database-enforcement | Retained as enforcement ops tooling; production apply remains separately authorized |
 | EX-TEST-001 | `app/tenant/__tests__/helpers.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-002 | `app/tenant/__tests__/authority.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-003 | `app/tenant/__tests__/bootstrap.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
@@ -390,6 +391,12 @@ All 37 approved merchant-owned models must appear below.
 | `app/routes/app.warehouse.tsx` | 55 / `db.shopifyVariantCache.findFirst` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 62 / `db.purchaseOrder.findFirst` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.warehouse.tsx` | 81 / `db.purchaseOrder.findFirst` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/services/adjustments/adjustment.server.ts` | 127 / `db.shopifyVariantCache.findMany` | service | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/adjustments/adjustment.server.ts` | 145 / `db.shopifyVariantCache.findMany` | service | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/adjustments/adjustment.server.ts` | 207 / `db.inventoryOperation.findFirst` | service | InventoryOperation | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/adjustments/adjustment.server.ts` | 574 / `db.inventoryOperation.findMany` | service | InventoryOperation | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/adjustments/adjustment.server.ts` | 594 / `db.inventoryOperationLine.findMany` | service | InventoryOperationLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/adjustments/adjustment.server.ts` | 607 / `db.inventoryOperation.findMany` | service | InventoryOperation | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 64 / `db.inventorySnapshot.findMany` | service | InventorySnapshot | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 85 / `db.salesDailyAggregate.findMany` | service | SalesDailyAggregate | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/forecasting.server.ts` | 102 / `db.purchaseOrder.findMany` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
@@ -1914,6 +1921,21 @@ All 37 approved merchant-owned models must appear below.
 | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | 1115 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-BF-032 | pr1_maintenance_backfill | approved exception | tenant:access:audit | EX-BF-032 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
 | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | 1143 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-BF-032 | pr1_maintenance_backfill | approved exception | tenant:access:audit | EX-BF-032 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
 | `scripts/tenant-backfill/tests/tenant-expansion.migration.test.ts` | 1153 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-BF-032 | pr1_maintenance_backfill | approved exception | tenant:access:audit | EX-BF-032 | PR 1 ownership backfill / diagnose / status tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 140 / `prisma.inventoryOperation.findMany` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 164 / `prisma.shopifyLocationFact.createMany` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 174 / `prisma.shopifyInventoryItemFact.createMany` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 186 / `prisma.shopifyVariantCache.createMany` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 234 / `prisma.shopifyVariantCache.create` | test | ShopifyVariantCache | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 260 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 387 / `prisma.inventoryOperation.count` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 538 / `prisma.inventoryOperation.count` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 551 / `prisma.inventoryOperation.count` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 570 / `prisma.inventoryOperation.count` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 960 / `$transaction` | test | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 961 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 964 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 987 / `prisma.inventoryOperation.findUniqueOrThrow` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
+| `scripts/tenant-enforcement/tests/adjustment-ledger.test.ts` | 1023 / `prisma.inventoryOperation.findFirstOrThrow` | test | InventoryOperation | direct prisma delegate | approved exception EX-ENF-043 | pr3_database_enforcement | approved exception | allowlist EX-ENF-043 | EX-ENF-043 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
 | `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 29 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-ENF-012 | infrastructure | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
 | `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 30 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
 | `scripts/tenant-enforcement/tests/enforcement.migration.test.ts` | 31 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-ENF-012 | pr3_database_enforcement | approved exception | tenant:access:audit | EX-ENF-012 | PR 3 database enforcement preflight/roles/RLS/apply/verify tooling (exact file) |
@@ -2115,8 +2137,8 @@ All 37 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 555,
-  "findings": 1872,
+  "scannedFiles": 565,
+  "findings": 1893,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2158,6 +2180,7 @@ All 37 approved merchant-owned models must appear below.
     "EX-ENF-039",
     "EX-ENF-041",
     "EX-ENF-042",
+    "EX-ENF-043",
     "EX-IDX-014",
     "EX-IDX-016",
     "EX-RAW-002",
@@ -2257,6 +2280,6 @@ All 37 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "e505dd314ae69abafdc161f4f97f17c295823b48d348704b77f1df3390534b50"
+  "contentDigest": "9dd2970d19ffcbe1b7c1049e165b6ba6fef8314ec1a48df430eead3e570935de"
 }
 ```

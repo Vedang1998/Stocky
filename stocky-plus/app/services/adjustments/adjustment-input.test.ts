@@ -111,7 +111,9 @@ describe("parseAdjustmentLines", () => {
   it("refuses more lines than one adjustment may hold", () => {
     const text = (count: number) =>
       Array.from({ length: count }, (_, i) => `SKU-${i},1`).join("\n");
-    expect(lines(text(MAX_ADJUSTMENT_LINES))).toHaveLength(MAX_ADJUSTMENT_LINES);
+    expect(lines(text(MAX_ADJUSTMENT_LINES))).toHaveLength(
+      MAX_ADJUSTMENT_LINES,
+    );
     expect(errors(text(MAX_ADJUSTMENT_LINES + 1))).toEqual([
       `One adjustment can change at most ${MAX_ADJUSTMENT_LINES} items. Split the rest into another adjustment.`,
     ]);
