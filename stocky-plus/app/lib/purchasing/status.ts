@@ -22,6 +22,9 @@ export type PurchaseOrderStatus = (typeof PURCHASE_ORDER_STATUSES)[number];
 /** Statuses whose remaining quantities count as incoming stock. */
 export const INCOMING_STATUSES = ["SENT", "ORDERED", "PARTIAL"] as const;
 
+/** Statuses a delivery can be received against. */
+export const RECEIVABLE_STATUSES = INCOMING_STATUSES;
+
 export const STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   DRAFT: "Draft",
   SENT: "Sent",
@@ -149,6 +152,46 @@ export function canEditLines(state: LifecycleState): boolean {
     !state.archived &&
     ["DRAFT", "SENT", "ORDERED", "PARTIAL"].includes(state.status)
   );
+}
+
+/** Why a delivery cannot be received against the order, or null when it can. */
+export function receivingDenial(state: LifecycleState): string | null {
+  if (state.archived) {
+    return "Archived purchase orders are read-only. Unarchive it first.";
+  }
+  if (state.status === "DRAFT") {
+    return "Send this purchase order or mark it as ordered before receiving it.";
+  }
+  return (RECEIVABLE_STATUSES as readonly string[]).includes(state.status)
+    ? null
+    : `A ${STATUS_LABELS[state.status].toLowerCase()} purchase order cannot be received.`;
+}
+
+/**
+ * Status once received quantities have changed. Receiving moves an open order
+ * to PARTIAL or RECEIVED and reversing a receipt moves it back; draft, closed
+ * and cancelled orders keep their status.
+ */
+export function statusAfterReceiving(
+  status: PurchaseOrderStatus,
+  lines: readonly {
+    orderedQty: number;
+    receivedQty: number;
+    cancelledQty: number;
+  }[],
+  wasMarkedOrdered: boolean,
+): PurchaseOrderStatus {
+  if (!["SENT", "ORDERED", "PARTIAL", "RECEIVED"].includes(status)) {
+    return status;
+  }
+  if (!lines.some((line) => line.receivedQty > 0)) {
+    if (status === "SENT" || status === "ORDERED") return status;
+    return wasMarkedOrdered ? "ORDERED" : "SENT";
+  }
+  const outstanding = lines.some(
+    (line) => line.orderedQty - line.cancelledQty - line.receivedQty > 0,
+  );
+  return outstanding ? "PARTIAL" : "RECEIVED";
 }
 
 export function isIncoming(status: PurchaseOrderStatus): boolean {

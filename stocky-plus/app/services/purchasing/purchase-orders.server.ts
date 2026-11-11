@@ -44,6 +44,7 @@ import {
   requireActiveLocation,
 } from "./locations.server";
 import {
+  assertNoReceiptInFlight,
   claimPurchaseOrder,
   effectiveCharges,
   lifecycleStateOf,
@@ -830,6 +831,7 @@ export async function updatePurchaseOrderLine(
         quantity: `Quantity cannot be less than the ${committed} already received or cancelled.`,
       });
     }
+    if (input.quantity < line.orderedQty) await assertNoReceiptInFlight(tx, po.id);
 
     const data: Record<string, unknown> = {};
     if (input.quantity !== line.orderedQty) data.orderedQty = input.quantity;
@@ -942,6 +944,7 @@ export async function setLineCancelledQuantity(
       throw invalidInput(`Only ${open} units of this line have not been received.`);
     }
     if (cancelledQty === line.cancelledQty) return;
+    await assertNoReceiptInFlight(tx, po.id);
     await tx.pOLineItem.update({ where: { id: line.id }, data: { cancelledQty } });
     await bumpVersion(tx, po.id);
     await persistAllocation(tx, po.id);
@@ -1082,6 +1085,9 @@ export async function transitionPurchaseOrder(
       assertCanPerform(lifecycleStateOf(po), action);
     } catch (error) {
       toStateError(error);
+    }
+    if (action === "cancel" || action === "close" || action === "archive") {
+      await assertNoReceiptInFlight(tx, po.id);
     }
     const now = new Date();
     const data: Record<string, unknown> = { status: nextStatusFor(po.status, action) };

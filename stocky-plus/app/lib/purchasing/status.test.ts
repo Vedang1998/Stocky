@@ -10,6 +10,8 @@ import {
   nextStatusFor,
   PURCHASE_ORDER_STATUSES,
   PurchaseOrderStateError,
+  receivingDenial,
+  statusAfterReceiving,
   type LifecycleState,
   type PurchaseOrderAction,
   type PurchaseOrderStatus,
@@ -152,5 +154,55 @@ describe("status helpers", () => {
     expect(isPurchaseOrderStatus("ORDERED")).toBe(true);
     expect(isPurchaseOrderStatus("ordered")).toBe(false);
     expect(isPurchaseOrderStatus("__proto__")).toBe(false);
+  });
+});
+
+describe("receiving", () => {
+  const line = (orderedQty: number, receivedQty: number, cancelledQty = 0) => ({
+    orderedQty,
+    receivedQty,
+    cancelledQty,
+  });
+
+  it("is open on sent, ordered and partially received orders only", () => {
+    for (const status of PURCHASE_ORDER_STATUSES) {
+      const open = ["SENT", "ORDERED", "PARTIAL"].includes(status);
+      expect(receivingDenial(state(status)) === null, status).toBe(open);
+    }
+    expect(receivingDenial(state("DRAFT"))).toMatch(/Send this purchase order/);
+    expect(receivingDenial(state("CANCELLED"))).toBe(
+      "A cancelled purchase order cannot be received.",
+    );
+    expect(receivingDenial(state("ORDERED", { archived: true }))).toMatch(
+      /Archived/,
+    );
+  });
+
+  it("moves an open order to partial, then received", () => {
+    expect(statusAfterReceiving("ORDERED", [line(10, 4), line(6, 0)], true)).toBe("PARTIAL");
+    expect(statusAfterReceiving("SENT", [line(10, 10), line(6, 5)], false)).toBe("PARTIAL");
+    expect(statusAfterReceiving("PARTIAL", [line(10, 10), line(6, 6)], true)).toBe("RECEIVED");
+  });
+
+  it("treats cancelled and over-received units as nothing left to receive", () => {
+    expect(statusAfterReceiving("PARTIAL", [line(10, 7, 3), line(6, 8)], true)).toBe("RECEIVED");
+    expect(statusAfterReceiving("ORDERED", [line(10, 10), line(6, 0, 6)], true)).toBe("RECEIVED");
+  });
+
+  it("does not call an order received when nothing was", () => {
+    expect(statusAfterReceiving("ORDERED", [line(10, 0), line(6, 0)], true)).toBe("ORDERED");
+    expect(statusAfterReceiving("SENT", [line(10, 0, 10)], false)).toBe("SENT");
+  });
+
+  it("reopens the order when receipts are reversed", () => {
+    expect(statusAfterReceiving("RECEIVED", [line(10, 4), line(6, 6)], true)).toBe("PARTIAL");
+    expect(statusAfterReceiving("RECEIVED", [line(10, 0)], true)).toBe("ORDERED");
+    expect(statusAfterReceiving("PARTIAL", [line(10, 0)], false)).toBe("SENT");
+  });
+
+  it("leaves draft, closed and cancelled orders alone", () => {
+    for (const status of ["DRAFT", "CLOSED", "CANCELLED"] as const) {
+      expect(statusAfterReceiving(status, [line(10, 10)], true)).toBe(status);
+    }
   });
 });

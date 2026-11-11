@@ -75,6 +75,24 @@ export async function claimPurchaseOrder(
   return loadPurchaseOrder(tx, purchaseOrderId);
 }
 
+/**
+ * Take the row lock for the rest of the transaction without a version check.
+ * Receiving uses it: a delivery is valid whichever version of the supplier
+ * document the receiver was looking at, but two deliveries must not be
+ * measured against the same open quantity at once.
+ */
+export async function lockPurchaseOrder(
+  tx: TenantDb,
+  purchaseOrderId: string,
+): Promise<PurchaseOrderRecord> {
+  const locked: { count: number } = await tx.purchaseOrder.updateMany({
+    where: { id: purchaseOrderId },
+    data: { updatedAt: new Date() },
+  });
+  if (locked.count === 0) throw notFound("Purchase order");
+  return loadPurchaseOrder(tx, purchaseOrderId);
+}
+
 export function lifecycleStateOf(
   po: Pick<PurchaseOrderRecord, "status" | "archivedAt" | "lineItems">,
 ): LifecycleState {
@@ -183,4 +201,25 @@ export async function persistAllocation(
     changed = true;
   }
   return { po: changed ? await loadPurchaseOrder(tx, purchaseOrderId) : po, totals };
+}
+
+export const RECEIPT_IN_FLIGHT_MESSAGE =
+  "A delivery on this purchase order is still waiting for Shopify to confirm the stock change. Finish or retry it under Receipts, then try again.";
+
+/**
+ * Refuse a change that would be wrong if an unconfirmed receipt or reversal
+ * lands afterwards: cancelling or closing the order, or lowering what a line
+ * still expects. Call it after claimPurchaseOrder, so no receipt can be
+ * recorded in between.
+ */
+export async function assertNoReceiptInFlight(
+  tx: TenantDb,
+  purchaseOrderId: string,
+): Promise<void> {
+  const inFlight: number = await tx.purchaseOrderReceipt.count({
+    where: { purchaseOrderId, status: { in: ["PENDING", "REVERSING"] } },
+  });
+  if (inFlight > 0) {
+    throw new PurchasingError("invalid_state", RECEIPT_IN_FLIGHT_MESSAGE);
+  }
 }

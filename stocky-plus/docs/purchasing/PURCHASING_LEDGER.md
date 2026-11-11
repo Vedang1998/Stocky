@@ -5,8 +5,9 @@ lifecycle. Code lives in `app/lib/purchasing` (pure rules and arithmetic) and
 `app/services/purchasing` (database commands and read models). Routes call the
 services; they do not write purchasing tables themselves.
 
-Receiving is not part of this document. Until the receiving ledger lands, the
-received quantity on a line is still written by the legacy receive path.
+Stock reaches Shopify only through the inventory operation ledger
+(`docs/phases/phase-5/INVENTORY_WRITE_LEDGER.md`), behind the receipt-write
+kill switch `FEATURE_RECEIPT_WRITES`, which is off by default.
 
 ## Records
 
@@ -18,6 +19,8 @@ received quantity on a line is still written by the legacy receive path.
 | `PurchaseOrder` | Header, lifecycle status, `version`, per-shop number. |
 | `POLineItem` | Ordered, received and cancelled quantities, unit cost, discount and tax percent, and a snapshot of the product (titles, SKU, barcode, weight, retail price) taken when the line is added. |
 | `PurchaseOrderCharge` | Header charge: shipping, duty, fee, discount or other, with an `allocate` flag. |
+| `PurchaseOrderReceipt` | One delivery received against a purchase order: number within the order, destination, who received it, status, and the inventory operations that carried it and its reversal. |
+| `PurchaseOrderReceiptLine` | Per purchase-order line on that delivery: accepted and rejected units, the units Shopify confirmed (`postedQty`), and the units reversed. |
 | `PurchasingEvent` | Append-only history, keyed by subject id with no foreign key, so the history of a deleted draft survives. |
 
 Product snapshots mean a purchase order stays readable after the product is
@@ -108,6 +111,8 @@ DRAFT → SENT → ORDERED → PARTIAL → RECEIVED → CLOSED
 
 Only receipt postings move an order to Partial or Received. A cancelled order
 cannot be reopened, and an order with received stock cannot be cancelled.
+While a receipt or reversal is waiting for Shopify, the order cannot be
+cancelled, closed or archived, and no line can be reduced or part-cancelled.
 
 Editing rules:
 
@@ -120,13 +125,75 @@ Editing rules:
   line and its history stay.
 - A sent or ordered order needs at least one line with quantity to order.
 
+## Receiving
+
+`app/services/purchasing/receiving.server.ts`. A line's `receivedQty` changes
+only here, and only by what Shopify confirmed.
+
+`postPurchaseOrderReceipt(db, admin, actor, input)` receives one delivery
+against a Sent, Ordered or Partial order that is not archived:
+
+1. The receipt and its lines are recorded as `PENDING` under the purchase
+   order's row lock. Each line carries accepted units (to be stocked) and
+   rejected units (recorded, never stocked, still owed by the supplier).
+2. The accepted units are recorded in the inventory ledger as one `RECEIPT`
+   operation (`po-receipt:<receiptId>`, reason `received`, quantity
+   `available`, at the order's destination) and sent to Shopify. Lines for the
+   same inventory item go as one change.
+3. When the ledger operation finishes, the lines Shopify applied are counted:
+   `postedQty` on the receipt line, `receivedQty` on the order line, and the
+   order moves to Partial or Received. Lines Shopify refused are not counted
+   and keep Shopify's message.
+
+| Receipt status | Meaning |
+| --- | --- |
+| `PENDING` | Recorded; Shopify has not confirmed. Nothing is counted. Finish it with `resumePurchaseOrderReceipt`. |
+| `POSTED` | Every accepted unit is in Shopify and counted. |
+| `PARTIALLY_POSTED` | Some lines are in Shopify and counted; the refused lines can be received again on a new receipt. |
+| `FAILED` | Nothing reached Shopify and nothing is counted. |
+| `REVERSING` | A reversal is recorded; Shopify has not confirmed. The receipt still counts. |
+| `REVERSED` | Every posted unit is back out of stock and off the order. |
+| `PARTIALLY_REVERSED` | Shopify would not take some lines back; those still count. |
+| `REVERSAL_FAILED` | Nothing was taken back; the receipt still counts. |
+
+Rules:
+
+- **Idempotency.** The screen picks an `idempotencyKey` per submission. The
+  same key with the same quantities returns the receipt already recorded;
+  with different quantities it is refused.
+- **Open quantity.** A line accepts at most ordered − cancelled − received,
+  less what unconfirmed receipts already hold, unless the receiver confirms
+  the extra units (`allowOverReceipt`). Over-received units are counted on the
+  line; the ordered quantity and the order total do not change.
+- **Switched off.** With the kill switch off nothing is recorded and the
+  caller is told so. A receipt that was already pending stays pending.
+- **Destination.** Stock is put away at the order's location, which must
+  still be active in Shopify.
+- **Reversal.** `reversePurchaseOrderReceipt` records the ledger's reversal of
+  the receipt's operation, once. The order reopens to Partial, Ordered or Sent
+  as its quantities imply. Receipts on closed or cancelled orders are not
+  reversed.
+- **Lead time.** When an order becomes fully received, the days since it was
+  ordered (or sent) are stored for the supplier and its 90-day average is
+  refreshed; a reversal that reopens the order removes them.
+
+`getReceivingWorksheet` gives a receiving screen each line's open, pending and
+rejected quantities; `listPurchaseOrderReceipts` lists an order's receipts.
+
+Not covered yet: average-cost updates on receipt, receipt sessions that are
+saved and resumed across scans, and resolving a barcode that is not on the
+order. Stock marked received before the receipt tables existed has no receipt
+and cannot be reversed here. There is no background job that finishes pending
+receipts; they are finished when someone retries them.
+
 ### Versions and concurrent edits
 
 Every command names the `version` it was looking at. If the order has moved on,
 the command is rejected with a message asking the user to reload, and nothing
 is written. `version` goes up whenever something printed on the supplier
 document changes (lines, charges, dates, terms, addresses, notes to supplier).
-Internal notes and references do not change it. `sentVersion` records what the
+Internal notes, references and receipts do not change it; a receipt takes the
+order's row lock instead of naming a version. `sentVersion` records what the
 supplier last received.
 
 ## Figures for other modules
