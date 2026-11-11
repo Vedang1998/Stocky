@@ -336,7 +336,6 @@ export default function Worksheet() {
   const detailContext: LineDetailContext = {
     currencyCode: summary?.currencyCode ?? null,
     salesPeriod: summary?.salesPeriod ?? "",
-    incomingLabel: worksheet.incoming,
   };
 
   const first = matching === 0 ? 0 : (view.page - 1) * view.pageSize + 1;
@@ -462,42 +461,48 @@ export default function Worksheet() {
               </>
             )}
             {view.pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="perPage" value={view.pageSize} />}
-            <s-grid gridTemplateColumns="1fr auto auto auto" gap="base" alignItems="end">
-              <s-search-field
-                label="Search"
-                labelAccessibilityVisibility="exclusive"
-                name="q"
-                placeholder="Search by product, SKU, barcode or supplier SKU"
-                value={view.query}
-              />
-              <s-button type="submit">Search</s-button>
-              <s-select
-                label="Show"
-                labelAccessibilityVisibility="exclusive"
-                value={view.show}
-                onChange={(event) =>
-                  navigate(to({ show: event.currentTarget.value as WorksheetShow }))
-                }
+            <s-query-container>
+              <s-grid
+                gridTemplateColumns="@container (inline-size > 560px) 1fr auto auto auto, 1fr auto"
+                gap="base"
+                alignItems="end"
               >
-                {WORKSHEET_SHOW.map((value) => (
-                  <s-option key={value} value={value}>
-                    {WORKSHEET_SHOW_LABELS[value]}
-                  </s-option>
-                ))}
-              </s-select>
-              <s-select
-                label="Rows per page"
-                labelAccessibilityVisibility="exclusive"
-                value={String(view.pageSize)}
-                onChange={(event) => navigate(to({ pageSize: Number(event.currentTarget.value) }))}
-              >
-                {PAGE_SIZES.map((size) => (
-                  <s-option key={size} value={String(size)}>
-                    {size} per page
-                  </s-option>
-                ))}
-              </s-select>
-            </s-grid>
+                <s-search-field
+                  label="Search"
+                  labelAccessibilityVisibility="exclusive"
+                  name="q"
+                  placeholder="Search by product, SKU, barcode or supplier SKU"
+                  value={view.query}
+                />
+                <s-button type="submit">Search</s-button>
+                <s-select
+                  label="Show"
+                  labelAccessibilityVisibility="exclusive"
+                  value={view.show}
+                  onChange={(event) =>
+                    navigate(to({ show: event.currentTarget.value as WorksheetShow }))
+                  }
+                >
+                  {WORKSHEET_SHOW.map((value) => (
+                    <s-option key={value} value={value}>
+                      {WORKSHEET_SHOW_LABELS[value]}
+                    </s-option>
+                  ))}
+                </s-select>
+                <s-select
+                  label="Rows per page"
+                  labelAccessibilityVisibility="exclusive"
+                  value={String(view.pageSize)}
+                  onChange={(event) => navigate(to({ pageSize: Number(event.currentTarget.value) }))}
+                >
+                  {PAGE_SIZES.map((size) => (
+                    <s-option key={size} value={String(size)}>
+                      {size} per page
+                    </s-option>
+                  ))}
+                </s-select>
+              </s-grid>
+            </s-query-container>
           </Form>
 
           {lines.length === 0 ? (

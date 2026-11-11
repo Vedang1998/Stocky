@@ -111,7 +111,7 @@ function Suggested({ line }: { line: WorksheetLine }) {
   if (line.suggestedQuantity == null) return <s-text color="subdued">None</s-text>;
   if (line.parityQuantity != null && line.parityQuantity !== line.suggestedQuantity) {
     return (
-      <s-stack direction="block" gap="small-200">
+      <s-stack direction="block" gap="small-200" alignItems="end">
         <s-text>{quantity(line.suggestedQuantity)}</s-text>
         <s-text color="subdued">{quantity(line.parityQuantity)} before supplier rules</s-text>
       </s-stack>
@@ -169,7 +169,7 @@ export function WorksheetTable({
         {lines.map((line) => (
           <s-table-row key={line.id}>
             <s-table-cell>
-              <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-grid gridTemplateColumns="auto 1fr" gap="small-200" alignItems="center">
                 <s-thumbnail size="small" src={line.imageUrl ?? undefined} alt="" />
                 <s-stack direction="block" gap="none">
                   <s-text type="strong">{line.productTitle}</s-text>
@@ -177,7 +177,7 @@ export function WorksheetTable({
                     <s-text color="subdued">{line.variantTitle}</s-text>
                   )}
                 </s-stack>
-              </s-stack>
+              </s-grid>
             </s-table-cell>
             <s-table-cell>{line.sku ?? MISSING_VALUE}</s-table-cell>
             <s-table-cell>

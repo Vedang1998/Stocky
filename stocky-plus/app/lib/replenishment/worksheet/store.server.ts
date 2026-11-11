@@ -19,7 +19,8 @@ import {
   type Warning,
   type WarningCode,
 } from "../types";
-import { WORKSHEETS_KEPT, type WorksheetSummary } from "./generate.server";
+import type { WorksheetSummary } from "./generate.server";
+import { WORKSHEETS_KEPT } from "./limits";
 import type { WorksheetLineDetail } from "./line";
 import { readWorksheetSettings, type WorksheetSettings } from "./settings";
 import type { WorksheetSortKey, WorksheetView } from "./view";

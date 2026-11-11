@@ -24,18 +24,9 @@ import {
   type StockPosition,
   type WorksheetLineRecord,
 } from "./line";
+import { MAX_WORKSHEET_VARIANTS, WORKSHEETS_KEPT } from "./limits";
 import type { WorksheetSettings } from "./settings";
 import type { SupplierTerms, VariantSuppliers, WorksheetSources } from "./sources";
-
-/**
- * Most variants one worksheet can hold. Larger catalogs are planned a
- * vendor, product type or supplier at a time, which is also how they are
- * ordered.
- */
-export const MAX_WORKSHEET_VARIANTS = 5000;
-
-/** Saved worksheets kept per shop; generating another removes the oldest. */
-export const WORKSHEETS_KEPT = 20;
 
 const LIVE = "LIVE";
 const PRODUCT_PAGE = 1000;

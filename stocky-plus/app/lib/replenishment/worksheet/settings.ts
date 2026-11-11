@@ -119,8 +119,33 @@ function field(form: FormData, name: string): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function filterValue(form: FormData, name: string): string | null {
-  return field(form, name).slice(0, MAX_FILTER_LENGTH) || null;
+/**
+ * Values of the vendor, product type and supplier dropdowns. A Polaris select
+ * submits an option's label when its value is empty, so "all" carries a value
+ * of its own and a chosen entry is prefixed to keep it apart from that value.
+ */
+export const ALL_FILTER_OPTION = "all";
+const CHOSEN_FILTER_PREFIX = "is:";
+
+export function filterOptionValue(value: string): string {
+  return value ? `${CHOSEN_FILTER_PREFIX}${value}` : ALL_FILTER_OPTION;
+}
+
+function filterValue(
+  form: FormData,
+  name: "vendor" | "productType" | "supplierId",
+  errors: FieldErrors,
+): string | null {
+  const raw = field(form, name);
+  if (raw === "" || raw === ALL_FILTER_OPTION) return null;
+  const chosen = raw.startsWith(CHOSEN_FILTER_PREFIX)
+    ? raw.slice(CHOSEN_FILTER_PREFIX.length)
+    : "";
+  if (chosen === "" || chosen.length > MAX_FILTER_LENGTH) {
+    errors[name] = "Choose an option from the list.";
+    return null;
+  }
+  return chosen;
 }
 
 function parseParams(
@@ -214,6 +239,12 @@ export function parseWorksheetSetup(form: FormData, asOf: LocalDate): ParsedSetu
     errors.incomingSource = "Choose which incoming stock to count.";
   }
 
+  const selection = {
+    vendor: filterValue(form, "vendor", errors),
+    productType: filterValue(form, "productType", errors),
+    supplierId: filterValue(form, "supplierId", errors),
+  };
+
   if (!parameters.ok || !incomingSource || Object.keys(errors).length > 0) {
     return { ok: false, errors };
   }
@@ -227,11 +258,7 @@ export function parseWorksheetSetup(form: FormData, asOf: LocalDate): ParsedSetu
         applyMinimumOrderQuantity: form.get("applyMinimumOrderQuantity") === "on",
         roundUpToPackSize: form.get("roundUpToPackSize") === "on",
       },
-      selection: {
-        vendor: filterValue(form, "vendor"),
-        productType: filterValue(form, "productType"),
-        supplierId: filterValue(form, "supplierId"),
-      },
+      selection,
     },
   };
 }

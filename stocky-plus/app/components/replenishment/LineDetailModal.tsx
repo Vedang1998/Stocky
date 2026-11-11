@@ -24,7 +24,6 @@ export type LineDetailContext = {
   currencyCode: string | null;
   /** The days whose sales the row reports, for example "Oct 12, 2026 to Nov 10, 2026". */
   salesPeriod: string;
-  incomingLabel: string;
 };
 
 function quantity(value: number | null): string {
@@ -224,9 +223,7 @@ function LineDetail({
           <Fact label="Available">{quantity(line.availableQuantity)}</Fact>
           <Fact label="On hand">{quantity(line.onHandQuantity)}</Fact>
           <Fact label="Committed">{quantity(line.committedQuantity)}</Fact>
-          <Fact label={`Incoming (${context.incomingLabel.toLowerCase()})`}>
-            {quantity(line.incomingQuantity)}
-          </Fact>
+          <Fact label="Incoming">{quantity(line.incomingQuantity)}</Fact>
           <Fact label="Days of stock">{formatDecimal(line.daysOfStock)}</Fact>
           <Fact label="Runs out around">
             {line.depletionDate ? formatLocalDate(line.depletionDate) : MISSING_VALUE}

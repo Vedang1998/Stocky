@@ -11,11 +11,13 @@ import { createTenantDb, type TenantDb } from "../../tenant-db.server";
 import { saveVariantRule } from "../../../lib/replenishment/rules.server";
 import {
   generateWorksheet,
-  MAX_WORKSHEET_VARIANTS,
-  WORKSHEETS_KEPT,
   WorksheetError,
   type GenerateWorksheetInput,
 } from "../../../lib/replenishment/worksheet/generate.server";
+import {
+  MAX_WORKSHEET_VARIANTS,
+  WORKSHEETS_KEPT,
+} from "../../../lib/replenishment/worksheet/limits";
 import {
   createDraftOrders,
   getOrderGroups,

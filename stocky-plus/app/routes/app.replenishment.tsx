@@ -27,15 +27,13 @@ import {
   describeSelection,
   formatInstant,
 } from "../lib/replenishment/worksheet/describe";
-import {
-  generateWorksheet,
-  MAX_WORKSHEET_VARIANTS,
-  WORKSHEETS_KEPT,
-  WorksheetError,
-} from "../lib/replenishment/worksheet/generate.server";
+import { generateWorksheet, WorksheetError } from "../lib/replenishment/worksheet/generate.server";
+import { MAX_WORKSHEET_VARIANTS, WORKSHEETS_KEPT } from "../lib/replenishment/worksheet/limits";
 import { loadSetupOptions } from "../lib/replenishment/worksheet/options.server";
 import { purchasingSources } from "../lib/replenishment/worksheet/purchasing.server";
 import {
+  ALL_FILTER_OPTION,
+  filterOptionValue,
   parseWorksheetSetup,
   setupFormFromDefaults,
   setupFormFromSettings,
@@ -235,26 +233,41 @@ export default function Replenishment() {
 
             <s-heading>Products</s-heading>
             <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
-              <s-select label="Vendor" name="vendor" value={form.vendor}>
-                <s-option value="">All vendors</s-option>
+              <s-select
+                label="Vendor"
+                name="vendor"
+                value={filterOptionValue(form.vendor)}
+                error={errors.vendor}
+              >
+                <s-option value={ALL_FILTER_OPTION}>All vendors</s-option>
                 {options.vendors.map((vendor) => (
-                  <s-option key={vendor} value={vendor}>
+                  <s-option key={vendor} value={filterOptionValue(vendor)}>
                     {vendor}
                   </s-option>
                 ))}
               </s-select>
-              <s-select label="Product type" name="productType" value={form.productType}>
-                <s-option value="">All product types</s-option>
+              <s-select
+                label="Product type"
+                name="productType"
+                value={filterOptionValue(form.productType)}
+                error={errors.productType}
+              >
+                <s-option value={ALL_FILTER_OPTION}>All product types</s-option>
                 {options.productTypes.map((productType) => (
-                  <s-option key={productType} value={productType}>
+                  <s-option key={productType} value={filterOptionValue(productType)}>
                     {productType}
                   </s-option>
                 ))}
               </s-select>
-              <s-select label="Supplier" name="supplierId" value={form.supplierId}>
-                <s-option value="">All suppliers</s-option>
+              <s-select
+                label="Supplier"
+                name="supplierId"
+                value={filterOptionValue(form.supplierId)}
+                error={errors.supplierId}
+              >
+                <s-option value={ALL_FILTER_OPTION}>All suppliers</s-option>
                 {suppliers.map((supplier) => (
-                  <s-option key={supplier.id} value={supplier.id}>
+                  <s-option key={supplier.id} value={filterOptionValue(supplier.id)}>
                     {supplier.name}
                   </s-option>
                 ))}
