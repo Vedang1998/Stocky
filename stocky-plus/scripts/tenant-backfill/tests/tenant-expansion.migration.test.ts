@@ -53,6 +53,7 @@ const ALL_MIGRATION_NAMES = [
   "20261110220000_inventory_operation_ledger",
   "20261110220000_purchasing_enum_values",
   "20261110220100_purchasing_ledger_foundation",
+  "20261111100000_purchase_order_receipts",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);

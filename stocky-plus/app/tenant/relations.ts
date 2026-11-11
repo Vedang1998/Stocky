@@ -288,6 +288,50 @@ const RELATIONS: MerchantRelationMeta[] = [
     nestedWherePermitted: false,
     allowedNestedOperations: ["connect"],
   },
+  // Receipts are written by the receiving service only, lines with their
+  // receipt; nothing is created or changed through the purchase order.
+  {
+    name: "receipts",
+    sourceModel: "PurchaseOrder",
+    targetModel: "PurchaseOrderReceipt",
+    cardinality: "many",
+    ownershipLineage: {
+      kind: "child_collection",
+      childForeignKey: "purchaseOrderId",
+    },
+    nestedWherePermitted: true,
+    allowedNestedOperations: [],
+  },
+  {
+    name: "purchaseOrder",
+    sourceModel: "PurchaseOrderReceipt",
+    targetModel: "PurchaseOrder",
+    cardinality: "one",
+    ownershipLineage: { kind: "parent_fk", foreignKey: "purchaseOrderId" },
+    nestedWherePermitted: false,
+    allowedNestedOperations: ["connect"],
+  },
+  {
+    name: "lines",
+    sourceModel: "PurchaseOrderReceipt",
+    targetModel: "PurchaseOrderReceiptLine",
+    cardinality: "many",
+    ownershipLineage: {
+      kind: "child_collection",
+      childForeignKey: "receiptId",
+    },
+    nestedWherePermitted: true,
+    allowedNestedOperations: ["create", "createMany"],
+  },
+  {
+    name: "receipt",
+    sourceModel: "PurchaseOrderReceiptLine",
+    targetModel: "PurchaseOrderReceipt",
+    cardinality: "one",
+    ownershipLineage: { kind: "parent_fk", foreignKey: "receiptId" },
+    nestedWherePermitted: false,
+    allowedNestedOperations: ["connect"],
+  },
   {
     name: "transferOrder",
     sourceModel: "TransferLineItem",
@@ -719,6 +763,7 @@ export const ROUTE_RELATION_SHAPES = [
   "POLineItem.purchaseOrder",
   "InventoryOperation.lines",
   "PurchaseOrder.charges",
+  "PurchaseOrderReceipt.lines",
 ] as const;
 
 export function relationMetaFor(

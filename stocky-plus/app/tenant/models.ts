@@ -36,6 +36,8 @@ export const INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS = [
 export const PURCHASING_DIRECT_MERCHANT_MODELS = [
   "PurchasingEvent",
   "PurchaseOrderCharge",
+  "PurchaseOrderReceipt",
+  "PurchaseOrderReceiptLine",
 ] as const;
 
 export const DIRECT_MERCHANT_MODELS = [
@@ -134,6 +136,8 @@ export const MERCHANT_DELEGATE_NAMES = {
   StocktakeLineItem: "stocktakeLineItem",
   PurchasingEvent: "purchasingEvent",
   PurchaseOrderCharge: "purchaseOrderCharge",
+  PurchaseOrderReceipt: "purchaseOrderReceipt",
+  PurchaseOrderReceiptLine: "purchaseOrderReceiptLine",
 } as const satisfies Record<MerchantOwnedModel, string>;
 
 export const DIRECT_MODEL_SET = new Set<string>(DIRECT_MERCHANT_MODELS);
@@ -158,5 +162,13 @@ export const PARENT_OWNERSHIP_RULES: Record<
   PurchaseOrderCharge: {
     parentModel: "PurchaseOrder",
     foreignKey: "purchaseOrderId",
+  },
+  PurchaseOrderReceipt: {
+    parentModel: "PurchaseOrder",
+    foreignKey: "purchaseOrderId",
+  },
+  PurchaseOrderReceiptLine: {
+    parentModel: "PurchaseOrderReceipt",
+    foreignKey: "receiptId",
   },
 };

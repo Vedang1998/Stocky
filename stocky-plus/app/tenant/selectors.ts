@@ -424,6 +424,30 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
     ],
   },
+  PurchaseOrderReceipt: {
+    model: "PurchaseOrderReceipt",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_idempotencyKey",
+        fields: ["shopId", "idempotencyKey"],
+      },
+      {
+        kind: "compound",
+        name: "shopId_purchaseOrderId_receiptNumber",
+        fields: ["shopId", "purchaseOrderId", "receiptNumber"],
+      },
+    ],
+  },
+  PurchaseOrderReceiptLine: {
+    model: "PurchaseOrderReceiptLine",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

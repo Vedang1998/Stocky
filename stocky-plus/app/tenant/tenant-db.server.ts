@@ -1903,6 +1903,8 @@ export type TenantDb = {
   stocktakeLineItem: TenantModelDelegate;
   purchasingEvent: TenantModelDelegate;
   purchaseOrderCharge: TenantModelDelegate;
+  purchaseOrderReceipt: TenantModelDelegate;
+  purchaseOrderReceiptLine: TenantModelDelegate;
   $transaction: <T>(
     fn: (db: TenantDb) => Promise<T>,
     options?: {

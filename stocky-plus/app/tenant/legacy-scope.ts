@@ -62,6 +62,8 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   InventoryOperationLine: "InventoryOperationLine",
   PurchasingEvent: "PurchasingEvent",
   PurchaseOrderCharge: "PurchaseOrderCharge",
+  PurchaseOrderReceipt: "PurchaseOrderReceipt",
+  PurchaseOrderReceiptLine: "PurchaseOrderReceiptLine",
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
@@ -82,6 +84,8 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "InventoryOperationLine",
   "PurchasingEvent",
   "PurchaseOrderCharge",
+  "PurchaseOrderReceipt",
+  "PurchaseOrderReceiptLine",
 ]);
 
 /**

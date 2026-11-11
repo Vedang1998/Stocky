@@ -111,7 +111,12 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     shopIdNullableInPrisma: true,
     legacyShopField: true,
     parentRelationships: ["Supplier"],
-    childRelationships: ["POLineItem", "LeadTimeSnapshot", "PurchaseOrderCharge"],
+    childRelationships: [
+      "POLineItem",
+      "LeadTimeSnapshot",
+      "PurchaseOrderCharge",
+      "PurchaseOrderReceipt",
+    ],
     crossDomainRelationships: ["Supplier"],
     existingShopIdIdUnique: true,
     requiredCompositeKey: true,
@@ -794,6 +799,42 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     expectedRuntimePrivileges: DML,
     enforcementStepGroup: "merchant_child",
   },
+  {
+    prismaModel: "PurchaseOrderReceipt",
+    sqlTable: "PurchaseOrderReceipt",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["PurchaseOrder"],
+    childRelationships: ["PurchaseOrderReceiptLine"],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "PurchaseOrderReceiptLine",
+    sqlTable: "PurchaseOrderReceiptLine",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["PurchaseOrderReceipt"],
+    childRelationships: [],
+    crossDomainRelationships: ["POLineItem"],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
 ] as const;
 
 export const BOOTSTRAP_TABLES: readonly NonMerchantTableSpec[] = [
@@ -1125,6 +1166,36 @@ export const COMPOSITE_FOREIGN_KEYS: readonly CompositeForeignKey[] = [
     onUpdate: "NO ACTION",
     purpose: "child_parent",
   },
+  {
+    name: "PurchaseOrderReceipt_shopId_purchaseOrderId_fkey",
+    childTable: "PurchaseOrderReceipt",
+    childColumns: ["shopId", "purchaseOrderId"],
+    parentTable: "PurchaseOrder",
+    parentColumns: ["shopId", "id"],
+    onDelete: "RESTRICT",
+    onUpdate: "NO ACTION",
+    purpose: "child_parent",
+  },
+  {
+    name: "PurchaseOrderReceiptLine_shopId_receiptId_fkey",
+    childTable: "PurchaseOrderReceiptLine",
+    childColumns: ["shopId", "receiptId"],
+    parentTable: "PurchaseOrderReceipt",
+    parentColumns: ["shopId", "id"],
+    onDelete: "CASCADE",
+    onUpdate: "NO ACTION",
+    purpose: "child_parent",
+  },
+  {
+    name: "PurchaseOrderReceiptLine_shopId_lineItemId_fkey",
+    childTable: "PurchaseOrderReceiptLine",
+    childColumns: ["shopId", "lineItemId"],
+    parentTable: "POLineItem",
+    parentColumns: ["shopId", "id"],
+    onDelete: "RESTRICT",
+    onUpdate: "NO ACTION",
+    purpose: "cross_domain",
+  },
 ] as const;
 
 /** Supporting indexes required before composite FK validation. */
@@ -1318,8 +1389,8 @@ export const PRE_PR6_A_MERCHANT_TABLE_COUNT = 26;
 export const PR6_A_ADDED_MERCHANT_TABLE_COUNT = 9;
 /** InventoryOperation + InventoryOperationLine (inventory-control ledger). */
 export const INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT = 2;
-/** PurchasingEvent and PurchaseOrderCharge. */
-export const PURCHASING_ADDED_MERCHANT_TABLE_COUNT = 2;
+/** PurchasingEvent, PurchaseOrderCharge, PurchaseOrderReceipt and its lines. */
+export const PURCHASING_ADDED_MERCHANT_TABLE_COUNT = 4;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
   PRE_PR6_A_MERCHANT_TABLE_COUNT +
   PR6_A_ADDED_MERCHANT_TABLE_COUNT +
