@@ -82,6 +82,24 @@ export type SalesHistoryCoverage = {
   latestOrderChangeAt: Date | null;
 };
 
+/** The order behind a unit event, for order-level reports. */
+export type SalesOrderSummary = {
+  orderGid: string;
+  /** Shopify order name, such as `#1001`. */
+  name: string;
+  processedAt: Date;
+  localDate: LocalDate;
+};
+
+/** What a line was sold as, which can differ from today's catalog. */
+export type SaleLineDescriptor = {
+  lineGid: string;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  vendor: string | null;
+};
+
 export type SalesHistory = {
   policies: {
     netUnits: typeof NET_UNITS_POLICY;
@@ -94,6 +112,10 @@ export type SalesHistory = {
   reportCurrency: string | null;
   events: UnitEvent[];
   daily: VariantDailySales[];
+  /** Every order with at least one returned event, by order GID. */
+  orders: Map<string, SalesOrderSummary>;
+  /** Every line with at least one returned event, by line GID. */
+  lines: Map<string, SaleLineDescriptor>;
   diagnostics: NetUnitsDiagnostics;
   coverage: SalesHistoryCoverage;
 };
@@ -125,6 +147,7 @@ function afterCursor(
 type OrderRow = {
   id: string;
   shopifyGid: string;
+  name: string;
   processedAt: Date | null;
   test: boolean;
   cancelledAt: Date | null;
@@ -134,6 +157,7 @@ type OrderRow = {
 const ORDER_SELECT = {
   id: true,
   shopifyGid: true,
+  name: true,
   processedAt: true,
   test: true,
   cancelledAt: true,
@@ -161,6 +185,10 @@ function toOrderInput(row: OrderRow): SalesOrderInput {
 type LineRow = {
   shopifyGid: string;
   shopifyOrderGid: string;
+  title: string;
+  variantTitle: string | null;
+  sku: string | null;
+  vendor: string | null;
   variantGidAtSale: string | null;
   productGidAtSale: string | null;
   isGiftCard: boolean;
@@ -195,6 +223,7 @@ async function loadOrderChildren(
   lines: SalesLineInput[];
   agreements: SalesAgreementInput[];
   sales: SalesSaleInput[];
+  descriptors: SaleLineDescriptor[];
 }> {
   const where = { existenceState: LIVE, shopifyOrderGid: { in: [...orderGids] } };
   const [lineRows, agreementRows, saleRows]: [LineRow[], AgreementRow[], SaleRow[]] =
@@ -204,6 +233,10 @@ async function loadOrderChildren(
         select: {
           shopifyGid: true,
           shopifyOrderGid: true,
+          title: true,
+          variantTitle: true,
+          sku: true,
+          vendor: true,
           variantGidAtSale: true,
           productGidAtSale: true,
           isGiftCard: true,
@@ -268,10 +301,21 @@ async function loadOrderChildren(
       saleTypename: row.saleTypename,
       quantity: row.quantity,
     })),
+    descriptors: lineRows.map((row) => ({
+      lineGid: row.shopifyGid,
+      title: row.title,
+      variantTitle: row.variantTitle,
+      sku: row.sku,
+      vendor: row.vendor,
+    })),
   };
 }
 
-async function loadCoverage(
+/**
+ * How far back the stored order facts reach, judged against `startLocalDate`.
+ * `timeZone` must already be validated.
+ */
+export async function loadSalesCoverage(
   db: TenantDb,
   timeZone: string,
   startLocalDate: LocalDate,
@@ -336,10 +380,33 @@ export async function loadSalesHistory(
     isWithinLocalRange(localDate, startLocalDate, endLocalDate);
 
   const events: UnitEvent[] = [];
+  const orders = new Map<string, SalesOrderSummary>();
+  const lines = new Map<string, SaleLineDescriptor>();
   const diagnostics = emptyNetUnitsDiagnostics();
-  const keep = (batch: UnitEvent[]) => {
+  const keep = (
+    batch: UnitEvent[],
+    orderRows: readonly OrderRow[],
+    descriptors: readonly SaleLineDescriptor[],
+  ) => {
+    const orderByGid = new Map(orderRows.map((row) => [row.shopifyGid, row]));
+    const descriptorByGid = new Map(descriptors.map((d) => [d.lineGid, d]));
     for (const event of batch) {
-      if (!variantFilter || variantFilter.has(event.variantGid)) events.push(event);
+      if (variantFilter && !variantFilter.has(event.variantGid)) continue;
+      events.push(event);
+      const order = orderByGid.get(event.orderGid);
+      // An event is only derived from an order that has a processedAt.
+      if (order?.processedAt && !orders.has(order.shopifyGid)) {
+        orders.set(order.shopifyGid, {
+          orderGid: order.shopifyGid,
+          name: order.name,
+          processedAt: order.processedAt,
+          localDate: localDateOf(order.processedAt, timeZone),
+        });
+      }
+      const descriptor = descriptorByGid.get(event.lineGid);
+      if (descriptor && !lines.has(descriptor.lineGid)) {
+        lines.set(descriptor.lineGid, descriptor);
+      }
     }
   };
 
@@ -362,7 +429,7 @@ export async function loadSalesHistory(
     orderCursor = { at: last.processedAt as Date, id: last.id };
     for (const row of rows) inRangeOrderGids.add(row.shopifyGid);
 
-    const children = await loadOrderChildren(
+    const { descriptors, ...children } = await loadOrderChildren(
       db,
       rows.map((row) => row.shopifyGid),
     );
@@ -373,7 +440,7 @@ export async function loadSalesHistory(
       ...children,
       includeDate: inRange,
     });
-    keep(derived.events);
+    keep(derived.events, rows, descriptors);
     mergeNetUnitsDiagnostics(diagnostics, derived.diagnostics);
     if (rows.length < batchSize) break;
   }
@@ -412,7 +479,7 @@ export async function loadSalesHistory(
       select: ORDER_SELECT,
     });
     if (rows.length === 0) continue;
-    const children = await loadOrderChildren(
+    const { descriptors, ...children } = await loadOrderChildren(
       db,
       rows.map((row) => row.shopifyGid),
     );
@@ -424,7 +491,7 @@ export async function loadSalesHistory(
       includeDate: inRange,
       includeKinds: ADDED_ONLY,
     });
-    keep(derived.events);
+    keep(derived.events, rows, descriptors);
     // Order-level counters describe the in-range population only; keep the
     // sale/event counters for late additions.
     mergeNetUnitsDiagnostics(diagnostics, {
@@ -462,8 +529,10 @@ export async function loadSalesHistory(
     reportCurrency: input.reportCurrency,
     events,
     daily: aggregateDaily(events),
+    orders,
+    lines,
     diagnostics,
-    coverage: await loadCoverage(
+    coverage: await loadSalesCoverage(
       db,
       timeZone,
       startLocalDate,

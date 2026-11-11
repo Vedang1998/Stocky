@@ -9,6 +9,9 @@ import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
 import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
+import { loadLastOrderedAt } from "../../../lib/analytics/stock-levels.server";
+import { toCsv } from "../../../lib/csv.server";
+import { findReport, loadReportContext } from "../../../lib/reports/registry.server";
 import { issueTenantAuthority } from "../../authority.server";
 import { readShopReportingProfile } from "../../bootstrap.server";
 import { createTenantDb, type TenantDb } from "../../tenant-db.server";
@@ -81,6 +84,50 @@ async function seedCatalog({ prisma, shopId }: Seed) {
   }
 }
 
+const LOCATION_MAIN = "gid://shopify/Location/71";
+const LOCATION_STORE = "gid://shopify/Location/72";
+
+/** On-hand units per variant and location; `null` is a quantity Shopify has not reported. */
+async function seedStock(
+  { prisma, shopId }: Seed,
+  levels: Array<[variant: string, location: string, onHand: number | null]>,
+) {
+  for (const [gid, name] of [
+    [LOCATION_MAIN, "Main warehouse"],
+    [LOCATION_STORE, "Downtown store"],
+  ]) {
+    await prisma.shopifyLocationFact.create({
+      data: {
+        shopId,
+        shopifyGid: gid,
+        name,
+        isActive: true,
+        fulfillsOnlineOrders: true,
+        shipsInventory: true,
+        isFulfillmentService: false,
+        hasActiveInventory: true,
+        ...live,
+      },
+    });
+  }
+  for (const [variant, location, onHand] of levels) {
+    await prisma.shopifyInventoryLevelFact.create({
+      data: {
+        shopId,
+        inventoryItemGid: variant.replace("ProductVariant", "InventoryItem"),
+        locationGid: location,
+        isActive: true,
+        availableQuantity: onHand,
+        onHandQuantity: onHand,
+        committedQuantity: 0,
+        incomingQuantity: 0,
+        shopifyUpdatedAt: new Date("2026-11-08T15:00:00Z"),
+        ...live,
+      },
+    });
+  }
+}
+
 type SaleSpec = {
   agreement: string;
   reason: string;
@@ -147,6 +194,7 @@ async function seedOrder({ prisma, shopId }: Seed, order: OrderSpec) {
         variantGidAtSale: line.variant,
         productGidAtSale: PRODUCT,
         orderProcessedAt: new Date(order.processedAt),
+        orderCancelledAt: order.cancelledAt ? new Date(order.cancelledAt) : null,
         orderTest: order.test ?? false,
         orderShopCurrencyCode: "USD",
         discountedUnitPriceAfterAllDiscountsShopAmount: line.price,
@@ -249,6 +297,13 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
     const b = { prisma: migrationPrisma, shopId: shopB.id };
     await seedCatalog(a);
     await seedCatalog(b);
+    await seedStock(a, [
+      [VARIANT_OLD, LOCATION_MAIN, 10],
+      [VARIANT_OLD, LOCATION_STORE, 2],
+      [VARIANT_MID, LOCATION_MAIN, 0],
+      [VARIANT_NEW, LOCATION_STORE, 3],
+    ]);
+    await seedStock(b, [[VARIANT_OLD, LOCATION_MAIN, 999]]);
 
     // 2026-09-20 04:30Z is 2026-09-20 00:30 EDT; 03:30Z is still 09-19 locally.
     const first = simple(1, "2026-09-20T04:30:00Z", VARIANT_OLD, 4, "100.00");
@@ -514,5 +569,144 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
         asOfLocalDate: "2026-11-09",
       }),
     ).rejects.toBeInstanceOf(AnalyticsPrerequisiteError);
+  });
+
+  describe("reports", () => {
+    const NOW = new Date("2026-11-10T17:00:00Z");
+    const RANGE = "range=custom&start=2026-09-15&end=2026-11-09";
+
+    const contextFor = (shopId: string, domain: string, db: TenantDb) =>
+      loadReportContext({
+        tenant: issueTenantAuthority({
+          shopId,
+          myshopifyDomain: domain,
+          source: "verified_admin_request",
+        }),
+        db,
+        now: NOW,
+      });
+
+    async function page(id: string, query = "") {
+      const report = findReport(id);
+      if (!report) throw new Error(`No report ${id}`);
+      return report.page(await contextFor(shopAId, SHOP_A_DOMAIN, dbA), new URLSearchParams(query));
+    }
+
+    function table(result: Awaited<ReturnType<typeof page>>) {
+      const keys = result.columns.map((column) => column.key);
+      return result.table.rows.map((row) =>
+        Object.fromEntries(row.cells.map((cell, index) => [keys[index], cell])),
+      );
+    }
+
+    const tiles = (result: Awaited<ReturnType<typeof page>>) =>
+      Object.fromEntries(result.table.tiles.map((tile) => [tile.label, tile.value]));
+
+    it("resolves the shop's calendar and currency, and refuses to guess them", async () => {
+      expect(await contextFor(shopAId, SHOP_A_DOMAIN, dbA)).toMatchObject({
+        timeZone: TZ,
+        currencyCode: "USD",
+        today: "2026-11-10",
+      });
+      // Shop B has no time zone or currency recorded yet.
+      await expect(contextFor(shopBId, SHOP_B_DOMAIN, dbB)).rejects.toBeInstanceOf(
+        AnalyticsPrerequisiteError,
+      );
+    });
+
+    it("reports sales by variant, naming a deleted variant from its order line", async () => {
+      const result = await page("sales-by-variant", `${RANGE}&sort=revenue&dir=desc`);
+      const rows = table(result);
+
+      expect(rows.map((row) => [row.variant, row.netUnits, row.revenue])).toEqual([
+        ["Size 9", "5", "$500.00"],
+        ["Size 10", "4", "$200.00"],
+        ["Size 11", "2", "$120.00"],
+        ["—", "1", "$9.00"],
+      ]);
+      expect(rows[1]).toMatchObject({ orderedUnits: "3", addedUnits: "2", returnedUnits: "1" });
+      expect(rows[3]).toMatchObject({ product: "Trail Shoe", sku: "—" });
+      expect(tiles(result)).toMatchObject({ "Net revenue": "$829.00", "Net units": "12" });
+      expect(result.dataAsOf).toBe("Oct 5, 2026, 11:00 AM EDT");
+      expect(result.notices).toEqual([]);
+    });
+
+    it("totals a day and an order the same way as the variant report", async () => {
+      const statistics = await page("sales-statistics", RANGE);
+      expect(tiles(statistics)).toMatchObject({
+        "Net revenue": "$829.00",
+        Orders: "5",
+        "Net units": "12",
+      });
+      const orders = await page("orders", RANGE);
+      expect(tiles(orders)).toMatchObject({ Orders: "6", "Net product revenue": "$829.00" });
+      const items = await page("sale-items", `${RANGE}&type=Refunded`);
+      expect(table(items).map((row) => [row.order, row.units, row.revenue])).toEqual([
+        ["#3", "-1", "-$50.00"],
+      ]);
+    });
+
+    it("grades the catalog in the ABC report", async () => {
+      const result = await page("abc-analysis");
+      expect(table(result).map((row) => [row.variant, row.grade, row.rank])).toEqual([
+        ["Size 9", "A", "1"],
+        ["Size 10", "A", "2"],
+        ["Size 11", "U", "—"],
+      ]);
+      expect(tiles(result)["Grade A"]).toBe("2 variants");
+      expect(result.notices.map((notice) => notice.heading)).toEqual([
+        "Some revenue came from variants that no longer exist",
+      ]);
+    });
+
+    it("values stock on hand from this shop's levels only", async () => {
+      const result = await page("stock-on-hand", "sort=onHand&dir=desc");
+      expect(
+        table(result).map((row) => [row.variant, row.location, row.onHand, row.costValue]),
+      ).toEqual([
+        ["Size 9", "Main warehouse", "10", "$485.00"],
+        ["Size 11", "Downtown store", "3", "$145.50"],
+        ["Size 9", "Downtown store", "2", "$97.00"],
+      ]);
+      expect(tiles(result)).toEqual({
+        "Units on hand": "15",
+        "Cost value": "$727.50",
+        "Retail value": "$1,800.00",
+        Variants: "2",
+      });
+      expect((await page("stock-on-hand", "stock=all")).table.totalRows).toBe(4);
+    });
+
+    it("ignores test, cancelled and deleted orders when dating the last order", async () => {
+      const lastOrdered = await loadLastOrderedAt(dbA, [VARIANT_OLD, VARIANT_MID, VARIANT_NEW]);
+      // Orders 7, 8 and 9 put Size 9 on an order on 10-05; none of them counts.
+      expect(lastOrdered.get(VARIANT_OLD)).toEqual(new Date("2026-09-20T04:30:00Z"));
+      expect(lastOrdered.get(VARIANT_MID)).toEqual(new Date("2026-10-01T15:00:00Z"));
+      expect((await loadLastOrderedAt(dbB, [VARIANT_OLD])).get(VARIANT_OLD)).toEqual(
+        new Date("2026-09-25T15:00:00Z"),
+      );
+    });
+
+    it("lists dead stock by the chosen period", async () => {
+      const result = await page("dead-stock", "days=30");
+      // Size 11 was created on 10-20, inside the 30 days, and is left out.
+      expect(
+        table(result).map((row) => [row.variant, row.onHand, row.lastOrderedDate, row.costValue]),
+      ).toEqual([["Size 9", "12", "2026-09-20", "$582.00"]]);
+      expect((await page("dead-stock", "days=60")).table.totalRows).toBe(0);
+    });
+
+    it("exports the same rows as CSV", async () => {
+      const report = findReport("sales-by-variant");
+      const result = await report?.export(
+        await contextFor(shopAId, SHOP_A_DOMAIN, dbA),
+        new URLSearchParams(`${RANGE}&sort=revenue&dir=desc&q=size 9`),
+      );
+      expect(toCsv(result?.headers ?? [], result?.rows ?? [])).toBe(
+        "Product,Variant,SKU,Vendor,Ordered,Added,Returned,Net units,Net revenue (USD)," +
+          "Average price (USD),Orders,First sold,Last sold\r\n" +
+          "Trail Shoe,Size 9,TS-9,Northwind,5,0,0,5,500.00,100.00,2,2026-09-19,2026-09-20\r\n",
+      );
+    });
   });
 });
