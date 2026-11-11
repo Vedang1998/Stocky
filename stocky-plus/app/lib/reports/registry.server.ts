@@ -16,8 +16,13 @@ import {
 import {
   addLocalDays,
   localDateOf,
+  localRangeToUtc,
   requireShopTimeZone,
 } from "../analytics/shop-calendar";
+import {
+  loadCompletedStocktakeLines,
+  loadTransferLines,
+} from "../analytics/stock-documents.server";
 import {
   loadLastOrderedAt,
   loadStockLevels,
@@ -50,6 +55,11 @@ import {
   buildVariantSalesReport,
   type SalesReportInput,
 } from "./sales-reports";
+import {
+  STOCKTAKE_VIEWS,
+  buildStocktakeVarianceReport,
+  buildTransfersReport,
+} from "./stock-document-reports";
 import {
   DEAD_STOCK_WINDOWS,
   DEFAULT_DEAD_STOCK_DAYS,
@@ -123,6 +133,29 @@ async function loadSales(
   };
 }
 
+/** Catalog entries and display names for the variants a stock document mentions. */
+async function loadVariantNames(
+  context: ReportContext,
+  variantGids: Iterable<string>,
+) {
+  const variants = await loadCatalogVariants(context.db, {
+    timeZone: context.timeZone,
+    variantGids: [...variantGids],
+  });
+  const catalog = new Map(
+    variants.map((variant) => [variant.variantGid, variant]),
+  );
+  return { catalog, directory: buildVariantDirectory(catalog) };
+}
+
+function requestedUtcRange(context: ReportContext, request: ReportRequest) {
+  return localRangeToUtc(
+    request.range.startLocalDate,
+    request.range.endLocalDate,
+    context.timeZone,
+  );
+}
+
 const SELLER_VIEW_OPTION: ReportOption = {
   key: "view",
   label: "Show",
@@ -135,6 +168,13 @@ const STOCK_FILTER_OPTION: ReportOption = {
   label: "Show",
   choices: STOCK_FILTERS,
   defaultValue: "stocked",
+};
+
+const STOCKTAKE_VIEW_OPTION: ReportOption = {
+  key: "view",
+  label: "Show",
+  choices: STOCKTAKE_VIEWS,
+  defaultValue: "variances",
 };
 
 const DEAD_STOCK_OPTION: ReportOption = {
@@ -413,6 +453,61 @@ const REPORTS: readonly RegisteredReport[] = [
         currencyCode: context.currencyCode,
         today: context.today,
         days,
+      });
+    },
+  }),
+  register({
+    id: "transfers",
+    title: "Transfers",
+    description:
+      "Units requested, shipped and received on each transfer between locations.",
+    group: "Inventory",
+    usesDateRange: true,
+    options: [],
+    load: async (context, request) => {
+      const [lines, locations] = await Promise.all([
+        loadTransferLines(context.db, requestedUtcRange(context, request)),
+        loadStockLocations(context.db),
+      ]);
+      const { directory } = await loadVariantNames(
+        context,
+        lines.map((line) => line.variantGid),
+      );
+      return buildTransfersReport({
+        lines,
+        directory,
+        locations,
+        timeZone: context.timeZone,
+      });
+    },
+  }),
+  register({
+    id: "stocktake-variances",
+    title: "Stocktake variances",
+    description:
+      "What each completed stocktake counted against what was expected, and the value of the difference.",
+    group: "Inventory",
+    usesDateRange: true,
+    options: [STOCKTAKE_VIEW_OPTION],
+    load: async (context, request) => {
+      const [lines, locations] = await Promise.all([
+        loadCompletedStocktakeLines(
+          context.db,
+          requestedUtcRange(context, request),
+        ),
+        loadStockLocations(context.db),
+      ]);
+      const names = await loadVariantNames(
+        context,
+        lines.map((line) => line.variantGid),
+      );
+      return buildStocktakeVarianceReport({
+        lines,
+        ...names,
+        locations,
+        timeZone: context.timeZone,
+        currencyCode: context.currencyCode,
+        view: request.options[STOCKTAKE_VIEW_OPTION.key],
       });
     },
   }),

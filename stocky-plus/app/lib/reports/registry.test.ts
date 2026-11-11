@@ -29,6 +29,8 @@ describe("report registry", () => {
       "abc-analysis",
       "stock-on-hand",
       "dead-stock",
+      "transfers",
+      "stocktake-variances",
     ]);
   });
 
