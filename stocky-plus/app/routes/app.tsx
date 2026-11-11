@@ -3,6 +3,8 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
+import { RouteErrorPage } from "../components/RouteErrorPage";
+import { describeRouteError, isShopifyAuthFlowResponse } from "../lib/route-error";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -33,7 +35,14 @@ export default function App() {
 }
 
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+
+  // Auth-flow responses (session-token bounce, exit-iframe, retry) must keep
+  // reaching the Shopify library's boundary; anything else is an app error.
+  if (isShopifyAuthFlowResponse(error)) {
+    return boundary.error(error);
+  }
+  return <RouteErrorPage view={describeRouteError(error)} />;
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
