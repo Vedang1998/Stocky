@@ -58,6 +58,8 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   ShopifyOrderLineFact: "ShopifyOrderLineFact",
   ShopifyOrderRefundFact: "ShopifyOrderRefundFact",
   OrderFactObservationInFlight: "OrderFactObservationInFlight",
+  PurchasingEvent: "PurchasingEvent",
+  PurchaseOrderCharge: "PurchaseOrderCharge",
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
@@ -74,6 +76,8 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "ShopifyOrderLineFact",
   "ShopifyOrderRefundFact",
   "OrderFactObservationInFlight",
+  "PurchasingEvent",
+  "PurchaseOrderCharge",
 ]);
 
 /**

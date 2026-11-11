@@ -22,6 +22,12 @@ export const PR6_A_CHILD_MERCHANT_MODELS = [
   "ShopifyOrderRefundTransactionFact",
 ] as const;
 
+/** Purchasing ledger tables (suppliers / purchase orders lane). */
+export const PURCHASING_DIRECT_MERCHANT_MODELS = [
+  "PurchasingEvent",
+  "PurchaseOrderCharge",
+] as const;
+
 export const DIRECT_MERCHANT_MODELS = [
   "Supplier",
   "PurchaseOrder",
@@ -44,6 +50,7 @@ export const DIRECT_MERCHANT_MODELS = [
   "ShopifyInventoryLevelFact",
   "CatalogObservationInFlight",
   ...PR6_A_DIRECT_MERCHANT_MODELS,
+  ...PURCHASING_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -112,6 +119,8 @@ export const MERCHANT_DELEGATE_NAMES = {
   POLineItem: "pOLineItem",
   TransferLineItem: "transferLineItem",
   StocktakeLineItem: "stocktakeLineItem",
+  PurchasingEvent: "purchasingEvent",
+  PurchaseOrderCharge: "purchaseOrderCharge",
 } as const satisfies Record<MerchantOwnedModel, string>;
 
 export const DIRECT_MODEL_SET = new Set<string>(DIRECT_MERCHANT_MODELS);
@@ -133,4 +142,8 @@ export const PARENT_OWNERSHIP_RULES: Record<
   },
   StocktakeLineItem: { parentModel: "Stocktake", foreignKey: "stocktakeId" },
   PurchaseOrder: { parentModel: "Supplier", foreignKey: "supplierId" },
+  PurchaseOrderCharge: {
+    parentModel: "PurchaseOrder",
+    foreignKey: "purchaseOrderId",
+  },
 };

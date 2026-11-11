@@ -4,12 +4,12 @@
 **Work unit:** PR 3 — Database enforcement
 **Branch:** `phase-1/tenant-enforcement`
 **Generator:** `scripts/tenant-enforcement/inventory.ts` (deterministic)
-**Content digest:** `11bc7084bf0ed567`
-**Merchant-owned tables:** 35
+**Content digest:** `51ff88d264b063ea`
+**Merchant-owned tables:** 37
 **Bootstrap tables:** 2
 **Control/maintenance tables:** 4
-**Composite parent keys:** 35
-**Composite foreign keys:** 19
+**Composite parent keys:** 37
+**Composite foreign keys:** 20
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run tenant:enforcement:inventory`.
@@ -44,7 +44,7 @@
 | Prisma model | SQL table | shopId nullability | Legacy shop | Parents | Children | Cross-domain | Existing (shopId,id) | Required composite key | Required composite FKs | Ownership diagnostics | RLS | Immutability trigger | Bootstrap exemption | Runtime privileges | Enforcement step | Rollback/forward recovery | Test coverage |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | Supplier | `Supplier` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, PurchaseOrder | — | `Supplier_shopId_id_key` (PR1) | `Supplier_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_Supplier_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
-| PurchaseOrder | `PurchaseOrder` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | Supplier | POLineItem, LeadTimeSnapshot | Supplier | `PurchaseOrder_shopId_id_key` (PR1) | `PurchaseOrder_shopId_id_key` | `PurchaseOrder_shopId_supplierId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_PurchaseOrder_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| PurchaseOrder | `PurchaseOrder` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | Supplier | POLineItem, LeadTimeSnapshot, PurchaseOrderCharge | Supplier | `PurchaseOrder_shopId_id_key` (PR1) | `PurchaseOrder_shopId_id_key` | `PurchaseOrder_shopId_supplierId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_PurchaseOrder_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ShopifyVariantCache | `ShopifyVariantCache` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | — | — | compatibility shopId idx only | `ShopifyVariantCache_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyVariantCache_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | InventorySnapshot | `InventorySnapshot` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | — | — | compatibility shopId idx only | `InventorySnapshot_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_InventorySnapshot_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | VariantAbcClass | `VariantAbcClass` | nullable in Prisma (DB NOT NULL after enforcement) | `shop` | — | — | — | compatibility shopId idx only | `VariantAbcClass_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_VariantAbcClass_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
@@ -78,6 +78,8 @@
 | ShopifyOrderAgreementFact | `ShopifyOrderAgreementFact` | non-null in Prisma (no expand/backfill) | — | ShopifyOrderFact | ShopifyOrderAgreementSaleFact | — | `ShopifyOrderAgreementFact_shopId_id_key` (PR1) | `ShopifyOrderAgreementFact_shopId_id_key` | `ShopifyOrderAgreementFact_shopId_shopifyOrderGid_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyOrderAgreementFact_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ShopifyOrderAgreementSaleFact | `ShopifyOrderAgreementSaleFact` | non-null in Prisma (no expand/backfill) | — | ShopifyOrderAgreementFact | — | — | `ShopifyOrderAgreementSaleFact_shopId_id_key` (PR1) | `ShopifyOrderAgreementSaleFact_shopId_id_key` | `ShopifyOrderAgreementSaleFact_shopId_shopifyAgreementGid_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyOrderAgreementSaleFact_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 | ShopifyOrderRefundTransactionFact | `ShopifyOrderRefundTransactionFact` | non-null in Prisma (no expand/backfill) | — | ShopifyOrderRefundFact | — | — | `ShopifyOrderRefundTransactionFact_shopId_id_key` (PR1) | `ShopifyOrderRefundTransactionFact_shopId_id_key` | `ShopifyOrderRefundTransactionFact_shopId_shopifyRefundGid_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_ShopifyOrderRefundTransactionFact_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| PurchasingEvent | `PurchasingEvent` | non-null in Prisma (no expand/backfill) | — | — | — | — | `PurchasingEvent_shopId_id_key` (PR1) | `PurchasingEvent_shopId_id_key` | — | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_PurchasingEvent_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
+| PurchaseOrderCharge | `PurchaseOrderCharge` | non-null in Prisma (no expand/backfill) | — | PurchaseOrder | — | — | `PurchaseOrderCharge_shopId_id_key` (PR1) | `PurchaseOrderCharge_shopId_id_key` | `PurchaseOrderCharge_shopId_purchaseOrderId_fkey` | zero-null + zero OPEN quarantine + parent/cross-domain match | yes (FORCE) | `trg_PurchaseOrderCharge_shopId_immutable` | no | SELECT/INSERT/UPDATE/DELETE | non-null → composite key → composite FK → RLS → trigger | reverse RLS/policies only with incident auth; constraints forward-recover | db-isolation + RLS matrix |
 
 ## Composite parent keys (`shopId`, `id`)
 
@@ -118,6 +120,8 @@
 | `ShopifyOrderAgreementFact_shopId_id_key` | `ShopifyOrderAgreementFact` | (shopId, id) |
 | `ShopifyOrderAgreementSaleFact_shopId_id_key` | `ShopifyOrderAgreementSaleFact` | (shopId, id) |
 | `ShopifyOrderRefundTransactionFact_shopId_id_key` | `ShopifyOrderRefundTransactionFact` | (shopId, id) |
+| `PurchasingEvent_shopId_id_key` | `PurchasingEvent` | (shopId, id) |
+| `PurchaseOrderCharge_shopId_id_key` | `PurchaseOrderCharge` | (shopId, id) |
 
 ## Composite tenant foreign keys
 
@@ -127,6 +131,7 @@
 | `VolumePriceTier_shopId_supplierId_fkey` | `VolumePriceTier` | (shopId, supplierId) | `Supplier` | (shopId, id) | CASCADE | child_parent |
 | `LeadTimeSnapshot_shopId_supplierId_fkey` | `LeadTimeSnapshot` | (shopId, supplierId) | `Supplier` | (shopId, id) | CASCADE | child_parent |
 | `POLineItem_shopId_purchaseOrderId_fkey` | `POLineItem` | (shopId, purchaseOrderId) | `PurchaseOrder` | (shopId, id) | CASCADE | child_parent |
+| `PurchaseOrderCharge_shopId_purchaseOrderId_fkey` | `PurchaseOrderCharge` | (shopId, purchaseOrderId) | `PurchaseOrder` | (shopId, id) | CASCADE | child_parent |
 | `TransferLineItem_shopId_transferOrderId_fkey` | `TransferLineItem` | (shopId, transferOrderId) | `TransferOrder` | (shopId, id) | CASCADE | child_parent |
 | `StocktakeLineItem_shopId_stocktakeId_fkey` | `StocktakeLineItem` | (shopId, stocktakeId) | `Stocktake` | (shopId, id) | CASCADE | child_parent |
 | `PurchaseOrder_shopId_supplierId_fkey` | `PurchaseOrder` | (shopId, supplierId) | `Supplier` | (shopId, id) | NO ACTION | cross_domain |
@@ -182,7 +187,9 @@
 | `ShopifyOrderAgreementFact` | `ShopifyOrderAgreementFact_shopId_not_null` | `ShopifyOrderAgreementFact_shopId_fkey_shop` | `ShopifyOrderAgreementFact_shopId_id_key` | `ShopifyOrderAgreementFact_tenant_select`, `ShopifyOrderAgreementFact_tenant_insert`, `ShopifyOrderAgreementFact_tenant_update`, `ShopifyOrderAgreementFact_tenant_delete` | `trg_ShopifyOrderAgreementFact_shopId_immutable` |
 | `ShopifyOrderAgreementSaleFact` | `ShopifyOrderAgreementSaleFact_shopId_not_null` | `ShopifyOrderAgreementSaleFact_shopId_fkey_shop` | `ShopifyOrderAgreementSaleFact_shopId_id_key` | `ShopifyOrderAgreementSaleFact_tenant_select`, `ShopifyOrderAgreementSaleFact_tenant_insert`, `ShopifyOrderAgreementSaleFact_tenant_update`, `ShopifyOrderAgreementSaleFact_tenant_delete` | `trg_ShopifyOrderAgreementSaleFact_shopId_immutable` |
 | `ShopifyOrderRefundTransactionFact` | `ShopifyOrderRefundTransactionFact_shopId_not_null` | `ShopifyOrderRefundTransactionFact_shopId_fkey_shop` | `ShopifyOrderRefundTransactionFact_shopId_id_key` | `ShopifyOrderRefundTransactionFact_tenant_select`, `ShopifyOrderRefundTransactionFact_tenant_insert`, `ShopifyOrderRefundTransactionFact_tenant_update`, `ShopifyOrderRefundTransactionFact_tenant_delete` | `trg_ShopifyOrderRefundTransactionFact_shopId_immutable` |
+| `PurchasingEvent` | `PurchasingEvent_shopId_not_null` | `PurchasingEvent_shopId_fkey_shop` | `PurchasingEvent_shopId_id_key` | `PurchasingEvent_tenant_select`, `PurchasingEvent_tenant_insert`, `PurchasingEvent_tenant_update`, `PurchasingEvent_tenant_delete` | `trg_PurchasingEvent_shopId_immutable` |
+| `PurchaseOrderCharge` | `PurchaseOrderCharge_shopId_not_null` | `PurchaseOrderCharge_shopId_fkey_shop` | `PurchaseOrderCharge_shopId_id_key` | `PurchaseOrderCharge_tenant_select`, `PurchaseOrderCharge_tenant_insert`, `PurchaseOrderCharge_tenant_update`, `PurchaseOrderCharge_tenant_delete` | `trg_PurchaseOrderCharge_shopId_immutable` |
 
 ## Schema verification note
 
-Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **35**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.
+Merchant coverage was compared to `app/tenant/models.ts` and `prisma/schema.prisma` on the PR 3 starting main. Count = **37**. Session, Shop, and the four tenant-backfill control tables are classified above and are **not** merchant-domain RLS targets.

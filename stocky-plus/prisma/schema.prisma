@@ -90,6 +90,8 @@ model Shop {
   shopifyOrderAgreementSaleFacts ShopifyOrderAgreementSaleFact[]
   shopifyOrderRefundTransactionFacts ShopifyOrderRefundTransactionFact[]
   orderFactObservationsInFlight OrderFactObservationInFlight[]
+  purchaseOrderCharges          PurchaseOrderCharge[]
+  purchasingEvents              PurchasingEvent[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -252,6 +254,18 @@ model TenantOwnershipIssueDetection {
 
 // ─── Module 1: Advanced Supplier Master ─────────────────────────────────────
 
+enum SupplierStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SupplierContactMethod {
+  EMAIL
+  PHONE
+  PORTAL
+  OTHER
+}
+
 model Supplier {
   id            String   @id @default(cuid())
   shop          String
@@ -263,18 +277,37 @@ model Supplier {
   contactPhone  String?
   currency      String   @default("USD")
   vendorNotes   String?
+  /// Trailing 90-day average of measured PO lead times (written by receiving).
   leadTimeDays  Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  status                 SupplierStatus         @default(ACTIVE)
+  archivedAt             DateTime?
+  website                String?                @db.VarChar(512)
+  addressLine1           String?                @db.VarChar(255)
+  addressLine2           String?                @db.VarChar(255)
+  city                   String?                @db.VarChar(128)
+  region                 String?                @db.VarChar(128)
+  postalCode             String?                @db.VarChar(32)
+  countryCode            String?                @db.VarChar(2)
+  paymentTerms           String?                @db.VarChar(255)
+  shippingTerms          String?                @db.VarChar(255)
+  defaultTaxRatePercent  Decimal?               @db.Decimal(7, 4)
+  /// Merchant-entered default lead time; never overwritten by measurements.
+  defaultLeadTimeDays    Int?
+  defaultRestockDays     Int?
+  minimumOrderValue      Decimal?               @db.Decimal(12, 2)
+  preferredContactMethod SupplierContactMethod?
 
   skuMappings       SupplierSkuMapping[]
   volumeTiers       VolumePriceTier[]
   purchaseOrders    PurchaseOrder[]
   leadTimeSnapshots LeadTimeSnapshot[]
 
+  @@unique([shopId, id])
   @@index([shop])
   @@index([shopId])
-  @@unique([shopId, id])
 }
 
 model SupplierSkuMapping {
@@ -282,17 +315,25 @@ model SupplierSkuMapping {
   shopId           String?
   supplierId       String
   shopifyVariantId String
-  vendorSku        String
+  vendorSku        String?
+  /// 1 means no minimum. Never applied automatically when building POs.
   moq              Int     @default(1)
+  /// 1 means individual units. Never applied automatically when building POs.
   packSize         Int     @default(1)
+
+  isPreferred          Boolean  @default(false)
+  supplierCost         Decimal? @db.Decimal(12, 4)
+  leadTimeDaysOverride Int?
+  orderUnit            String?  @db.VarChar(64)
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@unique([supplierId, shopifyVariantId])
+  @@unique([shopId, id])
+  @@unique([shopId, supplierId, shopifyVariantId])
   @@index([shopifyVariantId])
   @@index([shopId])
   @@index([shopId, supplierId])
-  @@unique([shopId, id])
 }
 
 model VolumePriceTier {
@@ -336,12 +377,23 @@ enum POStatus {
   PARTIAL
   RECEIVED
   CANCELLED
+  SENT
+  CLOSED
 }
 
 enum LandedCostMethod {
   WEIGHT
   VOLUME
   COST
+  QUANTITY
+}
+
+enum PurchaseOrderChargeKind {
+  SHIPPING
+  DUTY
+  FEE
+  DISCOUNT
+  OTHER
 }
 
 model PurchaseOrder {
@@ -353,7 +405,9 @@ model PurchaseOrder {
   poNumber         String?
   status           POStatus         @default(DRAFT)
   currency         String           @default("USD")
+  /// Shop-currency units per one PO-currency unit, frozen on the PO.
   exchangeRate     Decimal?         @db.Decimal(10, 6)
+  /// Legacy header charges. Read as charges until the PO's charges are edited.
   freightCost      Decimal?         @db.Decimal(10, 2)
   customsCost      Decimal?         @db.Decimal(10, 2)
   landedCostMethod LandedCostMethod @default(COST)
@@ -364,14 +418,46 @@ model PurchaseOrder {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  supplier  Supplier     @relation(fields: [supplierId], references: [id])
-  lineItems POLineItem[]
+  poSequence          Int?
+  /// Caller-supplied idempotency key for draft creation.
+  creationKey         String?   @db.VarChar(128)
+  supplierOrderNumber String?   @db.VarChar(128)
+  invoiceNumber       String?   @db.VarChar(128)
+  issuedOn            DateTime? @db.Date
+  expectedOn          DateTime? @db.Date
+  shipOn              DateTime? @db.Date
+  cancelOn            DateTime? @db.Date
+  invoiceOn           DateTime? @db.Date
+  paymentDueOn        DateTime? @db.Date
+  paymentTerms        String?   @db.VarChar(255)
+  shippingTerms       String?   @db.VarChar(255)
+  shipToAddress       String?   @db.VarChar(2000)
+  billToAddress       String?   @db.VarChar(2000)
+  buyerName           String?   @db.VarChar(255)
+  /// Printed on supplier-facing documents; `notes` stays internal.
+  supplierNotes       String?   @db.VarChar(4000)
+  /// Incremented on every material change; documents carry the version.
+  version             Int       @default(1)
+  sentVersion         Int?
+  sentAt              DateTime?
+  cancelledAt         DateTime?
+  closedAt            DateTime?
+  archivedAt          DateTime?
+  createdByUserId     String?   @db.VarChar(64)
 
+  supplier  Supplier              @relation(fields: [supplierId], references: [id])
+  lineItems POLineItem[]
+  charges   PurchaseOrderCharge[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, poSequence])
+  @@unique([shopId, poNumber])
+  @@unique([shopId, creationKey])
   @@index([shop, status])
   @@index([supplierId])
   @@index([shopId])
   @@index([shopId, supplierId])
-  @@unique([shopId, id])
+  @@index([shopId, status, expectedOn])
 }
 
 model POLineItem {
@@ -386,16 +472,72 @@ model POLineItem {
   manualCostOverride  Boolean  @default(false)
   weight              Decimal? @db.Decimal(10, 4)
   volume              Decimal? @db.Decimal(10, 4)
+  /// Per-unit share of allocated charges (PO currency).
   allocatedLandedCost Decimal? @db.Decimal(10, 4)
   retailPrice         Decimal? @db.Decimal(10, 2)
 
+  productTitle          String?  @db.VarChar(512)
+  variantTitle          String?  @db.VarChar(512)
+  sku                   String?  @db.VarChar(255)
+  barcode               String?  @db.VarChar(255)
+  inventoryItemGid      String?  @db.VarChar(256)
+  cancelledQty          Int      @default(0)
+  discountPercent       Decimal? @db.Decimal(7, 4)
+  taxRatePercent        Decimal? @db.Decimal(7, 4)
+  packSize              Int?
+  orderUnit             String?  @db.VarChar(64)
+  position              Int      @default(0)
+  note                  String?  @db.VarChar(1000)
+  /// Line share of allocated charges (PO currency); sums exactly to the charge total.
+  allocatedChargesTotal Decimal? @db.Decimal(12, 2)
+
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
+  @@unique([shopId, id])
   @@index([purchaseOrderId])
   @@index([shopifyVariantId])
   @@index([shopId])
   @@index([shopId, purchaseOrderId])
+}
+
+/// Header-level charge or discount on a purchase order. `amount` is
+/// non-negative; DISCOUNT reduces the total. Allocated charges feed landed cost.
+model PurchaseOrderCharge {
+  id              String                  @id @default(cuid())
+  shopId          String
+  purchaseOrderId String
+  kind            PurchaseOrderChargeKind
+  description     String?                 @db.VarChar(255)
+  amount          Decimal                 @db.Decimal(12, 2)
+  allocate        Boolean                 @default(true)
+  position        Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
   @@unique([shopId, id])
+  @@index([shopId, purchaseOrderId])
+}
+
+/// Append-only purchasing audit trail (suppliers, supplier products, POs).
+/// No foreign key to the subject so history survives draft deletion.
+model PurchasingEvent {
+  id          String   @id @default(cuid())
+  shopId      String
+  subjectType String   @db.VarChar(32)
+  subjectId   String   @db.VarChar(64)
+  action      String   @db.VarChar(64)
+  actorType   String   @db.VarChar(16)
+  actorId     String?  @db.VarChar(64)
+  details     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@index([shopId, subjectType, subjectId, createdAt])
 }
 
 // ─── Shopify data cache ─────────────────────────────────────────────────────

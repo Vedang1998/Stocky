@@ -165,6 +165,25 @@ const RELATIONS: MerchantRelationMeta[] = [
     ],
   },
   {
+    name: "charges",
+    sourceModel: "PurchaseOrder",
+    targetModel: "PurchaseOrderCharge",
+    cardinality: "many",
+    ownershipLineage: {
+      kind: "child_collection",
+      childForeignKey: "purchaseOrderId",
+    },
+    nestedWherePermitted: true,
+    allowedNestedOperations: [
+      "create",
+      "createMany",
+      "update",
+      "updateMany",
+      "delete",
+      "deleteMany",
+    ],
+  },
+  {
     name: "supplier",
     sourceModel: "PurchaseOrder",
     targetModel: "Supplier",
@@ -259,6 +278,15 @@ const RELATIONS: MerchantRelationMeta[] = [
     ownershipLineage: { kind: "parent_fk", foreignKey: "purchaseOrderId" },
     nestedWherePermitted: false,
     allowedNestedOperations: ["connect", "connectOrCreate", "disconnect"],
+  },
+  {
+    name: "purchaseOrder",
+    sourceModel: "PurchaseOrderCharge",
+    targetModel: "PurchaseOrder",
+    cardinality: "one",
+    ownershipLineage: { kind: "parent_fk", foreignKey: "purchaseOrderId" },
+    nestedWherePermitted: false,
+    allowedNestedOperations: ["connect"],
   },
   {
     name: "transferOrder",
@@ -666,6 +694,7 @@ export const ROUTE_RELATION_SHAPES = [
   "TransferOrder.lineItems",
   "Stocktake.lineItems",
   "POLineItem.purchaseOrder",
+  "PurchaseOrder.charges",
 ] as const;
 
 export function relationMetaFor(
