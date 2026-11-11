@@ -111,7 +111,7 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     shopIdNullableInPrisma: true,
     legacyShopField: true,
     parentRelationships: ["Supplier"],
-    childRelationships: ["POLineItem", "LeadTimeSnapshot", "PurchaseOrderCharge"],
+    childRelationships: ["POLineItem", "LeadTimeSnapshot"],
     crossDomainRelationships: ["Supplier"],
     existingShopIdIdUnique: true,
     requiredCompositeKey: true,
@@ -723,6 +723,42 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     enforcementStepGroup: "merchant_child",
   },
   {
+    prismaModel: "InventoryOperation",
+    sqlTable: "InventoryOperation",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: ["InventoryOperationLine"],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "InventoryOperationLine",
+    sqlTable: "InventoryOperationLine",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["InventoryOperation"],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
     prismaModel: "PurchasingEvent",
     sqlTable: "PurchasingEvent",
     classification: "merchant_domain",
@@ -920,16 +956,6 @@ export const COMPOSITE_FOREIGN_KEYS: readonly CompositeForeignKey[] = [
     purpose: "child_parent",
   },
   {
-    name: "PurchaseOrderCharge_shopId_purchaseOrderId_fkey",
-    childTable: "PurchaseOrderCharge",
-    childColumns: ["shopId", "purchaseOrderId"],
-    parentTable: "PurchaseOrder",
-    parentColumns: ["shopId", "id"],
-    onDelete: "CASCADE",
-    onUpdate: "NO ACTION",
-    purpose: "child_parent",
-  },
-  {
     name: "TransferLineItem_shopId_transferOrderId_fkey",
     childTable: "TransferLineItem",
     childColumns: ["shopId", "transferOrderId"],
@@ -1075,6 +1101,16 @@ export const COMPOSITE_FOREIGN_KEYS: readonly CompositeForeignKey[] = [
     childColumns: ["shopId", "shopifyRefundGid"],
     parentTable: "ShopifyOrderRefundFact",
     parentColumns: ["shopId", "shopifyGid"],
+    onDelete: "RESTRICT",
+    onUpdate: "NO ACTION",
+    purpose: "child_parent",
+  },
+  {
+    name: "InventoryOperationLine_shopId_operationId_fkey",
+    childTable: "InventoryOperationLine",
+    childColumns: ["shopId", "operationId"],
+    parentTable: "InventoryOperation",
+    parentColumns: ["shopId", "id"],
     onDelete: "RESTRICT",
     onUpdate: "NO ACTION",
     purpose: "child_parent",
@@ -1270,17 +1306,20 @@ void CONTROL_PLANE_DML;
 
 export const PRE_PR6_A_MERCHANT_TABLE_COUNT = 26;
 export const PR6_A_ADDED_MERCHANT_TABLE_COUNT = 9;
+/** InventoryOperation + InventoryOperationLine (inventory-control ledger). */
+export const INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT = 2;
 /** PurchasingEvent and PurchaseOrderCharge. */
 export const PURCHASING_ADDED_MERCHANT_TABLE_COUNT = 2;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
   PRE_PR6_A_MERCHANT_TABLE_COUNT +
   PR6_A_ADDED_MERCHANT_TABLE_COUNT +
+  INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT +
   PURCHASING_ADDED_MERCHANT_TABLE_COUNT;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== EXPECTED_MERCHANT_TABLE_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
+      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
     );
   }
 }
@@ -1300,3 +1339,6 @@ export const ORDER_OBSERVATION_LIFECYCLE_GUARD_FN =
 
 export const ORDER_OBSERVATION_SET_LEASE_FN =
   "stocky_order_observation_set_lease";
+
+/** Inventory operation ledger request/terminal-state immutability guard. */
+export const INVENTORY_OPERATION_GUARD_FN = "stocky_inventory_operation_guard";

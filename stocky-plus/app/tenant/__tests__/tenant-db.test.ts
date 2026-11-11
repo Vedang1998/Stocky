@@ -5,6 +5,7 @@ import { TenantAccessError, TenantAuthorityError } from "../errors";
 import {
   CHILD_MERCHANT_MODELS,
   DIRECT_MERCHANT_MODELS,
+  INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS,
   MERCHANT_OWNED_MODELS,
   PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT,
   PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT,
@@ -104,6 +105,7 @@ describe("tenant-bound database contract (PR 2)", () => {
     expect(DIRECT_MERCHANT_MODELS).toHaveLength(
       PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT +
         PR6_A_DIRECT_MERCHANT_MODELS.length +
+        INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS.length +
         PURCHASING_DIRECT_MERCHANT_MODELS.length,
     );
     expect(CHILD_MERCHANT_MODELS).toHaveLength(
