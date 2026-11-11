@@ -24,7 +24,7 @@ export {
   resolveAuthorityAfterVerifiedAuth,
   enumerateCanonicalShopsForScheduler,
   deleteSessionsForShop,
-  updateSessionScope,
+  updateOfflineSessionScope,
   getMerchantDelegate,
   type CanonicalShopIdentity,
 } from "./bootstrap.server";

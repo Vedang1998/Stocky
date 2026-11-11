@@ -195,14 +195,20 @@ export async function deleteSessionsForShop(shopDomain: string): Promise<number>
   return result.count;
 }
 
-export async function updateSessionScope(input: {
-  sessionId: string;
+/**
+ * Record the scopes Shopify reports for a shop on its offline session(s).
+ * Returns the number of sessions updated; zero when none is stored, which is
+ * normal after an uninstall.
+ */
+export async function updateOfflineSessionScope(input: {
+  shopDomain: string;
   scope: string;
-}): Promise<void> {
-  await rawPrisma.session.update({
-    where: { id: input.sessionId },
+}): Promise<number> {
+  const result = await rawPrisma.session.updateMany({
+    where: { shop: input.shopDomain, isOnline: false },
     data: { scope: input.scope },
   });
+  return result.count;
 }
 
 /**
