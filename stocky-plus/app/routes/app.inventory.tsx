@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useRef,
-  useSyncExternalStore,
-  type ComponentRef,
-  type KeyboardEvent,
-} from "react";
+import { useEffect, useRef, useSyncExternalStore, type ComponentRef } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Form, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -14,6 +8,7 @@ import {
   isStale,
 } from "../../extensions/propo-pos/src/format";
 import { numericIdFromGid } from "../lib/shopify-gid";
+import { submitOnEnter } from "../lib/submit-on-enter";
 import type { ResolvedVariant } from "../services/barcode-lookup.server";
 import {
   lookupInventory,
@@ -331,15 +326,6 @@ export default function Inventory() {
   useEffect(() => {
     if (!hasCamera) fieldRef.current?.focus();
   }, [now, hasCamera]);
-
-  // Polaris fields do not submit their form on Enter, and scanners end every
-  // code with Enter. Submit here, and stop the key so a future native
-  // submission cannot fire a second lookup.
-  function submitOnEnter(event: KeyboardEvent<HTMLFormElement>) {
-    if (event.key !== "Enter" || event.target !== fieldRef.current) return;
-    event.preventDefault();
-    event.currentTarget.requestSubmit();
-  }
 
   async function scanWithCamera() {
     let code: string;
