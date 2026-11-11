@@ -2,6 +2,7 @@
 import { createElement as h } from "react";
 import type { LoaderFunctionArgs } from "react-router";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { downloadHeaders } from "../lib/http/download.server";
 
 /**
  * Resource route: PDF receiver document for warehouse staff.
@@ -97,9 +98,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const buffer = await renderToBuffer(doc);
 
   return new Response(new Uint8Array(buffer), {
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="receiver-${po.id.slice(-6)}.pdf"`,
-    },
+    headers: downloadHeaders({
+      contentType: "application/pdf",
+      filename: `receiver-${po.id.slice(-6)}.pdf`,
+      disposition: "inline",
+    }),
   });
 };
