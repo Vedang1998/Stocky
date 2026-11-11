@@ -7,6 +7,8 @@ import type {
 import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { formatMoney } from "../lib/decimal-format";
+import { serializeDecimals } from "../lib/decimal-wire.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { db } = await requireAdminTenant({ request, params });
@@ -28,7 +30,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     take: 250,
   });
 
-  return { supplier, variants };
+  return serializeDecimals({ supplier, variants });
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -270,7 +272,11 @@ export default function SupplierDetail() {
                   <s-table-cell>{variantTitle(t.variantId)}</s-table-cell>
                   <s-table-cell>{t.minQty}</s-table-cell>
                   <s-table-cell>{t.maxQty ?? "∞"}</s-table-cell>
-                  <s-table-cell>${Number(t.unitCost).toFixed(2)}</s-table-cell>
+                  <s-table-cell>
+                    {formatMoney(t.unitCost, supplier.currency, {
+                      maximumFractionDigits: 4,
+                    })}
+                  </s-table-cell>
                   <s-table-cell>
                     <Form method="post">
                       <input type="hidden" name="intent" value="deleteTier" />
