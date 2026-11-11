@@ -86,6 +86,34 @@ describe("privacy compliance", () => {
         },
       });
     }
+    // A ledger line holds its operation with a RESTRICT key, so the erasure
+    // has to take the line before the operation.
+    const operation = await prisma.inventoryOperation.create({
+      data: {
+        shopId: shop.id,
+        idempotencyKey: `${domain}-adjustment`,
+        payloadDigest: "0".repeat(64),
+        kind: "ADJUSTMENT",
+        writeCapability: "inventory_adjustments",
+        sourceType: "adjustment",
+        sourceId: "adjustment-1",
+        reason: "correction",
+        quantityName: "available",
+        actorChannel: "ADMIN",
+        actorDisplayName: "Sam Keeper",
+        lineCount: 1,
+      },
+    });
+    await prisma.inventoryOperationLine.create({
+      data: {
+        shopId: shop.id,
+        operationId: operation.id,
+        lineNumber: 1,
+        inventoryItemGid: "gid://shopify/InventoryItem/1",
+        locationGid: "gid://shopify/Location/1",
+        delta: 2,
+      },
+    });
     await prisma.session.create({
       data: {
         id: `offline_${domain}`,
