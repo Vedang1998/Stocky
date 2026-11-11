@@ -7,6 +7,8 @@ import type { CatalogVariant } from "../analytics/catalog.server";
 import { ZERO, type Decimal } from "../analytics/money";
 import { localDateOf, type LocalDate } from "../analytics/shop-calendar";
 import type {
+  InventoryChange,
+  InventoryChangeKind,
   StocktakeLine,
   TransferLine,
   TransferStatus,
@@ -378,7 +380,212 @@ export function buildStocktakeVarianceReport(
     methodNotes: [
       "A stocktake is listed by the day it was completed, in your store's time zone. Stocktakes still in progress and cancelled stocktakes are not included.",
       "Variance value uses today's cost per item in Shopify, not the cost on the day of the count.",
-      "This report shows what was counted. It does not show whether the quantity in Shopify was changed to match.",
+      "This report shows what was counted. The Inventory adjustments report shows what was changed in Shopify as a result.",
+    ],
+  };
+}
+
+// --- Inventory adjustments ---------------------------------------------------
+
+const CHANGE_KIND_LABELS: Record<InventoryChangeKind, string> = {
+  ADJUSTMENT: "Adjustment",
+  STOCKTAKE: "Stocktake",
+  RECEIPT: "Purchase order receipt",
+  TRANSFER: "Transfer",
+  REVERSAL: "Reversal",
+};
+
+/** Shopify's inventory reason codes in the words its admin uses for them. */
+const REASON_LABELS: Record<string, string> = {
+  correction: "Correction",
+  cycle_count_available: "Inventory count",
+  damaged: "Damaged",
+  movement_created: "Transfer created",
+  movement_updated: "Transfer updated",
+  movement_received: "Transfer received",
+  movement_canceled: "Transfer cancelled",
+  other: "Other",
+  promotion: "Promotion or donation",
+  quality_control: "Quality control",
+  received: "Received",
+  reservation_created: "Reservation created",
+  reservation_deleted: "Reservation deleted",
+  reservation_updated: "Reservation updated",
+  restock: "Return restock",
+  safety_stock: "Safety stock",
+  shrinkage: "Theft or loss",
+};
+
+const QUANTITY_NAME_LABELS: Record<string, string> = {
+  available: "Available",
+  damaged: "Damaged",
+  quality_control: "Quality control",
+  safety_stock: "Safety stock",
+};
+
+const SELLABLE_QUANTITY = "available";
+
+const UNKNOWN_ITEM: VariantInfo = {
+  variantGid: "",
+  product: "Unknown item",
+  variant: "",
+  sku: null,
+  vendor: null,
+  productType: null,
+  inCatalog: false,
+};
+
+export type InventoryChangeRow = {
+  change: InventoryChange;
+  info: VariantInfo;
+  location: string;
+  date: LocalDate;
+  kind: string;
+  reason: string;
+  quantityName: string;
+  madeBy: string | null;
+  unitCost: Decimal | null;
+  /** Null unless the change moved sellable stock and the variant has a cost. */
+  value: Decimal | null;
+};
+
+export type InventoryChangesInput = {
+  changes: readonly InventoryChange[];
+  catalog: ReadonlyMap<string, CatalogVariant>;
+  directory: VariantDirectory;
+  locations: readonly StockLocation[];
+  timeZone: string;
+  currencyCode: string;
+};
+
+function madeBy(change: InventoryChange): string | null {
+  if (change.actorName) return change.actorName;
+  return change.actorChannel === "SYSTEM" ? "Automatic" : null;
+}
+
+/** One row per line of every inventory write Shopify accepted in the range. */
+export function buildInventoryChangesReport(
+  input: InventoryChangesInput,
+): ReportData<InventoryChangeRow> {
+  const { currencyCode } = input;
+  const locationName = locationNamer(input.locations);
+
+  const rows = input.changes.map((change): InventoryChangeRow => {
+    const variant = change.variantGid
+      ? input.catalog.get(change.variantGid)
+      : undefined;
+    const unitCost = variant ? unitCostIn(variant, currencyCode) : null;
+    return {
+      change,
+      info: change.variantGid
+        ? input.directory(change.variantGid)
+        : UNKNOWN_ITEM,
+      location: locationName(change.locationGid),
+      date: localDateOf(change.createdAt, input.timeZone),
+      kind: CHANGE_KIND_LABELS[change.kind] ?? change.kind,
+      reason: REASON_LABELS[change.reason] ?? change.reason,
+      quantityName:
+        QUANTITY_NAME_LABELS[change.quantityName] ?? change.quantityName,
+      madeBy: madeBy(change),
+      unitCost,
+      value:
+        unitCost && change.quantityName === SELLABLE_QUANTITY
+          ? unitCost.times(change.delta)
+          : null,
+    };
+  });
+
+  return {
+    columns: [
+      { key: "date", label: "Date", kind: "date", value: (r) => r.date },
+      { key: "type", label: "Type", kind: "text", value: (r) => r.kind },
+      { key: "reason", label: "Reason", kind: "text", value: (r) => r.reason },
+      {
+        key: "location",
+        label: "Location",
+        kind: "text",
+        value: (r) => r.location,
+      },
+      ...identityColumns<InventoryChangeRow>(),
+      {
+        key: "quantity",
+        label: "Quantity",
+        kind: "text",
+        definition:
+          "Which Shopify quantity changed. A change to Available changes On hand by the same amount.",
+        value: (r) => r.quantityName,
+      },
+      {
+        key: "change",
+        label: "Change",
+        kind: "integer",
+        definition: "Units added (above zero) or removed (below zero).",
+        value: (r) => r.change.delta,
+      },
+      {
+        key: "after",
+        label: "Quantity after",
+        kind: "integer",
+        definition:
+          "The quantity Shopify reported right after the change. Blank when Shopify did not report one.",
+        value: (r) => r.change.quantityAfterChange,
+      },
+      {
+        key: "value",
+        label: "Value of change",
+        kind: "money",
+        definition:
+          "Change × today's cost per item in Shopify, for changes to Available. Blank for other quantities and for variants without a cost.",
+        value: (r) => r.value,
+      },
+      {
+        key: "madeBy",
+        label: "Made by",
+        kind: "text",
+        value: (r) => r.madeBy,
+      },
+      { key: "note", label: "Note", kind: "text", value: (r) => r.change.note },
+    ],
+    rows,
+    rowKey: (row) => row.change.lineId,
+    defaultSort: { key: "date", direction: "desc" },
+    facets: [
+      { key: "type", label: "Type", value: (row) => row.kind },
+      { key: "reason", label: "Reason", value: (row) => row.reason },
+      { key: "location", label: "Location", value: (row) => row.location },
+    ],
+    searchKeys: [...IDENTITY_SEARCH_KEYS, "madeBy", "note"],
+    summarize: (shown) => [
+      {
+        label: "Changes",
+        value: count(new Set(shown.map((r) => r.change.operationId)).size),
+        detail: countOf(shown.length, "line", "lines"),
+      },
+      {
+        label: "Units added",
+        value: count(sumOf(shown, (r) => Math.max(r.change.delta, 0))),
+      },
+      {
+        label: "Units removed",
+        value: count(sumOf(shown, (r) => Math.max(-r.change.delta, 0))),
+      },
+      {
+        label: "Net value of changes",
+        value: formatCell(
+          "money",
+          sumValues(shown.map((r) => r.value)),
+          currencyCode,
+        ),
+        detail: "Changes to Available, at today's cost",
+      },
+    ],
+    notices: [],
+    dataAsOf: null,
+    methodNotes: [
+      "Only changes made through this app and accepted by Shopify are listed. Changes made directly in Shopify or by other apps are not included, and neither is a change that failed or is still waiting to be sent.",
+      "A change is listed by the day it was made, in your store's time zone.",
+      "A transfer appears twice: units removed at the source when it ships, and units added at the destination when it is received.",
+      "Value uses today's cost per item in Shopify, not the cost on the day of the change.",
     ],
   };
 }

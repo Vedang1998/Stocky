@@ -169,9 +169,13 @@ table, sorting, filtering, the totals and the export.
 | Sale items | Unit event | Date range | Unit events, net revenue |
 | Orders | Order | Date range | Unit events, net revenue |
 | Sales statistics | Shop-local day | Date range | Unit events, net revenue |
+| Gross profit | Variant | Date range | Unit events, net revenue, current unit cost (§7) |
 | ABC analysis | Catalog variant | Last 56 complete days | ABC/U (§6) |
 | Stock on hand | Variant and location | Now | Inventory level facts, catalog (§7) |
 | Dead stock | Variant | Now, against a chosen number of days | Inventory level facts, order line facts |
+| Transfers | Transfer line | Date range, by creation day | `TransferOrder`, `TransferLineItem` |
+| Stocktake variances | Stocktake line | Date range, by completion day | `Stocktake`, `StocktakeLineItem`, current unit cost |
+| Inventory adjustments | Applied ledger line | Date range, by the day the change was made | `InventoryOperation`, `InventoryOperationLine`, current unit cost |
 
 ### 9.1 Date ranges
 
@@ -241,7 +245,83 @@ ordered. N is 30, 60, 90 (default), 180 or 365.
 - When the stored order history starts less than N days ago, the page warns
   that a variant may have sold inside the period before the history begins.
 
-### 9.5 Totals, filters and export
+### 9.5 Gross profit
+
+Shopify stores one cost per inventory item and no history of it. Gross profit
+is therefore an estimate, and the report labels it as one.
+
+```
+estimated cost of goods = net units × current unit cost
+estimated gross profit  = net revenue − estimated cost of goods
+margin                  = estimated gross profit ÷ net revenue
+```
+
+- The unit cost is the variant's current Shopify cost (§7), used only when it
+  is in the shop currency. A variant with no cost, a cost in another currency,
+  or no longer in the catalog has a blank cost, profit and margin.
+- Profit is also blank when any of the variant's sales in the range has no
+  price in the shop currency, because its revenue is incomplete. The cost is
+  still shown.
+- Margin is blank when net revenue is zero.
+- The profit and margin totals cover only the variants with a profit figure and
+  say how many of the rows on screen that is. The margin total divides by the
+  revenue of those same variants, not by all revenue.
+- Nothing but the cost of goods is subtracted. Where prices include tax, net
+  revenue (§4) includes that tax and so does the profit.
+
+### 9.6 Transfers
+
+One row per line of every transfer created in the range, whatever its status.
+These are the app's own transfer documents; a transfer made directly in
+Shopify is not listed.
+
+- **Requested** is the line's quantity.
+- **Shipped** is the picked quantity, or the requested quantity when nothing
+  was picked. It is blank until the transfer is in transit or received.
+- **Received** is the line's received quantity, blank until the transfer is
+  received.
+- **In transit** is the shipped quantity of a transfer that is in transit, and
+  zero otherwise.
+
+Created, shipped and received dates are shop-local days.
+
+### 9.7 Stocktake variances
+
+One row per counted line of every stocktake completed in the range. Stocktakes
+in progress or cancelled are not included, and a line with no count is left out
+and counted in a notice.
+
+```
+variance       = counted − expected
+variance value = variance × current unit cost
+```
+
+Expected is the quantity the app recorded for the item when it was added to the
+stocktake. The value uses the current Shopify cost in the shop currency and is
+blank without one. By default only lines with a variance are listed; the report
+can show every counted line.
+
+### 9.8 Inventory adjustments
+
+One row per line of an inventory write that this app sent and Shopify accepted
+(`InventoryOperationLine.status = APPLIED`), for operations created in the
+range. A line that failed, conflicted or has not been sent yet changed no stock
+and is not listed. Changes made in Shopify itself or by another app never pass
+through the ledger and are not listed either.
+
+- Type is the operation kind: adjustment, stocktake, purchase order receipt,
+  transfer or reversal. A transfer appears as one operation when it ships
+  (units removed at the source) and another when it is received (units added
+  at the destination).
+- Reason and quantity are Shopify's own codes, shown in the wording of the
+  Shopify admin. A code without a known label is shown as received.
+- **Value of change** is the change × current unit cost, for changes to the
+  `available` quantity only. Moving units into `damaged`, `quality_control` or
+  `safety_stock` is not valued.
+- **Made by** is the staff member's display name recorded with the operation,
+  or "Automatic" for a change made by the system.
+
+### 9.9 Totals, filters and export
 
 Totals are computed from the rows left after filters and search, across every
 page, never from the page on screen. Sorting puts blank values last in both
@@ -254,12 +334,14 @@ with "(%)" in the header, and a missing value as an empty cell. All cells go
 through the shared encoder in `app/lib/csv.server.ts`, which neutralizes
 spreadsheet formulas.
 
-### 9.6 Known limits
+### 9.10 Known limits
 
 - A report is computed on request and held in memory for that request. Shops
   with very large catalogs or order volumes will need persisted daily
   aggregates before the 366-day range is comfortable.
 - Stock on hand is current only. A report of stock on a past date needs daily
   snapshots, which are not stored yet.
-- Cost of goods sold and profit are not reported. Shopify's current cost per
-  item is not the cost at the time of sale.
+- Every cost-based figure (stock value, gross profit, variance value, value of
+  an inventory change) uses the current Shopify cost per item, not the cost on
+  the day of the sale, count or change.
+- Purchase order and supplier reports are not built yet.

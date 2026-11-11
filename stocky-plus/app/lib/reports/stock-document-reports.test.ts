@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { Decimal } from "../analytics/money";
 import type {
+  InventoryChange,
   StocktakeLine,
   TransferLine,
 } from "../analytics/stock-documents.server";
@@ -8,6 +9,7 @@ import type { StockLocation } from "../analytics/stock-levels.server";
 import type { ReportViewRequest } from "./params";
 import { tablePage } from "./present";
 import {
+  buildInventoryChangesReport,
   buildStocktakeVarianceReport,
   buildTransfersReport,
 } from "./stock-document-reports";
@@ -363,6 +365,130 @@ describe("buildStocktakeVarianceReport", () => {
       "Units over": "1",
       "Units short": "0",
       "Net variance value": "$0.00",
+    });
+  });
+});
+
+function inventoryChange(
+  lineId: string,
+  overrides: Partial<InventoryChange> = {},
+): InventoryChange {
+  return {
+    lineId,
+    operationId: "operation-1",
+    kind: "ADJUSTMENT",
+    reason: "correction",
+    quantityName: "available",
+    actorName: "Dana Rivera",
+    actorChannel: "ADMIN",
+    note: null,
+    createdAt: new Date("2026-11-05T15:00:00Z"),
+    variantGid: variantGid(1),
+    locationGid: locationGid(1),
+    delta: -2,
+    quantityAfterChange: 8,
+    ...overrides,
+  };
+}
+
+describe("buildInventoryChangesReport", () => {
+  function report(changes: InventoryChange[]) {
+    return buildInventoryChangesReport({
+      changes,
+      catalog: CATALOG,
+      directory: DIRECTORY,
+      locations: LOCATIONS,
+      timeZone: TIME_ZONE,
+      currencyCode: "USD",
+    });
+  }
+
+  it("describes a change in the merchant's words", () => {
+    const rows = rowsByKey(
+      report([
+        inventoryChange("a", { reason: "shrinkage", note: "Broken in aisle" }),
+      ]),
+    );
+
+    expect(rows.get("a")).toMatchObject({
+      date: "2026-11-05",
+      type: "Adjustment",
+      reason: "Theft or loss",
+      location: "Main warehouse",
+      product: "Trail Shoe",
+      quantity: "Available",
+      change: -2,
+      after: 8,
+      value: "-16.00",
+      madeBy: "Dana Rivera",
+      note: "Broken in aisle",
+    });
+  });
+
+  it("shows a code it has no label for as Shopify sent it", () => {
+    const [row] = report([
+      inventoryChange("a", { reason: "new_reason", quantityName: "incoming" }),
+    ]).rows;
+
+    expect(row.reason).toBe("new_reason");
+    expect(row.quantityName).toBe("incoming");
+  });
+
+  it("values only changes to sellable stock", () => {
+    const [row] = report([
+      inventoryChange("a", { quantityName: "damaged", delta: 3 }),
+    ]).rows;
+
+    expect(row.quantityName).toBe("Damaged");
+    expect(row.value).toBeNull();
+  });
+
+  it("leaves the value blank for a variant without a cost", () => {
+    const [row] = report([
+      inventoryChange("a", { variantGid: variantGid(2) }),
+    ]).rows;
+
+    expect(row.value).toBeNull();
+  });
+
+  it("names an automatic change and leaves an unnamed staff change blank", () => {
+    const rows = report([
+      inventoryChange("system", { actorName: null, actorChannel: "SYSTEM" }),
+      inventoryChange("pos", { actorName: null, actorChannel: "POS" }),
+    ]).rows;
+
+    expect(rows.map((row) => row.madeBy)).toEqual(["Automatic", null]);
+  });
+
+  it("lists a change whose variant was not recorded", () => {
+    const [row] = report([inventoryChange("a", { variantGid: null })]).rows;
+
+    expect(row.info.product).toBe("Unknown item");
+    expect(row.value).toBeNull();
+  });
+
+  it("totals additions and removals separately and counts each change once", () => {
+    const data = report([
+      inventoryChange("a"),
+      inventoryChange("b", { variantGid: variantGid(3), delta: 5 }),
+      inventoryChange("c", {
+        operationId: "operation-2",
+        kind: "STOCKTAKE",
+        reason: "cycle_count_available",
+        delta: -1,
+      }),
+    ]);
+
+    // −2 × $8.00 + 5 × $2.50 − 1 × $8.00
+    expect(tiles(data)).toEqual({
+      Changes: "2",
+      "Units added": "5",
+      "Units removed": "3",
+      "Net value of changes": "-$11.50",
+    });
+    expect(tiles(data, { facets: { type: "Stocktake" } })).toMatchObject({
+      Changes: "1",
+      "Units removed": "1",
     });
   });
 });

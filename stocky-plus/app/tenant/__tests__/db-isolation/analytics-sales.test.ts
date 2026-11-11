@@ -9,6 +9,12 @@ import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
 import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
+import { localRangeToUtc } from "../../../lib/analytics/shop-calendar";
+import {
+  loadAppliedInventoryChanges,
+  loadCompletedStocktakeLines,
+  loadTransferLines,
+} from "../../../lib/analytics/stock-documents.server";
 import { loadLastOrderedAt } from "../../../lib/analytics/stock-levels.server";
 import { toCsv } from "../../../lib/csv.server";
 import { findReport, loadReportContext } from "../../../lib/reports/registry.server";
@@ -707,6 +713,225 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
           "Average price (USD),Orders,First sold,Last sold\r\n" +
           "Trail Shoe,Size 9,TS-9,Northwind,5,0,0,5,500.00,100.00,2,2026-09-19,2026-09-20\r\n",
       );
+    });
+
+    it("estimates gross profit from today's Shopify cost", async () => {
+      const result = await page("gross-profit", `${RANGE}&q=size 9`);
+
+      // 5 units at $100.00 against a $48.50 cost per item.
+      expect(table(result)[0]).toMatchObject({
+        netUnits: "5",
+        revenue: "$500.00",
+        unitCost: "$48.50",
+        cost: "$242.50",
+        profit: "$257.50",
+        margin: "51.50%",
+      });
+    });
+
+    describe("stock documents", () => {
+      const documentRange = localRangeToUtc("2026-09-15", "2026-11-09", TZ);
+
+      async function seedDocuments(
+        shopId: string,
+        domain: string,
+        units: { transfer: number; counted: number; adjusted: number },
+      ) {
+        await migrationPrisma.transferOrder.create({
+          data: {
+            shop: domain,
+            shopId,
+            sourceLocationId: LOCATION_MAIN,
+            destinationLocationId: LOCATION_STORE,
+            status: "RECEIVED",
+            createdAt: new Date("2026-10-10T15:00:00Z"),
+            shippedAt: new Date("2026-10-11T15:00:00Z"),
+            receivedAt: new Date("2026-10-12T15:00:00Z"),
+            lineItems: {
+              create: {
+                shopId,
+                shopifyVariantId: VARIANT_OLD,
+                quantity: units.transfer + 1,
+                pickedQty: units.transfer,
+                receivedQty: units.transfer,
+              },
+            },
+          },
+        });
+        await migrationPrisma.stocktake.create({
+          data: {
+            shop: domain,
+            shopId,
+            locationId: LOCATION_MAIN,
+            status: "COMPLETED",
+            name: "October count",
+            completedAt: new Date("2026-10-20T15:00:00Z"),
+            lineItems: {
+              create: [
+                { shopId, shopifyVariantId: VARIANT_OLD, expectedQty: 10, countedQty: units.counted },
+                { shopId, shopifyVariantId: VARIANT_MID, expectedQty: 0, countedQty: 0 },
+                { shopId, shopifyVariantId: VARIANT_NEW, expectedQty: 3, countedQty: null },
+              ],
+            },
+          },
+        });
+        const operation = await migrationPrisma.inventoryOperation.create({
+          data: {
+            shopId,
+            idempotencyKey: "adjustment-1",
+            payloadDigest: "0".repeat(64),
+            kind: "ADJUSTMENT",
+            writeCapability: "adjustmentWrites",
+            sourceType: "Adjustment",
+            sourceId: "adjustment-1",
+            reason: "shrinkage",
+            quantityName: "available",
+            actorDisplayName: "Dana Rivera",
+            actorChannel: "ADMIN",
+            status: "PARTIALLY_APPLIED",
+            lineCount: 2,
+            appliedLineCount: 1,
+            failedLineCount: 1,
+            completedAt: new Date("2026-10-21T15:00:05Z"),
+            createdAt: new Date("2026-10-21T15:00:00Z"),
+          },
+        });
+        const line = {
+          shopId,
+          operationId: operation.id,
+          locationGid: LOCATION_MAIN,
+        };
+        await migrationPrisma.inventoryOperationLine.createMany({
+          data: [
+            {
+              ...line,
+              lineNumber: 1,
+              inventoryItemGid: "gid://shopify/InventoryItem/9101",
+              variantGid: VARIANT_OLD,
+              delta: -units.adjusted,
+              status: "APPLIED",
+              appliedAt: new Date("2026-10-21T15:00:05Z"),
+              quantityAfterChange: 8,
+            },
+            // Shopify refused this line, so it never changed any stock.
+            {
+              ...line,
+              lineNumber: 2,
+              inventoryItemGid: "gid://shopify/InventoryItem/9102",
+              variantGid: VARIANT_MID,
+              delta: -50,
+              status: "FAILED",
+              errorCode: "INVALID_QUANTITY",
+            },
+          ],
+        });
+      }
+
+      beforeAll(async () => {
+        await seedDocuments(shopAId, SHOP_A_DOMAIN, { transfer: 4, counted: 8, adjusted: 2 });
+        await seedDocuments(shopBId, SHOP_B_DOMAIN, { transfer: 700, counted: 800, adjusted: 900 });
+        // Outside the range, and a count that is still open.
+        await migrationPrisma.transferOrder.create({
+          data: {
+            shop: SHOP_A_DOMAIN,
+            shopId: shopAId,
+            sourceLocationId: LOCATION_MAIN,
+            destinationLocationId: LOCATION_STORE,
+            status: "IN_TRANSIT",
+            createdAt: new Date("2026-08-01T15:00:00Z"),
+            lineItems: {
+              create: { shopId: shopAId, shopifyVariantId: VARIANT_OLD, quantity: 60 },
+            },
+          },
+        });
+        await migrationPrisma.stocktake.create({
+          data: {
+            shop: SHOP_A_DOMAIN,
+            shopId: shopAId,
+            locationId: LOCATION_STORE,
+            status: "IN_PROGRESS",
+            name: "Open count",
+            lineItems: {
+              create: {
+                shopId: shopAId,
+                shopifyVariantId: VARIANT_OLD,
+                expectedQty: 2,
+                countedQty: 70,
+              },
+            },
+          },
+        });
+      });
+
+      it("lists the transfers created in the range", async () => {
+        const result = await page("transfers", RANGE);
+
+        expect(table(result)).toEqual([
+          expect.objectContaining({
+            created: "2026-10-10",
+            from: "Main warehouse",
+            to: "Downtown store",
+            status: "Received",
+            variant: "Size 9",
+            requested: "5",
+            shipped: "4",
+            received: "4",
+            inTransit: "0",
+            receivedDate: "2026-10-12",
+          }),
+        ]);
+        expect(tiles(result)).toMatchObject({ Transfers: "1", "Units received": "4" });
+      });
+
+      it("reports completed stocktakes and leaves uncounted lines out", async () => {
+        const result = await page("stocktake-variances", RANGE);
+
+        expect(table(result)).toEqual([
+          expect.objectContaining({
+            completed: "2026-10-20",
+            stocktake: "October count",
+            location: "Main warehouse",
+            variant: "Size 9",
+            expected: "10",
+            counted: "8",
+            variance: "-2",
+            varianceValue: "-$97.00",
+          }),
+        ]);
+        expect(result.notices.map((notice) => notice.heading)).toEqual([
+          "1 line was never counted",
+        ]);
+        expect((await page("stocktake-variances", `${RANGE}&view=all`)).table.totalRows).toBe(2);
+      });
+
+      it("lists only the inventory changes Shopify accepted", async () => {
+        const result = await page("inventory-adjustments", RANGE);
+
+        expect(table(result)).toEqual([
+          expect.objectContaining({
+            date: "2026-10-21",
+            type: "Adjustment",
+            reason: "Theft or loss",
+            location: "Main warehouse",
+            variant: "Size 9",
+            quantity: "Available",
+            change: "-2",
+            after: "8",
+            value: "-$97.00",
+            madeBy: "Dana Rivera",
+          }),
+        ]);
+      });
+
+      it("keeps each shop's documents to itself", async () => {
+        const transfers = await loadTransferLines(dbB, documentRange);
+        const stocktakes = await loadCompletedStocktakeLines(dbB, documentRange);
+        const changes = await loadAppliedInventoryChanges(dbB, documentRange);
+
+        expect(transfers.map((line) => line.pickedQty)).toEqual([700]);
+        expect(stocktakes.map((line) => line.countedQty).sort()).toEqual([0, 800, null]);
+        expect(changes.map((change) => change.delta)).toEqual([-900]);
+      });
     });
   });
 });

@@ -1,9 +1,10 @@
 /**
- * Transfers and stocktakes as the app recorded them, read for reporting.
+ * Transfers, stocktakes and inventory writes as the app recorded them, read
+ * for reporting.
  *
  * These are the app's own documents, not Shopify facts: a line says what was
- * requested, shipped, received or counted here. Reports read them as they
- * are and never change them.
+ * requested, shipped, received, counted or written here. Reports read them as
+ * they are and never change them.
  */
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import type { UtcRange } from "./shop-calendar";
@@ -76,6 +77,49 @@ type StocktakeLineRow = {
   countedQty: number | null;
 };
 
+export type InventoryChangeKind =
+  "ADJUSTMENT" | "STOCKTAKE" | "RECEIPT" | "TRANSFER" | "REVERSAL";
+
+/** One line of an inventory write that Shopify accepted. */
+export type InventoryChange = {
+  lineId: string;
+  operationId: string;
+  kind: InventoryChangeKind;
+  /** Shopify inventory reason code, such as `correction` or `shrinkage`. */
+  reason: string;
+  /** The Shopify quantity that changed, such as `available` or `damaged`. */
+  quantityName: string;
+  actorName: string | null;
+  actorChannel: "ADMIN" | "POS" | "SYSTEM";
+  note: string | null;
+  createdAt: Date;
+  variantGid: string | null;
+  locationGid: string;
+  delta: number;
+  /** The quantity Shopify reported after the change; null when it did not say. */
+  quantityAfterChange: number | null;
+};
+
+type OperationRow = {
+  id: string;
+  kind: InventoryChangeKind;
+  reason: string;
+  quantityName: string;
+  actorDisplayName: string | null;
+  actorChannel: InventoryChange["actorChannel"];
+  note: string | null;
+  createdAt: Date;
+};
+
+type OperationLineRow = {
+  id: string;
+  operationId: string;
+  variantGid: string | null;
+  locationGid: string;
+  delta: number;
+  quantityAfterChange: number | null;
+};
+
 type PagedDelegate<Row> = {
   findMany(args: {
     where: Record<string, unknown>;
@@ -106,19 +150,23 @@ async function readAll<Row extends { id: string }>(
   }
 }
 
-/** Child rows of `parentIds`, read in bounded `IN` lists. */
+/** Child rows of `parentIds` that also match `filter`, read in bounded `IN` lists. */
 async function readChildren<Row extends { id: string }>(
   delegate: PagedDelegate<Row>,
   foreignKey: string,
   parentIds: readonly string[],
   select: Record<string, true>,
+  filter: Record<string, unknown> = {},
 ): Promise<Row[]> {
   const rows: Row[] = [];
   for (let i = 0; i < parentIds.length; i += IN_LIST_SIZE) {
     rows.push(
       ...(await readAll(
         delegate,
-        { [foreignKey]: { in: parentIds.slice(i, i + IN_LIST_SIZE) } },
+        {
+          ...filter,
+          [foreignKey]: { in: parentIds.slice(i, i + IN_LIST_SIZE) },
+        },
         select,
       )),
     );
@@ -220,6 +268,71 @@ export async function loadCompletedStocktakeLines(
       variantGid: line.shopifyVariantId,
       expectedQty: line.expectedQty,
       countedQty: line.countedQty,
+    };
+  });
+}
+
+/**
+ * Applied lines of the inventory writes made inside `range`. A line that
+ * failed, conflicted or is still waiting to be sent is not a change to
+ * Shopify's stock and is left out.
+ */
+export async function loadAppliedInventoryChanges(
+  db: TenantDb,
+  range: UtcRange,
+): Promise<InventoryChange[]> {
+  const operations = await readAll<OperationRow>(
+    db.inventoryOperation,
+    {
+      createdAt: { gte: range.startUtc, lt: range.endUtcExclusive },
+      appliedLineCount: { gt: 0 },
+    },
+    {
+      id: true,
+      kind: true,
+      reason: true,
+      quantityName: true,
+      actorDisplayName: true,
+      actorChannel: true,
+      note: true,
+      createdAt: true,
+    },
+  );
+  const byId = new Map(
+    operations.map((operation) => [operation.id, operation]),
+  );
+  const lines = await readChildren<OperationLineRow>(
+    db.inventoryOperationLine,
+    "operationId",
+    [...byId.keys()],
+    {
+      id: true,
+      operationId: true,
+      variantGid: true,
+      locationGid: true,
+      delta: true,
+      quantityAfterChange: true,
+    },
+    { status: "APPLIED" },
+  );
+
+  return lines.flatMap((line) => {
+    const operation = byId.get(line.operationId);
+    if (!operation) return [];
+    return {
+      lineId: line.id,
+      operationId: operation.id,
+      kind: operation.kind,
+      reason: operation.reason,
+      quantityName: operation.quantityName,
+      actorName: operation.actorDisplayName,
+      actorChannel: operation.actorChannel,
+      note: operation.note,
+      createdAt: operation.createdAt,
+      variantGid: line.variantGid,
+      locationGid: line.locationGid,
+      delta: line.delta,
+      quantityAfterChange: line.quantityAfterChange,
     };
   });
 }

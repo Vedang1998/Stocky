@@ -31,6 +31,7 @@ describe("report registry", () => {
       "dead-stock",
       "transfers",
       "stocktake-variances",
+      "inventory-adjustments",
     ]);
   });
 

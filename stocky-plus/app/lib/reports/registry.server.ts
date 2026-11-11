@@ -20,6 +20,7 @@ import {
   requireShopTimeZone,
 } from "../analytics/shop-calendar";
 import {
+  loadAppliedInventoryChanges,
   loadCompletedStocktakeLines,
   loadTransferLines,
 } from "../analytics/stock-documents.server";
@@ -57,6 +58,7 @@ import {
 } from "./sales-reports";
 import {
   STOCKTAKE_VIEWS,
+  buildInventoryChangesReport,
   buildStocktakeVarianceReport,
   buildTransfersReport,
 } from "./stock-document-reports";
@@ -508,6 +510,35 @@ const REPORTS: readonly RegisteredReport[] = [
         timeZone: context.timeZone,
         currencyCode: context.currencyCode,
         view: request.options[STOCKTAKE_VIEW_OPTION.key],
+      });
+    },
+  }),
+  register({
+    id: "inventory-adjustments",
+    title: "Inventory adjustments",
+    description:
+      "Every change this app made to your Shopify inventory: what changed, where, why and who made it.",
+    group: "Inventory",
+    usesDateRange: true,
+    options: [],
+    load: async (context, request) => {
+      const [changes, locations] = await Promise.all([
+        loadAppliedInventoryChanges(
+          context.db,
+          requestedUtcRange(context, request),
+        ),
+        loadStockLocations(context.db),
+      ]);
+      const names = await loadVariantNames(
+        context,
+        changes.flatMap((change) => change.variantGid ?? []),
+      );
+      return buildInventoryChangesReport({
+        changes,
+        ...names,
+        locations,
+        timeZone: context.timeZone,
+        currencyCode: context.currencyCode,
       });
     },
   }),

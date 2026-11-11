@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `13d04178df65402410b8db0b60d7197c1b633567f6a42d14a350952bfbeb8c64`
-**Scanned files:** 595
-**Findings:** 1905
+**Content digest:** `dcff4bb5dc6bbeb60c93414ff4dd10c3baadcb78403b8b305c08514101a6fefb`
+**Scanned files:** 600
+**Findings:** 1911
 **Converted paths:** 603
-**Approved exception findings:** 1302
+**Approved exception findings:** 1308
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -29,8 +29,8 @@ All 37 approved merchant-owned models must appear below.
 | ForecastOverride | 268 |
 | SalesDailyAggregate | 330 |
 | ShopSettings | 296 |
-| TransferOrder | 277 |
-| Stocktake | 275 |
+| TransferOrder | 279 |
+| Stocktake | 277 |
 | BomComponent | 269 |
 | LowStockAlert | 264 |
 | SyncApplicationReceipt | 285 |
@@ -45,8 +45,8 @@ All 37 approved merchant-owned models must appear below.
 | ShopifyOrderLineFact | 254 |
 | ShopifyOrderRefundFact | 251 |
 | OrderFactObservationInFlight | 254 |
-| InventoryOperation | 280 |
-| InventoryOperationLine | 268 |
+| InventoryOperation | 281 |
+| InventoryOperationLine | 269 |
 | SupplierSkuMapping | 330 |
 | VolumePriceTier | 259 |
 | LeadTimeSnapshot | 282 |
@@ -69,7 +69,7 @@ All 37 approved merchant-owned models must appear below.
 | script | 51 |
 | service | 104 |
 | tenant_infra | 5 |
-| test | 1545 |
+| test | 1551 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -857,23 +857,29 @@ All 37 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 219 / `prisma.purchaseOrder.create` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 243 / `prisma.leadTimeSnapshot.count` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/connect-or-create-merge.test.ts` | 246 / `prisma.leadTimeSnapshot.findUnique` | test | LeadTimeSnapshot | direct prisma delegate | approved exception EX-TEST-019 | migration_tests | approved exception | allowlist EX-TEST-019 | EX-TEST-019 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 38 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 56 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 70 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 99 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 114 / `prisma.shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 164 / `prisma.shopifyOrderFact.create` | test | ShopifyOrderFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 184 / `prisma.shopifyOrderLineFact.create` | test | ShopifyOrderLineFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 210 / `prisma.shopifyOrderAgreementFact.create` | test | ShopifyOrderAgreementFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 226 / `prisma.shopifyOrderAgreementSaleFact.create` | test | ShopifyOrderAgreementSaleFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 481 / `migrationPrisma.shopifyOrderAgreementFact.findFirstOrThrow` | test | ShopifyOrderAgreementFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 485 / `migrationPrisma.shopifyOrderAgreementSaleFact.findFirstOrThrow` | test | ShopifyOrderAgreementSaleFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 490 / `dbA.shopifyOrderAgreementFact.findMany` | test | ShopifyOrderAgreementFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 497 / `dbA.shopifyOrderAgreementSaleFact.count` | test | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 502 / `dbA.shopifyOrderAgreementFact.findUnique` | test | ShopifyOrderAgreementFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 505 / `dbA.shopifyOrderAgreementSaleFact.findFirst` | test | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 507 / `dbB.shopifyOrderAgreementSaleFact.count` | test | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 508 / `dbA.shopifyOrderRefundLineFact.count` | test | ShopifyOrderRefundLineFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 44 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 62 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 76 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 105 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 120 / `prisma.shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 170 / `prisma.shopifyOrderFact.create` | test | ShopifyOrderFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 190 / `prisma.shopifyOrderLineFact.create` | test | ShopifyOrderLineFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 216 / `prisma.shopifyOrderAgreementFact.create` | test | ShopifyOrderAgreementFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 232 / `prisma.shopifyOrderAgreementSaleFact.create` | test | ShopifyOrderAgreementSaleFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 487 / `migrationPrisma.shopifyOrderAgreementFact.findFirstOrThrow` | test | ShopifyOrderAgreementFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 491 / `migrationPrisma.shopifyOrderAgreementSaleFact.findFirstOrThrow` | test | ShopifyOrderAgreementSaleFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 496 / `dbA.shopifyOrderAgreementFact.findMany` | test | ShopifyOrderAgreementFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 503 / `dbA.shopifyOrderAgreementSaleFact.count` | test | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 508 / `dbA.shopifyOrderAgreementFact.findUnique` | test | ShopifyOrderAgreementFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 511 / `dbA.shopifyOrderAgreementSaleFact.findFirst` | test | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 513 / `dbB.shopifyOrderAgreementSaleFact.count` | test | ShopifyOrderAgreementSaleFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 514 / `dbA.shopifyOrderRefundLineFact.count` | test | ShopifyOrderRefundLineFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 740 / `migrationPrisma.transferOrder.create` | test | TransferOrder | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 761 / `migrationPrisma.stocktake.create` | test | Stocktake | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 778 / `migrationPrisma.inventoryOperation.create` | test | InventoryOperation | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 804 / `migrationPrisma.inventoryOperationLine.createMany` | test | InventoryOperationLine | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 834 / `migrationPrisma.transferOrder.create` | test | TransferOrder | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | 847 / `migrationPrisma.stocktake.create` | test | Stocktake | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/helpers.ts` | 49 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-031 | infrastructure | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/helpers.ts` | 55 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-TEST-031 | infrastructure | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/helpers.ts` | 78 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, InventoryOperation, InventoryOperationLine, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-TEST-031 | migration_tests | approved exception | tenant:access:audit | EX-TEST-031 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
@@ -2149,8 +2155,8 @@ All 37 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 595,
-  "findings": 1905,
+  "scannedFiles": 600,
+  "findings": 1911,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2292,6 +2298,6 @@ All 37 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "13d04178df65402410b8db0b60d7197c1b633567f6a42d14a350952bfbeb8c64"
+  "contentDigest": "dcff4bb5dc6bbeb60c93414ff4dd10c3baadcb78403b8b305c08514101a6fefb"
 }
 ```
