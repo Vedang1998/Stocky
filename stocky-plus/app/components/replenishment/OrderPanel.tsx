@@ -39,6 +39,9 @@ export function OrderPanel({
 
   const result = fetcher.data?.intent === "createOrders" ? fetcher.data : null;
   const busy = fetcher.state !== "idle";
+  const changedLines = result?.ok
+    ? result.orders.reduce((count, order) => count + order.changedLines, 0)
+    : 0;
   const submitted = fetcher.formData?.getAll("supplierId") ?? [];
 
   const create = (supplierIds: string[]) => {
@@ -72,6 +75,15 @@ export function OrderPanel({
               </s-unordered-list>
               <s-link href="/app/purchase-orders">Review and send them in Purchase orders</s-link>
             </s-stack>
+          </s-banner>
+        )}
+        {changedLines > 0 && (
+          <s-banner tone="warning" heading="Some rows changed while the order was being created">
+            <s-paragraph>
+              {plural(changedLines, "row is", "rows are")} on a new draft at the earlier quantity
+              but still open here. Check the draft before ordering{" "}
+              {changedLines === 1 ? "it" : "them"} again.
+            </s-paragraph>
           </s-banner>
         )}
         {result?.ok && result.orders.length === 0 && (
