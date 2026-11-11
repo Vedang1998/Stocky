@@ -1,12 +1,12 @@
 /**
- * Transfer receive must not mutate local receipt state when Shopify
- * completion is unsupported (Admin API 2025-10). Covers both present and
- * absent shopifyTransferId. FEATURE_TRANSFER_WRITES remains default OFF in
- * production; these cases enable the flag only to exercise the receive path.
+ * Receiving a transfer must not change local receipt state or Shopify stock
+ * unless ProPo itself moved the stock out: a signed-in staff member, the
+ * transfer kill switch on, and no Shopify-managed transfer behind it.
+ * The ledger-backed path is covered against PostgreSQL in
+ * scripts/tenant-enforcement/tests/transfer-movements.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
-import { UnsupportedShopifyOperationError } from "./shopify-sync.server";
 import { attachTenantDbContextMocks } from "../test-utils/prisma-tenant-context-mock";
 
 const SHOP = "shop-a.myshopify.com";
@@ -101,29 +101,34 @@ function actionArgs(request: Request): ActionFunctionArgs {
   return { request, params: {}, context: {} } as ActionFunctionArgs;
 }
 
-describe("transfer receive guard (unsupported Shopify completion)", () => {
+describe("transfer receive guard", () => {
   const previousTransferWrites = process.env.FEATURE_TRANSFER_WRITES;
+
+  function signIn(sessionToken?: { sub: string }) {
+    authenticateAdmin.mockResolvedValue({
+      session: { shop: SHOP },
+      ...(sessionToken ? { sessionToken } : {}),
+      admin: { graphql: vi.fn() },
+      redirect: vi.fn(),
+    });
+  }
+
+  function expectNothingChanged() {
+    expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
+    expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
+    expect(prismaMock.transferOrder.updateMany).not.toHaveBeenCalled();
+    expect(createShopifyTransfer).not.toHaveBeenCalled();
+    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
     attachTenantDbContextMocks(prismaMock);
-    // Enable only for these receive-path cases (assertInventoryWriteEnabled
-    // reads process.env). Defaults remain OFF outside this suite.
     process.env.FEATURE_TRANSFER_WRITES = "true";
-    authenticateAdmin.mockResolvedValue({
-      session: { shop: SHOP },
-      admin: { graphql: vi.fn() },
-      redirect: vi.fn(),
-    });
+    signIn({ sub: "7001" });
     resolveCanonicalShopByDomain.mockResolvedValue({
       id: SHOP_ID,
       myshopifyDomain: SHOP,
-    });
-    completeShopifyTransfer.mockImplementation(async () => {
-      throw new UnsupportedShopifyOperationError(
-        "completeShopifyTransfer",
-        "Admin GraphQL 2025-10 has no inventoryTransferComplete (or equivalent receive) mutation. Transfer receive remains disabled.",
-      );
     });
   });
 
@@ -135,27 +140,29 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
     }
   });
 
-  it("documents transferWrites remains gated by env default OFF", async () => {
-    const previous = process.env.FEATURE_TRANSFER_WRITES;
+  it("keeps transfer writes off unless the environment turns them on", async () => {
     delete process.env.FEATURE_TRANSFER_WRITES;
     const { featureFlags } = await import("../lib/feature-flags.server");
     expect(featureFlags.transferWrites()).toBe(false);
-    if (previous === undefined) {
-      delete process.env.FEATURE_TRANSFER_WRITES;
-    } else {
-      process.env.FEATURE_TRANSFER_WRITES = previous;
-    }
   });
 
-  it("does not mutate locally when Shopify transfer id is present and complete is unsupported", async () => {
+  it("refuses a transfer that was shipped as a Shopify transfer", async () => {
     const { action } = await import("../routes/app.transfers");
     prismaMock.transferOrder.findFirst.mockResolvedValue({
       id: "tr-1",
       shop: SHOP,
+      sourceLocationId: "gid://shopify/Location/1",
+      destinationLocationId: "gid://shopify/Location/2",
       shopifyTransferId: "gid://shopify/InventoryTransfer/1",
       status: "IN_TRANSIT",
       lineItems: [
-        { id: "tl-1", quantity: 4, pickedQty: 4, receivedQty: 0 },
+        {
+          id: "tl-1",
+          shopifyVariantId: "gid://shopify/ProductVariant/1",
+          quantity: 4,
+          pickedQty: 4,
+          receivedQty: 0,
+        },
       ],
     });
 
@@ -163,29 +170,31 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
       actionArgs(formRequest({ intent: "receive", transferId: "tr-1" })),
     );
 
-    expect(completeShopifyTransfer).toHaveBeenCalledWith(
-      expect.anything(),
-      "gid://shopify/InventoryTransfer/1",
-    );
     expect(result).toEqual({
-      error: expect.stringMatching(/unsupported/i),
+      error: expect.stringContaining("Receive it in Shopify admin"),
+      problems: [],
     });
-    // PR 3 TenantDb may open a read transaction to set/assert tenant context;
-    // local receipt mutations must still be absent.
-    expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
-    expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
-    expect(prismaMock.transferOrder.updateMany).not.toHaveBeenCalled();
+    expectNothingChanged();
   });
 
-  it("does not mutate locally when Shopify transfer id is absent", async () => {
+  it("refuses when the kill switch is off and says nothing was sent", async () => {
+    delete process.env.FEATURE_TRANSFER_WRITES;
     const { action } = await import("../routes/app.transfers");
     prismaMock.transferOrder.findFirst.mockResolvedValue({
       id: "tr-2",
       shop: SHOP,
+      sourceLocationId: "gid://shopify/Location/1",
+      destinationLocationId: "gid://shopify/Location/2",
       shopifyTransferId: null,
       status: "IN_TRANSIT",
       lineItems: [
-        { id: "tl-2", quantity: 2, pickedQty: 2, receivedQty: 0 },
+        {
+          id: "tl-2",
+          shopifyVariantId: "gid://shopify/ProductVariant/2",
+          quantity: 2,
+          pickedQty: 2,
+          receivedQty: 0,
+        },
       ],
     });
 
@@ -193,36 +202,30 @@ describe("transfer receive guard (unsupported Shopify completion)", () => {
       actionArgs(formRequest({ intent: "receive", transferId: "tr-2" })),
     );
 
-    expect(completeShopifyTransfer).toHaveBeenCalledWith(
-      expect.anything(),
-      "missing-shopify-transfer-id",
-    );
     expect(result).toEqual({
-      error: expect.stringMatching(/unsupported/i),
+      error: expect.stringContaining("switched off"),
+      problems: [],
     });
-    // PR 3 TenantDb may open a read transaction to set/assert tenant context;
-    // local receipt mutations must still be absent.
-    expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
-    expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
-    expect(prismaMock.transferOrder.updateMany).not.toHaveBeenCalled();
+    expect((result as { error: string }).error).not.toMatch(/FEATURE_/);
+    expectNothingChanged();
   });
 
-  it("returns a clear unsupported-operation response to the merchant", async () => {
-    const { action } = await import("../routes/app.transfers");
-    prismaMock.transferOrder.findFirst.mockResolvedValue({
-      id: "tr-3",
-      shop: SHOP,
-      shopifyTransferId: "gid://shopify/InventoryTransfer/9",
-      status: "IN_TRANSIT",
-      lineItems: [],
-    });
+  it.each(["ship", "receive"])(
+    "refuses to %s without a signed-in staff member, before reading the transfer",
+    async (intent) => {
+      signIn();
+      const { action } = await import("../routes/app.transfers");
 
-    const result = await action(
-      actionArgs(formRequest({ intent: "receive", transferId: "tr-3" })),
-    );
+      const result = await action(
+        actionArgs(formRequest({ intent, transferId: "tr-3" })),
+      );
 
-    expect(result).toMatchObject({
-      error: expect.stringContaining("completeShopifyTransfer is unsupported"),
-    });
-  });
+      expect(result).toEqual({
+        error: expect.stringContaining("signed-in Shopify staff member"),
+        problems: [],
+      });
+      expect(prismaMock.transferOrder.findFirst).not.toHaveBeenCalled();
+      expectNothingChanged();
+    },
+  );
 });

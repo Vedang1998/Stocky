@@ -26,6 +26,16 @@ export class InventoryOperationConflictError extends Error {
   }
 }
 
+/** The document an operation belongs to stopped accepting stock changes. */
+export class InventoryDocumentClosedError extends Error {
+  readonly code = "INVENTORY_DOCUMENT_CLOSED" as const;
+
+  constructor(readonly source: { type: string; id: string }) {
+    super(`${source.type} ${source.id} no longer accepts inventory changes.`);
+    this.name = "InventoryDocumentClosedError";
+  }
+}
+
 export class InventoryOperationNotFoundError extends Error {
   readonly code = "INVENTORY_OPERATION_NOT_FOUND" as const;
 

@@ -194,6 +194,7 @@ function actionArgs(
 function authAsShopB() {
   authenticateAdmin.mockResolvedValue({
     session: { shop: SHOP_B },
+    sessionToken: { sub: "9001" },
     admin: { graphql: vi.fn() },
     redirect: vi.fn(),
   });
@@ -491,7 +492,7 @@ describe("cross-shop denial", () => {
         where: directScoped({ id: "st-shop-a" }),
         include: scopedLineItemsInclude("stocktake"),
       });
-      expect(result).toEqual({ error: "Stocktake not found" });
+      expect(result).toEqual({ error: "Stocktake not found", problems: [] });
       expect(prismaMock.stocktake.update).not.toHaveBeenCalled();
       expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
       expect(adjustShopifyInventory).not.toHaveBeenCalled();
@@ -527,7 +528,7 @@ describe("cross-shop denial", () => {
         where: directScoped({ id: "tr-shop-a" }),
         include: scopedLineItemsInclude("transferOrder"),
       });
-      expect(result).toEqual({ error: "Transfer has no line items" });
+      expect(result).toEqual({ error: "Transfer not found", problems: [] });
       expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
       expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
       expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();

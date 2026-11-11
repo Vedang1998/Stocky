@@ -189,9 +189,20 @@ function assertSamePayload(
   return existing;
 }
 
+export interface RecordInventoryOperationOptions {
+  /**
+   * Runs inside the transaction that records a new operation, before anything
+   * is written; throw to refuse. A document locks its own row here, so nothing
+   * is recorded for a document that closed in the meantime. Not called when
+   * the key was already recorded.
+   */
+  guard?: (tx: TenantDb) => Promise<void>;
+}
+
 async function persist(
   db: TenantDb,
   draft: NormalizedInventoryOperationDraft,
+  options: RecordInventoryOperationOptions = {},
 ): Promise<{ operation: InventoryOperationRecord; created: boolean }> {
   const digest = inventoryOperationPayloadDigest(draft);
 
@@ -204,6 +215,7 @@ async function persist(
 
   try {
     const operation = await db.$transaction(async (tx) => {
+      await options.guard?.(tx);
       const created = (await tx.inventoryOperation.create({
         data: {
           idempotencyKey: draft.idempotencyKey,
@@ -256,8 +268,9 @@ async function persist(
 export async function recordInventoryOperation(
   db: TenantDb,
   draft: InventoryOperationDraft,
+  options: RecordInventoryOperationOptions = {},
 ): Promise<{ operation: InventoryOperationRecord; created: boolean }> {
-  return persist(db, normalizeInventoryOperationDraft(draft));
+  return persist(db, normalizeInventoryOperationDraft(draft), options);
 }
 
 export async function getInventoryOperationResult(
