@@ -95,6 +95,7 @@ export const LEAD_TIME_SOURCES = [
   "VARIANT_RULE",
   "SUPPLIER_VARIANT",
   "SUPPLIER_DEFAULT",
+  "SUPPLIER_MEASURED",
   "SHOP_DEFAULT",
 ] as const;
 
@@ -104,6 +105,7 @@ export const LEAD_TIME_SOURCE_LABELS: Record<LeadTimeSource, string> = {
   VARIANT_RULE: "Variant setting",
   SUPPLIER_VARIANT: "Supplier product setting",
   SUPPLIER_DEFAULT: "Supplier default",
+  SUPPLIER_MEASURED: "Measured from past deliveries",
   SHOP_DEFAULT: "Store default",
 };
 

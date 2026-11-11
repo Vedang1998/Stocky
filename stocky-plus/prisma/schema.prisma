@@ -2245,6 +2245,8 @@ model ReplenishmentWorksheetLine {
   priceCurrencyCode     String?                  @db.VarChar(8)
   unitCostAmount        Decimal?                 @db.Decimal(20, 6)
   unitCostCurrencyCode  String?                  @db.VarChar(8)
+  supplierCostAmount    Decimal?                 @db.Decimal(20, 6)
+  supplierCostCurrencyCode String?               @db.VarChar(8)
   supplierId            String?
   supplierName          String?
   vendorSku             String?
