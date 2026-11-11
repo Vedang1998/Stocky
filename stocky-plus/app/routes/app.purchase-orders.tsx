@@ -4,10 +4,18 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { Form, useLoaderData, useNavigation } from "react-router";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { formatDecimal, formatMoney } from "../lib/decimal-format";
+import { serializeDecimals } from "../lib/decimal-wire.server";
+import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { RECEIVING_OFF_MESSAGE } from "../lib/po-display";
 import { fetchLocations } from "../services/shopify-gql.server";
 import {
   applyLandedCostsToPO,
@@ -37,7 +45,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       take: 250,
     }),
   ]);
-  return { orders, suppliers, locations, variants };
+  // Landed unit cost is added here so the browser never does money arithmetic.
+  const ordersWithLandedCost = orders.map((po: any) => ({
+    ...po,
+    lineItems: po.lineItems.map((li: any) => ({
+      ...li,
+      landedUnitCost: li.unitCost.plus(li.allocatedLandedCost ?? 0),
+    })),
+  }));
+  return serializeDecimals({
+    orders: ordersWithLandedCost,
+    suppliers,
+    locations,
+    variants,
+  });
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -165,15 +186,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Current receivePartialPO updates app DB only — it does not call Shopify.
     // Keep the receipt-write kill switch so Shopify inventory sync cannot be
     // enabled later without an explicit Phase 4 release-gate decision.
-    try {
-      assertInventoryWriteEnabled("receiptWrites");
-    } catch (err) {
-      return {
-        error:
-          err instanceof Error
-            ? `${err.message} App-DB receiving is also gated until the receipt ledger and Shopify write path exist.`
-            : "Receipt writes disabled",
-      };
+    if (!isInventoryWriteEnabled("receiptWrites")) {
+      return { error: RECEIVING_OFF_MESSAGE };
     }
 
     const poId = form.get("poId") as string;
@@ -212,14 +226,23 @@ const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | 
 export default function PurchaseOrders() {
   const { orders, suppliers, locations, variants } =
     useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const actionError =
+    actionData && "error" in actionData ? actionData.error : null;
 
   const variantTitle = (id: string) =>
     variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
 
   return (
     <s-page heading="Purchase Orders">
+      {actionError && (
+        <s-banner tone="critical" heading="Purchase order not updated">
+          <s-paragraph>{actionError}</s-paragraph>
+        </s-banner>
+      )}
+
       <s-section heading="Create purchase order">
         <Form method="post">
           <input type="hidden" name="intent" value="create" />
@@ -294,9 +317,15 @@ export default function PurchaseOrders() {
                 </s-badge>
                 <s-text>
                   {po.currency}
-                  {po.exchangeRate ? ` @ ${po.exchangeRate}` : ""}
-                  {po.freightCost ? ` · Freight $${po.freightCost}` : ""}
-                  {po.customsCost ? ` · Customs $${po.customsCost}` : ""}
+                  {po.exchangeRate
+                    ? ` @ ${formatDecimal(po.exchangeRate)}`
+                    : ""}
+                  {po.freightCost
+                    ? ` · Freight ${formatMoney(po.freightCost, po.currency)}`
+                    : ""}
+                  {po.customsCost
+                    ? ` · Customs ${formatMoney(po.customsCost, po.currency)}`
+                    : ""}
                   {` · Allocation: ${po.landedCostMethod}`}
                 </s-text>
                 <s-link
@@ -327,15 +356,13 @@ export default function PurchaseOrders() {
                         <s-table-cell>{li.orderedQty}</s-table-cell>
                         <s-table-cell>{li.receivedQty}</s-table-cell>
                         <s-table-cell>
-                          ${Number(li.unitCost).toFixed(2)}
+                          {formatMoney(li.unitCost, po.currency, {
+                            maximumFractionDigits: 4,
+                          })}
                           {li.manualCostOverride ? " (manual)" : ""}
                         </s-table-cell>
                         <s-table-cell>
-                          $
-                          {(
-                            Number(li.unitCost) +
-                            Number(li.allocatedLandedCost ?? 0)
-                          ).toFixed(2)}
+                          {formatMoney(li.landedUnitCost, po.currency)}
                         </s-table-cell>
                         <s-table-cell>
                           {po.status === "DRAFT" && (

@@ -1888,6 +1888,10 @@ export type TenantDb = {
   shopifyOrderLineFact: TenantModelDelegate;
   shopifyOrderRefundFact: TenantModelDelegate;
   orderFactObservationInFlight: TenantModelDelegate;
+  replenishmentSettings: TenantModelDelegate;
+  replenishmentVariantRule: TenantModelDelegate;
+  replenishmentWorksheet: TenantModelDelegate;
+  replenishmentWorksheetLine: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
   shopifyOrderRefundLineFact: TenantModelDelegate;
   shopifyOrderAdjustmentFact: TenantModelDelegate;
@@ -1899,6 +1903,8 @@ export type TenantDb = {
   pOLineItem: TenantModelDelegate;
   transferLineItem: TenantModelDelegate;
   stocktakeLineItem: TenantModelDelegate;
+  purchasingEvent: TenantModelDelegate;
+  purchaseOrderCharge: TenantModelDelegate;
   $transaction: <T>(
     fn: (db: TenantDb) => Promise<T>,
     options?: {

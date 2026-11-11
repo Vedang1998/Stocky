@@ -8,7 +8,8 @@ import type {
 import { useFetcher, useLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { RECEIVING_OFF_MESSAGE } from "../lib/po-display";
 import { receivePartialPO, recordLeadTimeSnapshot } from "../services/landed-cost.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -36,15 +37,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "scan") {
-    try {
-      assertInventoryWriteEnabled("receiptWrites");
-    } catch (err) {
-      return {
-        error:
-          err instanceof Error
-            ? `${err.message} Warehouse receiving is gated until the receipt ledger and Shopify write path exist.`
-            : "Receipt writes disabled",
-      };
+    if (!isInventoryWriteEnabled("receiptWrites")) {
+      return { error: RECEIVING_OFF_MESSAGE };
     }
 
     const poId = form.get("poId") as string;

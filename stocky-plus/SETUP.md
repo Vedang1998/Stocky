@@ -52,6 +52,10 @@ shopify app config link   # creates or links a Partner app
 Create a **development store** in [partners.shopify.com](https://partners.shopify.com)
 (Stores → Add store). Do not use your live business store yet.
 
+Set `SHOPIFY_APP_HANDLE` in `.env` to the app's handle from the Partner
+Dashboard. The Billing page uses it to open Shopify's hosted plan selection
+page and shows an error state when it is unset.
+
 ## 4. Run the app
 
 Two terminals:
