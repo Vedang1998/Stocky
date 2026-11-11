@@ -25,6 +25,7 @@ export default function App() {
         <s-link href="/app/warehouse">Warehouse</s-link>
         <s-link href="/app/transfers">Transfers</s-link>
         <s-link href="/app/stocktakes">Stocktakes</s-link>
+        <s-link href="/app/adjustments">Adjustments</s-link>
         <s-link href="/app/bundles">Bundles</s-link>
         <s-link href="/app/analytics">Analytics</s-link>
         <s-link href="/app/billing">Billing</s-link>

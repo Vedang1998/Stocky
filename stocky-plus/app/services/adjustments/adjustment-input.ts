@@ -3,6 +3,8 @@ import type { ShopifyInventoryReason } from "../inventory-writes/types";
 export const MAX_ADJUSTMENT_LINES = 250;
 export const MAX_ADJUSTMENT_QUANTITY = 1_000_000;
 export const MAX_ADJUSTMENT_NOTE_LENGTH = 500;
+/** Far above 250 lines of the longest codes; anything larger is not a list of items. */
+export const MAX_ADJUSTMENT_TEXT_LENGTH = 100_000;
 const MAX_CODE_LENGTH = 255;
 
 /**
@@ -72,6 +74,15 @@ export function parseAdjustmentLines(
   text: string,
   mode: AdjustmentMode,
 ): ParsedAdjustmentLines {
+  if (text.length > MAX_ADJUSTMENT_TEXT_LENGTH) {
+    return {
+      ok: false,
+      errors: [
+        `That is too much text for one adjustment. Enter at most ${MAX_ADJUSTMENT_LINES} lines.`,
+      ],
+    };
+  }
+
   const errors: string[] = [];
   const lines: ParsedAdjustmentLine[] = [];
   const seen = new Map<string, number>();

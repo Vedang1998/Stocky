@@ -77,6 +77,11 @@ export type AdjustmentResult =
       error: string;
       details: string[];
       problems: DocumentLineProblem[];
+      /**
+       * True when the adjustment is in the ledger. Its lines must then not be
+       * offered for re-entry as they were: some of them may be applied.
+       */
+      recorded: boolean;
       /** Set when the adjustment is recorded but Shopify has not confirmed all of it. */
       unfinishedOperationId: string | null;
     };
@@ -86,6 +91,7 @@ const fail = (
   extra: Partial<{
     details: string[];
     problems: DocumentLineProblem[];
+    recorded: boolean;
     unfinishedOperationId: string | null;
   }> = {},
 ): AdjustmentResult => ({
@@ -93,6 +99,7 @@ const fail = (
   error,
   details: extra.details ?? [],
   problems: extra.problems ?? [],
+  recorded: extra.recorded ?? Boolean(extra.unfinishedOperationId),
   unfinishedOperationId: extra.unfinishedOperationId ?? null,
 });
 
@@ -185,7 +192,7 @@ async function describeOutcome(
         ? "The others are applied."
         : "Nothing was changed."
     } Enter the lines below again as a new adjustment.`,
-    { problems: describeLineProblems(result, variants) },
+    { problems: describeLineProblems(result, variants), recorded: true },
   );
 }
 
@@ -530,29 +537,42 @@ interface HistoryLineRow {
 
 export const ADJUSTMENT_HISTORY_PAGE_SIZE = 25;
 
-/**
- * Adjustments and their reversals, newest first. Pass `before` (the
- * `createdAt` of the last entry shown) for the next page.
- */
+/** Position of the last entry of a page; the next page starts after it. */
+export interface AdjustmentCursor {
+  createdAt: Date;
+  operationId: string;
+}
+
+export interface AdjustmentHistoryFilter {
+  /** Inclusive bounds on when the adjustment was recorded. */
+  from?: Date | null;
+  to?: Date | null;
+  after?: AdjustmentCursor | null;
+  take?: number;
+}
+
+/** Adjustments and their reversals, newest first. */
 export async function listAdjustments(
   db: TenantDb,
-  input: {
-    before?: Date | null;
-    from?: Date | null;
-    to?: Date | null;
-    take?: number;
-  } = {},
+  filter: AdjustmentHistoryFilter = {},
 ): Promise<AdjustmentHistoryEntry[]> {
-  const createdAt: Record<string, Date> = {};
-  if (input.before) createdAt.lt = input.before;
-  if (input.from) createdAt.gte = input.from;
-  if (input.to) createdAt.lte = input.to;
+  const conditions: Array<Record<string, unknown>> = [];
+  if (filter.from) conditions.push({ createdAt: { gte: filter.from } });
+  if (filter.to) conditions.push({ createdAt: { lte: filter.to } });
+  if (filter.after) {
+    conditions.push({
+      OR: [
+        { createdAt: { lt: filter.after.createdAt } },
+        {
+          createdAt: filter.after.createdAt,
+          id: { lt: filter.after.operationId },
+        },
+      ],
+    });
+  }
 
   const operations = (await db.inventoryOperation.findMany({
-    where: {
-      sourceType: ADJUSTMENT_SOURCE_TYPE,
-      ...(Object.keys(createdAt).length > 0 ? { createdAt } : {}),
-    },
+    where: { sourceType: ADJUSTMENT_SOURCE_TYPE, AND: conditions },
     select: {
       id: true,
       kind: true,
@@ -565,7 +585,7 @@ export async function listAdjustments(
       completedAt: true,
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: input.take ?? ADJUSTMENT_HISTORY_PAGE_SIZE,
+    take: filter.take ?? ADJUSTMENT_HISTORY_PAGE_SIZE,
   })) as HistoryOperationRow[];
   if (operations.length === 0) return [];
 
@@ -596,9 +616,15 @@ export async function listAdjustments(
   const reversedBy = new Map(
     reversals.map((r) => [r.reversesOperationId, r.id]),
   );
+  const linesByOperation = new Map<string, HistoryLineRow[]>();
+  for (const line of lines) {
+    const own = linesByOperation.get(line.operationId);
+    if (own) own.push(line);
+    else linesByOperation.set(line.operationId, [line]);
+  }
 
   return operations.map((operation) => {
-    const own = lines.filter((line) => line.operationId === operation.id);
+    const own = linesByOperation.get(operation.id) ?? [];
     const reversedByOperationId = reversedBy.get(operation.id) ?? null;
     return {
       operationId: operation.id,
@@ -615,6 +641,7 @@ export async function listAdjustments(
       canReverse:
         operation.kind === "ADJUSTMENT" &&
         reversedByOperationId === null &&
+        own.some((line) => line.status === "APPLIED") &&
         (operation.status === "APPLIED" ||
           operation.status === "PARTIALLY_APPLIED"),
       canResume: !TERMINAL_OPERATION_STATUSES.has(operation.status),
@@ -631,4 +658,36 @@ export async function listAdjustments(
       }),
     };
   });
+}
+
+/** Most adjustments one export holds; the report says when it stopped there. */
+export const ADJUSTMENT_EXPORT_LIMIT = 2_000;
+const EXPORT_PAGE_SIZE = 200;
+
+/**
+ * Every adjustment and reversal in a period, newest first, for the report
+ * export. `truncated` is true when the period holds more than the limit.
+ */
+export async function listAdjustmentsForExport(
+  db: TenantDb,
+  period: { from?: Date | null; to?: Date | null },
+  limit: number = ADJUSTMENT_EXPORT_LIMIT,
+): Promise<{ entries: AdjustmentHistoryEntry[]; truncated: boolean }> {
+  const entries: AdjustmentHistoryEntry[] = [];
+  let after: AdjustmentCursor | null = null;
+  while (entries.length <= limit) {
+    const page: AdjustmentHistoryEntry[] = await listAdjustments(db, {
+      ...period,
+      after,
+      take: EXPORT_PAGE_SIZE,
+    });
+    entries.push(...page);
+    const last = page.at(-1);
+    if (page.length < EXPORT_PAGE_SIZE || !last) break;
+    after = { createdAt: last.createdAt, operationId: last.operationId };
+  }
+  return {
+    entries: entries.slice(0, limit),
+    truncated: entries.length > limit,
+  };
 }
