@@ -147,6 +147,8 @@ function scanFile(abs: string): Finding[] {
   approvedControlPlaneImporters.add("app/sync/uninstall.server.ts");
   approvedControlPlaneImporters.add("app/sync/reinstall.server.ts");
   approvedControlPlaneImporters.add("app/sync/health.server.ts");
+  // Read-only, authority-scoped SyncHealth/SyncRun reader for merchant pages.
+  approvedControlPlaneImporters.add("app/sync/sync-status.server.ts");
   approvedControlPlaneImporters.add("app/sync/intake.server.ts");
   approvedControlPlaneImporters.add("app/sync/dispatcher.server.ts");
   approvedControlPlaneImporters.add("app/sync/fair-claim-query.server.ts");

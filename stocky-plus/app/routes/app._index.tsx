@@ -11,6 +11,9 @@ import { getLowStockAlerts } from "../services/forecasting.server";
 import { loadSetupGuide } from "../services/setup-guide.server";
 import { enqueueCatalogSync } from "../jobs/queue.server";
 import { SetupGuide } from "../components/SetupGuide";
+import { SyncAttentionBanner, SyncStatus } from "../components/SyncStatus";
+import { buildSyncStatusView } from "../lib/sync-status";
+import { readCatalogSyncStatus } from "../sync/sync-status.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
@@ -30,7 +33,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       db.supplier.count({ where: {} }),
       db.shopifyVariantCache.count({ where: {} }),
     ]);
-  const setupGuide = await loadSetupGuide(db);
+  const [setupGuide, syncDomains] = await Promise.all([
+    loadSetupGuide(db),
+    readCatalogSyncStatus(tenant),
+  ]);
 
   return {
     settings,
@@ -39,6 +45,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     supplierCount,
     cachedVariants,
     setupGuide,
+    syncStatus: buildSyncStatusView(
+      syncDomains.map((domain) => ({
+        ...domain,
+        lastSucceededAt: domain.lastSucceededAt?.toISOString() ?? null,
+      })),
+    ),
+    now: Date.now(),
   };
 };
 
@@ -71,6 +84,8 @@ export default function Dashboard() {
     supplierCount,
     cachedVariants,
     setupGuide,
+    syncStatus,
+    now,
   } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const syncing =
@@ -79,6 +94,9 @@ export default function Dashboard() {
 
   return (
     <s-page heading="Home">
+      {syncStatus.attention && (
+        <SyncAttentionBanner attention={syncStatus.attention} />
+      )}
       {!setupGuide.complete && (
         <SetupGuide guide={setupGuide} syncing={syncing} />
       )}
@@ -140,23 +158,7 @@ export default function Dashboard() {
         </s-section>
       )}
 
-      <s-section slot="aside" heading="Catalog sync">
-        <s-paragraph>
-          {cachedVariants > 0
-            ? `${cachedVariants} variants synced. Changes in Shopify arrive on their own; sync again if something looks out of date.`
-            : "Sync your Shopify catalog to begin."}
-        </s-paragraph>
-        <Form method="post">
-          <input type="hidden" name="intent" value="syncCatalog" />
-          <s-button
-            type="submit"
-            variant="primary"
-            {...(syncing ? { loading: true } : {})}
-          >
-            Sync catalog
-          </s-button>
-        </Form>
-      </s-section>
+      <SyncStatus status={syncStatus} now={now} syncing={syncing} />
 
       <s-section slot="aside" heading="Quick links">
         <s-unordered-list>
@@ -178,7 +180,8 @@ export default function Dashboard() {
       <s-section slot="aside" heading="On the shop floor">
         <s-paragraph>
           Staff can check stock from Shopify POS. In the POS app, open the
-          smart grid, tap Add tile, choose App, then ProPo inventory.
+          smart grid, tap Add tile, choose App, then ProPo inventory. Stock
+          also appears on each product's screen in POS.
         </s-paragraph>
         <s-paragraph>
           On a phone, open Inventory in the Shopify app and scan with the

@@ -4,8 +4,8 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `30601d24c3db151f5e057c7884ebcb6a7fb4033edb32f9b3867017d31d27566a`
-**Scanned files:** 542
+**Content digest:** `fafc512aec4e180dfcbed87fc5bfa9a0ec7e527cc392aa2b58a20285cdd57cda`
+**Scanned files:** 547
 **Findings:** 1798
 **Converted paths:** 548
 **Approved exception findings:** 1250
@@ -231,6 +231,7 @@ All 35 approved merchant-owned models must appear below.
 | EX-TEST-036 | `app/tenant/__tests__/compound-shopid-upsert.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-037 | `app/tenant/__tests__/pos-tenant.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-038 | `app/tenant/__tests__/admin-inventory-lookup.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-039 | `app/tenant/__tests__/sync-status-reader.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 
 ## Access path inventory
 
@@ -327,11 +328,11 @@ All 35 approved merchant-owned models must appear below.
 | `app/lib/order-facts/sync/webhook.ts` | 254 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 277 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 316 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 21 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 27 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 30 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 31 / `db.shopifyVariantCache.count` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
-| `app/routes/app._index.tsx` | 56 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 24 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 30 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 33 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 34 / `db.shopifyVariantCache.count` | route | ShopifyVariantCache | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
+| `app/routes/app._index.tsx` | 69 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.analytics.tsx` | 47 / `db.lowStockAlert.updateMany` | route | LowStockAlert | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.billing.tsx` | 68 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app.bundles.tsx` | 14 / `db.bomComponent.findMany` | route | BomComponent | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -2039,7 +2040,7 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 542,
+  "scannedFiles": 547,
   "findings": 1798,
   "violations": 0,
   "exceptionsUsed": [
@@ -2177,6 +2178,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "30601d24c3db151f5e057c7884ebcb6a7fb4033edb32f9b3867017d31d27566a"
+  "contentDigest": "fafc512aec4e180dfcbed87fc5bfa9a0ec7e527cc392aa2b58a20285cdd57cda"
 }
 ```
