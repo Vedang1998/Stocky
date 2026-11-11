@@ -187,7 +187,7 @@ describe("privacy compliance", () => {
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
         "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "Session",
-        "PrivacyRequest"
+        "PrivacyRequest", "InventoryOperationLine", "InventoryOperation"
       CASCADE
     `);
     for (const domain of SHOPS) {
