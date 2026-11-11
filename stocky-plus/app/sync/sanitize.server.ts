@@ -400,6 +400,26 @@ export function isSanitizedWebhookTopic(
   return Object.hasOwn(WEBHOOK_PROJECTION_SCHEMA_VERSIONS, topic);
 }
 
+const TOPIC_BY_LIBRARY_KEY: ReadonlyMap<string, SanitizedWebhookTopic> =
+  new Map(
+    (
+      Object.keys(WEBHOOK_PROJECTION_SCHEMA_VERSIONS) as SanitizedWebhookTopic[]
+    ).map((topic) => [topic.toUpperCase().replace(/[/.]/g, "_"), topic]),
+  );
+
+/**
+ * Shopify sends `X-Shopify-Topic: products/update`, but the Shopify API
+ * library reports a verified delivery as `PRODUCTS_UPDATE`. The sync pipeline
+ * keys sanitizers, job types and delivery records on the subscription form,
+ * so routes that take the topic from the verified request resolve it here.
+ */
+export function resolveSanitizedWebhookTopic(
+  topic: string,
+): SanitizedWebhookTopic | null {
+  if (isSanitizedWebhookTopic(topic)) return topic;
+  return TOPIC_BY_LIBRARY_KEY.get(topic) ?? null;
+}
+
 /**
  * Sanitize a verified webhook payload into a versioned control-plane projection.
  * Fail closed on bound overflow or invalid scalar types.
