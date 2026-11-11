@@ -172,6 +172,27 @@ function parseParams(
   }
 }
 
+export type ParsedParameters =
+  | { ok: true; params: MethodParameters }
+  | { ok: false; errors: FieldErrors };
+
+/** The forecast method and its periods, checked against the run date. */
+export function parseMethodParameters(form: FormData, asOf: LocalDate): ParsedParameters {
+  const errors: FieldErrors = {};
+  const method = parseChoice(form.get("method"), PARITY_METHODS);
+  if (!method) errors.method = "Choose a forecast method.";
+
+  const params = method ? parseParams(method, form, errors) : null;
+  if (params) {
+    for (const problem of validateMethodParameters(params, asOf)) {
+      errors[problem.field] ??= problem.message;
+    }
+  }
+  return params && Object.keys(errors).length === 0
+    ? { ok: true, params }
+    : { ok: false, errors };
+}
+
 export type ParsedSetup =
   | { ok: true; settings: WorksheetSettings }
   | { ok: false; errors: FieldErrors };
@@ -182,10 +203,8 @@ export type ParsedSetup =
  * worksheet for settings they did not choose.
  */
 export function parseWorksheetSetup(form: FormData, asOf: LocalDate): ParsedSetup {
-  const errors: FieldErrors = {};
-
-  const method = parseChoice(form.get("method"), PARITY_METHODS);
-  if (!method) errors.method = "Choose a forecast method.";
+  const parameters = parseMethodParameters(form, asOf);
+  const errors: FieldErrors = parameters.ok ? {} : { ...parameters.errors };
 
   const scopeKey = field(form, "scopeKey") || SHOP_SCOPE;
   if (!isScopeKey(scopeKey)) errors.scopeKey = "Choose a location.";
@@ -195,20 +214,13 @@ export function parseWorksheetSetup(form: FormData, asOf: LocalDate): ParsedSetu
     errors.incomingSource = "Choose which incoming stock to count.";
   }
 
-  const params = method ? parseParams(method, form, errors) : null;
-  if (params) {
-    for (const problem of validateMethodParameters(params, asOf)) {
-      errors[problem.field] ??= problem.message;
-    }
-  }
-
-  if (!params || !incomingSource || Object.keys(errors).length > 0) {
+  if (!parameters.ok || !incomingSource || Object.keys(errors).length > 0) {
     return { ok: false, errors };
   }
   return {
     ok: true,
     settings: {
-      params,
+      params: parameters.params,
       scopeKey,
       incomingSource,
       rounding: {
