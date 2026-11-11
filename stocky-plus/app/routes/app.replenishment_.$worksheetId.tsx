@@ -381,7 +381,7 @@ export default function Worksheet() {
       {summary?.coverage === "PARTIAL" && (
         <s-banner tone="warning" heading="Sales history covers only part of this period">
           <s-paragraph>
-            The app's order history starts on {summary.historyStart ?? "a later date"}, inside the
+            The app&apos;s order history starts on {summary.historyStart ?? "a later date"}, inside the
             sales period ({summary.salesPeriod}). Sales before that date are not counted, so
             suggestions may be low.
           </s-paragraph>
@@ -391,7 +391,7 @@ export default function Worksheet() {
         <s-banner tone="warning" heading="Some orders could not be counted">
           <s-paragraph>
             {plural(unreadableSales, "order", "orders")} in the sales period{" "}
-            {unreadableSales === 1 ? "has" : "have"} sales records that are missing or don't add
+            {unreadableSales === 1 ? "has" : "have"} sales records that are missing or don&apos;t add
             up, so {unreadableSales === 1 ? "its" : "their"} units are left out. They are picked up
             once the order sync has caught up.
           </s-paragraph>

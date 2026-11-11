@@ -34,7 +34,7 @@ export const purchasingSources: WorksheetSources = {
  */
 export function draftOrderPort(
   db: TenantDb,
-  context: { actor: PurchasingActor; admin: AdminGraphQLClient; today: LocalDate },
+  context: { actor: PurchasingActor; admin?: AdminGraphQLClient; today: LocalDate },
 ): DraftOrderPort {
   return {
     maxLinesPerOrder: MAX_LINES_PER_ORDER,

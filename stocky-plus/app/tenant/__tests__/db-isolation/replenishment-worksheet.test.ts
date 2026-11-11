@@ -4,7 +4,7 @@
  * views run in the database, and a final quantity is the only editable value.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { issueTenantAuthority } from "../../authority.server";
 import { TENANT_DB_CONTEXT_VERSION } from "../../db-context.server";
 import { createTenantDb, type TenantDb } from "../../tenant-db.server";
@@ -16,6 +16,18 @@ import {
   WorksheetError,
   type GenerateWorksheetInput,
 } from "../../../lib/replenishment/worksheet/generate.server";
+import {
+  createDraftOrders,
+  getOrderGroups,
+  type DraftOrder,
+  type DraftOrderPort,
+  type DraftOrderRequest,
+} from "../../../lib/replenishment/worksheet/orders.server";
+import { previewLineSuggestion } from "../../../lib/replenishment/worksheet/preview.server";
+import {
+  draftOrderPort,
+  purchasingSources,
+} from "../../../lib/replenishment/worksheet/purchasing.server";
 import type { WorksheetSettings } from "../../../lib/replenishment/worksheet/settings";
 import type {
   SupplierTerms,
@@ -35,6 +47,12 @@ import {
   type WorksheetLine,
 } from "../../../lib/replenishment/worksheet/store.server";
 import type { WorksheetView } from "../../../lib/replenishment/worksheet/view";
+import type { PurchasingActor } from "../../../services/purchasing/actor.server";
+import { loadPurchaseOrder } from "../../../services/purchasing/purchase-order-records.server";
+import {
+  createSupplier,
+  saveSupplierProduct,
+} from "../../../services/purchasing/suppliers.server";
 import {
   requireRuntimeUrl,
   resetAndEnforce,
@@ -328,6 +346,39 @@ function input(settings: Partial<WorksheetSettings> = {}): GenerateWorksheetInpu
     now: NOW,
   };
 }
+
+/**
+ * Purchasing as the worksheet sees it. Like the real module, it returns the
+ * order it already made when a creation key is repeated.
+ */
+function recordingPort(
+  options: {
+    maxLinesPerOrder?: number;
+    afterCreate?: (request: DraftOrderRequest) => Promise<void>;
+  } = {},
+) {
+  const orders = new Map<string, DraftOrder>();
+  const requests: DraftOrderRequest[] = [];
+  const port: DraftOrderPort = {
+    maxLinesPerOrder: options.maxLinesPerOrder ?? 1000,
+    async create(request) {
+      requests.push(request);
+      const existing = orders.get(request.creationKey);
+      if (existing) return { ...existing, created: false };
+      const order = {
+        id: `po_${orders.size + 1}`,
+        poNumber: `PO-${1001 + orders.size}`,
+        created: true,
+      };
+      orders.set(request.creationKey, order);
+      await options.afterCreate?.(request);
+      return order;
+    },
+  };
+  return { port, requests };
+}
+
+const STAFF: PurchasingActor = { type: "STAFF", id: "staff-1" };
 
 const ALL_ROWS: WorksheetView = {
   show: "ALL",
@@ -927,6 +978,408 @@ describe("replenishment worksheets", () => {
           data: { finalQuantity: -1, orderQuantity: -1 },
         }),
       ).rejects.toThrow("ReplenishmentWorksheetLine_quantities_check");
+    });
+  });
+
+  describe("trying another period on a row", () => {
+    it("recalculates one variant from the row's saved stock without changing the worksheet", async () => {
+      const { id } = await generateWorksheet(dbA(), fakeSources(), input());
+      const worksheet = (await getWorksheet(dbA(), id))!;
+      const line = bySku(await linesOf(dbA(), id), "MER-750");
+      const preview = (params: WorksheetSettings["params"]) =>
+        previewLineSuggestion(dbA(), {
+          worksheet: {
+            asOfLocalDate: worksheet.asOfLocalDate,
+            timeZone: worksheet.timeZone,
+            settings: worksheet.settings!,
+            currencyCode: "USD",
+          },
+          line,
+          params,
+          installedAt: new Date("2026-08-01T00:00:00Z"),
+        });
+
+      // The same 30 sold in 30 days, now to cover 60: 60 less 10 available and 3 incoming.
+      const longer = await preview({ method: "LAST_X_DAYS", sampleDays: 30, suggestDays: 60 });
+      expect(longer).toMatchObject({ parityQuantity: 47, suggestedQuantity: 47 });
+
+      // Only the 12 sold on Nov 2 fall in the last 14 days: 12 ÷ 14 × 14 less 13.
+      const shorter = await preview({ method: "LAST_X_DAYS", sampleDays: 14, suggestDays: 14 });
+      expect(shorter).toMatchObject({ parityQuantity: 0, suggestedQuantity: 0 });
+
+      const target = await preview({ method: "TARGET_STOCK_LEVEL", targetQuantity: 40 });
+      expect(target).toMatchObject({ parityQuantity: 27, suggestedQuantity: 27 });
+
+      // A period before the stored history gives no number rather than zero.
+      const tooEarly = await preview({
+        method: "CUSTOM_RANGE",
+        startDate: "2025-01-01",
+        endDate: "2025-01-31",
+        suggestDays: 30,
+      });
+      expect(tooEarly.suggestedQuantity).toBeNull();
+      expect(tooEarly.warnings.map((warning) => warning.code)).toContain("HISTORY_UNAVAILABLE");
+
+      expect(bySku(await linesOf(dbA(), id), "MER-750")).toEqual(line);
+    });
+
+    it("reads the previewed variant's sales from its own shop", async () => {
+      const { id } = await generateWorksheet(dbB(), fakeSources(), input());
+      const worksheet = (await getWorksheet(dbB(), id))!;
+      const line = bySku(await linesOf(dbB(), id), "MER-750");
+      const preview = await previewLineSuggestion(dbB(), {
+        worksheet: {
+          asOfLocalDate: worksheet.asOfLocalDate,
+          timeZone: worksheet.timeZone,
+          settings: worksheet.settings!,
+          currencyCode: "USD",
+        },
+        line,
+        params: { method: "LAST_X_DAYS", sampleDays: 30, suggestDays: 30 },
+        installedAt: new Date("2026-08-01T00:00:00Z"),
+      });
+      // Shop B sold 500; shop A's 30 are not part of it.
+      expect(preview.parityQuantity).toBe(487);
+    });
+  });
+
+  describe("draft purchase orders", () => {
+    // Merlot 750 ml keeps its suggestion of 17; the 1.5 L is set to 5 with the
+    // same supplier, and the stout to 4 with no supplier at all.
+    async function worksheetToOrder(settings: Partial<WorksheetSettings> = {}) {
+      const { id } = await generateWorksheet(dbA(), fakeSources(), input(settings));
+      const lines = await linesOf(dbA(), id);
+      await setFinalQuantity(dbA(), {
+        worksheetId: id,
+        lineId: bySku(lines, "MER-1500").id,
+        quantity: 5,
+      });
+      await setFinalQuantity(dbA(), {
+        worksheetId: id,
+        lineId: bySku(lines, "STOUT-CAN").id,
+        quantity: 4,
+      });
+      return { id, scopeKey: "SHOP" };
+    }
+    const acmeOrder = (worksheet: { id: string; scopeKey: string }, locationGid: string | null) => ({
+      worksheet,
+      supplierIds: ["sup_acme"],
+      locationGid,
+    });
+
+    it("groups the rows to order by supplier with an estimated cost", async () => {
+      const worksheet = await worksheetToOrder();
+      expect(await getOrderGroups(dbA(), worksheet.id)).toEqual({
+        groups: [
+          {
+            supplierId: "sup_acme",
+            supplierName: "Acme Wines",
+            lines: 2,
+            units: 22,
+            costByCurrency: [{ currencyCode: "USD", amount: "187.00" }],
+            linesWithoutCost: 0,
+          },
+        ],
+        linesWithoutSupplier: 1,
+      });
+      expect(await getOrderGroups(dbB(), worksheet.id)).toEqual({
+        groups: [],
+        linesWithoutSupplier: 0,
+      });
+    });
+
+    it("sends the worksheet's quantities to purchasing and locks the ordered rows", async () => {
+      const worksheet = await worksheetToOrder();
+      const { port, requests } = recordingPort();
+
+      const created = await createDraftOrders(dbA(), port, acmeOrder(worksheet, WAREHOUSE));
+      expect(created).toEqual([
+        {
+          supplierId: "sup_acme",
+          supplierName: "Acme Wines",
+          purchaseOrderId: "po_1",
+          purchaseOrderNumber: "PO-1001",
+          lines: 2,
+          changedLines: 0,
+          created: true,
+        },
+      ]);
+      expect(requests).toEqual([
+        {
+          supplierId: "sup_acme",
+          locationGid: WAREHOUSE,
+          lines: [
+            { variantGid: MERLOT_1500, quantity: 5 },
+            { variantGid: MERLOT_750, quantity: 17 },
+          ],
+          creationKey: expect.stringMatching(
+            new RegExp(`^replenishment:${worksheet.id}:sup_acme:[0-9a-f]{32}$`),
+          ),
+          source: "replenishment",
+        },
+      ]);
+
+      const lines = await linesOf(dbA(), worksheet.id);
+      expect(bySku(lines, "MER-750")).toMatchObject({
+        purchaseOrderId: "po_1",
+        purchaseOrderNumber: "PO-1001",
+        orderQuantity: 17,
+      });
+      expect(bySku(lines, "MER-1500").purchaseOrderId).toBe("po_1");
+      expect(bySku(lines, "STOUT-CAN").purchaseOrderId).toBeNull();
+      expect(await getWorksheetTotals(dbA(), worksheet.id)).toMatchObject({
+        toOrder: 1,
+        unitsToOrder: 4,
+        ordered: 2,
+      });
+      await expect(
+        setFinalQuantity(dbA(), {
+          worksheetId: worksheet.id,
+          lineId: bySku(lines, "MER-750").id,
+          quantity: 1,
+        }),
+      ).rejects.toMatchObject({ code: "already_ordered" });
+
+      // Nothing is left for this supplier, so asking again creates nothing.
+      expect(await createDraftOrders(dbA(), port, acmeOrder(worksheet, WAREHOUSE))).toEqual([]);
+      expect(requests).toHaveLength(1);
+    });
+
+    it("finishes the same order when a request failed before its rows were linked", async () => {
+      const worksheet = await worksheetToOrder();
+      let failures = 1;
+      const { port, requests } = recordingPort({
+        afterCreate: async () => {
+          if (failures-- > 0) throw new Error("connection lost");
+        },
+      });
+
+      await expect(
+        createDraftOrders(dbA(), port, acmeOrder(worksheet, WAREHOUSE)),
+      ).rejects.toThrow("connection lost");
+      expect(await getWorksheetTotals(dbA(), worksheet.id)).toMatchObject({ ordered: 0 });
+
+      const retried = await createDraftOrders(dbA(), port, acmeOrder(worksheet, WAREHOUSE));
+      expect(retried).toMatchObject([
+        { purchaseOrderId: "po_1", lines: 2, changedLines: 0, created: false },
+      ]);
+      expect(requests[1].creationKey).toBe(requests[0].creationKey);
+      expect(await getWorksheetTotals(dbA(), worksheet.id)).toMatchObject({ ordered: 2 });
+    });
+
+    it("never reuses an order for different quantities or another destination", async () => {
+      const worksheet = await worksheetToOrder();
+      const { port, requests } = recordingPort({
+        afterCreate: async () => {
+          throw new Error("connection lost");
+        },
+      });
+      const attempt = (locationGid: string) =>
+        createDraftOrders(dbA(), port, acmeOrder(worksheet, locationGid)).catch(() => undefined);
+
+      await attempt(WAREHOUSE);
+      await attempt(MAIN);
+      const lines = await linesOf(dbA(), worksheet.id);
+      await setFinalQuantity(dbA(), {
+        worksheetId: worksheet.id,
+        lineId: bySku(lines, "MER-750").id,
+        quantity: 18,
+      });
+      await attempt(WAREHOUSE);
+
+      expect(new Set(requests.map((request) => request.creationKey)).size).toBe(3);
+    });
+
+    it("splits a supplier's rows across orders when one order cannot hold them", async () => {
+      const worksheet = await worksheetToOrder();
+      const { port, requests } = recordingPort({ maxLinesPerOrder: 1 });
+
+      const created = await createDraftOrders(dbA(), port, acmeOrder(worksheet, WAREHOUSE));
+      expect(created.map((order) => [order.purchaseOrderNumber, order.lines])).toEqual([
+        ["PO-1001", 1],
+        ["PO-1002", 1],
+      ]);
+      expect(requests.map((request) => request.lines)).toEqual([
+        [{ variantGid: MERLOT_1500, quantity: 5 }],
+        [{ variantGid: MERLOT_750, quantity: 17 }],
+      ]);
+      const lines = await linesOf(dbA(), worksheet.id);
+      expect(bySku(lines, "MER-1500").purchaseOrderNumber).toBe("PO-1001");
+      expect(bySku(lines, "MER-750").purchaseOrderNumber).toBe("PO-1002");
+    });
+
+    it("leaves a row open when its quantity changed while the order was being created", async () => {
+      const worksheet = await worksheetToOrder();
+      const before = await linesOf(dbA(), worksheet.id);
+      const { port } = recordingPort({
+        afterCreate: async () => {
+          await setFinalQuantity(dbA(), {
+            worksheetId: worksheet.id,
+            lineId: bySku(before, "MER-750").id,
+            quantity: 30,
+          });
+        },
+      });
+
+      const created = await createDraftOrders(dbA(), port, acmeOrder(worksheet, WAREHOUSE));
+      expect(created).toMatchObject([{ lines: 1, changedLines: 1 }]);
+      const lines = await linesOf(dbA(), worksheet.id);
+      expect(bySku(lines, "MER-1500").purchaseOrderId).toBe("po_1");
+      expect(bySku(lines, "MER-750")).toMatchObject({ purchaseOrderId: null, orderQuantity: 30 });
+    });
+
+    it("delivers a shop-wide worksheet only to an active location the merchant chose", async () => {
+      const worksheet = await worksheetToOrder();
+      const { port, requests } = recordingPort();
+      const to = (locationGid: string | null) =>
+        createDraftOrders(dbA(), port, acmeOrder(worksheet, locationGid));
+
+      await expect(to(null)).rejects.toMatchObject({
+        code: "location_not_found",
+        message: "Choose the location the stock will be delivered to.",
+      });
+      await expect(to("gid://shopify/Product/301")).rejects.toMatchObject({
+        code: "location_not_found",
+      });
+      await expect(to(CLOSED)).rejects.toMatchObject({
+        code: "location_not_found",
+        message: "That location is not active in your store. Choose another delivery location.",
+      });
+      await expect(to("gid://shopify/Location/999")).rejects.toMatchObject({
+        code: "location_not_found",
+      });
+      expect(requests).toEqual([]);
+      expect(await getWorksheetTotals(dbA(), worksheet.id)).toMatchObject({ ordered: 0 });
+    });
+
+    it("delivers a one-location worksheet to that location whatever is asked for", async () => {
+      const { id } = await generateWorksheet(dbA(), fakeSources(), input({ scopeKey: MAIN }));
+      const { port, requests } = recordingPort();
+
+      await createDraftOrders(dbA(), port, acmeOrder({ id, scopeKey: MAIN }, WAREHOUSE));
+      // 30 sold less 4 available and 3 incoming at the main store.
+      expect(requests).toMatchObject([
+        { locationGid: MAIN, lines: [{ variantGid: MERLOT_750, quantity: 23 }] },
+      ]);
+    });
+
+    it("creates nothing from another shop's worksheet", async () => {
+      const worksheet = await worksheetToOrder();
+      const { port, requests } = recordingPort();
+
+      expect(await createDraftOrders(dbB(), port, acmeOrder(worksheet, WAREHOUSE))).toEqual([]);
+      expect(requests).toEqual([]);
+      expect(await getWorksheetTotals(dbA(), worksheet.id)).toMatchObject({ ordered: 0 });
+    });
+
+    it("plans from the purchasing module's supplier terms and creates a real draft", async () => {
+      try {
+        const supplier = await createSupplier(dbA(), STAFF, {
+          name: "Vintage Imports",
+          accountNumber: null,
+          contactName: null,
+          contactEmail: null,
+          contactPhone: null,
+          preferredContactMethod: null,
+          website: null,
+          addressLine1: null,
+          addressLine2: null,
+          city: null,
+          region: null,
+          postalCode: null,
+          countryCode: null,
+          currency: "USD",
+          paymentTerms: null,
+          shippingTerms: null,
+          defaultTaxRatePercent: null,
+          defaultLeadTimeDays: 9,
+          defaultRestockDays: null,
+          minimumOrderValue: null,
+          vendorNotes: null,
+        });
+        await saveSupplierProduct(dbA(), STAFF, supplier.id, {
+          variantGid: MERLOT_750,
+          vendorSku: "VI-MER-750",
+          moq: 24,
+          packSize: 12,
+          supplierCost: new Prisma.Decimal("7.25"),
+          leadTimeDaysOverride: null,
+          orderUnit: null,
+          isPreferred: true,
+        });
+
+        const { id } = await generateWorksheet(
+          dbA(),
+          purchasingSources,
+          input({
+            incomingSource: "APP_PURCHASE_ORDERS",
+            rounding: { applyMinimumOrderQuantity: true, roundUpToPackSize: true },
+            selection: { ...LAST_30.selection, supplierId: supplier.id },
+          }),
+        );
+        const [line] = await linesOf(dbA(), id);
+        // 30 sold less 10 available and nothing on order is 20, raised to the
+        // supplier's minimum of 24, which is already two full packs.
+        expect(line).toMatchObject({
+          sku: "MER-750",
+          supplierId: supplier.id,
+          supplierName: "Vintage Imports",
+          vendorSku: "VI-MER-750",
+          minimumOrderQuantity: 24,
+          packSize: 12,
+          supplierCostAmount: "7.25",
+          supplierCostCurrencyCode: "USD",
+          leadTimeDays: 9,
+          leadTimeSource: "SUPPLIER_DEFAULT",
+          incomingQuantity: 0,
+          parityQuantity: 20,
+          suggestedQuantity: 24,
+        });
+
+        const port = draftOrderPort(dbA(), { actor: STAFF, today: "2026-11-10" });
+        const order = { worksheet: { id, scopeKey: "SHOP" }, supplierIds: [supplier.id], locationGid: WAREHOUSE };
+        const [created] = await createDraftOrders(dbA(), port, order);
+        expect(created).toMatchObject({
+          supplierName: "Vintage Imports",
+          purchaseOrderNumber: "PO-1001",
+          lines: 1,
+          changedLines: 0,
+          created: true,
+        });
+
+        const purchaseOrder = await loadPurchaseOrder(dbA(), created.purchaseOrderId);
+        expect(purchaseOrder).toMatchObject({
+          status: "DRAFT",
+          supplierId: supplier.id,
+          locationId: WAREHOUSE,
+          poNumber: "PO-1001",
+        });
+        expect(purchaseOrder.lineItems).toHaveLength(1);
+        expect(purchaseOrder.lineItems[0]).toMatchObject({
+          shopifyVariantId: MERLOT_750,
+          orderedQty: 24,
+          vendorSku: "VI-MER-750",
+        });
+        expect(purchaseOrder.lineItems[0].unitCost.toFixed(2)).toBe("7.25");
+        expect((await getWorksheetLine(dbA(), id, line.id))?.purchaseOrderNumber).toBe("PO-1001");
+
+        expect(await createDraftOrders(dbA(), port, order)).toEqual([]);
+        expect(await migrationPrisma.purchaseOrder.count({ where: { shopId: shopAId } })).toBe(1);
+
+        // A draft is not stock on order, so the next plan still counts nothing incoming.
+        const next = await generateWorksheet(
+          dbA(),
+          purchasingSources,
+          input({ incomingSource: "APP_PURCHASE_ORDERS" }),
+        );
+        expect(bySku(await linesOf(dbA(), next.id), "MER-750").incomingQuantity).toBe(0);
+      } finally {
+        await migrationPrisma.$transaction([
+          migrationPrisma.purchasingEvent.deleteMany(),
+          migrationPrisma.purchaseOrder.deleteMany(),
+          migrationPrisma.supplier.deleteMany(),
+        ]);
+      }
     });
   });
 

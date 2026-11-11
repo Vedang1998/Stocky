@@ -294,7 +294,7 @@ function LineDetail({
         <s-heading>Suppliers</s-heading>
         {detail.suppliers.length === 0 ? (
           <s-text color="subdued">
-            No supplier is set for this variant, so it can't be added to a purchase order from
+            No supplier is set for this variant, so it can&apos;t be added to a purchase order from
             this worksheet.
           </s-text>
         ) : (
