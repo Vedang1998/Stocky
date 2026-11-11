@@ -1,10 +1,21 @@
-import type { LoaderFunctionArgs } from "react-router";
-import { redirect, Form, useLoaderData } from "react-router";
-
-import { login } from "../../shopify.server";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import { redirect } from "react-router";
 
 import styles from "./styles.module.css";
 
+export const meta: MetaFunction = () => [
+  { title: "ProPo — inventory planning and purchasing for Shopify" },
+  {
+    name: "description",
+    content:
+      "ProPo helps Shopify merchants plan replenishment, manage suppliers and purchase orders, receive stock, and run stocktakes and transfers.",
+  },
+];
+
+// Shopify opens the app URL with ?shop=…&host=… (and embedded=1 inside the
+// admin). Send those requests to the embedded app; everyone else gets a static
+// page. Installation only ever starts from a Shopify-owned surface, so this
+// page never asks for a store domain (App Store requirement 2.3.1).
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const url = new URL(request.url);
 
@@ -12,46 +23,38 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  return { showForm: Boolean(login) };
+  return null;
 };
 
-export default function App() {
-  const { showForm } = useLoaderData<typeof loader>();
-
+export default function Index() {
   return (
-    <div className={styles.index}>
+    <main className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>A short heading about [your app]</h1>
+        <h1 className={styles.heading}>ProPo</h1>
         <p className={styles.text}>
-          A tagline about [your app] that describes your value proposition.
+          Inventory planning, purchasing and receiving for Shopify merchants.
         </p>
-        {showForm && (
-          <Form className={styles.form} method="post" action="/auth/login">
-            <label className={styles.label}>
-              <span>Shop domain</span>
-              <input className={styles.input} type="text" name="shop" />
-              <span>e.g: my-shop-domain.myshopify.com</span>
-            </label>
-            <button className={styles.button} type="submit">
-              Log in
-            </button>
-          </Form>
-        )}
         <ul className={styles.list}>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Replenishment</strong>. Reorder suggestions from your
+            Shopify sales history, with the calculation shown for every
+            variant.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Suppliers and purchase orders</strong>. Supplier SKUs and
+            costs, purchase orders, and full or partial receiving.
           </li>
           <li>
-            <strong>Product feature</strong>. Some detail about your feature and
-            its benefit to your customer.
+            <strong>Stock control</strong>. Stocktakes, transfers between
+            locations, and exportable inventory reports.
           </li>
         </ul>
+        <p className={styles.note}>
+          ProPo is installed from the Shopify App Store and runs inside your
+          Shopify admin. Already installed? Open it from{" "}
+          <strong>Apps</strong> in your Shopify admin.
+        </p>
       </div>
-    </div>
+    </main>
   );
 }

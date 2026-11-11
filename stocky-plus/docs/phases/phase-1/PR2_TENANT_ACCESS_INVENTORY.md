@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `67898feba88ed5e706412f65e2118052710a44f163dc792e4d236626900556df`
-**Scanned files:** 528
-**Findings:** 1886
+**Content digest:** `5d1d0215192fdb3a8de2624954ba0f15e6e2e0c93c418f74df996d0056f0b496`
+**Scanned files:** 535
+**Findings:** 1888
 **Converted paths:** 621
-**Approved exception findings:** 1265
+**Approved exception findings:** 1267
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -38,7 +38,7 @@ All 37 approved merchant-owned models must appear below.
 | ShopifyProductCollectionMembership | 256 |
 | ShopifyVariantFact | 280 |
 | ShopifyInventoryItemFact | 266 |
-| ShopifyLocationFact | 261 |
+| ShopifyLocationFact | 263 |
 | ShopifyInventoryLevelFact | 277 |
 | CatalogObservationInFlight | 252 |
 | ShopifyOrderFact | 241 |
@@ -69,7 +69,7 @@ All 37 approved merchant-owned models must appear below.
 | script | 51 |
 | service | 119 |
 | tenant_infra | 5 |
-| test | 1503 |
+| test | 1505 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -461,35 +461,35 @@ All 37 approved merchant-owned models must appear below.
 | `app/services/purchasing/purchase-order-records.server.ts` | 63 / `tx.purchaseOrder.updateMany` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/purchasing/purchase-order-records.server.ts` | 68 / `tx.purchaseOrder.findFirst` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/purchasing/purchase-order-records.server.ts` | 176 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 364 / `db.supplierSkuMapping.findMany` | service | SupplierSkuMapping | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 367 / `db.volumePriceTier.findMany` | service | VolumePriceTier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 426 / `tx.purchaseOrder.aggregate` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 436 / `db.purchaseOrder.findFirst` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 480 / `db.supplier.findFirst` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 547 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 567 / `tx.purchaseOrder.create` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 654 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 680 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 705 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 728 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 754 / `tx.pOLineItem.create` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 767 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 813 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 869 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 890 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 897 / `tx.pOLineItem.delete` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 925 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 939 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 984 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1006 / `tx.purchaseOrderCharge.deleteMany` | service | PurchaseOrderCharge | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1008 / `tx.purchaseOrderCharge.createMany` | service | PurchaseOrderCharge | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1019 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1070 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1101 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1126 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1133 / `tx.purchaseOrder.delete` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1164 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/services/purchasing/purchase-orders.server.ts` | 1167 / `tx.purchaseOrder.create` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 368 / `db.supplierSkuMapping.findMany` | service | SupplierSkuMapping | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 371 / `db.volumePriceTier.findMany` | service | VolumePriceTier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 430 / `tx.purchaseOrder.aggregate` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 440 / `db.purchaseOrder.findFirst` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 484 / `db.supplier.findFirst` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 551 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 571 / `tx.purchaseOrder.create` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 661 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 687 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 712 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 735 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 761 / `tx.pOLineItem.create` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 774 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 820 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 875 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 896 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 903 / `tx.pOLineItem.delete` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 931 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 945 / `tx.pOLineItem.update` | service | POLineItem | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 990 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1012 / `tx.purchaseOrderCharge.deleteMany` | service | PurchaseOrderCharge | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1014 / `tx.purchaseOrderCharge.createMany` | service | PurchaseOrderCharge | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1025 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1079 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1112 / `tx.purchaseOrder.update` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1137 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1144 / `tx.purchaseOrder.delete` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1175 / `$transaction` | service | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/services/purchasing/purchase-orders.server.ts` | 1178 / `tx.purchaseOrder.create` | service | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/purchasing/suppliers.server.ts` | 217 / `db.supplier.findFirst` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/purchasing/suppliers.server.ts` | 240 / `db.supplier.findFirst` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/services/purchasing/suppliers.server.ts` | 285 / `db.supplier.findMany` | service | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
@@ -919,9 +919,11 @@ All 37 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 583 / `migrationPrisma.purchaseOrder.count` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 638 / `migrationPrisma.purchaseOrder.update` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 685 / `migrationPrisma.purchaseOrderCharge.count` | test | PurchaseOrderCharge | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 784 / `migrationPrisma.purchaseOrder.count` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 785 / `migrationPrisma.pOLineItem.count` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
-| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 959 / `migrationPrisma.supplier.update` | test | Supplier | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 722 / `migrationPrisma.shopifyLocationFact.updateMany` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 734 / `migrationPrisma.shopifyLocationFact.updateMany` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 809 / `migrationPrisma.purchaseOrder.count` | test | PurchaseOrder | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 810 / `migrationPrisma.pOLineItem.count` | test | POLineItem | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts` | 1013 / `migrationPrisma.supplier.update` | test | Supplier | direct prisma delegate | approved exception EX-TEST-037 | migration_tests | approved exception | allowlist EX-TEST-037 | EX-TEST-037 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 39 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-033 | migration_tests | approved exception | allowlist EX-TEST-033 | EX-TEST-033 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 62 / `ctx.db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 106 / `dbA.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
@@ -2128,8 +2130,8 @@ All 37 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 528,
-  "findings": 1886,
+  "scannedFiles": 535,
+  "findings": 1888,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2269,6 +2271,6 @@ All 37 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "67898feba88ed5e706412f65e2118052710a44f163dc792e4d236626900556df"
+  "contentDigest": "5d1d0215192fdb3a8de2624954ba0f15e6e2e0c93c418f74df996d0056f0b496"
 }
 ```
