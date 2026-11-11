@@ -34,6 +34,7 @@ import {
   type ProductVariantRead,
 } from "../../../lib/catalog-facts/admin-read";
 import type {
+  CanonicalApplyObservationResult,
   CanonicalFactIdentity,
   DirectCanonicalObservation,
 } from "../../../lib/catalog-facts/apply/types";
@@ -320,7 +321,287 @@ function healthDomainForIdentity(
       : "catalog";
 }
 
-export async function applyCatalogFactWebhookRefetch(input: {
+const RESOURCE_KIND_APPLY_ORDER = [
+  "Product",
+  "ProductVariant",
+  "InventoryItem",
+  "Location",
+  "InventoryLevel",
+] as const;
+
+/** How long a begun read keeps later reads of the same resource from applying. */
+export const CATALOG_REFETCH_LEASE_MS = 60_000;
+
+/**
+ * Delay before a failed catalog webhook job runs again. The first retry is
+ * quick because the usual cause is another job for the same new product still
+ * running. Later retries wait out the lease of a read that a crashed job left
+ * behind.
+ */
+export function catalogRefetchRetryDelayMs(attemptNumber: number): number {
+  return attemptNumber <= 1 ? 5_000 : CATALOG_REFETCH_LEASE_MS + 15_000;
+}
+
+/**
+ * Shopify returned a live resource but the applicator stored no fact for it:
+ * another read of the same resource is still in flight or finished while this
+ * one was running, or the response was incomplete. Nothing is recorded as
+ * applied, so the job runs again with a fresh read.
+ */
+export class CatalogFactNotStoredError extends Error {
+  readonly code = "catalog_fact_not_stored";
+
+  constructor(
+    identity: CanonicalFactIdentity,
+    readonly outcome: CanonicalApplyObservationResult["outcome"],
+    readonly diagnostic: string | null,
+  ) {
+    super(
+      `No canonical fact stored for ${canonicalIdentityKeyForReceipt(identity)}: ${outcome}${diagnostic ? ` (${diagnostic})` : ""}`,
+    );
+    this.name = "CatalogFactNotStoredError";
+  }
+}
+
+type TenantDb = ReturnType<typeof createTenantDb>;
+
+function parentIdentities(
+  observation: DirectCanonicalObservation,
+): CanonicalFactIdentity[] {
+  const { identity } = observation;
+  if (identity.resourceKind === "InventoryLevel") {
+    return [
+      {
+        shopId: identity.shopId,
+        resourceKind: "InventoryItem",
+        shopifyGid: identity.inventoryItemGid,
+      },
+      {
+        shopId: identity.shopId,
+        resourceKind: "Location",
+        shopifyGid: identity.locationGid,
+      },
+    ];
+  }
+  const attributes = (observation.attributes ?? {}) as Record<string, unknown>;
+  const parentGid =
+    identity.resourceKind === "InventoryItem"
+      ? attributes.shopifyVariantGid
+      : identity.resourceKind === "ProductVariant"
+        ? attributes.shopifyProductGid
+        : null;
+  if (typeof parentGid !== "string" || parentGid.length === 0) return [];
+  return [
+    {
+      shopId: identity.shopId,
+      resourceKind:
+        identity.resourceKind === "InventoryItem" ? "ProductVariant" : "Product",
+      shopifyGid: parentGid,
+    },
+  ];
+}
+
+async function hasCanonicalFact(
+  db: TenantDb,
+  identity: CanonicalFactIdentity,
+): Promise<boolean> {
+  if (identity.resourceKind === "InventoryLevel") {
+    throw new Error("catalog_refetch_parent_kind_invalid");
+  }
+  const where = { shopifyGid: identity.shopifyGid };
+  const select = { id: true } as const;
+  const row =
+    identity.resourceKind === "Product"
+      ? await db.shopifyProductFact.findFirst({ where, select })
+      : identity.resourceKind === "ProductVariant"
+        ? await db.shopifyVariantFact.findFirst({ where, select })
+        : identity.resourceKind === "InventoryItem"
+          ? await db.shopifyInventoryItemFact.findFirst({ where, select })
+          : await db.shopifyLocationFact.findFirst({ where, select });
+  return row != null;
+}
+
+/**
+ * Shopify does not order the webhooks of a new product. inventory_items/create
+ * and inventory_levels/connect regularly arrive before products/create has
+ * been applied, and any of them can be lost. A level cannot be stored without
+ * its item and location, an item without its variant, or a variant without its
+ * product, so the facts that are missing are read here and applied by the same
+ * job.
+ */
+async function readMissingParents(
+  db: TenantDb,
+  observations: readonly DirectCanonicalObservation[],
+  read: (
+    identity: CanonicalFactIdentity,
+  ) => Promise<DirectCanonicalObservation | { tombstoneHeld: true }>,
+): Promise<DirectCanonicalObservation[]> {
+  const queued = new Set(
+    observations.map((item) => canonicalIdentityKeyForReceipt(item.identity)),
+  );
+  const parents: DirectCanonicalObservation[] = [];
+  const pending = [...observations];
+  for (let child = pending.shift(); child; child = pending.shift()) {
+    if (child.existenceKind !== "LIVE_REFETCH") continue;
+    for (const parent of parentIdentities(child)) {
+      const key = canonicalIdentityKeyForReceipt(parent);
+      if (queued.has(key)) continue;
+      queued.add(key);
+      if (await hasCanonicalFact(db, parent)) continue;
+      const mapped = await read(parent);
+      if ("tombstoneHeld" in mapped) continue;
+      parents.push(mapped);
+      pending.push(mapped);
+    }
+  }
+  return RESOURCE_KIND_APPLY_ORDER.flatMap((kind) =>
+    parents.filter((item) => item.identity.resourceKind === kind),
+  );
+}
+
+/**
+ * A read that was begun and never applied blocks later reads of the same
+ * resource until its lease expires, so a failed attempt gives its reads back.
+ * Reads that were applied are already closed and are skipped.
+ */
+async function abandonUnfinishedObservations(
+  authority: TenantAuthority,
+  begun: readonly DirectCanonicalObservation[],
+): Promise<void> {
+  for (const item of begun) {
+    await abandonDirectObservation(authority, {
+      token: item.observationToken,
+      requestGeneration: item.observationRequestGen,
+      identity: item.identity,
+      leaseExpiresAt: new Date(0),
+    }).catch(() => undefined);
+  }
+}
+
+type AppliedChunk =
+  | { status: "applied"; results: CanonicalApplyObservationResult[] }
+  | { status: "already_applied"; results: [] };
+
+async function applyChunkWithReceipt(
+  input: CatalogFactWebhookRefetchInput,
+  db: TenantDb,
+  chunk: readonly DirectCanonicalObservation[],
+  applicationKey: string,
+): Promise<AppliedChunk> {
+  const payloadDigest = catalogRefetchApplicationDigest({
+    applyingDurableJobId: input.durableJobId,
+    topic: input.topic,
+    shopId: input.authority.shopId,
+    resolvedIdentities: chunk.map((item) => item.identity),
+  });
+  let applied: AppliedChunk;
+  try {
+    const outcome = await db.$transaction((tx) =>
+      applyWithApplicationReceipt(
+        tx,
+        {
+          applicationKey,
+          sourceJobType: `webhook:${input.topic}`,
+          rootDurableJobId: input.rootDurableJobId,
+          applyingDurableJobId: input.durableJobId,
+          payloadDigest,
+        },
+        async (tenantTx) => {
+          const canonicalDb = tenantTx as unknown as CanonicalApplyDb;
+          const lockIdentities = chunk.map((item) =>
+            item.identity.resourceKind === "InventoryLevel"
+              ? {
+                  shopId: item.identity.shopId,
+                  resourceKind: "InventoryLevel" as const,
+                  inventoryItemGid: item.identity.inventoryItemGid,
+                  locationGid: item.identity.locationGid,
+                }
+              : {
+                  shopId: item.identity.shopId,
+                  resourceKind: item.identity.resourceKind,
+                  shopifyGid: item.identity.shopifyGid,
+                },
+          );
+          const ordered = orderCanonicalLockKeysForAcquisition(
+            lockIdentities.map(deriveCanonicalLockKey),
+          );
+          const acquired = new Set<string>();
+          for (const key of ordered) {
+            const lockKey = `${key.key1}:${key.key2}`;
+            if (acquired.has(lockKey)) continue;
+            const match = lockIdentities.find((candidate) => {
+              const derived = deriveCanonicalLockKey(candidate);
+              return derived.key1 === key.key1 && derived.key2 === key.key2;
+            });
+            if (!match) throw new Error("catalog_refetch_lock_identity_missing");
+            await acquireCanonicalIdentityAdvisoryLock(canonicalDb, match);
+            acquired.add(lockKey);
+          }
+
+          const results: CanonicalApplyObservationResult[] = [];
+          for (const kind of RESOURCE_KIND_APPLY_ORDER) {
+            for (const item of chunk.filter(
+              (candidate) => candidate.identity.resourceKind === kind,
+            )) {
+              const result = await applyCanonicalFacts(canonicalDb, {
+                shopId: input.authority.shopId,
+                observations: [item],
+                requestedCanonicalIdentitiesPerTransaction: 1,
+                configuredWorstCaseConcurrentCanonicalTransactions:
+                  input.configuredWorstCaseConcurrentCanonicalTransactions,
+              });
+              for (const row of result.results) {
+                // Throwing rolls the receipt back with the rest, so the retry
+                // is a real second attempt and not an "already applied" no-op.
+                if (item.existenceKind === "LIVE_REFETCH" && row.factId == null) {
+                  throw new CatalogFactNotStoredError(
+                    item.identity,
+                    row.outcome,
+                    row.diagnosticState,
+                  );
+                }
+              }
+              results.push(...result.results);
+            }
+          }
+          return results;
+        },
+      ),
+    );
+    applied =
+      outcome.status === "applied"
+        ? { status: "applied", results: outcome.result }
+        : { status: "already_applied", results: [] };
+  } catch (error) {
+    if (!(
+      error instanceof SyncControlPlaneError &&
+      (error.code === APPLICATION_ALREADY_APPLIED ||
+        error.code === APPLICATION_DIGEST_CONFLICT ||
+        error.code === APPLICATION_OUTCOME_UNCERTAIN)
+    )) {
+      throw error;
+    }
+    const verified = await verifyApplicationReceiptAfterRollback(db, {
+      applicationKey,
+      expectedPayloadDigest: payloadDigest,
+    });
+    if (verified.status !== "verified") throw error;
+    applied = { status: "already_applied", results: [] };
+  }
+  if (applied.status === "already_applied") {
+    for (const item of chunk) {
+      await abandonDirectObservation(input.authority, {
+        token: item.observationToken,
+        requestGeneration: item.observationRequestGen,
+        identity: item.identity,
+        leaseExpiresAt: new Date(0),
+      });
+    }
+  }
+  return applied;
+}
+
+export type CatalogFactWebhookRefetchInput = {
   authority: TenantAuthority;
   admin: CatalogAdminReadClient;
   topic: CatalogFactAtomicWebhookTopic;
@@ -337,10 +618,29 @@ export async function applyCatalogFactWebhookRefetch(input: {
   canonicalBatchSize: number;
   configuredWorstCaseConcurrentCanonicalTransactions: number;
   reads?: Partial<RefetchDependencies>;
-}): Promise<{
+};
+
+export type CatalogFactWebhookRefetchResult = {
   applicationStatus: "applied" | "already_applied" | "tombstone_held";
   canonicalOutcome?: string;
-}> {
+};
+
+export async function applyCatalogFactWebhookRefetch(
+  input: CatalogFactWebhookRefetchInput,
+): Promise<CatalogFactWebhookRefetchResult> {
+  const begun: DirectCanonicalObservation[] = [];
+  try {
+    return await refetchAndApply(input, begun);
+  } catch (error) {
+    await abandonUnfinishedObservations(input.authority, begun);
+    throw error;
+  }
+}
+
+async function refetchAndApply(
+  input: CatalogFactWebhookRefetchInput,
+  begun: DirectCanonicalObservation[],
+): Promise<CatalogFactWebhookRefetchResult> {
   const shop = await getControlPlanePrisma().shop.findUnique({
     where: { id: input.authority.shopId },
     select: { myshopifyDomain: true, processingEnabled: true },
@@ -357,12 +657,16 @@ export async function applyCatalogFactWebhookRefetch(input: {
     input.topic,
     input.payload,
   );
-  const observation = await readAndMap(
-    input.admin,
-    { ...DEFAULT_READS, ...input.reads },
-    { ...input, identity },
-  );
   const reads = { ...DEFAULT_READS, ...input.reads };
+  const read = async (target: CanonicalFactIdentity) => {
+    const mapped = await readAndMap(input.admin, reads, {
+      ...input,
+      identity: target,
+    });
+    if (!("tombstoneHeld" in mapped)) begun.push(mapped);
+    return mapped;
+  };
+  const observation = await read(identity);
   const observations: DirectCanonicalObservation[] =
     "tombstoneHeld" in observation ? [] : [observation];
 
@@ -377,19 +681,18 @@ export async function applyCatalogFactWebhookRefetch(input: {
       identity.shopifyGid,
     );
     for (const variantGid of variantGids) {
-      const variantIdentity: CanonicalFactIdentity = {
+      const mappedVariant = await read({
         shopId: input.authority.shopId,
         resourceKind: "ProductVariant",
         shopifyGid: variantGid,
-      };
-      const mappedVariant = await readAndMap(input.admin, reads, {
-        ...input,
-        identity: variantIdentity,
       });
       if ("tombstoneHeld" in mappedVariant) continue;
       observations.push(mappedVariant);
     }
   }
+
+  const db = createTenantDb(input.authority);
+  const parents = await readMissingParents(db, observations, read);
 
   const payloadDigest =
     input.applicationPayloadDigest ??
@@ -430,7 +733,6 @@ export async function applyCatalogFactWebhookRefetch(input: {
         });
       }
     }
-    const db = createTenantDb(input.authority);
     await db.$transaction((tx) =>
       applyWithApplicationReceipt(
         tx,
@@ -457,18 +759,39 @@ export async function applyCatalogFactWebhookRefetch(input: {
   ) {
     throw new Error("catalog_refetch_batch_size_invalid");
   }
-  const orderedObservations = [
-    "Product",
-    "ProductVariant",
-    "InventoryItem",
-    "Location",
-    "InventoryLevel",
-  ].flatMap((kind) =>
+  const stored: CanonicalFactIdentity[] = [];
+  const keepStored = (
+    chunk: readonly DirectCanonicalObservation[],
+    applied: AppliedChunk,
+  ) => {
+    if (applied.status === "already_applied") {
+      stored.push(...chunk.map((item) => item.identity));
+      return;
+    }
+    for (const row of applied.results) {
+      if (row.factId != null) stored.push(row.identity);
+    }
+  };
+
+  // Each parent has its own receipt, keyed by what it is rather than by its
+  // position, because a retry may find some of them already in place.
+  for (const parent of parents) {
+    keepStored(
+      [parent],
+      await applyChunkWithReceipt(
+        input,
+        db,
+        [parent],
+        `${input.applicationKey}:catalog-facts:parent:${canonicalIdentityKeyForReceipt(parent.identity)}`,
+      ),
+    );
+  }
+
+  const orderedObservations = RESOURCE_KIND_APPLY_ORDER.flatMap((kind) =>
     observations.filter(
       (candidate) => candidate.identity.resourceKind === kind,
     ),
   );
-  const db = createTenantDb(input.authority);
   let applicationStatus: "applied" | "already_applied" = "already_applied";
   let canonicalOutcome: string | undefined;
   for (
@@ -480,117 +803,15 @@ export async function applyCatalogFactWebhookRefetch(input: {
       start,
       start + input.canonicalBatchSize,
     );
-    const chunkDigest = catalogRefetchApplicationDigest({
-      applyingDurableJobId: input.durableJobId,
-      topic: input.topic,
-      shopId: input.authority.shopId,
-      resolvedIdentities: chunk.map((item) => item.identity),
-    });
-    const chunkApplicationKey = `${input.applicationKey}:catalog-facts:${start}`;
-    let applied: {
-      status: "applied" | "already_applied";
-      result: unknown;
-    };
-    try {
-      applied = await db.$transaction((tx) =>
-        applyWithApplicationReceipt(
-          tx,
-          {
-            applicationKey: chunkApplicationKey,
-            sourceJobType: `webhook:${input.topic}`,
-            rootDurableJobId: input.rootDurableJobId,
-            applyingDurableJobId: input.durableJobId,
-            payloadDigest: chunkDigest,
-          },
-          async (tenantTx) => {
-            const canonicalDb = tenantTx as unknown as CanonicalApplyDb;
-            const lockIdentities = chunk.map((item) =>
-              item.identity.resourceKind === "InventoryLevel"
-                ? {
-                    shopId: item.identity.shopId,
-                    resourceKind: "InventoryLevel" as const,
-                    inventoryItemGid: item.identity.inventoryItemGid,
-                    locationGid: item.identity.locationGid,
-                  }
-                : {
-                    shopId: item.identity.shopId,
-                    resourceKind: item.identity.resourceKind,
-                    shopifyGid: item.identity.shopifyGid,
-                  },
-            );
-            const ordered = orderCanonicalLockKeysForAcquisition(
-              lockIdentities.map(deriveCanonicalLockKey),
-            );
-            const acquired = new Set<string>();
-            for (const key of ordered) {
-              const lockKey = `${key.key1}:${key.key2}`;
-              if (acquired.has(lockKey)) continue;
-              const match = lockIdentities.find((candidate) => {
-                const derived = deriveCanonicalLockKey(candidate);
-                return derived.key1 === key.key1 && derived.key2 === key.key2;
-              });
-              if (!match)
-                throw new Error("catalog_refetch_lock_identity_missing");
-              await acquireCanonicalIdentityAdvisoryLock(canonicalDb, match);
-              acquired.add(lockKey);
-            }
-
-            const results = [];
-            for (const kind of [
-              "Product",
-              "ProductVariant",
-              "InventoryItem",
-              "Location",
-              "InventoryLevel",
-            ] as const) {
-              for (const item of chunk.filter(
-                (candidate) => candidate.identity.resourceKind === kind,
-              )) {
-                const result = await applyCanonicalFacts(canonicalDb, {
-                  shopId: input.authority.shopId,
-                  observations: [item],
-                  requestedCanonicalIdentitiesPerTransaction: 1,
-                  configuredWorstCaseConcurrentCanonicalTransactions:
-                    input.configuredWorstCaseConcurrentCanonicalTransactions,
-                });
-                results.push(...result.results);
-              }
-            }
-            return results;
-          },
-        ),
-      );
-    } catch (error) {
-      if (!(
-        error instanceof SyncControlPlaneError &&
-        (error.code === APPLICATION_ALREADY_APPLIED ||
-          error.code === APPLICATION_DIGEST_CONFLICT ||
-          error.code === APPLICATION_OUTCOME_UNCERTAIN)
-      )) {
-        throw error;
-      }
-      const verified = await verifyApplicationReceiptAfterRollback(db, {
-        applicationKey: chunkApplicationKey,
-        expectedPayloadDigest: chunkDigest,
-      });
-      if (verified.status !== "verified") throw error;
-      applied = { status: "already_applied", result: null };
-    }
+    const applied = await applyChunkWithReceipt(
+      input,
+      db,
+      chunk,
+      `${input.applicationKey}:catalog-facts:${start}`,
+    );
     if (applied.status === "applied") applicationStatus = "applied";
-    if (applied.status === "already_applied") {
-      for (const item of chunk) {
-        await abandonDirectObservation(input.authority, {
-          token: item.observationToken,
-          requestGeneration: item.observationRequestGen,
-          identity: item.identity,
-          leaseExpiresAt: new Date(0),
-        });
-      }
-    }
-    const appliedRows = Array.isArray(applied.result)
-      ? (applied.result as Array<{ outcome?: string }>)
-      : [];
-    canonicalOutcome ??= appliedRows[0]?.outcome;
+    keepStored(chunk, applied);
+    canonicalOutcome ??= applied.results[0]?.outcome;
   }
 
   if (
@@ -609,7 +830,7 @@ export async function applyCatalogFactWebhookRefetch(input: {
 
   await projectAppliedCanonicalFacts({
     authority: input.authority,
-    canonicalIdentities: observations.map((item) => item.identity),
+    canonicalIdentities: stored,
   });
   await reconcileCatalogDiagnostics(
     input.authority,
