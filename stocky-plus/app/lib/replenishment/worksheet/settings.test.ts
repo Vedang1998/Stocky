@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  ALL_FILTER_OPTION,
+  filterOptionValue,
   parseWorksheetSetup,
   readWorksheetSettings,
   setupFormFromDefaults,
@@ -56,14 +58,14 @@ describe("parseWorksheetSetup", () => {
     });
   });
 
-  it("keeps the product selection and trims it", () => {
+  it("keeps the product selection", () => {
     const parsed = parseWorksheetSetup(
       form({
         ...LAST_30,
         scopeKey: "gid://shopify/Location/7",
-        vendor: "  Acme  ",
-        productType: "Wine",
-        supplierId: "sup_1",
+        vendor: filterOptionValue("Acme"),
+        productType: filterOptionValue("Wine"),
+        supplierId: filterOptionValue("sup_1"),
       }),
       AS_OF,
     );
@@ -72,6 +74,49 @@ describe("parseWorksheetSetup", () => {
       vendor: "Acme",
       productType: "Wine",
       supplierId: "sup_1",
+    });
+  });
+
+  it("reads the all option as no filter, even for a vendor that shares its name", () => {
+    const everything = parseWorksheetSetup(
+      form({
+        ...LAST_30,
+        vendor: filterOptionValue(""),
+        productType: ALL_FILTER_OPTION,
+        supplierId: ALL_FILTER_OPTION,
+      }),
+      AS_OF,
+    );
+    expect(everything.ok && everything.settings.selection).toEqual({
+      vendor: null,
+      productType: null,
+      supplierId: null,
+    });
+
+    const vendorNamedAll = parseWorksheetSetup(
+      form({ ...LAST_30, vendor: filterOptionValue(ALL_FILTER_OPTION) }),
+      AS_OF,
+    );
+    expect(vendorNamedAll.ok && vendorNamedAll.settings.selection.vendor).toBe(ALL_FILTER_OPTION);
+  });
+
+  it("rejects a selection that is not one of the dropdown's values", () => {
+    const parsed = parseWorksheetSetup(
+      form({
+        ...LAST_30,
+        vendor: "All vendors",
+        productType: "Wine",
+        supplierId: `is:${"x".repeat(256)}`,
+      }),
+      AS_OF,
+    );
+    expect(parsed).toEqual({
+      ok: false,
+      errors: {
+        vendor: "Choose an option from the list.",
+        productType: "Choose an option from the list.",
+        supplierId: "Choose an option from the list.",
+      },
     });
   });
 
@@ -205,8 +250,9 @@ describe("setup form values", () => {
       endDate: values.endDate,
       scopeKey: values.scopeKey,
       incomingSource: values.incomingSource,
-      vendor: values.vendor,
-      supplierId: values.supplierId,
+      vendor: filterOptionValue(values.vendor),
+      productType: filterOptionValue(values.productType),
+      supplierId: filterOptionValue(values.supplierId),
       ...(values.applyMinimumOrderQuantity ? { applyMinimumOrderQuantity: "on" } : {}),
     });
     expect(parseWorksheetSetup(resubmitted, AS_OF)).toEqual({ ok: true, settings });
