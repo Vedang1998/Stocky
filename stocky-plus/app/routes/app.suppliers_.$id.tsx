@@ -58,7 +58,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (intent === "addMapping") {
     await db.supplierSkuMapping.upsert({
       where: {
-        supplierId_shopifyVariantId: {
+        shopId_supplierId_shopifyVariantId: {
+          shopId: db.authority.shopId,
           supplierId: supplier.id,
           shopifyVariantId: form.get("variantId") as string,
         },
