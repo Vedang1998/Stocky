@@ -309,12 +309,11 @@ export default function BuyingTable() {
   if (gated) {
     return (
       <s-page heading="Buying Table">
-        <s-section heading="Premium feature">
-          <s-banner tone="info" heading="The Buying Table requires a subscription">
+        <s-section heading="Choose a plan">
+          <s-banner tone="info" heading="The Buying Table needs an active plan">
             <s-paragraph>
-              Demand planning, ABC analysis, and one-click PO generation are
-              part of the paid plan. Marketing must not claim unlimited or
-              AI-driven forecasting until Smart mode and AI gates exist.
+              Reorder suggestions, ABC analysis and purchase order creation
+              are included in every plan. Choose a plan to start using them.
             </s-paragraph>
           </s-banner>
           <s-stack direction="inline" gap="base">
