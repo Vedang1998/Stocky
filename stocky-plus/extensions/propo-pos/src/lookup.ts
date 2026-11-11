@@ -29,6 +29,9 @@ export type LookupView =
       loadedAt: number;
     };
 
+export type ErrorView = Extract<LookupView, { kind: "error" }>;
+export type StockView = Extract<LookupView, { kind: "stock" }>;
+
 type FetchLike = (
   input: string,
   init?: { signal?: AbortSignal },
@@ -41,7 +44,10 @@ export const MESSAGES = {
   offline: "Can't reach ProPo. Check the device's connection and try again.",
   failed: "ProPo couldn't load stock. Try again.",
   unreadable: "That code couldn't be read. Scan it again.",
-  removed: "This product is no longer in the synced catalog.",
+  removed:
+    "This product isn't in ProPo's catalog. Products added in Shopify appear after the next catalog sync.",
+  busy: "Too many lookups in a short time. Wait a moment and try again.",
+  noVariant: "ProPo can't show stock for this item.",
 } as const;
 
 function scanUrl(code: string, locationId: number | null): string {
@@ -66,10 +72,11 @@ function isAbort(error: unknown): boolean {
 
 async function errorView(
   response: Pick<Response, "status" | "json">,
-): Promise<LookupView> {
+): Promise<ErrorView> {
   if (response.status === 401) return { kind: "error", message: MESSAGES.signIn };
   if (response.status === 400) return { kind: "error", message: MESSAGES.unreadable };
   if (response.status === 404) return { kind: "error", message: MESSAGES.removed };
+  if (response.status === 429) return { kind: "error", message: MESSAGES.busy };
   if (response.status === 403) {
     const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
     return {
@@ -88,7 +95,7 @@ async function request<T>(
   fetchImpl: FetchLike,
   url: string,
   signal: AbortSignal | undefined,
-): Promise<{ ok: true; body: T } | { ok: false; view: LookupView } | null> {
+): Promise<{ ok: true; body: T } | { ok: false; view: ErrorView } | null> {
   let response: Awaited<ReturnType<FetchLike>>;
   try {
     response = await fetchImpl(url, { signal });
@@ -145,7 +152,7 @@ export async function lookupVariant(
   variantGid: string,
   locationId: number | null,
   signal?: AbortSignal,
-): Promise<LookupView | null> {
+): Promise<ErrorView | StockView | null> {
   const result = await request<StockResponse>(
     fetchImpl,
     stockUrl(variantGid, locationId),

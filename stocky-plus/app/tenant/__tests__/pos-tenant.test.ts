@@ -3,6 +3,13 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { LoaderFunctionArgs } from "react-router";
 import type { PrismaClient } from "@prisma/client";
 import type { JwtPayload } from "@shopify/shopify-api";
+import IORedis from "ioredis";
+import { requireRedisUrl } from "../../jobs/queue.server";
+import {
+  POS_STAFF_LIMIT,
+  posRateLimitKeys,
+} from "../../lib/pos/pos-rate-limit.server";
+import { createRedisRateLimitStore } from "../../lib/rate-limit/redis-store.server";
 import { isTenantAuthority } from "../authority.server";
 import { requirePosTenant } from "../require-pos-tenant.server";
 import { resolveScannedCode } from "../../services/barcode-lookup.server";
@@ -397,6 +404,49 @@ describe("POS tenant authority", () => {
         signedRequest(`/api/pos/scan?code=${BARCODE}`, signSessionToken(SHOP_A_DOMAIN)),
       );
       expect(response.status).toBe(403);
+    });
+
+    it("rate limits one staff member without affecting other staff or shops", async () => {
+      await seedCatalogVariant(prisma, shopAId, "1001", BARCODE);
+      await seedCatalogVariant(prisma, shopBId, "2001", BARCODE);
+      const redis = new IORedis(requireRedisUrl(), { maxRetriesPerRequest: 1 });
+      const keys = posRateLimitKeys(shopAId, "4242");
+      try {
+        const store = createRedisRateLimitStore(redis);
+        await Promise.all(
+          Array.from({ length: POS_STAFF_LIMIT.limit }, () =>
+            store.hit(keys.staff, POS_STAFF_LIMIT.windowSeconds * 1000),
+          ),
+        );
+
+        const limited = await scan(
+          signedRequest(`/api/pos/scan?code=${BARCODE}`, signSessionToken(SHOP_A_DOMAIN)),
+        );
+        expect(limited.status).toBe(429);
+        expect(limited.headers.get("Access-Control-Allow-Origin")).toBe("*");
+        const retryAfter = Number(limited.headers.get("Retry-After"));
+        expect(retryAfter).toBeGreaterThanOrEqual(1);
+        expect(retryAfter).toBeLessThanOrEqual(POS_STAFF_LIMIT.windowSeconds);
+        const body = await limited.json();
+        expect(body.error.code).toBe("rate_limited");
+        expect(JSON.stringify(body)).not.toContain(BARCODE);
+
+        const otherStaff = await scan(
+          signedRequest(
+            `/api/pos/scan?code=${BARCODE}`,
+            signSessionToken(SHOP_A_DOMAIN, { sub: "5151" }),
+          ),
+        );
+        expect(otherStaff.status).toBe(200);
+
+        const otherShop = await scan(
+          signedRequest(`/api/pos/scan?code=${BARCODE}`, signSessionToken(SHOP_B_DOMAIN)),
+        );
+        expect(otherShop.status).toBe(200);
+      } finally {
+        await redis.del(`propo:rate-limit:${keys.staff}`, `propo:rate-limit:${keys.shop}`);
+        await redis.quit();
+      }
     });
 
     it("answers the CORS preflight without a token", async () => {

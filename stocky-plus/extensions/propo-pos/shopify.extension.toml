@@ -13,3 +13,11 @@ target = "pos.home.tile.render"
 [[extensions.targeting]]
 module = "./src/Modal.tsx"
 target = "pos.home.modal.render"
+
+[[extensions.targeting]]
+module = "./src/ProductStockBlock.tsx"
+target = "pos.product-details.block.render"
+
+[[extensions.targeting]]
+module = "./src/ProductStockModal.tsx"
+target = "pos.product-details.action.render"

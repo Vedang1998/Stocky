@@ -12,9 +12,13 @@ const requirePosTenant = vi.fn();
 const resolveScannedCode = vi.fn();
 const findLiveVariant = vi.fn();
 const getVariantStock = vi.fn();
+const checkPosRateLimit = vi.fn();
 
 vi.mock("../../tenant/require-pos-tenant.server", () => ({
   requirePosTenant: (...args: unknown[]) => requirePosTenant(...args),
+}));
+vi.mock("./pos-rate-limit.server", () => ({
+  checkPosRateLimit: (...args: unknown[]) => checkPosRateLimit(...args),
 }));
 vi.mock("../../services/barcode-lookup.server", () => ({
   resolveScannedCode: (...args: unknown[]) => resolveScannedCode(...args),
@@ -60,6 +64,7 @@ beforeEach(() => {
     tenant: { correlationId: "corr-1" },
     cors: corsFor,
   });
+  checkPosRateLimit.mockResolvedValue({ allowed: true });
 });
 
 describe("POS API error handling", () => {
@@ -113,6 +118,60 @@ describe("POS API error handling", () => {
       expect.objectContaining({ correlationId: "corr-1", path: "/api/pos/scan" }),
     );
     consoleError.mockRestore();
+  });
+
+  it("checks the allowance of the authenticated caller", async () => {
+    resolveScannedCode.mockResolvedValue({ status: "unknown", code: "1" });
+    await scanLoader(args("/api/pos/scan?code=1"));
+    expect(checkPosRateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({ tenant: { correlationId: "corr-1" } }),
+    );
+  });
+
+  it("answers 429 with Retry-After and does no work once the allowance is spent", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    checkPosRateLimit.mockResolvedValue({
+      allowed: false,
+      scope: "staff",
+      retryAfterSeconds: 17,
+      firstDenial: true,
+    });
+    const response = await scanLoader(args("/api/pos/scan?code=1"));
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Retry-After")).toBe("17");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect((await response.json()).error.code).toBe("rate_limited");
+    expect(resolveScannedCode).not.toHaveBeenCalled();
+    expect(consoleWarn).toHaveBeenCalledWith("POS API rate limit reached", {
+      path: "/api/pos/scan",
+      correlationId: "corr-1",
+      scope: "staff",
+    });
+    consoleWarn.mockRestore();
+  });
+
+  it("logs a spent allowance once, not on every refused request", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    checkPosRateLimit.mockResolvedValue({
+      allowed: false,
+      scope: "shop",
+      retryAfterSeconds: 3,
+      firstDenial: false,
+    });
+    const response = await stockLoader(
+      args("/api/pos/stock?variant=gid://shopify/ProductVariant/11"),
+    );
+    expect(response.status).toBe(429);
+    expect(findLiveVariant).not.toHaveBeenCalled();
+    expect(consoleWarn).not.toHaveBeenCalled();
+    consoleWarn.mockRestore();
+  });
+
+  it("does not count unauthenticated requests against anyone", async () => {
+    requirePosTenant.mockRejectedValue(new Response(undefined, { status: 401 }));
+    await scanLoader(args("/api/pos/scan?code=1"));
+    expect(checkPosRateLimit).not.toHaveBeenCalled();
   });
 
   it("never caches inventory responses", async () => {

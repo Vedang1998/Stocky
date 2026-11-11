@@ -100,7 +100,14 @@ describe("lookupVariant", () => {
     );
   });
 
-  it("says when the product has left the catalog", async () => {
+  it("asks the operator to wait when the app is rate limiting", async () => {
+    expect(await lookupVariant(reply(429, {}), variant.variantGid, null)).toEqual({
+      kind: "error",
+      message: MESSAGES.busy,
+    });
+  });
+
+  it("says when the product is not in the synced catalog", async () => {
     expect(await lookupVariant(reply(404, {}), variant.variantGid, null)).toEqual({
       kind: "error",
       message: MESSAGES.removed,

@@ -4,6 +4,7 @@ import {
 } from "../../tenant/require-pos-tenant.server";
 import { TenantAccessError } from "../../tenant/errors";
 import { isProductVariantGid } from "../shopify-gid";
+import { checkPosRateLimit } from "./pos-rate-limit.server";
 
 /** Header POS reads to know it must re-authenticate the user. */
 const REAUTHORIZE_URL_HEADER = "X-Shopify-API-Request-Failure-Reauthorize-Url";
@@ -12,6 +13,7 @@ export type PosApiErrorCode =
   | "bad_request"
   | "not_found"
   | "forbidden"
+  | "rate_limited"
   | "internal_error";
 
 export class PosApiError extends Error {
@@ -58,9 +60,10 @@ function errorResponse(status: number, code: PosApiErrorCode, message: string) {
 }
 
 /**
- * Run a POS API handler with verified tenant authority. Authentication
- * failures, tenant denials and unexpected errors all come back as JSON the
- * extension can read.
+ * Run a POS API handler with verified tenant authority, within the shop's and
+ * staff member's request allowance. Authentication failures, tenant denials,
+ * rate limiting and unexpected errors all come back as JSON the extension can
+ * read.
  */
 export async function handlePosApiRequest(
   request: Request,
@@ -89,6 +92,24 @@ export async function handlePosApiRequest(
       request,
       errorResponse(500, "internal_error", "Something went wrong. Try again."),
     );
+  }
+
+  const rateLimit = await checkPosRateLimit(context);
+  if (!rateLimit.allowed) {
+    if (rateLimit.firstDenial) {
+      console.warn("POS API rate limit reached", {
+        path: new URL(request.url).pathname,
+        correlationId: context.tenant.correlationId,
+        scope: rateLimit.scope,
+      });
+    }
+    const response = errorResponse(
+      429,
+      "rate_limited",
+      "Too many requests. Wait a moment and try again.",
+    );
+    response.headers.set("Retry-After", String(rateLimit.retryAfterSeconds));
+    return context.cors(response);
   }
 
   try {
