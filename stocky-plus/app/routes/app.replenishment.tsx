@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { getShopEntitlements, requireCapability } from "../billing/entitlements.server";
+import { MethodPeriodFields } from "../components/replenishment/MethodPeriodFields";
 import { AnalyticsPrerequisiteError, requireShopCurrency } from "../lib/analytics/errors";
 import { localDateOf, requireShopTimeZone } from "../lib/analytics/shop-calendar";
 import type { FieldErrors } from "../lib/replenishment/form";
@@ -17,12 +18,8 @@ import { getReplenishmentDefaults } from "../lib/replenishment/settings.server";
 import {
   INCOMING_SOURCES,
   INCOMING_SOURCE_LABELS,
-  MAX_QUANTITY,
-  MAX_SAMPLE_DAYS,
-  MAX_SUGGEST_DAYS,
   PARITY_METHODS,
   PARITY_METHOD_LABELS,
-  SALES_BASED_METHODS,
   type ParityMethod,
 } from "../lib/replenishment/types";
 import {
@@ -174,7 +171,6 @@ export default function Replenishment() {
   const errors = result?.errors ?? {};
   const submitting =
     navigation.state !== "idle" && navigation.formData?.get("intent") === "generate";
-  const salesBased = SALES_BASED_METHODS.has(method);
 
   return (
     <s-page heading="Replenishment">
@@ -209,57 +205,7 @@ export default function Replenishment() {
             <s-text color="subdued">{METHOD_HELP[method]}</s-text>
 
             <s-grid gridTemplateColumns="repeat(auto-fit, minmax(200px, 1fr))" gap="base">
-              {method === "LAST_X_DAYS" && (
-                <s-number-field
-                  label="Sales period"
-                  name="sampleDays"
-                  suffix="days"
-                  min={1}
-                  max={MAX_SAMPLE_DAYS}
-                  step={1}
-                  value={form.sampleDays}
-                  error={errors.sampleDays}
-                />
-              )}
-              {method === "CUSTOM_RANGE" && (
-                <>
-                  <s-date-field
-                    label="Sales from"
-                    name="startDate"
-                    value={form.startDate}
-                    error={errors.startDate}
-                  />
-                  <s-date-field
-                    label="Sales to"
-                    name="endDate"
-                    value={form.endDate}
-                    error={errors.endDate}
-                  />
-                </>
-              )}
-              {salesBased && (
-                <s-number-field
-                  label="Days to cover"
-                  name="suggestDays"
-                  suffix="days"
-                  min={1}
-                  max={MAX_SUGGEST_DAYS}
-                  step={1}
-                  value={form.suggestDays}
-                  error={errors.suggestDays}
-                />
-              )}
-              {method === "TARGET_STOCK_LEVEL" && (
-                <s-number-field
-                  label="Target quantity"
-                  name="targetQuantity"
-                  min={0}
-                  max={MAX_QUANTITY}
-                  step={1}
-                  value={form.targetQuantity}
-                  error={errors.targetQuantity}
-                />
-              )}
+              <MethodPeriodFields method={method} values={form} errors={errors} />
               <s-select
                 label="Plan stock for"
                 name="scopeKey"

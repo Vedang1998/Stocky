@@ -6,6 +6,7 @@
  * draft; quantities are passed exactly as the worksheet shows them. Rows are
  * then linked to their order, which locks them against further edits here.
  */
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import type { TenantDb } from "../../../tenant/tenant-db.server";
 import { isLocationGid, SHOP_SCOPE } from "../scope";
@@ -17,7 +18,8 @@ const LINK_BATCH = 500;
 export type DraftOrderRequest = {
   supplierId: string;
   locationGid: string;
-  lines: Array<{ variantGid: string; quantity: number; unitCost?: string }>;
+  /** Purchasing prices each line from the supplier's terms. */
+  lines: Array<{ variantGid: string; quantity: number }>;
   /** The same key always returns the same order, so a retry cannot duplicate it. */
   creationKey: string;
   source: "replenishment";
@@ -30,7 +32,12 @@ export type DraftOrder = {
   created: boolean;
 };
 
-export type CreateDraftOrder = (request: DraftOrderRequest) => Promise<DraftOrder>;
+/** How the worksheet reaches the purchasing module. */
+export type DraftOrderPort = {
+  create(request: DraftOrderRequest): Promise<DraftOrder>;
+  /** Most lines purchasing accepts on one order; larger groups are split. */
+  maxLinesPerOrder: number;
+};
 
 export type OrderGroup = {
   supplierId: string;
@@ -141,7 +148,13 @@ export type CreatedOrder = {
   supplierName: string;
   purchaseOrderId: string;
   purchaseOrderNumber: string;
+  /** Rows now linked to the order. */
   lines: number;
+  /**
+   * Rows that are on the order but were edited or ordered elsewhere while it
+   * was being created. They stay open on the worksheet.
+   */
+  changedLines: number;
   /** False when an earlier attempt had already created this order. */
   created: boolean;
 };
@@ -172,14 +185,68 @@ async function resolveDestination(
 }
 
 /**
- * Creates one draft purchase order per chosen supplier from the worksheet's
- * unordered rows. Safe to repeat: a supplier's nth order from a worksheet
- * always uses the same key, so a retry after a failure links the rows to the
- * order that already exists instead of creating another.
+ * Links rows to their order and returns how many were linked. A row is
+ * linked only while it is still unordered and still shows the quantity that
+ * went on the order, so a locked row never disagrees with its order.
+ */
+async function linkLines(
+  db: TenantDb,
+  worksheetId: string,
+  lines: readonly PendingLine[],
+  order: DraftOrder,
+): Promise<number> {
+  const idsByQuantity = new Map<number, string[]>();
+  for (const line of lines) {
+    const ids = idsByQuantity.get(line.orderQuantity);
+    if (ids) ids.push(line.id);
+    else idsByQuantity.set(line.orderQuantity, [line.id]);
+  }
+  let linked = 0;
+  for (const [orderQuantity, ids] of idsByQuantity) {
+    for (let i = 0; i < ids.length; i += LINK_BATCH) {
+      const result: { count: number } = await db.replenishmentWorksheetLine.updateMany({
+        where: {
+          worksheetId,
+          id: { in: ids.slice(i, i + LINK_BATCH) },
+          orderQuantity,
+          purchaseOrderId: null,
+        },
+        data: { purchaseOrderId: order.id, purchaseOrderNumber: order.poNumber },
+      });
+      linked += result.count;
+    }
+  }
+  return linked;
+}
+
+/**
+ * Identifies an order by exactly what is on it. Repeating a request that
+ * failed part-way finds the order it already created; a request for
+ * different rows or quantities can never be mistaken for it.
+ */
+function creationKey(
+  worksheetId: string,
+  supplierId: string,
+  locationGid: string,
+  lines: readonly PendingLine[],
+): string {
+  const digest = createHash("sha256").update(`${locationGid};`);
+  for (const line of lines) digest.update(`${line.variantGid}=${line.orderQuantity};`);
+  return `replenishment:${worksheetId}:${supplierId}:${digest.digest("hex").slice(0, 32)}`;
+}
+
+/**
+ * Creates draft purchase orders for the chosen suppliers from the
+ * worksheet's unordered rows, then links each row to its order. A supplier
+ * with more rows than one order holds gets several orders.
+ *
+ * Safe to repeat: if a request fails after an order was created but before
+ * its rows were linked, the next attempt gets the same order back from
+ * purchasing and finishes the links.
  */
 export async function createDraftOrders(
   db: TenantDb,
-  createDraft: CreateDraftOrder,
+  purchasing: DraftOrderPort,
   input: {
     worksheet: { id: string; scopeKey: string };
     supplierIds: readonly string[];
@@ -192,44 +259,30 @@ export async function createDraftOrders(
 
   for (const supplierId of new Set(input.supplierIds)) {
     const pending = await loadPendingLines(db, worksheet.id, supplierId);
-    if (pending.length === 0) continue;
-
-    const earlier: Array<{ purchaseOrderId: string | null }> =
-      await db.replenishmentWorksheetLine.groupBy({
-        by: ["purchaseOrderId"],
-        where: { worksheetId: worksheet.id, supplierId, purchaseOrderId: { not: null } },
+    for (let start = 0; start < pending.length; start += purchasing.maxLinesPerOrder) {
+      const lines = pending.slice(start, start + purchasing.maxLinesPerOrder);
+      const order = await purchasing.create({
+        supplierId,
+        locationGid,
+        lines: lines.map((line) => ({
+          variantGid: line.variantGid,
+          quantity: line.orderQuantity,
+        })),
+        creationKey: creationKey(worksheet.id, supplierId, locationGid, lines),
+        source: "replenishment",
       });
-    const order = await createDraft({
-      supplierId,
-      locationGid,
-      lines: pending.map((line) => ({
-        variantGid: line.variantGid,
-        quantity: line.orderQuantity,
-        ...(line.supplierCostAmount ? { unitCost: line.supplierCostAmount.toFixed() } : {}),
-      })),
-      creationKey: `replenishment:${worksheet.id}:${supplierId}:${earlier.length + 1}`,
-      source: "replenishment",
-    });
 
-    const ids = pending.map((line) => line.id);
-    for (let i = 0; i < ids.length; i += LINK_BATCH) {
-      await db.replenishmentWorksheetLine.updateMany({
-        where: {
-          worksheetId: worksheet.id,
-          id: { in: ids.slice(i, i + LINK_BATCH) },
-          purchaseOrderId: null,
-        },
-        data: { purchaseOrderId: order.id, purchaseOrderNumber: order.poNumber },
+      const linked = await linkLines(db, worksheet.id, lines, order);
+      created.push({
+        supplierId,
+        supplierName: lines[0].supplierName ?? "Supplier",
+        purchaseOrderId: order.id,
+        purchaseOrderNumber: order.poNumber,
+        lines: linked,
+        changedLines: lines.length - linked,
+        created: order.created,
       });
     }
-    created.push({
-      supplierId,
-      supplierName: pending[0].supplierName ?? "Supplier",
-      purchaseOrderId: order.id,
-      purchaseOrderNumber: order.poNumber,
-      lines: pending.length,
-      created: order.created,
-    });
   }
   return created;
 }
