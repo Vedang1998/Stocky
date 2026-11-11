@@ -12,7 +12,9 @@ import { authenticate } from "../shopify.server";
  *
  * The shop header is not covered by Shopify's signature, the body is. A
  * request is recorded only for the shop its signed body names, so a signed
- * delivery for one shop cannot be replayed to erase another.
+ * delivery for one shop cannot be replayed to erase another. The topic header
+ * is not signed either: a customer request always carries a customer block
+ * and shop/redact never does, so a body with one is refused as a shop erasure.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { shop, topic, webhookId, payload } =
@@ -25,6 +27,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!signedShopMatches(payload, "shop_domain", shop)) {
     console.warn(
       `Rejected ${complianceTopic} webhook: the signed body does not name ${shop}`,
+    );
+    return new Response(null, { status: 401 });
+  }
+  if (complianceTopic === "shop/redact" && "customer" in payload) {
+    console.warn(
+      `Rejected shop/redact webhook for ${shop}: the signed body is a customer request`,
     );
     return new Response(null, { status: 401 });
   }

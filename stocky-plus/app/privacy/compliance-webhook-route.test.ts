@@ -139,6 +139,34 @@ describe("compliance webhook route", () => {
     },
   );
 
+  // The topic header is unsigned too. Shopify's own shop/redact comes 48
+  // hours after uninstall; a customer request must not bring it forward.
+  it.each(["customers/redact", "customers/data_request"])(
+    "answers 401 to a signed %s body replayed as shop/redact and records nothing",
+    async (signedFor) => {
+      const payload =
+        signedFor === "customers/redact"
+          ? {
+              shop_id: 954889,
+              shop_domain: SHOP,
+              customer: { id: 191167, email: "shopper@example.com" },
+              orders_to_redact: [299938],
+            }
+          : {
+              shop_id: 954889,
+              shop_domain: SHOP,
+              orders_requested: [299938],
+              customer: { id: 191167, email: "shopper@example.com" },
+              data_request: { id: 9999 },
+            };
+
+      const response = await respond(delivery("shop/redact", payload));
+
+      expect(response.status).toBe(401);
+      expect(recordPrivacyRequest).not.toHaveBeenCalled();
+    },
+  );
+
   it("answers 405 to a request that is not a POST", async () => {
     const response = await respond(
       delivery("shop/redact", { shop_domain: SHOP }, { method: "GET" }),

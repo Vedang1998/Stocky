@@ -38,20 +38,35 @@ export type InventoryWriteCapability =
   | "costSync"
   | "transferWrites";
 
+const WRITE_SWITCH: Record<InventoryWriteCapability, string> = {
+  stocktakeInventoryWrites: "FEATURE_STOCKTAKE_INVENTORY_WRITES",
+  adjustmentWrites: "FEATURE_ADJUSTMENT_WRITES",
+  receiptWrites: "FEATURE_RECEIPT_WRITES",
+  costSync: "FEATURE_COST_SYNC",
+  transferWrites: "FEATURE_TRANSFER_WRITES",
+};
+
+const WRITE_DESCRIPTION: Record<InventoryWriteCapability, string> = {
+  stocktakeInventoryWrites: "Applying stocktake counts to Shopify inventory",
+  adjustmentWrites: "Adjusting Shopify inventory",
+  receiptWrites: "Adding received stock to Shopify inventory",
+  costSync: "Updating product costs in Shopify",
+  transferWrites: "Moving Shopify inventory for transfers",
+};
+
+/**
+ * The thrown message is shown to merchants, so it says what is unavailable
+ * and nothing about configuration. The switch name goes to the server log.
+ */
 export function assertInventoryWriteEnabled(
   capability: InventoryWriteCapability,
 ): void {
   if (!featureFlags[capability]()) {
-    const envName: Record<InventoryWriteCapability, string> = {
-      stocktakeInventoryWrites: "FEATURE_STOCKTAKE_INVENTORY_WRITES",
-      adjustmentWrites: "FEATURE_ADJUSTMENT_WRITES",
-      receiptWrites: "FEATURE_RECEIPT_WRITES",
-      costSync: "FEATURE_COST_SYNC",
-      transferWrites: "FEATURE_TRANSFER_WRITES",
-    };
+    console.warn(
+      `Refused an inventory write: ${WRITE_SWITCH[capability]} is not enabled`,
+    );
     throw new Error(
-      `Inventory write capability "${capability}" is disabled. ` +
-        `Enable ${envName[capability]}=true only in approved test environments after release gates pass.`,
+      `${WRITE_DESCRIPTION[capability]} is not turned on for this store yet.`,
     );
   }
 }

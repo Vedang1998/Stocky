@@ -1,18 +1,37 @@
-FROM node:20-alpine
-RUN apk add --no-cache openssl
+# Three targets:
+#   runtime (default)  web server and background worker, production dependencies only
+#   release            migrations and role provisioning, run once per deploy
+#   build              intermediate
+#
+# The runtime image carries no migration tooling beyond the Prisma client and
+# never runs migrations: give the release step the migration credentials and
+# the runtime containers the runtime ones.
 
-EXPOSE 3000
-
+FROM node:22-alpine AS base
+# package.json pins npm with engine-strict, and the image ships an older one.
+RUN apk add --no-cache openssl && npm install -g npm@11.5.2
 WORKDIR /app
 
-ENV NODE_ENV=production
-
-COPY package.json package-lock.json* ./
-
-RUN npm ci --omit=dev && npm cache clean --force
-
+FROM base AS build
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci
 COPY . .
+RUN npx prisma generate && NODE_ENV=production npm run build
 
-RUN npm run build
+FROM build AS release
+CMD ["npx", "prisma", "migrate", "deploy"]
 
-CMD ["npm", "run", "docker-start"]
+FROM base AS runtime
+ENV NODE_ENV=production
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY prisma ./prisma
+RUN npx prisma generate
+COPY tsconfig.json env.d.ts ./
+COPY app ./app
+COPY public ./public
+COPY --from=build /app/build ./build
+USER node
+EXPOSE 3000
+# Web: the default command. Worker: the same image with `npm run worker`.
+CMD ["npm", "run", "start"]

@@ -13,7 +13,7 @@ How ProPo answers Shopify's three mandatory compliance webhooks and when it dele
 
 Every request is one row in the `PrivacyRequest` table and is written before Shopify gets its 200, so an acknowledged request cannot be lost. A redelivery of the same webhook is recognised by its webhook id and recorded once.
 
-A delivery is accepted only when the `shop_domain` in its signed body is the shop the delivery was sent for. Anything else gets a 401 and no record, so a webhook captured from one shop cannot be replayed against another.
+A delivery is accepted only when the `shop_domain` in its signed body is the shop the delivery was sent for. Anything else gets a 401 and no record, so a webhook captured from one shop cannot be replayed against another. A body that carries a customer block is not accepted as `shop/redact`, so a customer request cannot be replayed as a shop erasure.
 
 ## Why customer requests are closed on receipt
 
