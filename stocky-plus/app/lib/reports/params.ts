@@ -9,10 +9,7 @@ import {
   isLocalDate,
   type LocalDate,
 } from "../analytics/shop-calendar";
-import {
-  CUSTOM_RANGE_PRESET,
-  DEFAULT_RANGE_PRESET,
-} from "./range-presets";
+import { CUSTOM_RANGE_PRESET, DEFAULT_RANGE_PRESET } from "./range-presets";
 import type {
   ReportDateRange,
   ReportOption,
@@ -65,10 +62,18 @@ function presetRange(preset: string, today: LocalDate): ReportDateRange | null {
       return { preset, startLocalDate: yesterday, endLocalDate: yesterday };
     }
     case "month_to_date":
-      return { preset, startLocalDate: firstOfMonth(today), endLocalDate: today };
+      return {
+        preset,
+        startLocalDate: firstOfMonth(today),
+        endLocalDate: today,
+      };
     case "last_month": {
       const lastDay = addLocalDays(firstOfMonth(today), -1);
-      return { preset, startLocalDate: firstOfMonth(lastDay), endLocalDate: lastDay };
+      return {
+        preset,
+        startLocalDate: firstOfMonth(lastDay),
+        endLocalDate: lastDay,
+      };
     }
     default:
       return null;
@@ -87,14 +92,21 @@ export function resolveDateRange(input: {
   end: string | null;
   today: LocalDate;
 }): ResolvedDateRange {
-  const fallback = presetRange(DEFAULT_RANGE_PRESET, input.today) as ReportDateRange;
+  const fallback = presetRange(
+    DEFAULT_RANGE_PRESET,
+    input.today,
+  ) as ReportDateRange;
   const preset = input.preset ?? DEFAULT_RANGE_PRESET;
 
   if (preset !== CUSTOM_RANGE_PRESET) {
     const range = presetRange(preset, input.today);
     return range
       ? { range, problem: null }
-      : { range: fallback, problem: "That date range is not available. Showing the last 30 days." };
+      : {
+          range: fallback,
+          problem:
+            "That date range is not available. Showing the last 30 days.",
+        };
   }
 
   const { start, end } = input;
@@ -107,7 +119,8 @@ export function resolveDateRange(input: {
   if (end < start) {
     return {
       range: fallback,
-      problem: "The end date is before the start date. Showing the last 30 days.",
+      problem:
+        "The end date is before the start date. Showing the last 30 days.",
     };
   }
   if (diffLocalDays(start, end) + 1 > REPORT_MAX_RANGE_DAYS) {
@@ -120,7 +133,10 @@ export function resolveDateRange(input: {
       problem: `Reports cover up to ${REPORT_MAX_RANGE_DAYS} days at a time. Showing the last ${REPORT_MAX_RANGE_DAYS} days of the range you chose.`,
     };
   }
-  return { range: { preset, startLocalDate: start, endLocalDate: end }, problem: null };
+  return {
+    range: { preset, startLocalDate: start, endLocalDate: end },
+    problem: null,
+  };
 }
 
 /** What the merchant asked to see of an already computed report. */
@@ -190,7 +206,8 @@ export function parseReportView(
     search: (searchParams.get("q") ?? "").trim().slice(0, SEARCH_MAX_LENGTH),
     facets,
     sortKey: searchParams.get("sort"),
-    sortDirection: direction === "asc" || direction === "desc" ? direction : null,
+    sortDirection:
+      direction === "asc" || direction === "desc" ? direction : null,
     page: parsePage(searchParams.get("page")),
   };
 }

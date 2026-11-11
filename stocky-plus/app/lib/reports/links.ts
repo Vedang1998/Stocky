@@ -28,8 +28,10 @@ export function reportQuery(
       query.set("end", state.range.endLocalDate);
     }
   }
-  for (const [key, value] of Object.entries(state.options)) query.set(key, value);
-  for (const [key, value] of Object.entries(state.facets)) query.set(key, value);
+  for (const [key, value] of Object.entries(state.options))
+    query.set(key, value);
+  for (const [key, value] of Object.entries(state.facets))
+    query.set(key, value);
   if (state.search) query.set("q", state.search);
   const sort = overrides.sort ?? state.sort;
   query.set("sort", sort.key);
@@ -52,5 +54,8 @@ export function nextSort(
   if (current.key !== column.key) {
     return { key: column.key, direction: firstDirection(column.kind) };
   }
-  return { key: column.key, direction: current.direction === "asc" ? "desc" : "asc" };
+  return {
+    key: column.key,
+    direction: current.direction === "asc" ? "desc" : "asc",
+  };
 }

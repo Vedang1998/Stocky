@@ -12,7 +12,7 @@ import {
 } from "../analytics/abc-parity";
 import type { AbcParityRun } from "../analytics/abc-parity.server";
 import { ZERO } from "../analytics/money";
-import { formatCell } from "./present";
+import { countOf, formatCell } from "./present";
 import { diagnosticNotices, NO_ORDERS_NOTICE } from "./sales-reports";
 import type { ReportData, ReportNotice, ReportTile } from "./types";
 import { buildVariantDirectory, type VariantInfo } from "./variant-directory";
@@ -62,7 +62,8 @@ export function buildAbcReport(run: AbcParityRun): ReportData<AbcReportRow> {
         key: "rank",
         label: "Rank",
         kind: "integer",
-        definition: "Position by net revenue among graded variants, highest first. Ties go to the variant with more net units.",
+        definition:
+          "Position by net revenue among graded variants, highest first. Ties go to the variant with more net units.",
         value: (r) => r.abc.rank,
       },
       {
@@ -72,36 +73,55 @@ export function buildAbcReport(run: AbcParityRun): ReportData<AbcReportRow> {
         definition: `A: variants that make up the first ${ABC_A_CUMULATIVE_PERCENT}% of revenue. B: the next ${ABC_B_CUMULATIVE_PERCENT - ABC_A_CUMULATIVE_PERCENT}%. C: the rest, including variants with no sales. U: ungraded. The variant that crosses a threshold keeps the higher grade.`,
         value: (r) => r.abc.abcClass,
       },
-      { key: "product", label: "Product", kind: "text", value: (r) => r.info.product },
-      { key: "variant", label: "Variant", kind: "text", value: (r) => r.info.variant },
+      {
+        key: "product",
+        label: "Product",
+        kind: "text",
+        value: (r) => r.info.product,
+      },
+      {
+        key: "variant",
+        label: "Variant",
+        kind: "text",
+        value: (r) => r.info.variant,
+      },
       { key: "sku", label: "SKU", kind: "text", value: (r) => r.info.sku },
-      { key: "vendor", label: "Vendor", kind: "text", value: (r) => r.info.vendor },
+      {
+        key: "vendor",
+        label: "Vendor",
+        kind: "text",
+        value: (r) => r.info.vendor,
+      },
       {
         key: "netUnits",
         label: "Net units",
         kind: "integer",
-        definition: "Units ordered and added, minus units refunded, returned or removed by an edit, in the period.",
+        definition:
+          "Units ordered and added, minus units refunded, returned or removed by an edit, in the period.",
         value: (r) => r.abc.netUnits,
       },
       {
         key: "revenue",
         label: "Net revenue",
         kind: "money",
-        definition: "Net units × the unit price after all discounts. Excludes shipping and duties.",
+        definition:
+          "Net units × the unit price after all discounts. Excludes shipping and duties.",
         value: (r) => r.abc.revenue,
       },
       {
         key: "revenueShare",
         label: "Share of revenue",
         kind: "percent",
-        definition: "The variant's net revenue ÷ the net revenue of all graded variants.",
+        definition:
+          "The variant's net revenue ÷ the net revenue of all graded variants.",
         value: (r) => r.abc.revenueShare,
       },
       {
         key: "cumulativeShare",
         label: "Cumulative share",
         kind: "percent",
-        definition: "The combined share of this variant and every variant ranked above it.",
+        definition:
+          "The combined share of this variant and every variant ranked above it.",
         value: (r) => r.abc.cumulativeShare,
       },
       {
@@ -109,7 +129,9 @@ export function buildAbcReport(run: AbcParityRun): ReportData<AbcReportRow> {
         label: "Why ungraded",
         kind: "text",
         value: (r) =>
-          r.abc.unclassifiedReason ? UNCLASSIFIED_REASONS[r.abc.unclassifiedReason] : null,
+          r.abc.unclassifiedReason
+            ? UNCLASSIFIED_REASONS[r.abc.unclassifiedReason]
+            : null,
       },
     ],
     rows,
@@ -123,10 +145,13 @@ export function buildAbcReport(run: AbcParityRun): ReportData<AbcReportRow> {
     summarize: (shown): ReportTile[] =>
       CLASS_ORDER.map((abcClass) => {
         const graded = shown.filter((row) => row.abc.abcClass === abcClass);
-        const revenue = graded.reduce((sum, row) => sum.plus(row.abc.revenue), ZERO);
+        const revenue = graded.reduce(
+          (sum, row) => sum.plus(row.abc.revenue),
+          ZERO,
+        );
         return {
           label: abcClass === "U" ? "Ungraded (U)" : `Grade ${abcClass}`,
-          value: `${formatCell("integer", graded.length, "")} variants`,
+          value: countOf(graded.length, "variant", "variants"),
           detail: `${formatCell("money", revenue, run.currencyCode)} net revenue`,
         };
       }),

@@ -11,13 +11,17 @@ import {
   type UnitEvent,
   type UnitEventKind,
 } from "../analytics/net-units";
-import type { SalesHistory, SalesHistoryCoverage } from "../analytics/sales-history.server";
+import type {
+  SalesHistory,
+  SalesHistoryCoverage,
+} from "../analytics/sales-history.server";
 import type { StockLevel } from "../analytics/stock-levels.server";
 import type { SalesReportInput } from "./sales-reports";
 import { buildVariantDirectory } from "./variant-directory";
 
 export const variantGid = (n: number) => `gid://shopify/ProductVariant/${n}`;
-export const inventoryItemGid = (n: number) => `gid://shopify/InventoryItem/${n}`;
+export const inventoryItemGid = (n: number) =>
+  `gid://shopify/InventoryItem/${n}`;
 export const locationGid = (n: number) => `gid://shopify/Location/${n}`;
 
 export function catalogVariant(
@@ -88,11 +92,14 @@ export function unitEvent(input: {
     localDate: input.localDate,
     kind: input.kind ?? "ORDERED",
     units: input.units,
-    revenue: unitPrice === null ? null : new Decimal(unitPrice).times(input.units),
+    revenue:
+      unitPrice === null ? null : new Decimal(unitPrice).times(input.units),
   };
 }
 
-export function coverage(overrides: Partial<SalesHistoryCoverage> = {}): SalesHistoryCoverage {
+export function coverage(
+  overrides: Partial<SalesHistoryCoverage> = {},
+): SalesHistoryCoverage {
   return {
     earliestOrderLocalDate: "2025-01-01",
     latestOrderLocalDate: "2026-11-09",
@@ -147,7 +154,9 @@ export function salesInput(
   history: SalesHistory,
   variants: CatalogVariant[],
 ): SalesReportInput {
-  const catalog = new Map(variants.map((variant) => [variant.variantGid, variant]));
+  const catalog = new Map(
+    variants.map((variant) => [variant.variantGid, variant]),
+  );
   return {
     history,
     catalog,

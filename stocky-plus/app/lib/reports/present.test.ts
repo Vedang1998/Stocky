@@ -27,7 +27,15 @@ type Row = {
 };
 
 function row(id: string, values: Partial<Row> = {}): Row {
-  return { id, name: id, vendor: "Northwind", units: 1, revenue: new Decimal(1), day: null, ...values };
+  return {
+    id,
+    name: id,
+    vendor: "Northwind",
+    units: 1,
+    revenue: new Decimal(1),
+    day: null,
+    ...values,
+  };
 }
 
 function report(rows: Row[]): ReportData<Row> {
@@ -36,7 +44,12 @@ function report(rows: Row[]): ReportData<Row> {
       { key: "name", label: "Name", kind: "text", value: (r) => r.name },
       { key: "vendor", label: "Vendor", kind: "text", value: (r) => r.vendor },
       { key: "units", label: "Units", kind: "integer", value: (r) => r.units },
-      { key: "revenue", label: "Revenue", kind: "money", value: (r) => r.revenue },
+      {
+        key: "revenue",
+        label: "Revenue",
+        kind: "money",
+        value: (r) => r.revenue,
+      },
       { key: "day", label: "Day", kind: "date", value: (r) => r.day },
     ],
     rows,
@@ -45,7 +58,10 @@ function report(rows: Row[]): ReportData<Row> {
     facets: [{ key: "vendor", label: "Vendor", value: (r) => r.vendor }],
     searchKeys: ["name", "vendor"],
     summarize: (shown) => [
-      { label: "Units", value: String(shown.reduce((n, r) => n + (r.units ?? 0), 0)) },
+      {
+        label: "Units",
+        value: String(shown.reduce((n, r) => n + (r.units ?? 0), 0)),
+      },
     ],
     notices: [],
     methodNotes: [],
@@ -73,8 +89,12 @@ describe("sortRows", () => {
       row("c", { units: 12 }),
       row("d", { units: -3 }),
     ];
-    expect(ids(sortRows(data, rows, { key: "units", direction: "asc" }))).toEqual(["d", "a", "c", "b"]);
-    expect(ids(sortRows(data, rows, { key: "units", direction: "desc" }))).toEqual(["c", "a", "d", "b"]);
+    expect(
+      ids(sortRows(data, rows, { key: "units", direction: "asc" })),
+    ).toEqual(["d", "a", "c", "b"]);
+    expect(
+      ids(sortRows(data, rows, { key: "units", direction: "desc" })),
+    ).toEqual(["c", "a", "d", "b"]);
   });
 
   it("compares money as decimals, not strings or floats", () => {
@@ -84,23 +104,37 @@ describe("sortRows", () => {
       row("c", { revenue: new Decimal("0.1").plus("0.2") }),
       row("d", { revenue: new Decimal("0.3") }),
     ];
-    expect(ids(sortRows(data, rows, { key: "revenue", direction: "desc" }))).toEqual(["b", "a", "c", "d"]);
+    expect(
+      ids(sortRows(data, rows, { key: "revenue", direction: "desc" })),
+    ).toEqual(["b", "a", "c", "d"]);
   });
 
   it("sorts text naturally and without regard to case", () => {
-    const rows = [row("a", { name: "Size 10" }), row("b", { name: "size 9" }), row("c", { name: "Size 2" })];
-    expect(ids(sortRows(data, rows, { key: "name", direction: "asc" }))).toEqual(["c", "b", "a"]);
+    const rows = [
+      row("a", { name: "Size 10" }),
+      row("b", { name: "size 9" }),
+      row("c", { name: "Size 2" }),
+    ];
+    expect(
+      ids(sortRows(data, rows, { key: "name", direction: "asc" })),
+    ).toEqual(["c", "b", "a"]);
   });
 
   it("breaks ties by row key so paging is stable", () => {
     const rows = [row("c"), row("a"), row("b")];
-    expect(ids(sortRows(data, rows, { key: "units", direction: "desc" }))).toEqual(["a", "b", "c"]);
-    expect(ids(sortRows(data, rows, { key: "units", direction: "asc" }))).toEqual(["a", "b", "c"]);
+    expect(
+      ids(sortRows(data, rows, { key: "units", direction: "desc" })),
+    ).toEqual(["a", "b", "c"]);
+    expect(
+      ids(sortRows(data, rows, { key: "units", direction: "asc" })),
+    ).toEqual(["a", "b", "c"]);
   });
 
   it("leaves the order alone for an unknown column and never mutates its input", () => {
     const rows = [row("b"), row("a")];
-    expect(ids(sortRows(data, rows, { key: "nope", direction: "asc" }))).toEqual(["b", "a"]);
+    expect(
+      ids(sortRows(data, rows, { key: "nope", direction: "asc" })),
+    ).toEqual(["b", "a"]);
     sortRows(data, rows, { key: "name", direction: "asc" });
     expect(ids(rows)).toEqual(["b", "a"]);
   });
@@ -110,16 +144,24 @@ describe("resolveSort", () => {
   const data = report([]);
 
   it("uses the report default unless the requested column exists", () => {
-    expect(resolveSort(data, { sortKey: null, sortDirection: "asc" })).toEqual(data.defaultSort);
-    expect(resolveSort(data, { sortKey: "constructor", sortDirection: "asc" })).toEqual(data.defaultSort);
-    expect(resolveSort(data, { sortKey: "name", sortDirection: "asc" })).toEqual({
+    expect(resolveSort(data, { sortKey: null, sortDirection: "asc" })).toEqual(
+      data.defaultSort,
+    );
+    expect(
+      resolveSort(data, { sortKey: "constructor", sortDirection: "asc" }),
+    ).toEqual(data.defaultSort);
+    expect(
+      resolveSort(data, { sortKey: "name", sortDirection: "asc" }),
+    ).toEqual({
       key: "name",
       direction: "asc",
     });
-    expect(resolveSort(data, { sortKey: "name", sortDirection: null })).toEqual({
-      key: "name",
-      direction: "desc",
-    });
+    expect(resolveSort(data, { sortKey: "name", sortDirection: null })).toEqual(
+      {
+        key: "name",
+        direction: "desc",
+      },
+    );
   });
 });
 
@@ -133,8 +175,14 @@ describe("filterRows and facetChoices", () => {
   const data = report(rows);
 
   it("filters by an exact facet value", () => {
-    expect(ids(filterRows(data, rows, { search: "", facets: { vendor: "Contoso" } }))).toEqual(["b"]);
-    expect(filterRows(data, rows, { search: "", facets: { vendor: "contoso" } })).toEqual([]);
+    expect(
+      ids(
+        filterRows(data, rows, { search: "", facets: { vendor: "Contoso" } }),
+      ),
+    ).toEqual(["b"]);
+    expect(
+      filterRows(data, rows, { search: "", facets: { vendor: "contoso" } }),
+    ).toEqual([]);
   });
 
   it("offers and applies a choice for rows with no value", () => {
@@ -143,19 +191,32 @@ describe("filterRows and facetChoices", () => {
       { value: "Northwind", label: "Northwind" },
       { value: FACET_NONE, label: "None" },
     ]);
-    expect(ids(filterRows(data, rows, { search: "", facets: { vendor: FACET_NONE } }))).toEqual(["c", "d"]);
+    expect(
+      ids(
+        filterRows(data, rows, { search: "", facets: { vendor: FACET_NONE } }),
+      ),
+    ).toEqual(["c", "d"]);
   });
 
   it("searches the report's search columns without regard to case", () => {
-    expect(ids(filterRows(data, rows, { search: "SHOE", facets: {} }))).toEqual(["a", "b"]);
-    expect(ids(filterRows(data, rows, { search: "north", facets: {} }))).toEqual(["a"]);
+    expect(ids(filterRows(data, rows, { search: "SHOE", facets: {} }))).toEqual(
+      ["a", "b"],
+    );
+    expect(
+      ids(filterRows(data, rows, { search: "north", facets: {} })),
+    ).toEqual(["a"]);
     // Units are not a search column.
     expect(filterRows(data, rows, { search: "1", facets: {} })).toEqual([]);
   });
 
   it("combines facets and search", () => {
     expect(
-      ids(filterRows(data, rows, { search: "shoe", facets: { vendor: "Northwind" } })),
+      ids(
+        filterRows(data, rows, {
+          search: "shoe",
+          facets: { vendor: "Northwind" },
+        }),
+      ),
     ).toEqual(["a"]);
   });
 });
@@ -189,15 +250,24 @@ describe("formatCell and exportCell", () => {
   });
 
   it("names the unit in the export header", () => {
-    expect(exportHeader({ label: "Revenue", kind: "money" }, "USD")).toBe("Revenue (USD)");
-    expect(exportHeader({ label: "Share", kind: "percent" }, "USD")).toBe("Share (%)");
-    expect(exportHeader({ label: "Units", kind: "integer" }, "USD")).toBe("Units");
+    expect(exportHeader({ label: "Revenue", kind: "money" }, "USD")).toBe(
+      "Revenue (USD)",
+    );
+    expect(exportHeader({ label: "Share", kind: "percent" }, "USD")).toBe(
+      "Share (%)",
+    );
+    expect(exportHeader({ label: "Units", kind: "integer" }, "USD")).toBe(
+      "Units",
+    );
   });
 });
 
 describe("tablePage", () => {
   const rows = Array.from({ length: 120 }, (_, i) =>
-    row(`r${String(i).padStart(3, "0")}`, { units: i, vendor: i % 2 === 0 ? "Even" : "Odd" }),
+    row(`r${String(i).padStart(3, "0")}`, {
+      units: i,
+      vendor: i % 2 === 0 ? "Even" : "Odd",
+    }),
   );
   const data = report(rows);
 
@@ -212,7 +282,10 @@ describe("tablePage", () => {
       sort: { key: "units", direction: "desc" },
     });
     expect(page.rows).toHaveLength(50);
-    expect(page.rows[0]).toEqual({ key: "r119", cells: ["r119", "Odd", "119", "$1.00", "—"] });
+    expect(page.rows[0]).toEqual({
+      key: "r119",
+      cells: ["r119", "Odd", "119", "$1.00", "—"],
+    });
   });
 
   it("clamps a page past the end to the last page", () => {
@@ -223,7 +296,11 @@ describe("tablePage", () => {
   });
 
   it("summarizes every filtered row, not just the page on screen", () => {
-    const page = tablePage(data, { ...VIEW, facets: { vendor: "Even" } }, "USD");
+    const page = tablePage(
+      data,
+      { ...VIEW, facets: { vendor: "Even" } },
+      "USD",
+    );
     expect(page.filteredRows).toBe(60);
     expect(page.pageCount).toBe(2);
     // 0 + 2 + ... + 118
@@ -231,7 +308,9 @@ describe("tablePage", () => {
   });
 
   it("reports an empty result as a single empty page", () => {
-    expect(tablePage(data, { ...VIEW, search: "nothing" }, "USD")).toMatchObject({
+    expect(
+      tablePage(data, { ...VIEW, search: "nothing" }, "USD"),
+    ).toMatchObject({
       rows: [],
       filteredRows: 0,
       page: 1,
@@ -250,7 +329,16 @@ describe("exportTable", () => {
 
   it("exports every filtered row in the on-screen order", () => {
     expect(
-      exportTable(data, { ...VIEW, facets: { vendor: "Northwind" }, sortKey: "units", sortDirection: "desc" }, "USD"),
+      exportTable(
+        data,
+        {
+          ...VIEW,
+          facets: { vendor: "Northwind" },
+          sortKey: "units",
+          sortDirection: "desc",
+        },
+        "USD",
+      ),
     ).toEqual({
       headers: ["Name", "Vendor", "Units", "Revenue (USD)", "Day"],
       rows: [
@@ -272,7 +360,11 @@ describe("exportTable", () => {
 describe("formatShopInstant", () => {
   it("shows the shop's wall-clock time with its zone", () => {
     const instant = new Date("2026-11-09T02:30:00Z");
-    expect(formatShopInstant(instant, "America/New_York")).toBe("Nov 8, 2026, 9:30 PM EST");
-    expect(formatShopInstant(instant, "Asia/Tokyo")).toBe("Nov 9, 2026, 11:30 AM GMT+9");
+    expect(formatShopInstant(instant, "America/New_York")).toBe(
+      "Nov 8, 2026, 9:30 PM EST",
+    );
+    expect(formatShopInstant(instant, "Asia/Tokyo")).toBe(
+      "Nov 9, 2026, 11:30 AM GMT+9",
+    );
   });
 });

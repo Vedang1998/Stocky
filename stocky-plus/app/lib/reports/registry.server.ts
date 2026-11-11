@@ -9,7 +9,10 @@ import type { TenantDb } from "../../tenant/tenant-db.server";
 import { loadAbcParityRun } from "../analytics/abc-parity.server";
 import { loadCatalogVariants } from "../analytics/catalog.server";
 import { requireShopCurrency } from "../analytics/errors";
-import { loadSalesCoverage, loadSalesHistory } from "../analytics/sales-history.server";
+import {
+  loadSalesCoverage,
+  loadSalesHistory,
+} from "../analytics/sales-history.server";
 import {
   addLocalDays,
   localDateOf,
@@ -21,7 +24,11 @@ import {
   loadStockLocations,
 } from "../analytics/stock-levels.server";
 import { buildAbcReport } from "./abc-report";
-import { parseReportRequest, parseReportView, type ReportViewRequest } from "./params";
+import {
+  parseReportRequest,
+  parseReportView,
+  type ReportViewRequest,
+} from "./params";
 import {
   REPORT_EXPORT_ROW_LIMIT,
   exportTable,
@@ -104,7 +111,9 @@ async function loadSales(
         ? [...new Set(history.events.map((event) => event.variantGid))]
         : undefined,
   });
-  const catalog = new Map(variants.map((variant) => [variant.variantGid, variant]));
+  const catalog = new Map(
+    variants.map((variant) => [variant.variantGid, variant]),
+  );
   return {
     history,
     catalog,
@@ -130,7 +139,10 @@ const STOCK_FILTER_OPTION: ReportOption = {
 const DEAD_STOCK_OPTION: ReportOption = {
   key: "days",
   label: "No orders for",
-  choices: DEAD_STOCK_WINDOWS.map((days) => ({ value: String(days), label: `${days} days` })),
+  choices: DEAD_STOCK_WINDOWS.map((days) => ({
+    value: String(days),
+    label: `${days} days`,
+  })),
   defaultValue: String(DEFAULT_DEAD_STOCK_DAYS),
 };
 
@@ -149,8 +161,18 @@ export type ReportPage = {
   request: ReportRequest;
   view: ReportViewRequest;
   problems: string[];
-  columns: Array<{ key: string; label: string; kind: ColumnKind; definition: string | null }>;
-  facets: Array<{ key: string; label: string; choices: FacetChoices; selected: string }>;
+  columns: Array<{
+    key: string;
+    label: string;
+    kind: ColumnKind;
+    definition: string | null;
+  }>;
+  facets: Array<{
+    key: string;
+    label: string;
+    choices: FacetChoices;
+    selected: string;
+  }>;
   table: ReportTablePage;
   /** Labels of the columns the free-text search reads; empty when there is none. */
   searchLabels: string[];
@@ -163,7 +185,10 @@ export type ReportPage = {
 };
 
 export type RegisteredReport = ReportSummary & {
-  page: (context: ReportContext, searchParams: URLSearchParams) => Promise<ReportPage>;
+  page: (
+    context: ReportContext,
+    searchParams: URLSearchParams,
+  ) => Promise<ReportPage>;
   export: (
     context: ReportContext,
     searchParams: URLSearchParams,
@@ -216,14 +241,19 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
           .map((column) => column.label),
         notices: data.notices,
         methodNotes: data.methodNotes,
-        dataAsOf: data.dataAsOf ? formatShopInstant(data.dataAsOf, context.timeZone) : null,
+        dataAsOf: data.dataAsOf
+          ? formatShopInstant(data.dataAsOf, context.timeZone)
+          : null,
         timeZone: context.timeZone,
         exportRowLimit: REPORT_EXPORT_ROW_LIMIT,
       };
     },
     async export(context, searchParams) {
       const { parsed, data, view } = await run(context, searchParams);
-      return { ...exportTable(data, view, context.currencyCode), request: parsed.request };
+      return {
+        ...exportTable(data, view, context.currencyCode),
+        request: parsed.request,
+      };
     },
   };
 }
@@ -232,7 +262,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "best-sellers",
     title: "Best and worst sellers",
-    description: "Variants ranked by net revenue and units, including active variants that sold nothing.",
+    description:
+      "Variants ranked by net revenue and units, including active variants that sold nothing.",
     group: "Sales",
     usesDateRange: true,
     options: [SELLER_VIEW_OPTION],
@@ -247,7 +278,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "sales-by-variant",
     title: "Sales by variant",
-    description: "Units ordered, added and returned, net units, revenue and average price for each variant.",
+    description:
+      "Units ordered, added and returned, net units, revenue and average price for each variant.",
     group: "Sales",
     usesDateRange: true,
     options: [],
@@ -257,7 +289,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "sales-by-product",
     title: "Sales by product",
-    description: "Net units and revenue for each product, across all of its variants.",
+    description:
+      "Net units and revenue for each product, across all of its variants.",
     group: "Sales",
     usesDateRange: true,
     options: [],
@@ -287,7 +320,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "sales-statistics",
     title: "Sales statistics",
-    description: "Day-by-day orders, units, revenue, average order value and return rate.",
+    description:
+      "Day-by-day orders, units, revenue, average order value and return rate.",
     group: "Sales",
     usesDateRange: true,
     options: [],
@@ -297,7 +331,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "abc-analysis",
     title: "ABC analysis",
-    description: "Grades every variant A, B or C by its share of revenue over the last 56 days.",
+    description:
+      "Grades every variant A, B or C by its share of revenue over the last 56 days.",
     group: "Inventory",
     usesDateRange: false,
     options: [],
@@ -314,7 +349,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "stock-on-hand",
     title: "Stock on hand",
-    description: "Current quantities at each location with their cost and retail value.",
+    description:
+      "Current quantities at each location with their cost and retail value.",
     group: "Inventory",
     usesDateRange: false,
     options: [STOCK_FILTER_OPTION],
@@ -336,7 +372,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "dead-stock",
     title: "Dead stock",
-    description: "Variants with units on hand that have not been ordered for a while, and the money tied up in them.",
+    description:
+      "Variants with units on hand that have not been ordered for a while, and the money tied up in them.",
     group: "Inventory",
     usesDateRange: false,
     options: [DEAD_STOCK_OPTION],

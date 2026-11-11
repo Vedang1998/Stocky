@@ -9,14 +9,22 @@ import type { ReportOption } from "./types";
 
 const TODAY = "2026-11-10";
 
-function range(preset: string | null, start: string | null = null, end: string | null = null) {
+function range(
+  preset: string | null,
+  start: string | null = null,
+  end: string | null = null,
+) {
   return resolveDateRange({ preset, start, end, today: TODAY });
 }
 
 describe("resolveDateRange", () => {
   it("defaults to the last 30 complete days", () => {
     expect(range(null)).toEqual({
-      range: { preset: "last_30_days", startLocalDate: "2026-10-11", endLocalDate: "2026-11-09" },
+      range: {
+        preset: "last_30_days",
+        startLocalDate: "2026-10-11",
+        endLocalDate: "2026-11-09",
+      },
       problem: null,
     });
   });
@@ -30,13 +38,25 @@ describe("resolveDateRange", () => {
     ["month_to_date", "2026-11-01", "2026-11-10"],
     ["last_month", "2026-10-01", "2026-10-31"],
   ])("resolves %s", (preset, start, end) => {
-    expect(range(preset).range).toEqual({ preset, startLocalDate: start, endLocalDate: end });
+    expect(range(preset).range).toEqual({
+      preset,
+      startLocalDate: start,
+      endLocalDate: end,
+    });
   });
 
   it("resolves last month across a year boundary", () => {
     expect(
-      resolveDateRange({ preset: "last_month", start: null, end: null, today: "2026-01-15" }).range,
-    ).toMatchObject({ startLocalDate: "2025-12-01", endLocalDate: "2025-12-31" });
+      resolveDateRange({
+        preset: "last_month",
+        start: null,
+        end: null,
+        today: "2026-01-15",
+      }).range,
+    ).toMatchObject({
+      startLocalDate: "2025-12-01",
+      endLocalDate: "2025-12-31",
+    });
   });
 
   it("falls back with a message for an unknown preset", () => {
@@ -47,7 +67,11 @@ describe("resolveDateRange", () => {
 
   it("accepts a custom range, including a single day", () => {
     expect(range("custom", "2026-02-27", "2026-03-01")).toEqual({
-      range: { preset: "custom", startLocalDate: "2026-02-27", endLocalDate: "2026-03-01" },
+      range: {
+        preset: "custom",
+        startLocalDate: "2026-02-27",
+        endLocalDate: "2026-03-01",
+      },
       problem: null,
     });
     expect(range("custom", "2026-03-01", "2026-03-01").problem).toBeNull();
@@ -66,7 +90,9 @@ describe("resolveDateRange", () => {
   });
 
   it("rejects an end date before the start date", () => {
-    expect(range("custom", "2026-03-05", "2026-03-01").problem).toMatch(/before the start/);
+    expect(range("custom", "2026-03-05", "2026-03-01").problem).toMatch(
+      /before the start/,
+    );
   });
 
   it("keeps the most recent days of a range that is too long", () => {
@@ -114,10 +140,13 @@ describe("parseReportRequest", () => {
 });
 
 describe("parseReportView", () => {
-  const parse = (query: string) => parseReportView(new URLSearchParams(query), ["vendor"]);
+  const parse = (query: string) =>
+    parseReportView(new URLSearchParams(query), ["vendor"]);
 
   it("reads search, facets, sort and page", () => {
-    expect(parse("q=%20shoe%20&vendor=Northwind&sort=revenue&dir=asc&page=3")).toEqual({
+    expect(
+      parse("q=%20shoe%20&vendor=Northwind&sort=revenue&dir=asc&page=3"),
+    ).toEqual({
       search: "shoe",
       facets: { vendor: "Northwind" },
       sortKey: "revenue",
@@ -127,15 +156,22 @@ describe("parseReportView", () => {
   });
 
   it("ignores facets the report does not have and empty selections", () => {
-    expect(parse("vendor=&location=Main&shop=other.myshopify.com").facets).toEqual({});
+    expect(
+      parse("vendor=&location=Main&shop=other.myshopify.com").facets,
+    ).toEqual({});
   });
 
-  it.each(["0", "-2", "1.5", "abc", "9999999", ""])("treats page %j as the first page", (page) => {
-    expect(parse(`page=${page}`).page).toBe(1);
-  });
+  it.each(["0", "-2", "1.5", "abc", "9999999", ""])(
+    "treats page %j as the first page",
+    (page) => {
+      expect(parse(`page=${page}`).page).toBe(1);
+    },
+  );
 
   it("drops an unknown sort direction and bounds long input", () => {
-    const view = parse(`dir=sideways&q=${"x".repeat(500)}&vendor=${"v".repeat(900)}`);
+    const view = parse(
+      `dir=sideways&q=${"x".repeat(500)}&vendor=${"v".repeat(900)}`,
+    );
     expect(view.sortDirection).toBeNull();
     expect(view.search).toHaveLength(100);
     expect(view.facets.vendor).toHaveLength(300);

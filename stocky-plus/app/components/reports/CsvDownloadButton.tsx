@@ -12,7 +12,9 @@ type DownloadState =
   | { status: "failed"; message: string };
 
 function filenameFrom(response: Response, fallback: string): string {
-  const match = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") ?? "");
+  const match = /filename="([^"]+)"/.exec(
+    response.headers.get("Content-Disposition") ?? "",
+  );
   return match?.[1] ?? fallback;
 }
 
@@ -39,10 +41,13 @@ export function CsvDownloadButton({ href, fallbackFilename }: Props) {
     try {
       const response = await fetch(href, { headers: { Accept: "text/csv" } });
       if (!response.ok) {
-        const detail = response.status < 500 ? (await response.text()).slice(0, 200) : "";
+        const detail =
+          response.status < 500 ? (await response.text()).slice(0, 200) : "";
         setState({
           status: "failed",
-          message: detail || "The download could not be prepared. Try again in a moment.",
+          message:
+            detail ||
+            "The download could not be prepared. Try again in a moment.",
         });
         return;
       }
@@ -54,7 +59,8 @@ export function CsvDownloadButton({ href, fallbackFilename }: Props) {
     } catch {
       setState({
         status: "failed",
-        message: "The download did not finish. Check your connection and try again.",
+        message:
+          "The download did not finish. Check your connection and try again.",
       });
     }
   }
@@ -77,8 +83,8 @@ export function CsvDownloadButton({ href, fallbackFilename }: Props) {
       {state.status === "done" && state.truncated && (
         <s-banner tone="warning" heading="The download is not the whole report">
           <s-paragraph>
-            It holds the first rows only. Narrow the date range or add a filter to
-            download the rest.
+            It holds the first rows only. Narrow the date range or add a filter
+            to download the rest.
           </s-paragraph>
         </s-banner>
       )}

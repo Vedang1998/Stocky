@@ -24,7 +24,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw error;
   }
 
-  const result = await report.export(context, new URL(request.url).searchParams);
+  const result = await report.export(
+    context,
+    new URL(request.url).searchParams,
+  );
   const period = report.usesDateRange
     ? `${result.request.range.startLocalDate}-to-${result.request.range.endLocalDate}`
     : context.today;

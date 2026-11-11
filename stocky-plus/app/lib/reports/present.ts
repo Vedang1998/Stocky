@@ -26,7 +26,9 @@ export const FACET_NONE = "__none__";
 const FACET_CHOICE_LIMIT = 500;
 const EMPTY_CELL = "—";
 
-const integerFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const integerFormat = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
+});
 
 function compareValues(kind: ColumnKind, a: CellValue, b: CellValue): number {
   if (kind === "text" || kind === "date") {
@@ -72,7 +74,8 @@ export function resolveSort<Row>(
   data: Pick<ReportData<Row>, "columns" | "defaultSort">,
   view: Pick<ReportViewRequest, "sortKey" | "sortDirection">,
 ): ReportSort {
-  const known = view.sortKey != null && data.columns.some((c) => c.key === view.sortKey);
+  const known =
+    view.sortKey != null && data.columns.some((c) => c.key === view.sortKey);
   if (!known) return data.defaultSort;
   return {
     key: view.sortKey as string,
@@ -97,14 +100,22 @@ export function filterRows<Row>(
   rows: readonly Row[],
   view: Pick<ReportViewRequest, "search" | "facets">,
 ): Row[] {
-  const activeFacets = data.facets.filter((facet) => view.facets[facet.key] !== undefined);
+  const activeFacets = data.facets.filter(
+    (facet) => view.facets[facet.key] !== undefined,
+  );
   const needle = view.search.toLowerCase();
-  const searchColumns = data.columns.filter((c) => data.searchKeys.includes(c.key));
+  const searchColumns = data.columns.filter((c) =>
+    data.searchKeys.includes(c.key),
+  );
   return rows.filter((row) => {
     for (const facet of activeFacets) {
       const wanted = view.facets[facet.key];
       const actual = facet.value(row);
-      if (wanted === FACET_NONE ? actual !== null && actual !== "" : actual !== wanted) {
+      if (
+        wanted === FACET_NONE
+          ? actual !== null && actual !== ""
+          : actual !== wanted
+      ) {
         return false;
       }
     }
@@ -127,7 +138,9 @@ export function facetChoices<Row>(
     else values.add(value);
   }
   const choices = [...values]
-    .sort((a, b) => a.localeCompare(b, "en", { numeric: true, sensitivity: "base" }))
+    .sort((a, b) =>
+      a.localeCompare(b, "en", { numeric: true, sensitivity: "base" }),
+    )
     .slice(0, FACET_CHOICE_LIMIT)
     .map((value) => ({ value, label: value }));
   if (hasNone) choices.push({ value: FACET_NONE, label: "None" });
@@ -135,7 +148,11 @@ export function facetChoices<Row>(
 }
 
 /** A count with its noun, such as "1 order" or "1,250 orders". */
-export function countOf(count: number, singular: string, plural: string): string {
+export function countOf(
+  count: number,
+  singular: string,
+  plural: string,
+): string {
   return `${integerFormat.format(count)} ${count === 1 ? singular : plural}`;
 }
 
@@ -189,7 +206,10 @@ export function exportCell(
     case "integer":
       return Number(value);
     case "money":
-      return formatMoneyAmount(value as Decimal | number | string, currencyCode);
+      return formatMoneyAmount(
+        value as Decimal | number | string,
+        currencyCode,
+      );
     case "percent":
       return percentText(value);
     default:

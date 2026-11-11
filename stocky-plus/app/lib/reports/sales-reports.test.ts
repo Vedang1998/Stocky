@@ -29,14 +29,22 @@ const VIEW: ReportViewRequest = {
   page: 1,
 };
 
-function tiles<Row>(data: ReportData<Row>, view: Partial<ReportViewRequest> = {}) {
+function tiles<Row>(
+  data: ReportData<Row>,
+  view: Partial<ReportViewRequest> = {},
+) {
   return Object.fromEntries(
-    tablePage(data, { ...VIEW, ...view }, "USD").tiles.map((tile) => [tile.label, tile.value]),
+    tablePage(data, { ...VIEW, ...view }, "USD").tiles.map((tile) => [
+      tile.label,
+      tile.value,
+    ]),
   );
 }
 
 function rowsByKey<Row>(data: ReportData<Row>) {
-  return new Map(data.rows.map((row) => [data.rowKey(row), cellsByColumn(data, row)]));
+  return new Map(
+    data.rows.map((row) => [data.rowKey(row), cellsByColumn(data, row)]),
+  );
 }
 
 /**
@@ -51,21 +59,66 @@ function scenario() {
   const history = salesHistory({
     events: [
       unitEvent({ variant: 1, order: 1, localDate: "2026-11-01", units: 3 }),
-      unitEvent({ variant: 2, order: 1, localDate: "2026-11-01", units: 1, unitPrice: "40.00" }),
-      unitEvent({ variant: 1, order: 1, localDate: "2026-11-01", kind: "REFUNDED", units: -1 }),
+      unitEvent({
+        variant: 2,
+        order: 1,
+        localDate: "2026-11-01",
+        units: 1,
+        unitPrice: "40.00",
+      }),
+      unitEvent({
+        variant: 1,
+        order: 1,
+        localDate: "2026-11-01",
+        kind: "REFUNDED",
+        units: -1,
+      }),
       unitEvent({ variant: 1, order: 2, localDate: "2026-11-02", units: 2 }),
-      unitEvent({ variant: 3, order: 3, localDate: "2026-11-02", units: 1, unitPrice: "25.00" }),
-      unitEvent({ variant: 3, order: 3, localDate: "2026-11-02", kind: "REFUNDED", units: -1, unitPrice: "25.00" }),
-      unitEvent({ variant: 2, order: 4, localDate: "2026-11-03", kind: "ADDED", units: 2, unitPrice: "40.00" }),
+      unitEvent({
+        variant: 3,
+        order: 3,
+        localDate: "2026-11-02",
+        units: 1,
+        unitPrice: "25.00",
+      }),
+      unitEvent({
+        variant: 3,
+        order: 3,
+        localDate: "2026-11-02",
+        kind: "REFUNDED",
+        units: -1,
+        unitPrice: "25.00",
+      }),
+      unitEvent({
+        variant: 2,
+        order: 4,
+        localDate: "2026-11-03",
+        kind: "ADDED",
+        units: 2,
+        unitPrice: "40.00",
+      }),
     ],
     orderDates: { 4: "2026-10-20" },
   });
   return salesInput(history, [
-    catalogVariant(1, { productTitle: "Trail Shoe", variantTitle: "Size 9", vendor: "Northwind" }),
-    catalogVariant(2, { productTitle: "Trail Shoe", variantTitle: "Size 10", vendor: "Northwind", productGid: "gid://shopify/Product/1" }),
+    catalogVariant(1, {
+      productTitle: "Trail Shoe",
+      variantTitle: "Size 9",
+      vendor: "Northwind",
+    }),
+    catalogVariant(2, {
+      productTitle: "Trail Shoe",
+      variantTitle: "Size 10",
+      vendor: "Northwind",
+      productGid: "gid://shopify/Product/1",
+    }),
     catalogVariant(3, { productTitle: "Laces", vendor: "Contoso" }),
     catalogVariant(4, { productTitle: "Insole", vendor: "Contoso" }),
-    catalogVariant(5, { productTitle: "Old Boot", vendor: "Contoso", productStatus: "ARCHIVED" }),
+    catalogVariant(5, {
+      productTitle: "Old Boot",
+      vendor: "Contoso",
+      productStatus: "ARCHIVED",
+    }),
   ]);
 }
 
@@ -83,7 +136,11 @@ describe("buildSellersReport", () => {
       orders: 2,
       lastSaleDate: "2026-11-02",
     });
-    expect(rows.get(variantGid(2))).toMatchObject({ netUnits: 3, revenue: "120.00", orders: 2 });
+    expect(rows.get(variantGid(2))).toMatchObject({
+      netUnits: 3,
+      revenue: "120.00",
+      orders: 2,
+    });
     // 40 of 160 and 120 of 160.
     expect(rows.get(variantGid(1))?.revenueShare).toBe("0.25");
     expect(rows.get(variantGid(2))?.revenueShare).toBe("0.75");
@@ -152,7 +209,10 @@ describe("buildVariantSalesReport", () => {
       netUnits: 3,
       averagePrice: "40.00",
     });
-    expect(rows.get(variantGid(3))).toMatchObject({ netUnits: 0, averagePrice: null });
+    expect(rows.get(variantGid(3))).toMatchObject({
+      netUnits: 0,
+      averagePrice: null,
+    });
     expect(tiles(data)).toEqual({
       "Net revenue": "$160.00",
       "Net units": "7",
@@ -165,8 +225,19 @@ describe("buildVariantSalesReport", () => {
     const input = salesInput(
       salesHistory({
         events: [
-          unitEvent({ variant: 1, order: 1, localDate: "2026-11-01", units: 1 }),
-          unitEvent({ variant: 1, order: 2, localDate: "2026-11-01", units: 1, unitPrice: null }),
+          unitEvent({
+            variant: 1,
+            order: 1,
+            localDate: "2026-11-01",
+            units: 1,
+          }),
+          unitEvent({
+            variant: 1,
+            order: 2,
+            localDate: "2026-11-01",
+            units: 1,
+            unitPrice: null,
+          }),
         ],
       }),
       [catalogVariant(1)],
@@ -198,7 +269,11 @@ describe("buildProductSalesReport", () => {
       revenueShare: null,
       orders: 0,
     });
-    expect(tiles(data)).toEqual({ "Net revenue": "$160.00", "Net units": "7", Products: "2" });
+    expect(tiles(data)).toEqual({
+      "Net revenue": "$160.00",
+      "Net units": "7",
+      Products: "2",
+    });
   });
 });
 
@@ -218,8 +293,17 @@ describe("buildSaleItemsReport", () => {
       unitPrice: "10.00",
       revenue: "-10.00",
     });
-    expect(cells[6]).toMatchObject({ order: "#4", type: "Added by edit", units: 2, revenue: "80.00" });
-    expect(tiles(data)).toEqual({ "Net revenue": "$160.00", "Net units": "7", "Sale items": "7" });
+    expect(cells[6]).toMatchObject({
+      order: "#4",
+      type: "Added by edit",
+      units: 2,
+      revenue: "80.00",
+    });
+    expect(tiles(data)).toEqual({
+      "Net revenue": "$160.00",
+      "Net units": "7",
+      "Sale items": "7",
+    });
     expect(tiles(data, { facets: { type: "Refunded" } })).toEqual({
       "Net revenue": "-$35.00",
       "Net units": "-2",
@@ -229,7 +313,9 @@ describe("buildSaleItemsReport", () => {
 
   it("describes a line as it was sold, not as the catalog reads today", () => {
     const history = salesHistory({
-      events: [unitEvent({ variant: 1, order: 1, localDate: "2026-11-01", units: 1 })],
+      events: [
+        unitEvent({ variant: 1, order: 1, localDate: "2026-11-01", units: 1 }),
+      ],
       lines: new Map([
         [
           "gid://shopify/LineItem/1-1",
@@ -244,7 +330,9 @@ describe("buildSaleItemsReport", () => {
       ]),
     });
     const data = buildSaleItemsReport(
-      salesInput(history, [catalogVariant(1, { productTitle: "Trail Shoe", sku: "NEW-SKU" })]),
+      salesInput(history, [
+        catalogVariant(1, { productTitle: "Trail Shoe", sku: "NEW-SKU" }),
+      ]),
     );
     expect(cellsByColumn(data, data.rows[0])).toMatchObject({
       product: "Trail Shoe (2025)",
@@ -269,7 +357,10 @@ describe("buildOrdersReport", () => {
       netUnits: 3,
       revenue: "60.00",
     });
-    expect(rows.get("gid://shopify/Order/3")).toMatchObject({ netUnits: 0, revenue: "0.00" });
+    expect(rows.get("gid://shopify/Order/3")).toMatchObject({
+      netUnits: 0,
+      revenue: "0.00",
+    });
     // The edited order keeps its own order date, outside the range.
     expect(rows.get("gid://shopify/Order/4")).toMatchObject({
       orderDate: "2026-10-20",
@@ -290,11 +381,20 @@ describe("buildStatisticsReport", () => {
     const input = scenario();
     const data = buildStatisticsReport({
       ...input,
-      history: { ...input.history, startLocalDate: "2026-11-01", endLocalDate: "2026-11-04" },
+      history: {
+        ...input.history,
+        startLocalDate: "2026-11-01",
+        endLocalDate: "2026-11-04",
+      },
     });
     const days = rowsByKey(data);
 
-    expect([...days.keys()]).toEqual(["2026-11-01", "2026-11-02", "2026-11-03", "2026-11-04"]);
+    expect([...days.keys()]).toEqual([
+      "2026-11-01",
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+    ]);
     expect(days.get("2026-11-01")).toMatchObject({
       orders: 1,
       unitsSold: 4,
@@ -303,7 +403,11 @@ describe("buildStatisticsReport", () => {
       revenue: "60.00",
       averageOrderValue: "60.00",
     });
-    expect(days.get("2026-11-02")).toMatchObject({ orders: 2, netUnits: 2, revenue: "20.00" });
+    expect(days.get("2026-11-02")).toMatchObject({
+      orders: 2,
+      netUnits: 2,
+      revenue: "20.00",
+    });
     // Units added by an edit count on the day of the edit, but the order was
     // placed earlier, so the day has units and no new order.
     expect(days.get("2026-11-03")).toMatchObject({
@@ -312,7 +416,11 @@ describe("buildStatisticsReport", () => {
       revenue: "80.00",
       averageOrderValue: null,
     });
-    expect(days.get("2026-11-04")).toMatchObject({ orders: 0, netUnits: 0, revenue: "0.00" });
+    expect(days.get("2026-11-04")).toMatchObject({
+      orders: 0,
+      netUnits: 0,
+      revenue: "0.00",
+    });
 
     expect(tiles(data)).toEqual({
       "Net revenue": "$160.00",
@@ -327,7 +435,9 @@ describe("buildStatisticsReport", () => {
   });
 
   it("shows dashes rather than dividing by zero on an empty range", () => {
-    const data = buildStatisticsReport(salesInput(salesHistory({ events: [] }), []));
+    const data = buildStatisticsReport(
+      salesInput(salesHistory({ events: [] }), []),
+    );
     expect(data.rows).toHaveLength(3);
     expect(tiles(data)).toMatchObject({
       Orders: "0",
@@ -348,7 +458,10 @@ describe("salesNotices", () => {
 
   it("warns when the range starts before the imported history", () => {
     const [notice] = salesNotices({
-      coverage: coverage({ historyStartLocalDate: "2026-10-15", startsBeforeCoverage: true }),
+      coverage: coverage({
+        historyStartLocalDate: "2026-10-15",
+        startsBeforeCoverage: true,
+      }),
       diagnostics,
     });
     expect(notice).toMatchObject({ tone: "warning" });
@@ -358,7 +471,10 @@ describe("salesNotices", () => {
 
   it("tells an unsynced shop apart from a shop with no sales", () => {
     const [notice] = salesNotices({
-      coverage: coverage({ historyStartLocalDate: null, startsBeforeCoverage: true }),
+      coverage: coverage({
+        historyStartLocalDate: null,
+        startsBeforeCoverage: true,
+      }),
       diagnostics,
     });
     expect(notice.heading).toBe("No orders have been synced yet");

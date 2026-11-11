@@ -61,7 +61,9 @@ function toLevel(row: LevelRow): StockLevel {
 }
 
 /** Every LIVE location, active or not, sorted by name. */
-export async function loadStockLocations(db: TenantDb): Promise<StockLocation[]> {
+export async function loadStockLocations(
+  db: TenantDb,
+): Promise<StockLocation[]> {
   const rows: Array<{ shopifyGid: string; name: string; isActive: boolean }> =
     await db.shopifyLocationFact.findMany({
       where: { existenceState: LIVE },
@@ -73,7 +75,11 @@ export async function loadStockLocations(db: TenantDb): Promise<StockLocation[]>
       name: row.name,
       isActive: row.isActive,
     }))
-    .sort((a, b) => a.name.localeCompare(b.name) || (a.locationGid < b.locationGid ? -1 : 1));
+    .sort(
+      (a, b) =>
+        a.name.localeCompare(b.name) ||
+        (a.locationGid < b.locationGid ? -1 : 1),
+    );
 }
 
 /**
@@ -95,7 +101,10 @@ export async function loadStockLevels(
     const unique = [...new Set(input.inventoryItemGids)];
     for (let i = 0; i < unique.length; i += IN_LIST_SIZE) {
       const rows: LevelRow[] = await db.shopifyInventoryLevelFact.findMany({
-        where: { ...base, inventoryItemGid: { in: unique.slice(i, i + IN_LIST_SIZE) } },
+        where: {
+          ...base,
+          inventoryItemGid: { in: unique.slice(i, i + IN_LIST_SIZE) },
+        },
         select: LEVEL_SELECT,
       });
       levels.push(...rows.map(toLevel));
@@ -128,12 +137,16 @@ async function loadAbsentOrderGids(db: TenantDb): Promise<string[]> {
   const gids: string[] = [];
   let afterId: string | null = null;
   for (;;) {
-    const page: Array<{ id: string; shopifyGid: string }> = await db.shopifyOrderFact.findMany({
-      where: { existenceState: { not: LIVE }, ...(afterId ? { id: { gt: afterId } } : {}) },
-      select: { id: true, shopifyGid: true },
-      orderBy: { id: "asc" },
-      take: PAGE_SIZE,
-    });
+    const page: Array<{ id: string; shopifyGid: string }> =
+      await db.shopifyOrderFact.findMany({
+        where: {
+          existenceState: { not: LIVE },
+          ...(afterId ? { id: { gt: afterId } } : {}),
+        },
+        select: { id: true, shopifyGid: true },
+        orderBy: { id: "asc" },
+        take: PAGE_SIZE,
+      });
     for (const row of page) gids.push(row.shopifyGid);
     if (page.length < PAGE_SIZE) break;
     afterId = page[page.length - 1].id;
@@ -169,7 +182,9 @@ export async function loadLastOrderedAt(
         isGiftCard: false,
         orderProcessedAt: { not: null },
         variantGidAtSale: { in: unique.slice(i, i + IN_LIST_SIZE) },
-        ...(absentOrderGids.length > 0 ? { shopifyOrderGid: { notIn: absentOrderGids } } : {}),
+        ...(absentOrderGids.length > 0
+          ? { shopifyOrderGid: { notIn: absentOrderGids } }
+          : {}),
       },
       _max: { orderProcessedAt: true },
     });

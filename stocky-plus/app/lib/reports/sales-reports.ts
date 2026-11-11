@@ -11,7 +11,10 @@ import {
   type VariantWindowSales,
 } from "../analytics/net-units";
 import type { SalesHistory } from "../analytics/sales-history.server";
-import { enumerateLocalDates, type LocalDate } from "../analytics/shop-calendar";
+import {
+  enumerateLocalDates,
+  type LocalDate,
+} from "../analytics/shop-calendar";
 import { countOf, formatCell } from "./present";
 import type { ReportData, ReportNotice, ReportTile } from "./types";
 import type { VariantDirectory, VariantInfo } from "./variant-directory";
@@ -110,19 +113,38 @@ function sumRevenue(rows: ReadonlyArray<{ revenue: Decimal }>): Decimal {
 }
 
 function share(part: Decimal, whole: Decimal): Decimal | null {
-  return whole.greaterThan(0) && part.greaterThan(0) ? part.dividedBy(whole) : null;
+  return whole.greaterThan(0) && part.greaterThan(0)
+    ? part.dividedBy(whole)
+    : null;
 }
 
 function returnedUnits(sales: VariantWindowSales): number {
-  return sales.refundedUnits + sales.removedUnits + sales.returnedUnclassifiedUnits;
+  return (
+    sales.refundedUnits + sales.removedUnits + sales.returnedUnclassifiedUnits
+  );
 }
 
 function identityColumns<Row extends { info: VariantInfo }>() {
   return [
-    { key: "product", label: "Product", kind: "text", value: (r: Row) => r.info.product },
-    { key: "variant", label: "Variant", kind: "text", value: (r: Row) => r.info.variant },
+    {
+      key: "product",
+      label: "Product",
+      kind: "text",
+      value: (r: Row) => r.info.product,
+    },
+    {
+      key: "variant",
+      label: "Variant",
+      kind: "text",
+      value: (r: Row) => r.info.variant,
+    },
     { key: "sku", label: "SKU", kind: "text", value: (r: Row) => r.info.sku },
-    { key: "vendor", label: "Vendor", kind: "text", value: (r: Row) => r.info.vendor },
+    {
+      key: "vendor",
+      label: "Vendor",
+      kind: "text",
+      value: (r: Row) => r.info.vendor,
+    },
   ] as const;
 }
 
@@ -159,7 +181,9 @@ export function buildSellersReport(
   view: string,
 ): ReportData<SellerRow> {
   const windows = aggregateVariantWindow(input.history.events);
-  const totalRevenue = sumRevenue(windows.filter((w) => w.revenue.greaterThan(0)));
+  const totalRevenue = sumRevenue(
+    windows.filter((w) => w.revenue.greaterThan(0)),
+  );
   const rows: SellerRow[] = windows.map((sales) => ({
     info: input.directory(sales.variantGid),
     netUnits: sales.netUnits,
@@ -173,7 +197,8 @@ export function buildSellersReport(
   if (worst) {
     const sold = new Set(windows.map((w) => w.variantGid));
     for (const variant of input.catalog.values()) {
-      if (sold.has(variant.variantGid) || variant.productStatus !== "ACTIVE") continue;
+      if (sold.has(variant.variantGid) || variant.productStatus !== "ACTIVE")
+        continue;
       rows.push({
         info: input.directory(variant.variantGid),
         netUnits: 0,
@@ -187,9 +212,18 @@ export function buildSellersReport(
 
   const summarize = (shown: readonly SellerRow[]): ReportTile[] => {
     const tiles: ReportTile[] = [
-      { label: "Net revenue", value: money(sumRevenue(shown), input.currencyCode) },
-      { label: "Net units", value: count(shown.reduce((n, r) => n + r.netUnits, 0)) },
-      { label: "Variants sold", value: count(shown.filter((r) => r.netUnits > 0).length) },
+      {
+        label: "Net revenue",
+        value: money(sumRevenue(shown), input.currencyCode),
+      },
+      {
+        label: "Net units",
+        value: count(shown.reduce((n, r) => n + r.netUnits, 0)),
+      },
+      {
+        label: "Variants sold",
+        value: count(shown.filter((r) => r.netUnits > 0).length),
+      },
     ];
     if (worst) {
       tiles.push({
@@ -221,7 +255,8 @@ export function buildSellersReport(
         key: "revenueShare",
         label: "Share of revenue",
         kind: "percent",
-        definition: "The variant's net revenue ÷ the net revenue of all variants in the range.",
+        definition:
+          "The variant's net revenue ÷ the net revenue of all variants in the range.",
         value: (r) => r.revenueShare,
       },
       {
@@ -235,7 +270,8 @@ export function buildSellersReport(
         key: "lastSaleDate",
         label: "Last sold",
         kind: "date",
-        definition: "The most recent day in the range on which the variant was ordered.",
+        definition:
+          "The most recent day in the range on which the variant was ordered.",
         value: (r) => r.lastSaleDate,
       },
     ],
@@ -293,14 +329,16 @@ export function buildVariantSalesReport(
         key: "addedUnits",
         label: "Added",
         kind: "integer",
-        definition: "Units added to an order by a later edit or exchange, on the day they were added.",
+        definition:
+          "Units added to an order by a later edit or exchange, on the day they were added.",
         value: (r) => r.sales.addedUnits,
       },
       {
         key: "returnedUnits",
         label: "Returned",
         kind: "integer",
-        definition: "Units refunded, returned or removed by an edit, counted on the day of the original order.",
+        definition:
+          "Units refunded, returned or removed by an edit, counted on the day of the original order.",
         value: (r) => returnedUnits(r.sales),
       },
       {
@@ -321,7 +359,8 @@ export function buildVariantSalesReport(
         key: "averagePrice",
         label: "Average price",
         kind: "money",
-        definition: "Net revenue ÷ net units. Blank when net units are zero or a sale has no price.",
+        definition:
+          "Net revenue ÷ net units. Blank when net units are zero or a sale has no price.",
         value: (r) => r.averagePrice,
       },
       {
@@ -331,8 +370,18 @@ export function buildVariantSalesReport(
         definition: ORDERS_DEFINITION,
         value: (r) => r.sales.distinctOrders,
       },
-      { key: "firstSaleDate", label: "First sold", kind: "date", value: (r) => r.sales.firstSaleDate },
-      { key: "lastSaleDate", label: "Last sold", kind: "date", value: (r) => r.sales.lastSaleDate },
+      {
+        key: "firstSaleDate",
+        label: "First sold",
+        kind: "date",
+        value: (r) => r.sales.firstSaleDate,
+      },
+      {
+        key: "lastSaleDate",
+        label: "Last sold",
+        kind: "date",
+        value: (r) => r.sales.lastSaleDate,
+      },
     ],
     rows,
     rowKey: (row) => row.info.variantGid,
@@ -344,7 +393,10 @@ export function buildVariantSalesReport(
         label: "Net revenue",
         value: money(sumRevenue(shown.map((r) => r.sales)), input.currencyCode),
       },
-      { label: "Net units", value: count(shown.reduce((n, r) => n + r.sales.netUnits, 0)) },
+      {
+        label: "Net units",
+        value: count(shown.reduce((n, r) => n + r.sales.netUnits, 0)),
+      },
       {
         label: "Units returned",
         value: count(shown.reduce((n, r) => n + returnedUnits(r.sales), 0)),
@@ -373,13 +425,18 @@ export type ProductSalesRow = {
 export function buildProductSalesReport(
   input: SalesReportInput,
 ): ReportData<ProductSalesRow> {
-  type Bucket = ProductSalesRow & { variants: Set<string>; orderUnits: Map<string, number> };
+  type Bucket = ProductSalesRow & {
+    variants: Set<string>;
+    orderUnits: Map<string, number>;
+  };
   const buckets = new Map<string, Bucket>();
 
   for (const event of input.history.events) {
     const info = input.directory(event.variantGid);
     const productKey =
-      input.catalog.get(event.variantGid)?.productGid ?? event.productGid ?? event.variantGid;
+      input.catalog.get(event.variantGid)?.productGid ??
+      event.productGid ??
+      event.variantGid;
     let bucket = buckets.get(productKey);
     if (!bucket) {
       bucket = {
@@ -421,13 +478,19 @@ export function buildProductSalesReport(
 
   return {
     columns: [
-      { key: "product", label: "Product", kind: "text", value: (r) => r.product },
+      {
+        key: "product",
+        label: "Product",
+        kind: "text",
+        value: (r) => r.product,
+      },
       { key: "vendor", label: "Vendor", kind: "text", value: (r) => r.vendor },
       {
         key: "variantsSold",
         label: "Variants sold",
         kind: "integer",
-        definition: "Variants of the product with at least one sale or return in the range.",
+        definition:
+          "Variants of the product with at least one sale or return in the range.",
         value: (r) => r.variantsSold,
       },
       {
@@ -448,7 +511,8 @@ export function buildProductSalesReport(
         key: "revenueShare",
         label: "Share of revenue",
         kind: "percent",
-        definition: "The product's net revenue ÷ the net revenue of all products in the range.",
+        definition:
+          "The product's net revenue ÷ the net revenue of all products in the range.",
         value: (r) => r.revenueShare,
       },
       {
@@ -465,8 +529,14 @@ export function buildProductSalesReport(
     facets: [{ key: "vendor", label: "Vendor", value: (row) => row.vendor }],
     searchKeys: ["product", "vendor"],
     summarize: (shown) => [
-      { label: "Net revenue", value: money(sumRevenue(shown), input.currencyCode) },
-      { label: "Net units", value: count(shown.reduce((n, r) => n + r.netUnits, 0)) },
+      {
+        label: "Net revenue",
+        value: money(sumRevenue(shown), input.currencyCode),
+      },
+      {
+        label: "Net units",
+        value: count(shown.reduce((n, r) => n + r.netUnits, 0)),
+      },
       { label: "Products", value: count(shown.length) },
     ],
     notices: salesNotices(input.history),
@@ -496,7 +566,9 @@ export type SaleItemRow = {
 };
 
 /** One row per unit event, described as the line was sold. */
-export function buildSaleItemsReport(input: SalesReportInput): ReportData<SaleItemRow> {
+export function buildSaleItemsReport(
+  input: SalesReportInput,
+): ReportData<SaleItemRow> {
   const { history } = input;
   const rows: SaleItemRow[] = history.events.map((event) => {
     const line = history.lines.get(event.lineGid);
@@ -518,20 +590,37 @@ export function buildSaleItemsReport(input: SalesReportInput): ReportData<SaleIt
         key: "date",
         label: "Date",
         kind: "date",
-        definition: "The day the units count on: the order's day, or the day an edit added them.",
+        definition:
+          "The day the units count on: the order's day, or the day an edit added them.",
         value: (r) => r.event.localDate,
       },
       { key: "order", label: "Order", kind: "text", value: (r) => r.orderName },
-      { key: "product", label: "Product", kind: "text", value: (r) => r.product },
-      { key: "variant", label: "Variant", kind: "text", value: (r) => r.variant },
+      {
+        key: "product",
+        label: "Product",
+        kind: "text",
+        value: (r) => r.product,
+      },
+      {
+        key: "variant",
+        label: "Variant",
+        kind: "text",
+        value: (r) => r.variant,
+      },
       { key: "sku", label: "SKU", kind: "text", value: (r) => r.sku },
       { key: "vendor", label: "Vendor", kind: "text", value: (r) => r.vendor },
-      { key: "type", label: "Type", kind: "text", value: (r) => EVENT_LABELS[r.event.kind] },
+      {
+        key: "type",
+        label: "Type",
+        kind: "text",
+        value: (r) => EVENT_LABELS[r.event.kind],
+      },
       {
         key: "units",
         label: "Units",
         kind: "integer",
-        definition: "Positive for units sold or added, negative for units refunded, returned or removed.",
+        definition:
+          "Positive for units sold or added, negative for units refunded, returned or removed.",
         value: (r) => r.event.units,
       },
       {
@@ -553,7 +642,11 @@ export function buildSaleItemsReport(input: SalesReportInput): ReportData<SaleIt
     rowKey: (row) => row.event.saleGid,
     defaultSort: { key: "date", direction: "desc" },
     facets: [
-      { key: "type", label: "Type", value: (row) => EVENT_LABELS[row.event.kind] },
+      {
+        key: "type",
+        label: "Type",
+        value: (row) => EVENT_LABELS[row.event.kind],
+      },
       { key: "vendor", label: "Vendor", value: (row) => row.vendor },
     ],
     searchKeys: ["order", "product", "variant", "sku", "vendor"],
@@ -561,11 +654,17 @@ export function buildSaleItemsReport(input: SalesReportInput): ReportData<SaleIt
       {
         label: "Net revenue",
         value: money(
-          shown.reduce((sum, r) => (r.event.revenue ? sum.plus(r.event.revenue) : sum), ZERO),
+          shown.reduce(
+            (sum, r) => (r.event.revenue ? sum.plus(r.event.revenue) : sum),
+            ZERO,
+          ),
           input.currencyCode,
         ),
       },
-      { label: "Net units", value: count(shown.reduce((n, r) => n + r.event.units, 0)) },
+      {
+        label: "Net units",
+        value: count(shown.reduce((n, r) => n + r.event.units, 0)),
+      },
       { label: "Sale items", value: count(shown.length) },
     ],
     notices: salesNotices(history),
@@ -590,7 +689,9 @@ export type OrderRow = {
   revenue: Decimal;
 };
 
-export function buildOrdersReport(input: SalesReportInput): ReportData<OrderRow> {
+export function buildOrdersReport(
+  input: SalesReportInput,
+): ReportData<OrderRow> {
   type Bucket = OrderRow & { variantGids: Set<string> };
   const buckets = new Map<string, Bucket>();
   for (const event of input.history.events) {
@@ -616,17 +717,20 @@ export function buildOrdersReport(input: SalesReportInput): ReportData<OrderRow>
     bucket.netUnits += event.units;
     if (event.revenue) bucket.revenue = bucket.revenue.plus(event.revenue);
   }
-  const rows: OrderRow[] = [...buckets.values()].map(({ variantGids, ...row }) => ({
-    ...row,
-    variants: variantGids.size,
-  }));
+  const rows: OrderRow[] = [...buckets.values()].map(
+    ({ variantGids, ...row }) => ({
+      ...row,
+      variants: variantGids.size,
+    }),
+  );
   return {
     columns: [
       {
         key: "orderDate",
         label: "Order date",
         kind: "date",
-        definition: "The day the order was placed. An older order appears when an edit added items to it inside the range.",
+        definition:
+          "The day the order was placed. An older order appears when an edit added items to it inside the range.",
         value: (r) => r.orderDate,
       },
       { key: "order", label: "Order", kind: "text", value: (r) => r.orderName },
@@ -634,11 +738,22 @@ export function buildOrdersReport(input: SalesReportInput): ReportData<OrderRow>
         key: "variants",
         label: "Variants",
         kind: "integer",
-        definition: "Different variants on the order with a sale or return in the range.",
+        definition:
+          "Different variants on the order with a sale or return in the range.",
         value: (r) => r.variants,
       },
-      { key: "unitsSold", label: "Units sold", kind: "integer", value: (r) => r.unitsSold },
-      { key: "unitsReturned", label: "Units returned", kind: "integer", value: (r) => r.unitsReturned },
+      {
+        key: "unitsSold",
+        label: "Units sold",
+        kind: "integer",
+        value: (r) => r.unitsSold,
+      },
+      {
+        key: "unitsReturned",
+        label: "Units returned",
+        kind: "integer",
+        value: (r) => r.unitsReturned,
+      },
       {
         key: "netUnits",
         label: "Net units",
@@ -664,10 +779,16 @@ export function buildOrdersReport(input: SalesReportInput): ReportData<OrderRow>
       const counted = shown.filter((row) => row.netUnits > 0).length;
       return [
         { label: "Orders", value: count(shown.length) },
-        { label: "Net product revenue", value: money(revenue, input.currencyCode) },
+        {
+          label: "Net product revenue",
+          value: money(revenue, input.currencyCode),
+        },
         {
           label: "Average per order",
-          value: counted > 0 ? money(revenue.dividedBy(counted), input.currencyCode) : "—",
+          value:
+            counted > 0
+              ? money(revenue.dividedBy(counted), input.currencyCode)
+              : "—",
           detail: "Net product revenue ÷ orders with net units above zero",
         },
       ];
@@ -693,10 +814,15 @@ export type StatisticsRow = {
   averageOrderValue: Decimal | null;
 };
 
-export function buildStatisticsReport(input: SalesReportInput): ReportData<StatisticsRow> {
+export function buildStatisticsReport(
+  input: SalesReportInput,
+): ReportData<StatisticsRow> {
   const { history } = input;
   const days = new Map<string, StatisticsRow & { orderGids: Set<string> }>();
-  for (const localDate of enumerateLocalDates(history.startLocalDate, history.endLocalDate)) {
+  for (const localDate of enumerateLocalDates(
+    history.startLocalDate,
+    history.endLocalDate,
+  )) {
     days.set(localDate, {
       localDate,
       orders: 0,
@@ -726,11 +852,14 @@ export function buildStatisticsReport(input: SalesReportInput): ReportData<Stati
     if (event.revenue) day.revenue = day.revenue.plus(event.revenue);
   }
 
-  const rows: StatisticsRow[] = [...days.values()].map(({ orderGids, ...day }) => ({
-    ...day,
-    orders: orderGids.size,
-    averageOrderValue: orderGids.size > 0 ? day.revenue.dividedBy(orderGids.size) : null,
-  }));
+  const rows: StatisticsRow[] = [...days.values()].map(
+    ({ orderGids, ...day }) => ({
+      ...day,
+      orders: orderGids.size,
+      averageOrderValue:
+        orderGids.size > 0 ? day.revenue.dividedBy(orderGids.size) : null,
+    }),
+  );
 
   return {
     columns: [
@@ -739,18 +868,30 @@ export function buildStatisticsReport(input: SalesReportInput): ReportData<Stati
         key: "orders",
         label: "Orders",
         kind: "integer",
-        definition: "Orders placed that day with at least one product sale. Test and cancelled orders are not counted.",
+        definition:
+          "Orders placed that day with at least one product sale. Test and cancelled orders are not counted.",
         value: (r) => r.orders,
       },
-      { key: "unitsSold", label: "Units sold", kind: "integer", value: (r) => r.unitsSold },
+      {
+        key: "unitsSold",
+        label: "Units sold",
+        kind: "integer",
+        value: (r) => r.unitsSold,
+      },
       {
         key: "unitsReturned",
         label: "Units returned",
         kind: "integer",
-        definition: "Units refunded, returned or removed from orders placed that day, whenever the return happened.",
+        definition:
+          "Units refunded, returned or removed from orders placed that day, whenever the return happened.",
         value: (r) => r.unitsReturned,
       },
-      { key: "netUnits", label: "Net units", kind: "integer", value: (r) => r.netUnits },
+      {
+        key: "netUnits",
+        label: "Net units",
+        kind: "integer",
+        value: (r) => r.netUnits,
+      },
       {
         key: "revenue",
         label: "Net revenue",
@@ -780,7 +921,8 @@ export function buildStatisticsReport(input: SalesReportInput): ReportData<Stati
       const unitsReturned = shown.reduce((n, r) => n + r.unitsReturned, 0);
       const netUnits = unitsSold - unitsReturned;
       const best = shown.reduce<StatisticsRow | null>(
-        (top, row) => (row.revenue.greaterThan(top?.revenue ?? ZERO) ? row : top),
+        (top, row) =>
+          row.revenue.greaterThan(top?.revenue ?? ZERO) ? row : top,
         null,
       );
       return [
@@ -788,7 +930,10 @@ export function buildStatisticsReport(input: SalesReportInput): ReportData<Stati
         { label: "Orders", value: count(orders) },
         {
           label: "Average order value",
-          value: orders > 0 ? money(revenue.dividedBy(orders), input.currencyCode) : "—",
+          value:
+            orders > 0
+              ? money(revenue.dividedBy(orders), input.currencyCode)
+              : "—",
           detail: "Net revenue ÷ orders",
         },
         { label: "Net units", value: count(netUnits) },
@@ -796,7 +941,10 @@ export function buildStatisticsReport(input: SalesReportInput): ReportData<Stati
           label: "Units per order",
           value:
             orders > 0
-              ? new Decimal(netUnits).dividedBy(orders).toDecimalPlaces(2).toFixed(2)
+              ? new Decimal(netUnits)
+                  .dividedBy(orders)
+                  .toDecimalPlaces(2)
+                  .toFixed(2)
               : "—",
           detail: "Net units ÷ orders",
         },
@@ -804,7 +952,11 @@ export function buildStatisticsReport(input: SalesReportInput): ReportData<Stati
           label: "Return rate",
           value:
             unitsSold > 0
-              ? formatCell("percent", new Decimal(unitsReturned).dividedBy(unitsSold), "")
+              ? formatCell(
+                  "percent",
+                  new Decimal(unitsReturned).dividedBy(unitsSold),
+                  "",
+                )
               : "—",
           detail: "Units returned ÷ units sold",
         },

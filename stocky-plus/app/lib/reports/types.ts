@@ -104,5 +104,8 @@ export type ReportDefinition<Row> = {
   group: ReportGroup;
   usesDateRange: boolean;
   options: readonly ReportOption[];
-  load: (context: ReportContext, request: ReportRequest) => Promise<ReportData<Row>>;
+  load: (
+    context: ReportContext,
+    request: ReportRequest,
+  ) => Promise<ReportData<Row>>;
 };

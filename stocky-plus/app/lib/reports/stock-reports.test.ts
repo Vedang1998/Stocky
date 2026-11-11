@@ -3,7 +3,11 @@ import { Decimal } from "../analytics/money";
 import type { StockLocation } from "../analytics/stock-levels.server";
 import type { ReportViewRequest } from "./params";
 import { tablePage } from "./present";
-import { buildDeadStockReport, buildStockOnHandReport, stockedVariants } from "./stock-reports";
+import {
+  buildDeadStockReport,
+  buildStockOnHandReport,
+  stockedVariants,
+} from "./stock-reports";
 import {
   catalogVariant,
   cellsByColumn,
@@ -26,20 +30,32 @@ const LOCATIONS: StockLocation[] = [
   { locationGid: locationGid(2), name: "Downtown store", isActive: true },
 ];
 
-function tiles<Row>(data: ReportData<Row>, view: Partial<ReportViewRequest> = {}) {
+function tiles<Row>(
+  data: ReportData<Row>,
+  view: Partial<ReportViewRequest> = {},
+) {
   return Object.fromEntries(
-    tablePage(data, { ...VIEW, ...view }, "USD").tiles.map((tile) => [tile.label, tile.value]),
+    tablePage(data, { ...VIEW, ...view }, "USD").tiles.map((tile) => [
+      tile.label,
+      tile.value,
+    ]),
   );
 }
 
-function headings(data: ReportData<never> | { notices: Array<{ heading: string }> }) {
+function headings(
+  data: ReportData<never> | { notices: Array<{ heading: string }> },
+) {
   return data.notices.map((notice) => notice.heading);
 }
 
 describe("buildStockOnHandReport", () => {
   const catalog = [
     catalogVariant(1, { productTitle: "Trail Shoe", variantTitle: "Size 9" }),
-    catalogVariant(2, { productTitle: "Laces", unitCost: null, unitCostCurrencyCode: null }),
+    catalogVariant(2, {
+      productTitle: "Laces",
+      unitCost: null,
+      unitCostCurrencyCode: null,
+    }),
     catalogVariant(3, { productTitle: "Gift wrap", tracked: false }),
     catalogVariant(4, { productTitle: "Insole", unitCostCurrencyCode: "CAD" }),
     catalogVariant(5, { productTitle: "Sock", priceCurrencyCode: "CAD" }),
@@ -54,7 +70,13 @@ describe("buildStockOnHandReport", () => {
     stockLevel(99, 1, 8),
   ];
   const build = (filter: string) =>
-    buildStockOnHandReport({ catalog, levels, locations: LOCATIONS, currencyCode: "USD", filter });
+    buildStockOnHandReport({
+      catalog,
+      levels,
+      locations: LOCATIONS,
+      currencyCode: "USD",
+      filter,
+    });
 
   it("values on-hand units at Shopify cost and at retail", () => {
     const data = build("stocked");
@@ -78,7 +100,8 @@ describe("buildStockOnHandReport", () => {
   });
 
   it("lists tracked catalog variants only, and by default only where there is stock", () => {
-    const keys = (filter: string) => build(filter).rows.map((r) => build(filter).rowKey(r));
+    const keys = (filter: string) =>
+      build(filter).rows.map((r) => build(filter).rowKey(r));
     expect(keys("stocked")).toEqual([
       `${variantGid(1)}|${locationGid(1)}`,
       `${variantGid(2)}|${locationGid(1)}`,
@@ -91,12 +114,20 @@ describe("buildStockOnHandReport", () => {
 
   it("leaves cost value blank without a cost in the store currency", () => {
     const data = build("stocked");
-    const byProduct = new Map(data.rows.map((r) => [r.variant.productTitle, r]));
+    const byProduct = new Map(
+      data.rows.map((r) => [r.variant.productTitle, r]),
+    );
 
-    expect(byProduct.get("Laces")).toMatchObject({ unitCost: null, costValue: null });
+    expect(byProduct.get("Laces")).toMatchObject({
+      unitCost: null,
+      costValue: null,
+    });
     expect(byProduct.get("Laces")?.retailValue?.toFixed(2)).toBe("80.00");
     // A cost in another currency is not converted and not counted.
-    expect(byProduct.get("Insole")).toMatchObject({ unitCost: null, costValue: null });
+    expect(byProduct.get("Insole")).toMatchObject({
+      unitCost: null,
+      costValue: null,
+    });
   });
 
   it("shows a negative quantity as reported and values it at zero", () => {
@@ -158,7 +189,9 @@ describe("buildStockOnHandReport", () => {
       filter: "stocked",
     });
     expect(data.rows).toEqual([]);
-    expect(headings(data)).toEqual(["No inventory levels have been synced yet"]);
+    expect(headings(data)).toEqual([
+      "No inventory levels have been synced yet",
+    ]);
     expect(data.dataAsOf).toBeNull();
   });
 
@@ -166,8 +199,12 @@ describe("buildStockOnHandReport", () => {
     const data = buildStockOnHandReport({
       catalog,
       levels: [
-        stockLevel(1, 1, 1, { shopifyUpdatedAt: new Date("2026-11-01T00:00:00Z") }),
-        stockLevel(2, 1, 1, { shopifyUpdatedAt: new Date("2026-11-09T00:00:00Z") }),
+        stockLevel(1, 1, 1, {
+          shopifyUpdatedAt: new Date("2026-11-01T00:00:00Z"),
+        }),
+        stockLevel(2, 1, 1, {
+          shopifyUpdatedAt: new Date("2026-11-09T00:00:00Z"),
+        }),
         stockLevel(4, 1, 1, { shopifyUpdatedAt: null }),
       ],
       locations: LOCATIONS,
@@ -181,7 +218,12 @@ describe("buildStockOnHandReport", () => {
 describe("stockedVariants", () => {
   it("adds a variant's locations together and keeps positive totals", () => {
     const totals = stockedVariants(
-      [catalogVariant(1), catalogVariant(2), catalogVariant(3), catalogVariant(4, { tracked: false })],
+      [
+        catalogVariant(1),
+        catalogVariant(2),
+        catalogVariant(3),
+        catalogVariant(4, { tracked: false }),
+      ],
       [
         stockLevel(1, 1, 5),
         stockLevel(1, 2, -2),
@@ -191,7 +233,9 @@ describe("stockedVariants", () => {
         stockLevel(4, 1, 9),
       ],
     );
-    expect([...totals].map(([gid, entry]) => [gid, entry.onHand])).toEqual([[variantGid(1), 3]]);
+    expect([...totals].map(([gid, entry]) => [gid, entry.onHand])).toEqual([
+      [variantGid(1), 3],
+    ]);
   });
 });
 
@@ -202,7 +246,10 @@ describe("buildDeadStockReport", () => {
     catalogVariant(1, { productTitle: "Sold last week" }),
     catalogVariant(2, { productTitle: "Sold in spring" }),
     catalogVariant(3, { productTitle: "Never sold" }),
-    catalogVariant(4, { productTitle: "New arrival", createdLocalDate: "2026-10-01" }),
+    catalogVariant(4, {
+      productTitle: "New arrival",
+      createdLocalDate: "2026-10-01",
+    }),
     catalogVariant(5, { productTitle: "Out of stock" }),
     catalogVariant(6, { productTitle: "Exactly on the line", unitCost: null }),
     catalogVariant(7, { productTitle: "Age unknown", createdLocalDate: null }),
@@ -223,7 +270,10 @@ describe("buildDeadStockReport", () => {
     // 90 days before 2026-11-10 is 2026-08-12.
     [variantGid(6), new Date("2026-08-12T15:00:00Z")],
   ]);
-  const build = (days: number, historyStartLocalDate: string | null = "2025-01-01") =>
+  const build = (
+    days: number,
+    historyStartLocalDate: string | null = "2025-01-01",
+  ) =>
     buildDeadStockReport({
       catalog,
       levels,
@@ -237,7 +287,9 @@ describe("buildDeadStockReport", () => {
 
   it("lists stocked variants with no order inside the period", () => {
     const data = build(90);
-    const rows = new Map(data.rows.map((r) => [r.variant.productTitle, cellsByColumn(data, r)]));
+    const rows = new Map(
+      data.rows.map((r) => [r.variant.productTitle, cellsByColumn(data, r)]),
+    );
 
     expect([...rows.keys()].sort()).toEqual([
       "Age unknown",
@@ -254,13 +306,26 @@ describe("buildDeadStockReport", () => {
       costValue: "80.00",
       retailValue: "200.00",
     });
-    expect(rows.get("Never sold")).toMatchObject({ lastOrderedDate: null, daysSinceOrdered: null });
-    expect(rows.get("Exactly on the line")).toMatchObject({ daysSinceOrdered: 90, costValue: null });
+    expect(rows.get("Never sold")).toMatchObject({
+      lastOrderedDate: null,
+      daysSinceOrdered: null,
+    });
+    expect(rows.get("Exactly on the line")).toMatchObject({
+      daysSinceOrdered: 90,
+      costValue: null,
+    });
   });
 
   it("moves the line with the chosen period", () => {
-    const titles = (days: number) => build(days).rows.map((r) => r.variant.productTitle).sort();
-    expect(titles(180)).toEqual(["Age unknown", "Never sold", "Sold in spring"]);
+    const titles = (days: number) =>
+      build(days)
+        .rows.map((r) => r.variant.productTitle)
+        .sort();
+    expect(titles(180)).toEqual([
+      "Age unknown",
+      "Never sold",
+      "Sold in spring",
+    ]);
     expect(titles(365)).toEqual(["Age unknown", "Never sold"]);
     // Seven days ago is 11-03: sold that day counts, and the October arrival is old enough.
     expect(titles(7)).toContain("Sold last week");
@@ -284,13 +349,20 @@ describe("buildDeadStockReport", () => {
     expect(headings(build(90, "2026-09-15"))[0]).toBe(
       "Your imported order history is shorter than this period",
     );
-    expect(headings(build(90, "2026-08-12"))).toEqual(["1 variant with stock has no cost"]);
+    expect(headings(build(90, "2026-08-12"))).toEqual([
+      "1 variant with stock has no cost",
+    ]);
     expect(headings(build(90, null))[0]).toBe("No orders have been synced yet");
   });
 
   it("uses decimal arithmetic for values", () => {
     const data = buildDeadStockReport({
-      catalog: [catalogVariant(1, { unitCost: new Decimal("0.1"), priceAmount: new Decimal("0.7") })],
+      catalog: [
+        catalogVariant(1, {
+          unitCost: new Decimal("0.1"),
+          priceAmount: new Decimal("0.7"),
+        }),
+      ],
       levels: [stockLevel(1, 1, 3)],
       lastOrderedAt: new Map(),
       coverage: { historyStartLocalDate: "2025-01-01" },

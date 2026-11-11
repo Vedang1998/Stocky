@@ -28,7 +28,9 @@ export default function Reports() {
           <s-stack direction="block" gap="base">
             {group.reports.map((report) => (
               <s-stack key={report.id} direction="block" gap="small-300">
-                <s-link href={`/app/reports/${report.id}`}>{report.title}</s-link>
+                <s-link href={`/app/reports/${report.id}`}>
+                  {report.title}
+                </s-link>
                 <s-text color="subdued">{report.description}</s-text>
               </s-stack>
             ))}
@@ -40,8 +42,8 @@ export default function Reports() {
         <s-stack direction="block" gap="base">
           <s-paragraph>
             Every report is calculated from your Shopify orders, products and
-            inventory levels. Days are calendar days in your store&apos;s time zone,
-            and money is in your store currency.
+            inventory levels. Days are calendar days in your store&apos;s time
+            zone, and money is in your store currency.
           </s-paragraph>
           <s-paragraph>
             Each report explains its own columns, and every report can be

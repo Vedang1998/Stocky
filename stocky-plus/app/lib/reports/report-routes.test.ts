@@ -14,7 +14,9 @@ const { requireAdminTenant, loadReportContext } = vi.hoisted(() => ({
   loadReportContext: vi.fn(),
 }));
 
-vi.mock("../../tenant/require-admin-tenant.server", () => ({ requireAdminTenant }));
+vi.mock("../../tenant/require-admin-tenant.server", () => ({
+  requireAdminTenant,
+}));
 vi.mock("./registry.server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./registry.server")>()),
   loadReportContext,
@@ -84,7 +86,11 @@ const db = {
   },
   shopifyLocationFact: {
     findMany: vi.fn(async () => [
-      { shopifyGid: LOCATION, name: "@SUM(1+1)*cmd|' /C calc'!A0", isActive: true },
+      {
+        shopifyGid: LOCATION,
+        name: "@SUM(1+1)*cmd|' /C calc'!A0",
+        isActive: true,
+      },
     ]),
   },
 };
@@ -143,7 +149,9 @@ describe("report CSV export route", () => {
       args("/app/reports/stock-on-hand/export", "stock-on-hand"),
     )) as Response;
 
-    expect(response.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+    expect(response.headers.get("Content-Type")).toBe(
+      "text/csv; charset=utf-8",
+    );
     expect(response.headers.get("Content-Disposition")).toBe(
       'attachment; filename="stock-on-hand-2026-11-10.csv"',
     );
@@ -154,14 +162,19 @@ describe("report CSV export route", () => {
 
   it("exports the filtered rows, not the page on screen", async () => {
     const response = (await exportLoader(
-      args("/app/reports/stock-on-hand/export?q=no-such-product&page=4", "stock-on-hand"),
+      args(
+        "/app/reports/stock-on-hand/export?q=no-such-product&page=4",
+        "stock-on-hand",
+      ),
     )) as Response;
     expect((await response.text()).split("\r\n")).toHaveLength(2);
   });
 
   it("authenticates before it looks at the report id", async () => {
     requireAdminTenant.mockRejectedValue(new Response(null, { status: 401 }));
-    const error = await thrown(() => exportLoader(args("/app/reports/nope/export", "nope")));
+    const error = await thrown(() =>
+      exportLoader(args("/app/reports/nope/export", "nope")),
+    );
 
     expect((error as Response).status).toBe(401);
     expect(loadReportContext).not.toHaveBeenCalled();
@@ -177,7 +190,10 @@ describe("report CSV export route", () => {
 
   it("answers 409 with a plain message while shop settings are still syncing", async () => {
     loadReportContext.mockRejectedValue(
-      new AnalyticsPrerequisiteError("shop_timezone", "Shop time zone is not known yet"),
+      new AnalyticsPrerequisiteError(
+        "shop_timezone",
+        "Shop time zone is not known yet",
+      ),
     );
     const response = (await exportLoader(
       args("/app/reports/stock-on-hand/export", "stock-on-hand"),
@@ -198,12 +214,18 @@ describe("report CSV export route", () => {
 
 describe("report page route", () => {
   it("returns the computed page as plain data", async () => {
-    const data = await pageLoader(args("/app/reports/stock-on-hand?sort=onHand&dir=asc", "stock-on-hand"));
+    const data = await pageLoader(
+      args("/app/reports/stock-on-hand?sort=onHand&dir=asc", "stock-on-hand"),
+    );
 
     expect(data).toMatchObject({
       ready: true,
       page: {
-        report: { id: "stock-on-hand", title: "Stock on hand", usesDateRange: false },
+        report: {
+          id: "stock-on-hand",
+          title: "Stock on hand",
+          usesDateRange: false,
+        },
         request: { options: { stock: "stocked" } },
         table: {
           totalRows: 1,
@@ -228,7 +250,9 @@ describe("report page route", () => {
       "$19.99",
       "$79.96",
     ]);
-    expect(data.page.table.tiles.map((tile) => [tile.label, tile.value])).toEqual([
+    expect(
+      data.page.table.tiles.map((tile) => [tile.label, tile.value]),
+    ).toEqual([
       ["Units on hand", "4"],
       ["Cost value", "$30.00"],
       ["Retail value", "$79.96"],
@@ -246,15 +270,22 @@ describe("report page route", () => {
   });
 
   it("answers 404 for a report that does not exist", async () => {
-    const error = await thrown(() => pageLoader(args("/app/reports/nope", "nope")));
+    const error = await thrown(() =>
+      pageLoader(args("/app/reports/nope", "nope")),
+    );
     expect((error as Response).status).toBe(404);
   });
 
   it("renders a not-ready state instead of guessing a time zone or currency", async () => {
     loadReportContext.mockRejectedValue(
-      new AnalyticsPrerequisiteError("shop_currency", "Shop currency is not known yet"),
+      new AnalyticsPrerequisiteError(
+        "shop_currency",
+        "Shop currency is not known yet",
+      ),
     );
-    expect(await pageLoader(args("/app/reports/dead-stock", "dead-stock"))).toEqual({
+    expect(
+      await pageLoader(args("/app/reports/dead-stock", "dead-stock")),
+    ).toEqual({
       ready: false,
       title: "Dead stock",
     });

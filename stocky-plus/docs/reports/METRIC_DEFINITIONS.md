@@ -153,3 +153,113 @@ Values are kept at full precision through every sum. Rounding happens once, at
 display or export, half away from zero, to the currency's ISO 4217 minor unit
 (2 places for USD, 0 for JPY, 3 for KWD). Percentages round to two places and
 are blank when the denominator is zero.
+
+## 9. Reports
+
+The reports live in `app/lib/reports/`. `registry.server.ts` lists them and is
+the only way a route runs one, so a report's page and its CSV download are the
+same computation. Each report defines typed columns; the columns drive the
+table, sorting, filtering, the totals and the export.
+
+| Report | Rows | Period | Source |
+| --- | --- | --- | --- |
+| Best and worst sellers | Variant | Date range | Unit events (§2), net revenue (§4) |
+| Sales by variant | Variant | Date range | Unit events, net revenue |
+| Sales by product | Product | Date range | Unit events, net revenue |
+| Sale items | Unit event | Date range | Unit events, net revenue |
+| Orders | Order | Date range | Unit events, net revenue |
+| Sales statistics | Shop-local day | Date range | Unit events, net revenue |
+| ABC analysis | Catalog variant | Last 56 complete days | ABC/U (§6) |
+| Stock on hand | Variant and location | Now | Inventory level facts, catalog (§7) |
+| Dead stock | Variant | Now, against a chosen number of days | Inventory level facts, order line facts |
+
+### 9.1 Date ranges
+
+A date range is a pair of inclusive shop-local days. The presets "Last 7, 30,
+90 and 365 days" end yesterday, so they hold complete days only. "Today" and
+"Month to date" include today and so change during the day. A custom range may
+span at most 366 days; a longer one is cut to its most recent 366 days and the
+page says so. An unusable range falls back to the last 30 days with a message.
+
+### 9.2 Sales reports
+
+| Figure | Definition |
+| --- | --- |
+| Ordered | Units on orders placed in the range (`ORDERED` events). |
+| Added | Units added by a later edit or exchange, on the day they were added (`ADDED`). |
+| Returned | Units refunded, returned or removed by an edit, counted on the order's day (`REFUNDED`, `REMOVED`, `RETURNED_UNCLASSIFIED`). |
+| Net units | Ordered + added − returned. |
+| Net revenue | Sum of event revenue under `net-revenue-unit-price-v1`. |
+| Share of revenue | Row net revenue ÷ the net revenue of all rows with positive revenue. Blank for a row without positive revenue. |
+| Average price | Net revenue ÷ net units. Blank when net units are zero or any of the row's events has no revenue. |
+| Orders (variant, product rows) | Orders in which the row's net units are above zero. |
+| Orders (statistics) | Orders placed that day with at least one `ORDERED` event. An order that was later fully refunded still counts: it was placed. |
+| Average order value | Net revenue ÷ orders, for the day or the range. |
+| Return rate | Units returned ÷ units sold (ordered + added). |
+| Units per order | Net units ÷ orders. |
+
+The worst-sellers view adds every variant of an `ACTIVE` product that has no
+event in the range, with zero units and revenue.
+
+A variant that is no longer in the catalog is named from the most recent order
+line that sold it. Sale items always show the product, variant, SKU and vendor
+recorded on the order line, which can differ from the catalog today.
+
+The Orders report lists product units and product revenue only. It is not the
+order total: shipping, duties, tips and order-level adjustments are not in it.
+No customer data is read or shown.
+
+### 9.3 Stock on hand
+
+One row per tracked catalog variant and location with an active inventory
+level. Untracked variants and levels whose inventory item has no catalog
+variant are not listed.
+
+| Figure | Definition |
+| --- | --- |
+| Available, on hand, committed, incoming | Shopify's inventory quantities of those names, as last synced. A quantity Shopify has not reported is blank, not zero. |
+| Cost per item | Shopify `InventoryItem.unitCost`, only when it is in the shop currency. It is not a landed or moving-average cost. |
+| Cost value | On hand × cost per item. Blank when there is no cost in the shop currency. A negative on-hand quantity is valued at zero. |
+| Price | The variant's current price, only when it is in the shop currency. |
+| Retail value | On hand × price. A negative on-hand quantity is valued at zero. |
+
+Totals leave out rows whose value is blank, and the page says how many variants
+with stock have no cost. "Variants with stock" lists rows whose on-hand
+quantity is not zero, so negative quantities stay visible.
+
+### 9.4 Dead stock
+
+A variant is dead stock when its on-hand quantity across all locations is above
+zero and its most recent order is at least N days old, or it has never been
+ordered. N is 30, 60, 90 (default), 180 or 365.
+
+- The most recent order is the latest `processedAt` of a `LIVE` order line for
+  the variant on an order that is not a test, not cancelled and not deleted.
+  Refunds and edits do not move it.
+- A variant created less than N days ago is left out. A variant with no
+  creation date is kept.
+- When the stored order history starts less than N days ago, the page warns
+  that a variant may have sold inside the period before the history begins.
+
+### 9.5 Totals, filters and export
+
+Totals are computed from the rows left after filters and search, across every
+page, never from the page on screen. Sorting puts blank values last in both
+directions and breaks ties by row identity, so paging is stable.
+
+A CSV download holds every filtered row in the on-screen order, up to 50,000
+rows; the page says when a download was cut short. Money is written as a plain
+decimal in the currency named in the column header, percentages as a number
+with "(%)" in the header, and a missing value as an empty cell. All cells go
+through the shared encoder in `app/lib/csv.server.ts`, which neutralizes
+spreadsheet formulas.
+
+### 9.6 Known limits
+
+- A report is computed on request and held in memory for that request. Shops
+  with very large catalogs or order volumes will need persisted daily
+  aggregates before the 366-day range is comfortable.
+- Stock on hand is current only. A report of stock on a past date needs daily
+  snapshots, which are not stored yet.
+- Cost of goods sold and profit are not reported. Shopify's current cost per
+  item is not the cost at the time of sale.

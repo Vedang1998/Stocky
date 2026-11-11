@@ -11,7 +11,10 @@ import {
   localDateOf,
   type LocalDate,
 } from "../analytics/shop-calendar";
-import type { StockLevel, StockLocation } from "../analytics/stock-levels.server";
+import type {
+  StockLevel,
+  StockLocation,
+} from "../analytics/stock-levels.server";
 import { countOf, formatCell } from "./present";
 import type { ReportData, ReportNotice, ReportTile } from "./types";
 
@@ -44,14 +47,22 @@ function variantName(variant: CatalogVariant): string {
 }
 
 /** The variant's Shopify cost, when it is in the currency the report totals in. */
-function unitCostIn(variant: CatalogVariant, currencyCode: string): Decimal | null {
+function unitCostIn(
+  variant: CatalogVariant,
+  currencyCode: string,
+): Decimal | null {
   return variant.unitCost && variant.unitCostCurrencyCode === currencyCode
     ? variant.unitCost
     : null;
 }
 
-function priceIn(variant: CatalogVariant, currencyCode: string): Decimal | null {
-  return variant.priceCurrencyCode === currencyCode ? variant.priceAmount : null;
+function priceIn(
+  variant: CatalogVariant,
+  currencyCode: string,
+): Decimal | null {
+  return variant.priceCurrencyCode === currencyCode
+    ? variant.priceAmount
+    : null;
 }
 
 function valueOf(onHand: number | null, unit: Decimal | null): Decimal | null {
@@ -81,7 +92,10 @@ function trackedByInventoryItem(
 function latestLevelChange(levels: readonly StockLevel[]): Date | null {
   let latest: Date | null = null;
   for (const level of levels) {
-    if (level.shopifyUpdatedAt && (!latest || level.shopifyUpdatedAt > latest)) {
+    if (
+      level.shopifyUpdatedAt &&
+      (!latest || level.shopifyUpdatedAt > latest)
+    ) {
       latest = level.shopifyUpdatedAt;
     }
   }
@@ -129,7 +143,9 @@ export function buildStockOnHandReport(
 ): ReportData<StockOnHandRow> {
   const { currencyCode } = input;
   const tracked = trackedByInventoryItem(input.catalog);
-  const locationNames = new Map(input.locations.map((l) => [l.locationGid, l.name]));
+  const locationNames = new Map(
+    input.locations.map((l) => [l.locationGid, l.name]),
+  );
 
   const rows: StockOnHandRow[] = [];
   let unknownQuantity = 0;
@@ -137,7 +153,8 @@ export function buildStockOnHandReport(
     const variant = tracked.get(level.inventoryItemGid);
     if (!variant) continue;
     if (level.onHand === null) unknownQuantity += 1;
-    if (input.filter !== "all" && (level.onHand === null || level.onHand === 0)) continue;
+    if (input.filter !== "all" && (level.onHand === null || level.onHand === 0))
+      continue;
     const unitCost = unitCostIn(variant, currencyCode);
     const price = priceIn(variant, currencyCode);
     rows.push({
@@ -184,16 +201,37 @@ export function buildStockOnHandReport(
 
   return {
     columns: [
-      { key: "product", label: "Product", kind: "text", value: (r) => r.variant.productTitle },
-      { key: "variant", label: "Variant", kind: "text", value: (r) => variantName(r.variant) },
+      {
+        key: "product",
+        label: "Product",
+        kind: "text",
+        value: (r) => r.variant.productTitle,
+      },
+      {
+        key: "variant",
+        label: "Variant",
+        kind: "text",
+        value: (r) => variantName(r.variant),
+      },
       { key: "sku", label: "SKU", kind: "text", value: (r) => r.variant.sku },
-      { key: "vendor", label: "Vendor", kind: "text", value: (r) => r.variant.vendor },
-      { key: "location", label: "Location", kind: "text", value: (r) => r.location },
+      {
+        key: "vendor",
+        label: "Vendor",
+        kind: "text",
+        value: (r) => r.variant.vendor,
+      },
+      {
+        key: "location",
+        label: "Location",
+        kind: "text",
+        value: (r) => r.location,
+      },
       {
         key: "available",
         label: "Available",
         kind: "integer",
-        definition: "Units that can be sold now: on hand minus committed, unavailable and reserved units.",
+        definition:
+          "Units that can be sold now: on hand minus committed, unavailable and reserved units.",
         value: (r) => r.level.available,
       },
       {
@@ -214,7 +252,8 @@ export function buildStockOnHandReport(
         key: "incoming",
         label: "Incoming",
         kind: "integer",
-        definition: "Units on the way to the location, as Shopify reports them.",
+        definition:
+          "Units on the way to the location, as Shopify reports them.",
         value: (r) => r.level.incoming,
       },
       {
@@ -326,22 +365,32 @@ export function stockedVariants(
  * A variant created inside that window is left out: it has not had the time to
  * prove it does not sell.
  */
-export function buildDeadStockReport(input: DeadStockInput): ReportData<DeadStockRow> {
+export function buildDeadStockReport(
+  input: DeadStockInput,
+): ReportData<DeadStockRow> {
   const { currencyCode, today } = input;
   const cutoff = addLocalDays(today, -input.days);
   const rows: DeadStockRow[] = [];
 
-  for (const { variant, onHand } of stockedVariants(input.catalog, input.levels).values()) {
-    if (variant.createdLocalDate !== null && variant.createdLocalDate > cutoff) continue;
+  for (const { variant, onHand } of stockedVariants(
+    input.catalog,
+    input.levels,
+  ).values()) {
+    if (variant.createdLocalDate !== null && variant.createdLocalDate > cutoff)
+      continue;
     const orderedAt = input.lastOrderedAt.get(variant.variantGid);
-    const lastOrderedDate = orderedAt ? localDateOf(orderedAt, input.timeZone) : null;
+    const lastOrderedDate = orderedAt
+      ? localDateOf(orderedAt, input.timeZone)
+      : null;
     if (lastOrderedDate !== null && lastOrderedDate > cutoff) continue;
     const unitCost = unitCostIn(variant, currencyCode);
     rows.push({
       variant,
       onHand,
       lastOrderedDate,
-      daysSinceOrdered: lastOrderedDate ? diffLocalDays(lastOrderedDate, today) : null,
+      daysSinceOrdered: lastOrderedDate
+        ? diffLocalDays(lastOrderedDate, today)
+        : null,
       unitCost,
       costValue: valueOf(onHand, unitCost),
       retailValue: valueOf(onHand, priceIn(variant, currencyCode)),
@@ -368,22 +417,39 @@ export function buildDeadStockReport(input: DeadStockInput): ReportData<DeadStoc
 
   return {
     columns: [
-      { key: "product", label: "Product", kind: "text", value: (r) => r.variant.productTitle },
-      { key: "variant", label: "Variant", kind: "text", value: (r) => variantName(r.variant) },
+      {
+        key: "product",
+        label: "Product",
+        kind: "text",
+        value: (r) => r.variant.productTitle,
+      },
+      {
+        key: "variant",
+        label: "Variant",
+        kind: "text",
+        value: (r) => variantName(r.variant),
+      },
       { key: "sku", label: "SKU", kind: "text", value: (r) => r.variant.sku },
-      { key: "vendor", label: "Vendor", kind: "text", value: (r) => r.variant.vendor },
+      {
+        key: "vendor",
+        label: "Vendor",
+        kind: "text",
+        value: (r) => r.variant.vendor,
+      },
       {
         key: "onHand",
         label: "On hand",
         kind: "integer",
-        definition: "Units on hand across all locations, as Shopify reports them.",
+        definition:
+          "Units on hand across all locations, as Shopify reports them.",
         value: (r) => r.onHand,
       },
       {
         key: "lastOrderedDate",
         label: "Last ordered",
         kind: "date",
-        definition: "The day of the most recent order containing the variant. Test and cancelled orders are ignored. Blank when it has never been ordered in your imported history.",
+        definition:
+          "The day of the most recent order containing the variant. Test and cancelled orders are ignored. Blank when it has never been ordered in your imported history.",
         value: (r) => r.lastOrderedDate,
       },
       {
@@ -417,11 +483,16 @@ export function buildDeadStockReport(input: DeadStockInput): ReportData<DeadStoc
     rows,
     rowKey: (row) => row.variant.variantGid,
     defaultSort: { key: "costValue", direction: "desc" },
-    facets: [{ key: "vendor", label: "Vendor", value: (row) => row.variant.vendor }],
+    facets: [
+      { key: "vendor", label: "Vendor", value: (row) => row.variant.vendor },
+    ],
     searchKeys: ["product", "variant", "sku", "vendor"],
     summarize: (shown): ReportTile[] => [
       { label: "Variants", value: count(shown.length) },
-      { label: "Units on hand", value: count(shown.reduce((n, r) => n + r.onHand, 0)) },
+      {
+        label: "Units on hand",
+        value: count(shown.reduce((n, r) => n + r.onHand, 0)),
+      },
       {
         label: "Cost value",
         value: money(sumValues(shown.map((r) => r.costValue)), currencyCode),
