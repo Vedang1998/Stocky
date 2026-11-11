@@ -67,6 +67,8 @@ and record a new operation.
 
 ## Using it from a module
 
+A one-off change (a manual adjustment) records and executes one operation:
+
 ```ts
 const { db, admin, actor } = await requireInventoryActorContext({
   request,
@@ -74,21 +76,18 @@ const { db, admin, actor } = await requireInventoryActorContext({
 });
 
 const { operation } = await recordInventoryOperation(db, {
-  kind: "STOCKTAKE",
-  idempotencyKey: `stocktake:${stocktake.id}:apply:${stocktake.applyAttempt}`,
-  source: { type: "Stocktake", id: stocktake.id },
-  reason: "cycle_count_available",
+  kind: "ADJUSTMENT",
+  idempotencyKey: `adjustment:${submissionId}`,
+  source: { type: "InventoryAdjustment", id: submissionId },
+  reason: "correction",
   quantityName: "available",
-  referenceDocumentUri: `gid://propo/Stocktake/${stocktake.id}`,
+  referenceDocumentUri: null,
   actor,
-  note: null,
+  note,
   lines, // { inventoryItemId, variantId, locationId, delta, changeFromQuantity }
 });
 
 const result = await executeInventoryOperation(db, admin, operation.id);
-if (result.status === "APPLIED") {
-  // only now mark the document complete
-}
 ```
 
 - The capability (kill switch) is derived from `kind`; callers do not pass it.
@@ -96,8 +95,59 @@ if (result.status === "APPLIED") {
   `RETRY_PENDING` or `BLOCKED` result means "call again later"; the page must
   show it as unfinished, not as done.
 - Pass `changeFromQuantity` whenever the change was computed from a quantity
-  the merchant looked at (counts, set-to adjustments). Pass `null` only for
-  purely relative changes such as receipts and reversals.
+  the merchant looked at (set-to adjustments). Pass `null` only for purely
+  relative changes such as receipts, transfers and reversals.
+
+## Documents: stocktakes and transfers
+
+A document that can be retried, edited between attempts, or pressed twice does
+not pick its own keys. It describes the net change it should have made once it
+is fully applied and calls `settleInventoryDocument` (`settle.server.ts`):
+
+```ts
+const result = await settleInventoryDocument(db, admin, {
+  kind: "STOCKTAKE",
+  source: { type: "Stocktake", id: stocktake.id },
+  reason: "cycle_count_available",
+  quantityName: "available",
+  referenceDocumentUri: `gid://propo/Stocktake/${stocktake.id}`,
+  desired, // net delta per inventory item and location
+  actor,
+  note: null,
+  holdOpen: (tx) => lockOpenStocktake(tx, stocktake.id),
+});
+if (result.settled) {
+  // close the document under its row lock, re-reading the ledger state
+}
+```
+
+- The ledger's applied lines for the source are subtracted from `desired`; only
+  the difference is recorded, under the key `<type>:<id>:<attempt>`. A second
+  press, a concurrent press and a retry after a partial failure therefore send
+  only what Shopify has not confirmed. A level that was changed but is no
+  longer wanted (a count corrected back, a draft transfer cancelled after a
+  partial ship) is put back.
+- An unfinished operation is resumed before anything new is recorded.
+- `holdOpen` runs in the transaction that records each new operation and locks
+  the document row, so nothing is recorded for a document that closed or was
+  cancelled in the meantime (`InventoryDocumentClosedError`).
+- The document closes in its own transaction: lock the row in the expected
+  status, rebuild `desired` from the current lines, and close only when
+  `readDocumentLedgerState` shows nothing unfinished and nothing outstanding.
+
+| Document         | Source type        | Change                                     | Reason                  |
+| ---------------- | ------------------ | ------------------------------------------ | ----------------------- |
+| Stocktake        | `Stocktake`        | counted − expected at the counted location | `cycle_count_available` |
+| Transfer ship    | `TransferShipment` | −shipped units at the source               | `movement_created`      |
+| Transfer cancel  | `TransferShipment` | puts back whatever a partial ship took out | `movement_canceled`     |
+| Transfer receive | `TransferReceipt`  | +shipped units at the destination          | `movement_received`     |
+
+Transfers are app-managed: stock moves with `inventoryAdjustQuantities` under
+`write_inventory`, and no Shopify transfer object is created. Units in transit
+are therefore in neither location's `available` until the transfer is received.
+A transfer that carries a `shopifyTransferId` from the earlier native path is
+not received by the app. Using Shopify's native transfer objects needs
+transfer scopes the app does not request and is an owner decision.
 
 ## Limits and known gaps
 

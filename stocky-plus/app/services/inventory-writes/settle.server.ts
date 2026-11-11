@@ -159,6 +159,14 @@ export async function readDocumentLedgerState(
     }
   }
 
+  // Two requests settling the same state must record the same operation, and
+  // the payload digest depends on line order.
+  outstanding.sort(
+    (a, b) =>
+      a.inventoryItemId.localeCompare(b.inventoryItemId) ||
+      a.locationId.localeCompare(b.locationId),
+  );
+
   return {
     operationCount: operations.length,
     unfinishedOperationId:

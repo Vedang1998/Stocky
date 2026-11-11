@@ -3,7 +3,7 @@
  * unless ProPo itself moved the stock out: a signed-in staff member, the
  * transfer kill switch on, and no Shopify-managed transfer behind it.
  * The ledger-backed path is covered against PostgreSQL in
- * scripts/tenant-enforcement/tests/transfer-movements.test.ts.
+ * scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";

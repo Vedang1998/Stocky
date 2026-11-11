@@ -539,11 +539,7 @@ export async function receiveTransfer(
   const shipment = await buildMovementDocument(db, transfer, "shipment");
   if (!shipment.ok) return fail(shipment.error);
   const shipped = await readDocumentLedgerState(db, shipment.document);
-  if (
-    shipped.operationCount === 0 ||
-    shipped.unfinishedOperationId ||
-    shipped.outstanding.length > 0
-  ) {
+  if (shipped.unfinishedOperationId || shipped.outstanding.length > 0) {
     return fail(
       "ProPo has no complete record of this transfer leaving the source location, so it will not add stock at the destination.",
     );
