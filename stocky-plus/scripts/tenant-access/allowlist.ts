@@ -157,6 +157,7 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/pr5-f3-inventory-reconcile.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-jsonl-checkpoint.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-lock-capacity-aw.test.ts",
+  "scripts/tenant-enforcement/tests/pr5-f3-new-product-webhooks.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-overlap-races.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-projection-health.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts",
@@ -403,6 +404,22 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     owner: "phase-1-pr4-sync-control-plane",
     expirationPhaseOrRemovalCondition:
       "Retain while PR 4 correction suite requires disposable fixtures",
+  },
+  {
+    id: "EX-SYNC-TEST-REDELIVERY-001",
+    path: "app/sync/__tests__/durable-job-redelivery.test.ts",
+    category: "migration_tests",
+    reason:
+      "Issue #94 re-delivery regression test on the disposable PostgreSQL/Redis harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "CatalogObservationInFlight count assertion",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while the sync-integration suite requires disposable fixtures",
   },
   {
     id: "EX-SYNC-TEST-005",
