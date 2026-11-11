@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { spawn as spawnProcess, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -499,16 +500,18 @@ describe("PR6-D scratch integrity and resource failure", () => {
     expect(existsSync(path.join(leftover, ORDER_FACTS_SCRATCH_MARKER))).toBe(true);
     const jsonlPath = path.join(leftover, "source.jsonl");
     expect(existsSync(jsonlPath)).toBe(true);
-    const beforeHash = sha256(readFileSync(jsonlPath));
-    const beforeInventory = inventoryFiles(leftover);
     const pid = parked.pid;
     expect(typeof pid).toBe("number");
+    const exited = once(child, "exit");
     if (typeof pid === "number") {
       process.kill(pid, "SIGKILL");
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await exited;
+    // Snapshot only after the writer is gone. Until then its streams are
+    // still opening and flushing, so the directory can change under the test.
     expect(existsSync(jsonlPath)).toBe(true);
-    expect(sha256(readFileSync(jsonlPath))).toBe(beforeHash);
+    const beforeInventory = inventoryFiles(leftover);
+    expect(Object.keys(beforeInventory)).toContain("source.jsonl");
     const rebuilt = await createOwnedScratchDir({
       shopId: "pl-shop",
       syncRunId: "pl-run",
@@ -570,12 +573,12 @@ describe("PR6-D scratch integrity and resource failure", () => {
     expect(parked.stage).not.toBe("completed");
     const leftover = String(parked.dir);
     const jsonlPath = path.join(leftover, "source.jsonl");
-    const before = sha256(readFileSync(jsonlPath));
-    if (typeof parked.pid === "number") process.kill(parked.pid, "SIGKILL");
-    child.kill("SIGKILL");
-    await new Promise((resolve) => setTimeout(resolve, 100));
     expect(existsSync(jsonlPath)).toBe(true);
-    expect(sha256(readFileSync(jsonlPath))).toBe(before);
+    const exited = once(child, "exit");
+    if (typeof parked.pid === "number") process.kill(parked.pid, "SIGKILL");
+    await exited;
+    expect(existsSync(jsonlPath)).toBe(true);
+    expect(JSON.parse(readFileSync(statusPath, "utf8")).stage).toBe("parked");
     const occupancy = sanitizeDScratchOccupancy(
       await inspectDScratchOccupancy({ scratchRoot: root }),
     );

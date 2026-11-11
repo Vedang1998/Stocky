@@ -2,7 +2,7 @@
  * Child process for D scratch process-loss evidence.
  * Invoked only by source-stage.test.ts. Not a vitest file.
  */
-import { writeFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stageOrderFactsJsonl } from "./source-stage";
 
@@ -20,6 +20,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * The stager's write streams open on the thread pool, so its files can appear
+ * after the generator has already run. Wait for the file itself, not a delay.
+ */
+async function waitForFile(file: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!existsSync(file)) {
+    if (Date.now() > deadline) throw new Error(`timed out waiting for ${file}`);
+    await sleep(10);
+  }
 }
 
 async function main(): Promise<void> {
@@ -40,6 +52,8 @@ async function main(): Promise<void> {
           const attempts = readdirSync(scratchRoot).filter((name) =>
             name.startsWith("att-"),
           );
+          const dir = attempts[0] ? path.join(scratchRoot, attempts[0]) : null;
+          if (dir) await waitForFile(path.join(dir, "source.jsonl"));
           writeStatus({
             stage: "parked",
             pid: process.pid,
@@ -47,7 +61,7 @@ async function main(): Promise<void> {
             scratchRoot,
             shopId,
             syncRunId,
-            dir: attempts[0] ? path.join(scratchRoot, attempts[0]) : null,
+            dir,
           });
           await sleep(120_000);
         }
