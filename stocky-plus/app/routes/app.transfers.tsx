@@ -4,16 +4,37 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { Form, useLoaderData, useNavigation } from "react-router";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { ActionFeedback } from "../components/ActionFeedback";
+import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { fetchLocations } from "../services/shopify-gql.server";
-import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import {
-  completeShopifyTransfer,
-  createShopifyTransfer,
-  markShopifyTransferReadyToShip,
-} from "../services/shopify-sync.server";
+  requireAdminTenantWithActor,
+  STAFF_REQUIRED_MESSAGE,
+} from "../services/inventory-writes/actor.server";
+import {
+  parseWholeNumber,
+  readFormId,
+} from "../services/inventory-writes/form-values";
+import {
+  addTransferLine,
+  cancelTransfer,
+  createTransfer,
+  receiveTransfer,
+  setTransferPickedQuantity,
+  shipTransfer,
+} from "../services/transfers/transfer.server";
+import {
+  MAX_TRANSFER_LINE_QUANTITY,
+  transferShipQuantity,
+} from "../services/transfers/transfer-quantities";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, db } = await requireAdminTenant({ request });
@@ -34,188 +55,100 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return { transfers, locations, variants };
 };
 
+const QUANTITY_LIMIT = MAX_TRANSFER_LINE_QUANTITY.toLocaleString("en-US");
+
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, tenant, db } = await requireAdminTenant({ request });
-  const shop = tenant.myshopifyDomain;
+  const { admin, tenant, db, actor } = await requireAdminTenantWithActor({
+    request,
+  });
   const form = await request.formData();
-  const intent = form.get("intent") as string;
+  const intent = form.get("intent");
 
   if (intent === "create") {
-    const source = form.get("sourceLocationId") as string;
-    const destination = form.get("destinationLocationId") as string;
-    if (source === destination) {
-      return { error: "Source and destination must differ" };
-    }
-    await db.transferOrder.create({
-      data: {
-        shop,
-        sourceLocationId: source,
-        destinationLocationId: destination,
-        notes: (form.get("notes") as string) || null,
-        status: "DRAFT",
-      },
+    const notes = form.get("notes");
+    const result = await createTransfer(db, {
+      shop: tenant.myshopifyDomain,
+      sourceLocationId: readFormId(form.get("sourceLocationId")) ?? "",
+      destinationLocationId:
+        readFormId(form.get("destinationLocationId")) ?? "",
+      notes: typeof notes === "string" ? notes : null,
     });
-    return { ok: true };
+    return result.ok
+      ? { ok: true, notice: "Draft transfer created." }
+      : { error: result.error };
   }
 
   if (intent === "addLine") {
-    const transferId = form.get("transferId") as string;
-    const transfer = await db.transferOrder.findFirst({
-      where: { id: transferId },
+    const transferId = readFormId(form.get("transferId"));
+    if (!transferId) return { error: "Transfer not found" };
+    const shopifyVariantId = readFormId(form.get("variantId"));
+    if (!shopifyVariantId) return { error: "Choose a variant to add." };
+    const quantity = parseWholeNumber(form.get("quantity"), {
+      min: 1,
+      max: MAX_TRANSFER_LINE_QUANTITY,
     });
-    if (!transfer) return { error: "Transfer not found" };
-
-    await db.transferLineItem.create({
-      data: {
-        transferOrderId: transfer.id,
-        shopifyVariantId: form.get("variantId") as string,
-        quantity: parseInt(form.get("quantity") as string, 10),
-      },
+    if (quantity === null) {
+      return {
+        error: `Enter the quantity as a whole number from 1 to ${QUANTITY_LIMIT}.`,
+      };
+    }
+    const result = await addTransferLine(db, {
+      transferId,
+      shopifyVariantId,
+      quantity,
     });
-    return { ok: true };
+    return result.ok ? { ok: true } : { error: result.error };
   }
 
   if (intent === "pick") {
-    const lineId = form.get("lineId") as string;
-    const qty = parseInt(form.get("pickedQty") as string, 10);
-    const line = await db.transferLineItem.findFirst({
-      where: { id: lineId },
+    const lineId = readFormId(form.get("lineId"));
+    if (!lineId) return { error: "Transfer line not found" };
+    const pickedQty = parseWholeNumber(form.get("pickedQty"), {
+      min: 0,
+      max: MAX_TRANSFER_LINE_QUANTITY,
     });
-    if (!line) return { error: "Transfer line not found" };
-
-    await db.transferLineItem.update({
-      where: { id: line.id },
-      data: { pickedQty: qty },
-    });
-    return { ok: true };
-  }
-
-  if (intent === "ship") {
-    try {
-      assertInventoryWriteEnabled("transferWrites");
-    } catch (err) {
+    if (pickedQty === null) {
       return {
-        error: err instanceof Error ? err.message : "Transfer writes disabled",
+        error: "Enter the picked quantity as a whole number of 0 or more.",
       };
     }
-
-    const transferId = form.get("transferId") as string;
-    const transfer = await db.transferOrder.findFirst({
-      where: { id: transferId },
-      include: { lineItems: true },
-    });
-    if (!transfer || transfer.lineItems.length === 0) {
-      return { error: "Transfer has no line items" };
-    }
-
-    // Resolve inventoryItemIds from the variant cache for the Shopify mutation.
-    const lineInputs: Array<{ inventoryItemId: string; quantity: number }> = [];
-    for (const line of transfer.lineItems) {
-      const cache = await db.shopifyVariantCache.findUnique({
-        where: {
-          shop_shopifyVariantId: {
-            shop,
-            shopifyVariantId: line.shopifyVariantId,
-          },
-        },
-      });
-      if (!cache?.inventoryItemId) {
-        return {
-          error: `No inventory item cached for ${cache?.title ?? line.shopifyVariantId}. Run a catalog sync from the dashboard first.`,
-        };
-      }
-      lineInputs.push({
-        inventoryItemId: cache.inventoryItemId,
-        quantity: line.pickedQty > 0 ? line.pickedQty : line.quantity,
-      });
-    }
-
-    try {
-      const shopifyTransfer = await createShopifyTransfer(
-        admin,
-        transfer.sourceLocationId,
-        transfer.destinationLocationId,
-        lineInputs,
-      );
-      if (shopifyTransfer) {
-        await markShopifyTransferReadyToShip(admin, shopifyTransfer.id);
-        await db.transferOrder.update({
-          where: { id: transferId },
-          data: {
-            status: "IN_TRANSIT",
-            shopifyTransferId: shopifyTransfer.id,
-            shippedAt: new Date(),
-          },
-        });
-      }
-      return { ok: true };
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : "Transfer failed" };
-    }
+    const result = await setTransferPickedQuantity(db, { lineId, pickedQty });
+    return result.ok ? { ok: true } : { error: result.error };
   }
 
-  if (intent === "receive") {
-    try {
-      assertInventoryWriteEnabled("transferWrites");
-    } catch (err) {
+  if (intent === "ship" || intent === "receive" || intent === "cancel") {
+    const transferId = readFormId(form.get("transferId"));
+    if (!transferId) return { error: "Transfer not found", problems: [] };
+
+    if (intent === "cancel") {
+      const result = await cancelTransfer(db, admin, actor, transferId);
+      return result.ok
+        ? { ok: true, notice: "Transfer cancelled." }
+        : { error: result.error, problems: result.problems };
+    }
+
+    if (!actor) return { error: STAFF_REQUIRED_MESSAGE, problems: [] };
+    if (intent === "ship") {
+      const result = await shipTransfer(db, admin, actor, transferId);
+      if (!result.ok) return { error: result.error, problems: result.problems };
       return {
-        error: err instanceof Error ? err.message : "Transfer writes disabled",
+        ok: true,
+        notice: result.alreadyDone
+          ? "This transfer was already shipped. Nothing more was sent to Shopify."
+          : "Transfer shipped. Its stock has left the source location in Shopify.",
       };
     }
-
-    const transferId = form.get("transferId") as string;
-    const transfer = await db.transferOrder.findFirst({
-      where: { id: transferId },
-      include: { lineItems: true },
-    });
-    if (!transfer) return { error: "Transfer not found" };
-
-    try {
-      // Shopify-authoritative completion is required before any local receipt
-      // mutation (receivedQty / RECEIVED / receivedAt). Admin API 2025-10 has
-      // no supported complete/receive mutation — completeShopifyTransfer always
-      // throws UnsupportedShopifyOperationError. Call it whether or not
-      // shopifyTransferId is present so missing IDs cannot skip the guard and
-      // mark the transfer received locally. Do not invent a Shopify mutation.
-      await completeShopifyTransfer(
-        admin,
-        transfer.shopifyTransferId ?? "missing-shopify-transfer-id",
-      );
-
-      await db.$transaction(async (tx) => {
-        for (const line of transfer.lineItems) {
-          await tx.transferLineItem.update({
-            where: { id: line.id },
-            data: {
-              receivedQty: line.pickedQty > 0 ? line.pickedQty : line.quantity,
-            },
-          });
-        }
-        await tx.transferOrder.update({
-          where: { id: transferId },
-          data: { status: "RECEIVED", receivedAt: new Date() },
-        });
-      });
-      return { ok: true };
-    } catch (err) {
-      return {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Receive failed",
-      };
-    }
+    const result = await receiveTransfer(db, admin, actor, transferId);
+    if (!result.ok) return { error: result.error, problems: result.problems };
+    return {
+      ok: true,
+      notice: result.alreadyDone
+        ? "This transfer was already received. Nothing more was sent to Shopify."
+        : "Transfer received. Its stock is now at the destination in Shopify.",
+    };
   }
 
-  if (intent === "cancel") {
-    await db.transferOrder.updateMany({
-      where: { id: form.get("transferId") as string, status: "DRAFT" },
-      data: { status: "CANCELLED" },
-    });
-    return { ok: true };
-  }
-
-  return { ok: false };
+  return { error: "That action is not available." };
 };
 
 const STATUS_TONE: Record<string, "info" | "warning" | "success" | "critical"> = {
@@ -227,6 +160,7 @@ const STATUS_TONE: Record<string, "info" | "warning" | "success" | "critical"> =
 
 export default function Transfers() {
   const { transfers, locations, variants } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
   const locationName = (id: string) =>
@@ -236,6 +170,8 @@ export default function Transfers() {
 
   return (
     <s-page heading="Transfer Orders">
+      <ActionFeedback data={actionData} errorHeading="Transfer issue" />
+
       <s-section heading="New transfer">
         <Form method="post">
           <input type="hidden" name="intent" value="create" />
@@ -288,7 +224,9 @@ export default function Transfers() {
                 <s-table-header-row>
                   <s-table-header>Variant</s-table-header>
                   <s-table-header format="numeric">Requested</s-table-header>
-                  <s-table-header format="numeric">Picked</s-table-header>
+                  <s-table-header format="numeric">
+                    {transfer.status === "DRAFT" ? "To ship" : "Shipped"}
+                  </s-table-header>
                   <s-table-header format="numeric">Received</s-table-header>
                   <s-table-header>Picking</s-table-header>
                 </s-table-header-row>
@@ -299,11 +237,11 @@ export default function Transfers() {
                         {variantTitle(line.shopifyVariantId)}
                       </s-table-cell>
                       <s-table-cell>{line.quantity}</s-table-cell>
-                      <s-table-cell>{line.pickedQty}</s-table-cell>
+                      <s-table-cell>{transferShipQuantity(line)}</s-table-cell>
                       <s-table-cell>{line.receivedQty}</s-table-cell>
                       <s-table-cell>
                         {transfer.status === "DRAFT" && (
-                          <Form method="post">
+                          <Form method="post" onKeyDown={submitOnEnter}>
                             <input type="hidden" name="intent" value="pick" />
                             <input type="hidden" name="lineId" value={line.id} />
                             <s-stack direction="inline" gap="small-200">
@@ -311,7 +249,7 @@ export default function Transfers() {
                                 label="Picked qty"
                                 labelAccessibilityVisibility="exclusive"
                                 name="pickedQty"
-                                value={String(line.quantity)}
+                                value={String(transferShipQuantity(line))}
                                 min={0}
                                 max={line.quantity}
                               />
@@ -328,8 +266,17 @@ export default function Transfers() {
               </s-table>
             )}
 
+            {transfer.status === "DRAFT" && transfer.lineItems.length > 0 && (
+              <s-paragraph>
+                <s-text color="subdued">
+                  A line ships its requested quantity unless you save a smaller
+                  picked quantity for it.
+                </s-text>
+              </s-paragraph>
+            )}
+
             {transfer.status === "DRAFT" && (
-              <Form method="post">
+              <Form method="post" onKeyDown={submitOnEnter}>
                 <input type="hidden" name="intent" value="addLine" />
                 <input type="hidden" name="transferId" value={transfer.id} />
                 <s-stack direction="inline" gap="base">
@@ -363,7 +310,7 @@ export default function Transfers() {
                   <input type="hidden" name="intent" value="ship" />
                   <input type="hidden" name="transferId" value={transfer.id} />
                   <s-button type="submit" variant="primary">
-                    Ship (creates Shopify transfer)
+                    Ship from source
                   </s-button>
                 </Form>
               )}

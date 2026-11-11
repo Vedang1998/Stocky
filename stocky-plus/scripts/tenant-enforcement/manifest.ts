@@ -722,6 +722,42 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     expectedRuntimePrivileges: DML,
     enforcementStepGroup: "merchant_child",
   },
+  {
+    prismaModel: "InventoryOperation",
+    sqlTable: "InventoryOperation",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: ["InventoryOperationLine"],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "InventoryOperationLine",
+    sqlTable: "InventoryOperationLine",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["InventoryOperation"],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
 ] as const;
 
 export const BOOTSTRAP_TABLES: readonly NonMerchantTableSpec[] = [
@@ -1033,6 +1069,16 @@ export const COMPOSITE_FOREIGN_KEYS: readonly CompositeForeignKey[] = [
     onUpdate: "NO ACTION",
     purpose: "child_parent",
   },
+  {
+    name: "InventoryOperationLine_shopId_operationId_fkey",
+    childTable: "InventoryOperationLine",
+    childColumns: ["shopId", "operationId"],
+    parentTable: "InventoryOperation",
+    parentColumns: ["shopId", "id"],
+    onDelete: "RESTRICT",
+    onUpdate: "NO ACTION",
+    purpose: "child_parent",
+  },
 ] as const;
 
 /** Supporting indexes required before composite FK validation. */
@@ -1224,13 +1270,17 @@ void CONTROL_PLANE_DML;
 
 export const PRE_PR6_A_MERCHANT_TABLE_COUNT = 26;
 export const PR6_A_ADDED_MERCHANT_TABLE_COUNT = 9;
+/** InventoryOperation + InventoryOperationLine (inventory-control ledger). */
+export const INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT = 2;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
-  PRE_PR6_A_MERCHANT_TABLE_COUNT + PR6_A_ADDED_MERCHANT_TABLE_COUNT;
+  PRE_PR6_A_MERCHANT_TABLE_COUNT +
+  PR6_A_ADDED_MERCHANT_TABLE_COUNT +
+  INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== EXPECTED_MERCHANT_TABLE_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
+      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
     );
   }
 }
@@ -1250,3 +1300,6 @@ export const ORDER_OBSERVATION_LIFECYCLE_GUARD_FN =
 
 export const ORDER_OBSERVATION_SET_LEASE_FN =
   "stocky_order_observation_set_lease";
+
+/** Inventory operation ledger request/terminal-state immutability guard. */
+export const INVENTORY_OPERATION_GUARD_FN = "stocky_inventory_operation_guard";
