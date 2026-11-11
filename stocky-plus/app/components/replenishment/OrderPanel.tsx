@@ -170,7 +170,7 @@ export function OrderPanel({
               </s-button>
             )}
             <s-text color="subdued">
-              Drafts are not sent to suppliers. Each line is priced at the supplier's price for
+              Drafts are not sent to suppliers. Each line is priced at the supplier&apos;s price for
               its quantity, and you can change anything on the draft before ordering.
             </s-text>
           </>
