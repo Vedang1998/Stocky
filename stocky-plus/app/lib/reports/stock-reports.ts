@@ -47,7 +47,7 @@ function variantName(variant: CatalogVariant): string {
 }
 
 /** The variant's Shopify cost, when it is in the currency the report totals in. */
-function unitCostIn(
+export function unitCostIn(
   variant: CatalogVariant,
   currencyCode: string,
 ): Decimal | null {

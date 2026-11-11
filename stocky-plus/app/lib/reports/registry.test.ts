@@ -25,6 +25,7 @@ describe("report registry", () => {
       "sale-items",
       "orders",
       "sales-statistics",
+      "gross-profit",
       "abc-analysis",
       "stock-on-hand",
       "dead-stock",

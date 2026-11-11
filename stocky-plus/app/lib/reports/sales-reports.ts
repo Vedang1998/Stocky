@@ -26,9 +26,9 @@ export type SalesReportInput = {
   currencyCode: string;
 };
 
-const NET_UNITS_DEFINITION =
+export const NET_UNITS_DEFINITION =
   "Units ordered and added, minus units refunded, returned or removed by an edit. Refunds count against the day of the original order.";
-const NET_REVENUE_DEFINITION =
+export const NET_REVENUE_DEFINITION =
   "Net units × the unit price after all discounts. Excludes shipping and duties.";
 const ORDERS_DEFINITION =
   "Orders in which the item's net units are above zero. Test and cancelled orders are never counted.";
@@ -124,7 +124,7 @@ function returnedUnits(sales: VariantWindowSales): number {
   );
 }
 
-function identityColumns<Row extends { info: VariantInfo }>() {
+export function identityColumns<Row extends { info: VariantInfo }>() {
   return [
     {
       key: "product",
@@ -148,13 +148,13 @@ function identityColumns<Row extends { info: VariantInfo }>() {
   ] as const;
 }
 
-const VENDOR_FACET = {
+export const VENDOR_FACET = {
   key: "vendor",
   label: "Vendor",
   value: (row: { info: VariantInfo }) => row.info.vendor,
 };
 
-const IDENTITY_SEARCH_KEYS = ["product", "variant", "sku", "vendor"];
+export const IDENTITY_SEARCH_KEYS = ["product", "variant", "sku", "vendor"];
 
 // --- Best and worst sellers --------------------------------------------------
 

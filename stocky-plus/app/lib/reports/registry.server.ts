@@ -24,6 +24,7 @@ import {
   loadStockLocations,
 } from "../analytics/stock-levels.server";
 import { buildAbcReport } from "./abc-report";
+import { buildProfitReport } from "./profit-report";
 import {
   parseReportRequest,
   parseReportView,
@@ -327,6 +328,17 @@ const REPORTS: readonly RegisteredReport[] = [
     options: [],
     load: async (context, request) =>
       buildStatisticsReport(await loadSales(context, request, "sold")),
+  }),
+  register({
+    id: "gross-profit",
+    title: "Gross profit",
+    description:
+      "Estimated profit for each variant: net revenue minus today's Shopify cost of the units sold.",
+    group: "Sales",
+    usesDateRange: true,
+    options: [],
+    load: async (context, request) =>
+      buildProfitReport(await loadSales(context, request, "sold")),
   }),
   register({
     id: "abc-analysis",
