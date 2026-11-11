@@ -63,12 +63,13 @@ export function parseWorksheetView(search: URLSearchParams): WorksheetView {
   const direction =
     parseChoice(search.get("dir"), ["asc", "desc"] as const) ?? defaultDirection(key);
   const pageSize = Number(search.get("perPage"));
-  const page = Number(search.get("page"));
+  const rawPage = search.get("page") ?? "";
+  const page = /^\d{1,9}$/.test(rawPage) ? Number(rawPage) : 1;
   return {
     show: parseChoice(search.get("show"), WORKSHEET_SHOW) ?? "ALL",
     query: (search.get("q") ?? "").trim().slice(0, MAX_QUERY_LENGTH),
     sort: { key, direction },
-    page: Number.isSafeInteger(page) && page >= 1 ? page : 1,
+    page: Math.max(1, page),
     pageSize: (PAGE_SIZES as readonly number[]).includes(pageSize)
       ? pageSize
       : DEFAULT_PAGE_SIZE,

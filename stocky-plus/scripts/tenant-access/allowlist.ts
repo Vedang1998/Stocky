@@ -120,6 +120,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/compound-shopid-upsert.test.ts",
   "app/tenant/__tests__/db-isolation/analytics-sales.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
+  "app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [

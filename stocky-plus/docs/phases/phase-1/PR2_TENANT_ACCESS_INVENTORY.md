@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `904e4667a6380faa9c8e59768e45de9ec6ebd8e5980d44d8fad5dcedeb96aafa`
-**Scanned files:** 553
-**Findings:** 1846
+**Content digest:** `cb0581aa9d6bf446fb1a56cee812bdfdf4839300c29ef9bea4933eca1ca3b2d5`
+**Scanned files:** 557
+**Findings:** 1870
 **Converted paths:** 590
-**Approved exception findings:** 1256
+**Approved exception findings:** 1280
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -34,21 +34,21 @@ All 39 approved merchant-owned models must appear below.
 | BomComponent | 259 |
 | LowStockAlert | 255 |
 | SyncApplicationReceipt | 275 |
-| ShopifyProductFact | 309 |
+| ShopifyProductFact | 311 |
 | ShopifyProductCollectionMembership | 256 |
-| ShopifyVariantFact | 282 |
-| ShopifyInventoryItemFact | 267 |
-| ShopifyLocationFact | 262 |
-| ShopifyInventoryLevelFact | 278 |
+| ShopifyVariantFact | 284 |
+| ShopifyInventoryItemFact | 268 |
+| ShopifyLocationFact | 263 |
+| ShopifyInventoryLevelFact | 279 |
 | CatalogObservationInFlight | 252 |
-| ShopifyOrderFact | 246 |
-| ShopifyOrderLineFact | 243 |
+| ShopifyOrderFact | 247 |
+| ShopifyOrderLineFact | 244 |
 | ShopifyOrderRefundFact | 241 |
 | OrderFactObservationInFlight | 244 |
 | ReplenishmentSettings | 247 |
 | ReplenishmentVariantRule | 246 |
-| ReplenishmentWorksheet | 246 |
-| ReplenishmentWorksheetLine | 253 |
+| ReplenishmentWorksheet | 253 |
+| ReplenishmentWorksheetLine | 259 |
 | SupplierSkuMapping | 320 |
 | VolumePriceTier | 249 |
 | LeadTimeSnapshot | 272 |
@@ -57,8 +57,8 @@ All 39 approved merchant-owned models must appear below.
 | StocktakeLineItem | 255 |
 | ShopifyOrderRefundLineFact | 242 |
 | ShopifyOrderAdjustmentFact | 241 |
-| ShopifyOrderAgreementFact | 246 |
-| ShopifyOrderAgreementSaleFact | 248 |
+| ShopifyOrderAgreementFact | 247 |
+| ShopifyOrderAgreementSaleFact | 249 |
 | ShopifyOrderRefundTransactionFact | 241 |
 
 ## Counts by execution category
@@ -71,7 +71,7 @@ All 39 approved merchant-owned models must appear below.
 | script | 51 |
 | service | 33 |
 | tenant_infra | 5 |
-| test | 1500 |
+| test | 1524 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -235,6 +235,7 @@ All 39 approved merchant-owned models must appear below.
 | EX-TEST-036 | `app/tenant/__tests__/compound-shopid-upsert.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-037 | `app/tenant/__tests__/db-isolation/analytics-sales.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 | EX-TEST-038 | `app/tenant/__tests__/db-isolation/replenishment-planning.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
+| EX-TEST-039 | `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | migration_tests | no | phase-1-pr2-tenant-access | Retain while PR 2/3 isolation tests require disposable PostgreSQL fixtures |
 
 ## Access path inventory
 
@@ -373,13 +374,13 @@ All 39 approved merchant-owned models must appear below.
 | `app/lib/replenishment/worksheet/store.server.ts` | 138 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/replenishment/worksheet/store.server.ts` | 141 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/replenishment/worksheet/store.server.ts` | 144 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 411 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 415 / `db.replenishmentWorksheetLine.findMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 436 / `db.replenishmentWorksheetLine.findMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 453 / `db.replenishmentWorksheetLine.findFirst` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 491 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 493 / `tx.replenishmentWorksheetLine.findFirst` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/lib/replenishment/worksheet/store.server.ts` | 503 / `tx.replenishmentWorksheetLine.updateMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 415 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 419 / `db.replenishmentWorksheetLine.findMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 440 / `db.replenishmentWorksheetLine.findMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 457 / `db.replenishmentWorksheetLine.findFirst` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 495 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 497 / `tx.replenishmentWorksheetLine.findFirst` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 507 / `tx.replenishmentWorksheetLine.updateMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 19 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 25 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 28 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -885,6 +886,30 @@ All 39 approved merchant-owned models must appear below.
 | `app/tenant/__tests__/db-isolation/replenishment-planning.test.ts` | 158 / `migrationPrisma.replenishmentSettings.findMany` | test | ReplenishmentSettings | direct prisma delegate | approved exception EX-TEST-038 | migration_tests | approved exception | allowlist EX-TEST-038 | EX-TEST-038 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/replenishment-planning.test.ts` | 183 / `migrationPrisma.replenishmentSettings.findMany` | test | ReplenishmentSettings | direct prisma delegate | approved exception EX-TEST-038 | migration_tests | approved exception | allowlist EX-TEST-038 | EX-TEST-038 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/replenishment-planning.test.ts` | 253 / `dbA().replenishmentVariantRule.update` | test | ReplenishmentVariantRule | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 78 / `prisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 101 / `prisma.shopifyVariantFact.create` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 115 / `prisma.shopifyInventoryItemFact.create` | test | ShopifyInventoryItemFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 136 / `prisma.shopifyLocationFact.create` | test | ShopifyLocationFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 160 / `prisma.shopifyInventoryLevelFact.create` | test | ShopifyInventoryLevelFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 184 / `prisma.shopifyOrderFact.create` | test | ShopifyOrderFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 202 / `prisma.shopifyOrderLineFact.create` | test | ShopifyOrderLineFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 222 / `prisma.shopifyOrderAgreementFact.create` | test | ShopifyOrderAgreementFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 234 / `prisma.shopifyOrderAgreementSaleFact.create` | test | ShopifyOrderAgreementSaleFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 627 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 660 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 907 / `migrationPrisma.replenishmentWorksheetLine.update` | test | ReplenishmentWorksheetLine | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 919 / `migrationPrisma.replenishmentWorksheetLine.update` | test | ReplenishmentWorksheetLine | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 925 / `migrationPrisma.replenishmentWorksheetLine.update` | test | ReplenishmentWorksheetLine | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 939 / `migrationPrisma.replenishmentWorksheetLine.count` | test | ReplenishmentWorksheetLine | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 946 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 957 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 961 / `migrationPrisma.replenishmentWorksheetLine.count` | test | ReplenishmentWorksheetLine | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 964 / `migrationPrisma.replenishmentWorksheetLine.count` | test | ReplenishmentWorksheetLine | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 967 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 974 / `migrationPrisma.shopifyProductFact.create` | test | ShopifyProductFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 986 / `migrationPrisma.shopifyVariantFact.createMany` | test | ShopifyVariantFact | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 998 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
+| `app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts` | 1009 / `migrationPrisma.replenishmentWorksheet.count` | test | ReplenishmentWorksheet | direct prisma delegate | approved exception EX-TEST-039 | migration_tests | approved exception | allowlist EX-TEST-039 | EX-TEST-039 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 39 / `migrationPrisma.supplier.createMany` | test | Supplier | direct prisma delegate | approved exception EX-TEST-033 | migration_tests | approved exception | allowlist EX-TEST-033 | EX-TEST-033 | PR 2 tenant-access PostgreSQL/Redis integration harness (exact file) |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 62 / `ctx.db.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/tenant/__tests__/db-isolation/worker-surfaces.test.ts` | 106 / `dbA.supplier.findMany` | test | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
@@ -2091,8 +2116,8 @@ All 39 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 553,
-  "findings": 1846,
+  "scannedFiles": 557,
+  "findings": 1870,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2192,7 +2217,8 @@ All 39 approved merchant-owned models must appear below.
     "EX-TEST-035",
     "EX-TEST-036",
     "EX-TEST-037",
-    "EX-TEST-038"
+    "EX-TEST-038",
+    "EX-TEST-039"
   ],
   "modelsCovered": [
     "BomComponent",
@@ -2235,6 +2261,6 @@ All 39 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "904e4667a6380faa9c8e59768e45de9ec6ebd8e5980d44d8fad5dcedeb96aafa"
+  "contentDigest": "cb0581aa9d6bf446fb1a56cee812bdfdf4839300c29ef9bea4933eca1ca3b2d5"
 }
 ```
