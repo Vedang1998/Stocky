@@ -21,7 +21,6 @@ import {
   recordInventoryOperation,
   recordInventoryReversal,
 } from "../../../app/services/inventory-writes/ledger.server";
-import type { AdjustBatchRequest } from "../../../app/services/inventory-writes/shopify-adjust.server";
 import type {
   InventoryActor,
   InventoryOperationDraft,

@@ -135,7 +135,7 @@ vi.mock("../tenant/bootstrap.server", () => ({
   normalizeVerifiedShopifyDomain: (raw: string) => raw,
   resolveCanonicalShopByDomain,
   deleteSessionsForShop: vi.fn(),
-  updateSessionScope: vi.fn(),
+  updateOfflineSessionScope: vi.fn(),
 }));
 
 vi.mock("../services/shopify-gql.server", () => ({

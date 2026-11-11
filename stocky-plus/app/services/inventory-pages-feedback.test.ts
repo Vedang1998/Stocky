@@ -1,12 +1,14 @@
 /**
  * Issue #78: a failed (or successful) action on the Transfers and Stocktakes
  * pages must be visible to the merchant. Each case runs the real route action
- * and renders the real page with what the action returned.
+ * and renders the real page with what the action returned. Issue #97: forms
+ * built from Polaris fields must submit on Enter.
  */
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
+import { submitOnEnter } from "../lib/submit-on-enter";
 import { attachTenantDbContextMocks } from "../test-utils/prisma-tenant-context-mock";
 
 const SHOP = "shop-a.myshopify.com";
@@ -49,7 +51,12 @@ const { prismaMock, authenticateAdmin, resolveCanonicalShopByDomain, page } =
       prismaMock,
       authenticateAdmin: vi.fn(),
       resolveCanonicalShopByDomain: vi.fn(),
-      page: { loaderData: {} as unknown, actionData: undefined as unknown },
+      page: {
+        loaderData: {} as unknown,
+        actionData: undefined as unknown,
+        /** `onKeyDown` of every form rendered, keyed by its intent field. */
+        formKeyHandlers: new Map<string, unknown>(),
+      },
     };
   });
 
@@ -80,13 +87,27 @@ vi.mock("./shopify-gql.server", () => ({
 vi.mock("react-router", async () => {
   const actual =
     await vi.importActual<typeof import("react-router")>("react-router");
+  const { Children, isValidElement } = await import("react");
+  const Form = (props: { children?: ReactNode; onKeyDown?: unknown }) => {
+    for (const child of Children.toArray(props.children)) {
+      if (
+        isValidElement<{ name?: string; value?: string }>(child) &&
+        child.props.name === "intent" &&
+        child.props.value
+      ) {
+        page.formKeyHandlers.set(child.props.value, props.onKeyDown);
+      }
+    }
+    return createElement("form", null, props.children);
+  };
   return {
     ...actual,
     useLoaderData: () => page.loaderData,
     useActionData: () => page.actionData,
     useNavigation: () => ({ state: "idle" }),
-    Form: ({ children }: { children?: ReactNode }) =>
-      createElement("form", null, children),
+    useSearchParams: () => [new URLSearchParams(), vi.fn()],
+    useFetcher: () => ({ Form, data: undefined, state: "idle" }),
+    Form,
   };
 });
 
@@ -160,6 +181,7 @@ describe("action results on the Transfers and Stocktakes pages (#78)", () => {
       myshopifyDomain: SHOP,
     });
     page.actionData = undefined;
+    page.formKeyHandlers.clear();
   });
 
   afterEach(() => {
@@ -299,6 +321,77 @@ describe("action results on the Transfers and Stocktakes pages (#78)", () => {
       "Enter the counted quantity as a whole number from 0 to 1,000,000.",
     );
     expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
+  });
+
+  it("submits scan and quantity forms when Enter is pressed in their field (#97)", async () => {
+    const variantId = "gid://shopify/ProductVariant/1";
+    const variants = [{ shopifyVariantId: variantId, title: "Red wine" }];
+
+    const warehouse = await import("../routes/app.warehouse");
+    page.loaderData = {
+      openPOs: [
+        { id: "po-1", status: "ORDERED", supplier: null, lineItems: [] },
+      ],
+      variants,
+    };
+    renderToStaticMarkup(createElement(warehouse.default));
+
+    const stocktakes = await import("../routes/app.stocktakes");
+    page.loaderData = {
+      stocktakes: [
+        {
+          id: "st-1",
+          name: "Cellar",
+          locationId: SOURCE,
+          status: "IN_PROGRESS",
+          lineItems: [
+            {
+              id: "stl-1",
+              shopifyVariantId: variantId,
+              expectedQty: 5,
+              countedQty: null,
+            },
+          ],
+        },
+      ],
+      locations: LOCATIONS,
+      variants,
+    };
+    renderToStaticMarkup(createElement(stocktakes.default));
+
+    const transfers = await import("../routes/app.transfers");
+    page.loaderData = {
+      transfers: [
+        {
+          id: "tr-1",
+          sourceLocationId: SOURCE,
+          destinationLocationId: DESTINATION,
+          status: "DRAFT",
+          notes: null,
+          lineItems: [
+            {
+              id: "tl-1",
+              shopifyVariantId: variantId,
+              quantity: 2,
+              pickedQty: 0,
+              receivedQty: 0,
+            },
+          ],
+        },
+      ],
+      locations: LOCATIONS,
+      variants,
+    };
+    renderToStaticMarkup(createElement(transfers.default));
+
+    for (const intent of ["scan", "count", "pick", "addLine"]) {
+      expect(page.formKeyHandlers.get(intent), intent).toBe(submitOnEnter);
+    }
+    // Forms that are only a button keep the browser's own behaviour.
+    for (const intent of ["complete", "ship", "cancel"]) {
+      expect(page.formKeyHandlers.has(intent), intent).toBe(true);
+      expect(page.formKeyHandlers.get(intent), intent).toBeUndefined();
+    }
   });
 
   it("shows no banner when nothing was submitted", async () => {
