@@ -660,9 +660,8 @@ export async function listAdjustments(
   });
 }
 
-/** Most adjustments one export holds; the report says when it stopped there. */
+/** Most adjustments one export holds; the export route refuses a longer period. */
 export const ADJUSTMENT_EXPORT_LIMIT = 2_000;
-const EXPORT_PAGE_SIZE = 200;
 
 /**
  * Every adjustment and reversal in a period, newest first, for the report
@@ -671,19 +670,21 @@ const EXPORT_PAGE_SIZE = 200;
 export async function listAdjustmentsForExport(
   db: TenantDb,
   period: { from?: Date | null; to?: Date | null },
-  limit: number = ADJUSTMENT_EXPORT_LIMIT,
+  bounds: { limit?: number; pageSize?: number } = {},
 ): Promise<{ entries: AdjustmentHistoryEntry[]; truncated: boolean }> {
+  const limit = bounds.limit ?? ADJUSTMENT_EXPORT_LIMIT;
+  const pageSize = bounds.pageSize ?? 200;
   const entries: AdjustmentHistoryEntry[] = [];
   let after: AdjustmentCursor | null = null;
   while (entries.length <= limit) {
     const page: AdjustmentHistoryEntry[] = await listAdjustments(db, {
       ...period,
       after,
-      take: EXPORT_PAGE_SIZE,
+      take: pageSize,
     });
     entries.push(...page);
     const last = page.at(-1);
-    if (page.length < EXPORT_PAGE_SIZE || !last) break;
+    if (page.length < pageSize || !last) break;
     after = { createdAt: last.createdAt, operationId: last.operationId };
   }
   return {
