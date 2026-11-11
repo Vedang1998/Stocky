@@ -641,6 +641,29 @@ const RELATIONS: MerchantRelationMeta[] = [
       "upsert",
     ],
   },
+  // Inventory operation ledger: lines are created with their operation and
+  // never re-parented, so only nested create is permitted.
+  {
+    name: "lines",
+    sourceModel: "InventoryOperation",
+    targetModel: "InventoryOperationLine",
+    cardinality: "many",
+    ownershipLineage: {
+      kind: "child_collection",
+      childForeignKey: "operationId",
+    },
+    nestedWherePermitted: true,
+    allowedNestedOperations: ["create", "createMany"],
+  },
+  {
+    name: "operation",
+    sourceModel: "InventoryOperationLine",
+    targetModel: "InventoryOperation",
+    cardinality: "one",
+    ownershipLineage: { kind: "parent_fk", foreignKey: "operationId" },
+    nestedWherePermitted: false,
+    allowedNestedOperations: ["connect"],
+  },
 ];
 
 const BY_SOURCE = new Map<string, Map<string, MerchantRelationMeta>>();
@@ -666,6 +689,7 @@ export const ROUTE_RELATION_SHAPES = [
   "TransferOrder.lineItems",
   "Stocktake.lineItems",
   "POLineItem.purchaseOrder",
+  "InventoryOperation.lines",
 ] as const;
 
 export function relationMetaFor(
