@@ -347,7 +347,9 @@ describe("webhooks for a product created after install (#94)", () => {
     for (const count of [
       prisma.shopifyProductFact.count({ where: { shopifyGid: PRODUCT_GID } }),
       prisma.shopifyVariantFact.count({ where: { shopifyGid: VARIANT_GID } }),
-      prisma.shopifyInventoryItemFact.count({ where: { shopifyGid: ITEM_GID } }),
+      prisma.shopifyInventoryItemFact.count({
+        where: { shopifyGid: ITEM_GID },
+      }),
       prisma.shopifyLocationFact.count({
         where: { shopifyGid: LOCATION_GIDS[0] },
       }),

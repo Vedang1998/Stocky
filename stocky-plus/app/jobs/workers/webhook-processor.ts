@@ -37,8 +37,11 @@ import { planPerShopSchedulerJobs } from "../../tenant/scheduler.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { TenantAuthorityError } from "../../tenant/errors";
 import {
+  CATALOG_REFETCH_LEASE_MS,
+  CatalogFactNotStoredError,
   applyCatalogFactWebhookRefetch,
   catalogRefetchApplicationDigest,
+  catalogRefetchRetryDelayMs,
   isCatalogFactAtomicWebhookTopic,
   resolveCatalogWebhookIdentity,
 } from "./catalog-facts/resource-refetch";
@@ -487,6 +490,16 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       );
     }
 
+    if (durable.state === "SUCCEEDED" || durable.state === "DEAD_LETTERED") {
+      // A late copy of a delivery whose job has already finished. There is
+      // nothing left to run, and failing it would only invite the queue to
+      // deliver it again.
+      console.warn(
+        `Dropped ${topic} delivery ${bullmqJobId}: durable job ${durable.id} is already ${durable.state}`,
+      );
+      return;
+    }
+
     const { attempt } = await claimAttempt({
       durableJobId: durable.id,
       shopId: durable.shopId,
@@ -566,7 +579,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           signalReceivedAt: durable.createdAt,
           applicationKey,
           applicationPayloadDigest: expectedApplicationDigest,
-          leaseDurationMs: 60_000,
+          leaseDurationMs: CATALOG_REFETCH_LEASE_MS,
           canonicalBatchSize:
             writerConfig.effectiveCanonicalIdentitiesPerTransaction,
           configuredWorstCaseConcurrentCanonicalTransactions:
@@ -683,8 +696,14 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           shopId: durable.shopId,
           attemptId: attempt.id,
           workerId,
-          errorCode: "processor_error",
+          errorCode:
+            err instanceof CatalogFactNotStoredError
+              ? err.code
+              : "processor_error",
           failureSummary: message,
+          backoffMs: isCatalogFactAtomicWebhookTopic(topic)
+            ? catalogRefetchRetryDelayMs(attempt.attemptNumber)
+            : undefined,
         });
       } else {
         await completeAttemptFail({

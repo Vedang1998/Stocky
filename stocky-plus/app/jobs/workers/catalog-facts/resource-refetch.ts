@@ -395,7 +395,9 @@ function parentIdentities(
     {
       shopId: identity.shopId,
       resourceKind:
-        identity.resourceKind === "InventoryItem" ? "ProductVariant" : "Product",
+        identity.resourceKind === "InventoryItem"
+          ? "ProductVariant"
+          : "Product",
       shopifyGid: parentGid,
     },
   ];
@@ -533,7 +535,8 @@ async function applyChunkWithReceipt(
               const derived = deriveCanonicalLockKey(candidate);
               return derived.key1 === key.key1 && derived.key2 === key.key2;
             });
-            if (!match) throw new Error("catalog_refetch_lock_identity_missing");
+            if (!match)
+              throw new Error("catalog_refetch_lock_identity_missing");
             await acquireCanonicalIdentityAdvisoryLock(canonicalDb, match);
             acquired.add(lockKey);
           }
@@ -553,7 +556,10 @@ async function applyChunkWithReceipt(
               for (const row of result.results) {
                 // Throwing rolls the receipt back with the rest, so the retry
                 // is a real second attempt and not an "already applied" no-op.
-                if (item.existenceKind === "LIVE_REFETCH" && row.factId == null) {
+                if (
+                  item.existenceKind === "LIVE_REFETCH" &&
+                  row.factId == null
+                ) {
                   throw new CatalogFactNotStoredError(
                     item.identity,
                     row.outcome,
