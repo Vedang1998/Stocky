@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import type { LoaderFunctionArgs } from "react-router";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { downloadHeaders } from "../lib/http/download.server";
+import { parseLabelItems, zplLabel } from "../lib/warehouse-labels.server";
 
 /**
  * Resource route: generates ZPL barcode labels for the exact quantities
@@ -10,61 +12,40 @@ import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
  * Connect using the same barcode values.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant({ request });
-  const shop = tenant.myshopifyDomain;
-  const url = new URL(request.url);
-  const itemsParam = url.searchParams.get("items") ?? "";
-
-  const items = itemsParam
-    .split(",")
-    .filter(Boolean)
-    .map((pair) => {
-      const [variantId, count] = pair.split(":");
-      return {
-        variantId: decodeURIComponent(variantId ?? ""),
-        count: parseInt(count ?? "0", 10),
-      };
-    })
-    .filter((i) => i.variantId && i.count > 0);
-
-  if (items.length === 0) {
-    return new Response("No items specified", { status: 400 });
+  const { db } = await requireAdminTenant({ request });
+  const parsed = parseLabelItems(
+    new URL(request.url).searchParams.get("items") ?? "",
+  );
+  if (!parsed.ok) {
+    return new Response(parsed.message, { status: 400 });
   }
 
-  const zplBlocks: string[] = [];
+  const variants = await db.shopifyVariantCache.findMany({
+    where: {
+      shopifyVariantId: { in: parsed.items.map((item) => item.variantId) },
+    },
+  });
+  const variantsById = new Map<string, any>(
+    variants.map((variant: any) => [variant.shopifyVariantId, variant]),
+  );
 
-  for (const item of items) {
-    const variant = await db.shopifyVariantCache.findUnique({
-      where: {
-        shop_shopifyVariantId: { shop, shopifyVariantId: item.variantId },
-      },
-    });
+  const zplBlocks: string[] = [];
+  for (const item of parsed.items) {
+    const variant = variantsById.get(item.variantId);
     if (!variant) continue;
 
-    const barcode = variant.barcode ?? variant.sku ?? "";
-    const title = variant.title.slice(0, 40).replace(/[\^~]/g, "");
-
-    // One label per unit received: 2.25" x 1.25" at 203dpi.
-    for (let i = 0; i < item.count; i++) {
-      zplBlocks.push(
-        [
-          "^XA",
-          "^PW457",
-          "^LL254",
-          `^FO20,20^A0N,24,24^FD${title}^FS`,
-          barcode
-            ? `^FO20,60^BY2^BCN,120,Y,N,N^FD${barcode}^FS`
-            : `^FO20,80^A0N,20,20^FDNo barcode on file^FS`,
-          "^XZ",
-        ].join("\n"),
-      );
-    }
+    const label = zplLabel({
+      title: variant.title,
+      barcode: variant.barcode ?? variant.sku ?? "",
+    });
+    // One label per unit received.
+    for (let i = 0; i < item.count; i++) zplBlocks.push(label);
   }
 
   return new Response(zplBlocks.join("\n"), {
-    headers: {
-      "Content-Type": "text/plain; charset=utf-8",
-      "Content-Disposition": `attachment; filename="labels-${Date.now()}.zpl"`,
-    },
+    headers: downloadHeaders({
+      contentType: "text/plain; charset=utf-8",
+      filename: `labels-${Date.now()}.zpl`,
+    }),
   });
 };
