@@ -50,6 +50,7 @@ const ALL_MIGRATION_NAMES = [
   "20260905173500_pr5_f3_remaining_integration",
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
+  "20261110235000_privacy_requests_and_shop_erasure",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
@@ -58,7 +59,8 @@ const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
  * Control-plane tables that receive stocky_control_plane policies when that
  * role already exists (see 20260804210000_sync_control_plane_correction).
  * SyncApplicationReceipt is intentionally omitted — merchant-domain only.
- * DispatchReadyShop is added by D-048 with the same role-conditional pattern.
+ * DispatchReadyShop is added by D-048 and PrivacyRequest by the privacy
+ * migration, both with the same role-conditional pattern.
  */
 const CONTROL_PLANE_POLICY_TABLES = [
   "WebhookDelivery",
@@ -73,6 +75,7 @@ const CONTROL_PLANE_POLICY_TABLES = [
   "SyncHealth",
   "JobDispatch",
   "DispatchReadyShop",
+  "PrivacyRequest",
 ] as const;
 
 function listMigrationDirEntries(): string[] {
@@ -421,7 +424,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
-  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates twelve control-plane policies", async () => {
+  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates thirteen control-plane policies", async () => {
     const beforeDir = listMigrationDirEntries();
     expect(beforeDir).toEqual(
       expect.arrayContaining([
@@ -709,6 +712,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       "JobAttempt",
       "JobDispatch",
       "JobReplay",
+      "PrivacyRequest",
       "ReconciliationRun",
       "SyncApplicationReceipt",
       "SyncCursor",

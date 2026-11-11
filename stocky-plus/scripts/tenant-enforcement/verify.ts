@@ -24,6 +24,7 @@ import { defaultRuntimeRoleName } from "./connection";
 import {
   PRIVACY_ERASURE_DELETE_POLICY,
   PRIVACY_ERASURE_SELECT_POLICY,
+  defaultPrivacyErasureOwnerRoleName,
 } from "../sync-control-plane/privacy-erasure";
 import {
   expectedNormalizedTenantPredicate,
@@ -45,8 +46,8 @@ const APPROVED_EXTRA_RLS_POLICIES: Readonly<Record<string, readonly string[]>> =
 /**
  * Shop data erasure: every shop-keyed table carries one SELECT and one DELETE
  * policy for the erasure function's owner role. `sync:roles:verify` checks
- * their role and predicate exactly. Here they are tolerated only while they
- * keep their command, name a role and never name the runtime role.
+ * their predicate as well. Here they are tolerated only while they keep their
+ * command and are granted to that owner role and no other.
  */
 const PRIVACY_ERASURE_POLICY_COMMANDS: Readonly<Record<string, string>> = {
   [PRIVACY_ERASURE_SELECT_POLICY]: "r",
@@ -301,8 +302,8 @@ async function checkPolicies(
         row.polcmd !== erasureCommand ||
         !row.permissive ||
         row.with_check_expr !== null ||
-        roles.length === 0 ||
-        roles.includes(runtimeRole)
+        roles.length !== 1 ||
+        roles[0] !== defaultPrivacyErasureOwnerRoleName()
       ) {
         issues.push({
           code: "privacy_erasure_policy_unsafe",

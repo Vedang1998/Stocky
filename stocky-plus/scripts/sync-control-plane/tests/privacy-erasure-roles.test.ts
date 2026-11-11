@@ -13,6 +13,7 @@ import {
 import { defaultControlPlaneRoleName, defaultRuntimeRoleName } from "../roles";
 
 const FN = "public.stocky_privacy_erase_shop_batch(text, integer)";
+const BYSTANDER_ROLE = "stocky_privacy_test_bystander";
 
 describe("privacy erasure privileges", () => {
   const owner = defaultPrivacyErasureOwnerRoleName();
@@ -30,10 +31,13 @@ describe("privacy erasure privileges", () => {
     });
     await client.connect();
     await provisionPrivacyErasureOwner(client, roles);
+    await client.query(`DROP ROLE IF EXISTS "${BYSTANDER_ROLE}"`);
+    await client.query(`CREATE ROLE "${BYSTANDER_ROLE}" NOLOGIN`);
   });
 
   afterAll(async () => {
     await provisionPrivacyErasureOwner(client, roles);
+    await client.query(`DROP ROLE IF EXISTS "${BYSTANDER_ROLE}"`);
     await client.end();
   });
 
@@ -54,6 +58,11 @@ describe("privacy erasure privileges", () => {
       name: "everyone may execute the function",
       sql: `GRANT EXECUTE ON FUNCTION ${FN} TO PUBLIC`,
       reports: "public_has_privacy_erasure_execute",
+    },
+    {
+      name: "a role that has no part in erasure may execute the function",
+      sql: `GRANT EXECUTE ON FUNCTION ${FN} TO "${BYSTANDER_ROLE}"`,
+      reports: `privacy_erasure_execute_granted:${BYSTANDER_ROLE}`,
     },
     {
       name: "the function is owned by another role",
@@ -116,24 +125,30 @@ describe("privacy erasure privileges", () => {
     expect(await verifyPrivacyErasure(client, roles)).toEqual([]);
   });
 
-  it("is flagged by the tenant enforcement check when a policy names the runtime role", async () => {
-    await client.query(
-      `ALTER POLICY stocky_privacy_erasure_select ON "Supplier" TO "${runtime}"`,
-    );
+  it.each([
+    ["the runtime role", () => runtime],
+    ["the control-plane role", () => controlPlane],
+  ])(
+    "is flagged by the tenant enforcement check when a policy names %s",
+    async (_name, role) => {
+      await client.query(
+        `ALTER POLICY stocky_privacy_erasure_select ON "Supplier" TO "${role()}"`,
+      );
 
-    const errors = await verifyPrivacyErasure(client, roles);
-    const rls = await verifyRlsOnly(client);
-    expect(errors).toContain(
-      "privacy_erasure_policy_wrong_role:Supplier:stocky_privacy_erasure_select",
-    );
-    expect(rls.issues).toContainEqual({
-      code: "privacy_erasure_policy_unsafe",
-      table: "Supplier",
-      detail: `stocky_privacy_erasure_select:r:${runtime}`,
-    });
+      const errors = await verifyPrivacyErasure(client, roles);
+      const rls = await verifyRlsOnly(client);
+      expect(errors).toContain(
+        "privacy_erasure_policy_wrong_role:Supplier:stocky_privacy_erasure_select",
+      );
+      expect(rls.issues).toContainEqual({
+        code: "privacy_erasure_policy_unsafe",
+        table: "Supplier",
+        detail: `stocky_privacy_erasure_select:r:${role()}`,
+      });
 
-    await provisionPrivacyErasureOwner(client, roles);
-    expect(await verifyPrivacyErasure(client, roles)).toEqual([]);
-    expect((await verifyRlsOnly(client)).issues).toEqual([]);
-  });
+      await provisionPrivacyErasureOwner(client, roles);
+      expect(await verifyPrivacyErasure(client, roles)).toEqual([]);
+      expect((await verifyRlsOnly(client)).issues).toEqual([]);
+    },
+  );
 });

@@ -303,7 +303,7 @@ describe("privacy compliance", () => {
     expect(Number(request.erasedRows)).toBeGreaterThan(5);
   });
 
-  it("closes a later request for an already erased shop without touching a new install", async () => {
+  it("holds a later request for a shop that has installed again and leaves the new install alone", async () => {
     await seedShop(SHOP_A);
     await uninstall(SHOP_A);
     await shopRedact(SHOP_A, "shop-redact-first");
@@ -318,7 +318,8 @@ describe("privacy compliance", () => {
     const request = await prisma.privacyRequest.findUniqueOrThrow({
       where: { id: late.requestId },
     });
-    expect(request.resolution).toBe("SHOP_ACTIVE");
+    expect(request.resolution).toBeNull();
+    expect(request.lastErrorCode).toBe("shop_not_uninstalled");
     expect(await rowsByTable(reinstalled)).toEqual(before);
     expect(await prisma.session.count({ where: { shop: SHOP_A } })).toBe(1);
   });
@@ -344,21 +345,131 @@ describe("privacy compliance", () => {
     expect(await prisma.session.count({ where: { shop: SHOP_A } })).toBe(0);
   });
 
-  it("does not erase a shop that has the app installed", async () => {
+  it("does not erase an installed shop: the request waits, then closes at the deadline", async () => {
     const shopA = await seedShop(SHOP_A);
     const before = await rowsByTable(shopA);
+    const now = new Date();
 
     const recorded = await shopRedact(SHOP_A, "shop-redact-installed");
-    await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps });
+    const first = await runPrivacyMaintenance({
+      retentionDays: 30,
+      deps: realDeps,
+      now,
+    });
 
-    const request = await prisma.privacyRequest.findUniqueOrThrow({
+    expect(first).toMatchObject({ waiting: 1, resolved: 0, failed: 0 });
+    const waiting = await prisma.privacyRequest.findUniqueOrThrow({
       where: { id: recorded.requestId },
     });
-    expect(request.resolution).toBe("SHOP_ACTIVE");
+    expect(waiting.resolution).toBeNull();
+    expect(waiting.lastErrorCode).toBe("shop_not_uninstalled");
+    expect(waiting.nextAttemptAt.getTime()).toBe(now.getTime() + 6 * 60 * 60_000);
+    expect(await rowsByTable(shopA)).toEqual(before);
+
+    const atDeadline = await runPrivacyMaintenance({
+      retentionDays: 30,
+      deps: realDeps,
+      now: waiting.dueAt,
+    });
+
+    expect(atDeadline).toMatchObject({ resolved: 1, waiting: 0, overdue: 0 });
+    const closed = await prisma.privacyRequest.findUniqueOrThrow({
+      where: { id: recorded.requestId },
+    });
+    expect(closed.resolution).toBe("SHOP_ACTIVE");
     expect(await rowsByTable(shopA)).toEqual(before);
     expect(await prisma.session.count({ where: { shop: SHOP_A } })).toBe(1);
     const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopA } });
     expect(shop.processingEnabled).toBe(true);
+  });
+
+  it("erases a shop whose uninstall is processed after its shop/redact arrived", async () => {
+    const shopA = await seedShop(SHOP_A);
+    const now = new Date();
+
+    // app/uninstalled was missed, so shop/redact finds the shop installed.
+    const recorded = await shopRedact(SHOP_A, "shop-redact-before-uninstall");
+    await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps, now });
+    expect(Object.keys(await rowsByTable(shopA)).length).toBeGreaterThan(3);
+
+    await uninstall(SHOP_A);
+    const later = new Date(now.getTime() + 6 * 60 * 60_000);
+    const summary = await runPrivacyMaintenance({
+      retentionDays: 30,
+      deps: realDeps,
+      now: later,
+    });
+
+    expect(summary).toMatchObject({ resolved: 1, waiting: 0, failed: 0 });
+    expect(await rowsByTable(shopA)).toEqual({});
+    expect(await prisma.shop.findUnique({ where: { id: shopA } })).toBeNull();
+    const request = await prisma.privacyRequest.findUniqueOrThrow({
+      where: { id: recorded.requestId },
+    });
+    expect(request.resolution).toBe("SHOP_DATA_ERASED");
+  });
+
+  it("does not erase a shop an operator has put on hold", async () => {
+    const shopA = await seedShop(SHOP_A);
+    await prisma.shop.update({
+      where: { id: shopA },
+      data: { processingEnabled: false, processingDisabledReason: "MANUAL" },
+    });
+    const before = await rowsByTable(shopA);
+
+    const recorded = await shopRedact(SHOP_A, "shop-redact-on-hold");
+    const summary = await runPrivacyMaintenance({
+      retentionDays: 30,
+      deps: realDeps,
+    });
+
+    expect(summary).toMatchObject({ waiting: 1, resolved: 0, failed: 0 });
+    expect(await rowsByTable(shopA)).toEqual(before);
+    expect(await prisma.session.count({ where: { shop: SHOP_A } })).toBe(1);
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopA } });
+    expect(shop.processingDisabledReason).toBe("MANUAL");
+    const request = await prisma.privacyRequest.findUniqueOrThrow({
+      where: { id: recorded.requestId },
+    });
+    expect(request.resolution).toBeNull();
+  });
+
+  it("keeps the session of a merchant who installs again just as the erasure finishes", async () => {
+    const shopA = await seedShop(SHOP_A);
+    await uninstall(SHOP_A);
+    await shopRedact(SHOP_A, "shop-redact-then-reinstall");
+
+    // The second purge runs after the old shop row is gone. Installing again
+    // at that moment creates a new row and a new offline session.
+    let purges = 0;
+    const summary = await runPrivacyMaintenance({
+      retentionDays: 30,
+      deps: {
+        deleteSessions: deleteSessionsForShop,
+        purgeQueuedJobs: async (shopId) => {
+          purges += 1;
+          if (purges === 2) {
+            await prisma.shop.create({ data: { myshopifyDomain: SHOP_A } });
+            await prisma.session.create({
+              data: {
+                id: `offline_${SHOP_A}`,
+                shop: SHOP_A,
+                state: "state",
+                accessToken: "token-of-the-new-install",
+              },
+            });
+          }
+          return purgeQueuedJobsForShop(shopId);
+        },
+      },
+    });
+
+    expect(summary).toMatchObject({ resolved: 1, failed: 0 });
+    expect(await prisma.shop.findUnique({ where: { id: shopA } })).toBeNull();
+    const sessions = await prisma.session.findMany({ where: { shop: SHOP_A } });
+    expect(sessions.map((session) => session.accessToken)).toEqual([
+      "token-of-the-new-install",
+    ]);
   });
 
   it("keeps a failed erasure open, refuses reinstall meanwhile and finishes on retry", async () => {

@@ -55,14 +55,10 @@ function assertSafeRoleName(name: string): string {
   return name;
 }
 
-type ShopKeyedTable = { table: string; rlsEnabled: boolean };
-
 /** Every public table with a "shopId" column, as the erasure function sees them. */
-export async function listShopKeyedTables(
-  client: Client,
-): Promise<ShopKeyedTable[]> {
-  const res = await client.query<{ table: string; rls_enabled: boolean }>(
-    `SELECT c.relname AS table, c.relrowsecurity AS rls_enabled
+export async function listShopKeyedTables(client: Client): Promise<string[]> {
+  const res = await client.query<{ table: string }>(
+    `SELECT c.relname AS table
        FROM pg_class c
        JOIN pg_namespace n ON n.oid = c.relnamespace
        JOIN pg_attribute a ON a.attrelid = c.oid
@@ -73,7 +69,7 @@ export async function listShopKeyedTables(
         AND NOT a.attisdropped
       ORDER BY c.relname`,
   );
-  return res.rows.map((r) => ({ table: r.table, rlsEnabled: r.rls_enabled }));
+  return res.rows.map((r) => r.table);
 }
 
 async function erasureFunctionExists(client: Client): Promise<boolean> {
@@ -144,30 +140,31 @@ export async function provisionPrivacyErasureOwner(
       .catch(() => undefined);
   }
 
+  // The policies go on every shop-keyed table, including ones whose row
+  // security is not on yet: tenant enforcement may be applied after this runs,
+  // and the function must still reach the rows once it is.
   const tables = await listShopKeyedTables(client);
-  for (const { table, rlsEnabled } of tables) {
+  for (const table of tables) {
     await client.query(
       `REVOKE ALL ON TABLE ${quoteIdent(table)} FROM ${quoteIdent(owner)}`,
     );
     await client.query(
       `GRANT SELECT, DELETE ON TABLE ${quoteIdent(table)} TO ${quoteIdent(owner)}`,
     );
-    if (rlsEnabled) {
-      await replacePolicy(
-        client,
-        table,
-        PRIVACY_ERASURE_SELECT_POLICY,
-        "SELECT",
-        owner,
-      );
-      await replacePolicy(
-        client,
-        table,
-        PRIVACY_ERASURE_DELETE_POLICY,
-        "DELETE",
-        owner,
-      );
-    }
+    await replacePolicy(
+      client,
+      table,
+      PRIVACY_ERASURE_SELECT_POLICY,
+      "SELECT",
+      owner,
+    );
+    await replacePolicy(
+      client,
+      table,
+      PRIVACY_ERASURE_DELETE_POLICY,
+      "DELETE",
+      owner,
+    );
   }
 
   await client.query(
@@ -185,7 +182,21 @@ export async function provisionPrivacyErasureOwner(
 
   if (await erasureFunctionExists(client)) {
     await client.query(`REVOKE ALL ON FUNCTION ${FN_SIGNATURE} FROM PUBLIC`);
-    for (const role of [runtime, cp]) {
+    const granted = await client.query<{ grantee: string }>(
+      `SELECT r.rolname AS grantee
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+         CROSS JOIN LATERAL aclexplode(p.proacl) AS acl
+         JOIN pg_roles r ON r.oid = acl.grantee
+        WHERE n.nspname = 'public'
+          AND p.proname = $1
+          AND oidvectortypes(p.proargtypes) = 'text, integer'`,
+      [PRIVACY_ERASURE_FN],
+    );
+    const strays = granted.rows
+      .map((row) => row.grantee)
+      .filter((role) => role !== owner);
+    for (const role of new Set([runtime, cp, ...strays])) {
       await client.query(
         `REVOKE ALL ON FUNCTION ${FN_SIGNATURE} FROM ${quoteIdent(role)}`,
       );
@@ -201,7 +212,7 @@ export async function provisionPrivacyErasureOwner(
     );
   }
 
-  return { tables: tables.map((t) => t.table) };
+  return { tables };
 }
 
 async function tablePrivileges(
@@ -312,32 +323,30 @@ export async function verifyPrivacyErasure(
   }
 
   const shopKeyed = await listShopKeyedTables(client);
-  const shopKeyedNames = new Set(shopKeyed.map((t) => t.table));
-  for (const { table, rlsEnabled } of shopKeyed) {
+  const shopKeyedNames = new Set(shopKeyed);
+  for (const table of shopKeyed) {
     const privileges = await tablePrivileges(client, owner, table);
     if (privileges.join(",") !== "DELETE,SELECT") {
       errors.push(
         `privacy_erasure_table_privileges:${table}:${privileges.join("+") || "none"}`,
       );
     }
-    if (rlsEnabled) {
-      errors.push(
-        ...(await verifyPolicy(
-          client,
-          table,
-          PRIVACY_ERASURE_SELECT_POLICY,
-          "r",
-          owner,
-        )),
-        ...(await verifyPolicy(
-          client,
-          table,
-          PRIVACY_ERASURE_DELETE_POLICY,
-          "d",
-          owner,
-        )),
-      );
-    }
+    errors.push(
+      ...(await verifyPolicy(
+        client,
+        table,
+        PRIVACY_ERASURE_SELECT_POLICY,
+        "r",
+        owner,
+      )),
+      ...(await verifyPolicy(
+        client,
+        table,
+        PRIVACY_ERASURE_DELETE_POLICY,
+        "d",
+        owner,
+      )),
+    );
   }
 
   // Nothing beyond the shop-keyed tables and the Shop row itself.
@@ -443,6 +452,29 @@ export async function verifyPrivacyErasure(
   }
   if (await execute("public")) {
     errors.push("public_has_privacy_erasure_execute");
+  }
+
+  // has_function_privilege answers for the roles asked about. The grant list
+  // itself must hold the owner and the control plane and nobody else.
+  const grantees = await client.query<{ grantee: string }>(
+    `SELECT COALESCE(r.rolname, 'PUBLIC') AS grantee
+       FROM pg_proc p
+       JOIN pg_namespace n ON n.oid = p.pronamespace
+       CROSS JOIN LATERAL aclexplode(
+         COALESCE(p.proacl, acldefault('f', p.proowner))
+       ) AS acl
+       LEFT JOIN pg_roles r ON r.oid = acl.grantee
+      WHERE n.nspname = 'public'
+        AND p.proname = $1
+        AND oidvectortypes(p.proargtypes) = 'text, integer'
+        AND acl.privilege_type = 'EXECUTE'`,
+    [PRIVACY_ERASURE_FN],
+  );
+  const permitted = new Set([owner, options.controlPlaneRole]);
+  for (const { grantee } of grantees.rows) {
+    if (permitted.has(grantee) || grantee === "PUBLIC") continue;
+    if (grantee === options.runtimeRole) continue;
+    errors.push(`privacy_erasure_execute_granted:${grantee}`);
   }
 
   return errors;

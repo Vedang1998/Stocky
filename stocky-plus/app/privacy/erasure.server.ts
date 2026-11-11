@@ -16,6 +16,8 @@ const BATCH_ROWS = 5_000;
 const MAX_BATCHES_PER_RUN = 200;
 /** A claimed request is invisible to other workers for this long. */
 const CLAIM_LEASE_MS = 10 * 60_000;
+/** How often a request for a shop that is not uninstalled is looked at again. */
+const NOT_UNINSTALLED_RECHECK_MS = 6 * 60 * 60_000;
 const RETRY_DELAYS_MS = [
   60_000,
   5 * 60_000,
@@ -34,6 +36,7 @@ export type ErasureDeps = {
 export type ShopRedactOutcome =
   | { status: "resolved"; resolution: NonNullable<PrivacyRequest["resolution"]> }
   | { status: "continuing" }
+  | { status: "waiting" }
   | { status: "failed"; errorCode: string };
 
 export function retryDelayMs(attempts: number): number {
@@ -48,6 +51,9 @@ export function erasureErrorCode(error: unknown): string {
   }
   if (message.includes("stocky_privacy_erasure_stalled")) {
     return "erasure_stalled";
+  }
+  if (message.includes("stocky_privacy_erasure_incomplete")) {
+    return "erasure_incomplete";
   }
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" && /^[A-Za-z0-9_]{1,48}$/.test(code)
@@ -155,11 +161,62 @@ async function eraseShop(
     return { status: "continuing" };
   }
 
-  // A reinstall attempt or a job that was running during the erasure may have
-  // written a session or left a finished job behind.
-  await deps.deleteSessions(request.shopDomain);
+  // The function also returns 0 for a shop row it cannot see. The request is
+  // the evidence that the data is gone, so look for the row before saying so.
+  const remaining = await prisma.shop.findUnique({
+    where: { id: shopId },
+    select: { id: true },
+  });
+  if (remaining) throw new Error("stocky_privacy_erasure_incomplete");
+
+  // A job that was running during the erasure may have left a finished job
+  // behind, and a refused reinstall attempt a session. A shop row for the
+  // domain means the merchant has installed again since the old row was
+  // deleted; those sessions belong to the new install.
   await deps.purgeQueuedJobs(shopId);
+  const installedAgain = await prisma.shop.findUnique({
+    where: { myshopifyDomain: request.shopDomain },
+    select: { id: true },
+  });
+  if (!installedAgain) await deps.deleteSessions(request.shopDomain);
   return resolve(prisma, request, "SHOP_DATA_ERASED", now, erased);
+}
+
+/**
+ * shop/redact for a shop that is not uninstalled here. Either the merchant
+ * installed the app again, or app/uninstalled never arrived; the two look the
+ * same from this side. Nothing is deleted, and the request stays open until
+ * its deadline so that an uninstall processed late still leads to the
+ * erasure. Shopify sends shop/redact only once.
+ */
+async function holdWhileNotUninstalled(
+  prisma: PrismaClient,
+  request: PrivacyRequest,
+  now: Date,
+): Promise<ShopRedactOutcome> {
+  if (now >= request.dueAt) {
+    console.error(
+      `Privacy request ${request.id}: ${request.shopDomain} was still not uninstalled at the deadline; closed without erasing anything`,
+    );
+    return resolve(prisma, request, "SHOP_ACTIVE", now);
+  }
+  if (request.lastErrorCode !== "shop_not_uninstalled") {
+    console.error(
+      `Privacy request ${request.id}: shop/redact for ${request.shopDomain}, which is not uninstalled here. If the merchant has uninstalled, app/uninstalled was missed and has to be run for this shop`,
+    );
+  }
+  const recheckAt = Math.min(
+    now.getTime() + NOT_UNINSTALLED_RECHECK_MS,
+    request.dueAt.getTime(),
+  );
+  await prisma.privacyRequest.update({
+    where: { id: request.id },
+    data: {
+      lastErrorCode: "shop_not_uninstalled",
+      nextAttemptAt: new Date(recheckAt),
+    },
+  });
+  return { status: "waiting" };
 }
 
 export async function processShopRedactRequest(
@@ -181,32 +238,26 @@ export async function processShopRedactRequest(
     }
 
     const shopId = request.shopRecordId;
-    const shop = await prisma.shop.findUnique({
-      where: { id: shopId },
-      select: { processingEnabled: true },
-    });
-    if (!shop) return await resolve(prisma, request, "NO_SHOP_RECORD", now);
-    if (shop.processingEnabled) {
-      return await resolve(prisma, request, "SHOP_ACTIVE", now);
-    }
-
-    // Conditional on the shop still being disabled: a reinstall that won the
-    // race keeps its data, one that lost it is refused from here on.
+    // Only an uninstalled shop is erased. One that is installed, or that an
+    // operator has put on hold, keeps its data. Conditional on the shop still
+    // being uninstalled: a reinstall that won the race keeps its data, one
+    // that lost it is refused from here on. REDACTED is a run that continues.
     const marked = await prisma.shop.updateMany({
-      where: { id: shopId, processingEnabled: false },
+      where: {
+        id: shopId,
+        processingEnabled: false,
+        processingDisabledReason: { in: ["UNINSTALLED", "REDACTED"] },
+      },
       data: { processingDisabledReason: "REDACTED" },
     });
     if (marked.count === 0) {
-      const again = await prisma.shop.findUnique({
+      const present = await prisma.shop.findUnique({
         where: { id: shopId },
         select: { id: true },
       });
-      return await resolve(
-        prisma,
-        request,
-        again ? "SHOP_ACTIVE" : "NO_SHOP_RECORD",
-        now,
-      );
+      return present
+        ? await holdWhileNotUninstalled(prisma, request, now)
+        : await resolve(prisma, request, "NO_SHOP_RECORD", now);
     }
 
     return await eraseShop(prisma, request, shopId, deps, now);

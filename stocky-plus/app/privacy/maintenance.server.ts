@@ -23,6 +23,8 @@ export type PrivacyMaintenanceSummary = {
   retentionRequestsOpened: number;
   resolved: number;
   continuing: number;
+  /** Requests held open because the shop is not uninstalled. */
+  waiting: number;
   failed: number;
   overdue: number;
 };
@@ -46,6 +48,7 @@ export async function runPrivacyMaintenance(input: {
     ),
     resolved: 0,
     continuing: 0,
+    waiting: 0,
     failed: 0,
     overdue: 0,
   };
@@ -62,6 +65,8 @@ export async function runPrivacyMaintenance(input: {
       );
     } else if (outcome.status === "continuing") {
       summary.continuing += 1;
+    } else if (outcome.status === "waiting") {
+      summary.waiting += 1;
     } else {
       summary.failed += 1;
       console.error(

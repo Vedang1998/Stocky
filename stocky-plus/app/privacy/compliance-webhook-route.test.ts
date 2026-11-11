@@ -37,7 +37,7 @@ const WEBHOOK_ID = "b54557e4-bdd9-4b37-8a5f-bf7d70bcd043";
 function delivery(
   topic: string,
   payload: unknown,
-  options: { secret?: string; method?: string } = {},
+  options: { secret?: string; method?: string; headerShop?: string } = {},
 ): Request {
   const body = JSON.stringify(payload);
   const method = options.method ?? "POST";
@@ -50,7 +50,7 @@ function delivery(
         .update(body, "utf8")
         .digest("base64"),
       "X-Shopify-Topic": topic,
-      "X-Shopify-Shop-Domain": SHOP,
+      "X-Shopify-Shop-Domain": options.headerShop ?? SHOP,
       "X-Shopify-API-Version": "2026-07",
       "X-Shopify-Webhook-Id": WEBHOOK_ID,
     },
@@ -103,6 +103,41 @@ describe("compliance webhook route", () => {
     expect(response.status).toBe(401);
     expect(recordPrivacyRequest).not.toHaveBeenCalled();
   });
+
+  // Shopify signs the body, not the headers. A body signed for one shop must
+  // not be accepted under another shop's name.
+  it.each(COMPLIANCE_TOPICS)(
+    "answers 401 to a signed %s body replayed under another shop's header and records nothing",
+    async (topic) => {
+      const response = await respond(
+        delivery(
+          topic,
+          { shop_id: 954889, shop_domain: SHOP },
+          { headerShop: "victim-shop.myshopify.com" },
+        ),
+      );
+
+      expect(response.status).toBe(401);
+      expect(recordPrivacyRequest).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["no shop_domain", { shop_id: 954889 }],
+    ["a shop_domain that is not a string", { shop_domain: 954889 }],
+    [
+      "another topic's body",
+      { id: 1, myshopify_domain: SHOP, name: "A signed shop payload" },
+    ],
+  ])(
+    "answers 401 to a signed shop/redact body with %s and records nothing",
+    async (_case, payload) => {
+      const response = await respond(delivery("shop/redact", payload));
+
+      expect(response.status).toBe(401);
+      expect(recordPrivacyRequest).not.toHaveBeenCalled();
+    },
+  );
 
   it("answers 405 to a request that is not a POST", async () => {
     const response = await respond(
