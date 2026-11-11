@@ -181,7 +181,7 @@ export default function Dashboard() {
         <s-paragraph>
           Staff can check stock from Shopify POS. In the POS app, open the
           smart grid, tap Add tile, choose App, then ProPo inventory. Stock
-          also appears on each product's screen in POS.
+          also appears on each product’s screen in POS.
         </s-paragraph>
         <s-paragraph>
           On a phone, open Inventory in the Shopify app and scan with the
