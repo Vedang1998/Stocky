@@ -164,6 +164,7 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts",
   "scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts",
   "scripts/tenant-enforcement/tests/inventory-operation-ledger.test.ts",
+  "scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {

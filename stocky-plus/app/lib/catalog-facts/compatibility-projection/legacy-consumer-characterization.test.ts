@@ -27,10 +27,15 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
   });
 
   it("stocktake completion reads ShopifyVariantCache inventoryItemId and title", () => {
-    const source = readApp("routes/app.stocktakes.tsx");
-    expect(source).toMatch(/shopifyVariantCache\.findUnique/);
-    expect(source).toMatch(/cache\?\.inventoryItemId/);
-    expect(source).toMatch(/cache\.title/);
+    const service = readApp("services/stocktakes/stocktake.server.ts");
+    expect(service).toMatch(/findVariantInventoryItems\(/);
+    expect(service).toMatch(/\?\.inventoryItemId/);
+
+    const reader = readApp("services/inventory-writes/variant-items.server.ts");
+    expect(reader).toMatch(/shopifyVariantCache\.findMany/);
+    expect(reader).toMatch(
+      /select:\s*\{\s*shopifyVariantId:\s*true,\s*title:\s*true,\s*inventoryItemId:\s*true\s*\}/,
+    );
   });
 
   it("forecast onHand reads InventorySnapshot.quantityAvailable", () => {

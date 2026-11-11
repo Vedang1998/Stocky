@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { submitOnEnter } from "../lib/submit-on-enter";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -183,7 +184,7 @@ export default function Warehouse() {
           )}
 
           {selectedPO && (
-            <fetcher.Form method="post">
+            <fetcher.Form method="post" onKeyDown={submitOnEnter}>
               <input type="hidden" name="intent" value="scan" />
               <input type="hidden" name="poId" value={selectedPO.id} />
               <s-stack direction="inline" gap="base">
