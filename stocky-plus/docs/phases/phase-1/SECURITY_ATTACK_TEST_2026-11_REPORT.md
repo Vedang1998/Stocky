@@ -11,8 +11,8 @@
 | Code tested | `main` from `2685081` through `8da50a8`, plus the fix branches |
 | Target | One instance of this app in the author's own cloud container: production build (`react-router-serve`), PostgreSQL 16 provisioned with the CI role and RLS recipe, Redis, a real worker process, a localhost stand-in for the Shopify Admin API, synthetic shops and data |
 | Not targeted | Shopify's platform, the Partner Dashboard, any third-party service, any real store, any deployed instance. No load or denial-of-service traffic left the container |
-| Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases and the SEC-08 case on `stocky-test-store.myshopify.com`; results are recorded on #81 and #95 |
-| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling) |
+| Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases, the SEC-08 case and a real uninstall for SEC-12 on `stocky-test-store.myshopify.com`; results are recorded on #81, #95 and #90 |
+| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13) |
 
 One scope note. Before the synthetic shop names were pinned to localhost, two unknown-shop authentication tests caused the library to attempt a token exchange for a made-up `*.myshopify.com` name that does not exist. No store, credential or real token was involved, and the names were pinned to `127.0.0.1` for every later run.
 
@@ -35,7 +35,8 @@ Severity follows `CLAUDE.md` (P0 to P3).
 | SEC-09 | P3 | Secrets | `.dockerignore` did not exclude `.env` files, and the Dockerfile copies the whole directory | An image built from a working checkout would contain local secrets | By inspection | Fixed in #95 | None (configuration) |
 | SEC-10 | P3 | Webhooks (development) | Found by the store test of #81: the Vite dev server exits when a request body stream is cancelled | One oversized request ends a `shopify app dev` session. Production is not affected | Dev server: 413, then process exit | Fixed in #95: oversized bodies are left unread; dev server survives, production memory bound re-measured | `app/lib/http/bounded-request.test.ts` |
 | SEC-11 | P1 to P3 | Dependencies | 23 advisories in production dependencies on `main` (1 critical, 15 high), most in the React Router and Express family | Known request-handling flaws in the web server stack | `npm audit --omit=dev` | Reduced to 9 (0 critical, 4 high) in #90 by taking patched releases within the current majors. Residual below | CI suite on the new lockfile |
-| SEC-12 | P1 | Webhooks | Found on 2026-11-11 while reviewing #99. Shopify signs a webhook's body, not its shop or topic headers, and `app/uninstalled` took the shop from the header | Anyone holding one correctly signed delivery for this app could replay its body under another shop's name: that shop was disabled and its sessions deleted. With shop erasure (#99) the same header would choose whose data is deleted | A signed body for one shop, replayed with another active shop in the header: 200, shop disabled, session deleted | Fixed in #90: the route requires the signed body's `myshopify_domain` to match the header shop, 401 otherwise. Not yet confirmed against a live uninstall on the test store | `app/lib/http/signed-webhook-shop.test.ts`, `app/services/webhook-auth-uninstalled-shop.test.ts` |
+| SEC-12 | P1 | Webhooks | Found on 2026-11-11 while reviewing #99. Shopify signs a webhook's body, not its shop or topic headers, and `app/uninstalled` took the shop from the header | Anyone holding one correctly signed delivery for this app could replay its body under another shop's name: that shop was disabled and its sessions deleted. With shop erasure (#99) the same header would choose whose data is deleted | A signed body for one shop, replayed with another active shop in the header: 200, shop disabled, session deleted | Fixed in #90: the route requires the signed body's `myshopify_domain` to match the header shop, 401 otherwise. Confirmed on the test store on 2026-11-11 at main `9b02276` (store tester's record on #90): a real uninstall was accepted and processed. The live body is the whole Shop resource, owner contact fields included; the handler stores only `id`, `domain` and `myshopify_domain` and logs only the topic and shop | `app/lib/http/signed-webhook-shop.test.ts`, `app/services/webhook-auth-uninstalled-shop.test.ts`, `app/sync/__tests__/sync-control-plane.test.ts` |
+| SEC-13 | P1 | Forms (regression from #90) | Found by the store test on 2026-11-11 (#107, filed there as P0). The dependency update in #90 moved React Router from 7.18.1 to 7.18.5. Since 7.18.3 its check on form posts compares the full origin, scheme included, with the URL the server sees. Behind a TLS-terminating proxy or the dev tunnel the browser's origin is `https` and the server's view is `http`, and the app listed no allowed hosts | Every form in the embedded app was answered with 400 on `main` from `9b02276`: no supplier, purchase order, stocktake, transfer or sync could be submitted. Webhooks were not affected. No data was exposed or changed | Production build and dev server, form post forwarded as a proxy forwards it: own origin 400 before, accepted after; other sites, look-alike hosts and another port still 400 | Fixed in #95: the app's own public host, taken from `SHOPIFY_APP_URL`, is the only allowed action origin, set at dev start (`react-router.config.ts`) and at server start in production (`server/build.mjs`). The check stays on and the patched version is kept. The attack test missed it because its form posts carried no `Origin` header | `app/lib/http/action-origins.test.ts` |
 
 ## What held up (no change needed)
 
@@ -49,7 +50,7 @@ Each line is a set of attempts that failed as it should.
 - **Billing bypass.** The development subscription switch is refused on a production build and the subscription flag does not change.
 - **Secrets in logs.** None of the log statements in `app/` writes a token, session, payload or environment value. No secret is committed to the repository.
 - **Outbound requests.** The only two `fetch` calls download the bulk-operation result URL returned by the shop's own authenticated Admin API. No merchant-supplied URL is fetched.
-- **CSRF.** State-changing requests need the session token in the `Authorization` header, which a cross-site form cannot set.
+- **CSRF.** State-changing requests need the session token in the `Authorization` header, which a cross-site form cannot set. React Router's origin check on form posts is a second layer; it must list the app's own public host to work behind a proxy (SEC-13).
 - **POS API (#85, read at its branch head).** Token signature and expiry are checked by the Shopify library, the pull request adds the audience check the library skips, the shop comes only from the signed token, and uninstalled shops are refused. No finding.
 
 ## Open items
@@ -81,6 +82,7 @@ Each line is a set of attempts that failed as it should.
 - Tenant isolation: held under every attempt made.
 - Authentication and session tokens: held.
 - Webhook reliability and privacy topics: three P1 defects (SEC-01, SEC-07, SEC-12), fixed.
+- Cross-site form posts: refused by React Router's origin check. The dependency update that tightened the check also broke the app's own forms behind a proxy (SEC-13), fixed.
 - Export and file handling: four defects (SEC-02 to SEC-05), fixed.
 - Queue and worker integrity: held; one abuse path (SEC-08), fixed.
 - Inventory-write safety: not ready (OPEN-1); flags remain OFF.
@@ -90,5 +92,5 @@ Each line is a set of attempts that failed as it should.
 ## Decision this record supports
 
 - Safe to keep building on: yes.
-- Ready for App Store submission on security grounds: no, until OPEN-3 and OPEN-6 are closed, SEC-12 is confirmed on the test store, and an independent review of #81, #90 and #95 is recorded.
+- Ready for App Store submission on security grounds: no, until OPEN-3 and OPEN-6 are closed and an independent review of #81, #90 and #95 is recorded.
 - Production inventory writes approved: no.
