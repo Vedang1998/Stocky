@@ -94,6 +94,8 @@ model Shop {
   inventoryOperationLines InventoryOperationLine[]
   purchaseOrderCharges          PurchaseOrderCharge[]
   purchasingEvents              PurchasingEvent[]
+  purchaseOrderReceipts         PurchaseOrderReceipt[]
+  purchaseOrderReceiptLines     PurchaseOrderReceiptLine[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -447,9 +449,10 @@ model PurchaseOrder {
   archivedAt          DateTime?
   createdByUserId     String?   @db.VarChar(64)
 
-  supplier  Supplier              @relation(fields: [supplierId], references: [id])
+  supplier  Supplier               @relation(fields: [supplierId], references: [id])
   lineItems POLineItem[]
   charges   PurchaseOrderCharge[]
+  receipts  PurchaseOrderReceipt[]
 
   @@unique([shopId, id])
   @@unique([shopId, poSequence])
@@ -493,7 +496,8 @@ model POLineItem {
   /// Line share of allocated charges (PO currency); sums exactly to the charge total.
   allocatedChargesTotal Decimal? @db.Decimal(12, 2)
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  purchaseOrder PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  receiptLines  PurchaseOrderReceiptLine[]
 
   @@unique([shopId, id])
   @@index([purchaseOrderId])
@@ -540,6 +544,93 @@ model PurchasingEvent {
 
   @@unique([shopId, id])
   @@index([shopId, subjectType, subjectId, createdAt])
+}
+
+enum PurchaseOrderReceiptStatus {
+  /// Recorded; Shopify has not confirmed the stock change yet.
+  PENDING
+  /// Every accepted unit is in Shopify and counted on the purchase order.
+  POSTED
+  /// Some lines are in Shopify and counted; the others failed and were not.
+  PARTIALLY_POSTED
+  /// Nothing reached Shopify and nothing was counted.
+  FAILED
+  /// A reversal is recorded; Shopify has not confirmed it yet.
+  REVERSING
+  REVERSED
+  /// Some lines could not be taken back out of Shopify.
+  PARTIALLY_REVERSED
+  REVERSAL_FAILED
+}
+
+/// One delivery received against a purchase order. Quantities reach
+/// POLineItem.receivedQty only through a receipt, and only for lines Shopify
+/// confirmed.
+model PurchaseOrderReceipt {
+  id                   String                     @id @default(cuid())
+  shopId               String
+  purchaseOrderId      String
+  /// 1, 2, 3… within the purchase order.
+  receiptNumber        Int
+  /// Chosen by the caller per submission; a retry returns the same receipt.
+  idempotencyKey       String                     @db.VarChar(128)
+  payloadDigest        String                     @db.Char(64)
+  status               PurchaseOrderReceiptStatus @default(PENDING)
+  locationGid          String                     @db.VarChar(256)
+  /// Packing slip or delivery note number.
+  supplierReference    String?                    @db.VarChar(128)
+  note                 String?                    @db.VarChar(2000)
+  actorChannel         String                     @db.VarChar(16)
+  actorUserId          String?                    @db.VarChar(64)
+  /// InventoryOperation rows that carried this receipt and its reversal.
+  inventoryOperationId String?                    @db.VarChar(64)
+  reversalOperationId  String?                    @db.VarChar(64)
+  reversalNote         String?                    @db.VarChar(2000)
+  reversedByUserId     String?                    @db.VarChar(64)
+  failureCode          String?                    @db.VarChar(128)
+  failureMessage       String?                    @db.VarChar(1000)
+  postedAt             DateTime?
+  reversedAt           DateTime?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  shop          Shop                       @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  purchaseOrder PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  lines         PurchaseOrderReceiptLine[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, idempotencyKey])
+  @@unique([shopId, purchaseOrderId, receiptNumber])
+  @@index([shopId, status])
+}
+
+model PurchaseOrderReceiptLine {
+  id               String  @id @default(cuid())
+  shopId           String
+  receiptId        String
+  lineItemId       String
+  shopifyVariantId String  @db.VarChar(256)
+  inventoryItemGid String? @db.VarChar(256)
+  position         Int     @default(0)
+  /// Units put into stock.
+  acceptedQty      Int     @default(0)
+  /// Units refused at the door; never stocked and still owed by the supplier.
+  rejectedQty      Int     @default(0)
+  rejectReason     String? @db.VarChar(255)
+  /// Accepted units Shopify confirmed, counted on the purchase-order line.
+  postedQty        Int     @default(0)
+  reversedQty      Int     @default(0)
+  errorCode        String? @db.VarChar(128)
+  errorMessage     String? @db.VarChar(1000)
+
+  shop     Shop                 @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  receipt  PurchaseOrderReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  lineItem POLineItem           @relation(fields: [lineItemId], references: [id], onDelete: Restrict)
+
+  @@unique([shopId, id])
+  @@unique([receiptId, lineItemId])
+  @@index([shopId, receiptId])
+  @@index([shopId, lineItemId])
 }
 
 // ─── Shopify data cache ─────────────────────────────────────────────────────
