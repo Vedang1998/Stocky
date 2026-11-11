@@ -64,6 +64,8 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   ReplenishmentVariantRule: "ReplenishmentVariantRule",
   ReplenishmentWorksheet: "ReplenishmentWorksheet",
   ReplenishmentWorksheetLine: "ReplenishmentWorksheetLine",
+  PurchasingEvent: "PurchasingEvent",
+  PurchaseOrderCharge: "PurchaseOrderCharge",
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
@@ -84,6 +86,8 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "ReplenishmentVariantRule",
   "ReplenishmentWorksheet",
   "ReplenishmentWorksheetLine",
+  "PurchasingEvent",
+  "PurchaseOrderCharge",
 ]);
 
 /**

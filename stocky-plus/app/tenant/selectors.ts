@@ -331,6 +331,11 @@ export const MODEL_UNIQUE_SELECTORS: Record<
         name: "supplierId_shopifyVariantId",
         fields: ["supplierId", "shopifyVariantId"],
       },
+      {
+        kind: "compound",
+        name: "shopId_supplierId_shopifyVariantId",
+        fields: ["shopId", "supplierId", "shopifyVariantId"],
+      },
     ],
   },
   VolumePriceTier: {
@@ -419,6 +424,20 @@ export const MODEL_UNIQUE_SELECTORS: Record<
         name: "shopId_shopifyGid",
         fields: ["shopId", "shopifyGid"],
       },
+    ],
+  },
+  PurchasingEvent: {
+    model: "PurchasingEvent",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
+  PurchaseOrderCharge: {
+    model: "PurchaseOrderCharge",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
     ],
   },
 };

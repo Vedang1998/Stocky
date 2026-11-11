@@ -23,6 +23,7 @@ import {
   PR6_A_CHILD_MERCHANT_MODELS,
   PR6_A_DIRECT_MERCHANT_MODELS,
   REPLENISHMENT_DIRECT_MERCHANT_MODELS,
+  PURCHASING_DIRECT_MERCHANT_MODELS,
 } from "../../../app/tenant/models";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import {
@@ -36,6 +37,7 @@ import {
   PRE_PR6_A_MERCHANT_TABLE_COUNT,
   PR6_A_ADDED_MERCHANT_TABLE_COUNT,
   REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT,
+  PURCHASING_ADDED_MERCHANT_TABLE_COUNT,
 } from "../manifest";
 import { verifyRoles } from "../roles";
 import {
@@ -433,7 +435,8 @@ describe.sequential("PR6-A order / refund fact foundation", () => {
     expect(DIRECT_MERCHANT_MODELS).toHaveLength(
       PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT +
         PR6_A_DIRECT_MERCHANT_MODELS.length +
-        REPLENISHMENT_DIRECT_MERCHANT_MODELS.length,
+        REPLENISHMENT_DIRECT_MERCHANT_MODELS.length +
+        PURCHASING_DIRECT_MERCHANT_MODELS.length,
     );
     expect(CHILD_MERCHANT_MODELS).toHaveLength(
       PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT + PR6_A_CHILD_MERCHANT_MODELS.length,
@@ -444,15 +447,19 @@ describe.sequential("PR6-A order / refund fact foundation", () => {
     expect(EXPECTED_MERCHANT_TABLE_COUNT).toBe(
       PRE_PR6_A_MERCHANT_TABLE_COUNT +
         PR6_A_ADDED_MERCHANT_TABLE_COUNT +
-        REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT,
+        REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT +
+        PURCHASING_ADDED_MERCHANT_TABLE_COUNT,
     );
     expect(MERCHANT_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
     expect(MERCHANT_SQL_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
+    expect(PURCHASING_ADDED_MERCHANT_TABLE_COUNT).toBe(
+      PURCHASING_DIRECT_MERCHANT_MODELS.length,
+    );
     // 24 direct after PR6-A, plus four replenishment tables (planning inputs
-    // and worksheets).
-    expect(DIRECT_MERCHANT_MODELS).toHaveLength(28);
+    // and worksheets) and two purchasing tables.
+    expect(DIRECT_MERCHANT_MODELS).toHaveLength(30);
     expect(CHILD_MERCHANT_MODELS).toHaveLength(11);
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(39);
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(41);
   });
 
   it("registers each approved PR6-A merchant table exactly once with delegates", () => {
