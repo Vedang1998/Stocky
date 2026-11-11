@@ -357,7 +357,11 @@ function lineWhere(
       break;
   }
   if (view.query) {
-    const contains = { contains: view.query, mode: "insensitive" };
+    // Prisma passes % and _ through to ILIKE as wildcards; search for them literally.
+    const contains = {
+      contains: view.query.replace(/[\\%_]/g, "\\$&"),
+      mode: "insensitive",
+    };
     where.OR = [
       { productTitle: contains },
       { variantTitle: contains },
