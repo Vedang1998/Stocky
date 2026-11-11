@@ -184,7 +184,7 @@ function LineDetail({
 }: {
   line: WorksheetLine;
   context: LineDetailContext;
-  previewDefaults: PreviewFormValues;
+  previewDefaults: PreviewFormValues | null;
 }) {
   const { detail } = line;
   const cost = line.supplierCostAmount ?? line.unitCostAmount;
@@ -330,7 +330,7 @@ function LineDetail({
         )}
       </s-stack>
 
-      <Preview line={line} defaults={previewDefaults} />
+      {previewDefaults && <Preview line={line} defaults={previewDefaults} />}
     </s-stack>
   );
 }
@@ -344,7 +344,8 @@ export function LineDetailModal({
   id: string;
   line: WorksheetLine | null;
   context: LineDetailContext;
-  previewDefaults: PreviewFormValues;
+  /** Null when the worksheet's settings can't be read, so nothing can be recalculated. */
+  previewDefaults: PreviewFormValues | null;
 }) {
   return (
     <s-modal id={id} heading={line ? variantLabel(line) : "Row detail"} size="large">
