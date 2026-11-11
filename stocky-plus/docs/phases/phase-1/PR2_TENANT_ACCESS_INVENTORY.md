@@ -4,10 +4,10 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `dabf2725aaf531ed20d28270fdf4466df9d1b650ff504d4a96275a8a9bd8ab88`
-**Scanned files:** 544
-**Findings:** 1820
-**Converted paths:** 564
+**Content digest:** `904e4667a6380faa9c8e59768e45de9ec6ebd8e5980d44d8fad5dcedeb96aafa`
+**Scanned files:** 553
+**Findings:** 1846
+**Converted paths:** 590
 **Approved exception findings:** 1256
 **Violations:** 0
 
@@ -34,12 +34,12 @@ All 39 approved merchant-owned models must appear below.
 | BomComponent | 259 |
 | LowStockAlert | 255 |
 | SyncApplicationReceipt | 275 |
-| ShopifyProductFact | 307 |
+| ShopifyProductFact | 309 |
 | ShopifyProductCollectionMembership | 256 |
-| ShopifyVariantFact | 281 |
+| ShopifyVariantFact | 282 |
 | ShopifyInventoryItemFact | 267 |
-| ShopifyLocationFact | 261 |
-| ShopifyInventoryLevelFact | 277 |
+| ShopifyLocationFact | 262 |
+| ShopifyInventoryLevelFact | 278 |
 | CatalogObservationInFlight | 252 |
 | ShopifyOrderFact | 246 |
 | ShopifyOrderLineFact | 243 |
@@ -47,8 +47,8 @@ All 39 approved merchant-owned models must appear below.
 | OrderFactObservationInFlight | 244 |
 | ReplenishmentSettings | 247 |
 | ReplenishmentVariantRule | 246 |
-| ReplenishmentWorksheet | 240 |
-| ReplenishmentWorksheetLine | 240 |
+| ReplenishmentWorksheet | 246 |
+| ReplenishmentWorksheetLine | 253 |
 | SupplierSkuMapping | 320 |
 | VolumePriceTier | 249 |
 | LeadTimeSnapshot | 272 |
@@ -66,7 +66,7 @@ All 39 approved merchant-owned models must appear below.
 | Category | Count |
 |---|---|
 | bootstrap | 1 |
-| other | 101 |
+| other | 127 |
 | route | 85 |
 | script | 51 |
 | service | 33 |
@@ -354,6 +354,32 @@ All 39 approved merchant-owned models must appear below.
 | `app/lib/replenishment/settings.server.ts` | 92 / `db.replenishmentSettings.findFirst` | other | ReplenishmentSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/replenishment/settings.server.ts` | 96 / `db.replenishmentSettings.update` | other | ReplenishmentSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/lib/replenishment/settings.server.ts` | 101 / `db.replenishmentSettings.create` | other | ReplenishmentSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 122 / `db.shopifyLocationFact.findFirst` | other | ShopifyLocationFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 150 / `db.shopifyProductFact.findMany` | other | ShopifyProductFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 163 / `db.shopifyVariantFact.findMany` | other | ShopifyVariantFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 221 / `db.shopifyProductFact.findMany` | other | ShopifyProductFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 268 / `db.shopifyInventoryLevelFact.findMany` | other | ShopifyInventoryLevelFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 448 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 450 / `tx.replenishmentWorksheet.create` | other | ReplenishmentWorksheet | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 467 / `tx.replenishmentWorksheetLine.createMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 472 / `tx.replenishmentWorksheet.findMany` | other | ReplenishmentWorksheet | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/generate.server.ts` | 478 / `tx.replenishmentWorksheet.deleteMany` | other | ReplenishmentWorksheet | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 86 / `db.replenishmentWorksheet.findMany` | other | ReplenishmentWorksheet | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 98 / `db.replenishmentWorksheet.findFirst` | other | ReplenishmentWorksheet | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 107 / `db.replenishmentWorksheet.deleteMany` | other | ReplenishmentWorksheet | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 129 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 130 / `db.replenishmentWorksheetLine.aggregate` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 135 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 138 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 141 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 144 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 411 / `db.replenishmentWorksheetLine.count` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 415 / `db.replenishmentWorksheetLine.findMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 436 / `db.replenishmentWorksheetLine.findMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 453 / `db.replenishmentWorksheetLine.findFirst` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 491 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 493 / `tx.replenishmentWorksheetLine.findFirst` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/lib/replenishment/worksheet/store.server.ts` | 503 / `tx.replenishmentWorksheetLine.updateMany` | other | ReplenishmentWorksheetLine | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 19 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 25 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 28 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -2065,8 +2091,8 @@ All 39 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 544,
-  "findings": 1820,
+  "scannedFiles": 553,
+  "findings": 1846,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2209,6 +2235,6 @@ All 39 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "dabf2725aaf531ed20d28270fdf4466df9d1b650ff504d4a96275a8a9bd8ab88"
+  "contentDigest": "904e4667a6380faa9c8e59768e45de9ec6ebd8e5980d44d8fad5dcedeb96aafa"
 }
 ```
