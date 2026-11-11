@@ -63,6 +63,8 @@ CREATE TABLE "ReplenishmentWorksheetLine" (
     "priceCurrencyCode" VARCHAR(8),
     "unitCostAmount" DECIMAL(20,6),
     "unitCostCurrencyCode" VARCHAR(8),
+    "supplierCostAmount" DECIMAL(20,6),
+    "supplierCostCurrencyCode" VARCHAR(8),
     "supplierId" TEXT,
     "supplierName" TEXT,
     "vendorSku" TEXT,
