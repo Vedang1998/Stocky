@@ -1,19 +1,32 @@
 import type { ActionFunctionArgs } from "react-router";
+import { recordPrivacyRequest } from "../privacy/intake.server";
+import { resolveComplianceTopic } from "../privacy/topics";
 import { authenticate } from "../shopify.server";
 
 /**
- * Mandatory App Store compliance webhooks.
- * Topics: customers/data_request, customers/redact, shop/redact.
- *
- * Phase 0: authenticate + acknowledge. Full redaction/export workflows are
- * Phase 1 (requires Shop entity, retention policy, and operational runbook).
+ * Mandatory compliance webhooks: customers/data_request, customers/redact and
+ * shop/redact. The request is stored before Shopify gets its 200; a failure to
+ * store it answers 500 so Shopify delivers it again. shop/redact is carried
+ * out by the worker (app/privacy/maintenance.server.ts).
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic } = await authenticate.webhook(request);
+  const { shop, topic, webhookId, payload } =
+    await authenticate.webhook(request);
 
-  console.log(`Received compliance webhook ${topic} for ${shop}`);
+  const complianceTopic = resolveComplianceTopic(topic);
+  if (!complianceTopic) {
+    return new Response("Unsupported webhook topic", { status: 400 });
+  }
 
-  // Acknowledge immediately. Do not claim customer/shop data was erased until
-  // the Phase 1 retention/redaction pipeline exists and is tested.
+  const recorded = await recordPrivacyRequest({
+    topic: complianceTopic,
+    verifiedShop: shop,
+    webhookId,
+    payload,
+  });
+  console.log(
+    `Compliance webhook ${complianceTopic} for ${shop}: request ${recorded.requestId}${recorded.duplicate ? " (redelivery)" : ""}`,
+  );
+
   return new Response();
 };

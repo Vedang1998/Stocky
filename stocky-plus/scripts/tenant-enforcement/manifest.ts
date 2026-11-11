@@ -1213,6 +1213,19 @@ export const PLATFORM_CONTROL_PLANE_TABLES: readonly NonMerchantTableSpec[] = [
     notes:
       "D-048/D-049 per-shop dispatch readiness / nextDispatchAt scheduling cursor — control-plane DML only",
   },
+  {
+    prismaModel: "PrivacyRequest",
+    sqlTable: "PrivacyRequest",
+    classification: "platform_control_plane",
+    shopIdNullableInPrisma: null,
+    legacyShopField: false,
+    rlsRequired: false,
+    immutabilityTriggerRequired: false,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: [],
+    notes:
+      "Compliance request log; outlives the shop it names (shopRecordId, no FK) — control-plane DML only",
+  },
 ] as const;
 
 /** SQL table names for control-plane privilege grants. */

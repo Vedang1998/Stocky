@@ -22,6 +22,10 @@ import {
 } from "./manifest";
 import { defaultRuntimeRoleName } from "./connection";
 import {
+  PRIVACY_ERASURE_DELETE_POLICY,
+  PRIVACY_ERASURE_SELECT_POLICY,
+} from "../sync-control-plane/privacy-erasure";
+import {
   expectedNormalizedTenantPredicate,
   fkActionCode,
   normalizeCatalogExpr,
@@ -37,6 +41,17 @@ const APPROVED_EXTRA_RLS_POLICIES: Readonly<Record<string, readonly string[]>> =
   {
     SyncApplicationReceipt: ["stocky_receipt_probe_select"],
   };
+
+/**
+ * Shop data erasure: every shop-keyed table carries one SELECT and one DELETE
+ * policy for the erasure function's owner role. `sync:roles:verify` checks
+ * their role and predicate exactly. Here they are tolerated only while they
+ * keep their command, name a role and never name the runtime role.
+ */
+const PRIVACY_ERASURE_POLICY_COMMANDS: Readonly<Record<string, string>> = {
+  [PRIVACY_ERASURE_SELECT_POLICY]: "r",
+  [PRIVACY_ERASURE_DELETE_POLICY]: "d",
+};
 
 export type VerifyIssue = {
   code: string;
@@ -279,6 +294,24 @@ async function checkPolicies(
   }
 
   for (const row of res.rows) {
+    const erasureCommand = PRIVACY_ERASURE_POLICY_COMMANDS[row.polname];
+    if (erasureCommand) {
+      const roles = normalizeRoleArray(row.roles);
+      if (
+        row.polcmd !== erasureCommand ||
+        !row.permissive ||
+        row.with_check_expr !== null ||
+        roles.length === 0 ||
+        roles.includes(runtimeRole)
+      ) {
+        issues.push({
+          code: "privacy_erasure_policy_unsafe",
+          table,
+          detail: `${row.polname}:${row.polcmd}:${roles.join("+") || "PUBLIC"}`,
+        });
+      }
+      continue;
+    }
     const allowed = [
       ...expected.map((c) => rlsPolicyName(table, c)),
       ...(APPROVED_EXTRA_RLS_POLICIES[table] ?? []),

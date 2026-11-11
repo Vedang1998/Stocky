@@ -4,11 +4,11 @@
 **Work unit:** PR 2 — Tenant-bound access conversion
 **Branch:** `phase-1/tenant-access`
 **Generator:** `scripts/tenant-access/inventory.ts` (deterministic scanner)
-**Content digest:** `3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697`
-**Scanned files:** 515
-**Findings:** 1774
+**Content digest:** `cf5e37e1924d9efb7a5b2ab5596dabaf6763d7fb9f0040759c7f0bd92ca3674d`
+**Scanned files:** 531
+**Findings:** 1798
 **Converted paths:** 534
-**Approved exception findings:** 1240
+**Approved exception findings:** 1264
 **Violations:** 0
 
 > This file is mechanically generated. Do not edit by hand.
@@ -21,41 +21,41 @@ All 35 approved merchant-owned models must appear below.
 
 | Model | Finding count |
 |---|---|
-| Supplier | 632 |
-| PurchaseOrder | 344 |
-| ShopifyVariantCache | 362 |
-| InventorySnapshot | 317 |
-| VariantAbcClass | 259 |
-| ForecastOverride | 258 |
-| SalesDailyAggregate | 320 |
-| ShopSettings | 286 |
-| TransferOrder | 262 |
-| Stocktake | 259 |
-| BomComponent | 259 |
-| LowStockAlert | 255 |
-| SyncApplicationReceipt | 275 |
-| ShopifyProductFact | 304 |
-| ShopifyProductCollectionMembership | 256 |
-| ShopifyVariantFact | 276 |
-| ShopifyInventoryItemFact | 265 |
-| ShopifyLocationFact | 259 |
-| ShopifyInventoryLevelFact | 277 |
-| CatalogObservationInFlight | 252 |
-| ShopifyOrderFact | 241 |
-| ShopifyOrderLineFact | 241 |
-| ShopifyOrderRefundFact | 241 |
-| OrderFactObservationInFlight | 244 |
-| SupplierSkuMapping | 320 |
-| VolumePriceTier | 249 |
-| LeadTimeSnapshot | 272 |
-| POLineItem | 271 |
-| TransferLineItem | 255 |
-| StocktakeLineItem | 255 |
-| ShopifyOrderRefundLineFact | 241 |
-| ShopifyOrderAdjustmentFact | 241 |
-| ShopifyOrderAgreementFact | 241 |
-| ShopifyOrderAgreementSaleFact | 241 |
-| ShopifyOrderRefundTransactionFact | 241 |
+| Supplier | 648 |
+| PurchaseOrder | 358 |
+| ShopifyVariantCache | 376 |
+| InventorySnapshot | 331 |
+| VariantAbcClass | 273 |
+| ForecastOverride | 272 |
+| SalesDailyAggregate | 334 |
+| ShopSettings | 302 |
+| TransferOrder | 276 |
+| Stocktake | 273 |
+| BomComponent | 273 |
+| LowStockAlert | 269 |
+| SyncApplicationReceipt | 289 |
+| ShopifyProductFact | 318 |
+| ShopifyProductCollectionMembership | 270 |
+| ShopifyVariantFact | 290 |
+| ShopifyInventoryItemFact | 279 |
+| ShopifyLocationFact | 273 |
+| ShopifyInventoryLevelFact | 291 |
+| CatalogObservationInFlight | 266 |
+| ShopifyOrderFact | 255 |
+| ShopifyOrderLineFact | 255 |
+| ShopifyOrderRefundFact | 255 |
+| OrderFactObservationInFlight | 258 |
+| SupplierSkuMapping | 334 |
+| VolumePriceTier | 263 |
+| LeadTimeSnapshot | 286 |
+| POLineItem | 285 |
+| TransferLineItem | 269 |
+| StocktakeLineItem | 269 |
+| ShopifyOrderRefundLineFact | 255 |
+| ShopifyOrderAdjustmentFact | 255 |
+| ShopifyOrderAgreementFact | 255 |
+| ShopifyOrderAgreementSaleFact | 255 |
+| ShopifyOrderRefundTransactionFact | 255 |
 
 ## Counts by execution category
 
@@ -63,11 +63,12 @@ All 35 approved merchant-owned models must appear below.
 |---|---|
 | bootstrap | 1 |
 | other | 78 |
+| privacy | 3 |
 | route | 85 |
 | script | 51 |
 | service | 33 |
 | tenant_infra | 5 |
-| test | 1477 |
+| test | 1498 |
 | worker | 44 |
 
 ## Approved exceptions
@@ -96,6 +97,9 @@ All 35 approved merchant-owned models must appear below.
 | EX-SYNC-TEST-015 | `app/sync/__tests__/d049-readiness-corrections.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 D-049 readiness suite requires disposable fixtures |
 | EX-SYNC-TEST-016 | `app/sync/__tests__/d050-corrections.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 D-050 correction suite requires disposable fixtures |
 | EX-SYNC-TEST-017 | `app/sync/__tests__/d051-corrections.test.ts` | migration_tests | no | phase-1-pr4-sync-control-plane | Retain while PR 4 D-051 correction suite requires disposable fixtures |
+| EX-PRIVACY-001 | `app/privacy/erasure.server.ts` | pr4_sync_control_plane | yes | app-store-readiness | Retained while shop/redact is carried out by the worker |
+| EX-PRIVACY-002 | `app/privacy/retention.server.ts` | pr4_sync_control_plane | yes | app-store-readiness | Retained while uninstalled shops are erased after a retention window |
+| EX-PRIVACY-TEST-001 | `app/sync/__tests__/privacy-compliance.test.ts` | migration_tests | no | app-store-readiness | Retain while erasure is verified against disposable PostgreSQL fixtures |
 | EX-SYNC-001 | `app/sync/control-plane-db.server.ts` | pr4_sync_control_plane | yes | phase-1-pr4-sync-control-plane | Retained while durable sync control-plane remains the DB system of record for intake/dispatch |
 | EX-SYNC-002 | `app/sync/intake.server.ts` | pr4_sync_control_plane | yes | phase-1-pr4-sync-control-plane | Retained while durable sync control-plane remains the DB system of record for intake/dispatch |
 | EX-SYNC-003 | `app/sync/lifecycle.server.ts` | pr4_sync_control_plane | yes | phase-1-pr4-sync-control-plane | Retained while durable sync control-plane remains the DB system of record for intake/dispatch |
@@ -325,6 +329,9 @@ All 35 approved merchant-owned models must appear below.
 | `app/lib/order-facts/sync/webhook.ts` | 254 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 277 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
 | `app/lib/order-facts/sync/webhook.ts` | 316 / `$transaction` | other | — | Prisma $transaction | tenant-bound $transaction | TenantAuthority | converted | tenant:access:audit / test:tenant-access | — | — |
+| `app/privacy/erasure.server.ts` | 67 / `$transaction` | privacy | — | Prisma $transaction | approved exception EX-PRIVACY-001 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-PRIVACY-001 | — |
+| `app/privacy/erasure.server.ts` | 100 / `$transaction` | privacy | — | Prisma $transaction | approved exception EX-PRIVACY-001 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-PRIVACY-001 | — |
+| `app/privacy/retention.server.ts` | 39 / `$transaction` | privacy | — | Prisma $transaction | approved exception EX-PRIVACY-002 | pr4_sync_control_plane | approved exception | tenant:access:audit / test:tenant-access | EX-PRIVACY-002 | — |
 | `app/routes/app._index.tsx` | 19 / `db.shopSettings.upsert` | route | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 25 / `db.purchaseOrder.count` | route | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
 | `app/routes/app._index.tsx` | 28 / `db.supplier.count` | route | Supplier | global prisma + shop string | TenantDb scoped by TenantAuthority | verified_admin_request | converted | test:tenant-access | — | — |
@@ -521,6 +528,27 @@ All 35 approved merchant-owned models must appear below.
 | `app/sync/__tests__/dispatch-ready-shop.test.ts` | 202 / `$queryRaw` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRaw | approved exception EX-SYNC-TEST-014 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-014 | PR 4 D-048 DispatchReadyShop readiness lifecycle disposable harness |
 | `app/sync/__tests__/dispatch-ready-shop.test.ts` | 216 / `$transaction` | test | — | Prisma $transaction | approved exception EX-SYNC-TEST-014 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-SYNC-TEST-014 | — |
 | `app/sync/__tests__/dispatch-ready-shop.test.ts` | 217 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-014 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-014 | PR 4 D-048 DispatchReadyShop readiness lifecycle disposable harness |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 55 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 69 / `prisma.shopSettings.create` | test | ShopSettings | direct prisma delegate | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | allowlist EX-PRIVACY-TEST-001 | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 73 / `prisma.supplier.create` | test | Supplier | direct prisma delegate | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | allowlist EX-PRIVACY-TEST-001 | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 125 / `$transaction` | test | — | Prisma $transaction | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-PRIVACY-TEST-001 | — |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 127 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 146 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-PRIVACY-TEST-001 | infrastructure | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 157 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 166 / `prisma.supplier.deleteMany` | test | Supplier | direct prisma delegate | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | allowlist EX-PRIVACY-TEST-001 | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 167 / `prisma.shopSettings.deleteMany` | test | ShopSettings | direct prisma delegate | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | allowlist EX-PRIVACY-TEST-001 | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 563 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 580 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 583 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 586 / `$transaction` | test | — | Prisma $transaction | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit / test:tenant-access | EX-PRIVACY-TEST-001 | — |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 587 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 601 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 606 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 610 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 611 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 621 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 626 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
+| `app/sync/__tests__/privacy-compliance.test.ts` | 631 / `$queryRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $queryRawUnsafe | approved exception EX-PRIVACY-TEST-001 | migration_tests | approved exception | tenant:access:audit | EX-PRIVACY-TEST-001 | Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL |
 | `app/sync/__tests__/sync-attempt-recovery.test.ts` | 41 / `new PrismaClient` | test | — | PrismaClient construction | approved exception EX-SYNC-TEST-005 | infrastructure | approved exception | tenant:access:audit | EX-SYNC-TEST-005 | PR 4 D-043 F-PR4-04 attempt recovery disposable harness |
 | `app/sync/__tests__/sync-attempt-recovery.test.ts` | 50 / `$executeRawUnsafe` | test | Supplier, PurchaseOrder, ShopifyVariantCache, InventorySnapshot, VariantAbcClass, ForecastOverride, SalesDailyAggregate, ShopSettings, TransferOrder, Stocktake, BomComponent, LowStockAlert, SyncApplicationReceipt, ShopifyProductFact, ShopifyProductCollectionMembership, ShopifyVariantFact, ShopifyInventoryItemFact, ShopifyLocationFact, ShopifyInventoryLevelFact, CatalogObservationInFlight, ShopifyOrderFact, ShopifyOrderLineFact, ShopifyOrderRefundFact, OrderFactObservationInFlight, SupplierSkuMapping, VolumePriceTier, LeadTimeSnapshot, POLineItem, TransferLineItem, StocktakeLineItem, ShopifyOrderRefundLineFact, ShopifyOrderAdjustmentFact, ShopifyOrderAgreementFact, ShopifyOrderAgreementSaleFact, ShopifyOrderRefundTransactionFact | raw SQL $executeRawUnsafe | approved exception EX-SYNC-TEST-005 | migration_tests | approved exception | tenant:access:audit | EX-SYNC-TEST-005 | PR 4 D-043 F-PR4-04 attempt recovery disposable harness |
 | `app/sync/__tests__/sync-attempt-recovery.test.ts` | 470 / `prisma.syncApplicationReceipt.create` | test | SyncApplicationReceipt | direct prisma delegate | approved exception EX-SYNC-TEST-005 | migration_tests | approved exception | allowlist EX-SYNC-TEST-005 | EX-SYNC-TEST-005 | PR 4 D-043 F-PR4-04 attempt recovery disposable harness |
@@ -2013,8 +2041,8 @@ All 35 approved merchant-owned models must appear below.
 
 ```json
 {
-  "scannedFiles": 515,
-  "findings": 1774,
+  "scannedFiles": 531,
+  "findings": 1798,
   "violations": 0,
   "exceptionsUsed": [
     "EX-BF-004",
@@ -2056,6 +2084,9 @@ All 35 approved merchant-owned models must appear below.
     "EX-ENF-039",
     "EX-IDX-014",
     "EX-IDX-016",
+    "EX-PRIVACY-001",
+    "EX-PRIVACY-002",
+    "EX-PRIVACY-TEST-001",
     "EX-RAW-002",
     "EX-SEED-001",
     "EX-SYNC-001",
@@ -2151,6 +2182,6 @@ All 35 approved merchant-owned models must appear below.
     "VariantAbcClass",
     "VolumePriceTier"
   ],
-  "contentDigest": "3c7f908c296b35148cc443154b5adbc102e047c7d4965820bd74b2995dced697"
+  "contentDigest": "cf5e37e1924d9efb7a5b2ab5596dabaf6763d7fb9f0040759c7f0bd92ca3674d"
 }
 ```

@@ -10,6 +10,10 @@ import {
   PLATFORM_CONTROL_PLANE_SQL_TABLES,
 } from "../tenant-enforcement/manifest";
 import { quoteIdent } from "../tenant-enforcement/sql";
+import {
+  provisionPrivacyErasureOwner,
+  verifyPrivacyErasure,
+} from "./privacy-erasure";
 
 export const DEFAULT_CONTROL_PLANE_ROLE = "stocky_control_plane";
 export const DEFAULT_RUNTIME_ROLE = "stocky_runtime";
@@ -232,6 +236,12 @@ export async function provisionControlPlaneRole(
       probeOwnerRole: probeOwner,
     });
     grantsApplied.push("receipt_probe_owner");
+
+    await provisionPrivacyErasureOwner(client, {
+      controlPlaneRole: role,
+      runtimeRole: assertSafeRoleName(defaultRuntimeRoleName()),
+    });
+    grantsApplied.push("privacy_erasure_owner");
 
     // Migration may run before the role exists; ensure RLS policies here.
     for (const table of PLATFORM_CONTROL_PLANE_SQL_TABLES) {
@@ -582,6 +592,13 @@ export async function verifyControlPlaneRole(
 
   // NEW-PR4-C08: receipt probe function ownership and EXECUTE grants.
   errors.push(...(await verifyReceiptProbeFunction(client, role, runtime)));
+
+  errors.push(
+    ...(await verifyPrivacyErasure(client, {
+      controlPlaneRole: role,
+      runtimeRole: runtime,
+    })),
+  );
 
   return { ok: errors.length === 0, errors };
 }

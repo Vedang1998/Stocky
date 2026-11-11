@@ -19,6 +19,7 @@ describe("sync inventory manifest", () => {
         "JobAttempt",
         "JobDispatch",
         "JobReplay",
+        "PrivacyRequest",
         "ReconciliationRun",
         "SyncCursor",
         "SyncHealth",

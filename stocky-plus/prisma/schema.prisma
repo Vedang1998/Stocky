@@ -2120,3 +2120,65 @@ model OrderFactObservationInFlight {
   @@index([shopId, observationRequestGen])
   @@index([shopId, resourceKind, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal])
 }
+
+// ─── Privacy requests (Shopify compliance webhooks and retention) ────────────
+// Control-plane only. The runtime role receives no grants on this table.
+
+enum PrivacyRequestTopic {
+  CUSTOMERS_DATA_REQUEST
+  CUSTOMERS_REDACT
+  SHOP_REDACT
+}
+
+enum PrivacyRequestOrigin {
+  SHOPIFY_WEBHOOK
+  RETENTION_SWEEP
+}
+
+enum PrivacyRequestResolution {
+  /// customers/data_request, customers/redact: ProPo stores no customer data to
+  /// return or remove.
+  NO_CUSTOMER_DATA_HELD
+  /// shop/redact: every row keyed to the shop and the shop row itself are gone.
+  SHOP_DATA_ERASED
+  /// shop/redact: no shop row existed for the request when it was processed.
+  NO_SHOP_RECORD
+  /// shop/redact: the shop had the app installed again when the request was processed.
+  SHOP_ACTIVE
+}
+
+/// One row per compliance request. A request is open while `resolution` is null.
+/// Holds no customer identifiers: the customer's id, email and phone in the
+/// Shopify payload are never read.
+model PrivacyRequest {
+  id                String                    @id @default(cuid())
+  topic             PrivacyRequestTopic
+  origin            PrivacyRequestOrigin
+  shopDomain        String                    @db.VarChar(255)
+  /// Shop.id the request was bound to at intake. Not a foreign key and not named
+  /// shopId on purpose: this row must outlive the shop row an erasure deletes.
+  shopRecordId      String?
+  shopifyShopId     String?                   @db.VarChar(32)
+  /// X-Shopify-Webhook-Id. Unique so a redelivery never creates a second request.
+  shopifyWebhookId  String?                   @unique @db.VarChar(128)
+  /// customers/data_request only: Shopify's id for the request.
+  dataRequestId     String?                   @db.VarChar(32)
+  /// Number of order ids Shopify listed on a customer request. The ids
+  /// themselves are not kept.
+  ordersListed      Int?
+  receivedAt        DateTime                  @default(now())
+  /// Shopify requires completion within 30 days of the request.
+  dueAt             DateTime
+  attempts          Int                       @default(0)
+  nextAttemptAt     DateTime                  @default(now())
+  lastErrorCode     String?                   @db.VarChar(64)
+  resolution        PrivacyRequestResolution?
+  resolvedAt        DateTime?
+  erasedRows        BigInt?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([resolution, nextAttemptAt])
+  @@index([shopRecordId])
+  @@index([shopDomain, receivedAt])
+}

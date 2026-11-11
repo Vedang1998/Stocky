@@ -597,6 +597,56 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Retain while PR 4 D-051 correction suite requires disposable fixtures",
   },
+  {
+    id: "EX-PRIVACY-001",
+    path: "app/privacy/erasure.server.ts",
+    category: "pr4_sync_control_plane",
+    reason:
+      "Shop data erasure runs on the control-plane client: leases PrivacyRequest rows in a transaction and calls stocky_privacy_erase_shop_batch",
+    permittedModelsOrOperations: [
+      "PrivacyRequest",
+      "Shop lifecycle fields",
+      "SELECT stocky_privacy_erase_shop_batch via $queryRaw",
+      "PrismaClient via DATABASE_CONTROL_PLANE_URL only",
+    ],
+    productionRuntime: "yes",
+    owner: "app-store-readiness",
+    expirationPhaseOrRemovalCondition:
+      "Retained while shop/redact is carried out by the worker",
+  },
+  {
+    id: "EX-PRIVACY-002",
+    path: "app/privacy/retention.server.ts",
+    category: "pr4_sync_control_plane",
+    reason:
+      "Retention backstop marks an expired uninstalled shop REDACTED and opens its PrivacyRequest in one control-plane transaction",
+    permittedModelsOrOperations: [
+      "PrivacyRequest",
+      "Shop lifecycle fields",
+      "PrismaClient via DATABASE_CONTROL_PLANE_URL only",
+    ],
+    productionRuntime: "yes",
+    owner: "app-store-readiness",
+    expirationPhaseOrRemovalCondition:
+      "Retained while uninstalled shops are erased after a retention window",
+  },
+  {
+    id: "EX-PRIVACY-TEST-001",
+    path: "app/sync/__tests__/privacy-compliance.test.ts",
+    category: "migration_tests",
+    reason:
+      "Privacy compliance integration harness: seeds two shops and checks erasure and role privileges against PostgreSQL",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+      "Supplier and ShopSettings fixtures through the owner connection",
+      "Raw SQL under SET LOCAL ROLE for privilege assertions",
+    ],
+    productionRuntime: "no",
+    owner: "app-store-readiness",
+    expirationPhaseOrRemovalCondition:
+      "Retain while erasure is verified against disposable PostgreSQL fixtures",
+  },
   ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),
