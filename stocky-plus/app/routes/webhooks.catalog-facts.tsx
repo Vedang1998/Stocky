@@ -2,12 +2,13 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { dispatchPendingJobs } from "../sync/dispatcher.server";
 import { ingestAuthenticatedWebhook } from "../sync/intake.server";
-import { isSanitizedWebhookTopic } from "../sync/sanitize.server";
+import { resolveSanitizedWebhookTopic } from "../sync/sanitize.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic, payload, webhookId } =
-    await authenticate.webhook(request);
-  if (!isSanitizedWebhookTopic(topic)) {
+  const verified = await authenticate.webhook(request);
+  const { shop, payload, webhookId } = verified;
+  const topic = resolveSanitizedWebhookTopic(verified.topic);
+  if (!topic) {
     return new Response("Unsupported webhook topic", { status: 400 });
   }
   await ingestAuthenticatedWebhook({
