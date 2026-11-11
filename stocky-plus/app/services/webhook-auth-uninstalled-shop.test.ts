@@ -148,6 +148,26 @@ describe("webhook authentication for an uninstalled shop (#83)", () => {
     expect(outboundFetch).not.toHaveBeenCalled();
   });
 
+  // Shopify signs the body, not the shop header: a correctly signed body
+  // that names another shop, or no shop, must not uninstall the header's shop.
+  it.each([
+    [
+      "a body signed for another shop",
+      { id: 2, myshopify_domain: "other-shop.myshopify.com" },
+    ],
+    ["a signed body from another topic", { id: 7001, title: "A product" }],
+    ["a body with no shop name", { id: 1, myshopify_domain: null }],
+  ])("does not uninstall the header's shop on %s", async (_case, payload) => {
+    const response = await uninstalledAction(
+      routeArgs(
+        delivery({ topic: "app/uninstalled", body: JSON.stringify(payload) }),
+      ),
+    );
+
+    expect(response.status).toBe(401);
+    expect(processUninstall).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["customers/data_request", "CUSTOMERS_DATA_REQUEST"],
     ["customers/redact", "CUSTOMERS_REDACT"],
