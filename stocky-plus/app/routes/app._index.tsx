@@ -64,11 +64,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
-    // One sync at a time: a second job would only queue behind the first.
-    const domains = await readCatalogSyncStatus(tenant);
-    if (!domains.some((domain) => domain.syncing)) {
-      await enqueueCatalogSync(tenant);
-    }
+    // Does nothing when a sync for this shop is already queued or running.
+    await enqueueCatalogSync(tenant);
     return { synced: true };
   }
 

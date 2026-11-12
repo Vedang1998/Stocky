@@ -48,7 +48,7 @@ export function SyncStatus({
         </s-text>
         <Form method="post">
           <input type="hidden" name="intent" value="syncCatalog" />
-          {/* Disabled during a sync so a second press cannot queue another. */}
+          {/* The server ignores a request made during a sync, so do not offer one. */}
           <s-button
             type="submit"
             variant="primary"
