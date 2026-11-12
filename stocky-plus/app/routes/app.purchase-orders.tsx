@@ -1,474 +1,190 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
-import {
-  Form,
-  useActionData,
-  useLoaderData,
-  useNavigation,
-} from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { formatDecimal, formatMoney } from "../lib/decimal-format";
-import { serializeDecimals } from "../lib/decimal-wire.server";
-import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
-import { RECEIVING_OFF_MESSAGE } from "../lib/po-display";
-import { fetchLocations } from "../services/shopify-gql.server";
+import { formatMoney } from "../lib/decimal-format";
+import { formatDay } from "../lib/purchasing/display";
+import { STATUS_LABELS, STATUS_TONES } from "../lib/purchasing/status";
+import { submitOnEnter } from "../lib/submit-on-enter";
+import { listLocations } from "../services/purchasing/locations.server";
 import {
-  applyLandedCostsToPO,
-  receivePartialPO,
-  recalculatePOLineCost,
-  recordLeadTimeSnapshot,
-  resolveTieredUnitCost,
-} from "../services/landed-cost.server";
+  isPurchaseOrderView,
+  listPurchaseOrders,
+  PURCHASE_ORDER_VIEW_LABELS,
+  PURCHASE_ORDER_VIEWS,
+} from "../services/purchasing/purchase-order-list.server";
+import { readShopProfile } from "../services/purchasing/shop-profile.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+
+const MAX_PAGE = 10_000;
+
+function readPage(value: string | null): number {
+  if (!value || !/^\d{1,5}$/.test(value)) return 1;
+  const page = Number(value);
+  return page >= 1 && page <= MAX_PAGE ? page : 1;
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, db } = await requireAdminTenant({ request });
-  const [orders, suppliers, locations, variants] = await Promise.all([
-    db.purchaseOrder.findMany({
-      where: {},
-      include: { supplier: true, lineItems: true },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    db.supplier.findMany({
-      where: {},
-      orderBy: { name: "asc" },
-    }),
-    fetchLocations(admin),
-    db.shopifyVariantCache.findMany({
-      where: {},
-      orderBy: { title: "asc" },
-      take: 250,
-    }),
+  const url = new URL(request.url);
+  const requestedView = url.searchParams.get("view") ?? "";
+  const view = isPurchaseOrderView(requestedView) ? requestedView : "open";
+  const search = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
+
+  const [profile, locations] = await Promise.all([
+    readShopProfile(admin),
+    listLocations(db, admin),
   ]);
-  // Landed unit cost is added here so the browser never does money arithmetic.
-  const ordersWithLandedCost = orders.map((po: any) => ({
-    ...po,
-    lineItems: po.lineItems.map((li: any) => ({
-      ...li,
-      landedUnitCost: li.unitCost.plus(li.allocatedLandedCost ?? 0),
-    })),
-  }));
-  return serializeDecimals({
-    orders: ordersWithLandedCost,
-    suppliers,
-    locations,
-    variants,
+  const list = await listPurchaseOrders(db, {
+    view,
+    search,
+    page: readPage(url.searchParams.get("page")),
+    today: profile.today,
   });
+
+  return {
+    list,
+    search,
+    views: PURCHASE_ORDER_VIEWS.map((key) => ({
+      key,
+      label: PURCHASE_ORDER_VIEW_LABELS[key],
+      count: list.counts[key],
+    })),
+    locationNames: Object.fromEntries(locations.map((l) => [l.gid, l.name])),
+  };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant({ request });
-  const shop = tenant.myshopifyDomain;
-  const form = await request.formData();
-  const intent = form.get("intent") as string;
-
-  if (intent === "create") {
-    const supplierId = form.get("supplierId") as string;
-    const supplier = await db.supplier.findFirst({
-      where: { id: supplierId },
-    });
-    if (!supplier) return { error: "Supplier not found" };
-
-    await db.purchaseOrder.create({
-      data: {
-        shop,
-        supplierId: supplier.id,
-        locationId: form.get("locationId") as string,
-        currency: (form.get("currency") as string) || "USD",
-        exchangeRate: form.get("exchangeRate")
-          ? parseFloat(form.get("exchangeRate") as string)
-          : null,
-        freightCost: form.get("freightCost")
-          ? parseFloat(form.get("freightCost") as string)
-          : null,
-        customsCost: form.get("customsCost")
-          ? parseFloat(form.get("customsCost") as string)
-          : null,
-        landedCostMethod:
-          (form.get("landedCostMethod") as "WEIGHT" | "VOLUME" | "COST") ||
-          "COST",
-        status: "DRAFT",
-        draftedAt: new Date(),
-      },
-    });
-    return { ok: true };
-  }
-
-  if (intent === "addLine") {
-    const poId = form.get("poId") as string;
-    const qty = parseInt(form.get("quantity") as string, 10);
-    const variantId = form.get("variantId") as string;
-    const manualCost = form.get("unitCost") as string;
-
-    const po = await db.purchaseOrder.findFirst({
-      where: { id: poId },
-    });
-    if (!po) return { error: "Purchase order not found" };
-
-    // Tiered pricing from Module 1 is the default; a manual entry overrides it.
-    const tierCost = await resolveTieredUnitCost(db, po.supplierId, variantId, qty);
-    const unitCost = manualCost
-      ? parseFloat(manualCost)
-      : Number(tierCost ?? 0);
-
-    const mapping = await db.supplierSkuMapping.findUnique({
-      where: {
-        supplierId_shopifyVariantId: {
-          supplierId: po.supplierId,
-          shopifyVariantId: variantId,
-        },
-      },
-    });
-    const cache = await db.shopifyVariantCache.findUnique({
-      where: {
-        shop_shopifyVariantId: {
-          shop,
-          shopifyVariantId: variantId,
-        },
-      },
-    });
-
-    await db.pOLineItem.create({
-      data: {
-        purchaseOrderId: po.id,
-        shopifyVariantId: variantId,
-        vendorSku: mapping?.vendorSku,
-        orderedQty: qty,
-        unitCost,
-        manualCostOverride: Boolean(manualCost),
-        weight: cache?.weight,
-      },
-    });
-    return { ok: true };
-  }
-
-  if (intent === "updateQty") {
-    const lineItemId = form.get("lineItemId") as string;
-    const qty = parseInt(form.get("quantity") as string, 10);
-    const line = await db.pOLineItem.findFirst({
-      where: { id: lineItemId },
-    });
-    if (!line) return { error: "PO line not found" };
-    await recalculatePOLineCost(db, line.id, qty);
-    return { ok: true };
-  }
-
-  if (intent === "order") {
-    const poId = form.get("poId") as string;
-    const po = await db.purchaseOrder.findFirst({
-      where: { id: poId },
-    });
-    if (!po) return { error: "Purchase order not found" };
-    await applyLandedCostsToPO(db, po.id);
-    await db.purchaseOrder.update({
-      where: { id: po.id },
-      data: { status: "ORDERED", orderedAt: new Date() },
-    });
-    return { ok: true };
-  }
-
-  if (intent === "cancel") {
-    const poId = form.get("poId") as string;
-    const result = await db.purchaseOrder.updateMany({
-      where: { id: poId },
-      data: { status: "CANCELLED" },
-    });
-    if (result.count === 0) return { error: "Purchase order not found" };
-    return { ok: true };
-  }
-
-  if (intent === "receive") {
-    // Current receivePartialPO updates app DB only — it does not call Shopify.
-    // Keep the receipt-write kill switch so Shopify inventory sync cannot be
-    // enabled later without an explicit Phase 4 release-gate decision.
-    if (!isInventoryWriteEnabled("receiptWrites")) {
-      return { error: RECEIVING_OFF_MESSAGE };
-    }
-
-    const poId = form.get("poId") as string;
-    const lineItemId = form.get("lineItemId") as string;
-    const qty = parseInt(form.get("receivedQty") as string, 10);
-    const po = await db.purchaseOrder.findFirst({
-      where: { id: poId },
-      include: { lineItems: { where: { id: lineItemId } } },
-    });
-    if (!po || po.lineItems.length === 0) {
-      return { error: "Purchase order or line not found" };
-    }
-
-    await receivePartialPO(db, po.id, [{ lineItemId, receivedQty: qty }]);
-
-    const refreshed = await db.purchaseOrder.findFirst({
-      where: { id: po.id },
-    });
-    if (refreshed?.status === "RECEIVED") {
-      await recordLeadTimeSnapshot(db, refreshed.supplierId, po.id);
-    }
-    return { ok: true };
-  }
-
-  return { ok: false };
-};
-
-const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | "neutral"> = {
-  DRAFT: "info",
-  ORDERED: "warning",
-  PARTIAL: "warning",
-  RECEIVED: "success",
-  CANCELLED: "critical",
-};
+function listHref(view: string, search: string, page = 1): string {
+  const params = new URLSearchParams({ view });
+  if (search) params.set("q", search);
+  if (page > 1) params.set("page", String(page));
+  return `/app/purchase-orders?${params.toString()}`;
+}
 
 export default function PurchaseOrders() {
-  const { orders, suppliers, locations, variants } =
-    useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const isSubmitting = navigation.state === "submitting";
-  const actionError =
-    actionData && "error" in actionData ? actionData.error : null;
-
-  const variantTitle = (id: string) =>
-    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
+  const { list, search, views, locationNames } = useLoaderData<typeof loader>();
+  const viewLabel = PURCHASE_ORDER_VIEW_LABELS[list.view].toLowerCase();
 
   return (
-    <s-page heading="Purchase Orders">
-      {actionError && (
-        <s-banner tone="critical" heading="Purchase order not updated">
-          <s-paragraph>{actionError}</s-paragraph>
-        </s-banner>
-      )}
+    <s-page heading="Purchase orders">
+      <s-button
+        slot="primary-action"
+        variant="primary"
+        href="/app/purchase-orders/new"
+      >
+        Create purchase order
+      </s-button>
 
-      <s-section heading="Create purchase order">
-        <Form method="post">
-          <input type="hidden" name="intent" value="create" />
-          <s-stack direction="block" gap="base">
-            <s-select label="Supplier" name="supplierId" required>
-              {suppliers.map((s: any) => (
-                <s-option key={s.id} value={s.id}>
-                  {s.name}
-                </s-option>
-              ))}
-            </s-select>
-            <s-select label="Destination location" name="locationId" required>
-              {locations.map((l) => (
-                <s-option key={l.id} value={l.id}>
-                  {l.name}
-                </s-option>
-              ))}
-            </s-select>
-            <s-stack direction="inline" gap="base">
-              <s-text-field label="Currency" name="currency" value="USD" />
-              <s-number-field
-                label="Exchange rate"
-                name="exchangeRate"
-                placeholder="1.0"
-              />
-            </s-stack>
-            <s-stack direction="inline" gap="base">
-              <s-number-field
-                label="Freight cost"
-                name="freightCost"
-                placeholder="0.00"
-              />
-              <s-number-field
-                label="Customs / duties"
-                name="customsCost"
-                placeholder="0.00"
-              />
-              <s-select label="Landed cost allocation" name="landedCostMethod">
-                <s-option value="COST">By line cost</s-option>
-                <s-option value="WEIGHT">By weight</s-option>
-                <s-option value="VOLUME">By volume</s-option>
-              </s-select>
-            </s-stack>
-            <s-button
-              type="submit"
-              variant="primary"
-              {...(isSubmitting ? { loading: true } : {})}
-            >
-              Create draft PO
-            </s-button>
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="small-200">
+            {views.map((view) => (
+              <s-button
+                key={view.key}
+                href={listHref(view.key, search)}
+                variant={view.key === list.view ? "primary" : "tertiary"}
+              >
+                {view.label} ({view.count})
+              </s-button>
+            ))}
           </s-stack>
-        </Form>
-      </s-section>
 
-      {orders.length === 0 ? (
-        <s-section>
-          <s-paragraph>
-            No purchase orders yet. Create one above, or generate one from the{" "}
-            <s-link href="/app/buying-table">Buying Table</s-link>.
-          </s-paragraph>
-        </s-section>
-      ) : (
-        orders.map((po: any) => (
-          <s-section
-            key={po.id}
-            heading={`${po.supplier?.name ?? "Unresolved supplier"} — ${po.poNumber ?? po.id.slice(-6).toUpperCase()}`}
-          >
-            <s-stack direction="block" gap="base">
-              <s-stack direction="inline" gap="base">
-                <s-badge tone={STATUS_TONE[po.status] ?? "neutral"}>
-                  {po.status}
-                </s-badge>
-                <s-text>
-                  {po.currency}
-                  {po.exchangeRate
-                    ? ` @ ${formatDecimal(po.exchangeRate)}`
-                    : ""}
-                  {po.freightCost
-                    ? ` · Freight ${formatMoney(po.freightCost, po.currency)}`
-                    : ""}
-                  {po.customsCost
-                    ? ` · Customs ${formatMoney(po.customsCost, po.currency)}`
-                    : ""}
-                  {` · Allocation: ${po.landedCostMethod}`}
-                </s-text>
-                <s-link
-                  href={`/app/purchase-orders/${po.id}/receiver`}
-                  target="_blank"
-                >
-                  Receiver PDF
-                </s-link>
-              </s-stack>
-
-              {po.lineItems.length > 0 && (
-                <s-table>
-                  <s-table-header-row>
-                    <s-table-header>Variant</s-table-header>
-                    <s-table-header format="numeric">Ordered</s-table-header>
-                    <s-table-header format="numeric">Received</s-table-header>
-                    <s-table-header format="currency">Unit cost</s-table-header>
-                    <s-table-header format="currency">Landed unit cost</s-table-header>
-                    <s-table-header>Actions</s-table-header>
-                  </s-table-header-row>
-                  <s-table-body>
-                    {po.lineItems.map((li: any) => (
-                      <s-table-row key={li.id}>
-                        <s-table-cell>
-                          {variantTitle(li.shopifyVariantId)}
-                          {li.vendorSku ? ` (${li.vendorSku})` : ""}
-                        </s-table-cell>
-                        <s-table-cell>{li.orderedQty}</s-table-cell>
-                        <s-table-cell>{li.receivedQty}</s-table-cell>
-                        <s-table-cell>
-                          {formatMoney(li.unitCost, po.currency, {
-                            maximumFractionDigits: 4,
-                          })}
-                          {li.manualCostOverride ? " (manual)" : ""}
-                        </s-table-cell>
-                        <s-table-cell>
-                          {formatMoney(li.landedUnitCost, po.currency)}
-                        </s-table-cell>
-                        <s-table-cell>
-                          {po.status === "DRAFT" && (
-                            <Form method="post">
-                              <input type="hidden" name="intent" value="updateQty" />
-                              <input type="hidden" name="lineItemId" value={li.id} />
-                              <s-stack direction="inline" gap="small-200">
-                                <s-number-field
-                                  label="Qty"
-                                  labelAccessibilityVisibility="exclusive"
-                                  name="quantity"
-                                  value={String(li.orderedQty)}
-                                  min={1}
-                                />
-                                <s-button type="submit" variant="secondary">
-                                  Update
-                                </s-button>
-                              </s-stack>
-                            </Form>
-                          )}
-                          {(po.status === "ORDERED" || po.status === "PARTIAL") &&
-                            li.receivedQty < li.orderedQty && (
-                              <Form method="post">
-                                <input type="hidden" name="intent" value="receive" />
-                                <input type="hidden" name="poId" value={po.id} />
-                                <input type="hidden" name="lineItemId" value={li.id} />
-                                <s-stack direction="inline" gap="small-200">
-                                  <s-number-field
-                                    label="Receive qty"
-                                    labelAccessibilityVisibility="exclusive"
-                                    name="receivedQty"
-                                    value={String(li.orderedQty - li.receivedQty)}
-                                    min={1}
-                                    max={li.orderedQty - li.receivedQty}
-                                  />
-                                  <s-button type="submit" variant="secondary">
-                                    Receive
-                                  </s-button>
-                                </s-stack>
-                              </Form>
-                            )}
-                        </s-table-cell>
-                      </s-table-row>
-                    ))}
-                  </s-table-body>
-                </s-table>
+          <Form method="get" onKeyDown={submitOnEnter}>
+            <input type="hidden" name="view" value={list.view} />
+            <s-stack direction="inline" gap="small-200" alignItems="end">
+              <s-search-field
+                label="Search purchase orders"
+                labelAccessibilityVisibility="exclusive"
+                name="q"
+                value={search}
+                placeholder="PO number, supplier, supplier order or invoice number"
+              />
+              <s-button type="submit">Search</s-button>
+              {search && (
+                <s-button href={listHref(list.view, "")} variant="tertiary">
+                  Clear
+                </s-button>
               )}
-
-              {po.status === "DRAFT" && (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="addLine" />
-                  <input type="hidden" name="poId" value={po.id} />
-                  <s-stack direction="inline" gap="base">
-                    <s-select label="Variant" name="variantId" required>
-                      {variants.map((v: any) => (
-                        <s-option
-                          key={v.shopifyVariantId}
-                          value={v.shopifyVariantId}
-                        >
-                          {v.title}
-                        </s-option>
-                      ))}
-                    </s-select>
-                    <s-number-field
-                      label="Quantity"
-                      name="quantity"
-                      value="1"
-                      min={1}
-                      required
-                    />
-                    <s-number-field
-                      label="Unit cost override"
-                      name="unitCost"
-                      placeholder="Auto (tiered)"
-                    />
-                    <s-button type="submit" variant="secondary">
-                      Add line
-                    </s-button>
-                  </s-stack>
-                </Form>
-              )}
-
-              <s-stack direction="inline" gap="base">
-                {po.status === "DRAFT" && po.lineItems.length > 0 && (
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="order" />
-                    <input type="hidden" name="poId" value={po.id} />
-                    <s-button type="submit" variant="primary">
-                      Mark ordered (locks landed costs)
-                    </s-button>
-                  </Form>
-                )}
-                {(po.status === "DRAFT" || po.status === "ORDERED") && (
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="cancel" />
-                    <input type="hidden" name="poId" value={po.id} />
-                    <s-button type="submit" tone="critical" variant="tertiary">
-                      Cancel PO
-                    </s-button>
-                  </Form>
-                )}
-              </s-stack>
             </s-stack>
-          </s-section>
-        ))
-      )}
+          </Form>
+
+          {list.items.length === 0 ? (
+            <s-paragraph>
+              {search
+                ? `No ${viewLabel} purchase orders match “${search}”.`
+                : list.view === "open"
+                  ? "No open purchase orders. Create one to order stock from a supplier."
+                  : `No ${viewLabel} purchase orders.`}
+            </s-paragraph>
+          ) : (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">
+                  Purchase order
+                </s-table-header>
+                <s-table-header>Supplier</s-table-header>
+                <s-table-header listSlot="secondary">Status</s-table-header>
+                <s-table-header>Destination</s-table-header>
+                <s-table-header>Expected</s-table-header>
+                <s-table-header format="numeric">Received</s-table-header>
+                <s-table-header format="currency">Total</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {list.items.map((po) => (
+                  <s-table-row key={po.id}>
+                    <s-table-cell>
+                      <s-link href={`/app/purchase-orders/${po.id}`}>
+                        {po.poNumber}
+                      </s-link>
+                    </s-table-cell>
+                    <s-table-cell>{po.supplierName}</s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="inline" gap="small-200">
+                        <s-badge tone={STATUS_TONES[po.status]}>
+                          {STATUS_LABELS[po.status]}
+                        </s-badge>
+                        {po.archived && <s-badge>Archived</s-badge>}
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      {locationNames[po.locationGid] ?? "Unknown location"}
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="inline" gap="small-200">
+                        <s-text>{formatDay(po.expectedOn)}</s-text>
+                        {po.overdue && (
+                          <s-badge tone="critical">Overdue</s-badge>
+                        )}
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      {po.receivedUnits} of {po.orderedUnits}
+                    </s-table-cell>
+                    <s-table-cell>
+                      {formatMoney(po.total, po.currency)}
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          )}
+
+          {(list.page > 1 || list.hasNextPage) && (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              {list.page > 1 && (
+                <s-button href={listHref(list.view, search, list.page - 1)}>
+                  Previous
+                </s-button>
+              )}
+              <s-text color="subdued">Page {list.page}</s-text>
+              {list.hasNextPage && (
+                <s-button href={listHref(list.view, search, list.page + 1)}>
+                  Next
+                </s-button>
+              )}
+            </s-stack>
+          )}
+        </s-stack>
+      </s-section>
     </s-page>
   );
 }

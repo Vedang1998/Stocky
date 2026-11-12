@@ -35,6 +35,19 @@ export const STATUS_LABELS: Record<PurchaseOrderStatus, string> = {
   CANCELLED: "Cancelled",
 };
 
+export const STATUS_TONES: Record<
+  PurchaseOrderStatus,
+  "info" | "success" | "warning" | "critical" | "neutral"
+> = {
+  DRAFT: "info",
+  SENT: "info",
+  ORDERED: "warning",
+  PARTIAL: "warning",
+  RECEIVED: "success",
+  CLOSED: "neutral",
+  CANCELLED: "critical",
+};
+
 export type PurchaseOrderAction =
   | "markSent"
   | "markOrdered"

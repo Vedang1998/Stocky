@@ -255,3 +255,70 @@ export async function findVariantGidsByCode(
     });
   return rows.map((row) => row.shopifyGid);
 }
+
+const MAX_SEARCH_LENGTH = 100;
+const PRODUCT_TITLE_MATCH_LIMIT = 200;
+export const VARIANT_SEARCH_LIMIT = 25;
+
+const CATALOG_VARIANT_INCLUDE = { product: true, inventoryItems: true } as const;
+
+function byDisplayName(a: VariantSnapshot, b: VariantSnapshot): number {
+  return (
+    variantDisplayName(a).localeCompare(variantDisplayName(b)) ||
+    a.variantGid.localeCompare(b.variantGid)
+  );
+}
+
+/**
+ * Live variants for a typed search: SKU, barcode, product title or variant
+ * title containing the text. Variants whose SKU or barcode is exactly the
+ * text come first, so a scanned code puts its product at the top.
+ */
+export async function searchVariants(
+  db: TenantDb,
+  search: string,
+  limit: number = VARIANT_SEARCH_LIMIT,
+): Promise<{ variants: VariantSnapshot[]; hasMore: boolean }> {
+  const text = search.trim().slice(0, MAX_SEARCH_LENGTH);
+  if (!text) return { variants: [], hasMore: false };
+
+  const equals = { equals: text, mode: "insensitive" as const };
+  const contains = { contains: text, mode: "insensitive" as const };
+
+  const exactRows: CatalogVariantRow[] = await db.shopifyVariantFact.findMany({
+    where: { existenceState: "LIVE", OR: [{ sku: equals }, { barcode: equals }] },
+    include: CATALOG_VARIANT_INCLUDE,
+    orderBy: { shopifyGid: "asc" },
+    take: limit + 1,
+  });
+  const exact = exactRows.slice(0, limit).map(fromCatalog).sort(byDisplayName);
+  if (exactRows.length > limit) return { variants: exact, hasMore: true };
+
+  const products: Array<{ shopifyGid: string }> =
+    await db.shopifyProductFact.findMany({
+      where: { existenceState: "LIVE", title: contains },
+      select: { shopifyGid: true },
+      orderBy: { shopifyGid: "asc" },
+      take: PRODUCT_TITLE_MATCH_LIMIT,
+    });
+  const room = limit - exact.length;
+  const otherRows: CatalogVariantRow[] = await db.shopifyVariantFact.findMany({
+    where: {
+      existenceState: "LIVE",
+      shopifyGid: { notIn: exact.map((variant) => variant.variantGid) },
+      OR: [
+        { sku: contains },
+        { barcode: contains },
+        { title: contains },
+        ...(products.length > 0
+          ? [{ shopifyProductGid: { in: products.map((p) => p.shopifyGid) } }]
+          : []),
+      ],
+    },
+    include: CATALOG_VARIANT_INCLUDE,
+    orderBy: { shopifyGid: "asc" },
+    take: room + 1,
+  });
+  const others = otherRows.slice(0, room).map(fromCatalog).sort(byDisplayName);
+  return { variants: [...exact, ...others], hasMore: otherRows.length > room };
+}
