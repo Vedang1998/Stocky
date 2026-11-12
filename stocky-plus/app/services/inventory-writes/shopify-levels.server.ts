@@ -1,12 +1,16 @@
 import { shopifyGraphQL, type AdminGraphQLClient } from "../shopify-gql.server";
 
-const AVAILABLE_QUANTITIES_QUERY = `#graphql
-  query ProPoInventoryAvailable($ids: [ID!]!, $locationId: ID!) {
+const LEVEL_QUANTITIES_QUERY = `#graphql
+  query ProPoInventoryLevelQuantities(
+    $ids: [ID!]!
+    $locationId: ID!
+    $names: [String!]!
+  ) {
     nodes(ids: $ids) {
       ... on InventoryItem {
         id
         inventoryLevel(locationId: $locationId) {
-          quantities(names: ["available"]) {
+          quantities(names: $names) {
             name
             quantity
           }
@@ -17,7 +21,10 @@ const AVAILABLE_QUANTITIES_QUERY = `#graphql
 
 const ITEMS_PER_REQUEST = 100;
 
-interface AvailableQuantitiesData {
+/** The inventory states this app reads live: sellable units, and units physically at the location. */
+export type LevelQuantityName = "available" | "on_hand";
+
+interface LevelQuantitiesData {
   nodes: Array<{
     id?: string;
     inventoryLevel?: {
@@ -27,39 +34,52 @@ interface AvailableQuantitiesData {
 }
 
 /**
- * Shopify's current `available` quantity for each inventory item at one
- * location, read live. An item maps to null when it is not stocked at the
- * location (or no longer exists), and is never reported as 0 in that case.
+ * Shopify's current quantity for each inventory item at one location, read
+ * live. An item maps to null when it is not stocked at the location (or no
+ * longer exists), and is never reported as 0 in that case.
  */
-export type ReadAvailableQuantities = (
+export type ReadLevelQuantities = (
   locationId: string,
   inventoryItemIds: readonly string[],
 ) => Promise<Map<string, number | null>>;
 
-export function createAvailableQuantityReader(
+export type ReadAvailableQuantities = ReadLevelQuantities;
+
+export function createLevelQuantityReader(
   admin: AdminGraphQLClient,
-): ReadAvailableQuantities {
+  name: LevelQuantityName,
+): ReadLevelQuantities {
   return async (locationId, inventoryItemIds) => {
     const ids = [...new Set(inventoryItemIds)];
     const quantities = new Map<string, number | null>(
       ids.map((id) => [id, null]),
     );
     for (let start = 0; start < ids.length; start += ITEMS_PER_REQUEST) {
-      const result = await shopifyGraphQL<AvailableQuantitiesData>(
+      const result = await shopifyGraphQL<LevelQuantitiesData>(
         admin,
-        AVAILABLE_QUANTITIES_QUERY,
-        { ids: ids.slice(start, start + ITEMS_PER_REQUEST), locationId },
+        LEVEL_QUANTITIES_QUERY,
+        {
+          ids: ids.slice(start, start + ITEMS_PER_REQUEST),
+          locationId,
+          names: [name],
+        },
       );
       for (const node of result.data?.nodes ?? []) {
         if (!node?.id || !quantities.has(node.id)) continue;
-        const available = node.inventoryLevel?.quantities.find(
-          (q) => q.name === "available",
+        const level = node.inventoryLevel?.quantities.find(
+          (q) => q.name === name,
         );
-        if (available && Number.isInteger(available.quantity)) {
-          quantities.set(node.id, available.quantity);
+        if (level && Number.isInteger(level.quantity)) {
+          quantities.set(node.id, level.quantity);
         }
       }
     }
     return quantities;
   };
+}
+
+export function createAvailableQuantityReader(
+  admin: AdminGraphQLClient,
+): ReadAvailableQuantities {
+  return createLevelQuantityReader(admin, "available");
 }

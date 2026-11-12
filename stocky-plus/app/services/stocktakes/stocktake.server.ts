@@ -16,41 +16,183 @@ import {
   type DocumentLineProblem,
   type InventoryDocument,
 } from "../inventory-writes/settle.server";
+import {
+  createLevelQuantityReader,
+  type ReadLevelQuantities,
+} from "../inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../inventory-writes/types";
 import {
-  findVariantInventoryItems,
+  findVariantsByCode,
+  findVariantsById,
+  findVariantsByInventoryItem,
   ledgerVariantId,
+  variantsMatchingCode,
+  type CatalogVariant,
 } from "../inventory-writes/variant-items.server";
 
-interface StocktakeLine {
-  id: string;
-  shopifyVariantId: string;
-  expectedQty: number;
-  countedQty: number | null;
-}
+export type StocktakeStatus =
+  "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+export type StocktakeScope = "FULL" | "PARTIAL";
+/** The Shopify quantity the expected figures were frozen from. */
+export type StocktakeQuantityBasis = "AVAILABLE" | "ON_HAND";
+export type StocktakeCountSource = "MANUAL" | "SCAN" | "ZERO_FILL";
+/**
+ * How a line is settled when Shopify's quantity moved while the count was
+ * open: the units were counted before the movement (the variance is measured
+ * from the quantity frozen at the start) or after it (from the quantity
+ * Shopify showed when the movement was found).
+ */
+export type MovementResolution = "COUNTED_BEFORE" | "COUNTED_AFTER";
 
-interface StocktakeWithLines {
-  id: string;
-  locationId: string;
-  status: "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
-  lineItems: StocktakeLine[];
+export const STOCKTAKE_SOURCE_TYPE = "Stocktake";
+export const MAX_COUNTED_QUANTITY = 1_000_000;
+export const MAX_STOCKTAKE_NAME_LENGTH = 120;
+/** Items that one pasted list may add to a count. */
+export const MAX_ADDED_ITEMS = 500;
+export const MAX_ITEM_LIST_LENGTH = 50_000;
+const MAX_CODE_LENGTH = 191;
+
+/** Rows written per statement when a count sheet is created. */
+const LINE_INSERT_CHUNK = 1_000;
+const LOOKUP_CHUNK = 2_000;
+/** Variance lines checked against Shopify live at completion; the rest use synced quantities. */
+const LIVE_MOVEMENT_CHECK_LIMIT = 2_000;
+/** Lines flagged for movement review, or reviewed, in one request. */
+const MOVEMENT_BATCH_LIMIT = 500;
+
+export interface StocktakeOptions extends ExecuteInventoryOperationOptions {
+  /** Live read of Shopify's quantities for the movement check; defaults to the Admin API. */
+  readQuantities?: ReadLevelQuantities;
 }
 
 export type StocktakeActionResult = { ok: true } | { ok: false; error: string };
 
+export type CreateStocktakeResult =
+  | {
+      ok: true;
+      stocktakeId: string;
+      lineCount: number;
+      /** Stocked items left off the sheet because Shopify's quantity is not synced yet. */
+      skippedUnsynced: number;
+      /** Stocked items left off the sheet because no catalog variant is linked to them. */
+      skippedUnlinked: number;
+    }
+  | { ok: false; error: string };
+
+export type StocktakeScanResult =
+  | {
+      ok: true;
+      lineId: string;
+      title: string;
+      countedQty: number;
+      /** True when the scan put the item on the count sheet. */
+      added: boolean;
+    }
+  | { ok: false; error: string };
+
+export type AddStocktakeItemsResult =
+  | { ok: true; added: number; alreadyOnCount: number }
+  | { ok: false; error: string; details: string[] };
+
 export type StocktakeLineProblem = DocumentLineProblem;
+
+/** What stands between a count and its completion, when it is the merchant's call. */
+export type CompletionBlocker = "UNCOUNTED" | "MOVEMENT";
 
 export type CompleteStocktakeResult =
   | { ok: true; alreadyCompleted: boolean }
-  | { ok: false; error: string; problems: StocktakeLineProblem[] };
+  | {
+      ok: false;
+      error: string;
+      problems: StocktakeLineProblem[];
+      blocker: CompletionBlocker | null;
+    };
+
+export type CancelStocktakeResult =
+  { ok: true; alreadyCancelled: boolean } | { ok: false; error: string };
+
+interface StocktakeRow {
+  id: string;
+  locationId: string;
+  status: StocktakeStatus;
+  scope: StocktakeScope;
+  quantityBasis: StocktakeQuantityBasis;
+}
+
+interface CountLine {
+  id: string;
+  shopifyVariantId: string;
+  expectedQty: number;
+  countedQty: number | null;
+  movementDetectedQty: number | null;
+  movementBaselineQty: number | null;
+  movementReviewedAt: Date | null;
+}
+
+const STOCKTAKE_SELECT = {
+  id: true,
+  locationId: true,
+  status: true,
+  scope: true,
+  quantityBasis: true,
+} as const;
+
+const COUNT_LINE_SELECT = {
+  id: true,
+  shopifyVariantId: true,
+  expectedQty: true,
+  countedQty: true,
+  movementDetectedQty: true,
+  movementBaselineQty: true,
+  movementReviewedAt: true,
+} as const;
+
+const NO_MOVEMENT = {
+  movementDetectedQty: null,
+  movementBaselineQty: null,
+  movementReviewedAt: null,
+} as const;
 
 const CLOSED_MESSAGE =
   "This count is closed. Its lines can no longer be changed.";
+const NOT_FOUND_MESSAGE = "Stocktake not found";
+const INACTIVE_LOCATION_MESSAGE =
+  "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.";
+
+function chunked<T>(values: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let start = 0; start < values.length; start += size) {
+    chunks.push(values.slice(start, start + size));
+  }
+  return chunks;
+}
+
+const clock = (options: { now?: () => Date }) =>
+  options.now ?? (() => new Date());
+
+/**
+ * The change a counted line stands for. A line counted after stock moved is
+ * measured from the quantity Shopify showed when the movement was found.
+ */
+export function stocktakeLineDelta(line: {
+  expectedQty: number;
+  countedQty: number | null;
+  movementBaselineQty: number | null;
+}): number | null {
+  if (line.countedQty === null) return null;
+  return line.countedQty - (line.movementBaselineQty ?? line.expectedQty);
+}
+
+const awaitsMovementReview = (line: CountLine) =>
+  line.countedQty !== null &&
+  line.movementDetectedQty !== null &&
+  line.movementReviewedAt === null;
 
 /**
  * Hold the stocktake row for the rest of the transaction, provided the count
- * is still open. Completion takes the same lock before it closes the count,
- * so a line saved under it is always seen by the closing check.
+ * is still open. Completion and cancellation take the same lock before they
+ * close the count, so a line saved under it is always seen by the closing
+ * check.
  */
 async function lockOpenStocktake(
   tx: TenantDb,
@@ -63,67 +205,300 @@ async function lockOpenStocktake(
   return locked.count === 1;
 }
 
-export const MAX_COUNTED_QUANTITY = 1_000_000;
-const MAX_NAME_LENGTH = 120;
+async function findStocktake(
+  db: TenantDb,
+  stocktakeId: string,
+): Promise<StocktakeRow | null> {
+  return (await db.stocktake.findFirst({
+    where: { id: stocktakeId },
+    select: STOCKTAKE_SELECT,
+  })) as StocktakeRow | null;
+}
+
+async function loadCountLines(
+  db: TenantDb,
+  stocktakeId: string,
+): Promise<CountLine[]> {
+  return (await db.stocktakeLineItem.findMany({
+    where: { stocktakeId },
+    select: COUNT_LINE_SELECT,
+    orderBy: { id: "asc" },
+  })) as CountLine[];
+}
+
+interface StockedLevel {
+  inventoryItemGid: string;
+  availableQuantity: number | null;
+  onHandQuantity: number | null;
+}
+
+const basisQuantity = (level: StockedLevel, basis: StocktakeQuantityBasis) =>
+  basis === "ON_HAND" ? level.onHandQuantity : level.availableQuantity;
+
+const basisLabel = (basis: StocktakeQuantityBasis) =>
+  basis === "ON_HAND" ? "on-hand" : "available";
 
 /**
- * Start a count at one location. Expected quantities are frozen from the
- * latest inventory snapshot of every variant stocked there.
+ * Synced inventory levels of live items actively stocked at a location, keyed
+ * by inventory item. Pass `inventoryItemIds` to look up only those items.
+ */
+async function readStockedLevels(
+  db: TenantDb,
+  locationId: string,
+  inventoryItemIds?: readonly string[],
+): Promise<Map<string, StockedLevel>> {
+  const select = {
+    inventoryItemGid: true,
+    availableQuantity: true,
+    onHandQuantity: true,
+  } as const;
+  const base = {
+    locationGid: locationId,
+    existenceState: "LIVE",
+    isActive: true,
+  } as const;
+  const levels = new Map<string, StockedLevel>();
+  const collect = (rows: StockedLevel[]) => {
+    for (const row of rows) levels.set(row.inventoryItemGid, row);
+  };
+  if (!inventoryItemIds) {
+    collect(
+      (await db.shopifyInventoryLevelFact.findMany({
+        where: base,
+        select,
+      })) as StockedLevel[],
+    );
+    return levels;
+  }
+  for (const part of chunked([...new Set(inventoryItemIds)], LOOKUP_CHUNK)) {
+    collect(
+      (await db.shopifyInventoryLevelFact.findMany({
+        where: { ...base, inventoryItemGid: { in: part } },
+        select,
+      })) as StockedLevel[],
+    );
+  }
+  return levels;
+}
+
+/** The given inventory items that are live and tracked for inventory in Shopify. */
+async function readTrackedItemIds(
+  db: TenantDb,
+  inventoryItemIds: readonly string[],
+): Promise<Set<string>> {
+  const tracked = new Set<string>();
+  for (const part of chunked([...new Set(inventoryItemIds)], LOOKUP_CHUNK)) {
+    const rows = (await db.shopifyInventoryItemFact.findMany({
+      where: {
+        shopifyGid: { in: part },
+        tracked: true,
+        existenceState: "LIVE",
+      },
+      select: { shopifyGid: true },
+    })) as Array<{ shopifyGid: string }>;
+    for (const row of rows) tracked.add(row.shopifyGid);
+  }
+  return tracked;
+}
+
+/**
+ * Start a count at one location.
+ *
+ * A full count lists every tracked item stocked at the location; a partial
+ * count starts empty and takes the items that are scanned or added. Expected
+ * quantities are frozen from Shopify's synced on-hand quantities: the units
+ * physically at the location, which is what a person counts. Orders that are
+ * placed but not yet fulfilled do not change it.
  */
 export async function createStocktake(
   db: TenantDb,
-  input: { shop: string; locationId: string | null; name: string | null },
-): Promise<StocktakeActionResult> {
+  input: {
+    shop: string;
+    locationId: string | null;
+    name: string | null;
+    scope?: unknown;
+    blind?: boolean;
+    actor?: InventoryActor | null;
+  },
+  options: { now?: () => Date } = {},
+): Promise<CreateStocktakeResult> {
   if (!input.locationId) {
     return { ok: false, error: "Choose the location to count." };
   }
-  const active = await findActiveLocationIds(db, [input.locationId]);
-  if (!active.has(input.locationId)) {
-    return {
-      ok: false,
-      error:
-        "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.",
-    };
+  const scope = input.scope ?? "FULL";
+  if (scope !== "FULL" && scope !== "PARTIAL") {
+    return { ok: false, error: "Choose a full or a partial count." };
   }
   const name = input.name?.trim() ?? "";
-  if (name.length > MAX_NAME_LENGTH) {
+  if (name.length > MAX_STOCKTAKE_NAME_LENGTH) {
     return {
       ok: false,
-      error: `The name can be at most ${MAX_NAME_LENGTH} characters.`,
+      error: `The name can be at most ${MAX_STOCKTAKE_NAME_LENGTH} characters.`,
     };
   }
+  const active = await findActiveLocationIds(db, [input.locationId]);
+  if (!active.has(input.locationId)) {
+    return { ok: false, error: INACTIVE_LOCATION_MESSAGE };
+  }
 
-  const snapshots = (await db.inventorySnapshot.findMany({
-    where: { locationId: input.locationId },
-    orderBy: { snapshotDate: "desc" },
-    distinct: ["shopifyVariantId"],
-  })) as Array<{ shopifyVariantId: string; quantityAvailable: number }>;
+  const lines: Array<{ shopifyVariantId: string; expectedQty: number }> = [];
+  let skippedUnsynced = 0;
+  let skippedUnlinked = 0;
+  if (scope === "FULL") {
+    const levels = await readStockedLevels(db, input.locationId);
+    const tracked = await readTrackedItemIds(db, [...levels.keys()]);
+    const variants = await findVariantsByInventoryItem(db, [...tracked]);
+    for (const itemId of tracked) {
+      const variant = variants.get(itemId);
+      const onHand = levels.get(itemId)!.onHandQuantity;
+      if (!variant) {
+        skippedUnlinked += 1;
+      } else if (onHand === null) {
+        skippedUnsynced += 1;
+      } else {
+        lines.push({
+          shopifyVariantId: variant.shopifyVariantId,
+          expectedQty: onHand,
+        });
+      }
+    }
+    if (lines.length === 0) {
+      return {
+        ok: false,
+        error:
+          skippedUnsynced + skippedUnlinked > 0
+            ? "Shopify's on-hand quantities for this location are not synced yet. Run a sync from the dashboard, then start the count again."
+            : "No tracked items are stocked at this location in Shopify, so there is nothing to count. To count specific items, start a partial count.",
+      };
+    }
+    lines.sort((a, b) => a.shopifyVariantId.localeCompare(b.shopifyVariantId));
+  }
 
-  const startedAt = new Date();
-  await db.stocktake.create({
-    data: {
-      shop: input.shop,
-      locationId: input.locationId,
-      name: name || `Count ${startedAt.toISOString().slice(0, 10)}`,
-      status: "IN_PROGRESS",
-      startedAt,
-      lineItems: {
-        create: snapshots.map((snapshot) => ({
-          shopifyVariantId: snapshot.shopifyVariantId,
-          expectedQty: snapshot.quantityAvailable,
-        })),
+  const startedAt = clock(options)();
+  const stocktakeId = await db.$transaction(async (tx: TenantDb) => {
+    const created = (await tx.stocktake.create({
+      data: {
+        shop: input.shop,
+        locationId: input.locationId,
+        name: name || `Count ${startedAt.toISOString().slice(0, 10)}`,
+        status: "IN_PROGRESS",
+        scope,
+        quantityBasis: "ON_HAND",
+        blind: input.blind === true,
+        startedAt,
+        startedByUserId: input.actor?.shopifyUserId ?? null,
       },
-    },
+      select: { id: true },
+    })) as { id: string };
+    for (const part of chunked(lines, LINE_INSERT_CHUNK)) {
+      await tx.stocktakeLineItem.createMany({
+        data: part.map((line) => ({ ...line, stocktakeId: created.id })),
+      });
+    }
+    return created.id;
   });
-  return { ok: true };
+
+  return {
+    ok: true,
+    stocktakeId,
+    lineCount: lines.length,
+    skippedUnsynced,
+    skippedUnlinked,
+  };
 }
 
+/**
+ * Whether each variant can be put on a count at the stocktake's location, and
+ * the expected quantity it would start with. A variant Shopify cannot adjust
+ * there is refused now rather than when the count is completed.
+ */
+async function resolveNewLines(
+  db: TenantDb,
+  stocktake: StocktakeRow,
+  variants: readonly CatalogVariant[],
+): Promise<
+  Map<string, { ok: true; expectedQty: number } | { ok: false; error: string }>
+> {
+  const itemIds = variants.flatMap((v) =>
+    v.inventoryItemId ? [v.inventoryItemId] : [],
+  );
+  const [tracked, levels] = await Promise.all([
+    readTrackedItemIds(db, itemIds),
+    readStockedLevels(db, stocktake.locationId, itemIds),
+  ]);
+  const resolved = new Map<
+    string,
+    { ok: true; expectedQty: number } | { ok: false; error: string }
+  >();
+  for (const variant of variants) {
+    const refuse = (error: string) =>
+      resolved.set(variant.shopifyVariantId, { ok: false, error });
+    const itemId = variant.inventoryItemId;
+    if (!itemId) {
+      refuse(
+        `Shopify inventory is not linked yet for ${variant.title}. Run a catalog sync from the dashboard.`,
+      );
+      continue;
+    }
+    if (!tracked.has(itemId)) {
+      refuse(
+        `${variant.title} is not tracked for inventory in Shopify, so it cannot be counted.`,
+      );
+      continue;
+    }
+    const level = levels.get(itemId);
+    if (!level) {
+      refuse(
+        `${variant.title} is not stocked at this location in Shopify. Stock it at the location in Shopify first.`,
+      );
+      continue;
+    }
+    const expectedQty = basisQuantity(level, stocktake.quantityBasis);
+    if (expectedQty === null) {
+      refuse(
+        `Shopify's ${basisLabel(stocktake.quantityBasis)} quantity for ${variant.title} is not synced yet. Run a sync from the dashboard.`,
+      );
+      continue;
+    }
+    resolved.set(variant.shopifyVariantId, { ok: true, expectedQty });
+  }
+  return resolved;
+}
+
+const isValidCount = (value: unknown): value is number =>
+  typeof value === "number" &&
+  Number.isInteger(value) &&
+  value >= 0 &&
+  value <= MAX_COUNTED_QUANTITY;
+
+/**
+ * Save the counted quantity of one line, or clear it with `null`. A changed
+ * count discards the line's movement review: it is checked again when the
+ * count is completed.
+ */
 export async function saveStocktakeCount(
   db: TenantDb,
-  input: { lineId: string; countedQty: number },
+  input: {
+    lineId: string;
+    countedQty: number | null;
+    /** When given, the line must belong to this stocktake. */
+    stocktakeId?: string;
+    actor?: InventoryActor | null;
+  },
+  options: { now?: () => Date } = {},
 ): Promise<StocktakeActionResult> {
+  if (input.countedQty !== null && !isValidCount(input.countedQty)) {
+    return {
+      ok: false,
+      error: `Enter the counted quantity as a whole number from 0 to ${MAX_COUNTED_QUANTITY.toLocaleString("en-US")}.`,
+    };
+  }
   const line = (await db.stocktakeLineItem.findFirst({
-    where: { id: input.lineId },
+    where: {
+      id: input.lineId,
+      ...(input.stocktakeId ? { stocktakeId: input.stocktakeId } : {}),
+    },
+    select: { id: true, stocktakeId: true },
   })) as { id: string; stocktakeId: string } | null;
   if (!line) return { ok: false, error: "Stocktake line not found" };
 
@@ -131,56 +506,412 @@ export async function saveStocktakeCount(
     if (!(await lockOpenStocktake(tx, line.stocktakeId))) {
       return { ok: false as const, error: CLOSED_MESSAGE };
     }
+    const current = (await tx.stocktakeLineItem.findFirst({
+      where: { id: line.id },
+      select: { countedQty: true },
+    })) as { countedQty: number | null } | null;
+    if (!current) {
+      return { ok: false as const, error: "Stocktake line not found" };
+    }
+    const counted = input.countedQty !== null;
     await tx.stocktakeLineItem.update({
       where: { id: line.id },
-      data: { countedQty: input.countedQty },
+      data: {
+        countedQty: input.countedQty,
+        countSource: counted ? "MANUAL" : null,
+        countedAt: counted ? clock(options)() : null,
+        countedByUserId: counted ? (input.actor?.shopifyUserId ?? null) : null,
+        ...(current.countedQty === input.countedQty ? {} : NO_MOVEMENT),
+      },
     });
     return { ok: true as const };
   });
 }
 
-export async function addStocktakeLine(
-  db: TenantDb,
-  input: { stocktakeId: string; shopifyVariantId: string },
-): Promise<StocktakeActionResult> {
-  const stocktake = (await db.stocktake.findFirst({
-    where: { id: input.stocktakeId },
-  })) as { id: string; locationId: string } | null;
-  if (!stocktake) return { ok: false, error: "Stocktake not found" };
+function readCode(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const code = value.trim();
+  return code.length > 0 && code.length <= MAX_CODE_LENGTH ? code : null;
+}
 
-  const known = await findVariantInventoryItems(db, [input.shopifyVariantId]);
-  if (!known.has(input.shopifyVariantId)) {
-    return { ok: false, error: "That variant is not in this shop's catalog." };
+const ambiguousCodeMessage = (code: string, matches: CatalogVariant[]) =>
+  `${code} matches ${matches.length} items (${matches
+    .slice(0, 3)
+    .map((v) => v.title)
+    .join(
+      ", ",
+    )}${matches.length > 3 ? ", …" : ""}). Use a barcode or SKU that only one item has.`;
+
+/**
+ * Count units by barcode, SKU or variant ID: each scan adds `quantity` to the
+ * item's count. An item that is not on the sheet yet is added to it, provided
+ * Shopify stocks it at the counted location.
+ */
+export async function recordStocktakeScan(
+  db: TenantDb,
+  input: {
+    stocktakeId: string;
+    code: unknown;
+    quantity?: number;
+    actor?: InventoryActor | null;
+  },
+  options: { now?: () => Date } = {},
+): Promise<StocktakeScanResult> {
+  const fail = (error: string) => ({ ok: false as const, error });
+  const code = readCode(input.code);
+  if (!code) return fail("Scan or type a barcode or SKU.");
+  const quantity = input.quantity ?? 1;
+  if (!isValidCount(quantity) || quantity === 0) {
+    return fail(
+      `Enter the scanned quantity as a whole number from 1 to ${MAX_COUNTED_QUANTITY.toLocaleString("en-US")}.`,
+    );
   }
 
-  const snapshot = (await db.inventorySnapshot.findFirst({
-    where: {
-      shopifyVariantId: input.shopifyVariantId,
-      locationId: stocktake.locationId,
-    },
-    orderBy: { snapshotDate: "desc" },
-  })) as { quantityAvailable: number } | null;
+  const stocktake = await findStocktake(db, input.stocktakeId);
+  if (!stocktake) return fail(NOT_FOUND_MESSAGE);
+  if (stocktake.status !== "IN_PROGRESS") return fail(CLOSED_MESSAGE);
+
+  const matches = variantsMatchingCode(
+    await findVariantsByCode(db, [code]),
+    code,
+  );
+  if (matches.length === 0) {
+    return fail(
+      `No item in this shop's catalog has the barcode or SKU ${code}.`,
+    );
+  }
+  if (matches.length > 1) return fail(ambiguousCodeMessage(code, matches));
+  const [variant] = matches;
 
   return db.$transaction(async (tx: TenantDb) => {
     if (!(await lockOpenStocktake(tx, stocktake.id))) {
-      return { ok: false as const, error: CLOSED_MESSAGE };
+      return fail(CLOSED_MESSAGE);
     }
-    const existing = await tx.stocktakeLineItem.findFirst({
+    let line = (await tx.stocktakeLineItem.findFirst({
       where: {
         stocktakeId: stocktake.id,
-        shopifyVariantId: input.shopifyVariantId,
+        shopifyVariantId: variant.shopifyVariantId,
       },
-    });
-    if (!existing) {
-      await tx.stocktakeLineItem.create({
+      select: { id: true, countedQty: true },
+      orderBy: { id: "asc" },
+    })) as { id: string; countedQty: number | null } | null;
+    const added = line === null;
+    if (!line) {
+      const resolved = (await resolveNewLines(tx, stocktake, [variant])).get(
+        variant.shopifyVariantId,
+      )!;
+      if (!resolved.ok) return fail(resolved.error);
+      line = (await tx.stocktakeLineItem.create({
         data: {
           stocktakeId: stocktake.id,
-          shopifyVariantId: input.shopifyVariantId,
-          expectedQty: snapshot?.quantityAvailable ?? 0,
+          shopifyVariantId: variant.shopifyVariantId,
+          expectedQty: resolved.expectedQty,
         },
+        select: { id: true, countedQty: true },
+      })) as { id: string; countedQty: number | null };
+    }
+
+    const countedQty = (line.countedQty ?? 0) + quantity;
+    if (countedQty > MAX_COUNTED_QUANTITY) {
+      return fail(
+        `${variant.title} would be counted above ${MAX_COUNTED_QUANTITY.toLocaleString("en-US")}. Check its count.`,
+      );
+    }
+    await tx.stocktakeLineItem.update({
+      where: { id: line.id },
+      data: {
+        countedQty,
+        countSource: "SCAN",
+        countedAt: clock(options)(),
+        countedByUserId: input.actor?.shopifyUserId ?? null,
+        ...NO_MOVEMENT,
+      },
+    });
+    return {
+      ok: true as const,
+      lineId: line.id,
+      title: variant.title,
+      countedQty,
+      added,
+    };
+  });
+}
+
+/**
+ * Put a list of items on a count sheet, one barcode, SKU or variant ID per
+ * line, without counting them. Nothing is added unless every line names
+ * exactly one item that can be counted at the location.
+ */
+export async function addStocktakeItems(
+  db: TenantDb,
+  input: { stocktakeId: string; codesText: unknown },
+): Promise<AddStocktakeItemsResult> {
+  const fail = (error: string, details: string[] = []) => ({
+    ok: false as const,
+    error,
+    details,
+  });
+  if (typeof input.codesText !== "string") {
+    return fail("Enter at least one barcode or SKU.");
+  }
+  if (input.codesText.length > MAX_ITEM_LIST_LENGTH) {
+    return fail(
+      `The list is too long. Add at most ${MAX_ADDED_ITEMS} items at a time.`,
+    );
+  }
+  const entries = input.codesText
+    .split(/\r?\n/)
+    .map((text, index) => ({ lineNumber: index + 1, code: text.trim() }))
+    .filter((entry) => entry.code.length > 0);
+  if (entries.length === 0) return fail("Enter at least one barcode or SKU.");
+  if (entries.length > MAX_ADDED_ITEMS) {
+    return fail(
+      `Add at most ${MAX_ADDED_ITEMS} items at a time. This list has ${entries.length}.`,
+    );
+  }
+
+  const stocktake = await findStocktake(db, input.stocktakeId);
+  if (!stocktake) return fail(NOT_FOUND_MESSAGE);
+  if (stocktake.status !== "IN_PROGRESS") return fail(CLOSED_MESSAGE);
+
+  const details: string[] = [];
+  const usable = entries.filter((entry) => {
+    if (entry.code.length <= MAX_CODE_LENGTH) return true;
+    details.push(
+      `Line ${entry.lineNumber}: that is too long for a barcode or SKU.`,
+    );
+    return false;
+  });
+  const catalog = await findVariantsByCode(
+    db,
+    usable.map((entry) => entry.code),
+  );
+  const wanted = new Map<
+    string,
+    { variant: CatalogVariant; lineNumber: number }
+  >();
+  for (const entry of usable) {
+    const matches = variantsMatchingCode(catalog, entry.code);
+    if (matches.length === 0) {
+      details.push(
+        `Line ${entry.lineNumber}: no item has the barcode or SKU ${entry.code}.`,
+      );
+    } else if (matches.length > 1) {
+      details.push(
+        `Line ${entry.lineNumber}: ${ambiguousCodeMessage(entry.code, matches)}`,
+      );
+    } else if (!wanted.has(matches[0].shopifyVariantId)) {
+      wanted.set(matches[0].shopifyVariantId, {
+        variant: matches[0],
+        lineNumber: entry.lineNumber,
       });
     }
-    return { ok: true as const };
+  }
+
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, stocktake.id))) {
+      return fail(CLOSED_MESSAGE);
+    }
+    const existing = new Set(
+      (
+        (await tx.stocktakeLineItem.findMany({
+          where: {
+            stocktakeId: stocktake.id,
+            shopifyVariantId: { in: [...wanted.keys()] },
+          },
+          select: { shopifyVariantId: true },
+        })) as Array<{ shopifyVariantId: string }>
+      ).map((line) => line.shopifyVariantId),
+    );
+    const fresh = [...wanted.values()].filter(
+      ({ variant }) => !existing.has(variant.shopifyVariantId),
+    );
+    const resolved = await resolveNewLines(
+      tx,
+      stocktake,
+      fresh.map(({ variant }) => variant),
+    );
+    const lines: Array<{
+      stocktakeId: string;
+      shopifyVariantId: string;
+      expectedQty: number;
+    }> = [];
+    for (const { variant, lineNumber } of fresh) {
+      const outcome = resolved.get(variant.shopifyVariantId)!;
+      if (outcome.ok) {
+        lines.push({
+          stocktakeId: stocktake.id,
+          shopifyVariantId: variant.shopifyVariantId,
+          expectedQty: outcome.expectedQty,
+        });
+      } else {
+        details.push(`Line ${lineNumber}: ${outcome.error}`);
+      }
+    }
+    if (details.length > 0) {
+      return fail(
+        "Some lines could not be added. Nothing was added to the count.",
+        details.sort(
+          (a, b) =>
+            Number(a.slice(5, a.indexOf(":"))) -
+            Number(b.slice(5, b.indexOf(":"))),
+        ),
+      );
+    }
+    if (lines.length > 0) {
+      await tx.stocktakeLineItem.createMany({ data: lines });
+    }
+    return {
+      ok: true as const,
+      added: lines.length,
+      alreadyOnCount: existing.size,
+    };
+  });
+}
+
+/**
+ * Count every line that has no count yet as zero: the items on the sheet that
+ * nobody found. They are marked so the step can be undone and told apart from
+ * items somebody counted as zero.
+ */
+export async function zeroFillUncounted(
+  db: TenantDb,
+  input: { stocktakeId: string; actor?: InventoryActor | null },
+  options: { now?: () => Date } = {},
+): Promise<{ ok: true; lines: number } | { ok: false; error: string }> {
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, input.stocktakeId))) {
+      return {
+        ok: false as const,
+        error: await closedOrMissing(tx, input.stocktakeId),
+      };
+    }
+    const filled = await tx.stocktakeLineItem.updateMany({
+      where: { stocktakeId: input.stocktakeId, countedQty: null },
+      data: {
+        countedQty: 0,
+        countSource: "ZERO_FILL",
+        countedAt: clock(options)(),
+        countedByUserId: input.actor?.shopifyUserId ?? null,
+        ...NO_MOVEMENT,
+      },
+    });
+    return { ok: true as const, lines: filled.count };
+  });
+}
+
+/** Take back the zero counts `zeroFillUncounted` entered; counts entered by people stay. */
+export async function clearZeroFill(
+  db: TenantDb,
+  input: { stocktakeId: string },
+): Promise<{ ok: true; lines: number } | { ok: false; error: string }> {
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, input.stocktakeId))) {
+      return {
+        ok: false as const,
+        error: await closedOrMissing(tx, input.stocktakeId),
+      };
+    }
+    const cleared = await tx.stocktakeLineItem.updateMany({
+      where: { stocktakeId: input.stocktakeId, countSource: "ZERO_FILL" },
+      data: {
+        countedQty: null,
+        countSource: null,
+        countedAt: null,
+        countedByUserId: null,
+        ...NO_MOVEMENT,
+      },
+    });
+    return { ok: true as const, lines: cleared.count };
+  });
+}
+
+async function closedOrMissing(db: TenantDb, stocktakeId: string) {
+  return (await findStocktake(db, stocktakeId))
+    ? CLOSED_MESSAGE
+    : NOT_FOUND_MESSAGE;
+}
+
+/**
+ * Settle lines whose Shopify quantity moved while the count was open. With
+ * `lineIds` null every line waiting for review is settled the same way, up to
+ * `MOVEMENT_BATCH_LIMIT` per call; `remaining` reports what is left.
+ */
+export async function resolveStocktakeMovement(
+  db: TenantDb,
+  input: {
+    stocktakeId: string;
+    lineIds: readonly string[] | null;
+    resolution: unknown;
+  },
+  options: { now?: () => Date } = {},
+): Promise<
+  | { ok: true; resolved: number; remaining: number }
+  | { ok: false; error: string }
+> {
+  const { resolution } = input;
+  if (resolution !== "COUNTED_BEFORE" && resolution !== "COUNTED_AFTER") {
+    return {
+      ok: false,
+      error:
+        "Choose whether the item was counted before or after the stock moved.",
+    };
+  }
+  const lineIds = input.lineIds ? [...new Set(input.lineIds)] : null;
+  if (
+    lineIds &&
+    (lineIds.length === 0 || lineIds.length > MOVEMENT_BATCH_LIMIT)
+  ) {
+    return { ok: false, error: "Choose the lines to review." };
+  }
+
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, input.stocktakeId))) {
+      return {
+        ok: false as const,
+        error: await closedOrMissing(tx, input.stocktakeId),
+      };
+    }
+    const waiting = {
+      stocktakeId: input.stocktakeId,
+      countedQty: { not: null },
+      movementDetectedQty: { not: null },
+      movementReviewedAt: null,
+    };
+    const lines = (await tx.stocktakeLineItem.findMany({
+      where: { ...waiting, ...(lineIds ? { id: { in: lineIds } } : {}) },
+      select: { id: true, movementDetectedQty: true },
+      orderBy: { id: "asc" },
+      take: MOVEMENT_BATCH_LIMIT,
+    })) as Array<{ id: string; movementDetectedQty: number }>;
+
+    const reviewedAt = clock(options)();
+    if (resolution === "COUNTED_BEFORE") {
+      await tx.stocktakeLineItem.updateMany({
+        where: { id: { in: lines.map((line) => line.id) } },
+        data: { movementReviewedAt: reviewedAt, movementBaselineQty: null },
+      });
+    } else {
+      const byQuantity = new Map<number, string[]>();
+      for (const line of lines) {
+        const ids = byQuantity.get(line.movementDetectedQty) ?? [];
+        ids.push(line.id);
+        byQuantity.set(line.movementDetectedQty, ids);
+      }
+      for (const [quantity, ids] of byQuantity) {
+        await tx.stocktakeLineItem.updateMany({
+          where: { id: { in: ids } },
+          data: {
+            movementReviewedAt: reviewedAt,
+            movementBaselineQty: quantity,
+          },
+        });
+      }
+    }
+    const remaining = (await tx.stocktakeLineItem.count({
+      where: waiting,
+    })) as number;
+    return { ok: true as const, resolved: lines.length, remaining };
   });
 }
 
@@ -193,24 +924,39 @@ type BuiltDocument =
     }
   | { ok: false; error: string };
 
+const stocktakeDocument = (
+  stocktakeId: string,
+  desired: InventoryDocument["desired"],
+): InventoryDocument => ({
+  kind: "STOCKTAKE",
+  source: { type: STOCKTAKE_SOURCE_TYPE, id: stocktakeId },
+  reason: "cycle_count_available",
+  quantityName: "available",
+  referenceDocumentUri: `gid://propo/Stocktake/${stocktakeId}`,
+  desired,
+});
+
 /**
- * The stock change a count stands for: counted minus expected for every
- * counted line, as a relative change so sales made during the count are kept.
- * Uncounted lines are left alone; they are never treated as zero.
+ * The stock change a count stands for: one relative change per counted line
+ * that differs from its starting point, so stock that moves after this is
+ * kept. The change is made to `available`; the other on-hand states
+ * (committed, reserved and so on) are not touched, so on-hand moves by the
+ * same amount. Uncounted lines are left alone; they are never treated as zero.
  */
 async function buildStocktakeDocument(
   db: TenantDb,
-  stocktake: StocktakeWithLines,
+  stocktake: StocktakeRow,
+  lines: readonly CountLine[],
 ): Promise<BuiltDocument> {
-  const counted = stocktake.lineItems.filter((l) => l.countedQty !== null);
+  const counted = lines.filter((line) => line.countedQty !== null);
   if (counted.length === 0) {
     return { ok: false, error: "Enter at least one count before completing." };
   }
 
-  const variances = counted.filter((l) => l.countedQty !== l.expectedQty);
-  const items = await findVariantInventoryItems(
+  const variances = counted.filter((line) => stocktakeLineDelta(line) !== 0);
+  const items = await findVariantsById(
     db,
-    variances.map((l) => l.shopifyVariantId),
+    variances.map((line) => line.shopifyVariantId),
   );
 
   const seen = new Set<string>();
@@ -252,37 +998,170 @@ async function buildStocktakeDocument(
       inventoryItemId: item.inventoryItemId!,
       variantId: ledgerVariantId(line.shopifyVariantId),
       locationId: stocktake.locationId,
-      delta: line.countedQty! - line.expectedQty,
+      delta: stocktakeLineDelta(line)!,
       changeFromQuantity: null,
     };
   });
 
   return {
     ok: true,
-    document: {
-      kind: "STOCKTAKE",
-      source: { type: "Stocktake", id: stocktake.id },
-      reason: "cycle_count_available",
-      quantityName: "available",
-      referenceDocumentUri: `gid://propo/Stocktake/${stocktake.id}`,
-      desired,
-    },
+    document: stocktakeDocument(stocktake.id, desired),
     lineByItem,
   };
 }
 
-async function loadStocktake(
+/**
+ * Inventory items this count has already sent to Shopify, or may have. Their
+ * quantity in Shopify no longer says anything about movement during the
+ * count, because the count itself changed it.
+ */
+async function readItemsSentToShopify(
   db: TenantDb,
   stocktakeId: string,
-): Promise<StocktakeWithLines | null> {
-  return (await db.stocktake.findFirst({
-    where: { id: stocktakeId },
-    include: { lineItems: true },
-  })) as StocktakeWithLines | null;
+): Promise<Set<string>> {
+  const operations = (await db.inventoryOperation.findMany({
+    where: { sourceType: STOCKTAKE_SOURCE_TYPE, sourceId: stocktakeId },
+    select: { id: true },
+  })) as Array<{ id: string }>;
+  if (operations.length === 0) return new Set();
+  const lines = (await db.inventoryOperationLine.findMany({
+    where: {
+      operationId: { in: operations.map((operation) => operation.id) },
+      status: { in: ["APPLIED", "IN_FLIGHT"] },
+    },
+    select: { inventoryItemGid: true },
+  })) as Array<{ inventoryItemGid: string }>;
+  return new Set(lines.map((line) => line.inventoryItemGid));
 }
 
 /**
+ * Find counted lines whose quantity in Shopify no longer matches the quantity
+ * frozen when the count started, and flag them for review. A sale fulfilled
+ * or a delivery received while the count was open changes what the variance
+ * should be, and only the person who counted knows whether the units were
+ * counted before or after it.
+ *
+ * Lines with a variance are compared with a live read from Shopify, the
+ * others with the synced quantity. Lines already reviewed, and items this
+ * count has already changed in Shopify, are not checked again.
+ *
+ * Returns how many lines wait for review.
+ */
+async function flagMovedLines(
+  db: TenantDb,
+  admin: AdminGraphQLClient | null,
+  stocktake: StocktakeRow,
+  lines: readonly CountLine[],
+  options: StocktakeOptions,
+): Promise<number> {
+  const unreviewed = lines.filter(
+    (line) => line.countedQty !== null && line.movementReviewedAt === null,
+  );
+  if (unreviewed.length === 0) return 0;
+
+  const [variants, sent] = await Promise.all([
+    findVariantsById(
+      db,
+      unreviewed.map((line) => line.shopifyVariantId),
+    ),
+    readItemsSentToShopify(db, stocktake.id),
+  ]);
+  const checkable = unreviewed.flatMap((line) => {
+    const itemId = variants.get(line.shopifyVariantId)?.inventoryItemId;
+    return itemId && !sent.has(itemId) ? [{ line, itemId }] : [];
+  });
+
+  const readLive =
+    options.readQuantities ??
+    (admin
+      ? createLevelQuantityReader(
+          admin,
+          stocktake.quantityBasis === "ON_HAND" ? "on_hand" : "available",
+        )
+      : null);
+  const live = readLive
+    ? checkable
+        .filter(({ line }) => line.countedQty !== line.expectedQty)
+        .slice(0, LIVE_MOVEMENT_CHECK_LIMIT)
+    : [];
+  const liveIds = new Set(live.map(({ itemId }) => itemId));
+  const [liveQuantities, synced] = await Promise.all([
+    readLive
+      ? readLive(stocktake.locationId, [...liveIds])
+      : new Map<string, number | null>(),
+    readStockedLevels(
+      db,
+      stocktake.locationId,
+      checkable.flatMap(({ itemId }) => (liveIds.has(itemId) ? [] : [itemId])),
+    ),
+  ]);
+
+  const moved: Array<{ id: string; quantity: number }> = [];
+  const settledAgain: string[] = [];
+  for (const { line, itemId } of checkable) {
+    const level = synced.get(itemId);
+    const current = liveIds.has(itemId)
+      ? liveQuantities.get(itemId)
+      : level && basisQuantity(level, stocktake.quantityBasis);
+    // No reading (not stocked any more, or not synced) is not evidence of
+    // movement; Shopify answers for such an item when the change is sent.
+    if (current === null || current === undefined) continue;
+    if (current !== line.expectedQty) {
+      moved.push({ id: line.id, quantity: current });
+    } else if (line.movementDetectedQty !== null) {
+      settledAgain.push(line.id);
+    }
+  }
+
+  const flagged = moved.slice(0, MOVEMENT_BATCH_LIMIT);
+  if (flagged.length === 0 && settledAgain.length === 0) {
+    return lines.filter(awaitsMovementReview).length;
+  }
+
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, stocktake.id))) return 0;
+    const unreviewedLine = {
+      stocktakeId: stocktake.id,
+      movementReviewedAt: null,
+    };
+    const byQuantity = new Map<number, string[]>();
+    for (const { id, quantity } of flagged) {
+      const ids = byQuantity.get(quantity) ?? [];
+      ids.push(id);
+      byQuantity.set(quantity, ids);
+    }
+    for (const [quantity, ids] of byQuantity) {
+      await tx.stocktakeLineItem.updateMany({
+        where: { ...unreviewedLine, id: { in: ids } },
+        data: { movementDetectedQty: quantity },
+      });
+    }
+    for (const part of chunked(settledAgain, LOOKUP_CHUNK)) {
+      await tx.stocktakeLineItem.updateMany({
+        where: { ...unreviewedLine, id: { in: part } },
+        data: { movementDetectedQty: null },
+      });
+    }
+    return (await tx.stocktakeLineItem.count({
+      where: {
+        ...unreviewedLine,
+        countedQty: { not: null },
+        movementDetectedQty: { not: null },
+      },
+    })) as number;
+  });
+}
+
+const itemsText = (count: number) =>
+  `${count.toLocaleString("en-US")} ${count === 1 ? "item" : "items"}`;
+
+/**
  * Apply a count's variances to Shopify and close the count.
+ *
+ * Before anything is sent the count must be whole: items without a count are
+ * either counted, zero-filled or explicitly left unchanged
+ * (`acceptUncounted`), and every line whose stock moved in Shopify during the
+ * count has been reviewed.
  *
  * The count is closed only when the ledger shows every variance applied.
  * Pressing complete again, twice at once, or after a partial failure sends
@@ -293,21 +1172,30 @@ export async function completeStocktake(
   admin: AdminGraphQLClient | null,
   actor: InventoryActor,
   stocktakeId: string,
-  options: ExecuteInventoryOperationOptions = {},
+  options: StocktakeOptions & { acceptUncounted?: boolean } = {},
 ): Promise<CompleteStocktakeResult> {
   const fail = (
     error: string,
-    problems: StocktakeLineProblem[] = [],
-  ): CompleteStocktakeResult => ({ ok: false, error, problems });
+    extra: {
+      problems?: StocktakeLineProblem[];
+      blocker?: CompletionBlocker;
+    } = {},
+  ): CompleteStocktakeResult => ({
+    ok: false,
+    error,
+    problems: extra.problems ?? [],
+    blocker: extra.blocker ?? null,
+  });
+  const notOpen = async (): Promise<CompleteStocktakeResult> => {
+    const now = await findStocktake(db, stocktakeId);
+    return now?.status === "COMPLETED"
+      ? { ok: true, alreadyCompleted: true }
+      : fail("Only a count that is in progress can be completed.");
+  };
 
-  const stocktake = await loadStocktake(db, stocktakeId);
-  if (!stocktake) return fail("Stocktake not found");
-  if (stocktake.status === "COMPLETED") {
-    return { ok: true, alreadyCompleted: true };
-  }
-  if (stocktake.status !== "IN_PROGRESS") {
-    return fail("Only a count that is in progress can be completed.");
-  }
+  const stocktake = await findStocktake(db, stocktakeId);
+  if (!stocktake) return fail(NOT_FOUND_MESSAGE);
+  if (stocktake.status !== "IN_PROGRESS") return notOpen();
 
   const isEnabled = options.isCapabilityEnabled ?? isInventoryWriteEnabled;
   if (!isEnabled("stocktakeInventoryWrites")) {
@@ -316,8 +1204,31 @@ export async function completeStocktake(
     );
   }
 
-  const built = await buildStocktakeDocument(db, stocktake);
+  const lines = await loadCountLines(db, stocktake.id);
+  const built = await buildStocktakeDocument(db, stocktake, lines);
   if (!built.ok) return fail(built.error);
+
+  const uncounted = lines.filter((line) => line.countedQty === null).length;
+  if (uncounted > 0 && !options.acceptUncounted) {
+    return fail(
+      `${itemsText(uncounted)} on this count ${uncounted === 1 ? "has" : "have"} no count. Count them, mark them as zero, or complete the count leaving them unchanged.`,
+      { blocker: "UNCOUNTED" },
+    );
+  }
+
+  const awaitingReview = await flagMovedLines(
+    db,
+    admin,
+    stocktake,
+    lines,
+    options,
+  );
+  if (awaitingReview > 0) {
+    return fail(
+      `Stock moved in Shopify for ${itemsText(awaitingReview)} while this count was open. Review ${awaitingReview === 1 ? "it" : "them"}, then complete the count again. Nothing was sent to Shopify.`,
+      { blocker: "MOVEMENT" },
+    );
+  }
 
   let settle;
   try {
@@ -333,12 +1244,7 @@ export async function completeStocktake(
       options,
     );
   } catch (err) {
-    if (err instanceof InventoryDocumentClosedError) {
-      const now = await loadStocktake(db, stocktake.id);
-      return now?.status === "COMPLETED"
-        ? { ok: true, alreadyCompleted: true }
-        : fail("Only a count that is in progress can be completed.");
-    }
+    if (err instanceof InventoryDocumentClosedError) return notOpen();
     if (err instanceof InventoryOperationConflictError) {
       return fail(
         "This count changed while it was being completed. Reload the page and complete it again.",
@@ -350,36 +1256,96 @@ export async function completeStocktake(
     throw err;
   }
   if (!settle.settled) {
-    return fail(
-      `${describeUnsettled(settle)} The count stays open.`,
-      describeLineProblems(settle.operation, built.lineByItem),
-    );
+    return fail(`${describeUnsettled(settle)} The count stays open.`, {
+      problems: describeLineProblems(settle.operation, built.lineByItem),
+    });
   }
 
   const outcome = await db.$transaction(async (tx: TenantDb) => {
     if (!(await lockOpenStocktake(tx, stocktake.id))) return "not_open";
-    const current = await loadStocktake(tx, stocktake.id);
-    const rebuilt = current && (await buildStocktakeDocument(tx, current));
-    if (!rebuilt || !rebuilt.ok) return "changed";
+    const current = await loadCountLines(tx, stocktake.id);
+    if (
+      current.some(awaitsMovementReview) ||
+      (!options.acceptUncounted &&
+        current.some((line) => line.countedQty === null))
+    ) {
+      return "changed";
+    }
+    const rebuilt = await buildStocktakeDocument(tx, stocktake, current);
+    if (!rebuilt.ok) return "changed";
     const state = await readDocumentLedgerState(tx, rebuilt.document);
     if (state.unfinishedOperationId || state.outstanding.length > 0) {
       return "changed";
     }
     await tx.stocktake.update({
       where: { id: stocktake.id },
-      data: { status: "COMPLETED", completedAt: new Date() },
+      data: {
+        status: "COMPLETED",
+        completedAt: clock(options)(),
+        completedByUserId: actor.shopifyUserId,
+      },
     });
     return "closed";
   });
 
   if (outcome === "closed") return { ok: true, alreadyCompleted: false };
-  if (outcome === "not_open") {
-    const now = await loadStocktake(db, stocktake.id);
-    return now?.status === "COMPLETED"
-      ? { ok: true, alreadyCompleted: true }
-      : fail("Only a count that is in progress can be completed.");
-  }
+  if (outcome === "not_open") return notOpen();
   return fail(
     "A count was saved while this stocktake was being completed. Complete it again to apply the latest counts.",
   );
+}
+
+/**
+ * Abandon a count without changing stock. A count that has already changed
+ * stock in Shopify, or whose last attempt Shopify has not finished answering,
+ * cannot be cancelled: it has to be completed so the ledger and Shopify agree.
+ */
+export async function cancelStocktake(
+  db: TenantDb,
+  input: { stocktakeId: string; actor?: InventoryActor | null },
+  options: { now?: () => Date } = {},
+): Promise<CancelStocktakeResult> {
+  const stocktake = await findStocktake(db, input.stocktakeId);
+  if (!stocktake) return { ok: false, error: NOT_FOUND_MESSAGE };
+  if (stocktake.status === "CANCELLED") {
+    return { ok: true, alreadyCancelled: true };
+  }
+
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, stocktake.id))) {
+      const now = await findStocktake(tx, stocktake.id);
+      return now?.status === "CANCELLED"
+        ? { ok: true as const, alreadyCancelled: true }
+        : {
+            ok: false as const,
+            error: "Only a count that is in progress can be cancelled.",
+          };
+    }
+    const state = await readDocumentLedgerState(
+      tx,
+      stocktakeDocument(stocktake.id, []),
+    );
+    if (state.unfinishedOperationId) {
+      return {
+        ok: false as const,
+        error:
+          "Shopify has not finished answering for this count's last attempt. Complete the count again first; it cannot be cancelled until then.",
+      };
+    }
+    if (state.outstanding.length > 0) {
+      return {
+        ok: false as const,
+        error: `This count has already changed ${itemsText(state.outstanding.length)} in Shopify, so it cannot be cancelled. Complete it, or set those counts back to their expected quantities and complete it to put the stock back.`,
+      };
+    }
+    await tx.stocktake.update({
+      where: { id: stocktake.id },
+      data: {
+        status: "CANCELLED",
+        cancelledAt: clock(options)(),
+        cancelledByUserId: input.actor?.shopifyUserId ?? null,
+      },
+    });
+    return { ok: true as const, alreadyCancelled: false };
+  });
 }

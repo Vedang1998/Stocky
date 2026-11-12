@@ -9,6 +9,7 @@ import {
   type ExecuteInventoryOperationOptions,
 } from "./execute.server";
 import { recordInventoryOperation } from "./ledger.server";
+import { MAX_OPERATION_LINES } from "./payload";
 import {
   TERMINAL_OPERATION_STATUSES,
   type AdjustableQuantityName,
@@ -180,6 +181,10 @@ export async function readDocumentLedgerState(
  * Bring Shopify in line with a document: resume the operation that is still
  * unfinished, otherwise record and execute one for whatever is outstanding.
  *
+ * A document with more changes than one operation may hold is sent in
+ * several operations, the first `MAX_OPERATION_LINES` outstanding changes at a
+ * time; the caller is told it is not settled and calls again for the rest.
+ *
  * Each attempt gets the next key in the document's sequence, so two requests
  * racing on the same state record the same operation and only one of them
  * sends it. If the document changed between two racing requests the second
@@ -211,7 +216,7 @@ export async function settleInventoryDocument(
           referenceDocumentUri: input.referenceDocumentUri,
           actor: input.actor,
           note: input.note,
-          lines: state.outstanding,
+          lines: state.outstanding.slice(0, MAX_OPERATION_LINES),
         },
         {
           guard: async (tx) => {
@@ -284,6 +289,6 @@ export function describeUnsettled(result: SettleResult): string {
       return `Shopify did not accept ${rejected} of ${operation.lineCount} changes. Lines it accepted are recorded and will not be sent again.`;
     }
     case "APPLIED":
-      return "The document changed while it was being applied. Review it and try again.";
+      return `Shopify confirmed these changes, but ${result.outstanding.length} more remain to be sent. Try again to send the rest; confirmed changes are not sent twice.`;
   }
 }

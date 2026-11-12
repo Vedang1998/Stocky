@@ -622,6 +622,9 @@ model StocktakeLineItem {
   countSource         StocktakeCountSource?
   countedAt           DateTime?
   countedByUserId     String?               @db.VarChar(64)
+  /// Shopify's quantity when completion found it no longer matched
+  /// expectedQty. The line waits for review while movementReviewedAt is null.
+  movementDetectedQty Int?
   /// Set when stock moved in Shopify during the count and the count was taken
   /// after the movement: the variance is then counted minus this quantity.
   movementBaselineQty Int?

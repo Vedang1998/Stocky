@@ -29,6 +29,7 @@ ALTER TABLE "StocktakeLineItem"
     ADD COLUMN "countSource" "StocktakeCountSource",
     ADD COLUMN "countedAt" TIMESTAMP(3),
     ADD COLUMN "countedByUserId" VARCHAR(64),
+    ADD COLUMN "movementDetectedQty" INTEGER,
     ADD COLUMN "movementBaselineQty" INTEGER,
     ADD COLUMN "movementReviewedAt" TIMESTAMP(3);
 
