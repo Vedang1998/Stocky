@@ -568,16 +568,43 @@ enum StocktakeStatus {
   CANCELLED
 }
 
+/// FULL counts every item stocked at the location; PARTIAL only the items added to it.
+enum StocktakeScope {
+  FULL
+  PARTIAL
+}
+
+/// Which Shopify quantity `expectedQty` was frozen from. ON_HAND is what a
+/// person counts on the shelf; AVAILABLE is kept for counts started before it.
+enum StocktakeQuantityBasis {
+  AVAILABLE
+  ON_HAND
+}
+
+enum StocktakeCountSource {
+  MANUAL
+  SCAN
+  ZERO_FILL
+}
+
 model Stocktake {
-  id          String          @id @default(cuid())
-  shop        String
-  shopId      String?
-  locationId  String
-  status      StocktakeStatus @default(DRAFT)
-  name        String
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime        @default(now())
+  id                String                 @id @default(cuid())
+  shop              String
+  shopId            String?
+  locationId        String
+  status            StocktakeStatus        @default(DRAFT)
+  name              String
+  scope             StocktakeScope         @default(FULL)
+  quantityBasis     StocktakeQuantityBasis @default(AVAILABLE)
+  /// Expected quantities are hidden from the people counting until review.
+  blind             Boolean                @default(false)
+  startedAt         DateTime?
+  startedByUserId   String?                @db.VarChar(64)
+  completedAt       DateTime?
+  completedByUserId String?                @db.VarChar(64)
+  cancelledAt       DateTime?
+  cancelledByUserId String?                @db.VarChar(64)
+  createdAt         DateTime               @default(now())
 
   lineItems StocktakeLineItem[]
 
@@ -586,17 +613,25 @@ model Stocktake {
 }
 
 model StocktakeLineItem {
-  id               String  @id @default(cuid())
-  shopId           String?
-  stocktakeId      String
-  shopifyVariantId String
-  expectedQty      Int
-  countedQty       Int?
+  id                  String                @id @default(cuid())
+  shopId              String?
+  stocktakeId         String
+  shopifyVariantId    String
+  expectedQty         Int
+  countedQty          Int?
+  countSource         StocktakeCountSource?
+  countedAt           DateTime?
+  countedByUserId     String?               @db.VarChar(64)
+  /// Set when stock moved in Shopify during the count and the count was taken
+  /// after the movement: the variance is then counted minus this quantity.
+  movementBaselineQty Int?
+  movementReviewedAt  DateTime?
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([shopId, stocktakeId])
+  @@index([shopId, stocktakeId, shopifyVariantId])
   @@unique([shopId, id])
 }
 
