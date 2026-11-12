@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import type { PrismaClient } from "@prisma/client";
 import { resetControlPlanePrismaForTests } from "../../sync/control-plane-db.server";
 import { readCatalogSyncStatus } from "../../sync/sync-status.server";
@@ -15,10 +15,7 @@ import {
   SHOP_B_DOMAIN,
 } from "./helpers";
 
-const { sessionShop, enqueueCatalogSync } = vi.hoisted(() => ({
-  sessionShop: { domain: "" },
-  enqueueCatalogSync: vi.fn(),
-}));
+const { sessionShop } = vi.hoisted(() => ({ sessionShop: { domain: "" } }));
 
 // Home authenticates through app/shopify.server. Stand in for Shopify's
 // session check only; tenant resolution and every query are real.
@@ -28,14 +25,7 @@ vi.mock("../../shopify.server", () => ({
   },
 }));
 
-// Queueing needs the job dispatcher; these tests only check whether Home
-// asks for a sync.
-vi.mock("../../jobs/queue.server", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../jobs/queue.server")>()),
-  enqueueCatalogSync,
-}));
-
-const { loader: homeLoader, action: homeAction } = await import("../../routes/app._index");
+const { loader: homeLoader } = await import("../../routes/app._index");
 
 function authority(shopId: string, myshopifyDomain: string) {
   return issueTenantAuthority({
@@ -58,7 +48,6 @@ describe("catalog sync status reader", () => {
   });
 
   beforeEach(async () => {
-    enqueueCatalogSync.mockReset();
     await wipeSyncControlPlaneTables(prisma);
     // Home creates a settings row per shop domain; the shops are re-created
     // with new IDs for every test.
@@ -327,25 +316,5 @@ describe("catalog sync status reader", () => {
       "Up to date",
       "Up to date",
     ]);
-  });
-
-  it("queues a sync from Home only when the shop has none under way", async () => {
-    async function requestSync(domain: string) {
-      sessionShop.domain = domain;
-      const request = new Request("https://app.example.com/app", {
-        method: "POST",
-        body: new URLSearchParams({ intent: "syncCatalog" }),
-      });
-      return homeAction({ request, params: {}, context: {} } as ActionFunctionArgs);
-    }
-    await seedJob(shopAId, "catalog-sync", "2026-11-11T09:00:00Z");
-
-    await requestSync(SHOP_A_DOMAIN);
-    expect(enqueueCatalogSync).not.toHaveBeenCalled();
-
-    // Shop A's running sync does not hold back shop B.
-    await requestSync(SHOP_B_DOMAIN);
-    expect(enqueueCatalogSync).toHaveBeenCalledTimes(1);
-    expect(enqueueCatalogSync.mock.calls[0][0]).toMatchObject({ shopId: shopBId });
   });
 });

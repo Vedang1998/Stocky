@@ -87,6 +87,37 @@ describe("tenant queue/Redis envelope integration (C-03)", () => {
     expect(ctx.envelope.schemaVersion).toBe("tenant-job-envelope-v3");
   });
 
+  it("enqueueCatalogSync queues one job per shop however often it is requested", async () => {
+    const results = [];
+    for (let i = 0; i < 5; i += 1) {
+      results.push(await enqueueCatalogSync(authA()));
+    }
+
+    expect(results.map((result) => result.enqueued)).toEqual([
+      true,
+      false,
+      false,
+      false,
+      false,
+    ]);
+    expect(
+      await prisma.durableJob.count({
+        where: { shopId: shopAId, jobType: "catalog-sync" },
+      }),
+    ).toBe(1);
+
+    // One shop's sync requests do not hold back another shop's.
+    const otherShop = await enqueueCatalogSync(
+      issueTenantAuthority({
+        shopId: shopBId,
+        myshopifyDomain: SHOP_B_DOMAIN,
+        source: "verified_job",
+        correlationId: "corr-redis-b",
+      }),
+    );
+    expect(otherShop).toEqual({ enqueued: true });
+  });
+
   it("rejects arbitrary pre-built envelope supplied to producer", async () => {
     const envelope = createTenantJobEnvelope(authA(), "catalog_sync");
     await expect(
