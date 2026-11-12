@@ -1,6 +1,7 @@
 /**
- * Code 128 encoding for label previews and browser printing. Zebra printers
- * encode the same values themselves; this produces the bars a browser draws.
+ * Code 128 encoding for labels. A browser draws the bars from
+ * code128Widths; a Zebra printer is told the same split between symbol sets
+ * (code128Segments), so both print the same symbol at the same width.
  */
 
 // Bar and space widths of symbol values 0-105, each 11 modules wide.
@@ -46,36 +47,42 @@ function charValues(text: string): number[] {
   return Array.from(text, (char) => char.charCodeAt(0) - 32);
 }
 
+export type Code128Segment = {
+  /** B is full ASCII, one symbol per character; C is digits, one symbol per pair. */
+  set: "B" | "C";
+  text: string;
+};
+
 /**
- * Symbol values including start and check symbol, without the stop symbol.
- * All-digit values use the double-density digit set; a trailing odd digit and
- * everything else use the full ASCII set.
+ * How a value is split between the two symbol sets. Leading digits are packed
+ * two per symbol when that is shorter: from four digits when the value is all
+ * digits, and from six otherwise, because changing sets costs a symbol. A
+ * trailing odd digit and everything after the digits use the full ASCII set.
  */
-export function code128Symbols(value: string): number[] {
+export function code128Segments(value: string): Code128Segment[] {
   if (!isCode128Encodable(value)) {
     throw new RangeError("Code 128 can only encode printable ASCII");
   }
+  const leadingDigits = /^\d*/.exec(value)?.[0].length ?? 0;
+  const pairedDigits = leadingDigits - (leadingDigits % 2);
+  const worthPacking = DIGITS.test(value) ? 4 : 6;
+  if (pairedDigits < worthPacking) return [{ set: "B", text: value }];
 
-  let symbols: number[];
-  if (DIGITS.test(value) && value.length >= 4) {
-    const even = value.length - (value.length % 2);
-    symbols = [START_C, ...digitPairs(value.slice(0, even))];
-    if (even < value.length) {
-      symbols.push(CODE_C_TO_B, ...charValues(value.slice(even)));
-    }
-  } else {
-    const leadingDigits = /^\d*/.exec(value)?.[0].length ?? 0;
-    const pairedDigits = leadingDigits - (leadingDigits % 2);
-    // Switching sets costs one symbol, so it pays from six digits up.
-    symbols =
-      pairedDigits >= 6
-        ? [
-            START_C,
-            ...digitPairs(value.slice(0, pairedDigits)),
-            CODE_C_TO_B,
-            ...charValues(value.slice(pairedDigits)),
-          ]
-        : [START_B, ...charValues(value)];
+  const packed: Code128Segment = { set: "C", text: value.slice(0, pairedDigits) };
+  const rest = value.slice(pairedDigits);
+  return rest === "" ? [packed] : [packed, { set: "B", text: rest }];
+}
+
+/** Symbol values including start and check symbol, without the stop symbol. */
+export function code128Symbols(value: string): number[] {
+  const symbols: number[] = [];
+  for (const [index, segment] of code128Segments(value).entries()) {
+    if (index === 0) symbols.push(segment.set === "C" ? START_C : START_B);
+    // The only change of set is from the leading digits to the rest.
+    else symbols.push(CODE_C_TO_B);
+    symbols.push(
+      ...(segment.set === "C" ? digitPairs(segment.text) : charValues(segment.text)),
+    );
   }
 
   const checksum =
