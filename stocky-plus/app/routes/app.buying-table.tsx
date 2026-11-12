@@ -13,6 +13,7 @@ import {
   fetchInventoryLevels,
   fetchLocations,
 } from "../services/shopify-gql.server";
+import { applySupplierRules } from "../lib/replenishment";
 import { computeForecast } from "../services/forecasting.server";
 import { resolveTieredUnitCost } from "../services/landed-cost.server";
 
@@ -214,6 +215,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     if (!supplier) return { error: "Supplier not found" };
 
+    // Supplier minimums and pack sizes apply only when the merchant ticks them.
+    const supplierRules = {
+      applyMinimumOrderQuantity: form.get("applyMinimumOrderQuantity") === "on",
+      roundUpToPackSize: form.get("roundUpToPackSize") === "on",
+    };
+
     const lines: Array<{
       variantId: string;
       vendorSku: string | null;
@@ -224,18 +231,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     for (const [key, value] of form.entries()) {
       if (!key.startsWith("qty-")) continue;
       const mappingId = key.slice(4);
-      let qty = parseInt(value as string, 10);
-      if (!qty || qty <= 0) continue;
+      const entered = parseInt(value as string, 10);
+      if (!entered || entered <= 0) continue;
 
       const mapping = await db.supplierSkuMapping.findFirst({
         where: { id: mappingId, supplierId: supplier.id },
       });
       if (!mapping) continue;
 
-      // CURRENT behavior (KNOWN-WRONG vs product rules): forced MOQ/pack rounding.
-      // Characterization tests document this; Phase 2 must make rules optional.
-      qty = Math.max(qty, mapping.moq);
-      qty = Math.ceil(qty / mapping.packSize) * mapping.packSize;
+      const { quantity: qty } = applySupplierRules(
+        entered,
+        { minimumOrderQuantity: mapping.moq, packSize: mapping.packSize },
+        supplierRules,
+      );
 
       const tierCost = await resolveTieredUnitCost(
         db,
@@ -301,12 +309,11 @@ export default function BuyingTable() {
   if (gated) {
     return (
       <s-page heading="Buying Table">
-        <s-section heading="Premium feature">
-          <s-banner tone="info" heading="The Buying Table requires a subscription">
+        <s-section heading="Choose a plan">
+          <s-banner tone="info" heading="The Buying Table needs an active plan">
             <s-paragraph>
-              Demand planning, ABC analysis, and one-click PO generation are
-              part of the paid plan. Marketing must not claim unlimited or
-              AI-driven forecasting until Smart mode and AI gates exist.
+              Reorder suggestions, ABC analysis and purchase order creation
+              are included in every plan. Choose a plan to start using them.
             </s-paragraph>
           </s-banner>
           <s-stack direction="inline" gap="base">
@@ -452,6 +459,21 @@ export default function BuyingTable() {
                   ))}
                 </s-table-body>
               </s-table>
+              <s-stack direction="block" gap="small-300">
+                <s-checkbox
+                  name="applyMinimumOrderQuantity"
+                  value="on"
+                  label="Raise quantities to the supplier's minimum order"
+                />
+                <s-checkbox
+                  name="roundUpToPackSize"
+                  value="on"
+                  label="Round quantities up to full packs"
+                />
+                <s-text color="subdued">
+                  Leave both unticked to order exactly the quantities entered.
+                </s-text>
+              </s-stack>
               <s-button
                 type="submit"
                 variant="primary"
