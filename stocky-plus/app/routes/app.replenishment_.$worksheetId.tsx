@@ -125,6 +125,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       generatedAt: formatInstant(worksheet.generatedAt, worksheet.timeZone),
       method: settings ? describeMethod(settings.params) : PARITY_METHOD_LABELS[worksheet.method],
       scope: worksheet.scopeName ?? "All locations together",
+      scopeKey: worksheet.scopeKey,
       selection: selection
         ? describeSelection(
             selection,
@@ -336,6 +337,7 @@ export default function Worksheet() {
   const detailContext: LineDetailContext = {
     currencyCode: summary?.currencyCode ?? null,
     salesPeriod: summary?.salesPeriod ?? "",
+    scope: { key: worksheet.scopeKey, name: worksheet.scope },
   };
 
   const first = matching === 0 ? 0 : (view.page - 1) * view.pageSize + 1;

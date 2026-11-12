@@ -1,4 +1,5 @@
 import type { FieldErrors } from "../../lib/replenishment/form";
+import type { VariantRuleValues } from "../../lib/replenishment/rules.server";
 import type { ParityMethod, SuggestionResult } from "../../lib/replenishment/types";
 import type { CreatedOrder } from "../../lib/replenishment/worksheet/orders.server";
 
@@ -26,3 +27,13 @@ export type PreviewFormValues = {
   endDate: string;
   targetQuantity: string;
 };
+
+/** A variant's stored planning levels, as the levels route returns them. */
+export type LevelsLoaderResult =
+  | { ok: true; values: VariantRuleValues }
+  | { ok: false; message: string };
+
+/** The result of saving a variant's planning levels. */
+export type LevelsActionResult =
+  | { ok: true; outcome: "saved" | "cleared" }
+  | { ok: false; errors: FieldErrors; message?: string };
