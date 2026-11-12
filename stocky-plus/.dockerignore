@@ -1,3 +1,11 @@
 .cache
 build
 node_modules
+
+# Local secrets and CLI state must never be copied into an image. The Prisma
+# CLI also loads .env, so a copied file would silently supply any variable
+# the deploy environment leaves unset.
+.env
+.env.*
+!.env.example
+.shopify

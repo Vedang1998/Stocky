@@ -14,6 +14,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFile } from "node:fs/promises";
+import { finished } from "node:stream/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { OrderFactsJsonlError } from "./errors";
 import {
@@ -119,6 +120,30 @@ async function waitStatus(
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
   throw new Error(`timed out waiting for ${stage} at ${statusPath}`);
+}
+
+/**
+ * Resolves once the spawned tsx process and the node process it runs the
+ * script in have both exited. They share the stderr pipe, which reaches
+ * end-of-file only when the last of them is gone, so after this nothing can
+ * still write the killed attempt's files.
+ */
+async function processTreeExited(child: ChildProcess): Promise<void> {
+  if (!child.stderr) {
+    throw new Error("child was spawned without a stderr pipe");
+  }
+  child.stderr.resume();
+  await finished(child.stderr);
+}
+
+/**
+ * The process-loss child stages through write streams, so lines it had
+ * already handed to a stream can still reach the file after it reports
+ * "parked". A kill may therefore leave more bytes than were visible before
+ * it, but never fewer and never different ones.
+ */
+function keepsStagedBytes(afterKill: Buffer, beforeKill: Buffer): boolean {
+  return afterKill.subarray(0, beforeKill.length).equals(beforeKill);
 }
 
 describe("PR6-D source staging ownership", () => {
@@ -499,16 +524,20 @@ describe("PR6-D scratch integrity and resource failure", () => {
     expect(existsSync(path.join(leftover, ORDER_FACTS_SCRATCH_MARKER))).toBe(true);
     const jsonlPath = path.join(leftover, "source.jsonl");
     expect(existsSync(jsonlPath)).toBe(true);
-    const beforeHash = sha256(readFileSync(jsonlPath));
-    const beforeInventory = inventoryFiles(leftover);
+    const stagedBeforeKill = readFileSync(jsonlPath);
     const pid = parked.pid;
     expect(typeof pid).toBe("number");
     if (typeof pid === "number") {
       process.kill(pid, "SIGKILL");
     }
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await processTreeExited(child);
     expect(existsSync(jsonlPath)).toBe(true);
-    expect(sha256(readFileSync(jsonlPath))).toBe(beforeHash);
+    expect(keepsStagedBytes(readFileSync(jsonlPath), stagedBeforeKill)).toBe(
+      true,
+    );
+    // The writer is gone, so the leftover is now fixed: the rebuild, restage
+    // and dispose below must not change any file in it.
+    const beforeInventory = inventoryFiles(leftover);
     const rebuilt = await createOwnedScratchDir({
       shopId: "pl-shop",
       syncRunId: "pl-run",
@@ -570,12 +599,14 @@ describe("PR6-D scratch integrity and resource failure", () => {
     expect(parked.stage).not.toBe("completed");
     const leftover = String(parked.dir);
     const jsonlPath = path.join(leftover, "source.jsonl");
-    const before = sha256(readFileSync(jsonlPath));
+    const stagedBeforeKill = readFileSync(jsonlPath);
     if (typeof parked.pid === "number") process.kill(parked.pid, "SIGKILL");
     child.kill("SIGKILL");
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await processTreeExited(child);
     expect(existsSync(jsonlPath)).toBe(true);
-    expect(sha256(readFileSync(jsonlPath))).toBe(before);
+    expect(keepsStagedBytes(readFileSync(jsonlPath), stagedBeforeKill)).toBe(
+      true,
+    );
     const occupancy = sanitizeDScratchOccupancy(
       await inspectDScratchOccupancy({ scratchRoot: root }),
     );
