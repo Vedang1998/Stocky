@@ -599,6 +599,21 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     expirationPhaseOrRemovalCondition:
       "Retain while PR 4 D-051 correction suite requires disposable fixtures",
   },
+  {
+    id: "EX-SYNC-TEST-SESSION-TOKENS-001",
+    path: "app/sync/__tests__/session-token-encryption.test.ts",
+    category: "migration_tests",
+    reason:
+      "R-191 session token encryption test reads Session rows as stored on the disposable PostgreSQL harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "Session create, read and delete for the test shop",
+    ],
+    productionRuntime: "no",
+    owner: "app-store-readiness",
+    expirationPhaseOrRemovalCondition:
+      "Retain while the sync-integration suite requires disposable fixtures",
+  },
   ...syncControlPlaneExceptions(),
   ...backfillExceptions(),
   ...indexExceptions(),
