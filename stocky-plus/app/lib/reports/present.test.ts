@@ -11,6 +11,7 @@ import {
   filterRows,
   formatCell,
   formatShopInstant,
+  freshnessNote,
   resolveSort,
   sortRows,
   tablePage,
@@ -365,6 +366,26 @@ describe("formatShopInstant", () => {
     );
     expect(formatShopInstant(instant, "Asia/Tokyo")).toBe(
       "Nov 9, 2026, 11:30 AM GMT+9",
+    );
+  });
+});
+
+describe("freshnessNote", () => {
+  it("names the latest synced Shopify change in the shop's time zone", () => {
+    expect(
+      freshnessNote(new Date("2026-11-09T15:00:00Z"), "America/New_York"),
+    ).toBe("Includes Shopify changes up to Nov 9, 2026, 10:00 AM EST.");
+  });
+
+  it("says so when nothing has been synced", () => {
+    expect(freshnessNote(null, "America/New_York")).toBe(
+      "No Shopify data has been synced for this report yet.",
+    );
+  });
+
+  it("does not mention a Shopify sync for records made in this app", () => {
+    expect(freshnessNote("live", "America/New_York")).toBe(
+      "Lists the records made in this app as they are now.",
     );
   });
 });

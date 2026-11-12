@@ -49,6 +49,8 @@ export function ReportTable({
 
   const firstRow = (table.page - 1) * table.pageSize + 1;
   const lastRow = firstRow + table.rows.length - 1;
+  const hasPrevious = table.page > 1;
+  const hasNext = table.page < table.pageCount;
 
   return (
     <s-stack direction="block" gap="base">
@@ -94,15 +96,15 @@ export function ReportTable({
       </s-table>
       <s-stack direction="inline" gap="base" alignItems="center">
         <s-button
-          href={href({ page: table.page - 1 })}
-          disabled={table.page <= 1}
+          href={hasPrevious ? href({ page: table.page - 1 }) : undefined}
+          disabled={!hasPrevious}
           variant="secondary"
         >
           Previous
         </s-button>
         <s-button
-          href={href({ page: table.page + 1 })}
-          disabled={table.page >= table.pageCount}
+          href={hasNext ? href({ page: table.page + 1 }) : undefined}
+          disabled={!hasNext}
           variant="secondary"
         >
           Next

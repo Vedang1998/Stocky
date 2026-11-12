@@ -112,11 +112,7 @@ export function ReportView({ page }: { page: ReportPage }) {
       <s-section heading="About this report">
         <s-stack direction="block" gap="base">
           <s-paragraph>{report.description}</s-paragraph>
-          <s-paragraph>
-            {page.dataAsOf
-              ? `Includes Shopify changes up to ${page.dataAsOf}.`
-              : "No Shopify data has been synced for this report yet."}
-          </s-paragraph>
+          <s-paragraph>{page.freshness}</s-paragraph>
         </s-stack>
       </s-section>
 

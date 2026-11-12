@@ -169,6 +169,19 @@ export function formatShopInstant(instant: Date, timeZone: string): string {
   }).format(instant);
 }
 
+/** One sentence telling the merchant how current a report's figures are. */
+export function freshnessNote(
+  dataAsOf: Date | "live" | null,
+  timeZone: string,
+): string {
+  if (dataAsOf === "live") {
+    return "Lists the records made in this app as they are now.";
+  }
+  return dataAsOf
+    ? `Includes Shopify changes up to ${formatShopInstant(dataAsOf, timeZone)}.`
+    : "No Shopify data has been synced for this report yet.";
+}
+
 /** A fraction (0–1) as a percentage with two decimals, without the sign. */
 function percentText(value: CellValue): string {
   return toDecimal(value as Decimal | number | string)

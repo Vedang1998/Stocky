@@ -235,7 +235,7 @@ describe("report page route", () => {
           sort: { key: "onHand", direction: "asc" },
         },
         searchLabels: ["Product", "Variant", "SKU", "Vendor"],
-        dataAsOf: "Nov 9, 2026, 10:00 AM EST",
+        freshness: "Includes Shopify changes up to Nov 9, 2026, 10:00 AM EST.",
         timeZone: "America/New_York",
       },
     });

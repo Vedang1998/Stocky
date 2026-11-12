@@ -633,7 +633,9 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
       expect(rows[1]).toMatchObject({ orderedUnits: "3", addedUnits: "2", returnedUnits: "1" });
       expect(rows[3]).toMatchObject({ product: "Trail Shoe", sku: "—" });
       expect(tiles(result)).toMatchObject({ "Net revenue": "$829.00", "Net units": "12" });
-      expect(result.dataAsOf).toBe("Oct 5, 2026, 11:00 AM EDT");
+      expect(result.freshness).toBe(
+        "Includes Shopify changes up to Oct 5, 2026, 11:00 AM EDT.",
+      );
       expect(result.notices).toEqual([]);
     });
 

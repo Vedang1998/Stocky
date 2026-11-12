@@ -91,8 +91,12 @@ export type ReportData<Row> = {
   notices: ReportNotice[];
   /** Policy and method notes that apply to the whole report. */
   methodNotes: string[];
-  /** The most recent Shopify change the figures reflect; null when none is known. */
-  dataAsOf: Date | null;
+  /**
+   * The most recent Shopify change the figures reflect, or null when nothing
+   * has been synced yet. "live" marks a report over records made in this app,
+   * which are read as they are now.
+   */
+  dataAsOf: Date | "live" | null;
 };
 
 export type ReportGroup = "Sales" | "Inventory";

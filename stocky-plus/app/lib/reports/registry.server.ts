@@ -40,7 +40,7 @@ import {
   REPORT_EXPORT_ROW_LIMIT,
   exportTable,
   facetChoices,
-  formatShopInstant,
+  freshnessNote,
   tablePage,
   type FacetChoices,
   type ReportExport,
@@ -221,8 +221,8 @@ export type ReportPage = {
   searchLabels: string[];
   notices: ReportNotice[];
   methodNotes: string[];
-  /** The most recent Shopify change the figures reflect, in the shop's time zone. */
-  dataAsOf: string | null;
+  /** How current the figures are, as a sentence in the shop's time zone. */
+  freshness: string;
   timeZone: string;
   exportRowLimit: number;
 };
@@ -284,9 +284,7 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
           .map((column) => column.label),
         notices: data.notices,
         methodNotes: data.methodNotes,
-        dataAsOf: data.dataAsOf
-          ? formatShopInstant(data.dataAsOf, context.timeZone)
-          : null,
+        freshness: freshnessNote(data.dataAsOf, context.timeZone),
         timeZone: context.timeZone,
         exportRowLimit: REPORT_EXPORT_ROW_LIMIT,
       };
@@ -343,7 +341,8 @@ const REPORTS: readonly RegisteredReport[] = [
   register({
     id: "sale-items",
     title: "Sale items",
-    description: "Every sale, refund and order edit, line by line.",
+    description:
+      "Every sale, refund and order edit, line by line. Test and cancelled orders are left out.",
     group: "Sales",
     usesDateRange: true,
     options: [],

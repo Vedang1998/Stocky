@@ -185,7 +185,7 @@ export function buildTransfersReport(
       },
     ],
     notices: [],
-    dataAsOf: null,
+    dataAsOf: "live",
     methodNotes: [
       "A transfer is listed by the day it was created, in your store's time zone.",
       "Only transfers made in this app are listed. Transfers created directly in Shopify are not included.",
@@ -376,7 +376,7 @@ export function buildStocktakeVarianceReport(
       },
     ],
     notices,
-    dataAsOf: null,
+    dataAsOf: "live",
     methodNotes: [
       "A stocktake is listed by the day it was completed, in your store's time zone. Stocktakes still in progress and cancelled stocktakes are not included.",
       "Variance value uses today's cost per item in Shopify, not the cost on the day of the count.",
@@ -580,7 +580,7 @@ export function buildInventoryChangesReport(
       },
     ],
     notices: [],
-    dataAsOf: null,
+    dataAsOf: "live",
     methodNotes: [
       "Only changes made through this app and accepted by Shopify are listed. Changes made directly in Shopify or by other apps are not included, and neither is a change that failed or is still waiting to be sent.",
       "A change is listed by the day it was made, in your store's time zone.",
