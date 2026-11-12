@@ -118,6 +118,7 @@ const TEST_FILES = [
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
   "app/tenant/__tests__/compound-shopid-upsert.test.ts",
+  "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [
@@ -311,7 +312,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     category: "tenant_bound_access",
     reason: "Tenant-bound DB contract wraps raw client; never returns it to callers",
     permittedModelsOrOperations: [
-      "All 35 merchant-owned models via scoped delegates",
+      "All 37 merchant-owned models via scoped delegates",
     ],
     productionRuntime: "yes",
     owner: "phase-1-pr2-tenant-access",
