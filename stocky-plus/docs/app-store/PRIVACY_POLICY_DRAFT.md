@@ -1,7 +1,7 @@
 # ProPo privacy policy — DRAFT
 
 > **DRAFT — NOT FOR PUBLICATION. Requires review by a qualified lawyer before use.**
-> Prepared 2026-11-10 from the code on `main` at `2685081`. It describes what the code stores and does, not what the roadmap plans. Remove this box and the checklist below before publishing.
+> Prepared 2026-11-10 from the code on `main` at `2685081`; sections 5 and 6 and the checklist updated 2026-11-12 for the compliance webhooks, store erasure and the inventory change record. It describes what the code stores and does, not what the roadmap plans. Remove this box and the checklist below before publishing.
 
 ## Before publishing (remove this section from the public page)
 
@@ -9,8 +9,8 @@ Several statements in the policy are true only once code that is not on `main` t
 
 | # | Statement in the policy | State on `main` (2685081) | What has to happen |
 |---|---|---|---|
-| 1 | Store data is deleted after Shopify's `shop/redact` request | `app/routes/webhooks.compliance.tsx` only verifies and acknowledges the request; nothing is deleted. D-021 approves the deletion design; Q-008 is still open. | Ship and test the `shop/redact` deletion job, then confirm the retention exceptions with counsel. |
-| 2 | Customer data requests and deletion requests are handled | Same handler; `customers/data_request` and `customers/redact` are acknowledged only. | Ship both handlers. Decide whether order records named in `orders_to_redact` are deleted or de-identified. |
+| 1 | Store data is deleted after Shopify's `shop/redact` request | Done. An uninstalled store's data is erased when the request arrives, or 30 days after uninstall if it never does (`docs/app-store/DATA_DELETION.md`). | Confirm the 30-day window and any record the law requires us to keep with counsel. |
+| 2 | Customer data requests and deletion requests are handled | Done. Each request is recorded and closed as "no customer data held". Order records named in a deletion request are kept; they carry no shopper details. | Decide with counsel whether the named order records should be deleted instead. Section 6 describes what the code does today. |
 | 3 | Backup retention period | Not set in the repository. | `OWNER TO FILL` from the hosting/database provider. |
 | 4 | Encryption at rest | Not provable from the repository, so the policy does not claim it. | If the database provider encrypts at rest, add it with the provider's wording. |
 | 5 | Subprocessor list and hosting region | Not recorded in the repository. | `OWNER TO FILL` |
@@ -46,7 +46,7 @@ ProPo gets information in three ways: from Shopify through the access the mercha
 - When the app was installed, uninstalled or reinstalled.
 - Access credentials Shopify issues to ProPo: an access token, a refresh token, their expiry times and the permissions granted. These let ProPo read and update the store on the merchant's behalf.
 
-ProPo uses store-level ("offline") access only. It does not request per-staff sessions, so it does not store staff members' names or email addresses.
+ProPo uses store-level ("offline") access only. It does not request per-staff sessions and does not store staff members' email addresses. When a staff member changes inventory through ProPo, the change is recorded with that staff member's Shopify user ID, and their display name where one is supplied, so the merchant can see who made it.
 
 ### 3.2 Product, inventory and location information
 
@@ -135,9 +135,9 @@ We use information only for these purposes. We do not use one store's informatio
 
 **When the app is uninstalled**, ProPo stops processing the store straight away, cancels queued work and deletes the store's Shopify access tokens.
 
-**48 hours after uninstall**, Shopify asks us to erase the store's data. We then delete the store's information from our live systems within 30 days of that request, keeping only a record that the deletion took place and anything the law requires us to keep. Deleted data may remain in backups until they expire after `OWNER TO FILL: backup retention period`.
+**48 hours after uninstall**, Shopify asks us to erase the store's data. We then delete the store's information from our live systems within 30 days of that request, keeping only a record that the deletion took place and anything the law requires us to keep. If that request does not reach us, we delete the store's information ourselves `OWNER TO CONFIRM: 30` days after uninstall. Deleted data may remain in backups until they expire after `OWNER TO FILL: backup retention period`.
 
-**Shopper requests.** When a shopper asks a merchant for their data, Shopify tells ProPo which orders are involved. Within 30 days we give the merchant the information ProPo holds about those orders. When a shopper asks for deletion, we delete or de-identify the order records Shopify names within 30 days, unless the law requires us to keep them.
+**Shopper requests.** When a shopper asks a merchant for their data or for deletion, Shopify tells ProPo which orders are involved. ProPo holds nothing that identifies a shopper, so there is no personal information to hand over or delete; we record each request and that it was answered. The order records themselves (order number, amounts and line items) stay in the merchant's sales history. `OWNER TO DECIDE with counsel: keep these records, or delete the orders named in a deletion request.`
 
 **Supplier contacts** are kept until the merchant deletes the supplier or the store's data is erased.
 

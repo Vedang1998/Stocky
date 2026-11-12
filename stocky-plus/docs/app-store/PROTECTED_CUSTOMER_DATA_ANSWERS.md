@@ -66,7 +66,7 @@ Status key: **Ready** — can be answered truthfully today. **Blocked** — the 
 | L1.5 | Where applicable, respect and apply customer decisions to opt out of any data sharing such as a "data sale" or similar concept under applicable laws or regulations. | Not applicable. ProPo does not sell or share personal data. | As L1.3. | Ready (same note as L1.4) |
 | L1.6 | If you use personal data for automated decision-making and those decisions might have legal or significant effects, then you must allow customers to opt out. | Not applicable. ProPo's calculations are about products and stock, not about people. | Forecasting and ABC code in `app/services/forecasting.server.ts` operates on variant-level aggregates. | Ready |
 | L1.7 | Make privacy and data protection agreements with your merchants. | Yes, through the published privacy policy and `OWNER TO FILL: terms of service / data processing agreement`. | — | Blocked / Owner |
-| L1.8 | Apply retention periods to make sure that personal data isn't kept for longer than needed. | Target answer: Yes. Access tokens are deleted at uninstall; all store data is deleted after Shopify's `shop/redact` request; order records named in `customers/redact` are deleted or de-identified within 30 days. | Uninstall token deletion is implemented (`app/sync/uninstall.server.ts`). **The redaction handlers are not:** `app/routes/webhooks.compliance.tsx` only acknowledges. | **Blocked** — ship and test the compliance handlers first (D-021, Q-008). |
+| L1.8 | Apply retention periods to make sure that personal data isn't kept for longer than needed. | Yes. Access tokens are deleted at uninstall. All store data is deleted when Shopify's `shop/redact` request arrives, or `PRIVACY_UNINSTALLED_RETENTION_DAYS` (default 30) days after uninstall if it never does. | `app/sync/uninstall.server.ts`, `app/privacy/`, `docs/app-store/DATA_DELETION.md`. Tests: `app/sync/__tests__/privacy-compliance.test.ts`. | Ready once the owner confirms the retention window. |
 | L1.9 | Encrypt data at rest and in transit. | In transit: Yes. All app traffic is HTTPS and Shopify API calls use TLS. At rest: `OWNER TO FILL` from the database, Redis and backup provider. | Nothing in the repository proves encryption at rest or TLS on the database and Redis connections. Check the production `DATABASE_URL` (`sslmode`) and `REDIS_URL` (`rediss://`). | **Blocked / Owner** |
 
 ### Level 2 (not required for ProPo's request; proposed in case the dashboard asks)
@@ -85,13 +85,13 @@ Status key: **Ready** — can be answered truthfully today. **Blocked** — the 
 
 Shopify requires the app to verify and answer all three with a 2xx status, return `401` for an invalid HMAC, and complete the action within 30 days.
 
-| Topic | Shopify behavior | ProPo on `main` | Needed before submission |
+| Topic | Shopify behavior | ProPo | Open point |
 |---|---|---|---|
-| `customers/data_request` | Sends the customer's ID and the order IDs; the app gives the data to the store owner directly. | Verified and acknowledged only. | Export the order facts ProPo holds for the listed orders and deliver them to the store owner. |
-| `customers/redact` | Sent 5 days after the deletion request, with the order IDs to redact. | Verified and acknowledged only. | Delete or de-identify the listed order facts. `OWNER TO DECIDE:` delete the rows, or keep only daily totals per variant (which carry no order reference). |
-| `shop/redact` | Sent 48 hours after uninstall. | Verified and acknowledged only. | Delete all of the store's data, keeping only a deletion receipt and any record counsel says must be kept. |
+| `customers/data_request` | Sends the customer's ID and the order IDs; the app gives the data to the store owner directly. | Recorded and closed as "no customer data held". The customer block is never read and the order IDs are counted, not stored. | None, while ProPo stores no shopper fields. |
+| `customers/redact` | Sent after the deletion request, with the order IDs to redact. | Recorded and closed as "no customer data held". The named order records are kept; they hold order number, amounts and line items. | `OWNER TO DECIDE:` keep the order records, or delete the named orders. |
+| `shop/redact` | Sent 48 hours after uninstall. | Every row belonging to the store, its sessions and its queued jobs are deleted, then the store record. A record of the request is kept. A request for a store that is not recorded as uninstalled waits and is rechecked. | Retention window to be confirmed by the owner. |
 
-HMAC verification and the `401` response are handled by `authenticate.webhook` from the Shopify app library.
+HMAC verification and the `401` response are handled by `authenticate.webhook` from the Shopify app library. A delivery whose signed body names another shop, or a customer request sent as `shop/redact`, is also answered with `401`. Details: `docs/app-store/DATA_DELETION.md`.
 
 ## 5. read_all_orders justification (App Store requirement 3.2.1)
 
