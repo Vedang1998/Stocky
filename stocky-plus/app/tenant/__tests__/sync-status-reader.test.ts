@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import type { PrismaClient } from "@prisma/client";
 import { resetControlPlanePrismaForTests } from "../../sync/control-plane-db.server";
 import { readCatalogSyncStatus } from "../../sync/sync-status.server";
@@ -15,7 +15,10 @@ import {
   SHOP_B_DOMAIN,
 } from "./helpers";
 
-const { sessionShop } = vi.hoisted(() => ({ sessionShop: { domain: "" } }));
+const { sessionShop, enqueueCatalogSync } = vi.hoisted(() => ({
+  sessionShop: { domain: "" },
+  enqueueCatalogSync: vi.fn(),
+}));
 
 // Home authenticates through app/shopify.server. Stand in for Shopify's
 // session check only; tenant resolution and every query are real.
@@ -25,7 +28,14 @@ vi.mock("../../shopify.server", () => ({
   },
 }));
 
-const { loader: homeLoader } = await import("../../routes/app._index");
+// Queueing needs the job dispatcher; these tests only check whether Home
+// asks for a sync.
+vi.mock("../../jobs/queue.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../jobs/queue.server")>()),
+  enqueueCatalogSync,
+}));
+
+const { loader: homeLoader, action: homeAction } = await import("../../routes/app._index");
 
 function authority(shopId: string, myshopifyDomain: string) {
   return issueTenantAuthority({
@@ -48,7 +58,11 @@ describe("catalog sync status reader", () => {
   });
 
   beforeEach(async () => {
+    enqueueCatalogSync.mockReset();
     await wipeSyncControlPlaneTables(prisma);
+    // Home creates a settings row per shop domain; the shops are re-created
+    // with new IDs for every test.
+    await prisma.shopSettings.deleteMany({});
     await clearCatalogFacts(prisma);
     const shops = await seedTwoShops(prisma);
     shopAId = shops.shopA.id;
@@ -81,15 +95,47 @@ describe("catalog sync status reader", () => {
     });
   }
 
+  async function seedJob(shopId: string, jobType: string, at: string) {
+    return prisma.durableJob.create({
+      data: {
+        shopId,
+        jobType,
+        source: "catalog_sync",
+        queueName: "cron",
+        payloadSchemaVersion: "test",
+        sanitizedPayload: {},
+        payloadDigest: "test-digest",
+        idempotencyKey: `${jobType}:${shopId}:${at}`,
+        correlationId: `corr-${shopId}-${jobType}-${at}`,
+        authorityVersion: "v1",
+        state: "PENDING",
+        createdAt: new Date(at),
+      },
+    });
+  }
+
   it("reports every catalog domain as not started for a shop with no history", async () => {
     expect(await readCatalogSyncStatus(authority(shopAId, SHOP_A_DOMAIN))).toEqual([
-      { domain: "locations", state: "NEVER_STARTED", detailCode: null, lastSucceededAt: null },
-      { domain: "catalog", state: "NEVER_STARTED", detailCode: null, lastSucceededAt: null },
+      {
+        domain: "locations",
+        state: "NEVER_STARTED",
+        detailCode: null,
+        lastSucceededAt: null,
+        syncing: false,
+      },
+      {
+        domain: "catalog",
+        state: "NEVER_STARTED",
+        detailCode: null,
+        lastSucceededAt: null,
+        syncing: false,
+      },
       {
         domain: "inventory_levels",
         state: "NEVER_STARTED",
         detailCode: null,
         lastSucceededAt: null,
+        syncing: false,
       },
     ]);
   });
@@ -119,6 +165,7 @@ describe("catalog sync status reader", () => {
       state: "FAILED",
       detailCode: "open_dead_letter",
       lastSucceededAt: new Date("2026-11-09T10:00:00Z"),
+      syncing: false,
     });
     expect(a.find((row) => row.domain === "locations")?.state).toBe("NEVER_STARTED");
     expect(b.find((row) => row.domain === "catalog")).toEqual({
@@ -126,8 +173,38 @@ describe("catalog sync status reader", () => {
       state: "HEALTHY",
       detailCode: "latest_succeeded",
       lastSucceededAt: new Date("2026-11-11T08:00:00Z"),
+      syncing: false,
     });
     expect(b.find((row) => row.domain === "locations")?.state).toBe("RUNNING");
+  });
+
+  it("reports the domains a queued or running catalog sync has not finished yet", async () => {
+    await seedJob(shopAId, "catalog-sync", "2026-11-11T09:00:00Z");
+    await seedRun(shopAId, "locations", "SUCCEEDED", "2026-11-11T09:00:05Z");
+    await seedRun(shopAId, "catalog", "SUCCEEDED", "2026-11-10T09:00:00Z");
+    await seedRun(shopAId, "catalog", "RUNNING", "2026-11-11T09:00:06Z");
+
+    const rows = await readCatalogSyncStatus(authority(shopAId, SHOP_A_DOMAIN));
+    expect(rows.map((row) => [row.domain, row.syncing])).toEqual([
+      ["locations", false],
+      ["catalog", true],
+      ["inventory_levels", true],
+    ]);
+  });
+
+  it("does not report a sync for another shop's job, a finished job or another kind of job", async () => {
+    await seedJob(shopBId, "catalog-sync", "2026-11-11T09:00:00Z");
+    await seedJob(shopAId, "inventory-state-reconcile", "2026-11-11T09:00:00Z");
+    const finished = await seedJob(shopAId, "catalog-sync", "2026-11-11T08:00:00Z");
+    await prisma.$executeRaw`
+      UPDATE "DurableJob" SET state = 'CANCELLED', "cancelledAt" = NOW(), "updatedAt" = NOW()
+      WHERE id = ${finished.id}
+    `;
+
+    const a = await readCatalogSyncStatus(authority(shopAId, SHOP_A_DOMAIN));
+    const b = await readCatalogSyncStatus(authority(shopBId, SHOP_B_DOMAIN));
+    expect(a.map((row) => row.syncing)).toEqual([false, false, false]);
+    expect(b.map((row) => row.syncing)).toEqual([true, true, true]);
   });
 
   it("takes the most recent successful run and ignores runs that did not succeed", async () => {
@@ -178,6 +255,12 @@ describe("catalog sync status reader", () => {
     await expect(readCatalogSyncStatus(forged)).rejects.toBeInstanceOf(TenantAuthorityError);
   });
 
+  async function homeAs(domain: string) {
+    sessionShop.domain = domain;
+    const request = new Request("https://app.example.com/app");
+    return homeLoader({ request, params: {}, context: {} } as LoaderFunctionArgs);
+  }
+
   it("shows each shop its own sync status on Home", async () => {
     await prisma.syncHealth.createMany({
       data: [
@@ -186,12 +269,6 @@ describe("catalog sync status reader", () => {
       ],
     });
     await seedRun(shopBId, "catalog", "SUCCEEDED", "2026-11-11T08:00:00Z");
-
-    async function homeAs(domain: string) {
-      sessionShop.domain = domain;
-      const request = new Request("https://app.example.com/app");
-      return homeLoader({ request, params: {}, context: {} } as LoaderFunctionArgs);
-    }
 
     const a = await homeAs(SHOP_A_DOMAIN);
     expect(a.syncStatus.attention?.tone).toBe("critical");
@@ -207,5 +284,68 @@ describe("catalog sync status reader", () => {
       badge: { text: "Up to date" },
       lastSucceededAt: "2026-11-11T08:00:00.000Z",
     });
+  });
+
+  // Store-test finding on PR #96: the first sync left Home on "Not synced
+  // yet" until a reload, then showed "Needs attention" for a sync that had
+  // succeeded.
+  it("shows the first sync as in progress on Home, then as up to date", async () => {
+    await seedJob(shopAId, "catalog-sync", "2026-11-11T09:00:00Z");
+
+    const during = await homeAs(SHOP_A_DOMAIN);
+    expect(during.syncStatus.inProgress).toBe(true);
+    expect(during.syncStatus.rows.map((row) => row.badge.text)).toEqual([
+      "Syncing",
+      "Syncing",
+      "Syncing",
+    ]);
+    expect((await homeAs(SHOP_B_DOMAIN)).syncStatus.inProgress).toBe(false);
+
+    await prisma.$executeRaw`
+      UPDATE "DurableJob" SET state = 'CANCELLED', "cancelledAt" = NOW(), "updatedAt" = NOW()
+      WHERE "shopId" = ${shopAId}
+    `;
+    for (const syncDomain of ["locations", "catalog", "inventory_levels"]) {
+      await seedRun(shopAId, syncDomain, "SUCCEEDED", "2026-11-11T09:01:00Z");
+      // What the engine records after a successful sync while removal of
+      // products missing from Shopify is held.
+      await prisma.syncHealth.create({
+        data: {
+          shopId: shopAId,
+          syncDomain,
+          state: "DEGRADED",
+          detailCode: "absence_reconciliation_uncertain",
+        },
+      });
+    }
+
+    const after = await homeAs(SHOP_A_DOMAIN);
+    expect(after.syncStatus.inProgress).toBe(false);
+    expect(after.syncStatus.attention).toBeNull();
+    expect(after.syncStatus.rows.map((row) => row.badge.text)).toEqual([
+      "Up to date",
+      "Up to date",
+      "Up to date",
+    ]);
+  });
+
+  it("queues a sync from Home only when the shop has none under way", async () => {
+    async function requestSync(domain: string) {
+      sessionShop.domain = domain;
+      const request = new Request("https://app.example.com/app", {
+        method: "POST",
+        body: new URLSearchParams({ intent: "syncCatalog" }),
+      });
+      return homeAction({ request, params: {}, context: {} } as ActionFunctionArgs);
+    }
+    await seedJob(shopAId, "catalog-sync", "2026-11-11T09:00:00Z");
+
+    await requestSync(SHOP_A_DOMAIN);
+    expect(enqueueCatalogSync).not.toHaveBeenCalled();
+
+    // Shop A's running sync does not hold back shop B.
+    await requestSync(SHOP_B_DOMAIN);
+    expect(enqueueCatalogSync).toHaveBeenCalledTimes(1);
+    expect(enqueueCatalogSync.mock.calls[0][0]).toMatchObject({ shopId: shopBId });
   });
 });

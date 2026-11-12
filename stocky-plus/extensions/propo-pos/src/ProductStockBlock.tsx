@@ -1,9 +1,8 @@
 import { render } from "preact";
 import type { VariantStock } from "./api-types";
-import { formatObservedAt, formatQuantity, isStale } from "./format";
+import { formatLastChange, formatQuantity } from "./format";
 import { MESSAGES } from "./lookup";
 import { summarizeStock, variantGidFromPosId } from "./stock-summary";
-import { Freshness } from "./stock-views";
 import { useVariantStock } from "./use-variant-stock";
 
 export default async () => {
@@ -79,7 +78,7 @@ function StockSummary({
   }
 
   const { here, locationKnown, locationCount, totals } = summary;
-  const updated = here ? formatObservedAt(here.observedAt, now) : null;
+  const changed = here ? formatLastChange(here.observedAt, now) : null;
   return (
     <>
       {/* The block's slot only takes direct children of s-pos-block. */}
@@ -100,9 +99,7 @@ function StockSummary({
               {formatQuantity(here.committed)} committed ·{" "}
               {formatQuantity(here.incoming)} incoming
             </s-text>
-            {updated && (
-              <Freshness label={updated} stale={isStale(here.observedAt, now)} />
-            )}
+            {changed && <s-text color="subdued">{changed}</s-text>}
           </>
         ) : (
           locationKnown && <s-text>Not stocked at this location.</s-text>

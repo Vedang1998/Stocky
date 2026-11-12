@@ -1,5 +1,5 @@
 import { Form } from "react-router";
-import { formatObservedAt } from "../../extensions/propo-pos/src/format";
+import { formatAge } from "../lib/stock-format";
 import type { SyncAttention, SyncStatusView } from "../lib/sync-status";
 
 /** Shown at the top of Home when the last sync failed or is incomplete. */
@@ -11,15 +11,21 @@ export function SyncAttentionBanner({ attention }: { attention: SyncAttention })
   );
 }
 
+function syncedLabel(lastSucceededAt: string | null, now: number): string {
+  const age = formatAge(lastSucceededAt, now);
+  return age === null ? "No completed sync yet" : `Last synced ${age}`;
+}
+
 /** Per-domain sync state with the manual sync button. */
 export function SyncStatus({
   status,
   now,
-  syncing,
+  submitting,
 }: {
   status: SyncStatusView;
   now: number;
-  syncing: boolean;
+  /** The sync request itself is being sent. */
+  submitting: boolean;
 }) {
   return (
     <s-section slot="aside" heading="Shopify sync">
@@ -31,22 +37,25 @@ export function SyncStatus({
               <s-badge tone={row.badge.tone}>{row.badge.text}</s-badge>
             </s-stack>
             <s-text color="subdued">
-              {formatObservedAt(row.lastSucceededAt, now) ?? "No completed sync yet"}
+              {syncedLabel(row.lastSucceededAt, now)}
             </s-text>
           </s-stack>
         ))}
         <s-text color="subdued">
-          Changes in Shopify arrive on their own. Sync again if something
-          looks out of date.
+          {status.inProgress
+            ? "ProPo is copying your catalog from Shopify. This updates on its own; a large catalog can take several minutes."
+            : "Changes in Shopify arrive on their own. Sync again if something looks out of date."}
         </s-text>
         <Form method="post">
           <input type="hidden" name="intent" value="syncCatalog" />
+          {/* Disabled during a sync so a second press cannot queue another. */}
           <s-button
             type="submit"
             variant="primary"
-            {...(syncing ? { loading: true } : {})}
+            {...(submitting ? { loading: true } : {})}
+            {...(status.inProgress ? { disabled: true } : {})}
           >
-            Sync catalog
+            {status.inProgress ? "Sync in progress" : "Sync catalog"}
           </s-button>
         </Form>
       </s-stack>

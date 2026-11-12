@@ -13,6 +13,7 @@ import { enqueueCatalogSync } from "../jobs/queue.server";
 import { SetupGuide } from "../components/SetupGuide";
 import { SyncAttentionBanner, SyncStatus } from "../components/SyncStatus";
 import { buildSyncStatusView } from "../lib/sync-status";
+import { useRevalidateWhile } from "../lib/use-revalidate-while";
 import { readCatalogSyncStatus } from "../sync/sync-status.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -55,13 +56,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+const SYNC_REFRESH = { intervalMs: 5000, maxMs: 15 * 60 * 1000 };
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
   const form = await request.formData();
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
-    await enqueueCatalogSync(tenant);
+    // One sync at a time: a second job would only queue behind the first.
+    const domains = await readCatalogSyncStatus(tenant);
+    if (!domains.some((domain) => domain.syncing)) {
+      await enqueueCatalogSync(tenant);
+    }
     return { synced: true };
   }
 
@@ -91,6 +98,9 @@ export default function Dashboard() {
   const syncing =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "syncCatalog";
+  // A first sync takes from seconds to several minutes; follow it so the
+  // status and the setup guide update on their own.
+  useRevalidateWhile(syncStatus.inProgress, SYNC_REFRESH);
 
   return (
     <s-page heading="Home">
@@ -158,7 +168,7 @@ export default function Dashboard() {
         </s-section>
       )}
 
-      <SyncStatus status={syncStatus} now={now} syncing={syncing} />
+      <SyncStatus status={syncStatus} now={now} submitting={syncing} />
 
       <s-section slot="aside" heading="Quick links">
         <s-unordered-list>

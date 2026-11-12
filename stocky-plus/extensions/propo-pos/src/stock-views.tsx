@@ -1,5 +1,5 @@
 import type { LocationStock, ResolvedVariant, VariantStock } from "./api-types";
-import { formatObservedAt, formatQuantity, isStale } from "./format";
+import { formatLastChange, formatQuantity } from "./format";
 import { splitByLocation } from "./stock-summary";
 
 export function LookupError({
@@ -104,7 +104,7 @@ function LocationCard({
   location: LocationStock;
   now: number;
 }) {
-  const updated = formatObservedAt(location.observedAt, now);
+  const changed = formatLastChange(location.observedAt, now);
   return (
     <s-section heading={`${title}: ${location.locationName}`}>
       <s-stack direction="block" gap="small">
@@ -116,14 +116,14 @@ function LocationCard({
           {formatQuantity(location.committed)} committed ·{" "}
           {formatQuantity(location.incoming)} incoming
         </s-text>
-        {updated && <Freshness label={updated} stale={isStale(location.observedAt, now)} />}
+        {changed && <s-text color="subdued">{changed}</s-text>}
       </s-stack>
     </s-section>
   );
 }
 
 function LocationRow({ location, now }: { location: LocationStock; now: number }) {
-  const updated = formatObservedAt(location.observedAt, now);
+  const changed = formatLastChange(location.observedAt, now);
   return (
     <s-stack direction="block">
       <s-text type="strong">{location.locationName}</s-text>
@@ -131,15 +131,7 @@ function LocationRow({ location, now }: { location: LocationStock; now: number }
         {formatQuantity(location.available)} available ·{" "}
         {formatQuantity(location.onHand)} on hand
       </s-text>
-      {updated && <Freshness label={updated} stale={isStale(location.observedAt, now)} />}
+      {changed && <s-text color="subdued">{changed}</s-text>}
     </s-stack>
-  );
-}
-
-export function Freshness({ label, stale }: { label: string; stale: boolean }) {
-  return stale ? (
-    <s-badge tone="warning">{label}</s-badge>
-  ) : (
-    <s-text color="subdued">{label}</s-text>
   );
 }

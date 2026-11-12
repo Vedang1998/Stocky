@@ -6,10 +6,25 @@ import type {
 } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { ActionFeedback } from "../components/ActionFeedback";
+import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { assertInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { fetchLocations } from "../services/shopify-gql.server";
-import { adjustShopifyInventory } from "../services/shopify-sync.server";
+import {
+  requireAdminTenantWithActor,
+  STAFF_REQUIRED_MESSAGE,
+} from "../services/inventory-writes/actor.server";
+import {
+  parseWholeNumber,
+  readFormId,
+} from "../services/inventory-writes/form-values";
+import {
+  addStocktakeLine,
+  completeStocktake,
+  createStocktake,
+  MAX_COUNTED_QUANTITY,
+  saveStocktakeCount,
+} from "../services/stocktakes/stocktake.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, db } = await requireAdminTenant({ request });
@@ -31,147 +46,64 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, tenant, db } = await requireAdminTenant({ request });
-  const shop = tenant.myshopifyDomain;
+  const { admin, tenant, db, actor } = await requireAdminTenantWithActor({
+    request,
+  });
   const form = await request.formData();
-  const intent = form.get("intent") as string;
+  const intent = form.get("intent");
 
   if (intent === "create") {
-    const locationId = form.get("locationId") as string;
-
-    // Freeze expected quantities from the latest inventory snapshots.
-    const snapshots = await db.inventorySnapshot.findMany({
-      where: { locationId },
-      orderBy: { snapshotDate: "desc" },
-      distinct: ["shopifyVariantId"],
+    const name = form.get("name");
+    const result = await createStocktake(db, {
+      shop: tenant.myshopifyDomain,
+      locationId: readFormId(form.get("locationId")),
+      name: typeof name === "string" ? name : null,
     });
-
-    await db.stocktake.create({
-      data: {
-        shop,
-        locationId,
-        name: (form.get("name") as string) || `Count ${new Date().toLocaleDateString()}`,
-        status: "IN_PROGRESS",
-        startedAt: new Date(),
-        lineItems: {
-          create: snapshots.map((s: any) => ({
-            shopifyVariantId: s.shopifyVariantId,
-            expectedQty: s.quantityAvailable,
-          })),
-        },
-      },
-    });
-    return { ok: true };
+    return result.ok
+      ? { ok: true, notice: "Count started." }
+      : { error: result.error };
   }
 
   if (intent === "addItem") {
-    const stocktakeId = form.get("stocktakeId") as string;
-    const variantId = form.get("variantId") as string;
-    const stocktake = await db.stocktake.findFirst({
-      where: { id: stocktakeId },
-    });
-    if (!stocktake) return { error: "Stocktake not found" };
-
-    const existing = await db.stocktakeLineItem.findFirst({
-      where: { stocktakeId: stocktake.id, shopifyVariantId: variantId },
-    });
-    if (!existing) {
-      const snapshot = await db.inventorySnapshot.findFirst({
-        where: { shopifyVariantId: variantId },
-        orderBy: { snapshotDate: "desc" },
-      });
-      await db.stocktakeLineItem.create({
-        data: {
-          stocktakeId: stocktake.id,
-          shopifyVariantId: variantId,
-          expectedQty: snapshot?.quantityAvailable ?? 0,
-        },
-      });
-    }
-    return { ok: true };
+    const stocktakeId = readFormId(form.get("stocktakeId"));
+    const shopifyVariantId = readFormId(form.get("variantId"));
+    if (!stocktakeId) return { error: "Stocktake not found" };
+    if (!shopifyVariantId) return { error: "Choose a variant to add." };
+    const result = await addStocktakeLine(db, { stocktakeId, shopifyVariantId });
+    return result.ok ? { ok: true } : { error: result.error };
   }
 
   if (intent === "count") {
-    const lineId = form.get("lineId") as string;
-    const line = await db.stocktakeLineItem.findFirst({
-      where: { id: lineId },
+    const lineId = readFormId(form.get("lineId"));
+    if (!lineId) return { error: "Stocktake line not found" };
+    const countedQty = parseWholeNumber(form.get("countedQty"), {
+      min: 0,
+      max: MAX_COUNTED_QUANTITY,
     });
-    if (!line) return { error: "Stocktake line not found" };
-
-    await db.stocktakeLineItem.update({
-      where: { id: line.id },
-      data: { countedQty: parseInt(form.get("countedQty") as string, 10) },
-    });
-    return { ok: true };
+    if (countedQty === null) {
+      return {
+        error: `Enter the counted quantity as a whole number from 0 to ${MAX_COUNTED_QUANTITY.toLocaleString("en-US")}.`,
+      };
+    }
+    const result = await saveStocktakeCount(db, { lineId, countedQty });
+    return result.ok ? { ok: true } : { error: result.error };
   }
 
   if (intent === "complete") {
-    try {
-      assertInventoryWriteEnabled("stocktakeInventoryWrites");
-    } catch (err) {
-      return {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Stocktake inventory writes disabled",
-      };
-    }
-
-    const stocktakeId = form.get("stocktakeId") as string;
-    const stocktake = await db.stocktake.findFirst({
-      where: { id: stocktakeId },
-      include: { lineItems: true },
-    });
-    if (!stocktake) return { error: "Stocktake not found" };
-
-    const failures: string[] = [];
-    for (const line of stocktake.lineItems) {
-      if (line.countedQty === null) continue;
-      const delta = line.countedQty - line.expectedQty;
-      if (delta === 0) continue;
-
-      const cache = await db.shopifyVariantCache.findUnique({
-        where: {
-          shop_shopifyVariantId: {
-            shop,
-            shopifyVariantId: line.shopifyVariantId,
-          },
-        },
-      });
-      if (!cache?.inventoryItemId) {
-        failures.push(cache?.title ?? line.shopifyVariantId);
-        continue;
-      }
-
-      try {
-        // Push only the delta so concurrent sales are not overwritten.
-        await adjustShopifyInventory(
-          admin,
-          cache.inventoryItemId,
-          stocktake.locationId,
-          delta,
-          "cycle_count_available",
-        );
-      } catch {
-        failures.push(cache.title);
-      }
-    }
-
-    // Inventory-write contract: never mark complete when Shopify writes failed.
-    if (failures.length > 0) {
-      return {
-        error: `Stocktake left IN_PROGRESS — Shopify adjust failed for: ${failures.join(", ")}`,
-      };
-    }
-
-    await db.stocktake.update({
-      where: { id: stocktakeId },
-      data: { status: "COMPLETED", completedAt: new Date() },
-    });
-    return { ok: true };
+    if (!actor) return { error: STAFF_REQUIRED_MESSAGE, problems: [] };
+    const stocktakeId = readFormId(form.get("stocktakeId"));
+    if (!stocktakeId) return { error: "Stocktake not found", problems: [] };
+    const result = await completeStocktake(db, admin, actor, stocktakeId);
+    if (!result.ok) return { error: result.error, problems: result.problems };
+    return {
+      ok: true,
+      notice: result.alreadyCompleted
+        ? "This count was already completed. Nothing more was sent to Shopify."
+        : "Count completed. Its variances are applied in Shopify.",
+    };
   }
 
-  return { ok: false };
+  return { error: "That action is not available." };
 };
 
 export default function Stocktakes() {
@@ -185,11 +117,7 @@ export default function Stocktakes() {
 
   return (
     <s-page heading="Stocktakes (Cycle Counts)">
-      {actionData && "error" in actionData && actionData.error && (
-        <s-banner tone="critical" heading="Stocktake issue">
-          <s-paragraph>{actionData.error}</s-paragraph>
-        </s-banner>
-      )}
+      <ActionFeedback data={actionData} errorHeading="Stocktake issue" />
 
       <s-section heading="Start a count">
         <Form method="post">
@@ -280,7 +208,7 @@ export default function Stocktakes() {
                       </s-table-cell>
                       <s-table-cell>
                         {st.status === "IN_PROGRESS" && (
-                          <Form method="post">
+                          <Form method="post" onKeyDown={submitOnEnter}>
                             <input type="hidden" name="intent" value="count" />
                             <input type="hidden" name="lineId" value={line.id} />
                             <s-stack direction="inline" gap="small-200">
@@ -313,7 +241,7 @@ export default function Stocktakes() {
                 <input type="hidden" name="intent" value="complete" />
                 <input type="hidden" name="stocktakeId" value={st.id} />
                 <s-button type="submit" variant="primary">
-                  Complete — push deltas to Shopify
+                  Complete and apply variances in Shopify
                 </s-button>
               </Form>
             )}
