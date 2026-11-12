@@ -12,6 +12,7 @@
  * without the session being read and without calling Shopify.
  */
 import { createHmac } from "node:crypto";
+import { format } from "node:util";
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
 import { Session } from "@shopify/shopify-api";
@@ -166,6 +167,44 @@ describe("webhook authentication for an uninstalled shop (#83)", () => {
 
     expect(response.status).toBe(401);
     expect(processUninstall).not.toHaveBeenCalled();
+  });
+
+  // The live body is the whole Shop resource, owner contact details included.
+  it.each([
+    ["an accepted delivery", SHOP, 200],
+    ["a rejected delivery", "other-shop.myshopify.com", 401],
+  ])("logs no owner contact details for %s", async (_case, bodyShop, status) => {
+    const contact = {
+      email: "owner@example.com",
+      shop_owner: "Ada Example",
+      phone: "+15555550100",
+      address1: "1 Main Street",
+    };
+    const body = JSON.stringify({
+      id: 1,
+      myshopify_domain: bodyShop,
+      ...contact,
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const response = await uninstalledAction(
+        routeArgs(delivery({ topic: "app/uninstalled", body })),
+      );
+      expect(response.status).toBe(status);
+
+      // Rendered the way console prints it, so a logged object counts too.
+      const logged = [...log.mock.calls, ...warn.mock.calls]
+        .map((args) => format(...args))
+        .join("\n");
+      expect(logged).toContain(SHOP);
+      for (const value of Object.values(contact)) {
+        expect(logged).not.toContain(value);
+      }
+    } finally {
+      log.mockRestore();
+      warn.mockRestore();
+    }
   });
 
   it.each([

@@ -67,6 +67,37 @@ describe("sanitizeWebhookPayload", () => {
     expect(result.projection).not.toHaveProperty("title");
   });
 
+  // The live app/uninstalled body is the whole Shop resource, which carries
+  // the owner's contact details. Only the shop's identifiers may be stored.
+  it("keeps only the shop identifiers from app/uninstalled", () => {
+    const result = sanitizeWebhookPayload("app/uninstalled", {
+      id: 548380009,
+      name: "Example Shop",
+      email: "owner@example.com",
+      customer_email: "support@example.com",
+      shop_owner: "Ada Example",
+      phone: "+15555550100",
+      address1: "1 Main Street",
+      address2: "Suite 2",
+      city: "Ottawa",
+      zip: "K1A 0B1",
+      province: "Ontario",
+      country_name: "Canada",
+      latitude: 45.42,
+      longitude: -75.69,
+      domain: "shop.example.com",
+      myshopify_domain: "example-shop.myshopify.com",
+      plan_name: "basic",
+    });
+
+    expect(result.schemaVersion).toBe("webhook-projection-app-uninstalled-v1");
+    expect(result.projection).toEqual({
+      id: 548380009,
+      domain: "shop.example.com",
+      myshopify_domain: "example-shop.myshopify.com",
+    });
+  });
+
   it("rejects unsupported topics", () => {
     expect(() => sanitizeWebhookPayload("customers/create", {})).toThrow(
       SyncControlPlaneError,
