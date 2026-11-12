@@ -172,6 +172,9 @@ export default function Replenishment() {
 
   return (
     <s-page heading="Replenishment">
+      <s-button slot="secondary-actions" href="/app/replenishment/settings">
+        Settings
+      </s-button>
       {storeDetailsMissing && (
         <s-banner tone="warning" heading="Store details are still syncing">
           <s-paragraph>{STORE_DETAILS_MISSING}</s-paragraph>

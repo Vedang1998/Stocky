@@ -1,8 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useFetcher } from "react-router";
 import { formatDecimal, formatMoney, MISSING_VALUE } from "../../lib/decimal-format";
+import { MAX_LEAD_TIME_DAYS } from "../../lib/replenishment/form";
+import type { VariantRuleValues } from "../../lib/replenishment/rules.server";
+import { SHOP_SCOPE } from "../../lib/replenishment/scope";
 import {
   LEAD_TIME_SOURCE_LABELS,
+  MAX_QUANTITY,
   PARITY_METHODS,
   PARITY_METHOD_LABELS,
   type ParityMethod,
@@ -17,13 +21,20 @@ import {
 import { variantLabel } from "../../lib/replenishment/worksheet/labels";
 import type { WorksheetLine } from "../../lib/replenishment/worksheet/store.server";
 import { MethodPeriodFields } from "./MethodPeriodFields";
-import type { PreviewFormValues, WorksheetActionResult } from "./types";
+import type {
+  LevelsActionResult,
+  LevelsLoaderResult,
+  PreviewFormValues,
+  WorksheetActionResult,
+} from "./types";
 
 /** What the detail needs to know about the worksheet the row belongs to. */
 export type LineDetailContext = {
   currencyCode: string | null;
   /** The days whose sales the row reports, for example "Oct 12, 2026 to Nov 10, 2026". */
   salesPeriod: string;
+  /** The stock the worksheet plans: all locations together, or one location. */
+  scope: { key: string; name: string };
 };
 
 function quantity(value: number | null): string {
@@ -176,6 +187,125 @@ function Preview({ line, defaults }: { line: WorksheetLine; defaults: PreviewFor
   );
 }
 
+const LEVELS_PATH = "/app/replenishment/levels";
+
+const QUANTITY_LEVELS = [
+  { name: "minimumQuantity", label: "Minimum" },
+  { name: "shelfLimitQuantity", label: "Shelf limit" },
+  { name: "reorderPointQuantity", label: "Reorder point" },
+  { name: "safetyStockQuantity", label: "Safety stock" },
+] as const;
+
+function LevelsForm({
+  variantGid,
+  scopeKey,
+  values,
+}: {
+  variantGid: string;
+  scopeKey: string;
+  values: VariantRuleValues;
+}) {
+  const save = useFetcher<LevelsActionResult>();
+  const saved = save.data;
+  const errors = saved && !saved.ok ? saved.errors : {};
+
+  return (
+    <save.Form method="post" action={LEVELS_PATH}>
+      <input type="hidden" name="variantGid" value={variantGid} />
+      <input type="hidden" name="scopeKey" value={scopeKey} />
+      <s-stack direction="block" gap="base">
+        <s-grid gridTemplateColumns="repeat(auto-fit, minmax(150px, 1fr))" gap="base">
+          {QUANTITY_LEVELS.map((level) => (
+            <s-number-field
+              key={level.name}
+              label={level.label}
+              name={level.name}
+              min={0}
+              max={MAX_QUANTITY}
+              step={1}
+              value={String(values[level.name] ?? "")}
+              error={errors[level.name]}
+            />
+          ))}
+          <s-number-field
+            label="Lead time"
+            name="leadTimeDays"
+            suffix="days"
+            min={0}
+            max={MAX_LEAD_TIME_DAYS}
+            step={1}
+            value={String(values.leadTimeDays ?? "")}
+            error={errors.leadTimeDays}
+          />
+        </s-grid>
+        <s-text color="subdued">
+          Minimum and shelf limit are used by the fill shelves methods. A reorder point entered
+          here replaces the calculated one; safety stock is added to the calculated one. Leave a
+          field empty to not use it.
+        </s-text>
+        <s-stack direction="inline" gap="base" alignItems="center">
+          <s-button type="submit" {...(save.state !== "idle" ? { loading: true } : {})}>
+            Save levels
+          </s-button>
+          {saved?.ok && save.state === "idle" && (
+            <s-text color="subdued">
+              {saved.outcome === "cleared" ? "Levels cleared." : "Levels saved."} This worksheet
+              keeps the levels it was generated with; generate a new one to use them.
+            </s-text>
+          )}
+        </s-stack>
+        {saved && !saved.ok && saved.message && (
+          <s-banner tone="critical">
+            <s-paragraph>{saved.message}</s-paragraph>
+          </s-banner>
+        )}
+      </s-stack>
+    </save.Form>
+  );
+}
+
+/**
+ * The variant's stored levels for the stock this worksheet plans. They are
+ * read when the detail opens because the worksheet only has the levels it was
+ * generated with, which may have been changed since.
+ */
+function PlanningLevels({
+  variantGid,
+  scope,
+}: {
+  variantGid: string;
+  scope: LineDetailContext["scope"];
+}) {
+  const stored = useFetcher<LevelsLoaderResult>();
+  const requested = useRef(false);
+
+  useEffect(() => {
+    if (requested.current) return;
+    requested.current = true;
+    stored.load(`${LEVELS_PATH}?${new URLSearchParams({ variantGid, scopeKey: scope.key })}`);
+  }, [stored, variantGid, scope.key]);
+
+  return (
+    <s-stack direction="block" gap="base">
+      <s-heading>Planning levels</s-heading>
+      <s-text color="subdued">
+        {scope.key === SHOP_SCOPE
+          ? "These levels are used when you plan all locations together. Each location has its own."
+          : `These levels are used when you plan ${scope.name}. Other locations, and all locations together, have their own.`}
+      </s-text>
+      {!stored.data ? (
+        <s-spinner accessibilityLabel="Loading the planning levels" />
+      ) : stored.data.ok ? (
+        <LevelsForm variantGid={variantGid} scopeKey={scope.key} values={stored.data.values} />
+      ) : (
+        <s-banner tone="warning">
+          <s-paragraph>{stored.data.message}</s-paragraph>
+        </s-banner>
+      )}
+    </s-stack>
+  );
+}
+
 function LineDetail({
   line,
   context,
@@ -255,6 +385,8 @@ function LineDetail({
           </s-unordered-list>
         )}
       </s-stack>
+
+      <PlanningLevels variantGid={line.variantGid} scope={context.scope} />
 
       <s-stack direction="block" gap="base">
         <s-heading>Sales, {context.salesPeriod}</s-heading>
