@@ -70,6 +70,11 @@ function getConnection(): IORedis {
 export const WEBHOOK_QUEUE = "stocky-webhooks";
 export const CRON_QUEUE = "stocky-cron";
 export const INVENTORY_RECONCILE_MIN_ENQUEUE_INTERVAL_MS = 15 * 60 * 1000;
+/**
+ * Shortest interval between merchant-requested full catalog syncs for a shop.
+ * A sync is also never queued while another is still queued or running.
+ */
+export const CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS = 60 * 1000;
 
 export type WebhookJobData = {
   topic: string;
@@ -185,9 +190,51 @@ export async function enqueueWebhook(
   await kickDispatcher();
 }
 
-/** Create durable catalog-sync job; dispatcher enqueues to BullMQ. */
-export async function enqueueCatalogSync(tenant: TenantAuthority) {
+/**
+ * Create durable catalog-sync job; dispatcher enqueues to BullMQ.
+ *
+ * Merchant-triggered, so it is single-flight per shop: every request used to
+ * create its own job with up to 125 attempts, which let one shop queue an
+ * unbounded number of full catalog syncs. A request is skipped while a
+ * catalog sync for the shop is queued or running, or when one was requested
+ * within CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS. The time-bucketed idempotency
+ * key collapses concurrent requests that pass the check together.
+ */
+export async function enqueueCatalogSync(
+  tenant: TenantAuthority,
+): Promise<{ enqueued: boolean; reason?: string }> {
   const auth = requireAuthority(tenant, "enqueueCatalogSync");
+  const prisma = getControlPlanePrisma();
+  const now = Date.now();
+  const existing = await prisma.durableJob.findFirst({
+    where: {
+      shopId: auth.shopId,
+      jobType: "catalog-sync",
+      OR: [
+        {
+          state: {
+            in: [
+              "PENDING",
+              "RETRY_WAIT",
+              "DISPATCH_LEASED",
+              "ENQUEUED",
+              "RUNNING",
+            ],
+          },
+        },
+        {
+          createdAt: {
+            gte: new Date(now - CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS),
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { enqueued: false, reason: "already_requested" };
+  }
+  const bucket = Math.floor(now / CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS);
   await createDurableJob({
     shopId: auth.shopId,
     jobType: "catalog-sync",
@@ -195,12 +242,13 @@ export async function enqueueCatalogSync(tenant: TenantAuthority) {
     queueName: CRON_QUEUE,
     payloadSchemaVersion: "catalog-facts-v1",
     sanitizedPayload: { shopId: auth.shopId },
-    idempotencyKey: `catalog-sync:${auth.shopId}:${auth.correlationId}`,
+    idempotencyKey: `catalog-sync:${auth.shopId}:${bucket}`,
     correlationId: auth.correlationId,
     causationId: auth.causationId,
     maxAttempts: 125,
   });
   await kickDispatcher();
+  return { enqueued: true };
 }
 
 /** Dedicated producer for afterAuth catalog sync (approved source). */
