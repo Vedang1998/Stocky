@@ -1,5 +1,5 @@
 import { Form } from "react-router";
-import { formatObservedAt } from "../../extensions/propo-pos/src/format";
+import { formatAge } from "../lib/stock-format";
 import type { SyncAttention, SyncStatusView } from "../lib/sync-status";
 
 /** Shown at the top of Home when the last sync failed or is incomplete. */
@@ -9,6 +9,11 @@ export function SyncAttentionBanner({ attention }: { attention: SyncAttention })
       <s-paragraph>{attention.message}</s-paragraph>
     </s-banner>
   );
+}
+
+function syncedLabel(lastSucceededAt: string | null, now: number): string {
+  const age = formatAge(lastSucceededAt, now);
+  return age === null ? "No completed sync yet" : `Last synced ${age}`;
 }
 
 /** Per-domain sync state with the manual sync button. */
@@ -32,7 +37,7 @@ export function SyncStatus({
               <s-badge tone={row.badge.tone}>{row.badge.text}</s-badge>
             </s-stack>
             <s-text color="subdued">
-              {formatObservedAt(row.lastSucceededAt, now) ?? "No completed sync yet"}
+              {syncedLabel(row.lastSucceededAt, now)}
             </s-text>
           </s-stack>
         ))}

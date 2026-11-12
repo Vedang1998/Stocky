@@ -2,19 +2,15 @@ import { useEffect, useRef, useSyncExternalStore, type ComponentRef } from "reac
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Form, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import {
-  formatObservedAt,
-  formatQuantity,
-  isStale,
-} from "../../extensions/propo-pos/src/format";
 import { numericIdFromGid } from "../lib/shopify-gid";
+import { formatAge, formatQuantity } from "../lib/stock-format";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import type { ResolvedVariant } from "../services/barcode-lookup.server";
 import {
   lookupInventory,
   type InventoryLookup,
 } from "../services/inventory-lookup.server";
-import type { LocationStock, VariantStock } from "../services/stock-lookup.server";
+import type { VariantStock } from "../services/stock-lookup.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -98,16 +94,6 @@ const QUANTITY_COLUMNS = [
   { key: "committed", label: "Committed" },
   { key: "incoming", label: "Incoming" },
 ] as const;
-
-function LocationAge({ location, now }: { location: LocationStock; now: number }) {
-  const age = formatObservedAt(location.observedAt, now);
-  if (!age) return <s-text color="subdued">Not reported yet</s-text>;
-  return isStale(location.observedAt, now) ? (
-    <s-badge tone="warning">{age}</s-badge>
-  ) : (
-    <s-text color="subdued">{age}</s-text>
-  );
-}
 
 function StockNotice({ stock }: { stock: VariantStock }) {
   if (stock.inventoryItemGid === null) {
@@ -204,7 +190,7 @@ function Stock({
                   {label}
                 </s-table-header>
               ))}
-              <s-table-header listSlot="secondary">Last update</s-table-header>
+              <s-table-header listSlot="secondary">Last change</s-table-header>
             </s-table-header-row>
             <s-table-body>
               {stock.locations.map((location) => (
@@ -215,8 +201,12 @@ function Stock({
                       {formatQuantity(location[key])}
                     </s-table-cell>
                   ))}
+                  {/* When Shopify last changed the quantity. An old time
+                      is normal for a slow seller, so it is not a warning. */}
                   <s-table-cell>
-                    <LocationAge location={location} now={now} />
+                    <s-text color="subdued">
+                      {formatAge(location.observedAt, now) ?? "Not reported yet"}
+                    </s-text>
                   </s-table-cell>
                 </s-table-row>
               ))}
