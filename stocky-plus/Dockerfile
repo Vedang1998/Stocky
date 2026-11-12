@@ -30,6 +30,7 @@ RUN npx prisma generate
 COPY tsconfig.json env.d.ts ./
 COPY app ./app
 COPY public ./public
+COPY server ./server
 COPY --from=build /app/build ./build
 USER node
 EXPOSE 3000

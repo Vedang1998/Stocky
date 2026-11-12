@@ -28,8 +28,13 @@ function payloadTooLarge(maxBytes: number): Response {
  *
  * Throws a 413 Response when the declared Content-Length or the streamed body
  * exceeds the limit. The declared length is checked before any byte is read,
- * and the stream is cancelled as soon as the limit is crossed, so a client
- * that lies about Content-Length or uses chunked encoding is still bounded.
+ * and reading stops as soon as the limit is crossed, so a client that lies
+ * about Content-Length or uses chunked encoding is still bounded.
+ *
+ * The rest of an oversized body is left unread, not cancelled. The 413 asks
+ * for the connection to be closed, so the server drops it once it has
+ * answered. Cancelling is not safe on every adapter: the Vite dev server's
+ * request stream keeps enqueueing after a cancel and takes the process down.
  */
 export async function readBoundedRequest(
   request: Request,
@@ -43,7 +48,6 @@ export async function readBoundedRequest(
   if (declared !== null) {
     const declaredBytes = Number(declared);
     if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-      await request.body?.cancel().catch(() => undefined);
       throw payloadTooLarge(maxBytes);
     }
   }
@@ -61,7 +65,6 @@ export async function readBoundedRequest(
     if (done) break;
     received += value.byteLength;
     if (received > maxBytes) {
-      await reader.cancel().catch(() => undefined);
       throw payloadTooLarge(maxBytes);
     }
     chunks.push(value);

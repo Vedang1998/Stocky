@@ -7,6 +7,7 @@ import {
   assertAllowlistPathsAreExact,
   exceptionForPath,
 } from "./allowlist";
+import { inventoryRows, renderTenantAccessInventory } from "./inventory-render";
 import { assertNoViolations, scanRepository, type AccessFinding } from "./scan";
 import { EXPECTED_MERCHANT_TABLE_COUNT } from "../tenant-enforcement/manifest";
 
@@ -338,6 +339,113 @@ describe("tenant access architecture audit", () => {
     );
     expect(result.exceptionsUsed.some((id) => id.startsWith("EX-BF-"))).toBe(
       true,
+    );
+  });
+});
+
+/**
+ * The committed inventory may only change when tenant access changes.
+ * Line numbers, totals and a content digest used to be recorded and made any
+ * two open pull requests conflict in the file.
+ */
+describe("tenant access inventory rendering", () => {
+  const ROUTE = "app/routes/inventory-fixture.ts";
+  const SOURCE = fs.readFileSync(
+    path.join(FIXTURES, "route-db-import.ts.fixture"),
+    "utf8",
+  );
+
+  function scanSources(sources: Record<string, string>) {
+    fs.rmSync(TMP, { recursive: true, force: true });
+    for (const [relPath, source] of Object.entries(sources)) {
+      const dest = path.join(TMP, relPath);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, source);
+    }
+    return scanRepository({
+      roots: [TMP],
+      pathRoot: TMP,
+      checkAllowlistPaths: false,
+    });
+  }
+
+  it("is unchanged when access sites only move within a file", () => {
+    const original = scanSources({ [ROUTE]: SOURCE });
+    const moved = scanSources({
+      [ROUTE]: `// A comment added above.\n\n\n${SOURCE}`,
+    });
+
+    expect(moved.findings.map((f) => f.line)).not.toEqual(
+      original.findings.map((f) => f.line),
+    );
+    expect(renderTenantAccessInventory(moved)).toBe(
+      renderTenantAccessInventory(original),
+    );
+  });
+
+  it("is unchanged when a file without tenant access is added", () => {
+    const original = scanSources({ [ROUTE]: SOURCE });
+    const withNewFile = scanSources({
+      [ROUTE]: SOURCE,
+      "app/lib/format-fixture.ts": "export const twice = (n: number) => n * 2;\n",
+    });
+
+    expect(withNewFile.scannedFiles.length).toBe(
+      original.scannedFiles.length + 1,
+    );
+    expect(renderTenantAccessInventory(withNewFile)).toBe(
+      renderTenantAccessInventory(original),
+    );
+  });
+
+  it("changes when an access site is added, removed or repeated", () => {
+    const original = renderTenantAccessInventory(
+      scanSources({ [ROUTE]: SOURCE }),
+    );
+    const repeated = scanSources({
+      [ROUTE]: `${SOURCE}\nexport async function again() {\n  return prisma.supplier.findMany();\n}\n`,
+    });
+    const added = scanSources({
+      [ROUTE]: `${SOURCE}\nexport async function other() {\n  return prisma.purchaseOrder.count();\n}\n`,
+    });
+    const removed = scanSources({
+      [ROUTE]: SOURCE.replace("prisma.supplier.findMany()", "[]"),
+    });
+
+    expect(renderTenantAccessInventory(repeated)).not.toBe(original);
+    expect(renderTenantAccessInventory(added)).not.toBe(original);
+    expect(renderTenantAccessInventory(removed)).not.toBe(original);
+
+    const repeatedRow = inventoryRows(repeated.findings).find((row) =>
+      row.cells[1].includes("supplier.findMany"),
+    );
+    expect(repeatedRow?.sites).toBe(2);
+  });
+
+  it("orders rows by file and description, not by position in the file", () => {
+    const first = `${SOURCE}\nexport const a = () => prisma.purchaseOrder.count();\n`;
+    const swapped = SOURCE.replace(
+      "export async function badRoute()",
+      "export const a = () => prisma.purchaseOrder.count();\n\nexport async function badRoute()",
+    );
+
+    expect(renderTenantAccessInventory(scanSources({ [ROUTE]: swapped }))).toBe(
+      renderTenantAccessInventory(scanSources({ [ROUTE]: first })),
+    );
+  });
+
+  it("records no totals or digest for the real repository", () => {
+    const result = scanRepository();
+    const markdown = renderTenantAccessInventory(result);
+
+    expect(markdown).not.toContain(result.contentDigest);
+    expect(markdown).not.toMatch(/Scanned files|\*\*Findings:\*\*/);
+    const siteTotal = inventoryRows(result.findings).reduce(
+      (sum, row) => sum + row.sites,
+      0,
+    );
+    expect(siteTotal).toBe(
+      result.findings.filter((f) => f.kind !== "type_only_prisma_import").length,
     );
   });
 });
