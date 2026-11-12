@@ -33,11 +33,28 @@ describe("toSubscriptionRecord", () => {
     expect(
       toSubscriptionRecord({ ...base, lineItems: [recurringLineItem()] }),
     ).toEqual({
-      ...base,
+      id: base.id,
+      name: "Pro",
+      status: "ACTIVE",
       planHandle: "pro",
+      createdAt: "2026-11-01T00:00:00Z",
+      trialEndsAt: "2026-11-15T00:00:00.000Z",
+      currentPeriodEnd: "2027-11-01T00:00:00Z",
+      endsAtPeriodEnd: false,
       billingInterval: "ANNUAL",
       price: { amount: "1490.0", currencyCode: "USD" },
     });
+  });
+
+  it("reports no trial end without trial days or a parseable creation date", () => {
+    const lineItems = [recurringLineItem()];
+    expect(
+      toSubscriptionRecord({ ...base, trialDays: 0, lineItems }).trialEndsAt,
+    ).toBeNull();
+    expect(
+      toSubscriptionRecord({ ...base, createdAt: "not-a-date", lineItems })
+        .trialEndsAt,
+    ).toBeNull();
   });
 
   it("skips usage line items when looking for the recurring price", () => {

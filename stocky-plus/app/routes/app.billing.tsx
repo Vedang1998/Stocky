@@ -146,6 +146,11 @@ function CurrentPlanDetails({
         {terms.renewsOn && (
           <s-paragraph>Renews on {terms.renewsOn}.</s-paragraph>
         )}
+        {terms.endsOn && (
+          <s-paragraph>
+            Ends on {terms.endsOn} and will not renew.
+          </s-paragraph>
+        )}
       </s-stack>
 
       <s-table>

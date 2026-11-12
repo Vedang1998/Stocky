@@ -28,7 +28,8 @@ function subscription(
     planHandle: "growth",
     createdAt: "2026-11-01T00:00:00Z",
     currentPeriodEnd: "2026-12-01T00:00:00Z",
-    trialDays: 0,
+    trialEndsAt: null,
+    endsAtPeriodEnd: false,
     billingInterval: "EVERY_30_DAYS",
     price: { amount: "79.0", currencyCode: "USD" },
     ...overrides,
@@ -141,6 +142,14 @@ describe("resolveEntitlements", () => {
       subscription({ name: "Pro", planHandle: "growth" }),
     ]);
     expect(result.state === "active" && result.plan.handle).toBe("growth");
+  });
+
+  it("does not let a display name rescue a handle that matches no plan", () => {
+    const result = resolveEntitlements([
+      subscription({ name: "Pro", planHandle: "pro-legacy" }),
+    ]);
+    expect(result.state).toBe("unrecognized_plan");
+    expect(hasCapability(result, "core.purchase_orders")).toBe(false);
   });
 
   it("fails closed on an unknown plan", () => {
@@ -281,12 +290,9 @@ describe("checkLimit", () => {
 });
 
 describe("trialEndsAt", () => {
-  const trial = subscription({
-    createdAt: "2026-11-01T12:00:00Z",
-    trialDays: 14,
-  });
+  const trial = subscription({ trialEndsAt: "2026-11-15T12:00:00Z" });
 
-  it("counts trial days from the subscription's creation", () => {
+  it("returns the trial end while the trial is running", () => {
     expect(trialEndsAt(trial, new Date("2026-11-10T00:00:00Z"))).toEqual(
       new Date("2026-11-15T12:00:00Z"),
     );
@@ -296,11 +302,11 @@ describe("trialEndsAt", () => {
     expect(trialEndsAt(trial, new Date("2026-11-15T12:00:00Z"))).toBeNull();
   });
 
-  it("returns null without trial days or a parseable creation date", () => {
+  it("returns null without a trial or a parseable trial end", () => {
     const now = new Date("2026-11-02T00:00:00Z");
-    expect(trialEndsAt(subscription({ trialDays: 0 }), now)).toBeNull();
+    expect(trialEndsAt(subscription(), now)).toBeNull();
     expect(
-      trialEndsAt(subscription({ trialDays: 14, createdAt: "not-a-date" }), now),
+      trialEndsAt(subscription({ trialEndsAt: "not-a-date" }), now),
     ).toBeNull();
   });
 });

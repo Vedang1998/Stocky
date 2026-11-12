@@ -21,13 +21,16 @@ export interface SubscriptionRecord {
   id: string;
   name: string;
   status: string;
-  /** App Pricing plan handle from the recurring line item, when present. */
+  /** App Pricing plan handle from the recurring item, when present. */
   planHandle: string | null;
-  /** ISO-8601. */
-  createdAt: string;
-  /** ISO-8601; Shopify returns null when the subscription isn't active. */
+  /** ISO-8601; null when the source does not report it. */
+  createdAt: string | null;
+  /** ISO-8601 end of the free trial; null when there is no trial. */
+  trialEndsAt: string | null;
+  /** ISO-8601; null during a trial or when the subscription isn't active. */
   currentPeriodEnd: string | null;
-  trialDays: number;
+  /** True when the subscription stops at currentPeriodEnd instead of renewing. */
+  endsAtPeriodEnd: boolean;
   billingInterval: "EVERY_30_DAYS" | "ANNUAL" | null;
   /** Amount charged each interval; null when it cannot be stated exactly. */
   price: { amount: string; currencyCode: string } | null;
@@ -76,13 +79,18 @@ export function selectActiveSubscription(
   });
 }
 
-/** The plan handle is authoritative; the subscription name is the fallback. */
+/**
+ * The plan handle decides. The subscription name is consulted only when
+ * Shopify reports no handle, so a handle that matches no plan is never
+ * rescued by a display name.
+ */
 export function planForSubscription(
   subscription: SubscriptionRecord,
 ): SelfServePlan | null {
-  return (
-    findSelfServePlan(subscription.planHandle) ??
-    findSelfServePlan(subscription.name)
+  return findSelfServePlan(
+    subscription.planHandle !== null
+      ? subscription.planHandle
+      : subscription.name,
   );
 }
 
@@ -169,11 +177,9 @@ export function trialEndsAt(
   subscription: SubscriptionRecord,
   now: Date,
 ): Date | null {
-  if (subscription.trialDays <= 0) return null;
-  const start = timestamp(subscription.createdAt);
-  if (!Number.isFinite(start)) return null;
-  const end = new Date(start + subscription.trialDays * DAY_MS);
-  return end.getTime() > now.getTime() ? end : null;
+  const endMs = timestamp(subscription.trialEndsAt);
+  if (!Number.isFinite(endMs)) return null;
+  return endMs > now.getTime() ? new Date(endMs) : null;
 }
 
 /**

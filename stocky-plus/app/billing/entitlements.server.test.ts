@@ -82,8 +82,9 @@ const record: SubscriptionRecord = {
   status: "ACTIVE",
   planHandle: "essentials",
   createdAt: "2026-11-01T00:00:00Z",
+  trialEndsAt: null,
   currentPeriodEnd: "2026-12-01T00:00:00Z",
-  trialDays: 0,
+  endsAtPeriodEnd: false,
   billingInterval: "EVERY_30_DAYS",
   price: { amount: "29.0", currencyCode: "USD" },
 };

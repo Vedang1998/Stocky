@@ -138,6 +138,8 @@ export interface BillingTerms {
   trialEndsOn: string | null;
   /** Set once the trial is over and Shopify reports a period end. */
   renewsOn: string | null;
+  /** Set instead of renewsOn when the subscription stops at the period end. */
+  endsOn: string | null;
 }
 
 const CADENCE: Record<
@@ -182,23 +184,20 @@ export function describeBillingTerms(
   now: Date,
 ): BillingTerms {
   const charge = formatCharge(subscription);
+  const none = { charge, trialEndsOn: null, renewsOn: null, endsOn: null };
   const formatter = dateFormatter(timeZone);
-  if (!formatter) return { charge, trialEndsOn: null, renewsOn: null };
+  if (!formatter) return none;
 
   const trialEnd = trialEndsAt(subscription, now);
-  if (trialEnd) {
-    return { charge, trialEndsOn: formatter.format(trialEnd), renewsOn: null };
-  }
+  if (trialEnd) return { ...none, trialEndsOn: formatter.format(trialEnd) };
 
   const periodEnd = subscription.currentPeriodEnd
     ? new Date(subscription.currentPeriodEnd)
     : null;
-  return {
-    charge,
-    trialEndsOn: null,
-    renewsOn:
-      periodEnd && !Number.isNaN(periodEnd.getTime())
-        ? formatter.format(periodEnd)
-        : null,
-  };
+  if (!periodEnd || Number.isNaN(periodEnd.getTime())) return none;
+
+  const date = formatter.format(periodEnd);
+  return subscription.endsAtPeriodEnd
+    ? { ...none, endsOn: date }
+    : { ...none, renewsOn: date };
 }

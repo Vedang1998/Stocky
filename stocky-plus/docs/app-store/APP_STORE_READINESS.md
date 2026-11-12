@@ -63,5 +63,6 @@ For whoever sets up the production host. Nothing here has been deployed.
 - Release step, in order: `npx prisma migrate deploy`, then the commands `.github/workflows/ci.yml` runs after it, in the same order (`tenant:indexes:apply`, `tenant:roles:provision`, `tenant:enforcement:apply`, `sync:roles:provision`, each with `-- --apply`). The `release` target of the `Dockerfile` has the tooling for these.
 - Role provisioning has to run as a PostgreSQL superuser (see `DATA_DELETION.md`). Confirm this on the chosen host before launch.
 - `SHOPIFY_APP_URL` must be set at runtime, and the start command must stay `npm start`: the server takes the only allowed form origin from it (issue #107).
+- The worker stops at start-up without `DATABASE_CONTROL_PLANE_URL` (a connection as the `stocky_control_plane` role) and `STOCKY_DISPATCHER_PROCESS_COUNT` (the number of worker processes, 1 for one). Web and worker also need `DATABASE_URL` for the runtime role, `REDIS_URL` and `TENANT_JOB_ENVELOPE_SECRET`.
 - `PRIVACY_UNINSTALLED_RETENTION_DAYS` and the other variables are listed in `.env.example`.
 - Rate limiting is left to the hosting edge (R-190).

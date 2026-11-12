@@ -28,7 +28,8 @@ function subscription(
     planHandle: "growth",
     createdAt: "2026-11-01T00:00:00Z",
     currentPeriodEnd: "2026-12-01T03:00:00Z",
-    trialDays: 0,
+    trialEndsAt: null,
+    endsAtPeriodEnd: false,
     billingInterval: "EVERY_30_DAYS",
     price: { amount: "79.0", currencyCode: "USD" },
     ...overrides,
@@ -142,6 +143,7 @@ describe("describeBillingTerms", () => {
       charge: "$79.00 every 30 days",
       trialEndsOn: null,
       renewsOn: "November 30, 2026",
+      endsOn: null,
     });
     expect(
       describeBillingTerms(subscription(), "Asia/Tokyo", now).renewsOn,
@@ -149,14 +151,22 @@ describe("describeBillingTerms", () => {
   });
 
   it("shows the trial end instead of a renewal date during the trial", () => {
-    const trial = subscription({
-      createdAt: "2026-11-05T00:00:00Z",
-      trialDays: 14,
-    });
+    const trial = subscription({ trialEndsAt: "2026-11-19T00:00:00Z" });
     expect(describeBillingTerms(trial, "UTC", now)).toEqual({
       charge: "$79.00 every 30 days",
       trialEndsOn: "November 19, 2026",
       renewsOn: null,
+      endsOn: null,
+    });
+  });
+
+  it("shows an end date instead of a renewal when the plan will not renew", () => {
+    const ending = subscription({ endsAtPeriodEnd: true });
+    expect(describeBillingTerms(ending, "UTC", now)).toEqual({
+      charge: "$79.00 every 30 days",
+      trialEndsOn: null,
+      renewsOn: null,
+      endsOn: "December 1, 2026",
     });
   });
 
@@ -177,7 +187,7 @@ describe("describeBillingTerms", () => {
         "UTC",
         now,
       ),
-    ).toEqual({ charge: null, trialEndsOn: null, renewsOn: null });
+    ).toEqual({ charge: null, trialEndsOn: null, renewsOn: null, endsOn: null });
     expect(
       describeBillingTerms(
         subscription({ price: { amount: "n/a", currencyCode: "USD" } }),
@@ -194,6 +204,7 @@ describe("describeBillingTerms", () => {
       charge: "$79.00 every 30 days",
       trialEndsOn: null,
       renewsOn: null,
+      endsOn: null,
     });
   });
 });

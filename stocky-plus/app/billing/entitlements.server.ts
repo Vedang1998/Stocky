@@ -13,7 +13,7 @@ import {
   type ShopEntitlements,
 } from "./entitlements";
 import type { CapabilityKey } from "./plans";
-import { adminApiSubscriptionSource } from "./subscription-source.server";
+import { subscriptionSourceFor } from "./subscription-source.server";
 
 export { checkLimit, hasCapability } from "./entitlements";
 export type { LimitCheck, ShopEntitlements } from "./entitlements";
@@ -29,7 +29,7 @@ export async function getShopEntitlements({
   admin: AdminGraphQLClient;
   db: TenantDb;
 }): Promise<ShopEntitlements> {
-  const source = adminApiSubscriptionSource(admin);
+  const source = subscriptionSourceFor(admin);
   const entitlements = resolveEntitlements(await source.listSubscriptions());
 
   if (entitlements.state === "unrecognized_plan") {
