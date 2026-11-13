@@ -80,6 +80,7 @@ CREATE TABLE "ReplenishmentWorksheetLine" (
     "distinctOrders" INTEGER,
     "revenueAmount" DECIMAL(20,6),
     "unitsPerDay" DECIMAL(20,4),
+    "abcClass" VARCHAR(1),
     "stockStatus" "ReplenishmentStockStatus" NOT NULL,
     "daysOfStock" DECIMAL(20,1),
     "depletionDate" VARCHAR(10),
@@ -102,6 +103,8 @@ CREATE TABLE "ReplenishmentWorksheetLine" (
     CONSTRAINT "ReplenishmentWorksheetLine_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "ReplenishmentWorksheetLine_variant_gid_check"
       CHECK ("variantGid" ~ '^gid://shopify/ProductVariant/[0-9]+$'),
+    CONSTRAINT "ReplenishmentWorksheetLine_abc_class_check"
+      CHECK ("abcClass" IS NULL OR "abcClass" IN ('A', 'B', 'C', 'U')),
     CONSTRAINT "ReplenishmentWorksheetLine_quantities_check"
       CHECK (
         ("parityQuantity" IS NULL OR "parityQuantity" >= 0)

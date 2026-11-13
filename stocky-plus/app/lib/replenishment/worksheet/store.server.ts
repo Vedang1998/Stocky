@@ -7,6 +7,7 @@
  * generated.
  */
 import type { Prisma } from "@prisma/client";
+import type { AbcClass } from "../../analytics/abc-parity";
 import type { TenantDb } from "../../../tenant/tenant-db.server";
 import type { ReorderPointSource, StockStatus } from "../stock-health";
 import {
@@ -71,7 +72,8 @@ function readSummary(stored: unknown): WorksheetSummary | null {
   ) {
     return null;
   }
-  return stored as WorksheetSummary;
+  // Worksheets made before ABC/U was recorded have no ABC window.
+  return { abcWindow: null, ...stored } as WorksheetSummary;
 }
 
 function toHeader(row: HeaderRow): WorksheetHeader {
@@ -190,6 +192,7 @@ export type WorksheetLine = {
   distinctOrders: number | null;
   revenueAmount: string | null;
   unitsPerDay: string | null;
+  abcClass: AbcClass | null;
   stockStatus: StockStatus;
   daysOfStock: string | null;
   depletionDate: string | null;
@@ -219,14 +222,22 @@ type DecimalColumn =
 
 type LineRow = Omit<
   WorksheetLine,
-  DecimalColumn | "detail" | "leadTimeSource" | "reorderPointSource" | "warningCodes"
+  | DecimalColumn
+  | "abcClass"
+  | "detail"
+  | "leadTimeSource"
+  | "reorderPointSource"
+  | "warningCodes"
 > &
   Record<DecimalColumn, Prisma.Decimal | null> & {
+    abcClass: string | null;
     detail: unknown;
     leadTimeSource: string | null;
     reorderPointSource: string | null;
     warningCodes: string[];
   };
+
+const ABC_CLASSES: readonly AbcClass[] = ["A", "B", "C", "U"];
 
 function text(value: Prisma.Decimal | null): string | null {
   return value == null ? null : value.toFixed();
@@ -272,6 +283,9 @@ function toLine(row: LineRow): WorksheetLine {
     unitsPerDay: fixed(row.unitsPerDay, 2),
     daysOfStock: fixed(row.daysOfStock, 1),
     forecastDemand: fixed(row.forecastDemand, 2),
+    abcClass: (ABC_CLASSES as readonly string[]).includes(row.abcClass ?? "")
+      ? (row.abcClass as AbcClass)
+      : null,
     leadTimeSource: (LEAD_TIME_SOURCES as readonly string[]).includes(
       row.leadTimeSource ?? "",
     )
@@ -318,6 +332,7 @@ const LINE_SELECT = {
   distinctOrders: true,
   revenueAmount: true,
   unitsPerDay: true,
+  abcClass: true,
   stockStatus: true,
   daysOfStock: true,
   depletionDate: true,
@@ -383,6 +398,7 @@ const SORT_COLUMNS: Record<WorksheetSortKey, { column: string; nullable: boolean
   incoming: { column: "incomingQuantity", nullable: true },
   netUnits: { column: "netUnits", nullable: true },
   unitsPerDay: { column: "unitsPerDay", nullable: true },
+  abc: { column: "abcClass", nullable: true },
   daysOfStock: { column: "daysOfStock", nullable: true },
   suggested: { column: "suggestedQuantity", nullable: true },
   order: { column: "orderQuantity", nullable: false },

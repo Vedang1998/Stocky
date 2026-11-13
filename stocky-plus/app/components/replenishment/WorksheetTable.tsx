@@ -155,6 +155,7 @@ export function WorksheetTable({
         <SortableHeader label="Product" sortKey="product" {...header} />
         <SortableHeader label="SKU" sortKey="sku" {...header} />
         <SortableHeader label="Supplier" sortKey="supplier" {...header} />
+        <SortableHeader label="ABC" sortKey="abc" {...header} />
         <SortableHeader label="Available" sortKey="available" numeric {...header} />
         <SortableHeader label="Incoming" sortKey="incoming" numeric {...header} />
         <SortableHeader label="Net sold" sortKey="netUnits" numeric {...header} />
@@ -189,6 +190,7 @@ export function WorksheetTable({
                 </s-text>
               )}
             </s-table-cell>
+            <s-table-cell>{line.abcClass ?? MISSING_VALUE}</s-table-cell>
             <s-table-cell>{quantity(line.availableQuantity)}</s-table-cell>
             <s-table-cell>{quantity(line.incomingQuantity)}</s-table-cell>
             <s-table-cell>{quantity(line.netUnits)}</s-table-cell>

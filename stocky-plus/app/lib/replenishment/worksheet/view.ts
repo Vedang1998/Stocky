@@ -32,6 +32,7 @@ export const WORKSHEET_SORT_KEYS = [
   "incoming",
   "netUnits",
   "unitsPerDay",
+  "abc",
   "daysOfStock",
   "suggested",
   "order",

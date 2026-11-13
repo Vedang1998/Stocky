@@ -7,6 +7,7 @@
  * worksheet that can be opened is always complete. Nothing here writes to
  * Shopify or creates a purchase order.
  */
+import { loadAbcParityRun } from "../../analytics/abc-parity.server";
 import { loadCatalogVariants, type CatalogVariant } from "../../analytics/catalog.server";
 import { requireShopCurrency } from "../../analytics/errors";
 import { aggregateVariantWindow } from "../../analytics/net-units";
@@ -58,6 +59,11 @@ export type WorksheetSummary = {
   coverage: HistoryCoverage;
   /** First day the stored order history can speak for. */
   historyStartLocalDate: LocalDate | null;
+  /**
+   * The days the ABC/U classes were measured over: the shop's whole catalog,
+   * not just this selection, ending on the last complete day.
+   */
+  abcWindow: { start: LocalDate; end: LocalDate } | null;
   /** Variants left out because the chosen location does not stock them. */
   notStockedAtLocation: number;
   excludedOrders: {
@@ -376,6 +382,16 @@ export async function generateWorksheet(
   );
   const coverage = coverageForWindow(salesWindow, history.coverage.historyStartLocalDate);
 
+  // ABC/U ranks a variant against the whole shop, so the run covers every
+  // variant even when the worksheet is for one vendor or supplier.
+  const abc = await loadAbcParityRun(db, {
+    timeZone,
+    currencyCode,
+    installedAt: input.shop.installedAt,
+    now,
+  });
+  const abcClasses = new Map(abc.rows.map((row) => [row.variantGid, row.abcClass]));
+
   const [rules, supplierTerms, appIncoming, images] = await Promise.all([
     loadEffectiveRules(db, variantGids, settings.scopeKey),
     sources.getSupplierTerms(db, { variantGids }),
@@ -416,6 +432,7 @@ export async function generateWorksheet(
             revenue: variantSales.revenue,
           }
         : null,
+      abcClass: abcClasses.get(variant.variantGid) ?? null,
       rule: rules.get(variant.variantGid) ?? null,
       supplier: supplierFor(suppliers, settings.selection.supplierId),
       suppliers: suppliers?.all ?? [],
@@ -427,6 +444,7 @@ export async function generateWorksheet(
     salesWindow,
     coverage,
     historyStartLocalDate: history.coverage.historyStartLocalDate,
+    abcWindow: { start: abc.windowStartLocalDate, end: abc.windowEndLocalDate },
     notStockedAtLocation: catalog.length - planned.length,
     excludedOrders: {
       test: history.diagnostics.ordersExcludedTest,

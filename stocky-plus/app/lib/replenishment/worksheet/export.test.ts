@@ -36,6 +36,7 @@ function line(overrides: Partial<WorksheetLine> = {}): WorksheetLine {
     distinctOrders: 2,
     revenueAmount: "600",
     unitsPerDay: "1.00",
+    abcClass: "B",
     stockStatus: "LOW",
     daysOfStock: "10.0",
     depletionDate: "2026-11-20",
@@ -72,7 +73,7 @@ function line(overrides: Partial<WorksheetLine> = {}): WorksheetLine {
 
 describe("worksheetCsvRow", () => {
   it("has a value for every column, in column order", () => {
-    const row = worksheetCsvRow(line());
+    const row = worksheetCsvRow(line(), 30);
     expect(row).toHaveLength(WORKSHEET_CSV_HEADERS.length);
     expect(Object.fromEntries(WORKSHEET_CSV_HEADERS.map((header, i) => [header, row[i]]))).toEqual({
       Product: "Merlot",
@@ -90,7 +91,9 @@ describe("worksheetCsvRow", () => {
       "Net units sold": 30,
       Orders: 2,
       "Net sales": "600",
+      "Net sales per day": "20.00",
       "Units per day": "1.00",
+      "ABC class": "B",
       "Days of stock": "10.0",
       "Runs out around": "2026-11-20",
       "Stock status": "Low",
@@ -123,6 +126,7 @@ describe("worksheetCsvRow", () => {
           availableQuantity: null,
           netUnits: null,
           revenueAmount: null,
+          abcClass: null,
           suggestedQuantity: null,
           parityQuantity: null,
           finalQuantity: null,
@@ -130,6 +134,7 @@ describe("worksheetCsvRow", () => {
           warningCodes: [],
           purchaseOrderNumber: null,
         }),
+        30,
       ),
     ]);
     const [header, row] = csv.trimEnd().split("\r\n");
@@ -139,6 +144,8 @@ describe("worksheetCsvRow", () => {
       Available: "",
       "Net units sold": "",
       "Net sales": "",
+      "Net sales per day": "",
+      "ABC class": "",
       "Suggested quantity": "",
       "Order quantity": "0",
       Edited: "No",
@@ -149,7 +156,10 @@ describe("worksheetCsvRow", () => {
 
   it("stops a product title from being read as a spreadsheet formula", () => {
     const csv = toCsv(WORKSHEET_CSV_HEADERS, [
-      worksheetCsvRow(line({ productTitle: '=HYPERLINK("https://example.test")', sku: "+SKU" })),
+      worksheetCsvRow(
+        line({ productTitle: '=HYPERLINK("https://example.test")', sku: "+SKU" }),
+        30,
+      ),
     ]);
     expect(csv).toContain(`"'=HYPERLINK(""https://example.test"")"`);
     expect(csv).toContain("'+SKU");

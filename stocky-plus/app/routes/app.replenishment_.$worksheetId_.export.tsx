@@ -26,9 +26,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   }
 
   const view = parseWorksheetView(new URL(request.url).searchParams);
+  const salesDays = worksheet.summary?.salesWindow.days ?? null;
   const rows = [];
   for await (const lines of streamWorksheetLines(db, worksheet.id, view)) {
-    for (const line of lines) rows.push(worksheetCsvRow(line));
+    for (const line of lines) rows.push(worksheetCsvRow(line, salesDays));
   }
   return csvDownloadResponse(
     toCsv(WORKSHEET_CSV_HEADERS, rows),

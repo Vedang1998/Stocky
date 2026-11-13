@@ -46,6 +46,18 @@ barcode and supplier SKU.
 Every row opens to show the calculation step by step, the warnings, the stock
 and sales facts behind it, price, cost and margin, and each supplier's terms.
 
+Each row carries the variant's ABC/U class from the Stocky-parity
+classification in `app/lib/analytics/abc-parity.ts`: net sales over the last
+eight complete weeks, ranked across the whole shop rather than only the
+variants on the worksheet. The class is measured when the worksheet is
+generated and stored with the row, so the column sorts in SQL and a saved
+worksheet keeps the class it was made with. The summary records the eight
+weeks it covers. Worksheets made before the class was recorded show none.
+
+Net sales per day is the row's net sales divided by the days in the
+worksheet's sales period. It is worked out when shown, from the stored net
+sales, and is in the row's detail and the CSV export.
+
 ## What can be changed
 
 Only the quantity to order. The suggestion stays beside it and one click
@@ -111,6 +123,9 @@ module's own permission check.
 
 ## Not done yet
 
+- Shelf or bin location and landed or average cost columns: the app has no
+  source for them yet.
+- Saved column choices per merchant.
 - Setting planning levels for many variants at once.
 - Choosing a supplier for one row on the worksheet.
 - End-to-end run on the development store.
