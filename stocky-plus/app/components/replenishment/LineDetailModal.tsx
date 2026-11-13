@@ -14,8 +14,10 @@ import {
   type Warning,
 } from "../../lib/replenishment/types";
 import {
+  ABC_CLASS_DESCRIPTIONS,
   formatLocalDate,
   marginAndMarkup,
+  revenuePerDay,
   STOCK_STATUS_LABELS,
 } from "../../lib/replenishment/worksheet/describe";
 import { variantLabel } from "../../lib/replenishment/worksheet/labels";
@@ -33,6 +35,10 @@ export type LineDetailContext = {
   currencyCode: string | null;
   /** The days whose sales the row reports, for example "Oct 12, 2026 to Nov 10, 2026". */
   salesPeriod: string;
+  /** Length of the sales period in days; null when the worksheet does not record it. */
+  salesDays: number | null;
+  /** The days the shop's ABC/U classes were measured over. */
+  abcPeriod: string | null;
   /** The stock the worksheet plans: all locations together, or one location. */
   scope: { key: string; name: string };
 };
@@ -394,8 +400,31 @@ function LineDetail({
           <Fact label="Net units sold">{quantity(line.netUnits)}</Fact>
           <Fact label="Orders">{quantity(line.distinctOrders)}</Fact>
           <Fact label="Net sales">{money(line.revenueAmount, context.currencyCode)}</Fact>
+          <Fact label="Net sales per day">
+            {money(revenuePerDay(line.revenueAmount, context.salesDays), context.currencyCode)}
+          </Fact>
           <Fact label="Units per day">{formatDecimal(line.unitsPerDay)}</Fact>
         </Facts>
+      </s-stack>
+
+      <s-stack direction="block" gap="small-200">
+        <s-heading>ABC class</s-heading>
+        {line.abcClass ? (
+          <s-paragraph>
+            <s-text type="strong">{line.abcClass}</s-text>.{" "}
+            {ABC_CLASS_DESCRIPTIONS[line.abcClass]}
+            {context.abcPeriod ? ` (${context.abcPeriod}).` : "."}
+          </s-paragraph>
+        ) : (
+          <s-text color="subdued">
+            {context.abcPeriod
+              ? "No class: the variant was not in the shop's catalog when the classes were measured."
+              : "This worksheet was made before ABC classes were recorded."}
+          </s-text>
+        )}
+        <s-text color="subdued">
+          The class ranks the variant against the whole shop, not only this worksheet.
+        </s-text>
       </s-stack>
 
       <s-stack direction="block" gap="base">

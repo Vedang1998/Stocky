@@ -3,6 +3,7 @@
  * run always give the same row, so a stored worksheet can be checked against
  * its inputs.
  */
+import type { AbcClass } from "../../analytics/abc-parity";
 import { ZERO, type Decimal } from "../../analytics/money";
 import type { LocalDate } from "../local-date";
 import { rational, toFixed } from "../rational";
@@ -92,6 +93,8 @@ export type LineFacts = {
   appIncoming: number | null;
   /** Null when the variant has no sales in the window. */
   sales: LineSales | null;
+  /** The shop's ABC/U class for the variant; null when it is not in the run. */
+  abcClass: AbcClass | null;
   rule: EffectiveRule | null;
   /** The supplier the row would be ordered from. */
   supplier: SupplierTerms | null;
@@ -155,6 +158,7 @@ export type WorksheetLineRecord = {
   distinctOrders: number | null;
   revenueAmount: Decimal | null;
   unitsPerDay: string | null;
+  abcClass: AbcClass | null;
   stockStatus: StockStatus;
   daysOfStock: string | null;
   depletionDate: LocalDate | null;
@@ -288,6 +292,7 @@ export function buildWorksheetLine(
     distinctOrders: hasHistory ? (facts.sales?.distinctOrders ?? 0) : null,
     revenueAmount: hasHistory ? (facts.sales?.revenue ?? ZERO) : null,
     unitsPerDay: velocity ? toFixed(velocity, UNITS_PER_DAY_PLACES) : null,
+    abcClass: facts.abcClass,
     stockStatus: health.status,
     daysOfStock: health.daysOfStock,
     depletionDate: health.depletionDate,

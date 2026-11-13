@@ -47,6 +47,7 @@ function facts(overrides: Partial<LineFacts> = {}): LineFacts {
     stock: { available: 10, onHand: 14, committed: 4, incoming: 5 },
     appIncoming: null,
     sales: { netUnits: 60, distinctOrders: 41, revenue: new Prisma.Decimal("1199.40") },
+    abcClass: "A",
     rule: null,
     supplier: null,
     suppliers: [],
@@ -78,6 +79,12 @@ describe("buildWorksheetLine", () => {
     });
     expect(line.revenueAmount?.toString()).toBe("1199.4");
     expect(line.detail.trace.map((step) => step.key)).toContain("suggest.parity");
+  });
+
+  it("carries the shop's ABC/U class, and none when the variant is not in the run", () => {
+    expect(buildWorksheetLine(CONTEXT, facts()).abcClass).toBe("A");
+    expect(buildWorksheetLine(CONTEXT, facts({ abcClass: "U" })).abcClass).toBe("U");
+    expect(buildWorksheetLine(CONTEXT, facts({ abcClass: null })).abcClass).toBeNull();
   });
 
   it("leaves supplier rules off until the run asks for them", () => {

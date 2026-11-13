@@ -5,6 +5,7 @@ import {
   formatInstant,
   formatLocalDate,
   marginAndMarkup,
+  revenuePerDay,
 } from "./describe";
 
 describe("describeMethod", () => {
@@ -76,5 +77,20 @@ describe("marginAndMarkup", () => {
   it("returns nothing when either amount is missing or not a number", () => {
     expect(marginAndMarkup(null, "5")).toEqual({ margin: null, markup: null });
     expect(marginAndMarkup("5", "1e3")).toEqual({ margin: null, markup: null });
+  });
+});
+
+describe("revenuePerDay", () => {
+  it("divides net sales by the days in the sales period, to the cent", () => {
+    expect(revenuePerDay("600", 30)).toBe("20.00");
+    expect(revenuePerDay("1199.40", 7)).toBe("171.34");
+    expect(revenuePerDay("-12.5", 5)).toBe("-2.50");
+  });
+
+  it("returns nothing without a sales figure or a usable period", () => {
+    expect(revenuePerDay(null, 30)).toBeNull();
+    expect(revenuePerDay("600", null)).toBeNull();
+    expect(revenuePerDay("600", 0)).toBeNull();
+    expect(revenuePerDay("600", 1.5)).toBeNull();
   });
 });

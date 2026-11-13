@@ -2404,6 +2404,7 @@ model ReplenishmentWorksheetLine {
   distinctOrders        Int?
   revenueAmount         Decimal?                 @db.Decimal(20, 6)
   unitsPerDay           Decimal?                 @db.Decimal(20, 4)
+  abcClass              String?                  @db.VarChar(1)
   stockStatus           ReplenishmentStockStatus
   daysOfStock           Decimal?                 @db.Decimal(20, 1)
   depletionDate         String?                  @db.VarChar(10)

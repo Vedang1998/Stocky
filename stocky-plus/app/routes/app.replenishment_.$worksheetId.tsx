@@ -142,6 +142,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     summary: summary && {
       currencyCode: summary.currencyCode,
       salesPeriod: `${formatLocalDate(summary.salesWindow.start)} to ${formatLocalDate(summary.salesWindow.end)}`,
+      salesDays: summary.salesWindow.days,
+      abcPeriod: summary.abcWindow
+        ? `${formatLocalDate(summary.abcWindow.start)} to ${formatLocalDate(summary.abcWindow.end)}`
+        : null,
       coverage: summary.coverage.kind,
       historyStart: summary.historyStartLocalDate
         ? formatLocalDate(summary.historyStartLocalDate)
@@ -337,6 +341,8 @@ export default function Worksheet() {
   const detailContext: LineDetailContext = {
     currencyCode: summary?.currencyCode ?? null,
     salesPeriod: summary?.salesPeriod ?? "",
+    salesDays: summary?.salesDays ?? null,
+    abcPeriod: summary?.abcPeriod ?? null,
     scope: { key: worksheet.scopeKey, name: worksheet.scope },
   };
 

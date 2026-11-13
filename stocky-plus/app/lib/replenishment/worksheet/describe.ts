@@ -2,6 +2,7 @@
  * Merchant-facing wording for worksheets. Shared by the screens and the
  * export so the same run is described the same way everywhere.
  */
+import type { AbcClass } from "../../analytics/abc-parity";
 import type { LocalDate } from "../local-date";
 import { div, mul, rational, sign, sub, toFixed, type Rational } from "../rational";
 import type { StockStatus } from "../stock-health";
@@ -90,6 +91,24 @@ function parseDecimal(text: string | null): Rational | null {
   const digits = BigInt(whole + fraction);
   return rational(minus ? -digits : digits, 10n ** BigInt(fraction.length));
 }
+
+/**
+ * Net sales per day over the worksheet's sales period, to two decimals.
+ * Null when the row has no sales figure or the period is unknown.
+ */
+export function revenuePerDay(revenue: string | null, days: number | null): string | null {
+  const value = parseDecimal(revenue);
+  if (!value || days == null || !Number.isSafeInteger(days) || days <= 0) return null;
+  return toFixed(div(value, rational(days)), 2);
+}
+
+/** What each ABC/U class means, for the row's detail. */
+export const ABC_CLASS_DESCRIPTIONS: Record<AbcClass, string> = {
+  A: "Among the variants that make the first 80% of the shop's net sales over the last eight weeks",
+  B: "Among the variants that make the next 15% of the shop's net sales over the last eight weeks",
+  C: "Among the variants that make the last 5% of the shop's net sales over the last eight weeks, or sold nothing",
+  U: "Not ranked: the variant, or the shop's order history in this app, is newer than eight weeks",
+};
 
 /**
  * Margin (profit as a share of price) and markup (profit as a share of

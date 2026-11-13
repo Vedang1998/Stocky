@@ -129,6 +129,7 @@ async function seedCatalog(prisma: PrismaClient, shopId: string) {
         selectedOptions: [],
         priceAmount: variant.price,
         currencyCode: "USD",
+        shopifyCreatedAt: new Date("2025-06-01T00:00:00Z"),
         ...live,
       },
     });
@@ -422,8 +423,11 @@ describe("replenishment worksheets", () => {
     await seedCatalog(migrationPrisma, shopBId);
 
     // Shop A sold 30 Merlot 750 ml and 6 stout in the last 30 days, plus one
-    // sale today that the window leaves out. Shop B sold far more.
+    // sale today that the window leaves out. Its history starts before the
+    // eight weeks ABC/U looks at, so its variants are ranked. Shop B sold far
+    // more, but its history is too short to rank.
     const sales = [
+      { id: 5, processedAt: "2026-09-01T16:00:00Z", variant: STOUT_CAN, quantity: 1, price: "4.00" },
       { id: 1, processedAt: "2026-10-15T16:00:00Z", variant: MERLOT_750, quantity: 18, price: "20.00" },
       { id: 2, processedAt: "2026-11-02T16:00:00Z", variant: MERLOT_750, quantity: 12, price: "20.00" },
       { id: 3, processedAt: "2026-11-05T16:00:00Z", variant: STOUT_CAN, quantity: 6, price: "4.00" },
@@ -462,6 +466,7 @@ describe("replenishment worksheets", () => {
           currencyCode: "USD",
           salesWindow: { start: "2026-10-11", end: "2026-11-09", days: 30 },
           coverage: { kind: "FULL" },
+          abcWindow: { start: "2026-09-15", end: "2026-11-09" },
           notStockedAtLocation: 0,
         },
       });
@@ -493,6 +498,7 @@ describe("replenishment worksheets", () => {
         distinctOrders: 2,
         revenueAmount: "600",
         unitsPerDay: "1.00",
+        abcClass: "A",
         forecastDemand: "30.00",
         daysOfStock: "10.0",
         depletionDate: "2026-11-20",
@@ -516,6 +522,7 @@ describe("replenishment worksheets", () => {
         stockStatus: "UNKNOWN",
         warningCodes: ["INVENTORY_UNKNOWN"],
         supplierId: "sup_acme",
+        abcClass: "C",
       });
 
       expect(bySku(lines, "STOUT-CAN")).toMatchObject({
@@ -523,6 +530,8 @@ describe("replenishment worksheets", () => {
         availableQuantity: 20,
         incomingQuantity: null,
         netUnits: 6,
+        // 24 of the 624 in net sales over the eight weeks, after Merlot's 600.
+        abcClass: "C",
         parityQuantity: 0,
         orderQuantity: 0,
         supplierId: null,
@@ -747,8 +756,12 @@ describe("replenishment worksheets", () => {
         shop: { timeZone: TZ, currencyCode: "USD", installedAt: null },
       });
       const line = bySku(await linesOf(dbB(), generated.id), "MER-750");
-      expect(line).toMatchObject({ netUnits: 500, parityQuantity: 487 });
-      expect(bySku(await linesOf(dbA(), worksheetA), "MER-750").netUnits).toBe(30);
+      // Shop B's 500 sold do not rank it: its own history is under eight weeks.
+      expect(line).toMatchObject({ netUnits: 500, parityQuantity: 487, abcClass: "U" });
+      expect(bySku(await linesOf(dbA(), worksheetA), "MER-750")).toMatchObject({
+        netUnits: 30,
+        abcClass: "A",
+      });
     });
 
     it("hides a worksheet and its rows from another shop", async () => {
@@ -852,6 +865,17 @@ describe("replenishment worksheets", () => {
         "STOUT-CAN",
         "MER-750",
         "MER-1500",
+      ]);
+      // A before C; the two C rows keep product order either way.
+      expect(await skus({ sort: { key: "abc", direction: "asc" } })).toEqual([
+        "MER-750",
+        "MER-1500",
+        "STOUT-CAN",
+      ]);
+      expect(await skus({ sort: { key: "abc", direction: "desc" } })).toEqual([
+        "MER-1500",
+        "STOUT-CAN",
+        "MER-750",
       ]);
     });
 
@@ -980,6 +1004,15 @@ describe("replenishment worksheets", () => {
           data: { finalQuantity: -1, orderQuantity: -1 },
         }),
       ).rejects.toThrow("ReplenishmentWorksheetLine_quantities_check");
+    });
+
+    it("stores only the four ABC/U classes", async () => {
+      await expect(
+        migrationPrisma.replenishmentWorksheetLine.update({
+          where: { id: merlot },
+          data: { abcClass: "D" },
+        }),
+      ).rejects.toThrow("ReplenishmentWorksheetLine_abc_class_check");
     });
   });
 

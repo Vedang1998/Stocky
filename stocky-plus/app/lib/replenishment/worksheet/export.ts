@@ -2,7 +2,7 @@
  * A worksheet as a spreadsheet: one row per variant with the figures the
  * screen shows and the ones in each row's detail.
  */
-import { STOCK_STATUS_LABELS, WARNING_LABELS } from "./describe";
+import { revenuePerDay, STOCK_STATUS_LABELS, WARNING_LABELS } from "./describe";
 import type { WorksheetLine } from "./store.server";
 
 export const WORKSHEET_CSV_HEADERS = [
@@ -21,7 +21,9 @@ export const WORKSHEET_CSV_HEADERS = [
   "Net units sold",
   "Orders",
   "Net sales",
+  "Net sales per day",
   "Units per day",
+  "ABC class",
   "Days of stock",
   "Runs out around",
   "Stock status",
@@ -47,7 +49,8 @@ export const WORKSHEET_CSV_HEADERS = [
 
 type Cell = string | number | null;
 
-export function worksheetCsvRow(line: WorksheetLine): Cell[] {
+/** `salesDays` is the length of the worksheet's sales period, when known. */
+export function worksheetCsvRow(line: WorksheetLine, salesDays: number | null): Cell[] {
   return [
     line.productTitle,
     line.variantTitle === "Default Title" ? "" : line.variantTitle,
@@ -64,7 +67,9 @@ export function worksheetCsvRow(line: WorksheetLine): Cell[] {
     line.netUnits,
     line.distinctOrders,
     line.revenueAmount,
+    revenuePerDay(line.revenueAmount, salesDays),
     line.unitsPerDay,
+    line.abcClass,
     line.daysOfStock,
     line.depletionDate,
     STOCK_STATUS_LABELS[line.stockStatus],
