@@ -40,6 +40,12 @@ export const PURCHASING_DIRECT_MERCHANT_MODELS = [
   "PurchaseOrderReceiptLine",
 ] as const;
 
+/** Replenishment planning inputs (Stocky Parity worksheet). */
+export const REPLENISHMENT_DIRECT_MERCHANT_MODELS = [
+  "ReplenishmentSettings",
+  "ReplenishmentVariantRule",
+] as const;
+
 export const DIRECT_MERCHANT_MODELS = [
   "Supplier",
   "PurchaseOrder",
@@ -64,6 +70,7 @@ export const DIRECT_MERCHANT_MODELS = [
   ...PR6_A_DIRECT_MERCHANT_MODELS,
   ...INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS,
   ...PURCHASING_DIRECT_MERCHANT_MODELS,
+  ...REPLENISHMENT_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -123,6 +130,8 @@ export const MERCHANT_DELEGATE_NAMES = {
   OrderFactObservationInFlight: "orderFactObservationInFlight",
   InventoryOperation: "inventoryOperation",
   InventoryOperationLine: "inventoryOperationLine",
+  ReplenishmentSettings: "replenishmentSettings",
+  ReplenishmentVariantRule: "replenishmentVariantRule",
   SupplierSkuMapping: "supplierSkuMapping",
   ShopifyOrderRefundLineFact: "shopifyOrderRefundLineFact",
   ShopifyOrderAdjustmentFact: "shopifyOrderAdjustmentFact",
