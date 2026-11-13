@@ -12,7 +12,7 @@ Several statements in the policy are true only once code that is not on `main` t
 | 1 | Store data is deleted after Shopify's `shop/redact` request | Done. An uninstalled store's data is erased when the request arrives, or 30 days after uninstall if it never does (`docs/app-store/DATA_DELETION.md`). | Confirm the 30-day window and any record the law requires us to keep with counsel. |
 | 2 | Customer data requests and deletion requests are handled | Done. Each request is recorded and closed as "no customer data held". Order records named in a deletion request are kept; they carry no shopper details. | Decide with counsel whether the named order records should be deleted instead. Section 6 describes what the code does today. |
 | 3 | Backup retention period | Not set in the repository. | `OWNER TO FILL` from the hosting/database provider. |
-| 4 | Encryption at rest | Not provable from the repository, so the policy does not claim it. | If the database provider encrypts at rest, add it with the provider's wording. |
+| 4 | Encryption at rest | The app encrypts the Shopify access tokens it stores. Encryption of the rest of the database is not provable from the repository, so the policy does not claim it. | If the database provider encrypts at rest, add it with the provider's wording. |
 | 5 | Subprocessor list and hosting region | Not recorded in the repository. | `OWNER TO FILL` |
 
 Everything else below matches the code as of `2685081`. Re-check this policy whenever the data model, the webhook list or the requested scopes change.
