@@ -8,7 +8,10 @@ import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { getLowStockAlerts } from "../services/forecasting.server";
-import { enqueueCatalogSync } from "../jobs/queue.server";
+import {
+  enqueueCatalogSync,
+  enqueueOrderFactsSync,
+} from "../jobs/queue.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
@@ -44,7 +47,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
-    await enqueueCatalogSync(tenant);
+    await Promise.all([
+      enqueueCatalogSync(tenant),
+      enqueueOrderFactsSync(tenant),
+    ]);
     return { synced: true };
   }
 

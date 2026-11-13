@@ -75,6 +75,8 @@ export const INVENTORY_RECONCILE_MIN_ENQUEUE_INTERVAL_MS = 15 * 60 * 1000;
  * A sync is also never queued while another is still queued or running.
  */
 export const CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS = 60 * 1000;
+/** Shortest gap between two successful order-history imports requested for a shop. */
+export const ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export type WebhookJobData = {
   topic: string;
@@ -333,8 +335,54 @@ export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
   await kickDispatcher();
 }
 
-export async function enqueueOrderFactsSync(tenant: TenantAuthority) {
+/**
+ * Create the durable job that imports the shop's order history and stores its
+ * time zone and currency. Reports start empty without it.
+ *
+ * Single-flight per shop, like the catalog sync: the import reads the whole
+ * order history, so a request is skipped while an import for the shop is
+ * queued or running, or when one was requested within
+ * ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS. A failed import does not count as
+ * recent, so the merchant can start another. The idempotency key is bucketed
+ * by the minute, which collapses concurrent requests that pass the check
+ * together without blocking a retry after a failure.
+ */
+export async function enqueueOrderFactsSync(
+  tenant: TenantAuthority,
+): Promise<{ enqueued: boolean; reason?: string }> {
   const auth = requireAuthority(tenant, "enqueueOrderFactsSync");
+  const prisma = getControlPlanePrisma();
+  const now = Date.now();
+  const existing = await prisma.durableJob.findFirst({
+    where: {
+      shopId: auth.shopId,
+      jobType: "order-facts-sync",
+      OR: [
+        {
+          state: {
+            in: [
+              "PENDING",
+              "RETRY_WAIT",
+              "DISPATCH_LEASED",
+              "ENQUEUED",
+              "RUNNING",
+            ],
+          },
+        },
+        {
+          state: "SUCCEEDED",
+          createdAt: {
+            gte: new Date(now - ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS),
+          },
+        },
+      ],
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { enqueued: false, reason: "already_requested" };
+  }
+  const bucket = Math.floor(now / CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS);
   await createDurableJob({
     shopId: auth.shopId,
     jobType: "order-facts-sync",
@@ -342,12 +390,13 @@ export async function enqueueOrderFactsSync(tenant: TenantAuthority) {
     queueName: CRON_QUEUE,
     payloadSchemaVersion: "order-facts-sync-v1",
     sanitizedPayload: { shopId: auth.shopId },
-    idempotencyKey: `order-facts-sync:${auth.shopId}:${auth.correlationId}`,
+    idempotencyKey: `order-facts-sync:${auth.shopId}:${bucket}`,
     correlationId: auth.correlationId,
     causationId: auth.causationId,
     maxAttempts: 125,
   });
   await kickDispatcher();
+  return { enqueued: true };
 }
 
 export async function enqueueOrderFactsReconcile(
