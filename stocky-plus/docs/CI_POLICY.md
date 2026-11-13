@@ -61,14 +61,33 @@ covered by `.github/scripts/classify-ci-change-set.test.sh`.
    `fetch-depth: 0`). No third-party path-filter action. Prints changed paths
    and classification. Runs `git diff --check` on the compared range when the
    range is usable.
-2. `Lint, typecheck, test, build, Prisma, GraphQL` — existing heavy validate
-   job, unchanged in substance. Runs only when `full_ci=true`. Starts
-   PostgreSQL and Redis only in that case.
-3. `CI Gate` — stable final check (`if: always()`, needs classify + validate):
+2. `Lint, typecheck, test, build, Prisma, GraphQL` (`validate`) — setup,
+   Prisma validation and migrations, tenant enforcement apply and its
+   verifications, the tenant access and sync inventory audits, sync role
+   provisioning and verification, diff check, lint, typecheck, GraphQL
+   codegen, the PR5-F3 matrices, unit tests and build. Runs only when
+   `full_ci=true`. Starts PostgreSQL and Redis only in that case.
+3. Four jobs that run beside `validate` under the same condition, each on its
+   own runner with its own PostgreSQL and Redis:
+   - `Tenant enforcement tests` (`tenant_enforcement`)
+   - `Sync control-plane tests` (`sync_control_plane`)
+   - `Tenant access tests` (`tenant_access`)
+   - `Migration and tenant-backfill tests` (`migrations`)
+
+   These hold the test steps that used to run in sequence inside `validate`.
+   The steps were moved unchanged. Each job first prepares its database with
+   the same steps as `validate`; the workflow reuses the step definitions
+   through YAML aliases, so there is one definition of each preparation step.
+   `tenant_enforcement` runs before sync role provisioning, as it did in the
+   single job; the other three run after it. `migrations` also runs GraphQL
+   codegen first because its suite loads the generated Admin schema. The three
+   jobs whose steps used to precede the diff check end with it.
+4. `CI Gate` — stable final check (`if: always()`, needs classify and all five
+   full-CI jobs):
    - classify failure → FAIL
    - `docs_only=true` and classify succeeded → SUCCESS
-   - `full_ci=true` → SUCCESS only if validate succeeded
-   - full CI required but validate skipped, cancelled, or failed → FAIL
+   - `full_ci=true` → SUCCESS only if every full-CI job succeeded
+   - full CI required but any full-CI job skipped, cancelled, or failed → FAIL
 
 Skipped heavy CI must not count as success for a runtime change.
 
@@ -84,11 +103,13 @@ Skipped heavy CI must not count as success for a runtime change.
 
 ## Branch-protection note
 
-The heavy job keeps the historical check name
-`Lint, typecheck, test, build, Prisma, GraphQL`. After this policy lands, the
-stable always-present check is `CI Gate`. GitHub may treat a skipped required
-check as success, so `CI Gate` should be the merge gate once the repository
-ruleset is updated. This file does not change the ruleset.
+The `validate` job keeps the historical check name
+`Lint, typecheck, test, build, Prisma, GraphQL`. Since the split into parallel
+jobs that check alone no longer covers the database suites; `CI Gate` does,
+because it requires every full-CI job. The stable always-present check is
+`CI Gate`. GitHub may treat a skipped required check as success, so `CI Gate`
+should be the merge gate once the repository ruleset is updated. This file
+does not change the ruleset.
 
 ## Out of scope
 
