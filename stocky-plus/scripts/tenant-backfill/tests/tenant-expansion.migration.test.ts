@@ -51,6 +51,7 @@ const ALL_MIGRATION_NAMES = [
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
   "20261110220000_inventory_operation_ledger",
+  "20261110230000_replenishment_planning_inputs",
   "20261110235000_privacy_requests_and_shop_erasure",
 ] as const;
 
