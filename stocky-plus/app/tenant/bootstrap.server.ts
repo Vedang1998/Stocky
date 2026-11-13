@@ -7,8 +7,11 @@
  */
 
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
+import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import type { Session } from "@shopify/shopify-api";
 import rawPrisma from "../db.server";
+import { encryptedSessionStorage } from "../lib/session-tokens/encrypted-session-storage.server";
+import { loadSessionTokenCipher } from "../lib/session-tokens/cipher.server";
 import {
   issueTenantAuthority,
   type TenantAuthority,
@@ -21,14 +24,18 @@ export type CanonicalShopIdentity = {
   readonly myshopifyDomain: string;
 };
 
-/** Session-storage adapter constructed inside the bootstrap boundary (lazy). */
-type SessionStorage = PrismaSessionStorage<typeof rawPrisma>;
-
+/**
+ * Session-storage adapter constructed inside the bootstrap boundary (lazy).
+ * Access and refresh tokens are encrypted before they reach the table.
+ */
 let _shopifySessionStorage: SessionStorage | null = null;
 
 function getShopifySessionStorage(): SessionStorage {
   if (!_shopifySessionStorage) {
-    _shopifySessionStorage = new PrismaSessionStorage(rawPrisma);
+    _shopifySessionStorage = encryptedSessionStorage(
+      new PrismaSessionStorage(rawPrisma),
+      loadSessionTokenCipher(),
+    );
   }
   return _shopifySessionStorage;
 }
@@ -173,6 +180,71 @@ export async function deleteSessionsForShop(shopDomain: string): Promise<number>
     where: { shop: shopDomain },
   });
   return result.count;
+}
+
+/**
+ * Rewrites stored access and refresh tokens that are in the clear or under an
+ * older key with the current encryption key. Run it after switching
+ * encryption on and after adding a new key, before the old key is removed.
+ * A row whose token changes while this runs is left to the writer that
+ * changed it.
+ */
+export async function reencryptSessionTokens(
+  batchSize = 200,
+): Promise<{ sessions: number; rewritten: number }> {
+  const cipher = loadSessionTokenCipher();
+  if (!cipher) {
+    throw new Error(
+      "SESSION_TOKEN_ENCRYPTION_KEY is not set; there is no key to encrypt with",
+    );
+  }
+  let sessions = 0;
+  let rewritten = 0;
+  let after: string | undefined;
+  for (;;) {
+    const rows = await rawPrisma.session.findMany({
+      select: { id: true, accessToken: true, refreshToken: true },
+      orderBy: { id: "asc" },
+      take: batchSize,
+      ...(after ? { cursor: { id: after }, skip: 1 } : {}),
+    });
+    if (rows.length === 0) break;
+    for (const row of rows) {
+      sessions += 1;
+      const staleAccess = row.accessToken !== "" && cipher.isStale(row.accessToken);
+      const staleRefresh =
+        row.refreshToken !== null && cipher.isStale(row.refreshToken);
+      if (!staleAccess && !staleRefresh) continue;
+      const result = await rawPrisma.session.updateMany({
+        where: {
+          id: row.id,
+          accessToken: row.accessToken,
+          refreshToken: row.refreshToken,
+        },
+        data: {
+          ...(staleAccess
+            ? {
+                accessToken: cipher.seal(
+                  row.id,
+                  cipher.open(row.id, row.accessToken),
+                ),
+              }
+            : {}),
+          ...(staleRefresh
+            ? {
+                refreshToken: cipher.seal(
+                  row.id,
+                  cipher.open(row.id, row.refreshToken!),
+                ),
+              }
+            : {}),
+        },
+      });
+      rewritten += result.count;
+    }
+    after = rows[rows.length - 1].id;
+  }
+  return { sessions, rewritten };
 }
 
 /**

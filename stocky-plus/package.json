@@ -40,6 +40,7 @@
     "sync:inventory:check": "tsx scripts/sync-control-plane/inventory-check.ts",
     "sync:roles:provision": "tsx scripts/sync-control-plane/cli.ts provision",
     "sync:roles:verify": "tsx scripts/sync-control-plane/cli.ts verify",
+    "session-tokens:reencrypt": "tsx scripts/session-tokens/reencrypt.ts",
     "sync:claim-indexes:plan": "tsx scripts/sync-control-plane/claim-indexes-cli.ts plan",
     "sync:claim-indexes:apply": "tsx scripts/sync-control-plane/claim-indexes-cli.ts apply",
     "sync:claim-indexes:verify": "tsx scripts/sync-control-plane/claim-indexes-cli.ts verify",
