@@ -244,7 +244,7 @@ All 39 approved merchant-owned models must be covered below.
 | File | Symbol | Sites | Execution category | Models touched | Old access method | New access method | Authority source | Conversion status | Test evidence | Exception ID | Exception justification |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | `app/billing/entitlements.server.ts` | `db.shopSettings.create` | 1 | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
-| `app/billing/entitlements.server.ts` | `db.shopSettings.findUnique` | 1 | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
+| `app/billing/entitlements.server.ts` | `db.shopSettings.findUnique` | 2 | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/billing/entitlements.server.ts` | `db.shopSettings.update` | 2 | other | ShopSettings | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/billing/usage.server.ts` | `db.purchaseOrder.count` | 1 | other | PurchaseOrder | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |
 | `app/billing/usage.server.ts` | `db.shopifyLocationFact.count` | 1 | other | ShopifyLocationFact | global prisma + shop string | TenantDb scoped by TenantAuthority | TenantAuthority | converted | test:tenant-access | — | — |

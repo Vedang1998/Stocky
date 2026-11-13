@@ -272,6 +272,13 @@ function scopedLineItemsInclude(parentRelation: string) {
   };
 }
 
+/** Shop B's ShopSettings row, read through the tenant client, records a plan. */
+function activePlanSnapshot() {
+  const settings = prismaMock.shopSettings as Record<string, unknown>;
+  settings.findMany = vi.fn(async () => [{ id: "settings-shop-b" }]);
+  settings.findFirst = vi.fn(async () => ({ subscriptionActive: true }));
+}
+
 describe("cross-shop denial", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -390,6 +397,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B Buying Table createPO against Shop A supplier/mapping", async () => {
     const { action } = await import("../routes/app.buying-table");
+    activePlanSnapshot();
     prismaMock.supplier.findFirst.mockResolvedValue(null);
 
     const result = await action(
@@ -546,6 +554,7 @@ describe("cross-shop denial", () => {
 
   it("denies Buying Table createPO when Shop B supplier resolves but SKU mapping is Shop A", async () => {
     const { action } = await import("../routes/app.buying-table");
+    activePlanSnapshot();
     prismaMock.supplier.findFirst.mockResolvedValue({
       id: "supplier-shop-b",
       shop: SHOP_B,
