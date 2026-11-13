@@ -30,7 +30,7 @@ import {
   resolveStocktakeMovement,
   saveStocktakeCount,
   zeroFillUncounted,
-  type StocktakeOptions,
+  type CompleteStocktakeOptions,
 } from "../../../app/services/stocktakes/stocktake.server";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
 import {
@@ -120,8 +120,8 @@ describe("stocktake workflow", () => {
     );
 
   const enabled = (
-    extra: Partial<StocktakeOptions> = {},
-  ): StocktakeOptions => ({
+    extra: Partial<CompleteStocktakeOptions> = {},
+  ): CompleteStocktakeOptions => ({
     sendBatch: shopify.send,
     isCapabilityEnabled: () => true,
     readQuantities,
@@ -859,7 +859,7 @@ describe("stocktake workflow", () => {
       expect(await complete(id)).toEqual({
         ok: false,
         error:
-          "1 item on this count has no count. Count them, mark them as zero, or complete the count leaving them unchanged.",
+          "1 item on this count has no count. Count it, mark it as zero, or complete the count leaving it unchanged.",
         problems: [],
         blocker: "UNCOUNTED",
       });

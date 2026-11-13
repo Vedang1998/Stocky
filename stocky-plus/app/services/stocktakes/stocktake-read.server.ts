@@ -1,6 +1,11 @@
 import type { TenantDb } from "../../tenant/tenant-db.server";
+import {
+  TERMINAL_OPERATION_STATUSES,
+  type InventoryOperationStatus,
+} from "../inventory-writes/types";
 import { findVariantsById } from "../inventory-writes/variant-items.server";
 import {
+  STOCKTAKE_SOURCE_TYPE,
   stocktakeLineDelta,
   type StocktakeCountSource,
   type StocktakeQuantityBasis,
@@ -423,4 +428,51 @@ export async function listStocktakeLinesForExport(
     lines.push(...(await describeLines(db, part)));
   }
   return lines;
+}
+
+export interface StocktakeLedgerSummary {
+  /** Attempts to apply this count that reached the ledger. */
+  attemptCount: number;
+  /** Shopify has not finished answering the last attempt. */
+  unfinished: boolean;
+  /** Changes Shopify has confirmed for this count so far. */
+  appliedChangeCount: number;
+  /** Changes Shopify refused in the last attempt. */
+  refusedChangeCount: number;
+}
+
+/** What the inventory ledger holds for a count: whether applying it has started, and how far it got. */
+export async function getStocktakeLedgerSummary(
+  db: TenantDb,
+  stocktakeId: string,
+): Promise<StocktakeLedgerSummary> {
+  const operations = (await db.inventoryOperation.findMany({
+    where: { sourceType: STOCKTAKE_SOURCE_TYPE, sourceId: stocktakeId },
+    select: {
+      status: true,
+      appliedLineCount: true,
+      failedLineCount: true,
+      conflictLineCount: true,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  })) as Array<{
+    status: InventoryOperationStatus;
+    appliedLineCount: number;
+    failedLineCount: number;
+    conflictLineCount: number;
+  }>;
+  const last = operations.at(-1);
+  return {
+    attemptCount: operations.length,
+    unfinished: operations.some(
+      (operation) => !TERMINAL_OPERATION_STATUSES.has(operation.status),
+    ),
+    appliedChangeCount: operations.reduce(
+      (sum, operation) => sum + operation.appliedLineCount,
+      0,
+    ),
+    refusedChangeCount: last
+      ? last.failedLineCount + last.conflictLineCount
+      : 0,
+  };
 }

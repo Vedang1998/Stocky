@@ -53,7 +53,7 @@ export const MAX_ITEM_LIST_LENGTH = 50_000;
 const MAX_CODE_LENGTH = 191;
 
 /** Rows written per statement when a count sheet is created. */
-const LINE_INSERT_CHUNK = 1_000;
+const LINE_INSERT_CHUNK = 2_000;
 const LOOKUP_CHUNK = 2_000;
 /** Variance lines checked against Shopify live at completion; the rest use synced quantities. */
 const LIVE_MOVEMENT_CHECK_LIMIT = 2_000;
@@ -63,6 +63,11 @@ const MOVEMENT_BATCH_LIMIT = 500;
 export interface StocktakeOptions extends ExecuteInventoryOperationOptions {
   /** Live read of Shopify's quantities for the movement check; defaults to the Admin API. */
   readQuantities?: ReadLevelQuantities;
+}
+
+export interface CompleteStocktakeOptions extends StocktakeOptions {
+  /** Lines without a count are left as they are in Shopify instead of blocking completion. */
+  acceptUncounted?: boolean;
 }
 
 export type StocktakeActionResult = { ok: true } | { ok: false; error: string };
@@ -390,9 +395,14 @@ export async function createStocktake(
       },
       select: { id: true },
     })) as { id: string };
+    // Written through the count they belong to: one statement per chunk, with
+    // no per-row ownership lookup, so a sheet of thousands of items fits in
+    // the transaction.
     for (const part of chunked(lines, LINE_INSERT_CHUNK)) {
-      await tx.stocktakeLineItem.createMany({
-        data: part.map((line) => ({ ...line, stocktakeId: created.id })),
+      await tx.stocktake.update({
+        where: { id: created.id },
+        data: { lineItems: { createMany: { data: part } } },
+        select: { id: true },
       });
     }
     return created.id;
@@ -731,16 +741,11 @@ export async function addStocktakeItems(
       stocktake,
       fresh.map(({ variant }) => variant),
     );
-    const lines: Array<{
-      stocktakeId: string;
-      shopifyVariantId: string;
-      expectedQty: number;
-    }> = [];
+    const lines: Array<{ shopifyVariantId: string; expectedQty: number }> = [];
     for (const { variant, lineNumber } of fresh) {
       const outcome = resolved.get(variant.shopifyVariantId)!;
       if (outcome.ok) {
         lines.push({
-          stocktakeId: stocktake.id,
           shopifyVariantId: variant.shopifyVariantId,
           expectedQty: outcome.expectedQty,
         });
@@ -759,7 +764,11 @@ export async function addStocktakeItems(
       );
     }
     if (lines.length > 0) {
-      await tx.stocktakeLineItem.createMany({ data: lines });
+      await tx.stocktake.update({
+        where: { id: stocktake.id },
+        data: { lineItems: { createMany: { data: lines } } },
+        select: { id: true },
+      });
     }
     return {
       ok: true as const,
@@ -1172,7 +1181,7 @@ export async function completeStocktake(
   admin: AdminGraphQLClient | null,
   actor: InventoryActor,
   stocktakeId: string,
-  options: StocktakeOptions & { acceptUncounted?: boolean } = {},
+  options: CompleteStocktakeOptions = {},
 ): Promise<CompleteStocktakeResult> {
   const fail = (
     error: string,
@@ -1211,7 +1220,9 @@ export async function completeStocktake(
   const uncounted = lines.filter((line) => line.countedQty === null).length;
   if (uncounted > 0 && !options.acceptUncounted) {
     return fail(
-      `${itemsText(uncounted)} on this count ${uncounted === 1 ? "has" : "have"} no count. Count them, mark them as zero, or complete the count leaving them unchanged.`,
+      uncounted === 1
+        ? "1 item on this count has no count. Count it, mark it as zero, or complete the count leaving it unchanged."
+        : `${itemsText(uncounted)} on this count have no count. Count them, mark them as zero, or complete the count leaving them unchanged.`,
       { blocker: "UNCOUNTED" },
     );
   }
