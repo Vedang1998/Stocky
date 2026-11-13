@@ -26,7 +26,7 @@ Last updated: 2026-11-13.
 |---|---|
 | First install can hang on "Handling response" and skip the first sync (issue #73) | Fix in #82. |
 | Merchant screens show developer and planning text (issue #80) | Not started in this lane; the pages are being replaced by the feature lanes' pull requests, so the wording pass follows them. |
-| Plan limits are not enforced on feature routes | The entitlement service exists (#92); routes still read `ShopSettings.subscriptionActive`, which only the Billing page refreshes, so a cancellation is noticed only when the merchant opens Billing (security pass BIL-02). Wiring waits for the plan decision below. |
+| Plan limits are not enforced on feature routes | The entitlement service exists (#92); routes still read `ShopSettings.subscriptionActive`, which only the Billing page refreshes, so a cancellation is noticed only when the merchant opens Billing (security pass BIL-02). The Buying Table checks it in its actions as well as its page. Wiring waits for the plan decision below. |
 | Database and Redis connections not required to use TLS (R-191) | Depends on the host; set `sslmode=require` in the database URLs and a `rediss://` Redis URL once it is chosen. |
 | Subscription status has not been observed against a real subscription, from either source | Needs the plans below and a dev-store test with the $0 private test plan. |
 | In-app links to the privacy policy and terms | Not started; needs the published URLs. |

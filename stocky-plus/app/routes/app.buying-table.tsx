@@ -9,6 +9,7 @@ import { Form, redirect, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { AbcMetric } from "@prisma/client";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import {
   fetchInventoryLevels,
   fetchLocations,
@@ -174,6 +175,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     return { ok: true };
   }
+
+  await requireActivePlanSnapshot(db);
 
   if (intent === "setLookback") {
     const variantId = form.get("variantId") as string;

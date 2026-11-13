@@ -95,6 +95,27 @@ const NO_ACTIVE_PLAN_MESSAGE =
 const CAPABILITY_NOT_INCLUDED_MESSAGE =
   "Your current ProPo plan does not include this feature. You can change your plan from Billing.";
 
+function planRequired(message: string): Response {
+  return new Response(message, {
+    status: 403,
+    headers: { "Content-Type": "text/plain; charset=utf-8" },
+  });
+}
+
+/**
+ * Gate for routes that still use the stored snapshot rather than
+ * per-capability entitlements: throws a 403 unless the last snapshot recorded
+ * an active plan. Actions must call it too; hiding a form is not a gate.
+ */
+export async function requireActivePlanSnapshot(db: TenantDb): Promise<void> {
+  const settings = await db.shopSettings.findUnique({
+    where: { shop: db.authority.myshopifyDomain },
+    select: { subscriptionActive: true },
+  });
+  if (settings?.subscriptionActive === true) return;
+  throw planRequired(NO_ACTIVE_PLAN_MESSAGE);
+}
+
 /**
  * Server-side capability gate for loaders and actions. Throws a 403 Response;
  * hiding a button is not authorization. The app error boundary shows the
@@ -106,13 +127,9 @@ export function requireCapability(
 ): void {
   if (hasCapability(entitlements, capability)) return;
 
-  throw new Response(
+  throw planRequired(
     entitlements.state === "active"
       ? CAPABILITY_NOT_INCLUDED_MESSAGE
       : NO_ACTIVE_PLAN_MESSAGE,
-    {
-      status: 403,
-      headers: { "Content-Type": "text/plain; charset=utf-8" },
-    },
   );
 }

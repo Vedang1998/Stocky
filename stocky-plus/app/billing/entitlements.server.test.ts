@@ -7,6 +7,7 @@ import type { ShopEntitlements, SubscriptionRecord } from "./entitlements";
 import {
   getShopEntitlements,
   persistEntitlementSnapshot,
+  requireActivePlanSnapshot,
   requireCapability,
 } from "./entitlements.server";
 import { PLAN_CATALOG_VERSION, findSelfServePlan } from "./plans";
@@ -108,6 +109,41 @@ async function denial(run: () => void): Promise<Response> {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+describe("requireActivePlanSnapshot", () => {
+  async function outcome(db: TenantDb): Promise<Response | "allowed"> {
+    try {
+      await requireActivePlanSnapshot(db);
+      return "allowed";
+    } catch (thrown) {
+      if (thrown instanceof Response) return thrown;
+      throw thrown;
+    }
+  }
+
+  it("allows a shop whose snapshot records an active plan", async () => {
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi.fn(async () => ({ subscriptionActive: true })),
+    });
+    expect(await outcome(db)).toBe("allowed");
+    expect(shopSettings.findUnique).toHaveBeenCalledWith({
+      where: { shop: SHOP_DOMAIN },
+      select: { subscriptionActive: true },
+    });
+  });
+
+  it("refuses with a 403 when the snapshot has no active plan or no row", async () => {
+    for (const row of [{ subscriptionActive: false }, null]) {
+      const { db } = fakeDb({ findUnique: vi.fn(async () => row) });
+      const response = await outcome(db);
+      expect(response).toBeInstanceOf(Response);
+      expect((response as Response).status).toBe(403);
+      expect(await (response as Response).text()).toBe(
+        "An active ProPo plan is required for this feature. You can choose a plan from Billing.",
+      );
+    }
+  });
 });
 
 describe("requireCapability", () => {
