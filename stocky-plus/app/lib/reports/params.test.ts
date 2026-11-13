@@ -66,6 +66,15 @@ describe("resolveDateRange", () => {
     expect(resolved.problem).toMatch(/not available/);
   });
 
+  it.each(["constructor", "__proto__", "toString", "hasOwnProperty"])(
+    "treats the object property name %j as an unknown preset",
+    (name) => {
+      const resolved = range(name);
+      expect(resolved.range.preset).toBe("last_30_days");
+      expect(resolved.problem).toMatch(/not available/);
+    },
+  );
+
   it("accepts a custom range, including a single day", () => {
     expect(range("custom", "2026-02-27", "2026-03-01")).toEqual({
       range: {

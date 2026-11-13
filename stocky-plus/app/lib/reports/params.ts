@@ -33,19 +33,21 @@ export const RESERVED_QUERY_KEYS = [
   "page",
 ] as const;
 
-const TRAILING_DAYS: Readonly<Record<string, number>> = {
-  last_7_days: 7,
-  last_30_days: 30,
-  last_90_days: 90,
-  last_365_days: 365,
-};
+// A Map, not an object: the preset comes from the URL, and an object lookup
+// would answer for names such as "constructor".
+const TRAILING_DAYS: ReadonlyMap<string, number> = new Map([
+  ["last_7_days", 7],
+  ["last_30_days", 30],
+  ["last_90_days", 90],
+  ["last_365_days", 365],
+]);
 
 function firstOfMonth(date: LocalDate): LocalDate {
   return `${date.slice(0, 8)}01`;
 }
 
 function presetRange(preset: string, today: LocalDate): ReportDateRange | null {
-  const trailing = TRAILING_DAYS[preset];
+  const trailing = TRAILING_DAYS.get(preset);
   if (trailing !== undefined) {
     // Complete days only: the range ends yesterday.
     return {
