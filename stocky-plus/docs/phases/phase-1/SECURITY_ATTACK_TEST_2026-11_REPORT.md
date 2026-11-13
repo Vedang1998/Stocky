@@ -1,6 +1,6 @@
-# Security attack test — findings report (2026-11-10 / 11)
+# Security attack test — findings report (2026-11-10 to 13)
 
-**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95.
+**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95 (merged as `052ee00`). Round 3 on 2026-11-13 retested the code merged since then; it is recorded in its own section and in the open items.
 **Author:** Claude Code (security lane), on the owner's 2026-11-10 order.
 **Kind of record:** attack test and fixes by the same session. This is **not** an independent review: the session that found each issue also wrote its fix, and the fix pull requests were merged on the owner's order without independent review. Treat the "held" results as evidence for the tested cases only.
 
@@ -8,7 +8,7 @@
 
 | Item | Value |
 |---|---|
-| Code tested | `main` from `2685081` through `8da50a8`, plus the fix branches |
+| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0` |
 | Target | One instance of this app in the author's own cloud container: production build (`react-router-serve`), PostgreSQL 16 provisioned with the CI role and RLS recipe, Redis, a real worker process, a localhost stand-in for the Shopify Admin API, synthetic shops and data |
 | Not targeted | Shopify's platform, the Partner Dashboard, any third-party service, any real store, any deployed instance. No load or denial-of-service traffic left the container |
 | Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases, the SEC-08 case and a real uninstall for SEC-12 on `stocky-test-store.myshopify.com`; results are recorded on #81, #95 and #90 |
@@ -53,18 +53,42 @@ Each line is a set of attempts that failed as it should.
 - **CSRF.** State-changing requests need the session token in the `Authorization` header, which a cross-site form cannot set. React Router's origin check on form posts is a second layer; it must list the app's own public host to work behind a proxy (SEC-13).
 - **POS API (#85, read at its branch head).** Token signature and expiry are checked by the Shopify library, the pull request adds the audience check the library skips, the shop comes only from the signed token, and uninstalled shops are refused. No finding.
 
+## Round 3 (2026-11-13)
+
+Round 3 covers what merged after round 2: the inventory write ledger with the stocktake and transfer actions (#91) and the replenishment engine with the Buying Table (#89), on `main` at `494b3d0`. The target was the same local instance. Its inventory-write switches stayed OFF; the cases that need them ON ran only in the test suite, against the in-memory stand-in for Shopify's inventory API that #91 added.
+
+Held:
+
+- **Stocktakes and transfers across shops.** 10 requests from one shop naming another shop's stocktake, count line, transfer, location or variant were each refused with a "not found" or "not in this shop" message. The other shop's rows were unchanged and no ledger operation was recorded for either shop.
+- **Quantities and names.** Negative, fractional, exponent, hexadecimal, empty, non-numeric and over-limit quantities were refused on counts and transfer lines, and nothing was stored. An over-long name, an inactive location, a transfer to its own source and a receive before shipping were refused.
+- **Switches OFF.** Five simultaneous completions of one count and five simultaneous ships of one transfer sent nothing, recorded no ledger operation and left both documents open.
+- **Repeat and concurrent requests with the switches ON (tests only).** The lane's suite covers a repeated completion, ship, receive and cancel. This round adds a stress case with random delays in the stand-in: completions racing count changes on one stocktake, and ships, receives and cancels racing on one transfer. No request left a quantity that the document's own history cannot explain, and the final quantities equal the starting quantities plus the ledger's applied lines. The test was checked against a deliberate fault: with the ledger's per-document operation key made random, it fails in 9 of 12 rounds.
+- **Buying Table across shops.** Another shop's supplier and SKU mapping were refused and no order line was created from them. The development subscription switch is still refused on a production build.
+
+Found, all recorded under existing open items:
+
+- OPEN-1 is fixed by #91 and is closed below.
+- The Buying Table's order action checks no plan, and its quantities have no bounds (OPEN-4 and OPEN-2).
+
+Pull requests read before merge, at the head named. These are security passes requested by the owning lane, not approvals, and each was re-run on a local build of that branch:
+
+| Pull request | Head | Result |
+|---|---|---|
+| #111, App Store readiness batch | `dac922f` | No blocker. Raised: whether the Admin API or the Partner API is the right source for App Pricing status (unverified against Shopify, P1 if confirmed), a stored subscription flag still gating the Buying Table, and three container image notes. The image stages were emulated without Docker: build, release step, and web and worker start with runtime credentials only. A real `docker build` was not possible in this environment. Record: https://github.com/Vedang1998/Stocky/pull/111#issuecomment-6813625589. The lane has since reworked these; its ready head gets a second pass recorded on the pull request |
+| #88, reports and CSV exports | `836ffdb` | No blocker. Exports use the shared CSV encoder (SEC-04), ranges and paging are bounded, and another shop's data did not appear under any report. One P3: an unexpected `range` value answered 500. The lane fixed it at `e11d51b`. Record: https://github.com/Vedang1998/Stocky/pull/88#issuecomment-6865374014 |
+
 ## Open items
 
 | ID | Sev | Item | Owner | Risk register |
 |---|---|---|---|---|
-| OPEN-1 | P1 (latent) | Stocktake completion and transfer shipping are not idempotent and have no status guard. Inventory-write flags are OFF, so nothing reaches Shopify today | Transfers and stocktakes lane | R-186 |
-| OPEN-2 | P2 | Purchase-order quantity and cost inputs are not validated server-side and status changes can skip states | Purchase orders lane | R-187 |
-| OPEN-3 | P1 | Privacy webhooks are authenticated and acknowledged but do nothing yet. SEC-07 only makes them reachable. #99 implements them; its security review found one P1 (the shop to erase is read from the unsigned header) that must be fixed before it merges | App Store readiness lane | R-005 (existing) |
-| OPEN-4 | P2 | Entitlements are a single boolean checked on one route | App Store readiness lane (#92) | R-008 (existing) |
+| OPEN-1 | P1 (latent) | **Closed in round 3.** Stocktake completion and transfer shipping were not idempotent and had no status guard. #91 (merged as `d5a65ef`) routes both through the inventory write ledger and locks the document while it records each operation; repeat and concurrent requests apply each movement once (`scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts`, `stocktake-transfer-ledger-race.test.ts`). Inventory-write flags are still OFF | Transfers and stocktakes lane | R-186 |
+| OPEN-2 | P2 | Purchase-order quantity and cost inputs are not validated server-side and status changes can skip states. Round 3: the Buying Table's order action (#89) has the same gap. A quantity beyond the 32-bit range, or a look-back change that names no variant, answers 500; nothing is written in either case | Purchase orders lane | R-187 |
+| OPEN-3 | P1 | Privacy webhooks are authenticated and acknowledged but do nothing yet. SEC-07 only makes them reachable. #99 implements them; its security review found one P1 (the shop to erase is read from the unsigned header) that must be fixed before it merges. Round 3: #111 carries that work with the shop taken from the signed body; not merged at `494b3d0` | App Store readiness lane | R-005 (existing) |
+| OPEN-4 | P2 | Entitlements are a single boolean checked on one route. Round 3: that check is in the Buying Table's page only. Its order action creates a purchase order for a shop with no plan. #111 adds a plan catalog and a server-side check on the actions; not merged at `494b3d0` | App Store readiness lane (#92, #111) | R-008 (existing) |
 | OPEN-5 | P2 | Residual dependency advisories after #90 need major upgrades (Prisma 7, Vitest 5) or have no patched release (`minimatch` through `@react-router/fs-routes`, `lodash` and `@graphql-tools/utils` in code generation, `deepmerge` through Polaris) | Security lane, after the feature lanes land | R-188 |
-| OPEN-6 | P2 | The Dockerfile cannot build as written (Node 20 image against the `npm 11.5.2` engine pin, build tools omitted with `--omit=dev`), runs as root and runs migrations at container start, which needs migration credentials in the runtime container | App Store readiness lane | R-189 |
+| OPEN-6 | P2 | The Dockerfile cannot build as written (Node 20 image against the `npm 11.5.2` engine pin, build tools omitted with `--omit=dev`), runs as root and runs migrations at container start, which needs migration credentials in the runtime container | App Store readiness lane (reworked in #111, not merged at `494b3d0`) | R-189 |
 | OPEN-7 | P3 | No application-level rate limiting. After SEC-01, SEC-02 and SEC-08 every unauthenticated path is cheap and bounded, so this is left to the hosting edge | Deploy owner | R-190 |
-| OPEN-8 | P3 | The `Session` table stores Shopify access and refresh tokens in plaintext and the runtime role can read it. This is the Shopify library's default storage | Security lane | R-191 |
+| OPEN-8 | P3 | The `Session` table stores Shopify access and refresh tokens in plaintext and the runtime role can read it. This is the Shopify library's default storage. #111 adds encryption at rest; not merged at `494b3d0` | Security lane, App Store readiness lane | R-191 |
 | OPEN-9 | P3 | Public pages (`/`, `/auth/login`) send no `frame-ancestors` policy. They are static and have no forms since #76; revisit if that changes | App Store readiness lane | R-192 |
 | OPEN-10 | P3 | A webhook for a shop with no `Shop` row, or a signed delivery with malformed JSON, answers 500. Only Shopify can produce either; the 500 makes Shopify retry, which is the safer side | Accepted | None |
 | OPEN-11 | P3 | Labels for an unknown variant ID return an empty file with 200, and the ZPL lacks `^CI28`, so non-ASCII characters in titles will not print correctly on Zebra printers (from the store test) | Transfers and stocktakes lane | None (functional) |
@@ -73,8 +97,8 @@ Each line is a set of attempts that failed as it should.
 ## Not covered
 
 - Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The store tester covers the first three on the test store.
-- The inventory-write paths with their flags ON. They are OFF everywhere and were not turned on.
-- Features merged after `8da50a8`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
+- The inventory-write paths with their flags ON against Shopify. They are OFF everywhere and were not turned on. Round 3 exercised them only in tests, against a stand-in.
+- Features merged after `494b3d0`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
 - Infrastructure: TLS, network exposure of PostgreSQL and Redis, backups, and the hosting platform's own limits. Nothing is deployed yet.
 
 ## Category verdicts
@@ -85,12 +109,12 @@ Each line is a set of attempts that failed as it should.
 - Cross-site form posts: refused by React Router's origin check. The dependency update that tightened the check also broke the app's own forms behind a proxy (SEC-13), fixed.
 - Export and file handling: four defects (SEC-02 to SEC-05), fixed.
 - Queue and worker integrity: held; one abuse path (SEC-08), fixed.
-- Inventory-write safety: not ready (OPEN-1); flags remain OFF.
-- Billing and entitlements: bypass held; the entitlement model is still incomplete (OPEN-4).
+- Inventory-write safety: the repeat and concurrent request defect is fixed (OPEN-1) and held in tests against a stand-in. Flags remain OFF; nothing here was proven against Shopify.
+- Billing and entitlements: the development switch held; plans are not enforced on actions yet (OPEN-4).
 - Dependencies: improved, not clean (OPEN-5).
 
 ## Decision this record supports
 
 - Safe to keep building on: yes.
-- Ready for App Store submission on security grounds: no, until OPEN-3 and OPEN-6 are closed and an independent review of #81, #90 and #95 is recorded.
+- Ready for App Store submission on security grounds: no, until OPEN-3, OPEN-4 and OPEN-6 are closed and an independent review of #81, #90 and #95 is recorded.
 - Production inventory writes approved: no.
