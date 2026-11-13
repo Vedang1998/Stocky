@@ -40,14 +40,16 @@ import {
   cancelStocktake,
   clearZeroFill,
   completeStocktake,
-  MAX_ADDED_ITEMS,
-  MAX_COUNTED_QUANTITY,
-  MAX_ITEM_LIST_LENGTH,
   recordStocktakeScan,
   resolveStocktakeMovement,
   saveStocktakeCount,
   zeroFillUncounted,
 } from "../services/stocktakes/stocktake.server";
+import {
+  MAX_ADDED_ITEMS,
+  MAX_COUNTED_QUANTITY,
+  MAX_ITEM_LIST_LENGTH,
+} from "../services/stocktakes/stocktake-limits";
 import {
   COUNT_SOURCE_LABEL,
   formatUtc,

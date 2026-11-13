@@ -24,10 +24,8 @@ import {
   readPageNumber,
   type StocktakeListView,
 } from "../services/stocktakes/stocktake-read.server";
-import {
-  createStocktake,
-  MAX_STOCKTAKE_NAME_LENGTH,
-} from "../services/stocktakes/stocktake.server";
+import { createStocktake } from "../services/stocktakes/stocktake.server";
+import { MAX_STOCKTAKE_NAME_LENGTH } from "../services/stocktakes/stocktake-limits";
 import {
   formatUtc,
   STOCKTAKE_SCOPE_LABEL,

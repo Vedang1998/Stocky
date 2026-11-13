@@ -29,6 +29,12 @@ import {
   variantsMatchingCode,
   type CatalogVariant,
 } from "../inventory-writes/variant-items.server";
+import {
+  MAX_ADDED_ITEMS,
+  MAX_COUNTED_QUANTITY,
+  MAX_ITEM_LIST_LENGTH,
+  MAX_STOCKTAKE_NAME_LENGTH,
+} from "./stocktake-limits";
 
 export type StocktakeStatus =
   "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
@@ -45,11 +51,12 @@ export type StocktakeCountSource = "MANUAL" | "SCAN" | "ZERO_FILL";
 export type MovementResolution = "COUNTED_BEFORE" | "COUNTED_AFTER";
 
 export const STOCKTAKE_SOURCE_TYPE = "Stocktake";
-export const MAX_COUNTED_QUANTITY = 1_000_000;
-export const MAX_STOCKTAKE_NAME_LENGTH = 120;
-/** Items that one pasted list may add to a count. */
-export const MAX_ADDED_ITEMS = 500;
-export const MAX_ITEM_LIST_LENGTH = 50_000;
+export {
+  MAX_ADDED_ITEMS,
+  MAX_COUNTED_QUANTITY,
+  MAX_ITEM_LIST_LENGTH,
+  MAX_STOCKTAKE_NAME_LENGTH,
+};
 const MAX_CODE_LENGTH = 191;
 
 /** Rows written per statement when a count sheet is created. */

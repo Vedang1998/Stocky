@@ -128,6 +128,10 @@ if (result.settled) {
   longer wanted (a count corrected back, a draft transfer cancelled after a
   partial ship) is put back.
 - An unfinished operation is resumed before anything new is recorded.
+- A document with more than 5,000 outstanding changes is sent over several
+  operations, the first 5,000 at a time, two operations per request. Until
+  the last one is confirmed the document stays open and reports how many
+  changes remain; pressing again sends the rest and nothing twice.
 - `holdOpen` runs in the transaction that records each new operation and locks
   the document row, so nothing is recorded for a document that closed or was
   cancelled in the meantime (`InventoryDocumentClosedError`).
@@ -148,6 +152,63 @@ are therefore in neither location's `available` until the transfer is received.
 A transfer that carries a `shopifyTransferId` from the earlier native path is
 not received by the app. Using Shopify's native transfer objects needs
 transfer scopes the app does not request and is an owner decision.
+
+## Stocktakes
+
+A stocktake (`app/services/stocktakes/`, pages `/app/stocktakes` and
+`/app/stocktakes/<id>`) is a count sheet for one location. Completing it sends
+each difference to Shopify through `settleInventoryDocument`.
+
+- **Starting.** A count is for one active, synced location. A full count lists
+  every tracked item Shopify stocks there; a partial count starts empty and
+  holds only what is scanned or added. Expected quantities are frozen from the
+  synced on-hand quantity when the count starts (`quantityBasis: ON_HAND`),
+  because staff count what is physically on the shelf, including units already
+  committed to orders. Items whose level is not synced yet, or that have no
+  linked inventory item, are left off and reported.
+- **Counting.** A line is counted by typing a quantity, by scanning (each scan
+  of a SKU, barcode or variant ID adds one, or a typed quantity), or by marking
+  every uncounted line as zero, which can be undone. Each line records how it
+  was counted, when, and by which staff ID. Scanning an item that is not on
+  the sheet adds it when Shopify stocks it at the location and its quantity is
+  synced; otherwise the scan is refused with the reason. A pasted list of
+  SKUs, barcodes or variant IDs adds up to 500 items at a time, all or none.
+- **Blind counts.** The count can hide expected quantities while counting. The
+  server withholds them from the page data and the export, not only from the
+  screen, until the count is closed or the reviewer opens the differences.
+  Until roles exist this is a working aid, not an access control: any staff
+  member of the shop can open the differences view.
+- **Completing.** The difference for a line is counted − expected, sent as a
+  relative change to `available` with reason `cycle_count_available`, which
+  moves on-hand by the same amount. Completion is refused while lines are
+  uncounted unless the staff member chooses to leave them unchanged, and a
+  named staff member is required.
+- **Stock that moved during the count.** Before anything is sent, lines with a
+  difference are compared with Shopify's live on-hand quantity (up to 2,000
+  lines per request), and other lines with the synced quantity. A line whose
+  stock no longer equals what was expected blocks completion until someone
+  says whether it was counted before the movement (the difference is still
+  counted − expected) or after it (the difference is measured from the
+  quantity Shopify shows now). Changing a line's count clears that answer.
+  Items this count has already sent are not checked again.
+- **Partial failure.** Lines Shopify accepted stay accepted. The count stays
+  in progress, shows which lines were refused and why, and a second press
+  sends only what is still outstanding.
+- **Cancelling** is allowed only while the ledger shows nothing applied and
+  nothing unfinished for the count.
+- **Report.** The count sheet exports as CSV: item, SKU, barcode, expected,
+  counted, difference, how and when each line was counted, the staff ID, and
+  any stock movement found. Completed and cancelled counts stay readable under
+  closed counts.
+- Gated by `FEATURE_STOCKTAKE_INVENTORY_WRITES`. While it is off a count can
+  be started and counted but not completed.
+- Counts started before this workflow keep the basis they were created with
+  (`AVAILABLE`), so their expected quantities and differences still mean what
+  they did.
+
+Not built yet: counting from Shopify POS (the POS scan endpoint follows the POS
+extension work), assigning sections of a count to staff, recount requests for
+individual lines, cost value of the differences, and shop-timezone dates.
 
 ## Adjustments
 
