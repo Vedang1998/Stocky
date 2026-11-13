@@ -18,6 +18,7 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
   { label: "Stocktakes", href: "/app/stocktakes" },
   { label: "Transfers", href: "/app/transfers" },
   { label: "Suppliers", href: "/app/suppliers" },
+  { label: "Labels", href: "/app/labels" },
   { label: "Reports", href: "/app/analytics" },
   { label: "Bundles", href: "/app/bundles" },
   { label: "Billing", href: "/app/billing" },

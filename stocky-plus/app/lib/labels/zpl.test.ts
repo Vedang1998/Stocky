@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { layoutLabel, type LabelContent, type LabelLayout } from "./layout";
 import { LABEL_FIELDS, type LabelTemplate } from "./template";
-import { MAX_LABEL_COPIES, labelZpl } from "./zpl";
+import { MAX_LABEL_COPIES, labelRunZpl, labelZpl } from "./zpl";
 
 const TEMPLATE: LabelTemplate = {
   sizeId: "2.25x1.25",
@@ -131,5 +131,21 @@ describe("labelZpl", () => {
   it("accepts a layout that is only a size", () => {
     const empty: LabelLayout = { widthDots: 305, heightDots: 203, elements: [], issues: [] };
     expect(labelZpl(empty, 1)).toBe("^XA\n^CI28\n^PW305\n^LL203\n^LH0,0\n^PQ1\n^XZ");
+  });
+
+  describe("labelRunZpl", () => {
+    it("writes one format per product with its own quantity", () => {
+      const zpl = labelRunZpl(TEMPLATE, [
+        { content: SKI_WAX, count: 3 },
+        { content: { ...SKI_WAX, productTitle: "Ski Boots" }, count: 20 },
+      ]);
+      expect(zpl.match(/\^XA/g)).toHaveLength(2);
+      expect(zpl.match(/\^PQ(\d+)/g)).toEqual(["^PQ3", "^PQ20"]);
+      expect(fieldData(zpl)).toContain("Ski Boots");
+    });
+
+    it("writes nothing for an empty run", () => {
+      expect(labelRunZpl(TEMPLATE, [])).toBe("");
+    });
   });
 });

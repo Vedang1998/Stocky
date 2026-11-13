@@ -6,7 +6,14 @@
  * a barcode value only when Code 128 can encode it exactly.
  */
 import { code128Segments } from "./code128";
-import { labelText, type LabelLayout, type LabelTextElement } from "./layout";
+import {
+  labelText,
+  layoutLabel,
+  type LabelContent,
+  type LabelLayout,
+  type LabelTextElement,
+} from "./layout";
+import type { LabelTemplate } from "./template";
 
 /** Copies one print job may ask for; the printer's own limit is far higher. */
 export const MAX_LABEL_COPIES = 5000;
@@ -64,4 +71,12 @@ export function labelZpl(layout: LabelLayout, copies: number): string {
     `^PQ${copies}`,
     "^XZ",
   ].join("\n");
+}
+
+/** One print job for a whole run: each product's format, printed its own number of times. */
+export function labelRunZpl(
+  template: LabelTemplate,
+  run: ReadonlyArray<{ content: LabelContent; count: number }>,
+): string {
+  return run.map(({ content, count }) => labelZpl(layoutLabel(template, content), count)).join("\n");
 }
