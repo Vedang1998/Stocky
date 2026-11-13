@@ -44,6 +44,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return {
     list,
     search,
+    viewLabel: PURCHASE_ORDER_VIEW_LABELS[list.view].toLowerCase(),
     views: PURCHASE_ORDER_VIEWS.map((key) => ({
       key,
       label: PURCHASE_ORDER_VIEW_LABELS[key],
@@ -61,8 +62,8 @@ function listHref(view: string, search: string, page = 1): string {
 }
 
 export default function PurchaseOrders() {
-  const { list, search, views, locationNames } = useLoaderData<typeof loader>();
-  const viewLabel = PURCHASE_ORDER_VIEW_LABELS[list.view].toLowerCase();
+  const { list, search, viewLabel, views, locationNames } =
+    useLoaderData<typeof loader>();
 
   return (
     <s-page heading="Purchase orders">
