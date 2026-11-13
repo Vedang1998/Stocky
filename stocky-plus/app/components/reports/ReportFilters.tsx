@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Form } from "react-router";
 
+import { FACET_ALL } from "../../lib/reports/params";
 import {
   CUSTOM_RANGE_PRESET,
   RANGE_PRESETS,
@@ -117,7 +118,7 @@ export function ReportFilters({
                   name={facet.key}
                   value={facet.selected}
                 >
-                  <s-option value="">All</s-option>
+                  <s-option value={FACET_ALL}>All</s-option>
                   {facet.choices.map((choice) => (
                     <s-option key={choice.value} value={choice.value}>
                       {choice.label}

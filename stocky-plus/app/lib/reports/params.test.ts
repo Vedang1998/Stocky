@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  FACET_ALL,
   REPORT_MAX_RANGE_DAYS,
   parseReportRequest,
   parseReportView,
@@ -159,6 +160,10 @@ describe("parseReportView", () => {
     expect(
       parse("vendor=&location=Main&shop=other.myshopify.com").facets,
     ).toEqual({});
+  });
+
+  it("reads the All choice of a filter as no filter", () => {
+    expect(parse(`vendor=${FACET_ALL}`).facets).toEqual({});
   });
 
   it.each(["0", "-2", "1.5", "abc", "9999999", ""])(

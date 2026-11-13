@@ -32,11 +32,13 @@ import {
 import { buildAbcReport } from "./abc-report";
 import { buildProfitReport } from "./profit-report";
 import {
+  FACET_ALL,
   parseReportRequest,
   parseReportView,
   type ReportViewRequest,
 } from "./params";
 import {
+  FACET_NONE,
   REPORT_EXPORT_ROW_LIMIT,
   exportTable,
   facetChoices,
@@ -73,6 +75,7 @@ import {
 import type {
   ColumnKind,
   ReportContext,
+  ReportData,
   ReportDefinition,
   ReportGroup,
   ReportNotice,
@@ -238,6 +241,39 @@ export type RegisteredReport = ReportSummary & {
   ) => Promise<ReportExport & { request: ReportRequest }>;
 };
 
+/**
+ * A filter value that no row has (a stale bookmark, an edited link) would
+ * hide every row. It is dropped, and the page says so.
+ */
+export function dropUnknownFacetValues<Row>(
+  data: Pick<ReportData<Row>, "facets" | "rows">,
+  view: ReportViewRequest,
+): { view: ReportViewRequest; ignored: string[] } {
+  const facets: Record<string, string> = {};
+  const ignored: string[] = [];
+  for (const facet of data.facets) {
+    const wanted = view.facets[facet.key];
+    if (wanted === undefined) continue;
+    const known =
+      wanted === FACET_NONE ||
+      data.rows.some((row) => facet.value(row) === wanted);
+    if (known) facets[facet.key] = wanted;
+    else ignored.push(facet.label);
+  }
+  return { view: { ...view, facets }, ignored };
+}
+
+export function ignoredFilterNotices(ignored: readonly string[]): ReportNotice[] {
+  if (ignored.length === 0) return [];
+  return [
+    {
+      tone: "info",
+      heading: "A filter was not applied",
+      body: `${ignored.join(", ")} did not match anything in this report, so it was ignored.`,
+    },
+  ];
+}
+
 function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
   const { load, ...report } = definition;
 
@@ -249,17 +285,18 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
       today: context.today,
     });
     const data = await load(context, parsed.request);
-    const view = parseReportView(
+    const requested = parseReportView(
       searchParams,
       data.facets.map((facet) => facet.key),
     );
-    return { parsed, data, view };
+    const { view, ignored } = dropUnknownFacetValues(data, requested);
+    return { parsed, data, view, ignored };
   }
 
   return {
     ...report,
     async page(context, searchParams) {
-      const { parsed, data, view } = await run(context, searchParams);
+      const { parsed, data, view, ignored } = await run(context, searchParams);
       const table = tablePage(data, view, context.currencyCode);
       return {
         report,
@@ -276,13 +313,13 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
           key: facet.key,
           label: facet.label,
           choices: facetChoices(facet, data.rows),
-          selected: view.facets[facet.key] ?? "",
+          selected: view.facets[facet.key] ?? FACET_ALL,
         })),
         table,
         searchLabels: data.columns
           .filter((column) => data.searchKeys.includes(column.key))
           .map((column) => column.label),
-        notices: data.notices,
+        notices: [...ignoredFilterNotices(ignored), ...data.notices],
         methodNotes: data.methodNotes,
         freshness: freshnessNote(data.dataAsOf, context.timeZone),
         timeZone: context.timeZone,

@@ -139,6 +139,12 @@ export function resolveDateRange(input: {
   };
 }
 
+/**
+ * Value of a filter's "All" choice. The select must submit a non-empty value:
+ * an option with an empty value makes the browser send its label instead.
+ */
+export const FACET_ALL = "__all__";
+
 /** What the merchant asked to see of an already computed report. */
 export type ReportViewRequest = {
   search: string;
@@ -199,7 +205,9 @@ export function parseReportView(
   const facets: Record<string, string> = {};
   for (const key of facetKeys) {
     const raw = searchParams.get(key);
-    if (raw) facets[key] = raw.slice(0, FACET_VALUE_MAX_LENGTH);
+    if (raw && raw !== FACET_ALL) {
+      facets[key] = raw.slice(0, FACET_VALUE_MAX_LENGTH);
+    }
   }
   const direction = searchParams.get("dir");
   return {

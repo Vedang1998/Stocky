@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { RESERVED_QUERY_KEYS } from "./params";
-import { REPORT_GROUPS, findReport, listReports } from "./registry.server";
+import { RESERVED_QUERY_KEYS, type ReportViewRequest } from "./params";
+import { FACET_NONE } from "./present";
+import {
+  REPORT_GROUPS,
+  dropUnknownFacetValues,
+  findReport,
+  ignoredFilterNotices,
+  listReports,
+} from "./registry.server";
 
 // Query keys Shopify adds to embedded app URLs.
 const SHOPIFY_QUERY_KEYS = [
@@ -66,5 +73,51 @@ describe("report registry", () => {
     expect(findReport("Dead-Stock")).toBeNull();
     expect(findReport("toString")).toBeNull();
     expect(findReport(undefined)).toBeNull();
+  });
+});
+
+describe("filters that match nothing", () => {
+  const data = {
+    rows: [{ vendor: "Northwind" }, { vendor: null }],
+    facets: [
+      {
+        key: "vendor",
+        label: "Vendor",
+        value: (row: { vendor: string | null }) => row.vendor,
+      },
+    ],
+  };
+  const view = (vendor: string): ReportViewRequest => ({
+    search: "",
+    facets: { vendor },
+    sortKey: null,
+    sortDirection: null,
+    page: 1,
+  });
+
+  it("keeps a value that some row has, and the choice for rows with none", () => {
+    for (const vendor of ["Northwind", FACET_NONE]) {
+      expect(dropUnknownFacetValues(data, view(vendor))).toEqual({
+        view: view(vendor),
+        ignored: [],
+      });
+    }
+  });
+
+  it("drops a value no row has and names the filter", () => {
+    const result = dropUnknownFacetValues(data, view("All"));
+    expect(result.view.facets).toEqual({});
+    expect(result.ignored).toEqual(["Vendor"]);
+    expect(ignoredFilterNotices(result.ignored)).toEqual([
+      {
+        tone: "info",
+        heading: "A filter was not applied",
+        body: "Vendor did not match anything in this report, so it was ignored.",
+      },
+    ]);
+  });
+
+  it("shows no notice when nothing was ignored", () => {
+    expect(ignoredFilterNotices([])).toEqual([]);
   });
 });
