@@ -10,6 +10,7 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import type { Session } from "@shopify/shopify-api";
 import rawPrisma from "../db.server";
 import {
+  assertTenantAuthority,
   issueTenantAuthority,
   type TenantAuthority,
 } from "./authority.server";
@@ -185,6 +186,40 @@ export async function enumerateCanonicalShopsForScheduler(): Promise<
     select: { id: true, myshopifyDomain: true },
     orderBy: { myshopifyDomain: "asc" },
   });
+}
+
+export type ShopReportingProfile = {
+  /** Shopify `Shop.ianaTimezone`; null until order-facts sync records it. */
+  readonly ianaTimezone: string | null;
+  /** Shopify `Shop.currencyCode`; null until order-facts sync records it. */
+  readonly currencyCode: string | null;
+  /** When the app first created this shop's canonical row (first install). */
+  readonly installedAt: Date;
+};
+
+/**
+ * Read-only shop facts that reports need for calendar days, money and history
+ * coverage. Scoped to the caller's verified tenant; returns nothing else.
+ */
+export async function readShopReportingProfile(
+  tenant: TenantAuthority,
+): Promise<ShopReportingProfile> {
+  assertTenantAuthority(tenant);
+  const shop = await rawPrisma.shop.findUnique({
+    where: { id: tenant.shopId },
+    select: { ianaTimezone: true, currencyCode: true, createdAt: true },
+  });
+  if (!shop) {
+    throw new TenantAuthorityError(
+      "canonical_shop_missing",
+      "Canonical Shop missing for tenant authority",
+    );
+  }
+  return {
+    ianaTimezone: shop.ianaTimezone,
+    currencyCode: shop.currencyCode,
+    installedAt: shop.createdAt,
+  };
 }
 
 /** Session bootstrap helpers — Session only. */
