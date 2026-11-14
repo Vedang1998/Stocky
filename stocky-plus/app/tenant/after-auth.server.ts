@@ -13,6 +13,7 @@ import type { Session } from "@shopify/shopify-api";
 import type { TenantAuthority } from "./authority.server";
 import { resolveAuthorityAfterVerifiedAuth } from "./bootstrap.server";
 import { createTenantDb } from "./tenant-db.server";
+import { ensureShopSettings } from "./shop-settings.server";
 import { reactivateShopAfterVerifiedReinstall } from "../sync/reinstall.server";
 
 export type AfterAuthResult = {
@@ -22,9 +23,26 @@ export type AfterAuthResult = {
   reactivated: boolean;
 };
 
+function describeError(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const code = (err as { code?: unknown }).code;
+  return `${err.name}${typeof code === "string" ? ` [${code}]` : ""}: ${err.message}`;
+}
+
 export async function runAfterAuthTenantBootstrap(
   session: Session,
 ): Promise<AfterAuthResult> {
+  try {
+    return await bootstrapTenant(session);
+  } catch (err) {
+    // The Shopify library turns any afterAuth error into an empty 500 and logs
+    // nothing (issue #73). Log the error only: the session holds the token.
+    console.error("afterAuth tenant bootstrap failed:", describeError(err));
+    throw err;
+  }
+}
+
+async function bootstrapTenant(session: Session): Promise<AfterAuthResult> {
   const { shop, tenant } = await resolveAuthorityAfterVerifiedAuth({
     verifiedDomain: session.shop,
     source: "verified_scheduler",
@@ -43,15 +61,9 @@ export async function runAfterAuthTenantBootstrap(
 
   const db = createTenantDb(tenant);
 
-  await db.shopSettings.upsert({
-    where: { shop: tenant.myshopifyDomain },
-    create: {
-      shop: tenant.myshopifyDomain,
-      shopId: tenant.shopId,
-    },
-    // C-01: do not silently repair nullable ownership on update.
-    update: {},
-  });
+  // C-01: do not silently repair nullable ownership on update (empty update).
+  // Issue #73: tolerate the dashboard loader creating the row concurrently.
+  await ensureShopSettings(db, tenant);
 
   return {
     shopId: shop.id,

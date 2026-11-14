@@ -7,6 +7,7 @@ import type {
 import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { ensureShopSettings } from "../tenant/shop-settings.server";
 import { getLowStockAlerts } from "../services/forecasting.server";
 import { loadSetupGuide } from "../services/setup-guide.server";
 import { enqueueCatalogSync } from "../jobs/queue.server";
@@ -18,15 +19,10 @@ import { readCatalogSyncStatus } from "../sync/sync-status.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
-  const shop = tenant.myshopifyDomain;
 
   const [settings, alerts, openPOs, supplierCount, cachedVariants] =
     await Promise.all([
-      db.shopSettings.upsert({
-        where: { shop },
-        create: { shop },
-        update: {},
-      }),
+      ensureShopSettings(db, tenant),
       getLowStockAlerts(db),
       db.purchaseOrder.count({
         where: { status: { in: ["ORDERED", "PARTIAL"] } },
