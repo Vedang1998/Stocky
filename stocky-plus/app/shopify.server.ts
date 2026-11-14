@@ -46,8 +46,8 @@ const shopify = shopifyApp({
       }
       try {
         // Imports the order history and stores the shop's time zone and
-        // currency, which the reports need. Idempotent per shop.
-        await enqueueOrderFactsSync(tenant);
+        // currency, which the reports need. Once per install.
+        await enqueueOrderFactsSync(tenant, "install");
       } catch (err) {
         console.warn("Order history import enqueue skipped:", err);
       }

@@ -5,14 +5,19 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findFirst, createDurableJob, dispatchPendingJobs } = vi.hoisted(() => ({
+const { findFirst, findShop, createDurableJob, dispatchPendingJobs } =
+  vi.hoisted(() => ({
   findFirst: vi.fn(),
+  findShop: vi.fn(),
   createDurableJob: vi.fn(),
   dispatchPendingJobs: vi.fn(),
 }));
 
 vi.mock("../sync/control-plane-db.server", () => ({
-  getControlPlanePrisma: () => ({ durableJob: { findFirst } }),
+  getControlPlanePrisma: () => ({
+    durableJob: { findFirst },
+    shop: { findUnique: findShop },
+  }),
 }));
 vi.mock("../sync/intake.server", () => ({ createDurableJob }));
 vi.mock("../sync/dispatcher.server", () => ({ dispatchPendingJobs }));
@@ -46,6 +51,11 @@ describe("enqueueOrderFactsSync", () => {
     vi.setSystemTime(NOW);
     findFirst.mockReset();
     findFirst.mockResolvedValue(null);
+    findShop.mockReset();
+    findShop.mockResolvedValue({
+      createdAt: new Date("2026-10-01T00:00:00.000Z"),
+      reinstalledAt: null,
+    });
     createDurableJob.mockReset();
     createDurableJob.mockResolvedValue({ id: "job-1" });
     dispatchPendingJobs.mockReset();
@@ -135,5 +145,51 @@ describe("enqueueOrderFactsSync", () => {
       ([input]) => (input as { idempotencyKey: string }).idempotencyKey,
     );
     expect(first).not.toBe(second);
+  });
+
+  describe("when the afterAuth hook asks (trigger install)", () => {
+    const installedAt = new Date("2026-10-01T00:00:00.000Z");
+    const reinstalledAt = new Date("2026-11-12T00:00:00.000Z");
+
+    function succeededSince(): Date {
+      const where = findFirst.mock.calls[0][0].where as {
+        OR: Array<{ state?: string; createdAt?: { gte: Date } }>;
+      };
+      const succeeded = where.OR.find((clause) => clause.state === "SUCCEEDED");
+      return succeeded!.createdAt!.gte;
+    }
+
+    it("counts an import that succeeded since the shop was installed", async () => {
+      await enqueueOrderFactsSync(authority("auth-1"), "install");
+
+      expect(succeededSince()).toEqual(installedAt);
+    });
+
+    it("counts only imports since the latest reinstall, which erased the old data", async () => {
+      findShop.mockResolvedValue({ createdAt: installedAt, reinstalledAt });
+
+      await enqueueOrderFactsSync(authority("auth-1"), "install");
+
+      expect(succeededSince()).toEqual(reinstalledAt);
+    });
+
+    it("does not import again, however long ago the first import ran", async () => {
+      vi.setSystemTime(NOW + 30 * 24 * 60 * 60 * 1000);
+      findFirst.mockResolvedValue({ id: "job-from-last-month" });
+
+      const result = await enqueueOrderFactsSync(authority("auth-2"), "install");
+
+      expect(result).toEqual({ enqueued: false, reason: "already_requested" });
+      expect(createDurableJob).not.toHaveBeenCalled();
+    });
+
+    it("queues nothing for a shop that does not exist", async () => {
+      findShop.mockResolvedValue(null);
+
+      const result = await enqueueOrderFactsSync(authority("auth-3"), "install");
+
+      expect(result).toEqual({ enqueued: false, reason: "shop_missing" });
+      expect(createDurableJob).not.toHaveBeenCalled();
+    });
   });
 });

@@ -336,23 +336,49 @@ export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
 }
 
 /**
+ * Why an order-history import is being requested. After an install the import
+ * runs once; a merchant can ask for another one later.
+ */
+export type OrderFactsSyncTrigger = "install" | "merchant_request";
+
+/**
  * Create the durable job that imports the shop's order history and stores its
  * time zone and currency. Reports start empty without it.
  *
- * Single-flight per shop, like the catalog sync: the import reads the whole
- * order history, so a request is skipped while an import for the shop is
- * queued or running, or when one was requested within
- * ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS. A failed import does not count as
- * recent, so the merchant can start another. The idempotency key is bucketed
- * by the minute, which collapses concurrent requests that pass the check
- * together without blocking a retry after a failure.
+ * Single-flight per shop, like the catalog sync, because the import reads the
+ * whole order history. Either trigger is skipped while an import for the shop
+ * is queued or running. After that:
+ * - "install" (the afterAuth hook, which runs on every token exchange) is
+ *   skipped once an import has succeeded since the shop was installed or last
+ *   reinstalled, so an active shop is not re-imported again and again, while
+ *   a reinstall, which erases the old data, imports again;
+ * - "merchant_request" is skipped when an import succeeded within
+ *   ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS.
+ * A failed import counts for neither, so it can be retried. The idempotency
+ * key is bucketed by the minute, which collapses concurrent requests that pass
+ * the check together without blocking a retry after a failure.
  */
 export async function enqueueOrderFactsSync(
   tenant: TenantAuthority,
+  trigger: OrderFactsSyncTrigger = "merchant_request",
 ): Promise<{ enqueued: boolean; reason?: string }> {
   const auth = requireAuthority(tenant, "enqueueOrderFactsSync");
   const prisma = getControlPlanePrisma();
   const now = Date.now();
+  let succeededSince: Date;
+  if (trigger === "install") {
+    const shop = await prisma.shop.findUnique({
+      where: { id: auth.shopId },
+      select: { createdAt: true, reinstalledAt: true },
+    });
+    if (!shop) return { enqueued: false, reason: "shop_missing" };
+    succeededSince =
+      shop.reinstalledAt && shop.reinstalledAt > shop.createdAt
+        ? shop.reinstalledAt
+        : shop.createdAt;
+  } else {
+    succeededSince = new Date(now - ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS);
+  }
   const existing = await prisma.durableJob.findFirst({
     where: {
       shopId: auth.shopId,
@@ -369,12 +395,7 @@ export async function enqueueOrderFactsSync(
             ],
           },
         },
-        {
-          state: "SUCCEEDED",
-          createdAt: {
-            gte: new Date(now - ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS),
-          },
-        },
+        { state: "SUCCEEDED", createdAt: { gte: succeededSince } },
       ],
     },
     select: { id: true },
