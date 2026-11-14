@@ -12,7 +12,7 @@
 | Supplier master | App | `Supplier` + mappings + tiers | Child tables lack denormalized `shop`; OK if parent always checked |
 | Advanced PO ledger | App | `PurchaseOrder` / `POLineItem` | No versions, approvals, invoices, communication timeline |
 | Incoming inventory | App (custom POs) until stable native API | Forecast incoming from open app POs only | No native PO reconciliation; dual-source risk undocumented in UI |
-| Receipts / dispositions | App → sync to Shopify inventory | `receivePartialPO` updates app qty only | No Shopify write; no reject/extra/unreceive ledger; gated by `FEATURE_RECEIPT_WRITES` |
+| Receipts / dispositions | App → sync to Shopify inventory | `PurchaseOrderReceipt` + lines; accepted units written to Shopify as one `RECEIPT` inventory operation; rejects, over-receipt and reversal recorded | Gated by `FEATURE_RECEIPT_WRITES` (off); pending receipts are resumed by hand, no background sweeper |
 | Average / landed cost | App (+ optional Shopify cost sync) | Landed allocation on PO lines | No average-cost ledger; no cost sync mutation; `FEATURE_COST_SYNC` off |
 | Stocktakes | App count ledger; Shopify after approved completion | App stocktake + gated `inventoryAdjustQuantities` | Uses available snapshot; no audit/idempotency; writes default OFF |
 | Transfers | Prefer Shopify native when API supports; app mirrors | Custom `TransferOrder` + Shopify create/ready-to-ship; complete mutation **invalid** on 2025-10 schema | `FEATURE_TRANSFER_WRITES` off; GraphQL validation error on `inventoryTransferComplete` |
