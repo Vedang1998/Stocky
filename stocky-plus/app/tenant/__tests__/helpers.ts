@@ -149,3 +149,116 @@ export async function seedTwoShops(prisma: PrismaClient) {
   });
   return { shopA, shopB };
 }
+
+const CATALOG_OBSERVED_AT = new Date("2026-11-01T12:00:00.000Z");
+
+/** Remove catalog facts and shops, children first. */
+export async function clearCatalogFacts(prisma: PrismaClient): Promise<void> {
+  await prisma.shopifyInventoryLevelFact.deleteMany();
+  await prisma.shopifyLocationFact.deleteMany();
+  await prisma.shopifyInventoryItemFact.deleteMany();
+  await prisma.shopifyVariantFact.deleteMany();
+  await prisma.shopifyProductFact.deleteMany();
+  await prisma.shop.deleteMany();
+}
+
+/**
+ * One live product with a single variant, its inventory item, a location and
+ * a stock level, all keyed by `suffix`.
+ */
+export async function seedCatalogVariant(
+  prisma: PrismaClient,
+  shopId: string,
+  suffix: string,
+  barcode: string,
+  options: {
+    absent?: boolean;
+    available?: number;
+    productTitle?: string;
+    sku?: string;
+  } = {},
+) {
+  const productGid = `gid://shopify/Product/${suffix}`;
+  const variantGid = `gid://shopify/ProductVariant/${suffix}`;
+  const itemGid = `gid://shopify/InventoryItem/${suffix}`;
+  const locationGid = `gid://shopify/Location/${suffix}`;
+  const productTitle = options.productTitle ?? `Product ${suffix}`;
+  const live = {
+    existenceState: "LIVE" as const,
+    existenceKind: "LIVE_FULL_SYNC_PRESENT" as const,
+    existenceObservedAt: CATALOG_OBSERVED_AT,
+    sourceKind: "FULL_SYNC" as const,
+  };
+
+  await prisma.shopifyProductFact.create({
+    data: {
+      shopId,
+      shopifyGid: productGid,
+      title: productTitle,
+      handle: `product-${suffix}`,
+      tags: [],
+      status: "ACTIVE",
+      ...live,
+    },
+  });
+  await prisma.shopifyVariantFact.create({
+    data: {
+      shopId,
+      shopifyGid: variantGid,
+      shopifyProductGid: productGid,
+      title: "Default Title",
+      displayName: productTitle,
+      selectedOptions: [],
+      sku: options.sku ?? `SKU-${suffix}`,
+      barcode,
+      priceAmount: "10.00",
+      currencyCode: "USD",
+      ...live,
+      ...(options.absent
+        ? {
+            existenceState: "ABSENT" as const,
+            existenceKind: "ABSENT_CONFIRMED_QUERY" as const,
+            existenceRequestGen: 10n,
+            existenceResponseGen: 11n,
+            deletedAt: CATALOG_OBSERVED_AT,
+            deletionSource: "CONFIRMED_QUERY" as const,
+          }
+        : {}),
+    },
+  });
+  await prisma.shopifyInventoryItemFact.create({
+    data: {
+      shopId,
+      shopifyGid: itemGid,
+      shopifyVariantGid: variantGid,
+      tracked: true,
+      requiresShipping: true,
+      unitCostAccess: "NULL",
+      ...live,
+    },
+  });
+  await prisma.shopifyLocationFact.create({
+    data: {
+      shopId,
+      shopifyGid: locationGid,
+      name: `Store ${suffix}`,
+      isActive: true,
+      fulfillsOnlineOrders: true,
+      shipsInventory: true,
+      isFulfillmentService: false,
+      hasActiveInventory: true,
+      ...live,
+    },
+  });
+  await prisma.shopifyInventoryLevelFact.create({
+    data: {
+      shopId,
+      inventoryItemGid: itemGid,
+      locationGid,
+      availableQuantity: options.available ?? 5,
+      availableQuantityUpdatedAt: CATALOG_OBSERVED_AT,
+      ...live,
+    },
+  });
+  return { variantGid, locationGid };
+}

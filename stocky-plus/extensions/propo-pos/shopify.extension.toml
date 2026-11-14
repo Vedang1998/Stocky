@@ -1,0 +1,23 @@
+api_version = "2026-07"
+
+[[extensions]]
+type = "ui_extension"
+name = "ProPo inventory"
+handle = "propo-pos-inventory"
+description = "Scan or enter a barcode or SKU to see stock at every location."
+
+[[extensions.targeting]]
+module = "./src/Tile.tsx"
+target = "pos.home.tile.render"
+
+[[extensions.targeting]]
+module = "./src/Modal.tsx"
+target = "pos.home.modal.render"
+
+[[extensions.targeting]]
+module = "./src/ProductStockBlock.tsx"
+target = "pos.product-details.block.render"
+
+[[extensions.targeting]]
+module = "./src/ProductStockModal.tsx"
+target = "pos.product-details.action.render"
