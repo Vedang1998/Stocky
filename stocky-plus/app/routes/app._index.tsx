@@ -9,7 +9,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { getLowStockAlerts } from "../services/forecasting.server";
 import { loadSetupGuide } from "../services/setup-guide.server";
-import { enqueueCatalogSync } from "../jobs/queue.server";
+import {
+  enqueueCatalogSync,
+  enqueueOrderFactsSync,
+} from "../jobs/queue.server";
 import { SetupGuide } from "../components/SetupGuide";
 import { SyncAttentionBanner, SyncStatus } from "../components/SyncStatus";
 import { buildSyncStatusView } from "../lib/sync-status";
@@ -68,8 +71,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
-    // Does nothing when a sync for this shop is already queued or running.
-    await enqueueCatalogSync(tenant);
+    // Each does nothing when a sync of its kind for this shop is already
+    // queued or running.
+    await Promise.all([
+      enqueueCatalogSync(tenant),
+      enqueueOrderFactsSync(tenant),
+    ]);
     return { synced: true };
   }
 

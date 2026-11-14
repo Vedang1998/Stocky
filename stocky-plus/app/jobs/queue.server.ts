@@ -75,6 +75,8 @@ export const INVENTORY_RECONCILE_MIN_ENQUEUE_INTERVAL_MS = 15 * 60 * 1000;
  * A sync is also never queued while another is still queued or running.
  */
 export const CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS = 60 * 1000;
+/** Shortest gap between two successful order-history imports requested for a shop. */
+export const ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 export type WebhookJobData = {
   topic: string;
@@ -333,8 +335,75 @@ export async function enqueueAbcAnalysisForShop(tenant: TenantAuthority) {
   await kickDispatcher();
 }
 
-export async function enqueueOrderFactsSync(tenant: TenantAuthority) {
+/**
+ * Why an order-history import is being requested. After an install the import
+ * runs once; a merchant can ask for another one later.
+ */
+export type OrderFactsSyncTrigger = "install" | "merchant_request";
+
+/**
+ * Create the durable job that imports the shop's order history and stores its
+ * time zone and currency. Reports start empty without it.
+ *
+ * Single-flight per shop, like the catalog sync, because the import reads the
+ * whole order history. Either trigger is skipped while an import for the shop
+ * is queued or running. After that:
+ * - "install" (the afterAuth hook, which runs on every token exchange) is
+ *   skipped once an import has succeeded since the shop was installed or last
+ *   reinstalled, so an active shop is not re-imported again and again, while
+ *   a reinstall, which erases the old data, imports again;
+ * - "merchant_request" is skipped when an import succeeded within
+ *   ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS.
+ * A failed import counts for neither, so it can be retried. The idempotency
+ * key is bucketed by the minute, which collapses concurrent requests that pass
+ * the check together without blocking a retry after a failure.
+ */
+export async function enqueueOrderFactsSync(
+  tenant: TenantAuthority,
+  trigger: OrderFactsSyncTrigger = "merchant_request",
+): Promise<{ enqueued: boolean; reason?: string }> {
   const auth = requireAuthority(tenant, "enqueueOrderFactsSync");
+  const prisma = getControlPlanePrisma();
+  const now = Date.now();
+  let succeededSince: Date;
+  if (trigger === "install") {
+    const shop = await prisma.shop.findUnique({
+      where: { id: auth.shopId },
+      select: { createdAt: true, reinstalledAt: true },
+    });
+    if (!shop) return { enqueued: false, reason: "shop_missing" };
+    succeededSince =
+      shop.reinstalledAt && shop.reinstalledAt > shop.createdAt
+        ? shop.reinstalledAt
+        : shop.createdAt;
+  } else {
+    succeededSince = new Date(now - ORDER_FACTS_SYNC_MIN_ENQUEUE_INTERVAL_MS);
+  }
+  const existing = await prisma.durableJob.findFirst({
+    where: {
+      shopId: auth.shopId,
+      jobType: "order-facts-sync",
+      OR: [
+        {
+          state: {
+            in: [
+              "PENDING",
+              "RETRY_WAIT",
+              "DISPATCH_LEASED",
+              "ENQUEUED",
+              "RUNNING",
+            ],
+          },
+        },
+        { state: "SUCCEEDED", createdAt: { gte: succeededSince } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { enqueued: false, reason: "already_requested" };
+  }
+  const bucket = Math.floor(now / CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS);
   await createDurableJob({
     shopId: auth.shopId,
     jobType: "order-facts-sync",
@@ -342,12 +411,13 @@ export async function enqueueOrderFactsSync(tenant: TenantAuthority) {
     queueName: CRON_QUEUE,
     payloadSchemaVersion: "order-facts-sync-v1",
     sanitizedPayload: { shopId: auth.shopId },
-    idempotencyKey: `order-facts-sync:${auth.shopId}:${auth.correlationId}`,
+    idempotencyKey: `order-facts-sync:${auth.shopId}:${bucket}`,
     correlationId: auth.correlationId,
     causationId: auth.causationId,
     maxAttempts: 125,
   });
   await kickDispatcher();
+  return { enqueued: true };
 }
 
 export async function enqueueOrderFactsReconcile(
