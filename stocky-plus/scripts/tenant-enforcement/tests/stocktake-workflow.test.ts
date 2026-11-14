@@ -101,6 +101,8 @@ describe("stocktake workflow", () => {
   let shopify: FakeShopify;
   /** Items Shopify stocks in the cellar, for the live quantity read. */
   let stockedInShopify: Set<number>;
+  /** `item@location` pairs Shopify does not stock outside the cellar. */
+  let unstockedElsewhere: Set<string>;
 
   const readQuantities: ReadLevelQuantities = async (
     locationId,
@@ -112,12 +114,37 @@ describe("stocktake workflow", () => {
         const locationNumber = Number(locationId.split("/").pop());
         return [
           id,
-          locationNumber !== 11 || stockedInShopify.has(itemNumber)
+          (
+            locationNumber === 11
+              ? stockedInShopify.has(itemNumber)
+              : !unstockedElsewhere.has(`${itemNumber}@${locationNumber}`)
+          )
             ? shopify.level(itemNumber, locationNumber)
             : null,
         ];
       }),
     );
+
+  // Putting items on a sheet reads their expected quantity from the fake Shopify.
+  const start = (
+    db: TenantDb,
+    input: Parameters<typeof createStocktake>[2],
+    options: Parameters<typeof createStocktake>[3] = {},
+  ) => createStocktake(db, null, input, { readQuantities, ...options });
+  const scan = (
+    db: TenantDb,
+    input: Parameters<typeof recordStocktakeScan>[2],
+    options: Parameters<typeof recordStocktakeScan>[3] = {},
+  ) => recordStocktakeScan(db, null, input, { readQuantities, ...options });
+  const saveCount = (
+    db: TenantDb,
+    input: Parameters<typeof saveStocktakeCount>[2],
+    options: Parameters<typeof saveStocktakeCount>[3] = {},
+  ) => saveStocktakeCount(db, null, input, { readQuantities, ...options });
+  const addItems = (
+    db: TenantDb,
+    input: Parameters<typeof addStocktakeItems>[2],
+  ) => addStocktakeItems(db, null, input, { readQuantities });
 
   const enabled = (
     extra: Partial<CompleteStocktakeOptions> = {},
@@ -183,7 +210,7 @@ describe("stocktake workflow", () => {
   async function startCount(
     extra: { blind?: boolean; name?: string | null } = {},
   ) {
-    const created = await createStocktake(
+    const created = await start(
       dbA,
       {
         shop: SHOP_A,
@@ -204,7 +231,7 @@ describe("stocktake workflow", () => {
   }
 
   async function startPartialCount() {
-    const created = await createStocktake(dbA, {
+    const created = await start(dbA, {
       shop: SHOP_A,
       locationId: CELLAR,
       name: "Spot check",
@@ -216,7 +243,7 @@ describe("stocktake workflow", () => {
   }
 
   async function count(lineId: string, countedQty: number | null) {
-    expect(await saveStocktakeCount(dbA, { lineId, countedQty })).toEqual({
+    expect(await saveCount(dbA, { lineId, countedQty })).toEqual({
       ok: true,
     });
   }
@@ -355,7 +382,12 @@ describe("stocktake workflow", () => {
     shopify.setLevel(101, 10, 11);
     shopify.setLevel(102, 20, 11);
     shopify.setLevel(103, 5, 11);
-    stockedInShopify = new Set([101, 102, 103]);
+    // Rosé has a synced level in the cellar, but Shopify no longer stocks it there.
+    stockedInShopify = new Set([101, 102]);
+    unstockedElsewhere = new Set();
+    shopify.setLevel(101, 99, 12);
+    shopify.setLevel(106, 7, 12);
+    shopify.setLevel(201, 50, 21);
   });
 
   afterAll(async () => {
@@ -370,6 +402,7 @@ describe("stocktake workflow", () => {
         ok: true,
         stocktakeId: id,
         lineCount: 2,
+        expectedSource: "LIVE",
         skippedUnsynced: 1,
         skippedUnlinked: 1,
       });
@@ -378,10 +411,15 @@ describe("stocktake workflow", () => {
         orderBy: { shopifyVariantId: "asc" },
       });
       expect(
-        lines.map((l) => [l.shopifyVariantId, l.expectedQty, l.countedQty]),
+        lines.map((l) => [
+          l.shopifyVariantId,
+          l.expectedQty,
+          l.countedQty,
+          l.expectedReadAt,
+        ]),
       ).toEqual([
-        [RED, 10, null],
-        [WHITE, 20, null],
+        [RED, 10, null, NOW],
+        [WHITE, 20, null, NOW],
       ]);
       expect(
         await prisma.stocktake.findUniqueOrThrow({ where: { id } }),
@@ -391,6 +429,7 @@ describe("stocktake workflow", () => {
         status: "IN_PROGRESS",
         scope: "FULL",
         quantityBasis: "ON_HAND",
+        expectedSource: "LIVE",
         blind: false,
         startedAt: NOW,
         startedByUserId: "42",
@@ -398,7 +437,7 @@ describe("stocktake workflow", () => {
     });
 
     it("names an unnamed count after the day it started and remembers a blind count", async () => {
-      const created = await createStocktake(
+      const created = await start(
         dbA,
         { shop: SHOP_A, locationId: CELLAR, name: "  ", blind: true },
         fixedClock,
@@ -431,7 +470,7 @@ describe("stocktake workflow", () => {
         { locationId: CELLAR, name: "x".repeat(121) },
       ],
     ])("does not start a count with %s", async (_label, input) => {
-      const result = await createStocktake(dbA, {
+      const result = await start(dbA, {
         shop: SHOP_A,
         name: null,
         ...input,
@@ -443,7 +482,7 @@ describe("stocktake workflow", () => {
 
     it("does not start a full count where nothing can be counted, and says why", async () => {
       expect(
-        await createStocktake(dbA, {
+        await start(dbA, {
           shop: SHOP_A,
           locationId: EMPTY_ROOM,
           name: null,
@@ -454,10 +493,9 @@ describe("stocktake workflow", () => {
           "No tracked items are stocked at this location in Shopify, so there is nothing to count. To count specific items, start a partial count.",
       });
 
-      await setSynced(101, { onHand: null }, 12);
-      await setSynced(106, { onHand: null }, 12);
+      unstockedElsewhere.add("101@12").add("106@12");
       expect(
-        await createStocktake(dbA, {
+        await start(dbA, {
           shop: SHOP_A,
           locationId: SHOPFRONT,
           name: null,
@@ -465,9 +503,248 @@ describe("stocktake workflow", () => {
       ).toEqual({
         ok: false,
         error:
-          "Shopify's on-hand quantities for this location are not synced yet. Run a sync from the dashboard, then start the count again.",
+          "Shopify has no on-hand quantity for the items synced at this location. Run a sync from the dashboard, then start the count again.",
       });
       expect(await prisma.stocktake.count()).toBe(0);
+    });
+  });
+
+  describe("expected quantities", () => {
+    const unreadable: ReadLevelQuantities = async () => {
+      throw new Error("Throttled");
+    };
+
+    /** A full count of the cellar started without a live read, as a location too large to read is. */
+    async function startFromSync() {
+      const created = await createStocktake(
+        dbA,
+        null,
+        { shop: SHOP_A, locationId: CELLAR, name: "Cellar", actor: STAFF },
+        fixedClock,
+      );
+      if (!created.ok) throw new Error(created.error);
+      expect(created.expectedSource).toBe("SYNC");
+      return created.stocktakeId;
+    }
+
+    // Issue #119: one red was sold a moment ago. Shopify has 9; the sync still says 10.
+    it("starts from Shopify's quantity when the synced quantity is behind, so Shopify ends at what was counted", async () => {
+      shopify.setLevel(101, 9, 11);
+      const { id, lineFor } = await startCount();
+      expect((await lineOf(id, RED)).expectedQty).toBe(9);
+
+      await count(lineFor(RED), 10);
+      await count(lineFor(WHITE), 20);
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+
+      expect(shopify.level(101)).toBe(10);
+      const [operation] = await operations(id);
+      expect(operation.lines.map((l) => [l.inventoryItemGid, l.delta])).toEqual(
+        [[item(101), 1]],
+      );
+    });
+
+    it("does not start a count when Shopify cannot be read", async () => {
+      expect(
+        await start(
+          dbA,
+          { shop: SHOP_A, locationId: CELLAR, name: null },
+          { readQuantities: unreadable },
+        ),
+      ).toEqual({
+        ok: false,
+        error:
+          "Shopify's current quantities could not be read, so the count was not started. Try again in a moment.",
+      });
+      expect(await prisma.stocktake.count()).toBe(0);
+    });
+
+    it("reads a scanned or added item's quantity from Shopify, not from the sync", async () => {
+      const id = await startPartialCount();
+      await setSynced(101, { onHand: 10 });
+      shopify.setLevel(101, 9, 11);
+      shopify.setLevel(102, 18, 11);
+
+      await scan(dbA, { stocktakeId: id, code: "1111" }, fixedClock);
+      await addItems(dbA, { stocktakeId: id, codesText: "WHT-750" });
+
+      expect(await lineOf(id, RED)).toMatchObject({
+        expectedQty: 9,
+        expectedReadAt: NOW,
+      });
+      expect((await lineOf(id, WHITE)).expectedQty).toBe(18);
+      expect((await lineOf(id, WHITE)).expectedReadAt).not.toBeNull();
+    });
+
+    it("adds nothing to the sheet when Shopify cannot be read", async () => {
+      const id = await startPartialCount();
+      const error =
+        "Shopify's current quantities could not be read. Nothing was changed. Try again in a moment.";
+
+      expect(
+        await recordStocktakeScan(
+          dbA,
+          null,
+          { stocktakeId: id, code: "1111" },
+          { readQuantities: unreadable },
+        ),
+      ).toEqual({ ok: false, error });
+      expect(
+        await addStocktakeItems(
+          dbA,
+          null,
+          { stocktakeId: id, codesText: "1111" },
+          { readQuantities: unreadable },
+        ),
+      ).toEqual({ ok: false, error, details: [] });
+      expect(await prisma.stocktakeLineItem.count()).toBe(0);
+    });
+
+    it("keeps synced quantities unread until each item is counted, then measures from Shopify", async () => {
+      const id = await startFromSync();
+      expect(await lineOf(id, RED)).toMatchObject({
+        expectedQty: 10,
+        expectedReadAt: null,
+      });
+      // The sync is one red and two whites behind Shopify.
+      shopify.setLevel(101, 9, 11);
+      shopify.setLevel(102, 18, 11);
+
+      await saveCount(
+        dbA,
+        { lineId: (await lineOf(id, RED)).id, countedQty: 10 },
+        fixedClock,
+      );
+      await scan(dbA, { stocktakeId: id, code: "2222", quantity: 18 });
+
+      expect(await lineOf(id, RED)).toMatchObject({
+        expectedQty: 9,
+        expectedReadAt: NOW,
+        countedQty: 10,
+      });
+      expect(await lineOf(id, WHITE)).toMatchObject({
+        expectedQty: 18,
+        countedQty: 18,
+      });
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+      expect([shopify.level(101), shopify.level(102)]).toEqual([10, 18]);
+    });
+
+    it("reads an item once: a later count does not move its expected quantity", async () => {
+      const id = await startFromSync();
+      const red = (await lineOf(id, RED)).id;
+      shopify.setLevel(101, 9, 11);
+      await count(red, 10);
+      // Two reds are sold after the item was counted.
+      shopify.setLevel(101, 7, 11);
+
+      await count(red, 11);
+      await scan(dbA, { stocktakeId: id, code: "1111" });
+
+      expect(await lineOf(id, RED)).toMatchObject({
+        expectedQty: 9,
+        countedQty: 12,
+      });
+      expect(await complete(id, { acceptUncounted: true })).toMatchObject({
+        blocker: "MOVEMENT",
+      });
+      expect((await lineOf(id, RED)).movementDetectedQty).toBe(7);
+    });
+
+    it("saves a count while Shopify cannot be read, and reads the item when the count is completed", async () => {
+      const id = await startFromSync();
+      const red = (await lineOf(id, RED)).id;
+      shopify.setLevel(101, 9, 11);
+
+      expect(
+        await saveStocktakeCount(
+          dbA,
+          null,
+          { lineId: red, countedQty: 10 },
+          { readQuantities: unreadable },
+        ),
+      ).toEqual({ ok: true });
+      expect(await lineOf(id, RED)).toMatchObject({
+        expectedQty: 10,
+        expectedReadAt: null,
+        countedQty: 10,
+      });
+
+      expect(await complete(id, { acceptUncounted: true })).toEqual({
+        ok: true,
+        alreadyCompleted: false,
+      });
+      expect((await lineOf(id, RED)).expectedQty).toBe(9);
+      expect(shopify.level(101)).toBe(10);
+    });
+
+    it("takes items marked as zero to zero from Shopify's quantity, not the synced one", async () => {
+      const id = await startFromSync();
+      shopify.setLevel(101, 9, 11);
+      shopify.setLevel(102, 23, 11);
+      await zeroFillUncounted(dbA, { stocktakeId: id });
+
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+
+      expect([shopify.level(101), shopify.level(102)]).toEqual([0, 0]);
+      const [operation] = await operations(id);
+      expect(operation.lines.map((l) => l.delta).sort()).toEqual([-23, -9]);
+    });
+
+    it("does not keep asking for an item Shopify no longer stocks at the location", async () => {
+      const id = await startFromSync();
+      stockedInShopify.delete(101);
+      await saveCount(dbA, {
+        lineId: (await lineOf(id, RED)).id,
+        countedQty: 10,
+      });
+      expect((await lineOf(id, RED)).expectedReadAt).toBeNull();
+
+      expect(await complete(id, { acceptUncounted: true })).toEqual({
+        ok: true,
+        alreadyCompleted: false,
+      });
+      expect(await lineOf(id, RED)).toMatchObject({ expectedQty: 10 });
+      expect((await lineOf(id, RED)).expectedReadAt).not.toBeNull();
+      expect(shopify.requests).toHaveLength(0);
+    });
+
+    it("sends nothing while unread quantities cannot be read from Shopify", async () => {
+      const id = await startFromSync();
+      await zeroFillUncounted(dbA, { stocktakeId: id });
+
+      const error =
+        "Shopify's current quantities could not be read, so the count was not completed. Nothing was sent to Shopify. Try again in a moment.";
+      expect(await complete(id, { readQuantities: unreadable })).toEqual({
+        ok: false,
+        error,
+        problems: [],
+        blocker: null,
+      });
+      // With no way to read Shopify at all, synced quantities are not trusted either.
+      expect(
+        await completeStocktake(dbA, null, STAFF, id, {
+          sendBatch: shopify.send,
+          isCapabilityEnabled: () => true,
+        }),
+      ).toMatchObject({ ok: false, error });
+
+      expect(shopify.requests).toHaveLength(0);
+      expect(await status(id)).toBe("IN_PROGRESS");
+    });
+
+    it("stops a count whose quantities were read when Shopify cannot be read at completion", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+
+      expect(await complete(id, { readQuantities: unreadable })).toMatchObject({
+        ok: false,
+        error: expect.stringContaining("could not be read"),
+      });
+      expect(shopify.requests).toHaveLength(0);
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+      expect(shopify.level(101)).toBe(7);
     });
   });
 
@@ -476,7 +753,7 @@ describe("stocktake workflow", () => {
       const { id, lineFor } = await startCount();
 
       expect(
-        await saveStocktakeCount(
+        await saveCount(
           dbA,
           {
             lineId: lineFor(RED),
@@ -508,7 +785,7 @@ describe("stocktake workflow", () => {
       async (countedQty) => {
         const { id, lineFor } = await startCount();
 
-        const result = await saveStocktakeCount(dbA, {
+        const result = await saveCount(dbA, {
           lineId: lineFor(RED),
           countedQty,
         });
@@ -527,7 +804,7 @@ describe("stocktake workflow", () => {
       const second = await startCount();
 
       expect(
-        await saveStocktakeCount(dbA, {
+        await saveCount(dbA, {
           lineId: first.lineFor(RED),
           countedQty: 3,
           stocktakeId: second.id,
@@ -540,7 +817,7 @@ describe("stocktake workflow", () => {
       const { id, lineFor } = await startCount();
 
       expect(
-        await recordStocktakeScan(
+        await scan(
           dbA,
           { stocktakeId: id, code: " 1111 ", actor: COUNTER },
           fixedClock,
@@ -552,12 +829,12 @@ describe("stocktake workflow", () => {
         countedQty: 1,
         added: false,
       });
-      await recordStocktakeScan(dbA, {
+      await scan(dbA, {
         stocktakeId: id,
         code: "RED-750",
         quantity: 5,
       });
-      const third = await recordStocktakeScan(dbA, {
+      const third = await scan(dbA, {
         stocktakeId: id,
         code: RED,
       });
@@ -573,7 +850,7 @@ describe("stocktake workflow", () => {
     it("puts a scanned item on a partial count with its on-hand quantity", async () => {
       const id = await startPartialCount();
 
-      const scanned = await recordStocktakeScan(
+      const scanned = await scan(
         dbA,
         { stocktakeId: id, code: "2222", quantity: 3, actor: COUNTER },
         fixedClock,
@@ -603,7 +880,7 @@ describe("stocktake workflow", () => {
 
       const scans = await Promise.all(
         Array.from({ length: 6 }, () =>
-          recordStocktakeScan(dbA, { stocktakeId: id, code: "1111" }),
+          scan(dbA, { stocktakeId: id, code: "1111" }),
         ),
       );
 
@@ -633,16 +910,17 @@ describe("stocktake workflow", () => {
       ],
       [
         "ROS-750",
-        "Shopify's on-hand quantity for Rosé is not synced yet. Run a sync from the dashboard.",
+        "Rosé is not stocked at this location in Shopify. Stock it at the location in Shopify first.",
       ],
       ["", "Scan or type a barcode or SKU."],
       ["x".repeat(192), "Scan or type a barcode or SKU."],
     ])("does not count a scan of %s", async (code, error) => {
       const { id } = await startCount();
 
-      expect(await recordStocktakeScan(dbA, { stocktakeId: id, code })).toEqual(
-        { ok: false, error },
-      );
+      expect(await scan(dbA, { stocktakeId: id, code })).toEqual({
+        ok: false,
+        error,
+      });
       expect(await prisma.stocktakeLineItem.count()).toBe(2);
       expect(
         await prisma.stocktakeLineItem.count({
@@ -656,7 +934,7 @@ describe("stocktake workflow", () => {
       async (quantity) => {
         const { id } = await startCount();
 
-        const scanned = await recordStocktakeScan(dbA, {
+        const scanned = await scan(dbA, {
           stocktakeId: id,
           code: "1111",
           quantity,
@@ -675,9 +953,7 @@ describe("stocktake workflow", () => {
       const { id, lineFor } = await startCount();
       await count(lineFor(RED), MAX_COUNTED_QUANTITY);
 
-      expect(
-        await recordStocktakeScan(dbA, { stocktakeId: id, code: "1111" }),
-      ).toEqual({
+      expect(await scan(dbA, { stocktakeId: id, code: "1111" })).toEqual({
         ok: false,
         error: "Red wine would be counted above 1,000,000. Check its count.",
       });
@@ -686,16 +962,16 @@ describe("stocktake workflow", () => {
 
     it("adds a pasted list of items once each, uncounted, with their on-hand quantities", async () => {
       const id = await startPartialCount();
-      await setSynced(103, { onHand: 5 });
+      stockedInShopify.add(103);
 
       expect(
-        await addStocktakeItems(dbA, {
+        await addItems(dbA, {
           stocktakeId: id,
           codesText: "RED-750\n\n  3333  \r\n1111\n",
         }),
       ).toEqual({ ok: true, added: 2, alreadyOnCount: 0 });
       expect(
-        await addStocktakeItems(dbA, {
+        await addItems(dbA, {
           stocktakeId: id,
           codesText: `WHT-750\n${RED}`,
         }),
@@ -716,7 +992,7 @@ describe("stocktake workflow", () => {
     it("adds nothing from a list with a line it cannot use, and names each one", async () => {
       const id = await startPartialCount();
 
-      const result = await addStocktakeItems(dbA, {
+      const result = await addItems(dbA, {
         stocktakeId: id,
         codesText: ["RED-750", "0000", "8888", "PRT-500", "GIN-700"].join("\n"),
       });
@@ -738,13 +1014,13 @@ describe("stocktake workflow", () => {
       const id = await startPartialCount();
 
       expect(
-        await addStocktakeItems(dbA, { stocktakeId: id, codesText: " \n " }),
+        await addItems(dbA, { stocktakeId: id, codesText: " \n " }),
       ).toMatchObject({
         ok: false,
         error: "Enter at least one barcode or SKU.",
       });
       expect(
-        await addStocktakeItems(dbA, {
+        await addItems(dbA, {
           stocktakeId: id,
           codesText: Array.from(
             { length: MAX_ADDED_ITEMS + 1 },
@@ -756,7 +1032,7 @@ describe("stocktake workflow", () => {
         error: "Add at most 500 items at a time. This list has 501.",
       });
       expect(
-        await addStocktakeItems(dbA, { stocktakeId: id, codesText: 12 }),
+        await addItems(dbA, { stocktakeId: id, codesText: 12 }),
       ).toMatchObject({ ok: false });
       expect(await prisma.stocktakeLineItem.count()).toBe(0);
     });
@@ -976,12 +1252,11 @@ describe("stocktake workflow", () => {
       expect(operation.lines.map((l) => l.delta)).toEqual([6]);
     });
 
-    it("finds movement on an item whose count matched, from the synced quantity", async () => {
+    it("finds movement on an item whose count matched", async () => {
       const { id, lineFor } = await startCount();
       await count(lineFor(RED), 10);
       await count(lineFor(WHITE), 20);
-      // A delivery of five whites was received and has synced.
-      await setSynced(102, { onHand: 25 });
+      // A delivery of five whites was received; the sync has not caught up.
       shopify.setLevel(102, 25, 11);
 
       expect(await complete(id)).toMatchObject({ blocker: "MOVEMENT" });
@@ -1259,14 +1534,14 @@ describe("stocktake workflow", () => {
       const { id, lineFor } = await startCount();
       await count(lineFor(RED), 7);
       await count(lineFor(WHITE), 20);
-      await setSynced(103, { onHand: 5 });
+      stockedInShopify.add(103);
       let interfered = false;
 
       const first = await complete(id, {
         sendBatch: async (request) => {
           if (!interfered) {
             interfered = true;
-            await addStocktakeItems(dbA, {
+            await addItems(dbA, {
               stocktakeId: id,
               codesText: "ROS-750",
             });
@@ -1287,13 +1562,14 @@ describe("stocktake workflow", () => {
       await complete(id);
 
       expect(
-        await saveStocktakeCount(dbA, { lineId: lineFor(RED), countedQty: 1 }),
+        await saveCount(dbA, { lineId: lineFor(RED), countedQty: 1 }),
       ).toEqual({ ok: false, error: CLOSED_MESSAGE });
+      expect(await scan(dbA, { stocktakeId: id, code: "1111" })).toEqual({
+        ok: false,
+        error: CLOSED_MESSAGE,
+      });
       expect(
-        await recordStocktakeScan(dbA, { stocktakeId: id, code: "1111" }),
-      ).toEqual({ ok: false, error: CLOSED_MESSAGE });
-      expect(
-        await addStocktakeItems(dbA, { stocktakeId: id, codesText: "1111" }),
+        await addItems(dbA, { stocktakeId: id, codesText: "1111" }),
       ).toEqual({ ok: false, error: CLOSED_MESSAGE, details: [] });
       expect(await zeroFillUncounted(dbA, { stocktakeId: id })).toEqual({
         ok: false,
@@ -1422,7 +1698,7 @@ describe("stocktake workflow", () => {
       });
       for (const n of numbers) shopify.setLevel(n, 1, 15);
 
-      const created = await createStocktake(dbA, {
+      const created = await start(dbA, {
         shop: SHOP_A,
         locationId: WAREHOUSE,
         name: "Warehouse",
@@ -1430,6 +1706,22 @@ describe("stocktake workflow", () => {
       if (!created.ok) throw new Error(created.error);
       expect(created.lineCount).toBe(total);
       await zeroFillUncounted(dbA, { stocktakeId: created.stocktakeId });
+
+      // A sheet this long starts from synced quantities; Shopify is read for
+      // 2,000 items per attempt before anything is sent.
+      expect(created.expectedSource).toBe("SYNC");
+      expect(await complete(created.stocktakeId)).toEqual({
+        ok: false,
+        error:
+          "Shopify's current quantities still have to be read for 3,001 items on this count. Complete the count again to continue. Nothing was sent to Shopify.",
+        problems: [],
+        blocker: null,
+      });
+      expect(await complete(created.stocktakeId)).toMatchObject({
+        ok: false,
+        error: expect.stringContaining("read for 1,001 items"),
+      });
+      expect(shopify.requests).toHaveLength(0);
 
       const result = await complete(created.stocktakeId, {
         deadlineMs: 120_000,
@@ -1483,7 +1775,7 @@ describe("stocktake workflow", () => {
       await cancelStocktake(dbA, { stocktakeId: id });
 
       expect(
-        await saveStocktakeCount(dbA, { lineId: lineFor(RED), countedQty: 1 }),
+        await saveCount(dbA, { lineId: lineFor(RED), countedQty: 1 }),
       ).toEqual({ ok: false, error: CLOSED_MESSAGE });
       expect(await complete(id)).toEqual({
         ok: false,
@@ -1557,13 +1849,13 @@ describe("stocktake workflow", () => {
       const notFound = { ok: false, error: "Stocktake not found" };
 
       expect(
-        await saveStocktakeCount(dbB, { lineId: lineFor(RED), countedQty: 0 }),
+        await saveCount(dbB, { lineId: lineFor(RED), countedQty: 0 }),
       ).toEqual({ ok: false, error: "Stocktake line not found" });
+      expect(await scan(dbB, { stocktakeId: id, code: "1111" })).toEqual(
+        notFound,
+      );
       expect(
-        await recordStocktakeScan(dbB, { stocktakeId: id, code: "1111" }),
-      ).toEqual(notFound);
-      expect(
-        await addStocktakeItems(dbB, { stocktakeId: id, codesText: "1111" }),
+        await addItems(dbB, { stocktakeId: id, codesText: "1111" }),
       ).toEqual({ ...notFound, details: [] });
       expect(await zeroFillUncounted(dbB, { stocktakeId: id })).toEqual(
         notFound,
@@ -1598,7 +1890,7 @@ describe("stocktake workflow", () => {
     });
 
     it("counts its own item when both shops use the same barcode", async () => {
-      const created = await createStocktake(dbB, {
+      const created = await start(dbB, {
         shop: SHOP_B,
         locationId: OTHER_SHOPS_LOCATION,
         name: null,
@@ -1607,7 +1899,7 @@ describe("stocktake workflow", () => {
       if (!created.ok) throw new Error(created.error);
 
       expect(
-        await recordStocktakeScan(dbB, {
+        await scan(dbB, {
           stocktakeId: created.stocktakeId,
           code: "1111",
         }),
@@ -1679,8 +1971,8 @@ describe("stocktake workflow", () => {
 
     it("reports progress and filters lines by state", async () => {
       const { id, lineFor } = await startCount();
-      await setSynced(103, { onHand: 5 });
-      await addStocktakeItems(dbA, { stocktakeId: id, codesText: "ROS-750" });
+      stockedInShopify.add(103);
+      await addItems(dbA, { stocktakeId: id, codesText: "ROS-750" });
       await count(lineFor(RED), 12);
       await count(lineFor(WHITE), 20);
       shopify.setLevel(101, 6, 11);

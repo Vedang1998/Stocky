@@ -63,7 +63,9 @@ const text = (value: FormDataEntryValue | null): string =>
   typeof value === "string" ? value : "";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db, actor } = await requireAdminTenantWithActor({ request });
+  const { admin, tenant, db, actor } = await requireAdminTenantWithActor({
+    request,
+  });
   const form = await request.formData();
   if (form.get("intent") !== "create") {
     return { error: "That action is not available." };
@@ -75,7 +77,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     scope: text(form.get("scope")),
     blind: text(form.get("blind")),
   };
-  const result = await createStocktake(db, {
+  const result = await createStocktake(db, admin, {
     shop: tenant.myshopifyDomain,
     locationId: readFormId(values.locationId),
     name: values.name,

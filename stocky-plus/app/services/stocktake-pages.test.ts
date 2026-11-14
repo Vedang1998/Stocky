@@ -177,6 +177,7 @@ const header = (extra: Partial<StocktakeHeader> = {}): StocktakeHeader => ({
   status: "IN_PROGRESS",
   scope: "FULL",
   quantityBasis: "ON_HAND",
+  expectedSource: "LIVE",
   blind: false,
   createdAt: new Date("2026-11-12T09:00:00.000Z"),
   startedAt: new Date("2026-11-12T09:00:00.000Z"),
@@ -333,14 +334,18 @@ describe("Stocktakes list", () => {
       }),
     )) as Response;
 
-    expect(service.createStocktake).toHaveBeenCalledWith(context.db, {
-      shop: SHOP,
-      locationId: CELLAR,
-      name: "Friday count",
-      scope: "PARTIAL",
-      blind: true,
-      actor: STAFF,
-    });
+    expect(service.createStocktake).toHaveBeenCalledWith(
+      context.db,
+      context.admin,
+      {
+        shop: SHOP,
+        locationId: CELLAR,
+        name: "Friday count",
+        scope: "PARTIAL",
+        blind: true,
+        actor: STAFF,
+      },
+    );
     expect(response.status).toBe(302);
     expect(response.headers.get("Location")).toBe("/app/stocktakes/st-new");
   });
@@ -354,6 +359,7 @@ describe("Stocktakes list", () => {
 
     expect(service.createStocktake).toHaveBeenCalledWith(
       context.db,
+      context.admin,
       expect.objectContaining({ scope: "FULL", blind: false, name: "" }),
     );
   });
@@ -611,6 +617,7 @@ describe("Count page action", () => {
       expect(service.recordStocktakeScan).toHaveBeenNthCalledWith(
         1,
         context.db,
+        context.admin,
         {
           stocktakeId: ID,
           code: "1111",
@@ -621,6 +628,7 @@ describe("Count page action", () => {
       expect(service.recordStocktakeScan).toHaveBeenNthCalledWith(
         2,
         context.db,
+        context.admin,
         expect.objectContaining({ quantity: 6 }),
       );
       expect(single).toEqual({
@@ -681,6 +689,7 @@ describe("Count page action", () => {
 
       expect(service.recordStocktakeScan).toHaveBeenCalledWith(
         context.db,
+        context.admin,
         expect.objectContaining({ actor: null }),
       );
     });
@@ -693,12 +702,16 @@ describe("Count page action", () => {
       expect(
         await act({ intent: "count", lineId: "line-1", countedQty: " 7 " }),
       ).toEqual({ ok: true, notice: "Count saved." });
-      expect(service.saveStocktakeCount).toHaveBeenCalledWith(context.db, {
-        stocktakeId: ID,
-        lineId: "line-1",
-        countedQty: 7,
-        actor: STAFF,
-      });
+      expect(service.saveStocktakeCount).toHaveBeenCalledWith(
+        context.db,
+        context.admin,
+        {
+          stocktakeId: ID,
+          lineId: "line-1",
+          countedQty: 7,
+          actor: STAFF,
+        },
+      );
     });
 
     it("clears the count when the field is emptied", async () => {
@@ -709,6 +722,7 @@ describe("Count page action", () => {
       ).toEqual({ ok: true, notice: "Count cleared." });
       expect(service.saveStocktakeCount).toHaveBeenCalledWith(
         context.db,
+        context.admin,
         expect.objectContaining({ countedQty: null }),
       );
     });
@@ -762,10 +776,14 @@ describe("Count page action", () => {
           notice: "1 item added to the count. 2 items already on the count.",
         },
       );
-      expect(service.addStocktakeItems).toHaveBeenCalledWith(context.db, {
-        stocktakeId: ID,
-        codesText: "RED-750\n2222",
-      });
+      expect(service.addStocktakeItems).toHaveBeenCalledWith(
+        context.db,
+        context.admin,
+        {
+          stocktakeId: ID,
+          codesText: "RED-750\n2222",
+        },
+      );
 
       service.addStocktakeItems.mockResolvedValue({
         ok: true,
@@ -1269,6 +1287,26 @@ describe("Count page", () => {
     expect(unfinished).toContain(
       "Shopify has not finished answering the last attempt to complete this count.",
     );
+  });
+
+  it("says when an open count's expected quantities came from the last sync", async () => {
+    const heading = 'heading="Expected quantities are from the last sync"';
+
+    expect(await renderCount()).not.toContain(heading);
+
+    reads.getStocktake.mockResolvedValue(header({ expectedSource: "SYNC" }));
+    const synced = await renderCount();
+    expect(synced).toContain(heading);
+    expect(synced).toContain("read from Shopify when it is first counted");
+
+    reads.getStocktake.mockResolvedValue(
+      header({
+        expectedSource: "SYNC",
+        status: "COMPLETED",
+        completedAt: new Date("2026-11-12T11:15:00.000Z"),
+      }),
+    );
+    expect(await renderCount()).not.toContain(heading);
   });
 
   it("shows a completed count read-only", async () => {

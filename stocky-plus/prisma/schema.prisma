@@ -583,6 +583,14 @@ enum StocktakeQuantityBasis {
   ON_HAND
 }
 
+/// Where a count sheet's starting `expectedQty` values were read. LIVE is a
+/// read of Shopify as the count started; SYNC is the last synced quantity,
+/// used for counts started before the live read and for very large locations.
+enum StocktakeExpectedSource {
+  SYNC
+  LIVE
+}
+
 enum StocktakeCountSource {
   MANUAL
   SCAN
@@ -590,23 +598,24 @@ enum StocktakeCountSource {
 }
 
 model Stocktake {
-  id                String                 @id @default(cuid())
+  id                String                  @id @default(cuid())
   shop              String
   shopId            String?
   locationId        String
-  status            StocktakeStatus        @default(DRAFT)
+  status            StocktakeStatus         @default(DRAFT)
   name              String
-  scope             StocktakeScope         @default(FULL)
-  quantityBasis     StocktakeQuantityBasis @default(AVAILABLE)
+  scope             StocktakeScope          @default(FULL)
+  quantityBasis     StocktakeQuantityBasis  @default(AVAILABLE)
+  expectedSource    StocktakeExpectedSource @default(SYNC)
   /// Expected quantities are hidden from the people counting until review.
-  blind             Boolean                @default(false)
+  blind             Boolean                 @default(false)
   startedAt         DateTime?
-  startedByUserId   String?                @db.VarChar(64)
+  startedByUserId   String?                 @db.VarChar(64)
   completedAt       DateTime?
-  completedByUserId String?                @db.VarChar(64)
+  completedByUserId String?                 @db.VarChar(64)
   cancelledAt       DateTime?
-  cancelledByUserId String?                @db.VarChar(64)
-  createdAt         DateTime               @default(now())
+  cancelledByUserId String?                 @db.VarChar(64)
+  createdAt         DateTime                @default(now())
 
   lineItems StocktakeLineItem[]
 
@@ -620,6 +629,10 @@ model StocktakeLineItem {
   stocktakeId         String
   shopifyVariantId    String
   expectedQty         Int
+  /// When expectedQty was read from Shopify itself. Null while it is a synced
+  /// quantity, which is replaced by a live read when the line is counted or,
+  /// at the latest, when the count is completed.
+  expectedReadAt      DateTime?
   countedQty          Int?
   countSource         StocktakeCountSource?
   countedAt           DateTime?

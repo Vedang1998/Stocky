@@ -162,7 +162,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         error: `Enter the scanned quantity as a whole number from 1 to ${MAX_COUNTED_QUANTITY.toLocaleString("en-US")}.`,
       };
     }
-    const result = await recordStocktakeScan(db, {
+    const result = await recordStocktakeScan(db, admin, {
       stocktakeId,
       code: form.get("code"),
       quantity,
@@ -185,7 +185,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       ? null
       : parseWholeNumber(field, { min: 0, max: MAX_COUNTED_QUANTITY });
     if (!cleared && countedQty === null) return { error: COUNT_RANGE_MESSAGE };
-    const result = await saveStocktakeCount(db, {
+    const result = await saveStocktakeCount(db, admin, {
       stocktakeId,
       lineId,
       countedQty,
@@ -197,7 +197,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
   if (intent === "addItems") {
     const codes = form.get("codes");
-    const result = await addStocktakeItems(db, {
+    const result = await addStocktakeItems(db, admin, {
       stocktakeId,
       codesText: codes,
     });
@@ -463,6 +463,19 @@ export default function StocktakeCount() {
               Review {progress.movementReviewCount === 1 ? "it" : "them"}
             </s-link>{" "}
             before completing the count.
+          </s-paragraph>
+        </s-banner>
+      )}
+      {open && stocktake.expectedSource === "SYNC" && (
+        <s-banner
+          tone="info"
+          heading="Expected quantities are from the last sync"
+        >
+          <s-paragraph>
+            This count started from the last synced quantities, not from a read
+            of Shopify. Each item&apos;s quantity is read from Shopify when it
+            is first counted, and any item still unread is read before the count
+            is completed.
           </s-paragraph>
         </s-banner>
       )}

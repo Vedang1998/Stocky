@@ -8,6 +8,7 @@ import {
   STOCKTAKE_SOURCE_TYPE,
   stocktakeLineDelta,
   type StocktakeCountSource,
+  type StocktakeExpectedSource,
   type StocktakeQuantityBasis,
   type StocktakeScope,
   type StocktakeStatus,
@@ -39,6 +40,7 @@ export interface StocktakeHeader {
   status: StocktakeStatus;
   scope: StocktakeScope;
   quantityBasis: StocktakeQuantityBasis;
+  expectedSource: StocktakeExpectedSource;
   blind: boolean;
   createdAt: Date;
   startedAt: Date | null;
@@ -93,6 +95,7 @@ const HEADER_SELECT = {
   status: true,
   scope: true,
   quantityBasis: true,
+  expectedSource: true,
   blind: true,
   createdAt: true,
   startedAt: true,

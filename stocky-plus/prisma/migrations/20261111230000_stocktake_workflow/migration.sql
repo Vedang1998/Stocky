@@ -1,9 +1,9 @@
 -- Inventory control: stocktake workflow (full and partial counts, scanning,
 -- missed items, movement review, cancellation).
--- Additive only: three enums and nullable or defaulted columns on "Stocktake"
+-- Additive only: four enums and nullable or defaulted columns on "Stocktake"
 -- and "StocktakeLineItem". No existing column, row, constraint or index is
 -- changed, and existing counts keep their behaviour (basis AVAILABLE).
--- Rollback: DROP the columns below, then the three enums.
+-- Rollback: DROP the columns below, then the four enums.
 
 -- CreateEnum
 CREATE TYPE "StocktakeScope" AS ENUM ('FULL', 'PARTIAL');
@@ -14,10 +14,14 @@ CREATE TYPE "StocktakeQuantityBasis" AS ENUM ('AVAILABLE', 'ON_HAND');
 -- CreateEnum
 CREATE TYPE "StocktakeCountSource" AS ENUM ('MANUAL', 'SCAN', 'ZERO_FILL');
 
+-- CreateEnum
+CREATE TYPE "StocktakeExpectedSource" AS ENUM ('SYNC', 'LIVE');
+
 -- AlterTable
 ALTER TABLE "Stocktake"
     ADD COLUMN "scope" "StocktakeScope" NOT NULL DEFAULT 'FULL',
     ADD COLUMN "quantityBasis" "StocktakeQuantityBasis" NOT NULL DEFAULT 'AVAILABLE',
+    ADD COLUMN "expectedSource" "StocktakeExpectedSource" NOT NULL DEFAULT 'SYNC',
     ADD COLUMN "blind" BOOLEAN NOT NULL DEFAULT false,
     ADD COLUMN "startedByUserId" VARCHAR(64),
     ADD COLUMN "completedByUserId" VARCHAR(64),
@@ -26,6 +30,7 @@ ALTER TABLE "Stocktake"
 
 -- AlterTable
 ALTER TABLE "StocktakeLineItem"
+    ADD COLUMN "expectedReadAt" TIMESTAMP(3),
     ADD COLUMN "countSource" "StocktakeCountSource",
     ADD COLUMN "countedAt" TIMESTAMP(3),
     ADD COLUMN "countedByUserId" VARCHAR(64),
