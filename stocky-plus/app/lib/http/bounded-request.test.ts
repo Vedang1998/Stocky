@@ -81,29 +81,50 @@ describe("readBoundedRequest", () => {
   });
 
   it("refuses a declared Content-Length above the limit without reading the body", async () => {
-    let pulls = 0;
-    const request = streamedRequest(
-      [new Uint8Array(10)],
-      { "content-length": String(WEBHOOK_MAX_BODY_BYTES + 1) },
-      () => {
-        pulls += 1;
-      },
-    );
+    const request = streamedRequest([new Uint8Array(10)], {
+      "content-length": String(WEBHOOK_MAX_BODY_BYTES + 1),
+    });
 
     await expect413(readBoundedRequest(request, WEBHOOK_MAX_BODY_BYTES));
-    expect(pulls).toBe(0);
+    expect(request.bodyUsed).toBe(false);
   });
 
   it("refuses a streamed body without Content-Length once it passes the limit", async () => {
     let pulls = 0;
     const chunk = new Uint8Array(40).fill(0x62);
-    const request = streamedRequest([chunk, chunk, chunk, chunk, chunk], {}, () => {
+    const request = streamedRequest(Array<Uint8Array>(50).fill(chunk), {}, () => {
       pulls += 1;
     });
 
     await expect413(readBoundedRequest(request, 100));
-    // Reading stops at the chunk that crosses the limit (3 x 40 > 100).
-    expect(pulls).toBe(3);
+    // Reading stops at the chunk that crosses the limit (3 x 40 > 100); the
+    // stream itself may have buffered one more chunk ahead.
+    expect(pulls).toBeLessThanOrEqual(4);
+  });
+
+  it("leaves an oversized body uncancelled so the dev server's adapter survives", async () => {
+    const cancelled: string[] = [];
+    const oversized = (label: string, headers: Record<string, string>) =>
+      new Request(URL_, {
+        method: "POST",
+        headers,
+        body: new ReadableStream<Uint8Array>({
+          pull(controller) {
+            controller.enqueue(new Uint8Array(64));
+          },
+          cancel() {
+            cancelled.push(label);
+          },
+        }),
+        duplex: "half",
+      } as RequestInit);
+
+    await expect413(
+      readBoundedRequest(oversized("declared", { "content-length": "101" }), 100),
+    );
+    await expect413(readBoundedRequest(oversized("streamed", {}), 100));
+
+    expect(cancelled).toEqual([]);
   });
 
   it("refuses a body larger than an understated Content-Length", async () => {

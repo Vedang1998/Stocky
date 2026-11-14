@@ -16,24 +16,28 @@ import { deriveOrderLockKey } from "../../../app/lib/order-facts/lock-key";
 import {
   CHILD_MERCHANT_MODELS,
   DIRECT_MERCHANT_MODELS,
+  INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS,
   MERCHANT_DELEGATE_NAMES,
   MERCHANT_OWNED_MODELS,
   PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT,
   PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT,
   PR6_A_CHILD_MERCHANT_MODELS,
   PR6_A_DIRECT_MERCHANT_MODELS,
+  REPLENISHMENT_DIRECT_MERCHANT_MODELS,
 } from "../../../app/tenant/models";
 import { getMigrationClient, getRuntimeClient } from "../connection";
 import {
   COMPOSITE_FOREIGN_KEYS,
   ENFORCEMENT_CONTEXT_VERSION,
   EXPECTED_MERCHANT_TABLE_COUNT,
+  INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT,
   MERCHANT_SQL_TABLES,
   MERCHANT_TABLES,
   ORDER_OBSERVATION_LIFECYCLE_GUARD_FN,
   ORDER_OBSERVATION_SET_LEASE_FN,
   PRE_PR6_A_MERCHANT_TABLE_COUNT,
   PR6_A_ADDED_MERCHANT_TABLE_COUNT,
+  REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT,
 } from "../manifest";
 import { verifyRoles } from "../roles";
 import {
@@ -428,23 +432,42 @@ describe.sequential("PR6-A order / refund fact foundation", () => {
   it("derives DIRECT/CHILD/merchant inventories from the frozen nine-model add", () => {
     expect(PR6_A_DIRECT_MERCHANT_MODELS).toHaveLength(4);
     expect(PR6_A_CHILD_MERCHANT_MODELS).toHaveLength(5);
+    // Later additive inventories (each its own exported list) are summed on
+    // top of the frozen PR6-A totals of 24 direct / 11 child / 35 merchant.
+    const laterDirectAdds =
+      INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS.length +
+      REPLENISHMENT_DIRECT_MERCHANT_MODELS.length;
+    const laterChildAdds = 0;
     expect(DIRECT_MERCHANT_MODELS).toHaveLength(
-      PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT + PR6_A_DIRECT_MERCHANT_MODELS.length,
+      PRE_PR6_A_DIRECT_MERCHANT_MODEL_COUNT +
+        PR6_A_DIRECT_MERCHANT_MODELS.length +
+        laterDirectAdds,
     );
     expect(CHILD_MERCHANT_MODELS).toHaveLength(
-      PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT + PR6_A_CHILD_MERCHANT_MODELS.length,
+      PRE_PR6_A_CHILD_MERCHANT_MODEL_COUNT +
+        PR6_A_CHILD_MERCHANT_MODELS.length +
+        laterChildAdds,
     );
     expect(MERCHANT_OWNED_MODELS).toHaveLength(
       DIRECT_MERCHANT_MODELS.length + CHILD_MERCHANT_MODELS.length,
     );
     expect(EXPECTED_MERCHANT_TABLE_COUNT).toBe(
-      PRE_PR6_A_MERCHANT_TABLE_COUNT + PR6_A_ADDED_MERCHANT_TABLE_COUNT,
+      PRE_PR6_A_MERCHANT_TABLE_COUNT +
+        PR6_A_ADDED_MERCHANT_TABLE_COUNT +
+        INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT +
+        REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT,
     );
+    expect(
+      INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT +
+        REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT,
+    ).toBe(laterDirectAdds + laterChildAdds);
     expect(MERCHANT_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
     expect(MERCHANT_SQL_TABLES).toHaveLength(EXPECTED_MERCHANT_TABLE_COUNT);
-    expect(DIRECT_MERCHANT_MODELS).toHaveLength(24);
-    expect(CHILD_MERCHANT_MODELS).toHaveLength(11);
-    expect(MERCHANT_OWNED_MODELS).toHaveLength(35);
+    expect(DIRECT_MERCHANT_MODELS).toHaveLength(24 + laterDirectAdds);
+    expect(CHILD_MERCHANT_MODELS).toHaveLength(11 + laterChildAdds);
+    expect(MERCHANT_OWNED_MODELS).toHaveLength(
+      35 + laterDirectAdds + laterChildAdds,
+    );
   });
 
   it("registers each approved PR6-A merchant table exactly once with delegates", () => {

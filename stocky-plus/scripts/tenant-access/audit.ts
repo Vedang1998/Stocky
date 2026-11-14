@@ -11,9 +11,16 @@ console.log(
       event: "tenant_access_audit",
       scannedFiles: result.scannedFiles.length,
       findings: result.findings.length,
+      converted: result.findings.filter(
+        (f) => f.conversionStatus === "converted",
+      ).length,
+      approvedExceptions: result.findings.filter(
+        (f) => f.conversionStatus === "approved_exception",
+      ).length,
       violations: result.violations.length,
       exceptionsUsed: result.exceptionsUsed,
       modelsCovered: result.modelsCovered.length,
+      contentDigest: result.contentDigest,
     },
     null,
     2,

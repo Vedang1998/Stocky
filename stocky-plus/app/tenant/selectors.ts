@@ -282,6 +282,51 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
     ],
   },
+  InventoryOperation: {
+    model: "InventoryOperation",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_idempotencyKey",
+        fields: ["shopId", "idempotencyKey"],
+      },
+    ],
+  },
+  InventoryOperationLine: {
+    model: "InventoryOperationLine",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_operationId_lineNumber",
+        fields: ["shopId", "operationId", "lineNumber"],
+      },
+    ],
+  },
+  // The schema's single-column `shopId` unique is deliberately not a selector:
+  // callers read the shop's row with a tenant-scoped findFirst instead.
+  ReplenishmentSettings: {
+    model: "ReplenishmentSettings",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
+  ReplenishmentVariantRule: {
+    model: "ReplenishmentVariantRule",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_variantGid_scopeKey",
+        fields: ["shopId", "variantGid", "scopeKey"],
+      },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [

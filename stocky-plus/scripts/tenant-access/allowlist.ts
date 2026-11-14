@@ -118,6 +118,7 @@ const TEST_FILES = [
   "scripts/tenant-access/__tests__/authority-issuer-scanner.test.ts",
   "app/tenant/__tests__/pr5-f2c-compatibility-projection.test.ts",
   "app/tenant/__tests__/compound-shopid-upsert.test.ts",
+  "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [
@@ -162,6 +163,8 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts",
   "scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts",
   "scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts",
+  "scripts/tenant-enforcement/tests/inventory-operation-ledger.test.ts",
+  "scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {
@@ -309,7 +312,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     category: "tenant_bound_access",
     reason: "Tenant-bound DB contract wraps raw client; never returns it to callers",
     permittedModelsOrOperations: [
-      "All 35 merchant-owned models via scoped delegates",
+      "All 37 merchant-owned models via scoped delegates",
     ],
     productionRuntime: "yes",
     owner: "phase-1-pr2-tenant-access",
