@@ -209,6 +209,16 @@ amounts as the order page.
 | `/app/purchase-orders/:id/csv` | The order's lines with every amount as an exact decimal. |
 | `/app/purchase-orders/export?view=&q=` | The orders of a list view and search, newest first, at most 5,000, read 250 at a time. |
 
+Lines can be imported into an order whose lines are editable from a CSV file
+(`app/services/purchasing/line-import.server.ts`, intent `importLines`): a
+Quantity column and a Variant ID, Barcode or SKU column (looked up in that
+order, exact match, live variants of this shop only), with an optional Unit
+cost. The file is at most 1 MB and 1,000 rows. Every row is checked first;
+if any row is malformed, unknown or matches several products, nothing is added
+and the first ten problems are listed by row. Rows go through
+`addPurchaseOrderLines` at the version the page showed, so a product already
+on the order has its quantity raised. The lines CSV export imports as is.
+
 "Email to supplier" on the order page opens the merchant's own mail app with
 the order summarised (lines are cut short to keep the link under 1,800
 characters of body) and asks them to attach the PDF. The app sends nothing;

@@ -29,6 +29,7 @@ import {
   CHARGE_KIND_LABELS,
   CHARGE_KINDS,
 } from "../lib/purchasing/totals";
+import { actionFailure } from "../services/purchasing/action-result.server";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { supplierEmailHref } from "../services/purchasing/documents.server";
 import { PurchasingError } from "../services/purchasing/errors";
@@ -115,8 +116,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   };
 };
 
+// A lines file is at most 1 MB; the rest of the form is small.
+const MAX_FORM_BYTES = 2_000_000;
+
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const context = await requirePurchasingContext({ request, params });
+  if (Number(request.headers.get("Content-Length") ?? 0) > MAX_FORM_BYTES) {
+    return actionFailure("importLines", "The file is larger than 1 MB.");
+  }
   return runPurchaseOrderIntent(
     context,
     params.id ?? "",

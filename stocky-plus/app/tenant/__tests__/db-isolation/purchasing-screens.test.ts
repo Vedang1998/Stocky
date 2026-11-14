@@ -771,6 +771,225 @@ describe("purchase-order pages", () => {
     });
   });
 
+  describe("line import", () => {
+    const importLines = (
+      id: string,
+      version: string,
+      csv: string | null,
+      context = shopA(),
+    ) => {
+      const form = formData({ intent: "importLines", version });
+      if (csv !== null) {
+        form.set("linesFile", new File([csv], "lines.csv", { type: "text/csv" }));
+      }
+      return runPurchaseOrderIntent(context, id, form, stockOn());
+    };
+
+    const linesOf = async (id: string) =>
+      (await loadPurchaseOrder(dbA, id)).lineItems
+        .map((line) => ({
+          variant: line.shopifyVariantId,
+          qty: line.orderedQty,
+          cost: line.unitCost.toFixed(4),
+          manual: line.manualCostOverride,
+        }))
+        .sort((a, b) => a.variant.localeCompare(b.variant));
+
+    it("adds rows found by barcode, SKU or variant ID and raises lines already on the order", async () => {
+      const po = await purchaseOrder();
+      const result = succeeded(
+        await importLines(
+          po.id,
+          po.version,
+          [
+            "﻿Barcode,SKU,Variant ID,Qty,Unit cost",
+            "0123456789012,,,5,",
+            ',"W-RED",,3,1.2500',
+            ",,202,2,1.25",
+            "",
+          ].join("\r\n"),
+        ),
+      );
+
+      expect(result.notice).toBe(
+        "3 rows imported: 1 product added and 1 already on the order increased.",
+      );
+      expect(await linesOf(po.id)).toEqual([
+        { variant: BLUE, qty: 15, cost: "2.5000", manual: true },
+        { variant: RED, qty: 5, cost: "1.2500", manual: true },
+      ]);
+      expect((await current(po.id)).version).toBe(String(Number(po.version) + 1));
+    });
+
+    it("imports a lines file exported from another purchase order", async () => {
+      const source = await purchaseOrder();
+      succeeded(
+        await submit(source.id, {
+          intent: "addLine",
+          version: source.version,
+          variantGid: RED,
+          quantity: "4",
+          unitCost: "0.7500",
+        }),
+      );
+      const route = await import("../../../routes/app.purchase-orders_.$id_.csv");
+      const exported = await (
+        await route.loader({
+          request: new Request(`https://app.example.test/app/purchase-orders/${source.id}/csv`),
+          params: { id: source.id },
+          context: {},
+        } as unknown as LoaderFunctionArgs)
+      ).text();
+      const { supplierId } = await loadPurchaseOrder(dbA, source.id);
+      const target = await createPurchaseOrderDraft(
+        dbA,
+        BUYER,
+        { supplierId, locationGid: WAREHOUSE },
+        { today: TODAY },
+      );
+
+      succeeded(await importLines(target.id, "1", exported));
+
+      expect(await linesOf(target.id)).toEqual(await linesOf(source.id));
+    });
+
+    it("adds nothing when any row has a problem, and says which rows", async () => {
+      const po = await purchaseOrder();
+      const before = await linesOf(po.id);
+
+      const result = failed(
+        await importLines(
+          po.id,
+          po.version,
+          [
+            "SKU,Barcode,Variant ID,Quantity,Unit cost",
+            "W-RED,,,2,",
+            "W-RED,,,-1,",
+            "W-RED,,,1.5,",
+            "W-RED,,,1e3,",
+            "W-RED,,,2,12.34567",
+            "W-RED,,,2,-1",
+            "NOPE,,,1,",
+            ",,abc,1,",
+            ",,901,1,",
+            ",,,1,",
+          ].join("\n"),
+        ),
+      );
+
+      expect(result.error).toBe(
+        [
+          "Nothing was imported.",
+          "Row 3: the quantity must be a whole number from 1 to 1,000,000.",
+          "Row 4: the quantity must be a whole number from 1 to 1,000,000.",
+          "Row 5: the quantity must be a whole number from 1 to 1,000,000.",
+          "Row 6: the unit cost must be a number such as 12.50, with at most 4 decimals.",
+          "Row 7: the unit cost must be a number such as 12.50, with at most 4 decimals.",
+          'Row 9: "abc" is not a Shopify variant ID.',
+          "Row 11: give a SKU, barcode or variant ID.",
+        ].join(" "),
+      );
+
+      const lookups = failed(
+        await importLines(
+          po.id,
+          po.version,
+          ["SKU,Variant ID,Quantity", "NOPE,,1", ",901,1", "W-RED,,1"].join("\n"),
+        ),
+      );
+      expect(lookups.error).toBe(
+        "Nothing was imported. Row 2: no product has SKU NOPE. Row 3: no product in this store has that variant ID.",
+      );
+      expect(await linesOf(po.id)).toEqual(before);
+      expect((await current(po.id)).version).toBe(po.version);
+    });
+
+    it("asks for the variant ID when a SKU belongs to several products", async () => {
+      const po = await purchaseOrder();
+      const shopId = (await prisma.shop.findFirstOrThrow({ where: { myshopifyDomain: SHOP_A_DOMAIN } })).id;
+      await prisma.shopifyVariantFact.create({
+        data: {
+          ...completeVariantData({ id: "203", shopId, productId: "101" }),
+          title: "Green",
+          sku: "W-RED",
+        },
+      });
+      try {
+        const result = failed(
+          await importLines(po.id, po.version, "SKU,Quantity\nW-RED,1\n"),
+        );
+        expect(result.error).toBe(
+          "Nothing was imported. Row 2: 2 products have SKU W-RED; use the variant ID instead.",
+        );
+      } finally {
+        await prisma.shopifyVariantFact.deleteMany({
+          where: { shopId, shopifyGid: "gid://shopify/ProductVariant/203" },
+        });
+      }
+    });
+
+    it("refuses a file it cannot read, a missing file and a stale page", async () => {
+      const po = await purchaseOrder();
+      const cases: Array<[string | null, string]> = [
+        [null, "Choose a CSV file to import."],
+        ["", "Choose a CSV file to import."],
+        ["SKU,Unit cost\nW-RED,1\n", "The file needs a Quantity column."],
+        ["Name,Quantity\nWidget,1\n", "The file needs a SKU, Barcode or Variant ID column."],
+        ['SKU,Quantity\n"W-RED,1\n', "The file has a quoted value that never ends."],
+        ["SKU,Quantity\n", "The file has no rows to import."],
+        ["x".repeat(1_000_001), "The file is larger than 1 MB."],
+      ];
+      for (const [csv, message] of cases) {
+        expect(failed(await importLines(po.id, po.version, csv)).error, message).toBe(message);
+      }
+      const stale = failed(await importLines(po.id, "99", "SKU,Quantity\nW-RED,1\n"));
+      expect(stale.error).toBe(STALE_VERSION_MESSAGE);
+      expect(await linesOf(po.id)).toHaveLength(1);
+    });
+
+    it("refuses an upload larger than the form allows before reading it", async () => {
+      const po = await purchaseOrder();
+      const route = await import("../../../routes/app.purchase-orders_.$id");
+      const request = new Request(
+        `https://app.example.test/app/purchase-orders/${po.id}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Content-Length": "3000000",
+          },
+          body: "intent=importLines",
+        },
+      );
+      const formData = vi.spyOn(request, "formData");
+
+      const result = await route.action({
+        request,
+        params: { id: po.id },
+        context: {},
+      } as unknown as ActionFunctionArgs);
+
+      expect(result).toEqual({
+        ok: false,
+        intent: "importLines",
+        error: "The file is larger than 1 MB.",
+        fieldErrors: {},
+      });
+      expect(formData).not.toHaveBeenCalled();
+    });
+
+    it("does not let another shop import into this shop's order or use its products", async () => {
+      const po = await purchaseOrder();
+      const intoOurs = failed(
+        await importLines(po.id, po.version, "SKU,Quantity\nW-BLUE,1\n", shopB()),
+      );
+      expect(intoOurs.error).toBe("Purchase order was not found.");
+      expect(await linesOf(po.id)).toEqual([
+        { variant: BLUE, qty: 10, cost: "2.5000", manual: true },
+      ]);
+    });
+  });
+
   describe("another shop", () => {
     it("cannot change, receive or reverse this shop's purchase order", async () => {
       const po = await purchaseOrder({ ordered: true });
@@ -962,6 +1181,9 @@ describe("purchase-order pages", () => {
       expect(html).not.toContain("Receive delivery");
       expect(html).toContain("Widget - Red");
       expect(html).toContain("On this order");
+      expect(html).toMatch(
+        /<form method="post"[^>]*encType="multipart\/form-data"[^>]*><input type="hidden" name="intent" value="importLines"\/>.*?name="linesFile"/s,
+      );
       expect(html).not.toMatch(/NaN|\[object Object\]|undefined/);
     });
 

@@ -21,6 +21,10 @@ import {
 import type { PurchasingContext } from "./actor.server";
 import { PurchasingError } from "./errors";
 import {
+  importPurchaseOrderLines,
+  MAX_LINE_IMPORT_BYTES,
+} from "./line-import.server";
+import {
   addPurchaseOrderLines,
   deletePurchaseOrderDraft,
   duplicatePurchaseOrder,
@@ -231,6 +235,43 @@ export async function runPurchaseOrderIntent(
         return result.missingCostVariantGids.length > 0
           ? `${added} No cost is on file for it; enter the unit cost on the line.`
           : added;
+      });
+    }
+
+    case "importLines": {
+      const file = formData.get("linesFile");
+      if (!(file instanceof Blob) || file.size === 0) {
+        return actionFailure(intent, "Choose a CSV file to import.", {
+          linesFile: "Choose a CSV file to import.",
+        });
+      }
+      if (file.size > MAX_LINE_IMPORT_BYTES) {
+        return actionFailure(intent, "The file is larger than 1 MB.", {
+          linesFile: "The file is larger than 1 MB.",
+        });
+      }
+      const csv = await file.text();
+      return purchasingAction(intent, async () => {
+        const result = await importPurchaseOrderLines(
+          db,
+          actor,
+          purchaseOrderId,
+          version,
+          csv,
+          { admin },
+        );
+        const parts = [
+          `${result.rows} ${result.rows === 1 ? "row" : "rows"} imported:`,
+          result.added === 1 ? "1 product added" : `${result.added} products added`,
+        ];
+        const summary =
+          result.merged > 0
+            ? `${parts.join(" ")} and ${result.merged} already on the order increased.`
+            : `${parts.join(" ")}.`;
+        const missing = result.missingCostVariantGids.length;
+        return missing > 0
+          ? `${summary} ${missing === 1 ? "1 line has" : `${missing} lines have`} no cost on file; enter the unit cost on the line.`
+          : summary;
       });
     }
 

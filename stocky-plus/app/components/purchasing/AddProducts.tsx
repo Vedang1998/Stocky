@@ -124,6 +124,35 @@ export function AddProducts({
             Clear search
           </s-link>
         )}
+
+        <s-divider />
+
+        <Form method="post" encType="multipart/form-data">
+          <input type="hidden" name="intent" value="importLines" />
+          <input type="hidden" name="version" value={version} />
+          <s-stack direction="block" gap="small-200">
+            <s-heading>Import from a CSV file</s-heading>
+            <s-paragraph>
+              One row per product with a Quantity column and a SKU, Barcode or
+              Variant ID column. A Unit cost column is optional; without it the
+              supplier&apos;s price is used. If any row has a problem, nothing
+              is added. A lines file exported from a purchase order can be
+              imported as it is.
+            </s-paragraph>
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <input
+                type="file"
+                name="linesFile"
+                accept=".csv,text/csv"
+                aria-label="Lines file"
+                required
+              />
+              <s-button type="submit" variant="secondary">
+                Import lines
+              </s-button>
+            </s-stack>
+          </s-stack>
+        </Form>
       </s-stack>
     </s-section>
   );
