@@ -121,7 +121,13 @@ const TEST_FILES = [
   "app/tenant/__tests__/pos-tenant.test.ts",
   "app/tenant/__tests__/admin-inventory-lookup.test.ts",
   "app/tenant/__tests__/sync-status-reader.test.ts",
+  "app/tenant/__tests__/label-products.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
+  "app/tenant/__tests__/db-isolation/analytics-sales.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-receiving.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-screens.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-supplier-screens.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [
@@ -169,6 +175,8 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/pr6-a-order-fact-foundation.test.ts",
   "scripts/tenant-enforcement/tests/inventory-operation-ledger.test.ts",
   "scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts",
+  "scripts/tenant-enforcement/tests/adjustment-ledger.test.ts",
+  "scripts/tenant-enforcement/tests/stocktake-workflow.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {

@@ -4,7 +4,7 @@
 |---|---|---|---|---|---|---|
 | R-001 | P0 | Cross-shop IDOR on child mutations | PO/stocktake/transfer/supplier children historically by bare ID | Shop/parent scoping added on critical routes | Landed-cost service still shop-blind internally; no DB-enforced tenancy yet | Phase 1: shopId + composite FKs + RLS + tests |
 | R-002 | P0 | Unsafe stocktake Shopify writes | Serial adjusts; available snapshot; incomplete contract | Kill switch OFF; no complete-on-failure | Logic still not production-ready | Phase 5 rebuild |
-| R-003 | P0 | Receiving does not update Shopify inventory | `receivePartialPO` DB-only | Receipt writes gated OFF | Merchants may expect inventory change | Phase 4 ledger |
+| R-003 | P0 | Receiving does not update Shopify inventory | Legacy `receivePartialPO` was DB-only | Replaced by `services/purchasing/receiving.server.ts`: one `RECEIPT` inventory operation per receipt, counted only when Shopify confirms; receipt writes still gated OFF | Receiving unavailable until the owner turns on `FEATURE_RECEIPT_WRITES`; no sweeper for pending receipts yet | Owner flag decision; pending-receipt sweeper |
 | R-004 | P0 | Wrong forecast / ABC vs Stocky parity | 30/14, OOS, LT, 90-day ABC, no U | Characterization tests lock behavior | Cannot claim parity | Phase 2 engine |
 | R-005 | P0 | Missing privacy compliance processing | Stub webhook only | Topics declared in toml; Phase 1 brief proposes real processors (D-021) | No real redact/export yet | Phase 1 after brief approval; legal review (Q-008) |
 | R-006 | P0 | Branding / naming compliance | Stocky++ in README/SETUP/worker logs | Softened Admin billing/dashboard labels | Docs still dirty | Q-001 |

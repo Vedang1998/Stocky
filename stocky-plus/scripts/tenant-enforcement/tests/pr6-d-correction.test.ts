@@ -186,6 +186,101 @@ describe("PR6-D import completeness, poll, checkpoint, and Bulk A mapping", () =
     expect(result.status).toBe("SUCCEEDED");
   });
 
+  describe("shop profile", () => {
+    const emptyExport = {
+      id: "gid://shopify/BulkOperation/d-profile",
+      status: "COMPLETED",
+      url: null,
+      objectCount: "0",
+      rootObjectCount: "0",
+    };
+
+    async function clearProfile(): Promise<void> {
+      await prisma.shop.update({
+        where: { id: shopAId },
+        data: { ianaTimezone: null, currencyCode: null },
+      });
+    }
+
+    async function readProfile() {
+      const rows = await queryForShop<{
+        ianaTimezone: string | null;
+        currencyCode: string | null;
+      }>(
+        shopAId,
+        `SELECT "ianaTimezone", "currencyCode" FROM "Shop" WHERE id = $1`,
+        [shopAId],
+      );
+      return rows[0];
+    }
+
+    it("stores the shop's time zone and currency when the import starts", async () => {
+      await clearProfile();
+      const admin = createOrderFactsAdmin({
+        stores: {},
+        bulk: emptyExport,
+        shopTimezone: "America/Chicago",
+        shopCurrency: "CAD",
+      });
+      const result = await withTxnHost(shopAId, (db) =>
+        runOrderFactsImportStep({
+          db,
+          admin,
+          shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+          shopId: shopAId,
+          durableJobId: "import-profile",
+          correlationId: "import-profile",
+          pollBulkOperation: true,
+        }),
+      );
+      expect(result.status).toBe("SUCCEEDED");
+      expect(await readProfile()).toEqual({
+        ianaTimezone: "America/Chicago",
+        currencyCode: "CAD",
+      });
+    });
+
+    it("submits no export when the shop's profile cannot be read", async () => {
+      await clearProfile();
+      const inner = createOrderFactsAdmin({ stores: {}, bulk: emptyExport });
+      const queries: string[] = [];
+      const admin = {
+        graphql: async (
+          query: string,
+          options?: Parameters<typeof inner.graphql>[1],
+        ) => {
+          queries.push(query);
+          if (query.includes("ShopTimezoneCurrency")) {
+            return {
+              json: async () => ({ data: { shop: null } }),
+            } as Awaited<ReturnType<typeof inner.graphql>>;
+          }
+          return inner.graphql(query, options);
+        },
+      };
+      await expect(
+        withTxnHost(shopAId, (db) =>
+          runOrderFactsImportStep({
+            db,
+            admin,
+            shop: { id: shopAId, myshopifyDomain: SHOP_A_DOMAIN },
+            shopId: shopAId,
+            durableJobId: "import-profile-unreadable",
+            correlationId: "import-profile-unreadable",
+            pollBulkOperation: true,
+          }),
+        ),
+      ).rejects.toThrow();
+      expect(queries.some((q) => q.includes("bulkOperationRunQuery"))).toBe(
+        false,
+      );
+      expect(await readProfile()).toEqual({
+        ianaTimezone: null,
+        currencyCode: null,
+      });
+    });
+  });
+
   it("fails an empty download of a nonempty export", async () => {
     const admin = createOrderFactsAdmin({
       stores: {},

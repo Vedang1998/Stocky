@@ -21,6 +21,13 @@ const NOT_SHOPPER_DATA = [
   // The merchant's own supplier contacts.
   "Supplier.contactEmail",
   "Supplier.contactPhone",
+  "Supplier.addressLine1",
+  "Supplier.addressLine2",
+  // A purchase order's own header: where the merchant receives and is billed
+  // for stock, and the merchant's staff member who placed it.
+  "PurchaseOrder.shipToAddress",
+  "PurchaseOrder.billToAddress",
+  "PurchaseOrder.buyerName",
   // Street address of the merchant's stock location.
   "ShopifyLocationFact.address1",
 ];
