@@ -184,6 +184,9 @@ A date range is a pair of inclusive shop-local days. The presets "Last 7, 30,
 "Month to date" include today and so change during the day. A custom range may
 span at most 366 days; a longer one is cut to its most recent 366 days and the
 page says so. An unusable range falls back to the last 30 days with a message.
+The default is the last 30 days, except for Transfers, Stocktake variances and
+Inventory adjustments, which open on Month to date so that records made today
+are listed.
 
 ### 9.2 Sales reports
 

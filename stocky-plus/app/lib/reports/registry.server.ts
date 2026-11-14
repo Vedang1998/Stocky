@@ -281,6 +281,7 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
     const parsed = parseReportRequest({
       searchParams,
       usesDateRange: report.usesDateRange,
+      defaultRangePreset: report.defaultRangePreset,
       options: report.options,
       today: context.today,
     });
@@ -501,6 +502,8 @@ const REPORTS: readonly RegisteredReport[] = [
       "Units requested, shipped and received on each transfer between locations.",
     group: "Inventory",
     usesDateRange: true,
+    // Records made today are what a merchant opens these reports to see.
+    defaultRangePreset: "month_to_date",
     options: [],
     load: async (context, request) => {
       const [lines, locations] = await Promise.all([
@@ -526,6 +529,8 @@ const REPORTS: readonly RegisteredReport[] = [
       "What each completed stocktake counted against what was expected, and the value of the difference.",
     group: "Inventory",
     usesDateRange: true,
+    // Records made today are what a merchant opens these reports to see.
+    defaultRangePreset: "month_to_date",
     options: [STOCKTAKE_VIEW_OPTION],
     load: async (context, request) => {
       const [lines, locations] = await Promise.all([
@@ -556,6 +561,8 @@ const REPORTS: readonly RegisteredReport[] = [
       "Every change this app made to your Shopify inventory: what changed, where, why and who made it.",
     group: "Inventory",
     usesDateRange: true,
+    // Records made today are what a merchant opens these reports to see.
+    defaultRangePreset: "month_to_date",
     options: [],
     load: async (context, request) => {
       const [changes, locations] = await Promise.all([

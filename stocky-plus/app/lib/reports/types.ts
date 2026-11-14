@@ -107,6 +107,8 @@ export type ReportDefinition<Row> = {
   description: string;
   group: ReportGroup;
   usesDateRange: boolean;
+  /** Range shown until the merchant picks one; the last 30 complete days when unset. */
+  defaultRangePreset?: string;
   options: readonly ReportOption[];
   load: (
     context: ReportContext,

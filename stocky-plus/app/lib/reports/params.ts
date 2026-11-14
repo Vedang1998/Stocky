@@ -93,12 +93,15 @@ export function resolveDateRange(input: {
   start: string | null;
   end: string | null;
   today: LocalDate;
+  /** Used when no preset was requested. */
+  defaultPreset?: string;
 }): ResolvedDateRange {
   const fallback = presetRange(
     DEFAULT_RANGE_PRESET,
     input.today,
   ) as ReportDateRange;
-  const preset = input.preset ?? DEFAULT_RANGE_PRESET;
+  const preset =
+    input.preset ?? input.defaultPreset ?? DEFAULT_RANGE_PRESET;
 
   if (preset !== CUSTOM_RANGE_PRESET) {
     const range = presetRange(preset, input.today);
@@ -171,6 +174,7 @@ function parsePage(raw: string | null): number {
 export function parseReportRequest(input: {
   searchParams: URLSearchParams;
   usesDateRange: boolean;
+  defaultRangePreset?: string;
   options: readonly ReportOption[];
   today: LocalDate;
 }): ParsedReportRequest {
@@ -182,6 +186,7 @@ export function parseReportRequest(input: {
     start: searchParams.get("start"),
     end: searchParams.get("end"),
     today: input.today,
+    defaultPreset: input.defaultRangePreset,
   });
   if (input.usesDateRange && resolved.problem) problems.push(resolved.problem);
 

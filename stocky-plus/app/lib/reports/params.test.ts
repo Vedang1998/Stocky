@@ -60,6 +60,22 @@ describe("resolveDateRange", () => {
     });
   });
 
+  it("uses the report's own default range when none is requested", () => {
+    const resolved = resolveDateRange({
+      preset: null,
+      start: null,
+      end: null,
+      today: TODAY,
+      defaultPreset: "month_to_date",
+    });
+    expect(resolved.range).toEqual({
+      preset: "month_to_date",
+      startLocalDate: "2026-11-01",
+      endLocalDate: TODAY,
+    });
+    expect(resolved.problem).toBeNull();
+  });
+
   it("falls back with a message for an unknown preset", () => {
     const resolved = range("all_time");
     expect(resolved.range.preset).toBe("last_30_days");
