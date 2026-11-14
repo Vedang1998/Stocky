@@ -132,8 +132,10 @@ export async function resolveCanonicalShopByDomain(
 export async function resolveCanonicalShopProcessingState(
   verifiedDomain: string,
 ): Promise<{ shop: CanonicalShopIdentity; processingEnabled: boolean } | null> {
-  const row = await resolveCanonicalShopByDomain(verifiedDomain, {
-    withProcessingState: true,
+  const myshopifyDomain = normalizeVerifiedShopifyDomain(verifiedDomain);
+  const row = await rawPrisma.shop.findUnique({
+    where: { myshopifyDomain },
+    select: { id: true, myshopifyDomain: true, processingEnabled: true },
   });
   if (!row) return null;
   return {
