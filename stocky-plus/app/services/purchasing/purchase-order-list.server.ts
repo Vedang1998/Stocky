@@ -203,6 +203,8 @@ export async function listPurchaseOrders(
     view?: PurchaseOrderView;
     search?: string | null;
     supplierId?: string | null;
+    /** Only orders delivering to this location. */
+    locationGid?: string | null;
     page?: number;
     /** The merchant's calendar date as YYYY-MM-DD. */
     today?: string | null;
@@ -215,6 +217,7 @@ export async function listPurchaseOrders(
 
   const filters: Prisma.PurchaseOrderWhereInput[] = [viewWhere(view, today)];
   if (options.supplierId) filters.push({ supplierId: options.supplierId });
+  if (options.locationGid) filters.push({ locationId: options.locationGid });
   if (search) filters.push(await searchWhere(db, search));
 
   const [rows, counts]: [PurchaseOrderRecord[], Record<PurchaseOrderView, number>] =

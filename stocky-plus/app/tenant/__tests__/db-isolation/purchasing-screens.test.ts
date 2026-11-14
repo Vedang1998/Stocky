@@ -1042,6 +1042,75 @@ describe("purchase-order pages", () => {
       expect(html).not.toContain('name="idempotencyKey"');
     });
 
+    it("warehouse lists only orders with units to receive, each linked to its receiving page", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const { supplierId } = await loadPurchaseOrder(dbA, po.id);
+      await createPurchaseOrderDraft(
+        dbA,
+        BUYER,
+        {
+          supplierId,
+          locationGid: WAREHOUSE,
+          lines: [
+            { variantGid: RED, quantity: 3, unitCost: new Prisma.Decimal("1") },
+          ],
+        },
+        { today: TODAY },
+      );
+      const route = await import("../../../routes/app.warehouse");
+      const page = async (path: string) => {
+        const data = await route.loader(loaderArgs(path));
+        expect(unsafeWirePaths(data)).toEqual([]);
+        return { data, html: await renderRoute(route.default, data) };
+      };
+
+      const { data, html } = await page("/app/warehouse");
+      const atWarehouse = await page(
+        `/app/warehouse?location=${encodeURIComponent(WAREHOUSE)}&q=acme`,
+      );
+      // Another shop's location is not a filter this shop can use.
+      const foreignLocation = await page(
+        "/app/warehouse?location=gid%3A%2F%2Fshopify%2FLocation%2F411",
+      );
+      const noMatch = await page("/app/warehouse?q=nothing-here");
+
+      expect(data.orders.map((order) => order.id)).toEqual([po.id]);
+      expect(html).toContain("PO-1001");
+      expect(html).not.toContain("PO-1002");
+      expect(html).toContain(`href="/app/purchase-orders/${po.id}/receive"`);
+      expect(html).toContain("10 units (0 of 10 received)");
+      expect(html).toContain("Warehouse");
+      expect(html).toContain("Receiving is turned off for this store");
+      expect(atWarehouse.data.location).toBe(WAREHOUSE);
+      expect(atWarehouse.data.orders).toHaveLength(1);
+      expect(foreignLocation.data.location).toBe("");
+      expect(foreignLocation.data.orders).toHaveLength(1);
+      expect(noMatch.html).toContain("No incoming purchase orders match.");
+      expect(html + noMatch.html).not.toMatch(/NaN|\[object Object\]|undefined/);
+
+      requireAdminTenant.mockResolvedValue({ admin, db: dbB });
+      const otherShop = await page("/app/warehouse");
+      expect(otherShop.data.orders).toEqual([]);
+      expect(otherShop.html).toContain(
+        "Nothing to receive. Purchase orders appear here once they are sent to the supplier.",
+      );
+    });
+
+    it("warehouse drops an order once everything on it is received", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const received = await receive(po.id, {
+        idempotencyKey: "warehouse-full-receipt",
+        [`accepted-${po.blueLineId}`]: "10",
+      });
+      const route = await import("../../../routes/app.warehouse");
+
+      const data = await route.loader(loaderArgs("/app/warehouse"));
+
+      expect(received).toMatchObject({ ok: true });
+      expect((await current(po.id)).status).toBe("RECEIVED");
+      expect(data.orders).toEqual([]);
+    });
+
     it("creates a draft from the new-order form and refuses a malformed one", async () => {
       const supplier = await createSupplier(
         dbA,

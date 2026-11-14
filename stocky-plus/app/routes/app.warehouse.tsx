@@ -1,280 +1,217 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
-import { useEffect, useRef, useState, type ComponentRef } from "react";
-import { submitOnEnter } from "../lib/submit-on-enter";
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
-import { useFetcher, useLoaderData, useSearchParams } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { Form, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { RECEIVING_OFF_MESSAGE } from "../lib/po-display";
-import { receivePartialPO, recordLeadTimeSnapshot } from "../services/landed-cost.server";
+import { formatDay } from "../lib/purchasing/display";
+import { STATUS_LABELS, STATUS_TONES } from "../lib/purchasing/status";
+import { submitOnEnter } from "../lib/submit-on-enter";
+import { listLocations } from "../services/purchasing/locations.server";
+import { listPurchaseOrders } from "../services/purchasing/purchase-order-list.server";
+import { readShopProfile } from "../services/purchasing/shop-profile.server";
+import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+
+const MAX_PAGE = 10_000;
+
+function readPage(value: string | null): number {
+  if (!value || !/^\d{1,5}$/.test(value)) return 1;
+  const page = Number(value);
+  return page >= 1 && page <= MAX_PAGE ? page : 1;
+}
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request });
+  const { admin, db } = await requireAdminTenant({ request });
+  const url = new URL(request.url);
+  const search = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
 
-  const openPOs = await db.purchaseOrder.findMany({
-    where: { status: { in: ["ORDERED", "PARTIAL"] } },
-    include: { supplier: true, lineItems: true },
-    orderBy: { orderedAt: "desc" },
+  const [profile, locations] = await Promise.all([
+    readShopProfile(admin),
+    listLocations(db, admin),
+  ]);
+  // Only a location this shop has narrows the list; anything else shows all.
+  const requestedLocation = url.searchParams.get("location") ?? "";
+  const location = locations.some((l) => l.gid === requestedLocation)
+    ? requestedLocation
+    : "";
+
+  const list = await listPurchaseOrders(db, {
+    view: "incoming",
+    search,
+    locationGid: location || null,
+    page: readPage(url.searchParams.get("page")),
+    today: profile.today,
   });
 
-  const variantIds = openPOs.flatMap((po: any) =>
-    po.lineItems.map((li: any) => li.shopifyVariantId),
-  );
-  const variants = await db.shopifyVariantCache.findMany({
-    where: { shopifyVariantId: { in: variantIds } },
-  });
-
-  return { openPOs, variants };
+  return {
+    orders: list.items.map((po) => ({
+      id: po.id,
+      poNumber: po.poNumber,
+      status: po.status,
+      supplierName: po.supplierName,
+      locationName:
+        locations.find((l) => l.gid === po.locationGid)?.name ??
+        "Unknown location",
+      expectedOn: po.expectedOn,
+      overdue: po.overdue,
+      orderedUnits: po.orderedUnits,
+      receivedUnits: po.receivedUnits,
+      remainingUnits: po.remainingUnits,
+    })),
+    page: list.page,
+    hasNextPage: list.hasNextPage,
+    search,
+    location,
+    locations: locations.map((l) => ({ gid: l.gid, name: l.name })),
+    receivingEnabled: isInventoryWriteEnabled("receiptWrites"),
+  };
 };
 
-export const action = async ({ request }: ActionFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request });
-  const form = await request.formData();
-  const intent = form.get("intent") as string;
+function listHref(search: string, location: string, page = 1): string {
+  const params = new URLSearchParams();
+  if (search) params.set("q", search);
+  if (location) params.set("location", location);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return query ? `/app/warehouse?${query}` : "/app/warehouse";
+}
 
-  if (intent === "scan") {
-    if (!isInventoryWriteEnabled("receiptWrites")) {
-      return { error: RECEIVING_OFF_MESSAGE };
-    }
-
-    const poId = form.get("poId") as string;
-    const barcode = (form.get("barcode") as string).trim();
-    if (!barcode) return { error: "Empty scan" };
-
-    const variant = await db.shopifyVariantCache.findFirst({
-      where: { barcode },
-    });
-    if (!variant) {
-      return { error: `No variant found for barcode ${barcode}` };
-    }
-
-    const po = await db.purchaseOrder.findFirst({
-      where: { id: poId },
-      include: { lineItems: true },
-    });
-    if (!po) return { error: "PO not found" };
-
-    const line = po.lineItems.find(
-      (li: any) =>
-        li.shopifyVariantId === variant.shopifyVariantId &&
-        li.receivedQty < li.orderedQty,
-    );
-    if (!line) {
-      return {
-        error: `${variant.title} is not open on this PO (fully received or not ordered)`,
-      };
-    }
-
-    await receivePartialPO(db, po.id, [{ lineItemId: line.id, receivedQty: 1 }]);
-
-    const updated = await db.purchaseOrder.findFirst({
-      where: { id: po.id },
-    });
-    if (updated?.status === "RECEIVED") {
-      await recordLeadTimeSnapshot(db, updated.supplierId, po.id);
-    }
-
-    return {
-      scanned: {
-        lineItemId: line.id,
-        variantId: variant.shopifyVariantId,
-        title: variant.title,
-        barcode,
-      },
-    };
-  }
-
-  return { ok: false };
-};
-
-interface SessionScan {
-  lineItemId: string;
-  variantId: string;
-  title: string;
-  barcode: string;
-  count: number;
+function units(value: number): string {
+  return `${value} ${value === 1 ? "unit" : "units"}`;
 }
 
 export default function Warehouse() {
-  const { openPOs, variants } = useLoaderData<typeof loader>();
-  const fetcher = useFetcher<typeof action>();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const poId = searchParams.get("poId") ?? openPOs[0]?.id ?? "";
-  const [sessionScans, setSessionScans] = useState<SessionScan[]>([]);
-  const barcodeRef = useRef<ComponentRef<"s-text-field">>(null);
-
-  const selectedPO = openPOs.find((po: any) => po.id === poId);
-  const variantTitle = (id: string) =>
-    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
-
-  // Accumulate scans client-side so "Confirm Receipt" prints exactly what
-  // was received in this session (the Stocky receiving/labeling loop).
-  // State is adjusted during render with a guard ("storing information from
-  // previous renders"), avoiding cascading effect re-renders.
-  const [lastScanData, setLastScanData] = useState<typeof fetcher.data>(undefined);
-  if (fetcher.data !== lastScanData) {
-    setLastScanData(fetcher.data);
-    const data = fetcher.data;
-    if (data && "scanned" in data && data.scanned) {
-      const scan = data.scanned;
-      setSessionScans((prev) => {
-        const existing = prev.find((s) => s.lineItemId === scan.lineItemId);
-        if (existing) {
-          return prev.map((s) =>
-            s.lineItemId === scan.lineItemId ? { ...s, count: s.count + 1 } : s,
-          );
-        }
-        return [...prev, { ...scan, count: 1 }];
-      });
-    }
-  }
-
-  // Clear the scan field once the round-trip settles so the next barcode
-  // scan lands in an empty input.
-  useEffect(() => {
-    const data = fetcher.data;
-    if (
-      fetcher.state === "idle" &&
-      data &&
-      "scanned" in data &&
-      barcodeRef.current
-    ) {
-      barcodeRef.current.value = "";
-      barcodeRef.current.focus();
-    }
-  }, [fetcher.state, fetcher.data]);
-
-  const labelParams = sessionScans
-    .map((s) => `${encodeURIComponent(s.variantId)}:${s.count}`)
-    .join(",");
+  const {
+    orders,
+    page,
+    hasNextPage,
+    search,
+    location,
+    locations,
+    receivingEnabled,
+  } = useLoaderData<typeof loader>();
+  const filtered = Boolean(search || location);
 
   return (
-    <s-page heading="Warehouse — Scan, Receive & Print">
-      <s-section heading="Receiving station">
-        <s-stack direction="block" gap="base">
-          <s-select
-            label="Purchase order"
-            name="poSelect"
-            value={poId}
-            onChange={(e) => {
-              setSearchParams({ poId: e.currentTarget.value });
-              setSessionScans([]);
-            }}
-          >
-            {openPOs.map((po: any) => (
-              <s-option key={po.id} value={po.id}>
-                {po.supplier?.name ?? "Unresolved supplier"} —{" "}
-                {po.id.slice(-6).toUpperCase()} (
-                {po.status})
-              </s-option>
-            ))}
-          </s-select>
-
-          {openPOs.length === 0 && (
-            <s-banner tone="info" heading="No open purchase orders">
-              <s-paragraph>
-                Mark a PO as ordered first, then receive it here.
-              </s-paragraph>
-            </s-banner>
-          )}
-
-          {selectedPO && (
-            <fetcher.Form method="post" onKeyDown={submitOnEnter}>
-              <input type="hidden" name="intent" value="scan" />
-              <input type="hidden" name="poId" value={selectedPO.id} />
-              <s-stack direction="inline" gap="base">
-                <s-text-field
-                  ref={barcodeRef}
-                  label="Scan barcode"
-                  name="barcode"
-                  placeholder="Scan or type a barcode, then press Enter"
-                  autocomplete="off"
-                />
-                <s-button
-                  type="submit"
-                  variant="primary"
-                  {...(fetcher.state !== "idle" ? { loading: true } : {})}
-                >
-                  Receive +1
-                </s-button>
-              </s-stack>
-            </fetcher.Form>
-          )}
-
-          {fetcher.data && "error" in fetcher.data && fetcher.data.error && (
-            <s-banner tone="critical" heading="Scan failed">
-              <s-paragraph>{fetcher.data.error}</s-paragraph>
-            </s-banner>
-          )}
-        </s-stack>
-      </s-section>
-
-      {selectedPO && (
-        <s-section heading="PO progress">
-          <s-table>
-            <s-table-header-row>
-              <s-table-header>Variant</s-table-header>
-              <s-table-header format="numeric">Ordered</s-table-header>
-              <s-table-header format="numeric">Received</s-table-header>
-              <s-table-header>Status</s-table-header>
-            </s-table-header-row>
-            <s-table-body>
-              {selectedPO.lineItems.map((li: any) => (
-                <s-table-row key={li.id}>
-                  <s-table-cell>{variantTitle(li.shopifyVariantId)}</s-table-cell>
-                  <s-table-cell>{li.orderedQty}</s-table-cell>
-                  <s-table-cell>{li.receivedQty}</s-table-cell>
-                  <s-table-cell>
-                    {li.receivedQty >= li.orderedQty ? (
-                      <s-badge tone="success">Complete</s-badge>
-                    ) : li.receivedQty > 0 ? (
-                      <s-badge tone="warning">Partial</s-badge>
-                    ) : (
-                      <s-badge tone="neutral">Expected</s-badge>
-                    )}
-                  </s-table-cell>
-                </s-table-row>
-              ))}
-            </s-table-body>
-          </s-table>
-        </s-section>
+    <s-page heading="Receiving">
+      {!receivingEnabled && (
+        <s-banner tone="info" heading="Receiving is turned off for this store">
+          <s-paragraph>{RECEIVING_OFF_MESSAGE}</s-paragraph>
+        </s-banner>
       )}
 
-      <s-section heading="This session" slot="aside">
-        {sessionScans.length === 0 ? (
-          <s-paragraph>No scans yet this session.</s-paragraph>
-        ) : (
-          <s-stack direction="block" gap="base">
-            <s-unordered-list>
-              {sessionScans.map((s) => (
-                <s-list-item key={s.lineItemId}>
-                  {s.title} × {s.count}
-                </s-list-item>
-              ))}
-            </s-unordered-list>
-            <s-button
-              href={`/app/warehouse/labels?items=${labelParams}`}
-              target="_blank"
-              variant="primary"
-            >
-              Confirm receipt — print {sessionScans.reduce((a, s) => a + s.count, 0)} labels (ZPL)
-            </s-button>
+      <s-section>
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Purchase orders sent to suppliers that still have units to
+            receive. Open one to count the delivery, scan barcodes and print
+            labels for what arrived.
+          </s-paragraph>
+
+          <Form method="get" onKeyDown={submitOnEnter}>
+            <s-stack direction="inline" gap="small-200" alignItems="end">
+              <s-search-field
+                label="Search incoming orders"
+                labelAccessibilityVisibility="exclusive"
+                name="q"
+                value={search}
+                placeholder="PO number, supplier, supplier order or invoice number"
+              />
+              {locations.length > 1 && (
+                <s-select label="Destination" name="location" value={location}>
+                  <s-option value="">All locations</s-option>
+                  {locations.map((l) => (
+                    <s-option key={l.gid} value={l.gid}>
+                      {l.name}
+                    </s-option>
+                  ))}
+                </s-select>
+              )}
+              <s-button type="submit">Search</s-button>
+              {filtered && (
+                <s-button href="/app/warehouse" variant="tertiary">
+                  Clear
+                </s-button>
+              )}
+            </s-stack>
+          </Form>
+
+          {orders.length === 0 ? (
             <s-paragraph>
-              <s-text color="subdued">
-                Zebra: send the downloaded .zpl file to your printer. Dymo:
-                use Dymo Connect with the barcode values shown.
-              </s-text>
+              {filtered
+                ? "No incoming purchase orders match."
+                : "Nothing to receive. Purchase orders appear here once they are sent to the supplier."}
             </s-paragraph>
-            <s-button variant="tertiary" onClick={() => setSessionScans([])}>
-              Clear session
-            </s-button>
-          </s-stack>
-        )}
+          ) : (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">
+                  Purchase order
+                </s-table-header>
+                <s-table-header>Supplier</s-table-header>
+                <s-table-header listSlot="secondary">Status</s-table-header>
+                <s-table-header>Destination</s-table-header>
+                <s-table-header>Expected</s-table-header>
+                <s-table-header format="numeric">Still to receive</s-table-header>
+                <s-table-header>Receive</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {orders.map((po) => (
+                  <s-table-row key={po.id}>
+                    <s-table-cell>
+                      <s-link href={`/app/purchase-orders/${po.id}`}>
+                        {po.poNumber}
+                      </s-link>
+                    </s-table-cell>
+                    <s-table-cell>{po.supplierName}</s-table-cell>
+                    <s-table-cell>
+                      <s-badge tone={STATUS_TONES[po.status]}>
+                        {STATUS_LABELS[po.status]}
+                      </s-badge>
+                    </s-table-cell>
+                    <s-table-cell>{po.locationName}</s-table-cell>
+                    <s-table-cell>
+                      <s-stack direction="inline" gap="small-200">
+                        <s-text>{formatDay(po.expectedOn)}</s-text>
+                        {po.overdue && (
+                          <s-badge tone="critical">Overdue</s-badge>
+                        )}
+                      </s-stack>
+                    </s-table-cell>
+                    <s-table-cell>
+                      {units(po.remainingUnits)} ({po.receivedUnits} of{" "}
+                      {po.orderedUnits} received)
+                    </s-table-cell>
+                    <s-table-cell>
+                      <s-button
+                        href={`/app/purchase-orders/${po.id}/receive`}
+                        variant="primary"
+                        accessibilityLabel={`Receive ${po.poNumber}`}
+                      >
+                        Receive
+                      </s-button>
+                    </s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
+          )}
+
+          {(page > 1 || hasNextPage) && (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              {page > 1 && (
+                <s-button href={listHref(search, location, page - 1)}>
+                  Previous
+                </s-button>
+              )}
+              <s-text color="subdued">Page {page}</s-text>
+              {hasNextPage && (
+                <s-button href={listHref(search, location, page + 1)}>
+                  Next
+                </s-button>
+              )}
+            </s-stack>
+          )}
+        </s-stack>
       </s-section>
     </s-page>
   );

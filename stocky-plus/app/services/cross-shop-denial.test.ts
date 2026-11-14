@@ -20,9 +20,6 @@ const {
   adjustShopifyInventory,
   createShopifyTransfer,
   completeShopifyTransfer,
-  applyLandedCostsToPO,
-  receivePartialPO,
-  recalculatePOLineCost,
   resolveTieredUnitCost,
   featureFlags,
   resolveCanonicalShopByDomain,
@@ -101,9 +98,6 @@ const {
     adjustShopifyInventory: vi.fn(),
     createShopifyTransfer: vi.fn(),
     completeShopifyTransfer: vi.fn(),
-    applyLandedCostsToPO: vi.fn(),
-    receivePartialPO: vi.fn(),
-    recalculatePOLineCost: vi.fn(),
     resolveTieredUnitCost: vi.fn(),
     resolveCanonicalShopByDomain: vi.fn(),
     featureFlags: {
@@ -152,10 +146,6 @@ vi.mock("../services/shopify-sync.server", () => ({
 }));
 
 vi.mock("../services/landed-cost.server", () => ({
-  applyLandedCostsToPO,
-  receivePartialPO,
-  recalculatePOLineCost,
-  recordLeadTimeSnapshot: vi.fn(),
   resolveTieredUnitCost,
 }));
 
