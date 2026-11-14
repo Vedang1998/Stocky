@@ -109,6 +109,7 @@ export type CreateDraftInput = {
   source?: PurchaseOrderSource;
   currency?: string | null;
   exchangeRate?: Prisma.Decimal | null;
+  /** Null or left out: today plus the supplier's lead time, when it has one. */
   expectedOn?: Date | null;
   notes?: string | null;
 };
@@ -540,12 +541,14 @@ export async function createPurchaseOrderDraft(
   const variantGids = lines.map((line) => line.variantGid);
   const variants = await requireLiveVariants(db, variantGids, options.admin);
 
+  // No date given (an empty form field included): today plus the supplier's
+  // lead time, its default first, then its measured average rounded up.
+  const leadTimeDays =
+    supplier.defaultLeadTimeDays ??
+    (supplier.leadTimeDays !== null ? Math.max(0, Math.ceil(supplier.leadTimeDays)) : null);
   const expectedOn =
-    input.expectedOn !== undefined
-      ? input.expectedOn
-      : supplier.defaultLeadTimeDays !== null && options.today
-        ? addCalendarDays(options.today, supplier.defaultLeadTimeDays)
-        : null;
+    input.expectedOn ??
+    (leadTimeDays !== null && options.today ? addCalendarDays(options.today, leadTimeDays) : null);
 
   for (let attempt = 1; attempt <= NUMBERING_ATTEMPTS; attempt++) {
     try {

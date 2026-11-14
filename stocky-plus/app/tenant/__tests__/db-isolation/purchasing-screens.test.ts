@@ -17,6 +17,10 @@ import * as reactPdf from "@react-pdf/renderer";
 import { isValidElement } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { RECEIVING_OFF_MESSAGE } from "../../../lib/po-display";
+import {
+  formatCalendarDate,
+  todayInTimeZone,
+} from "../../../lib/purchasing/form-input";
 import { STAFF_REQUIRED_MESSAGE } from "../../../services/inventory-writes/actor.server";
 import type { ExecuteInventoryOperationOptions } from "../../../services/inventory-writes/execute.server";
 import type { InventoryActor } from "../../../services/inventory-writes/types";
@@ -1131,6 +1135,57 @@ describe("purchase-order pages", () => {
       expect(received).toMatchObject({ ok: true });
       expect((await current(po.id)).status).toBe("RECEIVED");
       expect(data.orders).toEqual([]);
+    });
+
+    it("dates a new order by the supplier's lead time when the form leaves the date empty", async () => {
+      const route = await import("../../../routes/app.purchase-orders_.new");
+      const path = "/app/purchase-orders/new";
+      const withDefault = await createSupplier(dbA, BUYER, {
+        ...supplierProfile("Acme Supply"),
+        defaultLeadTimeDays: 7,
+      });
+      const measuredOnly = await createSupplier(
+        dbA,
+        BUYER,
+        supplierProfile("Measured Supply"),
+      );
+      await prisma.supplier.update({
+        where: { id: measuredOnly.id },
+        data: { leadTimeDays: 4.2 },
+      });
+      const without = await createSupplier(
+        dbA,
+        BUYER,
+        supplierProfile("No Lead Supply"),
+      );
+      const create = async (
+        supplierId: string,
+        creationKey: string,
+        expectedOn = "",
+      ) => {
+        const result = await route.action(
+          actionArgs(
+            path,
+            {},
+            { supplierId, locationGid: WAREHOUSE, creationKey, expectedOn },
+          ),
+        );
+        const id = (result as Response).headers.get("Location")!.split("/").pop()!;
+        const po = await prisma.purchaseOrder.findUniqueOrThrow({ where: { id } });
+        return formatCalendarDate(po.expectedOn);
+      };
+      const today = todayInTimeZone("America/New_York")!;
+      const plus = (days: number) =>
+        formatCalendarDate(
+          new Date(Date.parse(`${today}T00:00:00Z`) + days * 86_400_000),
+        );
+
+      expect(await create(withDefault.id, "lead-default")).toBe(plus(7));
+      expect(await create(measuredOnly.id, "lead-measured")).toBe(plus(5));
+      expect(await create(without.id, "lead-none")).toBeNull();
+      expect(await create(withDefault.id, "lead-explicit", "2026-12-24")).toBe(
+        "2026-12-24",
+      );
     });
 
     it("creates a draft from the new-order form and refuses a malformed one", async () => {

@@ -269,6 +269,37 @@ describe("supplier pages", () => {
       });
     });
 
+    it("saves no preferred contact method from the form's Not set option", async () => {
+      const result = await createSupplierFromForm(
+        shopA(),
+        formData({
+          intent: "create",
+          ...PROFILE_FIELDS,
+          preferredContactMethod: "NONE",
+        }),
+      );
+      const [created] = await prisma.supplier.findMany();
+      const set = await submit(created!.id, {
+        intent: "saveProfile",
+        ...PROFILE_FIELDS,
+        preferredContactMethod: "PORTAL",
+      });
+      const cleared = await submit(created!.id, {
+        intent: "saveProfile",
+        ...PROFILE_FIELDS,
+        preferredContactMethod: "NONE",
+      });
+
+      expect(redirectedTo(result)).toBe(`/app/suppliers/${created!.id}`);
+      expect(created!.preferredContactMethod).toBeNull();
+      expect(set).toMatchObject({ ok: true });
+      expect(cleared).toMatchObject({ ok: true });
+      expect(
+        (await prisma.supplier.findUniqueOrThrow({ where: { id: created!.id } }))
+          .preferredContactMethod,
+      ).toBeNull();
+    });
+
     it.each([
       ["no name", { name: "" }, "name"],
       ["a currency that is not 3 letters", { currency: "US" }, "currency"],
@@ -909,6 +940,10 @@ describe("supplier pages", () => {
 
       expect(html).toContain('name="currency" value="USD"');
       expect(html).toContain("Supplier portal");
+      // An option with an empty value would submit its label instead.
+      expect(html).toMatch(/name="preferredContactMethod" value="NONE"/);
+      expect(html).toContain('<s-option value="NONE">Not set</s-option>');
+      expect(html).not.toContain('<s-option value="">');
       expect(redirectedTo(created)).toMatch(/^\/app\/suppliers\/[a-z0-9]+$/);
     });
   });

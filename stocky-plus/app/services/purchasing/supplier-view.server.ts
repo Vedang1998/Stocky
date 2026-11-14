@@ -7,6 +7,7 @@ import type { TenantDb } from "../../tenant/tenant-db.server";
 import { decimalToWire } from "../../lib/decimal-wire.server";
 import {
   getSupplierDetail,
+  NO_CONTACT_METHOD,
   SUPPLIER_CONTACT_METHOD_LABELS,
   SUPPLIER_CONTACT_METHODS,
   type SupplierStatus,
@@ -85,10 +86,13 @@ export function contactMethodOptions(): Array<{
   value: string;
   label: string;
 }> {
-  return SUPPLIER_CONTACT_METHODS.map((value) => ({
-    value,
-    label: SUPPLIER_CONTACT_METHOD_LABELS[value],
-  }));
+  return [
+    { value: NO_CONTACT_METHOD, label: "Not set" },
+    ...SUPPLIER_CONTACT_METHODS.map((value) => ({
+      value,
+      label: SUPPLIER_CONTACT_METHOD_LABELS[value],
+    })),
+  ];
 }
 
 /** Empty profile values for the new-supplier form. */
@@ -101,7 +105,7 @@ export function emptySupplierProfile(
     contactName: "",
     contactEmail: "",
     contactPhone: "",
-    preferredContactMethod: "",
+    preferredContactMethod: NO_CONTACT_METHOD,
     website: "",
     addressLine1: "",
     addressLine2: "",
@@ -155,7 +159,8 @@ export async function getSupplierView(
       contactName: text(supplier.contactName),
       contactEmail: text(supplier.contactEmail),
       contactPhone: text(supplier.contactPhone),
-      preferredContactMethod: text(supplier.preferredContactMethod),
+      preferredContactMethod:
+        supplier.preferredContactMethod ?? NO_CONTACT_METHOD,
       website: text(supplier.website),
       addressLine1: text(supplier.addressLine1),
       addressLine2: text(supplier.addressLine2),

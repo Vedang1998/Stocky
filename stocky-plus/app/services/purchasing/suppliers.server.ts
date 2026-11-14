@@ -23,6 +23,11 @@ import {
 
 export const SUPPLIER_CONTACT_METHODS = ["EMAIL", "PHONE", "PORTAL", "OTHER"] as const;
 export type SupplierContactMethod = (typeof SUPPLIER_CONTACT_METHODS)[number];
+/**
+ * The form value for "no preferred contact method". An option with an empty
+ * value submits its label in the admin's select, so "not set" needs a value.
+ */
+export const NO_CONTACT_METHOD = "NONE";
 
 export const SUPPLIER_CONTACT_METHOD_LABELS: Record<SupplierContactMethod, string> = {
   EMAIL: "Email",
@@ -96,7 +101,7 @@ export function parseSupplierProfileForm(
     preferredContactMethod: form.choice(
       "preferredContactMethod",
       SUPPLIER_CONTACT_METHODS,
-      { label: "Preferred contact method" },
+      { label: "Preferred contact method", none: NO_CONTACT_METHOD },
     ),
     website: form.url("website", { label: "Website" }),
     addressLine1: form.text("addressLine1", { maxLength: 255, label: "Address" }),

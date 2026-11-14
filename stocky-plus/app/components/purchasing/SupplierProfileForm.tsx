@@ -88,7 +88,6 @@ export function SupplierProfileForm({
             value={values.preferredContactMethod}
             error={fieldErrors.preferredContactMethod}
           >
-            <s-option value="">Not set</s-option>
             {contactMethods.map((method) => (
               <s-option key={method.value} value={method.value}>
                 {method.label}

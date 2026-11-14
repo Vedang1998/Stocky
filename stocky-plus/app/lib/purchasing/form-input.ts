@@ -154,11 +154,15 @@ export class FormReader {
   choice<T extends string>(
     name: string,
     allowed: readonly T[],
-    opts: Presence & { label?: string },
+    opts: Presence & {
+      label?: string;
+      /** The value of a select's "not set" option, read as no choice. */
+      none?: string;
+    },
   ): T | null {
     const value = this.raw(name);
     const label = opts.label ?? "Value";
-    if (value === null) {
+    if (value === null || (opts.none !== undefined && value === opts.none)) {
       return opts.required ? this.fail(name, `${label} is required.`) : null;
     }
     if (!(allowed as readonly string[]).includes(value)) {

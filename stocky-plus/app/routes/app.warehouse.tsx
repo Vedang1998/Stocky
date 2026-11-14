@@ -28,7 +28,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     readShopProfile(admin),
     listLocations(db, admin),
   ]);
-  // Only a location this shop has narrows the list; anything else shows all.
+  // Only a location this shop has narrows the list; "all" or anything else
+  // shows every destination.
   const requestedLocation = url.searchParams.get("location") ?? "";
   const location = locations.some((l) => l.gid === requestedLocation)
     ? requestedLocation
@@ -117,8 +118,12 @@ export default function Warehouse() {
                 placeholder="PO number, supplier, supplier order or invoice number"
               />
               {locations.length > 1 && (
-                <s-select label="Destination" name="location" value={location}>
-                  <s-option value="">All locations</s-option>
+                <s-select
+                  label="Destination"
+                  name="location"
+                  value={location || "all"}
+                >
+                  <s-option value="all">All locations</s-option>
                   {locations.map((l) => (
                     <s-option key={l.gid} value={l.gid}>
                       {l.name}
