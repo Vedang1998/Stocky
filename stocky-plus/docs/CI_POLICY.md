@@ -107,9 +107,9 @@ The `validate` job keeps the historical check name
 `Lint, typecheck, test, build, Prisma, GraphQL`. Since the split into parallel
 jobs that check alone no longer covers the database suites; `CI Gate` does,
 because it requires every full-CI job. The stable always-present check is
-`CI Gate`. GitHub may treat a skipped required check as success, so `CI Gate`
-should be the merge gate once the repository ruleset is updated. This file
-does not change the ruleset.
+`CI Gate`. GitHub may treat a skipped required check as success, so the
+`Protect main` ruleset requires both checks, with branches up to date before
+merging. This file does not change the ruleset.
 
 ## Out of scope
 
