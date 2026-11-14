@@ -186,6 +186,25 @@ describe("partnerSubscriptionRecord", () => {
     ).toBeNull();
   });
 
+  it("ignores an item without a handle when choosing the plan", () => {
+    const [plan] = activeSubscription().items;
+    const record = partnerSubscriptionRecord(
+      activeSubscription({
+        items: [
+          {
+            handle: null,
+            description: "Setup",
+            price: { __typename: "FlatRatePrice", currency: "USD", amount: "5.00" },
+            discount: null,
+          },
+          plan,
+        ],
+      }),
+    );
+    expect(record.planHandle).toBe("growth");
+    expect(record.price).toEqual({ amount: "79.00", currencyCode: "USD" });
+  });
+
   it("reports no plan handle for a subscription without items", () => {
     const record = partnerSubscriptionRecord(activeSubscription({ items: [] }));
     expect(record).toMatchObject({ planHandle: null, name: "", price: null });
@@ -282,6 +301,25 @@ describe("partnerApiSubscriptionSource", () => {
     );
   });
 
+  it("accepts a response with an item whose handle is null", async () => {
+    const subscription = activeSubscription();
+    const { source } = sourceReturning(() =>
+      jsonResponse({
+        data: {
+          activeSubscription: {
+            ...subscription,
+            items: [
+              { handle: null, description: null, price: null, discount: null },
+              ...subscription.items,
+            ],
+          },
+        },
+      }),
+    );
+    const [record] = await source.listSubscriptions();
+    expect(record.planHandle).toBe("growth");
+  });
+
   it("refuses a subscription that belongs to another shop", async () => {
     const { source } = sourceReturning(() =>
       jsonResponse({
@@ -348,10 +386,10 @@ describe("subscriptionSourceFor", () => {
   });
 
   it("says once, in production, that the Admin API is being read", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
     subscriptionSourceFor(admin, { NODE_ENV: "production" });
     subscriptionSourceFor(admin, { NODE_ENV: "production" });
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain("Partner API credentials");
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(error.mock.calls[0][0]).toContain("Partner API credentials");
   });
 });

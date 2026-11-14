@@ -11,7 +11,10 @@ import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import type { Session } from "@shopify/shopify-api";
 import rawPrisma from "../db.server";
 import { encryptedSessionStorage } from "../lib/session-tokens/encrypted-session-storage.server";
-import { loadSessionTokenCipher } from "../lib/session-tokens/cipher.server";
+import {
+  SessionTokenError,
+  loadSessionTokenCipher,
+} from "../lib/session-tokens/cipher.server";
 import {
   issueTenantAuthority,
   type TenantAuthority,
@@ -25,6 +28,13 @@ export type CanonicalShopIdentity = {
 };
 
 /**
+ * Read when this module loads, which is at start-up for both the web server
+ * and the worker: a production process without SESSION_TOKEN_ENCRYPTION_KEY
+ * stops there instead of starting and failing every authenticated request.
+ */
+const sessionTokenCipher = loadSessionTokenCipher();
+
+/**
  * Session-storage adapter constructed inside the bootstrap boundary (lazy).
  * Access and refresh tokens are encrypted before they reach the table.
  */
@@ -34,7 +44,7 @@ function getShopifySessionStorage(): SessionStorage {
   if (!_shopifySessionStorage) {
     _shopifySessionStorage = encryptedSessionStorage(
       new PrismaSessionStorage(rawPrisma),
-      loadSessionTokenCipher(),
+      sessionTokenCipher,
     );
   }
   return _shopifySessionStorage;
@@ -187,11 +197,35 @@ export async function deleteSessionsForShop(shopDomain: string): Promise<number>
  * older key with the current encryption key. Run it after switching
  * encryption on and after adding a new key, before the old key is removed.
  * A row whose token changes while this runs is left to the writer that
- * changed it.
+ * changed it. A row that cannot be read (written under a key that is no
+ * longer listed, or damaged) is skipped and counted, so one bad row does not
+ * stop the rest; the old key may be removed only when a run reports no
+ * unreadable rows and nothing rewritten.
  */
+type SessionTokenRow = {
+  id: string;
+  accessToken: string;
+  refreshToken: string | null;
+};
+
+/** The two Session calls the re-encrypt run makes; a test can wrap them. */
+export type SessionTokenTable = {
+  findMany(args: {
+    select: { id: true; accessToken: true; refreshToken: true };
+    where: { id?: { gt: string } };
+    orderBy: { id: "asc" };
+    take: number;
+  }): Promise<SessionTokenRow[]>;
+  updateMany(args: {
+    where: SessionTokenRow;
+    data: { accessToken?: string; refreshToken?: string };
+  }): Promise<{ count: number }>;
+};
+
 export async function reencryptSessionTokens(
   batchSize = 200,
-): Promise<{ sessions: number; rewritten: number }> {
+  table: SessionTokenTable = rawPrisma.session,
+): Promise<{ sessions: number; rewritten: number; unreadable: string[] }> {
   const cipher = loadSessionTokenCipher();
   if (!cipher) {
     throw new Error(
@@ -200,13 +234,16 @@ export async function reencryptSessionTokens(
   }
   let sessions = 0;
   let rewritten = 0;
+  const unreadable: string[] = [];
   let after: string | undefined;
   for (;;) {
-    const rows = await rawPrisma.session.findMany({
+    // Keyset paging: a row deleted between pages (an uninstall) cannot end
+    // the run early, as a Prisma cursor on a missing row would.
+    const rows = await table.findMany({
       select: { id: true, accessToken: true, refreshToken: true },
+      where: after === undefined ? {} : { id: { gt: after } },
       orderBy: { id: "asc" },
       take: batchSize,
-      ...(after ? { cursor: { id: after }, skip: 1 } : {}),
     });
     if (rows.length === 0) break;
     for (const row of rows) {
@@ -215,18 +252,16 @@ export async function reencryptSessionTokens(
       const staleRefresh =
         row.refreshToken !== null && cipher.isStale(row.refreshToken);
       if (!staleAccess && !staleRefresh) continue;
-      const result = await rawPrisma.session.updateMany({
-        where: {
-          id: row.id,
-          accessToken: row.accessToken,
-          refreshToken: row.refreshToken,
-        },
-        data: {
+
+      let data: { accessToken?: string; refreshToken?: string };
+      try {
+        data = {
           ...(staleAccess
             ? {
                 accessToken: cipher.seal(
                   row.id,
-                  cipher.open(row.id, row.accessToken),
+                  "accessToken",
+                  cipher.open(row.id, "accessToken", row.accessToken),
                 ),
               }
             : {}),
@@ -234,17 +269,31 @@ export async function reencryptSessionTokens(
             ? {
                 refreshToken: cipher.seal(
                   row.id,
-                  cipher.open(row.id, row.refreshToken!),
+                  "refreshToken",
+                  cipher.open(row.id, "refreshToken", row.refreshToken!),
                 ),
               }
             : {}),
+        };
+      } catch (error) {
+        if (!(error instanceof SessionTokenError)) throw error;
+        unreadable.push(row.id);
+        continue;
+      }
+
+      const result = await table.updateMany({
+        where: {
+          id: row.id,
+          accessToken: row.accessToken,
+          refreshToken: row.refreshToken,
         },
+        data,
       });
       rewritten += result.count;
     }
     after = rows[rows.length - 1].id;
   }
-  return { sessions, rewritten };
+  return { sessions, rewritten, unreadable };
 }
 
 /**

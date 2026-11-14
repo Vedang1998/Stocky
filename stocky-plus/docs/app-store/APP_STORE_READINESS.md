@@ -51,7 +51,7 @@ Steps only the owner can take:
 |---|---|
 | Create the App Pricing plans in the Partner Dashboard, including a $0 plan or review-store exemption for Shopify's reviewers | None exist. Until they do, the billing page has nothing to offer. |
 | Set `SHOPIFY_APP_HANDLE` in every environment | The billing page builds the plan-selection link from it. |
-| Create a Partner API client with the Manage apps permission and set `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_ACCESS_TOKEN` and `SHOPIFY_APP_GID` | Dev Dashboard, Organization settings, Users, Security, Partner API clients. Without them the app reads subscription status from the Admin API, which Shopify does not document for App Pricing. |
+| Create a Partner API client and set `SHOPIFY_PARTNER_ORG_ID`, `SHOPIFY_PARTNER_API_ACCESS_TOKEN` and `SHOPIFY_APP_GID` on the web service | Dev Dashboard, Organization settings, Users, Security, Partner API clients. Give it the Manage apps permission and nothing else: the token reads every shop's subscription in the Partner organization. `SHOPIFY_PARTNER_ORG_ID` is the Partner ID from the Partner Dashboard URL, not the organization ID in the Dev Dashboard URL. Without these the app reads the Admin API, which probably lists no App Pricing subscription, so every paying shop would be locked out (R-195). |
 | Answer the nine protected customer data questions | `PROTECTED_CUSTOMER_DATA_ANSWERS.md` has an answer for each with the code behind it. Answers 1, 3, 5, 6 and 7 change if a feature starts storing customer fields. |
 | Publish the privacy policy and terms; have counsel read them | `PRIVACY_POLICY_DRAFT.md` is an outline, not legal text. |
 | Choose the production host and give it a domain | The released app version still points at `example.com`, so install can only be tested through `shopify app dev`. |
@@ -67,7 +67,8 @@ For whoever sets up the production host. Nothing here has been deployed.
 - Role provisioning has to run as a PostgreSQL superuser (see `DATA_DELETION.md`). Confirm this on the chosen host before launch.
 - `SHOPIFY_APP_URL` must be set at runtime, and the start command must stay `npm start`: the server takes the only allowed form origin from it (issue #107).
 - The worker stops at start-up without `DATABASE_CONTROL_PLANE_URL` (a connection as the `stocky_control_plane` role) and `STOCKY_DISPATCHER_PROCESS_COUNT` (the number of worker processes, 1 for one). Web and worker also need `DATABASE_URL` for the runtime role, `REDIS_URL` and `TENANT_JOB_ENVELOPE_SECRET`.
-- `SESSION_TOKEN_ENCRYPTION_KEY` must be set on web, worker and the release step; in production the app does not start without it. Generate it with `openssl rand -base64 32`. On the first deploy that sets it, and after adding a new key in front of the old one, run `npm run session-tokens:reencrypt` once from the release step; remove the old key only after a run reports nothing rewritten.
+- `SESSION_TOKEN_ENCRYPTION_KEY` must be set on web, worker and the release step; in production the app does not start without it. Generate it with `openssl rand -base64 32`. On the first deploy that sets it, and after adding a new key in front of the old one, run `npm run session-tokens:reencrypt` once from the release step; remove the old key only after a run reports nothing rewritten and nothing unreadable (it exits 1 while any row is unreadable and lists those session ids).
+- The three Partner API settings above are needed in production for billing to work.
 - `PRIVACY_UNINSTALLED_RETENTION_DAYS` and the other variables are listed in `.env.example`.
 - Pin the base image by digest in the `Dockerfile` when the host is chosen.
 - Rate limiting is left to the hosting edge (R-190).

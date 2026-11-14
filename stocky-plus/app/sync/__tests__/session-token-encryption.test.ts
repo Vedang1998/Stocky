@@ -160,8 +160,74 @@ describe("session tokens at rest (R-191)", () => {
 
     const row = await prisma.session.findUniqueOrThrow({ where: { id: ID } });
     const newKeyOnly = createSessionTokenCipher(nextKey);
-    expect(newKeyOnly.open(ID, row.accessToken)).toBe(ACCESS);
-    expect(newKeyOnly.open(ID, row.refreshToken!)).toBe(REFRESH);
+    expect(newKeyOnly.open(ID, "accessToken", row.accessToken)).toBe(ACCESS);
+    expect(newKeyOnly.open(ID, "refreshToken", row.refreshToken!)).toBe(
+      REFRESH,
+    );
+  });
+
+  it("skips and reports a row it cannot read and rewrites the rest", async () => {
+    const lostKey = randomBytes(32).toString("base64");
+    const unreadableId = `offline_a-${SHOP}`;
+    await prisma.session.create({
+      data: {
+        id: unreadableId,
+        shop: SHOP,
+        state: "state",
+        isOnline: false,
+        accessToken: createSessionTokenCipher(lostKey).seal(
+          unreadableId,
+          "accessToken",
+          ACCESS,
+        ),
+      },
+    });
+    await storage.storeSession(offlineSession());
+    const nextKey = randomBytes(32).toString("base64");
+
+    process.env.SESSION_TOKEN_ENCRYPTION_KEY = `${nextKey},${KEY}`;
+    const run = await reencryptSessionTokens();
+
+    expect(run.unreadable).toEqual([unreadableId]);
+    expect(run.rewritten).toBe(1);
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: ID } });
+    expect(
+      createSessionTokenCipher(nextKey).open(ID, "accessToken", row.accessToken),
+    ).toBe(ACCESS);
+  });
+
+  it("visits every row when the last row of a page is deleted before the next", async () => {
+    const ids = ["a", "b", "c", "d"].map((tag) => `offline_${tag}-${SHOP}`);
+    for (const id of ids) {
+      await prisma.session.create({
+        data: { id, shop: SHOP, state: "state", isOnline: false, accessToken: ACCESS },
+      });
+    }
+
+    // An uninstall removes the row the next page starts after.
+    const table = {
+      findMany: async (
+        args: Parameters<typeof prisma.session.findMany>[0] & {
+          where: { id?: { gt?: string } };
+        },
+      ) => {
+        if (args.where.id?.gt === ids[1]) {
+          await prisma.session.deleteMany({ where: { id: ids[1] } });
+        }
+        return prisma.session.findMany(args);
+      },
+      updateMany: (args: Parameters<typeof prisma.session.updateMany>[0]) =>
+        prisma.session.updateMany(args),
+    };
+    const run = await reencryptSessionTokens(1, table as never);
+
+    expect(run.unreadable).toEqual([]);
+    const rows = await prisma.session.findMany({
+      where: { shop: SHOP },
+      orderBy: { id: "asc" },
+    });
+    expect(rows.map((row) => row.id)).toEqual([ids[0], ids[2], ids[3]]);
+    for (const row of rows) expect(row.accessToken).toMatch(/^enc:v1:/);
   });
 
   it("does not hand out a token copied from another shop's row", async () => {

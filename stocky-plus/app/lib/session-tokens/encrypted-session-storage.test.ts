@@ -84,7 +84,9 @@ describe("encrypted session storage", () => {
     await storage.storeSession(offlineSession());
     const encrypted = encryptedSessionStorage(
       storage,
-      createSessionTokenCipher(randomBytes(32).toString("base64")),
+      createSessionTokenCipher(randomBytes(32).toString("base64"), {
+        acceptPlaintext: true,
+      }),
     );
 
     const loaded = await encrypted.loadSession(ID);
@@ -92,6 +94,20 @@ describe("encrypted session storage", () => {
 
     await encrypted.storeSession(loaded!);
     expect(rows.get(ID)!.accessToken).toMatch(/^enc:v1:/);
+  });
+
+  it("treats a clear token as missing where clear tokens are refused", async () => {
+    const { storage } = tableStorage();
+    await storage.storeSession(offlineSession());
+    const encrypted = encryptedSessionStorage(
+      storage,
+      createSessionTokenCipher(randomBytes(32).toString("base64")),
+    );
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    expect(await encrypted.loadSession(ID)).toBeUndefined();
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(String(error.mock.calls[0][0])).not.toContain(ACCESS);
   });
 
   it("treats a session whose token was tampered with as missing", async () => {

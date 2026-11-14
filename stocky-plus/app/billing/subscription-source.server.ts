@@ -188,8 +188,8 @@ export function subscriptionSourceFor(
   }
   if (env.NODE_ENV === "production" && !warnedAboutAdminSource) {
     warnedAboutAdminSource = true;
-    console.warn(
-      "[billing] Partner API credentials are not set; subscription status is read from the Admin API, which Shopify does not document for App Pricing",
+    console.error(
+      "[billing] Partner API credentials are not set; subscription status is read from the Admin API, which Shopify does not document for App Pricing and which likely lists no App Pricing subscription (R-195)",
     );
   }
   return adminApiSubscriptionSource(admin);

@@ -25,26 +25,26 @@ describe("session token cipher", () => {
   it("returns the token it was given and never stores it readable", () => {
     const cipher = createSessionTokenCipher(KEY_A);
 
-    const stored = cipher.seal(SESSION, TOKEN);
+    const stored = cipher.seal(SESSION, "accessToken", TOKEN);
 
     expect(isSealedSessionToken(stored)).toBe(true);
     expect(stored).not.toContain(TOKEN);
     expect(stored).not.toContain(Buffer.from(TOKEN).toString("base64url"));
-    expect(cipher.open(SESSION, stored)).toBe(TOKEN);
+    expect(cipher.open(SESSION, "accessToken", stored)).toBe(TOKEN);
   });
 
   it("produces a different stored value each time", () => {
     const cipher = createSessionTokenCipher(KEY_A);
 
-    expect(cipher.seal(SESSION, TOKEN)).not.toBe(cipher.seal(SESSION, TOKEN));
+    expect(cipher.seal(SESSION, "accessToken", TOKEN)).not.toBe(cipher.seal(SESSION, "accessToken", TOKEN));
   });
 
   it("does not open a token moved to another session", () => {
     const cipher = createSessionTokenCipher(KEY_A);
-    const stored = cipher.seal(SESSION, TOKEN);
+    const stored = cipher.seal(SESSION, "accessToken", TOKEN);
 
     expect(
-      codeOf(() => cipher.open("offline_other-shop.myshopify.com", stored)),
+      codeOf(() => cipher.open("offline_other-shop.myshopify.com", "accessToken", stored)),
     ).toBe("token_corrupt");
   });
 
@@ -54,13 +54,13 @@ describe("session token cipher", () => {
     ["a changed iv", 1],
   ])("rejects %s", (_case, part) => {
     const cipher = createSessionTokenCipher(KEY_A);
-    const parts = cipher.seal(SESSION, TOKEN).split(":");
+    const parts = cipher.seal(SESSION, "accessToken", TOKEN).split(":");
     const index = 2 + part;
     const bytes = Buffer.from(parts[index], "base64url");
     bytes[0] ^= 0x01;
     parts[index] = bytes.toString("base64url");
 
-    expect(codeOf(() => cipher.open(SESSION, parts.join(":")))).toBe(
+    expect(codeOf(() => cipher.open(SESSION, "accessToken", parts.join(":")))).toBe(
       "token_corrupt",
     );
   });
@@ -68,39 +68,57 @@ describe("session token cipher", () => {
   it("rejects a stored value with missing parts", () => {
     const cipher = createSessionTokenCipher(KEY_A);
 
-    expect(codeOf(() => cipher.open(SESSION, "enc:v1:abc:def"))).toBe(
+    expect(codeOf(() => cipher.open(SESSION, "accessToken", "enc:v1:abc:def"))).toBe(
       "token_corrupt",
     );
   });
 
-  it("passes through a token stored before encryption was switched on", () => {
+  it("does not open an access token as the refresh token or the reverse", () => {
     const cipher = createSessionTokenCipher(KEY_A);
+    const access = cipher.seal(SESSION, "accessToken", TOKEN);
+    const refresh = cipher.seal(SESSION, "refreshToken", TOKEN);
 
-    expect(cipher.open(SESSION, TOKEN)).toBe(TOKEN);
+    expect(codeOf(() => cipher.open(SESSION, "refreshToken", access))).toBe(
+      "token_corrupt",
+    );
+    expect(codeOf(() => cipher.open(SESSION, "accessToken", refresh))).toBe(
+      "token_corrupt",
+    );
+    expect(cipher.open(SESSION, "refreshToken", refresh)).toBe(TOKEN);
+  });
+
+  it("passes through a token stored before encryption only when told to", () => {
+    const lenient = createSessionTokenCipher(KEY_A, { acceptPlaintext: true });
+    expect(lenient.open(SESSION, "accessToken", TOKEN)).toBe(TOKEN);
+
+    const strict = createSessionTokenCipher(KEY_A);
+    expect(codeOf(() => strict.open(SESSION, "accessToken", TOKEN))).toBe(
+      "token_corrupt",
+    );
   });
 
   it("writes with the first key and still reads tokens written with an older one", () => {
     const before = createSessionTokenCipher(KEY_A);
     const after = createSessionTokenCipher(`${KEY_B}, ${KEY_A}`);
-    const old = before.seal(SESSION, TOKEN);
+    const old = before.seal(SESSION, "accessToken", TOKEN);
 
-    expect(after.open(SESSION, old)).toBe(TOKEN);
-    const rewritten = after.seal(SESSION, TOKEN);
-    expect(createSessionTokenCipher(KEY_B).open(SESSION, rewritten)).toBe(
+    expect(after.open(SESSION, "accessToken", old)).toBe(TOKEN);
+    const rewritten = after.seal(SESSION, "accessToken", TOKEN);
+    expect(createSessionTokenCipher(KEY_B).open(SESSION, "accessToken", rewritten)).toBe(
       TOKEN,
     );
-    expect(codeOf(() => before.open(SESSION, rewritten))).toBe("key_unknown");
+    expect(codeOf(() => before.open(SESSION, "accessToken", rewritten))).toBe("key_unknown");
   });
 
   it("marks tokens that are in the clear or under an older key as stale", () => {
     const before = createSessionTokenCipher(KEY_A);
     const after = createSessionTokenCipher(`${KEY_B},${KEY_A}`);
-    const old = before.seal(SESSION, TOKEN);
+    const old = before.seal(SESSION, "accessToken", TOKEN);
 
     expect(before.isStale(old)).toBe(false);
     expect(after.isStale(old)).toBe(true);
     expect(after.isStale(TOKEN)).toBe(true);
-    expect(after.isStale(after.seal(SESSION, TOKEN))).toBe(false);
+    expect(after.isStale(after.seal(SESSION, "accessToken", TOKEN))).toBe(false);
   });
 
   it.each([
@@ -143,8 +161,26 @@ describe("loading the cipher from the environment", () => {
         NODE_ENV,
         SESSION_TOKEN_ENCRYPTION_KEY: KEY_A,
       });
-      expect(cipher?.open(SESSION, cipher.seal(SESSION, TOKEN))).toBe(TOKEN);
+      expect(
+        cipher?.open(SESSION, "accessToken", cipher.seal(SESSION, "accessToken", TOKEN)),
+      ).toBe(TOKEN);
     }
+  });
+
+  it("accepts tokens stored in the clear outside production only", () => {
+    const development = loadSessionTokenCipher({
+      NODE_ENV: "development",
+      SESSION_TOKEN_ENCRYPTION_KEY: KEY_A,
+    });
+    expect(development?.open(SESSION, "accessToken", TOKEN)).toBe(TOKEN);
+
+    const production = loadSessionTokenCipher({
+      NODE_ENV: "production",
+      SESSION_TOKEN_ENCRYPTION_KEY: KEY_A,
+    });
+    expect(codeOf(() => production?.open(SESSION, "accessToken", TOKEN))).toBe(
+      "token_corrupt",
+    );
   });
 
   it("does not start with a malformed key rather than fall back to none", () => {

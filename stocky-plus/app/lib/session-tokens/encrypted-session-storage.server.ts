@@ -31,21 +31,21 @@ export function encryptedSessionStorage(
       accessToken:
         session.accessToken === undefined
           ? undefined
-          : cipher!.seal(session.id, session.accessToken),
+          : cipher!.seal(session.id, "accessToken", session.accessToken),
       refreshToken:
         session.refreshToken === undefined
           ? undefined
-          : cipher!.seal(session.id, session.refreshToken),
+          : cipher!.seal(session.id, "refreshToken", session.refreshToken),
     });
   }
 
   function opened(session: Session): Session | undefined {
     try {
       if (session.accessToken !== undefined) {
-        session.accessToken = cipher!.open(session.id, session.accessToken);
+        session.accessToken = cipher!.open(session.id, "accessToken", session.accessToken);
       }
       if (session.refreshToken !== undefined) {
-        session.refreshToken = cipher!.open(session.id, session.refreshToken);
+        session.refreshToken = cipher!.open(session.id, "refreshToken", session.refreshToken);
       }
       return session;
     } catch (error) {

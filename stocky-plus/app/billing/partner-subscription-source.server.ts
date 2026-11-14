@@ -71,7 +71,7 @@ export function loadPartnerApiConfig(
   }
   if (!/^\d+$/.test(organizationId)) {
     throw new PartnerApiConfigError(
-      "SHOPIFY_PARTNER_ORG_ID must be the numeric Partner organization id",
+      "SHOPIFY_PARTNER_ORG_ID must be the Partner ID, the number in the Partner Dashboard URL",
     );
   }
   if (!APP_GID.test(appGid)) {
@@ -112,7 +112,8 @@ const ACTIVE_SUBSCRIPTION_QUERY = `query StockyActiveSubscription($appId: ID!, $
 }`;
 
 interface PartnerSubscriptionItem {
-  handle: string;
+  /** Nullable in Shopify's schema; an item without one cannot be the plan. */
+  handle: string | null;
   description: string | null;
   price: { __typename: string; currency: string; amount?: string } | null;
   discount: unknown;
@@ -137,7 +138,8 @@ function stringOrNull(value: unknown): string | null {
 }
 
 function parseItem(value: unknown): PartnerSubscriptionItem | null {
-  if (!isRecord(value) || typeof value.handle !== "string") return null;
+  if (!isRecord(value)) return null;
+  if (value.handle !== null && typeof value.handle !== "string") return null;
   const price = value.price;
   return {
     handle: value.handle,
@@ -189,17 +191,17 @@ function parseActiveSubscription(
 
 /**
  * The Partner API returns a subscription only while its contract is active,
- * so the record's status is always ACTIVE. The plan is the flat-rate item;
- * its handle is matched against the plan catalog by the entitlement logic.
+ * so the record's status is always ACTIVE. The plan is the flat-rate item
+ * with a handle; its handle is matched against the plan catalog by the
+ * entitlement logic.
  */
 export function partnerSubscriptionRecord(
   subscription: PartnerActiveSubscription,
 ): SubscriptionRecord {
+  const named = subscription.items.filter((candidate) => candidate.handle);
   const item =
-    subscription.items.find(
-      (candidate) => candidate.price?.__typename === "FlatRatePrice",
-    ) ??
-    subscription.items[0] ??
+    named.find((candidate) => candidate.price?.__typename === "FlatRatePrice") ??
+    named[0] ??
     null;
   const price = item?.price ?? null;
   const interval = subscription.billingPeriod;
