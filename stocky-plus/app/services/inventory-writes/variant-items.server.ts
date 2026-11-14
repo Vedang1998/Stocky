@@ -95,6 +95,18 @@ export function variantsMatchingCode(
   );
 }
 
+/** What to tell someone whose scanned or typed code names more than one item. */
+export const ambiguousCodeMessage = (
+  code: string,
+  matches: readonly CatalogVariant[],
+) =>
+  `${code} matches ${matches.length} items (${matches
+    .slice(0, 3)
+    .map((v) => v.title)
+    .join(
+      ", ",
+    )}${matches.length > 3 ? ", …" : ""}). Use a barcode or SKU that only one item has.`;
+
 /** Catalog variants keyed by variant ID. Unknown IDs are absent. */
 export async function findVariantsById(
   db: TenantDb,
@@ -125,4 +137,24 @@ export async function findVariantsByInventoryItem(
     for (const row of rows) found.set(row.inventoryItemId!, row);
   }
   return found;
+}
+
+/** The given inventory items that are live and tracked for inventory in Shopify. */
+export async function findTrackedInventoryItemIds(
+  db: TenantDb,
+  inventoryItemIds: readonly string[],
+): Promise<Set<string>> {
+  const tracked = new Set<string>();
+  for (const part of chunked([...new Set(inventoryItemIds)])) {
+    const rows = (await db.shopifyInventoryItemFact.findMany({
+      where: {
+        shopifyGid: { in: part },
+        tracked: true,
+        existenceState: "LIVE",
+      },
+      select: { shopifyGid: true },
+    })) as Array<{ shopifyGid: string }>;
+    for (const row of rows) tracked.add(row.shopifyGid);
+  }
+  return tracked;
 }

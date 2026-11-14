@@ -27,10 +27,10 @@ import {
   addTransferLine,
   cancelTransfer,
   createTransfer,
-  receiveTransfer,
   setTransferPickedQuantity,
   shipTransfer,
 } from "../services/transfers/transfer.server";
+import { receiveTransfer } from "../services/transfers/transfer-receiving.server";
 import {
   MAX_TRANSFER_LINE_QUANTITY,
   transferShipQuantity,

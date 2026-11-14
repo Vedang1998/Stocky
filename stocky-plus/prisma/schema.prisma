@@ -524,19 +524,36 @@ enum TransferStatus {
   CANCELLED
 }
 
+/// What happened to shipped units that never arrived, chosen when a transfer
+/// is closed short. RETURNED puts them back in stock at the source; WRITTEN_OFF
+/// leaves them out of stock at both locations.
+enum TransferShortResolution {
+  RETURNED
+  WRITTEN_OFF
+}
+
 model TransferOrder {
-  id                    String         @id @default(cuid())
+  id                    String                   @id @default(cuid())
   shop                  String
   shopId                String?
   sourceLocationId      String
   destinationLocationId String
-  status                TransferStatus @default(DRAFT)
+  status                TransferStatus           @default(DRAFT)
   shopifyTransferId     String?
   notes                 String?
+  createdByUserId       String?                  @db.VarChar(64)
   shippedAt             DateTime?
+  shippedByUserId       String?                  @db.VarChar(64)
+  /// When the transfer was finished: everything shipped was received,
+  /// rejected, returned or written off.
   receivedAt            DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  receivedByUserId      String?                  @db.VarChar(64)
+  /// Set when the transfer was finished with shipped units still missing.
+  shortResolution       TransferShortResolution?
+  cancelledAt           DateTime?
+  cancelledByUserId     String?                  @db.VarChar(64)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   lineItems TransferLineItem[]
 
@@ -546,13 +563,24 @@ model TransferOrder {
 }
 
 model TransferLineItem {
-  id               String  @id @default(cuid())
-  shopId           String?
-  transferOrderId  String
-  shopifyVariantId String
-  quantity         Int
-  pickedQty        Int     @default(0)
-  receivedQty      Int     @default(0)
+  id                String  @id @default(cuid())
+  shopId            String?
+  transferOrderId   String
+  shopifyVariantId  String
+  /// Units asked for on the draft.
+  quantity          Int
+  /// On a draft, the units picked so far (0 ships the whole quantity). Once
+  /// shipped, the units that left the source.
+  pickedQty         Int     @default(0)
+  /// Units Shopify has confirmed in stock at the destination.
+  receivedQty       Int     @default(0)
+  /// Units counted in at the destination and not posted to Shopify yet.
+  pendingReceiveQty Int     @default(0)
+  /// Units that arrived and were not put into stock (damaged, wrong item).
+  rejectedQty       Int     @default(0)
+  rejectNote        String? @db.VarChar(200)
+  /// Units put back in stock at the source when the transfer was closed short.
+  returnedQty       Int     @default(0)
 
   transferOrder TransferOrder @relation(fields: [transferOrderId], references: [id], onDelete: Cascade)
 
