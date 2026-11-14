@@ -1,4 +1,4 @@
-import type { Job } from "bullmq";
+import { DelayedError, type Job } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { unauthenticated } from "../../shopify.server";
 import type { WebhookJobData } from "../queue.server";
@@ -262,6 +262,43 @@ async function handleRefundCreate(
   }
 }
 
+/** How long a delivery that arrived before its dispatch was recorded waits between tries. */
+export const DISPATCH_ACK_RETRY_MS = 500;
+/**
+ * How long such a delivery keeps waiting. It covers a dispatcher that stalls
+ * or dies between queueing and recording: its lease (30 s) expires, the next
+ * dispatcher run finds this delivery still queued and records it.
+ */
+export const DISPATCH_ACK_WAIT_MS = 2 * 60_000;
+
+/**
+ * Claim the attempt for a dispatched delivery. The dispatcher queues a
+ * dispatch before it records it as enqueued, so a worker can pick it up a
+ * moment early (#122). Dispatches are delivered once, so failing that
+ * delivery would strand the job: it goes back to the queue for a short wait
+ * instead.
+ */
+async function claimDispatchedAttempt(
+  job: Job,
+  token: string | undefined,
+  input: Parameters<typeof claimAttempt>[0],
+) {
+  try {
+    return await claimAttempt(input);
+  } catch (error) {
+    if (
+      error instanceof SyncControlPlaneError &&
+      error.code === "dispatch_not_acknowledged" &&
+      token &&
+      Date.now() - job.timestamp < DISPATCH_ACK_WAIT_MS
+    ) {
+      await job.moveToDelayed(Date.now() + DISPATCH_ACK_RETRY_MS, token);
+      throw new DelayedError();
+    }
+    throw error;
+  }
+}
+
 async function requireJobContext(
   rawTenant: unknown,
   options?: { payloadShop?: string; expectedJobNameOrTopic?: string },
@@ -404,7 +441,10 @@ async function applyOrderFactsWebhookIfOwned(input: {
  * Process a webhook BullMQ job with exactly-once merchant application (F-PR4-01)
  * and envelope/dispatch identity assertions (F-PR4-16).
  */
-export async function processWebhookJob(job: Job<WebhookJobData>) {
+export async function processWebhookJob(
+  job: Job<WebhookJobData>,
+  token?: string,
+) {
   const { topic, payload, payloadShop, tenant: envelope } = job.data;
   const workerId = `webhook-worker:${process.pid}:${randomUUID().slice(0, 8)}`;
 
@@ -500,7 +540,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       return;
     }
 
-    const { attempt } = await claimAttempt({
+    const { attempt } = await claimDispatchedAttempt(job, token, {
       durableJobId: durable.id,
       shopId: durable.shopId,
       workerId,
@@ -936,7 +976,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
   );
 }
 
-export async function processCronJob(job: Job) {
+export async function processCronJob(job: Job, token?: string) {
   const workerId = `cron-worker:${process.pid}:${randomUUID().slice(0, 8)}`;
 
   if (job.name === "abc-analysis") {
@@ -1017,12 +1057,16 @@ export async function processCronJob(job: Job) {
         );
       }
 
-      const { attempt, job: claimedJob } = await claimAttempt({
-        durableJobId: durable.id,
-        shopId: durable.shopId,
-        workerId,
-        jobDispatchId: data.dispatchId,
-      });
+      const { attempt, job: claimedJob } = await claimDispatchedAttempt(
+        job,
+        token,
+        {
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          workerId,
+          jobDispatchId: data.dispatchId,
+        },
+      );
 
       try {
         if (job.name === "abc-analysis-shop") {

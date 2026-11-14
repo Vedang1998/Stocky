@@ -43,7 +43,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return {
         error:
           err instanceof Error
-            ? `${err.message} Warehouse receiving is gated until the receipt ledger and Shopify write path exist.`
+            ? `${err.message} The scan was not recorded and Shopify inventory is unchanged.`
             : "Receipt writes disabled",
       };
     }

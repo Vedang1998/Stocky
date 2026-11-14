@@ -407,6 +407,21 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
       "Retain while PR 4 correction suite requires disposable fixtures",
   },
   {
+    id: "EX-SYNC-TEST-DISPATCH-ACK-RACE-001",
+    path: "app/sync/__tests__/dispatch-ack-race.test.ts",
+    category: "migration_tests",
+    reason:
+      "Issue #122 early-delivery and stranded-job regression test on the disposable PostgreSQL/Redis harness",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "TRUNCATE via raw SQL in beforeEach",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while the sync-integration suite requires disposable fixtures",
+  },
+  {
     id: "EX-SYNC-TEST-REDELIVERY-001",
     path: "app/sync/__tests__/durable-job-redelivery.test.ts",
     category: "migration_tests",

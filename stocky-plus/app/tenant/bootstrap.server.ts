@@ -13,6 +13,7 @@ import rawPrisma from "../db.server";
 import { encryptedSessionStorage } from "../lib/session-tokens/encrypted-session-storage.server";
 import {
   SessionTokenError,
+  createSessionTokenCipher,
   loadSessionTokenCipher,
 } from "../lib/session-tokens/cipher.server";
 import {
@@ -226,12 +227,15 @@ export async function reencryptSessionTokens(
   batchSize = 200,
   table: SessionTokenTable = rawPrisma.session,
 ): Promise<{ sessions: number; rewritten: number; unreadable: string[] }> {
-  const cipher = loadSessionTokenCipher();
-  if (!cipher) {
+  const keyList = process.env.SESSION_TOKEN_ENCRYPTION_KEY;
+  if (!keyList?.trim()) {
     throw new Error(
       "SESSION_TOKEN_ENCRYPTION_KEY is not set; there is no key to encrypt with",
     );
   }
+  // Sealing tokens stored before encryption is what this run is for, so it
+  // reads them even where the app refuses clear tokens (production).
+  const cipher = createSessionTokenCipher(keyList, { acceptPlaintext: true });
   let sessions = 0;
   let rewritten = 0;
   const unreadable: string[] = [];

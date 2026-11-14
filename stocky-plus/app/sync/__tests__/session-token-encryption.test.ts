@@ -149,6 +149,33 @@ describe("session tokens at rest (R-191)", () => {
     expect((await reencryptSessionTokens()).rewritten).toBe(0);
   });
 
+  it("encrypts sessions stored before encryption in production too", async () => {
+    await prisma.session.create({
+      data: {
+        id: ID,
+        shop: SHOP,
+        state: "state",
+        isOnline: false,
+        accessToken: ACCESS,
+        refreshToken: REFRESH,
+      },
+    });
+    const nodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      const run = await reencryptSessionTokens();
+      expect(run.unreadable).toEqual([]);
+      expect(run.rewritten).toBe(1);
+    } finally {
+      process.env.NODE_ENV = nodeEnv;
+    }
+
+    const row = await prisma.session.findUniqueOrThrow({ where: { id: ID } });
+    expect(row.accessToken).toMatch(/^enc:v1:/);
+    expect(row.refreshToken).toMatch(/^enc:v1:/);
+    expect((await storage.loadSession(ID))?.accessToken).toBe(ACCESS);
+  });
+
   it("moves every token to a new key so the old key can be removed", async () => {
     await storage.storeSession(offlineSession());
     const nextKey = randomBytes(32).toString("base64");

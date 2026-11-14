@@ -71,6 +71,27 @@ export async function claimAttempt(input: {
       );
     }
 
+    if (job.state === "DISPATCH_LEASED" && input.jobDispatchId) {
+      // The dispatcher queues a dispatch first and records it as enqueued
+      // afterwards, so its own delivery can arrive in between (#122). That
+      // delivery is early, not wrong: tell the worker to come back.
+      const pending = await tx.jobDispatch.findFirst({
+        where: {
+          id: input.jobDispatchId,
+          shopId: job.shopId,
+          durableJobId: job.id,
+          state: "PENDING_ENQUEUE",
+        },
+        select: { id: true },
+      });
+      if (pending) {
+        throw new SyncControlPlaneError(
+          "dispatch_not_acknowledged",
+          "Dispatch is queued but not yet recorded as enqueued",
+        );
+      }
+    }
+
     assertTransition(job.state, "RUNNING");
 
     const attemptNumber = job.attemptCount + 1;

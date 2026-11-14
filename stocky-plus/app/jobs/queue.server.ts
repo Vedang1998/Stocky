@@ -393,7 +393,7 @@ export async function enqueueOrderFactsReconcile(
 }
 
 export function createWebhookWorker(
-  processor: (job: Job<WebhookJobData>) => Promise<void>,
+  processor: (job: Job<WebhookJobData>, token?: string) => Promise<void>,
 ) {
   return new Worker<WebhookJobData>(WEBHOOK_QUEUE, processor, {
     connection: getConnection(),
@@ -401,7 +401,9 @@ export function createWebhookWorker(
   });
 }
 
-export function createCronWorker(processor: (job: Job) => Promise<void>) {
+export function createCronWorker(
+  processor: (job: Job, token?: string) => Promise<void>,
+) {
   return new Worker(CRON_QUEUE, processor, {
     connection: getConnection(),
     concurrency: CRON_WORKER_CONCURRENCY,

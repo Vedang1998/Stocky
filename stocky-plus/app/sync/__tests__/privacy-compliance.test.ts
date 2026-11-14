@@ -400,7 +400,10 @@ describe("privacy compliance", () => {
       now: waiting.dueAt,
     });
 
-    expect(atDeadline).toMatchObject({ resolved: 1, waiting: 0, overdue: 0 });
+    expect(atDeadline).toMatchObject({ waiting: 0, overdue: 0 });
+    // Thirty days on, shops that other test files left uninstalled are past
+    // retention too; their requests are opened and closed in the same run.
+    expect(atDeadline.resolved).toBe(1 + atDeadline.retentionRequestsOpened);
     const closed = await prisma.privacyRequest.findUniqueOrThrow({
       where: { id: recorded.requestId },
     });
