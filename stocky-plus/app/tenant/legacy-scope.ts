@@ -22,6 +22,8 @@ import {
   CHILD_MODEL_SET,
   DIRECT_MODEL_SET,
   PARENT_OWNERSHIP_RULES,
+  PR6_A_CHILD_MERCHANT_MODELS,
+  type ChildMerchantModel,
   type DirectMerchantModel,
 } from "./models";
 import { parentRelationFieldName } from "./relations";
@@ -83,6 +85,20 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "ReplenishmentSettings",
   "ReplenishmentVariantRule",
 ]);
+
+/**
+ * Child models keyed to their parent by a composite `(shopId, parentGid)`
+ * foreign key with a NOT NULL `shopId`. PostgreSQL already forces every row
+ * onto a same-tenant parent, so the canonical `shopId` is the complete scope
+ * and no parent ownership rule or null-shopId branch applies.
+ */
+export const SHOP_KEYED_CHILD_MODELS = new Set<ChildMerchantModel>(
+  PR6_A_CHILD_MERCHANT_MODELS,
+);
+
+export function isShopKeyedChildModel(model: string): boolean {
+  return SHOP_KEYED_CHILD_MODELS.has(model as ChildMerchantModel);
+}
 
 /**
  * Versioned bound on distinct null-ownership legacy representations
@@ -208,6 +224,8 @@ export function legacyShopMatchesTenant(
  *   shopId === foreign → denied
  * Child:
  *   shopId === tenant or null (lineage enforced separately via parent scope)
+ * Shop-keyed child:
+ *   shopId === tenant
  */
 export function rowOwnershipOk(
   model: string,
@@ -236,6 +254,7 @@ export function rowOwnershipOk(
 
   if (CHILD_MODEL_SET.has(model)) {
     const shopId = row.shopId;
+    if (isShopKeyedChildModel(model)) return shopId === authority.shopId;
     if (shopId != null && shopId !== authority.shopId) return false;
     return shopId === authority.shopId || shopId == null;
   }
@@ -490,6 +509,9 @@ export function childTenantScopeWhereSync(
   model: string,
   authority: TenantAuthority,
 ): Record<string, unknown> {
+  if (isShopKeyedChildModel(model)) {
+    return { shopId: authority.shopId };
+  }
   const rule = PARENT_OWNERSHIP_RULES[model];
   if (!rule) {
     throw new TenantAccessError(
@@ -545,6 +567,9 @@ export async function tenantScopeWhere(
       );
     }
     if (CHILD_MODEL_SET.has(model)) {
+      if (isShopKeyedChildModel(model)) {
+        return { shopId: authority.shopId };
+      }
       const rule = PARENT_OWNERSHIP_RULES[model];
       if (!rule) {
         throw new TenantAccessError(
@@ -639,6 +664,9 @@ export function nestedBulkScalarScopeWhere(
     );
   }
   if (CHILD_MODEL_SET.has(model)) {
+    if (isShopKeyedChildModel(model)) {
+      return { shopId: authority.shopId };
+    }
     return {
       OR: [{ shopId: authority.shopId }, { shopId: null }],
     };

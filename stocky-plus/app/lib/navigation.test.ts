@@ -5,20 +5,26 @@ import { APP_HOME, APP_NAV_ITEMS } from "./navigation";
 
 const ROUTES_DIR = join(__dirname, "..", "routes");
 
-/** Flat-routes file for an app path: /app -> app._index, /app/x -> app.x */
-function routeFileFor(href: string): string {
+/**
+ * Flat-routes files that can render an app path: /app -> app._index,
+ * /app/x -> app.x, or app.x._index when the section has child routes.
+ */
+function routeFilesFor(href: string): string[] {
   const segments = href.split("/").filter(Boolean);
-  const name = segments.length === 1 ? `${segments[0]}._index` : segments.join(".");
-  return join(ROUTES_DIR, `${name}.tsx`);
+  if (segments.length === 1) return [join(ROUTES_DIR, `${segments[0]}._index.tsx`)];
+  const name = segments.join(".");
+  return [`${name}.tsx`, `${name}._index.tsx`].map((file) =>
+    join(ROUTES_DIR, file),
+  );
 }
 
 describe("app navigation", () => {
   const items = [APP_HOME, ...APP_NAV_ITEMS];
 
   it.each(items)("$label links to a page that renders", ({ href }) => {
-    const file = routeFileFor(href);
-    expect(existsSync(file), `${href} has no route module`).toBe(true);
-    expect(readFileSync(file, "utf8")).toMatch(/^export default function /m);
+    const file = routeFilesFor(href).find((candidate) => existsSync(candidate));
+    expect(file, `${href} has no route module`).toBeDefined();
+    expect(readFileSync(file!, "utf8")).toMatch(/^export default function /m);
   });
 
   it("keeps every destination inside the embedded app", () => {
