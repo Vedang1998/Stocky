@@ -243,3 +243,68 @@ export async function listPurchaseOrders(
     counts,
   };
 }
+
+/** Most purchase orders one export holds; the newest are kept. */
+export const PURCHASE_ORDER_EXPORT_LIMIT = 5_000;
+const EXPORT_BATCH_SIZE = 250;
+
+export type PurchaseOrderExport = {
+  view: PurchaseOrderView;
+  items: PurchaseOrderListItem[];
+  /** True when more orders matched than the export holds. */
+  truncated: boolean;
+};
+
+/**
+ * Every purchase order in a view and search, newest first, read in batches
+ * so a large export never holds every order's lines at once.
+ */
+export async function exportPurchaseOrders(
+  db: TenantDb,
+  options: {
+    view?: PurchaseOrderView;
+    search?: string | null;
+    /** The merchant's calendar date as YYYY-MM-DD. */
+    today?: string | null;
+    limit?: number;
+    /** Orders read per query. */
+    batchSize?: number;
+  } = {},
+): Promise<PurchaseOrderExport> {
+  const view = options.view ?? "all";
+  const limit = Math.min(
+    options.limit ?? PURCHASE_ORDER_EXPORT_LIMIT,
+    PURCHASE_ORDER_EXPORT_LIMIT,
+  );
+  const batchSize = Math.min(
+    options.batchSize ?? EXPORT_BATCH_SIZE,
+    EXPORT_BATCH_SIZE,
+  );
+  const today = options.today ? parseCalendarDate(options.today) : null;
+  const search = options.search?.trim().slice(0, MAX_SEARCH_LENGTH) ?? "";
+
+  const filters: Prisma.PurchaseOrderWhereInput[] = [viewWhere(view, today)];
+  if (search) filters.push(await searchWhere(db, search));
+
+  const items: PurchaseOrderListItem[] = [];
+  let cursor: string | null = null;
+  while (items.length <= limit) {
+    const rows: PurchaseOrderRecord[] = await db.purchaseOrder.findMany({
+      where: { AND: filters },
+      include: PURCHASE_ORDER_INCLUDE,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: Math.min(batchSize, limit + 1 - items.length),
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    });
+    for (const po of rows) items.push(toListItem(po, today));
+    if (rows.length === 0 || items.length > limit) break;
+    cursor = rows[rows.length - 1]!.id;
+    if (rows.length < batchSize) break;
+  }
+
+  return {
+    view,
+    items: items.slice(0, limit),
+    truncated: items.length > limit,
+  };
+}

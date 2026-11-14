@@ -9,6 +9,7 @@ import { listLocations } from "../services/purchasing/locations.server";
 import {
   isPurchaseOrderView,
   listPurchaseOrders,
+  PURCHASE_ORDER_EXPORT_LIMIT,
   PURCHASE_ORDER_VIEW_LABELS,
   PURCHASE_ORDER_VIEWS,
 } from "../services/purchasing/purchase-order-list.server";
@@ -51,6 +52,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       count: list.counts[key],
     })),
     locationNames: Object.fromEntries(locations.map((l) => [l.gid, l.name])),
+    exportLimit: PURCHASE_ORDER_EXPORT_LIMIT,
   };
 };
 
@@ -62,8 +64,10 @@ function listHref(view: string, search: string, page = 1): string {
 }
 
 export default function PurchaseOrders() {
-  const { list, search, viewLabel, views, locationNames } =
+  const { list, search, viewLabel, views, locationNames, exportLimit } =
     useLoaderData<typeof loader>();
+  const exportParams = new URLSearchParams({ view: list.view });
+  if (search) exportParams.set("q", search);
 
   return (
     <s-page heading="Purchase orders">
@@ -107,6 +111,22 @@ export default function PurchaseOrders() {
               )}
             </s-stack>
           </Form>
+
+          {list.items.length > 0 && (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-link
+                href={`/app/purchase-orders/export?${exportParams.toString()}`}
+                target="_blank"
+              >
+                Export {search ? "matching" : viewLabel} purchase orders (CSV)
+              </s-link>
+              {list.counts[list.view] > exportLimit && (
+                <s-text color="subdued">
+                  The newest {exportLimit.toLocaleString("en-US")} are exported.
+                </s-text>
+              )}
+            </s-stack>
+          )}
 
           {list.items.length === 0 ? (
             <s-paragraph>

@@ -79,6 +79,8 @@ export type PurchaseOrderLineView = {
   landedUnitCost: string;
   /** Projected margin over landed cost, in percent; null when it cannot be worked out. */
   marginPercent: string | null;
+  /** Retail price in shop currency when the line was added; null when unknown. */
+  retailPrice: string | null;
 };
 
 export type PurchaseOrderChargeView = {
@@ -208,6 +210,7 @@ export async function getPurchaseOrderView(
       taxAmount: toFixed(cost.taxAmount),
       landedUnitCost: toFixed(cost.landedUnitCost, UNIT_COST_SCALE),
       marginPercent: toFixedOrNull(margin, 1),
+      retailPrice: toFixedOrNull(line.retailPrice),
     };
   });
 

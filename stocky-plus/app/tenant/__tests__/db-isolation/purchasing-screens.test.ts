@@ -13,6 +13,8 @@ import {
   vi,
 } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
+import * as reactPdf from "@react-pdf/renderer";
+import { isValidElement } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { RECEIVING_OFF_MESSAGE } from "../../../lib/po-display";
 import { STAFF_REQUIRED_MESSAGE } from "../../../services/inventory-writes/actor.server";
@@ -31,6 +33,12 @@ import {
   loadPurchaseOrder,
   STALE_VERSION_MESSAGE,
 } from "../../../services/purchasing/purchase-order-records.server";
+import {
+  purchaseOrderDocument,
+  receivingSheetDocument,
+  supplierEmailHref,
+} from "../../../services/purchasing/documents.server";
+import { exportPurchaseOrders } from "../../../services/purchasing/purchase-order-list.server";
 import { getPurchaseOrderView } from "../../../services/purchasing/purchase-order-view.server";
 import {
   createPurchaseOrderDraft,
@@ -114,11 +122,25 @@ const admin = {
     new Response(
       JSON.stringify({
         data: {
-          shop: { currencyCode: "USD", ianaTimezone: "America/New_York" },
+          shop: {
+            name: "Cellar & Co",
+            currencyCode: "USD",
+            ianaTimezone: "America/New_York",
+          },
         },
       }),
     ),
 } as never;
+
+/** Every piece of text a PDF document tree would print, in order. */
+function documentText(node: unknown): string[] {
+  if (typeof node === "string" || typeof node === "number") return [String(node)];
+  if (Array.isArray(node)) return node.flatMap(documentText);
+  if (isValidElement(node)) {
+    return documentText((node.props as { children?: unknown }).children);
+  }
+  return [];
+}
 
 function formData(fields: Record<string, string>): FormData {
   const form = new FormData();
@@ -1146,6 +1168,249 @@ describe("purchase-order pages", () => {
         (created as Response).headers.get("Location"),
       );
       expect(await prisma.purchaseOrder.count()).toBe(1);
+    });
+  });
+
+  describe("documents", () => {
+    const loaderArgs = (path: string, params: Record<string, string> = {}) =>
+      ({
+        request: new Request(`https://app.example.test${path}`),
+        params,
+        context: {},
+      }) as unknown as LoaderFunctionArgs;
+
+    async function withShipping() {
+      const po = await purchaseOrder();
+      succeeded(
+        await submit(po.id, {
+          intent: "saveCharges",
+          version: po.version,
+          chargeCount: "1",
+          landedCostMethod: "COST",
+          "charge-kind-0": "SHIPPING",
+          "charge-amount-0": "10.05",
+          "charge-allocate-0": "on",
+        }),
+      );
+      return current(po.id);
+    }
+
+    const view = (id: string) =>
+      getPurchaseOrderView(dbA, id, { today: TODAY, shopCurrency: "USD" });
+
+    it("answers each document as a download named by order number and version", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const routes = {
+        pdf: await import("../../../routes/app.purchase-orders_.$id_.pdf"),
+        receiver:
+          await import("../../../routes/app.purchase-orders_.$id_.receiver"),
+        csv: await import("../../../routes/app.purchase-orders_.$id_.csv"),
+      };
+      const args = (suffix: string) =>
+        loaderArgs(`/app/purchase-orders/${po.id}/${suffix}`, { id: po.id });
+
+      const pdf = await routes.pdf.loader(args("pdf"));
+      const sheet = await routes.receiver.loader(args("receiver"));
+      const csv = await routes.csv.loader(args("csv"));
+
+      for (const response of [pdf, sheet]) {
+        expect(response.headers.get("Content-Type")).toBe("application/pdf");
+        const bytes = new Uint8Array(await response.arrayBuffer());
+        expect(new TextDecoder().decode(bytes.slice(0, 5))).toBe("%PDF-");
+      }
+      expect(pdf.headers.get("Content-Disposition")).toBe(
+        'inline; filename="PO-1001-v1.pdf"',
+      );
+      expect(sheet.headers.get("Content-Disposition")).toBe(
+        'inline; filename="PO-1001-receiving-v1.pdf"',
+      );
+      expect(csv.headers.get("Content-Type")).toBe("text/csv; charset=utf-8");
+      expect(csv.headers.get("Content-Disposition")).toBe(
+        'attachment; filename="PO-1001-lines-v1.csv"',
+      );
+      const rows = (await csv.text()).split("\r\n");
+      expect(rows[0]).toBe(
+        "PO number,Product,Variant ID,SKU,Supplier SKU,Barcode,Ordered,Cancelled,Received,Still expected,Currency,Unit cost,Discount %,Tax %,Net amount,Tax amount,Landed unit cost,Retail price,Note",
+      );
+      expect(rows[1]).toMatch(
+        new RegExp(
+          `^PO-1001,Widget - Blue,${BLUE},W-BLUE,,0123456789012,10,0,0,10,USD,2\\.5000,0,0,25\\.00,0\\.00,2\\.5000,`,
+        ),
+      );
+
+      requireAdminTenant.mockResolvedValue({ admin, db: dbB });
+      for (const [name, loader] of [
+        ["pdf", routes.pdf.loader],
+        ["receiver", routes.receiver.loader],
+        ["csv", routes.csv.loader],
+      ] as const) {
+        const thrown = await loader(args(name)).then(
+          () => null,
+          (error: unknown) => error,
+        );
+        expect(thrown, name).toBeInstanceOf(Response);
+        expect((thrown as Response).status, name).toBe(404);
+      }
+    });
+
+    it("puts costs, charges and terms on the supplier PDF and leaves costs off the receiving sheet", async () => {
+      const po = await withShipping();
+      const order = await view(po.id);
+
+      const supplierCopy = documentText(
+        purchaseOrderDocument(reactPdf, order, "Cellar & Co"),
+      );
+      const sheet = documentText(
+        receivingSheetDocument(reactPdf, order, "USD"),
+      ).join("\n");
+
+      expect(supplierCopy).toEqual(
+        expect.arrayContaining([
+          "Purchase order PO-1001",
+          "Acme Supply",
+          "orders@acme.example",
+          "Cellar & Co",
+          "Widget - Blue",
+          "SKU W-BLUE",
+          "10",
+          "$2.50",
+          "$25.00",
+          "Shipping",
+          "$10.05",
+          "Total (USD)",
+          "$35.05",
+        ]),
+      );
+      expect(supplierCopy.join("\n")).not.toMatch(/NaN|undefined|null/);
+      expect(sheet).toContain("Receiving sheet PO-1001");
+      expect(sheet).toContain("Widget - Blue");
+      expect(sheet).toContain("0123456789012");
+      expect(sheet).not.toContain("$2.50");
+      expect(sheet).not.toContain("$25.00");
+      expect(sheet).not.toContain("$35.05");
+      expect(sheet).not.toContain("$10.05");
+      expect(sheet).not.toMatch(/NaN|undefined|null/);
+    });
+
+    it("drafts the supplier email with the order and keeps long orders within a link's length", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const order = await view(po.id);
+
+      const href = supplierEmailHref(order, "Cellar & Co")!;
+      const url = new URL(href);
+      const many = supplierEmailHref(
+        {
+          ...order,
+          lines: Array.from({ length: 300 }, (_, index) => ({
+            ...order.lines[0]!,
+            id: `line-${index}`,
+            name: `Widget number ${index} with a fairly long product name`,
+          })),
+        },
+        "Cellar & Co",
+      )!;
+      const manyBody = new URL(many).searchParams.get("body")!;
+
+      expect(url.protocol).toBe("mailto:");
+      expect(url.pathname).toBe("orders@acme.example");
+      expect(url.searchParams.get("subject")).toBe(
+        "Purchase order PO-1001 from Cellar & Co",
+      );
+      expect(url.searchParams.get("body")).toContain("- 10 × Widget - Blue");
+      expect(url.searchParams.get("body")).toContain("Total: $25.00");
+      expect(url.searchParams.get("body")).toMatch(/Thank you,\nCellar & Co$/);
+      expect(manyBody.length).toBeLessThanOrEqual(1_800);
+      expect(manyBody).toMatch(/- and \d+ more lines; see the attached PDF/);
+      expect(manyBody).toContain("Total: $");
+      expect(
+        supplierEmailHref(
+          { ...order, supplier: { ...order.supplier, contactEmail: null } },
+          "Cellar & Co",
+        ),
+      ).toBeNull();
+    });
+
+    it("offers the documents and the email on the order page, and an export on the list", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const detail = await import("../../../routes/app.purchase-orders_.$id");
+      const list = await import("../../../routes/app.purchase-orders");
+
+      const page = await renderRoute(
+        detail.default,
+        await detail.loader(
+          loaderArgs(`/app/purchase-orders/${po.id}`, { id: po.id }),
+        ),
+      );
+      const listPage = await renderRoute(
+        list.default,
+        await list.loader(loaderArgs("/app/purchase-orders?view=open&q=acme")),
+      );
+
+      expect(page).toContain(`href="/app/purchase-orders/${po.id}/pdf"`);
+      expect(page).toContain(`href="/app/purchase-orders/${po.id}/receiver"`);
+      expect(page).toContain(`href="/app/purchase-orders/${po.id}/csv"`);
+      expect(page).toContain('href="mailto:orders@acme.example?subject=');
+      expect(page).toContain("Email to Acme Supply");
+      expect(listPage).toContain(
+        'href="/app/purchase-orders/export?view=open&amp;q=acme"',
+      );
+      expect(listPage).toContain("Export matching purchase orders (CSV)");
+    });
+
+    it("exports a list view newest first, in batches, and only this shop's orders", async () => {
+      const first = await purchaseOrder({ ordered: true });
+      const { supplierId } = await loadPurchaseOrder(dbA, first.id);
+      for (const key of ["second", "third"]) {
+        await createPurchaseOrderDraft(
+          dbA,
+          BUYER,
+          {
+            supplierId,
+            locationGid: WAREHOUSE,
+            creationKey: `export-${key}`,
+            lines: [
+              { variantGid: RED, quantity: 2, unitCost: new Prisma.Decimal("1.25") },
+            ],
+          },
+          { today: TODAY },
+        );
+      }
+      const route = await import("../../../routes/app.purchase-orders_.export");
+
+      const capped = await exportPurchaseOrders(dbA, {
+        view: "all",
+        limit: 2,
+        batchSize: 1,
+      });
+      const whole = await exportPurchaseOrders(dbA, { view: "all", batchSize: 2 });
+      const response = await route.loader(
+        loaderArgs("/app/purchase-orders/export?view=incoming"),
+      );
+      const rows = (await response.text()).trimEnd().split("\r\n");
+      requireAdminTenant.mockResolvedValue({ admin, db: dbB });
+      const otherShop = await (
+        await route.loader(loaderArgs("/app/purchase-orders/export?view=all"))
+      ).text();
+
+      expect(capped.items.map((item) => item.poNumber)).toEqual([
+        "PO-1003",
+        "PO-1002",
+      ]);
+      expect(capped.truncated).toBe(true);
+      expect(whole.items.map((item) => item.poNumber)).toEqual([
+        "PO-1003",
+        "PO-1002",
+        "PO-1001",
+      ]);
+      expect(whole.truncated).toBe(false);
+      expect(response.headers.get("Content-Disposition")).toEqual(
+        expect.stringMatching(/^attachment; filename="purchase-orders-incoming-\d{4}-\d{2}-\d{2}\.csv"$/),
+      );
+      expect(rows).toHaveLength(2);
+      expect(rows[1]).toMatch(
+        /^PO-1001,Ordered,No,Acme Supply,Warehouse,,No,10,0,10,USD,25\.00,/,
+      );
+      expect(otherShop.trimEnd().split("\r\n")).toHaveLength(1);
     });
   });
 });

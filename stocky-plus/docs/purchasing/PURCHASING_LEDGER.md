@@ -196,6 +196,31 @@ Internal notes, references and receipts do not change it; a receipt takes the
 order's row lock instead of naming a version. `sentVersion` records what the
 supplier last received.
 
+## Documents and exports
+
+`app/services/purchasing/documents.server.ts` renders every document from the
+order's view model (`getPurchaseOrderView`), so a document shows the same exact
+amounts as the order page.
+
+| Route | Document |
+| --- | --- |
+| `/app/purchase-orders/:id/pdf` | The purchase order for the supplier: lines with supplier SKU, quantity (ordered less cancelled), unit cost, discount, tax and amount; charges; total; terms, dates, ship-to and bill-to; notes to supplier. Named `<PO number>-v<version>.pdf`. |
+| `/app/purchase-orders/:id/receiver` | The receiving sheet: ordered, received and still-expected units per line, barcode or SKU, retail price and a box to write the count. No costs. |
+| `/app/purchase-orders/:id/csv` | The order's lines with every amount as an exact decimal. |
+| `/app/purchase-orders/export?view=&q=` | The orders of a list view and search, newest first, at most 5,000, read 250 at a time. |
+
+"Email to supplier" on the order page opens the merchant's own mail app with
+the order summarised (lines are cut short to keep the link under 1,800
+characters of body) and asks them to attach the PDF. The app sends nothing;
+"Mark as sent" records that it went and which version.
+
+The PDFs use the built-in Helvetica font, which prints Latin-1 text only.
+Product names in other scripts need an embedded Unicode font, not added yet.
+
+The warehouse page (`/app/warehouse`) lists Sent, Ordered and Partial orders
+that are not archived, filtered by destination and search, each linked to its
+receiving page.
+
 ## Figures for other modules
 
 `app/services/purchasing/planning.server.ts`:

@@ -1,107 +1,34 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
-import { createElement as h } from "react";
 import type { LoaderFunctionArgs } from "react-router";
+import {
+  pdfResponse,
+  purchaseOrderFilename,
+  receivingSheetPdf,
+} from "../services/purchasing/documents.server";
+import { PurchasingError } from "../services/purchasing/errors";
+import { getPurchaseOrderView } from "../services/purchasing/purchase-order-view.server";
+import { readShopProfile } from "../services/purchasing/shop-profile.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { downloadHeaders } from "../lib/http/download.server";
 
 /**
- * Resource route: PDF receiver document for warehouse staff.
- * Shows retail prices but deliberately hides wholesale/unit costs.
+ * Resource route: the receiving sheet warehouse staff count a delivery
+ * against. It shows retail prices and deliberately leaves out costs.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
-  const po = await db.purchaseOrder.findFirst({
-    where: { id: params.id },
-    include: { supplier: true, lineItems: true },
-  });
-  if (!po) throw new Response("Purchase order not found", { status: 404 });
-
-  const variantIds = po.lineItems.map((li: any) => li.shopifyVariantId);
-  const variants = await db.shopifyVariantCache.findMany({
-    where: { shopifyVariantId: { in: variantIds } },
-  });
-  const titleFor = (id: string) =>
-    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
-  const barcodeFor = (id: string) =>
-    variants.find((v: any) => v.shopifyVariantId === id)?.barcode ?? "";
-
-  const { renderToBuffer, Document, Page, Text, View, StyleSheet } =
-    await import("@react-pdf/renderer");
-
-  const styles = StyleSheet.create({
-    page: { padding: 32, fontSize: 10, fontFamily: "Helvetica" },
-    title: { fontSize: 18, marginBottom: 4 },
-    meta: { marginBottom: 16, color: "#444" },
-    row: {
-      flexDirection: "row",
-      borderBottomWidth: 1,
-      borderBottomColor: "#ddd",
-      paddingVertical: 6,
-    },
-    headerRow: {
-      flexDirection: "row",
-      borderBottomWidth: 2,
-      borderBottomColor: "#000",
-      paddingVertical: 6,
-      fontFamily: "Helvetica-Bold",
-    },
-    colProduct: { width: "40%" },
-    colSku: { width: "20%" },
-    colQty: { width: "13%", textAlign: "right" },
-    colPrice: { width: "14%", textAlign: "right" },
-    checkbox: { width: "13%", textAlign: "center" },
+  const { admin, db } = await requireAdminTenant({ request, params });
+  const profile = await readShopProfile(admin);
+  const order = await getPurchaseOrderView(db, params.id ?? "", {
+    admin,
+    today: profile.today,
+    shopCurrency: profile.currencyCode,
+  }).catch((error: unknown) => {
+    if (error instanceof PurchasingError && error.code === "not_found") {
+      throw new Response("Purchase order not found", { status: 404 });
+    }
+    throw error;
   });
 
-  const doc = h(
-    Document,
-    null,
-    h(
-      Page,
-      { size: "LETTER", style: styles.page },
-      h(Text, { style: styles.title }, `Receiving Sheet — PO ${po.id.slice(-6).toUpperCase()}`),
-      h(
-        Text,
-        { style: styles.meta },
-        `Supplier: ${po.supplier?.name ?? "Unresolved supplier"}    Ordered: ${po.orderedAt ? new Date(po.orderedAt).toLocaleDateString() : "—"}    Status: ${po.status}`,
-      ),
-      h(
-        View,
-        { style: styles.headerRow },
-        h(Text, { style: styles.colProduct }, "Product"),
-        h(Text, { style: styles.colSku }, "Barcode / SKU"),
-        h(Text, { style: styles.colQty }, "Expected"),
-        h(Text, { style: styles.colPrice }, "Retail"),
-        h(Text, { style: styles.checkbox }, "Counted"),
-      ),
-      ...po.lineItems.map((li: any) =>
-        h(
-          View,
-          { style: styles.row, key: li.id },
-          h(Text, { style: styles.colProduct }, titleFor(li.shopifyVariantId)),
-          h(
-            Text,
-            { style: styles.colSku },
-            barcodeFor(li.shopifyVariantId) || li.vendorSku || "—",
-          ),
-          h(Text, { style: styles.colQty }, String(li.orderedQty - li.receivedQty)),
-          h(
-            Text,
-            { style: styles.colPrice },
-            li.retailPrice ? `$${Number(li.retailPrice).toFixed(2)}` : "—",
-          ),
-          h(Text, { style: styles.checkbox }, "☐"),
-        ),
-      ),
-    ),
+  return pdfResponse(
+    await receivingSheetPdf(order, profile.currencyCode),
+    purchaseOrderFilename(order, "-receiving", "pdf"),
   );
-
-  const buffer = await renderToBuffer(doc);
-
-  return new Response(new Uint8Array(buffer), {
-    headers: downloadHeaders({
-      contentType: "application/pdf",
-      filename: `receiver-${po.id.slice(-6)}.pdf`,
-      disposition: "inline",
-    }),
-  });
 };

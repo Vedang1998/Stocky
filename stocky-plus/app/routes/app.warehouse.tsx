@@ -102,9 +102,9 @@ export default function Warehouse() {
       <s-section>
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            Purchase orders sent to suppliers that still have units to
-            receive. Open one to count the delivery, scan barcodes and print
-            labels for what arrived.
+            Purchase orders sent to suppliers that still have units to receive.
+            Open one to count the delivery, scan barcodes and print labels for
+            what arrived.
           </s-paragraph>
 
           <Form method="get" onKeyDown={submitOnEnter}>
@@ -151,7 +151,9 @@ export default function Warehouse() {
                 <s-table-header listSlot="secondary">Status</s-table-header>
                 <s-table-header>Destination</s-table-header>
                 <s-table-header>Expected</s-table-header>
-                <s-table-header format="numeric">Still to receive</s-table-header>
+                <s-table-header format="numeric">
+                  Still to receive
+                </s-table-header>
                 <s-table-header>Receive</s-table-header>
               </s-table-header-row>
               <s-table-body>

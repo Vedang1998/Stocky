@@ -30,6 +30,7 @@ import {
   CHARGE_KINDS,
 } from "../lib/purchasing/totals";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
+import { supplierEmailHref } from "../services/purchasing/documents.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { listPurchasingEvents } from "../services/purchasing/events.server";
 import { runPurchaseOrderIntent } from "../services/purchasing/purchase-order-actions.server";
@@ -98,6 +99,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     confirm: url.searchParams.get("confirm"),
     timeZone: profile.ianaTimezone,
     shopCurrency: profile.currencyCode,
+    emailHref:
+      order.status === "CANCELLED"
+        ? null
+        : supplierEmailHref(order, profile.name),
     receivingEnabled: isInventoryWriteEnabled("receiptWrites"),
     chargeKinds: CHARGE_KINDS.map((value) => ({
       value,
@@ -156,6 +161,7 @@ export default function PurchaseOrderDetail() {
     confirm,
     timeZone,
     shopCurrency,
+    emailHref,
     receivingEnabled,
     chargeKinds,
     allocationMethods,
@@ -412,8 +418,39 @@ export default function PurchaseOrderDetail() {
               Duplicate as new draft
             </s-button>
           </Form>
+        </s-stack>
+      </s-section>
+
+      <s-section slot="aside" heading="Documents">
+        <s-stack direction="block" gap="small-200">
+          {emailHref ? (
+            <s-stack direction="block" gap="small-400">
+              <s-link href={emailHref} target="_blank">
+                Email to {order.supplier.name}
+              </s-link>
+              <s-text color="subdued">
+                Opens your mail app with the order filled in. Attach the PDF
+                {actions.includes("markSent")
+                  ? ", send it, then mark the order as sent."
+                  : " and send it."}
+              </s-text>
+            </s-stack>
+          ) : (
+            order.status !== "CANCELLED" && (
+              <s-text color="subdued">
+                Add an email address to the supplier to email this order from
+                here.
+              </s-text>
+            )
+          )}
+          <s-link href={`${orderHref}/pdf`} target="_blank">
+            Purchase order (PDF)
+          </s-link>
           <s-link href={`${orderHref}/receiver`} target="_blank">
-            Receiving sheet (PDF)
+            Receiving sheet (PDF, no costs)
+          </s-link>
+          <s-link href={`${orderHref}/csv`} target="_blank">
+            Lines (CSV)
           </s-link>
         </s-stack>
       </s-section>
