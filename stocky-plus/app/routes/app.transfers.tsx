@@ -151,12 +151,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   return { error: "That action is not available." };
 };
 
-const STATUS_TONE: Record<string, "info" | "warning" | "success" | "critical"> = {
-  DRAFT: "info",
-  IN_TRANSIT: "warning",
-  RECEIVED: "success",
-  CANCELLED: "critical",
-};
+const STATUS_TONE: Record<string, "info" | "warning" | "success" | "critical"> =
+  {
+    DRAFT: "info",
+    IN_TRANSIT: "warning",
+    RECEIVED: "success",
+    CANCELLED: "critical",
+  };
 
 export default function Transfers() {
   const { transfers, locations, variants } = useLoaderData<typeof loader>();
@@ -216,7 +217,9 @@ export default function Transfers() {
               <s-badge tone={STATUS_TONE[transfer.status] ?? "neutral"}>
                 {transfer.status.replace("_", " ")}
               </s-badge>
-              {transfer.notes && <s-text color="subdued">{transfer.notes}</s-text>}
+              {transfer.notes && (
+                <s-text color="subdued">{transfer.notes}</s-text>
+              )}
             </s-stack>
 
             {transfer.lineItems.length > 0 && (
@@ -237,13 +240,22 @@ export default function Transfers() {
                         {variantTitle(line.shopifyVariantId)}
                       </s-table-cell>
                       <s-table-cell>{line.quantity}</s-table-cell>
-                      <s-table-cell>{transferShipQuantity(line)}</s-table-cell>
+                      <s-table-cell>
+                        {/* A cancelled transfer never left the source. */}
+                        {transfer.status === "CANCELLED"
+                          ? 0
+                          : transferShipQuantity(line)}
+                      </s-table-cell>
                       <s-table-cell>{line.receivedQty}</s-table-cell>
                       <s-table-cell>
                         {transfer.status === "DRAFT" && (
                           <Form method="post" onKeyDown={submitOnEnter}>
                             <input type="hidden" name="intent" value="pick" />
-                            <input type="hidden" name="lineId" value={line.id} />
+                            <input
+                              type="hidden"
+                              name="lineId"
+                              value={line.id}
+                            />
                             <s-stack direction="inline" gap="small-200">
                               <s-number-field
                                 label="Picked qty"

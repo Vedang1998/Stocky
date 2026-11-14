@@ -210,10 +210,7 @@ function directScoped(where: Record<string, unknown>) {
         OR: [
           { shopId: SHOP_B_ID },
           {
-            AND: [
-              { shopId: null },
-              { shop: legacyShopIn(SHOP_B) },
-            ],
+            AND: [{ shopId: null }, { shop: legacyShopIn(SHOP_B) }],
           },
         ],
       },
@@ -240,10 +237,7 @@ function childScoped(
               OR: [
                 { shopId: SHOP_B_ID },
                 {
-                  AND: [
-                    { shopId: null },
-                    { shop: legacyShopIn(SHOP_B) },
-                  ],
+                  AND: [{ shopId: null }, { shop: legacyShopIn(SHOP_B) }],
                 },
               ],
             },
@@ -319,7 +313,7 @@ describe("cross-shop denial", () => {
   });
 
   it("denies Shop B updating Shop A stocktake line and never adjusts inventory", async () => {
-    const { action } = await import("../routes/app.stocktakes");
+    const { action } = await import("../routes/app.stocktakes_.$id");
     prismaMock.stocktakeLineItem.findFirst.mockResolvedValue(null);
 
     const result = await action(
@@ -329,11 +323,17 @@ describe("cross-shop denial", () => {
           lineId: "stl-shop-a",
           countedQty: "5",
         }),
+        { id: "st-shop-a" },
       ),
     );
 
     expect(prismaMock.stocktakeLineItem.findFirst).toHaveBeenCalledWith({
-      where: childScoped({ id: "stl-shop-a" }, "stocktake"),
+      where: childScoped(
+        { id: "stl-shop-a", stocktakeId: "st-shop-a" },
+        "stocktake",
+      ),
+      // TenantDb adds its own ownership-proof columns to the selection.
+      select: expect.objectContaining({ id: true, stocktakeId: true }),
     });
     expect(result).toEqual({ error: "Stocktake line not found" });
     expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
@@ -483,24 +483,23 @@ describe("cross-shop denial", () => {
     process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES = "true";
     featureFlags.stocktakeInventoryWrites.mockReturnValue(true);
     try {
-      const { action } = await import("../routes/app.stocktakes");
+      const { action } = await import("../routes/app.stocktakes_.$id");
       prismaMock.stocktake.findFirst.mockResolvedValue(null);
 
       const result = await action(
-        actionArgs(
-          formRequest({
-            intent: "complete",
-            stocktakeId: "st-shop-a",
-          }),
-        ),
+        actionArgs(formRequest({ intent: "complete" }), { id: "st-shop-a" }),
       );
 
       expect(authenticateAdmin).toHaveBeenCalled();
       expect(prismaMock.stocktake.findFirst).toHaveBeenCalledWith({
         where: directScoped({ id: "st-shop-a" }),
-        include: scopedLineItemsInclude("stocktake"),
+        select: expect.objectContaining({ id: true, status: true }),
       });
-      expect(result).toEqual({ error: "Stocktake not found", problems: [] });
+      expect(result).toEqual({
+        error: "Stocktake not found",
+        problems: [],
+        blocker: null,
+      });
       expect(prismaMock.stocktake.update).not.toHaveBeenCalled();
       expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
       expect(adjustShopifyInventory).not.toHaveBeenCalled();
