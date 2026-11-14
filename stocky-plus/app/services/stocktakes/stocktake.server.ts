@@ -845,6 +845,19 @@ export async function recordStocktakeScan(
   });
 }
 
+/** The given variants that already have a line on a count's sheet. */
+async function findVariantsOnSheet(
+  db: TenantDb,
+  stocktakeId: string,
+  shopifyVariantIds: readonly string[],
+): Promise<Set<string>> {
+  const lines = (await db.stocktakeLineItem.findMany({
+    where: { stocktakeId, shopifyVariantId: { in: [...shopifyVariantIds] } },
+    select: { shopifyVariantId: true },
+  })) as Array<{ shopifyVariantId: string }>;
+  return new Set(lines.map((line) => line.shopifyVariantId));
+}
+
 /**
  * Put a list of items on a count sheet, one barcode, SKU or variant ID per
  * line, without counting them. Nothing is added unless every line names
@@ -918,21 +931,10 @@ export async function addStocktakeItems(
     }
   }
 
-  const variantsOnSheet = async (client: TenantDb) =>
-    new Set(
-      (
-        (await client.stocktakeLineItem.findMany({
-          where: {
-            stocktakeId: stocktake.id,
-            shopifyVariantId: { in: [...wanted.keys()] },
-          },
-          select: { shopifyVariantId: true },
-        })) as Array<{ shopifyVariantId: string }>
-      ).map((line) => line.shopifyVariantId),
-    );
-
   // Expected quantities are read from Shopify before the count is locked.
-  const onSheet = await variantsOnSheet(db);
+  const onSheet = await findVariantsOnSheet(db, stocktake.id, [
+    ...wanted.keys(),
+  ]);
   const fresh = [...wanted.values()].filter(
     ({ variant }) => !onSheet.has(variant.shopifyVariantId),
   );
@@ -978,7 +980,9 @@ export async function addStocktakeItems(
       return fail(CLOSED_MESSAGE);
     }
     // Another request may have added some of them in the meantime.
-    const nowOnSheet = await variantsOnSheet(tx);
+    const nowOnSheet = await findVariantsOnSheet(tx, stocktake.id, [
+      ...wanted.keys(),
+    ]);
     const added = lines.filter(
       (line) => !nowOnSheet.has(line.shopifyVariantId),
     );

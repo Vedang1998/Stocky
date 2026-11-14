@@ -8,7 +8,13 @@ import { Form, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { getLowStockAlerts } from "../services/forecasting.server";
+import { loadSetupGuide } from "../services/setup-guide.server";
 import { enqueueCatalogSync } from "../jobs/queue.server";
+import { SetupGuide } from "../components/SetupGuide";
+import { SyncAttentionBanner, SyncStatus } from "../components/SyncStatus";
+import { buildSyncStatusView } from "../lib/sync-status";
+import { useRevalidateWhile } from "../lib/use-revalidate-while";
+import { readCatalogSyncStatus } from "../sync/sync-status.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
@@ -28,6 +34,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       db.supplier.count({ where: {} }),
       db.shopifyVariantCache.count({ where: {} }),
     ]);
+  const [setupGuide, syncDomains] = await Promise.all([
+    loadSetupGuide(db),
+    readCatalogSyncStatus(tenant),
+  ]);
 
   return {
     settings,
@@ -35,8 +45,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     openPOs,
     supplierCount,
     cachedVariants,
+    setupGuide,
+    syncStatus: buildSyncStatusView(
+      syncDomains.map((domain) => ({
+        ...domain,
+        lastSucceededAt: domain.lastSucceededAt?.toISOString() ?? null,
+      })),
+    ),
+    now: Date.now(),
   };
 };
+
+const SYNC_REFRESH = { intervalMs: 5000, maxMs: 15 * 60 * 1000 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
@@ -44,6 +64,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
+    // Does nothing when a sync for this shop is already queued or running.
     await enqueueCatalogSync(tenant);
     return { synced: true };
   }
@@ -60,41 +81,57 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Dashboard() {
-  const { settings, alerts, openPOs, supplierCount, cachedVariants } =
-    useLoaderData<typeof loader>();
+  const {
+    settings,
+    alerts,
+    openPOs,
+    supplierCount,
+    cachedVariants,
+    setupGuide,
+    syncStatus,
+    now,
+  } = useLoaderData<typeof loader>();
   const navigation = useNavigation();
+  const syncing =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "syncCatalog";
+  // A first sync takes from seconds to several minutes; follow it so the
+  // status and the setup guide update on their own.
+  useRevalidateWhile(syncStatus.inProgress, SYNC_REFRESH);
 
   return (
-    <s-page heading="Inventory platform">
-      {cachedVariants === 0 && (
-        <s-banner tone="warning" heading="Catalog not synced yet">
-          <s-paragraph>
-            Run a catalog sync to pull your products, variants, and barcodes
-            from Shopify via a bulk operation. The background worker must be
-            running (`npm run worker`).
-          </s-paragraph>
-        </s-banner>
+    <s-page heading="Home">
+      {syncStatus.attention && (
+        <SyncAttentionBanner attention={syncStatus.attention} />
+      )}
+      {!setupGuide.complete && (
+        <SetupGuide guide={setupGuide} syncing={syncing} />
       )}
 
       <s-section heading="Overview">
-        <s-stack direction="inline" gap="large-100">
-          <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-heading>{supplierCount}</s-heading>
-            <s-paragraph>Suppliers</s-paragraph>
-          </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-heading>{openPOs}</s-heading>
-            <s-paragraph>Open POs</s-paragraph>
-          </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-heading>{cachedVariants}</s-heading>
-            <s-paragraph>Cached variants</s-paragraph>
-          </s-box>
-          <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-heading>{alerts.length}</s-heading>
-            <s-paragraph>Low stock alerts</s-paragraph>
-          </s-box>
-        </s-stack>
+        <s-query-container>
+          <s-grid
+            gridTemplateColumns="@container (inline-size > 480px) 1fr 1fr 1fr 1fr, 1fr 1fr"
+            gap="base"
+          >
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>{supplierCount}</s-heading>
+              <s-paragraph>Suppliers</s-paragraph>
+            </s-box>
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>{openPOs}</s-heading>
+              <s-paragraph>Open purchase orders</s-paragraph>
+            </s-box>
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>{cachedVariants}</s-heading>
+              <s-paragraph>Variants synced</s-paragraph>
+            </s-box>
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>{alerts.length}</s-heading>
+              <s-paragraph>Low stock alerts</s-paragraph>
+            </s-box>
+          </s-grid>
+        </s-query-container>
       </s-section>
 
       {alerts.length > 0 && (
@@ -128,36 +165,35 @@ export default function Dashboard() {
         </s-section>
       )}
 
-      <s-section slot="aside" heading="Catalog sync">
-        <s-paragraph>
-          {cachedVariants > 0
-            ? `${cachedVariants} variants cached. Re-sync after adding products.`
-            : "Sync your Shopify catalog to begin."}
-        </s-paragraph>
-        <Form method="post">
-          <input type="hidden" name="intent" value="syncCatalog" />
-          <s-button
-            type="submit"
-            variant="primary"
-            {...(navigation.state === "submitting" ? { loading: true } : {})}
-          >
-            Sync catalog (bulk operation)
-          </s-button>
-        </Form>
-      </s-section>
+      <SyncStatus status={syncStatus} now={now} submitting={syncing} />
 
       <s-section slot="aside" heading="Quick links">
         <s-unordered-list>
           <s-list-item>
-            <s-link href="/app/buying-table">Buying Table</s-link>
+            <s-link href="/app/buying-table">Replenishment</s-link>
           </s-list-item>
           <s-list-item>
-            <s-link href="/app/purchase-orders">Purchase Orders</s-link>
+            <s-link href="/app/purchase-orders">Purchase orders</s-link>
           </s-list-item>
           <s-list-item>
-            <s-link href="/app/warehouse">Scan & Receive</s-link>
+            <s-link href="/app/warehouse">Scan and receive</s-link>
+          </s-list-item>
+          <s-list-item>
+            <s-link href="/app/inventory">Look up stock</s-link>
           </s-list-item>
         </s-unordered-list>
+      </s-section>
+
+      <s-section slot="aside" heading="On the shop floor">
+        <s-paragraph>
+          Staff can check stock from Shopify POS. In the POS app, open the
+          smart grid, tap Add tile, choose App, then ProPo inventory. Stock
+          also appears on each product’s screen in POS.
+        </s-paragraph>
+        <s-paragraph>
+          On a phone, open Inventory in the Shopify app and scan with the
+          camera.
+        </s-paragraph>
       </s-section>
 
       <s-section slot="aside" heading="Plan">

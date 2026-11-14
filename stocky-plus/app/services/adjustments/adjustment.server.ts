@@ -134,6 +134,14 @@ async function describeOutcome(
       unfinishedOperationId: result.operationId,
     });
   }
+  if (result.status === "APPLYING") {
+    // Another request holds this operation and is sending it; there may be
+    // nothing left to finish once it is done.
+    return fail(
+      "This adjustment is being sent to Shopify right now, possibly by another request. Changes Shopify has confirmed are not sent twice. Reload the page in a moment to see the result.",
+      { unfinishedOperationId: result.operationId },
+    );
+  }
   if (!TERMINAL_OPERATION_STATUSES.has(result.status)) {
     return fail(
       "Shopify has not confirmed every change yet. Changes it confirmed are recorded and will not be sent again. Use Finish applying to send the rest.",

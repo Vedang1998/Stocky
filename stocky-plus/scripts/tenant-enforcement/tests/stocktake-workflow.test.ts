@@ -638,9 +638,23 @@ describe("stocktake workflow", () => {
       // Two reds are sold after the item was counted.
       shopify.setLevel(101, 7, 11);
 
-      await count(red, 11);
-      await scan(dbA, { stocktakeId: id, code: "1111" });
+      let reads = 0;
+      const counting: ReadLevelQuantities = (locationId, ids) => {
+        reads += 1;
+        return readQuantities(locationId, ids);
+      };
+      await saveCount(
+        dbA,
+        { lineId: red, countedQty: 11 },
+        { readQuantities: counting },
+      );
+      await scan(
+        dbA,
+        { stocktakeId: id, code: "1111" },
+        { readQuantities: counting },
+      );
 
+      expect(reads).toBe(0);
       expect(await lineOf(id, RED)).toMatchObject({
         expectedQty: 9,
         countedQty: 12,
