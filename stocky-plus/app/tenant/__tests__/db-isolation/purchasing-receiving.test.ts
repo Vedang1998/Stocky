@@ -1013,12 +1013,14 @@ describe("purchase-order receiving", () => {
         );
 
       expect((await purchasingError(asShopB(po.id))).code).toBe("not_found");
+      // One at a time: a rejection created before it is awaited is unhandled.
       for (const attempt of [
-        resumePurchaseOrderReceipt(dbB, null, posted.receipt!.id, enabled()),
-        reversePurchaseOrderReceipt(dbB, null, RECEIVER, { receiptId: posted.receipt!.id }, enabled()),
-        getReceivingWorksheet(dbB, po.id),
+        () => resumePurchaseOrderReceipt(dbB, null, posted.receipt!.id, enabled()),
+        () =>
+          reversePurchaseOrderReceipt(dbB, null, RECEIVER, { receiptId: posted.receipt!.id }, enabled()),
+        () => getReceivingWorksheet(dbB, po.id),
       ]) {
-        expect((await purchasingError(attempt)).code).toBe("not_found");
+        expect((await purchasingError(attempt())).code).toBe("not_found");
       }
       expect(await listPurchaseOrderReceipts(dbB, po.id)).toEqual([]);
       expect(await dbB.purchaseOrderReceipt.count({})).toBe(0);
