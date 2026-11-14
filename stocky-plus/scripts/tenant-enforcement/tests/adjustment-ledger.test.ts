@@ -370,6 +370,36 @@ describe("inventory adjustments on the inventory ledger", () => {
       expect(results.some((r) => r.ok)).toBe(true);
     });
 
+    it("tells the second of two simultaneous requests that the first is still sending", async () => {
+      const twice = input("RED-75, -3");
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let reached!: () => void;
+      const sending = new Promise<void>((resolve) => (reached = resolve));
+
+      const first = submitAdjustment(dbA, null, STAFF, twice, {
+        ...enabled(),
+        sendBatch: async (request) => {
+          reached();
+          await held;
+          return shopify.send(request);
+        },
+      });
+      await sending;
+      const second = failed(
+        await submitAdjustment(dbA, null, STAFF, twice, enabled()),
+      );
+      release();
+
+      expect(second.error).toBe(
+        "This adjustment is being sent to Shopify right now, possibly by another request. Changes Shopify has confirmed are not sent twice. Reload the page in a moment to see the result.",
+      );
+      expect(second.recorded).toBe(true);
+      expect(await first).toMatchObject({ ok: true });
+      expect(shopify.requests).toHaveLength(1);
+      expect(shopify.level(101)).toBe(7);
+    });
+
     it("treats a new form as a new adjustment", async () => {
       await submit("RED-75, -3");
       await submit("RED-75, -3");

@@ -261,6 +261,14 @@ source type `InventoryAdjustment`, and the ledger is its history.
   inventory history.
 - **Reversal** applies the opposite of the applied lines, once per
   adjustment, by a named staff member; a reversal cannot be reversed.
+- **Quantity after a change.** Each applied line stores the quantity Shopify
+  reports after the change. Shopify does not always report one. A "set" line
+  was applied on exactly the quantity it named, so its result is stored either
+  way; an add or remove line that Shopify reports nothing for shows no
+  quantity rather than a guess.
+- **Two requests at once.** The request that finds the other one still
+  sending says so and asks for a reload, because there may be nothing left to
+  finish.
 - **Report.** The history lists every adjustment and reversal with its
   staff ID, location, note and the result Shopify gave for each line, and
   exports the chosen period as CSV (one row per line). An export refuses a
