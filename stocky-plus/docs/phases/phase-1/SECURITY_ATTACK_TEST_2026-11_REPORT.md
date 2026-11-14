@@ -1,6 +1,6 @@
-# Security attack test — findings report (2026-11-10 to 13)
+# Security attack test — findings report (2026-11-10 to 14)
 
-**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95 (merged as `052ee00`). Round 3 on 2026-11-13 retested the code merged since then; it is recorded in its own section and in the open items.
+**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95 (merged as `052ee00`). Round 3 on 2026-11-13 retested the code merged since then; it is recorded in its own section and in the open items. Round 4 on 2026-11-14 tested the mobile and POS code merged as #96 and is recorded in its own section.
 **Author:** Claude Code (security lane), on the owner's 2026-11-10 order.
 **Kind of record:** attack test and fixes by the same session. This is **not** an independent review: the session that found each issue also wrote its fix, and the fix pull requests were merged on the owner's order without independent review. Treat the "held" results as evidence for the tested cases only.
 
@@ -8,11 +8,11 @@
 
 | Item | Value |
 |---|---|
-| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0` |
+| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0`. Round 4: `main` at `f7548ba` |
 | Target | One instance of this app in the author's own cloud container: production build (`react-router-serve`), PostgreSQL 16 provisioned with the CI role and RLS recipe, Redis, a real worker process, a localhost stand-in for the Shopify Admin API, synthetic shops and data |
 | Not targeted | Shopify's platform, the Partner Dashboard, any third-party service, any real store, any deployed instance. No load or denial-of-service traffic left the container |
 | Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases, the SEC-08 case and a real uninstall for SEC-12 on `stocky-test-store.myshopify.com`; results are recorded on #81, #95 and #90 |
-| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13) |
+| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13), #118 (round 3 race test, SEC-15) |
 
 One scope note. Before the synthetic shop names were pinned to localhost, two unknown-shop authentication tests caused the library to attempt a token exchange for a made-up `*.myshopify.com` name that does not exist. No store, credential or real token was involved, and the names were pinned to `127.0.0.1` for every later run.
 
@@ -37,6 +37,7 @@ Severity follows `CLAUDE.md` (P0 to P3).
 | SEC-11 | P1 to P3 | Dependencies | 23 advisories in production dependencies on `main` (1 critical, 15 high), most in the React Router and Express family | Known request-handling flaws in the web server stack | `npm audit --omit=dev` | Reduced to 9 (0 critical, 4 high) in #90 by taking patched releases within the current majors. Residual below | CI suite on the new lockfile |
 | SEC-12 | P1 | Webhooks | Found on 2026-11-11 while reviewing #99. Shopify signs a webhook's body, not its shop or topic headers, and `app/uninstalled` took the shop from the header | Anyone holding one correctly signed delivery for this app could replay its body under another shop's name: that shop was disabled and its sessions deleted. With shop erasure (#99) the same header would choose whose data is deleted | A signed body for one shop, replayed with another active shop in the header: 200, shop disabled, session deleted | Fixed in #90: the route requires the signed body's `myshopify_domain` to match the header shop, 401 otherwise. Confirmed on the test store on 2026-11-11 at main `9b02276` (store tester's record on #90): a real uninstall was accepted and processed. The live body is the whole Shop resource, owner contact fields included; the handler stores only `id`, `domain` and `myshopify_domain` and logs only the topic and shop | `app/lib/http/signed-webhook-shop.test.ts`, `app/services/webhook-auth-uninstalled-shop.test.ts`, `app/sync/__tests__/sync-control-plane.test.ts` |
 | SEC-13 | P1 | Forms (regression from #90) | Found by the store test on 2026-11-11 (#107, filed there as P0). The dependency update in #90 moved React Router from 7.18.1 to 7.18.5. Since 7.18.3 its check on form posts compares the full origin, scheme included, with the URL the server sees. Behind a TLS-terminating proxy or the dev tunnel the browser's origin is `https` and the server's view is `http`, and the app listed no allowed hosts | Every form in the embedded app was answered with 400 on `main` from `9b02276`: no supplier, purchase order, stocktake, transfer or sync could be submitted. Webhooks were not affected. No data was exposed or changed | Production build and dev server, form post forwarded as a proxy forwards it: own origin 400 before, accepted after; other sites, look-alike hosts and another port still 400 | Fixed in #95: the app's own public host, taken from `SHOPIFY_APP_URL`, is the only allowed action origin, set at dev start (`react-router.config.ts`) and at server start in production (`server/build.mjs`). The check stays on and the patched version is kept. The attack test missed it because its form posts carried no `Origin` header | `app/lib/http/action-origins.test.ts` |
+| SEC-15 | P3 | Inventory lookup (from #96) | Found in round 4. The admin Inventory page cleaned control characters out of a scanned code before the exact barcode and SKU match, but passed the raw text to the product-name search that runs when nothing matches. PostgreSQL refuses a NUL byte in text | A lookup whose text contains a NUL byte answered with an error page instead of "not found". No data was exposed or changed, and the POS endpoints were not affected | Production build of `main` at `f7548ba`: the lookup answered 500 and the server logged PostgreSQL error 22021; the same text on `/api/pos/scan` answered normally | Fixed in #118: the name search removes control characters first, with the same rule the scan path uses (`stripControlCharacters` in `app/lib/scanning/barcode.ts`). The new test failed before the change with error 22021 and passes after | `app/tenant/__tests__/admin-inventory-lookup.test.ts` ("searches text that carries control characters instead of failing") |
 
 ## What held up (no change needed)
 
@@ -77,6 +78,34 @@ Pull requests read before merge, at the head named. These are security passes re
 | #111, App Store readiness batch | `dac922f` | No blocker. Raised: whether the Admin API or the Partner API is the right source for App Pricing status (unverified against Shopify, P1 if confirmed), a stored subscription flag still gating the Buying Table, and three container image notes. The image stages were emulated without Docker: build, release step, and web and worker start with runtime credentials only. A real `docker build` was not possible in this environment. Record: https://github.com/Vedang1998/Stocky/pull/111#issuecomment-6813625589. The lane has since reworked these; its ready head gets a second pass recorded on the pull request |
 | #88, reports and CSV exports | `836ffdb` | No blocker. Exports use the shared CSV encoder (SEC-04), ranges and paging are bounded, and another shop's data did not appear under any report. One P3: an unexpected `range` value answered 500. The lane fixed it at `e11d51b`. Record: https://github.com/Vedang1998/Stocky/pull/88#issuecomment-6865374014 |
 
+## Round 4 (2026-11-14)
+
+Round 4 covers the mobile and POS work merged as #96, on `main` at `f7548ba`: the two POS endpoints (`/api/pos/scan` and `/api/pos/stock`) with their token check and rate limit, the admin Inventory lookup, and the sync status and setup guide on the home page. The target was the same local instance, with catalog facts seeded for both synthetic shops, including one barcode that both shops use.
+
+Held:
+
+- **POS tokens.** 13 requests were refused with 401 or 403 and no data: no token, a malformed token, a token signed with another secret, an unsigned token, an expired token, a token issued for another app, a token naming an unknown shop, five tokens whose destination was not a plain shop address, and a token passed in the URL.
+- **POS across shops.** Each shop saw only its own product for the shared barcode. Another shop's barcode, SKU and variant ID answered "unknown" or "not found", and a shop parameter or shop header naming another shop was refused.
+- **POS input.** Over-long codes, wildcard characters, SQL text, a NUL byte, and malformed variant and location IDs were refused or treated as plain text. Nothing failed.
+- **POS rate limit.** One staff member was stopped after 240 requests in a minute while other staff and the other shop were not affected. Tokens without a usable staff ID shared one allowance. The shop as a whole was stopped at 2,400. With Redis stopped, the endpoints kept answering, about a quarter of a second slower, and logged the outage once: the limiter allows requests when its store is down. That is the lane's recorded choice, because the endpoints are authenticated.
+- **A disabled shop on POS.** A valid token for an uninstalled shop was refused.
+- **Admin Inventory lookup across shops.** Lookups from one shop for another shop's barcode, SKU, product name and variant ID, and lookups with wildcard and SQL text, showed no row of the other shop.
+- **Home page.** Sync status and the setup guide carried no data of the other shop, no job identifier and no internal failure text.
+
+Found:
+
+- SEC-15 (P3): a NUL byte in the Inventory lookup text answered with an error page. Fixed in #118, see the findings table.
+- Outside #96: the install hook queued a full catalog sync on every token exchange, about hourly for a shop in use. That is SEC-14, recorded with its fix in #120.
+- Outside #96: the first page load after a reinstall answered with an error on the local instance, 5 of 6 times on `main` at `ba2f33d`. Filed as #123 for the owning lane; a fix is proposed in #111 and passed the same local steps 8 of 8 times. A real uninstall and reinstall on the test store is still needed.
+
+Pull requests read before merge during this round. As in round 3, these are security passes requested by the owning lane, not approvals:
+
+| Pull request | Head | Result |
+|---|---|---|
+| #111, App Store readiness batch | `1a38de5`, then commits `e685b8a`, `b2053a2` and `3a60008` | No blocker at any of the four. Session tokens are now encrypted at rest (OPEN-8) and held under key copy, rotation, an unknown key and tampering; the Partner API source for plan status fails closed. Open after the last look: a stored plan snapshot is refreshed only on the billing page (P2), and the Partner settings are not yet required at start-up (waits on the test-store check, R-195). Records: comments 6868501175, 6868725287, 6869025644 and 6869069515 on #111 |
+| #117, order-history import after install | `09895cb` | No blocker. Two findings on the earlier head `59cb337` were fixed before this pass: the hook re-imported the whole order history every six hours (P2), and a reinstall soon after an import skipped the import (P3). Record: https://github.com/Vedang1998/Stocky/pull/117#issuecomment-6872344935 |
+| #88, reports and CSV exports | `5d32805` (changes since `836ffdb` only) | No security change. Record: https://github.com/Vedang1998/Stocky/pull/88#issuecomment-6868807817 |
+
 ## Open items
 
 | ID | Sev | Item | Owner | Risk register |
@@ -96,9 +125,9 @@ Pull requests read before merge, at the head named. These are security passes re
 
 ## Not covered
 
-- Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The store tester covers the first three on the test store.
+- Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The POS extension itself (`extensions/propo-pos`) was read but not run: round 4 tested the endpoints it calls, not the extension on a device. The store tester covers the first three on the test store.
 - The inventory-write paths with their flags ON against Shopify. They are OFF everywhere and were not turned on. Round 3 exercised them only in tests, against a stand-in.
-- Features merged after `494b3d0`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
+- Features merged after `f7548ba`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
 - Infrastructure: TLS, network exposure of PostgreSQL and Redis, backups, and the hosting platform's own limits. Nothing is deployed yet.
 
 ## Category verdicts

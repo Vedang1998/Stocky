@@ -171,6 +171,26 @@ describe("admin inventory lookup", () => {
     expect((await searchLiveVariants(db, "%%")).variants).toEqual([]);
   });
 
+  it("searches text that carries control characters instead of failing", async () => {
+    await seedCatalogVariant(prisma, shopAId, "1001", "A-1", {
+      productTitle: "Agave Tequila",
+    });
+
+    // PostgreSQL refuses a NUL byte in a text parameter; the raw query used
+    // to reach the name search and fail the page.
+    expect(await lookupAs(SHOP_A_DOMAIN, "?q=aga%00ve")).toMatchObject({
+      kind: "stock",
+      variant: { displayName: "Agave Tequila" },
+    });
+    expect(await lookupAs(SHOP_A_DOMAIN, "?q=tequ%09ila%0D%0A")).toMatchObject({
+      kind: "stock",
+      variant: { displayName: "Agave Tequila" },
+    });
+    expect(await lookupAs(SHOP_A_DOMAIN, "?q=%00%00")).toMatchObject({
+      kind: "not_found",
+    });
+  });
+
   it("caps a broad search and reports that more exist", async () => {
     for (let i = 0; i < MAX_SEARCH_RESULTS + 2; i += 1) {
       await seedCatalogVariant(prisma, shopAId, String(3000 + i), `CAP-${i}`, {

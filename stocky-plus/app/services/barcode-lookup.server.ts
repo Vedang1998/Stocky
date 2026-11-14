@@ -3,6 +3,7 @@ import {
   barcodeLookupKeys,
   MAX_SCANNED_CODE_LENGTH,
   normalizeScannedCode,
+  stripControlCharacters,
   type ScanNormalizationFailure,
 } from "../lib/scanning/barcode";
 
@@ -187,7 +188,9 @@ export async function searchLiveVariants(
   db: TenantDb,
   text: string,
 ): Promise<VariantSearchResult> {
-  const term = text.trim().slice(0, MAX_SCANNED_CODE_LENGTH);
+  const term = stripControlCharacters(text)
+    .trim()
+    .slice(0, MAX_SCANNED_CODE_LENGTH);
   if (term.length < MIN_SEARCH_LENGTH) return { variants: [], truncated: false };
 
   const contains = { contains: likeLiteral(term), mode: "insensitive" } as const;
