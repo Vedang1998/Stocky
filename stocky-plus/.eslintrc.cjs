@@ -76,6 +76,30 @@ module.exports = {
       ],
     },
 
+    // The Shopify CLI's dev proxy sends every /extensions/* request to its
+    // extension server. Vite serves a module at its path under the project
+    // root, so a page that imports from extensions/ at run time cannot load
+    // that module under `shopify app dev` and never becomes interactive.
+    {
+      files: ["app/**/*.{ts,tsx}"],
+      excludedFiles: ["**/*.test.{ts,tsx}", "**/__tests__/**"],
+      rules: {
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: ["**/extensions/**"],
+                message:
+                  "App code may import only types from extensions/. Put shared run-time code under app/lib.",
+                allowTypeImports: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // Node
     {
       files: [
