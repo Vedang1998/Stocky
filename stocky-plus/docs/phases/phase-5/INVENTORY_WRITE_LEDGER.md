@@ -161,18 +161,36 @@ each difference to Shopify through `settleInventoryDocument`.
 
 - **Starting.** A count is for one active, synced location. A full count lists
   every tracked item Shopify stocks there; a partial count starts empty and
-  holds only what is scanned or added. Expected quantities are frozen from the
-  synced on-hand quantity when the count starts (`quantityBasis: ON_HAND`),
-  because staff count what is physically on the shelf, including units already
-  committed to orders. Items whose level is not synced yet, or that have no
-  linked inventory item, are left off and reported.
+  holds only what is scanned or added. Staff count what is physically on the
+  shelf, including units already committed to orders, so the expected
+  quantity is Shopify's on-hand quantity (`quantityBasis: ON_HAND`). Items
+  that have no linked inventory item, or that Shopify does not stock at the
+  location, are left off and reported.
+- **Where expected quantities come from.** The synced quantities can trail
+  Shopify (an inventory webhook carries only `available`; on-hand is refreshed
+  by a sync), and a difference measured from a stale quantity would be sent to
+  Shopify as a wrong change (issue #119). Expected quantities are therefore
+  read from Shopify itself:
+  - A full count of up to 1,000 items reads every on-hand quantity live when
+    it starts (`expectedSource: LIVE`). If Shopify cannot be read, the count
+    is not started.
+  - A larger location starts from the synced quantities
+    (`expectedSource: SYNC`) and the page says so. Each line is then read from
+    Shopify when it is first counted, and `expectedReadAt` records when.
+  - An item scanned or added to a sheet is read live before it is added; if
+    Shopify cannot be read, nothing is added.
+  - Completion never measures a difference from a quantity that was not read
+    from Shopify. Lines still unread are read first (up to 2,000 per press);
+    if more remain, completion stops and asks for another press, and nothing
+    is sent. If Shopify cannot be read, completion is refused.
 - **Counting.** A line is counted by typing a quantity, by scanning (each scan
   of a SKU, barcode or variant ID adds one, or a typed quantity), or by marking
   every uncounted line as zero, which can be undone. Each line records how it
   was counted, when, and by which staff ID. Scanning an item that is not on
-  the sheet adds it when Shopify stocks it at the location and its quantity is
-  synced; otherwise the scan is refused with the reason. A pasted list of
-  SKUs, barcodes or variant IDs adds up to 500 items at a time, all or none.
+  the sheet adds it when Shopify stocks it at the location; otherwise the scan
+  is refused with the reason. A pasted list of SKUs, barcodes or variant IDs
+  adds up to 500 items at a time, all or none. A count can still be saved
+  while Shopify cannot be read; the line stays unread until it can.
 - **Blind counts.** The count can hide expected quantities while counting. The
   server withholds them from the page data and the export, not only from the
   screen, until the count is closed or the reviewer opens the differences.
@@ -183,14 +201,18 @@ each difference to Shopify through `settleInventoryDocument`.
   moves on-hand by the same amount. Completion is refused while lines are
   uncounted unless the staff member chooses to leave them unchanged, and a
   named staff member is required.
-- **Stock that moved during the count.** Before anything is sent, lines with a
-  difference are compared with Shopify's live on-hand quantity (up to 2,000
-  lines per request), and other lines with the synced quantity. A line whose
-  stock no longer equals what was expected blocks completion until someone
-  says whether it was counted before the movement (the difference is still
+- **Stock that moved during the count.** Before anything is sent, the count
+  is compared with Shopify's live on-hand quantity, up to 2,000 lines per
+  press: unread lines first, then lines with a difference, then the rest.
+  Lines beyond that are compared with the synced quantity. A line whose stock
+  no longer equals what was read blocks completion until someone says whether
+  it was counted before the movement (the difference is still
   counted − expected) or after it (the difference is measured from the
   quantity Shopify shows now). Changing a line's count clears that answer.
-  Items this count has already sent are not checked again.
+  Items this count has already sent are not checked again. The check and the
+  send are separate requests: the change goes to `available` while the count
+  is measured in on-hand, so Shopify's compare-and-swap cannot guard it, and a
+  movement in the seconds between the two is not detected.
 - **Partial failure.** Lines Shopify accepted stay accepted. The count stays
   in progress, shows which lines were refused and why, and a second press
   sends only what is still outstanding.

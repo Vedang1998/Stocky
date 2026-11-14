@@ -1403,6 +1403,38 @@ describe("stocktake workflow", () => {
       expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: true });
     });
 
+    it("tells a second press that the first is still sending, not that the count stays open", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => (release = resolve));
+      let reached!: () => void;
+      const sending = new Promise<void>((resolve) => (reached = resolve));
+
+      const first = complete(id, {
+        sendBatch: async (request) => {
+          reached();
+          await held;
+          return shopify.send(request);
+        },
+      });
+      await sending;
+      const second = await complete(id);
+      release();
+
+      expect(second).toEqual({
+        ok: false,
+        error:
+          "These changes are being sent to Shopify right now, possibly by another request. Changes Shopify has confirmed are not sent twice. Reload the page in a moment to see the result, and try again if anything is left.",
+        problems: [],
+        blocker: null,
+      });
+      expect(await first).toEqual({ ok: true, alreadyCompleted: false });
+      expect(shopify.requests).toHaveLength(1);
+      expect(await status(id)).toBe("COMPLETED");
+    });
+
     it("stays open after a partial failure and the retry sends only the refused line", async () => {
       const { id, lineFor } = await startCount();
       await count(lineFor(RED), 7);

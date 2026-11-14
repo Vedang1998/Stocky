@@ -317,6 +317,42 @@ describe("action results on the Transfers page (#78)", () => {
     }
   });
 
+  it("shows nothing as shipped on a transfer that was cancelled as a draft", async () => {
+    const route = await import("../routes/app.transfers");
+    const transfer = (status: string) => ({
+      id: `transfer-${status}`,
+      status,
+      sourceLocationId: SOURCE,
+      destinationLocationId: DESTINATION,
+      notes: null,
+      createdAt: new Date("2026-11-12T09:00:00.000Z"),
+      lineItems: [
+        {
+          id: `line-${status}`,
+          shopifyVariantId: "gid://shopify/ProductVariant/1",
+          quantity: 5,
+          pickedQty: 2,
+          receivedQty: 0,
+        },
+      ],
+    });
+    const cells = (status: string) => {
+      page.loaderData = {
+        transfers: [transfer(status)],
+        locations: LOCATIONS,
+        variants: [],
+      };
+      const html = renderToStaticMarkup(createElement(route.default));
+      return [...html.matchAll(/<s-table-cell>(\d+)<\/s-table-cell>/g)].map(
+        (match) => Number(match[1]),
+      );
+    };
+
+    // Requested, shipped, received.
+    expect(cells("CANCELLED")).toEqual([5, 0, 0]);
+    expect(cells("IN_TRANSIT")).toEqual([5, 2, 0]);
+  });
+
   it("shows no banner when nothing was submitted", async () => {
     const route = await import("../routes/app.transfers");
     page.loaderData = { transfers: [], locations: LOCATIONS, variants: [] };

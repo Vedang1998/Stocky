@@ -268,27 +268,46 @@ export function describeLineProblems(
     });
 }
 
-/** Merchant-facing explanation of why a document is not settled yet. */
-export function describeUnsettled(result: SettleResult): string {
+/**
+ * Merchant-facing explanation of why a document is not settled yet.
+ *
+ * `standing` says where that leaves the document ("The count stays open.").
+ * It is left out while the changes are still being sent, because the request
+ * sending them may have moved the document on by the time the page reloads.
+ */
+export function describeUnsettled(result: SettleResult, standing = ""): string {
   const operation = result.operation;
+  const withStanding = (text: string) =>
+    standing ? `${text} ${standing}` : text;
   if (!operation) {
-    return "Shopify has not confirmed every change yet. Try again.";
+    return withStanding(
+      "Shopify has not confirmed every change yet. Try again.",
+    );
   }
   switch (operation.status) {
     case "BLOCKED":
-      return "Inventory changes are switched off for this app, so nothing was sent to Shopify.";
-    case "PENDING":
+      return withStanding(
+        "Inventory changes are switched off for this app, so nothing was sent to Shopify.",
+      );
     case "APPLYING":
+      return "These changes are being sent to Shopify right now, possibly by another request. Changes Shopify has confirmed are not sent twice. Reload the page in a moment to see the result, and try again if anything is left.";
+    case "PENDING":
     case "RETRY_PENDING":
-      return operation.lastErrorCode === "WRITE_CAPABILITY_DISABLED"
-        ? "Inventory changes were switched off part-way through. Lines already confirmed by Shopify are recorded; try again once changes are enabled."
-        : "Shopify has not confirmed every change yet. Lines already confirmed are recorded and will not be sent again. Try again in a moment.";
+      return withStanding(
+        operation.lastErrorCode === "WRITE_CAPABILITY_DISABLED"
+          ? "Inventory changes were switched off part-way through. Lines already confirmed by Shopify are recorded; try again once changes are enabled."
+          : "Shopify has not confirmed every change yet. Lines already confirmed are recorded and will not be sent again. Try again in a moment.",
+      );
     case "PARTIALLY_APPLIED":
     case "FAILED": {
       const rejected = operation.failedLineCount + operation.conflictLineCount;
-      return `Shopify did not accept ${rejected} of ${operation.lineCount} changes. Lines it accepted are recorded and will not be sent again.`;
+      return withStanding(
+        `Shopify did not accept ${rejected} of ${operation.lineCount} changes. Lines it accepted are recorded and will not be sent again.`,
+      );
     }
     case "APPLIED":
-      return `Shopify confirmed these changes, but ${result.outstanding.length} more remain to be sent. Try again to send the rest; confirmed changes are not sent twice.`;
+      return withStanding(
+        `Shopify confirmed these changes, but ${result.outstanding.length} more remain to be sent. Try again to send the rest; confirmed changes are not sent twice.`,
+      );
   }
 }

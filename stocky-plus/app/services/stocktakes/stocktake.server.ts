@@ -1598,7 +1598,7 @@ export async function completeStocktake(
     throw err;
   }
   if (!settle.settled) {
-    return fail(`${describeUnsettled(settle)} The count stays open.`, {
+    return fail(describeUnsettled(settle, "The count stays open."), {
       problems: describeLineProblems(settle.operation, built.lineByItem),
     });
   }
