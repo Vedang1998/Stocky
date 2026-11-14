@@ -1,0 +1,11 @@
+{
+  "name": "propo-pos",
+  "private": true,
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "type": "module",
+  "dependencies": {
+    "@shopify/ui-extensions": "2026.7.x",
+    "preact": "^10.29.0"
+  }
+}
