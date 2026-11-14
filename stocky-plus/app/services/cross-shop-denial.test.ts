@@ -379,21 +379,26 @@ describe("cross-shop denial", () => {
     // Shop B cannot load Shop A's supplier by id.
     prismaMock.supplier.findFirst.mockResolvedValue(null);
 
-    await expect(
-      action(
-        actionArgs(
-          formRequest({
-            intent: "deleteMapping",
-            mappingId: "map-shop-a",
-          }),
-          { id: "supplier-shop-a" },
-        ),
+    const result = await action(
+      actionArgs(
+        formRequest({
+          intent: "removeProduct",
+          mappingId: "map-shop-a",
+        }),
+        { id: "supplier-shop-a" },
       ),
-    ).rejects.toMatchObject({ status: 404 });
+    );
 
     expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
       where: directScoped({ id: "supplier-shop-a" }),
     });
+    expect(result).toEqual({
+      ok: false,
+      intent: "removeProduct",
+      error: "Supplier was not found.",
+      fieldErrors: {},
+    });
+    expect(prismaMock.supplierSkuMapping.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.supplierSkuMapping.deleteMany).not.toHaveBeenCalled();
     expect(prismaMock.volumePriceTier.deleteMany).not.toHaveBeenCalled();
   });

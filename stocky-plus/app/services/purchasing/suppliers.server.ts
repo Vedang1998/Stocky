@@ -664,6 +664,8 @@ export async function saveSupplierProduct(
     isPreferred: input.isPreferred,
   };
 
+  // An unknown or archived supplier is reported before the product lookup.
+  await requireActiveSupplier(db, supplierId);
   const existing: { id: string } | null = await db.supplierSkuMapping.findFirst({
     where: { supplierId, shopifyVariantId: input.variantGid },
     select: { id: true },

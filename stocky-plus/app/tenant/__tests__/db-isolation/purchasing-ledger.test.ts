@@ -321,7 +321,7 @@ describe("purchasing ledger", () => {
         action({
           request: new Request(`https://app.test/app/suppliers/${supplierId}`, {
             method: "POST",
-            body: new URLSearchParams({ intent: "addMapping", variantId: WIDGET, ...fields }),
+            body: new URLSearchParams({ intent: "saveProduct", variantGid: WIDGET, ...fields }),
           }),
           params: { id: supplierId },
           context: {},
