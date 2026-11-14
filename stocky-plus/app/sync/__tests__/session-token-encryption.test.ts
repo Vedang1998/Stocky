@@ -52,7 +52,10 @@ describe("session tokens at rest (R-191)", () => {
 
   beforeEach(async () => {
     process.env.SESSION_TOKEN_ENCRYPTION_KEY = KEY;
-    await prisma.session.deleteMany({ where: { shop: SHOP } });
+    // The re-encrypt run walks the whole table, so sessions other test files
+    // left behind (in the clear, or sealed under a key from an earlier test
+    // here) would change its counts.
+    await prisma.session.deleteMany({});
   });
 
   it("writes encrypted tokens and reads back what Shopify issued", async () => {
