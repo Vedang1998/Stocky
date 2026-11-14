@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   checkPurchaseOrderAllowance: vi.fn(),
   previewLineSuggestion: vi.fn(),
   draftOrderPort: vi.fn(),
+  saveWorksheetColumns: vi.fn(),
 }));
 
 const context = {
@@ -63,6 +64,10 @@ vi.mock("./order-limit.server", () => ({
   checkPurchaseOrderAllowance: mocks.checkPurchaseOrderAllowance,
 }));
 vi.mock("./preview.server", () => ({ previewLineSuggestion: mocks.previewLineSuggestion }));
+vi.mock("../settings.server", async (original) => ({
+  ...(await original<typeof import("../settings.server")>()),
+  saveWorksheetColumns: mocks.saveWorksheetColumns,
+}));
 vi.mock("./purchasing.server", () => ({
   draftOrderPort: mocks.draftOrderPort,
   purchasingSources: { listSuppliers: vi.fn(async () => []) },
@@ -155,6 +160,33 @@ describe("worksheet page action", () => {
   it("rejects a form it does not know", async () => {
     const response = await thrown(() => action(post({ intent: "deleteEverything" })));
     expect(response.status).toBe(400);
+  });
+
+  describe("saveColumns", () => {
+    it("saves the ticked columns for the shop and returns what was stored", async () => {
+      mocks.saveWorksheetColumns.mockResolvedValue(["sku", "abc"]);
+      await expect(
+        action(post({ intent: "saveColumns", column: ["abc", "sku", "notAColumn"] })),
+      ).resolves.toEqual({ intent: "saveColumns", ok: true, columns: ["sku", "abc"] });
+      expect(mocks.saveWorksheetColumns).toHaveBeenCalledWith(context.db, [
+        "abc",
+        "sku",
+        "notAColumn",
+      ]);
+    });
+
+    it("saves an empty choice when every optional column is unticked", async () => {
+      mocks.saveWorksheetColumns.mockResolvedValue([]);
+      await action(post({ intent: "saveColumns" }));
+      expect(mocks.saveWorksheetColumns).toHaveBeenCalledWith(context.db, []);
+    });
+
+    it("is refused without a plan that includes replenishment", async () => {
+      mocks.entitlements.mockResolvedValue(resolveEntitlements([]));
+      const response = await thrown(() => action(post({ intent: "saveColumns", column: "sku" })));
+      expect(response.status).toBe(403);
+      expect(mocks.saveWorksheetColumns).not.toHaveBeenCalled();
+    });
   });
 
   describe("setQuantity", () => {

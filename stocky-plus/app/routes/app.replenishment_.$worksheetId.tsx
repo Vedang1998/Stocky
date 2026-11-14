@@ -12,11 +12,16 @@ import type {
   PreviewFormValues,
   WorksheetActionResult,
 } from "../components/replenishment/types";
+import { ColumnsModal } from "../components/replenishment/ColumnsModal";
 import { WorksheetTable } from "../components/replenishment/WorksheetTable";
 import { AnalyticsPrerequisiteError } from "../lib/analytics/errors";
 import { localDateOf } from "../lib/analytics/shop-calendar";
 import { SHOP_SCOPE } from "../lib/replenishment/scope";
-import { getReplenishmentDefaults } from "../lib/replenishment/settings.server";
+import {
+  getReplenishmentDefaults,
+  getWorksheetColumns,
+  saveWorksheetColumns,
+} from "../lib/replenishment/settings.server";
 import {
   INCOMING_SOURCE_LABELS,
   MAX_QUANTITY,
@@ -97,13 +102,14 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const view = parseWorksheetView(new URL(request.url).searchParams);
   const selection = worksheet.settings?.selection ?? null;
 
-  const [page, totals, orders, options, defaults, suppliers] = await Promise.all([
+  const [page, totals, orders, options, defaults, suppliers, columns] = await Promise.all([
     loadWorksheetPage(db, worksheet.id, view),
     getWorksheetTotals(db, worksheet.id),
     getOrderGroups(db, worksheet.id),
     loadSetupOptions(db),
     getReplenishmentDefaults(db),
     selection?.supplierId ? purchasingSources.listSuppliers(db) : [],
+    getWorksheetColumns(db),
   ]);
 
   const { summary, settings } = worksheet;
@@ -120,6 +126,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     : null;
 
   return {
+    columns,
     worksheet: {
       id: worksheet.id,
       generatedAt: formatInstant(worksheet.generatedAt, worksheet.timeZone),
@@ -192,6 +199,11 @@ export const action = async ({
   const form = await request.formData();
   const intent = field(form, "intent");
   const lineId = field(form, "lineId");
+
+  if (intent === "saveColumns") {
+    const columns = await saveWorksheetColumns(db, form.getAll("column"));
+    return { intent, ok: true, columns };
+  }
 
   if (intent === "setQuantity") {
     const quantity = parseQuantity(field(form, "quantity"));
@@ -307,6 +319,7 @@ export const action = async ({
 };
 
 const DETAIL_MODAL_ID = "worksheet-line-detail";
+const COLUMNS_MODAL_ID = "worksheet-columns";
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
@@ -323,7 +336,7 @@ function plural(count: number, one: string, many: string): string {
 
 export default function Worksheet() {
   const data = useLoaderData<typeof loader>();
-  const { worksheet, summary, view, lines, matching, pageCount, totals } = data;
+  const { worksheet, summary, view, lines, matching, pageCount, totals, columns } = data;
   const navigate = useNavigate();
   const [selected, setSelected] = useState<WorksheetLine | null>(null);
 
@@ -471,7 +484,7 @@ export default function Worksheet() {
             {view.pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="perPage" value={view.pageSize} />}
             <s-query-container>
               <s-grid
-                gridTemplateColumns="@container (inline-size > 560px) 1fr auto auto auto, 1fr auto"
+                gridTemplateColumns="@container (inline-size > 560px) 1fr auto auto auto auto, 1fr auto"
                 gap="base"
                 alignItems="end"
               >
@@ -509,6 +522,9 @@ export default function Worksheet() {
                     </s-option>
                   ))}
                 </s-select>
+                <s-button type="button" commandFor={COLUMNS_MODAL_ID} command="--show">
+                  Columns
+                </s-button>
               </s-grid>
             </s-query-container>
           </Form>
@@ -528,6 +544,8 @@ export default function Worksheet() {
             <>
               <WorksheetTable
                 lines={lines}
+                columns={columns}
+                currencyCode={summary?.currencyCode ?? null}
                 view={view}
                 path={path}
                 detailModalId={DETAIL_MODAL_ID}
@@ -564,6 +582,8 @@ export default function Worksheet() {
         destination={data.destination}
         locations={data.locations}
       />
+
+      <ColumnsModal key={columns.join(",")} id={COLUMNS_MODAL_ID} columns={columns} />
 
       <LineDetailModal
         id={DETAIL_MODAL_ID}
