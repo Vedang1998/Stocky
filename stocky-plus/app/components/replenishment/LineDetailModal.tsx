@@ -23,6 +23,7 @@ import {
 import { variantLabel } from "../../lib/replenishment/worksheet/labels";
 import type { WorksheetLine } from "../../lib/replenishment/worksheet/store.server";
 import { MethodPeriodFields } from "./MethodPeriodFields";
+import { SmartForecastPanel } from "./SmartForecastPanel";
 import type {
   LevelsActionResult,
   LevelsLoaderResult,
@@ -32,6 +33,7 @@ import type {
 
 /** What the detail needs to know about the worksheet the row belongs to. */
 export type LineDetailContext = {
+  worksheetId: string;
   currencyCode: string | null;
   /** The days whose sales the row reports, for example "Oct 12, 2026 to Nov 10, 2026". */
   salesPeriod: string;
@@ -489,6 +491,8 @@ function LineDetail({
       </s-stack>
 
       {previewDefaults && <Preview line={line} defaults={previewDefaults} />}
+
+      <SmartForecastPanel line={line} worksheetId={context.worksheetId} />
     </s-stack>
   );
 }
