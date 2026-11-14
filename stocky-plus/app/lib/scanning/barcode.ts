@@ -31,6 +31,15 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
 const DIGITS_ONLY = /^\d+$/;
 
 /**
+ * Remove control characters. No product name, SKU or barcode contains one,
+ * and PostgreSQL refuses a NUL byte in text, so input headed for a lookup is
+ * cleaned first.
+ */
+export function stripControlCharacters(value: string): string {
+  return value.replace(CONTROL_CHARACTERS, "");
+}
+
+/**
  * Turn raw scanner or keyboard input into the code to look up.
  *
  * Strips AIM symbology identifiers, terminators (CR/LF/TAB) and other
@@ -52,7 +61,7 @@ export function normalizeScannedCode(raw: string): NormalizedScan {
     }
   }
 
-  value = value.replace(CONTROL_CHARACTERS, "").trim();
+  value = stripControlCharacters(value).trim();
 
   if (value.length === 0) return { ok: false, reason: "empty" };
   if (value.length > MAX_SCANNED_CODE_LENGTH) {
