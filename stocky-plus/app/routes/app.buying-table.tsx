@@ -18,6 +18,12 @@ import { applySupplierRules } from "../lib/replenishment";
 import { computeForecast } from "../services/forecasting.server";
 import { resolveTieredUnitCost } from "../services/landed-cost.server";
 
+/**
+ * Value of the "Select a vendor" option. An `s-select` submits the option's
+ * label when its value is empty, so the placeholder needs a value of its own.
+ */
+const NO_VENDOR = "none";
+
 interface BuyingRow {
   mappingId: string;
   variantId: string;
@@ -40,7 +46,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const url = new URL(request.url);
-  const supplierId = url.searchParams.get("supplierId") ?? "";
+  const requestedSupplierId = url.searchParams.get("supplierId") ?? "";
   const metric: AbcMetric =
     url.searchParams.get("metric") === "VOLUME" ? "VOLUME" : "REVENUE";
 
@@ -58,7 +64,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     url.searchParams.get("locationId") || locations[0]?.id || "all";
 
   const rows: BuyingRow[] = [];
-  const supplier = suppliers.find((s: any) => s.id === supplierId);
+  const supplier = suppliers.find((s: any) => s.id === requestedSupplierId);
+  const supplierId: string = supplier?.id ?? "";
+  const supplierNotFound =
+    !supplier && requestedSupplierId !== "" && requestedSupplierId !== NO_VENDOR;
 
   if (supplier && settings.subscriptionActive) {
     const mappings = await db.supplierSkuMapping.findMany({
@@ -140,6 +149,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     suppliers,
     locations,
     supplierId,
+    supplierNotFound,
     locationId,
     metric,
     rows,
@@ -300,6 +310,7 @@ export default function BuyingTable() {
     suppliers,
     locations,
     supplierId,
+    supplierNotFound,
     locationId,
     metric,
     rows,
@@ -342,8 +353,8 @@ export default function BuyingTable() {
       <s-section heading="Filters">
         <Form method="get">
           <s-stack direction="inline" gap="base">
-            <s-select label="Vendor" name="supplierId" value={supplierId}>
-              <s-option value="">Select a vendor</s-option>
+            <s-select label="Vendor" name="supplierId" value={supplierId || NO_VENDOR}>
+              <s-option value={NO_VENDOR}>Select a vendor</s-option>
               {suppliers.map((s: any) => (
                 <s-option key={s.id} value={s.id}>
                   {s.name}
@@ -367,6 +378,17 @@ export default function BuyingTable() {
           </s-stack>
         </Form>
       </s-section>
+
+      {supplierNotFound && (
+        <s-section>
+          <s-banner tone="warning" heading="Vendor not found">
+            <s-paragraph>
+              That vendor is not on your vendor list. Choose a vendor and load
+              the table again.
+            </s-paragraph>
+          </s-banner>
+        </s-section>
+      )}
 
       {supplierId && rows.length === 0 && (
         <s-section>
