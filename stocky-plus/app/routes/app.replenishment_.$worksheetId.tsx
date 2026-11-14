@@ -352,6 +352,7 @@ export default function Worksheet() {
     ? (lines.find((line) => line.id === selected.id) ?? selected)
     : null;
   const detailContext: LineDetailContext = {
+    worksheetId: worksheet.id,
     currencyCode: summary?.currencyCode ?? null,
     salesPeriod: summary?.salesPeriod ?? "",
     salesDays: summary?.salesDays ?? null,
