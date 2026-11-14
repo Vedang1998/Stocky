@@ -85,6 +85,22 @@ const BATCH_LINE_SELECT = {
   changeFromQuantity: true,
 } as const;
 
+/**
+ * The quantity a level holds once a change is applied. Shopify does not
+ * always report it. A compare-and-swap change was applied on exactly the
+ * quantity it named, so its result is known either way; a relative change
+ * without a report stays unknown rather than guessed.
+ */
+function quantityAfter(
+  line: { delta: number; changeFromQuantity: number | null },
+  reported: number | null | undefined,
+): number | null {
+  if (typeof reported === "number") return reported;
+  return line.changeFromQuantity === null
+    ? null
+    : line.changeFromQuantity + line.delta;
+}
+
 function batchKey(operationId: string, sequence: number): string {
   return `propo-inv:${operationId}:${sequence}`;
 }
@@ -287,10 +303,12 @@ export async function executeInventoryOperation(
               status: "APPLIED",
               appliedAt: now,
               shopifyAdjustmentGroupGid: outcome.adjustmentGroupId,
-              quantityAfterChange:
+              quantityAfterChange: quantityAfter(
+                line,
                 afterByLevel.get(
                   `${line.inventoryItemGid}|${line.locationGid}`,
-                ) ?? null,
+                ),
+              ),
               errorCode: null,
               errorMessage: null,
             },

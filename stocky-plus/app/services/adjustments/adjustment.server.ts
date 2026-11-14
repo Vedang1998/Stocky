@@ -30,7 +30,13 @@ import {
   type InventoryOperationResult,
   type InventoryOperationStatus,
 } from "../inventory-writes/types";
-import { ledgerVariantId } from "../inventory-writes/variant-items.server";
+import {
+  findVariantsByCode,
+  findVariantsByInventoryItem,
+  ledgerVariantId,
+  variantsMatchingCode,
+  type CatalogVariant,
+} from "../inventory-writes/variant-items.server";
 import {
   MAX_ADJUSTMENT_NOTE_LENGTH,
   isAdjustmentMode,
@@ -103,52 +109,6 @@ const fail = (
   unfinishedOperationId: extra.unfinishedOperationId ?? null,
 });
 
-interface CatalogVariant {
-  shopifyVariantId: string;
-  title: string;
-  sku: string | null;
-  barcode: string | null;
-  inventoryItemId: string | null;
-}
-
-const CATALOG_SELECT = {
-  shopifyVariantId: true,
-  title: true,
-  sku: true,
-  barcode: true,
-  inventoryItemId: true,
-} as const;
-
-/** Variants whose SKU, barcode or variant GID is one of `codes`. */
-async function findVariantsByCode(
-  db: TenantDb,
-  codes: string[],
-): Promise<CatalogVariant[]> {
-  return (await db.shopifyVariantCache.findMany({
-    where: {
-      OR: [
-        { sku: { in: codes } },
-        { barcode: { in: codes } },
-        { shopifyVariantId: { in: codes } },
-      ],
-    },
-    select: CATALOG_SELECT,
-  })) as CatalogVariant[];
-}
-
-async function findVariantsByInventoryItem(
-  db: TenantDb,
-  inventoryItemIds: string[],
-): Promise<Map<string, CatalogVariant>> {
-  const ids = [...new Set(inventoryItemIds)];
-  if (ids.length === 0) return new Map();
-  const rows = (await db.shopifyVariantCache.findMany({
-    where: { inventoryItemId: { in: ids } },
-    select: CATALOG_SELECT,
-  })) as CatalogVariant[];
-  return new Map(rows.map((row) => [row.inventoryItemId!, row]));
-}
-
 function isSwitchedOn(options: AdjustmentOptions): boolean {
   return (options.isCapabilityEnabled ?? isInventoryWriteEnabled)(
     "adjustmentWrites",
@@ -173,6 +133,14 @@ async function describeOutcome(
     return fail(SWITCHED_OFF_MESSAGE, {
       unfinishedOperationId: result.operationId,
     });
+  }
+  if (result.status === "APPLYING") {
+    // Another request holds this operation and is sending it; there may be
+    // nothing left to finish once it is done.
+    return fail(
+      "This adjustment is being sent to Shopify right now, possibly by another request. Changes Shopify has confirmed are not sent twice. Reload the page in a moment to see the result.",
+      { unfinishedOperationId: result.operationId },
+    );
   }
   if (!TERMINAL_OPERATION_STATUSES.has(result.status)) {
     return fail(
@@ -280,12 +248,7 @@ export async function submitAdjustment(
   const lineOfVariant = new Map<string, number>();
   const resolved: Array<{ variant: CatalogVariant; quantity: number }> = [];
   for (const line of parsed.lines) {
-    const matches = catalog.filter(
-      (v) =>
-        v.sku === line.code ||
-        v.barcode === line.code ||
-        v.shopifyVariantId === line.code,
-    );
+    const matches = variantsMatchingCode(catalog, line.code);
     if (matches.length === 0) {
       details.push(
         `Line ${line.lineNumber}: no variant has the SKU or barcode ${line.code}.`,

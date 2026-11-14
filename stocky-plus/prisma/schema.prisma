@@ -570,16 +570,52 @@ enum StocktakeStatus {
   CANCELLED
 }
 
+/// FULL counts every item stocked at the location; PARTIAL only the items added to it.
+enum StocktakeScope {
+  FULL
+  PARTIAL
+}
+
+/// Which Shopify quantity `expectedQty` was frozen from. ON_HAND is what a
+/// person counts on the shelf; AVAILABLE is kept for counts started before it.
+enum StocktakeQuantityBasis {
+  AVAILABLE
+  ON_HAND
+}
+
+/// Where a count sheet's starting `expectedQty` values were read. LIVE is a
+/// read of Shopify as the count started; SYNC is the last synced quantity,
+/// used for counts started before the live read and for very large locations.
+enum StocktakeExpectedSource {
+  SYNC
+  LIVE
+}
+
+enum StocktakeCountSource {
+  MANUAL
+  SCAN
+  ZERO_FILL
+}
+
 model Stocktake {
-  id          String          @id @default(cuid())
-  shop        String
-  shopId      String?
-  locationId  String
-  status      StocktakeStatus @default(DRAFT)
-  name        String
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime        @default(now())
+  id                String                  @id @default(cuid())
+  shop              String
+  shopId            String?
+  locationId        String
+  status            StocktakeStatus         @default(DRAFT)
+  name              String
+  scope             StocktakeScope          @default(FULL)
+  quantityBasis     StocktakeQuantityBasis  @default(AVAILABLE)
+  expectedSource    StocktakeExpectedSource @default(SYNC)
+  /// Expected quantities are hidden from the people counting until review.
+  blind             Boolean                 @default(false)
+  startedAt         DateTime?
+  startedByUserId   String?                 @db.VarChar(64)
+  completedAt       DateTime?
+  completedByUserId String?                 @db.VarChar(64)
+  cancelledAt       DateTime?
+  cancelledByUserId String?                 @db.VarChar(64)
+  createdAt         DateTime                @default(now())
 
   lineItems StocktakeLineItem[]
 
@@ -588,17 +624,32 @@ model Stocktake {
 }
 
 model StocktakeLineItem {
-  id               String  @id @default(cuid())
-  shopId           String?
-  stocktakeId      String
-  shopifyVariantId String
-  expectedQty      Int
-  countedQty       Int?
+  id                  String                @id @default(cuid())
+  shopId              String?
+  stocktakeId         String
+  shopifyVariantId    String
+  expectedQty         Int
+  /// When expectedQty was read from Shopify itself. Null while it is a synced
+  /// quantity, which is replaced by a live read when the line is counted or,
+  /// at the latest, when the count is completed.
+  expectedReadAt      DateTime?
+  countedQty          Int?
+  countSource         StocktakeCountSource?
+  countedAt           DateTime?
+  countedByUserId     String?               @db.VarChar(64)
+  /// Shopify's quantity when completion found it no longer matched
+  /// expectedQty. The line waits for review while movementReviewedAt is null.
+  movementDetectedQty Int?
+  /// Set when stock moved in Shopify during the count and the count was taken
+  /// after the movement: the variance is then counted minus this quantity.
+  movementBaselineQty Int?
+  movementReviewedAt  DateTime?
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([shopId, stocktakeId])
+  @@index([shopId, stocktakeId, shopifyVariantId])
   @@unique([shopId, id])
 }
 

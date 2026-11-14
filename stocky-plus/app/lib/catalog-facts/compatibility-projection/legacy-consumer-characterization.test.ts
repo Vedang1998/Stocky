@@ -28,13 +28,20 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
 
   it("stocktake completion reads ShopifyVariantCache inventoryItemId and title", () => {
     const service = readApp("services/stocktakes/stocktake.server.ts");
-    expect(service).toMatch(/findVariantInventoryItems\(/);
+    expect(service).toMatch(/findVariantsById\(/);
     expect(service).toMatch(/\?\.inventoryItemId/);
 
     const reader = readApp("services/inventory-writes/variant-items.server.ts");
     expect(reader).toMatch(/shopifyVariantCache\.findMany/);
     expect(reader).toMatch(
-      /select:\s*\{\s*shopifyVariantId:\s*true,\s*title:\s*true,\s*inventoryItemId:\s*true\s*\}/,
+      /const CATALOG_SELECT = \{\s*shopifyVariantId:\s*true,\s*title:\s*true,\s*sku:\s*true,\s*barcode:\s*true,\s*inventoryItemId:\s*true,?\s*\} as const/,
+    );
+    const byId = reader.slice(
+      reader.indexOf("export async function findVariantsById("),
+      reader.indexOf("export async function findVariantsByInventoryItem("),
+    );
+    expect(byId).toMatch(
+      /shopifyVariantCache\.findMany\(\{\s*where:\s*\{\s*shopifyVariantId:\s*\{\s*in:\s*part\s*\}\s*\},\s*select:\s*CATALOG_SELECT,?\s*\}\)/,
     );
   });
 
