@@ -9,7 +9,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { getLowStockAlerts } from "../services/forecasting.server";
 import { loadSetupGuide } from "../services/setup-guide.server";
-import { enqueueCatalogSync } from "../jobs/queue.server";
+import {
+  enqueueCatalogSync,
+  enqueueOrderFactsSync,
+} from "../jobs/queue.server";
 import { SetupGuide } from "../components/SetupGuide";
 import { SyncAttentionBanner, SyncStatus } from "../components/SyncStatus";
 import { buildSyncStatusView } from "../lib/sync-status";
@@ -28,10 +31,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         update: {},
       }),
       getLowStockAlerts(db),
+      // The same orders as the Open view of the purchase-order list.
       db.purchaseOrder.count({
-        where: { status: { in: ["ORDERED", "PARTIAL"] } },
+        where: {
+          archivedAt: null,
+          status: { in: ["DRAFT", "SENT", "ORDERED", "PARTIAL"] },
+        },
       }),
-      db.supplier.count({ where: {} }),
+      db.supplier.count({ where: { status: "ACTIVE" } }),
       db.shopifyVariantCache.count({ where: {} }),
     ]);
   const [setupGuide, syncDomains] = await Promise.all([
@@ -64,8 +71,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const intent = form.get("intent") as string;
 
   if (intent === "syncCatalog") {
-    // Does nothing when a sync for this shop is already queued or running.
-    await enqueueCatalogSync(tenant);
+    // Each does nothing when a sync of its kind for this shop is already
+    // queued or running.
+    await Promise.all([
+      enqueueCatalogSync(tenant),
+      enqueueOrderFactsSync(tenant),
+    ]);
     return { synced: true };
   }
 
@@ -176,7 +187,7 @@ export default function Dashboard() {
             <s-link href="/app/purchase-orders">Purchase orders</s-link>
           </s-list-item>
           <s-list-item>
-            <s-link href="/app/warehouse">Scan and receive</s-link>
+            <s-link href="/app/warehouse">Receiving</s-link>
           </s-list-item>
           <s-list-item>
             <s-link href="/app/inventory">Look up stock</s-link>

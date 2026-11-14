@@ -65,7 +65,11 @@ import {
   bulkRootUpdatedAt,
   mapBulkAAssemblyToOrderSnapshot,
 } from "./mapper-bulk";
-import { readGrantedAccessScopes } from "./refetch";
+import {
+  readGrantedAccessScopes,
+  readShopTimezoneCurrencyOrThrow,
+} from "./refetch";
+import { persistShopTimezoneCurrencyValues } from "./shop-metadata";
 import {
   mergeLedgerCounts,
   readOrderFactsImportLedger,
@@ -76,7 +80,7 @@ import {
   wrapAdminWithDTransportBudget,
 } from "./transport-budget";
 import type { LedgerQueryCounts } from "./types";
-import type { OrderFactsTxnHost } from "./apply-composition";
+import { asApplyDb, type OrderFactsTxnHost } from "./apply-composition";
 
 export type OrderFactsImportStepResult =
   | {
@@ -263,6 +267,20 @@ export async function runOrderFactsImportStep(input: {
 
   if (input.pollBulkOperation !== false && input.jsonlSource == null) {
     if (!bulkOperationGid) {
+      // Reports need the shop's time zone and currency, and until now only an
+      // order webhook stored them. Store them before the export is submitted,
+      // so a shop whose profile cannot be read never starts a long import.
+      const shopMetadata = await readShopTimezoneCurrencyOrThrow({
+        admin: countRunAdmin,
+        shop: input.shop,
+      });
+      await input.db.$transaction((tx) =>
+        persistShopTimezoneCurrencyValues(
+          asApplyDb(tx),
+          input.shopId,
+          shopMetadata,
+        ),
+      );
       const submitted = await submitOrderFactsBulkA(
         countRunAdmin as CatalogAdminReadClient,
         {

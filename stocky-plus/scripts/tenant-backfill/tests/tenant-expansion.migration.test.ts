@@ -51,7 +51,11 @@ const ALL_MIGRATION_NAMES = [
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
   "20261110220000_inventory_operation_ledger",
+  "20261110220000_purchasing_enum_values",
+  "20261110220100_purchasing_ledger_foundation",
   "20261110230000_replenishment_planning_inputs",
+  "20261111100000_purchase_order_receipts",
+  "20261111230000_stocktake_workflow",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
