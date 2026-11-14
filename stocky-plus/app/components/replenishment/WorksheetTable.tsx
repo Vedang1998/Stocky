@@ -1,11 +1,13 @@
 import { useFetcher } from "react-router";
-import { formatDecimal, MISSING_VALUE } from "../../lib/decimal-format";
+import type { ReactNode } from "react";
+import { formatDecimal, formatMoney, MISSING_VALUE } from "../../lib/decimal-format";
 import { variantLabel } from "../../lib/replenishment/worksheet/labels";
 import { MAX_QUANTITY, type WarningCode } from "../../lib/replenishment/types";
 import {
   STOCK_STATUS_LABELS,
   WARNING_LABELS,
 } from "../../lib/replenishment/worksheet/describe";
+import type { WorksheetColumn } from "../../lib/replenishment/worksheet/columns";
 import type { WorksheetLine } from "../../lib/replenishment/worksheet/store.server";
 import {
   worksheetViewSearch,
@@ -135,14 +137,118 @@ function Warnings({ codes }: { codes: WarningCode[] }) {
   );
 }
 
+type ColumnSpec = {
+  label: string;
+  /** Null for a column the database does not sort by. */
+  sortKey: WorksheetSortKey | null;
+  numeric: boolean;
+  cell: (line: WorksheetLine, currencyCode: string | null) => ReactNode;
+};
+
+const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
+  sku: {
+    label: "SKU",
+    sortKey: "sku",
+    numeric: false,
+    cell: (line) => line.sku ?? MISSING_VALUE,
+  },
+  supplier: {
+    label: "Supplier",
+    sortKey: "supplier",
+    numeric: false,
+    cell: (line) =>
+      line.supplierName ?? (
+        <s-text color="subdued">
+          {line.supplierCount > 1 ? `${line.supplierCount} suppliers, none preferred` : "None"}
+        </s-text>
+      ),
+  },
+  abc: { label: "ABC", sortKey: "abc", numeric: false, cell: (line) => line.abcClass ?? MISSING_VALUE },
+  available: {
+    label: "Available",
+    sortKey: "available",
+    numeric: true,
+    cell: (line) => quantity(line.availableQuantity),
+  },
+  onHand: {
+    label: "On hand",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => quantity(line.onHandQuantity),
+  },
+  committed: {
+    label: "Committed",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => quantity(line.committedQuantity),
+  },
+  incoming: {
+    label: "Incoming",
+    sortKey: "incoming",
+    numeric: true,
+    cell: (line) => quantity(line.incomingQuantity),
+  },
+  netUnits: {
+    label: "Net sold",
+    sortKey: "netUnits",
+    numeric: true,
+    cell: (line) => quantity(line.netUnits),
+  },
+  revenue: {
+    label: "Net sales",
+    sortKey: null,
+    numeric: true,
+    cell: (line, currencyCode) =>
+      line.revenueAmount == null
+        ? MISSING_VALUE
+        : currencyCode
+          ? formatMoney(line.revenueAmount, currencyCode)
+          : formatDecimal(line.revenueAmount),
+  },
+  unitsPerDay: {
+    label: "Per day",
+    sortKey: "unitsPerDay",
+    numeric: true,
+    cell: (line) => formatDecimal(line.unitsPerDay),
+  },
+  daysOfStock: {
+    label: "Days of stock",
+    sortKey: "daysOfStock",
+    numeric: true,
+    cell: (line) => formatDecimal(line.daysOfStock),
+  },
+  leadTime: {
+    label: "Lead time",
+    sortKey: null,
+    numeric: true,
+    cell: (line) =>
+      line.leadTimeDays == null
+        ? MISSING_VALUE
+        : line.leadTimeDays === 1
+          ? "1 day"
+          : `${line.leadTimeDays.toLocaleString("en-US")} days`,
+  },
+  reorderPoint: {
+    label: "Reorder point",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => quantity(line.reorderPoint),
+  },
+};
+
 export function WorksheetTable({
   lines,
+  columns,
+  currencyCode,
   view,
   path,
   detailModalId,
   onOpenDetail,
 }: {
   lines: WorksheetLine[];
+  /** The optional columns to show, in table order. */
+  columns: readonly WorksheetColumn[];
+  currencyCode: string | null;
   view: WorksheetView;
   path: string;
   detailModalId: string;
@@ -153,14 +259,22 @@ export function WorksheetTable({
     <s-table>
       <s-table-header-row>
         <SortableHeader label="Product" sortKey="product" {...header} />
-        <SortableHeader label="SKU" sortKey="sku" {...header} />
-        <SortableHeader label="Supplier" sortKey="supplier" {...header} />
-        <SortableHeader label="ABC" sortKey="abc" {...header} />
-        <SortableHeader label="Available" sortKey="available" numeric {...header} />
-        <SortableHeader label="Incoming" sortKey="incoming" numeric {...header} />
-        <SortableHeader label="Net sold" sortKey="netUnits" numeric {...header} />
-        <SortableHeader label="Per day" sortKey="unitsPerDay" numeric {...header} />
-        <SortableHeader label="Days of stock" sortKey="daysOfStock" numeric {...header} />
+        {columns.map((column) => {
+          const spec = COLUMNS[column];
+          return spec.sortKey ? (
+            <SortableHeader
+              key={column}
+              label={spec.label}
+              sortKey={spec.sortKey}
+              numeric={spec.numeric}
+              {...header}
+            />
+          ) : (
+            <s-table-header key={column} {...(spec.numeric ? { format: "numeric" as const } : {})}>
+              {spec.label}
+            </s-table-header>
+          );
+        })}
         <SortableHeader label="Suggested" sortKey="suggested" numeric {...header} />
         <SortableHeader label="Order" sortKey="order" numeric {...header} />
         <s-table-header>Status</s-table-header>
@@ -180,22 +294,9 @@ export function WorksheetTable({
                 </s-stack>
               </s-grid>
             </s-table-cell>
-            <s-table-cell>{line.sku ?? MISSING_VALUE}</s-table-cell>
-            <s-table-cell>
-              {line.supplierName ? (
-                line.supplierName
-              ) : (
-                <s-text color="subdued">
-                  {line.supplierCount > 1 ? `${line.supplierCount} suppliers, none preferred` : "None"}
-                </s-text>
-              )}
-            </s-table-cell>
-            <s-table-cell>{line.abcClass ?? MISSING_VALUE}</s-table-cell>
-            <s-table-cell>{quantity(line.availableQuantity)}</s-table-cell>
-            <s-table-cell>{quantity(line.incomingQuantity)}</s-table-cell>
-            <s-table-cell>{quantity(line.netUnits)}</s-table-cell>
-            <s-table-cell>{formatDecimal(line.unitsPerDay)}</s-table-cell>
-            <s-table-cell>{formatDecimal(line.daysOfStock)}</s-table-cell>
+            {columns.map((column) => (
+              <s-table-cell key={column}>{COLUMNS[column].cell(line, currencyCode)}</s-table-cell>
+            ))}
             <s-table-cell>
               <Suggested line={line} />
             </s-table-cell>

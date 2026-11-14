@@ -54,6 +54,13 @@ generated and stored with the row, so the column sorts in SQL and a saved
 worksheet keeps the class it was made with. The summary records the eight
 weeks it covers. Worksheets made before the class was recorded show none.
 
+The **Columns** button beside the search chooses which optional columns the
+table shows (SKU, supplier, ABC class, stock figures, sales figures, lead
+time, reorder point). Product, the suggested and order quantities, status and
+the detail button are always shown. The choice is saved for the shop in
+`ReplenishmentSettings.worksheetColumns` and applies to every worksheet; the
+CSV export always has every column.
+
 Net sales per day is the row's net sales divided by the days in the
 worksheet's sales period. It is worked out when shown, from the stored net
 sales, and is in the row's detail and the CSV export.
@@ -125,7 +132,6 @@ module's own permission check.
 
 - Shelf or bin location and landed or average cost columns: the app has no
   source for them yet.
-- Saved column choices per merchant.
 - Setting planning levels for many variants at once.
 - Choosing a supplier for one row on the worksheet.
 - End-to-end run on the development store.

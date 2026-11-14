@@ -2299,6 +2299,8 @@ model ReplenishmentSettings {
   defaultLeadTimeDays       Int?
   applyMinimumOrderQuantity Boolean                     @default(false)
   roundUpToPackSize         Boolean                     @default(false)
+  /// Optional worksheet columns the merchant shows; see `worksheet/columns.ts`.
+  worksheetColumns          String[]                    @default(["sku", "supplier", "abc", "available", "incoming", "netUnits", "unitsPerDay", "daysOfStock"])
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime                    @updatedAt
 

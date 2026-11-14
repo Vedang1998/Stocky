@@ -10,10 +10,13 @@ import { TENANT_DB_CONTEXT_VERSION } from "../../db-context.server";
 import { createTenantDb } from "../../tenant-db.server";
 import {
   getReplenishmentDefaults,
+  getWorksheetColumns,
   INITIAL_DEFAULTS,
   saveReplenishmentDefaults,
+  saveWorksheetColumns,
   type ReplenishmentDefaults,
 } from "../../../lib/replenishment/settings.server";
+import { DEFAULT_WORKSHEET_COLUMNS } from "../../../lib/replenishment/worksheet/columns";
 import {
   EMPTY_RULE,
   getVariantRule,
@@ -138,6 +141,7 @@ describe("replenishment planning inputs", () => {
   describe("shop defaults", () => {
     it("reads the initial defaults without creating a row", async () => {
       const defaults = await getReplenishmentDefaults(dbA());
+      expect(await getWorksheetColumns(dbA())).toEqual(DEFAULT_WORKSHEET_COLUMNS);
       expect(defaults).toEqual({ ...INITIAL_DEFAULTS, updatedAt: null });
       expect(await migrationPrisma.replenishmentSettings.count()).toBe(0);
     });
@@ -185,6 +189,39 @@ describe("replenishment planning inputs", () => {
       });
       expect(rows).toHaveLength(1);
       expect([14, 60, 90]).toContain(rows[0].sampleDays);
+    });
+  });
+
+  describe("worksheet columns", () => {
+    it("starts every shop on the default columns, with or without a settings row", async () => {
+      // Both shops have a settings row by now, created without a column choice.
+      expect(await getWorksheetColumns(dbA())).toEqual(DEFAULT_WORKSHEET_COLUMNS);
+      expect(await getWorksheetColumns(dbB())).toEqual(DEFAULT_WORKSHEET_COLUMNS);
+    });
+
+    it("saves one shop's choice without touching its defaults or another shop", async () => {
+      const before = await getReplenishmentDefaults(dbA());
+      expect(await saveWorksheetColumns(dbA(), ["reorderPoint", "sku", "unknown"])).toEqual([
+        "sku",
+        "reorderPoint",
+      ]);
+      expect(await getWorksheetColumns(dbA())).toEqual(["sku", "reorderPoint"]);
+      // Saving columns touches the row's update time and nothing else.
+      expect(await getReplenishmentDefaults(dbA())).toEqual({
+        ...before,
+        updatedAt: expect.any(Date),
+      });
+      expect(await getWorksheetColumns(dbB())).toEqual(DEFAULT_WORKSHEET_COLUMNS);
+    });
+
+    it("keeps the column choice when the defaults are saved again", async () => {
+      await saveReplenishmentDefaults(dbA(), CUSTOM_DEFAULTS);
+      expect(await getWorksheetColumns(dbA())).toEqual(["sku", "reorderPoint"]);
+    });
+
+    it("stores an empty choice as no optional columns", async () => {
+      expect(await saveWorksheetColumns(dbB(), [])).toEqual([]);
+      expect(await getWorksheetColumns(dbB())).toEqual([]);
     });
   });
 

@@ -6,6 +6,11 @@
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { isUniqueViolation } from "./db-errors.server";
 import {
+  DEFAULT_WORKSHEET_COLUMNS,
+  readWorksheetColumns,
+  type WorksheetColumn,
+} from "./worksheet/columns";
+import {
   INCOMING_SOURCES,
   MAX_QUANTITY,
   MAX_SAMPLE_DAYS,
@@ -84,32 +89,62 @@ export async function getReplenishmentDefaults(
   return row ? fromRow(row) : { ...INITIAL_DEFAULTS, updatedAt: null };
 }
 
-export async function saveReplenishmentDefaults(
+/**
+ * Writes part of the shop's settings row, creating it with the column
+ * defaults for everything else the first time.
+ */
+async function writeSettings<Row>(
   db: TenantDb,
-  values: ReplenishmentDefaults,
-): Promise<StoredDefaults> {
-  const write = async (): Promise<SettingsRow> => {
+  data: Record<string, unknown>,
+): Promise<Row> {
+  const write = async (): Promise<Row> => {
     const existing = (await db.replenishmentSettings.findFirst({
       select: { id: true },
     })) as { id: string } | null;
     if (existing) {
       return (await db.replenishmentSettings.update({
         where: { shopId_id: { shopId: db.authority.shopId, id: existing.id } },
-        data: values,
-      })) as SettingsRow;
+        data,
+      })) as Row;
     }
-    return (await db.replenishmentSettings.create({
-      data: values,
-    })) as SettingsRow;
+    return (await db.replenishmentSettings.create({ data })) as Row;
   };
 
   try {
-    return fromRow(await write());
+    return await write();
   } catch (error) {
     // Two first-time saves raced; the other one created the row. Update it.
     if (!isUniqueViolation(error)) throw error;
-    return fromRow(await write());
+    return write();
   }
+}
+
+export async function saveReplenishmentDefaults(
+  db: TenantDb,
+  values: ReplenishmentDefaults,
+): Promise<StoredDefaults> {
+  return fromRow(await writeSettings<SettingsRow>(db, values));
+}
+
+/** The optional worksheet columns the shop shows. Never writes. */
+export async function getWorksheetColumns(db: TenantDb): Promise<WorksheetColumn[]> {
+  const row = (await db.replenishmentSettings.findFirst({
+    select: { worksheetColumns: true },
+  })) as { worksheetColumns: string[] | null } | null;
+  return row?.worksheetColumns
+    ? readWorksheetColumns(row.worksheetColumns)
+    : [...DEFAULT_WORKSHEET_COLUMNS];
+}
+
+/** Saves the shop's choice of worksheet columns; unknown names are dropped. */
+export async function saveWorksheetColumns(
+  db: TenantDb,
+  columns: readonly unknown[],
+): Promise<WorksheetColumn[]> {
+  const row = await writeSettings<{ worksheetColumns: string[] }>(db, {
+    worksheetColumns: readWorksheetColumns(columns),
+  });
+  return readWorksheetColumns(row.worksheetColumns);
 }
 
 /** Validates the Settings form. Returns either values or per-field errors. */
