@@ -28,10 +28,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         update: {},
       }),
       getLowStockAlerts(db),
+      // The same orders as the Open view of the purchase-order list.
       db.purchaseOrder.count({
-        where: { status: { in: ["ORDERED", "PARTIAL"] } },
+        where: {
+          archivedAt: null,
+          status: { in: ["DRAFT", "SENT", "ORDERED", "PARTIAL"] },
+        },
       }),
-      db.supplier.count({ where: {} }),
+      db.supplier.count({ where: { status: "ACTIVE" } }),
       db.shopifyVariantCache.count({ where: {} }),
     ]);
   const [setupGuide, syncDomains] = await Promise.all([
@@ -176,7 +180,7 @@ export default function Dashboard() {
             <s-link href="/app/purchase-orders">Purchase orders</s-link>
           </s-list-item>
           <s-list-item>
-            <s-link href="/app/warehouse">Scan and receive</s-link>
+            <s-link href="/app/warehouse">Receiving</s-link>
           </s-list-item>
           <s-list-item>
             <s-link href="/app/inventory">Look up stock</s-link>

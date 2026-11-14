@@ -18,12 +18,17 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
     expect(source).toMatch(/cache\?\.inventoryItemId/);
   });
 
-  it("warehouse barcode lookup reads ShopifyVariantCache barcode and title", () => {
-    const source = readApp("routes/app.warehouse.tsx");
-    expect(source).toMatch(/shopifyVariantCache\.findFirst/);
-    expect(source).toMatch(/where:\s*\{\s*barcode\s*\}/);
-    expect(source).toMatch(/variant\.title/);
-    expect(source).toMatch(/variant\.shopifyVariantId/);
+  it("receiving matches scans against the purchase order's line snapshots, not ShopifyVariantCache", () => {
+    const warehouse = readApp("routes/app.warehouse.tsx");
+    expect(warehouse).not.toMatch(/shopifyVariantCache/);
+
+    const worksheet = readApp("services/purchasing/receiving.server.ts");
+    expect(worksheet).toMatch(/barcode:\s*line\.barcode/);
+    expect(worksheet).toMatch(/sku:\s*line\.sku/);
+
+    const scan = readApp("lib/purchasing/receiving-scan.ts");
+    expect(scan).toMatch(/sameCode\(line\.barcode, code\)/);
+    expect(scan).not.toMatch(/shopifyVariantCache/);
   });
 
   it("stocktake completion reads ShopifyVariantCache inventoryItemId and title", () => {

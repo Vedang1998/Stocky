@@ -11,7 +11,6 @@ import {
   calculateReorderPoint,
   calculateToBuy,
 } from "./forecasting.server";
-import { receivePartialPO } from "./landed-cost.server";
 import { featureFlags } from "../lib/feature-flags.server";
 import { poDisplayNumber, poLineTotals } from "../lib/po-display";
 
@@ -151,11 +150,5 @@ describe("CHARACTERIZATION: stocktake completion safety (Phase 0 fix)", () => {
       status = "COMPLETED";
     }
     expect(status).toBe("IN_PROGRESS");
-  });
-});
-
-describe("CHARACTERIZATION: receivePartialPO status transitions", () => {
-  it("exposes receivePartialPO for integration characterization", () => {
-    expect(typeof receivePartialPO).toBe("function");
   });
 });

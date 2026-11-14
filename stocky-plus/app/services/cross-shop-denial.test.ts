@@ -20,9 +20,6 @@ const {
   adjustShopifyInventory,
   createShopifyTransfer,
   completeShopifyTransfer,
-  applyLandedCostsToPO,
-  receivePartialPO,
-  recalculatePOLineCost,
   resolveTieredUnitCost,
   featureFlags,
   resolveCanonicalShopByDomain,
@@ -101,9 +98,6 @@ const {
     adjustShopifyInventory: vi.fn(),
     createShopifyTransfer: vi.fn(),
     completeShopifyTransfer: vi.fn(),
-    applyLandedCostsToPO: vi.fn(),
-    receivePartialPO: vi.fn(),
-    recalculatePOLineCost: vi.fn(),
     resolveTieredUnitCost: vi.fn(),
     resolveCanonicalShopByDomain: vi.fn(),
     featureFlags: {
@@ -152,10 +146,6 @@ vi.mock("../services/shopify-sync.server", () => ({
 }));
 
 vi.mock("../services/landed-cost.server", () => ({
-  applyLandedCostsToPO,
-  receivePartialPO,
-  recalculatePOLineCost,
-  recordLeadTimeSnapshot: vi.fn(),
   resolveTieredUnitCost,
 }));
 
@@ -287,29 +277,39 @@ describe("cross-shop denial", () => {
   });
 
   it("denies Shop B mutating Shop A purchase order / line", async () => {
-    const { action } = await import("../routes/app.purchase-orders");
+    const { action } = await import("../routes/app.purchase-orders_.$id");
+    prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
     const result = await action(
       actionArgs(
         formRequest({
-          intent: "addLine",
-          poId: "po-shop-a",
-          variantId: "gid://shopify/ProductVariant/1",
-          quantity: "2",
+          intent: "removeLine",
+          version: "3",
+          lineId: "line-shop-a",
         }),
+        { id: "po-shop-a" },
       ),
     );
 
     expect(authenticateAdmin).toHaveBeenCalled();
+    expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
+      where: directScoped({ id: "po-shop-a", version: 3 }),
+      data: { updatedAt: expect.any(Date) },
+    });
     expect(prismaMock.purchaseOrder.findFirst).toHaveBeenCalledWith({
       where: directScoped({ id: "po-shop-a" }),
+      select: { id: true, shop: true, shopId: true },
     });
-    expect(result).toEqual({ error: "Purchase order not found" });
+    expect(result).toEqual({
+      ok: false,
+      intent: "removeLine",
+      error: "Purchase order was not found.",
+      fieldErrors: {},
+    });
+    expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
-    expect(applyLandedCostsToPO).not.toHaveBeenCalled();
-    expect(receivePartialPO).not.toHaveBeenCalled();
-    expect(recalculatePOLineCost).not.toHaveBeenCalled();
+    expect(prismaMock.pOLineItem.update).not.toHaveBeenCalled();
   });
 
   it("denies Shop B updating Shop A stocktake line and never adjusts inventory", async () => {
@@ -369,21 +369,26 @@ describe("cross-shop denial", () => {
     // Shop B cannot load Shop A's supplier by id.
     prismaMock.supplier.findFirst.mockResolvedValue(null);
 
-    await expect(
-      action(
-        actionArgs(
-          formRequest({
-            intent: "deleteMapping",
-            mappingId: "map-shop-a",
-          }),
-          { id: "supplier-shop-a" },
-        ),
+    const result = await action(
+      actionArgs(
+        formRequest({
+          intent: "removeProduct",
+          mappingId: "map-shop-a",
+        }),
+        { id: "supplier-shop-a" },
       ),
-    ).rejects.toMatchObject({ status: 404 });
+    );
 
     expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
       where: directScoped({ id: "supplier-shop-a" }),
     });
+    expect(result).toEqual({
+      ok: false,
+      intent: "removeProduct",
+      error: "Supplier was not found.",
+      fieldErrors: {},
+    });
+    expect(prismaMock.supplierSkuMapping.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.supplierSkuMapping.deleteMany).not.toHaveBeenCalled();
     expect(prismaMock.volumePriceTier.deleteMany).not.toHaveBeenCalled();
   });
@@ -413,29 +418,31 @@ describe("cross-shop denial", () => {
   });
 
   it("denies Shop B cancelling Shop A purchase order", async () => {
-    const { action } = await import("../routes/app.purchase-orders");
+    const { action } = await import("../routes/app.purchase-orders_.$id");
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
+    prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
     const result = await action(
-      actionArgs(
-        formRequest({
-          intent: "cancel",
-          poId: "po-shop-a",
-        }),
-      ),
+      actionArgs(formRequest({ intent: "cancel", version: "3" }), {
+        id: "po-shop-a",
+      }),
     );
 
     expect(authenticateAdmin).toHaveBeenCalled();
+    expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledTimes(1);
     expect(prismaMock.purchaseOrder.updateMany).toHaveBeenCalledWith({
-      where: directScoped({ id: "po-shop-a" }),
-      data: { status: "CANCELLED" },
+      where: directScoped({ id: "po-shop-a", version: 3 }),
+      data: { updatedAt: expect.any(Date) },
     });
-    expect(result).toEqual({ error: "Purchase order not found" });
+    expect(result).toEqual({
+      ok: false,
+      intent: "cancel",
+      error: "Purchase order was not found.",
+      fieldErrors: {},
+    });
     expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.update).not.toHaveBeenCalled();
-    expect(applyLandedCostsToPO).not.toHaveBeenCalled();
-    expect(receivePartialPO).not.toHaveBeenCalled();
     expect(adjustShopifyInventory).not.toHaveBeenCalled();
     expect(createShopifyTransfer).not.toHaveBeenCalled();
     expect(completeShopifyTransfer).not.toHaveBeenCalled();
@@ -444,7 +451,7 @@ describe("cross-shop denial", () => {
   it("rejects client-supplied Shop A as authority on PO cancel (session shop wins)", async () => {
     // Control test — not counted as a standalone record-level denial case.
     // Conflicting form shop must never establish authority; requireAdminTenant denies.
-    const { action } = await import("../routes/app.purchase-orders");
+    const { action } = await import("../routes/app.purchase-orders_.$id");
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
 
     await expect(
@@ -452,9 +459,10 @@ describe("cross-shop denial", () => {
         actionArgs(
           formRequest({
             intent: "cancel",
-            poId: "po-shop-a",
+            version: "3",
             shop: SHOP_A,
           }),
+          { id: "po-shop-a" },
         ),
       ),
     ).rejects.toMatchObject({

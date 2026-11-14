@@ -123,6 +123,10 @@ const TEST_FILES = [
   "app/tenant/__tests__/sync-status-reader.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
   "app/tenant/__tests__/db-isolation/analytics-sales.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-receiving.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-screens.test.ts",
+  "app/tenant/__tests__/db-isolation/purchasing-supplier-screens.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [

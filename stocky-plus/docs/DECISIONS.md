@@ -93,6 +93,7 @@ Format: current rule → proposed → reason → merchant impact → technical i
 3. **Reason:** Prevent silent expansion of unsafe receiving; align with freeze list.
 4. **Merchant impact:** Receiving UI blocked by default.
 5. **Final:** **Accepted** for Phase 0; Phase 4 rebuild replaces path.
+6. **Status (2026-11-14):** `receivePartialPO` is removed. Receiving runs through `services/purchasing/receiving.server.ts` and the inventory operation ledger, still behind `FEATURE_RECEIPT_WRITES`.
 
 ## D-010 — Phase 0 correction gate closure
 
