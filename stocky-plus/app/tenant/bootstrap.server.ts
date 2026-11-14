@@ -9,6 +9,7 @@
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import type { Session } from "@shopify/shopify-api";
+import type { ShopProcessingDisabledReason } from "@prisma/client";
 import rawPrisma from "../db.server";
 import { encryptedSessionStorage } from "../lib/session-tokens/encrypted-session-storage.server";
 import {
@@ -89,10 +90,34 @@ export async function upsertCanonicalShop(
   return shop;
 }
 
+export type CanonicalShopWithProcessingState = CanonicalShopIdentity & {
+  readonly processingEnabled: boolean;
+  readonly processingDisabledReason: ShopProcessingDisabledReason | null;
+};
+
 export async function resolveCanonicalShopByDomain(
   verifiedDomain: string,
-): Promise<CanonicalShopIdentity | null> {
+): Promise<CanonicalShopIdentity | null>;
+export async function resolveCanonicalShopByDomain(
+  verifiedDomain: string,
+  options: { withProcessingState: true },
+): Promise<CanonicalShopWithProcessingState | null>;
+export async function resolveCanonicalShopByDomain(
+  verifiedDomain: string,
+  options?: { withProcessingState: true },
+): Promise<CanonicalShopIdentity | CanonicalShopWithProcessingState | null> {
   const myshopifyDomain = normalizeVerifiedShopifyDomain(verifiedDomain);
+  if (options?.withProcessingState) {
+    return rawPrisma.shop.findUnique({
+      where: { myshopifyDomain },
+      select: {
+        id: true,
+        myshopifyDomain: true,
+        processingEnabled: true,
+        processingDisabledReason: true,
+      },
+    });
+  }
   return rawPrisma.shop.findUnique({
     where: { myshopifyDomain },
     select: { id: true, myshopifyDomain: true },

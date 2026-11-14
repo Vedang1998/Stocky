@@ -407,6 +407,21 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
       "Retain while PR 4 correction suite requires disposable fixtures",
   },
   {
+    id: "EX-SYNC-TEST-REINSTALL-FIRST-REQUEST-001",
+    path: "app/sync/__tests__/reinstall-first-request.test.ts",
+    category: "migration_tests",
+    reason:
+      "Issue #123 reinstall first-request regression test on the disposable PostgreSQL harness with row-level security",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "Shop, ShopSettings and Supplier fixtures for one test shop",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while the sync-integration suite requires disposable fixtures",
+  },
+  {
     id: "EX-SYNC-TEST-DISPATCH-ACK-RACE-001",
     path: "app/sync/__tests__/dispatch-ack-race.test.ts",
     category: "migration_tests",

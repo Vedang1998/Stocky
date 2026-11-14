@@ -2,7 +2,7 @@
 
 What stands between the current code and a ProPo listing Shopify would accept. One list, three states: done, in progress, blocked on the owner. Kept by the App Store readiness lane; update it in the same pull request that changes an item.
 
-Last updated: 2026-11-13.
+Last updated: 2026-11-14.
 
 ## Done
 
@@ -16,6 +16,8 @@ Last updated: 2026-11-13.
 | Subscription status read from the Partner API, which Shopify documents as the record for App Pricing; the Admin API is the fallback when the Partner API settings are absent | #111 (security pass BIL-01) |
 | Shopify access and refresh tokens encrypted at rest in the `Session` table | #111 (R-191) |
 | Products created after install get their inventory facts; a dead-lettered webhook job is no longer delivered again | #103 (issue #94) |
+| A webhook or background job delivered a moment before the dispatcher recorded it runs once instead of being lost; a job whose queue delivery is gone is retried or dead-lettered within about six minutes | #111 (issue #122) |
+| The first page load after a reinstall renders: requests wait up to five seconds for the afterAuth hook to re-enable the shop, instead of answering 500 | #111 (issue #123) |
 | Container image builds on the pinned Node and npm, runs as a non-root user, does not run migrations at start and does not carry the migration files | `Dockerfile`, R-189 |
 | Drafts for the listing, privacy policy, reviewer instructions and the protected customer data form | `LISTING_DRAFT.md`, `PRIVACY_POLICY_DRAFT.md`, `REVIEWER_TEST_INSTRUCTIONS.md`, `PROTECTED_CUSTOMER_DATA_ANSWERS.md` |
 | `read_all_orders` approved by Shopify for the public app | Checked in the Partner Dashboard on 2026-11-10 |

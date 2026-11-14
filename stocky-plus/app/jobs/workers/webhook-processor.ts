@@ -292,6 +292,9 @@ async function claimDispatchedAttempt(
       token &&
       Date.now() - job.timestamp < DISPATCH_ACK_WAIT_MS
     ) {
+      console.warn(
+        `Delivery ${job.id} arrived before its dispatch was recorded; trying again in ${DISPATCH_ACK_RETRY_MS}ms`,
+      );
       await job.moveToDelayed(Date.now() + DISPATCH_ACK_RETRY_MS, token);
       throw new DelayedError();
     }
