@@ -355,6 +355,14 @@ async function markDispatchFailed(
   });
 }
 
+/**
+ * The DurableJob row decides whether and when a job runs again, and every run
+ * gets a dispatch of its own. A retry by BullMQ would deliver the same
+ * dispatch a second time, after its job has moved to RETRY_WAIT or has been
+ * dead-lettered.
+ */
+export const DURABLE_DISPATCH_JOB_OPTIONS = { attempts: 1 } as const;
+
 async function addJobToQueue(
   job: ClaimedJobRow,
   dispatch: JobDispatch,
@@ -385,7 +393,7 @@ async function addJobToQueue(
         dispatchSequence: dispatch.dispatchSequence,
         queueJobId: dispatch.queueJobId,
       },
-      { jobId: dispatch.queueJobId },
+      { ...DURABLE_DISPATCH_JOB_OPTIONS, jobId: dispatch.queueJobId },
     );
     return queue;
   }
@@ -407,7 +415,7 @@ async function addJobToQueue(
       queueJobId: dispatch.queueJobId,
       payload,
     },
-    { jobId: dispatch.queueJobId },
+    { ...DURABLE_DISPATCH_JOB_OPTIONS, jobId: dispatch.queueJobId },
   );
   return queue;
 }
