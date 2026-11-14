@@ -121,6 +121,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/pos-tenant.test.ts",
   "app/tenant/__tests__/admin-inventory-lookup.test.ts",
   "app/tenant/__tests__/sync-status-reader.test.ts",
+  "app/tenant/__tests__/label-products.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-planning.test.ts",
   "app/tenant/__tests__/db-isolation/analytics-sales.test.ts",
   "app/tenant/__tests__/db-isolation/purchasing-ledger.test.ts",

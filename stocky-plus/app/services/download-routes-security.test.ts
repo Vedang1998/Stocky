@@ -74,6 +74,29 @@ describe("warehouse labels route", () => {
     expectPrivateDownload(response);
   });
 
+  // Store-test finding: an unknown variant used to give an empty file with 200.
+  it("stops with a clear error when a product is not in the catalog", async () => {
+    const unknown = "gid://shopify/ProductVariant/424242";
+    const response = (await labelsLoader(
+      args(`/app/warehouse/labels?items=${encodeURIComponent(GID)}:2,${encodeURIComponent(unknown)}:1`),
+    )) as Response;
+    const text = await response.text();
+
+    expect(response.status).toBe(404);
+    expect(text).toContain(unknown);
+    expect(text).toContain("no labels were made");
+    expect(text).not.toContain("^XA");
+  });
+
+  it("gives the same error when the only product is unknown", async () => {
+    variantFindMany.mockResolvedValue([]);
+    const response = (await labelsLoader(
+      args(`/app/warehouse/labels?items=${encodeURIComponent(GID)}:2`),
+    )) as Response;
+    expect(response.status).toBe(404);
+    expect(await response.text()).toContain(GID);
+  });
+
   it("prints exactly the maximum number of labels", async () => {
     variantFindMany.mockResolvedValue([
       { shopifyVariantId: GID, title: "Alpha Widget", barcode: "111", sku: null },
