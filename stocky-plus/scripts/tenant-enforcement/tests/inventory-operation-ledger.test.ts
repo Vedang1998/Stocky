@@ -632,6 +632,39 @@ describe("inventory operation ledger and Shopify write executor", () => {
       ).toBe("PENDING");
     });
 
+    it("knows the quantity after a compare-and-swap change when Shopify does not report it", async () => {
+      shopify.setLevel(101, 10);
+      shopify.setLevel(102, 4);
+      const operation = await record({
+        lines: [line(101, 5, 10), line(102, -1, null)],
+      });
+
+      const result = await executeInventoryOperation(dbA, null, operation.id, {
+        ...enabled(),
+        sendBatch: async (request) => {
+          const outcome = await shopify.send(request);
+          return outcome.kind === "applied"
+            ? {
+                ...outcome,
+                changes: outcome.changes.map((change) => ({
+                  ...change,
+                  quantityAfterChange: null,
+                })),
+              }
+            : outcome;
+        },
+      });
+
+      // 10 + 5 is certain because Shopify applied it on exactly 10. The
+      // relative change could have landed on any quantity, so it stays unknown.
+      expect(
+        result.lines.map((l) => [l.status, l.quantityAfterChange]),
+      ).toEqual([
+        ["APPLIED", 15],
+        ["APPLIED", null],
+      ]);
+    });
+
     it("records Shopify's confirmation on every line and never sends again", async () => {
       shopify.setLevel(101, 10);
       shopify.setLevel(102, 4);

@@ -5,8 +5,8 @@
 **Branch:** `phase-1/sync-control-plane`
 **Generator:** `scripts/sync-control-plane/inventory.ts` (deterministic)
 **Inventory version:** `phase1-pr4-sync-inventory-v3-d048-pr6d`
-**Content digest:** `191b83498733a237f4a6fa341e6be0620e718d7c7bd76e467684073500360539`
-**Surfaces:** 58
+**Content digest:** `6c1ace71805d6784e03fffb4219c1d8b24dfaa14f71de2b8f5df529a0d3b356f`
+**Surfaces:** 63
 
 > This file is mechanically generated. Do not edit by hand.
 > Regenerate with `npm run sync:inventory`.
@@ -16,15 +16,15 @@
 
 | Kind | Count |
 |---|---|
-| control_plane_table | 12 |
+| control_plane_table | 13 |
 | dispatcher | 2 |
 | merchant_table | 1 |
-| producer | 8 |
+| producer | 9 |
 | queue | 2 |
 | replay_path | 1 |
 | sanitizer | 9 |
 | webhook_route | 11 |
-| worker | 12 |
+| worker | 15 |
 
 ## Surface inventory
 
@@ -64,7 +64,7 @@
 | webhook_route | `webhook:order_transactions/create` | `app/routes/webhooks.order_transactions.create.tsx` | `action` | Durable intake for order_transactions/create identity-only signal |
 | webhook_route | `webhook:inventory_levels/update` | `app/routes/webhooks.inventory_levels.update.tsx` | `action` | Durable intake for inventory_levels/update |
 | webhook_route | `webhook:catalog-facts` | `app/routes/webhooks.catalog-facts.tsx` | `action` | Shared durable intake route for PR5 catalog/inventory signal topics |
-| webhook_route | `webhook:compliance` | `app/routes/webhooks.compliance.tsx` | `action` | Authenticate only — PR 7 processors |
+| webhook_route | `webhook:compliance` | `app/routes/webhooks.compliance.tsx` | `action` | Records a PrivacyRequest per delivery; shop/redact is carried out by the worker |
 | replay_path | `replay:dead-letter` | `app/sync/replay.server.ts` | `replayDeadLetter` | Operator/system replay — no merchant UI |
 | sanitizer | `sanitizer:orders/create` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned order projection |
 | sanitizer | `sanitizer:orders/cancelled` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned cancelled-order projection |
@@ -75,6 +75,11 @@
 | sanitizer | `sanitizer:inventory_levels/update` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Versioned inventory projection |
 | sanitizer | `sanitizer:catalog-facts` | `app/sync/sanitize.server.ts` | `sanitizeCatalogIdentityProjection` | Identity and signal metadata only for PR5 resource topics |
 | sanitizer | `sanitizer:app/uninstalled` | `app/sync/sanitize.server.ts` | `sanitizeWebhookPayload` | Identity/control metadata only |
+| producer | `producer:privacy-intake` | `app/privacy/intake.server.ts` | `recordPrivacyRequest` | Durable intake for compliance webhooks (control plane only) |
+| worker | `worker:privacy-maintenance` | `app/privacy/maintenance.server.ts` | `runPrivacyMaintenance` | Worker loop: retention sweep, due shop/redact requests, overdue report |
+| worker | `worker:privacy-erasure` | `app/privacy/erasure.server.ts` | `processShopRedactRequest` | Leases a shop/redact request and erases the shop in bounded batches |
+| worker | `worker:privacy-retention` | `app/privacy/retention.server.ts` | `openRetentionErasureRequests` | Opens erasure requests for shops uninstalled past the retention window |
+| control_plane_table | `table:PrivacyRequest` | `prisma/schema.prisma` | `PrivacyRequest` | platform_control_plane |
 | control_plane_table | `table:WebhookDelivery` | `prisma/schema.prisma` | `WebhookDelivery` | platform_control_plane |
 | control_plane_table | `table:DurableJob` | `prisma/schema.prisma` | `DurableJob` | platform_control_plane |
 | control_plane_table | `table:JobAttempt` | `prisma/schema.prisma` | `JobAttempt` | platform_control_plane |

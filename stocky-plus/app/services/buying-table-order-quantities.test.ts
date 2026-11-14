@@ -7,6 +7,11 @@ import type { ActionFunctionArgs } from "react-router";
 
 const { db, resolveTieredUnitCost } = vi.hoisted(() => ({
   db: {
+    authority: {
+      shopId: "shop-buying-table",
+      myshopifyDomain: "buying-table.myshopify.com",
+    },
+    shopSettings: { findUnique: vi.fn() },
     supplier: { findFirst: vi.fn() },
     supplierSkuMapping: { findFirst: vi.fn() },
     purchaseOrder: { create: vi.fn() },
@@ -58,6 +63,7 @@ async function createDraft(fields: Record<string, string>) {
 describe("Buying Table draft purchase order quantities", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    db.shopSettings.findUnique.mockResolvedValue({ subscriptionActive: true });
     db.supplier.findFirst.mockResolvedValue({ id: "supplier-1" });
     db.supplierSkuMapping.findFirst.mockImplementation(
       async ({ where }: { where: { id: string } }) => {

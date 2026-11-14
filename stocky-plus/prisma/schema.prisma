@@ -92,6 +92,10 @@ model Shop {
   orderFactObservationsInFlight OrderFactObservationInFlight[]
   inventoryOperations InventoryOperation[]
   inventoryOperationLines InventoryOperationLine[]
+  purchaseOrderCharges          PurchaseOrderCharge[]
+  purchasingEvents              PurchasingEvent[]
+  purchaseOrderReceipts         PurchaseOrderReceipt[]
+  purchaseOrderReceiptLines     PurchaseOrderReceiptLine[]
   replenishmentSettings ReplenishmentSettings[]
   replenishmentVariantRules ReplenishmentVariantRule[]
 }
@@ -256,6 +260,18 @@ model TenantOwnershipIssueDetection {
 
 // ─── Module 1: Advanced Supplier Master ─────────────────────────────────────
 
+enum SupplierStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum SupplierContactMethod {
+  EMAIL
+  PHONE
+  PORTAL
+  OTHER
+}
+
 model Supplier {
   id            String   @id @default(cuid())
   shop          String
@@ -267,18 +283,37 @@ model Supplier {
   contactPhone  String?
   currency      String   @default("USD")
   vendorNotes   String?
+  /// Trailing 90-day average of measured PO lead times (written by receiving).
   leadTimeDays  Float?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  status                 SupplierStatus         @default(ACTIVE)
+  archivedAt             DateTime?
+  website                String?                @db.VarChar(512)
+  addressLine1           String?                @db.VarChar(255)
+  addressLine2           String?                @db.VarChar(255)
+  city                   String?                @db.VarChar(128)
+  region                 String?                @db.VarChar(128)
+  postalCode             String?                @db.VarChar(32)
+  countryCode            String?                @db.VarChar(2)
+  paymentTerms           String?                @db.VarChar(255)
+  shippingTerms          String?                @db.VarChar(255)
+  defaultTaxRatePercent  Decimal?               @db.Decimal(7, 4)
+  /// Merchant-entered default lead time; never overwritten by measurements.
+  defaultLeadTimeDays    Int?
+  defaultRestockDays     Int?
+  minimumOrderValue      Decimal?               @db.Decimal(12, 2)
+  preferredContactMethod SupplierContactMethod?
 
   skuMappings       SupplierSkuMapping[]
   volumeTiers       VolumePriceTier[]
   purchaseOrders    PurchaseOrder[]
   leadTimeSnapshots LeadTimeSnapshot[]
 
+  @@unique([shopId, id])
   @@index([shop])
   @@index([shopId])
-  @@unique([shopId, id])
 }
 
 model SupplierSkuMapping {
@@ -286,17 +321,25 @@ model SupplierSkuMapping {
   shopId           String?
   supplierId       String
   shopifyVariantId String
-  vendorSku        String
+  vendorSku        String?
+  /// 1 means no minimum. Never applied automatically when building POs.
   moq              Int     @default(1)
+  /// 1 means individual units. Never applied automatically when building POs.
   packSize         Int     @default(1)
+
+  isPreferred          Boolean  @default(false)
+  supplierCost         Decimal? @db.Decimal(12, 4)
+  leadTimeDaysOverride Int?
+  orderUnit            String?  @db.VarChar(64)
 
   supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@unique([supplierId, shopifyVariantId])
+  @@unique([shopId, id])
+  @@unique([shopId, supplierId, shopifyVariantId])
   @@index([shopifyVariantId])
   @@index([shopId])
   @@index([shopId, supplierId])
-  @@unique([shopId, id])
 }
 
 model VolumePriceTier {
@@ -340,12 +383,23 @@ enum POStatus {
   PARTIAL
   RECEIVED
   CANCELLED
+  SENT
+  CLOSED
 }
 
 enum LandedCostMethod {
   WEIGHT
   VOLUME
   COST
+  QUANTITY
+}
+
+enum PurchaseOrderChargeKind {
+  SHIPPING
+  DUTY
+  FEE
+  DISCOUNT
+  OTHER
 }
 
 model PurchaseOrder {
@@ -357,7 +411,9 @@ model PurchaseOrder {
   poNumber         String?
   status           POStatus         @default(DRAFT)
   currency         String           @default("USD")
+  /// Shop-currency units per one PO-currency unit, frozen on the PO.
   exchangeRate     Decimal?         @db.Decimal(10, 6)
+  /// Legacy header charges. Read as charges until the PO's charges are edited.
   freightCost      Decimal?         @db.Decimal(10, 2)
   customsCost      Decimal?         @db.Decimal(10, 2)
   landedCostMethod LandedCostMethod @default(COST)
@@ -368,14 +424,47 @@ model PurchaseOrder {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  supplier  Supplier     @relation(fields: [supplierId], references: [id])
-  lineItems POLineItem[]
+  poSequence          Int?
+  /// Caller-supplied idempotency key for draft creation.
+  creationKey         String?   @db.VarChar(128)
+  supplierOrderNumber String?   @db.VarChar(128)
+  invoiceNumber       String?   @db.VarChar(128)
+  issuedOn            DateTime? @db.Date
+  expectedOn          DateTime? @db.Date
+  shipOn              DateTime? @db.Date
+  cancelOn            DateTime? @db.Date
+  invoiceOn           DateTime? @db.Date
+  paymentDueOn        DateTime? @db.Date
+  paymentTerms        String?   @db.VarChar(255)
+  shippingTerms       String?   @db.VarChar(255)
+  shipToAddress       String?   @db.VarChar(2000)
+  billToAddress       String?   @db.VarChar(2000)
+  buyerName           String?   @db.VarChar(255)
+  /// Printed on supplier-facing documents; `notes` stays internal.
+  supplierNotes       String?   @db.VarChar(4000)
+  /// Incremented on every material change; documents carry the version.
+  version             Int       @default(1)
+  sentVersion         Int?
+  sentAt              DateTime?
+  cancelledAt         DateTime?
+  closedAt            DateTime?
+  archivedAt          DateTime?
+  createdByUserId     String?   @db.VarChar(64)
 
+  supplier  Supplier               @relation(fields: [supplierId], references: [id])
+  lineItems POLineItem[]
+  charges   PurchaseOrderCharge[]
+  receipts  PurchaseOrderReceipt[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, poSequence])
+  @@unique([shopId, poNumber])
+  @@unique([shopId, creationKey])
   @@index([shop, status])
   @@index([supplierId])
   @@index([shopId])
   @@index([shopId, supplierId])
-  @@unique([shopId, id])
+  @@index([shopId, status, expectedOn])
 }
 
 model POLineItem {
@@ -390,16 +479,160 @@ model POLineItem {
   manualCostOverride  Boolean  @default(false)
   weight              Decimal? @db.Decimal(10, 4)
   volume              Decimal? @db.Decimal(10, 4)
+  /// Per-unit share of allocated charges (PO currency).
   allocatedLandedCost Decimal? @db.Decimal(10, 4)
   retailPrice         Decimal? @db.Decimal(10, 2)
 
-  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  productTitle          String?  @db.VarChar(512)
+  variantTitle          String?  @db.VarChar(512)
+  sku                   String?  @db.VarChar(255)
+  barcode               String?  @db.VarChar(255)
+  inventoryItemGid      String?  @db.VarChar(256)
+  cancelledQty          Int      @default(0)
+  discountPercent       Decimal? @db.Decimal(7, 4)
+  taxRatePercent        Decimal? @db.Decimal(7, 4)
+  packSize              Int?
+  orderUnit             String?  @db.VarChar(64)
+  position              Int      @default(0)
+  note                  String?  @db.VarChar(1000)
+  /// Line share of allocated charges (PO currency); sums exactly to the charge total.
+  allocatedChargesTotal Decimal? @db.Decimal(12, 2)
 
+  purchaseOrder PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  receiptLines  PurchaseOrderReceiptLine[]
+
+  @@unique([shopId, id])
   @@index([purchaseOrderId])
   @@index([shopifyVariantId])
   @@index([shopId])
   @@index([shopId, purchaseOrderId])
+}
+
+/// Header-level charge or discount on a purchase order. `amount` is
+/// non-negative; DISCOUNT reduces the total. Allocated charges feed landed cost.
+model PurchaseOrderCharge {
+  id              String                  @id @default(cuid())
+  shopId          String
+  purchaseOrderId String
+  kind            PurchaseOrderChargeKind
+  description     String?                 @db.VarChar(255)
+  amount          Decimal                 @db.Decimal(12, 2)
+  allocate        Boolean                 @default(true)
+  position        Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  shop          Shop          @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+
   @@unique([shopId, id])
+  @@index([shopId, purchaseOrderId])
+}
+
+/// Append-only purchasing audit trail (suppliers, supplier products, POs).
+/// No foreign key to the subject so history survives draft deletion.
+model PurchasingEvent {
+  id          String   @id @default(cuid())
+  shopId      String
+  subjectType String   @db.VarChar(32)
+  subjectId   String   @db.VarChar(64)
+  action      String   @db.VarChar(64)
+  actorType   String   @db.VarChar(16)
+  actorId     String?  @db.VarChar(64)
+  details     Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@index([shopId, subjectType, subjectId, createdAt])
+}
+
+enum PurchaseOrderReceiptStatus {
+  /// Recorded; Shopify has not confirmed the stock change yet.
+  PENDING
+  /// Every accepted unit is in Shopify and counted on the purchase order.
+  POSTED
+  /// Some lines are in Shopify and counted; the others failed and were not.
+  PARTIALLY_POSTED
+  /// Nothing reached Shopify and nothing was counted.
+  FAILED
+  /// A reversal is recorded; Shopify has not confirmed it yet.
+  REVERSING
+  REVERSED
+  /// Some lines could not be taken back out of Shopify.
+  PARTIALLY_REVERSED
+  REVERSAL_FAILED
+}
+
+/// One delivery received against a purchase order. Quantities reach
+/// POLineItem.receivedQty only through a receipt, and only for lines Shopify
+/// confirmed.
+model PurchaseOrderReceipt {
+  id                   String                     @id @default(cuid())
+  shopId               String
+  purchaseOrderId      String
+  /// 1, 2, 3… within the purchase order.
+  receiptNumber        Int
+  /// Chosen by the caller per submission; a retry returns the same receipt.
+  idempotencyKey       String                     @db.VarChar(128)
+  payloadDigest        String                     @db.Char(64)
+  status               PurchaseOrderReceiptStatus @default(PENDING)
+  locationGid          String                     @db.VarChar(256)
+  /// Packing slip or delivery note number.
+  supplierReference    String?                    @db.VarChar(128)
+  note                 String?                    @db.VarChar(2000)
+  actorChannel         String                     @db.VarChar(16)
+  actorUserId          String?                    @db.VarChar(64)
+  /// InventoryOperation rows that carried this receipt and its reversal.
+  inventoryOperationId String?                    @db.VarChar(64)
+  reversalOperationId  String?                    @db.VarChar(64)
+  reversalNote         String?                    @db.VarChar(2000)
+  reversedByUserId     String?                    @db.VarChar(64)
+  failureCode          String?                    @db.VarChar(128)
+  failureMessage       String?                    @db.VarChar(1000)
+  postedAt             DateTime?
+  reversedAt           DateTime?
+  createdAt            DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+
+  shop          Shop                       @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  purchaseOrder PurchaseOrder              @relation(fields: [purchaseOrderId], references: [id], onDelete: Restrict)
+  lines         PurchaseOrderReceiptLine[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, idempotencyKey])
+  @@unique([shopId, purchaseOrderId, receiptNumber])
+  @@index([shopId, status])
+}
+
+model PurchaseOrderReceiptLine {
+  id               String  @id @default(cuid())
+  shopId           String
+  receiptId        String
+  lineItemId       String
+  shopifyVariantId String  @db.VarChar(256)
+  inventoryItemGid String? @db.VarChar(256)
+  position         Int     @default(0)
+  /// Units put into stock.
+  acceptedQty      Int     @default(0)
+  /// Units refused at the door; never stocked and still owed by the supplier.
+  rejectedQty      Int     @default(0)
+  rejectReason     String? @db.VarChar(255)
+  /// Accepted units Shopify confirmed, counted on the purchase-order line.
+  postedQty        Int     @default(0)
+  reversedQty      Int     @default(0)
+  errorCode        String? @db.VarChar(128)
+  errorMessage     String? @db.VarChar(1000)
+
+  shop     Shop                 @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  receipt  PurchaseOrderReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  lineItem POLineItem           @relation(fields: [lineItemId], references: [id], onDelete: Restrict)
+
+  @@unique([shopId, id])
+  @@unique([receiptId, lineItemId])
+  @@index([shopId, receiptId])
+  @@index([shopId, lineItemId])
 }
 
 // ─── Shopify data cache ─────────────────────────────────────────────────────
@@ -570,16 +803,52 @@ enum StocktakeStatus {
   CANCELLED
 }
 
+/// FULL counts every item stocked at the location; PARTIAL only the items added to it.
+enum StocktakeScope {
+  FULL
+  PARTIAL
+}
+
+/// Which Shopify quantity `expectedQty` was frozen from. ON_HAND is what a
+/// person counts on the shelf; AVAILABLE is kept for counts started before it.
+enum StocktakeQuantityBasis {
+  AVAILABLE
+  ON_HAND
+}
+
+/// Where a count sheet's starting `expectedQty` values were read. LIVE is a
+/// read of Shopify as the count started; SYNC is the last synced quantity,
+/// used for counts started before the live read and for very large locations.
+enum StocktakeExpectedSource {
+  SYNC
+  LIVE
+}
+
+enum StocktakeCountSource {
+  MANUAL
+  SCAN
+  ZERO_FILL
+}
+
 model Stocktake {
-  id          String          @id @default(cuid())
-  shop        String
-  shopId      String?
-  locationId  String
-  status      StocktakeStatus @default(DRAFT)
-  name        String
-  startedAt   DateTime?
-  completedAt DateTime?
-  createdAt   DateTime        @default(now())
+  id                String                  @id @default(cuid())
+  shop              String
+  shopId            String?
+  locationId        String
+  status            StocktakeStatus         @default(DRAFT)
+  name              String
+  scope             StocktakeScope          @default(FULL)
+  quantityBasis     StocktakeQuantityBasis  @default(AVAILABLE)
+  expectedSource    StocktakeExpectedSource @default(SYNC)
+  /// Expected quantities are hidden from the people counting until review.
+  blind             Boolean                 @default(false)
+  startedAt         DateTime?
+  startedByUserId   String?                 @db.VarChar(64)
+  completedAt       DateTime?
+  completedByUserId String?                 @db.VarChar(64)
+  cancelledAt       DateTime?
+  cancelledByUserId String?                 @db.VarChar(64)
+  createdAt         DateTime                @default(now())
 
   lineItems StocktakeLineItem[]
 
@@ -588,17 +857,32 @@ model Stocktake {
 }
 
 model StocktakeLineItem {
-  id               String  @id @default(cuid())
-  shopId           String?
-  stocktakeId      String
-  shopifyVariantId String
-  expectedQty      Int
-  countedQty       Int?
+  id                  String                @id @default(cuid())
+  shopId              String?
+  stocktakeId         String
+  shopifyVariantId    String
+  expectedQty         Int
+  /// When expectedQty was read from Shopify itself. Null while it is a synced
+  /// quantity, which is replaced by a live read when the line is counted or,
+  /// at the latest, when the count is completed.
+  expectedReadAt      DateTime?
+  countedQty          Int?
+  countSource         StocktakeCountSource?
+  countedAt           DateTime?
+  countedByUserId     String?               @db.VarChar(64)
+  /// Shopify's quantity when completion found it no longer matched
+  /// expectedQty. The line waits for review while movementReviewedAt is null.
+  movementDetectedQty Int?
+  /// Set when stock moved in Shopify during the count and the count was taken
+  /// after the movement: the variance is then counted minus this quantity.
+  movementBaselineQty Int?
+  movementReviewedAt  DateTime?
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
 
   @@index([shopId])
   @@index([shopId, stocktakeId])
+  @@index([shopId, stocktakeId, shopifyVariantId])
   @@unique([shopId, id])
 }
 
@@ -2254,6 +2538,68 @@ model OrderFactObservationInFlight {
   @@index([shopId, leaseExpiresAt, lifecycleState])
   @@index([shopId, observationRequestGen])
   @@index([shopId, resourceKind, shopifyRefundGid, shopifyLineItemGid, refundLineOrdinal])
+}
+
+// ─── Privacy requests (Shopify compliance webhooks and retention) ────────────
+// Control-plane only. The runtime role receives no grants on this table.
+
+enum PrivacyRequestTopic {
+  CUSTOMERS_DATA_REQUEST
+  CUSTOMERS_REDACT
+  SHOP_REDACT
+}
+
+enum PrivacyRequestOrigin {
+  SHOPIFY_WEBHOOK
+  RETENTION_SWEEP
+}
+
+enum PrivacyRequestResolution {
+  /// customers/data_request, customers/redact: ProPo stores no customer data to
+  /// return or remove.
+  NO_CUSTOMER_DATA_HELD
+  /// shop/redact: every row keyed to the shop and the shop row itself are gone.
+  SHOP_DATA_ERASED
+  /// shop/redact: no shop row existed for the request when it was processed.
+  NO_SHOP_RECORD
+  /// shop/redact: the shop had the app installed again when the request was processed.
+  SHOP_ACTIVE
+}
+
+/// One row per compliance request. A request is open while `resolution` is null.
+/// Holds no customer identifiers: the customer's id, email and phone in the
+/// Shopify payload are never read.
+model PrivacyRequest {
+  id                String                    @id @default(cuid())
+  topic             PrivacyRequestTopic
+  origin            PrivacyRequestOrigin
+  shopDomain        String                    @db.VarChar(255)
+  /// Shop.id the request was bound to at intake. Not a foreign key and not named
+  /// shopId on purpose: this row must outlive the shop row an erasure deletes.
+  shopRecordId      String?
+  shopifyShopId     String?                   @db.VarChar(32)
+  /// X-Shopify-Webhook-Id. Unique so a redelivery never creates a second request.
+  shopifyWebhookId  String?                   @unique @db.VarChar(128)
+  /// customers/data_request only: Shopify's id for the request.
+  dataRequestId     String?                   @db.VarChar(32)
+  /// Number of order ids Shopify listed on a customer request. The ids
+  /// themselves are not kept.
+  ordersListed      Int?
+  receivedAt        DateTime                  @default(now())
+  /// Shopify requires completion within 30 days of the request.
+  dueAt             DateTime
+  attempts          Int                       @default(0)
+  nextAttemptAt     DateTime                  @default(now())
+  lastErrorCode     String?                   @db.VarChar(64)
+  resolution        PrivacyRequestResolution?
+  resolvedAt        DateTime?
+  erasedRows        BigInt?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  @@index([resolution, nextAttemptAt])
+  @@index([shopRecordId])
+  @@index([shopDomain, receivedAt])
 }
 
 // ─── Replenishment planning (Stocky Parity) ─────────────────────────────────

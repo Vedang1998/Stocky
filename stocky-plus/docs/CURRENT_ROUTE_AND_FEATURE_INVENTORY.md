@@ -10,12 +10,16 @@
 |---|---|---|---|---|
 | `app.tsx` | Embedded shell + nav | F-001 | Keep | Missing Home modules from PRD IA (Receiving, Inventory, Labels, Reports, Alerts, Settings as first-class) |
 | `app._index.tsx` | Dashboard | F-004, F-007 | Refactor | Working title heading; sync CTA; subscription display |
-| `app.suppliers.tsx` | Supplier list | F-017 | Keep/refactor | Shop-scoped |
-| `app.suppliers_.$id.tsx` | Supplier detail, mappings, tiers | F-017–F-024 | Keep/refactor | Child deletes now scoped via parent supplier |
-| `app.purchase-orders.tsx` | PO list/create/lines/receive | F-046–F-059 | Refactor | Shop checks added Phase 0; money still JS number; receive gated |
-| `app.purchase-orders_.$id.receiver.tsx` | Receiver PDF | F-052 | Keep/refactor | Shop-scoped loader |
+| `app.suppliers.tsx` | Supplier list (active/archived, search) | F-017 | Keep | On `services/purchasing` |
+| `app.suppliers_.new.tsx` | New supplier | F-017 | Keep | On `services/purchasing` |
+| `app.suppliers_.$id.tsx` | Supplier profile, products, terms, price tiers, archive/delete, history | F-017–F-024 | Keep | On `services/purchasing`; archived suppliers read-only |
+| `app.purchase-orders.tsx` | PO list with views and search | F-046–F-059 | Keep | On `services/purchasing`; money as exact decimal strings |
+| `app.purchase-orders_.new.tsx` | New PO draft | F-046 | Keep | Idempotent creation key |
+| `app.purchase-orders_.$id.tsx` | PO lines, charges, lifecycle, receipts, history | F-046–F-059 | Keep | Version-claimed forms |
+| `app.purchase-orders_.$id_.receive.tsx` | Receive a delivery (scan/count, rejects, over-receipt) | F-057, F-062 | Keep | Inventory ledger `RECEIPT`; `FEATURE_RECEIPT_WRITES` off by default |
+| `app.purchase-orders_.$id_.receiver.tsx` | Receiver PDF | F-052 | Keep/refactor | Shop-scoped loader; still legacy content |
 | `app.buying-table.tsx` | Replenishment worksheet | F-026–F-040, F-039 | Rebuild later | Caps 50 mappings; N+1 live inventory; forced MOQ/pack; wrong forecast; premature Boolean gate |
-| `app.warehouse.tsx` | Barcode receiving UI | F-057, F-062 | Refactor | Receipt writes gated; no Shopify inventory sync |
+| `app.warehouse.tsx` | Receiving queue: incoming POs by destination, linked to the receive page | F-057, F-062 | Keep | Receiving itself happens on the PO receive page |
 | `app.warehouse_.labels.tsx` | ZPL labels | F-084, F-085 | Keep/refactor | Partial |
 | `app.transfers.tsx` | Custom transfer lifecycle | F-081, F-082 | Refactor | Shopify transfer mutations gated; tenant fixes on addLine/pick |
 | `app.stocktakes.tsx` | Cycle counts | F-074–F-080 | Unsafe → freeze | Writes gated; no longer completes on Shopify failures |
@@ -41,7 +45,7 @@
 | Module | Purpose | Disposition |
 |---|---|---|
 | `forecasting.server.ts` | Velocity, ROP, ABC, alerts | Rewrite (Phase 2) — characterization locked |
-| `landed-cost.server.ts` | Allocation, receivePartialPO | Refactor — shop-blind internals remain risk |
+| `landed-cost.server.ts` | Legacy allocation and tier lookup used by the Buying Table | Replace with `lib/purchasing/totals.ts` and `services/purchasing` when the Buying Table is rebuilt |
 | `shopify-gql.server.ts` | Throttled GraphQL helper | Keep concept; validate ops |
 | `shopify-sync.server.ts` | Bulk sync, inventory adjust, transfers, billing mutation | Keep; write paths gated at routes |
 | `jobs/queue.server.ts` + workers | BullMQ webhooks, ABC cron, catalog sync | Keep; need dead-letter / sync-run tables |
