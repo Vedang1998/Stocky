@@ -20,7 +20,7 @@
     "prisma": "prisma",
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
-    "typecheck": "react-router typegen && tsc --noEmit",
+    "typecheck": "react-router typegen && tsc --noEmit && tsc --noEmit -p extensions/propo-pos",
     "test": "vitest run",
     "test:migrations": "vitest run --config vitest.migrations.config.ts",
     "test:migrations-name-filter-probes": "vitest run --config vitest.migrations-name-filter-probes.config.ts",
