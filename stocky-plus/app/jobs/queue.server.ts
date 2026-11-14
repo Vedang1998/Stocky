@@ -251,9 +251,64 @@ export async function enqueueCatalogSync(
   return { enqueued: true };
 }
 
-/** Dedicated producer for afterAuth catalog sync (approved source). */
-export async function enqueueAfterAuthCatalogSync(tenant: TenantAuthority) {
+/**
+ * Shortest gap between a catalog sync that succeeded and the next one the
+ * afterAuth hook may queue for the same shop.
+ */
+export const AFTER_AUTH_CATALOG_SYNC_MIN_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Dedicated producer for afterAuth catalog sync (approved source).
+ *
+ * afterAuth runs on every token exchange, not only at install: with expiring
+ * offline tokens that is about once an hour for a shop in use. Every run used
+ * to create its own job with up to 125 attempts, so a request is now skipped
+ * while a catalog sync for the shop is queued or running, or when one
+ * succeeded within AFTER_AUTH_CATALOG_SYNC_MIN_INTERVAL_MS. A sync from before
+ * the shop's latest reinstall does not count, because the catalog was not
+ * followed while the app was uninstalled, and neither does a failed one. The
+ * minute-bucketed idempotency key collapses hook runs that pass the check
+ * together.
+ */
+export async function enqueueAfterAuthCatalogSync(
+  tenant: TenantAuthority,
+): Promise<{ enqueued: boolean; reason?: string }> {
   const auth = requireAuthority(tenant, "enqueueAfterAuthCatalogSync");
+  const prisma = getControlPlanePrisma();
+  const now = Date.now();
+  const shop = await prisma.shop.findUnique({
+    where: { id: auth.shopId },
+    select: { reinstalledAt: true },
+  });
+  const recentSince = Math.max(
+    now - AFTER_AUTH_CATALOG_SYNC_MIN_INTERVAL_MS,
+    shop?.reinstalledAt?.getTime() ?? 0,
+  );
+  const existing = await prisma.durableJob.findFirst({
+    where: {
+      shopId: auth.shopId,
+      jobType: "catalog-sync",
+      OR: [
+        {
+          state: {
+            in: [
+              "PENDING",
+              "RETRY_WAIT",
+              "DISPATCH_LEASED",
+              "ENQUEUED",
+              "RUNNING",
+            ],
+          },
+        },
+        { state: "SUCCEEDED", createdAt: { gte: new Date(recentSince) } },
+      ],
+    },
+    select: { id: true },
+  });
+  if (existing) {
+    return { enqueued: false, reason: "already_requested" };
+  }
+  const bucket = Math.floor(now / CATALOG_SYNC_MIN_ENQUEUE_INTERVAL_MS);
   await createDurableJob({
     shopId: auth.shopId,
     jobType: "catalog-sync",
@@ -261,12 +316,13 @@ export async function enqueueAfterAuthCatalogSync(tenant: TenantAuthority) {
     queueName: CRON_QUEUE,
     payloadSchemaVersion: "catalog-facts-v1",
     sanitizedPayload: { shopId: auth.shopId, reason: "after_auth" },
-    idempotencyKey: `after-auth-catalog-sync:${auth.shopId}:${auth.correlationId}`,
+    idempotencyKey: `after-auth-catalog-sync:${auth.shopId}:${bucket}`,
     correlationId: auth.correlationId,
     causationId: auth.causationId,
     maxAttempts: 125,
   });
   await kickDispatcher();
+  return { enqueued: true };
 }
 
 export async function enqueueInventoryStateReconcile(
