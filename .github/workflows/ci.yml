@@ -68,6 +68,9 @@ jobs:
           esac
 
   validate:
+    # The long database suites run in the parallel jobs below. Each of them
+    # prepares its own database with the same steps as this job (the aliases
+    # point at the step definitions here), and CI Gate requires every job.
     name: Lint, typecheck, test, build, Prisma, GraphQL
     needs: classify
     if: ${{ needs.classify.outputs.full_ci == 'true' }}
@@ -76,11 +79,11 @@ jobs:
     # exceed the prior 45m wall on GitHub-hosted runners (observed cancel at
     # ~45m during final test:migrations on tip 314981e).
     timeout-minutes: 120
-    defaults:
+    defaults: &ci_defaults
       run:
         working-directory: stocky-plus
 
-    services:
+    services: &ci_services
       postgres:
         image: postgres:16-alpine
         env:
@@ -104,7 +107,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
 
-    env:
+    env: &ci_env
       # Test-only placeholders — no real Shopify credentials or merchant data.
       NODE_ENV: test
       DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_plus_ci
@@ -136,10 +139,12 @@ jobs:
       ALLOW_DEV_SUBSCRIPTION_ACTIVATE: "false"
 
     steps:
-      - name: Checkout
+      - &checkout
+        name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - &setup_node
+        name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22.19.0"
@@ -148,30 +153,36 @@ jobs:
 
       # Match package.json "packageManager" / engines.npm — same version used
       # to repair the lockfile and for local validation evidence.
-      - name: Pin npm
+      - &pin_npm
+        name: Pin npm
         working-directory: .
         run: npm install -g npm@11.5.2
 
-      - name: Verify Node and npm versions
+      - &verify_versions
+        name: Verify Node and npm versions
         working-directory: .
         run: |
           node --version
           npm --version
           test "$(npm --version)" = "11.5.2"
 
-      - name: Install dependencies
+      - &install_dependencies
+        name: Install dependencies
         run: npm ci
 
-      - name: Generate Prisma client
+      - &prisma_generate
+        name: Generate Prisma client
         run: npx prisma generate
 
       - name: Validate Prisma schema
         run: npx prisma validate
 
-      - name: Apply migrations to ephemeral PostgreSQL
+      - &migrate_deploy
+        name: Apply migrations to ephemeral PostgreSQL
         run: npx prisma migrate deploy
 
-      - name: Compatibility index apply
+      - &index_apply
+        name: Compatibility index apply
         run: npm run tenant:indexes:apply -- --apply
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -190,19 +201,22 @@ jobs:
       - name: Tenant enforcement inventory freshness
         run: npm run tenant:enforcement:inventory:check
 
-      - name: Tenant database role provisioning
+      - &tenant_roles_provision
+        name: Tenant database role provisioning
         run: npm run tenant:roles:provision -- --apply
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
-      - name: Tenant enforcement preflight
+      - &enforcement_preflight
+        name: Tenant enforcement preflight
         run: npm run tenant:enforcement:preflight
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
-      - name: Tenant enforcement apply
+      - &enforcement_apply
+        name: Tenant enforcement apply
         run: npm run tenant:enforcement:apply -- --apply
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -237,6 +251,116 @@ jobs:
         env:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - name: Tenant access architecture audit
+        run: npm run tenant:access:audit
+
+      - name: Tenant access inventory freshness
+        run: npm run tenant:access:inventory:check
+
+      - name: Sync control-plane inventory freshness
+        run: npm run sync:inventory:check
+
+      - &sync_roles_provision
+        name: Sync control-plane role provisioning
+        run: npm run sync:roles:provision -- --apply
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+          STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_ci_only
+
+      - name: Sync control-plane role verification
+        run: npm run sync:roles:verify
+        env:
+          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
+          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+
+      - &git_diff_check
+        name: Git diff check
+        run: git diff --check
+        working-directory: .
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Requires outbound HTTPS to shopify.dev to fetch the Admin GraphQL schema.
+      # Must run before Unit tests so the generated Admin 2026-07 schema artifact
+      # exists for the bulk schema gate. R-016 remains OPEN.
+      - &graphql_codegen
+        name: GraphQL codegen / schema validation
+        run: npm run graphql-codegen
+
+      - name: PR5-F3 JSONL ingest unit matrix
+        run: npx vitest run app/lib/catalog-facts/ingest --reporter=verbose --passWithNoTests false
+
+      - name: PR5-F3 two-root scanner and exact bulk-submit exception
+        run: >-
+          npx vitest run
+          app/lib/catalog-facts/foundation-safety.test.ts
+          app/lib/catalog-facts/admin-read/mutation-safety.test.ts
+          app/lib/catalog-facts/admin-read/f3-scanner.test.ts
+          --reporter=verbose --passWithNoTests false
+
+      - name: PR5-F3 whole-application semantic safety scan
+        run: npx tsx scripts/pr5-f3-safety-scan.ts
+
+      - name: PR5-F3 JSONL checkpoint and completeness PostgreSQL matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-jsonl-checkpoint.test.ts
+
+      - name: PR5-F3 webhook authoritative-refetch and R-165 matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts
+
+      - name: PR5-F3 overlap races
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-overlap-races.test.ts
+
+      - name: PR5-F3 absence confirmation and flag-off matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-absence-confirmation.test.ts
+
+      - name: PR5-F3 inventory reconcile matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-inventory-reconcile.test.ts
+
+      - name: PR5-F3 projection and health matrix
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-projection-health.test.ts
+
+      - name: PR5-F3 derived lock-capacity Race AW
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-lock-capacity-aw.test.ts
+
+      - name: PR5-F3 scale completeness
+        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  tenant_enforcement:
+    name: Tenant enforcement tests
+    needs: classify
+    if: ${{ needs.classify.outputs.full_ci == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults: *ci_defaults
+    services: *ci_services
+    env: *ci_env
+
+    steps:
+      # Runs before sync control-plane role provisioning, as it did in the
+      # single job.
+      - *checkout
+      - *setup_node
+      - *pin_npm
+      - *verify_versions
+      - *install_dependencies
+      - *prisma_generate
+      - *migrate_deploy
+      - *index_apply
+      - *tenant_roles_provision
+      - *enforcement_preflight
+      - *enforcement_apply
 
       - name: Tenant pooled-connection isolation tests
         run: npm run test:db-isolation -- app/tenant/__tests__/db-isolation/isolation.test.ts
@@ -401,27 +525,31 @@ jobs:
           TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
           DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
 
-      - name: Tenant access architecture audit
-        run: npm run tenant:access:audit
+      - *git_diff_check
 
-      - name: Tenant access inventory freshness
-        run: npm run tenant:access:inventory:check
+  sync_control_plane:
+    name: Sync control-plane tests
+    needs: classify
+    if: ${{ needs.classify.outputs.full_ci == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults: *ci_defaults
+    services: *ci_services
+    env: *ci_env
 
-      - name: Sync control-plane inventory freshness
-        run: npm run sync:inventory:check
-
-      - name: Sync control-plane role provisioning
-        run: npm run sync:roles:provision -- --apply
-        env:
-          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
-          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
-          STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_ci_only
-
-      - name: Sync control-plane role verification
-        run: npm run sync:roles:verify
-        env:
-          TENANT_MAINTENANCE_DATABASE_URL: ${{ env.DATABASE_URL }}
-          DATABASE_MIGRATION_URL: ${{ env.DATABASE_URL }}
+    steps:
+      - *checkout
+      - *setup_node
+      - *pin_npm
+      - *verify_versions
+      - *install_dependencies
+      - *prisma_generate
+      - *migrate_deploy
+      - *index_apply
+      - *tenant_roles_provision
+      - *enforcement_preflight
+      - *enforcement_apply
+      - *sync_roles_provision
 
       - name: Sync control-plane integration tests
         run: npm run test:sync-integration
@@ -550,6 +678,32 @@ jobs:
           STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
           DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_ci_only@localhost:5432/stocky_plus_ci
 
+      - *git_diff_check
+
+  tenant_access:
+    name: Tenant access tests
+    needs: classify
+    if: ${{ needs.classify.outputs.full_ci == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults: *ci_defaults
+    services: *ci_services
+    env: *ci_env
+
+    steps:
+      - *checkout
+      - *setup_node
+      - *pin_npm
+      - *verify_versions
+      - *install_dependencies
+      - *prisma_generate
+      - *migrate_deploy
+      - *index_apply
+      - *tenant_roles_provision
+      - *enforcement_preflight
+      - *enforcement_apply
+      - *sync_roles_provision
+
       - name: Tenant access PostgreSQL tests
         run: npm run test:tenant-access -- app/tenant/__tests__/nullable-ownership.test.ts app/tenant/__tests__/tenant-db.test.ts app/tenant/__tests__/bootstrap.test.ts
 
@@ -655,62 +809,34 @@ jobs:
       - name: Tenant access tests
         run: npm run test:tenant-access
 
-      - name: Git diff check
-        run: git diff --check
-        working-directory: .
+      - *git_diff_check
 
-      - name: Lint
-        run: npm run lint
+  migrations:
+    name: Migration and tenant-backfill tests
+    needs: classify
+    if: ${{ needs.classify.outputs.full_ci == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults: *ci_defaults
+    services: *ci_services
+    env: *ci_env
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      # Requires outbound HTTPS to shopify.dev to fetch the Admin GraphQL schema.
-      # Must run before Unit tests so the generated Admin 2026-07 schema artifact
-      # exists for the bulk schema gate. R-016 remains OPEN.
-      - name: GraphQL codegen / schema validation
-        run: npm run graphql-codegen
-
-      - name: PR5-F3 JSONL ingest unit matrix
-        run: npx vitest run app/lib/catalog-facts/ingest --reporter=verbose --passWithNoTests false
-
-      - name: PR5-F3 two-root scanner and exact bulk-submit exception
-        run: >-
-          npx vitest run
-          app/lib/catalog-facts/foundation-safety.test.ts
-          app/lib/catalog-facts/admin-read/mutation-safety.test.ts
-          app/lib/catalog-facts/admin-read/f3-scanner.test.ts
-          --reporter=verbose --passWithNoTests false
-
-      - name: PR5-F3 whole-application semantic safety scan
-        run: npx tsx scripts/pr5-f3-safety-scan.ts
-
-      - name: PR5-F3 JSONL checkpoint and completeness PostgreSQL matrix
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-jsonl-checkpoint.test.ts
-
-      - name: PR5-F3 webhook authoritative-refetch and R-165 matrix
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-webhook-refetch.test.ts
-
-      - name: PR5-F3 overlap races
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-overlap-races.test.ts
-
-      - name: PR5-F3 absence confirmation and flag-off matrix
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-absence-confirmation.test.ts
-
-      - name: PR5-F3 inventory reconcile matrix
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-inventory-reconcile.test.ts
-
-      - name: PR5-F3 projection and health matrix
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-projection-health.test.ts
-
-      - name: PR5-F3 derived lock-capacity Race AW
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-lock-capacity-aw.test.ts
-
-      - name: PR5-F3 scale completeness
-        run: npm run test:migrations -- scripts/tenant-enforcement/tests/pr5-f3-scale-completeness.test.ts
-
-      - name: Unit tests
-        run: npm test
+    steps:
+      # The full migration suite loads the generated Admin schema artifact
+      # (pr6-d-integration), so codegen runs first.
+      - *checkout
+      - *setup_node
+      - *pin_npm
+      - *verify_versions
+      - *install_dependencies
+      - *prisma_generate
+      - *migrate_deploy
+      - *index_apply
+      - *tenant_roles_provision
+      - *enforcement_preflight
+      - *enforcement_apply
+      - *sync_roles_provision
+      - *graphql_codegen
 
       - name: Migration and tenant-backfill tests
         run: npm run test:migrations
@@ -724,13 +850,10 @@ jobs:
       - name: Constrained-memory subject evidence
         run: npm run test:subject-memory
 
-      - name: Build
-        run: npm run build
-
   gate:
     name: CI Gate
     if: always()
-    needs: [classify, validate]
+    needs: [classify, validate, tenant_enforcement, sync_control_plane, tenant_access, migrations]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -738,12 +861,20 @@ jobs:
         env:
           CLASSIFY_RESULT: ${{ needs.classify.result }}
           VALIDATE_RESULT: ${{ needs.validate.result }}
+          TENANT_ENFORCEMENT_RESULT: ${{ needs.tenant_enforcement.result }}
+          SYNC_CONTROL_PLANE_RESULT: ${{ needs.sync_control_plane.result }}
+          TENANT_ACCESS_RESULT: ${{ needs.tenant_access.result }}
+          MIGRATIONS_RESULT: ${{ needs.migrations.result }}
           FULL_CI: ${{ needs.classify.outputs.full_ci }}
           DOCS_ONLY: ${{ needs.classify.outputs.docs_only }}
         run: |
           set -euo pipefail
           echo "classify_result=${CLASSIFY_RESULT}"
           echo "validate_result=${VALIDATE_RESULT}"
+          echo "tenant_enforcement_result=${TENANT_ENFORCEMENT_RESULT}"
+          echo "sync_control_plane_result=${SYNC_CONTROL_PLANE_RESULT}"
+          echo "tenant_access_result=${TENANT_ACCESS_RESULT}"
+          echo "migrations_result=${MIGRATIONS_RESULT}"
           echo "full_ci=${FULL_CI}"
           echo "docs_only=${DOCS_ONLY}"
           if [ "${CLASSIFY_RESULT}" != "success" ]; then
@@ -751,11 +882,22 @@ jobs:
             exit 1
           fi
           if [ "${FULL_CI}" = "true" ]; then
-            if [ "${VALIDATE_RESULT}" != "success" ]; then
-              echo "CI Gate FAIL: full CI required but validate result is ${VALIDATE_RESULT}"
+            failed=0
+            for job_result in \
+              "validate=${VALIDATE_RESULT}" \
+              "tenant_enforcement=${TENANT_ENFORCEMENT_RESULT}" \
+              "sync_control_plane=${SYNC_CONTROL_PLANE_RESULT}" \
+              "tenant_access=${TENANT_ACCESS_RESULT}" \
+              "migrations=${MIGRATIONS_RESULT}"; do
+              if [ "${job_result#*=}" != "success" ]; then
+                echo "CI Gate FAIL: full CI required but ${job_result%%=*} result is ${job_result#*=}"
+                failed=1
+              fi
+            done
+            if [ "${failed}" -ne 0 ]; then
               exit 1
             fi
-            echo "CI Gate SUCCESS: full validate succeeded"
+            echo "CI Gate SUCCESS: every full CI job succeeded"
             exit 0
           fi
           if [ "${DOCS_ONLY}" = "true" ]; then
