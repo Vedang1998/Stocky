@@ -209,7 +209,12 @@ async function buildLegDocument(
     );
   }
 
-  const items = await findVariantInventoryItems(db, [...unitsByVariant.keys()]);
+  // Every line is looked up, not only the ones with units: a line whose units
+  // all went back still has to be named when Shopify refuses its change.
+  const items = await findVariantInventoryItems(
+    db,
+    transfer.lineItems.map((line) => line.shopifyVariantId),
+  );
   const unresolved = [...unitsByVariant.keys()]
     .filter((id) => !items.get(id)?.inventoryItemId)
     .map((id) => items.get(id)?.title ?? id);
@@ -221,12 +226,16 @@ async function buildLegDocument(
   }
 
   const lineByItem: LineByItem = new Map();
+  for (const [shopifyVariantId, item] of items) {
+    if (item.inventoryItemId) {
+      lineByItem.set(item.inventoryItemId, {
+        shopifyVariantId,
+        title: item.title,
+      });
+    }
+  }
   const desired = [...unitsByVariant].map(([shopifyVariantId, units]) => {
     const item = items.get(shopifyVariantId)!;
-    lineByItem.set(item.inventoryItemId!, {
-      shopifyVariantId,
-      title: item.title,
-    });
     return {
       inventoryItemId: item.inventoryItemId!,
       variantId: ledgerVariantId(shopifyVariantId),

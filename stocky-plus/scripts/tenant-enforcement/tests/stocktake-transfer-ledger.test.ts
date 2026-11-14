@@ -195,25 +195,23 @@ describe("transfers on the inventory ledger", () => {
         [WHITE, 6],
       ],
     ) {
-      expect(
-        await createTransfer(dbA, {
-          shop: SHOP_A,
-          sourceLocationId: SOURCE,
-          destinationLocationId: DESTINATION,
-          notes: "  Restock the shop floor  ",
-        }),
-      ).toEqual({ ok: true });
-      const transfer = await prisma.transferOrder.findFirstOrThrow();
+      const created = await createTransfer(dbA, {
+        shop: SHOP_A,
+        sourceLocationId: SOURCE,
+        destinationLocationId: DESTINATION,
+        notes: "  Restock the shop floor  ",
+      });
+      if (!created.ok) throw new Error(created.error);
       for (const [shopifyVariantId, quantity] of lines) {
         expect(
           await addTransferLine(dbA, {
-            transferId: transfer.id,
+            transferId: created.transferId,
             shopifyVariantId,
             quantity,
           }),
-        ).toEqual({ ok: true });
+        ).toMatchObject({ ok: true });
       }
-      return transfer.id;
+      return created.transferId;
     }
 
     const load = (id: string) =>
@@ -431,6 +429,7 @@ describe("transfers on the inventory ledger", () => {
         ok: false,
         error: STAFF_REQUIRED_MESSAGE,
         problems: [],
+        blocker: null,
       });
       expect((await load(id)).status).toBe("DRAFT");
 
@@ -480,6 +479,7 @@ describe("transfers on the inventory ledger", () => {
         error:
           "Only a draft transfer can be cancelled. This one has already shipped.",
         problems: [],
+        blocker: null,
       });
       expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
     });
@@ -526,6 +526,8 @@ describe("transfers on the inventory ledger", () => {
       expect(await receiveTransfer(dbA, null, STAFF, id, enabled())).toEqual({
         ok: true,
         alreadyDone: true,
+        receivedUnits: 0,
+        completed: true,
       });
       expect(shopify.requests).toHaveLength(sent);
     });
@@ -539,7 +541,9 @@ describe("transfers on the inventory ledger", () => {
 
       expect(failed).toMatchObject({
         ok: false,
-        error: expect.stringContaining("The transfer stays in transit."),
+        error: expect.stringContaining(
+          "The transfer stays in transit and the units stay counted in.",
+        ),
         problems: [{ shopifyVariantId: RED, title: "Red wine" }],
       });
       expect((await load(id)).status).toBe("IN_TRANSIT");
@@ -551,7 +555,12 @@ describe("transfers on the inventory ledger", () => {
       expect(await receiveTransfer(dbA, null, STAFF, id, enabled())).toEqual({
         ok: true,
         alreadyDone: false,
+        receivedUnits: 10,
+        completed: true,
       });
+      expect(shopify.requests.at(-1)!.changes).toEqual([
+        expect.objectContaining({ inventoryItemId: item(101), delta: 4 }),
+      ]);
       expect(levels()).toMatchObject({
         redDestination: 4,
         whiteDestination: 6,
@@ -608,6 +617,7 @@ describe("transfers on the inventory ledger", () => {
         error:
           "Transfer inventory changes are switched off for this app. Nothing was sent to Shopify and the transfer was not changed.",
         problems: [],
+        blocker: null,
       });
       expect((await load(id)).status).toBe("DRAFT");
 
@@ -663,6 +673,7 @@ describe("transfers on the inventory ledger", () => {
           ok: false,
           error: "Transfer not found",
           problems: [],
+          blocker: null,
         });
       }
 

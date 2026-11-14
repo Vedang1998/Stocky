@@ -357,6 +357,7 @@ describe("cross-shop denial", () => {
 
     expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
       where: directScoped({ id: "tr-shop-a" }),
+      select: { id: true, shop: true, shopId: true },
     });
     expect(result).toEqual({ error: "Transfer not found" });
     expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
@@ -523,9 +524,12 @@ describe("cross-shop denial", () => {
       );
 
       expect(authenticateAdmin).toHaveBeenCalled();
+      const scopedLines = scopedLineItemsInclude("transferOrder");
       expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
         where: directScoped({ id: "tr-shop-a" }),
-        include: scopedLineItemsInclude("transferOrder"),
+        include: {
+          lineItems: { ...scopedLines.lineItems, orderBy: { id: "asc" } },
+        },
       });
       expect(result).toEqual({ error: "Transfer not found", problems: [] });
       expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();

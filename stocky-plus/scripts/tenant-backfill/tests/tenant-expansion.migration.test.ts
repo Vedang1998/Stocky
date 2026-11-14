@@ -53,6 +53,7 @@ const ALL_MIGRATION_NAMES = [
   "20261110220000_inventory_operation_ledger",
   "20261110230000_replenishment_planning_inputs",
   "20261111230000_stocktake_workflow",
+  "20261114010000_transfer_workflow",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);

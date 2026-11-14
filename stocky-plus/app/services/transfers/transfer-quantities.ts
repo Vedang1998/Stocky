@@ -61,3 +61,54 @@ export function transferWrittenOffQuantity(
     ? Math.max(0, transferOutstandingQuantity(line))
     : 0;
 }
+
+export interface TransferTotals {
+  lineCount: number;
+  /** Units the transfer asks for. */
+  requestedUnits: number;
+  /** Units that left the source, or will when a draft ships; none for a cancelled transfer. */
+  shipUnits: number;
+  /** Units in stock at the destination. */
+  receivedUnits: number;
+  /** Units counted in at the destination and not posted yet. */
+  countedInUnits: number;
+  rejectedUnits: number;
+  /** Units put back into stock at the source when the transfer was closed short. */
+  returnedUnits: number;
+  /** Units that never arrived and were written off. */
+  writtenOffUnits: number;
+  /** Shipped units nobody has accounted for yet, while the transfer is in transit. */
+  outstandingUnits: number;
+}
+
+/** Where the units of a transfer stand, added up over its lines. */
+export function transferTotals(
+  status: string,
+  lines: readonly TransferLineQuantities[],
+): TransferTotals {
+  const totals: TransferTotals = {
+    lineCount: lines.length,
+    requestedUnits: 0,
+    shipUnits: 0,
+    receivedUnits: 0,
+    countedInUnits: 0,
+    rejectedUnits: 0,
+    returnedUnits: 0,
+    writtenOffUnits: 0,
+    outstandingUnits: 0,
+  };
+  for (const line of lines) {
+    totals.requestedUnits += line.quantity;
+    // A cancelled transfer never left the source.
+    if (status !== "CANCELLED") totals.shipUnits += transferShipQuantity(line);
+    totals.receivedUnits += line.receivedQty;
+    totals.countedInUnits += line.pendingReceiveQty;
+    totals.rejectedUnits += line.rejectedQty;
+    totals.returnedUnits += line.returnedQty;
+    totals.writtenOffUnits += transferWrittenOffQuantity(status, line);
+    if (status === "IN_TRANSIT") {
+      totals.outstandingUnits += Math.max(0, transferOutstandingQuantity(line));
+    }
+  }
+  return totals;
+}

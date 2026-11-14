@@ -170,6 +170,7 @@ const ENFORCEMENT_FILES = [
   "scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts",
   "scripts/tenant-enforcement/tests/adjustment-ledger.test.ts",
   "scripts/tenant-enforcement/tests/stocktake-workflow.test.ts",
+  "scripts/tenant-enforcement/tests/transfer-workflow.test.ts",
 ] as const;
 
 function backfillExceptions(): AccessException[] {
