@@ -1,7 +1,7 @@
 /**
- * Stocktake completion and transfer ship/receive/cancel against the inventory
- * ledger — disposable PostgreSQL 16 with RLS applied, and the in-memory
- * Shopify double from the ledger suite.
+ * Transfer ship/receive/cancel against the inventory ledger — disposable
+ * PostgreSQL 16 with RLS applied, and the in-memory Shopify double from the
+ * ledger suite. Stocktakes are covered in stocktake-workflow.test.ts.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
@@ -11,19 +11,13 @@ import type { ExecuteInventoryOperationOptions } from "../../../app/services/inv
 import { settleInventoryDocument } from "../../../app/services/inventory-writes/settle.server";
 import type { InventoryActor } from "../../../app/services/inventory-writes/types";
 import {
-  addStocktakeLine,
-  completeStocktake,
-  createStocktake,
-  saveStocktakeCount,
-} from "../../../app/services/stocktakes/stocktake.server";
-import {
   addTransferLine,
   cancelTransfer,
   createTransfer,
-  receiveTransfer,
   setTransferPickedQuantity,
   shipTransfer,
 } from "../../../app/services/transfers/transfer.server";
+import { receiveTransfer } from "../../../app/services/transfers/transfer-receiving.server";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
 import {
   createTenantDb,
@@ -57,7 +51,7 @@ const STAFF: InventoryActor = {
   channel: "ADMIN",
 };
 
-describe("stocktakes and transfers on the inventory ledger", () => {
+describe("transfers on the inventory ledger", () => {
   let prisma: PrismaClient;
   let dbA: TenantDb;
   let dbB: TenantDb;
@@ -194,426 +188,6 @@ describe("stocktakes and transfers on the inventory ledger", () => {
     await prisma?.$disconnect();
   });
 
-  describe("stocktakes", () => {
-    async function startCount() {
-      expect(
-        await createStocktake(dbA, {
-          shop: SHOP_A,
-          locationId: SOURCE,
-          name: "Cellar",
-        }),
-      ).toEqual({ ok: true });
-      const stocktake = await prisma.stocktake.findFirstOrThrow({
-        include: { lineItems: true },
-      });
-      const lineFor = (shopifyVariantId: string) =>
-        stocktake.lineItems.find(
-          (l) => l.shopifyVariantId === shopifyVariantId,
-        )!.id;
-      return { id: stocktake.id, lineFor, lineItems: stocktake.lineItems };
-    }
-
-    async function count(lineId: string, countedQty: number) {
-      expect(await saveStocktakeCount(dbA, { lineId, countedQty })).toEqual({
-        ok: true,
-      });
-    }
-
-    const status = async (id: string) =>
-      (await prisma.stocktake.findUniqueOrThrow({ where: { id } })).status;
-
-    it("freezes expected quantities from the snapshots of the counted location only", async () => {
-      const { lineItems } = await startCount();
-      expect(
-        lineItems
-          .map((l) => [l.shopifyVariantId, l.expectedQty, l.countedQty])
-          .sort(),
-      ).toEqual([
-        [RED, 10, null],
-        [WHITE, 20, null],
-      ]);
-    });
-
-    it.each([
-      ["a deactivated location", INACTIVE],
-      ["another shop's location", OTHER_SHOPS_LOCATION],
-      ["no location", null],
-    ])("does not start a count at %s", async (_label, locationId) => {
-      const result = await createStocktake(dbA, {
-        shop: SHOP_A,
-        locationId,
-        name: null,
-      });
-      expect(result.ok).toBe(false);
-      expect(await prisma.stocktake.count()).toBe(0);
-    });
-
-    it("adds a catalog variant once, with the expected quantity of the counted location", async () => {
-      const { id } = await startCount();
-
-      for (let i = 0; i < 2; i += 1) {
-        expect(
-          await addStocktakeLine(dbA, {
-            stocktakeId: id,
-            shopifyVariantId: ROSE,
-          }),
-        ).toEqual({ ok: true });
-      }
-      expect(
-        await addStocktakeLine(dbA, {
-          stocktakeId: id,
-          shopifyVariantId: OTHER_SHOPS,
-        }),
-      ).toEqual({
-        ok: false,
-        error: "That variant is not in this shop's catalog.",
-      });
-
-      const lines = await prisma.stocktakeLineItem.findMany({
-        where: { stocktakeId: id, shopifyVariantId: ROSE },
-      });
-      expect(lines).toHaveLength(1);
-      expect(lines[0].expectedQty).toBe(0);
-    });
-
-    it("applies each variance once, closes the count and records who did it", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      await count(lineFor(WHITE), 20);
-
-      const result = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(result).toEqual({ ok: true, alreadyCompleted: false });
-      expect(shopify.level(101)).toBe(7);
-      expect(shopify.level(102)).toBe(20);
-      const closed = await prisma.stocktake.findUniqueOrThrow({
-        where: { id },
-      });
-      expect(closed.status).toBe("COMPLETED");
-      expect(closed.completedAt).toBeInstanceOf(Date);
-
-      const [operation, ...rest] = await operations("Stocktake", id);
-      expect(rest).toEqual([]);
-      expect(operation).toMatchObject({
-        kind: "STOCKTAKE",
-        status: "APPLIED",
-        reason: "cycle_count_available",
-        quantityName: "available",
-        actorShopifyUserId: "42",
-        actorChannel: "ADMIN",
-        idempotencyKey: `Stocktake:${id}:1`,
-        referenceDocumentUri: `gid://propo/Stocktake/${id}`,
-      });
-      expect(
-        operation.lines.map((l) => [
-          l.inventoryItemGid,
-          l.variantGid,
-          l.locationGid,
-          l.delta,
-          l.status,
-        ]),
-      ).toEqual([[item(101), RED, SOURCE, -3, "APPLIED"]]);
-    });
-
-    it("keeps sales made during the count: the variance is relative", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 12);
-      shopify.setLevel(101, 6, 11);
-
-      await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(shopify.level(101)).toBe(8);
-    });
-
-    it("sends nothing when a completed count is completed again", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      await completeStocktake(dbA, null, STAFF, id, enabled());
-      const sent = shopify.requests.length;
-
-      const again = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(again).toEqual({ ok: true, alreadyCompleted: true });
-      expect(shopify.requests).toHaveLength(sent);
-      expect(shopify.level(101)).toBe(7);
-      expect(await operations("Stocktake", id)).toHaveLength(1);
-    });
-
-    it("applies the variance once when complete is pressed twice at the same time", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-
-      const results = await Promise.all([
-        completeStocktake(dbA, null, STAFF, id, enabled()),
-        completeStocktake(dbA, null, STAFF, id, enabled()),
-      ]);
-
-      expect(results.some((r) => r.ok)).toBe(true);
-      expect(shopify.requests).toHaveLength(1);
-      expect(shopify.level(101)).toBe(7);
-      expect(await status(id)).toBe("COMPLETED");
-      expect(await operations("Stocktake", id)).toHaveLength(1);
-      expect(await completeStocktake(dbA, null, STAFF, id, enabled())).toEqual({
-        ok: true,
-        alreadyCompleted: true,
-      });
-    });
-
-    it("stays open after a partial failure and the retry sends only the refused line", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      await count(lineFor(WHITE), 25);
-      rejectNextChangeAt(1);
-
-      const failed = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(failed).toEqual({
-        ok: false,
-        error:
-          "Shopify did not accept 1 of 2 changes. Lines it accepted are recorded and will not be sent again. The count stays open.",
-        problems: [
-          {
-            shopifyVariantId: WHITE,
-            title: "White wine",
-            message: "The item is not stocked at the location.",
-          },
-        ],
-      });
-      expect(await status(id)).toBe("IN_PROGRESS");
-      expect({ red: shopify.level(101), white: shopify.level(102) }).toEqual({
-        red: 7,
-        white: 20,
-      });
-
-      const before = shopify.requests.length;
-      const retried = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(retried).toEqual({ ok: true, alreadyCompleted: false });
-      expect(shopify.requests).toHaveLength(before + 1);
-      expect(shopify.requests.at(-1)!.changes).toEqual([
-        expect.objectContaining({ inventoryItemId: item(102), delta: 5 }),
-      ]);
-      expect({ red: shopify.level(101), white: shopify.level(102) }).toEqual({
-        red: 7,
-        white: 25,
-      });
-      const recorded = await operations("Stocktake", id);
-      expect(recorded.map((o) => o.status)).toEqual([
-        "PARTIALLY_APPLIED",
-        "APPLIED",
-      ]);
-      expect(recorded[1].idempotencyKey).toBe(`Stocktake:${id}:2`);
-    });
-
-    it("resends the same request after a lost response instead of adjusting twice", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      shopify.loseNextResponse();
-
-      const unknown = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(unknown.ok).toBe(false);
-      expect(await status(id)).toBe("IN_PROGRESS");
-      expect(shopify.level(101)).toBe(7);
-
-      const retried = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(retried).toEqual({ ok: true, alreadyCompleted: false });
-      expect(shopify.level(101)).toBe(7);
-      expect(new Set(shopify.keys()).size).toBe(1);
-      expect(await operations("Stocktake", id)).toHaveLength(1);
-    });
-
-    it("puts an applied variance back when the count is corrected after a partial failure", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      await count(lineFor(WHITE), 25);
-      rejectNextChangeAt(1);
-      await completeStocktake(dbA, null, STAFF, id, enabled());
-      expect(shopify.level(101)).toBe(7);
-
-      // Both lines are recounted and match the expected quantity after all.
-      await count(lineFor(RED), 10);
-      await count(lineFor(WHITE), 20);
-
-      const result = await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      expect(result).toEqual({ ok: true, alreadyCompleted: false });
-      expect({ red: shopify.level(101), white: shopify.level(102) }).toEqual({
-        red: 10,
-        white: 20,
-      });
-      expect(await status(id)).toBe("COMPLETED");
-    });
-
-    it("stays open when a count is saved mid-completion, then applies it on the next attempt", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      let interfered = false;
-
-      const first = await completeStocktake(
-        dbA,
-        null,
-        STAFF,
-        id,
-        enabled({
-          sendBatch: async (request) => {
-            if (!interfered) {
-              interfered = true;
-              await count(lineFor(WHITE), 18);
-            }
-            return shopify.send(request);
-          },
-        }),
-      );
-
-      expect(first).toEqual({
-        ok: false,
-        error:
-          "A count was saved while this stocktake was being completed. Complete it again to apply the latest counts.",
-        problems: [],
-      });
-      expect(await status(id)).toBe("IN_PROGRESS");
-      expect({ red: shopify.level(101), white: shopify.level(102) }).toEqual({
-        red: 7,
-        white: 20,
-      });
-
-      expect(await completeStocktake(dbA, null, STAFF, id, enabled())).toEqual({
-        ok: true,
-        alreadyCompleted: false,
-      });
-      expect({ red: shopify.level(101), white: shopify.level(102) }).toEqual({
-        red: 7,
-        white: 18,
-      });
-    });
-
-    it("rejects count and line changes once the count is closed", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-      await completeStocktake(dbA, null, STAFF, id, enabled());
-
-      const closedMessage =
-        "This count is closed. Its lines can no longer be changed.";
-      expect(
-        await saveStocktakeCount(dbA, { lineId: lineFor(RED), countedQty: 1 }),
-      ).toEqual({ ok: false, error: closedMessage });
-      expect(
-        await addStocktakeLine(dbA, {
-          stocktakeId: id,
-          shopifyVariantId: ROSE,
-        }),
-      ).toEqual({ ok: false, error: closedMessage });
-      const red = await prisma.stocktakeLineItem.findUniqueOrThrow({
-        where: { id: lineFor(RED) },
-      });
-      expect(red.countedQty).toBe(7);
-    });
-
-    it("records and sends nothing while the kill switch is off", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-
-      const result = await completeStocktake(
-        dbA,
-        null,
-        STAFF,
-        id,
-        switchedOff(),
-      );
-
-      expect(result).toEqual({
-        ok: false,
-        error:
-          "Stocktake inventory changes are switched off for this app. Nothing was sent to Shopify and the count stays open.",
-        problems: [],
-      });
-      expect(shopify.requests).toHaveLength(0);
-      expect(await prisma.inventoryOperation.count()).toBe(0);
-      expect(await status(id)).toBe("IN_PROGRESS");
-    });
-
-    it("refuses to complete with no counts, an unlinked item, or a variant counted on two lines", async () => {
-      const { id, lineFor } = await startCount();
-      expect(
-        await completeStocktake(dbA, null, STAFF, id, enabled()),
-      ).toMatchObject({
-        ok: false,
-        error: "Enter at least one count before completing.",
-      });
-
-      await addStocktakeLine(dbA, {
-        stocktakeId: id,
-        shopifyVariantId: UNLINKED,
-      });
-      const unlinked = await prisma.stocktakeLineItem.findFirstOrThrow({
-        where: { stocktakeId: id, shopifyVariantId: UNLINKED },
-      });
-      await count(unlinked.id, 3);
-      expect(
-        await completeStocktake(dbA, null, STAFF, id, enabled()),
-      ).toMatchObject({
-        ok: false,
-        error: expect.stringContaining(
-          "Shopify inventory is not linked yet for: Unlinked gin.",
-        ),
-      });
-      await count(unlinked.id, 0);
-
-      // Legacy data can hold the same variant twice; the app no longer adds it.
-      const duplicate = await prisma.stocktakeLineItem.create({
-        data: {
-          stocktakeId: id,
-          shopId: (await prisma.stocktake.findUniqueOrThrow({ where: { id } }))
-            .shopId,
-          shopifyVariantId: RED,
-          expectedQty: 10,
-          countedQty: 4,
-        },
-      });
-      await count(lineFor(RED), 7);
-      expect(
-        await completeStocktake(dbA, null, STAFF, id, enabled()),
-      ).toMatchObject({
-        ok: false,
-        error: expect.stringContaining("on the count more than once"),
-      });
-      expect(duplicate.countedQty).toBe(4);
-
-      expect(shopify.requests).toHaveLength(0);
-      expect(await prisma.inventoryOperation.count()).toBe(0);
-      expect(await status(id)).toBe("IN_PROGRESS");
-    });
-
-    it("gives another shop no way to count or complete it", async () => {
-      const { id, lineFor } = await startCount();
-      await count(lineFor(RED), 7);
-
-      expect(
-        await saveStocktakeCount(dbB, { lineId: lineFor(RED), countedQty: 0 }),
-      ).toEqual({ ok: false, error: "Stocktake line not found" });
-      expect(
-        await addStocktakeLine(dbB, {
-          stocktakeId: id,
-          shopifyVariantId: OTHER_SHOPS,
-        }),
-      ).toEqual({ ok: false, error: "Stocktake not found" });
-      expect(await completeStocktake(dbB, null, STAFF, id, enabled())).toEqual({
-        ok: false,
-        error: "Stocktake not found",
-        problems: [],
-      });
-
-      expect(shopify.requests).toHaveLength(0);
-      expect(await status(id)).toBe("IN_PROGRESS");
-      const red = await prisma.stocktakeLineItem.findUniqueOrThrow({
-        where: { id: lineFor(RED) },
-      });
-      expect(red.countedQty).toBe(7);
-    });
-  });
-
   describe("transfers", () => {
     async function draftTransfer(
       lines: Array<[variantId: string, quantity: number]> = [
@@ -621,25 +195,23 @@ describe("stocktakes and transfers on the inventory ledger", () => {
         [WHITE, 6],
       ],
     ) {
-      expect(
-        await createTransfer(dbA, {
-          shop: SHOP_A,
-          sourceLocationId: SOURCE,
-          destinationLocationId: DESTINATION,
-          notes: "  Restock the shop floor  ",
-        }),
-      ).toEqual({ ok: true });
-      const transfer = await prisma.transferOrder.findFirstOrThrow();
+      const created = await createTransfer(dbA, {
+        shop: SHOP_A,
+        sourceLocationId: SOURCE,
+        destinationLocationId: DESTINATION,
+        notes: "  Restock the shop floor  ",
+      });
+      if (!created.ok) throw new Error(created.error);
       for (const [shopifyVariantId, quantity] of lines) {
         expect(
           await addTransferLine(dbA, {
-            transferId: transfer.id,
+            transferId: created.transferId,
             shopifyVariantId,
             quantity,
           }),
-        ).toEqual({ ok: true });
+        ).toMatchObject({ ok: true });
       }
-      return transfer.id;
+      return created.transferId;
     }
 
     const load = (id: string) =>
@@ -857,6 +429,7 @@ describe("stocktakes and transfers on the inventory ledger", () => {
         ok: false,
         error: STAFF_REQUIRED_MESSAGE,
         problems: [],
+        blocker: null,
       });
       expect((await load(id)).status).toBe("DRAFT");
 
@@ -906,6 +479,7 @@ describe("stocktakes and transfers on the inventory ledger", () => {
         error:
           "Only a draft transfer can be cancelled. This one has already shipped.",
         problems: [],
+        blocker: null,
       });
       expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
     });
@@ -952,6 +526,8 @@ describe("stocktakes and transfers on the inventory ledger", () => {
       expect(await receiveTransfer(dbA, null, STAFF, id, enabled())).toEqual({
         ok: true,
         alreadyDone: true,
+        receivedUnits: 0,
+        completed: true,
       });
       expect(shopify.requests).toHaveLength(sent);
     });
@@ -965,7 +541,9 @@ describe("stocktakes and transfers on the inventory ledger", () => {
 
       expect(failed).toMatchObject({
         ok: false,
-        error: expect.stringContaining("The transfer stays in transit."),
+        error: expect.stringContaining(
+          "The transfer stays in transit and the units stay counted in.",
+        ),
         problems: [{ shopifyVariantId: RED, title: "Red wine" }],
       });
       expect((await load(id)).status).toBe("IN_TRANSIT");
@@ -977,7 +555,12 @@ describe("stocktakes and transfers on the inventory ledger", () => {
       expect(await receiveTransfer(dbA, null, STAFF, id, enabled())).toEqual({
         ok: true,
         alreadyDone: false,
+        receivedUnits: 10,
+        completed: true,
       });
+      expect(shopify.requests.at(-1)!.changes).toEqual([
+        expect.objectContaining({ inventoryItemId: item(101), delta: 4 }),
+      ]);
       expect(levels()).toMatchObject({
         redDestination: 4,
         whiteDestination: 6,
@@ -1034,6 +617,7 @@ describe("stocktakes and transfers on the inventory ledger", () => {
         error:
           "Transfer inventory changes are switched off for this app. Nothing was sent to Shopify and the transfer was not changed.",
         problems: [],
+        blocker: null,
       });
       expect((await load(id)).status).toBe("DRAFT");
 
@@ -1089,6 +673,7 @@ describe("stocktakes and transfers on the inventory ledger", () => {
           ok: false,
           error: "Transfer not found",
           problems: [],
+          blocker: null,
         });
       }
 
