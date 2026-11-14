@@ -20,6 +20,32 @@ import { isVariantGid, resolveVariants } from "./variants.server";
 
 /** Largest file accepted, in bytes. */
 export const MAX_LINE_IMPORT_BYTES = 1_000_000;
+/**
+ * The file's text, read chunk by chunk so that no more than `maxBytes` is
+ * ever held; null when the file is larger.
+ */
+export async function readLinesFile(
+  file: Blob,
+  maxBytes: number = MAX_LINE_IMPORT_BYTES,
+): Promise<string | null> {
+  if (file.size > maxBytes) return null;
+  const reader = file.stream().getReader();
+  const decoder = new TextDecoder("utf-8");
+  let text = "";
+  let bytes = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    bytes += value.byteLength;
+    if (bytes > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 /** Row problems listed before the rest are summarised. */
 const MAX_REPORTED_PROBLEMS = 10;
 const MAX_CODE_LENGTH = 255;

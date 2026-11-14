@@ -20,10 +20,7 @@ import {
 } from "./action-result.server";
 import type { PurchasingContext } from "./actor.server";
 import { PurchasingError } from "./errors";
-import {
-  importPurchaseOrderLines,
-  MAX_LINE_IMPORT_BYTES,
-} from "./line-import.server";
+import { importPurchaseOrderLines, readLinesFile } from "./line-import.server";
 import {
   addPurchaseOrderLines,
   deletePurchaseOrderDraft,
@@ -245,12 +242,12 @@ export async function runPurchaseOrderIntent(
           linesFile: "Choose a CSV file to import.",
         });
       }
-      if (file.size > MAX_LINE_IMPORT_BYTES) {
+      const csv = await readLinesFile(file);
+      if (csv === null) {
         return actionFailure(intent, "The file is larger than 1 MB.", {
           linesFile: "The file is larger than 1 MB.",
         });
       }
-      const csv = await file.text();
       return purchasingAction(intent, async () => {
         const result = await importPurchaseOrderLines(
           db,
