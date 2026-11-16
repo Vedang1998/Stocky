@@ -7,7 +7,10 @@ import {
 import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import { shopifySessionStorage } from "./tenant/bootstrap.server";
 import { runAfterAuthTenantBootstrap } from "./tenant/after-auth.server";
-import { enqueueAfterAuthCatalogSync } from "./jobs/queue.server";
+import {
+  enqueueAfterAuthCatalogSync,
+  enqueueOrderFactsSync,
+} from "./jobs/queue.server";
 import {
   readBoundedRequest,
   WEBHOOK_MAX_BODY_BYTES,
@@ -40,6 +43,13 @@ const shopify = shopifyApp({
       } catch (err) {
         // Redis may be down — durable PENDING job still created when DB available.
         console.warn("Catalog sync enqueue skipped:", err);
+      }
+      try {
+        // Imports the order history and stores the shop's time zone and
+        // currency, which the reports need. Once per install.
+        await enqueueOrderFactsSync(tenant, "install");
+      } catch (err) {
+        console.warn("Order history import enqueue skipped:", err);
       }
     },
   },

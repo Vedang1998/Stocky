@@ -128,6 +128,10 @@ if (result.settled) {
   longer wanted (a count corrected back, a draft transfer cancelled after a
   partial ship) is put back.
 - An unfinished operation is resumed before anything new is recorded.
+- A document with more than 5,000 outstanding changes is sent over several
+  operations, the first 5,000 at a time, two operations per request. Until
+  the last one is confirmed the document stays open and reports how many
+  changes remain; pressing again sends the rest and nothing twice.
 - `holdOpen` runs in the transaction that records each new operation and locks
   the document row, so nothing is recorded for a document that closed or was
   cancelled in the meantime (`InventoryDocumentClosedError`).
@@ -148,6 +152,132 @@ are therefore in neither location's `available` until the transfer is received.
 A transfer that carries a `shopifyTransferId` from the earlier native path is
 not received by the app. Using Shopify's native transfer objects needs
 transfer scopes the app does not request and is an owner decision.
+
+## Stocktakes
+
+A stocktake (`app/services/stocktakes/`, pages `/app/stocktakes` and
+`/app/stocktakes/<id>`) is a count sheet for one location. Completing it sends
+each difference to Shopify through `settleInventoryDocument`.
+
+- **Starting.** A count is for one active, synced location. A full count lists
+  every tracked item Shopify stocks there; a partial count starts empty and
+  holds only what is scanned or added. Staff count what is physically on the
+  shelf, including units already committed to orders, so the expected
+  quantity is Shopify's on-hand quantity (`quantityBasis: ON_HAND`). Items
+  that have no linked inventory item, or that Shopify does not stock at the
+  location, are left off and reported.
+- **Where expected quantities come from.** The synced quantities can trail
+  Shopify (an inventory webhook carries only `available`; on-hand is refreshed
+  by a sync), and a difference measured from a stale quantity would be sent to
+  Shopify as a wrong change (issue #119). Expected quantities are therefore
+  read from Shopify itself:
+  - A full count of up to 1,000 items reads every on-hand quantity live when
+    it starts (`expectedSource: LIVE`). If Shopify cannot be read, the count
+    is not started.
+  - A larger location starts from the synced quantities
+    (`expectedSource: SYNC`) and the page says so. Each line is then read from
+    Shopify when it is first counted, and `expectedReadAt` records when.
+  - An item scanned or added to a sheet is read live before it is added; if
+    Shopify cannot be read, nothing is added.
+  - Completion never measures a difference from a quantity that was not read
+    from Shopify. Lines still unread are read first (up to 2,000 per press);
+    if more remain, completion stops and asks for another press, and nothing
+    is sent. If Shopify cannot be read, completion is refused.
+- **Counting.** A line is counted by typing a quantity, by scanning (each scan
+  of a SKU, barcode or variant ID adds one, or a typed quantity), or by marking
+  every uncounted line as zero, which can be undone. Each line records how it
+  was counted, when, and by which staff ID. Scanning an item that is not on
+  the sheet adds it when Shopify stocks it at the location; otherwise the scan
+  is refused with the reason. A pasted list of SKUs, barcodes or variant IDs
+  adds up to 500 items at a time, all or none. A count can still be saved
+  while Shopify cannot be read; the line stays unread until it can.
+- **Blind counts.** The count can hide expected quantities while counting. The
+  server withholds them from the page data and the export, not only from the
+  screen, until the count is closed or the reviewer opens the differences.
+  Until roles exist this is a working aid, not an access control: any staff
+  member of the shop can open the differences view.
+- **Completing.** The difference for a line is counted − expected, sent as a
+  relative change to `available` with reason `cycle_count_available`, which
+  moves on-hand by the same amount. Completion is refused while lines are
+  uncounted unless the staff member chooses to leave them unchanged, and a
+  named staff member is required.
+- **Stock that moved during the count.** Before anything is sent, the count
+  is compared with Shopify's live on-hand quantity, up to 2,000 lines per
+  press: unread lines first, then lines with a difference, then the rest.
+  Lines beyond that are compared with the synced quantity. A line whose stock
+  no longer equals what was read blocks completion until someone says whether
+  it was counted before the movement (the difference is still
+  counted − expected) or after it (the difference is measured from the
+  quantity Shopify shows now). Changing a line's count clears that answer.
+  Items this count has already sent are not checked again. The check and the
+  send are separate requests: the change goes to `available` while the count
+  is measured in on-hand, so Shopify's compare-and-swap cannot guard it, and a
+  movement in the seconds between the two is not detected.
+- **Partial failure.** Lines Shopify accepted stay accepted. The count stays
+  in progress, shows which lines were refused and why, and a second press
+  sends only what is still outstanding.
+- **Cancelling** is allowed only while the ledger shows nothing applied and
+  nothing unfinished for the count.
+- **Report.** The count sheet exports as CSV: item, SKU, barcode, expected,
+  counted, difference, how and when each line was counted, the staff ID, and
+  any stock movement found. Completed and cancelled counts stay readable under
+  closed counts.
+- Gated by `FEATURE_STOCKTAKE_INVENTORY_WRITES`. While it is off a count can
+  be started and counted but not completed.
+- Counts started before this workflow keep the basis they were created with
+  (`AVAILABLE`), so their expected quantities and differences still mean what
+  they did.
+
+Not built yet: counting from Shopify POS (the POS scan endpoint follows the POS
+extension work), assigning sections of a count to staff, recount requests for
+individual lines, cost value of the differences, and shop-timezone dates.
+
+## Adjustments
+
+A manual adjustment (`app/services/adjustments/`, page `/app/adjustments`) has
+no table of its own: it is one ledger operation of kind `ADJUSTMENT` with
+source type `InventoryAdjustment`, and the ledger is its history.
+
+- **One form, one adjustment.** The page issues a submission ID with every
+  load. It is the operation's source ID and its idempotency key
+  (`adjustment:<id>`), so a form submitted twice, or twice at once, is recorded
+  and sent once. The second request is answered from the ledger without
+  reading or changing anything else.
+- **Input.** One item per line: a SKU, barcode or variant ID, then a quantity
+  (comma, tab or semicolon separated, so two spreadsheet columns paste as they
+  are). Up to 250 items. Every line must match exactly one variant of the
+  shop with a linked inventory item; otherwise nothing is recorded and each
+  bad line is named.
+- **Add or remove** sends the signed amount as a relative change.
+- **Set** reads Shopify's `available` for each item at the location just
+  before recording, records the difference, and sends it with
+  `changeFromQuantity`, so a sale made in between makes Shopify refuse that
+  line instead of being overwritten. An item that is not stocked at the
+  location is refused, never treated as 0. Items already at the target are
+  left out.
+- **Reasons** are a fixed list of codes Shopify accepts for `available`
+  (correction, recount, damaged, theft or loss, received, returned to stock,
+  promotion or donation, other), so the reason also shows in Shopify's own
+  inventory history.
+- **Reversal** applies the opposite of the applied lines, once per
+  adjustment, by a named staff member; a reversal cannot be reversed.
+- **Quantity after a change.** Each applied line stores the quantity Shopify
+  reports after the change. Shopify does not always report one. A "set" line
+  was applied on exactly the quantity it named, so its result is stored either
+  way; an add or remove line that Shopify reports nothing for shows no
+  quantity rather than a guess.
+- **Two requests at once.** The request that finds the other one still
+  sending says so and asks for a reload, because there may be nothing left to
+  finish.
+- **Report.** The history lists every adjustment and reversal with its
+  staff ID, location, note and the result Shopify gave for each line, and
+  exports the chosen period as CSV (one row per line). An export refuses a
+  period of more than 2,000 adjustments rather than returning part of it.
+- Gated by `FEATURE_ADJUSTMENT_WRITES`. While it is off nothing is recorded.
+
+Not built yet: merchant-defined reasons, attachments, approval before an
+adjustment is applied, and shop-timezone dates (the history and the export use
+UTC).
 
 ## Limits and known gaps
 

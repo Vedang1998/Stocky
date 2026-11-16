@@ -31,6 +31,25 @@ describe("ActionFeedback", () => {
     expect(html).toContain("White wine: The item is not stocked here.");
   });
 
+  it("lists plain details, such as input lines that could not be read", () => {
+    const html = render({
+      error: "Some lines could not be read. Nothing was changed.",
+      details: ["Line 2: a change of 0 does nothing.", "<b>Line 3</b>"],
+    });
+    expect(html).toContain("Line 2: a change of 0 does nothing.");
+    expect(html).not.toContain("<b>");
+  });
+
+  it("shows the first 20 details and counts the rest", () => {
+    const html = render({
+      error: "Some lines could not be read.",
+      details: Array.from({ length: 23 }, (_, i) => `Line ${i + 1}: bad.`),
+    });
+    expect(html).toContain("Line 20: bad.");
+    expect(html).not.toContain("Line 21: bad.");
+    expect(html).toContain("and 3 more");
+  });
+
   it("escapes text that came back from Shopify or the merchant", () => {
     const html = render({
       error: "<img src=x onerror=alert(1)>",
@@ -58,8 +77,18 @@ describe("readActionFeedback", () => {
   it("ignores values of the wrong shape", () => {
     expect(readActionFeedback(null)).toEqual({});
     expect(readActionFeedback("error")).toEqual({});
-    expect(readActionFeedback({ error: 5, notice: "", problems: "x" })).toEqual(
-      { error: undefined, notice: undefined, problems: [] },
-    );
+    expect(
+      readActionFeedback({
+        error: 5,
+        notice: "",
+        problems: "x",
+        details: ["kept", 7, null],
+      }),
+    ).toEqual({
+      error: undefined,
+      notice: undefined,
+      problems: [],
+      details: ["kept"],
+    });
   });
 });

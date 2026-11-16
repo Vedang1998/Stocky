@@ -1,8 +1,9 @@
 /**
- * Issue #78: a failed (or successful) action on the Transfers and Stocktakes
- * pages must be visible to the merchant. Each case runs the real route action
- * and renders the real page with what the action returned. Issue #97: forms
- * built from Polaris fields must submit on Enter.
+ * Issue #78: a failed (or successful) action on the Transfers page must be
+ * visible to the merchant. Each case runs the real route action and renders
+ * the real page with what the action returned. Issue #97: forms built from
+ * Polaris fields must submit on Enter. The Stocktakes pages are covered in
+ * stocktake-pages.test.ts.
  */
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -141,16 +142,6 @@ async function transfersPage(fields: Record<string, string>) {
   };
 }
 
-async function stocktakesPage(fields: Record<string, string>) {
-  const route = await import("../routes/app.stocktakes");
-  page.actionData = await route.action(post("/app/stocktakes", fields));
-  page.loaderData = { stocktakes: [], locations: LOCATIONS, variants: [] };
-  return {
-    actionData: page.actionData,
-    html: renderToStaticMarkup(createElement(route.default)),
-  };
-}
-
 function expectCriticalBanner(html: string, heading: string, message: string) {
   const banner = html.match(
     /<s-banner[^>]*tone="critical"[^>]*>.*?<\/s-banner>/s,
@@ -159,7 +150,7 @@ function expectCriticalBanner(html: string, heading: string, message: string) {
   expect(banner?.[0]).toContain(message);
 }
 
-describe("action results on the Transfers and Stocktakes pages (#78)", () => {
+describe("action results on the Transfers page (#78)", () => {
   const flags = [
     "FEATURE_TRANSFER_WRITES",
     "FEATURE_STOCKTAKE_INVENTORY_WRITES",
@@ -278,86 +269,9 @@ describe("action results on the Transfers and Stocktakes pages (#78)", () => {
     expect(prismaMock.transferOrder.create).toHaveBeenCalledTimes(1);
   });
 
-  it("shows that completing a count is switched off", async () => {
-    prismaMock.stocktake.findFirst.mockResolvedValue({
-      id: "st-1",
-      shop: SHOP,
-      locationId: SOURCE,
-      status: "IN_PROGRESS",
-      lineItems: [
-        {
-          id: "stl-1",
-          shopifyVariantId: "gid://shopify/ProductVariant/1",
-          expectedQty: 5,
-          countedQty: 3,
-        },
-      ],
-    });
-
-    const { html } = await stocktakesPage({
-      intent: "complete",
-      stocktakeId: "st-1",
-    });
-
-    expectCriticalBanner(
-      html,
-      "Stocktake issue",
-      "Stocktake inventory changes are switched off for this app.",
-    );
-    expect(html).not.toMatch(/FEATURE_/);
-    expect(prismaMock.stocktake.update).not.toHaveBeenCalled();
-  });
-
-  it("shows a bad counted quantity instead of saving it", async () => {
-    const { html } = await stocktakesPage({
-      intent: "count",
-      lineId: "stl-1",
-      countedQty: "-4",
-    });
-
-    expectCriticalBanner(
-      html,
-      "Stocktake issue",
-      "Enter the counted quantity as a whole number from 0 to 1,000,000.",
-    );
-    expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
-  });
-
-  it("submits scan and quantity forms when Enter is pressed in their field (#97)", async () => {
+  it("submits quantity forms when Enter is pressed in their field (#97)", async () => {
     const variantId = "gid://shopify/ProductVariant/1";
     const variants = [{ shopifyVariantId: variantId, title: "Red wine" }];
-
-    const warehouse = await import("../routes/app.warehouse");
-    page.loaderData = {
-      openPOs: [
-        { id: "po-1", status: "ORDERED", supplier: null, lineItems: [] },
-      ],
-      variants,
-    };
-    renderToStaticMarkup(createElement(warehouse.default));
-
-    const stocktakes = await import("../routes/app.stocktakes");
-    page.loaderData = {
-      stocktakes: [
-        {
-          id: "st-1",
-          name: "Cellar",
-          locationId: SOURCE,
-          status: "IN_PROGRESS",
-          lineItems: [
-            {
-              id: "stl-1",
-              shopifyVariantId: variantId,
-              expectedQty: 5,
-              countedQty: null,
-            },
-          ],
-        },
-      ],
-      locations: LOCATIONS,
-      variants,
-    };
-    renderToStaticMarkup(createElement(stocktakes.default));
 
     const transfers = await import("../routes/app.transfers");
     page.loaderData = {
@@ -384,14 +298,50 @@ describe("action results on the Transfers and Stocktakes pages (#78)", () => {
     };
     renderToStaticMarkup(createElement(transfers.default));
 
-    for (const intent of ["scan", "count", "pick", "addLine"]) {
+    for (const intent of ["pick", "addLine"]) {
       expect(page.formKeyHandlers.get(intent), intent).toBe(submitOnEnter);
     }
     // Forms that are only a button keep the browser's own behaviour.
-    for (const intent of ["complete", "ship", "cancel"]) {
+    for (const intent of ["ship", "cancel"]) {
       expect(page.formKeyHandlers.has(intent), intent).toBe(true);
       expect(page.formKeyHandlers.get(intent), intent).toBeUndefined();
     }
+  });
+
+  it("shows nothing as shipped on a transfer that was cancelled as a draft", async () => {
+    const route = await import("../routes/app.transfers");
+    const transfer = (status: string) => ({
+      id: `transfer-${status}`,
+      status,
+      sourceLocationId: SOURCE,
+      destinationLocationId: DESTINATION,
+      notes: null,
+      createdAt: new Date("2026-11-12T09:00:00.000Z"),
+      lineItems: [
+        {
+          id: `line-${status}`,
+          shopifyVariantId: "gid://shopify/ProductVariant/1",
+          quantity: 5,
+          pickedQty: 2,
+          receivedQty: 0,
+        },
+      ],
+    });
+    const cells = (status: string) => {
+      page.loaderData = {
+        transfers: [transfer(status)],
+        locations: LOCATIONS,
+        variants: [],
+      };
+      const html = renderToStaticMarkup(createElement(route.default));
+      return [...html.matchAll(/<s-table-cell>(\d+)<\/s-table-cell>/g)].map(
+        (match) => Number(match[1]),
+      );
+    };
+
+    // Requested, shipped, received.
+    expect(cells("CANCELLED")).toEqual([5, 0, 0]);
+    expect(cells("IN_TRANSIT")).toEqual([5, 2, 0]);
   });
 
   it("shows no banner when nothing was submitted", async () => {

@@ -110,6 +110,7 @@ describe("ZPL field safety", () => {
     expect(zplLabel({ title: "Alpha Widget", barcode: "111" })).toBe(
       [
         "^XA",
+        "^CI28",
         "^PW457",
         "^LL254",
         "^FO20,20^A0N,24,24^FDAlpha Widget^FS",
@@ -117,6 +118,13 @@ describe("ZPL field safety", () => {
         "^XZ",
       ].join("\n"),
     );
+  });
+
+  it("selects UTF-8 so a dash or accent in a title prints as text", () => {
+    const label = zplLabel({ title: "Crème brûlée – 500 g", barcode: "111" });
+    expect(label.indexOf("^CI28")).toBeGreaterThan(label.indexOf("^XA"));
+    expect(label.indexOf("^CI28")).toBeLessThan(label.indexOf("^FD"));
+    expect(label).toContain("^FDCrème brûlée – 500 g^FS");
   });
 
   it("keeps the no-barcode notice for empty values", () => {

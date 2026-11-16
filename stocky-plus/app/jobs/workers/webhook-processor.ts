@@ -1,4 +1,4 @@
-import type { Job } from "bullmq";
+import { DelayedError, type Job } from "bullmq";
 import { randomUUID } from "node:crypto";
 import { unauthenticated } from "../../shopify.server";
 import type { WebhookJobData } from "../queue.server";
@@ -37,8 +37,11 @@ import { planPerShopSchedulerJobs } from "../../tenant/scheduler.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { TenantAuthorityError } from "../../tenant/errors";
 import {
+  CATALOG_REFETCH_LEASE_MS,
+  CatalogFactNotStoredError,
   applyCatalogFactWebhookRefetch,
   catalogRefetchApplicationDigest,
+  catalogRefetchRetryDelayMs,
   isCatalogFactAtomicWebhookTopic,
   resolveCatalogWebhookIdentity,
 } from "./catalog-facts/resource-refetch";
@@ -259,6 +262,46 @@ async function handleRefundCreate(
   }
 }
 
+/** How long a delivery that arrived before its dispatch was recorded waits between tries. */
+export const DISPATCH_ACK_RETRY_MS = 500;
+/**
+ * How long such a delivery keeps waiting. It covers a dispatcher that stalls
+ * or dies between queueing and recording: its lease (30 s) expires, the next
+ * dispatcher run finds this delivery still queued and records it.
+ */
+export const DISPATCH_ACK_WAIT_MS = 2 * 60_000;
+
+/**
+ * Claim the attempt for a dispatched delivery. The dispatcher queues a
+ * dispatch before it records it as enqueued, so a worker can pick it up a
+ * moment early (#122). Dispatches are delivered once, so failing that
+ * delivery would strand the job: it goes back to the queue for a short wait
+ * instead.
+ */
+async function claimDispatchedAttempt(
+  job: Job,
+  token: string | undefined,
+  input: Parameters<typeof claimAttempt>[0],
+) {
+  try {
+    return await claimAttempt(input);
+  } catch (error) {
+    if (
+      error instanceof SyncControlPlaneError &&
+      error.code === "dispatch_not_acknowledged" &&
+      token &&
+      Date.now() - job.timestamp < DISPATCH_ACK_WAIT_MS
+    ) {
+      console.warn(
+        `Delivery ${job.id} arrived before its dispatch was recorded; trying again in ${DISPATCH_ACK_RETRY_MS}ms`,
+      );
+      await job.moveToDelayed(Date.now() + DISPATCH_ACK_RETRY_MS, token);
+      throw new DelayedError();
+    }
+    throw error;
+  }
+}
+
 async function requireJobContext(
   rawTenant: unknown,
   options?: { payloadShop?: string; expectedJobNameOrTopic?: string },
@@ -401,7 +444,10 @@ async function applyOrderFactsWebhookIfOwned(input: {
  * Process a webhook BullMQ job with exactly-once merchant application (F-PR4-01)
  * and envelope/dispatch identity assertions (F-PR4-16).
  */
-export async function processWebhookJob(job: Job<WebhookJobData>) {
+export async function processWebhookJob(
+  job: Job<WebhookJobData>,
+  token?: string,
+) {
   const { topic, payload, payloadShop, tenant: envelope } = job.data;
   const workerId = `webhook-worker:${process.pid}:${randomUUID().slice(0, 8)}`;
 
@@ -487,7 +533,17 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
       );
     }
 
-    const { attempt } = await claimAttempt({
+    if (durable.state === "SUCCEEDED" || durable.state === "DEAD_LETTERED") {
+      // A late copy of a delivery whose job has already finished. There is
+      // nothing left to run, and failing it would only invite the queue to
+      // deliver it again.
+      console.warn(
+        `Dropped ${topic} delivery ${bullmqJobId}: durable job ${durable.id} is already ${durable.state}`,
+      );
+      return;
+    }
+
+    const { attempt } = await claimDispatchedAttempt(job, token, {
       durableJobId: durable.id,
       shopId: durable.shopId,
       workerId,
@@ -566,7 +622,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           signalReceivedAt: durable.createdAt,
           applicationKey,
           applicationPayloadDigest: expectedApplicationDigest,
-          leaseDurationMs: 60_000,
+          leaseDurationMs: CATALOG_REFETCH_LEASE_MS,
           canonicalBatchSize:
             writerConfig.effectiveCanonicalIdentitiesPerTransaction,
           configuredWorstCaseConcurrentCanonicalTransactions:
@@ -683,8 +739,14 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
           shopId: durable.shopId,
           attemptId: attempt.id,
           workerId,
-          errorCode: "processor_error",
+          errorCode:
+            err instanceof CatalogFactNotStoredError
+              ? err.code
+              : "processor_error",
           failureSummary: message,
+          backoffMs: isCatalogFactAtomicWebhookTopic(topic)
+            ? catalogRefetchRetryDelayMs(attempt.attemptNumber)
+            : undefined,
         });
       } else {
         await completeAttemptFail({
@@ -917,7 +979,7 @@ export async function processWebhookJob(job: Job<WebhookJobData>) {
   );
 }
 
-export async function processCronJob(job: Job) {
+export async function processCronJob(job: Job, token?: string) {
   const workerId = `cron-worker:${process.pid}:${randomUUID().slice(0, 8)}`;
 
   if (job.name === "abc-analysis") {
@@ -998,12 +1060,16 @@ export async function processCronJob(job: Job) {
         );
       }
 
-      const { attempt, job: claimedJob } = await claimAttempt({
-        durableJobId: durable.id,
-        shopId: durable.shopId,
-        workerId,
-        jobDispatchId: data.dispatchId,
-      });
+      const { attempt, job: claimedJob } = await claimDispatchedAttempt(
+        job,
+        token,
+        {
+          durableJobId: durable.id,
+          shopId: durable.shopId,
+          workerId,
+          jobDispatchId: data.dispatchId,
+        },
+      );
 
       try {
         if (job.name === "abc-analysis-shop") {

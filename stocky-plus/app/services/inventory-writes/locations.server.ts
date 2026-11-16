@@ -17,3 +17,28 @@ export async function findActiveLocationIds(
   })) as Array<{ shopifyGid: string }>;
   return new Set(rows.map((r) => r.shopifyGid));
 }
+
+export interface SyncedLocation {
+  id: string;
+  name: string;
+  isActive: boolean;
+}
+
+/**
+ * The shop's synced locations by name, deactivated ones included so that
+ * documents made at a location keep its name after it is deactivated.
+ */
+export async function listSyncedLocations(
+  db: TenantDb,
+): Promise<SyncedLocation[]> {
+  const rows = (await db.shopifyLocationFact.findMany({
+    where: { existenceState: "LIVE" },
+    select: { shopifyGid: true, name: true, isActive: true },
+    orderBy: { name: "asc" },
+  })) as Array<{ shopifyGid: string; name: string; isActive: boolean }>;
+  return rows.map((row) => ({
+    id: row.shopifyGid,
+    name: row.name,
+    isActive: row.isActive,
+  }));
+}
