@@ -51,7 +51,11 @@ const {
   },
   context: {
     actor: null as unknown,
-    db: { tenant: "shop-a" },
+    db: {
+      tenant: "shop-a",
+      authority: { myshopifyDomain: "shop-a.myshopify.com" },
+      shopSettings: { findUnique: vi.fn() },
+    },
     admin: { graphql: () => undefined },
   },
   listSyncedLocations: vi.fn(),
@@ -256,6 +260,7 @@ function renderList(loaderData: Record<string, unknown>, actionData?: unknown) {
     view: "open",
     page: 1,
     locations: LOCATIONS,
+    planActive: true,
     writesEnabled: true,
     ...loaderData,
   };
@@ -267,6 +272,9 @@ function renderList(loaderData: Record<string, unknown>, actionData?: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  context.db.shopSettings.findUnique.mockResolvedValue({
+    subscriptionActive: true,
+  });
   isInventoryWriteEnabled.mockReturnValue(true);
   listSyncedLocations.mockResolvedValue(LOCATIONS);
   reads.listStocktakes.mockResolvedValue({ stocktakes: [], hasMore: false });
@@ -1536,5 +1544,169 @@ describe("Count sheet export", () => {
       .split("\r\n");
 
     expect(row.startsWith(`Cellar count,${CELLAR},`)).toBe(true);
+  });
+});
+
+describe("Stocktakes without an active plan", () => {
+  const PLAN_BANNER =
+    'heading="An active ProPo plan is needed to make changes"';
+
+  const attempt = async (run: () => Promise<unknown>): Promise<unknown> => {
+    try {
+      return await run();
+    } catch (thrown) {
+      return thrown;
+    }
+  };
+
+  const CHANGES: Array<Record<string, string>> = [
+    { intent: "scan", code: "1111" },
+    { intent: "count", lineId: "line-1", countedQty: "7" },
+    { intent: "addItems", codes: "RED-750" },
+    { intent: "zeroFill" },
+    { intent: "clearZeroFill" },
+    {
+      intent: "resolveMovement",
+      lineId: "line-1",
+      resolution: "COUNTED_AFTER",
+    },
+    { intent: "complete" },
+    { intent: "complete", acceptUncounted: "1" },
+    { intent: "cancel" },
+  ];
+
+  /** Every submit button with its label; "Find" only searches the count. */
+  function submitButtons(html: string) {
+    const buttons = html.match(/<s-button[^>]*type="submit"[^>]*>[^<]*/g) ?? [];
+    return {
+      changes: buttons.filter((button) => !button.endsWith(">Find")),
+      find: buttons.filter((button) => button.endsWith(">Find")),
+    };
+  }
+
+  for (const snapshot of [{ subscriptionActive: false }, null]) {
+    it(`refuses every change with 403 when the plan snapshot is ${JSON.stringify(snapshot)}`, async () => {
+      context.db.shopSettings.findUnique.mockResolvedValue(snapshot);
+
+      const refusals = [
+        await attempt(() =>
+          listRoute.action(
+            post("/app/stocktakes", { intent: "create", locationId: CELLAR }),
+          ),
+        ),
+      ];
+      for (const fields of CHANGES) {
+        refusals.push(await attempt(() => act(fields)));
+      }
+
+      for (const [index, refusal] of refusals.entries()) {
+        expect(refusal, String(index)).toBeInstanceOf(Response);
+        expect((refusal as Response).status, String(index)).toBe(403);
+      }
+      for (const [name, call] of Object.entries(service)) {
+        expect(call, name).not.toHaveBeenCalled();
+      }
+      expect(reads.getStocktake).not.toHaveBeenCalled();
+    });
+  }
+
+  it("still lists counts, says why none can be started and locks the form", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+
+    const data = await listRoute.loader(get("/app/stocktakes"));
+    expect(data).toMatchObject({ planActive: false, locations: LOCATIONS });
+    expect(reads.listStocktakes).toHaveBeenCalledTimes(1);
+
+    const html = renderList({ planActive: false });
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain('href="/app/billing"');
+    const { changes } = submitButtons(html);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toContain('disabled="true"');
+    expect(page.formKeyHandlers.get("create")).toBeUndefined();
+  });
+
+  it("shows no plan banner on the list while the plan is active", async () => {
+    const data = await listRoute.loader(get("/app/stocktakes"));
+    expect(data).toMatchObject({ planActive: true });
+
+    const html = renderList({});
+    expect(html).not.toContain(PLAN_BANNER);
+    expect(submitButtons(html).changes[0]).not.toContain("disabled");
+  });
+
+  it("still shows an open count and lets it be searched, with every change locked", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue({
+      subscriptionActive: false,
+    });
+
+    const html = await renderCount();
+
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain("Red wine");
+    const { changes, find } = submitButtons(html);
+    expect(changes.length).toBeGreaterThan(3);
+    for (const button of changes) {
+      expect(button).toContain('disabled="true"');
+    }
+    expect(find).toHaveLength(1);
+    expect(find[0]).not.toContain("disabled");
+    expect(page.formKeyHandlers.get("get")).toBe(submitOnEnter);
+    for (const [intent, handler] of page.formKeyHandlers) {
+      if (intent !== "get") expect(handler, intent).toBeUndefined();
+    }
+  });
+
+  it("locks the review of stock that moved during the count", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      movementReviewCount: 1,
+    });
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([line({ movementDetectedQty: 6, movementBaselineQty: 6 })]),
+    );
+
+    const html = await renderCount(`/app/stocktakes/${ID}?filter=movement`);
+
+    const { changes } = submitButtons(html);
+    expect(changes.length).toBeGreaterThan(1);
+    for (const button of changes) {
+      expect(button).toContain('disabled="true"');
+    }
+  });
+
+  it("shows no plan banner on a count while the plan is active", async () => {
+    const html = await renderCount();
+
+    expect(html).not.toContain(PLAN_BANNER);
+    expect(
+      submitButtons(html).changes.some(
+        (button) => !button.includes("disabled"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not hide a database failure behind the plan banner", async () => {
+    context.db.shopSettings.findUnique.mockRejectedValue(
+      new Error("connection lost"),
+    );
+
+    await expect(loadCount()).rejects.toThrow("connection lost");
+    await expect(listRoute.loader(get("/app/stocktakes"))).rejects.toThrow(
+      "connection lost",
+    );
+  });
+
+  it("still downloads the count sheet", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+
+    const response = (await exportLoader(
+      get(`/app/stocktakes/${ID}/export`, { id: ID }),
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Red wine");
+    expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
   });
 });
