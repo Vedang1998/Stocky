@@ -16,6 +16,7 @@ import {
   transferShipQuantity,
   transferTotals,
   transferWrittenOffQuantity,
+  type TransferLedgerStanding,
   type TransferLineQuantities,
   type TransferTotals,
 } from "./transfer-quantities";
@@ -371,4 +372,28 @@ export async function getTransferHistory(
       },
     ];
   });
+}
+
+/** Add a transfer's history up into where the ledger says its stock is. */
+export function transferLedgerStanding(
+  events: readonly TransferEvent[],
+): TransferLedgerStanding {
+  const standing: TransferLedgerStanding = {
+    shipmentRequests: 0,
+    unitsOutOfSource: 0,
+    unitsIntoDestination: 0,
+    shipmentUnfinished: false,
+    receiptUnfinished: false,
+  };
+  for (const event of events) {
+    if (event.leg === "shipment") {
+      standing.shipmentRequests += 1;
+      standing.unitsOutOfSource -= event.netUnits;
+      standing.shipmentUnfinished ||= event.unfinished;
+    } else {
+      standing.unitsIntoDestination += event.netUnits;
+      standing.receiptUnfinished ||= event.unfinished;
+    }
+  }
+  return standing;
 }

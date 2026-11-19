@@ -5,10 +5,12 @@ import {
   transferStatusBadge,
 } from "./transfer-display";
 import {
+  transferAttention,
   transferOutstandingQuantity,
   transferShipQuantity,
   transferTotals,
   transferWrittenOffQuantity,
+  type TransferLedgerStanding,
   type TransferLineQuantities,
 } from "./transfer-quantities";
 
@@ -87,6 +89,115 @@ describe("transfer quantities", () => {
       lineCount: 0,
       shipUnits: 0,
     });
+  });
+});
+
+describe("unfinished steps of a transfer", () => {
+  const ledger = (
+    values: Partial<TransferLedgerStanding> = {},
+  ): TransferLedgerStanding => ({
+    shipmentRequests: 0,
+    unitsOutOfSource: 0,
+    unitsIntoDestination: 0,
+    shipmentUnfinished: false,
+    receiptUnfinished: false,
+    ...values,
+  });
+  const shipped = ledger({ shipmentRequests: 1, unitsOutOfSource: 10 });
+  const totals = { shipUnits: 10, receivedUnits: 4 };
+
+  it("finds nothing unfinished on a draft or a cancelled transfer whose stock is all at the source", () => {
+    for (const status of ["DRAFT", "CANCELLED"]) {
+      expect(transferAttention(status, totals, ledger())).toBeNull();
+      // A request Shopify refused whole moved nothing.
+      expect(
+        transferAttention(status, totals, ledger({ shipmentRequests: 2 })),
+      ).toBeNull();
+    }
+  });
+
+  it("points at stock that is out of the source before the transfer shipped or after it was cancelled", () => {
+    const partlyOut = ledger({ shipmentRequests: 1, unitsOutOfSource: 4 });
+    const unanswered = ledger({
+      shipmentRequests: 1,
+      shipmentUnfinished: true,
+    });
+
+    for (const standing of [partlyOut, unanswered, shipped]) {
+      expect(transferAttention("DRAFT", totals, standing)).toBe(
+        "SHIPMENT_UNFINISHED",
+      );
+      expect(transferAttention("CANCELLED", totals, standing)).toBe(
+        "PUT_BACK_UNFINISHED",
+      );
+    }
+  });
+
+  it("finds a transfer in transit in order when the ledger matches its lines", () => {
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, unitsIntoDestination: 4 }),
+      ),
+    ).toBeNull();
+  });
+
+  it("points at a transfer in transit that never left the source in the ledger", () => {
+    expect(transferAttention("IN_TRANSIT", totals, ledger())).toBe(
+      "NO_SHIPMENT_RECORD",
+    );
+  });
+
+  it("points at a return to the source before it looks at the receipt", () => {
+    const receiptOutOfLine = { unitsIntoDestination: 1 };
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, ...receiptOutOfLine, unitsOutOfSource: 7 }),
+      ),
+    ).toBe("RETURN_UNFINISHED");
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, ...receiptOutOfLine, shipmentUnfinished: true }),
+      ),
+    ).toBe("RETURN_UNFINISHED");
+  });
+
+  it("points at a receipt whose units are not all in stock at the destination, or one too many", () => {
+    for (const unitsIntoDestination of [0, 3, 5]) {
+      expect(
+        transferAttention(
+          "IN_TRANSIT",
+          totals,
+          ledger({ ...shipped, unitsIntoDestination }),
+        ),
+      ).toBe("RECEIPT_UNFINISHED");
+    }
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({
+          ...shipped,
+          unitsIntoDestination: 4,
+          receiptUnfinished: true,
+        }),
+      ),
+    ).toBe("RECEIPT_UNFINISHED");
+  });
+
+  it("finds nothing unfinished on a finished transfer", () => {
+    expect(
+      transferAttention(
+        "RECEIVED",
+        totals,
+        ledger({ shipmentRequests: 2, unitsOutOfSource: 4 }),
+      ),
+    ).toBeNull();
   });
 });
 

@@ -112,3 +112,66 @@ export function transferTotals(
   }
   return totals;
 }
+
+/** What the inventory ledger shows for a transfer, from the changes Shopify confirmed. */
+export interface TransferLedgerStanding {
+  /** Requests that moved, or tried to move, stock at the source. */
+  shipmentRequests: number;
+  /** Net units out of stock at the source. */
+  unitsOutOfSource: number;
+  /** Net units added to stock at the destination. */
+  unitsIntoDestination: number;
+  /** Shopify has not finished answering a request at the source. */
+  shipmentUnfinished: boolean;
+  /** Shopify has not finished answering a request at the destination. */
+  receiptUnfinished: boolean;
+}
+
+/**
+ * A step that was started and did not finish, which the staff member has to
+ * finish before the transfer can move on.
+ *
+ * - `SHIPMENT_UNFINISHED`: a draft whose stock has partly left the source.
+ * - `PUT_BACK_UNFINISHED`: a cancelled transfer whose stock is not all back.
+ * - `NO_SHIPMENT_RECORD`: in transit, with nothing in the ledger to show its
+ *   stock leaving the source.
+ * - `RETURN_UNFINISHED`: in transit, with part of its missing units already
+ *   back at the source.
+ * - `RECEIPT_UNFINISHED`: in transit, with the destination's stock out of
+ *   line with the units the transfer shows as received.
+ */
+export type TransferAttention =
+  | "SHIPMENT_UNFINISHED"
+  | "PUT_BACK_UNFINISHED"
+  | "NO_SHIPMENT_RECORD"
+  | "RETURN_UNFINISHED"
+  | "RECEIPT_UNFINISHED";
+
+/** Compare where a transfer says its units are with what the ledger shows. */
+export function transferAttention(
+  status: string,
+  totals: Pick<TransferTotals, "shipUnits" | "receivedUnits">,
+  ledger: TransferLedgerStanding,
+): TransferAttention | null {
+  const stockOut = ledger.shipmentUnfinished || ledger.unitsOutOfSource !== 0;
+  switch (status) {
+    case "DRAFT":
+      return stockOut ? "SHIPMENT_UNFINISHED" : null;
+    case "CANCELLED":
+      return stockOut ? "PUT_BACK_UNFINISHED" : null;
+    case "IN_TRANSIT":
+      if (ledger.shipmentRequests === 0) return "NO_SHIPMENT_RECORD";
+      if (
+        ledger.shipmentUnfinished ||
+        ledger.unitsOutOfSource !== totals.shipUnits
+      ) {
+        return "RETURN_UNFINISHED";
+      }
+      return ledger.receiptUnfinished ||
+        ledger.unitsIntoDestination !== totals.receivedUnits
+        ? "RECEIPT_UNFINISHED"
+        : null;
+    default:
+      return null;
+  }
+}

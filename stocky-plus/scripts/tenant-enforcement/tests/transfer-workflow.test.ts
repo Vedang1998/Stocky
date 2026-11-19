@@ -18,7 +18,9 @@ import {
   getTransferLines,
   listTransferLinesForExport,
   listTransfers,
+  transferLedgerStanding,
 } from "../../../app/services/transfers/transfer-read.server";
+import { transferAttention } from "../../../app/services/transfers/transfer-quantities";
 import {
   closeTransfer,
   countInOutstandingUnits,
@@ -1500,6 +1502,100 @@ describe("transfer workflow", () => {
         status: "PARTIALLY_APPLIED",
         refusedChangeCount: 1,
       });
+    });
+
+    /** What the transfer page is told is unfinished, read the way its loader reads it. */
+    async function attention(id: string) {
+      const header = (await getTransfer(dbA, id))!;
+      const { totals } = await getTransferLines(dbA, {
+        transfer: header,
+        filter: "all",
+        page: 1,
+      });
+      return transferAttention(
+        header.status,
+        totals,
+        transferLedgerStanding(await getTransferHistory(dbA, id)),
+      );
+    }
+
+    it("tells the page which step did not finish, until it is finished", async () => {
+      const id = await draftTransfer();
+      expect(await attention(id)).toBeNull();
+
+      rejectNextChangeAt(1);
+      await shipTransfer(dbA, null, STAFF, id, enabled());
+      expect((await load(id)).status).toBe("DRAFT");
+      expect(await attention(id)).toBe("SHIPMENT_UNFINISHED");
+
+      await shipTransfer(dbA, null, STAFF, id, enabled());
+      expect((await load(id)).status).toBe("IN_TRANSIT");
+      expect(await attention(id)).toBeNull();
+
+      // Units that are counted in and not posted are not out of line.
+      await scan(id, "RED-750", 2);
+      await scan(id, "WHT-750", 3);
+      expect(await attention(id)).toBeNull();
+
+      rejectNextChangeAt(1);
+      await postTransferReceipt(dbA, null, RECEIVER, id, enabled());
+      expect(await attention(id)).toBe("RECEIPT_UNFINISHED");
+
+      await postTransferReceipt(dbA, null, RECEIVER, id, enabled());
+      expect(await attention(id)).toBeNull();
+
+      rejectNextChangeAt(1);
+      await closeTransfer(
+        dbA,
+        null,
+        RECEIVER,
+        id,
+        { resolution: "RETURNED" },
+        enabled(),
+      );
+      expect((await load(id)).status).toBe("IN_TRANSIT");
+      expect(await attention(id)).toBe("RETURN_UNFINISHED");
+
+      await closeTransfer(
+        dbA,
+        null,
+        RECEIVER,
+        id,
+        { resolution: "RETURNED" },
+        enabled(),
+      );
+      expect((await load(id)).status).toBe("RECEIVED");
+      expect(await attention(id)).toBeNull();
+    });
+
+    it("keeps pointing at a partly shipped draft until its stock is back", async () => {
+      const id = await draftTransfer();
+      rejectNextChangeAt(1);
+      await shipTransfer(dbA, null, STAFF, id, enabled());
+
+      rejectNextChangeAt(0);
+      expect(
+        await cancelTransfer(dbA, null, STAFF, id, enabled()),
+      ).toMatchObject({ ok: false });
+      expect((await load(id)).status).toBe("DRAFT");
+      expect(await attention(id)).toBe("SHIPMENT_UNFINISHED");
+
+      expect(await cancelTransfer(dbA, null, STAFF, id, enabled())).toEqual({
+        ok: true,
+        alreadyDone: false,
+      });
+      expect(levels()).toMatchObject({ redSource: 10, whiteSource: 20 });
+      expect(await attention(id)).toBeNull();
+    });
+
+    it("points at a transfer in transit that the ledger never saw leave", async () => {
+      const id = await draftTransfer();
+      await prisma.transferOrder.update({
+        where: { id },
+        data: { status: "IN_TRANSIT" },
+      });
+
+      expect(await attention(id)).toBe("NO_SHIPMENT_RECORD");
     });
   });
 
