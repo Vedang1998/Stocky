@@ -6,6 +6,7 @@
  */
 
 import type { Session } from "@shopify/shopify-api";
+import { rejectNulInput } from "../lib/http/nul-input.server";
 import {
   issueTenantAuthority,
   type TenantAuthority,
@@ -126,6 +127,7 @@ export async function requireAdminTenant(
   };
 
   await denyConflictingClientShop(request, shop, params);
+  await rejectNulInput(request);
 
   if (
     found.processingEnabled === false &&
