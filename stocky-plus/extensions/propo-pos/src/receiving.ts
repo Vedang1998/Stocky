@@ -163,6 +163,11 @@ export async function submitReceipt(
   if (!result.ok && result.message === RECEIVING_MESSAGES.offline) {
     return failure(RECEIVING_MESSAGES.submitUnsure);
   }
+  // A server error can come after part of the receipt was recorded, so the
+  // outcome is unknown: the same key must be retried, not a fresh count.
+  if (!result.ok && result.status !== undefined && result.status >= 500) {
+    return failure(RECEIVING_MESSAGES.submitUnsure);
+  }
   return result;
 }
 
