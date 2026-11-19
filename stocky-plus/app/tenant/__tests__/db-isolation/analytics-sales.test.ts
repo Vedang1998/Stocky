@@ -10,7 +10,10 @@ import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
 import { loadPurchaseOrders } from "../../../lib/analytics/purchase-orders.server";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
-import { loadDemandHistory } from "../../../lib/smart-forecast/history.server";
+import {
+  loadDemandHistories,
+  loadDemandHistory,
+} from "../../../lib/smart-forecast/history.server";
 import { localRangeToUtc } from "../../../lib/analytics/shop-calendar";
 import {
   loadAppliedInventoryChanges,
@@ -1046,5 +1049,32 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
       days: [],
       startLocalDate: null,
     });
+  });
+
+  it("gives Smart Forecast every row's daily demand from one read", async () => {
+    const input = {
+      endLocalDate: "2026-10-05" as const,
+      horizonDays: 14,
+      averageDays: 28,
+      timeZone: TZ,
+      currencyCode: "USD",
+      installedAt: null,
+    };
+    const UNSOLD = "gid://shopify/ProductVariant/9500";
+    const single = await loadDemandHistory(dbA, { ...input, variantGid: VARIANT_OLD });
+    const many = await loadDemandHistories(dbA, {
+      ...input,
+      variantGids: [VARIANT_OLD, VARIANT_NEW, UNSOLD],
+    });
+    expect(many.startLocalDate).toBe(single.startLocalDate);
+    // The same days for a variant whichever way it is read.
+    expect(many.byVariant.get(VARIANT_OLD)).toEqual(single.days);
+    expect(many.byVariant.get(VARIANT_NEW)?.filter((day) => day.units !== 0)).toEqual([
+      { date: "2026-10-03", units: 2, inStock: null },
+    ]);
+    // A variant with no sales still gets every day, as zero.
+    const unsold = many.byVariant.get(UNSOLD);
+    expect(unsold).toHaveLength(single.days.length);
+    expect(unsold?.every((day) => day.units === 0)).toBe(true);
   });
 });
