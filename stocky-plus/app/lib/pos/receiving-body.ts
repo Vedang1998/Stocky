@@ -37,6 +37,7 @@ function optionalText(
 ): string | null {
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") return bad(`${label} must be text.`);
+  if (value.includes("\u0000")) return bad(`${label} contains an invalid character.`);
   const text = value.trim();
   if (text.length > maxLength) {
     return bad(`${label} must be ${maxLength} characters or fewer.`);
@@ -72,6 +73,7 @@ export function parseReceiptBody(
     if (typeof lineItemId !== "string" || lineItemId === "" || lineItemId.length > 64) {
       return bad("Every line needs a lineItemId.");
     }
+    if (lineItemId.includes("\u0000")) return bad("Every line needs a lineItemId.");
     if (seen.has(lineItemId)) return bad("A line appears twice.");
     seen.add(lineItemId);
 

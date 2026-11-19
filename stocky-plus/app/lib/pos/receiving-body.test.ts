@@ -79,4 +79,11 @@ describe("parseReceiptBody", () => {
     }));
     expect(failure({ idempotencyKey: KEY, lines }).message).toContain("at most 1000");
   });
+
+  it("refuses NUL bytes in text and line ids", () => {
+    expect(failure({ idempotencyKey: KEY, lines: [line], note: "a\u0000b" }).code).toBe("bad_request");
+    expect(
+      failure({ idempotencyKey: KEY, lines: [{ lineItemId: "l\u00001", acceptedQty: 1 }] }).code,
+    ).toBe("bad_request");
+  });
 });

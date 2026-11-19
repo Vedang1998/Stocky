@@ -3,7 +3,7 @@ import type { ReceivingLine } from "./api-types";
 import {
   RECEIVING_MESSAGES,
   bumpCount,
-  createSubmissionKeys,
+  createSubmissionKey,
   loadOrders,
   loadSheet,
   matchLine,
@@ -111,21 +111,20 @@ describe("receiptRequest and submission keys", () => {
     expect(receiptRequest("k", { a: 1 }, true).allowOverReceipt).toBe(true);
   });
 
-  it("keeps the key for identical counts and renews it when they change", () => {
+  it("keeps one key until it is reset, even when counts change", () => {
     let n = 0;
-    const keys = createSubmissionKeys(() => `key-${++n}`);
-    const first = keys.keyFor({ a: 1 }, false);
-    expect(keys.keyFor({ a: 1 }, false)).toBe(first);
-    expect(keys.keyFor({ a: 2 }, false)).not.toBe(first);
-    expect(keys.keyFor({ a: 2 }, true)).toBe("key-3");
+    const key = createSubmissionKey(() => `key-${++n}`);
+    const first = key.get();
+    expect(key.get()).toBe(first);
+    expect(first).toBe("key-1");
   });
 
-  it("starts a new key after a receipt is finished", () => {
+  it("starts a new key after reset", () => {
     let n = 0;
-    const keys = createSubmissionKeys(() => `key-${++n}`);
-    const first = keys.keyFor({ a: 1 }, false);
-    keys.finish();
-    expect(keys.keyFor({ a: 1 }, false)).not.toBe(first);
+    const key = createSubmissionKey(() => `key-${++n}`);
+    const first = key.get();
+    key.reset();
+    expect(key.get()).not.toBe(first);
   });
 });
 
@@ -166,6 +165,17 @@ describe("requests", () => {
     expect(await loadSheet(respond(status), 401, "po")).toMatchObject({ ok: false, message });
   });
 
+  it("carries the HTTP status on a failure, and none when offline", async () => {
+    expect(await submitReceipt(respond(409, {}), 401, "po", { idempotencyKey: "k", lines: [] })).toMatchObject({
+      ok: false,
+      status: 409,
+    });
+    const offline = vi.fn().mockRejectedValue(new Error("down"));
+    const result = await submitReceipt(offline, 401, "po", { idempotencyKey: "k", lines: [] });
+    expect(result).toMatchObject({ ok: false, message: RECEIVING_MESSAGES.submitUnsure });
+    expect((result as { status?: number }).status).toBeUndefined();
+  });
+
   it("shows the app's own message for a refusal and keeps the field errors", async () => {
     const fetchImpl = respond(400, {
       error: { code: "bad_request", message: "Fix the highlighted field.", fieldErrors: { "line:l1": "Only 4 left." } },
@@ -176,6 +186,7 @@ describe("requests", () => {
     expect(result).toEqual({
       ok: false,
       message: "Fix the highlighted field.",
+      status: 400,
       fieldErrors: { "line:l1": "Only 4 left." },
     });
   });
