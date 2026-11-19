@@ -346,15 +346,33 @@ documents above are the record of what moved.
   or refused it. The transfer report exports one row per item as CSV with
   requested, shipped, received, counted-in, rejected, returned, written-off
   and outstanding units.
+- **Papers.** Two PDFs print from the transfer page
+  (`transfer-documents.server.ts`, routes `…/document` and `…/pick-list`).
+  The pick list exists while the transfer is a draft: the items in SKU order
+  with the units to pick, a box to write the units picked in, and how many
+  are already entered as picked. The transfer document goes with the stock: while the transfer is a
+  draft or in transit it lists what is sent with blank boxes for the units
+  received and damaged and lines for the packer and receiver to sign; once the
+  transfer is received or cancelled it is the record, with asked, sent,
+  received, rejected, returned and written-off units and their totals. Both
+  name the two locations with their addresses as Shopify gave them, and show
+  times on the shop's clock, or in UTC and marked as such when Shopify does
+  not answer with the shop's time zone. A transfer of more than 250 items
+  prints in parts of 250, one request per part (`?part=2`): the PDF library
+  needs about 11 ms of processor time per row and holds the server's event
+  loop while it works, so one part costs about 3 seconds and a whole
+  1,000-item transfer in one request cost over 20. Printing reads only; it
+  needs no active plan and no write switch.
 - Gated by `FEATURE_TRANSFER_WRITES`. While it is off a transfer can be
   drafted and edited, units counted in and rejects recorded, and a transfer
   with nothing left to move can be finished or written off; nothing that
   changes stock in Shopify is sent.
 
 Not built yet: approval before a transfer ships, several shipments for one
-transfer, receiving from Shopify POS, a printable transfer document and
-labels, transfers suggested from replenishment or balancing, cost value in
-transit, and shop-timezone dates. In-transit units are not shown as incoming
+transfer, receiving from Shopify POS, labels, transfers suggested from
+replenishment or balancing, cost value in transit, shop-timezone dates on the
+transfer page and its CSV report (the papers have them), and a paper size
+other than US Letter. In-transit units are not shown as incoming
 at the destination in Shopify, because no Shopify transfer object exists.
 
 ## Plan gate

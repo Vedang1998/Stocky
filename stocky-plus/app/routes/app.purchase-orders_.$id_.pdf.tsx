@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
+import { pdfResponse } from "../lib/pdf/document.server";
 import {
-  pdfResponse,
   purchaseOrderFilename,
   purchaseOrderPdf,
 } from "../services/purchasing/documents.server";

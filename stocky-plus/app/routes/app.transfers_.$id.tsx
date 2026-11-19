@@ -63,6 +63,7 @@ import {
 import {
   SHORT_RESOLUTION_LABEL,
   transferEventLabel,
+  transferPaperParts,
   transferReference,
   transferStatusBadge,
   unitCount,
@@ -559,6 +560,12 @@ export default function TransferDetail() {
     change: Partial<{ filter: TransferLineFilter; page: number }>,
   ) => pageHref(transfer.id, { filter, page: 1, ...change });
   const closedShortUnits = totals.returnedUnits + totals.writtenOffUnits;
+  // A long transfer prints as several documents; one button for each.
+  const partCount = transferPaperParts(totals.lineCount);
+  const paperParts = Array.from({ length: partCount }, (_, index) => index + 1);
+  const partQuery = (part: number) => (partCount > 1 ? `?part=${part}` : "");
+  const partLabel = (part: number) =>
+    partCount > 1 ? `, part ${part} of ${partCount}` : "";
 
   return (
     <s-page heading={`Transfer ${transferReference(transfer.id)}`}>
@@ -676,7 +683,28 @@ export default function TransferDetail() {
                   ].join(" · ")}
           </s-text>
           {totals.lineCount > 0 && (
-            <s-stack direction="inline">
+            <s-stack direction="inline" gap="small">
+              {draft &&
+                paperParts.map((part) => (
+                  <s-button
+                    key={`pick-list-${part}`}
+                    href={`/app/transfers/${transfer.id}/pick-list${partQuery(part)}`}
+                    target="_blank"
+                    variant="secondary"
+                  >
+                    Print pick list{partLabel(part)} (PDF)
+                  </s-button>
+                ))}
+              {paperParts.map((part) => (
+                <s-button
+                  key={`document-${part}`}
+                  href={`/app/transfers/${transfer.id}/document${partQuery(part)}`}
+                  target="_blank"
+                  variant="secondary"
+                >
+                  Print transfer document{partLabel(part)} (PDF)
+                </s-button>
+              ))}
               <s-button
                 href={`/app/transfers/${transfer.id}/export`}
                 target="_blank"

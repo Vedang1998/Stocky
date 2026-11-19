@@ -1507,6 +1507,10 @@ describe("Transfer page", () => {
     expect(html).toContain("Notes: Friday restock");
     expect(html).toContain("2 items, 14 units to ship");
     expect(html).toContain(`href="/app/transfers/${ID}/export"`);
+    expect(html).toContain(`href="/app/transfers/${ID}/pick-list"`);
+    expect(html).toContain("Print pick list (PDF)");
+    expect(html).toContain(`href="/app/transfers/${ID}/document"`);
+    expect(html).toContain("Print transfer document (PDF)");
     expect(html).toMatch(
       /<s-text-field[^>]*label="Barcode or SKU"[^>]*name="code"/,
     );
@@ -1549,6 +1553,35 @@ describe("Transfer page", () => {
     expect(submitDisabled(empty, "ship")).toBe(true);
     expect(empty).toContain("No items are on this transfer yet.");
     expect(empty).not.toContain("/export");
+    // Nothing to print either.
+    expect(empty).not.toContain("/document");
+    expect(empty).not.toContain("/pick-list");
+  });
+
+  it("offers one print button per part for a draft of more than 250 items", async () => {
+    given({}, [line()]);
+    reads.getTransferLines.mockResolvedValue({
+      lines: [line()],
+      total: 600,
+      page: 1,
+      pageCount: 12,
+      totals: { ...transferTotals("DRAFT", [line()]), lineCount: 600 },
+    });
+
+    const html = await renderDetail();
+
+    for (const part of [1, 2, 3]) {
+      expect(html).toContain(
+        `href="/app/transfers/${ID}/pick-list?part=${part}"`,
+      );
+      expect(html).toContain(
+        `href="/app/transfers/${ID}/document?part=${part}"`,
+      );
+    }
+    expect(html).toContain("Print pick list, part 1 of 3 (PDF)");
+    expect(html).toContain("Print transfer document, part 3 of 3 (PDF)");
+    expect(html).not.toContain("part=4");
+    expect(html).not.toContain(`href="/app/transfers/${ID}/document"`);
   });
 
   it("offers to ship below zero only after the source was found short", async () => {
@@ -1637,6 +1670,9 @@ describe("Transfer page", () => {
     expect(html).toContain("2 units are counted in and not posted.");
     expect(page.formKeyHandlers.has("close")).toBe(false);
     expect(html).not.toContain("<s-banner");
+    // The transfer document travels with the stock; picking is over.
+    expect(html).toContain(`href="/app/transfers/${ID}/document"`);
+    expect(html).not.toContain("/pick-list");
 
     for (const intent of ["scan", "countIn", "reject"]) {
       expect(page.formKeyHandlers.get(intent), intent).toBe(submitOnEnter);
@@ -1830,6 +1866,9 @@ describe("Transfer page", () => {
     expect(html).toContain("9 units received at the destination");
     expect(page.formKeyHandlers.size).toBe(0);
     expect(html).not.toContain("<s-banner");
+    expect(html).toContain(`href="/app/transfers/${ID}/document"`);
+    expect(html).toContain("Print transfer document (PDF)");
+    expect(html).not.toContain("/pick-list");
   });
 
   it.each([
@@ -2186,6 +2225,9 @@ describe("Transfers without an active plan", () => {
     for (const [intent, handler] of page.formKeyHandlers) {
       expect(handler, intent).toBeUndefined();
     }
+    // Reading and printing stay open, as the report download does.
+    expect(html).toContain(`href="/app/transfers/${ID}/pick-list"`);
+    expect(html).toContain(`href="/app/transfers/${ID}/document"`);
   });
 
   it("still shows a transfer in transit, with receiving and closing locked", async () => {
