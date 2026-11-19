@@ -21,6 +21,7 @@ import {
   type ReceivableLine,
 } from "../../services/purchasing/receiving.server";
 import type { AdminGraphQLClient } from "../../services/shopify-gql.server";
+import { requirePosPlan } from "./pos-plan.server";
 import { PosApiError } from "./pos-api.server";
 import { parseReceiptBody } from "./receiving-body";
 
@@ -151,6 +152,7 @@ export async function listReceivableOrders(
   search: string | null,
   deps: Pick<ReceivingDeps, "receivingEnabled"> = {},
 ): Promise<PosReceivingList> {
+  await requirePosPlan(db);
   const list = await listPurchaseOrders(db, {
     view: "incoming",
     locationGid,
@@ -178,6 +180,7 @@ export async function getReceivingSheet(
   locationGid: string,
   deps: Pick<ReceivingDeps, "receivingEnabled"> = {},
 ): Promise<PosReceivingSheet> {
+  await requirePosPlan(db);
   const po = await loadOrderAtLocation(db, purchaseOrderId, locationGid);
   const worksheet = await getReceivingWorksheet(db, po.id).catch(toApiError);
   return {
@@ -200,6 +203,7 @@ export async function receiveAtPos(
   deps: ReceivingDeps,
 ): Promise<PosReceiptResponse> {
   const { db, actor } = context;
+  await requirePosPlan(db);
   if (!actor.shopifyUserId) {
     throw new PosApiError(403, "forbidden", STAFF_REQUIRED_MESSAGE);
   }
