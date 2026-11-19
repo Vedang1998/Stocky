@@ -114,6 +114,30 @@ describe("privacy compliance", () => {
         delta: 2,
       },
     });
+    // Stock history refuses every UPDATE, so the erasure has to remove it
+    // with deletes alone.
+    await prisma.dailyStockSnapshot.create({
+      data: {
+        shopId: shop.id,
+        localDate: "2026-11-01",
+        timeZone: "UTC",
+        dayEndedAt: new Date("2026-11-02T00:00:00Z"),
+        capturedAt: new Date("2026-11-02T00:05:00Z"),
+        levelCount: 1,
+      },
+    });
+    await prisma.dailyStockLevel.create({
+      data: {
+        shopId: shop.id,
+        localDate: "2026-11-01",
+        variantGid: "gid://shopify/ProductVariant/1",
+        locationGid: "gid://shopify/Location/1",
+        availableQuantity: 4,
+        onHandQuantity: 4,
+        priceAmount: "1.00",
+        priceCurrencyCode: "USD",
+      },
+    });
     await prisma.session.create({
       data: {
         id: `offline_${domain}`,
@@ -187,7 +211,8 @@ describe("privacy compliance", () => {
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
         "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "Session",
-        "PrivacyRequest", "InventoryOperationLine", "InventoryOperation"
+        "PrivacyRequest", "InventoryOperationLine", "InventoryOperation",
+        "DailyStockLevel", "DailyStockSnapshot"
       CASCADE
     `);
     for (const domain of SHOPS) {
