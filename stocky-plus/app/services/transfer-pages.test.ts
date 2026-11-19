@@ -1739,6 +1739,30 @@ describe("Transfer page", () => {
     expect(html).toContain("Red wine");
   });
 
+  it("lets units counted in during an unfinished return be set back to zero", async () => {
+    inTransit(
+      [
+        shippedLine({ pendingReceiveQty: 2 }),
+        shippedLine({ id: "line-2", title: "White wine" }),
+      ],
+      [event({ netUnits: -20 }), event({ operationId: "op-2", netUnits: 3 })],
+    );
+
+    const html = await renderDetail();
+
+    expect(html).toContain('heading="Closing this transfer did not finish"');
+    expect(
+      html.match(/<input type="hidden" name="intent" value="countIn"\/>/g),
+    ).toHaveLength(1);
+    expect(html).toMatch(
+      /name="lineId" value="line-1"\/>.*?<s-number-field[^>]*name="quantity"[^>]*value="2"/s,
+    );
+    expect(html).toContain("2 units are counted in and not posted.");
+    for (const intent of ["scan", "reject", "postReceipt", "close"]) {
+      expect(page.formKeyHandlers.has(intent), intent).toBe(false);
+    }
+  });
+
   it("offers nothing that moves stock for a shipment the ledger does not know", async () => {
     inTransit([shippedLine()], []);
 

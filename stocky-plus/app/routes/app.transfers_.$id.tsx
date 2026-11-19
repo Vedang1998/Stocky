@@ -612,7 +612,7 @@ export default function TransferDetail() {
               {closedShortUnits > 0 &&
                 `. ${unitCount(closedShortUnits)} that did not arrive ${closedShortUnits === 1 ? "was" : "were"} ${
                   SHORT_RESOLUTION_LABEL[
-                    totals.returnedUnits > 0 ? "RETURNED" : "WRITTEN_OFF"
+                    transfer.shortResolution ?? "WRITTEN_OFF"
                   ]
                 }.`}
             </s-text>
@@ -895,7 +895,8 @@ export default function TransferDetail() {
                     <s-table-cell>{line.shipQty}</s-table-cell>
                     <s-table-cell>{line.receivedQty}</s-table-cell>
                     <s-table-cell>
-                      {receivable ? (
+                      {/* Units counted in stay editable, so they can always be set back to 0. */}
+                      {receivable || line.pendingReceiveQty > 0 ? (
                         <LineQuantityForm
                           key={`countIn:${line.pendingReceiveQty}`}
                           intent="countIn"
