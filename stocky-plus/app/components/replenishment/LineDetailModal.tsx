@@ -16,7 +16,7 @@ import {
 import {
   ABC_CLASS_DESCRIPTIONS,
   formatLocalDate,
-  marginAndMarkup,
+  lineMargin,
   revenuePerDay,
   STOCK_STATUS_LABELS,
 } from "../../lib/replenishment/worksheet/describe";
@@ -324,15 +324,7 @@ function LineDetail({
   previewDefaults: PreviewFormValues | null;
 }) {
   const { detail } = line;
-  const cost = line.supplierCostAmount ?? line.unitCostAmount;
-  const costCurrency = line.supplierCostAmount
-    ? line.supplierCostCurrencyCode
-    : line.unitCostCurrencyCode;
-  // Margin only means something when price and cost are in the same currency.
-  const comparable = cost != null && costCurrency === line.priceCurrencyCode;
-  const { margin, markup } = comparable
-    ? marginAndMarkup(line.priceAmount, cost)
-    : { margin: null, markup: null };
+  const { margin, markup, currenciesDiffer } = lineMargin(line);
 
   return (
     <s-stack direction="block" gap="large">
@@ -442,7 +434,7 @@ function LineDetail({
           <Fact label="Margin">{percent(margin)}</Fact>
           <Fact label="Markup">{percent(markup)}</Fact>
         </Facts>
-        {cost != null && !comparable && (
+        {currenciesDiffer && (
           <s-text color="subdued">
             Margin and markup are not shown because the price and the cost are in different
             currencies.
