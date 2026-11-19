@@ -68,6 +68,7 @@ import {
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { readShopReportingProfile } from "../tenant/bootstrap.server";
+import { smartForecastColumn } from "../lib/smart-forecast/worksheet.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import type { TenantDb } from "../tenant/tenant-db.server";
 
@@ -96,8 +97,9 @@ function describeRounding(worksheet: WorksheetHeader): string {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant({ request, params });
-  requireCapability(await getShopEntitlements({ admin, db }), "core.replenishment");
+  const { admin, tenant, db } = await requireAdminTenant({ request, params });
+  const entitlements = await getShopEntitlements({ admin, db });
+  requireCapability(entitlements, "core.replenishment");
   const worksheet = await requireWorksheet(db, params.worksheetId);
   const view = parseWorksheetView(new URL(request.url).searchParams);
   const selection = worksheet.settings?.selection ?? null;
@@ -111,6 +113,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     selection?.supplierId ? purchasingSources.listSuppliers(db) : [],
     getWorksheetColumns(db),
   ]);
+
+  // Smart Forecast is read only for the rows on this page, and only when the
+  // merchant chose its column.
+  const showSmartForecast = columns.includes("smartForecast");
+  const profile = showSmartForecast ? await readShopReportingProfile(tenant) : null;
+  const smartForecast = await smartForecastColumn(db, {
+    shown: showSmartForecast,
+    entitlements,
+    worksheet,
+    rows: page.lines,
+    shopCurrencyCode: profile?.currencyCode ?? null,
+    installedAt: profile?.installedAt ?? null,
+  });
 
   const { summary, settings } = worksheet;
   const scopeLocation = options.locations.find((location) => location.gid === worksheet.scopeKey);
@@ -162,6 +177,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     },
     view: { ...view, page: page.page },
     lines: page.lines,
+    smartForecast,
     matching: page.matching,
     pageCount: page.pageCount,
     totals,

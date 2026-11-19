@@ -46,3 +46,8 @@ export type LevelsActionResult =
 export type SmartForecastLoaderResult =
   | { ok: true; forecast: SmartForecast; historyDays: number }
   | { ok: false; reason: "PLAN" | "METHOD" | "UNAVAILABLE"; message: string };
+
+export type {
+  SmartForecastCell,
+  SmartForecastColumn,
+} from "../../lib/smart-forecast/worksheet.server";
