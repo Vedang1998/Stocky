@@ -937,6 +937,10 @@ describe("purchase-order pages", () => {
         ["Name,Quantity\nWidget,1\n", "The file needs a SKU, Barcode or Variant ID column."],
         ['SKU,Quantity\n"W-RED,1\n', "The file has a quoted value that never ends."],
         ["SKU,Quantity\n", "The file has no rows to import."],
+        [
+          "SKU,Quantity\nW-RED\u0000,1\n",
+          "The file is not plain-text CSV. Save it as CSV UTF-8 and try again.",
+        ],
         ["x".repeat(1_000_001), "The file is larger than 1 MB."],
       ];
       for (const [csv, message] of cases) {
