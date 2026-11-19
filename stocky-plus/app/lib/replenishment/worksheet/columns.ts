@@ -27,6 +27,7 @@ export const WORKSHEET_COLUMNS = [
   "leadTime",
   "reorderPoint",
   "forecastDemand",
+  "smartForecast",
   "packSize",
 ] as const;
 
@@ -56,6 +57,7 @@ export const WORKSHEET_COLUMN_LABELS: Record<WorksheetColumn, string> = {
   leadTime: "Lead time",
   reorderPoint: "Reorder point",
   forecastDemand: "Forecast demand",
+  smartForecast: "Smart Forecast (Pro plan)",
   packSize: "Pack size",
 };
 

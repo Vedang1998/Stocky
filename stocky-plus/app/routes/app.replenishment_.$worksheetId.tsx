@@ -352,7 +352,8 @@ function plural(count: number, one: string, many: string): string {
 
 export default function Worksheet() {
   const data = useLoaderData<typeof loader>();
-  const { worksheet, summary, view, lines, matching, pageCount, totals, columns } = data;
+  const { worksheet, summary, view, lines, matching, pageCount, totals, columns, smartForecast } =
+    data;
   const navigate = useNavigate();
   const [selected, setSelected] = useState<WorksheetLine | null>(null);
 
@@ -564,6 +565,7 @@ export default function Worksheet() {
                 columns={columns}
                 currencyCode={summary?.currencyCode ?? null}
                 salesDays={summary?.salesDays ?? null}
+                smartForecast={smartForecast}
                 view={view}
                 path={path}
                 detailModalId={DETAIL_MODAL_ID}

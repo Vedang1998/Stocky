@@ -16,7 +16,7 @@ import {
   type WorksheetSortKey,
   type WorksheetView,
 } from "../../lib/replenishment/worksheet/view";
-import type { WorksheetActionResult } from "./types";
+import type { SmartForecastColumn, WorksheetActionResult } from "./types";
 
 const STATUS_TONES = {
   OUT_OF_STOCK: "critical",
@@ -142,6 +142,7 @@ function Warnings({ codes }: { codes: WarningCode[] }) {
 /** What a cell needs to know about the worksheet beyond its own row. */
 type CellContext = {
   currencyCode: string | null;
+  smartForecast: SmartForecastColumn;
   /** Days in the sales period; null when the worksheet does not record it. */
   salesDays: number | null;
 };
@@ -155,6 +156,33 @@ function money(amount: string | null, currencyCode: string | null, digits?: numb
 
 function percent(value: string | null): string {
   return value == null ? MISSING_VALUE : `${formatDecimal(value)}%`;
+}
+
+/**
+ * A row's Smart Forecast: the units expected over the days to cover and the
+ * method used. Advice beside the parity suggestion, which it never changes.
+ */
+function SmartForecastCellView({
+  line,
+  column,
+}: {
+  line: WorksheetLine;
+  column: SmartForecastColumn;
+}) {
+  if (column.status === "OFF") return MISSING_VALUE;
+  if (column.status !== "OK") {
+    return <s-text color="subdued">{column.status === "PLAN" ? "Pro plan" : "Last X days only"}</s-text>;
+  }
+  const cell = column.byRow[line.id];
+  if (!cell || cell.forecastUnits == null) return MISSING_VALUE;
+  return (
+    <s-stack direction="block" gap="none">
+      <s-text>{formatDecimal(cell.forecastUnits)}</s-text>
+      <s-text color="subdued">
+        {cell.outcome === "SELECTED" ? cell.label : "Recent average kept"}
+      </s-text>
+    </s-stack>
+  );
 }
 
 type ColumnSpec = {
@@ -310,6 +338,12 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     numeric: true,
     cell: (line) => formatDecimal(line.forecastDemand),
   },
+  smartForecast: {
+    label: "Smart Forecast",
+    sortKey: null,
+    numeric: true,
+    cell: (line, { smartForecast }) => <SmartForecastCellView line={line} column={smartForecast} />,
+  },
   packSize: {
     label: "Pack size",
     sortKey: null,
@@ -323,6 +357,7 @@ export function WorksheetTable({
   columns,
   currencyCode,
   salesDays,
+  smartForecast,
   view,
   path,
   detailModalId,
@@ -334,6 +369,8 @@ export function WorksheetTable({
   currencyCode: string | null;
   /** Days in the sales period, for sales per day; null when not recorded. */
   salesDays: number | null;
+  /** The Smart Forecast column's data; only read when that column is shown. */
+  smartForecast: SmartForecastColumn;
   view: WorksheetView;
   path: string;
   detailModalId: string;
@@ -380,7 +417,7 @@ export function WorksheetTable({
               </s-grid>
             </s-table-cell>
             {columns.map((column) => (
-              <s-table-cell key={column}>{COLUMNS[column].cell(line, { currencyCode, salesDays })}</s-table-cell>
+              <s-table-cell key={column}>{COLUMNS[column].cell(line, { currencyCode, salesDays, smartForecast })}</s-table-cell>
             ))}
             <s-table-cell>
               <Suggested line={line} />
