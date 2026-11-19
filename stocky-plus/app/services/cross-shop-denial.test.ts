@@ -321,6 +321,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B updating Shop A stocktake line and never adjusts inventory", async () => {
     const { action } = await import("../routes/app.stocktakes_.$id");
+    activePlanSnapshot();
     prismaMock.stocktakeLineItem.findFirst.mockResolvedValue(null);
 
     const result = await action(
@@ -349,6 +350,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B adding items to Shop A transfer", async () => {
     const { action } = await import("../routes/app.transfers_.$id");
+    activePlanSnapshot();
     prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
     const result = await action(
@@ -494,6 +496,7 @@ describe("cross-shop denial", () => {
     featureFlags.stocktakeInventoryWrites.mockReturnValue(true);
     try {
       const { action } = await import("../routes/app.stocktakes_.$id");
+      activePlanSnapshot();
       prismaMock.stocktake.findFirst.mockResolvedValue(null);
 
       const result = await action(
@@ -529,6 +532,7 @@ describe("cross-shop denial", () => {
     featureFlags.transferWrites.mockReturnValue(true);
     try {
       const { action } = await import("../routes/app.transfers_.$id");
+      activePlanSnapshot();
       prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
       const result = await action(

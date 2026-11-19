@@ -11,7 +11,9 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
@@ -24,6 +26,7 @@ import {
   readFormId,
 } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import {
   formatUtc,
   itemCount,
@@ -86,7 +89,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const query = new URL(request.url).searchParams;
   const filter = readTransferLineFilter(query.get("filter"));
-  const [lines, history, locations] = await Promise.all([
+  const [lines, history, locations, planActive] = await Promise.all([
     getTransferLines(db, {
       transfer,
       filter,
@@ -94,6 +97,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     }),
     getTransferHistory(db, transfer.id),
     listSyncedLocations(db),
+    planAllowsChanges(db),
   ]);
   const locationName = (id: string) =>
     locations.find((location) => location.id === id)?.name ??
@@ -114,6 +118,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           lines.totals,
           transferLedgerStanding(history),
         ),
+    planActive,
     writesEnabled: isInventoryWriteEnabled("transferWrites"),
   };
 };
@@ -132,6 +137,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     request,
     params,
   });
+  await requireActivePlanSnapshot(db);
   const transferId = readFormId(params.id);
   if (!transferId) return { error: NOT_FOUND };
   const form = await request.formData();
@@ -456,7 +462,8 @@ function LineQuantityForm({
   value,
   min = 0,
   max,
-  busy,
+  locked,
+  onEnter,
 }: {
   intent: string;
   lineId: string;
@@ -465,10 +472,11 @@ function LineQuantityForm({
   value: number;
   min?: number;
   max: number;
-  busy: boolean;
+  locked: boolean;
+  onEnter: typeof submitOnEnter | undefined;
 }) {
   return (
-    <Form method="post" onKeyDown={submitOnEnter}>
+    <Form method="post" onKeyDown={onEnter}>
       <input type="hidden" name="intent" value={intent} />
       <input type="hidden" name="lineId" value={lineId} />
       <s-stack direction="inline" gap="small-200">
@@ -480,7 +488,7 @@ function LineQuantityForm({
           min={min}
           max={max}
         />
-        <s-button type="submit" variant="secondary" {...disabledWhen(busy)}>
+        <s-button type="submit" variant="secondary" {...disabledWhen(locked)}>
           Save
         </s-button>
       </s-stack>
@@ -506,10 +514,14 @@ export default function TransferDetail() {
     filter,
     history,
     attention,
+    planActive,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const busy = useNavigation().state !== "idle";
+  // Nothing is submitted twice, and nothing at all without an active plan.
+  const locked = useNavigation().state !== "idle" || !planActive;
+  // Enter in a field submits too, so it is taken away with the buttons.
+  const onEnter = planActive ? submitOnEnter : undefined;
   const [confirming, setConfirming] = useState<
     "cancel" | "RETURNED" | "WRITTEN_OFF" | null
   >(null);
@@ -554,6 +566,7 @@ export default function TransferDetail() {
         Transfers
       </s-link>
 
+      {!planActive && <PlanRequiredBanner records="This transfer" />}
       {managedByShopify ? (
         <s-banner
           tone="info"
@@ -679,7 +692,7 @@ export default function TransferDetail() {
       {draft && (
         <s-section heading="Add items">
           <s-stack direction="block" gap="base">
-            <Form method="post" onKeyDown={submitOnEnter} key={scannedAt ?? 0}>
+            <Form method="post" onKeyDown={onEnter} key={scannedAt ?? 0}>
               <input type="hidden" name="intent" value="addItem" />
               <s-stack direction="inline" gap="base" alignItems="end">
                 <s-text-field
@@ -698,7 +711,7 @@ export default function TransferDetail() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  {...disabledWhen(busy)}
+                  {...disabledWhen(locked)}
                 >
                   Add
                 </s-button>
@@ -726,7 +739,7 @@ export default function TransferDetail() {
                   <s-button
                     type="submit"
                     variant="secondary"
-                    {...disabledWhen(busy)}
+                    {...disabledWhen(locked)}
                   >
                     Add to transfer
                   </s-button>
@@ -740,7 +753,7 @@ export default function TransferDetail() {
       {receivable && (
         <s-section heading="Receive items">
           <s-stack direction="block" gap="base">
-            <Form method="post" onKeyDown={submitOnEnter} key={scannedAt ?? 0}>
+            <Form method="post" onKeyDown={onEnter} key={scannedAt ?? 0}>
               <input type="hidden" name="intent" value="scan" />
               <s-stack direction="inline" gap="base" alignItems="end">
                 <s-text-field
@@ -759,7 +772,7 @@ export default function TransferDetail() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  {...disabledWhen(busy)}
+                  {...disabledWhen(locked)}
                 >
                   Count in
                 </s-button>
@@ -775,7 +788,7 @@ export default function TransferDetail() {
                 <s-button
                   type="submit"
                   variant="secondary"
-                  {...disabledWhen(busy)}
+                  {...disabledWhen(locked)}
                 >
                   Count in all {unitCount(totals.outstandingUnits)} still to
                   come
@@ -838,7 +851,8 @@ export default function TransferDetail() {
                         value={line.quantity}
                         min={1}
                         max={MAX_TRANSFER_LINE_QUANTITY}
-                        busy={busy}
+                        locked={locked}
+                        onEnter={onEnter}
                       />
                     </s-table-cell>
                     <s-table-cell>
@@ -850,7 +864,8 @@ export default function TransferDetail() {
                         label={`Picked quantity of ${line.title}`}
                         value={transferShipQuantity(line)}
                         max={line.quantity}
-                        busy={busy}
+                        locked={locked}
+                        onEnter={onEnter}
                       />
                     </s-table-cell>
                     <s-table-cell>
@@ -862,7 +877,7 @@ export default function TransferDetail() {
                           variant="tertiary"
                           tone="critical"
                           accessibilityLabel={`Remove ${line.title}`}
-                          {...disabledWhen(busy)}
+                          {...disabledWhen(locked)}
                         >
                           Remove
                         </s-button>
@@ -905,7 +920,8 @@ export default function TransferDetail() {
                           label={`Units of ${line.title} counted in`}
                           value={line.pendingReceiveQty}
                           max={line.shipQty}
-                          busy={busy}
+                          locked={locked}
+                          onEnter={onEnter}
                         />
                       ) : (
                         line.pendingReceiveQty
@@ -915,7 +931,7 @@ export default function TransferDetail() {
                       {receivable ? (
                         <Form
                           method="post"
-                          onKeyDown={submitOnEnter}
+                          onKeyDown={onEnter}
                           key={`reject:${line.rejectedQty}:${line.rejectNote ?? ""}`}
                         >
                           <input type="hidden" name="intent" value="reject" />
@@ -940,7 +956,7 @@ export default function TransferDetail() {
                             <s-button
                               type="submit"
                               variant="secondary"
-                              {...disabledWhen(busy)}
+                              {...disabledWhen(locked)}
                             >
                               Save
                             </s-button>
@@ -1044,7 +1060,7 @@ export default function TransferDetail() {
                   type="submit"
                   variant="primary"
                   {...disabledWhen(
-                    busy || !writesEnabled || totals.lineCount === 0,
+                    locked || !writesEnabled || totals.lineCount === 0,
                   )}
                 >
                   Ship transfer
@@ -1065,7 +1081,7 @@ export default function TransferDetail() {
                     type="submit"
                     variant="secondary"
                     tone="critical"
-                    {...disabledWhen(busy || !writesEnabled)}
+                    {...disabledWhen(locked || !writesEnabled)}
                   >
                     Ship anyway
                   </s-button>
@@ -1092,7 +1108,7 @@ export default function TransferDetail() {
                     type="submit"
                     variant="primary"
                     tone="critical"
-                    {...disabledWhen(busy)}
+                    {...disabledWhen(locked)}
                   >
                     Cancel transfer
                   </s-button>
@@ -1127,7 +1143,7 @@ export default function TransferDetail() {
               <s-button
                 type="submit"
                 variant="primary"
-                {...disabledWhen(busy || !writesEnabled)}
+                {...disabledWhen(locked || !writesEnabled)}
               >
                 Finish putting stock back
               </s-button>
@@ -1150,7 +1166,7 @@ export default function TransferDetail() {
                   <s-button
                     type="submit"
                     variant="primary"
-                    {...disabledWhen(busy || !writesEnabled)}
+                    {...disabledWhen(locked || !writesEnabled)}
                   >
                     Post receipt
                   </s-button>
@@ -1168,7 +1184,7 @@ export default function TransferDetail() {
                   <s-button
                     type="submit"
                     variant="primary"
-                    {...disabledWhen(busy || !writesEnabled)}
+                    {...disabledWhen(locked || !writesEnabled)}
                   >
                     Receive all {unitCount(totals.outstandingUnits)}
                   </s-button>
@@ -1203,7 +1219,7 @@ export default function TransferDetail() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  {...disabledWhen(busy)}
+                  {...disabledWhen(locked)}
                 >
                   Finish transfer
                 </s-button>
@@ -1228,7 +1244,7 @@ export default function TransferDetail() {
                   variant="primary"
                   tone="critical"
                   {...disabledWhen(
-                    busy || (confirming === "RETURNED" && !writesEnabled),
+                    locked || (confirming === "RETURNED" && !writesEnabled),
                   )}
                 >
                   Close transfer

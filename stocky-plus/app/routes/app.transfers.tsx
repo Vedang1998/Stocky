@@ -11,12 +11,15 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import { formatUtc } from "../services/stocktakes/stocktake-display";
 import { readPageNumber } from "../services/stocktakes/stocktake-read.server";
 import { createTransfer } from "../services/transfers/transfer.server";
@@ -39,9 +42,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const view = readTransferListView(params.get("view"));
   const page = readPageNumber(params.get("page"));
 
-  const [{ transfers, hasMore }, locations] = await Promise.all([
+  const [{ transfers, hasMore }, locations, planActive] = await Promise.all([
     listTransfers(db, { view, page }),
     listSyncedLocations(db),
+    planAllowsChanges(db),
   ]);
   return {
     transfers,
@@ -49,6 +53,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     view,
     page,
     locations,
+    planActive,
     writesEnabled: isInventoryWriteEnabled("transferWrites"),
   };
 };
@@ -64,6 +69,7 @@ const text = (value: FormDataEntryValue | null): string =>
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { tenant, db, actor } = await requireAdminTenantWithActor({ request });
+  await requireActivePlanSnapshot(db);
   const form = await request.formData();
   if (form.get("intent") !== "create") {
     return { error: "That action is not available." };
@@ -127,10 +133,18 @@ function unitsSummary({ status, totals }: TransferListEntry): string {
 }
 
 export default function Transfers() {
-  const { transfers, hasMore, view, page, locations, writesEnabled } =
-    useLoaderData<typeof loader>();
+  const {
+    transfers,
+    hasMore,
+    view,
+    page,
+    locations,
+    planActive,
+    writesEnabled,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const busy = useNavigation().state !== "idle";
+  // Nothing is submitted twice, and nothing at all without an active plan.
+  const locked = useNavigation().state !== "idle" || !planActive;
 
   const values: Partial<CreateValues> =
     actionData && "values" in actionData ? (actionData.values ?? {}) : {};
@@ -141,6 +155,7 @@ export default function Transfers() {
 
   return (
     <s-page heading="Transfers">
+      {!planActive && <PlanRequiredBanner records="Transfers" />}
       {!writesEnabled && (
         <s-banner
           tone="warning"
@@ -211,7 +226,7 @@ export default function Transfers() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  {...(busy ? { disabled: true } : {})}
+                  {...(locked ? { disabled: true } : {})}
                 >
                   Create draft
                 </s-button>

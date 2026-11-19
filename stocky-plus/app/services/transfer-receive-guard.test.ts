@@ -26,6 +26,7 @@ const {
       updateMany: vi.fn(),
       create: vi.fn(),
     },
+    shopSettings: { findMany: vi.fn(), findFirst: vi.fn() },
     transferLineItem: {
       findFirst: vi.fn(),
       create: vi.fn(),
@@ -125,6 +126,11 @@ describe("transfer receive guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     attachTenantDbContextMocks(prismaMock);
+    // The shop's settings row records an active plan.
+    prismaMock.shopSettings.findMany.mockResolvedValue([{ id: "settings-a" }]);
+    prismaMock.shopSettings.findFirst.mockResolvedValue({
+      subscriptionActive: true,
+    });
     process.env.FEATURE_TRANSFER_WRITES = "true";
     signIn({ sub: "7001" });
     resolveCanonicalShopByDomain.mockResolvedValue({

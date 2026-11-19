@@ -61,7 +61,11 @@ const {
   },
   context: {
     actor: null as unknown,
-    db: { tenant: "shop-a" },
+    db: {
+      tenant: "shop-a",
+      authority: { myshopifyDomain: "shop-a.myshopify.com" },
+      shopSettings: { findUnique: vi.fn() },
+    },
     admin: { graphql: () => undefined },
   },
   listSyncedLocations: vi.fn(),
@@ -333,6 +337,7 @@ function renderList(loaderData: Record<string, unknown>, actionData?: unknown) {
     view: "open",
     page: 1,
     locations: LOCATIONS,
+    planActive: true,
     writesEnabled: true,
     ...loaderData,
   };
@@ -355,6 +360,9 @@ function submitDisabled(html: string, intent: string): boolean | undefined {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  context.db.shopSettings.findUnique.mockResolvedValue({
+    subscriptionActive: true,
+  });
   isInventoryWriteEnabled.mockReturnValue(true);
   listSyncedLocations.mockResolvedValue(LOCATIONS);
   reads.listTransfers.mockResolvedValue({ transfers: [], hasMore: false });
@@ -2052,5 +2060,178 @@ describe("Transfer report export", () => {
     expect(row).toContain(
       "T-ABC123,gid://shopify/Location/99,Shop floor,Draft,",
     );
+  });
+});
+
+describe("Transfers without an active plan", () => {
+  const PLAN_BANNER =
+    'heading="An active ProPo plan is needed to make changes"';
+
+  const attempt = async (run: () => Promise<unknown>): Promise<unknown> => {
+    try {
+      return await run();
+    } catch (thrown) {
+      return thrown;
+    }
+  };
+
+  const CHANGES: Array<Record<string, string>> = [
+    { intent: "addItem", code: "RED-750", quantity: "2" },
+    { intent: "addItems", items: "RED-750,2" },
+    { intent: "setQuantity", lineId: "line-1", quantity: "4" },
+    { intent: "pick", lineId: "line-1", pickedQty: "4" },
+    { intent: "remove", lineId: "line-1" },
+    { intent: "ship" },
+    { intent: "ship", allowShortSource: "1" },
+    { intent: "cancel" },
+    { intent: "scan", code: "RED-750" },
+    { intent: "countIn", lineId: "line-1", quantity: "3" },
+    { intent: "reject", lineId: "line-1", quantity: "1", note: "Broken" },
+    { intent: "countInAll" },
+    { intent: "postReceipt" },
+    { intent: "receiveAll" },
+    { intent: "close", resolution: "RETURNED" },
+    { intent: "close", resolution: "WRITTEN_OFF" },
+  ];
+
+  const submitButtons = (html: string) =>
+    html.match(/<s-button[^>]*type="submit"[^>]*>/g) ?? [];
+
+  for (const snapshot of [{ subscriptionActive: false }, null]) {
+    it(`refuses every change with 403 when the plan snapshot is ${JSON.stringify(snapshot)}`, async () => {
+      context.db.shopSettings.findUnique.mockResolvedValue(snapshot);
+
+      const refusals = [
+        await attempt(() =>
+          listRoute.action(
+            post("/app/transfers", {
+              intent: "create",
+              sourceLocationId: WAREHOUSE,
+              destinationLocationId: SHOP_FLOOR,
+            }),
+          ),
+        ),
+      ];
+      for (const fields of CHANGES) {
+        refusals.push(await attempt(() => act(fields)));
+      }
+
+      for (const [index, refusal] of refusals.entries()) {
+        expect(refusal, String(index)).toBeInstanceOf(Response);
+        expect((refusal as Response).status, String(index)).toBe(403);
+      }
+      expect(await (refusals[0] as Response).text()).toBe(
+        "An active ProPo plan is required for this feature. You can choose a plan from Billing.",
+      );
+      for (const [name, service] of Object.entries({
+        ...drafts,
+        ...receiving,
+      })) {
+        expect(service, name).not.toHaveBeenCalled();
+      }
+      expect(reads.getTransfer).not.toHaveBeenCalled();
+    });
+  }
+
+  it("asks for the plan snapshot of the signed-in shop before the change", async () => {
+    drafts.cancelTransfer.mockResolvedValue({ ok: true, alreadyDone: false });
+
+    await act({ intent: "cancel" });
+
+    expect(drafts.cancelTransfer).toHaveBeenCalledTimes(1);
+
+    expect(context.db.shopSettings.findUnique).toHaveBeenCalledWith({
+      where: { shop: SHOP },
+      select: { subscriptionActive: true },
+    });
+  });
+
+  it("still lists transfers, says why nothing can be created and locks the form", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+
+    const data = await listRoute.loader(get("/app/transfers"));
+    expect(data).toMatchObject({ planActive: false, locations: LOCATIONS });
+    expect(reads.listTransfers).toHaveBeenCalledTimes(1);
+
+    const html = renderList({ planActive: false });
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain('href="/app/billing"');
+    expect(submitDisabled(html, "create")).toBe(true);
+  });
+
+  it("shows no plan banner on the list while the plan is active", async () => {
+    const data = await listRoute.loader(get("/app/transfers"));
+    expect(data).toMatchObject({ planActive: true });
+
+    const html = renderList({});
+    expect(html).not.toContain(PLAN_BANNER);
+    expect(submitDisabled(html, "create")).toBe(false);
+  });
+
+  it("still shows a draft, with every button locked and Enter doing nothing", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue({
+      subscriptionActive: false,
+    });
+
+    const html = await renderDetail();
+
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain("Red wine");
+    const buttons = submitButtons(html);
+    expect(buttons.length).toBeGreaterThan(4);
+    for (const button of buttons) {
+      expect(button).toContain('disabled="true"');
+    }
+    expect(page.formKeyHandlers.size).toBeGreaterThan(2);
+    for (const [intent, handler] of page.formKeyHandlers) {
+      expect(handler, intent).toBeUndefined();
+    }
+  });
+
+  it("still shows a transfer in transit, with receiving and closing locked", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    inTransit([shippedLine({ pendingReceiveQty: 2 })]);
+
+    const html = await renderDetail();
+
+    expect(html).toContain(PLAN_BANNER);
+    const buttons = submitButtons(html);
+    expect(buttons.length).toBeGreaterThan(3);
+    for (const button of buttons) {
+      expect(button).toContain('disabled="true"');
+    }
+    for (const [intent, handler] of page.formKeyHandlers) {
+      expect(handler, intent).toBeUndefined();
+    }
+  });
+
+  it("shows no plan banner on a transfer while the plan is active", async () => {
+    const html = await renderDetail();
+
+    expect(html).not.toContain(PLAN_BANNER);
+    expect(submitDisabled(html, "addItem")).toBe(false);
+  });
+
+  it("does not hide a database failure behind the plan banner", async () => {
+    context.db.shopSettings.findUnique.mockRejectedValue(
+      new Error("connection lost"),
+    );
+
+    await expect(loadDetail()).rejects.toThrow("connection lost");
+    await expect(listRoute.loader(get("/app/transfers"))).rejects.toThrow(
+      "connection lost",
+    );
+  });
+
+  it("still downloads the transfer report", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+
+    const response = (await exportLoader(
+      get(`/app/transfers/${ID}/export`, { id: ID }),
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("RED-750");
+    expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
   });
 });

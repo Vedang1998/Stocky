@@ -42,6 +42,7 @@ const { prismaMock, authenticateAdmin, resolveCanonicalShopByDomain, page } =
         create: vi.fn(),
         update: vi.fn(),
       },
+      shopSettings: { findMany: vi.fn(), findFirst: vi.fn() },
       shopifyLocationFact: { findMany: vi.fn() },
       shopifyVariantCache: { findMany: vi.fn() },
       $executeRaw: vi.fn(),
@@ -123,6 +124,7 @@ const LIST_DATA = {
     { id: SOURCE, name: "Warehouse", isActive: true },
     { id: DESTINATION, name: "Shop floor", isActive: true },
   ],
+  planActive: true,
   writesEnabled: true,
 };
 
@@ -179,6 +181,7 @@ async function transferPage(fields: Record<string, string>) {
     filter: "all",
     history: [],
     attention: null,
+    planActive: true,
     writesEnabled: true,
   };
   return {
@@ -205,6 +208,11 @@ describe("action results on the Transfers pages (#78)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     attachTenantDbContextMocks(prismaMock);
+    // The shop's settings row records an active plan.
+    prismaMock.shopSettings.findMany.mockResolvedValue([{ id: "settings-a" }]);
+    prismaMock.shopSettings.findFirst.mockResolvedValue({
+      subscriptionActive: true,
+    });
     for (const name of flags) delete process.env[name];
     authenticateAdmin.mockResolvedValue({
       session: { shop: SHOP },

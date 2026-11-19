@@ -30,7 +30,11 @@ const { service, context, fetchLocations, isInventoryWriteEnabled, page } =
     },
     context: {
       actor: null as unknown,
-      db: { tenant: "shop-a" },
+      db: {
+        tenant: "shop-a",
+        authority: { myshopifyDomain: "shop-a.myshopify.com" },
+        shopSettings: { findUnique: vi.fn() },
+      },
       admin: { graphql: () => undefined },
     },
     fetchLocations: vi.fn(),
@@ -160,6 +164,7 @@ const entry = (
 
 const LOADER_DATA = {
   submissionId: SUBMISSION,
+  planActive: true,
   writesEnabled: true,
   locations: [{ id: LOCATION, name: "Shop floor" }],
   history: [] as AdjustmentHistoryEntry[],
@@ -185,6 +190,9 @@ async function submitAndRender(fields: Record<string, string>) {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  context.db.shopSettings.findUnique.mockResolvedValue({
+    subscriptionActive: true,
+  });
   fetchLocations.mockResolvedValue(LOADER_DATA.locations);
   isInventoryWriteEnabled.mockReturnValue(false);
   service.listAdjustments.mockResolvedValue([]);
@@ -753,5 +761,118 @@ describe("adjustment report export", () => {
     expect(await response.text()).toContain(
       "more than 2,000 adjustments. Choose a shorter period",
     );
+  });
+});
+
+describe("Adjustments without an active plan", () => {
+  const PLAN_BANNER =
+    'heading="An active ProPo plan is needed to make changes"';
+
+  const attempt = async (fields: Record<string, string>): Promise<unknown> => {
+    try {
+      return await route.action(post(fields));
+    } catch (thrown) {
+      return thrown;
+    }
+  };
+
+  /** The buttons that change stock, and the one that only filters the history. */
+  function submitButtons(html: string) {
+    const buttons = html.match(/<s-button[^>]*type="submit"[^>]*>/g) ?? [];
+    return {
+      changes: buttons.filter((button) => button.includes('variant="primary"')),
+      periodFilter: buttons.filter((button) =>
+        button.includes('variant="secondary"'),
+      ),
+    };
+  }
+
+  for (const snapshot of [{ subscriptionActive: false }, null]) {
+    it(`refuses every change with 403 when the plan snapshot is ${JSON.stringify(snapshot)}`, async () => {
+      context.db.shopSettings.findUnique.mockResolvedValue(snapshot);
+
+      for (const intent of ["submit", "resume", "reverse"]) {
+        const refusal = await attempt({ ...FORM, intent, operationId: "op-1" });
+        expect(refusal, intent).toBeInstanceOf(Response);
+        expect((refusal as Response).status, intent).toBe(403);
+      }
+
+      expect(service.submitAdjustment).not.toHaveBeenCalled();
+      expect(service.resumeAdjustment).not.toHaveBeenCalled();
+      expect(service.reverseAdjustment).not.toHaveBeenCalled();
+    });
+  }
+
+  it("still shows the history, says why nothing can be changed and locks every form", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    isInventoryWriteEnabled.mockReturnValue(true);
+    service.listAdjustments.mockResolvedValue([
+      entry({ status: "RETRY_PENDING", canResume: true, canReverse: false }),
+    ]);
+
+    const data = await route.loader(get("/app/adjustments"));
+    expect(data).toMatchObject({ planActive: false, writesEnabled: true });
+    expect(service.listAdjustments).toHaveBeenCalledTimes(1);
+
+    page.loaderData = data;
+    page.actionData = undefined;
+    const html = renderToStaticMarkup(createElement(route.default));
+
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain('href="/app/billing"');
+    expect(html).toContain("Red wine");
+    const { changes, periodFilter } = submitButtons(html);
+    expect(changes).toHaveLength(2);
+    for (const button of changes) {
+      expect(button).toContain('disabled="true"');
+    }
+    expect(periodFilter).toHaveLength(1);
+    expect(periodFilter[0]).not.toContain("disabled");
+  });
+
+  it("shows no plan banner and leaves the forms open while the plan is active", async () => {
+    service.listAdjustments.mockResolvedValue([
+      entry({ status: "RETRY_PENDING", canResume: true, canReverse: false }),
+    ]);
+
+    const data = await route.loader(get("/app/adjustments"));
+    expect(data).toMatchObject({ planActive: true });
+
+    page.loaderData = data;
+    page.actionData = undefined;
+    const html = renderToStaticMarkup(createElement(route.default));
+
+    expect(html).not.toContain(PLAN_BANNER);
+    const { changes } = submitButtons(html);
+    expect(changes).toHaveLength(2);
+    for (const button of changes) {
+      expect(button).not.toContain("disabled");
+    }
+  });
+
+  it("does not hide a database failure behind the plan banner", async () => {
+    context.db.shopSettings.findUnique.mockRejectedValue(
+      new Error("connection lost"),
+    );
+
+    await expect(route.loader(get("/app/adjustments"))).rejects.toThrow(
+      "connection lost",
+    );
+  });
+
+  it("still downloads the adjustment report", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    service.listAdjustmentsForExport.mockResolvedValue({
+      entries: [entry()],
+      truncated: false,
+    });
+
+    const response = (await exportLoader(
+      get("/app/adjustments/export"),
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("RED-75");
+    expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
   });
 });

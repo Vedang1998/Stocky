@@ -357,6 +357,25 @@ labels, transfers suggested from replenishment or balancing, cost value in
 transit, and shop-timezone dates. In-transit units are not shown as incoming
 at the destination in Shopify, because no Shopify transfer object exists.
 
+## Plan gate
+
+Every action of the Stocktakes, Adjustments and Transfers pages calls
+`requireActivePlanSnapshot` (`app/billing/entitlements.server.ts`) before it
+reads the form, so a shop without an active plan gets a 403 and nothing is
+recorded or sent. That covers creating, editing, counting, shipping,
+receiving, completing, reversing, cancelling and finishing an unfinished
+step. The pages and their CSV reports stay readable: the loaders ask
+`planAllowsChanges` (`plan-access.server.ts`), show a banner that links to
+Billing, disable every button that changes something and stop Enter from
+submitting. The ledger itself does not check the plan; the routes do.
+
+A lapsed plan therefore also stops work that is already under way, such as
+receiving a transfer that is in transit or putting cancelled stock back. Stock
+in Shopify stays as it was at the last confirmed step, and the page keeps
+saying what is unfinished until a plan is active again. Whether documents in
+flight should stay finishable after a plan lapses is a plan-policy decision
+that has not been made.
+
 ## Limits and known gaps
 
 - 5,000 lines per operation, 250 changes per Shopify request (default batch
