@@ -445,7 +445,7 @@ describe("inventory adjustments on the inventory ledger", () => {
         await submit("RED-75, -3", { locationId }),
       );
       expect(failure.error).toBe(
-        "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.",
+        "That location is not an active, synced location of this shop. Choose Sync catalog on the Home page, then try again.",
       );
     });
 
