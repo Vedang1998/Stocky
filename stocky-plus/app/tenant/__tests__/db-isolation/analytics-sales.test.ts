@@ -8,6 +8,7 @@ import { loadAbcParityRun } from "../../../lib/analytics/abc-parity.server";
 import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
 import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
+import { loadPurchaseOrders } from "../../../lib/analytics/purchase-orders.server";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
 import { localRangeToUtc } from "../../../lib/analytics/shop-calendar";
 import {
@@ -933,6 +934,77 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
         expect(transfers.map((line) => line.pickedQty)).toEqual([700]);
         expect(stocktakes.map((line) => line.countedQty).sort()).toEqual([0, 800, null]);
         expect(changes.map((change) => change.delta)).toEqual([-900]);
+      });
+    });
+
+    describe("purchase orders", () => {
+      const poRange = localRangeToUtc("2026-09-15", "2026-11-09", TZ);
+
+      async function seedOrder(
+        shopId: string,
+        domain: string,
+        input: { poNumber: string; createdAt: string; qty: number },
+      ) {
+        const supplier = await migrationPrisma.supplier.create({
+          data: { shop: domain, shopId, name: `Supplier ${input.poNumber}` },
+        });
+        await migrationPrisma.purchaseOrder.create({
+          data: {
+            shop: domain,
+            shopId,
+            supplierId: supplier.id,
+            locationId: LOCATION_MAIN,
+            poNumber: input.poNumber,
+            status: "ORDERED",
+            createdAt: new Date(input.createdAt),
+            lineItems: {
+              create: {
+                shopId,
+                shopifyVariantId: VARIANT_OLD,
+                orderedQty: input.qty,
+                receivedQty: 1,
+                unitCost: "5.00",
+              },
+            },
+          },
+        });
+      }
+
+      beforeAll(async () => {
+        await seedOrder(shopAId, SHOP_A_DOMAIN, {
+          poNumber: "PO-A-IN",
+          createdAt: "2026-10-05T15:00:00Z",
+          qty: 10,
+        });
+        await seedOrder(shopAId, SHOP_A_DOMAIN, {
+          poNumber: "PO-A-OUT",
+          createdAt: "2026-08-01T15:00:00Z",
+          qty: 10,
+        });
+        await seedOrder(shopBId, SHOP_B_DOMAIN, {
+          poNumber: "PO-B-IN",
+          createdAt: "2026-10-06T15:00:00Z",
+          qty: 77,
+        });
+      });
+
+      it("lists the orders created in the range with the app's own totals", async () => {
+        const orders = await loadPurchaseOrders(dbA, poRange);
+
+        expect(orders.map((order) => order.poNumber)).toEqual(["PO-A-IN"]);
+        expect(orders[0]).toMatchObject({
+          orderedUnits: 10,
+          receivedUnits: 1,
+          remainingUnits: 9,
+        });
+        expect(orders[0]!.merchandiseAmount.toFixed(2)).toBe("50.00");
+      });
+
+      it("keeps each shop's purchase orders to itself", async () => {
+        const orders = await loadPurchaseOrders(dbB, poRange);
+
+        expect(orders.map((order) => order.poNumber)).toEqual(["PO-B-IN"]);
+        expect(orders[0]!.orderedUnits).toBe(77);
       });
     });
   });
