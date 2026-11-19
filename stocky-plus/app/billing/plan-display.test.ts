@@ -5,6 +5,7 @@ import {
   describeBillingTerms,
   formatUsd,
   monthlyPriceLabel,
+  planSummary,
   planTermRows,
 } from "./plan-display";
 import { SELF_SERVE_PLANS, findSelfServePlan } from "./plans";
@@ -206,5 +207,31 @@ describe("describeBillingTerms", () => {
       renewsOn: null,
       endsOn: null,
     });
+  });
+});
+
+describe("planSummary", () => {
+  it("names the plan instead of showing its stored key", () => {
+    expect(
+      planSummary({ subscriptionActive: true, subscriptionPlan: "growth" }),
+    ).toBe("Growth plan");
+  });
+
+  it("does not show a key that matches no plan", () => {
+    expect(
+      planSummary({ subscriptionActive: true, subscriptionPlan: "dev" }),
+    ).toBe("Your plan is active.");
+    expect(
+      planSummary({ subscriptionActive: true, subscriptionPlan: null }),
+    ).toBe("Your plan is active.");
+  });
+
+  it("asks for a plan, without promising a free tier, when none is active", () => {
+    const text = planSummary({
+      subscriptionActive: false,
+      subscriptionPlan: "growth",
+    });
+    expect(text).toBe("No plan selected. Choose a plan to use the Buying Table.");
+    expect(text).not.toMatch(/free/i);
   });
 });

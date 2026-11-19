@@ -174,8 +174,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       process.env.NODE_ENV !== "production";
     if (!allow) {
       return {
-        error:
-          "Development subscription activation is disabled. Set ALLOW_DEV_SUBSCRIPTION_ACTIVATE=true only in non-production environments.",
+        error: "This action isn't available.",
       };
     }
     await db.shopSettings.upsert({
@@ -514,9 +513,9 @@ export default function BuyingTable() {
       {lookbackFor && (
         <s-section heading={`Custom lookback — ${lookbackFor.title}`}>
           <s-paragraph>
-            Override the global lookback window for this SKU only. Velocity
-            will be computed across this date range (out-of-stock days still
-            excluded).
+            Use a different sales period for this product only. Its sales
+            rate is worked out over these dates, leaving out days it was out
+            of stock.
           </s-paragraph>
           <Form method="post" onSubmit={() => setLookbackFor(null)}>
             <input type="hidden" name="intent" value="setLookback" />

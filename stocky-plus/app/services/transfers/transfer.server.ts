@@ -115,7 +115,7 @@ export async function createTransfer(
     return {
       ok: false,
       error:
-        "One of those locations is not an active, synced location of this shop. Run a sync from the dashboard, then try again.",
+        "One of those locations is not an active, synced location of this shop. Choose Sync catalog on the Home page, then try again.",
     };
   }
 
@@ -301,7 +301,7 @@ async function buildMovementDocument(
   if (unresolved.length > 0) {
     return {
       ok: false,
-      error: `Shopify inventory is not linked yet for: ${unresolved.join(", ")}. Run a catalog sync from the dashboard, then try again.`,
+      error: `Shopify inventory is not linked yet for: ${unresolved.join(", ")}. Choose Sync catalog on the Home page, then try again.`,
     };
   }
 

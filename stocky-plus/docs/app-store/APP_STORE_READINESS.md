@@ -2,7 +2,7 @@
 
 What stands between the current code and a ProPo listing Shopify would accept. One list, three states: done, in progress, blocked on the owner. Kept by the App Store readiness lane; update it in the same pull request that changes an item.
 
-Last updated: 2026-11-14.
+Last updated: 2026-11-19.
 
 ## Done
 
@@ -18,6 +18,7 @@ Last updated: 2026-11-14.
 | Products created after install get their inventory facts; a dead-lettered webhook job is no longer delivered again | #103 (issue #94) |
 | A webhook or background job delivered a moment before the dispatcher recorded it runs once instead of being lost; a job whose queue delivery is gone is retried or dead-lettered within about six minutes | #111 (issue #122) |
 | The first page load after a reinstall renders: requests wait up to five seconds for the afterAuth hook to re-enable the shop, instead of answering 500 | #111 (issue #123) |
+| Merchant screens carry no developer or planning wording; a unit test refuses developer commands, environment variable names and internal phrases in the app's screens and stock-change messages (issue #80) | this PR |
 | Container image builds on the pinned Node and npm, runs as a non-root user, does not run migrations at start and does not carry the migration files | `Dockerfile`, R-189 |
 | Drafts for the listing, privacy policy, reviewer instructions and the protected customer data form | `LISTING_DRAFT.md`, `PRIVACY_POLICY_DRAFT.md`, `REVIEWER_TEST_INSTRUCTIONS.md`, `PROTECTED_CUSTOMER_DATA_ANSWERS.md` |
 | `read_all_orders` approved by Shopify for the public app | Checked in the Partner Dashboard on 2026-11-10 |
@@ -27,7 +28,6 @@ Last updated: 2026-11-14.
 | Item | State |
 |---|---|
 | First install can hang on "Handling response" and skip the first sync (issue #73) | Fix in #82. |
-| Merchant screens show developer and planning text (issue #80) | Not started in this lane; the pages are being replaced by the feature lanes' pull requests, so the wording pass follows them. |
 | Plan limits are not enforced on feature routes | The entitlement service exists (#92); routes still read `ShopSettings.subscriptionActive`, which only the Billing page refreshes, so a cancellation is noticed only when the merchant opens Billing (security pass BIL-02). The Buying Table checks it in its actions as well as its page. Wiring waits for the plan decision below. |
 | Database and Redis connections not required to use TLS (R-191) | Depends on the host; set `sslmode=require` in the database URLs and a `rediss://` Redis URL once it is chosen. |
 | Subscription status has not been observed against a real subscription, from either source | Needs the plans below and a dev-store test with the $0 private test plan. |

@@ -191,7 +191,7 @@ const NOT_FOUND_MESSAGE = "Stocktake not found";
 const UNREADABLE_MESSAGE =
   "Shopify's current quantities could not be read. Nothing was changed. Try again in a moment.";
 const INACTIVE_LOCATION_MESSAGE =
-  "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.";
+  "That location is not an active, synced location of this shop. Choose Sync catalog on the Home page, then try again.";
 
 function chunked<T>(values: readonly T[], size: number): T[][] {
   const chunks: T[][] = [];
@@ -443,7 +443,7 @@ export async function createStocktake(
         ok: false,
         error:
           skippedUnsynced + skippedUnlinked > 0
-            ? "Shopify has no on-hand quantity for the items synced at this location. Run a sync from the dashboard, then start the count again."
+            ? "Shopify has no on-hand quantity for the items synced at this location. Choose Sync catalog on the Home page, then start the count again."
             : "No tracked items are stocked at this location in Shopify, so there is nothing to count. To count specific items, start a partial count.",
       };
     }
@@ -547,7 +547,7 @@ async function resolveNewLines(
     const itemId = variant.inventoryItemId;
     if (!itemId) {
       refuse(
-        `Shopify inventory is not linked yet for ${variant.title}. Run a catalog sync from the dashboard.`,
+        `Shopify inventory is not linked yet for ${variant.title}. Choose Sync catalog on the Home page.`,
       );
       continue;
     }
@@ -577,7 +577,7 @@ async function resolveNewLines(
     const expectedQty = basisQuantity(level, stocktake.quantityBasis);
     if (expectedQty === null) {
       refuse(
-        `Shopify's ${basisLabel(stocktake.quantityBasis)} quantity for ${variant.title} is not synced yet. Run a sync from the dashboard.`,
+        `Shopify's ${basisLabel(stocktake.quantityBasis)} quantity for ${variant.title} is not synced yet. Choose Sync catalog on the Home page.`,
       );
       continue;
     }
@@ -1238,7 +1238,7 @@ async function buildStocktakeDocument(
   if (unresolved.size > 0) {
     return {
       ok: false,
-      error: `Shopify inventory is not linked yet for: ${[...unresolved].join(", ")}. Run a catalog sync from the dashboard, then complete the count again.`,
+      error: `Shopify inventory is not linked yet for: ${[...unresolved].join(", ")}. Choose Sync catalog on the Home page, then complete the count again.`,
     };
   }
 

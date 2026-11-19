@@ -18,6 +18,7 @@ import { SyncAttentionBanner, SyncStatus } from "../components/SyncStatus";
 import { buildSyncStatusView } from "../lib/sync-status";
 import { useRevalidateWhile } from "../lib/use-revalidate-while";
 import { readCatalogSyncStatus } from "../sync/sync-status.server";
+import { planSummary } from "../billing/plan-display";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
@@ -47,7 +48,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   ]);
 
   return {
-    settings,
+    plan: planSummary(settings),
     alerts: alerts.slice(0, 10),
     openPOs,
     supplierCount,
@@ -93,7 +94,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Dashboard() {
   const {
-    settings,
+    plan,
     alerts,
     openPOs,
     supplierCount,
@@ -208,11 +209,7 @@ export default function Dashboard() {
       </s-section>
 
       <s-section slot="aside" heading="Plan">
-        <s-paragraph>
-          {settings.subscriptionActive
-            ? `Active: ${settings.subscriptionPlan ?? "subscribed"}`
-            : "Free tier — Buying Table locked"}
-        </s-paragraph>
+        <s-paragraph>{plan}</s-paragraph>
         <s-link href="/app/billing">Manage billing</s-link>
       </s-section>
     </s-page>
