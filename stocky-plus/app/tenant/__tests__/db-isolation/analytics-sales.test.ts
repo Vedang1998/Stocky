@@ -8,6 +8,7 @@ import { loadAbcParityRun } from "../../../lib/analytics/abc-parity.server";
 import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
 import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
+import { loadLowStock } from "../../../lib/analytics/low-stock.server";
 import { loadPurchaseOrders } from "../../../lib/analytics/purchase-orders.server";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
 import { loadDemandHistory } from "../../../lib/smart-forecast/history.server";
@@ -1006,6 +1007,136 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
 
         expect(orders.map((order) => order.poNumber)).toEqual(["PO-B-IN"]);
         expect(orders[0]!.orderedUnits).toBe(77);
+      });
+    });
+
+    describe("low stock", () => {
+      const SETTINGS = {
+        params: { method: "LAST_X_DAYS", sampleDays: 30, suggestDays: 14 },
+        scopeKey: "SHOP",
+        incomingSource: "SHOPIFY_INCOMING",
+        rounding: {
+          applyMinimumOrderQuantity: false,
+          roundUpToPackSize: false,
+        },
+        selection: { vendor: null, productType: null, supplierId: null },
+      };
+
+      async function seedWorksheet(
+        shopId: string,
+        generatedAt: string,
+        lines: Array<{
+          variantGid: string;
+          title: string;
+          status: "OUT_OF_STOCK" | "LOW" | "OK" | "UNKNOWN";
+        }>,
+      ) {
+        const worksheet = await migrationPrisma.replenishmentWorksheet.create({
+          data: {
+            shopId,
+            method: "LAST_X_DAYS",
+            scopeKey: "SHOP",
+            settings: SETTINGS,
+            asOfLocalDate: generatedAt.slice(0, 10),
+            timeZone: TZ,
+            generatedAt: new Date(generatedAt),
+            lineCount: lines.length,
+          },
+        });
+        await migrationPrisma.replenishmentWorksheetLine.createMany({
+          data: lines.map((line) => ({
+            shopId,
+            worksheetId: worksheet.id,
+            variantGid: line.variantGid,
+            productGid: `gid://shopify/Product/${line.variantGid.split("/").pop()}`,
+            productTitle: line.title,
+            variantTitle: "Default Title",
+            tracked: true,
+            stockStatus: line.status,
+            availableQuantity: line.status === "OUT_OF_STOCK" ? 0 : 3,
+            unitsPerDay: "2",
+            priceAmount: "10",
+            priceCurrencyCode: "USD",
+            suggestedQuantity: 12,
+            orderQuantity: 12,
+            detail: {},
+          })),
+        });
+      }
+
+      beforeAll(async () => {
+        await seedWorksheet(shopAId, "2026-11-01T15:00:00Z", [
+          {
+            variantGid: "gid://shopify/ProductVariant/1",
+            title: "Stale",
+            status: "LOW",
+          },
+        ]);
+        await seedWorksheet(shopAId, "2026-11-09T15:00:00Z", [
+          {
+            variantGid: "gid://shopify/ProductVariant/2",
+            title: "Gone",
+            status: "OUT_OF_STOCK",
+          },
+          {
+            variantGid: "gid://shopify/ProductVariant/3",
+            title: "Running low",
+            status: "LOW",
+          },
+          {
+            variantGid: "gid://shopify/ProductVariant/4",
+            title: "Fine",
+            status: "OK",
+          },
+          {
+            variantGid: "gid://shopify/ProductVariant/5",
+            title: "Untracked",
+            status: "UNKNOWN",
+          },
+        ]);
+        await seedWorksheet(shopBId, "2026-11-09T16:00:00Z", [
+          {
+            variantGid: "gid://shopify/ProductVariant/6",
+            title: "Other shop",
+            status: "OUT_OF_STOCK",
+          },
+        ]);
+      });
+
+      it("reads the latest worksheet's low and out-of-stock lines only", async () => {
+        const { worksheet, lines } = await loadLowStock(dbA);
+
+        expect(worksheet).toMatchObject({ allLocations: true });
+        expect(worksheet?.generatedAt.toISOString()).toBe(
+          "2026-11-09T15:00:00.000Z",
+        );
+        expect(lines.map((line) => line.productTitle).sort()).toEqual([
+          "Gone",
+          "Running low",
+        ]);
+      });
+
+      it("keeps each shop's worksheet to itself", async () => {
+        const { lines } = await loadLowStock(dbB);
+
+        expect(lines.map((line) => line.productTitle)).toEqual(["Other shop"]);
+      });
+
+      it("shows the report with the worksheet it came from", async () => {
+        const result = await page("low-stock");
+
+        expect(tiles(result)).toMatchObject({
+          "Variants low or out": "2",
+          "Out of stock": "1",
+        });
+        expect(result.notices.map((notice) => notice.heading)).toEqual([
+          expect.stringMatching(/^From the worksheet generated Nov 9, 2026/),
+        ]);
+        expect(
+          table(result)
+            .map((row) => row.product)
+            .sort(),
+        ).toEqual(["Gone", "Running low"]);
       });
     });
   });
