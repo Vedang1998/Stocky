@@ -30,7 +30,7 @@ npm run worker    # terminal 2
 | Buying Table | `/app/buying-table` | Per-vendor demand planning grid: ABC class, live stock, incoming, sales velocity (out-of-stock days excluded), reorder points, one-click draft PO with MOQ/pack rounding, per-SKU custom lookbacks |
 | Warehouse | `/app/warehouse` | Scan-to-receive (barcode → +1), session receipt tracking, ZPL label generation for exactly the units received |
 | Stocktakes | `/app/stocktakes` | Freeze expected counts, enter physical counts, push deltas to Shopify via `inventoryAdjustQuantities` |
-| Transfers | `/app/transfers` | Draft → pick → ship → receive using Shopify's Inventory Transfer API |
+| Transfers | `/app/transfers` | Draft by scan or pasted list → pick → ship (stock check at the source) → receive in parts by scan, with rejects → close short; stock moves through the inventory-write ledger, CSV transfer report |
 | Bundles / BOM | `/app/bundles` | Map bundle variants to component variants; bundle sales feed component forecasting |
 | Analytics | `/app/analytics` | Dead stock (120-day), tied-up capital, inventory valuation (qty × landed cost), low-stock alerts, CSV exports |
 | Billing | `/app/billing` | Current plan, limits and usage; plan changes go through Shopify App Pricing's hosted plan selection page |
