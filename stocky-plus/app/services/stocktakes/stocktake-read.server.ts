@@ -155,14 +155,24 @@ export function readLineSearch(value: string | null): string {
  */
 export async function listStocktakes(
   db: TenantDb,
-  input: { view: StocktakeListView; page: number },
+  input: {
+    view: StocktakeListView;
+    page: number;
+    /** Only counts of this location. */
+    locationGid?: string;
+    /** Only counts that are being counted now, not drafts. */
+    inProgressOnly?: boolean;
+  },
 ): Promise<{ stocktakes: StocktakeListEntry[]; hasMore: boolean }> {
   const rows = (await db.stocktake.findMany({
     where: {
       status:
         input.view === "open"
-          ? { in: ["DRAFT", "IN_PROGRESS"] }
+          ? input.inProgressOnly
+            ? "IN_PROGRESS"
+            : { in: ["DRAFT", "IN_PROGRESS"] }
           : { in: ["COMPLETED", "CANCELLED"] },
+      ...(input.locationGid ? { locationId: input.locationGid } : {}),
     },
     select: HEADER_SELECT,
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],

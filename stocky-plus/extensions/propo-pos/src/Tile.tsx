@@ -8,7 +8,7 @@ function InventoryTile() {
   return (
     <s-tile
       heading="ProPo"
-      subheading="Stock and receiving"
+      subheading="Stock, receiving, counts"
       onClick={() => shopify.action.presentModal()}
     />
   );

@@ -8,7 +8,7 @@ import type {
   ReceivingSheet,
 } from "./api-types";
 
-type FetchLike = (
+export type FetchLike = (
   input: string,
   init?: {
     method?: string;
@@ -35,7 +35,7 @@ export type Result<T> =
   | { ok: true; value: T }
   | { ok: false; message: string; fieldErrors: Record<string, string> };
 
-function failure(
+export function failure(
   message: string,
   fieldErrors: Record<string, string> = {},
 ): { ok: false; message: string; fieldErrors: Record<string, string> } {
@@ -73,7 +73,7 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-async function call<T>(
+export async function call<T>(
   fetchImpl: FetchLike,
   url: string,
   init: Parameters<FetchLike>[1],
@@ -94,7 +94,7 @@ async function call<T>(
   }
 }
 
-function withLocation(path: string, locationId: number | null, extra: Record<string, string> = {}) {
+export function withLocation(path: string, locationId: number | null, extra: Record<string, string> = {}) {
   const params = new URLSearchParams(extra);
   if (locationId !== null) params.set("location", String(locationId));
   const query = params.toString();
