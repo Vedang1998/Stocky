@@ -9,6 +9,8 @@ import {
 import { formatDecimal } from "../lib/decimal-format";
 import { serializeDecimals } from "../lib/decimal-wire.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 
 type Component = {
   id: string;
@@ -20,7 +22,7 @@ type Variant = { shopifyVariantId: string; title: string };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { db } = await requireAdminTenant({ request });
-  const [components, variants] = await Promise.all([
+  const [components, variants, planActive] = await Promise.all([
     db.bomComponent.findMany({
       where: {},
       orderBy: { bundleVariantId: "asc" },
@@ -32,8 +34,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       take: 250,
       select: { shopifyVariantId: true, title: true },
     }) as Promise<Variant[]>,
+    planAllowsChanges(db),
   ]);
-  return serializeDecimals({ components, variants });
+  return { ...serializeDecimals({ components, variants }), planActive };
 };
 
 type ActionResult = { ok: true } | { ok: false; errors: BundleComponentErrors };
@@ -85,7 +88,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<ActionRes
 };
 
 export default function Bundles() {
-  const { components, variants } = useLoaderData<typeof loader>();
+  const { components, variants, planActive } = useLoaderData<typeof loader>();
   const result = useActionData<typeof action>();
   const errors = result && !result.ok ? result.errors : {};
 
@@ -101,6 +104,7 @@ export default function Bundles() {
 
   return (
     <s-page heading="Bundles / Bill of Materials">
+      {!planActive && <PlanRequiredBanner records="Bundles" />}
       <s-section heading="Map a component">
         <s-paragraph>
           When a bundle sells, each of its components is counted as sold too,
