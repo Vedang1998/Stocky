@@ -173,6 +173,7 @@ table, sorting, filtering, the totals and the export.
 | ABC analysis | Catalog variant | Last 56 complete days | ABC/U (§6) |
 | Stock on hand | Variant and location | Now | Inventory level facts, catalog (§7) |
 | Dead stock | Variant | Now, against a chosen number of days | Inventory level facts, order line facts |
+| Low stock | Variant, product or vendor | The latest replenishment worksheet | `ReplenishmentWorksheetLine` (stock status, reorder point, days of stock, suggested order) |
 | Transfers | Transfer line | Date range, by creation day | `TransferOrder`, `TransferLineItem` |
 | Stocktake variances | Stocktake line | Date range, by completion day | `Stocktake`, `StocktakeLineItem`, current unit cost |
 | Inventory adjustments | Applied ledger line | Date range, by the day the change was made | `InventoryOperation`, `InventoryOperationLine`, current unit cost |
@@ -235,6 +236,29 @@ variant are not listed.
 Totals leave out rows whose value is blank, and the page says how many variants
 with stock have no cost. "Variants with stock" lists rows whose on-hand
 quantity is not zero, so negative quantities stay visible.
+
+**Low stock.** Variants that are low or out of stock, shown by variant, by
+product or by vendor. The report does not work out stock status itself. It reads
+the lines of the shop's most recently generated replenishment worksheet whose
+status is `LOW` or `OUT_OF_STOCK`, so it always matches what the merchant orders
+from, and `Replenishment: the worksheet` (`docs/replenishment/PARITY_ENGINE.md`)
+is where status, reorder point, days of stock, depletion date and the suggested
+quantity are defined.
+
+- The figures are a snapshot: stock, sales and supplier terms are as they were
+  when that worksheet was generated, and the page says when. There is no date
+  range. With no worksheet the report is empty and says so.
+- A worksheet that counted one location, or was limited to a vendor, product
+  type or supplier, covers only that; the page says so in a warning and does not
+  hide the gap.
+- **Lost revenue per day** is, for an out-of-stock variant only, the worksheet's
+  units sold per day × the variant's current price, when the price is in the
+  shop currency. It is blank without a selling rate or a price. Low variants are
+  not losing sales yet and carry no figure. In the product and vendor views it is
+  the sum of the known figures of their variants.
+- **Runs out on** in the product and vendor views is the earliest day any of the
+  listed variants is expected to run out.
+- The CSV download holds the rows of the chosen view only.
 
 ### 9.4 Dead stock
 

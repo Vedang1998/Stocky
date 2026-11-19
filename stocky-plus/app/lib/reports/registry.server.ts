@@ -8,6 +8,7 @@ import type { TenantAuthority } from "../../tenant/authority.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { loadAbcParityRun } from "../analytics/abc-parity.server";
 import { loadCatalogVariants } from "../analytics/catalog.server";
+import { loadLowStock } from "../analytics/low-stock.server";
 import { loadPurchaseOrders } from "../analytics/purchase-orders.server";
 import { requireShopCurrency } from "../analytics/errors";
 import {
@@ -49,6 +50,10 @@ import {
   type ReportExport,
   type ReportTablePage,
 } from "./present";
+import {
+  LOW_STOCK_VIEWS,
+  buildLowStockReport,
+} from "./low-stock-report";
 import {
   buildPurchaseOrderItemsReport,
   buildPurchaseOrdersReport,
@@ -165,6 +170,13 @@ function requestedUtcRange(context: ReportContext, request: ReportRequest) {
     context.timeZone,
   );
 }
+
+const LOW_STOCK_VIEW_OPTION: ReportOption = {
+  key: "view",
+  label: "Show",
+  choices: LOW_STOCK_VIEWS,
+  defaultValue: "variants",
+};
 
 const SELLER_VIEW_OPTION: ReportOption = {
   key: "view",
@@ -636,6 +648,22 @@ const REPORTS: readonly RegisteredReport[] = [
         today: context.today,
       });
     },
+  }),
+  register({
+    id: "low-stock",
+    title: "Low stock",
+    description:
+      "Variants that are low or out of stock, with days of stock, reorder point, suggested order and lost revenue, by variant, product or vendor.",
+    group: "Inventory",
+    usesDateRange: false,
+    options: [LOW_STOCK_VIEW_OPTION],
+    load: async (context, request) =>
+      buildLowStockReport({
+        lowStock: await loadLowStock(context.db),
+        view: request.options[LOW_STOCK_VIEW_OPTION.key],
+        timeZone: context.timeZone,
+        currencyCode: context.currencyCode,
+      }),
   }),
 ];
 
