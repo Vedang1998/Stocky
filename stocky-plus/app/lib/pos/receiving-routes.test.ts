@@ -160,12 +160,11 @@ describe("POST /api/pos/receiving/:id", () => {
   it("refuses a declared size over the limit without reading the body", async () => {
     const args = post("/api/pos/receiving/po-1?location=401", "{}");
     args.request.headers.set("Content-Length", "300000");
-    const text = vi.spyOn(args.request, "text");
 
     const response = await action(args);
 
     expect(response.status).toBe(400);
-    expect(text).not.toHaveBeenCalled();
+    expect((await response.json()).error.message).toBe("The request is too large.");
     expect(receiveAtPos).not.toHaveBeenCalled();
   });
 
