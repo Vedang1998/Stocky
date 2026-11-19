@@ -57,7 +57,7 @@ function inShopCurrency(
   );
 }
 
-function isOverdue(
+export function isOverdue(
   order: Pick<PurchaseOrderFact, "status" | "archived" | "expectedOn">,
   today: LocalDate,
 ): boolean {
@@ -69,7 +69,7 @@ function isOverdue(
   );
 }
 
-function expectedDate(order: Pick<PurchaseOrderFact, "expectedOn">) {
+export function expectedDate(order: Pick<PurchaseOrderFact, "expectedOn">) {
   return order.expectedOn
     ? (order.expectedOn.toISOString().slice(0, 10) as LocalDate)
     : null;
