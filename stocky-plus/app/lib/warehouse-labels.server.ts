@@ -8,10 +8,9 @@
  * ZPL commands into the print job.
  */
 
-/** Distinct variants accepted in one label request. */
-export const MAX_LABEL_VARIANTS = 200;
-/** Total labels (sum of counts) accepted in one label request. */
-export const MAX_LABELS_PER_REQUEST = 5000;
+import { MAX_LABEL_VARIANTS, MAX_LABELS_PER_REQUEST } from "./labels/limits";
+
+export { MAX_LABEL_VARIANTS, MAX_LABELS_PER_REQUEST };
 /** Characters of the product title printed on a label. */
 export const LABEL_TITLE_MAX_CHARS = 40;
 /** Longest value printed as a Code 128 barcode on a 2.25" label. */
@@ -119,6 +118,9 @@ export function zplLabel(input: { title: string; barcode: string }): string {
         : "^FO20,80^A0N,20,20^FDBarcode not printable^FS";
   return [
     "^XA",
+    // Without this the printer reads text as single-byte and prints any
+    // accent or dash outside ASCII as garbage.
+    "^CI28",
     "^PW457",
     "^LL254",
     `^FO20,20^A0N,24,24^FD${title}^FS`,

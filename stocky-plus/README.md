@@ -33,7 +33,7 @@ npm run worker    # terminal 2
 | Transfers | `/app/transfers` | Draft → pick → ship → receive using Shopify's Inventory Transfer API |
 | Bundles / BOM | `/app/bundles` | Map bundle variants to component variants; bundle sales feed component forecasting |
 | Analytics | `/app/analytics` | Dead stock (120-day), tied-up capital, inventory valuation (qty × landed cost), low-stock alerts, CSV exports |
-| Billing | `/app/billing` | `appSubscriptionCreate` plans; the Buying Table is gated as a premium feature |
+| Billing | `/app/billing` | Current plan, limits and usage; plan changes go through Shopify App Pricing's hosted plan selection page |
 
 ## Prerequisites
 

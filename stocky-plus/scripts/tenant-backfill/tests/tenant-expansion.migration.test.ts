@@ -51,7 +51,11 @@ const ALL_MIGRATION_NAMES = [
   "20260907010000_pr6_a_order_refund_fact_foundation",
   "20260907020000_pr6_a_order_refund_existence_coherence",
   "20261110220000_inventory_operation_ledger",
+  "20261110220000_purchasing_enum_values",
+  "20261110220100_purchasing_ledger_foundation",
   "20261110230000_replenishment_planning_inputs",
+  "20261110235000_privacy_requests_and_shop_erasure",
+  "20261111100000_purchase_order_receipts",
   "20261111230000_stocktake_workflow",
   "20261114010000_transfer_workflow",
 ] as const;
@@ -62,7 +66,8 @@ const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);
  * Control-plane tables that receive stocky_control_plane policies when that
  * role already exists (see 20260804210000_sync_control_plane_correction).
  * SyncApplicationReceipt is intentionally omitted — merchant-domain only.
- * DispatchReadyShop is added by D-048 with the same role-conditional pattern.
+ * DispatchReadyShop is added by D-048 and PrivacyRequest by the privacy
+ * migration, both with the same role-conditional pattern.
  */
 const CONTROL_PLANE_POLICY_TABLES = [
   "WebhookDelivery",
@@ -77,6 +82,7 @@ const CONTROL_PLANE_POLICY_TABLES = [
   "SyncHealth",
   "JobDispatch",
   "DispatchReadyShop",
+  "PrivacyRequest",
 ] as const;
 
 function listMigrationDirEntries(): string[] {
@@ -425,7 +431,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
     expect(listMigrationDirEntries()).toEqual(beforeDir);
   }, 180_000);
 
-  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates twelve control-plane policies", async () => {
+  it("NEW-PR4-C07 role-present: parks PR4 migrations, applies once, creates thirteen control-plane policies", async () => {
     const beforeDir = listMigrationDirEntries();
     expect(beforeDir).toEqual(
       expect.arrayContaining([
@@ -713,6 +719,7 @@ describe("Phase 1 PR 1 tenant expansion migrations + backfill", () => {
       "JobAttempt",
       "JobDispatch",
       "JobReplay",
+      "PrivacyRequest",
       "ReconciliationRun",
       "SyncApplicationReceipt",
       "SyncCursor",

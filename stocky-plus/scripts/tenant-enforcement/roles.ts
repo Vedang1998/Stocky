@@ -81,11 +81,14 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   ORDER_OBSERVATION_LIFECYCLE_GUARD_FN,
   ORDER_OBSERVATION_SET_LEASE_FN,
   INVENTORY_OPERATION_GUARD_FN,
+  // Shop data erasure; owned by a NOLOGIN role, EXECUTE for control plane only.
+  "stocky_privacy_erase_shop_batch",
 ]);
 
 /** Narrow SECURITY DEFINER allowlist — locked search_path required (F-PR4-04). */
 const APPROVED_SECURITY_DEFINER_FUNCTIONS = new Set([
   "stocky_has_application_receipt",
+  "stocky_privacy_erase_shop_batch",
 ]);
 
 type DefaultAclObjType = "r" | "S" | "f";

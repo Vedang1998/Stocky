@@ -83,8 +83,7 @@ export default function Bundles() {
       <s-section heading="Map a component">
         <s-paragraph>
           When a bundle sells, the sales history of each mapped component is
-          incremented so forecasting stays accurate for raw materials — the
-          bundle problem Stocky never solved.
+          incremented so forecasting stays accurate for raw materials.
         </s-paragraph>
         <Form method="post">
           <input type="hidden" name="intent" value="add" />

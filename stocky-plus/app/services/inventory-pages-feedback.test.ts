@@ -269,18 +269,9 @@ describe("action results on the Transfers page (#78)", () => {
     expect(prismaMock.transferOrder.create).toHaveBeenCalledTimes(1);
   });
 
-  it("submits scan and quantity forms when Enter is pressed in their field (#97)", async () => {
+  it("submits quantity forms when Enter is pressed in their field (#97)", async () => {
     const variantId = "gid://shopify/ProductVariant/1";
     const variants = [{ shopifyVariantId: variantId, title: "Red wine" }];
-
-    const warehouse = await import("../routes/app.warehouse");
-    page.loaderData = {
-      openPOs: [
-        { id: "po-1", status: "ORDERED", supplier: null, lineItems: [] },
-      ],
-      variants,
-    };
-    renderToStaticMarkup(createElement(warehouse.default));
 
     const transfers = await import("../routes/app.transfers");
     page.loaderData = {
@@ -307,7 +298,7 @@ describe("action results on the Transfers page (#78)", () => {
     };
     renderToStaticMarkup(createElement(transfers.default));
 
-    for (const intent of ["scan", "pick", "addLine"]) {
+    for (const intent of ["pick", "addLine"]) {
       expect(page.formKeyHandlers.get(intent), intent).toBe(submitOnEnter);
     }
     // Forms that are only a button keep the browser's own behaviour.

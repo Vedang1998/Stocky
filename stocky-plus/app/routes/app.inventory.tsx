@@ -1,10 +1,11 @@
-import { useEffect, useRef, useSyncExternalStore, type ComponentRef } from "react";
+import { useEffect, useRef, type ComponentRef } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Form, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { numericIdFromGid } from "../lib/shopify-gid";
 import { formatAge, formatQuantity } from "../lib/stock-format";
 import { submitOnEnter } from "../lib/submit-on-enter";
+import { useDeviceCamera } from "../lib/use-device-camera";
 import type { ResolvedVariant } from "../services/barcode-lookup.server";
 import {
   lookupInventory,
@@ -283,23 +284,6 @@ function Result({
     case "stock":
       return <Stock lookup={lookup} matchesQuery={matchesQuery} now={now} />;
   }
-}
-
-const neverChanges = () => () => {};
-
-/**
- * Shopify Mobile and POS expose the device camera to App Bridge; desktop
- * browsers do not. Read on the client only, so the server render and the
- * first client render agree.
- */
-function useDeviceCamera(): boolean {
-  return useSyncExternalStore(
-    neverChanges,
-    () =>
-      typeof shopify !== "undefined" &&
-      Boolean(shopify.environment.mobile || shopify.environment.pos),
-    () => false,
-  );
 }
 
 export default function Inventory() {

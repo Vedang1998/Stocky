@@ -48,7 +48,48 @@ export type RequireAdminTenantInput = {
   request: Request;
   params?: Record<string, string | undefined>;
   authenticateAdmin?: AuthenticateAdmin;
+  /** How long to wait for a reinstall's afterAuth hook; tests shorten it. */
+  reinstallWait?: { timeoutMs: number; pollMs: number };
 };
+
+export const REINSTALL_WAIT = { timeoutMs: 5_000, pollMs: 100 } as const;
+
+/**
+ * After a reinstall the page's loaders authenticate alongside the request
+ * that runs the afterAuth hook, and a loader that found the new session
+ * already stored can reach the database before the hook has re-enabled the
+ * shop (#123). Every tenant policy hides a disabled shop's rows: reads come
+ * back empty and writes are refused. So a request for a shop that the
+ * uninstall webhook disabled waits, for a bounded time, until the shop is
+ * enabled again.
+ *
+ * It does not re-enable the shop itself. A request that authenticated with a
+ * session stored before the uninstall (the webhook deletes sessions only
+ * after it has disabled the shop) must not switch a shop back on that is
+ * actually uninstalled: its data would then never be erased. If the hook
+ * does not finish in time, the request goes on with the shop disabled, as
+ * before.
+ */
+async function waitForReinstall(
+  shop: CanonicalShopIdentity,
+  wait: { timeoutMs: number; pollMs: number },
+): Promise<void> {
+  const deadline = Date.now() + wait.timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, wait.pollMs));
+    const state = await resolveCanonicalShopByDomain(shop.myshopifyDomain, {
+      withProcessingState: true,
+    });
+    if (
+      !state ||
+      state.id !== shop.id ||
+      state.processingEnabled !== false ||
+      state.processingDisabledReason !== "UNINSTALLED"
+    ) {
+      return;
+    }
+  }
+}
 
 /**
  * Derive branded tenant authority from a verified admin request.
@@ -70,15 +111,28 @@ export async function requireAdminTenant(
       : undefined;
 
   const normalizedDomain = normalizeVerifiedShopifyDomain(session.shop);
-  const shop = await resolveCanonicalShopByDomain(normalizedDomain);
-  if (!shop) {
+  const found = await resolveCanonicalShopByDomain(normalizedDomain, {
+    withProcessingState: true,
+  });
+  if (!found) {
     throw new TenantAuthorityError(
       "canonical_shop_missing",
       "Canonical Shop missing for authenticated domain — complete afterAuth bootstrap first",
     );
   }
+  const shop: CanonicalShopIdentity = {
+    id: found.id,
+    myshopifyDomain: found.myshopifyDomain,
+  };
 
   await denyConflictingClientShop(request, shop, params);
+
+  if (
+    found.processingEnabled === false &&
+    found.processingDisabledReason === "UNINSTALLED"
+  ) {
+    await waitForReinstall(shop, input.reinstallWait ?? REINSTALL_WAIT);
+  }
 
   const tenant = issueTenantAuthority({
     shopId: shop.id,

@@ -13,6 +13,7 @@ export const SYNC_CONTROL_PLANE_ERROR_CODES = [
   "projection_bounds_exceeded",
   "projection_scalar_type_invalid",
   "illegal_job_transition",
+  "dispatch_not_acknowledged",
   "job_not_found",
   "job_lease_conflict",
   "attempt_conflict",

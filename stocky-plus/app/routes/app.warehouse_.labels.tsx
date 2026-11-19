@@ -29,10 +29,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     variants.map((variant: any) => [variant.shopifyVariantId, variant]),
   );
 
+  // Printing fewer labels than were asked for would go unnoticed at the
+  // printer, so a product that is not in the catalog stops the whole job.
+  const unknown = parsed.items.filter((item) => !variantsById.has(item.variantId));
+  if (unknown.length > 0) {
+    return new Response(
+      `These products are not in your catalog, so no labels were made: ${unknown
+        .map((item) => item.variantId)
+        .join(", ")}. They may have been deleted in Shopify or not synced yet.`,
+      { status: 404, headers: { "Content-Type": "text/plain; charset=utf-8" } },
+    );
+  }
+
   const zplBlocks: string[] = [];
   for (const item of parsed.items) {
-    const variant = variantsById.get(item.variantId);
-    if (!variant) continue;
+    const variant = variantsById.get(item.variantId)!;
 
     const label = zplLabel({
       title: variant.title,

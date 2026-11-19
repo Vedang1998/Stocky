@@ -10,7 +10,6 @@
     "config:use": "shopify app config use",
     "env": "shopify app env",
     "start": "react-router-serve ./server/build.mjs",
-    "docker-start": "npm run setup && npm run start",
     "setup": "prisma generate && prisma migrate deploy",
     "worker": "tsx app/jobs/workers/index.ts",
     "db:migrate": "tsx scripts/tenant-enforcement/guard-prisma-destructive.ts migrate",
@@ -41,6 +40,7 @@
     "sync:inventory:check": "tsx scripts/sync-control-plane/inventory-check.ts",
     "sync:roles:provision": "tsx scripts/sync-control-plane/cli.ts provision",
     "sync:roles:verify": "tsx scripts/sync-control-plane/cli.ts verify",
+    "session-tokens:reencrypt": "tsx scripts/session-tokens/reencrypt.ts",
     "sync:claim-indexes:plan": "tsx scripts/sync-control-plane/claim-indexes-cli.ts plan",
     "sync:claim-indexes:apply": "tsx scripts/sync-control-plane/claim-indexes-cli.ts apply",
     "sync:claim-indexes:verify": "tsx scripts/sync-control-plane/claim-indexes-cli.ts verify",
@@ -100,6 +100,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router": "^7.18.5",
+    "tsx": "^4.19.3",
     "vite-tsconfig-paths": "^6.0.4"
   },
   "devDependencies": {
@@ -120,7 +121,6 @@
     "eslint-plugin-react-hooks": "^7.0.1",
     "graphql-config": "^5.1.1",
     "prettier": "^3.6.2",
-    "tsx": "^4.19.3",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^3.0.9"

@@ -6,6 +6,10 @@
  * Phase 1+ must migrate display money paths to decimal-safe handling.
  */
 
+/** Shown when a receive is attempted while the receipt-write kill switch is off. */
+export const RECEIVING_OFF_MESSAGE =
+  "Receiving is turned off for this store, so nothing was received and no stock changed.";
+
 export function poDisplayNumber(po: {
   poNumber: string | null;
   id: string;
