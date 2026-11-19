@@ -1,11 +1,11 @@
 /**
- * Request-body size bounds for unauthenticated entry points.
+ * Request-body size bounds.
  *
- * Shopify webhook verification has to buffer the whole body to compute the
- * HMAC, so without a bound any unauthenticated client can make the server hold
- * arbitrarily large payloads in memory before the signature is rejected.
- * The body is read here first, refused once it passes the limit, and handed
- * back as a fresh Request so downstream verification is unchanged.
+ * A handler that has to look at a request body before it can refuse the
+ * request would otherwise hold whatever the client sends: Shopify webhook
+ * verification buffers the whole body to compute the HMAC, and the tenant
+ * check on signed-in requests reads form and JSON bodies for shop hints.
+ * The body is read here first and reading stops once it passes the limit.
  */
 
 /**
@@ -23,23 +23,21 @@ function payloadTooLarge(maxBytes: number): Response {
 }
 
 /**
- * Read at most `maxBytes` of the request body and return an equivalent
- * Request backed by the buffered bytes.
+ * Read the request body, or return `null` when it is larger than `maxBytes`.
+ * A request without a body gives an empty array.
  *
- * Throws a 413 Response when the declared Content-Length or the streamed body
- * exceeds the limit. The declared length is checked before any byte is read,
- * and reading stops as soon as the limit is crossed, so a client that lies
- * about Content-Length or uses chunked encoding is still bounded.
+ * The declared Content-Length is checked before any byte is read, and reading
+ * stops as soon as the limit is crossed, so a client that lies about
+ * Content-Length or uses chunked encoding is still bounded.
  *
- * The rest of an oversized body is left unread, not cancelled. The 413 asks
- * for the connection to be closed, so the server drops it once it has
- * answered. Cancelling is not safe on every adapter: the Vite dev server's
- * request stream keeps enqueueing after a cancel and takes the process down.
+ * The rest of an oversized body is left unread, not cancelled. Cancelling is
+ * not safe on every adapter: the Vite dev server's request stream keeps
+ * enqueueing after a cancel and takes the process down.
  */
-export async function readBoundedRequest(
+export async function readBoundedBytes(
   request: Request,
   maxBytes: number,
-): Promise<Request> {
+): Promise<Uint8Array<ArrayBuffer> | null> {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) {
     throw new RangeError(`maxBytes must be a non-negative safe integer, got ${maxBytes}`);
   }
@@ -48,12 +46,12 @@ export async function readBoundedRequest(
   if (declared !== null) {
     const declaredBytes = Number(declared);
     if (Number.isFinite(declaredBytes) && declaredBytes > maxBytes) {
-      throw payloadTooLarge(maxBytes);
+      return null;
     }
   }
 
   if (request.body === null) {
-    return request;
+    return new Uint8Array(0);
   }
 
   const reader = request.body.getReader();
@@ -65,7 +63,7 @@ export async function readBoundedRequest(
     if (done) break;
     received += value.byteLength;
     if (received > maxBytes) {
-      throw payloadTooLarge(maxBytes);
+      return null;
     }
     chunks.push(value);
   }
@@ -75,6 +73,30 @@ export async function readBoundedRequest(
   for (const chunk of chunks) {
     body.set(chunk, offset);
     offset += chunk.byteLength;
+  }
+  return body;
+}
+
+/**
+ * Read at most `maxBytes` of the request body and return an equivalent
+ * Request backed by the buffered bytes.
+ *
+ * Throws a 413 Response when the declared Content-Length or the streamed body
+ * exceeds the limit (see `readBoundedBytes`). The 413 asks for the connection
+ * to be closed, so the server drops it once it has answered and the unread
+ * rest of the body with it.
+ */
+export async function readBoundedRequest(
+  request: Request,
+  maxBytes: number,
+): Promise<Request> {
+  const hasBody = request.body !== null;
+  const body = await readBoundedBytes(request, maxBytes);
+  if (body === null) {
+    throw payloadTooLarge(maxBytes);
+  }
+  if (!hasBody) {
+    return request;
   }
 
   return new Request(request.url, {
