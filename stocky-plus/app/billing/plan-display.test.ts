@@ -188,7 +188,12 @@ describe("describeBillingTerms", () => {
         "UTC",
         now,
       ),
-    ).toEqual({ charge: null, trialEndsOn: null, renewsOn: null, endsOn: null });
+    ).toEqual({
+      charge: null,
+      trialEndsOn: null,
+      renewsOn: null,
+      endsOn: null,
+    });
     expect(
       describeBillingTerms(
         subscription({ price: { amount: "n/a", currencyCode: "USD" } }),
@@ -199,9 +204,7 @@ describe("describeBillingTerms", () => {
   });
 
   it("omits dates when the time zone is unusable", () => {
-    expect(
-      describeBillingTerms(subscription(), "Not/A_Zone", now),
-    ).toEqual({
+    expect(describeBillingTerms(subscription(), "Not/A_Zone", now)).toEqual({
       charge: "$79.00 every 30 days",
       trialEndsOn: null,
       renewsOn: null,
@@ -231,7 +234,9 @@ describe("planSummary", () => {
       subscriptionActive: false,
       subscriptionPlan: "growth",
     });
-    expect(text).toBe("No plan selected. Choose a plan to use the Buying Table.");
+    expect(text).toBe(
+      "No plan selected. Choose a plan to use the Buying Table.",
+    );
     expect(text).not.toMatch(/free/i);
   });
 });
