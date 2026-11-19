@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  readBoundedBytes,
   readBoundedRequest,
   WEBHOOK_MAX_BODY_BYTES,
 } from "./bounded-request.server";
@@ -143,5 +144,41 @@ describe("readBoundedRequest", () => {
     await expect(
       readBoundedRequest(new Request(URL_, { method: "GET" }), -1),
     ).rejects.toThrow(RangeError);
+  });
+});
+
+describe("readBoundedBytes", () => {
+  it("returns the body bytes when they fit", async () => {
+    const request = streamedRequest([
+      new TextEncoder().encode("ab"),
+      new TextEncoder().encode("cd"),
+    ]);
+    const bytes = await readBoundedBytes(request, 4);
+    expect(new TextDecoder().decode(bytes ?? undefined)).toBe("abcd");
+  });
+
+  it("returns null for a declared length over the limit and reads nothing", async () => {
+    const request = streamedRequest([new Uint8Array(10)], { "content-length": "101" });
+    expect(await readBoundedBytes(request, 100)).toBeNull();
+    expect(request.bodyUsed).toBe(false);
+  });
+
+  it("returns null once a streamed body passes the limit and stops reading", async () => {
+    let pulls = 0;
+    const chunk = new Uint8Array(40);
+    const request = streamedRequest(Array<Uint8Array>(50).fill(chunk), {}, () => {
+      pulls += 1;
+    });
+    expect(await readBoundedBytes(request, 100)).toBeNull();
+    expect(pulls).toBeLessThanOrEqual(4);
+  });
+
+  it("returns an empty array for a request without a body", async () => {
+    const bytes = await readBoundedBytes(new Request(URL_, { method: "GET" }), 100);
+    expect(bytes).toEqual(new Uint8Array(0));
+  });
+
+  it("rejects an invalid limit", async () => {
+    await expect(readBoundedBytes(new Request(URL_), -1)).rejects.toThrow(RangeError);
   });
 });
