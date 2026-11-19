@@ -659,6 +659,35 @@ describe("Transfer page loader", () => {
       ],
       "RECEIPT_UNFINISHED",
     ],
+    [
+      "a transfer whose receipt Shopify has not answered",
+      "IN_TRANSIT",
+      [
+        event(),
+        event({
+          operationId: "op-2",
+          leg: "receipt",
+          status: "APPLYING",
+          unfinished: true,
+          netUnits: 0,
+        }),
+      ],
+      "RECEIPT_UNFINISHED",
+    ],
+    [
+      "a transfer whose return Shopify has not answered",
+      "IN_TRANSIT",
+      [
+        event(),
+        event({
+          operationId: "op-2",
+          status: "RETRY_PENDING",
+          unfinished: true,
+          netUnits: 0,
+        }),
+      ],
+      "RETURN_UNFINISHED",
+    ],
   ] as const)(
     "compares the lines with the ledger: %s",
     async (_name, status, history, attention) => {

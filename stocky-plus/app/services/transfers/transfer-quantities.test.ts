@@ -158,6 +158,14 @@ describe("unfinished steps of a transfer", () => {
         ledger({ ...shipped, ...receiptOutOfLine, unitsOutOfSource: 7 }),
       ),
     ).toBe("RETURN_UNFINISHED");
+    // More out of the source than the lines say is out of line as well.
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({ ...shipped, unitsOutOfSource: 12, unitsIntoDestination: 4 }),
+      ),
+    ).toBe("RETURN_UNFINISHED");
     expect(
       transferAttention(
         "IN_TRANSIT",

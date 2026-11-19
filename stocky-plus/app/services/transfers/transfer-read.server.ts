@@ -339,20 +339,19 @@ export async function getTransferHistory(
   }>;
   if (operations.length === 0) return [];
 
-  const applied = (await db.inventoryOperationLine.findMany({
+  // Added up in the database: a large transfer received in many parts has
+  // far more ledger lines than the page has rows.
+  const applied = (await db.inventoryOperationLine.groupBy({
+    by: ["operationId"],
     where: {
       operationId: { in: operations.map((operation) => operation.id) },
       status: "APPLIED",
     },
-    select: { operationId: true, delta: true },
-  })) as Array<{ operationId: string; delta: number }>;
-  const netUnits = new Map<string, number>();
-  for (const line of applied) {
-    netUnits.set(
-      line.operationId,
-      (netUnits.get(line.operationId) ?? 0) + line.delta,
-    );
-  }
+    _sum: { delta: true },
+  })) as Array<{ operationId: string; _sum: { delta: number | null } }>;
+  const netUnits = new Map(
+    applied.map((group) => [group.operationId, group._sum.delta ?? 0]),
+  );
 
   return operations.flatMap((operation) => {
     const leg = transferLegOf(operation.sourceType);
