@@ -5,30 +5,15 @@ import {
   parsePosLocation,
   posJson,
 } from "../lib/pos/pos-api.server";
+import { readPosJson } from "../lib/pos/pos-body.server";
 import {
   getReceivingSheet,
   receiveAtPos,
   requireReceivingLocation,
 } from "../lib/pos/receiving-api.server";
 
-/** The raw body is small: at most 1000 short lines. */
+/** The body is small: at most 1000 short lines. */
 const MAX_BODY_BYTES = 256 * 1024;
-
-async function readJsonBody(request: Request): Promise<unknown> {
-  const declared = Number(request.headers.get("Content-Length") ?? 0);
-  if (declared > MAX_BODY_BYTES) {
-    throw new PosApiError(400, "bad_request", "The request is too large.");
-  }
-  const text = await request.text();
-  if (text.length > MAX_BODY_BYTES) {
-    throw new PosApiError(400, "bad_request", "The request is too large.");
-  }
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new PosApiError(400, "bad_request", "The request body must be JSON.");
-  }
-}
 
 /**
  * GET /api/pos/receiving/:id?location=<POS location ID>
@@ -57,7 +42,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) =>
     const locationGid = requireReceivingLocation(
       parsePosLocation(new URL(request.url).searchParams.get("location")),
     );
-    const body = await readJsonBody(request);
+    const body = await readPosJson(request, MAX_BODY_BYTES);
     const { unauthenticated } = await import("../shopify.server");
     const result = await receiveAtPos(context, params.id ?? "", locationGid, body, {
       adminFor: async (shopDomain) => (await unauthenticated.admin(shopDomain)).admin,
