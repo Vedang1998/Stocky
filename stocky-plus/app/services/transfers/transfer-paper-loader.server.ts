@@ -4,7 +4,8 @@
  * the part asked for (`?part=2`; a transfer of up to 250 items has one part).
  */
 import type { LoaderFunctionArgs } from "react-router";
-import { pdfResponse } from "../../lib/pdf/document.server";
+import { noSuchPartResponse, pdfResponse } from "../../lib/pdf/document.server";
+import { pdfPartCount, readPdfPart } from "../../lib/pdf/parts";
 import { requireAdminTenant } from "../../tenant/require-admin-tenant.server";
 import { readFormId } from "../inventory-writes/form-values";
 import { readShopProfile } from "../purchasing/shop-profile.server";
@@ -15,7 +16,6 @@ import {
   transferDocumentPdf,
   transferPaperFilename,
 } from "./transfer-documents.server";
-import { transferPaperParts } from "./transfer-display";
 
 export type TransferPaperKind = "document" | "pick-list";
 
@@ -28,13 +28,6 @@ function plainText(text: string, status: number): Response {
       "X-Content-Type-Options": "nosniff",
     },
   });
-}
-
-/** The part asked for: 1 when none is named, null for anything but a whole number from 1. */
-function readPart(value: string | null): number | null {
-  if (value === null) return 1;
-  if (!/^[1-9]\d{0,3}$/.test(value)) return null;
-  return Number(value);
 }
 
 /**
@@ -69,15 +62,10 @@ export async function loadTransferPaper(
     );
   }
 
-  const parts = transferPaperParts(paper.lines.length);
-  const part = readPart(new URL(request.url).searchParams.get("part"));
+  const parts = pdfPartCount(paper.lines.length);
+  const part = readPdfPart(new URL(request.url).searchParams.get("part"));
   if (part === null || part > parts) {
-    return plainText(
-      parts === 1
-        ? "This transfer prints as one document, without parts."
-        : `This transfer prints in ${parts} parts. Ask for a part from 1 to ${parts}.`,
-      404,
-    );
+    return noSuchPartResponse("transfer", parts);
   }
 
   const setting = { ...(await readPaperSetting(admin)), part };

@@ -227,6 +227,19 @@ characters of body) and asks them to attach the PDF. The app sends nothing;
 The PDFs use the built-in Helvetica font, which prints Latin-1 text only.
 Product names in other scripts need an embedded Unicode font, not added yet.
 
+An order of more than 250 printed lines (lines with units still ordered)
+prints both PDFs in parts of 250 lines, one request per part
+(`/pdf?part=2`), and the order page offers a link for each part. Every part
+of the supplier PDF carries the supplier, the addresses and the terms; the
+totals, charges and notes are on the last part, and the earlier parts say so.
+Files are named with the part (`PO-1001-v2-part-2-of-3.pdf`), and the email
+draft tells the supplier how many parts are attached. The reason is server
+time: the PDF library holds the event loop while it lays out pages, and a
+1,000-line order in one request took 17 seconds for the supplier PDF and 24
+for the receiving sheet, during which the server answered little else. One
+part of 250 lines takes 2.4 and 3.0 seconds. The part arithmetic is shared
+with the transfer papers (`app/lib/pdf/parts.ts`).
+
 The warehouse page (`/app/warehouse`) lists Sent, Ordered and Partial orders
 that are not archived, filtered by destination and search, each linked to its
 receiving page.

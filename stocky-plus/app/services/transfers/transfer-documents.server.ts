@@ -13,12 +13,19 @@ import {
   renderPdf,
   type ReactPdf,
 } from "../../lib/pdf/document.server";
+import {
+  isLastPart,
+  partFileSuffix,
+  partRange,
+  partTitle,
+  pdfPart,
+  pdfPartCount,
+  type PdfPart,
+} from "../../lib/pdf/parts";
 import { formatShopInstant } from "../../lib/reports/present";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { formatUtc, itemCount } from "../stocktakes/stocktake-display";
 import {
-  TRANSFER_PAPER_LINES_PER_PART,
-  transferPaperParts,
   transferReference,
   transferStatusBadge,
   unitCount,
@@ -165,40 +172,9 @@ function dateLines(
 }
 
 /** The lines one part shows, and where they sit in the whole transfer. */
-interface PaperPart {
-  part: number;
-  parts: number;
-  lines: TransferLineView[];
-  /** 1-based position of the part's first line among all lines. */
-  first: number;
-  total: number;
-}
-
-function partOf(lines: readonly TransferLineView[], part: number): PaperPart {
-  const start = (part - 1) * TRANSFER_PAPER_LINES_PER_PART;
-  return {
-    part,
-    parts: transferPaperParts(lines.length),
-    lines: lines.slice(start, start + TRANSFER_PAPER_LINES_PER_PART),
-    first: start + 1,
-    total: lines.length,
-  };
-}
+type PaperPart = PdfPart<TransferLineView>;
 
 const number = (value: number) => value.toLocaleString("en-US");
-
-function partTitle(title: string, shown: PaperPart): string {
-  return shown.parts > 1
-    ? `${title} · Part ${shown.part} of ${shown.parts}`
-    : title;
-}
-
-/** "Items 251 to 500 of 1,000" on a transfer that prints in parts. */
-function partRange(shown: PaperPart): string | null {
-  if (shown.parts === 1) return null;
-  const last = shown.first + shown.lines.length - 1;
-  return `Items ${number(shown.first)} to ${number(last)} of ${number(shown.total)}`;
-}
 
 function heading(
   pdf: ReactPdf,
@@ -315,8 +291,6 @@ function signature({ Text, View }: ReactPdf, label: string): ReactNode {
     h(Text, { style: PDF_STYLES.detail }, "Date"),
   );
 }
-
-const isLastPart = (shown: PaperPart) => shown.part === shown.parts;
 
 /**
  * The copy that travels with the stock: what was sent, with a box per line
@@ -494,7 +468,7 @@ export function transferDocument(
   setting: TransferPaperSetting,
 ): ReactElement<DocumentProps> {
   const { Document, Page } = pdf;
-  const shown = partOf(paper.lines, setting.part ?? 1);
+  const shown = pdfPart(paper.lines, setting.part ?? 1);
   const title = partTitle(`Transfer ${paper.reference}`, shown);
   return h(
     Document,
@@ -558,7 +532,7 @@ export function pickListDocument(
 ): ReactElement<DocumentProps> {
   const { Document, Page, Text, View } = pdf;
   // Sorted over the whole transfer first, so the parts follow one walk.
-  const shown = partOf(pickOrder(paper.lines), setting.part ?? 1);
+  const shown = pdfPart(pickOrder(paper.lines), setting.part ?? 1);
   const title = partTitle(`Pick list ${paper.reference}`, shown);
   const columns = {
     code: { width: "28%", paddingRight: 6 },
@@ -629,10 +603,9 @@ export function transferPaperFilename(
   kind: "document" | "pick-list",
   part = 1,
 ): string {
-  const parts = transferPaperParts(paper.lines.length);
   const name =
     kind === "document"
       ? `transfer-${paper.reference}`
       : `transfer-${paper.reference}-pick-list`;
-  return parts > 1 ? `${name}-part-${part}-of-${parts}.pdf` : `${name}.pdf`;
+  return `${name}${partFileSuffix(part, pdfPartCount(paper.lines.length))}.pdf`;
 }

@@ -1616,19 +1616,21 @@ describe("purchase-order pages", () => {
       const detail = await import("../../../routes/app.purchase-orders_.$id");
       const list = await import("../../../routes/app.purchase-orders");
 
-      const page = await renderRoute(
-        detail.default,
-        await detail.loader(
-          loaderArgs(`/app/purchase-orders/${po.id}`, { id: po.id }),
-        ),
+      const data = await detail.loader(
+        loaderArgs(`/app/purchase-orders/${po.id}`, { id: po.id }),
       );
+      const page = await renderRoute(detail.default, data);
       const listPage = await renderRoute(
         list.default,
         await list.loader(loaderArgs("/app/purchase-orders?view=open&q=acme")),
       );
 
+      expect(data).toMatchObject({ pdfParts: 1 });
       expect(page).toContain(`href="/app/purchase-orders/${po.id}/pdf"`);
       expect(page).toContain(`href="/app/purchase-orders/${po.id}/receiver"`);
+      expect(page).toContain("Purchase order (PDF)");
+      expect(page).toContain("Receiving sheet (PDF, no costs)");
+      expect(page).toContain("Attach the PDF");
       expect(page).toContain(`href="/app/purchase-orders/${po.id}/csv"`);
       expect(page).toContain('href="mailto:orders@acme.example?subject=');
       expect(page).toContain("Email to Acme Supply");
@@ -1636,6 +1638,29 @@ describe("purchase-order pages", () => {
         'href="/app/purchase-orders/export?view=open&amp;q=acme"',
       );
       expect(listPage).toContain("Export matching purchase orders (CSV)");
+
+      // An order too long for one PDF gets a link for each part.
+      const longPage = await renderRoute(detail.default, {
+        ...data,
+        pdfParts: 3,
+      });
+      for (const part of [1, 2, 3]) {
+        expect(longPage).toContain(
+          `href="/app/purchase-orders/${po.id}/pdf?part=${part}"`,
+        );
+        expect(longPage).toContain(
+          `href="/app/purchase-orders/${po.id}/receiver?part=${part}"`,
+        );
+        expect(longPage).toContain(`Purchase order, part ${part} of 3 (PDF)`);
+        expect(longPage).toContain(
+          `Receiving sheet, part ${part} of 3 (PDF, no costs)`,
+        );
+      }
+      expect(longPage).not.toContain("part=4");
+      expect(longPage).not.toContain(
+        `href="/app/purchase-orders/${po.id}/pdf"`,
+      );
+      expect(longPage).toContain("Attach all 3 parts of the PDF");
     });
 
     it("exports a list view newest first, in batches, and only this shop's orders", async () => {

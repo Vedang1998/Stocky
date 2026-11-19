@@ -116,3 +116,23 @@ export function pdfResponse(
     }),
   });
 }
+
+/**
+ * The answer to an address that asks for a part the document does not have:
+ * a sentence that says how many there are, as plain text.
+ */
+export function noSuchPartResponse(what: string, parts: number): Response {
+  return new Response(
+    parts === 1
+      ? `This ${what} prints as one document, without parts.`
+      : `This ${what} prints in ${parts} parts. Ask for a part from 1 to ${parts}.`,
+    {
+      status: 404,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+      },
+    },
+  );
+}

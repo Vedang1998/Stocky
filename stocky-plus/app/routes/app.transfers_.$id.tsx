@@ -15,6 +15,7 @@ import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { partLabel, partQuery, pdfPartCount } from "../lib/pdf/parts";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -63,7 +64,6 @@ import {
 import {
   SHORT_RESOLUTION_LABEL,
   transferEventLabel,
-  transferPaperParts,
   transferReference,
   transferStatusBadge,
   unitCount,
@@ -561,11 +561,8 @@ export default function TransferDetail() {
   ) => pageHref(transfer.id, { filter, page: 1, ...change });
   const closedShortUnits = totals.returnedUnits + totals.writtenOffUnits;
   // A long transfer prints as several documents; one button for each.
-  const partCount = transferPaperParts(totals.lineCount);
+  const partCount = pdfPartCount(totals.lineCount);
   const paperParts = Array.from({ length: partCount }, (_, index) => index + 1);
-  const partQuery = (part: number) => (partCount > 1 ? `?part=${part}` : "");
-  const partLabel = (part: number) =>
-    partCount > 1 ? `, part ${part} of ${partCount}` : "";
 
   return (
     <s-page heading={`Transfer ${transferReference(transfer.id)}`}>
@@ -688,21 +685,21 @@ export default function TransferDetail() {
                 paperParts.map((part) => (
                   <s-button
                     key={`pick-list-${part}`}
-                    href={`/app/transfers/${transfer.id}/pick-list${partQuery(part)}`}
+                    href={`/app/transfers/${transfer.id}/pick-list${partQuery(part, partCount)}`}
                     target="_blank"
                     variant="secondary"
                   >
-                    Print pick list{partLabel(part)} (PDF)
+                    Print pick list{partLabel(part, partCount)} (PDF)
                   </s-button>
                 ))}
               {paperParts.map((part) => (
                 <s-button
                   key={`document-${part}`}
-                  href={`/app/transfers/${transfer.id}/document${partQuery(part)}`}
+                  href={`/app/transfers/${transfer.id}/document${partQuery(part, partCount)}`}
                   target="_blank"
                   variant="secondary"
                 >
-                  Print transfer document{partLabel(part)} (PDF)
+                  Print transfer document{partLabel(part, partCount)} (PDF)
                 </s-button>
               ))}
               <s-button

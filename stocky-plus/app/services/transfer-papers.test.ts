@@ -12,11 +12,9 @@ import type {
   TransferHeader,
   TransferLineView,
 } from "./transfers/transfer-read.server";
+import { pdfPartCount } from "../lib/pdf/parts";
 import { transferTotals } from "./transfers/transfer-quantities";
-import {
-  transferPaperParts,
-  transferStatusBadge,
-} from "./transfers/transfer-display";
+import { transferStatusBadge } from "./transfers/transfer-display";
 import type { TransferPaper } from "./transfers/transfer-documents.server";
 
 const WAREHOUSE = "gid://shopify/Location/1";
@@ -495,7 +493,7 @@ describe("Pick list", () => {
 
 describe("A transfer too long for one document", () => {
   it("prints in parts of 250 items", () => {
-    expect([0, 1, 250, 251, 500, 501, 1000].map(transferPaperParts)).toEqual([
+    expect([0, 1, 250, 251, 500, 501, 1000].map(pdfPartCount)).toEqual([
       1, 1, 1, 2, 2, 3, 4,
     ]);
   });

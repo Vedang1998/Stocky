@@ -46,19 +46,6 @@ export function transferReference(transferId: string): string {
   return `T-${transferId.slice(-6).toUpperCase()}`;
 }
 
-/**
- * Items on one printed part. Laying out a PDF costs about a hundredth of a
- * second of server time per line, so a long transfer prints as several
- * documents of this size rather than one that holds the server for many
- * seconds.
- */
-export const TRANSFER_PAPER_LINES_PER_PART = 250;
-
-/** How many parts a transfer with this many items prints in; at least one. */
-export function transferPaperParts(lineCount: number): number {
-  return Math.max(1, Math.ceil(lineCount / TRANSFER_PAPER_LINES_PER_PART));
-}
-
 export const SHORT_RESOLUTION_LABEL = {
   RETURNED: "put back into stock at the source",
   WRITTEN_OFF: "written off",

@@ -15,6 +15,14 @@ import {
   renderPdf,
   type ReactPdf,
 } from "../../lib/pdf/document.server";
+import {
+  isLastPart,
+  partFileSuffix,
+  partRange,
+  partTitle,
+  pdfPart,
+  pdfPartCount,
+} from "../../lib/pdf/parts";
 import { formatDay } from "../../lib/purchasing/display";
 import { STATUS_LABELS } from "../../lib/purchasing/status";
 import { CHARGE_KIND_LABELS } from "../../lib/purchasing/totals";
@@ -57,22 +65,43 @@ function shipTo(order: PurchaseOrderView): string {
   );
 }
 
-/** The purchase order as the supplier receives it: lines, costs, charges and terms. */
+/** The lines both PDFs print: those the supplier is still asked to ship. */
+function printedLines(order: Pick<PurchaseOrderView, "lines">) {
+  return order.lines.filter((line) => orderedUnits(line) > 0);
+}
+
+/**
+ * How many parts the order's PDFs print in. An order of up to 250 printed
+ * lines is one document; a longer one prints 250 lines to a part.
+ */
+export function purchaseOrderPdfParts(
+  order: Pick<PurchaseOrderView, "lines">,
+): number {
+  return pdfPartCount(printedLines(order).length);
+}
+
+/**
+ * One part of the purchase order as the supplier receives it: lines, costs
+ * and terms. The totals, charges and notes are on the last part.
+ */
 export function purchaseOrderPdf(
   order: PurchaseOrderView,
   shopName: string | null,
+  part = 1,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  return renderPdf((pdf) => purchaseOrderDocument(pdf, order, shopName));
+  return renderPdf((pdf) => purchaseOrderDocument(pdf, order, shopName, part));
 }
 
 export function purchaseOrderDocument(
   pdf: ReactPdf,
   order: PurchaseOrderView,
   shopName: string | null,
+  part = 1,
 ): ReactElement<DocumentProps> {
   const { Document, Page, Text, View } = pdf;
   const money = (amount: string) => formatMoney(amount, order.currency);
-  const lines = order.lines.filter((line) => orderedUnits(line) > 0);
+  const shown = pdfPart(printedLines(order), part);
+  const title = partTitle(`Purchase order ${order.poNumber}`, shown);
   const columns = {
     product: { width: "40%" },
     qty: { width: "9%", ...PDF_STYLES.number },
@@ -96,14 +125,11 @@ export function purchaseOrderDocument(
 
   return h(
     Document,
-    {
-      title: `Purchase order ${order.poNumber}`,
-      author: shopName ?? undefined,
-    },
+    { title, author: shopName ?? undefined },
     h(
       Page,
       { size: "LETTER", style: PDF_STYLES.page },
-      h(Text, { style: PDF_STYLES.title }, `Purchase order ${order.poNumber}`),
+      h(Text, { style: PDF_STYLES.title }, title),
       h(
         Text,
         { style: PDF_STYLES.subtitle },
@@ -111,6 +137,7 @@ export function purchaseOrderDocument(
           `Version ${order.version}`,
           header.issuedOn && `Issued ${formatDay(header.issuedOn)}`,
           order.status === "CANCELLED" && "Cancelled",
+          partRange(shown, "Lines"),
         ),
       ),
       h(
@@ -148,7 +175,7 @@ export function purchaseOrderDocument(
         h(Text, { style: columns.tax }, "Tax"),
         h(Text, { style: columns.amount }, "Amount"),
       ),
-      ...lines.map((line) =>
+      ...shown.lines.map((line) =>
         h(
           View,
           { style: PDF_STYLES.row, key: line.id, wrap: false },
@@ -172,30 +199,37 @@ export function purchaseOrderDocument(
           h(Text, { style: columns.amount }, money(line.netAmount)),
         ),
       ),
-      h(
-        View,
-        { style: PDF_STYLES.totals, wrap: false },
-        totalRow(
-          `Subtotal (${order.totals.units} ${order.totals.units === 1 ? "unit" : "units"})`,
-          order.totals.merchandiseAmount,
-        ),
-        isZero(order.totals.taxAmount)
-          ? null
-          : totalRow("Tax", order.totals.taxAmount),
-        ...order.charges.map((charge) =>
-          totalRow(
-            charge.description || CHARGE_KIND_LABELS[charge.kind],
-            charge.amount,
+      // The totals are for the whole order, so they are printed once.
+      isLastPart(shown)
+        ? h(
+            View,
+            { style: PDF_STYLES.totals, wrap: false },
+            totalRow(
+              `Subtotal (${order.totals.units} ${order.totals.units === 1 ? "unit" : "units"})`,
+              order.totals.merchandiseAmount,
+            ),
+            isZero(order.totals.taxAmount)
+              ? null
+              : totalRow("Tax", order.totals.taxAmount),
+            ...order.charges.map((charge) =>
+              totalRow(
+                charge.description || CHARGE_KIND_LABELS[charge.kind],
+                charge.amount,
+              ),
+            ),
+            h(
+              View,
+              { style: PDF_STYLES.grandTotal },
+              h(Text, null, `Total (${order.currency})`),
+              h(Text, null, money(order.totals.totalAmount)),
+            ),
+          )
+        : h(
+            Text,
+            { style: PDF_STYLES.notes },
+            `The order continues on the next part. Its totals are on part ${shown.parts}.`,
           ),
-        ),
-        h(
-          View,
-          { style: PDF_STYLES.grandTotal },
-          h(Text, null, `Total (${order.currency})`),
-          h(Text, null, money(order.totals.totalAmount)),
-        ),
-      ),
-      header.supplierNotes
+      isLastPart(shown) && header.supplierNotes
         ? h(
             View,
             { style: PDF_STYLES.notes },
@@ -205,30 +239,39 @@ export function purchaseOrderDocument(
         : null,
       pageFooter(
         pdf,
-        `Purchase order ${order.poNumber}, version ${order.version}`,
+        partTitle(
+          `Purchase order ${order.poNumber}, version ${order.version}`,
+          shown,
+        ),
       ),
     ),
   );
 }
 
 /**
- * The sheet warehouse staff count a delivery against. It shows what is still
- * expected and the retail price for price tags, never what the shop paid.
+ * One part of the sheet warehouse staff count a delivery against. It shows
+ * what is still expected and the retail price for price tags, never what the
+ * shop paid.
  */
 export function receivingSheetPdf(
   order: PurchaseOrderView,
   shopCurrency: string | null,
+  part = 1,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  return renderPdf((pdf) => receivingSheetDocument(pdf, order, shopCurrency));
+  return renderPdf((pdf) =>
+    receivingSheetDocument(pdf, order, shopCurrency, part),
+  );
 }
 
 export function receivingSheetDocument(
   pdf: ReactPdf,
   order: PurchaseOrderView,
   shopCurrency: string | null,
+  part = 1,
 ): ReactElement<DocumentProps> {
   const { Document, Page, Text, View } = pdf;
-  const lines = order.lines.filter((line) => orderedUnits(line) > 0);
+  const shown = pdfPart(printedLines(order), part);
+  const title = partTitle(`Receiving sheet ${order.poNumber}`, shown);
   const retail = (amount: string | null) =>
     amount === null
       ? "—"
@@ -247,17 +290,18 @@ export function receivingSheetDocument(
 
   return h(
     Document,
-    { title: `Receiving sheet ${order.poNumber}` },
+    { title },
     h(
       Page,
       { size: "LETTER", style: PDF_STYLES.page },
-      h(Text, { style: PDF_STYLES.title }, `Receiving sheet ${order.poNumber}`),
+      h(Text, { style: PDF_STYLES.title }, title),
       h(
         Text,
         { style: PDF_STYLES.subtitle },
         present(
           STATUS_LABELS[order.status],
           `${order.totals.remainingUnits} of ${order.totals.units} units still expected`,
+          partRange(shown, "Lines"),
         ),
       ),
       h(
@@ -291,7 +335,7 @@ export function receivingSheetDocument(
           "Counted",
         ),
       ),
-      ...lines.map((line) =>
+      ...shown.lines.map((line) =>
         h(
           View,
           { style: PDF_STYLES.row, key: line.id, wrap: false },
@@ -333,17 +377,23 @@ export function receivingSheetDocument(
           ),
         ),
       ),
-      pageFooter(pdf, `Receiving sheet ${order.poNumber}`),
+      pageFooter(pdf, title),
     ),
   );
 }
 
+/**
+ * `PO-1001-receiving-v2.pdf`. A PDF that is one of several parts says which:
+ * `PO-1001-v2-part-2-of-3.pdf`.
+ */
 export function purchaseOrderFilename(
   order: Pick<PurchaseOrderView, "poNumber" | "version">,
   suffix: string,
   extension: "pdf" | "csv",
+  part?: { part: number; parts: number },
 ): string {
-  return `${order.poNumber}${suffix}-v${order.version}.${extension}`;
+  const partSuffix = part ? partFileSuffix(part.part, part.parts) : "";
+  return `${order.poNumber}${suffix}-v${order.version}${partSuffix}.${extension}`;
 }
 
 const LINE_COLUMNS = [
@@ -459,10 +509,11 @@ export function supplierEmailHref(
   const money = (amount: string) => formatMoney(amount, order.currency);
   const { header } = order;
 
+  const parts = purchaseOrderPdfParts(order);
   const intro = [
     `Hello ${order.supplier.name},`,
     "",
-    `Please find our purchase order ${order.poNumber} (version ${order.version}) attached.`,
+    `Please find our purchase order ${order.poNumber} (version ${order.version}) attached${parts > 1 ? ` in ${parts} parts` : ""}.`,
     "",
   ];
   const closing = [
@@ -477,7 +528,7 @@ export function supplierEmailHref(
   ];
 
   const budget = EMAIL_BODY_LIMIT - [...intro, ...closing].join("\n").length;
-  const lines = order.lines.filter((line) => orderedUnits(line) > 0);
+  const lines = printedLines(order);
   const listed: string[] = [];
   let used = 0;
   for (const [index, line] of lines.entries()) {

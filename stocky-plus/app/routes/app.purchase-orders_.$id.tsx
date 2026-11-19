@@ -16,6 +16,7 @@ import {
 import { ReceiptsSection } from "../components/purchasing/ReceiptsSection";
 import { formatMoney } from "../lib/decimal-format";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { partLabel, partQuery } from "../lib/pdf/parts";
 import { formatMoment } from "../lib/purchasing/display";
 import { describePurchasingEvent } from "../lib/purchasing/history";
 import {
@@ -31,7 +32,10 @@ import {
 } from "../lib/purchasing/totals";
 import { actionFailure } from "../services/purchasing/action-result.server";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
-import { supplierEmailHref } from "../services/purchasing/documents.server";
+import {
+  purchaseOrderPdfParts,
+  supplierEmailHref,
+} from "../services/purchasing/documents.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { listPurchasingEvents } from "../services/purchasing/events.server";
 import { runPurchaseOrderIntent } from "../services/purchasing/purchase-order-actions.server";
@@ -104,6 +108,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       order.status === "CANCELLED"
         ? null
         : supplierEmailHref(order, profile.name),
+    pdfParts: purchaseOrderPdfParts(order),
     receivingEnabled: isInventoryWriteEnabled("receiptWrites"),
     chargeKinds: CHARGE_KINDS.map((value) => ({
       value,
@@ -169,6 +174,7 @@ export default function PurchaseOrderDetail() {
     timeZone,
     shopCurrency,
     emailHref,
+    pdfParts,
     receivingEnabled,
     chargeKinds,
     allocationMethods,
@@ -198,6 +204,8 @@ export default function PurchaseOrderDetail() {
   );
   const confirmation = pendingAction ? CONFIRMATIONS[pendingAction] : undefined;
   const orderHref = `/app/purchase-orders/${order.id}`;
+  // A long order prints as several PDFs; one link for each.
+  const paperParts = Array.from({ length: pdfParts }, (_, index) => index + 1);
   const { totals } = order;
 
   return (
@@ -436,7 +444,8 @@ export default function PurchaseOrderDetail() {
                 Email to {order.supplier.name}
               </s-link>
               <s-text color="subdued">
-                Opens your mail app with the order filled in. Attach the PDF
+                Opens your mail app with the order filled in. Attach{" "}
+                {pdfParts > 1 ? `all ${pdfParts} parts of the PDF` : "the PDF"}
                 {actions.includes("markSent")
                   ? ", send it, then mark the order as sent."
                   : " and send it."}
@@ -450,12 +459,24 @@ export default function PurchaseOrderDetail() {
               </s-text>
             )
           )}
-          <s-link href={`${orderHref}/pdf`} target="_blank">
-            Purchase order (PDF)
-          </s-link>
-          <s-link href={`${orderHref}/receiver`} target="_blank">
-            Receiving sheet (PDF, no costs)
-          </s-link>
+          {paperParts.map((part) => (
+            <s-link
+              key={`pdf-${part}`}
+              href={`${orderHref}/pdf${partQuery(part, pdfParts)}`}
+              target="_blank"
+            >
+              Purchase order{partLabel(part, pdfParts)} (PDF)
+            </s-link>
+          ))}
+          {paperParts.map((part) => (
+            <s-link
+              key={`receiver-${part}`}
+              href={`${orderHref}/receiver${partQuery(part, pdfParts)}`}
+              target="_blank"
+            >
+              Receiving sheet{partLabel(part, pdfParts)} (PDF, no costs)
+            </s-link>
+          ))}
           <s-link href={`${orderHref}/csv`} target="_blank">
             Lines (CSV)
           </s-link>
