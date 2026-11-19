@@ -4,9 +4,10 @@
  * may receive, which location, retries, the receiving switch and shop
  * isolation.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { PosApiError } from "../../../lib/pos/pos-api.server";
+import { POS_NO_PLAN_MESSAGE } from "../../../lib/pos/pos-plan.server";
 import {
   getReceivingSheet,
   listReceivableOrders,
@@ -113,6 +114,27 @@ describe("receiving at POS", () => {
     sendBatch: shopify.send,
     isCapabilityEnabled: () => false,
   });
+  const setPlan = async (active: boolean, shopAId?: string, shopBId?: string) => {
+    const shops = [
+      [SHOP_A_DOMAIN, shopAId],
+      [SHOP_B_DOMAIN, shopBId],
+    ] as const;
+    for (const [shop, shopId] of shops) {
+      if (shop === SHOP_B_DOMAIN && shopBId === undefined) continue;
+      if (shop === SHOP_A_DOMAIN && shopAId === undefined) {
+        await prisma.shopSettings.updateMany({
+          where: { shop },
+          data: { subscriptionActive: active },
+        });
+        continue;
+      }
+      await prisma.shopSettings.upsert({
+        where: { shop },
+        create: { shop, shopId, subscriptionActive: active, subscriptionPlan: "test" },
+        update: { subscriptionActive: active },
+      });
+    }
+  };
   const nextKey = () => `pos-receiving-test-${++submissions}`;
   const stock = (itemNumber: number) => shopify.level(itemNumber, WAREHOUSE_NUMBER);
 
@@ -131,6 +153,7 @@ describe("receiving at POS", () => {
     prisma = ctx.migrationPrisma;
     await ctx.runtimePrisma.$disconnect();
     const { shopA, shopB } = await seedTwoShops(prisma);
+    await setPlan(true, shopA.id, shopB.id);
 
     await prisma.shopifyProductFact.createMany({
       data: [
@@ -422,6 +445,47 @@ describe("receiving at POS", () => {
       });
 
       expect(list.orders).toEqual([]);
+    });
+  });
+
+  describe("the plan gate", () => {
+    afterEach(async () => {
+      await setPlan(true);
+    });
+
+    it("refuses every receiving call for a shop without an active plan, and writes nothing", async () => {
+      const po = await orderedPo();
+      await setPlan(false);
+
+      for (const call of [
+        () => listReceivableOrders(dbA, WAREHOUSE, null, { receivingEnabled: () => true }),
+        () => getReceivingSheet(dbA, po.id, WAREHOUSE, { receivingEnabled: () => true }),
+        () =>
+          receiveAtPos(
+            contextFor(dbA),
+            po.id,
+            WAREHOUSE,
+            body([{ lineItemId: po.lineId(BLUE), acceptedQty: 4 }]),
+            deps(enabled()),
+          ),
+      ]) {
+        const error = await apiError(call());
+        expect(error).toMatchObject({ status: 403, code: "forbidden", message: POS_NO_PLAN_MESSAGE });
+      }
+
+      expect(stock(BLUE_ITEM)).toBe(4);
+      expect(await prisma.purchaseOrderReceipt.count()).toBe(0);
+    });
+
+    it("works again once the plan is active", async () => {
+      const po = await orderedPo();
+      await setPlan(false);
+      await apiError(getReceivingSheet(dbA, po.id, WAREHOUSE, { receivingEnabled: () => true }));
+      await setPlan(true);
+
+      const sheet = await getReceivingSheet(dbA, po.id, WAREHOUSE, { receivingEnabled: () => true });
+
+      expect(sheet.order.id).toBe(po.id);
     });
   });
 });
