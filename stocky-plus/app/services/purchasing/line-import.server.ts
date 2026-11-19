@@ -302,6 +302,13 @@ export async function importPurchaseOrderLines(
   csv: string,
   options: { admin?: AdminGraphQLClient } = {},
 ): Promise<LineImportResult> {
+  // A text CSV never holds a NUL; a spreadsheet or a UTF-16 export does, and
+  // PostgreSQL cannot look one up or store it.
+  if (csv.includes("\u0000")) {
+    throw invalidInput(
+      "The file is not plain-text CSV. Save it as CSV UTF-8 and try again.",
+    );
+  }
   const { rows, problems } = parseRows(parseCsvRecords(csv));
   if (problems.length > 0) throw invalidInput(problemMessage(problems));
   if (rows.length === 0) throw invalidInput("The file has no rows to import.");
