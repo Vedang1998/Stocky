@@ -26,10 +26,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const [settings, alerts, openPOs, supplierCount, cachedVariants] =
     await Promise.all([
-      db.shopSettings.upsert({
+      // Read only: the afterAuth hook creates the row, and a page load must
+      // not write (TEN-02).
+      db.shopSettings.findUnique({
         where: { shop },
-        create: { shop },
-        update: {},
+        select: { subscriptionActive: true, subscriptionPlan: true },
       }),
       getLowStockAlerts(db),
       // The same orders as the Open view of the purchase-order list.

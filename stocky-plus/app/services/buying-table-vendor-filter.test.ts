@@ -8,7 +8,7 @@ import type { LoaderFunctionArgs } from "react-router";
 
 const { db } = vi.hoisted(() => ({
   db: {
-    shopSettings: { upsert: vi.fn() },
+    shopSettings: { findUnique: vi.fn(), upsert: vi.fn() },
     supplier: { findMany: vi.fn() },
     supplierSkuMapping: { findMany: vi.fn() },
   },
@@ -42,7 +42,7 @@ async function load(query: string) {
 describe("Buying Table vendor filter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    db.shopSettings.upsert.mockResolvedValue({ subscriptionActive: true });
+    db.shopSettings.findUnique.mockResolvedValue({ subscriptionActive: true });
     db.supplier.findMany.mockResolvedValue([{ id: "supplier-1", name: "Acme" }]);
     db.supplierSkuMapping.findMany.mockResolvedValue([]);
   });
@@ -52,6 +52,18 @@ describe("Buying Table vendor filter", () => {
 
     expect(data.supplierId).toBe("");
     expect(data.supplierNotFound).toBe(false);
+    expect(db.supplierSkuMapping.findMany).not.toHaveBeenCalled();
+  });
+
+  it("only reads the shop's settings (TEN-02)", async () => {
+    await load("?supplierId=supplier-1");
+    expect(db.shopSettings.upsert).not.toHaveBeenCalled();
+  });
+
+  it("shows the plan gate when the settings row is missing", async () => {
+    db.shopSettings.findUnique.mockResolvedValue(null);
+    const data = await load("?supplierId=supplier-1");
+    expect(data.gated).toBe(true);
     expect(db.supplierSkuMapping.findMany).not.toHaveBeenCalled();
   });
 

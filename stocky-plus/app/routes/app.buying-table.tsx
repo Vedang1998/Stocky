@@ -50,11 +50,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const metric: AbcMetric =
     url.searchParams.get("metric") === "VOLUME" ? "VOLUME" : "REVENUE";
 
-  const settings = await db.shopSettings.upsert({
+  // Read only: the afterAuth hook creates the row (TEN-02).
+  const settings = await db.shopSettings.findUnique({
     where: { shop },
-    create: { shop },
-    update: {},
+    select: { subscriptionActive: true },
   });
+  const subscriptionActive = settings?.subscriptionActive ?? false;
 
   const [suppliers, locations] = await Promise.all([
     db.supplier.findMany({ where: {}, orderBy: { name: "asc" } }),
@@ -69,7 +70,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const supplierNotFound =
     !supplier && requestedSupplierId !== "" && requestedSupplierId !== NO_VENDOR;
 
-  if (supplier && settings.subscriptionActive) {
+  if (supplier && subscriptionActive) {
     const mappings = await db.supplierSkuMapping.findMany({
       where: { supplierId: supplier.id },
       take: 50,
@@ -153,7 +154,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     locationId,
     metric,
     rows,
-    gated: !settings.subscriptionActive,
+    gated: !subscriptionActive,
     allowDevActivate:
       process.env.NODE_ENV !== "production" &&
       process.env.ALLOW_DEV_SUBSCRIPTION_ACTIVATE === "true",
