@@ -11,6 +11,10 @@
  * It is honoured only when NODE_ENV is "development" or "test". Anywhere
  * else, including an unset NODE_ENV, it is ignored and logged, so a copied
  * .env cannot give a production store a free plan.
+ *
+ * The granted plan is stored on ShopSettings like any other, and the stored
+ * snapshot outlives the override until the shop's entitlements are read again,
+ * so a process with the override must never serve a production database.
  */
 import type { SubscriptionRecord } from "./entitlements";
 import { findSelfServePlan, type SelfServePlan } from "./plans";
