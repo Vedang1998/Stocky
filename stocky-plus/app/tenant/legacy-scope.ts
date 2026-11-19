@@ -68,6 +68,8 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   PurchaseOrderReceiptLine: "PurchaseOrderReceiptLine",
   ReplenishmentSettings: "ReplenishmentSettings",
   ReplenishmentVariantRule: "ReplenishmentVariantRule",
+  ReplenishmentWorksheet: "ReplenishmentWorksheet",
+  ReplenishmentWorksheetLine: "ReplenishmentWorksheetLine",
 };
 
 /** Direct models without a legacy `shop` column — shopId-only scope. */
@@ -92,6 +94,8 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "PurchaseOrderReceiptLine",
   "ReplenishmentSettings",
   "ReplenishmentVariantRule",
+  "ReplenishmentWorksheet",
+  "ReplenishmentWorksheetLine",
 ]);
 
 /**

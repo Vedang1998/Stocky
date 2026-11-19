@@ -26,6 +26,7 @@ const {
       updateMany: vi.fn(),
       create: vi.fn(),
     },
+    shopSettings: { findMany: vi.fn(), findFirst: vi.fn() },
     transferLineItem: {
       findFirst: vi.fn(),
       create: vi.fn(),
@@ -97,8 +98,9 @@ function formRequest(fields: Record<string, string>): Request {
   });
 }
 
-function actionArgs(request: Request): ActionFunctionArgs {
-  return { request, params: {}, context: {} } as ActionFunctionArgs;
+function actionArgs(request: Request, id: string): ActionFunctionArgs {
+  const params: Record<string, string> = { id };
+  return { request, params, context: {} } as ActionFunctionArgs;
 }
 
 describe("transfer receive guard", () => {
@@ -124,6 +126,11 @@ describe("transfer receive guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     attachTenantDbContextMocks(prismaMock);
+    // The shop's settings row records an active plan.
+    prismaMock.shopSettings.findMany.mockResolvedValue([{ id: "settings-a" }]);
+    prismaMock.shopSettings.findFirst.mockResolvedValue({
+      subscriptionActive: true,
+    });
     process.env.FEATURE_TRANSFER_WRITES = "true";
     signIn({ sub: "7001" });
     resolveCanonicalShopByDomain.mockResolvedValue({
@@ -146,83 +153,92 @@ describe("transfer receive guard", () => {
     expect(featureFlags.transferWrites()).toBe(false);
   });
 
-  it("refuses a transfer that was shipped as a Shopify transfer", async () => {
-    const { action } = await import("../routes/app.transfers");
-    prismaMock.transferOrder.findFirst.mockResolvedValue({
-      id: "tr-1",
-      shop: SHOP,
-      sourceLocationId: "gid://shopify/Location/1",
-      destinationLocationId: "gid://shopify/Location/2",
-      shopifyTransferId: "gid://shopify/InventoryTransfer/1",
-      status: "IN_TRANSIT",
-      lineItems: [
-        {
-          id: "tl-1",
-          shopifyVariantId: "gid://shopify/ProductVariant/1",
-          quantity: 4,
-          pickedQty: 4,
-          receivedQty: 0,
-        },
-      ],
-    });
-
-    const result = await action(
-      actionArgs(formRequest({ intent: "receive", transferId: "tr-1" })),
-    );
-
-    expect(result).toEqual({
-      error: expect.stringContaining("Receive it in Shopify admin"),
-      problems: [],
-    });
-    expectNothingChanged();
-  });
-
-  it("refuses when the kill switch is off and says nothing was sent", async () => {
-    delete process.env.FEATURE_TRANSFER_WRITES;
-    const { action } = await import("../routes/app.transfers");
-    prismaMock.transferOrder.findFirst.mockResolvedValue({
-      id: "tr-2",
-      shop: SHOP,
-      sourceLocationId: "gid://shopify/Location/1",
-      destinationLocationId: "gid://shopify/Location/2",
-      shopifyTransferId: null,
-      status: "IN_TRANSIT",
-      lineItems: [
-        {
-          id: "tl-2",
-          shopifyVariantId: "gid://shopify/ProductVariant/2",
-          quantity: 2,
-          pickedQty: 2,
-          receivedQty: 0,
-        },
-      ],
-    });
-
-    const result = await action(
-      actionArgs(formRequest({ intent: "receive", transferId: "tr-2" })),
-    );
-
-    expect(result).toEqual({
-      error: expect.stringContaining("switched off"),
-      problems: [],
-    });
-    expect((result as { error: string }).error).not.toMatch(/FEATURE_/);
-    expectNothingChanged();
-  });
-
-  it.each(["ship", "receive"])(
-    "refuses to %s without a signed-in staff member, before reading the transfer",
+  it.each(["receiveAll", "postReceipt", "close"])(
+    "refuses to %s a transfer that was shipped as a Shopify transfer",
     async (intent) => {
-      signIn();
-      const { action } = await import("../routes/app.transfers");
+      const { action } = await import("../routes/app.transfers_.$id");
+      prismaMock.transferOrder.findFirst.mockResolvedValue({
+        id: "tr-1",
+        shop: SHOP,
+        sourceLocationId: "gid://shopify/Location/1",
+        destinationLocationId: "gid://shopify/Location/2",
+        shopifyTransferId: "gid://shopify/InventoryTransfer/1",
+        status: "IN_TRANSIT",
+        lineItems: [
+          {
+            id: "tl-1",
+            shopifyVariantId: "gid://shopify/ProductVariant/1",
+            quantity: 4,
+            pickedQty: 4,
+            receivedQty: 0,
+            pendingReceiveQty: 0,
+            rejectedQty: 0,
+            rejectNote: null,
+            returnedQty: 0,
+          },
+        ],
+      });
 
       const result = await action(
-        actionArgs(formRequest({ intent, transferId: "tr-3" })),
+        actionArgs(formRequest({ intent, resolution: "WRITTEN_OFF" }), "tr-1"),
       );
 
       expect(result).toEqual({
-        error: expect.stringContaining("signed-in Shopify staff member"),
+        error: expect.stringContaining("Receive it in Shopify admin"),
         problems: [],
+      });
+      expectNothingChanged();
+    },
+  );
+
+  it.each(["receiveAll", "postReceipt"])(
+    "refuses to %s when the kill switch is off and says nothing was sent",
+    async (intent) => {
+      delete process.env.FEATURE_TRANSFER_WRITES;
+      const { action } = await import("../routes/app.transfers_.$id");
+      prismaMock.transferOrder.findFirst.mockResolvedValue({
+        id: "tr-2",
+        shop: SHOP,
+        sourceLocationId: "gid://shopify/Location/1",
+        destinationLocationId: "gid://shopify/Location/2",
+        shopifyTransferId: null,
+        status: "IN_TRANSIT",
+        lineItems: [
+          {
+            id: "tl-2",
+            shopifyVariantId: "gid://shopify/ProductVariant/2",
+            quantity: 2,
+            pickedQty: 2,
+            receivedQty: 0,
+            pendingReceiveQty: 2,
+            rejectedQty: 0,
+            rejectNote: null,
+            returnedQty: 0,
+          },
+        ],
+      });
+
+      const result = await action(actionArgs(formRequest({ intent }), "tr-2"));
+
+      expect(result).toEqual({
+        error: expect.stringContaining("switched off"),
+        problems: [],
+      });
+      expect((result as { error: string }).error).not.toMatch(/FEATURE_/);
+      expectNothingChanged();
+    },
+  );
+
+  it.each(["ship", "receiveAll", "postReceipt", "close"])(
+    "refuses to %s without a signed-in staff member, before reading the transfer",
+    async (intent) => {
+      signIn();
+      const { action } = await import("../routes/app.transfers_.$id");
+
+      const result = await action(actionArgs(formRequest({ intent }), "tr-3"));
+
+      expect(result).toEqual({
+        error: expect.stringContaining("signed-in Shopify staff member"),
       });
       expect(prismaMock.transferOrder.findFirst).not.toHaveBeenCalled();
       expectNothingChanged();

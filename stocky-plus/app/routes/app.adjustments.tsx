@@ -12,7 +12,9 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -42,6 +44,7 @@ import {
   STAFF_REQUIRED_MESSAGE,
 } from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import type {
   InventoryOperationLineStatus,
   InventoryOperationStatus,
@@ -52,8 +55,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, db } = await requireAdminTenant({ request });
   const query = readAdjustmentHistoryQuery(new URL(request.url).searchParams);
 
-  const [locations, entries] = await Promise.all([
+  const [locations, planActive, entries] = await Promise.all([
     fetchLocations(admin),
+    planAllowsChanges(db),
     // One more than a page, to know whether an older page exists.
     listAdjustments(db, {
       from: query.from,
@@ -69,6 +73,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Identifies the adjustment the form on this page will record, so that
     // submitting the form twice records it once.
     submissionId: randomUUID(),
+    planActive,
     writesEnabled: isInventoryWriteEnabled("adjustmentWrites"),
     locations,
     history,
@@ -104,6 +109,7 @@ const text = (value: FormDataEntryValue | null): string =>
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, db, actor } = await requireAdminTenantWithActor({ request });
+  await requireActivePlanSnapshot(db);
   const form = await request.formData();
   const intent = form.get("intent");
 
@@ -237,11 +243,11 @@ function olderHref(filter: { from: string; to: string }, cursor: string) {
 function HistoryEntry({
   entry,
   locationName,
-  busy,
+  locked,
 }: {
   entry: AdjustmentHistoryEntry;
   locationName: (id: string | null) => string;
-  busy: boolean;
+  locked: boolean;
 }) {
   const [confirmingReversal, setConfirmingReversal] = useState(false);
   const badge = STATUS_BADGE[entry.status];
@@ -302,7 +308,7 @@ function HistoryEntry({
               <s-button
                 type="submit"
                 variant="primary"
-                {...(busy ? { disabled: true } : {})}
+                {...(locked ? { disabled: true } : {})}
               >
                 Finish applying
               </s-button>
@@ -343,7 +349,7 @@ function HistoryEntry({
                   type="submit"
                   variant="primary"
                   tone="critical"
-                  {...(busy ? { disabled: true } : {})}
+                  {...(locked ? { disabled: true } : {})}
                 >
                   Reverse in Shopify
                 </s-button>
@@ -365,6 +371,7 @@ function HistoryEntry({
 export default function Adjustments() {
   const {
     submissionId,
+    planActive,
     writesEnabled,
     locations,
     history,
@@ -373,7 +380,8 @@ export default function Adjustments() {
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const busy = navigation.state !== "idle";
+  // Nothing is submitted twice, and nothing at all without an active plan.
+  const locked = navigation.state !== "idle" || !planActive;
 
   const values: Partial<FormValues> =
     (actionData && "values" in actionData ? actionData.values : undefined) ??
@@ -384,6 +392,7 @@ export default function Adjustments() {
 
   return (
     <s-page heading="Adjustments">
+      {!planActive && <PlanRequiredBanner records="Adjustments" />}
       {!writesEnabled && (
         <s-banner tone="warning" heading="Adjustments are switched off">
           <s-paragraph>
@@ -466,6 +475,7 @@ export default function Adjustments() {
                   {...(navigation.state === "submitting"
                     ? { loading: true }
                     : {})}
+                  {...(planActive ? {} : { disabled: true })}
                 >
                   Apply adjustment
                 </s-button>
@@ -519,7 +529,7 @@ export default function Adjustments() {
                 key={entry.operationId}
                 entry={entry}
                 locationName={locationName}
-                busy={busy}
+                locked={locked}
               />
             ))
           )}

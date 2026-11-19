@@ -1,7 +1,7 @@
 /**
  * Issue #80: merchant screens must not show developer or internal wording.
- * Reads every text node and string literal in the embedded app's routes and
- * components, and the merchant-facing messages of the stock services, and
+ * Reads every text node and string literal in the embedded app's routes,
+ * components and services, and
  * refuses wording that only makes sense to the people building ProPo.
  * Server log lines are skipped.
  */
@@ -29,11 +29,8 @@ const FILES = [
     /[/\\]app[._][^/\\]*\.tsx$/.test(path),
   ),
   ...walk(join(ROOT, "app/components")).filter(isSource),
+  ...walk(join(ROOT, "app/services")).filter(isSource),
   ...[
-    "app/services/stocktakes/stocktake.server.ts",
-    "app/services/adjustments/adjustment.server.ts",
-    "app/services/transfers/transfer.server.ts",
-    "app/services/inventory-writes/settle.server.ts",
     "app/lib/po-display.ts",
   ].map((path) => join(ROOT, path)),
 ];

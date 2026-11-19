@@ -11,7 +11,7 @@ export const APP_HOME: AppNavItem = { label: "Home", href: "/app" };
  * listed only once its page exists; navigation.test.ts enforces that.
  */
 export const APP_NAV_ITEMS: readonly AppNavItem[] = [
-  { label: "Replenishment", href: "/app/buying-table" },
+  { label: "Replenishment", href: "/app/replenishment" },
   { label: "Purchase orders", href: "/app/purchase-orders" },
   { label: "Receiving", href: "/app/warehouse" },
   { label: "Inventory", href: "/app/inventory" },

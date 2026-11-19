@@ -144,14 +144,16 @@ if (result.settled) {
 | Stocktake        | `Stocktake`        | counted − expected at the counted location | `cycle_count_available` |
 | Transfer ship    | `TransferShipment` | −shipped units at the source               | `movement_created`      |
 | Transfer cancel  | `TransferShipment` | puts back whatever a partial ship took out | `movement_canceled`     |
-| Transfer receive | `TransferReceipt`  | +shipped units at the destination          | `movement_received`     |
+| Transfer close   | `TransferShipment` | +missing units back at the source          | `movement_canceled`     |
+| Transfer receive | `TransferReceipt`  | +received units at the destination         | `movement_received`     |
 
 Transfers are app-managed: stock moves with `inventoryAdjustQuantities` under
 `write_inventory`, and no Shopify transfer object is created. Units in transit
 are therefore in neither location's `available` until the transfer is received.
 A transfer that carries a `shopifyTransferId` from the earlier native path is
 not received by the app. Using Shopify's native transfer objects needs
-transfer scopes the app does not request and is an owner decision.
+transfer scopes the app does not request and is an owner decision. The
+workflow is described under [Transfers](#transfers).
 
 ## Stocktakes
 
@@ -278,6 +280,101 @@ source type `InventoryAdjustment`, and the ledger is its history.
 Not built yet: merchant-defined reasons, attachments, approval before an
 adjustment is applied, and shop-timezone dates (the history and the export use
 UTC).
+
+## Transfers
+
+A transfer (`app/services/transfers/`, pages `/app/transfers` and
+`/app/transfers/<id>`) moves stock from one active, synced location to another.
+It has no tables beyond `TransferOrder` and `TransferLineItem`; the two ledger
+documents above are the record of what moved.
+
+- **Two documents, each a net change.** `TransferShipment:<id>` is what the
+  transfer has taken out of the source: the shipped units, less the units put
+  back when it is closed short. `TransferReceipt:<id>` is what it has added at
+  the destination: every unit received so far, plus the units counted in for
+  the receipt being posted. Each step rebuilds its document from the current
+  lines and settles it, so a second press, two presses at once and a retry
+  after a partial failure send only what Shopify has not confirmed.
+- **Draft.** Items are added by scanning or typing a SKU, barcode or variant
+  ID, or by pasting a list with an optional quantity per row (comma, tab or
+  semicolon separated, up to 250 items, all or none, each refused row named).
+  An item must be tracked in Shopify and have a linked inventory item. A
+  variant has one line; adding it again adds to that line. A line's quantity
+  can be changed or the line removed. A line ships its quantity unless a
+  smaller picked quantity is saved for it. Up to 1,000 lines of up to
+  1,000,000 units.
+- **Shipping** needs a named staff member. Shopify's live `available` is read
+  first at both locations. An item Shopify does not stock at the source or at
+  the destination stops the shipment. A source with fewer units than the
+  transfer takes stops it until the staff member confirms that the source may
+  go below zero. If the quantities cannot be read, nothing is sent. After a
+  partial failure only the units that have not left yet are checked again.
+  When every change is confirmed the transfer goes in transit and each line's
+  shipped quantity is frozen in `pickedQty`.
+- **Cancelling** is for drafts. If an interrupted shipment already took stock
+  out, cancelling puts it back first; the transfer is cancelled only when the
+  ledger shows the source whole again.
+- **Receiving.** Units are counted in at the destination by scanning (one unit
+  per scan, or a typed number) or by typing a number per line, which changes
+  nothing in Shopify. A barcode shared by two catalog items is taken as the
+  one on the transfer. Posting the receipt adds the counted-in units at the
+  destination and needs a named staff member; a transfer takes as many
+  receipts as it needs. Units counted in while a receipt is being posted are
+  kept for the next one. The transfer finishes when every shipped unit is
+  received or rejected. Nothing is added at the destination unless the ledger
+  shows the whole shipment out of the source.
+- **Rejects.** Units that arrived and are not fit for sale are recorded on
+  their line with a reason. They enter stock at neither location and no change
+  is sent to Shopify for them.
+- **Closing short.** When shipped units will not arrive, the transfer is closed
+  and the staff member chooses: put the missing units back into stock at the
+  source (the shipment document shrinks by them, so the ledger sends the
+  difference back) or write them off (nothing is sent; they stay out of stock
+  at both locations). Units counted in and not posted must be posted or
+  cleared first. While a return is partly applied the transfer stays in
+  transit and takes no receipt; closing again finishes it.
+- **Status.** The stored status stays `DRAFT`, `IN_TRANSIT`, `RECEIVED` or
+  `CANCELLED`. "Partly received", "Received with rejects" and "Closed short"
+  are derived from the line quantities (`transfer-display.ts`).
+- **Unfinished steps.** The transfer page compares the lines with the ledger
+  (`transferAttention`) and says which step did not finish: a shipment partly
+  sent, a cancelled transfer whose stock is not all back, a receipt partly
+  posted, a return partly applied, or a transfer in transit that the ledger
+  never saw leave the source. For the last one the app moves no stock at all.
+- **History and report.** The page lists the transfer's ledger operations:
+  what left, arrived and went back, who did it, and whether Shopify confirmed
+  or refused it. The transfer report exports one row per item as CSV with
+  requested, shipped, received, counted-in, rejected, returned, written-off
+  and outstanding units.
+- Gated by `FEATURE_TRANSFER_WRITES`. While it is off a transfer can be
+  drafted and edited, units counted in and rejects recorded, and a transfer
+  with nothing left to move can be finished or written off; nothing that
+  changes stock in Shopify is sent.
+
+Not built yet: approval before a transfer ships, several shipments for one
+transfer, receiving from Shopify POS, a printable transfer document and
+labels, transfers suggested from replenishment or balancing, cost value in
+transit, and shop-timezone dates. In-transit units are not shown as incoming
+at the destination in Shopify, because no Shopify transfer object exists.
+
+## Plan gate
+
+Every action of the Stocktakes, Adjustments and Transfers pages calls
+`requireActivePlanSnapshot` (`app/billing/entitlements.server.ts`) before it
+reads the form, so a shop without an active plan gets a 403 and nothing is
+recorded or sent. That covers creating, editing, counting, shipping,
+receiving, completing, reversing, cancelling and finishing an unfinished
+step. The pages and their CSV reports stay readable: the loaders ask
+`planAllowsChanges` (`plan-access.server.ts`), show a banner that links to
+Billing, disable every button that changes something and stop Enter from
+submitting. The ledger itself does not check the plan; the routes do.
+
+A lapsed plan therefore also stops work that is already under way, such as
+receiving a transfer that is in transit or putting cancelled stock back. Stock
+in Shopify stays as it was at the last confirmed step, and the page keeps
+saying what is unfinished until a plan is active again. Whether documents in
+flight should stay finishable after a plan lapses is a plan-policy decision
+that has not been made.
 
 ## Limits and known gaps
 

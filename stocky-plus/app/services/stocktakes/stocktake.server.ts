@@ -22,6 +22,8 @@ import {
 } from "../inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../inventory-writes/types";
 import {
+  ambiguousCodeMessage,
+  findTrackedInventoryItemIds,
   findVariantsByCode,
   findVariantsById,
   findVariantsByInventoryItem,
@@ -315,26 +317,6 @@ async function readStockedLevels(
   return levels;
 }
 
-/** The given inventory items that are live and tracked for inventory in Shopify. */
-async function readTrackedItemIds(
-  db: TenantDb,
-  inventoryItemIds: readonly string[],
-): Promise<Set<string>> {
-  const tracked = new Set<string>();
-  for (const part of chunked([...new Set(inventoryItemIds)], LOOKUP_CHUNK)) {
-    const rows = (await db.shopifyInventoryItemFact.findMany({
-      where: {
-        shopifyGid: { in: part },
-        tracked: true,
-        existenceState: "LIVE",
-      },
-      select: { shopifyGid: true },
-    })) as Array<{ shopifyGid: string }>;
-    for (const row of rows) tracked.add(row.shopifyGid);
-  }
-  return tracked;
-}
-
 /** The live read for a count's quantity basis, or null when there is no Admin client to read with. */
 function liveReader(
   admin: AdminGraphQLClient | null,
@@ -404,7 +386,7 @@ export async function createStocktake(
   let expectedSource: StocktakeExpectedSource = "LIVE";
   if (scope === "FULL") {
     const levels = await readStockedLevels(db, input.locationId);
-    const tracked = await readTrackedItemIds(db, [...levels.keys()]);
+    const tracked = await findTrackedInventoryItemIds(db, [...levels.keys()]);
     const variants = await findVariantsByInventoryItem(db, [...tracked]);
     const countable = [...tracked].filter((itemId) => variants.has(itemId));
     skippedUnlinked = tracked.size - countable.length;
@@ -518,7 +500,7 @@ async function resolveNewLines(
   const itemIds = variants.flatMap((v) =>
     v.inventoryItemId ? [v.inventoryItemId] : [],
   );
-  const tracked = await readTrackedItemIds(db, itemIds);
+  const tracked = await findTrackedInventoryItemIds(db, itemIds);
   const readLive = liveReader(admin, stocktake.quantityBasis, options);
 
   let live: Map<string, number | null> | null = null;
@@ -722,14 +704,6 @@ function readCode(value: unknown): string | null {
   const code = value.trim();
   return code.length > 0 && code.length <= MAX_CODE_LENGTH ? code : null;
 }
-
-const ambiguousCodeMessage = (code: string, matches: CatalogVariant[]) =>
-  `${code} matches ${matches.length} items (${matches
-    .slice(0, 3)
-    .map((v) => v.title)
-    .join(
-      ", ",
-    )}${matches.length > 3 ? ", …" : ""}). Use a barcode or SKU that only one item has.`;
 
 /**
  * Count units by barcode, SKU or variant ID: each scan adds `quantity` to the
