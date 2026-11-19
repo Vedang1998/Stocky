@@ -98,6 +98,8 @@ model Shop {
   purchaseOrderReceiptLines     PurchaseOrderReceiptLine[]
   replenishmentSettings ReplenishmentSettings[]
   replenishmentVariantRules ReplenishmentVariantRule[]
+  replenishmentWorksheets ReplenishmentWorksheet[]
+  replenishmentWorksheetLines ReplenishmentWorksheetLine[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -757,19 +759,36 @@ enum TransferStatus {
   CANCELLED
 }
 
+/// What happened to shipped units that never arrived, chosen when a transfer
+/// is closed short. RETURNED puts them back in stock at the source; WRITTEN_OFF
+/// leaves them out of stock at both locations.
+enum TransferShortResolution {
+  RETURNED
+  WRITTEN_OFF
+}
+
 model TransferOrder {
-  id                    String         @id @default(cuid())
+  id                    String                   @id @default(cuid())
   shop                  String
   shopId                String?
   sourceLocationId      String
   destinationLocationId String
-  status                TransferStatus @default(DRAFT)
+  status                TransferStatus           @default(DRAFT)
   shopifyTransferId     String?
   notes                 String?
+  createdByUserId       String?                  @db.VarChar(64)
   shippedAt             DateTime?
+  shippedByUserId       String?                  @db.VarChar(64)
+  /// When the transfer was finished: everything shipped was received,
+  /// rejected, returned or written off.
   receivedAt            DateTime?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
+  receivedByUserId      String?                  @db.VarChar(64)
+  /// Set when the transfer was finished with shipped units still missing.
+  shortResolution       TransferShortResolution?
+  cancelledAt           DateTime?
+  cancelledByUserId     String?                  @db.VarChar(64)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
 
   lineItems TransferLineItem[]
 
@@ -779,13 +798,24 @@ model TransferOrder {
 }
 
 model TransferLineItem {
-  id               String  @id @default(cuid())
-  shopId           String?
-  transferOrderId  String
-  shopifyVariantId String
-  quantity         Int
-  pickedQty        Int     @default(0)
-  receivedQty      Int     @default(0)
+  id                String  @id @default(cuid())
+  shopId            String?
+  transferOrderId   String
+  shopifyVariantId  String
+  /// Units asked for on the draft.
+  quantity          Int
+  /// On a draft, the units picked so far (0 ships the whole quantity). Once
+  /// shipped, the units that left the source.
+  pickedQty         Int     @default(0)
+  /// Units Shopify has confirmed in stock at the destination.
+  receivedQty       Int     @default(0)
+  /// Units counted in at the destination and not posted to Shopify yet.
+  pendingReceiveQty Int     @default(0)
+  /// Units that arrived and were not put into stock (damaged, wrong item).
+  rejectedQty       Int     @default(0)
+  rejectNote        String? @db.VarChar(200)
+  /// Units put back in stock at the source when the transfer was closed short.
+  returnedQty       Int     @default(0)
 
   transferOrder TransferOrder @relation(fields: [transferOrderId], references: [id], onDelete: Cascade)
 
@@ -2634,6 +2664,8 @@ model ReplenishmentSettings {
   defaultLeadTimeDays       Int?
   applyMinimumOrderQuantity Boolean                     @default(false)
   roundUpToPackSize         Boolean                     @default(false)
+  /// Optional worksheet columns the merchant shows; see `worksheet/columns.ts`.
+  worksheetColumns          String[]                    @default(["sku", "supplier", "abc", "available", "incoming", "netUnits", "unitsPerDay", "daysOfStock"])
   createdAt                 DateTime                    @default(now())
   updatedAt                 DateTime                    @updatedAt
 
@@ -2663,4 +2695,108 @@ model ReplenishmentVariantRule {
   @@unique([shopId, id])
   @@unique([shopId, variantGid, scopeKey])
   @@index([shopId, scopeKey])
+}
+
+enum ReplenishmentStockStatus {
+  OUT_OF_STOCK
+  LOW
+  OK
+  UNKNOWN
+}
+
+/// A generated worksheet: the settings of one run and when it was computed.
+/// Lines are a snapshot of that moment; "regenerate" creates a new worksheet.
+model ReplenishmentWorksheet {
+  id            String              @id @default(cuid())
+  shopId        String
+  method        ReplenishmentMethod
+  scopeKey      String              @db.VarChar(256)
+  /// Location name when generated, so the title survives a rename.
+  scopeName     String?
+  /// The run as the merchant chose it: method parameters, incoming source,
+  /// supplier rounding and the product selection.
+  settings      Json
+  asOfLocalDate String              @db.VarChar(10)
+  timeZone      String              @db.VarChar(64)
+  windowStart   String?             @db.VarChar(10)
+  windowEnd     String?             @db.VarChar(10)
+  /// Sales-history coverage and exclusions for the run, shown with the results.
+  summary       Json?
+  lineCount     Int                 @default(0)
+  generatedAt   DateTime
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  shop  Shop                         @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  lines ReplenishmentWorksheetLine[]
+
+  @@unique([shopId, id])
+  @@index([shopId, createdAt])
+}
+
+/// One variant on a worksheet: the inputs used, the suggestion and the
+/// merchant's final quantity. `orderQuantity` is the final quantity when the
+/// merchant set one, otherwise the suggestion.
+model ReplenishmentWorksheetLine {
+  id                    String                   @id @default(cuid())
+  shopId                String
+  worksheetId           String
+  variantGid            String                   @db.VarChar(256)
+  productGid            String                   @db.VarChar(256)
+  productTitle          String
+  variantTitle          String
+  sku                   String?
+  barcode               String?
+  vendor                String?
+  productType           String?
+  imageUrl              String?
+  priceAmount           Decimal?                 @db.Decimal(20, 6)
+  priceCurrencyCode     String?                  @db.VarChar(8)
+  unitCostAmount        Decimal?                 @db.Decimal(20, 6)
+  unitCostCurrencyCode  String?                  @db.VarChar(8)
+  supplierCostAmount    Decimal?                 @db.Decimal(20, 6)
+  supplierCostCurrencyCode String?               @db.VarChar(8)
+  supplierId            String?
+  supplierName          String?
+  vendorSku             String?
+  minimumOrderQuantity  Int?
+  packSize              Int?
+  supplierCount         Int                      @default(0)
+  tracked               Boolean
+  availableQuantity     Int?
+  onHandQuantity        Int?
+  committedQuantity     Int?
+  incomingQuantity      Int?
+  netUnits              Int?
+  distinctOrders        Int?
+  revenueAmount         Decimal?                 @db.Decimal(20, 6)
+  unitsPerDay           Decimal?                 @db.Decimal(20, 4)
+  abcClass              String?                  @db.VarChar(1)
+  stockStatus           ReplenishmentStockStatus
+  daysOfStock           Decimal?                 @db.Decimal(20, 1)
+  depletionDate         String?                  @db.VarChar(10)
+  leadTimeDays          Int?
+  leadTimeSource        String?                  @db.VarChar(32)
+  reorderPoint          Int?
+  reorderPointSource    String?                  @db.VarChar(16)
+  forecastDemand        Decimal?                 @db.Decimal(20, 4)
+  parityQuantity        Int?
+  suggestedQuantity     Int?
+  finalQuantity         Int?
+  orderQuantity         Int                      @default(0)
+  warningCodes          String[]
+  /// Explanation trace, stock-health trace, warnings and rule adjustments.
+  detail                Json
+  purchaseOrderId       String?
+  purchaseOrderNumber   String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+
+  shop      Shop                   @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  worksheet ReplenishmentWorksheet @relation(fields: [shopId, worksheetId], references: [shopId, id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, worksheetId, variantGid])
+  @@index([shopId, worksheetId, orderQuantity])
+  @@index([shopId, worksheetId, stockStatus])
 }

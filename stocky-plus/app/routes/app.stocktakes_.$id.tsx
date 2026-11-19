@@ -11,7 +11,9 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
@@ -24,6 +26,7 @@ import {
   readFormId,
 } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import {
   getStocktake,
   getStocktakeLedgerSummary,
@@ -99,7 +102,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const filter = readLineFilter(query.get("filter"));
   const search = readLineSearch(query.get("q"));
 
-  const [progress, lines, ledger, locations] = await Promise.all([
+  const [progress, lines, ledger, locations, planActive] = await Promise.all([
     getStocktakeProgress(db, stocktake.id),
     getStocktakeLines(db, {
       stocktakeId: stocktake.id,
@@ -109,6 +112,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     }),
     getStocktakeLedgerSummary(db, stocktake.id),
     listSyncedLocations(db),
+    planAllowsChanges(db),
   ]);
 
   const open = stocktake.status === "IN_PROGRESS";
@@ -134,6 +138,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     filter,
     search,
     expectedHidden,
+    planActive,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
   };
 };
@@ -143,6 +148,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     request,
     params,
   });
+  await requireActivePlanSnapshot(db);
   const stocktakeId = readFormId(params.id);
   if (!stocktakeId) return { error: NOT_FOUND };
   const form = await request.formData();
@@ -323,7 +329,7 @@ const disabledWhen = (condition: boolean) =>
   condition ? { disabled: true } : {};
 
 /** The two ways a line whose stock moved can be settled, with the change each one makes. */
-function MovementReview({ line, busy }: { line: PageLine; busy: boolean }) {
+function MovementReview({ line, locked }: { line: PageLine; locked: boolean }) {
   if (
     line.countedQty === null ||
     line.expectedQty === null ||
@@ -355,7 +361,11 @@ function MovementReview({ line, busy }: { line: PageLine; busy: boolean }) {
             <input type="hidden" name="intent" value="resolveMovement" />
             <input type="hidden" name="lineId" value={line.id} />
             <input type="hidden" name="resolution" value={choice.resolution} />
-            <s-button type="submit" variant="secondary" {...disabledWhen(busy)}>
+            <s-button
+              type="submit"
+              variant="secondary"
+              {...disabledWhen(locked)}
+            >
               {choice.label} (change {signed(choice.change)})
             </s-button>
           </Form>
@@ -388,10 +398,14 @@ export default function StocktakeCount() {
     filter,
     search,
     expectedHidden,
+    planActive,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const busy = useNavigation().state !== "idle";
+  // Nothing is submitted twice, and nothing at all without an active plan.
+  const locked = useNavigation().state !== "idle" || !planActive;
+  // Enter in a field submits too, so it is taken away with the buttons.
+  const onEnter = planActive ? submitOnEnter : undefined;
   const [confirmingCancel, setConfirmingCancel] = useState(false);
 
   const open = stocktake.status === "IN_PROGRESS";
@@ -431,6 +445,7 @@ export default function StocktakeCount() {
         Stocktakes
       </s-link>
 
+      {!planActive && <PlanRequiredBanner records="This count" />}
       {open && !writesEnabled && (
         <s-banner
           tone="warning"
@@ -528,7 +543,7 @@ export default function StocktakeCount() {
       {open && (
         <s-section heading="Scan or enter items">
           <s-stack direction="block" gap="base">
-            <Form method="post" onKeyDown={submitOnEnter} key={scannedAt ?? 0}>
+            <Form method="post" onKeyDown={onEnter} key={scannedAt ?? 0}>
               <input type="hidden" name="intent" value="scan" />
               <s-stack direction="inline" gap="base" alignItems="end">
                 <s-text-field
@@ -547,7 +562,7 @@ export default function StocktakeCount() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  {...disabledWhen(busy)}
+                  {...disabledWhen(locked)}
                 >
                   Count
                 </s-button>
@@ -576,7 +591,7 @@ export default function StocktakeCount() {
                   <s-button
                     type="submit"
                     variant="secondary"
-                    {...disabledWhen(busy)}
+                    {...disabledWhen(locked)}
                   >
                     Add to count
                   </s-button>
@@ -650,7 +665,7 @@ export default function StocktakeCount() {
                   <s-button
                     type="submit"
                     variant="secondary"
-                    {...disabledWhen(busy)}
+                    {...disabledWhen(locked)}
                   >
                     {label}
                   </s-button>
@@ -711,11 +726,11 @@ export default function StocktakeCount() {
                     <s-table-cell>
                       <s-stack direction="block" gap="small-200">
                         {open && reviewingMovement ? (
-                          <MovementReview line={line} busy={busy} />
+                          <MovementReview line={line} locked={locked} />
                         ) : open ? (
                           <Form
                             method="post"
-                            onKeyDown={submitOnEnter}
+                            onKeyDown={onEnter}
                             key={`${line.id}:${line.countedQty}`}
                           >
                             <input type="hidden" name="intent" value="count" />
@@ -740,7 +755,7 @@ export default function StocktakeCount() {
                               <s-button
                                 type="submit"
                                 variant="secondary"
-                                {...disabledWhen(busy)}
+                                {...disabledWhen(locked)}
                               >
                                 Save
                               </s-button>
@@ -789,7 +804,7 @@ export default function StocktakeCount() {
                   <s-button
                     type="submit"
                     variant="tertiary"
-                    {...disabledWhen(busy)}
+                    {...disabledWhen(locked)}
                   >
                     Undo
                   </s-button>
@@ -812,7 +827,7 @@ export default function StocktakeCount() {
                     <s-button
                       type="submit"
                       variant="secondary"
-                      {...disabledWhen(busy)}
+                      {...disabledWhen(locked)}
                     >
                       Mark {progress.uncountedCount === 1 ? "it" : "them"} as
                       zero
@@ -825,7 +840,7 @@ export default function StocktakeCount() {
                       type="submit"
                       variant="primary"
                       {...disabledWhen(
-                        busy || !writesEnabled || progress.countedCount === 0,
+                        locked || !writesEnabled || progress.countedCount === 0,
                       )}
                     >
                       Complete and leave{" "}
@@ -842,7 +857,7 @@ export default function StocktakeCount() {
                     type="submit"
                     variant="primary"
                     {...disabledWhen(
-                      busy || !writesEnabled || progress.countedCount === 0,
+                      locked || !writesEnabled || progress.countedCount === 0,
                     )}
                   >
                     Complete count
@@ -869,7 +884,7 @@ export default function StocktakeCount() {
                     type="submit"
                     variant="primary"
                     tone="critical"
-                    {...disabledWhen(busy)}
+                    {...disabledWhen(locked)}
                   >
                     Cancel count
                   </s-button>
