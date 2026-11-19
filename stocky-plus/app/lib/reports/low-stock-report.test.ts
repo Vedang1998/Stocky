@@ -6,7 +6,7 @@ import type {
   LowStockWorksheet,
 } from "../analytics/low-stock.server";
 import type { ReportViewRequest } from "./params";
-import { tablePage } from "./present";
+import { exportTable, tablePage } from "./present";
 import { buildLowStockReport } from "./low-stock-report";
 import { cellsByColumn } from "./test-fixtures";
 import type { ReportData } from "./types";
@@ -254,5 +254,31 @@ describe("buildLowStockReport: tiles and notices", () => {
     expect(data.notices.map((n) => n.heading)).toContain(
       "The worksheet's settings could not be read",
     );
+  });
+});
+
+describe("buildLowStockReport: export", () => {
+  it("downloads the variants view in the order on screen, soonest run-out first", () => {
+    const file = exportTable(build([line("v1"), OUT_OF_STOCK]), VIEW, "USD");
+    const header = file.headers;
+    const column = (name: string) => header.indexOf(name);
+
+    expect(file.rows.map((row) => row[column("Variant")])).toEqual([
+      "Size 10",
+      "Size 9",
+    ]);
+    expect(file.rows[0]?.[column("Status")]).toBe("Out of stock");
+    expect(header).toContain("Lost revenue per day (USD)");
+    expect(file.rows[0]?.[column("Lost revenue per day (USD)")]).toBe("30.00");
+    expect(file.rows[1]?.[column("Lost revenue per day (USD)")]).toBeNull();
+  });
+
+  it("downloads only the rows of the chosen view", () => {
+    const file = exportTable(build([line("v1"), OUT_OF_STOCK], "vendors"), VIEW, "USD");
+    expect(file.headers).toEqual(
+      expect.arrayContaining(["Vendor", "Products", "Variants low or out"]),
+    );
+    expect(file.headers).not.toContain("SKU");
+    expect(file.rows).toHaveLength(1);
   });
 });
