@@ -26,9 +26,9 @@ import {
   addTransferLine,
   cancelTransfer,
   createTransfer,
-  receiveTransfer,
   shipTransfer,
 } from "../../../app/services/transfers/transfer.server";
+import { receiveTransfer } from "../../../app/services/transfers/transfer-receiving.server";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
 import {
   createTenantDb,
