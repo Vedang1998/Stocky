@@ -10,6 +10,16 @@ declare module "./src/Modal.tsx" {
   const globalThis: { shopify: typeof shopify };
 }
 
+declare module "./src/StockLookup.tsx" {
+  const shopify: import("@shopify/ui-extensions/pos.home.modal.render").Api;
+  const globalThis: { shopify: typeof shopify };
+}
+
+declare module "./src/Receive.tsx" {
+  const shopify: import("@shopify/ui-extensions/pos.home.modal.render").Api;
+  const globalThis: { shopify: typeof shopify };
+}
+
 declare module "./src/ProductStockBlock.tsx" {
   const shopify: import("@shopify/ui-extensions/pos.product-details.block.render").Api;
   const globalThis: { shopify: typeof shopify };
