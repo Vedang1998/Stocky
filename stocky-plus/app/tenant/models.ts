@@ -44,6 +44,8 @@ export const PURCHASING_DIRECT_MERCHANT_MODELS = [
 export const REPLENISHMENT_DIRECT_MERCHANT_MODELS = [
   "ReplenishmentSettings",
   "ReplenishmentVariantRule",
+  "ReplenishmentWorksheet",
+  "ReplenishmentWorksheetLine",
 ] as const;
 
 export const DIRECT_MERCHANT_MODELS = [
@@ -132,6 +134,8 @@ export const MERCHANT_DELEGATE_NAMES = {
   InventoryOperationLine: "inventoryOperationLine",
   ReplenishmentSettings: "replenishmentSettings",
   ReplenishmentVariantRule: "replenishmentVariantRule",
+  ReplenishmentWorksheet: "replenishmentWorksheet",
+  ReplenishmentWorksheetLine: "replenishmentWorksheetLine",
   SupplierSkuMapping: "supplierSkuMapping",
   ShopifyOrderRefundLineFact: "shopifyOrderRefundLineFact",
   ShopifyOrderAdjustmentFact: "shopifyOrderAdjustmentFact",

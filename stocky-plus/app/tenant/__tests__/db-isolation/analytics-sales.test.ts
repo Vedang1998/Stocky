@@ -10,6 +10,7 @@ import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
 import { loadPurchaseOrders } from "../../../lib/analytics/purchase-orders.server";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
+import { loadDemandHistory } from "../../../lib/smart-forecast/history.server";
 import { localRangeToUtc } from "../../../lib/analytics/shop-calendar";
 import {
   loadAppliedInventoryChanges,
@@ -1056,6 +1057,44 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
         expect(orders.map((order) => order.poNumber)).toEqual(["PO-B-IN"]);
         expect(orders[0]!.orderedUnits).toBe(77);
       });
+    });
+  });
+
+  it("gives Smart Forecast one variant's daily demand from the shop's own history", async () => {
+    const input = {
+      variantGid: VARIANT_OLD,
+      endLocalDate: "2026-10-05" as const,
+      horizonDays: 14,
+      averageDays: 28,
+      timeZone: TZ,
+      currencyCode: "USD",
+      installedAt: null,
+    };
+    const history = await loadDemandHistory(dbA, input);
+    // Starts at the earliest stored order, not before, so no day is a made-up zero.
+    expect(history.startLocalDate).toBe("2026-09-01");
+    expect(history.days).toHaveLength(35);
+    expect(history.days[0]).toEqual({ date: "2026-09-01", units: 0, inStock: null });
+    expect(history.days.at(-1)?.date).toBe("2026-10-05");
+    const sold = history.days.filter((day) => day.units !== 0);
+    // Test, cancelled and deleted orders on Oct 5 do not count.
+    expect(sold).toEqual([
+      { date: "2026-09-19", units: 1, inStock: null },
+      { date: "2026-09-20", units: 4, inStock: null },
+    ]);
+
+    // Shop B sold 500 of the same variant; none of it reaches shop A, and
+    // shop B's own history starts at its own order.
+    const other = await loadDemandHistory(dbB, input);
+    expect(other.startLocalDate).toBe("2026-09-25");
+    expect(other.days.filter((day) => day.units !== 0)).toEqual([
+      { date: "2026-09-25", units: 500, inStock: null },
+    ]);
+
+    // Before any stored order there is no history at all.
+    expect(await loadDemandHistory(dbA, { ...input, endLocalDate: "2026-08-15" })).toEqual({
+      days: [],
+      startLocalDate: null,
     });
   });
 });
