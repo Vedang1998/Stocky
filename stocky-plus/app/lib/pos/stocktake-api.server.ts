@@ -22,6 +22,7 @@ import {
 } from "../../services/stocktakes/stocktake.server";
 import type { AdminGraphQLClient } from "../../services/shopify-gql.server";
 import { PosApiError } from "./pos-api.server";
+import { requirePosPlan } from "./pos-plan.server";
 import { parseCountBody } from "./stocktake-body";
 
 export type PosStocktakeEntry = {
@@ -118,6 +119,7 @@ export async function listCountableStocktakes(
   db: TenantDb,
   locationGid: string,
 ): Promise<PosStocktakeList> {
+  await requirePosPlan(db);
   const { stocktakes, hasMore } = await listStocktakes(db, {
     view: "open",
     page: 1,
@@ -142,6 +144,7 @@ export async function getCountSheet(
   stocktakeId: string,
   locationGid: string,
 ): Promise<PosCountSheet> {
+  await requirePosPlan(db);
   const stocktake = await openCount(db, stocktakeId, locationGid);
   const [progress, counted] = await Promise.all([
     progressOf(db, stocktake.id),
@@ -184,6 +187,7 @@ export async function countAtPos(
   deps: CountDeps,
 ): Promise<PosCountResponse> {
   const { db, actor } = context;
+  await requirePosPlan(db);
   if (!actor.shopifyUserId) {
     throw new PosApiError(403, "forbidden", STAFF_REQUIRED_MESSAGE);
   }

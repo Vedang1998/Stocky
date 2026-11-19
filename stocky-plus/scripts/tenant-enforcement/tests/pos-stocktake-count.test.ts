@@ -4,9 +4,10 @@
  * withheld, and shop isolation. Counting itself is covered by the stocktake
  * workflow suite.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { PosApiError } from "../../../app/lib/pos/pos-api.server";
+import { POS_NO_PLAN_MESSAGE } from "../../../app/lib/pos/pos-plan.server";
 import {
   countAtPos,
   getCountSheet,
@@ -131,6 +132,15 @@ describe("counting a stocktake from POS", () => {
           available: 10,
         }),
         onHandQuantity: 10,
+      })),
+    });
+
+    await prisma.shopSettings.createMany({
+      data: [SHOP_A, SHOP_B].map((shop, index) => ({
+        shop,
+        shopId: index === 0 ? shopA.id : shopB.id,
+        subscriptionActive: true,
+        subscriptionPlan: "test",
       })),
     });
 
@@ -275,6 +285,40 @@ describe("counting a stocktake from POS", () => {
         hasMoreCounted: false,
       });
       expect(JSON.stringify(sheet).toLowerCase()).not.toContain("expected");
+    });
+  });
+
+  describe("the plan gate", () => {
+    afterEach(async () => {
+      await prisma.shopSettings.updateMany({
+        where: { shop: SHOP_A },
+        data: { subscriptionActive: true },
+      });
+    });
+
+    it("refuses listing, reading and counting without an active plan, and changes nothing", async () => {
+      const id = await startCount(dbA, SHOP_A, CELLAR);
+      await prisma.shopSettings.updateMany({
+        where: { shop: SHOP_A },
+        data: { subscriptionActive: false },
+      });
+
+      const calls = [
+        () => listCountableStocktakes(dbA, CELLAR),
+        () => getCountSheet(dbA, id, CELLAR),
+        () =>
+          countAtPos(contextFor(dbA), id, CELLAR, { intent: "scan", code: "1111", quantity: 2 }, deps),
+      ];
+      for (const call of calls) {
+        const error = await call().then(
+          () => null,
+          (reason: unknown) => reason,
+        );
+        expect(error).toBeInstanceOf(PosApiError);
+        expect(error).toMatchObject({ status: 403, code: "forbidden", message: POS_NO_PLAN_MESSAGE });
+      }
+
+      expect(await prisma.stocktakeLineItem.count({ where: { countedQty: { not: null } } })).toBe(0);
     });
   });
 });
