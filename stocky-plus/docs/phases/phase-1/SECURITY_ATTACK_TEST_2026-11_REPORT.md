@@ -8,7 +8,7 @@
 
 | Item | Value |
 |---|---|
-| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0`. Round 4: `main` at `f7548ba`. Round 5: `main` at `8ede0e5` |
+| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0`. Round 4: `main` at `f7548ba`. Round 5: `main` at `8ede0e5`, with a follow-up at `29b7e41` |
 | Target | One instance of this app in the author's own cloud container: production build (`react-router-serve`), PostgreSQL 16 provisioned with the CI role and RLS recipe, Redis, a real worker process, a localhost stand-in for the Shopify Admin API, synthetic shops and data |
 | Not targeted | Shopify's platform, the Partner Dashboard, any third-party service, any real store, any deployed instance. No load or denial-of-service traffic left the container |
 | Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases, the SEC-08 case and a real uninstall for SEC-12 on `stocky-test-store.myshopify.com`; results are recorded on #81, #95 and #90 |
@@ -126,6 +126,11 @@ Found:
 - Not new: the first page load of a newly installed shop still answers with an error on the local instance. That is issue #73; its fix is #82, not merged.
 - OPEN-4 is still open after #111: see the open items.
 
+Follow-up on `main` at `29b7e41`, the same day:
+
+- **Purchase-order reports (#126).** Both reports and their exports returned only the requesting shop's orders and lines for each of two shops, a shop parameter naming the other shop was refused, hostile page, sort and range values answered without a server error, the date range stayed bounded, and a supplier name written as a formula was neutralised in both CSV files. Nothing found.
+- **Smart Forecast engine (#121).** It is an arithmetic library with no route, no database access, no provider call and no caller on `main`, so nothing of it is reachable yet. It needs a pass when a screen or job starts to use it.
+
 Pull requests read before merge during this round. These are security passes requested by the owning lane, not approvals:
 
 | Pull request | Head | Result |
@@ -155,7 +160,7 @@ Pull requests read before merge during this round. These are security passes req
 
 - Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The POS extension itself (`extensions/propo-pos`) was read but not run: round 4 tested the endpoints it calls, not the extension on a device. The store tester covers the first three on the test store.
 - The inventory-write paths with their flags ON against Shopify. They are OFF everywhere and were not turned on. Round 3 exercised them only in tests, against a stand-in.
-- Features merged after `8ede0e5`, starting with the purchase-order reports in #126, and the Smart Forecast engine from #121, which round 5 did not attack. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
+- Features merged after `29b7e41`, and the Smart Forecast engine from #121 once something calls it. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
 - Infrastructure: TLS, network exposure of PostgreSQL and Redis, backups, and the hosting platform's own limits. Nothing is deployed yet.
 
 ## Category verdicts
