@@ -1,8 +1,7 @@
 # Replenishment: Stocky Parity engine
 
-Status: engine, stock health and planning inputs implemented on branch
-`replenishment/parity-engine`. The worksheet and settings screens that use
-them follow in the next change.
+The engine, stock health and planning inputs. The screens that use them are
+described in [WORKSHEET.md](WORKSHEET.md).
 
 Source of the formulas: [PRD §3.4](../product/02_FULL_STOCKY_PARITY_PRD.md).
 Code: `app/lib/replenishment/`.
@@ -116,8 +115,7 @@ takes that number as an input and does not recount it.
 
 ## Not done yet
 
-- Worksheet, settings and low-stock screens.
-- Purchase-order draft creation from a worksheet (uses the purchase order
-  module's API).
+- A low-stock screen of its own. The worksheet has a low or out of stock
+  filter.
 - Smart Forecast. Nothing here calls a model or changes parity results.
 - End-to-end run on the development store.
