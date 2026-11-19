@@ -376,11 +376,9 @@ describe("privacy compliance", () => {
   it("does not erase an installed shop: the request waits, then closes at the deadline", async () => {
     const shopA = await seedShop(SHOP_A);
     const before = await rowsByTable(shopA);
+    const now = new Date();
 
     const recorded = await shopRedact(SHOP_A, "shop-redact-installed");
-    // Taken after intake: the request is due from the moment it was received,
-    // which is later than any clock read before it.
-    const now = new Date();
     const first = await runPrivacyMaintenance({
       retentionDays: 30,
       deps: realDeps,
