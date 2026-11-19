@@ -1,5 +1,5 @@
 import type { FieldErrors } from "../../lib/replenishment/form";
-import type { VariantRuleValues } from "../../lib/replenishment/rules.server";
+import type { RuleChangeOutcome, VariantRuleValues } from "../../lib/replenishment/rules.server";
 import type { ParityMethod, SuggestionResult } from "../../lib/replenishment/types";
 import type { WorksheetColumn } from "../../lib/replenishment/worksheet/columns";
 import type { SmartForecast } from "../../lib/smart-forecast";
@@ -20,7 +20,9 @@ export type WorksheetActionResult =
   | { intent: "createOrders"; ok: true; orders: CreatedOrder[] }
   | { intent: "createOrders"; ok: false; message: string }
   | { intent: "saveColumns"; ok: true; columns: WorksheetColumn[] }
-  | { intent: "saveColumns"; ok: false; message: string };
+  | { intent: "saveColumns"; ok: false; message: string }
+  | { intent: "setLevels"; ok: true; variants: number; outcome: RuleChangeOutcome }
+  | { intent: "setLevels"; ok: false; errors: FieldErrors; message?: string };
 
 /** Starting values for the "try another period" form in a row's detail. */
 export type PreviewFormValues = {

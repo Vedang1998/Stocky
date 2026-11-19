@@ -13,9 +13,15 @@ import type {
   WorksheetActionResult,
 } from "../components/replenishment/types";
 import { ColumnsModal } from "../components/replenishment/ColumnsModal";
+import { LevelsBulkModal } from "../components/replenishment/LevelsBulkModal";
 import { WorksheetTable } from "../components/replenishment/WorksheetTable";
 import { AnalyticsPrerequisiteError } from "../lib/analytics/errors";
 import { localDateOf } from "../lib/analytics/shop-calendar";
+import {
+  applyRuleChanges,
+  parseRuleChangesForm,
+  ReplenishmentRuleError,
+} from "../lib/replenishment/rules.server";
 import { SHOP_SCOPE } from "../lib/replenishment/scope";
 import {
   getReplenishmentDefaults,
@@ -50,6 +56,7 @@ import {
   getWorksheet,
   getWorksheetLine,
   getWorksheetTotals,
+  listViewVariantGids,
   loadWorksheetPage,
   setFinalQuantity,
   WorksheetEditError,
@@ -221,6 +228,29 @@ export const action = async ({
     return { intent, ok: true, columns };
   }
 
+  if (intent === "setLevels") {
+    const parsed = parseRuleChangesForm(form);
+    if (!parsed.ok) return { intent, ok: false, errors: parsed.errors };
+    // The rows the merchant is looking at: the same filter and search as the page.
+    const view = parseWorksheetView(
+      new URLSearchParams({ show: field(form, "show"), q: field(form, "q") }),
+    );
+    const variantGids = await listViewVariantGids(db, worksheet.id, view);
+    try {
+      const outcome = await applyRuleChanges(db, {
+        variantGids,
+        scopeKey: worksheet.scopeKey,
+        changes: parsed.changes,
+      });
+      return { intent, ok: true, variants: variantGids.length, outcome };
+    } catch (error) {
+      if (error instanceof ReplenishmentRuleError) {
+        return { intent, ok: false, errors: {}, message: error.message };
+      }
+      throw error;
+    }
+  }
+
   if (intent === "setQuantity") {
     const quantity = parseQuantity(field(form, "quantity"));
     if (quantity === "invalid") {
@@ -336,6 +366,7 @@ export const action = async ({
 
 const DETAIL_MODAL_ID = "worksheet-line-detail";
 const COLUMNS_MODAL_ID = "worksheet-columns";
+const LEVELS_MODAL_ID = "worksheet-levels";
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
@@ -502,7 +533,7 @@ export default function Worksheet() {
             {view.pageSize !== DEFAULT_PAGE_SIZE && <input type="hidden" name="perPage" value={view.pageSize} />}
             <s-query-container>
               <s-grid
-                gridTemplateColumns="@container (inline-size > 560px) 1fr auto auto auto auto, 1fr auto"
+                gridTemplateColumns="@container (inline-size > 640px) 1fr auto auto auto auto auto, 1fr auto"
                 gap="base"
                 alignItems="end"
               >
@@ -542,6 +573,9 @@ export default function Worksheet() {
                 </s-select>
                 <s-button type="button" commandFor={COLUMNS_MODAL_ID} command="--show">
                   Columns
+                </s-button>
+                <s-button type="button" commandFor={LEVELS_MODAL_ID} command="--show">
+                  Set levels
                 </s-button>
               </s-grid>
             </s-query-container>
@@ -604,6 +638,14 @@ export default function Worksheet() {
       />
 
       <ColumnsModal key={columns.join(",")} id={COLUMNS_MODAL_ID} columns={columns} />
+
+      <LevelsBulkModal
+        id={LEVELS_MODAL_ID}
+        matching={matching}
+        scopeName={worksheet.scope}
+        show={view.show}
+        query={view.query}
+      />
 
       <LineDetailModal
         id={DETAIL_MODAL_ID}

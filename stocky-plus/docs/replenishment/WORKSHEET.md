@@ -93,6 +93,15 @@ when it opens, since the worksheet only has the levels it was generated with.
 Saving them does not change the open worksheet either; the next one uses
 them.
 
+**Set levels** beside the search changes the levels of every variant the
+current filter and search show, in the worksheet's stock scope. Each level is
+kept, set to a number or cleared; kept levels stay as each variant has them.
+The variants come from the worksheet's own rows on the server, never from the
+browser. All of them change in one transaction, up to a whole worksheet
+(5,000). Levels are added only for variants still in the synced catalog, and
+a variant left with no levels has its rule removed. As with one variant, the
+open worksheet does not change.
+
 ## Creating purchase orders
 
 Rows with a quantity to order and one supplier are grouped by supplier. Each
@@ -137,6 +146,5 @@ module's own permission check.
 
 - Shelf or bin location and landed or average cost columns: the app has no
   source for them yet.
-- Setting planning levels for many variants at once.
 - Choosing a supplier for one row on the worksheet.
 - End-to-end run on the development store.

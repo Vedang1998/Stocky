@@ -305,3 +305,160 @@ export function parseVariantRuleForm(form: FormData):
   }
   return { ok: true, variantGid, scopeKey, values };
 }
+
+export type RuleField = (typeof RULE_FIELDS)[number];
+export { RULE_FIELDS };
+
+/**
+ * Changes to planning levels for many variants at once. A field that is
+ * absent is left as each variant has it; a number sets it; null clears it.
+ */
+export type RuleChanges = Partial<VariantRuleValues>;
+
+/** The most variants one change may cover: a whole worksheet. */
+export const MAX_BULK_RULE_VARIANTS = 5000;
+
+export type RuleChangeOutcome = {
+  /** Variants whose existing levels were changed. */
+  updated: number;
+  /** Variants that had no levels in this scope and now have some. */
+  created: number;
+  /** Variants left with no levels at all, whose rule was removed. */
+  cleared: number;
+  /** Variants not in the synced catalog, so no new levels were added for them. */
+  skipped: number;
+};
+
+/**
+ * Applies the same field changes to the planning levels of many variants in
+ * one stock scope, in one transaction. Each variant keeps the fields that
+ * are not changed. Levels are added only for variants still in the synced
+ * catalog; existing levels can be changed or cleared either way, as with
+ * one variant.
+ */
+export async function applyRuleChanges(
+  db: TenantDb,
+  input: { variantGids: readonly string[]; scopeKey: string; changes: RuleChanges },
+): Promise<RuleChangeOutcome> {
+  const { scopeKey } = input;
+  if (!isScopeKey(scopeKey)) {
+    throw new ReplenishmentRuleError("invalid_scope", "Unknown stock scope");
+  }
+  const variantGids = [...new Set(input.variantGids)];
+  if (variantGids.length > MAX_BULK_RULE_VARIANTS || !variantGids.every(isVariantGid)) {
+    throw new ReplenishmentRuleError("invalid_variant", "Unknown variant");
+  }
+  const changes: RuleChanges = {};
+  for (const field of RULE_FIELDS) {
+    if (field in input.changes) changes[field] = input.changes[field] ?? null;
+  }
+  const outcome: RuleChangeOutcome = { updated: 0, created: 0, cleared: 0, skipped: 0 };
+  if (variantGids.length === 0 || Object.keys(changes).length === 0) return outcome;
+  const setsAValue = RULE_FIELDS.some((field) => changes[field] != null);
+
+  await db.$transaction(async (tx) => {
+    if (scopeKey !== SHOP_SCOPE && setsAValue) {
+      const location = await tx.shopifyLocationFact.findFirst({
+        where: { shopifyGid: scopeKey, existenceState: "LIVE" },
+        select: { id: true },
+      });
+      if (!location) {
+        throw new ReplenishmentRuleError(
+          "location_not_found",
+          "This location isn't in your synced locations.",
+        );
+      }
+    }
+
+    for (let start = 0; start < variantGids.length; start += QUERY_CHUNK) {
+      const chunk = variantGids.slice(start, start + QUERY_CHUNK);
+      const existing: Array<{ variantGid: string }> = await tx.replenishmentVariantRule.findMany({
+        where: { variantGid: { in: chunk }, scopeKey },
+        select: { variantGid: true },
+      });
+      const hasRule = new Set(existing.map((row) => row.variantGid));
+
+      if (hasRule.size > 0) {
+        const ruled = [...hasRule];
+        // A rule must keep at least one level. When the changes only clear
+        // levels, rules left with none are removed instead of updated.
+        if (!setsAValue) {
+          const keptNull = Object.fromEntries(
+            RULE_FIELDS.filter((field) => !(field in changes)).map((field) => [field, null]),
+          );
+          const cleared: { count: number } = await tx.replenishmentVariantRule.deleteMany({
+            where: { variantGid: { in: ruled }, scopeKey, ...keptNull },
+          });
+          outcome.cleared += cleared.count;
+        }
+        const updated: { count: number } = await tx.replenishmentVariantRule.updateMany({
+          where: { variantGid: { in: ruled }, scopeKey },
+          data: changes,
+        });
+        outcome.updated += updated.count;
+      }
+
+      const withoutRule = chunk.filter((gid) => !hasRule.has(gid));
+      if (setsAValue && withoutRule.length > 0) {
+        const live: Array<{ shopifyGid: string }> = await tx.shopifyVariantFact.findMany({
+          where: { shopifyGid: { in: withoutRule }, existenceState: "LIVE" },
+          select: { shopifyGid: true },
+        });
+        const liveGids = [...new Set(live.map((row) => row.shopifyGid))];
+        outcome.skipped += withoutRule.length - liveGids.length;
+        if (liveGids.length > 0) {
+          const created: { count: number } = await tx.replenishmentVariantRule.createMany({
+            data: liveGids.map((variantGid) => ({ variantGid, scopeKey, ...changes })),
+            // A rule saved for one of them meanwhile keeps its own values.
+            skipDuplicates: true,
+          });
+          outcome.created += created.count;
+        }
+      }
+    }
+  });
+  return outcome;
+}
+
+export type RuleChangeMode = "keep" | "set" | "clear";
+export const RULE_CHANGE_MODES: readonly RuleChangeMode[] = ["keep", "set", "clear"];
+
+const RULE_FIELD_LIMITS: Record<RuleField, { label: string; max: number }> = {
+  minimumQuantity: { label: "Minimum", max: MAX_QUANTITY },
+  shelfLimitQuantity: { label: "Shelf limit", max: MAX_QUANTITY },
+  reorderPointQuantity: { label: "Reorder point", max: MAX_QUANTITY },
+  safetyStockQuantity: { label: "Safety stock", max: MAX_QUANTITY },
+  leadTimeDays: { label: "Lead time", max: MAX_LEAD_TIME_DAYS },
+};
+
+/**
+ * Reads the bulk levels form: for each field, `<field>Mode` is keep, set or
+ * clear, and `<field>` is the number to set.
+ */
+export function parseRuleChangesForm(
+  form: FormData,
+): { ok: true; changes: RuleChanges } | { ok: false; errors: FieldErrors } {
+  const errors: FieldErrors = {};
+  const changes: RuleChanges = {};
+  for (const field of RULE_FIELDS) {
+    const mode = form.get(`${field}Mode`) ?? "keep";
+    if (mode === "keep") continue;
+    if (mode === "clear") {
+      changes[field] = null;
+      continue;
+    }
+    if (mode !== "set") {
+      errors[field] = "Choose keep, set or clear.";
+      continue;
+    }
+    const { label, max } = RULE_FIELD_LIMITS[field];
+    const value = parseWholeNumber(form.get(field), field, label, { min: 0, max }, errors, {
+      optional: false,
+    });
+    if (value != null) changes[field] = value;
+  }
+  if (Object.keys(errors).length === 0 && Object.keys(changes).length === 0) {
+    errors.form = "Choose at least one level to set or clear.";
+  }
+  return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, changes };
+}
