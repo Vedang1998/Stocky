@@ -3,6 +3,13 @@ import type * as Contract from "../../../extensions/propo-pos/src/api-types";
 import { matchLine } from "../../../extensions/propo-pos/src/receiving";
 import { findScannedLine } from "../purchasing/receiving-scan";
 import type {
+  PosCountLine,
+  PosCountResponse,
+  PosCountSheet,
+  PosStocktakeEntry,
+  PosStocktakeList,
+} from "./stocktake-api.server";
+import type {
   PosReceiptResponse,
   PosReceivableOrder,
   PosReceivingLine,
@@ -19,6 +26,20 @@ describe("POS receiving response contract", () => {
       Same<PosReceivingLine, Contract.ReceivingLine>,
       Same<PosReceivingSheet, Contract.ReceivingSheet>,
       Same<PosReceiptResponse, Contract.ReceiptResponse>,
+    ] = [true, true, true, true, true];
+    expect(contract).toEqual([true, true, true, true, true]);
+  });
+});
+
+describe("POS counting response contract", () => {
+  it("matches the server types", () => {
+    type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+    const contract: [
+      Same<PosStocktakeEntry, Contract.CountableStocktake>,
+      Same<PosStocktakeList, Contract.StocktakeListResponse>,
+      Same<PosCountLine, Contract.CountLine>,
+      Same<PosCountSheet, Contract.CountSheet>,
+      Same<PosCountResponse, Contract.CountResponse>,
     ] = [true, true, true, true, true];
     expect(contract).toEqual([true, true, true, true, true]);
   });

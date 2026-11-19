@@ -176,6 +176,12 @@ describe("requests", () => {
     expect((result as { status?: number }).status).toBeUndefined();
   });
 
+  it("treats a server error on submit as an unconfirmed receipt, with no status", async () => {
+    const result = await submitReceipt(respond(500), 401, "po", { idempotencyKey: "k", lines: [] });
+    expect(result).toMatchObject({ ok: false, message: RECEIVING_MESSAGES.submitUnsure });
+    expect((result as { status?: number }).status).toBeUndefined();
+  });
+
   it("shows the app's own message for a refusal and keeps the field errors", async () => {
     const fetchImpl = respond(400, {
       error: { code: "bad_request", message: "Fix the highlighted field.", fieldErrors: { "line:l1": "Only 4 left." } },

@@ -8,7 +8,7 @@ import type {
   ReceivingSheet,
 } from "./api-types";
 
-type FetchLike = (
+export type FetchLike = (
   input: string,
   init?: {
     method?: string;
@@ -41,7 +41,7 @@ export type Failure = {
 
 export type Result<T> = { ok: true; value: T } | Failure;
 
-function failure(
+export function failure(
   message: string,
   fieldErrors: Record<string, string> = {},
   status?: number,
@@ -82,7 +82,7 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-async function call<T>(
+export async function call<T>(
   fetchImpl: FetchLike,
   url: string,
   init: Parameters<FetchLike>[1],
@@ -103,7 +103,7 @@ async function call<T>(
   }
 }
 
-function withLocation(path: string, locationId: number | null, extra: Record<string, string> = {}) {
+export function withLocation(path: string, locationId: number | null, extra: Record<string, string> = {}) {
   const params = new URLSearchParams(extra);
   if (locationId !== null) params.set("location", String(locationId));
   const query = params.toString();
@@ -161,6 +161,11 @@ export async function submitReceipt(
   );
   if (result === null) return failure(RECEIVING_MESSAGES.submitUnsure);
   if (!result.ok && result.message === RECEIVING_MESSAGES.offline) {
+    return failure(RECEIVING_MESSAGES.submitUnsure);
+  }
+  // A server error can come after part of the receipt was recorded, so the
+  // outcome is unknown: the same key must be retried, not a fresh count.
+  if (!result.ok && result.status !== undefined && result.status >= 500) {
     return failure(RECEIVING_MESSAGES.submitUnsure);
   }
   return result;

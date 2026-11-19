@@ -125,3 +125,42 @@ export type ReceiptResponse = {
 export type ApiErrorWithFields = {
   error: { code: string; message: string; fieldErrors?: Record<string, string> };
 };
+
+export type CountableStocktake = {
+  id: string;
+  name: string;
+  scope: "FULL" | "PARTIAL";
+  blind: boolean;
+  lineCount: number;
+  countedCount: number;
+};
+
+export type StocktakeListResponse = {
+  stocktakes: CountableStocktake[];
+  hasMore: boolean;
+};
+
+export type CountLine = {
+  lineId: string;
+  variantGid: string;
+  title: string;
+  sku: string | null;
+  barcode: string | null;
+  countedQty: number | null;
+};
+
+export type CountProgress = { lineCount: number; countedCount: number };
+
+export type CountSheet = {
+  stocktake: { id: string; name: string; blind: boolean } & CountProgress;
+  counted: CountLine[];
+  hasMoreCounted: boolean;
+};
+
+export type CountResponse =
+  | {
+      ok: true;
+      line: { lineId: string; title: string; countedQty: number | null; added: boolean };
+      progress: CountProgress;
+    }
+  | { ok: false; message: string; progress: CountProgress };

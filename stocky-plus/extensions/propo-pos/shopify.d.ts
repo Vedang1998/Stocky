@@ -15,6 +15,11 @@ declare module "./src/StockLookup.tsx" {
   const globalThis: { shopify: typeof shopify };
 }
 
+declare module "./src/Count.tsx" {
+  const shopify: import("@shopify/ui-extensions/pos.home.modal.render").Api;
+  const globalThis: { shopify: typeof shopify };
+}
+
 declare module "./src/Receive.tsx" {
   const shopify: import("@shopify/ui-extensions/pos.home.modal.render").Api;
   const globalThis: { shopify: typeof shopify };
