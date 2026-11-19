@@ -503,6 +503,42 @@ describe("transfer workflow", () => {
     });
   });
 
+  it("holds at most 1,000 items, and still takes more units of an item it has", async () => {
+    const id = await draftTransfer([[RED, 1]]);
+    const { shopId } = await load(id);
+    await prisma.transferLineItem.createMany({
+      data: Array.from({ length: 998 }, (_, index) => ({
+        shopId,
+        transferOrderId: id,
+        shopifyVariantId: variant(10_000 + index),
+        quantity: 1,
+      })),
+    });
+
+    expect(
+      await addTransferItems(dbA, { transferId: id, itemsText: "WHT-750,2" }),
+    ).toMatchObject({ ok: true, added: 1 });
+    expect(await prisma.transferLineItem.count()).toBe(1_000);
+
+    expect(
+      await addTransferItems(dbA, {
+        transferId: id,
+        itemsText: "RED-750,3\nROSE-750,1",
+      }),
+    ).toMatchObject({
+      ok: false,
+      error:
+        "A transfer can hold at most 1,000 items. Put the rest on another transfer.",
+    });
+    expect(await prisma.transferLineItem.count()).toBe(1_000);
+    expect((await lineOf(id, RED)).quantity).toBe(1);
+
+    expect(
+      await addTransferItems(dbA, { transferId: id, itemsText: "RED-750,3" }),
+    ).toMatchObject({ ok: true, added: 0, updated: 1 });
+    expect((await lineOf(id, RED)).quantity).toBe(4);
+  });
+
   describe("the stock check before shipping", () => {
     it("stops when the source has fewer units than the transfer takes, until that is confirmed", async () => {
       const id = await draftTransfer();
@@ -541,6 +577,21 @@ describe("transfer workflow", () => {
       expect(confirmed).toEqual({ ok: true, alreadyDone: false });
       expect((await load(id)).status).toBe("IN_TRANSIT");
       expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+    });
+
+    it("ships without asking when the source has exactly the units the transfer takes", async () => {
+      const id = await draftTransfer();
+
+      const shipped = await shipTransfer(dbA, null, STAFF, id, {
+        ...enabled(),
+        readQuantities: reader({
+          [`${item(101)}|${SOURCE}`]: 4,
+          [`${item(102)}|${SOURCE}`]: 6,
+        }),
+      });
+
+      expect(shipped).toEqual({ ok: true, alreadyDone: false });
+      expect((await load(id)).status).toBe("IN_TRANSIT");
     });
 
     it("refuses an item Shopify does not stock at the source or the destination, confirmed or not", async () => {
@@ -782,6 +833,30 @@ describe("transfer workflow", () => {
         countedIn: 1,
         outstanding: 1,
       });
+    });
+
+    it("asks for another code when both items sharing a barcode are on the transfer", async () => {
+      shopify.setLevel(104, 3, 11);
+      shopify.setLevel(105, 3, 11);
+      const id = await shippedTransfer([
+        [TWIN_A, 2],
+        [TWIN_B, 2],
+      ]);
+
+      expect(await scan(id, "5019999")).toEqual({
+        ok: false,
+        error:
+          "5019999 matches 2 items (Twin A, Twin B). Use a barcode or SKU that only one item has.",
+      });
+      expect((await lineOf(id, TWIN_A)).pendingReceiveQty).toBe(0);
+      expect((await lineOf(id, TWIN_B)).pendingReceiveQty).toBe(0);
+
+      expect(await scan(id, "TWIN-B")).toMatchObject({
+        ok: true,
+        title: "Twin B",
+        countedIn: 1,
+      });
+      expect((await lineOf(id, TWIN_A)).pendingReceiveQty).toBe(0);
     });
 
     it("bounds the typed units of a line by what is still to be received", async () => {
@@ -1337,6 +1412,141 @@ describe("transfer workflow", () => {
       expect(await operations("TransferShipment", id)).toHaveLength(1);
       expect((await load(id)).status).toBe("IN_TRANSIT");
     });
+
+    it("takes no posted receipt while a return is unfinished", async () => {
+      const id = await shippedTransfer();
+      rejectNextChangeAt(1);
+      await close(id, "RETURNED");
+      // Counted in on another device before it saw the close.
+      expect(await scan(id, "RED-750", 1)).toMatchObject({ ok: true });
+      const sent = shopify.requests.length;
+
+      expect(
+        await postTransferReceipt(dbA, null, RECEIVER, id, enabled()),
+      ).toEqual({
+        ok: false,
+        error:
+          "Closing this transfer was started and part of its stock is already back at the source, so nothing more can be received. Close the transfer again to finish.",
+        problems: [],
+        blocker: null,
+      });
+
+      expect(shopify.requests).toHaveLength(sent);
+      expect(await lineOf(id, RED)).toMatchObject({
+        receivedQty: 0,
+        pendingReceiveQty: 1,
+      });
+      expect(levels()).toMatchObject({ redDestination: 0, redSource: 10 });
+    });
+
+    it("does not close while the last receipt is still on its way to Shopify", async () => {
+      const id = await shippedTransfer();
+      await scan(id, "RED-750", 3);
+      shopify.loseNextResponse();
+      expect(
+        await postTransferReceipt(dbA, null, RECEIVER, id, enabled()),
+      ).toMatchObject({ ok: false });
+      // Shopify added the units; its answer never arrived.
+      expect(levels()).toMatchObject({ redDestination: 3 });
+      const red = await lineOf(id, RED);
+      expect(
+        await setTransferReceiveQuantity(dbA, {
+          lineId: red.id,
+          quantity: 0,
+          transferId: id,
+        }),
+      ).toEqual({ ok: true });
+      const sent = shopify.requests.length;
+
+      expect(await close(id, "WRITTEN_OFF")).toEqual({
+        ok: false,
+        error:
+          "The last receipt has not finished posting. Post the receipt again, then close the transfer.",
+        problems: [],
+        blocker: null,
+      });
+      expect(shopify.requests).toHaveLength(sent);
+      expect((await load(id)).status).toBe("IN_TRANSIT");
+
+      // Posting again confirms the lost receipt, then takes back the units
+      // that are no longer counted in.
+      expect(
+        await postTransferReceipt(dbA, null, RECEIVER, id, enabled()),
+      ).toEqual({
+        ok: true,
+        alreadyDone: false,
+        receivedUnits: 0,
+        completed: false,
+      });
+      expect(levels()).toMatchObject({ redDestination: 0, redSource: 6 });
+
+      expect(await close(id, "WRITTEN_OFF")).toEqual({
+        ok: true,
+        alreadyDone: false,
+        missingUnits: 10,
+        resolution: "WRITTEN_OFF",
+      });
+    });
+
+    it("adds no stock at the destination for a transfer the ledger never saw leave", async () => {
+      const id = await draftTransfer();
+      await prisma.transferOrder.update({
+        where: { id },
+        data: { status: "IN_TRANSIT" },
+      });
+      expect(await scan(id, "RED-750", 2)).toMatchObject({ ok: true });
+      const refusal = {
+        ok: false,
+        error:
+          "ProPo has no complete record of this transfer leaving the source location, so it will not add stock at the destination.",
+        problems: [],
+        blocker: null,
+      };
+
+      expect(
+        await postTransferReceipt(dbA, null, RECEIVER, id, enabled()),
+      ).toEqual(refusal);
+      expect(await receiveTransfer(dbA, null, RECEIVER, id, enabled())).toEqual(
+        refusal,
+      );
+
+      expect(shopify.requests).toHaveLength(0);
+      expect(await prisma.inventoryOperation.count()).toBe(0);
+      expect(await lineOf(id, RED)).toMatchObject({
+        receivedQty: 0,
+        pendingReceiveQty: 2,
+      });
+      expect(levels()).toMatchObject({
+        redDestination: 0,
+        whiteDestination: 0,
+      });
+    });
+
+    it("neither returns nor writes off units of a transfer the ledger never saw leave", async () => {
+      const id = await draftTransfer();
+      await prisma.transferOrder.update({
+        where: { id },
+        data: { status: "IN_TRANSIT" },
+      });
+
+      for (const resolution of ["RETURNED", "WRITTEN_OFF"]) {
+        expect(await close(id, resolution)).toEqual({
+          ok: false,
+          error:
+            "ProPo has no complete record of this transfer leaving the source location, so it will not add stock at the destination.",
+          problems: [],
+          blocker: null,
+        });
+      }
+
+      expect(shopify.requests).toHaveLength(0);
+      expect(await prisma.inventoryOperation.count()).toBe(0);
+      expect(await load(id)).toMatchObject({
+        status: "IN_TRANSIT",
+        shortResolution: null,
+      });
+      expect(levels()).toMatchObject({ redSource: 10, whiteSource: 20 });
+    });
   });
 
   describe("what the pages read", () => {
@@ -1596,6 +1806,184 @@ describe("transfer workflow", () => {
       });
 
       expect(await attention(id)).toBe("NO_SHIPMENT_RECORD");
+    });
+  });
+
+  describe("two people on one transfer at the same moment", () => {
+    /**
+     * Shop A's database handle, except that `before` runs once, just ahead of
+     * the first transaction the caller opens: the moment between a service's
+     * checks and the change it makes under the transfer's lock.
+     */
+    function beforeFirstTransaction(before: () => Promise<void>): TenantDb {
+      let waiting = true;
+      return new Proxy(dbA, {
+        get(target, property) {
+          const value: unknown = Reflect.get(target, property, target);
+          if (typeof value !== "function") return value;
+          if (property !== "$transaction") return value.bind(target);
+          return async (...args: unknown[]) => {
+            if (waiting) {
+              waiting = false;
+              await before();
+            }
+            return value.apply(target, args) as unknown;
+          };
+        },
+      });
+    }
+
+    it("does not ship a quantity that was changed while the shipment was being sent", async () => {
+      const id = await draftTransfer();
+      const red = await lineOf(id, RED);
+
+      const shipped = await shipTransfer(
+        dbA,
+        null,
+        STAFF,
+        id,
+        enabled({
+          sendBatch: async (request) => {
+            const answer = await shopify.send(request);
+            await setTransferLineQuantity(dbA, { lineId: red.id, quantity: 5 });
+            return answer;
+          },
+        }),
+      );
+
+      expect(shipped).toEqual({
+        ok: false,
+        error:
+          "A line was changed while this transfer was being shipped. Ship it again to apply the latest quantities.",
+        problems: [],
+        blocker: null,
+      });
+      expect(await load(id)).toMatchObject({
+        status: "DRAFT",
+        shippedAt: null,
+      });
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+
+      expect(await shipTransfer(dbA, null, STAFF, id, enabled())).toEqual({
+        ok: true,
+        alreadyDone: false,
+      });
+      expect((await load(id)).status).toBe("IN_TRANSIT");
+      expect(await lineOf(id, RED)).toMatchObject({
+        quantity: 5,
+        pickedQty: 5,
+      });
+      expect(levels()).toMatchObject({ redSource: 5, whiteSource: 14 });
+    });
+
+    it("does not cancel a draft whose shipment is on its way to Shopify", async () => {
+      const id = await draftTransfer();
+      let letShopifyAnswer = () => {};
+      const shopifyHeld = new Promise<void>((resolve) => {
+        letShopifyAnswer = resolve;
+      });
+      let shipping: ReturnType<typeof shipTransfer> | undefined;
+
+      const db = beforeFirstTransaction(
+        () =>
+          new Promise<void>((requestSent) => {
+            shipping = shipTransfer(
+              dbA,
+              null,
+              STAFF,
+              id,
+              enabled({
+                sendBatch: async (request) => {
+                  requestSent();
+                  await shopifyHeld;
+                  return shopify.send(request);
+                },
+              }),
+            );
+          }),
+      );
+
+      const cancelled = await cancelTransfer(db, null, RECEIVER, id, enabled());
+
+      expect(cancelled).toEqual({
+        ok: false,
+        error:
+          "This transfer is being shipped right now. Reload the page, then cancel it again if it is still a draft.",
+        problems: [],
+        blocker: null,
+      });
+      expect(await load(id)).toMatchObject({
+        status: "DRAFT",
+        cancelledAt: null,
+      });
+
+      letShopifyAnswer();
+      expect(await shipping).toEqual({ ok: true, alreadyDone: false });
+      expect(await load(id)).toMatchObject({
+        status: "IN_TRANSIT",
+        cancelledAt: null,
+        shippedByUserId: "42",
+      });
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+      expect(shopify.requests).toHaveLength(1);
+    });
+
+    it("does not close a transfer as complete when a unit goes missing at the last moment", async () => {
+      const id = await shippedTransfer();
+      await scan(id, "RED-750", 3);
+      await scan(id, "WHT-750", 6);
+      await postTransferReceipt(dbA, null, RECEIVER, id, enabled());
+      const red = await lineOf(id, RED);
+      const rejectRed = (rejectedQty: number) =>
+        setTransferRejectedQuantity(dbA, {
+          lineId: red.id,
+          rejectedQty,
+          note: rejectedQty > 0 ? "Broken" : "",
+          transferId: id,
+        });
+      expect(await rejectRed(1)).toMatchObject({ ok: true });
+      const sent = shopify.requests.length;
+
+      const closed = await closeTransfer(
+        beforeFirstTransaction(async () => {
+          expect(await rejectRed(0)).toMatchObject({ ok: true });
+        }),
+        null,
+        RECEIVER,
+        id,
+        { resolution: undefined },
+        enabled(),
+      );
+
+      expect(closed).toEqual({
+        ok: false,
+        error:
+          "This transfer was changed while it was being closed. Reload the page to see where it stands, then close it again.",
+        problems: [],
+        blocker: null,
+      });
+      expect(await load(id)).toMatchObject({
+        status: "IN_TRANSIT",
+        receivedAt: null,
+        shortResolution: null,
+      });
+      expect(shopify.requests).toHaveLength(sent);
+
+      expect(
+        await closeTransfer(
+          dbA,
+          null,
+          RECEIVER,
+          id,
+          { resolution: undefined },
+          enabled(),
+        ),
+      ).toMatchObject({
+        ok: false,
+        error: expect.stringContaining(
+          "1 unit shipped on this transfer did not arrive.",
+        ),
+      });
     });
   });
 
