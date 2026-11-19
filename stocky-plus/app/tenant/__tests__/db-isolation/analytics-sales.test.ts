@@ -9,6 +9,7 @@ import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
 import { AnalyticsPrerequisiteError } from "../../../lib/analytics/errors";
 import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
+import { loadDemandHistory } from "../../../lib/smart-forecast/history.server";
 import { localRangeToUtc } from "../../../lib/analytics/shop-calendar";
 import {
   loadAppliedInventoryChanges,
@@ -18,7 +19,6 @@ import {
 import { loadLastOrderedAt } from "../../../lib/analytics/stock-levels.server";
 import { toCsv } from "../../../lib/csv.server";
 import { findReport, loadReportContext } from "../../../lib/reports/registry.server";
-import { loadDemandHistory } from "../../../lib/smart-forecast/history.server";
 import { issueTenantAuthority } from "../../authority.server";
 import { readShopReportingProfile } from "../../bootstrap.server";
 import { createTenantDb, type TenantDb } from "../../tenant-db.server";
@@ -935,6 +935,9 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
         expect(stocktakes.map((line) => line.countedQty).sort()).toEqual([0, 800, null]);
         expect(changes.map((change) => change.delta)).toEqual([-900]);
       });
+    });
+  });
+
   it("gives Smart Forecast one variant's daily demand from the shop's own history", async () => {
     const input = {
       variantGid: VARIANT_OLD,
