@@ -14,12 +14,13 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { PrismaClient } from "@prisma/client";
-import type { ExecuteInventoryOperationOptions } from "../../../app/services/inventory-writes/execute.server";
+import type { ReadLevelQuantities } from "../../../app/services/inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../../../app/services/inventory-writes/types";
 import {
   completeStocktake,
   createStocktake,
   saveStocktakeCount,
+  type CompleteStocktakeOptions,
 } from "../../../app/services/stocktakes/stocktake.server";
 import {
   addTransferLine,
@@ -37,6 +38,7 @@ import { FakeShopify, item, location } from "./fake-shopify-inventory";
 import { resetSchemaAndApplyEnforcement } from "./helpers";
 import {
   completeInventoryItemData,
+  completeInventoryLevelData,
   completeLocationData,
 } from "./pr5-f3-test-helpers";
 
@@ -63,7 +65,23 @@ describe("stock conservation under concurrent requests", () => {
     Record<"red" | "white" | "redDest" | "whiteDest", number>
   >;
 
-  const enabled = (): ExecuteInventoryOperationOptions => ({
+  /** The count reads its starting and current quantities from the same Shopify double. */
+  const readQuantities: ReadLevelQuantities = async (
+    locationId,
+    inventoryItemIds,
+  ) => {
+    await sleep(Math.random() * 10);
+    const locationNumber = Number(locationId.split("/").pop());
+    return new Map(
+      inventoryItemIds.map((id) => [
+        id,
+        shopify.level(Number(id.split("/").pop()), locationNumber),
+      ]),
+    );
+  };
+
+  const enabled = (): CompleteStocktakeOptions => ({
+    readQuantities,
     sendBatch: async (request) => {
       await sleep(Math.random() * 40);
       const outcome = await shopify.send(request);
@@ -108,6 +126,22 @@ describe("stock conservation under concurrent requests", () => {
         inventoryItemId: v.inventoryItemId,
       })),
     });
+    // A count sheet lists the items the sync knows at the location.
+    await prisma.shopifyInventoryLevelFact.createMany({
+      data: [
+        { itemId: "101", onHand: 10 },
+        { itemId: "102", onHand: 20 },
+      ].map(({ itemId, onHand }) => ({
+        ...completeInventoryLevelData({
+          id: `level-${itemId}-11`,
+          shopId: shopA.id,
+          itemId,
+          locationId: "11",
+          available: onHand,
+        }),
+        onHandQuantity: onHand,
+      })),
+    });
     const snapshotDate = new Date("2026-11-01T00:00:00Z");
     await prisma.inventorySnapshot.createMany({
       data: [
@@ -145,11 +179,13 @@ describe("stock conservation under concurrent requests", () => {
   it.each(Array.from({ length: ROUNDS }, (_, i) => i))(
     "stocktake: 8 completes racing 6 count changes, round %i",
     async () => {
-      await createStocktake(dbA, {
-        shop: SHOP_A,
-        locationId: SOURCE,
-        name: "race",
-      });
+      const started = await createStocktake(
+        dbA,
+        null,
+        { shop: SHOP_A, locationId: SOURCE, name: "race", actor: STAFF },
+        { readQuantities },
+      );
+      expect(started).toMatchObject({ ok: true, lineCount: 2 });
       const stocktake = await prisma.stocktake.findFirstOrThrow({
         include: { lineItems: true },
       });
@@ -159,8 +195,15 @@ describe("stock conservation under concurrent requests", () => {
       const white = stocktake.lineItems.find(
         (l) => l.shopifyVariantId === WHITE,
       )!.id;
-      await saveStocktakeCount(dbA, { lineId: red, countedQty: 7 });
-      await saveStocktakeCount(dbA, { lineId: white, countedQty: 25 });
+      const count = (lineId: string, countedQty: number) =>
+        saveStocktakeCount(
+          dbA,
+          null,
+          { lineId, countedQty, actor: STAFF },
+          { readQuantities },
+        );
+      await count(red, 7);
+      await count(white, 25);
 
       const outcomes = await Promise.allSettled([
         ...Array.from({ length: 8 }, async () => {
@@ -169,7 +212,7 @@ describe("stock conservation under concurrent requests", () => {
         }),
         ...[5, 9, 3, 12, 0, 6].map(async (qty) => {
           await sleep(Math.random() * 80);
-          return saveStocktakeCount(dbA, { lineId: red, countedQty: qty });
+          return count(red, qty);
         }),
       ]);
       const thrown = outcomes.filter((o) => o.status === "rejected");
