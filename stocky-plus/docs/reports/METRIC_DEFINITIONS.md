@@ -176,6 +176,8 @@ table, sorting, filtering, the totals and the export.
 | Transfers | Transfer line | Date range, by creation day | `TransferOrder`, `TransferLineItem` |
 | Stocktake variances | Stocktake line | Date range, by completion day | `Stocktake`, `StocktakeLineItem`, current unit cost |
 | Inventory adjustments | Applied ledger line | Date range, by the day the change was made | `InventoryOperation`, `InventoryOperationLine`, current unit cost |
+| Purchase orders | Purchase order | Date range, by creation day | `PurchaseOrder`, totals from `app/lib/purchasing/totals.ts` |
+| Purchase order items | Purchase order line | Date range, by creation day | `POLineItem`, the same totals |
 
 ### 9.1 Date ranges
 
@@ -324,7 +326,49 @@ through the ledger and are not listed either.
 - **Made by** is the staff member's display name recorded with the operation,
   or "Automatic" for a change made by the system.
 
-### 9.9 Totals, filters and export
+### 9.9 Purchase orders
+
+One row per purchase order created in the range (the creation moment read in
+the shop's time zone). Archived orders are listed. The report is read live from
+the records this app keeps, not from Shopify, so it carries no sync date.
+
+Every figure comes from the purchasing module's own arithmetic
+(`computePurchaseOrderTotals`, reached through the purchase order services), so
+the report cannot disagree with the purchase order screen or its PDF.
+
+- **Units ordered** is units ordered less units cancelled. **Units received**
+  is the sum of received quantities. **Units outstanding** is ordered, less
+  cancelled, less received, never below zero per line.
+- **Merchandise** is line amounts after line discounts, before tax and order
+  charges. **Order total** adds tax and charges (shipping, duties, other) and
+  subtracts order discounts.
+- Amounts are shown in the shop currency. An order in another currency is
+  converted with the exchange rate frozen on that order (shop-currency units per
+  one order-currency unit). An order in another currency with no rate is
+  shown blank, left out of the value tile, and named in a notice.
+- **Overdue** is Yes for an order that is sent, ordered or partly received, not
+  archived, with an expected date before today (shop-local). An order expected
+  today is not overdue.
+- Tiles: purchase orders listed; units ordered; units outstanding; value
+  ordered. Drafts and cancelled orders count in the first tile only. Archived
+  orders are left out of units outstanding.
+
+### 9.10 Purchase order items
+
+One row per line of the purchase orders in 9.9, with the same date range,
+status, supplier and overdue filters. The product and variant name are today's
+catalog name; for a variant no longer in the catalog the report shows the title
+saved on the line when it was added.
+
+- **Ordered** is units on the line less cancelled; **Outstanding** is ordered,
+  less cancelled, less received.
+- **Unit cost** is the cost on the line. **Landed unit cost** is the unit cost
+  after the line discount plus the line's share of allocated order charges, as
+  the order's landed cost method allocates them; tax is not included.
+  **Line amount** is net of the line discount and before tax.
+- Currency conversion and blanks follow 9.9.
+
+### 9.11 Totals, filters and export
 
 Totals are computed from the rows left after filters and search, across every
 page, never from the page on screen. Sorting puts blank values last in both
@@ -337,7 +381,7 @@ with "(%)" in the header, and a missing value as an empty cell. All cells go
 through the shared encoder in `app/lib/csv.server.ts`, which neutralizes
 spreadsheet formulas.
 
-### 9.10 Known limits
+### 9.12 Known limits
 
 - A report is computed on request and held in memory for that request. Shops
   with very large catalogs or order volumes will need persisted daily
@@ -347,4 +391,8 @@ spreadsheet formulas.
 - Every cost-based figure (stock value, gross profit, variance value, value of
   an inventory change) uses the current Shopify cost per item, not the cost on
   the day of the sale, count or change.
-- Purchase order and supplier reports are not built yet.
+- Purchase order reports list orders by creation day only; there is no
+  report by receipt date or by supplier performance yet (filter by supplier
+  works). Supplier-specific reports are not built.
+- Amounts on a foreign-currency order use the order's frozen rate, so they do
+  not move with later exchange-rate changes.

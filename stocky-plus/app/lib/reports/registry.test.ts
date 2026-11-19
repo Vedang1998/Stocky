@@ -39,6 +39,8 @@ describe("report registry", () => {
       "transfers",
       "stocktake-variances",
       "inventory-adjustments",
+      "purchase-orders",
+      "purchase-order-items",
     ]);
   });
 
