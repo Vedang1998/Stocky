@@ -8,6 +8,7 @@ import type { TenantAuthority } from "../../tenant/authority.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { loadAbcParityRun } from "../analytics/abc-parity.server";
 import { loadCatalogVariants } from "../analytics/catalog.server";
+import { loadPurchaseOrders } from "../analytics/purchase-orders.server";
 import { requireShopCurrency } from "../analytics/errors";
 import {
   loadSalesCoverage,
@@ -48,6 +49,10 @@ import {
   type ReportExport,
   type ReportTablePage,
 } from "./present";
+import {
+  buildPurchaseOrderItemsReport,
+  buildPurchaseOrdersReport,
+} from "./purchase-order-reports";
 import {
   SELLER_VIEWS,
   buildOrdersReport,
@@ -582,6 +587,53 @@ const REPORTS: readonly RegisteredReport[] = [
         locations,
         timeZone: context.timeZone,
         currencyCode: context.currencyCode,
+      });
+    },
+  }),
+  register({
+    id: "purchase-orders",
+    title: "Purchase orders",
+    description:
+      "Every purchase order created in the period: supplier, status, expected date, units received and value in your shop currency.",
+    group: "Inventory",
+    usesDateRange: true,
+    defaultRangePreset: "month_to_date",
+    options: [],
+    load: async (context, request) =>
+      buildPurchaseOrdersReport({
+        orders: await loadPurchaseOrders(
+          context.db,
+          requestedUtcRange(context, request),
+        ),
+        timeZone: context.timeZone,
+        currencyCode: context.currencyCode,
+        today: context.today,
+      }),
+  }),
+  register({
+    id: "purchase-order-items",
+    title: "Purchase order items",
+    description:
+      "Every line on those purchase orders: what was ordered, received and still outstanding, with unit cost and landed cost.",
+    group: "Inventory",
+    usesDateRange: true,
+    defaultRangePreset: "month_to_date",
+    options: [],
+    load: async (context, request) => {
+      const orders = await loadPurchaseOrders(
+        context.db,
+        requestedUtcRange(context, request),
+      );
+      const { directory } = await loadVariantNames(
+        context,
+        orders.flatMap((order) => order.lines.map((line) => line.variantGid)),
+      );
+      return buildPurchaseOrderItemsReport({
+        orders,
+        directory,
+        timeZone: context.timeZone,
+        currencyCode: context.currencyCode,
+        today: context.today,
       });
     },
   }),
