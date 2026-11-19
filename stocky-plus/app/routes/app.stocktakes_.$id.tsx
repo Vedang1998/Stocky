@@ -149,6 +149,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     params,
   });
   await requireActivePlanSnapshot(db);
+  // Whoever changes a document is recorded on it, so nothing here is saved
+  // for a request that names no staff member.
+  if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
   const stocktakeId = readFormId(params.id);
   if (!stocktakeId) return { error: NOT_FOUND };
   const form = await request.formData();
@@ -272,7 +275,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "complete") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await completeStocktake(db, admin, actor, stocktakeId, {
       acceptUncounted: form.get("acceptUncounted") === "1",
     });

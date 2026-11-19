@@ -138,6 +138,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     params,
   });
   await requireActivePlanSnapshot(db);
+  // Whoever changes a document is recorded on it, so nothing here is saved
+  // for a request that names no staff member.
+  if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
   const transferId = readFormId(params.id);
   if (!transferId) return { error: NOT_FOUND };
   const form = await request.formData();
@@ -251,7 +254,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "ship") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await shipTransfer(db, admin, actor, transferId, {
       allowShortSource: form.get("allowShortSource") === "1",
     });
@@ -354,7 +356,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "postReceipt" || intent === "receiveAll") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await (intent === "receiveAll"
       ? receiveTransfer(db, admin, actor, transferId)
       : postTransferReceipt(db, admin, actor, transferId));
@@ -379,7 +380,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "close") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await closeTransfer(db, admin, actor, transferId, {
       resolution: form.get("resolution"),
     });

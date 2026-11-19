@@ -17,7 +17,10 @@ import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.server";
+import {
+  requireAdminTenantWithActor,
+  STAFF_REQUIRED_MESSAGE,
+} from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
@@ -83,6 +86,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     scope: text(form.get("scope")),
     blind: text(form.get("blind")),
   };
+  // The draft records who made it, so none is made for a request that names
+  // no staff member. What was entered goes back to the form.
+  if (!actor) return { error: STAFF_REQUIRED_MESSAGE, values };
   const result = await createStocktake(db, admin, {
     shop: tenant.myshopifyDomain,
     locationId: readFormId(values.locationId),

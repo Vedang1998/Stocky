@@ -459,6 +459,32 @@ describe("Transfers list", () => {
     expect(html).toMatch(/<s-text-field[^>]*name="notes"[^>]*value="Top up"/);
   });
 
+  it("creates no draft without a signed-in staff member, and keeps what was entered", async () => {
+    context.actor = null;
+
+    const result = await listRoute.action(
+      post("/app/transfers", {
+        intent: "create",
+        sourceLocationId: WAREHOUSE,
+        destinationLocationId: SHOP_FLOOR,
+        notes: "Friday restock",
+      }),
+    );
+
+    expect(result).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      values: {
+        sourceLocationId: WAREHOUSE,
+        destinationLocationId: SHOP_FLOOR,
+        notes: "Friday restock",
+      },
+    });
+    expect(drafts.createTransfer).not.toHaveBeenCalled();
+    expect(renderList({}, result)).toMatch(
+      /<s-text-field[^>]*name="notes"[^>]*value="Friday restock"/,
+    );
+  });
+
   it("refuses an intent it does not know", async () => {
     const result = await listRoute.action(
       post("/app/transfers", { intent: "ship", transferId: ID }),
@@ -749,6 +775,46 @@ describe("Transfer page action", () => {
     expect(drafts.createTransfer).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "addItem",
+    "addItems",
+    "setQuantity",
+    "pick",
+    "remove",
+    "ship",
+    "cancel",
+    "scan",
+    "countIn",
+    "reject",
+    "countInAll",
+    "postReceipt",
+    "receiveAll",
+    "close",
+  ])(
+    "saves nothing for %s without a signed-in staff member",
+    async (intent) => {
+      context.actor = null;
+
+      expect(
+        await act({
+          intent,
+          code: "RED-750",
+          items: "RED-750",
+          lineId: "line-1",
+          quantity: "2",
+          pickedQty: "1",
+          rejectedQty: "1",
+        }),
+      ).toEqual({ error: STAFF_REQUIRED_MESSAGE });
+      for (const [name, service] of Object.entries({
+        ...drafts,
+        ...receiving,
+      })) {
+        expect(service, name).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   describe("adding one item", () => {
     it("adds the scanned code with its units and says where the line stands", async () => {
       drafts.addTransferItems.mockResolvedValue({
@@ -1013,15 +1079,6 @@ describe("Transfer page action", () => {
   });
 
   describe("ship", () => {
-    it("needs a signed-in staff member, before anything is read", async () => {
-      context.actor = null;
-
-      expect(await act({ intent: "ship" })).toEqual({
-        error: STAFF_REQUIRED_MESSAGE,
-      });
-      expect(drafts.shipTransfer).not.toHaveBeenCalled();
-    });
-
     it("confirms a shipped transfer", async () => {
       drafts.shipTransfer.mockResolvedValue({ ok: true, alreadyDone: false });
 
@@ -1089,8 +1146,7 @@ describe("Transfer page action", () => {
   });
 
   describe("cancel", () => {
-    it("cancels a draft even when nobody is signed in", async () => {
-      context.actor = null;
+    it("cancels a draft as the signed-in staff member", async () => {
       drafts.cancelTransfer.mockResolvedValue({ ok: true, alreadyDone: false });
 
       const result = await act({ intent: "cancel" });
@@ -1098,7 +1154,7 @@ describe("Transfer page action", () => {
       expect(drafts.cancelTransfer).toHaveBeenCalledWith(
         context.db,
         context.admin,
-        null,
+        STAFF,
         ID,
       );
       expect(result).toEqual({ ok: true, notice: "Transfer cancelled." });
@@ -1292,20 +1348,6 @@ describe("Transfer page action", () => {
   });
 
   describe("posting a receipt", () => {
-    it.each(["postReceipt", "receiveAll", "close"])(
-      "%s needs a signed-in staff member, before anything is read",
-      async (intent) => {
-        context.actor = null;
-
-        expect(await act({ intent })).toEqual({
-          error: STAFF_REQUIRED_MESSAGE,
-        });
-        expect(receiving.postTransferReceipt).not.toHaveBeenCalled();
-        expect(receiving.receiveTransfer).not.toHaveBeenCalled();
-        expect(receiving.closeTransfer).not.toHaveBeenCalled();
-      },
-    );
-
     it("posts what is counted in and says the transfer stays open for the rest", async () => {
       receiving.postTransferReceipt.mockResolvedValue({
         ok: true,
