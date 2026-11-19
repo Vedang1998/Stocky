@@ -31,37 +31,46 @@ export const RECEIVING_MESSAGES = {
     "ProPo couldn't confirm the receipt. Tap Receive again to retry; the same delivery won't be counted twice.",
 } as const;
 
-export type Result<T> =
-  | { ok: true; value: T }
-  | { ok: false; message: string; fieldErrors: Record<string, string> };
+export type Failure = {
+  ok: false;
+  message: string;
+  fieldErrors: Record<string, string>;
+  /** HTTP status of the refusal; absent when the server was never reached. */
+  status?: number;
+};
+
+export type Result<T> = { ok: true; value: T } | Failure;
 
 function failure(
   message: string,
   fieldErrors: Record<string, string> = {},
-): { ok: false; message: string; fieldErrors: Record<string, string> } {
-  return { ok: false, message, fieldErrors };
+  status?: number,
+): Failure {
+  return status === undefined
+    ? { ok: false, message, fieldErrors }
+    : { ok: false, message, fieldErrors, status };
 }
 
 async function errorResult(
   response: Pick<Response, "status" | "json">,
-): Promise<ReturnType<typeof failure>> {
+): Promise<Failure> {
   const body = (await response.json().catch(() => null)) as ApiErrorWithFields | null;
   const message = body?.error?.message;
   const fieldErrors = body?.error?.fieldErrors ?? {};
   switch (response.status) {
     case 401:
-      return failure(RECEIVING_MESSAGES.signIn);
+      return failure(RECEIVING_MESSAGES.signIn, {}, 401);
     case 403:
-      return failure(message || RECEIVING_MESSAGES.unavailable);
+      return failure(message || RECEIVING_MESSAGES.unavailable, {}, 403);
     case 404:
-      return failure(message || RECEIVING_MESSAGES.notFound);
+      return failure(message || RECEIVING_MESSAGES.notFound, {}, 404);
     case 429:
-      return failure(RECEIVING_MESSAGES.busy);
+      return failure(RECEIVING_MESSAGES.busy, {}, 429);
     case 400:
     case 409:
-      return failure(message || RECEIVING_MESSAGES.failed, fieldErrors);
+      return failure(message || RECEIVING_MESSAGES.failed, fieldErrors, response.status);
     default:
-      return failure(RECEIVING_MESSAGES.failed);
+      return failure(RECEIVING_MESSAGES.failed, {}, response.status);
   }
 }
 
@@ -226,21 +235,21 @@ export function receiptRequest(
 }
 
 /**
- * Keeps one idempotency key for as long as the same counts are being sent, so
- * a retry after a dropped connection records the delivery once, and starts a
- * new key as soon as the counts change.
+ * One idempotency key for a delivery, kept from the first tap of Receive until
+ * a receipt completes, whatever happens to the counts in between. If an answer
+ * is lost the receipt may already exist; sending the same key again finishes
+ * or repeats that receipt, and sending different counts under it is refused
+ * (409) instead of recording the delivery twice. Refusals record nothing, so
+ * the key stays safe to reuse after them.
  */
-export function createSubmissionKeys(newKey: () => string) {
-  let current: { digest: string; key: string } | null = null;
+export function createSubmissionKey(newKey: () => string) {
+  let current: string | null = null;
   return {
-    keyFor(counts: Counts, allowOverReceipt: boolean): string {
-      const digest = JSON.stringify(receiptRequest("", counts, allowOverReceipt));
-      if (!current || current.digest !== digest) {
-        current = { digest, key: newKey() };
-      }
-      return current.key;
+    get(): string {
+      current ??= newKey();
+      return current;
     },
-    finish() {
+    reset() {
       current = null;
     },
   };

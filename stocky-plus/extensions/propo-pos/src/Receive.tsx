@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks"
 import type { ReceivableOrder, ReceivingLine, ReceivingSheet } from "./api-types";
 import {
   bumpCount,
-  createSubmissionKeys,
+  createSubmissionKey,
   describeOrder,
   loadOrders,
   loadSheet,
@@ -190,7 +190,7 @@ function ReceiveOrder({
   const [cameraAvailable, setCameraAvailable] = useState(() =>
     shopify.scanner.sources.current.value.includes("camera"),
   );
-  const keys = useMemo(() => createSubmissionKeys(newSubmissionKey), []);
+  const submissionKey = useMemo(() => createSubmissionKey(newSubmissionKey), []);
   const linesRef = useRef<readonly ReceivingLine[]>([]);
   const sendingRef = useRef(false);
 
@@ -254,25 +254,43 @@ function ReceiveOrder({
     setSending(true);
     setNotice(null);
     setLineErrors({});
-    const request = receiptRequest(keys.keyFor(counts, allowOver), counts, allowOver);
+    const request = receiptRequest(submissionKey.get(), counts, allowOver);
     const result = await submitReceipt(fetch, locationId, orderId, request);
     sendingRef.current = false;
     setSending(false);
 
     if (!result.ok) {
+      if (result.status === 409) {
+        // The order changed or this delivery was already recorded with other
+        // counts: show what is on the order now and start over.
+        submissionKey.reset();
+        setCounts({});
+        setAllowOver(false);
+        setAttempt((n) => n + 1);
+        setNotice({
+          tone: "warning",
+          heading: "Check what was received",
+          detail: `${result.message} The order has been reloaded; count again if anything is missing.`,
+        });
+        return;
+      }
       const errors: Record<string, string> = {};
       for (const [key, message] of Object.entries(result.fieldErrors)) {
         errors[key.startsWith("line:") ? key.slice("line:".length) : key] = message;
       }
       setLineErrors(errors);
-      setNotice({ tone: "critical", heading: "Nothing was received", detail: result.message });
+      setNotice({
+        tone: "critical",
+        heading: result.status === undefined ? "Receipt not confirmed" : "Nothing was received",
+        detail: result.message,
+      });
       return;
     }
 
     const { complete, message, receiptNumber, sheet } = result.value;
     setState({ kind: "ready", sheet });
     if (complete) {
-      keys.finish();
+      submissionKey.reset();
       setCounts({});
       setAllowOver(false);
       setNotice({ tone: "success", heading: message });
