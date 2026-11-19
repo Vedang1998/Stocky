@@ -6,6 +6,8 @@ import {
 import { processCronJob, processWebhookJob } from "./webhook-processor";
 import { dispatchPendingJobs } from "../../sync/dispatcher.server";
 import { assertCanonicalWriterCapacityAtStartup } from "./catalog-facts/capacity";
+import { startPrivacyMaintenanceLoop } from "../../privacy/maintenance.server";
+import { startStrandedJobRecoveryLoop } from "./stranded-job-recovery";
 
 async function main() {
   console.log("Starting Stocky++ workers...");
@@ -43,6 +45,9 @@ async function main() {
     }, dispatcherIntervalMs);
     console.log(`Dispatcher loop every ${dispatcherIntervalMs}ms`);
   }
+
+  startStrandedJobRecoveryLoop();
+  startPrivacyMaintenanceLoop();
 
   console.log("Workers running. Press Ctrl+C to stop.");
 }

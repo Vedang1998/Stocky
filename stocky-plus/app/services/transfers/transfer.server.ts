@@ -464,7 +464,7 @@ export async function shipTransfer(
   if (!settled.ok) return fail(settled.error);
   if (!settled.settle.settled) {
     return fail(
-      `${describeUnsettled(settled.settle)} The transfer stays a draft.`,
+      describeUnsettled(settled.settle, "The transfer stays a draft."),
       describeLineProblems(settled.settle.operation, built.lineByItem),
     );
   }
@@ -559,7 +559,7 @@ export async function receiveTransfer(
   if (!settled.ok) return fail(settled.error);
   if (!settled.settle.settled) {
     return fail(
-      `${describeUnsettled(settled.settle)} The transfer stays in transit.`,
+      describeUnsettled(settled.settle, "The transfer stays in transit."),
       describeLineProblems(settled.settle.operation, built.lineByItem),
     );
   }

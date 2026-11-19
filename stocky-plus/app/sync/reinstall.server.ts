@@ -88,14 +88,30 @@ export async function reactivateShopAfterVerifiedReinstall(input: {
     );
   }
 
-  const updated = await prisma.shop.update({
-    where: { id: shop.id },
+  // Conditional on the state read above: a shop marked REDACTED in the
+  // meantime (erasure has started) must not be switched back on.
+  const enabled = await prisma.shop.updateMany({
+    where: {
+      id: shop.id,
+      processingEnabled: false,
+      processingDisabledReason: "UNINSTALLED",
+    },
     data: {
       processingEnabled: true,
       processingDisabledReason: null,
       processingDisabledAt: null,
       reinstalledAt: new Date(),
     },
+  });
+  if (enabled.count === 0) {
+    throw new SyncControlPlaneError(
+      "reinstall_denied",
+      "Shop state changed while reactivating",
+    );
+  }
+
+  const updated = await prisma.shop.findUniqueOrThrow({
+    where: { id: shop.id },
     select: {
       id: true,
       myshopifyDomain: true,

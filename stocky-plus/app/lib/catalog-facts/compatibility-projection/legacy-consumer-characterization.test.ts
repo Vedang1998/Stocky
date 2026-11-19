@@ -18,23 +18,35 @@ describe("legacy consumer characterization (PR5-F2C)", () => {
     expect(source).toMatch(/cache\?\.inventoryItemId/);
   });
 
-  it("warehouse barcode lookup reads ShopifyVariantCache barcode and title", () => {
-    const source = readApp("routes/app.warehouse.tsx");
-    expect(source).toMatch(/shopifyVariantCache\.findFirst/);
-    expect(source).toMatch(/where:\s*\{\s*barcode\s*\}/);
-    expect(source).toMatch(/variant\.title/);
-    expect(source).toMatch(/variant\.shopifyVariantId/);
+  it("receiving matches scans against the purchase order's line snapshots, not ShopifyVariantCache", () => {
+    const warehouse = readApp("routes/app.warehouse.tsx");
+    expect(warehouse).not.toMatch(/shopifyVariantCache/);
+
+    const worksheet = readApp("services/purchasing/receiving.server.ts");
+    expect(worksheet).toMatch(/barcode:\s*line\.barcode/);
+    expect(worksheet).toMatch(/sku:\s*line\.sku/);
+
+    const scan = readApp("lib/purchasing/receiving-scan.ts");
+    expect(scan).toMatch(/sameCode\(line\.barcode, code\)/);
+    expect(scan).not.toMatch(/shopifyVariantCache/);
   });
 
   it("stocktake completion reads ShopifyVariantCache inventoryItemId and title", () => {
     const service = readApp("services/stocktakes/stocktake.server.ts");
-    expect(service).toMatch(/findVariantInventoryItems\(/);
+    expect(service).toMatch(/findVariantsById\(/);
     expect(service).toMatch(/\?\.inventoryItemId/);
 
     const reader = readApp("services/inventory-writes/variant-items.server.ts");
     expect(reader).toMatch(/shopifyVariantCache\.findMany/);
     expect(reader).toMatch(
-      /select:\s*\{\s*shopifyVariantId:\s*true,\s*title:\s*true,\s*inventoryItemId:\s*true\s*\}/,
+      /const CATALOG_SELECT = \{\s*shopifyVariantId:\s*true,\s*title:\s*true,\s*sku:\s*true,\s*barcode:\s*true,\s*inventoryItemId:\s*true,?\s*\} as const/,
+    );
+    const byId = reader.slice(
+      reader.indexOf("export async function findVariantsById("),
+      reader.indexOf("export async function findVariantsByInventoryItem("),
+    );
+    expect(byId).toMatch(
+      /shopifyVariantCache\.findMany\(\{\s*where:\s*\{\s*shopifyVariantId:\s*\{\s*in:\s*part\s*\}\s*\},\s*select:\s*CATALOG_SELECT,?\s*\}\)/,
     );
   });
 

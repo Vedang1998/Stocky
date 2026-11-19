@@ -62,6 +62,10 @@ const DIRECT_TABLE: Record<DirectMerchantModel, string> = {
   OrderFactObservationInFlight: "OrderFactObservationInFlight",
   InventoryOperation: "InventoryOperation",
   InventoryOperationLine: "InventoryOperationLine",
+  PurchasingEvent: "PurchasingEvent",
+  PurchaseOrderCharge: "PurchaseOrderCharge",
+  PurchaseOrderReceipt: "PurchaseOrderReceipt",
+  PurchaseOrderReceiptLine: "PurchaseOrderReceiptLine",
   ReplenishmentSettings: "ReplenishmentSettings",
   ReplenishmentVariantRule: "ReplenishmentVariantRule",
 };
@@ -82,6 +86,10 @@ export const DIRECT_NO_LEGACY_SHOP = new Set<DirectMerchantModel>([
   "OrderFactObservationInFlight",
   "InventoryOperation",
   "InventoryOperationLine",
+  "PurchasingEvent",
+  "PurchaseOrderCharge",
+  "PurchaseOrderReceipt",
+  "PurchaseOrderReceiptLine",
   "ReplenishmentSettings",
   "ReplenishmentVariantRule",
 ]);

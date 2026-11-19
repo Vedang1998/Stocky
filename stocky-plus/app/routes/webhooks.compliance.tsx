@@ -1,19 +1,51 @@
 import type { ActionFunctionArgs } from "react-router";
+import { signedShopMatches } from "../lib/http/signed-webhook-shop";
+import { recordPrivacyRequest } from "../privacy/intake.server";
+import { resolveComplianceTopic } from "../privacy/topics";
 import { authenticate } from "../shopify.server";
 
 /**
- * Mandatory App Store compliance webhooks.
- * Topics: customers/data_request, customers/redact, shop/redact.
+ * Mandatory compliance webhooks: customers/data_request, customers/redact and
+ * shop/redact. The request is stored before Shopify gets its 200; a failure to
+ * store it answers 500 so Shopify delivers it again. shop/redact is carried
+ * out by the worker (app/privacy/maintenance.server.ts).
  *
- * Phase 0: authenticate + acknowledge. Full redaction/export workflows are
- * Phase 1 (requires Shop entity, retention policy, and operational runbook).
+ * The shop header is not covered by Shopify's signature, the body is. A
+ * request is recorded only for the shop its signed body names, so a signed
+ * delivery for one shop cannot be replayed to erase another. The topic header
+ * is not signed either: a customer request always carries a customer block
+ * and shop/redact never does, so a body with one is refused as a shop erasure.
  */
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic } = await authenticate.webhook(request);
+  const { shop, topic, webhookId, payload } =
+    await authenticate.webhook(request);
 
-  console.log(`Received compliance webhook ${topic} for ${shop}`);
+  const complianceTopic = resolveComplianceTopic(topic);
+  if (!complianceTopic) {
+    return new Response("Unsupported webhook topic", { status: 400 });
+  }
+  if (!signedShopMatches(payload, "shop_domain", shop)) {
+    console.warn(
+      `Rejected ${complianceTopic} webhook: the signed body does not name ${shop}`,
+    );
+    return new Response(null, { status: 401 });
+  }
+  if (complianceTopic === "shop/redact" && "customer" in payload) {
+    console.warn(
+      `Rejected shop/redact webhook for ${shop}: the signed body is a customer request`,
+    );
+    return new Response(null, { status: 401 });
+  }
 
-  // Acknowledge immediately. Do not claim customer/shop data was erased until
-  // the Phase 1 retention/redaction pipeline exists and is tested.
+  const recorded = await recordPrivacyRequest({
+    topic: complianceTopic,
+    verifiedShop: shop,
+    webhookId,
+    payload,
+  });
+  console.log(
+    `Compliance webhook ${complianceTopic} for ${shop}: request ${recorded.requestId}${recorded.duplicate ? " (redelivery)" : ""}`,
+  );
+
   return new Response();
 };
