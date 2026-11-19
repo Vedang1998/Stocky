@@ -8,7 +8,8 @@
  * Limits (product rationale):
  * - MAX_BODY_BYTES = 1_048_576 (1 MiB UTF-8 / encoded body bytes): aligned with
  *   typical Shopify app request body ceilings for admin embedded POSTs; larger
- *   bodies fail closed. Measured via ArrayBuffer.byteLength, not JS string length.
+ *   bodies fail closed. Measured in encoded bytes, not JS string length, and
+ *   enforced while reading: nothing past the ceiling is held in memory.
  * - MAX_NODES = 20_000: above a 5_000-line stocktake-style payload of small
  *   objects (~3 scalars each) while still bounding pathological graphs.
  * - MAX_DEPTH = 12: nested form/JSON shapes beyond ordinary business depth.
@@ -18,7 +19,8 @@
  * - application/json (and +json): full body byte ceiling, then UTF-8 decode + JSON parse
  * - application/x-www-form-urlencoded: full body byte ceiling before form parse
  * - multipart/form-data: full body byte ceiling (includes file parts) before form parse
- * - other / missing content-types: body is not inspected for hints
+ * - other / missing content-types: body is not inspected for hints; the body
+ *   byte ceiling still applies
  *
  * Key-specific hint semantics (F-PR2R2-08):
  * - Explicit identity keys (shopId, shop_id, myshopifyDomain, …): string and
@@ -32,6 +34,7 @@
  * Matching hints never establish authority — they can only deny.
  */
 
+import { readBoundedBytes } from "../lib/http/bounded-request.server";
 import type { CanonicalShopIdentity } from "./bootstrap.server";
 import { TenantAuthorityError } from "./errors";
 import { normalizeShopDomain } from "./shop-domain";
@@ -232,11 +235,23 @@ function walkJson(
   }
 }
 
-async function readBodyBytes(request: Request): Promise<ArrayBuffer> {
-  return request.clone().arrayBuffer();
+/**
+ * The complete encoded body, read from a clone so the route can still read
+ * the request. Reading stops at MAX_BODY_BYTES: a larger body is refused
+ * without being held in memory, whether or not its length was declared.
+ */
+async function readBodyBytes(request: Request): Promise<Uint8Array> {
+  const bytes = await readBoundedBytes(request.clone(), MAX_BODY_BYTES);
+  if (bytes === null) {
+    throw new TenantAuthorityError(
+      "client_shop_hint_limit",
+      "Client shop-hint inspection exceeded maximum body byte size",
+    );
+  }
+  return bytes;
 }
 
-function decodeUtf8(buffer: ArrayBuffer): string {
+function decodeUtf8(buffer: Uint8Array): string {
   return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
 }
 
@@ -284,12 +299,6 @@ export async function extractClientShopHints(
     contentType.includes("+json")
   ) {
     const buffer = await readBodyBytes(request);
-    if (buffer.byteLength > MAX_BODY_BYTES) {
-      throw new TenantAuthorityError(
-        "client_shop_hint_limit",
-        "Client shop-hint inspection exceeded maximum body byte size",
-      );
-    }
     if (buffer.byteLength === 0) return hints;
     let raw: string;
     try {
@@ -316,13 +325,7 @@ export async function extractClientShopHints(
   ) {
     // Measure the complete encoded request body (includes multipart file parts)
     // before parsing. Do not sum fields independently as a substitute.
-    const buffer = await readBodyBytes(request);
-    if (buffer.byteLength > MAX_BODY_BYTES) {
-      throw new TenantAuthorityError(
-        "client_shop_hint_limit",
-        "Client shop-hint inspection exceeded maximum body byte size",
-      );
-    }
+    await readBodyBytes(request);
     try {
       const form = await request.clone().formData();
       for (const [key, value] of form.entries()) {
@@ -346,6 +349,11 @@ export async function extractClientShopHints(
       if (err instanceof TenantAuthorityError) throw err;
       // ignore unreadable body after byte check
     }
+  } else if (request.body !== null) {
+    // A body of any other type holds no hints to inspect, but the same ceiling
+    // applies: a route's formData() reads the whole body before it rejects
+    // the type.
+    await readBodyBytes(request);
   }
 
   return hints;

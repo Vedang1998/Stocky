@@ -1,5 +1,6 @@
 export * from "./types";
 export * from "./local-date";
+export * from "./scope";
 export { computeSuggestion } from "./suggestion";
 export { applySupplierRules, type SupplierRuleResult } from "./supplier-rules";
 export {
