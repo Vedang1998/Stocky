@@ -179,20 +179,26 @@ export async function executeInventoryOperation(
   const disabledMessage = `Inventory writes for ${capability} are switched off. Nothing was sent to Shopify.`;
 
   if (!isEnabled(capability)) {
-    await db.inventoryOperation.updateMany({
-      where: { id: op.id, status: { in: ["PENDING", "BLOCKED"] } },
-      data: {
-        status: "BLOCKED",
-        lastErrorCode: CAPABILITY_DISABLED,
-        lastErrorMessage: disabledMessage,
-      },
-    });
-    await db.inventoryOperation.updateMany({
-      where: { id: op.id, status: "RETRY_PENDING" },
-      data: {
-        lastErrorCode: CAPABILITY_DISABLED,
-        lastErrorMessage: disabledMessage,
-      },
+    // One transaction, so that requests for the same operation wait their
+    // turn on its row. As bare statements the tenant client runs these
+    // serializable, and several arriving together fail each other with a
+    // write conflict.
+    await db.$transaction(async (tx) => {
+      await tx.inventoryOperation.updateMany({
+        where: { id: op.id, status: { in: ["PENDING", "BLOCKED"] } },
+        data: {
+          status: "BLOCKED",
+          lastErrorCode: CAPABILITY_DISABLED,
+          lastErrorMessage: disabledMessage,
+        },
+      });
+      await tx.inventoryOperation.updateMany({
+        where: { id: op.id, status: "RETRY_PENDING" },
+        data: {
+          lastErrorCode: CAPABILITY_DISABLED,
+          lastErrorMessage: disabledMessage,
+        },
+      });
     });
     return getInventoryOperationResult(db, op.id);
   }
