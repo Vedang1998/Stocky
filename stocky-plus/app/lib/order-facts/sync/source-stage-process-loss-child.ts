@@ -2,7 +2,7 @@
  * Child process for D scratch process-loss evidence.
  * Invoked only by source-stage.test.ts. Not a vitest file.
  */
-import { writeFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stageOrderFactsJsonl } from "./source-stage";
 
@@ -20,6 +20,18 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * The stager's write streams open their files asynchronously, and the first
+ * 40 lines can be produced before the open completes on a slow runner. Report
+ * "parked" only once source.jsonl exists, as the test expects.
+ */
+async function waitForFile(file: string, timeoutMs = 10_000): Promise<void> {
+  const started = Date.now();
+  while (!existsSync(file) && Date.now() - started < timeoutMs) {
+    await sleep(10);
+  }
 }
 
 async function main(): Promise<void> {
@@ -40,6 +52,11 @@ async function main(): Promise<void> {
           const attempts = readdirSync(scratchRoot).filter((name) =>
             name.startsWith("att-"),
           );
+          if (attempts[0]) {
+            await waitForFile(
+              path.join(scratchRoot, attempts[0], "source.jsonl"),
+            );
+          }
           writeStatus({
             stage: "parked",
             pid: process.pid,
@@ -59,7 +76,9 @@ async function main(): Promise<void> {
       scratchRoot,
       expectedObjectCount: "400",
       expectedRootObjectCount: "400",
-      maxScratchBytes: Number(process.env.PR6_D_CHILD_MAX_SCRATCH_BYTES ?? 32 * 1024 * 1024),
+      maxScratchBytes: Number(
+        process.env.PR6_D_CHILD_MAX_SCRATCH_BYTES ?? 32 * 1024 * 1024,
+      ),
     },
   );
   writeStatus({ stage: "completed", pid: process.pid, status: result.status });
