@@ -2,7 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { LoaderFunctionArgs } from "react-router";
 import type { PrismaClient } from "@prisma/client";
 import { resetControlPlanePrismaForTests } from "../../sync/control-plane-db.server";
-import { readCatalogSyncStatus } from "../../sync/sync-status.server";
+import {
+  readCatalogSyncStatus,
+  readOrderHistoryStatus,
+} from "../../sync/sync-status.server";
 import { issueTenantAuthority } from "../authority.server";
 import { TenantAuthorityError } from "../errors";
 import {
@@ -316,5 +319,74 @@ describe("catalog sync status reader", () => {
       "Up to date",
       "Up to date",
     ]);
+  });
+
+  describe("order history status", () => {
+    // Created directly in the target state: the job state machine only allows
+    // forward transitions, so a finished job cannot be reached by an update.
+    async function seedOrderJob(
+      shopId: string,
+      state: "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED",
+      at: string,
+    ) {
+      const when = new Date(at);
+      await prisma.durableJob.create({
+        data: {
+          shopId,
+          jobType: "order-facts-sync",
+          source: "order_facts_sync",
+          queueName: "cron",
+          payloadSchemaVersion: "order-facts-sync-v1",
+          sanitizedPayload: {},
+          payloadDigest: "test-digest",
+          idempotencyKey: `order-facts-sync:${shopId}:${at}`,
+          correlationId: `corr-${shopId}-${at}`,
+          authorityVersion: "v1",
+          state,
+          createdAt: when,
+          startedAt: state === "PENDING" ? null : when,
+          completedAt: state === "SUCCEEDED" || state === "FAILED" ? when : null,
+        },
+      });
+    }
+
+    it("is not started for a shop with no order sync", async () => {
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("not_started");
+    });
+
+    it("is importing while the first order sync is queued or running", async () => {
+      await seedOrderJob(shopAId, "RUNNING", "2026-11-11T09:00:00Z");
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("importing");
+    });
+
+    it("is not started when the only sync failed", async () => {
+      await seedOrderJob(shopAId, "FAILED", "2026-11-11T09:00:00Z");
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("not_started");
+    });
+
+    it("stays ready while a later sync runs", async () => {
+      await seedOrderJob(shopAId, "SUCCEEDED", "2026-11-10T09:00:00Z");
+      await seedOrderJob(shopAId, "RUNNING", "2026-11-11T09:00:00Z");
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("ready");
+    });
+
+    it("ignores other shops and other job types", async () => {
+      await seedOrderJob(shopBId, "SUCCEEDED", "2026-11-10T09:00:00Z");
+      await seedJob(shopAId, "catalog-sync", "2026-11-11T09:00:00Z");
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("not_started");
+      expect(
+        await readOrderHistoryStatus(authority(shopBId, SHOP_B_DOMAIN)),
+      ).toBe("ready");
+    });
   });
 });

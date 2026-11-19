@@ -96,3 +96,43 @@ export async function readCatalogSyncStatus(
     };
   });
 }
+
+/** The job that imports a shop's order history, and later keeps it current. */
+const ORDER_FACTS_SYNC_JOB_TYPE = "order-facts-sync";
+
+/**
+ * Whether the shop's order history is in. Sales reports read it, so they say
+ * when it is still arriving instead of showing a partial picture as complete.
+ *
+ * - `importing`: an order sync is queued or running and none has finished yet.
+ * - `ready`: an order sync has finished at least once. Later syncs only add
+ *   recent orders, so a re-sync does not make the history "importing" again.
+ * - `not_started`: no sync is queued and none has finished (none was requested,
+ *   or every attempt ended in failure).
+ */
+export type OrderHistoryStatus = "importing" | "ready" | "not_started";
+
+export async function readOrderHistoryStatus(
+  authority: TenantAuthority,
+): Promise<OrderHistoryStatus> {
+  assertTenantAuthority(authority);
+  const prisma = getControlPlanePrisma();
+  const shopId = authority.shopId;
+
+  const [succeeded, unfinished] = await Promise.all([
+    prisma.durableJob.findFirst({
+      where: { shopId, jobType: ORDER_FACTS_SYNC_JOB_TYPE, state: "SUCCEEDED" },
+      select: { id: true },
+    }),
+    prisma.durableJob.findFirst({
+      where: {
+        shopId,
+        jobType: ORDER_FACTS_SYNC_JOB_TYPE,
+        state: { in: [...UNFINISHED_JOB_STATES] },
+      },
+      select: { id: true },
+    }),
+  ]);
+  if (succeeded) return "ready";
+  return unfinished ? "importing" : "not_started";
+}

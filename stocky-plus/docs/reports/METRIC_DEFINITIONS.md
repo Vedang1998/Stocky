@@ -218,6 +218,22 @@ The Orders report lists product units and product revenue only. It is not the
 order total: shipping, duties, tips and order-level adjustments are not in it.
 No customer data is read or shown.
 
+**Order history import.** The sales reports above, gross profit, ABC analysis
+and dead stock read the imported order history. While it is missing or arriving
+they show their normal figures with a warning that the figures are incomplete:
+
+- *Still being imported*: an order sync is queued or running and none has ever
+  finished for the shop. Figures include only the orders imported so far.
+- *Not imported*: no order sync is queued and none has ever finished (never
+  requested, or every attempt failed). The merchant is pointed to the home page
+  sync.
+- Once any order sync has finished the warning is gone. A later sync only adds
+  recent orders, so it does not bring the warning back.
+
+Stock on hand, the stock document reports and the purchasing reports do not read
+order history and never show it. The CSV download carries no warning; the page
+does.
+
 ### 9.3 Stock on hand
 
 One row per tracked catalog variant and location with an active inventory
