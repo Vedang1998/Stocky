@@ -4,6 +4,8 @@ import { formatDecimal, formatMoney, MISSING_VALUE } from "../../lib/decimal-for
 import { variantLabel } from "../../lib/replenishment/worksheet/labels";
 import { MAX_QUANTITY, type WarningCode } from "../../lib/replenishment/types";
 import {
+  lineMargin,
+  revenuePerDay,
   STOCK_STATUS_LABELS,
   WARNING_LABELS,
 } from "../../lib/replenishment/worksheet/describe";
@@ -137,12 +139,30 @@ function Warnings({ codes }: { codes: WarningCode[] }) {
   );
 }
 
+/** What a cell needs to know about the worksheet beyond its own row. */
+type CellContext = {
+  currencyCode: string | null;
+  /** Days in the sales period; null when the worksheet does not record it. */
+  salesDays: number | null;
+};
+
+function money(amount: string | null, currencyCode: string | null, digits?: number): string {
+  if (amount == null) return MISSING_VALUE;
+  return currencyCode
+    ? formatMoney(amount, currencyCode, { maximumFractionDigits: digits })
+    : formatDecimal(amount);
+}
+
+function percent(value: string | null): string {
+  return value == null ? MISSING_VALUE : `${formatDecimal(value)}%`;
+}
+
 type ColumnSpec = {
   label: string;
   /** Null for a column the database does not sort by. */
   sortKey: WorksheetSortKey | null;
   numeric: boolean;
-  cell: (line: WorksheetLine, currencyCode: string | null) => ReactNode;
+  cell: (line: WorksheetLine, context: CellContext) => ReactNode;
 };
 
 const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
@@ -151,6 +171,12 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     sortKey: "sku",
     numeric: false,
     cell: (line) => line.sku ?? MISSING_VALUE,
+  },
+  barcode: {
+    label: "Barcode",
+    sortKey: null,
+    numeric: false,
+    cell: (line) => line.barcode ?? MISSING_VALUE,
   },
   supplier: {
     label: "Supplier",
@@ -163,7 +189,43 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
         </s-text>
       ),
   },
+  vendorSku: {
+    label: "Supplier SKU",
+    sortKey: null,
+    numeric: false,
+    cell: (line) => line.vendorSku ?? MISSING_VALUE,
+  },
   abc: { label: "ABC", sortKey: "abc", numeric: false, cell: (line) => line.abcClass ?? MISSING_VALUE },
+  price: {
+    label: "Price",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => money(line.priceAmount, line.priceCurrencyCode),
+  },
+  shopifyCost: {
+    label: "Shopify cost",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => money(line.unitCostAmount, line.unitCostCurrencyCode, 4),
+  },
+  supplierCost: {
+    label: "Supplier cost",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => money(line.supplierCostAmount, line.supplierCostCurrencyCode, 4),
+  },
+  margin: {
+    label: "Margin",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => percent(lineMargin(line).margin),
+  },
+  markup: {
+    label: "Markup",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => percent(lineMargin(line).markup),
+  },
   available: {
     label: "Available",
     sortKey: "available",
@@ -194,22 +256,30 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     numeric: true,
     cell: (line) => quantity(line.netUnits),
   },
+  orders: {
+    label: "Orders",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => quantity(line.distinctOrders),
+  },
   revenue: {
     label: "Net sales",
     sortKey: null,
     numeric: true,
-    cell: (line, currencyCode) =>
-      line.revenueAmount == null
-        ? MISSING_VALUE
-        : currencyCode
-          ? formatMoney(line.revenueAmount, currencyCode)
-          : formatDecimal(line.revenueAmount),
+    cell: (line, { currencyCode }) => money(line.revenueAmount, currencyCode),
   },
   unitsPerDay: {
     label: "Per day",
     sortKey: "unitsPerDay",
     numeric: true,
     cell: (line) => formatDecimal(line.unitsPerDay),
+  },
+  revenuePerDay: {
+    label: "Sales per day",
+    sortKey: null,
+    numeric: true,
+    cell: (line, { currencyCode, salesDays }) =>
+      money(revenuePerDay(line.revenueAmount, salesDays), currencyCode),
   },
   daysOfStock: {
     label: "Days of stock",
@@ -234,12 +304,25 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     numeric: true,
     cell: (line) => quantity(line.reorderPoint),
   },
+  forecastDemand: {
+    label: "Forecast demand",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => formatDecimal(line.forecastDemand),
+  },
+  packSize: {
+    label: "Pack size",
+    sortKey: null,
+    numeric: true,
+    cell: (line) => quantity(line.packSize),
+  },
 };
 
 export function WorksheetTable({
   lines,
   columns,
   currencyCode,
+  salesDays,
   view,
   path,
   detailModalId,
@@ -249,6 +332,8 @@ export function WorksheetTable({
   /** The optional columns to show, in table order. */
   columns: readonly WorksheetColumn[];
   currencyCode: string | null;
+  /** Days in the sales period, for sales per day; null when not recorded. */
+  salesDays: number | null;
   view: WorksheetView;
   path: string;
   detailModalId: string;
@@ -295,7 +380,7 @@ export function WorksheetTable({
               </s-grid>
             </s-table-cell>
             {columns.map((column) => (
-              <s-table-cell key={column}>{COLUMNS[column].cell(line, currencyCode)}</s-table-cell>
+              <s-table-cell key={column}>{COLUMNS[column].cell(line, { currencyCode, salesDays })}</s-table-cell>
             ))}
             <s-table-cell>
               <Suggested line={line} />

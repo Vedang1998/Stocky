@@ -563,6 +563,7 @@ export default function Worksheet() {
                 lines={lines}
                 columns={columns}
                 currencyCode={summary?.currencyCode ?? null}
+                salesDays={summary?.salesDays ?? null}
                 view={view}
                 path={path}
                 detailModalId={DETAIL_MODAL_ID}
