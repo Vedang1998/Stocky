@@ -53,4 +53,9 @@ describe("parseCountBody", () => {
   ])("refuses %s", (_name, body) => {
     expect(refused(body).code).toBe("bad_request");
   });
+
+  it("refuses NUL bytes in a code and a line id", () => {
+    expect(refused({ intent: "scan", code: "01\u000023" }).code).toBe("bad_request");
+    expect(refused({ intent: "count", lineId: "l\u00001", countedQty: 1 }).code).toBe("bad_request");
+  });
 });

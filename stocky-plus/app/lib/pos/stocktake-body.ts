@@ -36,6 +36,7 @@ export function parseCountBody(body: unknown): PosCountRequest {
     if (typeof code !== "string" || code.trim() === "") {
       return bad("Scan or type a barcode or SKU.");
     }
+    if (code.includes("\u0000")) return bad("That code is not valid.");
     if (code.trim().length > MAX_CODE_LENGTH) return bad("That code is too long.");
     return {
       intent: "scan",
@@ -46,7 +47,12 @@ export function parseCountBody(body: unknown): PosCountRequest {
 
   if (body.intent === "count") {
     const { lineId } = body;
-    if (typeof lineId !== "string" || lineId === "" || lineId.length > 64) {
+    if (
+      typeof lineId !== "string" ||
+      lineId === "" ||
+      lineId.length > 64 ||
+      lineId.includes("\u0000")
+    ) {
       return bad("A count needs a lineId.");
     }
     return {
