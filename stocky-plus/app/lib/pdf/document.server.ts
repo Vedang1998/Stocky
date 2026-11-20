@@ -81,9 +81,9 @@ const afterWaitingRequests = () =>
  * (just under a second for 250 rows), and documents asked for together ran
  * that part back to back: with twelve of them another request of the
  * process waited 9.9 seconds, measured here. In a queue the loop is free
- * again after each document's own layout, and the same request waited 0.9
- * seconds however many documents were asked for. The documents themselves
- * take as long as before.
+ * again after each document's own layout, and the same request waited about
+ * a second (0.9 with twelve documents, 1.3 at worst with six). The documents
+ * themselves take as long as before.
  */
 export function renderPdf(
   build: (pdf: ReactPdf) => ReactElement<DocumentProps>,

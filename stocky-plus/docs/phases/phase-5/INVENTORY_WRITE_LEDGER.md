@@ -411,8 +411,8 @@ documents above are the record of what moved.
   time (`renderPdf` in `app/lib/pdf/document.server.ts`): the first part of
   layout does not give the event loop back, and twelve documents asked for
   together ran that part back to back, so another request waited 9.9 seconds
-  in a local measurement; queued, it waited 0.9 seconds, the layout of one
-  document. The count is kept in Redis per shop,
+  in a local measurement; queued, it waited about a second, the layout of
+  one document. The count is kept in Redis per shop,
   keyed by the shop of the verified session. If Redis cannot be reached the
   request is allowed and the outage is logged at most once a minute: the
   routes are signed-in admin routes, and a Redis outage should not stop a
