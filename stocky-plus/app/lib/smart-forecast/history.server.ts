@@ -26,24 +26,30 @@ export type DemandHistoryResult = {
   startLocalDate: LocalDate | null;
 };
 
+type HistoryWindow = {
+  endLocalDate: LocalDate;
+  horizonDays: number;
+  averageDays: number;
+  timeZone: string;
+  currencyCode: string | null;
+  installedAt: Date | null;
+};
+
 /**
- * Daily net units for the variant up to `endLocalDate`, starting no earlier
- * than the shop's stored order history, so a day before it is never read as
- * a day without sales. Stock-out days are not known to the app yet, so every
- * day is marked as unknown rather than in stock.
+ * Daily net units for each variant up to `endLocalDate`, from one read of the
+ * sales history. Days start no earlier than the shop's stored order history,
+ * so a day before it is never read as a day without sales. Stock-out days are
+ * not known to the app yet, so every day is marked as unknown rather than in
+ * stock. Every requested variant gets an entry, with the same days.
  */
-export async function loadDemandHistory(
+export async function loadDemandHistories(
   db: TenantDb,
-  input: {
-    variantGid: string;
-    endLocalDate: LocalDate;
-    horizonDays: number;
-    averageDays: number;
-    timeZone: string;
-    currencyCode: string | null;
-    installedAt: Date | null;
-  },
-): Promise<DemandHistoryResult> {
+  input: HistoryWindow & { variantGids: readonly string[] },
+): Promise<{ startLocalDate: LocalDate | null; byVariant: Map<string, DemandDay[]> }> {
+  const byVariant = new Map<string, DemandDay[]>();
+  const variantGids = [...new Set(input.variantGids)];
+  if (variantGids.length === 0) return { startLocalDate: null, byVariant };
+
   const wanted = demandHistoryDays(input.horizonDays, input.averageDays);
   const requestedStart = addDays(input.endLocalDate, -(wanted - 1));
   const history = await loadSalesHistory(db, {
@@ -51,24 +57,48 @@ export async function loadDemandHistory(
     endLocalDate: input.endLocalDate,
     timeZone: input.timeZone,
     reportCurrency: input.currencyCode,
-    variantGids: [input.variantGid],
+    variantGids,
     installedAt: input.installedAt,
   });
 
   const historyStart = history.coverage.historyStartLocalDate;
   if (historyStart == null || compareLocalDates(historyStart, input.endLocalDate) > 0) {
-    return { days: [], startLocalDate: null };
+    for (const gid of variantGids) byVariant.set(gid, []);
+    return { startLocalDate: null, byVariant };
   }
   const start =
     compareLocalDates(historyStart, requestedStart) > 0 ? historyStart : requestedStart;
 
-  const units = new Map<LocalDate, number>();
+  const units = new Map<string, Map<LocalDate, number>>();
   for (const day of history.daily) {
-    if (day.variantGid === input.variantGid) units.set(day.localDate, day.netUnits);
+    let variant = units.get(day.variantGid);
+    if (!variant) units.set(day.variantGid, (variant = new Map()));
+    variant.set(day.localDate, day.netUnits);
   }
-  const days: DemandDay[] = [];
-  for (let date = start; compareLocalDates(date, input.endLocalDate) <= 0; date = addDays(date, 1)) {
-    days.push({ date, units: units.get(date) ?? 0, inStock: null });
+  for (const gid of variantGids) {
+    const sold = units.get(gid);
+    const days: DemandDay[] = [];
+    for (
+      let date = start;
+      compareLocalDates(date, input.endLocalDate) <= 0;
+      date = addDays(date, 1)
+    ) {
+      days.push({ date, units: sold?.get(date) ?? 0, inStock: null });
+    }
+    byVariant.set(gid, days);
   }
-  return { days, startLocalDate: start };
+  return { startLocalDate: start, byVariant };
+}
+
+/** One variant's daily demand; see `loadDemandHistories`. */
+export async function loadDemandHistory(
+  db: TenantDb,
+  input: HistoryWindow & { variantGid: string },
+): Promise<DemandHistoryResult> {
+  const { variantGid, ...window } = input;
+  const result = await loadDemandHistories(db, { ...window, variantGids: [variantGid] });
+  return {
+    days: result.byVariant.get(variantGid) ?? [],
+    startLocalDate: result.startLocalDate,
+  };
 }

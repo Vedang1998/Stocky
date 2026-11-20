@@ -466,6 +466,20 @@ export async function* streamWorksheetLines(
   }
 }
 
+/** The variants of every row matching the view's filter and search. */
+export async function listViewVariantGids(
+  db: TenantDb,
+  worksheetId: string,
+  view: Pick<WorksheetView, "show" | "query">,
+): Promise<string[]> {
+  const rows: Array<{ variantGid: string }> = await db.replenishmentWorksheetLine.findMany({
+    where: lineWhere(worksheetId, view),
+    select: { variantGid: true },
+    orderBy: { id: "asc" },
+  });
+  return rows.map((row) => row.variantGid);
+}
+
 export async function getWorksheetLine(
   db: TenantDb,
   worksheetId: string,

@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   previewLineSuggestion: vi.fn(),
   draftOrderPort: vi.fn(),
   saveWorksheetColumns: vi.fn(),
+  listViewVariantGids: vi.fn(),
+  applyRuleChanges: vi.fn(),
 }));
 
 const context = {
@@ -55,6 +57,11 @@ vi.mock("./store.server", async (original) => ({
   getWorksheetLine: mocks.getWorksheetLine,
   setFinalQuantity: mocks.setFinalQuantity,
   streamWorksheetLines: mocks.streamWorksheetLines,
+  listViewVariantGids: mocks.listViewVariantGids,
+}));
+vi.mock("../rules.server", async (original) => ({
+  ...(await original<typeof import("../rules.server")>()),
+  applyRuleChanges: mocks.applyRuleChanges,
 }));
 vi.mock("./orders.server", () => ({
   getOrderGroups: mocks.getOrderGroups,
@@ -187,6 +194,62 @@ describe("worksheet page action", () => {
       const response = await thrown(() => action(post({ intent: "saveColumns", column: "sku" })));
       expect(response.status).toBe(403);
       expect(mocks.saveWorksheetColumns).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("setLevels", () => {
+    const GIDS = ["gid://shopify/ProductVariant/1", "gid://shopify/ProductVariant/2"];
+
+    it("applies the chosen levels to the rows the filter and search show, in the worksheet's scope", async () => {
+      mocks.listViewVariantGids.mockResolvedValue(GIDS);
+      const outcome = { updated: 1, created: 1, cleared: 0, skipped: 0 };
+      mocks.applyRuleChanges.mockResolvedValue(outcome);
+      await expect(
+        action(
+          post({
+            intent: "setLevels",
+            show: "LOW_STOCK",
+            q: "shoe",
+            minimumQuantityMode: "set",
+            minimumQuantity: "4",
+            leadTimeDaysMode: "clear",
+            safetyStockQuantityMode: "keep",
+            safetyStockQuantity: "999",
+          }),
+        ),
+      ).resolves.toEqual({ intent: "setLevels", ok: true, variants: 2, outcome });
+      expect(mocks.listViewVariantGids).toHaveBeenCalledWith(
+        context.db,
+        "ws_1",
+        expect.objectContaining({ show: "LOW_STOCK", query: "shoe" }),
+      );
+      expect(mocks.applyRuleChanges).toHaveBeenCalledWith(context.db, {
+        variantGids: GIDS,
+        scopeKey: "SHOP",
+        changes: { minimumQuantity: 4, leadTimeDays: null },
+      });
+    });
+
+    it("saves nothing when a level is out of range or nothing is chosen", async () => {
+      await expect(
+        action(post({ intent: "setLevels", leadTimeDaysMode: "set", leadTimeDays: "400" })),
+      ).resolves.toMatchObject({ intent: "setLevels", ok: false, errors: { leadTimeDays: expect.any(String) } });
+      await expect(action(post({ intent: "setLevels" }))).resolves.toMatchObject({
+        intent: "setLevels",
+        ok: false,
+        errors: { form: "Choose at least one level to set or clear." },
+      });
+      expect(mocks.listViewVariantGids).not.toHaveBeenCalled();
+      expect(mocks.applyRuleChanges).not.toHaveBeenCalled();
+    });
+
+    it("is refused without a plan that includes replenishment", async () => {
+      mocks.entitlements.mockResolvedValue(resolveEntitlements([]));
+      const response = await thrown(() =>
+        action(post({ intent: "setLevels", minimumQuantityMode: "clear" })),
+      );
+      expect(response.status).toBe(403);
+      expect(mocks.applyRuleChanges).not.toHaveBeenCalled();
     });
   });
 

@@ -1,9 +1,8 @@
 # Smart Forecast
 
-Status: forecasting engine and backtest (`app/lib/smart-forecast/`), plus a
-Smart Forecast panel in the worksheet row detail on the worksheet branch. The
-panel reaches main with the worksheet rebuild, after the analytics foundation
-(#88) and plan entitlements (#111).
+Status: forecasting engine and backtest (`app/lib/smart-forecast/`), a
+Smart Forecast panel in the worksheet row detail, and an opt-in Smart
+Forecast column on the worksheet table.
 
 Product sources: `docs/product/01_EXECUTIVE_PRODUCT_DIRECTION.md` (Smart
 mode), `02_FULL_STOCKY_PARITY_PRD.md` §3.4 (Smart mode),
@@ -83,11 +82,27 @@ as zero demand.
   suggestion stays as it was. When the average was kept, the panel says to
   keep the Stocky Parity suggestion and offers no button.
 
+## The worksheet column
+
+"Smart Forecast (Pro plan)" is one of the optional columns under
+**Columns**. It is off by default, and nothing is read unless the merchant
+turned it on, the shop's plan includes `forecast.smart` and the worksheet was
+made with "Last X days". Otherwise the column shows "Pro plan" or "Last X
+days only" and no history is read.
+
+When it runs, `smartForecastColumn` (`worksheet.server.ts`) forecasts only the
+rows on the current page (at most 100), from one read of the
+sales history for all their variants (`loadDemandHistories`). Each cell shows
+the forecast units over the worksheet's days to cover and the model chosen,
+or "Recent average kept". The column is not sortable and is not in the CSV
+export, because it is worked out when the page is shown and is never stored.
+Ordering from a forecast stays in the row detail panel, which shows why the
+model was chosen.
+
 ## Not done yet
 
 - Out-of-stock days from inventory history (the adapter marks every day as
   unknown until the app keeps daily stock levels per variant).
-- An opt-in worksheet column; today the forecast runs one row at a time.
 - Outcome logging: storing each shown forecast and comparing it with what
   later sold.
 - Year-over-year seasonality and stockout-length estimation need more than

@@ -17,7 +17,7 @@ describe("readWorksheetColumns", () => {
   });
 
   it("drops names it does not know and values that are not names", () => {
-    expect(readWorksheetColumns(["sku", "price", 3, null, "SKU"])).toEqual(["sku"]);
+    expect(readWorksheetColumns(["sku", "shelf", 3, null, "SKU"])).toEqual(["sku"]);
   });
 
   it("reads an empty choice as no optional columns", () => {
