@@ -81,7 +81,7 @@ describe("PR5-F3 exact mutation exception and two-root scanner", () => {
 
   it("FX-SCAN-005 rejects a planted worker write-service import", () => {
     const root = workerRoot(
-      `import { adjustShopifyInventory } from "../../../services/shopify-sync.server";`,
+      `import { processBomSale } from "../../../services/shopify-sync.server";`,
     );
     expect(() => assertCatalogFactsWorkerBoundarySafe(root)).toThrow(
       /forbidden_import/,
