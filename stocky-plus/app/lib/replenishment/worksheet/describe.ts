@@ -127,3 +127,27 @@ export function marginAndMarkup(
     sign(base) > 0 ? toFixed(mul(div(profit, base), rational(100)), 1) : null;
   return { margin: percent(priceValue), markup: percent(costValue) };
 }
+
+/**
+ * A row's margin and markup on the cost an order would use: the supplier's
+ * cost when there is one, otherwise the Shopify unit cost. Both are null when
+ * the price and that cost are in different currencies, because comparing
+ * them would mean nothing.
+ */
+export function lineMargin(line: {
+  priceAmount: string | null;
+  priceCurrencyCode: string | null;
+  unitCostAmount: string | null;
+  unitCostCurrencyCode: string | null;
+  supplierCostAmount: string | null;
+  supplierCostCurrencyCode: string | null;
+}): { margin: string | null; markup: string | null; currenciesDiffer: boolean } {
+  const cost = line.supplierCostAmount ?? line.unitCostAmount;
+  const costCurrency =
+    line.supplierCostAmount != null ? line.supplierCostCurrencyCode : line.unitCostCurrencyCode;
+  if (cost == null) return { margin: null, markup: null, currenciesDiffer: false };
+  if (costCurrency !== line.priceCurrencyCode) {
+    return { margin: null, markup: null, currenciesDiffer: true };
+  }
+  return { ...marginAndMarkup(line.priceAmount, cost), currenciesDiffer: false };
+}

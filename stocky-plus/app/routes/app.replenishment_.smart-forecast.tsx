@@ -7,10 +7,14 @@ import type { LoaderFunctionArgs } from "react-router";
 import { hasCapability } from "../billing/entitlements";
 import { getShopEntitlements, requireCapability } from "../billing/entitlements.server";
 import type { SmartForecastLoaderResult } from "../components/replenishment/types";
-import { addDays } from "../lib/replenishment/local-date";
 import { getWorksheet, getWorksheetLine } from "../lib/replenishment/worksheet/store.server";
-import { smartForecast } from "../lib/smart-forecast";
-import { loadDemandHistory } from "../lib/smart-forecast/history.server";
+import type { SmartForecast } from "../lib/smart-forecast";
+import {
+  SMART_FORECAST_METHOD_MESSAGE,
+  SMART_FORECAST_PLAN_MESSAGE,
+  smartForecastBasis,
+  smartForecastsForRows,
+} from "../lib/smart-forecast/worksheet.server";
 import { readShopReportingProfile } from "../tenant/bootstrap.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
@@ -22,11 +26,7 @@ export const loader = async ({
   const entitlements = await getShopEntitlements({ admin, db });
   requireCapability(entitlements, "core.replenishment");
   if (!hasCapability(entitlements, "forecast.smart")) {
-    return {
-      ok: false,
-      reason: "PLAN",
-      message: "Smart Forecast is included in the Pro plan.",
-    };
+    return { ok: false, reason: "PLAN", message: SMART_FORECAST_PLAN_MESSAGE };
   }
 
   const search = new URL(request.url).searchParams;
@@ -38,41 +38,15 @@ export const loader = async ({
     return { ok: false, reason: "UNAVAILABLE", message: "That row is no longer on this worksheet." };
   }
 
-  // The baseline every Smart Forecast method must beat is the recent
-  // average, which is what "Last X days" calculates. Other methods read
-  // different days, so the comparison would not be like for like.
-  const runParams = worksheet.settings?.params;
-  if (runParams?.method !== "LAST_X_DAYS") {
-    return {
-      ok: false,
-      reason: "METHOD",
-      message:
-        "Smart Forecast is compared with the Last X days method, so it is available on worksheets made with that method.",
-    };
-  }
-  const averageDays = runParams.sampleDays;
+  const basis = smartForecastBasis(worksheet);
+  if (!basis) return { ok: false, reason: "METHOD", message: SMART_FORECAST_METHOD_MESSAGE };
 
   const profile = await readShopReportingProfile(tenant);
-  const history = await loadDemandHistory(db, {
-    variantGid: line.variantGid,
-    // The worksheet's own last complete day, so the forecast matches the snapshot.
-    endLocalDate: addDays(worksheet.asOfLocalDate, -1),
-    horizonDays: runParams.suggestDays,
-    averageDays,
-    timeZone: worksheet.timeZone,
+  const { historyDays, byRow } = await smartForecastsForRows(db, {
+    basis,
+    rows: [line],
     currencyCode: worksheet.summary?.currencyCode ?? profile.currencyCode,
     installedAt: profile.installedAt,
   });
-
-  return {
-    ok: true,
-    forecast: smartForecast({
-      days: history.days,
-      horizonDays: runParams.suggestDays,
-      averageDays,
-      available: line.availableQuantity,
-      incoming: line.incomingQuantity,
-    }),
-    historyDays: history.days.length,
-  };
+  return { ok: true, forecast: byRow.get(line.id) as SmartForecast, historyDays };
 };
