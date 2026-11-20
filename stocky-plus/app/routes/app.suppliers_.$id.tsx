@@ -5,7 +5,9 @@ import type {
 } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import {
   AddSupplierProducts,
   SupplierProductEditor,
@@ -14,6 +16,7 @@ import {
 import { SupplierProfileForm } from "../components/purchasing/SupplierProfileForm";
 import { formatMoment } from "../lib/purchasing/display";
 import { describePurchasingEvent } from "../lib/purchasing/history";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { listPurchasingEvents } from "../services/purchasing/events.server";
@@ -55,8 +58,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const active = supplier.status === "ACTIVE";
 
   const find = (url.searchParams.get("find") ?? "").trim().slice(0, 100);
-  const [profile, events, matches, vendors] = await Promise.all([
+  const [profile, planActive, events, matches, vendors] = await Promise.all([
     readShopProfile(admin),
+    planAllowsChanges(db),
     listPurchasingEvents(
       db,
       { subjectType: "SUPPLIER", subjectId: supplier.id },
@@ -75,6 +79,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   return {
     supplier,
+    planActive,
     history: events.map((event) => ({
       id: event.id,
       text: describePurchasingEvent(event.action, event.details),
@@ -101,6 +106,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const context = await requirePurchasingContext({ request, params });
+  await requireActivePlanSnapshot(context.db);
   return runSupplierIntent(context, params.id ?? "", await request.formData());
 };
 
@@ -111,6 +117,7 @@ function days(value: number): string {
 export default function SupplierDetail() {
   const {
     supplier,
+    planActive,
     history,
     productSearch,
     vendors,
@@ -136,6 +143,7 @@ export default function SupplierDetail() {
       <s-link slot="breadcrumb-actions" href="/app/suppliers">
         Suppliers
       </s-link>
+      {!planActive && <PlanRequiredBanner records="Suppliers" />}
 
       <ActionFeedback data={actionData} errorHeading="Supplier not updated" />
 

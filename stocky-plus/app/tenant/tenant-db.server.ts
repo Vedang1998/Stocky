@@ -1892,6 +1892,10 @@ export type TenantDb = {
   inventoryOperationLine: TenantModelDelegate;
   replenishmentSettings: TenantModelDelegate;
   replenishmentVariantRule: TenantModelDelegate;
+  replenishmentWorksheet: TenantModelDelegate;
+  replenishmentWorksheetLine: TenantModelDelegate;
+  dailyStockSnapshot: TenantModelDelegate;
+  dailyStockLevel: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
   shopifyOrderRefundLineFact: TenantModelDelegate;
   shopifyOrderAdjustmentFact: TenantModelDelegate;

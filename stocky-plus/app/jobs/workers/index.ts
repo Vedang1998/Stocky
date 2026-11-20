@@ -8,6 +8,7 @@ import { dispatchPendingJobs } from "../../sync/dispatcher.server";
 import { assertCanonicalWriterCapacityAtStartup } from "./catalog-facts/capacity";
 import { startPrivacyMaintenanceLoop } from "../../privacy/maintenance.server";
 import { startStrandedJobRecoveryLoop } from "./stranded-job-recovery";
+import { startDailyStockSnapshotLoop } from "./daily-stock-snapshots";
 
 async function main() {
   console.log("Starting Stocky++ workers...");
@@ -48,6 +49,7 @@ async function main() {
 
   startStrandedJobRecoveryLoop();
   startPrivacyMaintenanceLoop();
+  startDailyStockSnapshotLoop();
 
   console.log("Workers running. Press Ctrl+C to stop.");
 }

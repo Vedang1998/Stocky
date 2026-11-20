@@ -9,6 +9,7 @@
  */
 
 import type { JwtPayload } from "@shopify/shopify-api";
+import { rejectNulInput } from "../lib/http/nul-input.server";
 import { issueTenantAuthority, type TenantAuthority } from "./authority.server";
 import {
   normalizeVerifiedShopifyDomain,
@@ -115,6 +116,7 @@ export async function requirePosTenant(
   }
 
   await denyConflictingClientShop(request, resolved.shop, params);
+  await rejectNulInput(request);
 
   const tenant = issueTenantAuthority({
     shopId: resolved.shop.id,

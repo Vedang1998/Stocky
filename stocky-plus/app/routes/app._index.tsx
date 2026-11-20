@@ -181,7 +181,7 @@ export default function Dashboard() {
       <s-section slot="aside" heading="Quick links">
         <s-unordered-list>
           <s-list-item>
-            <s-link href="/app/buying-table">Replenishment</s-link>
+            <s-link href="/app/replenishment">Replenishment</s-link>
           </s-list-item>
           <s-list-item>
             <s-link href="/app/purchase-orders">Purchase orders</s-link>

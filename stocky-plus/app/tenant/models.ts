@@ -44,6 +44,14 @@ export const PURCHASING_DIRECT_MERCHANT_MODELS = [
 export const REPLENISHMENT_DIRECT_MERCHANT_MODELS = [
   "ReplenishmentSettings",
   "ReplenishmentVariantRule",
+  "ReplenishmentWorksheet",
+  "ReplenishmentWorksheetLine",
+] as const;
+
+/** Daily stock history: one capture per shop-local day and its stock levels. */
+export const STOCK_HISTORY_DIRECT_MERCHANT_MODELS = [
+  "DailyStockSnapshot",
+  "DailyStockLevel",
 ] as const;
 
 export const DIRECT_MERCHANT_MODELS = [
@@ -71,6 +79,7 @@ export const DIRECT_MERCHANT_MODELS = [
   ...INVENTORY_OPERATION_DIRECT_MERCHANT_MODELS,
   ...PURCHASING_DIRECT_MERCHANT_MODELS,
   ...REPLENISHMENT_DIRECT_MERCHANT_MODELS,
+  ...STOCK_HISTORY_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -132,6 +141,10 @@ export const MERCHANT_DELEGATE_NAMES = {
   InventoryOperationLine: "inventoryOperationLine",
   ReplenishmentSettings: "replenishmentSettings",
   ReplenishmentVariantRule: "replenishmentVariantRule",
+  ReplenishmentWorksheet: "replenishmentWorksheet",
+  ReplenishmentWorksheetLine: "replenishmentWorksheetLine",
+  DailyStockSnapshot: "dailyStockSnapshot",
+  DailyStockLevel: "dailyStockLevel",
   SupplierSkuMapping: "supplierSkuMapping",
   ShopifyOrderRefundLineFact: "shopifyOrderRefundLineFact",
   ShopifyOrderAdjustmentFact: "shopifyOrderAdjustmentFact",

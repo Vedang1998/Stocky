@@ -61,11 +61,14 @@ import {
 import { issueTenantAuthority } from "../../authority.server";
 import { createTenantDb, type TenantDb } from "../../tenant-db.server";
 import {
+  PLAN_REQUIRED_HEADING,
   requireRuntimeUrl,
   resetAndEnforce,
+  seedActivePlans,
   seedTwoShops,
   SHOP_A_DOMAIN,
   SHOP_B_DOMAIN,
+  withoutPlan,
 } from "./helpers";
 
 const { requireAdminTenant, requirePurchasingContext } = vi.hoisted(() => ({
@@ -196,6 +199,7 @@ describe("purchase-order pages", () => {
     prisma = ctx.migrationPrisma;
     await ctx.runtimePrisma.$disconnect();
     const shops = await seedTwoShops(prisma);
+    await seedActivePlans(prisma, [shops.shopA, shops.shopB]);
 
     await prisma.shopifyProductFact.createMany({
       data: [
@@ -937,6 +941,10 @@ describe("purchase-order pages", () => {
         ["Name,Quantity\nWidget,1\n", "The file needs a SKU, Barcode or Variant ID column."],
         ['SKU,Quantity\n"W-RED,1\n', "The file has a quoted value that never ends."],
         ["SKU,Quantity\n", "The file has no rows to import."],
+        [
+          "SKU,Quantity\nW-RED\u0000,1\n",
+          "The file is not plain-text CSV. Save it as CSV UTF-8 and try again.",
+        ],
         ["x".repeat(1_000_001), "The file is larger than 1 MB."],
       ];
       for (const [csv, message] of cases) {
@@ -1444,7 +1452,79 @@ describe("purchase-order pages", () => {
       expect((again as Response).headers.get("Location")).toBe(
         (created as Response).headers.get("Location"),
       );
+      expect(page).not.toContain(PLAN_REQUIRED_HEADING);
       expect(await prisma.purchaseOrder.count()).toBe(1);
+    });
+
+    it("tells a shop with no plan that changes are unavailable, and refuses them", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const { supplierId, poNumber } =
+        await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: po.id } });
+      const newRoute = await import("../../../routes/app.purchase-orders_.new");
+      const detailRoute =
+        await import("../../../routes/app.purchase-orders_.$id");
+      const receiveRoute =
+        await import("../../../routes/app.purchase-orders_.$id_.receive");
+      const params = { id: po.id };
+      const newPath = "/app/purchase-orders/new";
+      const detailPath = `/app/purchase-orders/${po.id}`;
+      const receivePath = `${detailPath}/receive`;
+
+      await withoutPlan(prisma, SHOP_A_DOMAIN, async () => {
+        const pages = [
+          await renderRoute(
+            newRoute.default,
+            await newRoute.loader(loaderArgs(newPath)),
+          ),
+          await renderRoute(
+            detailRoute.default,
+            await detailRoute.loader(loaderArgs(detailPath, params)),
+          ),
+          await renderRoute(
+            receiveRoute.default,
+            await receiveRoute.loader(loaderArgs(receivePath, params)),
+          ),
+        ];
+        const writes = [
+          () =>
+            newRoute.action(
+              actionArgs(
+                newPath,
+                {},
+                {
+                  supplierId,
+                  locationGid: WAREHOUSE,
+                  creationKey: "screens-no-plan",
+                },
+              ),
+            ),
+          () =>
+            detailRoute.action(
+              actionArgs(detailPath, params, {
+                intent: "saveDetails",
+                version: po.version,
+                notes: "changed without a plan",
+              }),
+            ),
+          () =>
+            receiveRoute.action(
+              actionArgs(receivePath, params, {
+                idempotencyKey: "screens-no-plan-receipt",
+                [`accepted-${po.blueLineId}`]: "1",
+              }),
+            ),
+        ];
+
+        for (const page of pages) expect(page).toContain(PLAN_REQUIRED_HEADING);
+        expect(pages[1]).toContain(`Purchase order ${poNumber}`);
+        for (const write of writes) {
+          await expect(write()).rejects.toMatchObject({ status: 403 });
+        }
+      });
+
+      expect(await prisma.purchaseOrder.count()).toBe(1);
+      expect(await current(po.id)).toMatchObject({ version: po.version });
+      expect(await prisma.purchaseOrderReceipt.count()).toBe(0);
     });
   });
 
