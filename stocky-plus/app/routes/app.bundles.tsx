@@ -105,8 +105,9 @@ export default function Bundles() {
     <s-page heading="Bundles / Bill of Materials">
       <s-section heading="Map a component">
         <s-paragraph>
-          When a bundle sells, the sales history of each mapped component is increased by the
-          quantity set here.
+          When a bundle sells, each of its components is counted as sold too,
+          in the quantity set here, so forecasts stay accurate for the parts
+          you buy.
         </s-paragraph>
         <Form method="post">
           <input type="hidden" name="intent" value="add" />

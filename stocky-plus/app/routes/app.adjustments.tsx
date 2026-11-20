@@ -421,7 +421,8 @@ export default function Adjustments() {
         {locations.length === 0 ? (
           <s-paragraph>
             No Shopify locations were found for this shop. Add a location in
-            Shopify admin, run a sync from the dashboard, then come back.
+            Shopify admin, choose Sync catalog on the Home page, then come
+            back.
           </s-paragraph>
         ) : (
           // Remounted for each new submission ID so a recorded adjustment

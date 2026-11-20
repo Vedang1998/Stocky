@@ -179,8 +179,8 @@ export default function Transfers() {
         {activeLocations.length < 2 ? (
           <s-paragraph>
             A transfer moves stock between two locations, and fewer than two
-            active locations are synced. Run a sync from the dashboard, then
-            create a transfer.
+            active locations are synced. Choose Sync catalog on the Home
+            page, then create a transfer.
           </s-paragraph>
         ) : (
           <Form method="post">

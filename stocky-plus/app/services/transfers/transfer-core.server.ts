@@ -221,7 +221,7 @@ async function buildLegDocument(
   if (unresolved.length > 0) {
     return {
       ok: false,
-      error: `Shopify inventory is not linked yet for: ${unresolved.join(", ")}. Run a catalog sync from the dashboard, then try again.`,
+      error: `Shopify inventory is not linked yet for: ${unresolved.join(", ")}. Choose Sync catalog on the Home page, then try again.`,
     };
   }
 

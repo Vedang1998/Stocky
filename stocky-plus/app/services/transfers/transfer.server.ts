@@ -94,7 +94,7 @@ export async function createTransfer(
     return {
       ok: false,
       error:
-        "One of those locations is not an active, synced location of this shop. Run a sync from the dashboard, then try again.",
+        "One of those locations is not an active, synced location of this shop. Choose Sync catalog on the Home page, then try again.",
     };
   }
 
@@ -307,7 +307,7 @@ export async function addTransferItems(
       );
     } else if (!matches[0].inventoryItemId) {
       details.push(
-        `Line ${item.lineNumber}: Shopify inventory is not linked yet for ${matches[0].title}. Run a catalog sync from the dashboard.`,
+        `Line ${item.lineNumber}: Shopify inventory is not linked yet for ${matches[0].title}. Choose Sync catalog on the Home page.`,
       );
     } else {
       named.push({

@@ -154,8 +154,8 @@ export default function Stocktakes() {
       <s-section heading="Start a count">
         {activeLocations.length === 0 ? (
           <s-paragraph>
-            No active locations are synced yet. Run a sync from the dashboard,
-            then start a count.
+            No active locations are synced yet. Choose Sync catalog on the
+            Home page, then start a count.
           </s-paragraph>
         ) : (
           <Form method="post" onKeyDown={onEnter}>
