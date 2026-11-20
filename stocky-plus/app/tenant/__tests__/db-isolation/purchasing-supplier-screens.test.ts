@@ -36,11 +36,14 @@ import {
 import { issueTenantAuthority } from "../../authority.server";
 import { createTenantDb, type TenantDb } from "../../tenant-db.server";
 import {
+  PLAN_REQUIRED_HEADING,
   requireRuntimeUrl,
   resetAndEnforce,
+  seedActivePlans,
   seedTwoShops,
   SHOP_A_DOMAIN,
   SHOP_B_DOMAIN,
+  withoutPlan,
 } from "./helpers";
 
 const { requireAdminTenant, requirePurchasingContext } = vi.hoisted(() => ({
@@ -152,6 +155,7 @@ describe("supplier pages", () => {
     prisma = ctx.migrationPrisma;
     await ctx.runtimePrisma.$disconnect();
     const shops = await seedTwoShops(prisma);
+    await seedActivePlans(prisma, [shops.shopA, shops.shopB]);
 
     await prisma.shopifyProductFact.createMany({
       data: [
@@ -944,7 +948,48 @@ describe("supplier pages", () => {
       expect(html).toMatch(/name="preferredContactMethod" value="NONE"/);
       expect(html).toContain('<s-option value="NONE">Not set</s-option>');
       expect(html).not.toContain('<s-option value="">');
+      expect(html).not.toContain(PLAN_REQUIRED_HEADING);
       expect(redirectedTo(created)).toMatch(/^\/app\/suppliers\/[a-z0-9]+$/);
+    });
+
+    it("tells a shop with no plan that changes are unavailable, and refuses them", async () => {
+      const id = await supplier();
+      const newRoute = await import("../../../routes/app.suppliers_.new");
+      const detailRoute = await import("../../../routes/app.suppliers_.$id");
+      const detailPath = `/app/suppliers/${id}`;
+
+      await withoutPlan(prisma, SHOP_A_DOMAIN, async () => {
+        const newPage = await renderRoute(
+          newRoute.default,
+          await newRoute.loader(loaderArgs("/app/suppliers/new")),
+        );
+        const detailPage = await renderRoute(
+          detailRoute.default,
+          await detailRoute.loader(loaderArgs(detailPath, { id })),
+        );
+
+        expect(newPage).toContain(PLAN_REQUIRED_HEADING);
+        expect(detailPage).toContain(PLAN_REQUIRED_HEADING);
+        expect(detailPage).toContain("Acme Supply");
+        await expect(
+          newRoute.action(
+            actionArgs("/app/suppliers/new", {
+              intent: "create",
+              ...PROFILE_FIELDS,
+            }),
+          ),
+        ).rejects.toMatchObject({ status: 403 });
+        await expect(
+          detailRoute.action({
+            ...actionArgs(detailPath, { intent: "archive" }),
+            params: { id },
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+      });
+
+      expect(
+        await prisma.supplier.findMany({ select: { id: true, status: true } }),
+      ).toEqual([{ id, status: "ACTIVE" }]);
     });
   });
 });
