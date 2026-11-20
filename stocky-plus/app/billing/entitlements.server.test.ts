@@ -77,6 +77,13 @@ function uniqueViolation() {
   );
 }
 
+function writeConflict() {
+  return new Prisma.PrismaClientKnownRequestError(
+    "Transaction failed due to a write conflict or a deadlock. Please retry your transaction",
+    { code: "P2034", clientVersion: "test" },
+  );
+}
+
 const record: SubscriptionRecord = {
   id: "gid://shopify/AppSubscription/1001",
   name: "Essentials",
@@ -274,6 +281,85 @@ describe("persistEntitlementSnapshot", () => {
       failure,
     );
     expect(shopSettings.update).not.toHaveBeenCalled();
+  });
+
+  it("accepts a lost update when a concurrent request stored the same snapshot", async () => {
+    const stale = { subscriptionActive: false, subscriptionPlan: null };
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi
+        .fn()
+        .mockResolvedValueOnce(stale)
+        .mockResolvedValueOnce({ ...snapshot }),
+      update: vi.fn(async () => {
+        throw writeConflict();
+      }),
+    });
+
+    await expect(
+      persistEntitlementSnapshot(db, snapshot),
+    ).resolves.toBeUndefined();
+    expect(shopSettings.update).toHaveBeenCalledTimes(1);
+    expect(shopSettings.findUnique).toHaveBeenCalledTimes(2);
+  });
+
+  it("passes a lost update on when the stored snapshot is a different one", async () => {
+    const stale = { subscriptionActive: false, subscriptionPlan: null };
+    const failure = writeConflict();
+    const { db } = fakeDb({
+      findUnique: vi.fn().mockResolvedValueOnce(stale).mockResolvedValueOnce({
+        subscriptionActive: true,
+        subscriptionPlan: "pro",
+      }),
+      update: vi.fn(async () => {
+        throw failure;
+      }),
+    });
+
+    await expect(persistEntitlementSnapshot(db, snapshot)).rejects.toBe(
+      failure,
+    );
+  });
+
+  it("accepts a lost update after a concurrent create as well", async () => {
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi
+        .fn()
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ ...snapshot }),
+      create: vi.fn(async () => {
+        throw uniqueViolation();
+      }),
+      update: vi.fn(async () => {
+        throw writeConflict();
+      }),
+    });
+
+    await expect(
+      persistEntitlementSnapshot(db, snapshot),
+    ).resolves.toBeUndefined();
+    expect(shopSettings.create).toHaveBeenCalledTimes(1);
+    expect(shopSettings.update).toHaveBeenCalledTimes(1);
+  });
+
+  it("rethrows update failures that are not write conflicts without reading again", async () => {
+    const failure = new Prisma.PrismaClientKnownRequestError("timed out", {
+      code: "P2024",
+      clientVersion: "test",
+    });
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi.fn(async () => ({
+        subscriptionActive: false,
+        subscriptionPlan: null,
+      })),
+      update: vi.fn(async () => {
+        throw failure;
+      }),
+    });
+
+    await expect(persistEntitlementSnapshot(db, snapshot)).rejects.toBe(
+      failure,
+    );
+    expect(shopSettings.findUnique).toHaveBeenCalledTimes(1);
   });
 });
 
