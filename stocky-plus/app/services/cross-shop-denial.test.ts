@@ -285,6 +285,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B mutating Shop A purchase order / line", async () => {
     const { action } = await import("../routes/app.purchase-orders_.$id");
+    activePlanSnapshot();
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
@@ -321,6 +322,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B updating Shop A stocktake line and never adjusts inventory", async () => {
     const { action } = await import("../routes/app.stocktakes_.$id");
+    activePlanSnapshot();
     prismaMock.stocktakeLineItem.findFirst.mockResolvedValue(null);
 
     const result = await action(
@@ -347,25 +349,28 @@ describe("cross-shop denial", () => {
     expect(adjustShopifyInventory).not.toHaveBeenCalled();
   });
 
-  it("denies Shop B adding a line to Shop A transfer", async () => {
-    const { action } = await import("../routes/app.transfers");
+  it("denies Shop B adding items to Shop A transfer", async () => {
+    const { action } = await import("../routes/app.transfers_.$id");
+    activePlanSnapshot();
     prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
     const result = await action(
-      actionArgs(
-        formRequest({
-          intent: "addLine",
-          transferId: "tr-shop-a",
-          variantId: "gid://shopify/ProductVariant/1",
-          quantity: "3",
-        }),
-      ),
+      actionArgs(formRequest({ intent: "addItems", items: "SKU-1,3" }), {
+        id: "tr-shop-a",
+      }),
     );
 
     expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
       where: directScoped({ id: "tr-shop-a" }),
+      // TenantDb adds its own ownership-proof columns to the selection.
+      select: { id: true, status: true, shop: true, shopId: true },
     });
-    expect(result).toEqual({ error: "Transfer not found" });
+    expect(prismaMock.shopifyVariantCache.findMany).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      error: "Transfer not found",
+      details: [],
+      items: "SKU-1,3",
+    });
     expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
     expect(createShopifyTransfer).not.toHaveBeenCalled();
     expect(completeShopifyTransfer).not.toHaveBeenCalled();
@@ -427,6 +432,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B cancelling Shop A purchase order", async () => {
     const { action } = await import("../routes/app.purchase-orders_.$id");
+    activePlanSnapshot();
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
@@ -492,6 +498,7 @@ describe("cross-shop denial", () => {
     featureFlags.stocktakeInventoryWrites.mockReturnValue(true);
     try {
       const { action } = await import("../routes/app.stocktakes_.$id");
+      activePlanSnapshot();
       prismaMock.stocktake.findFirst.mockResolvedValue(null);
 
       const result = await action(
@@ -526,24 +533,27 @@ describe("cross-shop denial", () => {
     process.env.FEATURE_TRANSFER_WRITES = "true";
     featureFlags.transferWrites.mockReturnValue(true);
     try {
-      const { action } = await import("../routes/app.transfers");
+      const { action } = await import("../routes/app.transfers_.$id");
+      activePlanSnapshot();
       prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
       const result = await action(
-        actionArgs(
-          formRequest({
-            intent: "ship",
-            transferId: "tr-shop-a",
-          }),
-        ),
+        actionArgs(formRequest({ intent: "ship" }), { id: "tr-shop-a" }),
       );
 
       expect(authenticateAdmin).toHaveBeenCalled();
+      const scopedLines = scopedLineItemsInclude("transferOrder");
       expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
         where: directScoped({ id: "tr-shop-a" }),
-        include: scopedLineItemsInclude("transferOrder"),
+        include: {
+          lineItems: { ...scopedLines.lineItems, orderBy: { id: "asc" } },
+        },
       });
-      expect(result).toEqual({ error: "Transfer not found", problems: [] });
+      expect(result).toEqual({
+        error: "Transfer not found",
+        problems: [],
+        blocker: null,
+      });
       expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
       expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
       expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();

@@ -5,6 +5,7 @@ import {
   MAX_SEARCH_RESULTS,
   searchLiveVariants,
 } from "../../services/barcode-lookup.server";
+import { lookupInventory } from "../../services/inventory-lookup.server";
 import { loadSetupGuide } from "../../services/setup-guide.server";
 import { issueTenantAuthority } from "../authority.server";
 import { createTenantDb } from "../tenant-db.server";
@@ -169,6 +170,42 @@ describe("admin inventory lookup", () => {
     expect(underscore.variants.map((v) => v.sku)).toEqual(["ZIN_1000"]);
     expect((await searchLiveVariants(db, "Z_N")).variants).toEqual([]);
     expect((await searchLiveVariants(db, "%%")).variants).toEqual([]);
+  });
+
+  it("searches text that carries control characters instead of failing", async () => {
+    await seedCatalogVariant(prisma, shopAId, "1001", "A-1", {
+      productTitle: "Agave Tequila",
+    });
+
+    expect(await lookupAs(SHOP_A_DOMAIN, "?q=tequ%09ila%0D%0A")).toMatchObject({
+      kind: "stock",
+      variant: { displayName: "Agave Tequila" },
+    });
+
+    // PostgreSQL refuses a NUL byte in a text parameter; the raw text used to
+    // reach the name search and fail the page. The lookup drops it like any
+    // other control character.
+    const db = tenantDb(shopAId, SHOP_A_DOMAIN);
+    expect(
+      await lookupInventory(db, { query: "aga\u0000ve", variantGid: null }),
+    ).toMatchObject({
+      kind: "stock",
+      variant: { displayName: "Agave Tequila" },
+    });
+    expect(
+      await lookupInventory(db, { query: "\u0000\u0000", variantGid: null }),
+    ).toMatchObject({ kind: "not_found" });
+  });
+
+  it("answers 400 for a NUL in the request before the lookup runs", async () => {
+    for (const search of ["?q=aga%00ve", "?q=%00%00", "?q=agave&variant=%00"]) {
+      const thrown: unknown = await lookupAs(SHOP_A_DOMAIN, search).then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(thrown).toBeInstanceOf(Response);
+      expect((thrown as Response).status).toBe(400);
+    }
   });
 
   it("caps a broad search and reports that more exist", async () => {

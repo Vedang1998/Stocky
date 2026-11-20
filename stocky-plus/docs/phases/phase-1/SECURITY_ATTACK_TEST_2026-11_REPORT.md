@@ -1,6 +1,6 @@
-# Security attack test — findings report (2026-11-10 / 11)
+# Security attack test — findings report (2026-11-10 to 19)
 
-**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95.
+**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95 (merged as `052ee00`). Round 3 on 2026-11-13 retested the code merged since then; it is recorded in its own section and in the open items. Round 4 on 2026-11-14 tested the mobile and POS code merged as #96 and is recorded in its own section. Round 5 on 2026-11-19 tested the purchasing, stocktake, adjustment, label and report code merged since then, and is recorded in its own section. Round 6 started on 2026-11-19 on `main` at `a4c62f8`; its findings, SEC-18 and SEC-19, are recorded below and fixed in #138.
 **Author:** Claude Code (security lane), on the owner's 2026-11-10 order.
 **Kind of record:** attack test and fixes by the same session. This is **not** an independent review: the session that found each issue also wrote its fix, and the fix pull requests were merged on the owner's order without independent review. Treat the "held" results as evidence for the tested cases only.
 
@@ -8,11 +8,11 @@
 
 | Item | Value |
 |---|---|
-| Code tested | `main` from `2685081` through `8da50a8`, plus the fix branches |
+| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0`. Round 4: `main` at `f7548ba`. Round 5: `main` at `8ede0e5`, with a follow-up at `29b7e41`. Round 6: `main` at `a4c62f8` |
 | Target | One instance of this app in the author's own cloud container: production build (`react-router-serve`), PostgreSQL 16 provisioned with the CI role and RLS recipe, Redis, a real worker process, a localhost stand-in for the Shopify Admin API, synthetic shops and data |
 | Not targeted | Shopify's platform, the Partner Dashboard, any third-party service, any real store, any deployed instance. No load or denial-of-service traffic left the container |
 | Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases, the SEC-08 case and a real uninstall for SEC-12 on `stocky-test-store.myshopify.com`; results are recorded on #81, #95 and #90 |
-| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13) |
+| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13), #118 (round 3 race test, SEC-14 to SEC-17) |
 
 One scope note. Before the synthetic shop names were pinned to localhost, two unknown-shop authentication tests caused the library to attempt a token exchange for a made-up `*.myshopify.com` name that does not exist. No store, credential or real token was involved, and the names were pinned to `127.0.0.1` for every later run.
 
@@ -37,6 +37,12 @@ Severity follows `CLAUDE.md` (P0 to P3).
 | SEC-11 | P1 to P3 | Dependencies | 23 advisories in production dependencies on `main` (1 critical, 15 high), most in the React Router and Express family | Known request-handling flaws in the web server stack | `npm audit --omit=dev` | Reduced to 9 (0 critical, 4 high) in #90 by taking patched releases within the current majors. Residual below | CI suite on the new lockfile |
 | SEC-12 | P1 | Webhooks | Found on 2026-11-11 while reviewing #99. Shopify signs a webhook's body, not its shop or topic headers, and `app/uninstalled` took the shop from the header | Anyone holding one correctly signed delivery for this app could replay its body under another shop's name: that shop was disabled and its sessions deleted. With shop erasure (#99) the same header would choose whose data is deleted | A signed body for one shop, replayed with another active shop in the header: 200, shop disabled, session deleted | Fixed in #90: the route requires the signed body's `myshopify_domain` to match the header shop, 401 otherwise. Confirmed on the test store on 2026-11-11 at main `9b02276` (store tester's record on #90): a real uninstall was accepted and processed. The live body is the whole Shop resource, owner contact fields included; the handler stores only `id`, `domain` and `myshopify_domain` and logs only the topic and shop | `app/lib/http/signed-webhook-shop.test.ts`, `app/services/webhook-auth-uninstalled-shop.test.ts`, `app/sync/__tests__/sync-control-plane.test.ts` |
 | SEC-13 | P1 | Forms (regression from #90) | Found by the store test on 2026-11-11 (#107, filed there as P0). The dependency update in #90 moved React Router from 7.18.1 to 7.18.5. Since 7.18.3 its check on form posts compares the full origin, scheme included, with the URL the server sees. Behind a TLS-terminating proxy or the dev tunnel the browser's origin is `https` and the server's view is `http`, and the app listed no allowed hosts | Every form in the embedded app was answered with 400 on `main` from `9b02276`: no supplier, purchase order, stocktake, transfer or sync could be submitted. Webhooks were not affected. No data was exposed or changed | Production build and dev server, form post forwarded as a proxy forwards it: own origin 400 before, accepted after; other sites, look-alike hosts and another port still 400 | Fixed in #95: the app's own public host, taken from `SHOPIFY_APP_URL`, is the only allowed action origin, set at dev start (`react-router.config.ts`) and at server start in production (`server/build.mjs`). The check stays on and the patched version is kept. The attack test missed it because its form posts carried no `Origin` header | `app/lib/http/action-origins.test.ts` |
+| SEC-14 | P2 | Rate limiting | Found on 2026-11-14 during the security pass on #117. The `afterAuth` hook queued a full catalog sync with up to 125 attempts on every token exchange, not only at install. Since #72 switched on expiring offline tokens that is about once an hour for a shop in use. Same weakness as SEC-08, in the producer #95 did not cover | Bulk exports and worker time on the shared worker grow with every active shop and hour of use. No data exposure | 4 page loads with an expired session: 4 new jobs; 33 queued for one shop over a test session | Fixed in #118: one sync per shop while one is queued or running or succeeded in the last six hours; a reinstall still resyncs. Same test: 1 job | `app/jobs/after-auth-catalog-sync-enqueue.test.ts` |
+| SEC-15 | P3 | Inventory lookup (from #96) | Found in round 4. The admin Inventory page cleaned control characters out of a scanned code before the exact barcode and SKU match, but passed the raw text to the product-name search that runs when nothing matches. PostgreSQL refuses a NUL byte in text | A lookup whose text contains a NUL byte answered with an error page instead of "not found". No data was exposed or changed, and the POS endpoints were not affected | Production build of `main` at `f7548ba`: the lookup answered 500 and the server logged PostgreSQL error 22021; the same text on `/api/pos/scan` answered normally | Fixed in #118: the name search removes control characters first, with the same rule the scan path uses (`stripControlCharacters` in `app/lib/scanning/barcode.ts`). The new test failed before the change with error 22021 and passes after | `app/tenant/__tests__/admin-inventory-lookup.test.ts` ("searches text that carries control characters instead of failing") |
+| SEC-16 | P2 | Request size (signed-in routes) | Found in round 5. Before a signed-in request reaches route code, the tenant check reads the body to look for a shop name that conflicts with the session. It buffered the whole body and compared it with its 1 MiB ceiling afterwards. A body of any other content type was not bounded at all, and a route that then asked for form data read all of it before rejecting the type | A signed-in user, or a script with a valid session token, could make the server hold very large bodies in memory. A few at once can exhaust a small instance and take the app down for every shop. No data exposure | Production build of `main` at `8ede0e5`, three oversized posts at once to a signed-in route: server memory rose from about 0.2 GB to 2.1 GB | Fixed in #118: the check refuses a declared length over the ceiling without reading, and otherwise reads in chunks and stops at the ceiling (`readBoundedBytes` in `app/lib/http/bounded-request.server.ts`), for every content type. Same three posts as form, JSON and plain text: peak 148 to 159 MB. The refusal keeps its existing error (`client_shop_hint_limit`), so an oversized body on an admin route still answers 500, now without the memory cost | `app/tenant/__tests__/client-hint-byte-limits.test.ts` ("body read is bounded (SEC-16)"), `app/lib/http/bounded-request.test.ts` ("readBoundedBytes") |
+| SEC-17 | P3 | Input handling (all tenant routes) | Found in round 5. PostgreSQL text cannot hold a NUL character and rejects the whole statement. Search boxes, filters, route ids and form fields on the admin pages passed text to queries without refusing one. SEC-15 fixed one page; the same input failed on the others. A purchase-order line file that held a NUL (a spreadsheet or UTF-16 export saved as `.csv`) failed the same way | The request answered with an error page instead of a refusal or "not found". No data was exposed or changed | Production build of `main` at `8ede0e5`: the affected requests answered 500 and the server logged PostgreSQL error 22021 | Fixed in #118: `rejectNulInput` (`app/lib/http/nul-input.server.ts`) answers 400 for a NUL in the path, the query, or a form field name, value or file name. `requireAdminTenant` and `requirePosTenant` call it, so every tenant route is covered before route code runs. The line import refuses such a file with a message that says how to save it. After the change: 18 request cases answered 400, the import answered its message and wrote nothing, and the server logged no 22021. JSON bodies are checked by each JSON endpoint (the POS endpoints do, from #128 and #129) | `app/lib/http/nul-input.test.ts`, `app/tenant/__tests__/client-hints.test.ts` ("NUL characters (SEC-17)"), `app/tenant/__tests__/pos-tenant.test.ts`, `app/tenant/__tests__/admin-inventory-lookup.test.ts`, `app/tenant/__tests__/db-isolation/purchasing-screens.test.ts` |
+| SEC-18 | P2 | Billing and entitlements (suppliers, purchase orders, receiving, bundles) | Found in round 6; the remainder of OPEN-4. The billing ruling of 2026-11-19 is that every action that creates or changes a record refuses a shop whose stored plan is inactive. Six route actions never asked: add a supplier, change a supplier, create a purchase order, change a purchase order, receive a delivery, and add or remove a bundle component | A shop that never chose a plan, or whose plan lapsed, kept the full purchasing workflow. No data was exposed and nothing reached Shopify | Production build of `main` at `a4c62f8`, shop alpha's stored plan set inactive: a transfer create answered 403 (already gated), while supplier create, save, archive and restore, purchase order create, save and duplicate, and a bundle component add all succeeded and wrote rows | Fixed in #138: each of the six actions calls `requireActivePlanSnapshot` right after it resolves the tenant and before it reads the form. The five purchasing pages show the plan notice the inventory pages show. After the change the same nine requests answered 403 and wrote nothing; with the plan active they succeeded; the pages, the purchase-order CSV and the export still answered 200 without a plan. Left open: the dashboard's `syncCatalog` and `ackAlert` actions, and the POS receive and count endpoints in #128 and #129 (passed to their lanes) | `app/services/purchasing-plan-gate.test.ts`, `app/tenant/__tests__/db-isolation/purchasing-screens.test.ts` and `purchasing-supplier-screens.test.ts` ("tells a shop with no plan that changes are unavailable, and refuses them") |
+| SEC-19 | P2 | Tenant enforcement in the database (preflight before row-level policies and runtime grants are applied) | Found in round 6 while setting up the local instance. The preflight checks that every child row has its parent before the composite foreign keys are created. It looked every parent up by row id, but the eleven catalog and order fact keys point at a Shopify GID inside the shop, so each fact row with a valid parent was counted as an orphan | Once a shop has synced its catalog or orders, `tenant:enforcement:apply` refuses to run again. A table added by a later migration then gets no row-level policies and no grants for the runtime role, and the feature that uses it answers 500 (permission denied). It fails closed: nothing is exposed and no other table loses its protection | Fresh database, enforcement applied, then one product, variant, inventory item, location and level for one shop: the preflight reported 2, 2 and 1 orphans and a second apply was refused with `orphan_parent_refs`. The same refusal on the local test database, where the worksheet tables from #127 had no grants. The daily stock snapshots lane reproduced it independently on #142 with a key made of shop and date | Fixed in #138: a parent whose key is not the row id is matched on shop and key together, and a NULL reference is not checked, as for the foreign key itself. The row-id lookup is unchanged. After the fix the second apply succeeds on both databases, and a reference with no parent in its own shop is still reported | `scripts/tenant-enforcement/tests/preflight-parent-refs.test.ts` (three cases, on PostgreSQL 16) |
 
 ## What held up (no change needed)
 
@@ -53,18 +59,156 @@ Each line is a set of attempts that failed as it should.
 - **CSRF.** State-changing requests need the session token in the `Authorization` header, which a cross-site form cannot set. React Router's origin check on form posts is a second layer; it must list the app's own public host to work behind a proxy (SEC-13).
 - **POS API (#85, read at its branch head).** Token signature and expiry are checked by the Shopify library, the pull request adds the audience check the library skips, the shop comes only from the signed token, and uninstalled shops are refused. No finding.
 
+## Round 3 (2026-11-13)
+
+Round 3 covers what merged after round 2: the inventory write ledger with the stocktake and transfer actions (#91) and the replenishment engine with the Buying Table (#89), on `main` at `494b3d0`. The target was the same local instance. Its inventory-write switches stayed OFF; the cases that need them ON ran only in the test suite, against the in-memory stand-in for Shopify's inventory API that #91 added.
+
+Held:
+
+- **Stocktakes and transfers across shops.** 10 requests from one shop naming another shop's stocktake, count line, transfer, location or variant were each refused with a "not found" or "not in this shop" message. The other shop's rows were unchanged and no ledger operation was recorded for either shop.
+- **Quantities and names.** Negative, fractional, exponent, hexadecimal, empty, non-numeric and over-limit quantities were refused on counts and transfer lines, and nothing was stored. An over-long name, an inactive location, a transfer to its own source and a receive before shipping were refused.
+- **Switches OFF.** Five simultaneous completions of one count and five simultaneous ships of one transfer sent nothing, recorded no ledger operation and left both documents open.
+- **Repeat and concurrent requests with the switches ON (tests only).** The lane's suite covers a repeated completion, ship, receive and cancel. This round adds a stress case with random delays in the stand-in: completions racing count changes on one stocktake, and ships, receives and cancels racing on one transfer. No request left a quantity that the document's own history cannot explain, and the final quantities equal the starting quantities plus the ledger's applied lines. The test was checked against a deliberate fault: with the ledger's per-document operation key made random, it fails in 9 of 12 rounds.
+- **Buying Table across shops.** Another shop's supplier and SKU mapping were refused and no order line was created from them. The development subscription switch is still refused on a production build.
+
+Found, all recorded under existing open items:
+
+- OPEN-1 is fixed by #91 and is closed below.
+- The Buying Table's order action checks no plan, and its quantities have no bounds (OPEN-4 and OPEN-2).
+
+Pull requests read before merge, at the head named. These are security passes requested by the owning lane, not approvals, and each was re-run on a local build of that branch:
+
+| Pull request | Head | Result |
+|---|---|---|
+| #111, App Store readiness batch | `dac922f` | No blocker. Raised: whether the Admin API or the Partner API is the right source for App Pricing status (unverified against Shopify, P1 if confirmed), a stored subscription flag still gating the Buying Table, and three container image notes. The image stages were emulated without Docker: build, release step, and web and worker start with runtime credentials only. A real `docker build` was not possible in this environment. Record: https://github.com/Vedang1998/Stocky/pull/111#issuecomment-6813625589. The lane has since reworked these; its ready head gets a second pass recorded on the pull request |
+| #88, reports and CSV exports | `836ffdb` | No blocker. Exports use the shared CSV encoder (SEC-04), ranges and paging are bounded, and another shop's data did not appear under any report. One P3: an unexpected `range` value answered 500. The lane fixed it at `e11d51b`. Record: https://github.com/Vedang1998/Stocky/pull/88#issuecomment-6865374014 |
+
+## Round 4 (2026-11-14)
+
+Round 4 covers the mobile and POS work merged as #96, on `main` at `f7548ba`: the two POS endpoints (`/api/pos/scan` and `/api/pos/stock`) with their token check and rate limit, the admin Inventory lookup, and the sync status and setup guide on the home page. The target was the same local instance, with catalog facts seeded for both synthetic shops, including one barcode that both shops use.
+
+Held:
+
+- **POS tokens.** 13 requests were refused with 401 or 403 and no data: no token, a malformed token, a token signed with another secret, an unsigned token, an expired token, a token issued for another app, a token naming an unknown shop, five tokens whose destination was not a plain shop address, and a token passed in the URL.
+- **POS across shops.** Each shop saw only its own product for the shared barcode. Another shop's barcode, SKU and variant ID answered "unknown" or "not found", and a shop parameter or shop header naming another shop was refused.
+- **POS input.** Over-long codes, wildcard characters, SQL text, a NUL byte, and malformed variant and location IDs were refused or treated as plain text. Nothing failed.
+- **POS rate limit.** One staff member was stopped after 240 requests in a minute while other staff and the other shop were not affected. Tokens without a usable staff ID shared one allowance. The shop as a whole was stopped at 2,400. With Redis stopped, the endpoints kept answering, about a quarter of a second slower, and logged the outage once: the limiter allows requests when its store is down. That is the lane's recorded choice, because the endpoints are authenticated.
+- **A disabled shop on POS.** A valid token for an uninstalled shop was refused.
+- **Admin Inventory lookup across shops.** Lookups from one shop for another shop's barcode, SKU, product name and variant ID, and lookups with wildcard and SQL text, showed no row of the other shop.
+- **Home page.** Sync status and the setup guide carried no data of the other shop, no job identifier and no internal failure text.
+
+Found:
+
+- SEC-15 (P3): a NUL byte in the Inventory lookup text answered with an error page. Fixed in #118, see the findings table.
+- Outside #96: the install hook queued a full catalog sync on every token exchange, about hourly for a shop in use. That is SEC-14, fixed in #118 with SEC-15.
+- Outside #96: the first page load after a reinstall answered with an error on the local instance, 5 of 6 times on `main` at `ba2f33d`. Filed as #123 for the owning lane; a fix is proposed in #111 and passed the same local steps 8 of 8 times. A real uninstall and reinstall on the test store is still needed.
+
+Pull requests read before merge during this round. As in round 3, these are security passes requested by the owning lane, not approvals:
+
+| Pull request | Head | Result |
+|---|---|---|
+| #111, App Store readiness batch | `1a38de5`, then commits `e685b8a`, `b2053a2` and `3a60008` | No blocker at any of the four. Session tokens are now encrypted at rest (OPEN-8) and held under key copy, rotation, an unknown key and tampering; the Partner API source for plan status fails closed. Open after the last look: a stored plan snapshot is refreshed only on the billing page (P2), and the Partner settings are not yet required at start-up (waits on the test-store check, R-195). Records: comments 6868501175, 6868725287, 6869025644 and 6869069515 on #111 |
+| #117, order-history import after install | `09895cb` | No blocker. Two findings on the earlier head `59cb337` were fixed before this pass: the hook re-imported the whole order history every six hours (P2), and a reinstall soon after an import skipped the import (P3). Record: https://github.com/Vedang1998/Stocky/pull/117#issuecomment-6872344935 |
+| #88, reports and CSV exports | `5d32805` (changes since `836ffdb` only) | No security change. Record: https://github.com/Vedang1998/Stocky/pull/88#issuecomment-6868807817 |
+
+## Round 5 (2026-11-19)
+
+Round 5 covers what merged after round 4 without a pass from this lane, on `main` at `8ede0e5`: suppliers, purchase orders, receiving and documents (#101), adjustments (#102), the stocktake workflow (#112), labels (#104), the reports (#88), and shop erasure and billing from #111 as merged (`1715dd8`). The target was the same local instance. Inventory-write switches stayed OFF.
+
+Held:
+
+- **Across shops.** One shop could not read, change, receive, export or print another shop's suppliers, purchase orders, receipts, stocktakes, adjustments, labels or documents, by ID or by search, and report requests and exports returned no row of the other shop. A line file naming the other shop's SKU imported nothing.
+- **Hostile input.** Out-of-range and malformed dates, pages, sort keys and wildcard text on every report and its export answered without a server error; the one exception was a NUL character (SEC-17). Formula text stored as a supplier name is neutralised in CSV exports. The line import refused a file over 1 MB, a file over 1,000 rows, a binary file and an out-of-range quantity, each with a message and no partial write.
+- **Shop erasure.** A third synthetic shop installed, created a supplier with a contact person, a supplier product, a purchase order with a line and a charge, a stocktake and a transfer through the app, was uninstalled and then received `shop/redact`. No row of that shop was left in any shop-scoped table, and the other shops' rows were untouched.
+
+Found:
+
+- SEC-16 (P2): signed-in routes buffered a request body of any size before the size check. Fixed in #118, see the findings table.
+- SEC-17 (P3): a NUL character in text answered with an error page on most admin routes. Fixed in #118, see the findings table.
+- Not new: the first page load of a newly installed shop still answers with an error on the local instance. That is issue #73; its fix is #82, not merged.
+- OPEN-4 is still open after #111: see the open items.
+
+Follow-up on `main` at `29b7e41`, the same day:
+
+- **Purchase-order reports (#126).** Both reports and their exports returned only the requesting shop's orders and lines for each of two shops, a shop parameter naming the other shop was refused, hostile page, sort and range values answered without a server error, the date range stayed bounded, and a supplier name written as a formula was neutralised in both CSV files. Nothing found.
+- **Smart Forecast engine (#121).** It is an arithmetic library with no route, no database access, no provider call and no caller on `main`, so nothing of it is reachable yet. It needs a pass when a screen or job starts to use it.
+
+Pull requests read before merge during this round. These are security passes requested by the owning lane, not approvals:
+
+| Pull request | Head | Result |
+|---|---|---|
+| #127, replenishment worksheet | `a5716f3`, carried over to `7949fdb` after a merge of `main` | No blocker. Tenant isolation, the plan check, input bounds, concurrent order creation and shop erasure held on a local production build. Records: comments 6996748346 and 6997106367 on #127 |
+| #128, POS receiving | `93e4b10`, then `458fcd4` and `8ab72c5` | No blocker at `8ab72c5`. Two P2 findings were fixed by the lane before that head: the endpoint buffered the body before its size limit (POS-01), and the POS screen renewed the receipt's idempotency key when the counts changed, so a retry after a dropped connection could record a delivery twice (POS-02). Still open, not blocking: the receive action has no plan check (OPEN-4), and two identical submissions sent at the same moment can answer 500 from a write conflict in the shared receipt code from #101 while stock stays right; passed to the purchasing lane. The pass carries over to `3def634`, a merge of `main` that leaves the pull request's own diff unchanged. Records: comments 6996897715, 6997008673, 6997024222 and 7001576785 on #128 |
+| #129, POS stocktake counting | `1ffb971`, then `748fcf3` and `b688870` | No blocker. Counting requires a staff identity, a count line is bound to its stocktake and shop, and expected quantities are never sent to the device. No CI had run when the pass was posted, because the pull request targeted the #128 branch. Records: comments 6996950583, 6997009131 and 6997024733 on #129 |
+| #124, transfer workflow | `6d42b9e` | No blocker; no P0, P1 or P2. On a local build with transfer writes on against the stand-in: shop separation held on the page, the export and all 14 actions; input limits, the plan gate and the staff requirement held on every stock-moving action; ten copies of ship, receive, post receipt and close each produced one adjustment, and the stock totals matched the document, including after an unanswered ship followed by edits or a cancel. Two P3 notes: a NUL in the path or notes answers 500 until SEC-17 lands, and a draft can be edited or cancelled with a token that carries no staff id (no stock moves). Not exercised: multi-item partial failures. Merged at that head as `9a48410`. With `9a48410` merged into this branch, the four NUL requests from that pass (list search, page id, export id, notes field) answer 400 on a local build and clean requests still succeed. Record: comment 7001552334 on #124 |
+| #131, receipt write conflict | `3692198` | No blocker. Fixes the 500 that identical receipt submissions arriving together got (found in the #128 pass). The new tests fail on `main`'s source and pass on the head; 20 identical posts on a local build left one receipt and one adjustment per burst. Record: comment 7001315893 on #131 |
+| #132, removal of the direct inventory-write helpers | `37e3577`, its own two commits only | No blocker. After it the ledger's sender is the only Shopify inventory mutation in the app. Record: comment 7001448096 on #132 |
+| #133, development plan override | `51b1b50` | No blocker. In a production build the override stayed off for `NODE_ENV` production, unset, empty, `staging`, `Development` and `test` with a trailing space; it is on only for exactly `development` or `test`. Two P3 notes: the stored plan snapshot outlives the guard if a development process ever serves the production database, and the variable belongs on the deploy checklist as absent in production. Record: comment 7001377620 on #133 |
+| #134, reinstall wait (tenant resolver) | `2d313ee` | No blocker. The resolver only became stricter: a shop still disabled after the wait gets a fixed 503 instead of going on; nothing is written and the answer carries no shop data. No CI had run, because it targeted the #125 branch. Record: comment 7001419461 on #134 |
+| #135, order-history notice on sales reports | `a63a171` | No blocker. The new control-plane read asserts the tenant authority, filters on its shop, and returns one of three words. Record: comment 7001463497 on #135 |
+| #130, supplier performance report | `00c4ab0` | No blocker, by reading only; the head was not run locally. The report is a pure builder over the purchase-order loader that the #126 reports use, on the tenant-scoped client. It adds no route, request parameter or query, so the shared date-range bounds and the CSV formula guard apply unchanged. Record: comment 7001581632 on #130 |
+
+## Round 6 (2026-11-19, in progress)
+
+Round 6 runs on `main` at `a4c62f8`, which now holds the transfer workflow (#124), the replenishment worksheet (#127) and the round 3 to 5 fixes (#118). The target is the same local instance.
+
+Found:
+
+- SEC-18 (P2), in the findings table: purchasing and bundle actions did not check the plan. Fixed in #138.
+- SEC-19 (P2), in the findings table: tenant enforcement could not be applied again to a database that holds catalog or order facts. Fixed in #138. Deploy note: after any migration that adds a merchant table, `tenant:enforcement:apply -- --apply` has to run before the app serves that table; until this fix it could not.
+
+Held, on a build of #138:
+
+- A shop with no plan can still open the supplier, purchase-order, receiving and bundle pages, the purchase-order CSV and the purchase-order export. Reading and exporting stay available, as the pricing document requires for a lapsed plan.
+- With the plan active again, every action refused above succeeds.
+
+Open for the owner, unchanged by this round: a lapsed plan also stops a shop from finishing a document it started while the plan was active. After #138 that includes receiving a delivery against an order already placed, as it already includes receiving a transfer in transit.
+
+Also fixed in #138:
+
+- The Buying Table's two lookback actions answered 500 when the request named no product or no location (the last part of OPEN-2 that still reproduced). They now refuse it with a message and write nothing. Regression test: `app/services/buying-table-lookback-input.test.ts`.
+- A timing fault in `app/sync/__tests__/privacy-compliance.test.ts` ("the request waits, then closes at the deadline"). The test read the clock before the request was recorded, so on a slow runner the request was not yet due and the test failed. It reddened CI on #133 at `c54fc93`. The erasure code is unchanged: a request that is not yet due is picked up by the next run.
+
+Held, on `main` at `a4c62f8` plus #138, local build with transfer writes on against the stand-in:
+
+- **Transfers when Shopify accepts only part of a movement.** The #124 pass did not exercise this. With the ledger sending one line per call and the stand-in refusing or dropping calls: a half-accepted shipment stays a draft and shipping again sends only the rest; cancelling it puts back only what left; editing lines afterwards moves only the difference; a lost answer followed by a refused put-back neither loses stock nor returns it twice; a half-accepted receipt stays in transit, closed to edits, and receiving again adds only the rest. Stock totals matched the documents in every case. Regression tests: five cases under "transfer: Shopify accepts only part of a movement" in `scripts/tenant-enforcement/tests/stocktake-transfer-ledger-race.test.ts`.
+- **Purchase-order inputs and state changes (OPEN-2).** Quantities, costs, exchange rates and dates outside their bounds are refused with a message, and every out-of-order status change tried is refused with a message (send or order with no products, close before any receipt, delete after ordering, send, order, add products or cancel after a cancel, delete on an archived order). The Buying Table's order action answers a refusal, not a 500, for a quantity beyond the 32-bit range, a negative one and a fraction.
+- **Dependency audit (OPEN-5), re-run.** Production dependencies: 9 advisories (0 critical, 4 high), the same set as after #90; each needs a major upgrade (Prisma 7, `@shopify/ui-extensions`) or has no patched release. Development-only tooling adds 45 more (2 critical, in the test runner's worker pool, which never runs in the deployed app).
+- **Webhook replay (OPEN-12).** Unchanged. The compliance webhooks added by #111 bind the signed `shop_domain` to the shop the delivery names, so a `shop/redact` body cannot be replayed against another shop.
+
+Notes (P3, no change made):
+
+- "Mark as sent" on an order that is already sent, at the same content version, succeeds again on the server and adds another "sent" line to the order's history; five requests at once add five. The page hides the button in that state. Nothing else changes. Passed to the purchasing lane.
+- A transfer draft whose lines were all removed after a half-accepted shipment cannot be shipped ("Transfer has no line items"); the units that left stay out of the source location until the draft is cancelled, which puts them back.
+
+Security passes in this round (REVIEW role, no files changed on the subject branches):
+
+| Pull request | Head | Result |
+|---|---|---|
+| #128, POS receiving | `de58e33` | No blocker. Adds the plan check to the POS receiving endpoints (SEC-18). P3 note: the POS check also covers the read calls, which is stricter than the admin pages. Record: comment 7022255761 on #128 |
+| #129, POS stocktake counting | `24f1a2e`, then `946f38e` | No blocker. Same plan check on the counting endpoints. Records: comments 7002064218 and 7022256171 on #129 |
+| #131, receipt write conflict | `6f30375` | No blocker; carried over from `3692198`. Record: comment 7002489505 on #131 |
+| #132, removal of the direct inventory-write helpers | `38d2422` | No blocker; carried over from `37e3577`. Record: comment 7002064568 on #132 |
+| #133, development plan override | `c54fc93` | No blocker; carried over from `51b1b50`. The pull request's own diff is unchanged through its merge of `main`; the new commit is comments only. Record: comment 7022389304 on #133 |
+| #134, reinstall wait and Home plan check | `69a2783` | No blocker. Home's two actions (start a catalog sync, dismiss an alert) answer 403 without a plan on a local build, nothing queued or written; another shop's alert id matches nothing. Home and Bundles show the plan notice. Record: comment 7022389652 on #134 |
+| #136, more worksheet columns | `3fe483c` | No blocker, by reading. No new route, action, query or request parameter; the columns draw fields the worksheet page already sends, and column names are still filtered against the known keys. Record: comment 7022588219 on #136 |
+| #137, Low stock report | `55d98aa` | No blocker. One entry on the existing reports route; every read goes through the shop's own client, and a two-shop database test returns only the caller's lines. The export uses the shared formula guard. Record: comment 7022582422 on #137 |
+| #139, Smart Forecast worksheet column | `ba64db0` | No blocker. The Pro capability is checked on the server before any read; a Growth shop that saves the column gets the plan message and no figures, and another shop's worksheet or row answers with no data on a local build. Work per request is bounded to one page of rows. Record: comment 7022931828 on #139 |
+| #141, first install with a concurrent settings row | `d59f6ea` | No blocker. Only a unique violation takes the read-back path, the read is bound to the shop, and the new log line carries the error's name, code and message, never the session. Two P3 notes on the pull request. Record: comment 7022729286 on #141 |
+| #143, named staff member on every inventory change | `a9fdf5b` | No blocker. The change only refuses: a token with no staff id is turned away on every transfer and count action on a local build, with nothing written. The staff member still comes only from the signed session token. Closes note N2 from the pass on #124. Record: comment 7022958393 on #143 |
+
 ## Open items
 
 | ID | Sev | Item | Owner | Risk register |
 |---|---|---|---|---|
-| OPEN-1 | P1 (latent) | Stocktake completion and transfer shipping are not idempotent and have no status guard. Inventory-write flags are OFF, so nothing reaches Shopify today | Transfers and stocktakes lane | R-186 |
-| OPEN-2 | P2 | Purchase-order quantity and cost inputs are not validated server-side and status changes can skip states | Purchase orders lane | R-187 |
-| OPEN-3 | P1 | Privacy webhooks are authenticated and acknowledged but do nothing yet. SEC-07 only makes them reachable. #99 implements them; its security review found one P1 (the shop to erase is read from the unsigned header) that must be fixed before it merges | App Store readiness lane | R-005 (existing) |
-| OPEN-4 | P2 | Entitlements are a single boolean checked on one route | App Store readiness lane (#92) | R-008 (existing) |
+| OPEN-1 | P1 (latent) | **Closed in round 3.** Stocktake completion and transfer shipping were not idempotent and had no status guard. #91 (merged as `d5a65ef`) routes both through the inventory write ledger and locks the document while it records each operation; repeat and concurrent requests apply each movement once (`scripts/tenant-enforcement/tests/stocktake-transfer-ledger.test.ts`, `stocktake-transfer-ledger-race.test.ts`). Inventory-write flags are still OFF | Transfers and stocktakes lane | R-186 |
+| OPEN-2 | P2 | Purchase-order quantity and cost inputs are not validated server-side and status changes can skip states. Round 3: the Buying Table's order action (#89) has the same gap. A quantity beyond the 32-bit range, or a look-back change that names no variant, answers 500; nothing is written in either case. **Closed in round 6:** the purchase-order inputs and state changes are refused with a message on `main` at `a4c62f8`, and the look-back actions are fixed in #138 | Closed | R-187 |
+| OPEN-3 | P1 | Privacy webhooks are authenticated and acknowledged but do nothing yet. SEC-07 only makes them reachable. #99 implements them; its security review found one P1 (the shop to erase is read from the unsigned header) that must be fixed before it merges. Round 3: #111 carries that work with the shop taken from the signed body; not merged at `494b3d0`. Round 5: #111 merged as `1715dd8`, and shop erasure removed every row of an uninstalled shop on the local instance, including the tables added since. Real delivery of the three topics on the test store is not confirmed by this lane | App Store readiness lane | R-005 (existing) |
+| OPEN-4 | P2 | Entitlements are a single boolean checked on one route. Round 3: that check is in the Buying Table's page only. Its order action creates a purchase order for a shop with no plan. #111 adds a plan catalog and a server-side check on the actions; not merged at `494b3d0`. Round 5: #111 merged as `1715dd8`. The Buying Table's order action now refuses a shop with no active plan, and it is the only caller: on `main` at `29b7e41` no other route checks the plan and `requireCapability` has no caller, so purchase orders, receiving, stocktakes, adjustments, labels and reports work for a shop with no plan. The replenishment worksheet (#127, merged as `f29dd22`) checks the plan in its loaders and actions, and #124 adds the stored-plan check to the transfer, stocktake and adjustment actions; #124 was not merged when this was written. Round 6: #124 merged as `9a48410`. On `main` at `a4c62f8` the supplier, purchase-order, receiving and bundle actions still did not check the plan (SEC-18, fixed in #138). After #138 the actions left without a check are the dashboard's `syncCatalog` and `ackAlert`, and the POS endpoints in #128 and #129 | App Store readiness lane (#92, #111) | R-008 (existing) |
 | OPEN-5 | P2 | Residual dependency advisories after #90 need major upgrades (Prisma 7, Vitest 5) or have no patched release (`minimatch` through `@react-router/fs-routes`, `lodash` and `@graphql-tools/utils` in code generation, `deepmerge` through Polaris) | Security lane, after the feature lanes land | R-188 |
-| OPEN-6 | P2 | The Dockerfile cannot build as written (Node 20 image against the `npm 11.5.2` engine pin, build tools omitted with `--omit=dev`), runs as root and runs migrations at container start, which needs migration credentials in the runtime container | App Store readiness lane | R-189 |
+| OPEN-6 | P2 | The Dockerfile cannot build as written (Node 20 image against the `npm 11.5.2` engine pin, build tools omitted with `--omit=dev`), runs as root and runs migrations at container start, which needs migration credentials in the runtime container | App Store readiness lane (reworked in #111, not merged at `494b3d0`) | R-189 |
 | OPEN-7 | P3 | No application-level rate limiting. After SEC-01, SEC-02 and SEC-08 every unauthenticated path is cheap and bounded, so this is left to the hosting edge | Deploy owner | R-190 |
-| OPEN-8 | P3 | The `Session` table stores Shopify access and refresh tokens in plaintext and the runtime role can read it. This is the Shopify library's default storage | Security lane | R-191 |
+| OPEN-8 | P3 | The `Session` table stores Shopify access and refresh tokens in plaintext and the runtime role can read it. This is the Shopify library's default storage. #111 adds encryption at rest; not merged at `494b3d0` | Security lane, App Store readiness lane | R-191 |
 | OPEN-9 | P3 | Public pages (`/`, `/auth/login`) send no `frame-ancestors` policy. They are static and have no forms since #76; revisit if that changes | App Store readiness lane | R-192 |
 | OPEN-10 | P3 | A webhook for a shop with no `Shop` row, or a signed delivery with malformed JSON, answers 500. Only Shopify can produce either; the 500 makes Shopify retry, which is the safer side | Accepted | None |
 | OPEN-11 | P3 | Labels for an unknown variant ID return an empty file with 200, and the ZPL lacks `^CI28`, so non-ASCII characters in titles will not print correctly on Zebra printers (from the store test) | Transfers and stocktakes lane | None (functional) |
@@ -72,9 +216,9 @@ Each line is a set of attempts that failed as it should.
 
 ## Not covered
 
-- Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The store tester covers the first three on the test store.
-- The inventory-write paths with their flags ON. They are OFF everywhere and were not turned on.
-- Features merged after `8da50a8`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling.
+- Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The POS extension itself (`extensions/propo-pos`) was read but not run: round 4 tested the endpoints it calls, not the extension on a device. The store tester covers the first three on the test store.
+- The inventory-write paths with their flags ON against Shopify. They are OFF everywhere and were not turned on. Round 3 exercised them only in tests, against a stand-in.
+- Features merged after `a4c62f8`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling. The Smart Forecast engine from #121 is now called by the replenishment worksheet's Smart Forecast panel, which was covered in the #127 pass.
 - Infrastructure: TLS, network exposure of PostgreSQL and Redis, backups, and the hosting platform's own limits. Nothing is deployed yet.
 
 ## Category verdicts
@@ -85,12 +229,12 @@ Each line is a set of attempts that failed as it should.
 - Cross-site form posts: refused by React Router's origin check. The dependency update that tightened the check also broke the app's own forms behind a proxy (SEC-13), fixed.
 - Export and file handling: four defects (SEC-02 to SEC-05), fixed.
 - Queue and worker integrity: held; one abuse path (SEC-08), fixed.
-- Inventory-write safety: not ready (OPEN-1); flags remain OFF.
-- Billing and entitlements: bypass held; the entitlement model is still incomplete (OPEN-4).
+- Inventory-write safety: the repeat and concurrent request defect is fixed (OPEN-1) and held in tests against a stand-in. Flags remain OFF; nothing here was proven against Shopify.
+- Billing and entitlements: the development switch held. After #138 every admin page action that creates or changes a merchant record checks the plan; the dashboard's two actions and the POS endpoints in #128 and #129 do not yet (OPEN-4, SEC-18).
 - Dependencies: improved, not clean (OPEN-5).
 
 ## Decision this record supports
 
 - Safe to keep building on: yes.
-- Ready for App Store submission on security grounds: no, until OPEN-3 and OPEN-6 are closed and an independent review of #81, #90 and #95 is recorded.
+- Ready for App Store submission on security grounds: no, until OPEN-3, OPEN-4 and OPEN-6 are closed and an independent review of #81, #90 and #95 is recorded.
 - Production inventory writes approved: no.
