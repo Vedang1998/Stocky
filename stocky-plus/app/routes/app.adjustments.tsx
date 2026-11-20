@@ -45,6 +45,8 @@ import {
 } from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
 import type {
   InventoryOperationLineStatus,
   InventoryOperationStatus,
@@ -52,8 +54,13 @@ import type {
 import { fetchLocations } from "../services/shopify-gql.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant({ request });
-  const query = readAdjustmentHistoryQuery(new URL(request.url).searchParams);
+  const { admin, db, tenant } = await requireAdminTenant({ request });
+  // The history's "from" and "to" are days on the shop's clock.
+  const timeZone = await readShopTimeZone(tenant);
+  const query = readAdjustmentHistoryQuery(
+    new URL(request.url).searchParams,
+    timeZone,
+  );
 
   const [locations, planActive, entries] = await Promise.all([
     fetchLocations(admin),
@@ -74,6 +81,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // submitting the form twice records it once.
     submissionId: randomUUID(),
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("adjustmentWrites"),
     locations,
     history,
@@ -219,12 +227,6 @@ const chosen = (isChosen: boolean) => (isChosen ? { selected: true } : {});
 
 const signed = (delta: number) => (delta > 0 ? `+${delta}` : String(delta));
 
-/** `2026-11-11 21:40 UTC`; the same text on the server and in the browser. */
-function formatUtc(value: Date | string): string {
-  const iso = new Date(value).toISOString();
-  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
-}
-
 function exportHref(filter: { from: string; to: string }): string {
   const params = new URLSearchParams();
   if (filter.from) params.set("from", filter.from);
@@ -243,10 +245,12 @@ function olderHref(filter: { from: string; to: string }, cursor: string) {
 function HistoryEntry({
   entry,
   locationName,
+  timeZone,
   locked,
 }: {
   entry: AdjustmentHistoryEntry;
   locationName: (id: string | null) => string;
+  timeZone: string | null;
   locked: boolean;
 }) {
   const [confirmingReversal, setConfirmingReversal] = useState(false);
@@ -269,7 +273,8 @@ function HistoryEntry({
           {entry.reversedByOperationId && <s-badge>Reversed</s-badge>}
         </s-stack>
         <s-text color="subdued">
-          {formatUtc(entry.createdAt)} · {locationName(entry.locationId)} ·{" "}
+          {formatShopTime(entry.createdAt, timeZone)} ·{" "}
+          {locationName(entry.locationId)} ·{" "}
           {entry.staffId ? `Staff ID ${entry.staffId}` : "Staff not recorded"}
         </s-text>
         {entry.note && <s-paragraph>{entry.note}</s-paragraph>}
@@ -288,7 +293,14 @@ function HistoryEntry({
                 <s-table-cell>{line.title}</s-table-cell>
                 <s-table-cell>{line.sku ?? ""}</s-table-cell>
                 <s-table-cell>{signed(line.delta)}</s-table-cell>
-                <s-table-cell>{line.quantityAfterChange ?? ""}</s-table-cell>
+                <s-table-cell>
+                  {line.quantityAfterChange ??
+                    (line.status === "APPLIED" ? (
+                      <s-text color="subdued">Not reported by Shopify</s-text>
+                    ) : (
+                      ""
+                    ))}
+                </s-table-cell>
                 <s-table-cell>
                   {LINE_RESULT[line.status]}
                   {line.status === "FAILED" && line.errorMessage
@@ -372,6 +384,7 @@ export default function Adjustments() {
   const {
     submissionId,
     planActive,
+    timeZone,
     writesEnabled,
     locations,
     history,
@@ -494,11 +507,15 @@ export default function Adjustments() {
           <Form method="get">
             <s-stack direction="inline" gap="base" alignItems="end">
               <s-date-field
-                label="From (UTC)"
+                label={timeZone ? "From" : "From (UTC)"}
                 name="from"
                 value={filter.from}
               />
-              <s-date-field label="To (UTC)" name="to" value={filter.to} />
+              <s-date-field
+                label={timeZone ? "To" : "To (UTC)"}
+                name="to"
+                value={filter.to}
+              />
               <s-button type="submit" variant="secondary">
                 Show
               </s-button>
@@ -529,6 +546,7 @@ export default function Adjustments() {
                 key={entry.operationId}
                 entry={entry}
                 locationName={locationName}
+                timeZone={timeZone}
                 locked={locked}
               />
             ))

@@ -11,10 +11,17 @@ import type {
   InventoryOperationLineStatus,
   InventoryOperationStatus,
 } from "../services/inventory-writes/types";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import {
+  shopDay,
+  shopTimeCell,
+  timeColumn,
+} from "../services/inventory-writes/shop-time";
 import { fetchLocations } from "../services/shopify-gql.server";
 
-const HEADERS = [
-  "Recorded at (UTC)",
+/** The time is on the shop's clock when its time zone is known; the heading says which clock. */
+const headers = (timeZone: string | null) => [
+  timeColumn("Recorded at", timeZone),
   "Type",
   "Status",
   "Reason",
@@ -29,7 +36,7 @@ const HEADERS = [
   "Note",
   "Adjustment ID",
   "Reverses adjustment ID",
-] as const;
+];
 
 const STATUS_TEXT: Record<InventoryOperationStatus, string> = {
   APPLIED: "Applied",
@@ -51,8 +58,13 @@ const LINE_TEXT: Record<InventoryOperationLineStatus, string> = {
 
 /** The adjustment report: one row per item of every adjustment and reversal in the period. */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant({ request });
-  const query = readAdjustmentHistoryQuery(new URL(request.url).searchParams);
+  const { admin, db, tenant } = await requireAdminTenant({ request });
+  // The period's days are days on the shop's clock, as on the page.
+  const timeZone = await readShopTimeZone(tenant);
+  const query = readAdjustmentHistoryQuery(
+    new URL(request.url).searchParams,
+    timeZone,
+  );
 
   const [{ entries, truncated }, locations] = await Promise.all([
     listAdjustmentsForExport(db, { from: query.from, to: query.to }),
@@ -78,7 +90,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   for (const entry of entries) {
     for (const line of entry.lines) {
       rows.push([
-        entry.createdAt,
+        shopTimeCell(entry.createdAt, timeZone),
         entry.kind === "REVERSAL" ? "Reversal" : "Adjustment",
         STATUS_TEXT[entry.status],
         adjustmentReasonLabel(entry.reason),
@@ -102,6 +114,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const period =
     query.fromDay || query.toDay
       ? `${query.fromDay || "start"}-to-${query.toDay || "today"}`
-      : new Date().toISOString().slice(0, 10);
-  return csvDownloadResponse(toCsv(HEADERS, rows), `adjustments-${period}.csv`);
+      : shopDay(new Date(), timeZone);
+  return csvDownloadResponse(
+    toCsv(headers(timeZone), rows),
+    `adjustments-${period}.csv`,
+  );
 };

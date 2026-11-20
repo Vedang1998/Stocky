@@ -12,6 +12,7 @@ import type { ExecuteInventoryOperationOptions } from "../../../app/services/inv
 import type { ReadLevelQuantities } from "../../../app/services/inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../../../app/services/inventory-writes/types";
 import { transferStatusBadge } from "../../../app/services/transfers/transfer-display";
+import { readTransferPaper } from "../../../app/services/transfers/transfer-documents.server";
 import {
   getTransfer,
   getTransferHistory,
@@ -1666,6 +1667,107 @@ describe("transfer workflow", () => {
       ).toEqual(["Red wine", "White wine"]);
     });
 
+    it("reads a transfer for printing: every item, both addresses and where the units stand", async () => {
+      const id = await shippedTransfer();
+      await scan(id, "RED-750", 3);
+      await postTransferReceipt(dbA, null, RECEIVER, id, enabled());
+      await prisma.shopifyLocationFact.update({
+        where: { id: "11" },
+        data: {
+          address1: "1 Cellar Lane",
+          city: "Napa",
+          provinceCode: "CA",
+          zip: "94558",
+          countryCode: "US",
+        },
+      });
+
+      try {
+        const paper = await readTransferPaper(dbA, id);
+
+        expect(paper).toMatchObject({
+          reference: `T-${id.slice(-6).toUpperCase()}`,
+          statusLabel: "Partly received",
+          source: {
+            name: "Location 11",
+            addressLines: ["1 Cellar Lane", "Napa, CA 94558", "US"],
+          },
+          destination: { name: "Location 12", addressLines: [] },
+          totals: {
+            lineCount: 2,
+            shipUnits: 10,
+            receivedUnits: 3,
+            outstandingUnits: 7,
+          },
+        });
+        expect(paper?.transfer.id).toBe(id);
+        expect(
+          paper?.lines.map((l) => [l.title, l.sku, l.shipQty, l.receivedQty]),
+        ).toEqual([
+          ["Red wine", "RED-750", 4, 3],
+          ["White wine", "WHT-750", 6, 0],
+        ]);
+      } finally {
+        await prisma.shopifyLocationFact.update({
+          where: { id: "11" },
+          data: {
+            address1: null,
+            city: null,
+            provinceCode: null,
+            zip: null,
+            countryCode: null,
+          },
+        });
+      }
+    });
+
+    it("prints a location Shopify no longer has without its old name", async () => {
+      const id = await draftTransfer();
+      await prisma.shopifyLocationFact.update({
+        where: { id: "12" },
+        data: {
+          existenceState: "ABSENT",
+          existenceKind: "ABSENT_CONFIRMED_QUERY",
+          deletedAt: new Date("2026-11-12T09:00:00.000Z"),
+          deletionSource: "CONFIRMED_QUERY",
+        },
+      });
+
+      try {
+        const paper = await readTransferPaper(dbA, id);
+
+        expect(paper?.source.name).toBe("Location 11");
+        expect(paper?.destination).toEqual({
+          name: "Location no longer in Shopify",
+          addressLines: [],
+        });
+      } finally {
+        await prisma.shopifyLocationFact.update({
+          where: { id: "12" },
+          data: {
+            existenceState: "LIVE",
+            existenceKind: "LIVE_REFETCH",
+            deletedAt: null,
+            deletionSource: null,
+          },
+        });
+      }
+    });
+
+    it("never prints another shop's location, even when a transfer names it", async () => {
+      const id = await draftTransfer();
+      // No page can save this; it stands for a row that went wrong.
+      await prisma.transferOrder.update({
+        where: { id },
+        data: { destinationLocationId: OTHER_SHOPS_LOCATION },
+      });
+
+      const paper = await readTransferPaper(dbA, id);
+
+      expect(paper?.destination.name).toBe("Location no longer in Shopify");
+      expect(JSON.stringify(paper)).not.toContain("Location 21");
+    });
+
     it("reads a transfer's history from the ledger: what left, arrived and went back, and who did it", async () => {
       const id = await shippedTransfer();
       await scan(id, "RED-750", 3);
@@ -1999,6 +2101,7 @@ describe("transfer workflow", () => {
     };
 
     expect(await getTransfer(dbB, id)).toBeNull();
+    expect(await readTransferPaper(dbB, id)).toBeNull();
     expect(await getTransferHistory(dbB, id)).toEqual([]);
     expect(
       (await listTransfers(dbB, { view: "open", page: 1 })).transfers,

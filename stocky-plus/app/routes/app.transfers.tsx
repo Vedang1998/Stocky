@@ -20,7 +20,8 @@ import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
-import { formatUtc } from "../services/stocktakes/stocktake-display";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
 import { readPageNumber } from "../services/stocktakes/stocktake-read.server";
 import { createTransfer } from "../services/transfers/transfer.server";
 import {
@@ -37,16 +38,18 @@ import {
 import { MAX_TRANSFER_NOTES_LENGTH } from "../services/transfers/transfer-quantities";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request });
+  const { db, tenant } = await requireAdminTenant({ request });
   const params = new URL(request.url).searchParams;
   const view = readTransferListView(params.get("view"));
   const page = readPageNumber(params.get("page"));
 
-  const [{ transfers, hasMore }, locations, planActive] = await Promise.all([
-    listTransfers(db, { view, page }),
-    listSyncedLocations(db),
-    planAllowsChanges(db),
-  ]);
+  const [{ transfers, hasMore }, locations, planActive, timeZone] =
+    await Promise.all([
+      listTransfers(db, { view, page }),
+      listSyncedLocations(db),
+      planAllowsChanges(db),
+      readShopTimeZone(tenant),
+    ]);
   return {
     transfers,
     hasMore,
@@ -54,6 +57,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     page,
     locations,
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("transferWrites"),
   };
 };
@@ -140,6 +144,7 @@ export default function Transfers() {
     page,
     locations,
     planActive,
+    timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -296,7 +301,7 @@ export default function Transfers() {
                       </s-table-cell>
                       <s-table-cell>{unitsSummary(transfer)}</s-table-cell>
                       <s-table-cell>
-                        {formatUtc(transfer.createdAt)}
+                        {formatShopTime(transfer.createdAt, timeZone)}
                       </s-table-cell>
                     </s-table-row>
                   );
