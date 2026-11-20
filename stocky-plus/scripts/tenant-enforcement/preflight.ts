@@ -124,22 +124,52 @@ async function countOpenQuarantine(
   return Number(res.rows[0]?.c ?? 0);
 }
 
+/**
+ * Child rows whose parent reference does not hold up under a composite
+ * foreign key.
+ *
+ * Most tables point at their parent's row id, which names one row across all
+ * shops: the parent can be found by id alone, and a parent under another shop
+ * is a tenant mismatch.
+ *
+ * Catalog and order facts point at a key that is unique only within a shop
+ * (a Shopify GID). There the parent is the row with the child's shop and that
+ * key, so the two must be matched together; a child without one is an orphan
+ * whichever other shops hold the same key. A NULL reference is not checked,
+ * as for the foreign key itself. Looking these parents up by row id counted
+ * every fact row as an orphan.
+ */
 async function countParentMismatches(
   client: Client,
   child: string,
+  childColumn: string,
   parent: string,
-  parentIdColumn: string,
+  parentKeyColumn: string,
 ): Promise<{ mismatch: number; orphan: number }> {
-  const sql = `
+  const shopId = quoteIdent("shopId");
+  const reference = quoteIdent(childColumn);
+  const sql =
+    parentKeyColumn === "id"
+      ? `
     SELECT
       COUNT(*) FILTER (
-        WHERE c.${quoteIdent("shopId")} IS NOT NULL
-          AND p.${quoteIdent("shopId")} IS NOT NULL
-          AND c.${quoteIdent("shopId")} IS DISTINCT FROM p.${quoteIdent("shopId")}
+        WHERE c.${shopId} IS NOT NULL
+          AND p.${shopId} IS NOT NULL
+          AND c.${shopId} IS DISTINCT FROM p.${shopId}
       )::text AS mismatch,
       COUNT(*) FILTER (WHERE p.id IS NULL)::text AS orphan
     FROM ${quoteIdent(child)} c
-    LEFT JOIN ${quoteIdent(parent)} p ON p.id = c.${quoteIdent(parentIdColumn)}
+    LEFT JOIN ${quoteIdent(parent)} p ON p.id = c.${reference}
+  `
+      : `
+    SELECT '0' AS mismatch, COUNT(*)::text AS orphan
+    FROM ${quoteIdent(child)} c
+    WHERE c.${reference} IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM ${quoteIdent(parent)} p
+        WHERE p.${shopId} = c.${shopId}
+          AND p.${quoteIdent(parentKeyColumn)} = c.${reference}
+      )
   `;
   const res = await client.query<{ mismatch: string; orphan: string }>(sql);
   return {
@@ -338,8 +368,9 @@ export async function runPreflight(
       const { mismatch, orphan } = await countParentMismatches(
         client,
         fk.childTable,
-        fk.parentTable,
         fk.childColumns[1],
+        fk.parentTable,
+        fk.parentColumns[1],
       );
       if (fk.purpose === "cross_domain" || fk.purpose === "secondary_lineage") {
         crossDomainMismatchCount += mismatch;
