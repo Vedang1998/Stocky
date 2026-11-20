@@ -482,6 +482,84 @@ describe("purchase-order receiving", () => {
       expect((await received(po.id)).byVariant[BLUE]).toBe(10);
     });
 
+    /** Runs `request` ten times at once and returns the answers; none may fail. */
+    async function tenAtOnce(
+      request: () => Promise<ReceivingResult>,
+    ): Promise<ReceivingResult[]> {
+      const outcomes = await Promise.allSettled(Array.from({ length: 10 }, request));
+      expect(
+        outcomes.flatMap((outcome) =>
+          outcome.status === "rejected" ? [String(outcome.reason)] : [],
+        ),
+      ).toEqual([]);
+      return outcomes.map(
+        (outcome) => (outcome as PromiseFulfilledResult<ReceivingResult>).value,
+      );
+    }
+
+    // Which request loses a race depends on timing, so each burst runs three
+    // times: before the fix, one round in six got through by chance.
+    it("answers every one of ten identical submissions that arrive at once, and receives once", async () => {
+      const po = await orderedPo();
+      for (let round = 1; round <= 3; round++) {
+        const lines = [{ lineItemId: po.lineId(BLUE), acceptedQty: 3 }];
+
+        const results = await tenAtOnce(() =>
+          receive(po.id, lines, { key: `receiving-burst-000${round}` }),
+        );
+
+        expect(new Set(results.map((result) => result.receipt!.id)).size).toBe(1);
+        expect(await receiptRows()).toBe(round);
+        expect(shopify.requests).toHaveLength(round);
+        expect(stock(BLUE_ITEM)).toBe(4 + 3 * round);
+        // A request that lost the race may still say "not confirmed yet";
+        // asking again shows the receipt posted and counted once.
+        const settled = await resumePurchaseOrderReceipt(dbA, null, results[0].receipt!.id, enabled());
+        expect(settled.receipt!.status).toBe("POSTED");
+        expect(shopify.requests).toHaveLength(round);
+        expect((await received(po.id)).byVariant[BLUE]).toBe(3 * round);
+      }
+    });
+
+    it("answers every one of ten retries of a pending delivery while receiving is switched off", async () => {
+      const po = await orderedPo();
+      for (let round = 1; round <= 3; round++) {
+        shopify.loseNextResponse();
+        const pending = await receive(po.id, [{ lineItemId: po.lineId(RED), acceptedQty: 2 }]);
+
+        const results = await tenAtOnce(() =>
+          resumePurchaseOrderReceipt(dbA, null, pending.receipt!.id, switchedOff()),
+        );
+
+        for (const result of results) {
+          expect(result.complete).toBe(false);
+          expect(result.receipt!.status).toBe("PENDING");
+          expect(result.message).toMatch(/receiving is turned off for this store/);
+        }
+        expect(shopify.requests).toHaveLength(round);
+        expect((await received(po.id)).byVariant[RED]).toBe(0);
+      }
+    });
+
+    it("answers every one of ten identical reversals that arrive at once, and takes the stock back once", async () => {
+      const po = await orderedPo();
+      for (let round = 1; round <= 3; round++) {
+        const receipt = await receive(po.id, [{ lineItemId: po.lineId(BLUE), acceptedQty: 3 }]);
+        expect(stock(BLUE_ITEM)).toBe(7);
+
+        await tenAtOnce(() =>
+          reversePurchaseOrderReceipt(dbA, null, RECEIVER, { receiptId: receipt.receipt!.id }, enabled()),
+        );
+
+        expect(shopify.requests).toHaveLength(2 * round);
+        expect(stock(BLUE_ITEM)).toBe(4);
+        const settled = await resumePurchaseOrderReceipt(dbA, null, receipt.receipt!.id, enabled());
+        expect(settled.receipt!.status).toBe("REVERSED");
+        expect(shopify.requests).toHaveLength(2 * round);
+        expect(await received(po.id)).toMatchObject({ status: "ORDERED", byVariant: { [BLUE]: 0 } });
+      }
+    });
+
     it("lets only one of two different deliveries claim the same open units", async () => {
       const po = await orderedPo();
       const lines = [{ lineItemId: po.lineId(BLUE), acceptedQty: 10 }];

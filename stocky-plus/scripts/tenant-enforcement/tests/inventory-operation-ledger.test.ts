@@ -866,6 +866,63 @@ describe("inventory operation ledger and Shopify write executor", () => {
       });
     });
 
+    it("answers every one of ten executors that start at once, and sends once", async () => {
+      for (let round = 0; round < 3; round++) {
+        const operation = await record({
+          idempotencyKey: `adjustment:burst:${round}`,
+          lines: [line(101, 2)],
+        });
+        const sentBefore = shopify.requests.length;
+
+        const outcomes = await Promise.allSettled(
+          Array.from({ length: 10 }, () =>
+            executeInventoryOperation(dbA, null, operation.id, enabled()),
+          ),
+        );
+
+        expect(
+          outcomes.flatMap((outcome) =>
+            outcome.status === "rejected" ? [String(outcome.reason)] : [],
+          ),
+        ).toEqual([]);
+        expect(shopify.requests).toHaveLength(sentBefore + 1);
+        expect(
+          (await getInventoryOperationResult(dbA, operation.id)).status,
+        ).toBe("APPLIED");
+      }
+      expect(shopify.level(101)).toBe(6);
+    });
+
+    it("answers every one of ten executors that start at once while writes are switched off", async () => {
+      for (let round = 0; round < 3; round++) {
+        const operation = await record({
+          idempotencyKey: `adjustment:burst-off:${round}`,
+          lines: [line(101, 2)],
+        });
+
+        const outcomes = await Promise.allSettled(
+          Array.from({ length: 10 }, () =>
+            executeInventoryOperation(dbA, null, operation.id, {
+              sendBatch: shopify.send,
+              isCapabilityEnabled: () => false,
+            }),
+          ),
+        );
+
+        expect(
+          outcomes.flatMap((outcome) =>
+            outcome.status === "rejected" ? [String(outcome.reason)] : [],
+          ),
+        ).toEqual([]);
+        expect(
+          outcomes.map(
+            (outcome) => outcome.status === "fulfilled" && outcome.value.status,
+          ),
+        ).toEqual(Array.from({ length: 10 }, () => "BLOCKED"));
+      }
+      expect(shopify.requests).toHaveLength(0);
+    });
+
     it("marks a stale line as a conflict and still applies the rest under a new key", async () => {
       shopify.setLevel(101, 10);
       shopify.setLevel(102, 7);

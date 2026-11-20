@@ -263,6 +263,16 @@ receiving page.
   lead time in use with its source: variant override, then the supplier's
   default, then the supplier's measured average rounded up.
 
+## Plan gate
+
+The actions of the supplier, purchase-order and receiving pages call
+`requireActivePlanSnapshot` (`app/billing/entitlements.server.ts`) right
+after they resolve the tenant and before they read the form. A shop without
+an active plan gets a 403 and nothing is recorded. The pages, the documents
+and the exports stay readable; the pages that hold a form read
+`planAllowsChanges` and show a notice that links to Billing. The replenishment
+worksheet and the Buying Table carry their own plan checks.
+
 ## Tenant isolation
 
 Every query goes through the tenant database wrapper. Supplier terms are
