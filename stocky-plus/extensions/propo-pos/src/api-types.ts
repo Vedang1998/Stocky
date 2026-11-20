@@ -67,3 +67,61 @@ export type StockResponse = {
 export type ApiErrorBody = {
   error: { code: string; message: string };
 };
+
+export type ReceivableOrder = {
+  id: string;
+  poNumber: string;
+  supplierName: string;
+  status: string;
+  /** YYYY-MM-DD, or null when no date is set. */
+  expectedOn: string | null;
+  orderedUnits: number;
+  receivedUnits: number;
+  remainingUnits: number;
+};
+
+export type ReceivingListResponse = {
+  receivingEnabled: boolean;
+  orders: ReceivableOrder[];
+  hasMore: boolean;
+};
+
+export type ReceivingLine = {
+  lineItemId: string;
+  variantGid: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  orderedQty: number;
+  receivedQty: number;
+  pendingQty: number;
+  rejectedQty: number;
+  /** Units a new receipt can accept without confirming an over-receipt. */
+  openQty: number;
+};
+
+export type ReceivingSheet = {
+  receivingEnabled: boolean;
+  order: { id: string; poNumber: string; supplierName: string };
+  /** Why nothing can be received right now, or null when receiving is open. */
+  denial: string | null;
+  lines: ReceivingLine[];
+};
+
+export type ReceiptRequest = {
+  /** One per submission; sending it again records the receipt once. */
+  idempotencyKey: string;
+  lines: Array<{ lineItemId: string; acceptedQty: number }>;
+  allowOverReceipt?: boolean;
+};
+
+export type ReceiptResponse = {
+  complete: boolean;
+  message: string;
+  receiptNumber: number | null;
+  sheet: ReceivingSheet;
+};
+
+export type ApiErrorWithFields = {
+  error: { code: string; message: string; fieldErrors?: Record<string, string> };
+};
