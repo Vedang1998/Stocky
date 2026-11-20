@@ -100,6 +100,8 @@ model Shop {
   replenishmentVariantRules ReplenishmentVariantRule[]
   replenishmentWorksheets ReplenishmentWorksheet[]
   replenishmentWorksheetLines ReplenishmentWorksheetLine[]
+  dailyStockSnapshots DailyStockSnapshot[]
+  dailyStockLevels DailyStockLevel[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -2799,4 +2801,52 @@ model ReplenishmentWorksheetLine {
   @@unique([shopId, worksheetId, variantGid])
   @@index([shopId, worksheetId, orderQuantity])
   @@index([shopId, worksheetId, stockStatus])
+}
+
+// ─── Daily stock history ─────────────────────────────────────────────────────
+
+/// One capture of a shop's stock for one calendar day in the shop's time zone,
+/// taken shortly after that day ended. A date with no row was not captured; a
+/// row with `levelCount` 0 is a captured day on which nothing was stocked.
+model DailyStockSnapshot {
+  id         String   @id @default(cuid())
+  shopId     String
+  localDate  String   @db.VarChar(10)
+  /// The shop's IANA time zone when the day was captured.
+  timeZone   String   @db.VarChar(64)
+  /// The instant `localDate` ended in `timeZone`.
+  dayEndedAt DateTime
+  /// When the quantities were read; never earlier than `dayEndedAt`.
+  capturedAt DateTime
+  levelCount Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  shop   Shop              @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  levels DailyStockLevel[]
+
+  @@unique([shopId, id])
+  @@unique([shopId, localDate])
+}
+
+/// Stock of one tracked variant at one location in a daily snapshot, as the
+/// app knew it from Shopify at capture time. A null quantity is one Shopify
+/// had not reported, never zero. Cost and price are the values of that day.
+model DailyStockLevel {
+  id                   String   @id @default(cuid())
+  shopId               String
+  localDate            String   @db.VarChar(10)
+  variantGid           String   @db.VarChar(256)
+  locationGid          String   @db.VarChar(256)
+  availableQuantity    Int?
+  onHandQuantity       Int?
+  unitCostAmount       Decimal? @db.Decimal(20, 6)
+  unitCostCurrencyCode String?  @db.VarChar(8)
+  priceAmount          Decimal  @db.Decimal(20, 6)
+  priceCurrencyCode    String   @db.VarChar(8)
+
+  shop     Shop               @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  snapshot DailyStockSnapshot @relation(fields: [shopId, localDate], references: [shopId, localDate], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, localDate, variantGid, locationGid])
 }
