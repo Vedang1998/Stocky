@@ -602,6 +602,42 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     enforcementStepGroup: "merchant_direct",
   },
   {
+    prismaModel: "DailyStockSnapshot",
+    sqlTable: "DailyStockSnapshot",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: ["DailyStockLevel"],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
+    prismaModel: "DailyStockLevel",
+    sqlTable: "DailyStockLevel",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: ["DailyStockSnapshot"],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
     prismaModel: "SupplierSkuMapping",
     sqlTable: "SupplierSkuMapping",
     classification: "merchant_domain",
@@ -1278,6 +1314,16 @@ export const COMPOSITE_FOREIGN_KEYS: readonly CompositeForeignKey[] = [
     onUpdate: "NO ACTION",
     purpose: "child_parent",
   },
+  {
+    name: "DailyStockLevel_shopId_localDate_fkey",
+    childTable: "DailyStockLevel",
+    childColumns: ["shopId", "localDate"],
+    parentTable: "DailyStockSnapshot",
+    parentColumns: ["shopId", "localDate"],
+    onDelete: "CASCADE",
+    onUpdate: "NO ACTION",
+    purpose: "child_parent",
+  },
 ] as const;
 
 /** Supporting indexes required before composite FK validation. */
@@ -1491,17 +1537,20 @@ export const PURCHASING_ADDED_MERCHANT_TABLE_COUNT = 4;
  * ReplenishmentWorksheet + ReplenishmentWorksheetLine (saved worksheets).
  */
 export const REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT = 4;
+/** DailyStockSnapshot + DailyStockLevel (daily stock history). */
+export const STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT = 2;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
   PRE_PR6_A_MERCHANT_TABLE_COUNT +
   PR6_A_ADDED_MERCHANT_TABLE_COUNT +
   INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT +
   PURCHASING_ADDED_MERCHANT_TABLE_COUNT +
-  REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT;
+  REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT +
+  STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== EXPECTED_MERCHANT_TABLE_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
+      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}+${STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
     );
   }
 }
@@ -1524,3 +1573,6 @@ export const ORDER_OBSERVATION_SET_LEASE_FN =
 
 /** Inventory operation ledger request/terminal-state immutability guard. */
 export const INVENTORY_OPERATION_GUARD_FN = "stocky_inventory_operation_guard";
+
+/** Daily stock history is written once; this guard refuses every UPDATE. */
+export const DAILY_STOCK_HISTORY_GUARD_FN = "stocky_daily_stock_history_guard";

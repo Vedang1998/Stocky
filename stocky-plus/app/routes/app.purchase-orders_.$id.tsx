@@ -5,7 +5,9 @@ import type {
 } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { AddProducts } from "../components/purchasing/AddProducts";
 import { ChargesEditor } from "../components/purchasing/ChargesEditor";
 import { PurchaseOrderDetailsForm } from "../components/purchasing/PurchaseOrderDetailsForm";
@@ -29,6 +31,7 @@ import {
   CHARGE_KIND_LABELS,
   CHARGE_KINDS,
 } from "../lib/purchasing/totals";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import { actionFailure } from "../services/purchasing/action-result.server";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { supplierEmailHref } from "../services/purchasing/documents.server";
@@ -64,7 +67,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   });
 
   const find = (url.searchParams.get("find") ?? "").trim().slice(0, 100);
-  const [receipts, events, matches] = await Promise.all([
+  const [planActive, receipts, events, matches] = await Promise.all([
+    planAllowsChanges(db),
     listPurchaseOrderReceipts(db, order.id),
     listPurchasingEvents(
       db,
@@ -79,6 +83,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   return {
     order,
+    planActive,
     receipts,
     history: events.map((event) => ({
       id: event.id,
@@ -121,6 +126,7 @@ const MAX_FORM_BYTES = 2_000_000;
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const context = await requirePurchasingContext({ request, params });
+  await requireActivePlanSnapshot(context.db);
   if (Number(request.headers.get("Content-Length") ?? 0) > MAX_FORM_BYTES) {
     return actionFailure("importLines", "The file is larger than 1 MB.");
   }
@@ -161,6 +167,7 @@ const CONFIRMATIONS: Partial<
 export default function PurchaseOrderDetail() {
   const {
     order,
+    planActive,
     receipts,
     history,
     productSearch,
@@ -205,6 +212,7 @@ export default function PurchaseOrderDetail() {
       <s-link slot="breadcrumb-actions" href="/app/purchase-orders">
         Purchase orders
       </s-link>
+      {!planActive && <PlanRequiredBanner records="Purchase orders" />}
 
       <ActionFeedback
         data={actionData}
