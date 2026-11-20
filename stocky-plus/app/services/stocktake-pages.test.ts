@@ -678,6 +678,8 @@ describe("Count page action", () => {
     "addItems",
     "zeroFill",
     "clearZeroFill",
+    "recount",
+    "keepCount",
     "resolveMovement",
     "complete",
     "cancel",
