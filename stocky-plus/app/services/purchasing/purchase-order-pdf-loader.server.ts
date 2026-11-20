@@ -5,6 +5,7 @@
  */
 import type { LoaderFunctionArgs } from "react-router";
 import { noSuchPartResponse, pdfResponse } from "../../lib/pdf/document.server";
+import { refusePaperOverLimit } from "../../lib/pdf/paper-rate-limit.server";
 import { readPdfPart } from "../../lib/pdf/parts";
 import { requireAdminTenant } from "../../tenant/require-admin-tenant.server";
 import {
@@ -23,7 +24,10 @@ export async function loadPurchaseOrderPdf(
   { request, params }: LoaderFunctionArgs,
   kind: PurchaseOrderPdfKind,
 ): Promise<Response> {
-  const { admin, db } = await requireAdminTenant({ request, params });
+  const { admin, db, tenant } = await requireAdminTenant({ request, params });
+  const limited = await refusePaperOverLimit(tenant, request);
+  if (limited) return limited;
+
   const profile = await readShopProfile(admin);
   const order = await getPurchaseOrderView(db, params.id ?? "", {
     admin,

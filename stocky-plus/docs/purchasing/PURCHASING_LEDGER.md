@@ -240,6 +240,12 @@ for the receiving sheet, during which the server answered little else. One
 part of 250 lines takes 2.4 and 3.0 seconds. The part arithmetic is shared
 with the transfer papers (`app/lib/pdf/parts.ts`).
 
+Both PDF routes count against the shop's allowance of 12 printed documents a
+minute, shared with the transfer papers and the count sheet
+(`app/lib/pdf/paper-rate-limit.server.ts`). A request over it is answered
+with 429 and `Retry-After` before the order is read. These two routes are
+the only places a purchase-order PDF is laid out.
+
 The warehouse page (`/app/warehouse`) lists Sent, Ordered and Partial orders
 that are not archived, filtered by destination and search, each linked to its
 receiving page.

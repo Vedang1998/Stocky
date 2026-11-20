@@ -237,7 +237,8 @@ each difference to Shopify through `settleInventoryDocument`.
   request per part (`?part=2`), and each request reads only the lines of its
   part; the page offers a button per part, or a list of the parts when there
   are more than four. Times are on the shop's clock. Printing reads only; it
-  needs no active plan and no write switch.
+  needs no active plan and no write switch. Requests count against the shop's
+  allowance for printed documents (see Papers under Transfers).
 - Gated by `FEATURE_STOCKTAKE_INVENTORY_WRITES`. While it is off a count can
   be started and counted but not completed.
 - Counts started before this workflow keep the basis they were created with
@@ -376,6 +377,21 @@ documents above are the record of what moved.
   loop while it works, so one part costs about 3 seconds and a whole
   1,000-item transfer in one request cost over 20. Printing reads only; it
   needs no active plan and no write switch.
+- **How often papers can be asked for.** A shop may ask for 12 printed
+  documents a minute (`app/lib/pdf/paper-rate-limit.server.ts`). The transfer
+  document, the pick list, the count sheet and both purchase-order PDFs count
+  against the same allowance, one for each request, so one for each part. The
+  request over the limit is answered with 429, a `Retry-After` header and a
+  sentence saying in how many seconds to try again, before anything is read
+  or laid out. The reason is the event loop above: six parts asked for at
+  once held the server for 8.7 seconds, and another shop's page waited 2.9
+  seconds behind them. With the limit one shop can take about half of one
+  server process's time at the worst. The count is kept in Redis per shop,
+  keyed by the shop of the verified session. If Redis cannot be reached the
+  request is allowed and the outage is logged at most once a minute: the
+  routes are signed-in admin routes, and a Redis outage should not stop a
+  shop printing. A count of more than 3,000 items has more than 12 parts and
+  cannot be printed whole within one minute; the refusal says when to go on.
 - Gated by `FEATURE_TRANSFER_WRITES`. While it is off a transfer can be
   drafted and edited, units counted in and rejects recorded, and a transfer
   with nothing left to move can be finished or written off; nothing that

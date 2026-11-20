@@ -5,6 +5,7 @@
  */
 import type { LoaderFunctionArgs } from "react-router";
 import { noSuchPartResponse, pdfResponse } from "../../lib/pdf/document.server";
+import { refusePaperOverLimit } from "../../lib/pdf/paper-rate-limit.server";
 import { pdfPartCount, readPdfPart } from "../../lib/pdf/parts";
 import { requireAdminTenant } from "../../tenant/require-admin-tenant.server";
 import { readFormId } from "../inventory-writes/form-values";
@@ -25,7 +26,10 @@ export async function loadTransferPaper(
   { request, params }: LoaderFunctionArgs,
   kind: TransferPaperKind,
 ): Promise<Response> {
-  const { admin, db } = await requireAdminTenant({ request, params });
+  const { admin, db, tenant } = await requireAdminTenant({ request, params });
+  const limited = await refusePaperOverLimit(tenant, request);
+  if (limited) return limited;
+
   const transferId = readFormId(params.id);
   const paper = transferId ? await readTransferPaper(db, transferId) : null;
   if (!paper) return paperRefusal("Transfer not found", 404);

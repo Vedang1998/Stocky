@@ -36,10 +36,18 @@ vi.mock("./transfers/transfer-read.server", async () => {
   return { ...actual, ...reads };
 });
 
+const { limiter, tenant } = vi.hoisted(() => ({
+  limiter: { refusePaperOverLimit: vi.fn() },
+  tenant: { shopId: "shop-a", correlationId: "request-1" },
+}));
+
+vi.mock("../lib/pdf/paper-rate-limit.server", () => limiter);
+
 vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant,
   })),
 }));
 
@@ -214,6 +222,8 @@ beforeEach(() => {
   reads.listTransferLinesForExport.mockReset();
   context.db.shopifyLocationFact.findMany.mockReset();
   context.admin.graphql.mockReset();
+  limiter.refusePaperOverLimit.mockReset();
+  limiter.refusePaperOverLimit.mockResolvedValue(null);
 
   reads.getTransfer.mockResolvedValue(header());
   reads.listTransferLinesForExport.mockResolvedValue([line(), line(WHITE)]);
@@ -791,5 +801,34 @@ describe("Transfer paper routes", () => {
     await expect(
       documentLoader(args(`/app/transfers/${ID}/document`)),
     ).rejects.toBe(bounce);
+  });
+
+  it("counts each paper asked for against the signed-in shop", async () => {
+    reads.getTransfer.mockResolvedValue(header(SHIPPED));
+    const asked = args(`/app/transfers/${ID}/document`);
+
+    await documentLoader(asked);
+
+    expect(limiter.refusePaperOverLimit).toHaveBeenCalledTimes(1);
+    expect(limiter.refusePaperOverLimit).toHaveBeenCalledWith(
+      tenant,
+      asked.request,
+    );
+  });
+
+  it("answers a shop that asks too often before anything is read", async () => {
+    const refusal = new Response("Try again later", { status: 429 });
+    limiter.refusePaperOverLimit.mockResolvedValue(refusal);
+
+    expect(await documentLoader(args(`/app/transfers/${ID}/document`))).toBe(
+      refusal,
+    );
+    expect(await pickListLoader(args(`/app/transfers/${ID}/pick-list`))).toBe(
+      refusal,
+    );
+
+    expect(reads.getTransfer).not.toHaveBeenCalled();
+    expect(context.db.shopifyLocationFact.findMany).not.toHaveBeenCalled();
+    expect(context.admin.graphql).not.toHaveBeenCalled();
   });
 });

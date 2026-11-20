@@ -5,6 +5,7 @@
  */
 import type { LoaderFunctionArgs } from "react-router";
 import { noSuchPartResponse, pdfResponse } from "../../lib/pdf/document.server";
+import { refusePaperOverLimit } from "../../lib/pdf/paper-rate-limit.server";
 import { readPdfPart } from "../../lib/pdf/parts";
 import { requireAdminTenant } from "../../tenant/require-admin-tenant.server";
 import { readFormId } from "../inventory-writes/form-values";
@@ -22,7 +23,10 @@ export async function loadCountSheet({
   request,
   params,
 }: LoaderFunctionArgs): Promise<Response> {
-  const { admin, db } = await requireAdminTenant({ request, params });
+  const { admin, db, tenant } = await requireAdminTenant({ request, params });
+  const limited = await refusePaperOverLimit(tenant, request);
+  if (limited) return limited;
+
   const stocktakeId = readFormId(params.id);
   const part = readPdfPart(new URL(request.url).searchParams.get("part"));
   // An address that names no usable part is still answered for the count it

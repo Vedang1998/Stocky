@@ -43,10 +43,18 @@ vi.mock("./purchasing/purchase-order-view.server", async () => {
 
 vi.mock("./purchasing/shop-profile.server", () => profile);
 
+const { limiter, tenant } = vi.hoisted(() => ({
+  limiter: { refusePaperOverLimit: vi.fn() },
+  tenant: { shopId: "shop-a", correlationId: "request-1" },
+}));
+
+vi.mock("../lib/pdf/paper-rate-limit.server", () => limiter);
+
 vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant,
   })),
 }));
 
@@ -195,6 +203,8 @@ const args = (path: string, params: Record<string, string> = { id: ID }) =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  limiter.refusePaperOverLimit.mockReset();
+  limiter.refusePaperOverLimit.mockResolvedValue(null);
   profile.readShopProfile.mockResolvedValue({
     name: "Cellar & Co",
     currencyCode: "USD",
@@ -525,5 +535,33 @@ describe("Purchase order PDF routes", () => {
     await expect(
       supplierLoader(args(`/app/purchase-orders/${ID}/pdf`)),
     ).rejects.toThrow("connection lost");
+  });
+
+  it("counts each PDF asked for against the signed-in shop", async () => {
+    view.getPurchaseOrderView.mockResolvedValue(order([line()]));
+    const asked = args(`/app/purchase-orders/${ID}/pdf`);
+
+    await supplierLoader(asked);
+
+    expect(limiter.refusePaperOverLimit).toHaveBeenCalledTimes(1);
+    expect(limiter.refusePaperOverLimit).toHaveBeenCalledWith(
+      tenant,
+      asked.request,
+    );
+  });
+
+  it("answers a shop that asks too often before anything is read", async () => {
+    const refusal = new Response("Try again later", { status: 429 });
+    limiter.refusePaperOverLimit.mockResolvedValue(refusal);
+
+    expect(await supplierLoader(args(`/app/purchase-orders/${ID}/pdf`))).toBe(
+      refusal,
+    );
+    expect(
+      await receivingLoader(args(`/app/purchase-orders/${ID}/receiver`)),
+    ).toBe(refusal);
+
+    expect(profile.readShopProfile).not.toHaveBeenCalled();
+    expect(view.getPurchaseOrderView).not.toHaveBeenCalled();
   });
 });

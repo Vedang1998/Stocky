@@ -40,10 +40,18 @@ vi.mock("./stocktakes/stocktake-read.server", async () => {
 
 vi.mock("./inventory-writes/locations.server", () => ({ listSyncedLocations }));
 
+const { limiter, tenant } = vi.hoisted(() => ({
+  limiter: { refusePaperOverLimit: vi.fn() },
+  tenant: { shopId: "shop-a", correlationId: "request-1" },
+}));
+
+vi.mock("../lib/pdf/paper-rate-limit.server", () => limiter);
+
 vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant,
   })),
 }));
 
@@ -216,6 +224,8 @@ function shopAnswers(shop: Record<string, unknown> | null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  limiter.refusePaperOverLimit.mockReset();
+  limiter.refusePaperOverLimit.mockResolvedValue(null);
   reads.getStocktake.mockResolvedValue(header());
   reads.getStocktakeLineRange.mockResolvedValue({
     lines: [line(), line(WHITE)],
@@ -833,5 +843,30 @@ describe("Count sheet route", () => {
       await loader(args(`/app/stocktakes/${ID}/count-sheet`)),
       "count-sheet-Cellar-count-2026-11-12.pdf",
     );
+  });
+
+  it("counts each sheet asked for against the signed-in shop", async () => {
+    const asked = args(`/app/stocktakes/${ID}/count-sheet`);
+
+    await loader(asked);
+
+    expect(limiter.refusePaperOverLimit).toHaveBeenCalledTimes(1);
+    expect(limiter.refusePaperOverLimit).toHaveBeenCalledWith(
+      tenant,
+      asked.request,
+    );
+  });
+
+  it("answers a shop that asks too often before anything is read", async () => {
+    const refusal = new Response("Try again later", { status: 429 });
+    limiter.refusePaperOverLimit.mockResolvedValue(refusal);
+
+    expect(await loader(args(`/app/stocktakes/${ID}/count-sheet`))).toBe(
+      refusal,
+    );
+
+    expect(reads.getStocktake).not.toHaveBeenCalled();
+    expect(reads.getStocktakeLineRange).not.toHaveBeenCalled();
+    expect(context.admin.graphql).not.toHaveBeenCalled();
   });
 });

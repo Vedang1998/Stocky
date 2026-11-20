@@ -74,6 +74,11 @@ const { requireAdminTenant, requirePurchasingContext } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../require-admin-tenant.server", () => ({ requireAdminTenant }));
+// The allowance for printed documents is counted in Redis and has its own
+// tests (app/lib/pdf/paper-rate-limit.test.ts); here every request is allowed.
+vi.mock("../../../lib/pdf/paper-rate-limit.server", () => ({
+  refusePaperOverLimit: vi.fn(async () => null),
+}));
 vi.mock("../../../services/purchasing/actor.server", async (original) => ({
   ...(await original<
     typeof import("../../../services/purchasing/actor.server")
