@@ -1835,3 +1835,72 @@ describe("Stocktake times on the shop's clock", () => {
     );
   });
 });
+
+describe("Printing the count sheet from the count page", () => {
+  const withLines = (lineCount: number) =>
+    reads.getStocktakeProgress.mockResolvedValue({ ...PROGRESS, lineCount });
+
+  it("offers the count sheet of an open count as one PDF", async () => {
+    const html = await renderCount();
+
+    expect(html).toContain(
+      '<s-button href="/app/stocktakes/st-1/count-sheet" target="_blank" variant="secondary">Print count sheet (PDF)</s-button>',
+    );
+    expect(html).not.toContain("<details>");
+  });
+
+  it.each(["COMPLETED", "CANCELLED"] as const)(
+    "calls it the count record once the count is %s",
+    async (status) => {
+      reads.getStocktake.mockResolvedValue(header({ status }));
+
+      const html = await renderCount();
+
+      expect(html).toContain("Print count record");
+      expect(html).not.toContain("Print count sheet");
+    },
+  );
+
+  it("offers nothing to print for a count with no items", async () => {
+    withLines(0);
+
+    const html = await renderCount();
+
+    expect(html).not.toContain("/count-sheet");
+    expect(html).toContain("Download count sheet (CSV)");
+  });
+
+  it("offers one button per part for a count of up to four parts", async () => {
+    withLines(1_000);
+
+    const html = await renderCount();
+
+    for (const part of [1, 2, 3, 4]) {
+      expect(html).toContain(
+        `href="/app/stocktakes/st-1/count-sheet?part=${part}"`,
+      );
+      expect(html).toContain(`, part ${part} of 4`);
+    }
+    expect(html).not.toContain("part=5");
+    expect(html).not.toContain("<details>");
+  });
+
+  it("lists the parts of a longer count under one heading, each with the items it holds", async () => {
+    withLines(1_260);
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "<summary>Print count sheet (PDF), in 6 parts of up to 250 items</summary>",
+    );
+    expect(html).toContain(
+      '<s-link href="/app/stocktakes/st-1/count-sheet?part=1" target="_blank">Part 1: items 1 to 250</s-link>',
+    );
+    expect(html).toContain(
+      '<s-link href="/app/stocktakes/st-1/count-sheet?part=6" target="_blank">Part 6: items 1,251 to 1,260</s-link>',
+    );
+    expect(html).not.toContain("part=7");
+    // The buttons give way to the list.
+    expect(html).not.toMatch(/<s-button href="[^"]*count-sheet/);
+  });
+});

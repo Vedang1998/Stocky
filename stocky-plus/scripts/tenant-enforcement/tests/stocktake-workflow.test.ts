@@ -10,8 +10,11 @@ import type { PrismaClient } from "@prisma/client";
 import { MAX_OPERATION_LINES } from "../../../app/services/inventory-writes/payload";
 import type { ReadLevelQuantities } from "../../../app/services/inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../../../app/services/inventory-writes/types";
+import { PDF_LINES_PER_PART } from "../../../app/lib/pdf/parts";
+import { readCountSheet } from "../../../app/services/stocktakes/stocktake-count-sheet.server";
 import {
   getStocktake,
+  getStocktakeLineRange,
   getStocktakeLines,
   getStocktakeProgress,
   listStocktakeLinesForExport,
@@ -1929,6 +1932,14 @@ describe("stocktake workflow", () => {
       ).toEqual([]);
       expect(await listStocktakeLinesForExport(dbB, id)).toEqual([]);
       expect((await getStocktakeProgress(dbB, id)).lineCount).toBe(0);
+      expect(
+        await getStocktakeLineRange(dbB, {
+          stocktakeId: id,
+          skip: 0,
+          take: 250,
+        }),
+      ).toEqual({ lines: [], total: 0 });
+      expect(await readCountSheet(dbB, id, 1)).toBeNull();
 
       expect(shopify.requests).toHaveLength(0);
       expect(await status(id)).toBe("IN_PROGRESS");
@@ -2124,6 +2135,65 @@ describe("stocktake workflow", () => {
       expect(last.lines[0].id).toBe("line-050");
       expect([differences.total, differences.pageCount]).toEqual([28, 1]);
       expect(differences.lines.every((l) => l.delta === 1)).toBe(true);
+    });
+
+    it("reads the count sheet one part at a time, in the order of the count page", async () => {
+      const id = await startPartialCount();
+      const lineCount = PDF_LINES_PER_PART + 5;
+      await prisma.stocktakeLineItem.createMany({
+        data: Array.from({ length: lineCount }, (_, i) => ({
+          id: `line-${String(i).padStart(3, "0")}`,
+          stocktakeId: id,
+          shopId: shopAId,
+          shopifyVariantId: i === 0 ? RED : variant(5_000 + i),
+          expectedQty: 10,
+          countedQty: i === 0 ? 7 : null,
+        })),
+      });
+
+      const first = await readCountSheet(dbA, id, 1);
+      const second = await readCountSheet(dbA, id, 2);
+      const third = await readCountSheet(dbA, id, 3);
+
+      expect(first?.locationName).toBe("Location 11");
+      expect(first?.progress).toMatchObject({
+        lineCount,
+        countedCount: 1,
+        differenceCount: 1,
+        unitsShort: 3,
+      });
+      expect(first?.shown).toMatchObject({
+        part: 1,
+        parts: 2,
+        first: 1,
+        total: lineCount,
+      });
+      expect(first?.shown.lines).toHaveLength(PDF_LINES_PER_PART);
+      // The catalog names an item it knows; the rest print by variant ID.
+      expect(first?.shown.lines[0]).toMatchObject({
+        id: "line-000",
+        title: "Red wine",
+        sku: "RED-750",
+        expectedQty: 10,
+        countedQty: 7,
+        delta: -3,
+      });
+      expect(first?.shown.lines.at(-1)?.id).toBe("line-249");
+      expect(second?.shown).toMatchObject({
+        part: 2,
+        parts: 2,
+        first: PDF_LINES_PER_PART + 1,
+        total: lineCount,
+      });
+      expect(second?.shown.lines.map((l) => l.id)).toEqual([
+        "line-250",
+        "line-251",
+        "line-252",
+        "line-253",
+        "line-254",
+      ]);
+      // A part past the last has no lines; the route answers 404 for it.
+      expect(third?.shown).toMatchObject({ part: 3, parts: 2, lines: [] });
     });
 
     it("exports every line with its catalog details", async () => {

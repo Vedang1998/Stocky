@@ -433,6 +433,29 @@ export async function listStocktakeLinesForExport(
   return lines;
 }
 
+/**
+ * A run of a count's lines in sheet order, and how many lines the count has.
+ * For a printed part: a count can be far longer than one request should lay
+ * out, so only the lines of the part are read.
+ */
+export async function getStocktakeLineRange(
+  db: TenantDb,
+  input: { stocktakeId: string; skip: number; take: number },
+): Promise<{ lines: StocktakeLineView[]; total: number }> {
+  const where = { stocktakeId: input.stocktakeId };
+  const [total, rows] = await Promise.all([
+    db.stocktakeLineItem.count({ where }) as Promise<number>,
+    db.stocktakeLineItem.findMany({
+      where,
+      select: LINE_SELECT,
+      orderBy: { id: "asc" },
+      skip: input.skip,
+      take: input.take,
+    }) as Promise<LineRow[]>,
+  ]);
+  return { lines: await describeLines(db, rows), total };
+}
+
 export interface StocktakeLedgerSummary {
   /** Attempts to apply this count that reached the ledger. */
   attemptCount: number;

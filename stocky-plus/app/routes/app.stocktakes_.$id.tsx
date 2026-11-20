@@ -15,6 +15,12 @@ import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import {
+  PDF_LINES_PER_PART,
+  partLabel,
+  partQuery,
+  pdfPartCount,
+} from "../lib/pdf/parts";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -392,6 +398,9 @@ function lineNote(line: PageLine): string {
   return notes.join(", ");
 }
 
+/** Up to this many parts are offered as buttons; a longer count lists its parts under one heading. */
+const MAX_SHEET_PART_BUTTONS = 4;
+
 export default function StocktakeCount() {
   const {
     stocktake,
@@ -415,6 +424,21 @@ export default function StocktakeCount() {
 
   const open = stocktake.status === "IN_PROGRESS";
   const badge = STOCKTAKE_STATUS_BADGE[stocktake.status];
+  // The paper is a sheet to count from until the count is closed, then a
+  // record of it. A count with no items has nothing to print.
+  const sheetName =
+    stocktake.status === "COMPLETED" || stocktake.status === "CANCELLED"
+      ? "count record"
+      : "count sheet";
+  const sheetParts =
+    progress.lineCount === 0
+      ? []
+      : Array.from(
+          { length: pdfPartCount(progress.lineCount) },
+          (_, index) => index + 1,
+        );
+  const sheetHref = (part: number) =>
+    `/app/stocktakes/${stocktake.id}/count-sheet${partQuery(part, sheetParts.length)}`;
   const scannedAt =
     actionData && "scannedAt" in actionData ? actionData.scannedAt : undefined;
   const pastedCodes =
@@ -536,7 +560,7 @@ export default function StocktakeCount() {
             {progress.differenceCount !== null &&
               ` · ${itemCount(progress.differenceCount)} with a difference (${(progress.unitsOver ?? 0).toLocaleString("en-US")} units over, ${(progress.unitsShort ?? 0).toLocaleString("en-US")} units short)`}
           </s-text>
-          <s-stack direction="inline">
+          <s-stack direction="inline" gap="small">
             <s-button
               href={`/app/stocktakes/${stocktake.id}/export`}
               target="_blank"
@@ -544,7 +568,42 @@ export default function StocktakeCount() {
             >
               Download count sheet (CSV)
             </s-button>
+            {sheetParts.length <= MAX_SHEET_PART_BUTTONS &&
+              sheetParts.map((part) => (
+                <s-button
+                  key={part}
+                  href={sheetHref(part)}
+                  target="_blank"
+                  variant="secondary"
+                >
+                  Print {sheetName}
+                  {partLabel(part, sheetParts.length)} (PDF)
+                </s-button>
+              ))}
           </s-stack>
+          {sheetParts.length > MAX_SHEET_PART_BUTTONS && (
+            <details>
+              <summary>
+                Print {sheetName} (PDF), in {sheetParts.length} parts of up to{" "}
+                {PDF_LINES_PER_PART} items
+              </summary>
+              <s-stack direction="inline" gap="small">
+                {sheetParts.map((part) => (
+                  <s-link key={part} href={sheetHref(part)} target="_blank">
+                    Part {part}: items{" "}
+                    {((part - 1) * PDF_LINES_PER_PART + 1).toLocaleString(
+                      "en-US",
+                    )}{" "}
+                    to{" "}
+                    {Math.min(
+                      part * PDF_LINES_PER_PART,
+                      progress.lineCount,
+                    ).toLocaleString("en-US")}
+                  </s-link>
+                ))}
+              </s-stack>
+            </details>
+          )}
         </s-stack>
       </s-section>
 

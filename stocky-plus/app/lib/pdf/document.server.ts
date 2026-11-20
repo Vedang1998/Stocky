@@ -4,7 +4,7 @@
  * footer, and the response that hands the PDF to the browser.
  */
 import { createElement as h, type ReactElement, type ReactNode } from "react";
-import type { DocumentProps } from "@react-pdf/renderer";
+import type { DocumentProps, Styles } from "@react-pdf/renderer";
 import { downloadHeaders } from "../http/download.server";
 
 export type ReactPdf = typeof import("@react-pdf/renderer");
@@ -86,6 +86,85 @@ export function labelled(
     { style: PDF_STYLES.block },
     h(Text, { style: PDF_STYLES.label }, label),
     ...shown.map((line, index) => h(Text, { key: index }, line)),
+  );
+}
+
+type CellStyle = Styles[string];
+
+// A cell is one text run, with any second line as a smaller run inside it:
+// a table row made of plain text lays out about twice as fast as one made of
+// nested boxes, and a document can have hundreds of rows.
+const DETAIL = { fontSize: 8, color: "#555" };
+
+/** A table cell: its text, and a smaller second line when there is one. */
+export function textCell(
+  { Text }: ReactPdf,
+  style: CellStyle,
+  text: string,
+  detail: string | null,
+): ReactNode {
+  return h(
+    Text,
+    { style },
+    text,
+    detail ? h(Text, { style: DETAIL }, "\n", detail) : null,
+  );
+}
+
+/** What a person scans or reads to find the item: its barcode, with the SKU under it, or the SKU alone. */
+export function codeCell(
+  pdf: ReactPdf,
+  style: CellStyle,
+  item: { barcode: string | null; sku: string | null },
+): ReactNode {
+  return textCell(
+    pdf,
+    style,
+    item.barcode || item.sku || "—",
+    item.barcode && item.sku ? `SKU ${item.sku}` : null,
+  );
+}
+
+const BOX_WIDTH = 40;
+const BOX_GAP = 22;
+
+/** The column that takes the width the others leave: the item's name. */
+export const ITEM_COLUMN = { flexGrow: 1, flexBasis: 0, paddingRight: 6 };
+
+/** The heading over a column of write-in boxes. */
+export const BOX_HEADING = {
+  width: BOX_WIDTH + BOX_GAP,
+  textAlign: "right" as const,
+};
+
+/** An empty box somebody writes a counted quantity into. */
+export function writeInBox({ View }: ReactPdf): ReactNode {
+  return h(View, {
+    style: {
+      width: BOX_WIDTH,
+      height: 14,
+      marginLeft: BOX_GAP,
+      borderWidth: 0.75,
+      borderColor: "#111",
+    },
+  });
+}
+
+/** Two ruled lines under a label, for a name with signature and a date. */
+export function signature({ Text, View }: ReactPdf, label: string): ReactNode {
+  const rule = {
+    borderBottomWidth: 0.75,
+    borderBottomColor: "#111",
+    height: 22,
+  };
+  return h(
+    View,
+    { style: { ...PDF_STYLES.block, paddingRight: 24 } },
+    h(Text, { style: PDF_STYLES.label }, label),
+    h(View, { style: rule }),
+    h(Text, { style: PDF_STYLES.detail }, "Name and signature"),
+    h(View, { style: rule }),
+    h(Text, { style: PDF_STYLES.detail }, "Date"),
   );
 }
 

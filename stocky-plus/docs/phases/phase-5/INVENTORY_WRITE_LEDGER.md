@@ -224,6 +224,20 @@ each difference to Shopify through `settleInventoryDocument`.
   counted, difference, how and when each line was counted, the staff ID, and
   any stock movement found. Completed and cancelled counts stay readable under
   closed counts.
+- **Count sheet on paper.** The count page prints the count as a PDF
+  (`stocktake-count-sheet.server.ts`, route `…/count-sheet`). While the count
+  is open it is the sheet to take to the shelves: the items in the order of
+  the count page, the expected quantity, a box to write the units found in,
+  what is already entered for an item, and lines for the counter and the
+  checker to sign. A blind count prints no expected quantities. Once the
+  count is completed or cancelled the same address prints the record:
+  expected, counted and the difference for every item, a note on a line whose
+  difference was measured from the quantity after stock moved, and the totals
+  of the count. A count of more than 250 items prints in parts of 250, one
+  request per part (`?part=2`), and each request reads only the lines of its
+  part; the page offers a button per part, or a list of the parts when there
+  are more than four. Times are on the shop's clock. Printing reads only; it
+  needs no active plan and no write switch.
 - Gated by `FEATURE_STOCKTAKE_INVENTORY_WRITES`. While it is off a count can
   be started and counted but not completed.
 - Counts started before this workflow keep the basis they were created with

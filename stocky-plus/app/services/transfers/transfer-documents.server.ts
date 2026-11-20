@@ -5,12 +5,18 @@
  * transfer page, so the paper and the screen show the same quantities.
  */
 import { createElement as h, type ReactElement, type ReactNode } from "react";
-import type { DocumentProps, Styles } from "@react-pdf/renderer";
+import type { DocumentProps } from "@react-pdf/renderer";
 import {
+  BOX_HEADING,
+  ITEM_COLUMN,
   PDF_STYLES,
+  codeCell,
   labelled,
   pageFooter,
   renderPdf,
+  signature,
+  textCell,
+  writeInBox,
   type ReactPdf,
 } from "../../lib/pdf/document.server";
 import {
@@ -188,61 +194,6 @@ function heading(
   ];
 }
 
-type CellStyle = Styles[string];
-
-// A cell is one text run, with any second line as a smaller run inside it:
-// a table row made of plain text lays out about twice as fast as one made of
-// nested boxes, and a transfer can have hundreds of rows.
-const DETAIL = { fontSize: 8, color: "#555" };
-
-function textCell(
-  { Text }: ReactPdf,
-  style: CellStyle,
-  text: string,
-  detail: string | null,
-): ReactNode {
-  return h(
-    Text,
-    { style },
-    text,
-    detail ? h(Text, { style: DETAIL }, "\n", detail) : null,
-  );
-}
-
-function codeCell(
-  pdf: ReactPdf,
-  style: CellStyle,
-  line: TransferLineView,
-): ReactNode {
-  return textCell(
-    pdf,
-    style,
-    line.barcode || line.sku || "—",
-    line.barcode && line.sku ? `SKU ${line.sku}` : null,
-  );
-}
-
-const BOX_WIDTH = 40;
-const BOX_GAP = 22;
-const ITEM_COLUMN = { flexGrow: 1, flexBasis: 0, paddingRight: 6 };
-const BOX_HEADING = {
-  width: BOX_WIDTH + BOX_GAP,
-  textAlign: "right" as const,
-};
-
-/** An empty box somebody writes a counted quantity into. */
-function writeInBox({ View }: ReactPdf): ReactNode {
-  return h(View, {
-    style: {
-      width: BOX_WIDTH,
-      height: 14,
-      marginLeft: BOX_GAP,
-      borderWidth: 0.75,
-      borderColor: "#111",
-    },
-  });
-}
-
 function noItems({ Text }: ReactPdf): ReactNode {
   return h(
     Text,
@@ -258,23 +209,6 @@ function notes({ Text, View }: ReactPdf, text: string | null): ReactNode {
     { style: PDF_STYLES.notes },
     h(Text, { style: PDF_STYLES.label }, "Notes"),
     h(Text, null, text),
-  );
-}
-
-function signature({ Text, View }: ReactPdf, label: string): ReactNode {
-  const rule = {
-    borderBottomWidth: 0.75,
-    borderBottomColor: "#111",
-    height: 22,
-  };
-  return h(
-    View,
-    { style: { ...PDF_STYLES.block, paddingRight: 24 } },
-    h(Text, { style: PDF_STYLES.label }, label),
-    h(View, { style: rule }),
-    h(Text, { style: PDF_STYLES.detail }, "Name and signature"),
-    h(View, { style: rule }),
-    h(Text, { style: PDF_STYLES.detail }, "Date"),
   );
 }
 
