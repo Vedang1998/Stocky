@@ -61,6 +61,8 @@ import {
   MAX_COUNTED_QUANTITY,
   MAX_ITEM_LIST_LENGTH,
 } from "../services/stocktakes/stocktake-limits";
+import { differenceValueLine } from "../services/stocktakes/stocktake-value";
+import { getStocktakeDifferenceValue } from "../services/stocktakes/stocktake-value.server";
 import {
   COUNT_SOURCE_LABEL,
   itemCount,
@@ -109,7 +111,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const filter = readLineFilter(query.get("filter"));
   const search = readLineSearch(query.get("q"));
 
-  const [progress, lines, ledger, locations, planActive, timeZone] =
+  const open = stocktake.status === "IN_PROGRESS";
+  const expectedHidden = stocktake.blind && open && !REVIEW_FILTERS.has(filter);
+  const [progress, lines, ledger, locations, planActive, timeZone, value] =
     await Promise.all([
       getStocktakeProgress(db, stocktake.id),
       getStocktakeLines(db, {
@@ -122,10 +126,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       listSyncedLocations(db),
       planAllowsChanges(db),
       readShopTimeZone(tenant),
+      // What the differences are worth says what the differences are, so it
+      // is withheld with them while a blind count is being counted.
+      expectedHidden ? null : getStocktakeDifferenceValue(db, stocktake),
     ]);
 
-  const open = stocktake.status === "IN_PROGRESS";
-  const expectedHidden = stocktake.blind && open && !REVIEW_FILTERS.has(filter);
   return {
     stocktake,
     locationName:
@@ -147,6 +152,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     filter,
     search,
     expectedHidden,
+    value,
     planActive,
     timeZone,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
@@ -411,6 +417,7 @@ export default function StocktakeCount() {
     filter,
     search,
     expectedHidden,
+    value,
     planActive,
     timeZone,
     writesEnabled,
@@ -424,6 +431,7 @@ export default function StocktakeCount() {
 
   const open = stocktake.status === "IN_PROGRESS";
   const badge = STOCKTAKE_STATUS_BADGE[stocktake.status];
+  const valueLine = value && differenceValueLine(value);
   // The paper is a sheet to count from until the count is closed, then a
   // record of it. A count with no items has nothing to print.
   const sheetName =
@@ -560,6 +568,7 @@ export default function StocktakeCount() {
             {progress.differenceCount !== null &&
               ` · ${itemCount(progress.differenceCount)} with a difference (${(progress.unitsOver ?? 0).toLocaleString("en-US")} units over, ${(progress.unitsShort ?? 0).toLocaleString("en-US")} units short)`}
           </s-text>
+          {valueLine && <s-text>{valueLine}</s-text>}
           <s-stack direction="inline" gap="small">
             <s-button
               href={`/app/stocktakes/${stocktake.id}/export`}

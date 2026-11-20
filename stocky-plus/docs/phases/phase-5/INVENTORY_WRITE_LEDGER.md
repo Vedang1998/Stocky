@@ -220,10 +220,31 @@ each difference to Shopify through `settleInventoryDocument`.
   sends only what is still outstanding.
 - **Cancelling** is allowed only while the ledger shows nothing applied and
   nothing unfinished for the count.
+- **Value of the differences.** The count page, the count record and the
+  report say what the differences are worth: units over less units short,
+  each at Shopify's unit cost (`InventoryItem.unitCost`, from the synced
+  catalog facts; `stocktake-value.server.ts`). While the count is open the
+  cost is the one last synced, so the figure follows cost changes. When the
+  count is completed, after Shopify has confirmed the changes and before the
+  count closes, the cost of every line that changed stock is kept on the
+  line (`unitCostAmount`, `unitCostCurrencyCode`), and a completed count is
+  valued at those: its record does not move when costs change later. An item
+  counts as having no cost when Shopify has none, when the app could not read
+  it, or when the item has left the catalog; such differences are counted and
+  named ("2 items with a difference have no unit cost in Shopify and are not
+  in this figure"), never valued at zero. A count completed before costs were
+  kept says its differences had no cost recorded. A cancelled count has no
+  value: it changed no stock. The sums are decimals from the database to the
+  text and exact to the last digit; only the text on the page is rounded, to
+  the currency's own decimals. A blind count shows no value while it is being
+  counted, and the costs are not read for it, because the value would give the
+  differences away; its review of differences shows it. Costs are visible to
+  everyone who can open the count until roles exist.
 - **Report.** The count sheet exports as CSV: item, SKU, barcode, expected,
-  counted, difference, how and when each line was counted, the staff ID, and
-  any stock movement found. Completed and cancelled counts stay readable under
-  closed counts.
+  counted, difference, how and when each line was counted, the staff ID, any
+  stock movement found, and for a line with a difference the unit cost, the
+  value of the difference (exact, not rounded) and the currency. Completed and
+  cancelled counts stay readable under closed counts.
 - **Count sheet on paper.** The count page prints the count as a PDF
   (`stocktake-count-sheet.server.ts`, route `…/count-sheet`). While the count
   is open it is the sheet to take to the shelves: the items in the order of
@@ -247,7 +268,7 @@ each difference to Shopify through `settleInventoryDocument`.
 
 Not built yet: counting from Shopify POS (the POS scan endpoint follows the POS
 extension work), assigning sections of a count to staff, recount requests for
-individual lines, and cost value of the differences.
+individual lines, and approval of a count by a second person.
 
 ## Adjustments
 
@@ -386,7 +407,12 @@ documents above are the record of what moved.
   or laid out. The reason is the event loop above: six parts asked for at
   once held the server for 8.7 seconds, and another shop's page waited 2.9
   seconds behind them. With the limit one shop can take about half of one
-  server process's time at the worst. The count is kept in Redis per shop,
+  server process's time at the worst. Documents are also laid out one at a
+  time (`renderPdf` in `app/lib/pdf/document.server.ts`): the first part of
+  layout does not give the event loop back, and twelve documents asked for
+  together ran that part back to back, so another request waited 9.9 seconds
+  in a local measurement; queued, it waited 0.9 seconds, the layout of one
+  document. The count is kept in Redis per shop,
   keyed by the shop of the verified session. If Redis cannot be reached the
   request is allowed and the outage is logged at most once a minute: the
   routes are signed-in admin routes, and a Redis outage should not stop a

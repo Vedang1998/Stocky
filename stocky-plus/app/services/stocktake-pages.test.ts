@@ -16,6 +16,8 @@ import type {
   StocktakeListEntry,
   StocktakeProgress,
 } from "./stocktakes/stocktake-read.server";
+import type { DifferenceValue } from "./stocktakes/stocktake-value";
+import { Prisma } from "@prisma/client";
 
 const SHOP = "shop-a.myshopify.com";
 const CELLAR = "gid://shopify/Location/11";
@@ -106,6 +108,18 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
     tenant: context.db.authority,
   })),
 }));
+
+/** What the count's differences are worth; a count with no differences unless a test says otherwise. */
+const values = vi.hoisted(() => ({
+  getStocktakeDifferenceValue: vi.fn(),
+  listStocktakeLineValues: vi.fn(),
+}));
+vi.mock("./stocktakes/stocktake-value.server", async () => {
+  const actual = await vi.importActual<
+    typeof import("./stocktakes/stocktake-value.server")
+  >("./stocktakes/stocktake-value.server");
+  return { ...actual, ...values };
+});
 
 /** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
 const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
@@ -248,6 +262,13 @@ async function loadCount(path = `/app/stocktakes/${ID}`) {
 }
 
 /** Loads the count page and renders it the way it reaches the merchant. */
+const NO_DIFFERENCES: DifferenceValue = {
+  basis: "CURRENT",
+  totals: [],
+  costedCount: 0,
+  uncostedCount: 0,
+};
+
 async function renderCount(
   path = `/app/stocktakes/${ID}`,
   actionData: unknown = undefined,
@@ -278,6 +299,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
   shopClock.readShopTimeZone.mockResolvedValue(null);
+  values.getStocktakeDifferenceValue.mockResolvedValue(NO_DIFFERENCES);
+  values.listStocktakeLineValues.mockResolvedValue(new Map());
   context.db.shopSettings.findUnique.mockResolvedValue({
     subscriptionActive: true,
   });
@@ -1474,6 +1497,20 @@ describe("Count sheet export", () => {
       }),
       line({ id: "line-3", title: "Rosé", movementDetectedQty: 4 }),
     ]);
+    values.listStocktakeLineValues.mockResolvedValue(
+      new Map([
+        [
+          "line-1",
+          {
+            unitCost: {
+              amount: new Prisma.Decimal("4.250000"),
+              currencyCode: "USD",
+            },
+            value: "25.5",
+          },
+        ],
+      ]),
+    );
 
     const response = await exportCount();
     const [head, ...rows] = (await response.text()).trimEnd().split("\r\n");
@@ -1487,16 +1524,56 @@ describe("Count sheet export", () => {
     );
     expect(response.headers.get("Cache-Control")).toContain("no-store");
     expect(head).toBe(
-      "Count,Location,Status,Item,SKU,Barcode,Expected,Counted,Difference,How counted,Counted at (UTC),Counted by staff ID,Stock moved during count,Measured from",
+      "Count,Location,Status,Item,SKU,Barcode,Expected,Counted,Difference,How counted,Counted at (UTC),Counted by staff ID,Stock moved during count,Measured from,Unit cost,Difference value,Currency",
     );
     expect(rows).toEqual([
-      'Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,6,Typed,2026-11-12T09:30:00.000Z,77,"Yes, reviewed",6',
-      "Cellar count,Cellar,In progress,White wine,,,10,,,,,,,",
-      'Cellar count,Cellar,In progress,Rosé,RED-750,1111,10,12,2,Typed,2026-11-12T09:30:00.000Z,77,"Yes, not reviewed",',
+      'Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,6,Typed,2026-11-12T09:30:00.000Z,77,"Yes, reviewed",6,4.25,25.5,USD',
+      "Cellar count,Cellar,In progress,White wine,,,10,,,,,,,,,,",
+      // A difference with no unit cost has no value to give.
+      'Cellar count,Cellar,In progress,Rosé,RED-750,1111,10,12,2,Typed,2026-11-12T09:30:00.000Z,77,"Yes, not reviewed",,,,',
     ]);
     expect(reads.listStocktakeLinesForExport).toHaveBeenCalledWith(
       context.db,
       ID,
+    );
+    // The costs are read for this shop's count, in the state it is in.
+    expect(values.listStocktakeLineValues).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "IN_PROGRESS" }),
+    );
+  });
+
+  it("writes a shortage as a negative value that stays a number in a spreadsheet", async () => {
+    reads.getStocktake.mockResolvedValue(header({ status: "COMPLETED" }));
+    reads.listStocktakeLinesForExport.mockResolvedValue([
+      line({ countedQty: 7, delta: -3 }),
+    ]);
+    values.listStocktakeLineValues.mockResolvedValue(
+      new Map([
+        [
+          "line-1",
+          {
+            unitCost: {
+              amount: new Prisma.Decimal("4.125000"),
+              currencyCode: "USD",
+            },
+            value: "-12.375",
+          },
+        ],
+      ]),
+    );
+
+    const [, row] = (await (await exportCount()).text())
+      .trimEnd()
+      .split("\r\n");
+
+    // Exact, not rounded to cents, and with no apostrophe in front.
+    expect(
+      row.endsWith(",-3,Typed,2026-11-12T09:30:00.000Z,77,,,4.125,-12.375,USD"),
+    ).toBe(true);
+    expect(values.listStocktakeLineValues).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "COMPLETED" }),
     );
   });
 
@@ -1511,8 +1588,10 @@ describe("Count sheet export", () => {
       .split("\r\n");
 
     expect(row).toBe(
-      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,,12,,Typed,2026-11-12T09:30:00.000Z,77,,",
+      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,,12,,Typed,2026-11-12T09:30:00.000Z,77,,,,,",
     );
+    // A value would give the difference away, so the costs are not even read.
+    expect(values.listStocktakeLineValues).not.toHaveBeenCalled();
   });
 
   it("includes expected quantities of a blind count once it is completed", async () => {
@@ -1816,7 +1895,7 @@ describe("Stocktake times on the shop's clock", () => {
     expect(head).toContain(",Counted at (America/Toronto),");
     expect(head).not.toContain("UTC");
     expect(row).toBe(
-      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,2,Typed,2026-11-12 22:10,77,,",
+      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,2,Typed,2026-11-12 22:10,77,,,,,",
     );
   });
 
@@ -1833,6 +1912,109 @@ describe("Stocktake times on the shop's clock", () => {
     expect(response.headers.get("Content-Disposition")).toContain(
       "stocktake-2026-11-13.csv",
     );
+  });
+});
+
+describe("Value of the differences on the count page", () => {
+  const worth = (extra: Partial<DifferenceValue> = {}): DifferenceValue => ({
+    basis: "CURRENT",
+    totals: [{ currencyCode: "USD", amount: "-214.5" }],
+    costedCount: 3,
+    uncostedCount: 0,
+    ...extra,
+  });
+
+  it("says what the differences of an open count are worth, and at which cost", async () => {
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth());
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "<s-text>Value of differences: -$214.50. At Shopify&#x27;s unit cost as last synced.</s-text>",
+    );
+    expect(values.getStocktakeDifferenceValue).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "IN_PROGRESS" }),
+    );
+  });
+
+  it("says how many differences have no unit cost and are left out", async () => {
+    values.getStocktakeDifferenceValue.mockResolvedValue(
+      worth({ uncostedCount: 2 }),
+    );
+
+    expect(await renderCount()).toContain(
+      "Value of differences: -$214.50. At Shopify&#x27;s unit cost as last synced. 2 items with a difference have no unit cost in Shopify and are not in this figure.",
+    );
+  });
+
+  it("does not invent a figure when no difference has a unit cost", async () => {
+    values.getStocktakeDifferenceValue.mockResolvedValue(
+      worth({ totals: [], costedCount: 0, uncostedCount: 1 }),
+    );
+
+    expect(await renderCount()).toContain(
+      "Value of differences: not known. 1 item with a difference has no unit cost in Shopify.",
+    );
+  });
+
+  it("gives a completed count's value at the cost kept when it was completed", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "COMPLETED",
+        completedAt: new Date("2026-11-12T11:00:00.000Z"),
+        completedByUserId: "42",
+      }),
+    );
+    values.getStocktakeDifferenceValue.mockResolvedValue(
+      worth({
+        basis: "COMPLETION",
+        totals: [{ currencyCode: "USD", amount: "37" }],
+      }),
+    );
+
+    expect(await renderCount()).toContain(
+      "Value of differences: +$37.00. At Shopify&#x27;s unit cost when the count was completed.",
+    );
+    expect(values.getStocktakeDifferenceValue).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "COMPLETED" }),
+    );
+  });
+
+  it("says nothing about value when the count has no differences, or was cancelled", async () => {
+    expect(await renderCount()).not.toContain("Value of differences");
+
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "CANCELLED",
+        cancelledAt: new Date("2026-11-12T11:00:00.000Z"),
+      }),
+    );
+    values.getStocktakeDifferenceValue.mockResolvedValue(null);
+    expect(await renderCount()).not.toContain("Value of differences");
+  });
+
+  it("keeps the value of a blind count off the page while it is being counted", async () => {
+    reads.getStocktake.mockResolvedValue(header({ blind: true }));
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth());
+
+    const html = await renderCount();
+
+    expect(html).not.toContain("Value of differences");
+    expect(html).not.toContain("214.50");
+    // Not read at all: it cannot reach the browser in the page's data either.
+    expect(values.getStocktakeDifferenceValue).not.toHaveBeenCalled();
+    expect(page.loaderData).toMatchObject({ value: null });
+  });
+
+  it("shows the value of a blind count in its review of differences", async () => {
+    reads.getStocktake.mockResolvedValue(header({ blind: true }));
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth());
+
+    expect(
+      await renderCount(`/app/stocktakes/${ID}?filter=differences`),
+    ).toContain("Value of differences: -$214.50.");
   });
 });
 

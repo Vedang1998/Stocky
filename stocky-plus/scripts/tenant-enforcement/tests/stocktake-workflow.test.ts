@@ -35,6 +35,11 @@ import {
   zeroFillUncounted,
   type CompleteStocktakeOptions,
 } from "../../../app/services/stocktakes/stocktake.server";
+import {
+  getStocktakeDifferenceValue,
+  keepDifferenceCosts,
+  listStocktakeLineValues,
+} from "../../../app/services/stocktakes/stocktake-value.server";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
 import {
   createTenantDb,
@@ -46,12 +51,15 @@ import {
   completeInventoryItemData,
   completeInventoryLevelData,
   completeLocationData,
+  completeProductData,
+  completeVariantData,
 } from "./pr5-f3-test-helpers";
 
 const SHOP_A = "stocktake-workflow-a.myshopify.com";
 const SHOP_B = "stocktake-workflow-b.myshopify.com";
 
 const variant = (n: number) => `gid://shopify/ProductVariant/${n}`;
+const productGid = (n: number) => `gid://shopify/Product/${n}`;
 const RED = variant(1);
 const WHITE = variant(2);
 const ROSE = variant(3);
@@ -1787,6 +1795,424 @@ describe("stocktake workflow", () => {
       ]);
       expect(numbers.every((n) => shopify.level(n, 15) === 0)).toBe(true);
     }, 240_000);
+  });
+
+  describe("value of the differences", () => {
+    let shopBId: string;
+
+    /** Shopify's unit cost of a cellar item, as a catalog sync would leave it. */
+    async function setCost(
+      itemNumber: number,
+      amount: string | null,
+      access:
+        | "PRESENT"
+        | "NULL"
+        | "OMITTED_NO_PERMISSION"
+        | "QUERY_ERROR_ISOLATED" = amount === null ? "NULL" : "PRESENT",
+    ) {
+      await prisma.shopifyInventoryItemFact.update({
+        where: {
+          shopId_shopifyGid: { shopId: shopAId, shopifyGid: item(itemNumber) },
+        },
+        data: {
+          unitCostAmount: amount,
+          unitCostCurrencyCode: amount === null ? null : "USD",
+          unitCostAccess: access,
+        },
+      });
+    }
+
+    const open = (id: string) => ({ id, status: "IN_PROGRESS" as const });
+    const completed = (id: string) => ({ id, status: "COMPLETED" as const });
+    const keptCost = async (stocktakeId: string, variantId: string) => {
+      const line = await lineOf(stocktakeId, variantId);
+      return [
+        line.unitCostAmount?.toFixed() ?? null,
+        line.unitCostCurrencyCode,
+      ];
+    };
+
+    beforeAll(async () => {
+      shopBId = (
+        await prisma.shop.findUniqueOrThrow({
+          where: { myshopifyDomain: SHOP_B },
+        })
+      ).id;
+      await prisma.shopifyProductFact.createMany({
+        data: [
+          completeProductData({ id: "9001", shopId: shopAId }),
+          completeProductData({ id: "9002", shopId: shopBId }),
+        ],
+      });
+      await prisma.shopifyVariantFact.createMany({
+        data: [
+          ...["1", "2", "3"].map((id) =>
+            completeVariantData({ id, shopId: shopAId, productId: "9001" }),
+          ),
+          // The other shop has a variant with Red wine's ID and its own cost.
+          {
+            ...completeVariantData({
+              id: "b-red",
+              shopId: shopBId,
+              productId: "9002",
+            }),
+            shopifyGid: RED,
+          },
+        ],
+      });
+      for (const [itemNumber, variantGid] of [
+        [101, RED],
+        [102, WHITE],
+        [103, ROSE],
+      ] as const) {
+        await prisma.shopifyInventoryItemFact.update({
+          where: {
+            shopId_shopifyGid: {
+              shopId: shopAId,
+              shopifyGid: item(itemNumber),
+            },
+          },
+          data: { shopifyVariantGid: variantGid },
+        });
+      }
+      await prisma.shopifyInventoryItemFact.create({
+        data: {
+          ...completeInventoryItemData({ id: "202", shopId: shopBId }),
+          shopifyVariantGid: RED,
+          unitCostAmount: "999.000000",
+          unitCostCurrencyCode: "USD",
+          unitCostAccess: "PRESENT",
+        },
+      });
+    });
+
+    beforeEach(async () => {
+      await setCost(101, "4.250000");
+      await setCost(102, "12.500000");
+    });
+
+    afterAll(async () => {
+      await prisma.shopifyInventoryItemFact.delete({
+        where: {
+          shopId_shopifyGid: { shopId: shopBId, shopifyGid: item(202) },
+        },
+      });
+      await prisma.shopifyInventoryItemFact.updateMany({
+        where: { shopId: shopAId },
+        data: {
+          shopifyVariantGid: null,
+          unitCostAmount: null,
+          unitCostCurrencyCode: null,
+          unitCostAccess: "NULL",
+        },
+      });
+      await prisma.shopifyVariantFact.deleteMany({
+        where: { shopifyProductGid: { in: [9001, 9002].map(productGid) } },
+      });
+      await prisma.shopifyProductFact.deleteMany({
+        where: { shopifyGid: { in: [9001, 9002].map(productGid) } },
+      });
+    });
+
+    it("values an open count at Shopify's unit cost as last synced, units over less units short", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7); // 3 short at 4.25
+      await count(lineFor(WHITE), 22); // 2 over at 12.50
+
+      expect(await getStocktakeDifferenceValue(dbA, open(id))).toEqual({
+        basis: "CURRENT",
+        totals: [{ currencyCode: "USD", amount: "12.25" }],
+        costedCount: 2,
+        uncostedCount: 0,
+      });
+
+      // The count is still open, so a cost changed in Shopify moves the figure.
+      await setCost(101, "5.000000");
+      expect(
+        (await getStocktakeDifferenceValue(dbA, open(id)))?.totals,
+      ).toEqual([{ currencyCode: "USD", amount: "10" }]);
+    });
+
+    it("has nothing to value before anything is counted, or when every count matches", async () => {
+      const { id, lineFor } = await startCount();
+      const nothing = {
+        basis: "CURRENT",
+        totals: [],
+        costedCount: 0,
+        uncostedCount: 0,
+      };
+      expect(await getStocktakeDifferenceValue(dbA, open(id))).toEqual(nothing);
+
+      await count(lineFor(RED), 10);
+      await count(lineFor(WHITE), 20);
+      expect(await getStocktakeDifferenceValue(dbA, open(id))).toEqual(nothing);
+    });
+
+    it.each([
+      ["has no cost in Shopify", null, "NULL"],
+      [
+        "has a cost the app was not allowed to read",
+        "8.000000",
+        "OMITTED_NO_PERMISSION",
+      ],
+      [
+        "has a cost Shopify failed to return",
+        "8.000000",
+        "QUERY_ERROR_ISOLATED",
+      ],
+    ] as const)(
+      "leaves out an item that %s, and counts it",
+      async (_case, amount, access) => {
+        await setCost(102, amount, access);
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await count(lineFor(WHITE), 22);
+
+        expect(await getStocktakeDifferenceValue(dbA, open(id))).toEqual({
+          basis: "CURRENT",
+          totals: [{ currencyCode: "USD", amount: "-12.75" }],
+          costedCount: 1,
+          uncostedCount: 1,
+        });
+      },
+    );
+
+    it("counts an item whose cost is zero as valued, at nothing", async () => {
+      await setCost(101, "0.000000");
+      await setCost(102, null);
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+
+      expect(await getStocktakeDifferenceValue(dbA, open(id))).toEqual({
+        basis: "CURRENT",
+        totals: [{ currencyCode: "USD", amount: "0" }],
+        costedCount: 1,
+        uncostedCount: 0,
+      });
+    });
+
+    it("does not use the cost of an item that is no longer in the catalog", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      const redItem = {
+        shopId_shopifyGid: { shopId: shopAId, shopifyGid: item(101) },
+      };
+      await prisma.shopifyInventoryItemFact.update({
+        where: redItem,
+        data: {
+          existenceState: "ABSENT",
+          existenceKind: "ABSENT_CONFIRMED_QUERY",
+          deletedAt: NOW,
+          deletionSource: "CONFIRMED_QUERY",
+        },
+      });
+      try {
+        expect(await getStocktakeDifferenceValue(dbA, open(id))).toEqual({
+          basis: "CURRENT",
+          totals: [],
+          costedCount: 0,
+          uncostedCount: 1,
+        });
+      } finally {
+        await prisma.shopifyInventoryItemFact.update({
+          where: redItem,
+          data: {
+            existenceState: "LIVE",
+            existenceKind: "LIVE_REFETCH",
+            deletedAt: null,
+            deletionSource: null,
+          },
+        });
+      }
+    });
+
+    it("keeps the unit cost on the lines that changed stock when the count is completed", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+
+      expect(await keptCost(id, RED)).toEqual(["4.25", "USD"]);
+      // White wine was counted as expected: nothing changed, nothing is kept.
+      expect(await keptCost(id, WHITE)).toEqual([null, null]);
+      expect(await getStocktakeDifferenceValue(dbA, completed(id))).toEqual({
+        basis: "COMPLETION",
+        totals: [{ currencyCode: "USD", amount: "-12.75" }],
+        costedCount: 1,
+        uncostedCount: 0,
+      });
+    });
+
+    it("does not move the value of a completed count when the cost changes afterwards", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 22);
+      await complete(id);
+
+      await setCost(101, "40.000000");
+      await setCost(102, null);
+
+      expect(await getStocktakeDifferenceValue(dbA, completed(id))).toEqual({
+        basis: "COMPLETION",
+        totals: [{ currencyCode: "USD", amount: "12.25" }],
+        costedCount: 2,
+        uncostedCount: 0,
+      });
+      const values = await listStocktakeLineValues(dbA, completed(id));
+      expect(
+        [...values.entries()].map(([lineId, valued]) => [
+          lineId,
+          valued.unitCost.amount.toFixed(),
+          valued.unitCost.currencyCode,
+          valued.value,
+        ]),
+      ).toEqual(
+        expect.arrayContaining([
+          [lineFor(RED), "4.25", "USD", "-12.75"],
+          [lineFor(WHITE), "12.5", "USD", "25"],
+        ]),
+      );
+      expect(values.size).toBe(2);
+    });
+
+    it("says how many differences had no cost when the count was completed", async () => {
+      await setCost(102, null);
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 22);
+      await complete(id);
+      // A cost entered in Shopify later does not reach back into the record.
+      await setCost(102, "12.500000");
+
+      expect(await getStocktakeDifferenceValue(dbA, completed(id))).toEqual({
+        basis: "COMPLETION",
+        totals: [{ currencyCode: "USD", amount: "-12.75" }],
+        costedCount: 1,
+        uncostedCount: 1,
+      });
+      expect(
+        (await listStocktakeLineValues(dbA, completed(id))).has(lineFor(WHITE)),
+      ).toBe(false);
+    });
+
+    it("values a line counted after stock moved from the quantity it is measured from", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await prisma.stocktakeLineItem.update({
+        where: { id: lineFor(RED) },
+        data: {
+          movementDetectedQty: 8,
+          movementBaselineQty: 8,
+          movementReviewedAt: NOW,
+        },
+      });
+
+      // 7 counted against 8, not against the 10 first expected.
+      expect(
+        (await getStocktakeDifferenceValue(dbA, open(id)))?.totals,
+      ).toEqual([{ currencyCode: "USD", amount: "-4.25" }]);
+    });
+
+    it("keeps costs only on lines with a difference, and drops one kept by an earlier attempt", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      // An earlier attempt to complete found a difference on White wine; the
+      // count was then corrected before it closed.
+      await prisma.stocktakeLineItem.update({
+        where: { id: lineFor(WHITE) },
+        data: { unitCostAmount: "3.000000", unitCostCurrencyCode: "USD" },
+      });
+
+      await keepDifferenceCosts(dbA, id);
+
+      expect(await keptCost(id, RED)).toEqual(["4.25", "USD"]);
+      expect(await keptCost(id, WHITE)).toEqual([null, null]);
+
+      // Running it again with a new cost replaces the one kept.
+      await setCost(101, "4.400000");
+      await keepDifferenceCosts(dbA, id);
+      expect(await keptCost(id, RED)).toEqual(["4.4", "USD"]);
+    });
+
+    it("has no value for a cancelled count", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      expect(await cancelStocktake(dbA, { stocktakeId: id })).toMatchObject({
+        ok: true,
+      });
+
+      const cancelled = { id, status: "CANCELLED" as const };
+      expect(await getStocktakeDifferenceValue(dbA, cancelled)).toBeNull();
+      expect((await listStocktakeLineValues(dbA, cancelled)).size).toBe(0);
+    });
+
+    it("shows a count completed before costs were kept as having no cost recorded", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      await complete(id);
+      await prisma.stocktakeLineItem.updateMany({
+        where: { stocktakeId: id },
+        data: { unitCostAmount: null, unitCostCurrencyCode: null },
+      });
+
+      expect(await getStocktakeDifferenceValue(dbA, completed(id))).toEqual({
+        basis: "COMPLETION",
+        totals: [],
+        costedCount: 0,
+        uncostedCount: 1,
+      });
+    });
+
+    it("refuses a cost without its currency, and a negative cost, in the database", async () => {
+      const { lineFor } = await startCount();
+      await expect(
+        prisma.stocktakeLineItem.update({
+          where: { id: lineFor(RED) },
+          data: { unitCostAmount: "4.250000" },
+        }),
+      ).rejects.toThrow(/StocktakeLineItem_unitCost_with_currency/);
+      await expect(
+        prisma.stocktakeLineItem.update({
+          where: { id: lineFor(RED) },
+          data: { unitCostAmount: "-1.000000", unitCostCurrencyCode: "USD" },
+        }),
+      ).rejects.toThrow(/StocktakeLineItem_unitCost_nonnegative/);
+    });
+
+    it("never uses another shop's cost for the same variant ID, and never shows this shop's value to another", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+
+      // Shop B's Red wine costs 999; shop A's count is valued at its own 4.25.
+      expect(
+        (await getStocktakeDifferenceValue(dbA, open(id)))?.totals,
+      ).toEqual([{ currencyCode: "USD", amount: "-12.75" }]);
+
+      expect(await getStocktakeDifferenceValue(dbB, open(id))).toEqual({
+        basis: "CURRENT",
+        totals: [],
+        costedCount: 0,
+        uncostedCount: 0,
+      });
+      expect((await listStocktakeLineValues(dbB, open(id))).size).toBe(0);
+      await keepDifferenceCosts(dbB, id);
+      expect(await keptCost(id, RED)).toEqual([null, null]);
+
+      await complete(id);
+      expect(await keptCost(id, RED)).toEqual(["4.25", "USD"]);
+      expect(await getStocktakeDifferenceValue(dbB, completed(id))).toEqual({
+        basis: "COMPLETION",
+        totals: [],
+        costedCount: 0,
+        uncostedCount: 0,
+      });
+    });
   });
 
   describe("cancelling a count", () => {

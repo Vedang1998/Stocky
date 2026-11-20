@@ -17,6 +17,7 @@ import {
   COUNT_SOURCE_LABEL,
   STOCKTAKE_STATUS_BADGE,
 } from "../services/stocktakes/stocktake-display";
+import { listStocktakeLineValues } from "../services/stocktakes/stocktake-value.server";
 
 /** The time is on the shop's clock when its time zone is known; the heading says which clock. */
 const headers = (timeZone: string | null) => [
@@ -34,12 +35,20 @@ const headers = (timeZone: string | null) => [
   "Counted by staff ID",
   "Stock moved during count",
   "Measured from",
+  "Unit cost",
+  "Difference value",
+  "Currency",
 ];
 
 /**
  * The count sheet: one row per item on the count. While a blind count is
  * still being counted the expected quantities and differences are left empty,
  * as they are on the page.
+ *
+ * A line with a difference carries Shopify's unit cost and the difference at
+ * that cost: the cost as last synced while the count is open, the cost kept
+ * at completion once it is completed. The value is exact, not rounded to the
+ * currency, so the column adds up to the figure on the page.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { db, tenant } = await requireAdminTenant({ request, params });
@@ -56,19 +65,21 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     });
   }
 
-  const [lines, locations, timeZone] = await Promise.all([
+  const expectedHidden = stocktake.blind && stocktake.status === "IN_PROGRESS";
+  const [lines, locations, timeZone, values] = await Promise.all([
     listStocktakeLinesForExport(db, stocktake.id),
     listSyncedLocations(db),
     readShopTimeZone(tenant),
+    expectedHidden ? null : listStocktakeLineValues(db, stocktake),
   ]);
   const locationName =
     locations.find((location) => location.id === stocktake.locationId)?.name ??
     stocktake.locationId;
   const status = STOCKTAKE_STATUS_BADGE[stocktake.status].label;
-  const expectedHidden = stocktake.blind && stocktake.status === "IN_PROGRESS";
 
   const rows: CsvCell[][] = lines.map((line) => {
     const moved = line.movementDetectedQty !== null;
+    const valued = values?.get(line.id);
     return [
       stocktake.name,
       locationName,
@@ -90,6 +101,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       expectedHidden || !moved || !line.movementReviewedAt
         ? null
         : (line.movementBaselineQty ?? line.expectedQty),
+      valued?.unitCost.amount.toFixed(),
+      valued?.value,
+      valued?.unitCost.currencyCode,
     ];
   });
 

@@ -17,6 +17,7 @@ import type {
   CountSheet,
   CountSheetSetting,
 } from "./stocktakes/stocktake-count-sheet.server";
+import type { DifferenceValue } from "./stocktakes/stocktake-value";
 
 const CELLAR = "gid://shopify/Location/11";
 const ID = "st-1";
@@ -39,6 +40,9 @@ vi.mock("./stocktakes/stocktake-read.server", async () => {
 });
 
 vi.mock("./inventory-writes/locations.server", () => ({ listSyncedLocations }));
+
+const values = vi.hoisted(() => ({ getStocktakeDifferenceValue: vi.fn() }));
+vi.mock("./stocktakes/stocktake-value.server", () => values);
 
 const { limiter, tenant } = vi.hoisted(() => ({
   limiter: { refusePaperOverLimit: vi.fn() },
@@ -151,6 +155,7 @@ function sheet(
   return {
     stocktake,
     locationName: "Cellar",
+    value: null,
     progress: progress({
       lineCount: shown?.total ?? lines.length,
       countedCount: lines.filter((each) => each.countedQty !== null).length,
@@ -224,6 +229,7 @@ function shopAnswers(shop: Record<string, unknown> | null) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  values.getStocktakeDifferenceValue.mockResolvedValue(null);
   limiter.refusePaperOverLimit.mockReset();
   limiter.refusePaperOverLimit.mockResolvedValue(null);
   reads.getStocktake.mockResolvedValue(header());
@@ -451,6 +457,98 @@ describe("Count record of a closed count", () => {
     ]);
   });
 
+  it("closes the totals of a completed count with what its differences were worth", () => {
+    const record = (value: DifferenceValue) =>
+      sheetText(
+        sheet(
+          header(COMPLETED),
+          [line(counted(12)), line({ ...WHITE, ...counted(7) })],
+          {
+            progress: progress({
+              countedCount: 2,
+              uncountedCount: 0,
+              differenceCount: 2,
+              unitsOver: 2,
+              unitsShort: 3,
+            }),
+            value,
+          },
+        ),
+      );
+    const tail = (text: string[]) => text.slice(text.indexOf("Units short"));
+
+    expect(
+      tail(
+        record({
+          basis: "COMPLETION",
+          totals: [{ currencyCode: "USD", amount: "-4.25" }],
+          costedCount: 2,
+          uncostedCount: 0,
+        }),
+      ),
+    ).toEqual([
+      "Units short",
+      "3",
+      "Value of differences",
+      "-$4.25",
+      "At Shopify's unit cost when the count was completed.",
+    ]);
+
+    expect(
+      tail(
+        record({
+          basis: "COMPLETION",
+          totals: [{ currencyCode: "USD", amount: "8.5" }],
+          costedCount: 1,
+          uncostedCount: 1,
+        }),
+      ),
+    ).toEqual([
+      "Units short",
+      "3",
+      "Value of differences",
+      "+$8.50",
+      "At Shopify's unit cost when the count was completed. 1 item with a difference had no unit cost when the count was completed and is not in this figure.",
+    ]);
+
+    // Completed before costs were kept, or nothing on it has a cost.
+    expect(
+      tail(
+        record({
+          basis: "COMPLETION",
+          totals: [],
+          costedCount: 0,
+          uncostedCount: 2,
+        }),
+      ),
+    ).toEqual([
+      "Units short",
+      "3",
+      "Value of differences",
+      "Not known",
+      "2 items with a difference had no unit cost when the count was completed.",
+    ]);
+  });
+
+  it("prints no value for a count without differences, or without a value", () => {
+    const none = sheetText(
+      sheet(header(COMPLETED), [line(counted(10))], {
+        value: {
+          basis: "COMPLETION",
+          totals: [],
+          costedCount: 0,
+          uncostedCount: 0,
+        },
+      }),
+    );
+    expect(none).not.toContain("Value of differences");
+    expect(none[none.length - 2]).toBe("Units short");
+
+    expect(
+      sheetText(sheet(header(COMPLETED), [line(counted(12))])),
+    ).not.toContain("Value of differences");
+  });
+
   it("shows the expected quantities of a blind count once it is closed", () => {
     const text = sheetText(
       sheet(header({ ...COMPLETED, blind: true }), [
@@ -628,6 +726,36 @@ describe("What the count sheet reads", () => {
     expect(
       (await readCountSheet(context.db as never, ID, 1))?.locationName,
     ).toBe("Location no longer in Shopify");
+  });
+
+  it("reads what the differences were worth for a completed count only", async () => {
+    const worth: DifferenceValue = {
+      basis: "COMPLETION",
+      totals: [{ currencyCode: "USD", amount: "-12.75" }],
+      costedCount: 1,
+      uncostedCount: 0,
+    };
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth);
+
+    // An open sheet is for counting; a value would give the differences away.
+    expect(
+      (await readCountSheet(context.db as never, ID, 1))?.value,
+    ).toBeNull();
+    reads.getStocktake.mockResolvedValue(header({ status: "CANCELLED" }));
+    expect(
+      (await readCountSheet(context.db as never, ID, 1))?.value,
+    ).toBeNull();
+    expect(values.getStocktakeDifferenceValue).not.toHaveBeenCalled();
+
+    const completed = header(COMPLETED);
+    reads.getStocktake.mockResolvedValue(completed);
+    expect((await readCountSheet(context.db as never, ID, 1))?.value).toEqual(
+      worth,
+    );
+    expect(values.getStocktakeDifferenceValue).toHaveBeenCalledWith(
+      context.db,
+      completed,
+    );
   });
 
   it("has one part, with no lines, for a count without items", async () => {

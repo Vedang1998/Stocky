@@ -49,11 +49,22 @@ import {
   type StocktakeLineView,
   type StocktakeProgress,
 } from "./stocktake-read.server";
+import {
+  differenceValueAmount,
+  differenceValueNote,
+  type DifferenceValue,
+} from "./stocktake-value";
+import { getStocktakeDifferenceValue } from "./stocktake-value.server";
 
 export interface CountSheet {
   stocktake: StocktakeHeader;
   locationName: string;
   progress: StocktakeProgress;
+  /**
+   * What the differences of a completed count were worth at the unit costs
+   * kept when it was completed. Null for an open or cancelled count.
+   */
+  value: DifferenceValue | null;
   /** The lines of the part asked for, in the order of the count page. */
   shown: PdfPart<StocktakeLineView>;
 }
@@ -74,7 +85,7 @@ export async function readCountSheet(
   if (!stocktake) return null;
 
   const first = (part - 1) * PDF_LINES_PER_PART;
-  const [range, progress, locations] = await Promise.all([
+  const [range, progress, locations, value] = await Promise.all([
     getStocktakeLineRange(db, {
       stocktakeId: stocktake.id,
       skip: first,
@@ -82,6 +93,9 @@ export async function readCountSheet(
     }),
     getStocktakeProgress(db, stocktake.id),
     listSyncedLocations(db),
+    stocktake.status === "COMPLETED"
+      ? getStocktakeDifferenceValue(db, stocktake)
+      : null,
   ]);
 
   return {
@@ -90,6 +104,7 @@ export async function readCountSheet(
       locations.find((location) => location.id === stocktake.locationId)
         ?.name ?? UNKNOWN_LOCATION,
     progress,
+    value,
     shown: {
       part,
       parts: pdfPartCount(range.total),
@@ -244,13 +259,14 @@ function movementNote(line: StocktakeLineView): string | null {
 /** The record of a closed count: what was expected, what was found, and the difference. */
 function record(pdf: ReactPdf, sheet: CountSheet): ReactNode[] {
   const { Text, View } = pdf;
-  const { progress, shown, stocktake } = sheet;
-  const total = (label: string, value: string) =>
+  const { progress, shown, stocktake, value } = sheet;
+  const valueNote = value && differenceValueNote(value);
+  const total = (label: string, figure: string) =>
     h(
       View,
       { style: PDF_STYLES.totalRow, key: label },
       h(Text, null, label),
-      h(Text, null, value),
+      h(Text, null, figure),
     );
 
   return [
@@ -295,7 +311,16 @@ function record(pdf: ReactPdf, sheet: CountSheet): ReactNode[] {
           total("Items with a difference", number(progress.differenceCount)),
           total("Units over", number(progress.unitsOver)),
           total("Units short", number(progress.unitsShort)),
+          valueNote
+            ? total(
+                "Value of differences",
+                differenceValueAmount(value!) ?? "Not known",
+              )
+            : null,
         )
+      : null,
+    shown.total > 0 && isLastPart(shown) && valueNote
+      ? h(Text, { style: PDF_STYLES.notes, key: "value" }, valueNote)
       : null,
     isLastPart(shown) && stocktake.status === "CANCELLED"
       ? h(

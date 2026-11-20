@@ -31,12 +31,14 @@ import {
   variantsMatchingCode,
   type CatalogVariant,
 } from "../inventory-writes/variant-items.server";
+import { stocktakeLineDelta } from "./stocktake-delta";
 import {
   MAX_ADDED_ITEMS,
   MAX_COUNTED_QUANTITY,
   MAX_ITEM_LIST_LENGTH,
   MAX_STOCKTAKE_NAME_LENGTH,
 } from "./stocktake-limits";
+import { keepDifferenceCosts } from "./stocktake-value.server";
 
 export type StocktakeStatus =
   "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
@@ -55,6 +57,7 @@ export type StocktakeCountSource = "MANUAL" | "SCAN" | "ZERO_FILL";
 export type MovementResolution = "COUNTED_BEFORE" | "COUNTED_AFTER";
 
 export const STOCKTAKE_SOURCE_TYPE = "Stocktake";
+export { stocktakeLineDelta };
 export {
   MAX_ADDED_ITEMS,
   MAX_COUNTED_QUANTITY,
@@ -205,19 +208,6 @@ function chunked<T>(values: readonly T[], size: number): T[][] {
 
 const clock = (options: { now?: () => Date }) =>
   options.now ?? (() => new Date());
-
-/**
- * The change a counted line stands for. A line counted after stock moved is
- * measured from the quantity Shopify showed when the movement was found.
- */
-export function stocktakeLineDelta(line: {
-  expectedQty: number;
-  countedQty: number | null;
-  movementBaselineQty: number | null;
-}): number | null {
-  if (line.countedQty === null) return null;
-  return line.countedQty - (line.movementBaselineQty ?? line.expectedQty);
-}
 
 const awaitsMovementReview = (line: CountLine) =>
   line.countedQty !== null &&
@@ -1580,6 +1570,13 @@ export async function completeStocktake(
       problems: describeLineProblems(settle.operation, built.lineByItem),
     });
   }
+
+  // Shopify now holds the counted quantities. Before the count closes, keep
+  // the unit cost of every line that changed stock, so the value of the
+  // differences on the record does not move with later cost changes. If a
+  // count is saved between here and the lock below, the closing check sees
+  // the change and the count stays open; completing again repeats this step.
+  await keepDifferenceCosts(db, stocktake.id);
 
   const outcome = await db.$transaction(async (tx: TenantDb) => {
     if (!(await lockOpenStocktake(tx, stocktake.id))) return "not_open";
