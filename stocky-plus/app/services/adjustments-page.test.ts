@@ -584,6 +584,34 @@ describe("Adjustments page", () => {
     expect(html).not.toContain("Reverse this adjustment");
   });
 
+  it("says so when Shopify did not report the quantity after an applied change", () => {
+    const applied = render({
+      history: [
+        entry({
+          lines: [{ ...entry().lines[0], quantityAfterChange: null }],
+        }),
+      ],
+    });
+    expect(applied).toContain("Not reported by Shopify");
+
+    const reported = render({ history: [entry()] });
+    expect(reported).not.toContain("Not reported by Shopify");
+    expect(reported).toContain("<s-table-cell>7</s-table-cell>");
+
+    // A change that was not applied has no quantity after it.
+    for (const status of ["FAILED", "IN_FLIGHT", "PENDING"] as const) {
+      const html = render({
+        history: [
+          entry({
+            status: "PARTIALLY_APPLIED",
+            lines: [{ ...entry().lines[0], status, quantityAfterChange: null }],
+          }),
+        ],
+      });
+      expect(html, status).not.toContain("Not reported by Shopify");
+    }
+  });
+
   it("shows Shopify's reason on a refused line and marks a reversed adjustment", () => {
     const html = render({
       history: [

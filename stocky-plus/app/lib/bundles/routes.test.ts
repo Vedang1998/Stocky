@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 
 const db = vi.hoisted(() => ({
+  authority: { shopId: "shop-a", myshopifyDomain: "shop-a.myshopify.com" },
+  shopSettings: { findUnique: vi.fn() },
   bomComponent: { findMany: vi.fn(), upsert: vi.fn(), deleteMany: vi.fn() },
   shopifyVariantCache: { findMany: vi.fn() },
 }));
@@ -34,6 +36,7 @@ function post(fields: Record<string, string>): ActionFunctionArgs {
 const ADD = { intent: "add", bundleVariantId: "v-box", componentVariantId: "v-part", quantity: "0.1" };
 
 beforeEach(() => {
+  db.shopSettings.findUnique.mockReset().mockResolvedValue({ subscriptionActive: true });
   db.bomComponent.findMany.mockReset().mockResolvedValue([]);
   db.bomComponent.upsert.mockReset().mockResolvedValue({});
   db.bomComponent.deleteMany.mockReset().mockResolvedValue({ count: 1 });
