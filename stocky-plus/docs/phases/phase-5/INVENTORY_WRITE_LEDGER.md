@@ -498,6 +498,19 @@ saying what is unfinished until a plan is active again. Whether documents in
 flight should stay finishable after a plan lapses is a plan-policy decision
 that has not been made.
 
+## Staff identity
+
+Every action of the Stocktakes, Adjustments and Transfers pages needs a named
+staff member: the user ID in the session token Shopify signed for the request
+(`readAdminActor`, `actor.server.ts`). A request without one is answered with
+"Inventory changes need a signed-in Shopify staff member…" before the form is
+read, and nothing is saved. That holds for steps that move no stock as well,
+such as starting a draft, editing its items, counting, counting units in and
+cancelling, so every document says who made it and who cancelled it. The
+check is made in the routes, after the plan gate. The draft and counting
+services still take an optional actor in their signatures; the ledger itself
+always requires one.
+
 ## Limits and known gaps
 
 - 5,000 lines per operation, 250 changes per Shopify request (default batch

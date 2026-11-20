@@ -407,6 +407,34 @@ describe("Stocktakes list", () => {
     );
   });
 
+  it("starts no count without a signed-in staff member, and keeps what was entered", async () => {
+    context.actor = null;
+
+    const actionData = await listRoute.action(
+      post("/app/stocktakes", {
+        intent: "create",
+        name: "Friday count",
+        locationId: CELLAR,
+        scope: "PARTIAL",
+        blind: "hide",
+      }),
+    );
+
+    expect(actionData).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      values: {
+        name: "Friday count",
+        locationId: CELLAR,
+        scope: "PARTIAL",
+        blind: "hide",
+      },
+    });
+    expect(service.createStocktake).not.toHaveBeenCalled();
+    expect(renderList({}, actionData)).toMatch(
+      /<s-text-field[^>]*name="name"[^>]*value="Friday count"/,
+    );
+  });
+
   it("shows why a count could not be started and keeps what was entered", async () => {
     service.createStocktake.mockResolvedValue({
       ok: false,
@@ -644,6 +672,38 @@ describe("Count page action", () => {
     expect(await act({})).toEqual({ error: "That action is not available." });
   });
 
+  it.each([
+    "scan",
+    "count",
+    "addItems",
+    "zeroFill",
+    "clearZeroFill",
+    "recount",
+    "keepCount",
+    "resolveMovement",
+    "complete",
+    "cancel",
+  ])(
+    "saves nothing for %s without a signed-in staff member",
+    async (intent) => {
+      context.actor = null;
+
+      expect(
+        await act({
+          intent,
+          code: "1111",
+          codes: "1111",
+          lineId: "line-1",
+          countedQty: "3",
+          resolution: "COUNTED_BEFORE",
+        }),
+      ).toEqual({ error: STAFF_REQUIRED_MESSAGE });
+      for (const [name, write] of Object.entries(service)) {
+        expect(write, name).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   describe("scan", () => {
     it("counts one unit unless a quantity is given, and says what the count is now", async () => {
       service.recordStocktakeScan.mockResolvedValue({
@@ -731,25 +791,6 @@ describe("Count page action", () => {
         error: "No item in this shop's catalog has the barcode or SKU 0000.",
         scannedAt: expect.any(Number),
       });
-    });
-
-    it("counts without a staff identity, which only completing needs", async () => {
-      context.actor = null;
-      service.recordStocktakeScan.mockResolvedValue({
-        ok: true,
-        lineId: "line-1",
-        title: "Red wine",
-        countedQty: 1,
-        added: false,
-      });
-
-      await act({ intent: "scan", code: "1111" });
-
-      expect(service.recordStocktakeScan).toHaveBeenCalledWith(
-        context.db,
-        context.admin,
-        expect.objectContaining({ actor: null }),
-      );
     });
   });
 
@@ -1049,15 +1090,6 @@ describe("Count page action", () => {
   });
 
   describe("complete", () => {
-    it("needs a signed-in staff member", async () => {
-      context.actor = null;
-
-      expect(await act({ intent: "complete" })).toEqual({
-        error: STAFF_REQUIRED_MESSAGE,
-      });
-      expect(service.completeStocktake).not.toHaveBeenCalled();
-    });
-
     it("completes as the staff member, leaving uncounted items alone only when asked", async () => {
       service.completeStocktake.mockResolvedValue({
         ok: true,
@@ -1145,8 +1177,7 @@ describe("Count page action", () => {
   });
 
   describe("cancel", () => {
-    it("cancels the count, with or without a staff identity", async () => {
-      context.actor = null;
+    it("cancels the count as the signed-in staff member", async () => {
       service.cancelStocktake.mockResolvedValue({
         ok: true,
         alreadyCancelled: false,
@@ -1158,7 +1189,7 @@ describe("Count page action", () => {
       });
       expect(service.cancelStocktake).toHaveBeenCalledWith(context.db, {
         stocktakeId: ID,
-        actor: null,
+        actor: STAFF,
       });
 
       service.cancelStocktake.mockResolvedValue({
