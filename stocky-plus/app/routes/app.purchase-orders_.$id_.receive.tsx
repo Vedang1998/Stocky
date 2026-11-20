@@ -11,11 +11,14 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { RECEIVING_OFF_MESSAGE } from "../lib/po-display";
 import { findScannedLine, readCount } from "../lib/purchasing/receiving-scan";
 import { STATUS_LABELS, STATUS_TONES } from "../lib/purchasing/status";
 import { submitOnEnter } from "../lib/submit-on-enter";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { listLocations } from "../services/purchasing/locations.server";
@@ -31,10 +34,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { admin, db } = await requireAdminTenant({ request, params });
   const purchaseOrderId = params.id ?? "";
 
-  const [po, worksheet, locations] = await Promise.all([
+  const [po, worksheet, locations, planActive] = await Promise.all([
     loadPurchaseOrder(db, purchaseOrderId),
     getReceivingWorksheet(db, purchaseOrderId),
     listLocations(db, admin),
+    planAllowsChanges(db),
   ]).catch((error: unknown) => {
     if (error instanceof PurchasingError && error.code === "not_found") {
       throw new Response("Purchase order not found", { status: 404 });
@@ -52,6 +56,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         null,
     },
     worksheet,
+    planActive,
     fillAll: new URL(request.url).searchParams.get("fill") === "all",
     receivingEnabled: isInventoryWriteEnabled("receiptWrites"),
     // One key per rendered form: submitting it twice records one receipt.
@@ -61,6 +66,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const context = await requirePurchasingContext({ request, params });
+  await requireActivePlanSnapshot(context.db);
   return receiveDelivery(context, params.id ?? "", await request.formData());
 };
 
@@ -74,8 +80,14 @@ function labelsHref(
 }
 
 export default function ReceiveDelivery() {
-  const { order, worksheet, fillAll, receivingEnabled, idempotencyKey } =
-    useLoaderData<typeof loader>();
+  const {
+    order,
+    worksheet,
+    planActive,
+    fillAll,
+    receivingEnabled,
+    idempotencyKey,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const orderHref = `/app/purchase-orders/${order.id}`;
   const failure = actionData && !actionData.ok ? actionData : null;
@@ -89,6 +101,7 @@ export default function ReceiveDelivery() {
       <s-link slot="breadcrumb-actions" href={orderHref}>
         Purchase order {order.poNumber}
       </s-link>
+      {!planActive && <PlanRequiredBanner records="Purchase orders" />}
 
       {failure && (
         <s-banner tone="critical" heading="Nothing was received">
