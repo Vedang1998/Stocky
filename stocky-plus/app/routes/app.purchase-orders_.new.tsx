@@ -11,9 +11,12 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { FormReader } from "../lib/purchasing/form-input";
 import { submitOnEnter } from "../lib/submit-on-enter";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import {
   invalidForm,
   purchasingAction,
@@ -30,16 +33,18 @@ import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, db } = await requireAdminTenant({ request });
-  const [suppliers, locations, profile] = await Promise.all([
+  const [suppliers, locations, profile, planActive] = await Promise.all([
     listSupplierOptions(db),
     listLocations(db, admin),
     readShopProfile(admin),
+    planAllowsChanges(db),
   ]);
   const requestedSupplier = new URL(request.url).searchParams.get("supplier");
   return {
     suppliers,
     locations: locations.filter((location) => location.isActive),
     shopCurrency: profile.currencyCode,
+    planActive,
     selectedSupplierId:
       suppliers.find((supplier) => supplier.id === requestedSupplier)?.id ??
       suppliers[0]?.id ??
@@ -51,6 +56,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, db, actor } = await requirePurchasingContext({ request });
+  await requireActivePlanSnapshot(db);
   const form = new FormReader(await request.formData());
 
   const supplierId = form.text("supplierId", {
@@ -111,6 +117,7 @@ export default function NewPurchaseOrder() {
     suppliers,
     locations,
     shopCurrency,
+    planActive,
     selectedSupplierId,
     creationKey,
   } = useLoaderData<typeof loader>();
@@ -125,6 +132,7 @@ export default function NewPurchaseOrder() {
       <s-link slot="breadcrumb-actions" href="/app/purchase-orders">
         Purchase orders
       </s-link>
+      {!planActive && <PlanRequiredBanner records="Purchase orders" />}
       <ActionFeedback
         data={actionData}
         errorHeading="Purchase order not created"
