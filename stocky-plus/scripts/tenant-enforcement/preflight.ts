@@ -454,7 +454,11 @@ export async function runPreflight(
 
   if (mode === "resume" || mode === "final") {
     const { verifyEnforcement } = await import("./verify");
-    const { verifyRoles, collectDefaultAclFailures } = await import("./roles");
+    const {
+      verifyRoles,
+      collectDefaultAclFailures,
+      merchantTablesWithRuntimeDml,
+    } = await import("./roles");
     const { defaultRuntimeRoleName } = await import("./connection");
 
     const def = await verifyEnforcement(client);
@@ -470,9 +474,16 @@ export async function runPreflight(
     const terminalTablePosture =
       progress.forcedRlsCount === MERCHANT_SQL_TABLES.length &&
       progress.notNullCount === MERCHANT_SQL_TABLES.length;
+    // The same holds for one table as soon as the runtime role can use it:
+    // when a later migration has added a table, enforcement is incomplete
+    // again, but only for that table. A missing object on a table that is
+    // already in use is still tampering (SEC-22).
+    const inRuntimeUse = await merchantTablesWithRuntimeDml(client);
     const definitionDanger = def.issues.filter(
       (i) =>
-        (!incompleteCode.test(i.code) || terminalTablePosture) &&
+        (!incompleteCode.test(i.code) ||
+          terminalTablePosture ||
+          (i.table !== undefined && inRuntimeUse.has(i.table))) &&
         /^(policy_|trigger_|fk_|composite_|rls_|shopId_|helper_|unexpected_|not_null_)/.test(
           i.code,
         ),
