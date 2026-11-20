@@ -1,6 +1,7 @@
 /**
- * The Buying Table's order action writes the purchase order itself, so it
- * has to refuse what the purchasing service refuses for every other order:
+ * The Buying Table's order action refuses a bad request before anything is
+ * read, and then has the purchasing service create the order. It refuses
+ * what the purchasing service refuses for every other order:
  * a missing supplier or location, a location that is not the shop's, more
  * lines than an order may have, and a quantity out of range. Before, a
  * missing field ended in a 500 and any text was stored as the location.
@@ -8,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
 
-const { db, fetchLocations } = vi.hoisted(() => ({
+const { db, fetchLocations, createPurchaseOrderDraft } = vi.hoisted(() => ({
   db: {
     authority: {
       shopId: "shop-order-input",
@@ -20,6 +21,7 @@ const { db, fetchLocations } = vi.hoisted(() => ({
     purchaseOrder: { create: vi.fn() },
   },
   fetchLocations: vi.fn(),
+  createPurchaseOrderDraft: vi.fn(),
 }));
 
 vi.mock("../tenant/require-admin-tenant.server", () => ({
@@ -29,8 +31,12 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
     db,
   })),
 }));
-vi.mock("./landed-cost.server", () => ({
-  resolveTieredUnitCost: vi.fn(async () => null),
+vi.mock("./purchasing/purchase-orders.server", async (original) => ({
+  ...(await original<typeof import("./purchasing/purchase-orders.server")>()),
+  createPurchaseOrderDraft,
+}));
+vi.mock("./purchasing/shop-profile.server", () => ({
+  readShopProfile: vi.fn(async () => ({ today: "2026-11-20" })),
 }));
 vi.mock("./shopify-gql.server", () => ({
   fetchInventoryLevels: vi.fn(),
@@ -81,7 +87,7 @@ describe("Buying Table order input", () => {
         packSize: 1,
       }),
     );
-    db.purchaseOrder.create.mockResolvedValue({ id: "po-1" });
+    createPurchaseOrderDraft.mockResolvedValue({ id: "po-1", poNumber: "PO-1", created: true });
     fetchLocations.mockResolvedValue([{ id: LOCATION, name: "Warehouse" }]);
   });
 
@@ -92,7 +98,7 @@ describe("Buying Table order input", () => {
 
       expect(result).toEqual({ error: TARGET_MISSING });
       expect(db.supplier.findFirst).not.toHaveBeenCalled();
-      expect(db.purchaseOrder.create).not.toHaveBeenCalled();
+      expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
     },
   );
 
@@ -110,7 +116,7 @@ describe("Buying Table order input", () => {
       error:
         "That location is not one of this shop's locations. Choose a location and try again.",
     });
-    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
   });
 
   it("creates the order at one of the shop's own locations", async () => {
@@ -120,14 +126,14 @@ describe("Buying Table order input", () => {
       "qty-map-a": "2",
     });
 
-    expect(db.purchaseOrder.create).toHaveBeenCalledTimes(1);
-    expect(db.purchaseOrder.create.mock.calls[0][0].data).toMatchObject({
+    expect(createPurchaseOrderDraft).toHaveBeenCalledTimes(1);
+    expect(createPurchaseOrderDraft.mock.calls[0][2]).toMatchObject({
       supplierId: SUPPLIER,
-      locationId: LOCATION,
-      lineItems: {
-        create: [{ shopifyVariantId: "variant-map-a", orderedQty: 2 }],
-      },
+      locationGid: LOCATION,
+      lines: [{ variantGid: "variant-map-a", quantity: 2 }],
+      source: "replenishment",
     });
+    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
   });
 
   it("does not ask Shopify for locations when there is nothing to order", async () => {
@@ -152,7 +158,7 @@ describe("Buying Table order input", () => {
     });
 
     expect(result).toEqual({ error: "A quantity can be at most 1,000,000." });
-    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
   });
 
   it("accepts the largest quantity an order line may have", async () => {
@@ -162,7 +168,7 @@ describe("Buying Table order input", () => {
       "qty-map-a": "1000000",
     });
 
-    expect(db.purchaseOrder.create).toHaveBeenCalledTimes(1);
+    expect(createPurchaseOrderDraft).toHaveBeenCalledTimes(1);
   });
 
   it("refuses a quantity that a supplier rule lifts out of range", async () => {
@@ -182,7 +188,7 @@ describe("Buying Table order input", () => {
     });
 
     expect(result).toEqual({ error: "A quantity can be at most 1,000,000." });
-    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
   });
 
   it("does not look up a single line of an order with more lines than an order may have", async () => {
@@ -204,6 +210,62 @@ describe("Buying Table order input", () => {
     });
     expect(db.supplier.findFirst).not.toHaveBeenCalled();
     expect(db.supplierSkuMapping.findFirst).not.toHaveBeenCalled();
-    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
+  });
+});
+
+describe("Buying Table order through the purchasing service", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.shopSettings.findUnique.mockResolvedValue({ subscriptionActive: true });
+    db.supplier.findFirst.mockResolvedValue({ id: SUPPLIER });
+    db.supplierSkuMapping.findFirst.mockImplementation(
+      async ({ where }: { where: { id: string } }) => ({
+        id: where.id,
+        shopifyVariantId: `variant-${where.id}`,
+        vendorSku: null,
+        moq: 1,
+        packSize: 1,
+      }),
+    );
+    fetchLocations.mockResolvedValue([{ id: LOCATION, name: "Warehouse" }]);
+  });
+
+  it("opens the numbered draft, with the page's key so a second press finds the same one", async () => {
+    createPurchaseOrderDraft.mockResolvedValue({ id: "po-7", poNumber: "PO-7", created: true });
+    const response = await createOrder({
+      supplierId: SUPPLIER,
+      locationId: LOCATION,
+      creationKey: "key-1",
+      "qty-map-a": "3",
+    });
+
+    expect(response).toBeInstanceOf(Response);
+    expect((response as Response).headers.get("Location")).toBe("/app/purchase-orders/po-7");
+    const [calledDb, actor, input, options] = createPurchaseOrderDraft.mock.calls[0];
+    expect(calledDb).toBe(db);
+    // The signed-in staff member is recorded (null here, where no session is read).
+    expect(actor).toEqual({ type: "STAFF", id: null });
+    expect(input).toEqual({
+      supplierId: SUPPLIER,
+      locationGid: LOCATION,
+      lines: [{ variantGid: "variant-map-a", quantity: 3 }],
+      creationKey: "key-1",
+      source: "replenishment",
+    });
+    expect(options).toMatchObject({ today: "2026-11-20" });
+  });
+
+  it("shows the purchasing service's refusal instead of failing", async () => {
+    const { PurchasingError } = await import("./purchasing/errors");
+    createPurchaseOrderDraft.mockRejectedValue(
+      new PurchasingError("invalid_input", "This supplier is archived."),
+    );
+    const result = await createOrder({
+      supplierId: SUPPLIER,
+      locationId: LOCATION,
+      "qty-map-a": "3",
+    });
+    expect(result).toEqual({ error: "This supplier is archived." });
   });
 });

@@ -5,7 +5,13 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { Form, redirect, useLoaderData, useNavigation } from "react-router";
+import {
+  Form,
+  redirect,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { AbcMetric } from "@prisma/client";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
@@ -16,11 +22,14 @@ import {
 } from "../services/shopify-gql.server";
 import { applySupplierRules } from "../lib/replenishment";
 import { computeForecast } from "../services/forecasting.server";
-import { resolveTieredUnitCost } from "../services/landed-cost.server";
+import { requirePurchasingContext } from "../services/purchasing/actor.server";
+import { PurchasingError } from "../services/purchasing/errors";
 import {
+  createPurchaseOrderDraft,
   MAX_LINES_PER_ORDER,
   MAX_ORDER_QUANTITY,
 } from "../services/purchasing/purchase-orders.server";
+import { readShopProfile } from "../services/purchasing/shop-profile.server";
 
 /**
  * Value of the "Select a vendor" option. An `s-select` submits the option's
@@ -158,6 +167,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     metric,
     rows,
     gated: !settings.subscriptionActive,
+    // One key per rendered page, so a second press of Create opens the same draft.
+    creationKey: crypto.randomUUID(),
     allowDevActivate:
       process.env.NODE_ENV !== "production" &&
       process.env.ALLOW_DEV_SUBSCRIPTION_ACTIVATE === "true",
@@ -199,7 +210,10 @@ function lookbackTarget(
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, tenant, db } = await requireAdminTenant({ request });
+  // The signed-in staff member is recorded on the orders this page creates.
+  const { admin, tenant, db, actor } = await requirePurchasingContext({
+    request,
+  });
   const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
@@ -260,10 +274,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "createPO") {
-    // This action writes the order itself, so it checks what the purchasing
-    // service checks for every other order: both ids are there, the order is
-    // no longer than an order may be, quantities are in range, and the
-    // location is one of the shop's own.
+    // The order is created by the purchasing service, as every other order
+    // is: it numbers the order, prices each line from the supplier's terms,
+    // records who created it and checks the supplier, location and products.
+    // The checks here refuse a bad request before anything is read.
     const supplierId = form.get("supplierId");
     const locationId = form.get("locationId");
     if (!usableId(supplierId) || !usableId(locationId)) {
@@ -275,6 +289,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (entries.length > MAX_LINES_PER_ORDER) {
       return { error: ORDER_TOO_MANY_LINES };
     }
+    const creationKey = form.get("creationKey");
 
     const supplier = await db.supplier.findFirst({
       where: { id: supplierId },
@@ -287,12 +302,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       roundUpToPackSize: form.get("roundUpToPackSize") === "on",
     };
 
-    const lines: Array<{
-      variantId: string;
-      vendorSku: string | null;
-      qty: number;
-      unitCost: number;
-    }> = [];
+    const lines: Array<{ variantGid: string; quantity: number }> = [];
 
     for (const [key, value] of entries) {
       const mappingId = key.slice(4);
@@ -304,26 +314,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       });
       if (!mapping) continue;
 
-      const { quantity: qty } = applySupplierRules(
+      const { quantity } = applySupplierRules(
         entered,
         { minimumOrderQuantity: mapping.moq, packSize: mapping.packSize },
         supplierRules,
       );
-      if (qty > MAX_ORDER_QUANTITY) return { error: ORDER_QUANTITY_TOO_LARGE };
-
-      const tierCost = await resolveTieredUnitCost(
-        db,
-        supplier.id,
-        mapping.shopifyVariantId,
-        qty,
-      );
-
-      lines.push({
-        variantId: mapping.shopifyVariantId,
-        vendorSku: mapping.vendorSku,
-        qty,
-        unitCost: Number(tierCost ?? 0),
-      });
+      if (quantity > MAX_ORDER_QUANTITY) {
+        return { error: ORDER_QUANTITY_TOO_LARGE };
+      }
+      lines.push({ variantGid: mapping.shopifyVariantId, quantity });
     }
 
     if (lines.length > 0) {
@@ -332,24 +331,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!locations.some((location) => location.id === locationId)) {
         return { error: ORDER_LOCATION_UNKNOWN };
       }
-      await db.purchaseOrder.create({
-        data: {
-          shop,
-          supplierId: supplier.id,
-          locationId,
-          status: "DRAFT",
-          draftedAt: new Date(),
-          lineItems: {
-            create: lines.map((l) => ({
-              shopifyVariantId: l.variantId,
-              vendorSku: l.vendorSku,
-              orderedQty: l.qty,
-              unitCost: l.unitCost,
-            })),
+      try {
+        const profile = await readShopProfile(admin);
+        const draft = await createPurchaseOrderDraft(
+          db,
+          actor,
+          {
+            supplierId: supplier.id,
+            locationGid: locationId,
+            lines,
+            // One key per rendered page: pressing Create twice opens the same draft.
+            creationKey: usableId(creationKey) ? creationKey : null,
+            source: "replenishment",
           },
-        },
-      });
-      return redirect("/app/purchase-orders");
+          { admin, today: profile.today },
+        );
+        return redirect(`/app/purchase-orders/${draft.id}`);
+      } catch (error) {
+        if (error instanceof PurchasingError) return { error: error.message };
+        throw error;
+      }
     }
     return { ok: false };
   }
@@ -373,8 +374,14 @@ export default function BuyingTable() {
     metric,
     rows,
     gated,
+    creationKey,
     allowDevActivate,
   } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const actionError =
+    actionData && "error" in actionData && typeof actionData.error === "string"
+      ? actionData.error
+      : null;
   const navigation = useNavigation();
   const [lookbackFor, setLookbackFor] = useState<BuyingRow | null>(null);
 
@@ -408,6 +415,11 @@ export default function BuyingTable() {
 
   return (
     <s-page heading="Buying Table">
+      {actionError && (
+        <s-banner tone="critical">
+          <s-paragraph>{actionError}</s-paragraph>
+        </s-banner>
+      )}
       <s-section heading="Filters">
         <Form method="get">
           <s-stack direction="inline" gap="base">
@@ -468,6 +480,7 @@ export default function BuyingTable() {
             <input type="hidden" name="intent" value="createPO" />
             <input type="hidden" name="supplierId" value={supplierId} />
             <input type="hidden" name="locationId" value={locationId} />
+            <input type="hidden" name="creationKey" value={creationKey} />
             <s-stack direction="block" gap="base">
               <s-table>
                 <s-table-header-row>
