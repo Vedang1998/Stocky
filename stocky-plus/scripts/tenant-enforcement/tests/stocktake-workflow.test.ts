@@ -2138,6 +2138,19 @@ describe("stocktake workflow", () => {
       expect(await keptCost(id, RED)).toEqual(["4.4", "USD"]);
     });
 
+    it("writes no cost to a count that is already closed", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      await complete(id);
+      await setCost(101, "40.000000");
+
+      // A second request that was completing the same count gets here late.
+      await keepDifferenceCosts(dbA, id);
+
+      expect(await keptCost(id, RED)).toEqual(["4.25", "USD"]);
+    });
+
     it("has no value for a cancelled count", async () => {
       const { id, lineFor } = await startCount();
       await count(lineFor(RED), 7);

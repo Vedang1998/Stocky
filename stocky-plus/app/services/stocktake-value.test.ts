@@ -345,13 +345,19 @@ describe("Keeping unit costs when a count is completed", () => {
     updateMany.mock.calls
       .map(([query]) => {
         const { where, data } = query as unknown as {
-          where: { stocktakeId: string; id: { in: string[] } };
+          where: {
+            stocktakeId: string;
+            id: { in: string[] };
+            stocktake: { status: string };
+          };
           data: {
             unitCostAmount: Prisma.Decimal | null;
             unitCostCurrencyCode: string | null;
           };
         };
         expect(where.stocktakeId).toBe(ID);
+        // Never a line of a count that has closed.
+        expect(where.stocktake).toEqual({ status: "IN_PROGRESS" });
         return [
           where.id.in,
           data.unitCostAmount?.toFixed() ?? null,

@@ -242,6 +242,7 @@ export async function listStocktakeLineValues(
  * stock, and on no other line. Called while the count is being completed,
  * after Shopify has confirmed the changes and before the count is closed; a
  * failure leaves the count open, and completing it again starts over here.
+ * Nothing is written to a count that is no longer in progress.
  *
  * The writes are grouped by cost, so a count costs one statement for each
  * distinct cost, not one for each line.
@@ -292,7 +293,13 @@ export async function keepDifferenceCosts(
   for (const { cost, ids } of groups.values()) {
     for (const part of chunked(ids)) {
       await db.stocktakeLineItem.updateMany({
-        where: { stocktakeId, id: { in: part } },
+        // Only while the count is open: a second request completing the same
+        // count must not rewrite the costs of one that has just closed.
+        where: {
+          stocktakeId,
+          id: { in: part },
+          stocktake: { status: "IN_PROGRESS" },
+        },
         data: {
           unitCostAmount: cost?.amount ?? null,
           unitCostCurrencyCode: cost?.currencyCode ?? null,
