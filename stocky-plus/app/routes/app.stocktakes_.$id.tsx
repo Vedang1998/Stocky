@@ -27,6 +27,8 @@ import {
 } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
 import {
   getStocktake,
   getStocktakeLedgerSummary,
@@ -55,7 +57,6 @@ import {
 } from "../services/stocktakes/stocktake-limits";
 import {
   COUNT_SOURCE_LABEL,
-  formatUtc,
   itemCount,
   signed,
   staffText,
@@ -93,7 +94,7 @@ function withheld(line: StocktakeLineView): PageLine {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
+  const { db, tenant } = await requireAdminTenant({ request, params });
   const stocktakeId = readFormId(params.id);
   const stocktake = stocktakeId ? await getStocktake(db, stocktakeId) : null;
   if (!stocktake) throw new Response(NOT_FOUND, { status: 404 });
@@ -102,18 +103,20 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const filter = readLineFilter(query.get("filter"));
   const search = readLineSearch(query.get("q"));
 
-  const [progress, lines, ledger, locations, planActive] = await Promise.all([
-    getStocktakeProgress(db, stocktake.id),
-    getStocktakeLines(db, {
-      stocktakeId: stocktake.id,
-      filter,
-      search,
-      page: readPageNumber(query.get("page")),
-    }),
-    getStocktakeLedgerSummary(db, stocktake.id),
-    listSyncedLocations(db),
-    planAllowsChanges(db),
-  ]);
+  const [progress, lines, ledger, locations, planActive, timeZone] =
+    await Promise.all([
+      getStocktakeProgress(db, stocktake.id),
+      getStocktakeLines(db, {
+        stocktakeId: stocktake.id,
+        filter,
+        search,
+        page: readPageNumber(query.get("page")),
+      }),
+      getStocktakeLedgerSummary(db, stocktake.id),
+      listSyncedLocations(db),
+      planAllowsChanges(db),
+      readShopTimeZone(tenant),
+    ]);
 
   const open = stocktake.status === "IN_PROGRESS";
   const expectedHidden = stocktake.blind && open && !REVIEW_FILTERS.has(filter);
@@ -139,6 +142,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     search,
     expectedHidden,
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
   };
 };
@@ -399,6 +403,7 @@ export default function StocktakeCount() {
     search,
     expectedHidden,
     planActive,
+    timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -505,19 +510,22 @@ export default function StocktakeCount() {
           </s-stack>
           <s-text>
             {locationName} · started{" "}
-            {formatUtc(stocktake.startedAt ?? stocktake.createdAt)} by{" "}
-            {staffText(stocktake.startedByUserId)}
+            {formatShopTime(
+              stocktake.startedAt ?? stocktake.createdAt,
+              timeZone,
+            )}{" "}
+            by {staffText(stocktake.startedByUserId)}
           </s-text>
           {stocktake.status === "COMPLETED" && (
             <s-text>
-              Completed {formatUtc(stocktake.completedAt)} by{" "}
+              Completed {formatShopTime(stocktake.completedAt, timeZone)} by{" "}
               {staffText(stocktake.completedByUserId)}. Its differences are
               applied in Shopify.
             </s-text>
           )}
           {stocktake.status === "CANCELLED" && (
             <s-text>
-              Cancelled {formatUtc(stocktake.cancelledAt)} by{" "}
+              Cancelled {formatShopTime(stocktake.cancelledAt, timeZone)} by{" "}
               {staffText(stocktake.cancelledByUserId)}. Nothing was changed in
               Shopify.
             </s-text>

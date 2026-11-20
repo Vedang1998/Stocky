@@ -103,8 +103,13 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant: context.db.authority,
   })),
 }));
+
+/** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
+const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
+vi.mock("./inventory-writes/shop-clock.server", () => shopClock);
 
 vi.mock("../lib/feature-flags.server", () => ({ isInventoryWriteEnabled }));
 
@@ -272,6 +277,7 @@ function renderList(loaderData: Record<string, unknown>, actionData?: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  shopClock.readShopTimeZone.mockResolvedValue(null);
   context.db.shopSettings.findUnique.mockResolvedValue({
     subscriptionActive: true,
   });
@@ -1708,5 +1714,124 @@ describe("Stocktakes without an active plan", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("Red wine");
     expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("Stocktake times on the shop's clock", () => {
+  const TORONTO = "America/Toronto";
+
+  beforeEach(() => {
+    shopClock.readShopTimeZone.mockResolvedValue(TORONTO);
+  });
+
+  it("reads the zone of the shop the request is signed in to, for the list and for a count", async () => {
+    const list = await listRoute.loader(get("/app/stocktakes"));
+    const count = await loadCount();
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledTimes(2);
+    expect(shopClock.readShopTimeZone).toHaveBeenNthCalledWith(
+      1,
+      context.db.authority,
+    );
+    expect(shopClock.readShopTimeZone).toHaveBeenNthCalledWith(
+      2,
+      context.db.authority,
+    );
+    expect(list).toMatchObject({ timeZone: TORONTO });
+    expect(count).toMatchObject({ timeZone: TORONTO });
+  });
+
+  it("lists each count with the time it started on the shop's clock", () => {
+    const html = renderList({
+      timeZone: TORONTO,
+      stocktakes: [
+        {
+          ...header({ startedAt: new Date("2026-11-13T02:30:00.000Z") }),
+          lineCount: 3,
+          countedCount: 2,
+        },
+      ],
+    });
+
+    expect(html).toContain("Nov 12, 2026, 9:30 PM EST");
+    expect(html).not.toContain("UTC");
+  });
+
+  it("shows when a count started and was completed on the shop's clock", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "COMPLETED",
+        completedAt: new Date("2026-11-12T11:15:00.000Z"),
+        completedByUserId: "42",
+      }),
+    );
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "Cellar · started Nov 12, 2026, 4:00 AM EST by staff ID 42",
+    );
+    expect(html).toContain(
+      "Completed Nov 12, 2026, 6:15 AM EST by staff ID 42.",
+    );
+    expect(html).not.toContain("UTC");
+  });
+
+  it("shows when a count was cancelled on the shop's clock", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "CANCELLED",
+        cancelledAt: new Date("2026-11-12T11:15:00.000Z"),
+        cancelledByUserId: "42",
+      }),
+    );
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "Cancelled Nov 12, 2026, 6:15 AM EST by staff ID 42.",
+    );
+    expect(html).not.toContain("UTC");
+  });
+
+  it("writes the count sheet's times on the shop's clock, names the clock in the heading and dates the file by the shop's day", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({ startedAt: new Date("2026-11-13T02:30:00.000Z") }),
+    );
+    reads.listStocktakeLinesForExport.mockResolvedValue([
+      line({ countedAt: new Date("2026-11-13T03:10:00.000Z") }),
+    ]);
+
+    const response = (await exportLoader(
+      get(`/app/stocktakes/${ID}/export`, { id: ID }),
+    )) as Response;
+    const [head, row] = (await response.text()).trimEnd().split("\r\n");
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "stocktake-2026-11-12.csv",
+    );
+    expect(head).toContain(",Counted at (America/Toronto),");
+    expect(head).not.toContain("UTC");
+    expect(row).toBe(
+      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,2,Typed,2026-11-12 22:10,77,,",
+    );
+  });
+
+  it("dates the count sheet's file by the UTC day while the shop's zone is not known", async () => {
+    shopClock.readShopTimeZone.mockResolvedValue(null);
+    reads.getStocktake.mockResolvedValue(
+      header({ startedAt: new Date("2026-11-13T02:30:00.000Z") }),
+    );
+
+    const response = (await exportLoader(
+      get(`/app/stocktakes/${ID}/export`, { id: ID }),
+    )) as Response;
+
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "stocktake-2026-11-13.csv",
+    );
   });
 });

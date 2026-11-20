@@ -28,11 +28,9 @@ import {
 } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
-import {
-  formatUtc,
-  itemCount,
-  staffText,
-} from "../services/stocktakes/stocktake-display";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
+import { itemCount, staffText } from "../services/stocktakes/stocktake-display";
 import { readPageNumber } from "../services/stocktakes/stocktake-read.server";
 import {
   addTransferItems,
@@ -83,14 +81,14 @@ const LINE_NOT_FOUND = "Transfer line not found";
 const QUANTITY_LIMIT = MAX_TRANSFER_LINE_QUANTITY.toLocaleString("en-US");
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
+  const { db, tenant } = await requireAdminTenant({ request, params });
   const transferId = readFormId(params.id);
   const transfer = transferId ? await getTransfer(db, transferId) : null;
   if (!transfer) throw new Response(NOT_FOUND, { status: 404 });
 
   const query = new URL(request.url).searchParams;
   const filter = readTransferLineFilter(query.get("filter"));
-  const [lines, history, locations, planActive] = await Promise.all([
+  const [lines, history, locations, planActive, timeZone] = await Promise.all([
     getTransferLines(db, {
       transfer,
       filter,
@@ -99,6 +97,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     getTransferHistory(db, transfer.id),
     listSyncedLocations(db),
     planAllowsChanges(db),
+    readShopTimeZone(tenant),
   ]);
   const locationName = (id: string) =>
     locations.find((location) => location.id === id)?.name ??
@@ -120,6 +119,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           transferLedgerStanding(history),
         ),
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("transferWrites"),
   };
 };
@@ -516,6 +516,7 @@ export default function TransferDetail() {
     history,
     attention,
     planActive,
+    timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -612,19 +613,19 @@ export default function TransferDetail() {
             </s-text>
           </s-stack>
           <s-text>
-            Created {formatUtc(transfer.createdAt)} by{" "}
+            Created {formatShopTime(transfer.createdAt, timeZone)} by{" "}
             {staffText(transfer.createdByUserId)}
           </s-text>
           {transfer.shippedAt && (
             <s-text>
-              Shipped {formatUtc(transfer.shippedAt)} by{" "}
+              Shipped {formatShopTime(transfer.shippedAt, timeZone)} by{" "}
               {staffText(transfer.shippedByUserId)}
             </s-text>
           )}
           {transfer.status === "RECEIVED" && (
             <s-text>
               {closedShortUnits > 0 ? "Closed" : "Received"}{" "}
-              {formatUtc(transfer.receivedAt)} by{" "}
+              {formatShopTime(transfer.receivedAt, timeZone)} by{" "}
               {staffText(transfer.receivedByUserId)}
               {closedShortUnits > 0 &&
                 `. ${unitCount(closedShortUnits)} that did not arrive ${closedShortUnits === 1 ? "was" : "were"} ${
@@ -638,7 +639,7 @@ export default function TransferDetail() {
             <s-text>
               Cancelled
               {transfer.cancelledAt
-                ? ` ${formatUtc(transfer.cancelledAt)} by ${staffText(transfer.cancelledByUserId)}`
+                ? ` ${formatShopTime(transfer.cancelledAt, timeZone)} by ${staffText(transfer.cancelledByUserId)}`
                 : ""}
               . Its stock stays at the source location.
             </s-text>
@@ -1322,7 +1323,9 @@ export default function TransferDetail() {
             <s-table-body>
               {history.map((event) => (
                 <s-table-row key={event.operationId}>
-                  <s-table-cell>{formatUtc(event.at)}</s-table-cell>
+                  <s-table-cell>
+                    {formatShopTime(event.at, timeZone)}
+                  </s-table-cell>
                   <s-table-cell>
                     {transferEventLabel(event.leg, event.netUnits)}
                   </s-table-cell>

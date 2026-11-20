@@ -120,8 +120,13 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant: context.db.authority,
   })),
 }));
+
+/** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
+const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
+vi.mock("./inventory-writes/shop-clock.server", () => shopClock);
 
 vi.mock("../lib/feature-flags.server", () => ({ isInventoryWriteEnabled }));
 
@@ -360,6 +365,7 @@ function submitDisabled(html: string, intent: string): boolean | undefined {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  shopClock.readShopTimeZone.mockResolvedValue(null);
   context.db.shopSettings.findUnique.mockResolvedValue({
     subscriptionActive: true,
   });
@@ -2275,5 +2281,137 @@ describe("Transfers without an active plan", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("RED-750");
     expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("Transfer times on the shop's clock", () => {
+  const TORONTO = "America/Toronto";
+
+  beforeEach(() => {
+    shopClock.readShopTimeZone.mockResolvedValue(TORONTO);
+  });
+
+  it("reads the zone of the shop the request is signed in to, for the list and for a transfer", async () => {
+    const list = await listRoute.loader(get("/app/transfers"));
+    const detail = await loadDetail();
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledTimes(2);
+    expect(shopClock.readShopTimeZone).toHaveBeenNthCalledWith(
+      1,
+      context.db.authority,
+    );
+    expect(shopClock.readShopTimeZone).toHaveBeenNthCalledWith(
+      2,
+      context.db.authority,
+    );
+    expect(list).toMatchObject({ timeZone: TORONTO });
+    expect(detail).toMatchObject({ timeZone: TORONTO });
+  });
+
+  it("lists each transfer with the time it was created on the shop's clock", () => {
+    const transfer = header({
+      createdAt: new Date("2026-11-13T02:30:00.000Z"),
+    });
+
+    const html = renderList({
+      timeZone: TORONTO,
+      transfers: [{ ...transfer, totals: transferTotals("DRAFT", [line()]) }],
+    });
+
+    expect(html).toContain("Nov 12, 2026, 9:30 PM EST");
+    expect(html).not.toContain("UTC");
+  });
+
+  it("shows when a transfer was created, shipped and received, and each stock change, on the shop's clock", async () => {
+    given(
+      {
+        status: "RECEIVED",
+        ...SHIPPED,
+        receivedAt: new Date("2026-11-13T08:00:00.000Z"),
+        receivedByUserId: "77",
+      },
+      [shippedLine({ receivedQty: 10 })],
+      [
+        event(),
+        event({
+          operationId: "op-2",
+          leg: "receipt",
+          at: new Date("2026-11-13T08:00:00.000Z"),
+          netUnits: 10,
+        }),
+      ],
+    );
+
+    const html = await renderDetail();
+
+    expect(html).toContain("Created Nov 12, 2026, 4:00 AM EST by staff ID 42");
+    expect(html).toContain("Shipped Nov 12, 2026, 5:00 AM EST by staff ID 42");
+    expect(html).toContain("Received Nov 13, 2026, 3:00 AM EST by staff ID 77");
+    expect(html).toContain(
+      "<s-table-cell>Nov 13, 2026, 3:00 AM EST</s-table-cell>",
+    );
+    expect(html).not.toContain("UTC");
+  });
+
+  it("shows when a transfer was cancelled on the shop's clock", async () => {
+    given(
+      {
+        status: "CANCELLED",
+        cancelledAt: new Date("2026-11-12T11:00:00.000Z"),
+        cancelledByUserId: "42",
+      },
+      [line()],
+    );
+
+    const html = await renderDetail();
+
+    expect(html).toContain(
+      "Cancelled Nov 12, 2026, 6:00 AM EST by staff ID 42",
+    );
+    expect(html).not.toContain("UTC");
+  });
+
+  it("writes the report's times on the shop's clock, names the clock in each heading and dates the file by the shop's day", async () => {
+    given(
+      {
+        status: "IN_TRANSIT",
+        createdAt: new Date("2026-11-13T02:30:00.000Z"),
+        shippedAt: new Date("2026-11-13T15:05:00.000Z"),
+        shippedByUserId: "42",
+      },
+      [shippedLine()],
+    );
+
+    const response = (await exportLoader(
+      get(`/app/transfers/${ID}/export`, { id: ID }),
+    )) as Response;
+    const [head, row] = (await response.text()).trimEnd().split("\r\n");
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(response.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="transfer-T-ABC123-2026-11-12.csv"',
+    );
+    expect(head).toContain(
+      "Created at (America/Toronto),Shipped at (America/Toronto),Received or closed at (America/Toronto),",
+    );
+    expect(head).not.toContain("UTC");
+    expect(row).toBe(
+      "T-ABC123,Warehouse,Shop floor,In transit,2026-11-12 21:30,2026-11-13 10:05,,Red wine,RED-750,1111,10,10,0,0,0,,0,0,10",
+    );
+  });
+
+  it("dates the report's file by the UTC day while the shop's zone is not known", async () => {
+    shopClock.readShopTimeZone.mockResolvedValue(null);
+    given({ createdAt: new Date("2026-11-13T02:30:00.000Z") }, [line()]);
+
+    const response = (await exportLoader(
+      get(`/app/transfers/${ID}/export`, { id: ID }),
+    )) as Response;
+
+    expect(response.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="transfer-T-ABC123-2026-11-13.csv"',
+    );
   });
 });

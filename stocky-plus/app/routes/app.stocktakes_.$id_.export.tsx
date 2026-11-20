@@ -3,6 +3,12 @@ import { csvDownloadResponse, toCsv, type CsvCell } from "../lib/csv.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import {
+  shopDay,
+  shopTimeCell,
+  timeColumn,
+} from "../services/inventory-writes/shop-time";
 import {
   getStocktake,
   listStocktakeLinesForExport,
@@ -12,7 +18,8 @@ import {
   STOCKTAKE_STATUS_BADGE,
 } from "../services/stocktakes/stocktake-display";
 
-const HEADERS = [
+/** The time is on the shop's clock when its time zone is known; the heading says which clock. */
+const headers = (timeZone: string | null) => [
   "Count",
   "Location",
   "Status",
@@ -23,11 +30,11 @@ const HEADERS = [
   "Counted",
   "Difference",
   "How counted",
-  "Counted at (UTC)",
+  timeColumn("Counted at", timeZone),
   "Counted by staff ID",
   "Stock moved during count",
   "Measured from",
-] as const;
+];
 
 /**
  * The count sheet: one row per item on the count. While a blind count is
@@ -35,7 +42,7 @@ const HEADERS = [
  * as they are on the page.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
+  const { db, tenant } = await requireAdminTenant({ request, params });
   const stocktakeId = readFormId(params.id);
   const stocktake = stocktakeId ? await getStocktake(db, stocktakeId) : null;
   if (!stocktake) {
@@ -49,9 +56,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     });
   }
 
-  const [lines, locations] = await Promise.all([
+  const [lines, locations, timeZone] = await Promise.all([
     listStocktakeLinesForExport(db, stocktake.id),
     listSyncedLocations(db),
+    readShopTimeZone(tenant),
   ]);
   const locationName =
     locations.find((location) => location.id === stocktake.locationId)?.name ??
@@ -72,7 +80,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       line.countedQty,
       expectedHidden ? null : line.delta,
       line.countSource ? COUNT_SOURCE_LABEL[line.countSource] : null,
-      line.countedAt,
+      shopTimeCell(line.countedAt, timeZone),
       line.countedByUserId,
       expectedHidden || !moved
         ? null
@@ -85,8 +93,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     ];
   });
 
-  const day = (stocktake.startedAt ?? stocktake.createdAt)
-    .toISOString()
-    .slice(0, 10);
-  return csvDownloadResponse(toCsv(HEADERS, rows), `stocktake-${day}.csv`);
+  const day = shopDay(stocktake.startedAt ?? stocktake.createdAt, timeZone);
+  return csvDownloadResponse(
+    toCsv(headers(timeZone), rows),
+    `stocktake-${day}.csv`,
+  );
 };

@@ -22,9 +22,9 @@ import {
   pdfPartCount,
   type PdfPart,
 } from "../../lib/pdf/parts";
-import { formatShopInstant } from "../../lib/reports/present";
 import type { TenantDb } from "../../tenant/tenant-db.server";
-import { formatUtc, itemCount } from "../stocktakes/stocktake-display";
+import { formatShopTime } from "../inventory-writes/shop-time";
+import { itemCount } from "../stocktakes/stocktake-display";
 import {
   transferReference,
   transferStatusBadge,
@@ -133,18 +133,6 @@ export async function readTransferPaper(
  * A moment as the shop's clock shows it. Without a known time zone it is
  * given in UTC and says so, rather than guessing a zone.
  */
-function shopTime(instant: Date | null, timeZone: string | null): string {
-  if (!instant) return "";
-  if (timeZone) {
-    try {
-      return formatShopInstant(instant, timeZone);
-    } catch {
-      // A zone name this runtime does not know; UTC below is still correct.
-    }
-  }
-  return formatUtc(instant);
-}
-
 function joined(...parts: Array<string | false | null | undefined>): string {
   return parts
     .filter(
@@ -160,13 +148,14 @@ function dateLines(
 ): string[] {
   const closedShort = totals.returnedUnits + totals.writtenOffUnits > 0;
   return filled(
-    `Created ${shopTime(transfer.createdAt, timeZone)}`,
-    transfer.shippedAt && `Shipped ${shopTime(transfer.shippedAt, timeZone)}`,
+    `Created ${formatShopTime(transfer.createdAt, timeZone)}`,
+    transfer.shippedAt &&
+      `Shipped ${formatShopTime(transfer.shippedAt, timeZone)}`,
     transfer.status === "RECEIVED" && transfer.receivedAt
-      ? `${closedShort ? "Closed" : "Received"} ${shopTime(transfer.receivedAt, timeZone)}`
+      ? `${closedShort ? "Closed" : "Received"} ${formatShopTime(transfer.receivedAt, timeZone)}`
       : null,
     transfer.status === "CANCELLED" && transfer.cancelledAt
-      ? `Cancelled ${shopTime(transfer.cancelledAt, timeZone)}`
+      ? `Cancelled ${formatShopTime(transfer.cancelledAt, timeZone)}`
       : null,
   );
 }

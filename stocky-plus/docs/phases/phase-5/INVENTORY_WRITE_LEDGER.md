@@ -232,7 +232,7 @@ each difference to Shopify through `settleInventoryDocument`.
 
 Not built yet: counting from Shopify POS (the POS scan endpoint follows the POS
 extension work), assigning sections of a count to staff, recount requests for
-individual lines, cost value of the differences, and shop-timezone dates.
+individual lines, and cost value of the differences.
 
 ## Adjustments
 
@@ -277,9 +277,8 @@ source type `InventoryAdjustment`, and the ledger is its history.
   period of more than 2,000 adjustments rather than returning part of it.
 - Gated by `FEATURE_ADJUSTMENT_WRITES`. While it is off nothing is recorded.
 
-Not built yet: merchant-defined reasons, attachments, approval before an
-adjustment is applied, and shop-timezone dates (the history and the export use
-UTC).
+Not built yet: merchant-defined reasons, attachments, and approval before an
+adjustment is applied.
 
 ## Transfers
 
@@ -370,10 +369,35 @@ documents above are the record of what moved.
 
 Not built yet: approval before a transfer ships, several shipments for one
 transfer, receiving from Shopify POS, labels, transfers suggested from
-replenishment or balancing, cost value in transit, shop-timezone dates on the
-transfer page and its CSV report (the papers have them), and a paper size
-other than US Letter. In-transit units are not shown as incoming
-at the destination in Shopify, because no Shopify transfer object exists.
+replenishment or balancing, cost value in transit, and a paper size other
+than US Letter. In-transit units are not shown as incoming at the destination
+in Shopify, because no Shopify transfer object exists.
+
+## Times on the shop's clock
+
+The stocktake, adjustment and transfer pages, their CSV reports and the
+transfer papers give every time on the shop's clock (`shop-time.ts`).
+
+- **Which zone.** The pages and reports read the IANA time zone stored for
+  the shop at its last sync (`readShopTimeZone` in `shop-clock.server.ts`),
+  which costs no Shopify call. The transfer papers ask Shopify for it together
+  with the shop's name and addresses. Until a zone is known (a shop whose
+  first sync has not finished), or when the server does not know the zone
+  Shopify named, times are given in UTC and marked "UTC". No zone is guessed.
+- **Pages** read "Nov 10, 2026, 3:45 PM EST": the zone's short name follows
+  the time, so a time read from a screenshot is not ambiguous.
+- **CSV reports** write `2026-11-10 15:45` and name the zone in the column
+  heading, "Shipped at (America/Toronto)". Without a zone the heading says
+  "(UTC)" and the cell is the full ISO time, as it was before. A report's file
+  name carries the shop's day.
+- **Adjustment history dates.** "From" and "To" are whole days on the shop's
+  clock, including the 23-hour and 25-hour days when the clocks change; the
+  report downloaded from the page covers the same days. Without a zone they
+  are UTC days and the fields say so.
+
+Times are stored in UTC and nothing stored changes. A shop that changes its
+time zone in Shopify sees earlier documents on the new clock after the next
+sync.
 
 ## Plan gate
 
