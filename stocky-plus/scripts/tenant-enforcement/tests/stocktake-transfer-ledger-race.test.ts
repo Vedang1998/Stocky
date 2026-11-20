@@ -10,6 +10,11 @@
  * assertions hold for every interleaving, so a failure here is a defect, not
  * a flake.
  *
+ * The last group sends a transfer's lines one request each and has Shopify
+ * refuse or lose some of them, so a shipment, a put-back or a receipt lands
+ * only in part. The document must stay where it was, and the next attempt
+ * must move only what is still missing.
+ *
  * Disposable PostgreSQL 16 with RLS applied, as in stocktake-transfer-ledger.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -26,6 +31,7 @@ import {
   addTransferLine,
   cancelTransfer,
   createTransfer,
+  setTransferLineQuantity,
   shipTransfer,
 } from "../../../app/services/transfers/transfer.server";
 import { receiveTransfer } from "../../../app/services/transfers/transfer-receiving.server";
@@ -56,7 +62,7 @@ const ROUNDS = 6;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe("stock conservation under concurrent requests", () => {
+describe("stock conservation", () => {
   let prisma: PrismaClient;
   let dbA: TenantDb;
   let shopify: FakeShopify;
@@ -370,4 +376,195 @@ describe("stock conservation under concurrent requests", () => {
     },
     60_000,
   );
+
+  describe("transfer: Shopify accepts only part of a movement", () => {
+    /** One request per line, so Shopify can accept one line and not another. */
+    const lineByLine = () => ({ ...enabled(), batchSize: 1 });
+    const accept = () => shopify.next(() => null);
+    const refuse = () =>
+      shopify.next(() => ({
+        kind: "rejected",
+        errors: [
+          {
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Shopify refused this change",
+            changeIndex: null,
+          },
+        ],
+      }));
+    const stock = () => ({
+      redSource: shopify.level(101, 11),
+      whiteSource: shopify.level(102, 11),
+      redDestination: shopify.level(101, 12),
+      whiteDestination: shopify.level(102, 12),
+    });
+    const UNTOUCHED = {
+      redSource: 10,
+      whiteSource: 20,
+      redDestination: 0,
+      whiteDestination: 0,
+    };
+    const statusOf = async (id: string) =>
+      (await prisma.transferOrder.findUniqueOrThrow({ where: { id } })).status;
+
+    /** A draft of 4 red and 6 white from the source to the destination. */
+    async function draft() {
+      await createTransfer(dbA, {
+        shop: SHOP_A,
+        sourceLocationId: SOURCE,
+        destinationLocationId: DESTINATION,
+        notes: null,
+      });
+      const { id } = await prisma.transferOrder.findFirstOrThrow();
+      for (const [shopifyVariantId, quantity] of [
+        [RED, 4],
+        [WHITE, 6],
+      ] as const) {
+        await addTransferLine(dbA, {
+          transferId: id,
+          shopifyVariantId,
+          quantity,
+        });
+      }
+      const lines = await prisma.transferLineItem.findMany({
+        where: { transferOrderId: id },
+      });
+      const lineOf = (variant: string) =>
+        lines.find((line) => line.shopifyVariantId === variant)!.id;
+      return { id, redLine: lineOf(RED), whiteLine: lineOf(WHITE) };
+    }
+
+    /** Red leaves the source; Shopify refuses white. */
+    async function halfShipped() {
+      const transfer = await draft();
+      accept();
+      refuse();
+      const shipped = await shipTransfer(
+        dbA,
+        null,
+        STAFF,
+        transfer.id,
+        lineByLine(),
+      );
+      expect(shipped).toMatchObject({ ok: false });
+      expect(await statusOf(transfer.id)).toBe("DRAFT");
+      expect(stock()).toEqual({ ...UNTOUCHED, redSource: 6 });
+      return transfer;
+    }
+
+    it("a half-accepted shipment stays a draft, and shipping again sends only the rest", async () => {
+      const { id } = await halfShipped();
+
+      expect(
+        await shipTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true, alreadyDone: false });
+
+      expect(await statusOf(id)).toBe("IN_TRANSIT");
+      expect(stock()).toEqual({ ...UNTOUCHED, redSource: 6, whiteSource: 14 });
+    }, 60_000);
+
+    it("cancelling a half-accepted shipment puts back only what left", async () => {
+      const { id } = await halfShipped();
+
+      expect(
+        await cancelTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true, alreadyDone: false });
+      expect(
+        await cancelTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true, alreadyDone: true });
+
+      expect(await statusOf(id)).toBe("CANCELLED");
+      expect(stock()).toEqual(UNTOUCHED);
+    }, 60_000);
+
+    it("lines changed after a half-accepted shipment move only the difference", async () => {
+      const { id, redLine, whiteLine } = await halfShipped();
+      await setTransferLineQuantity(dbA, {
+        transferId: id,
+        lineId: redLine,
+        quantity: 2,
+      });
+      await setTransferLineQuantity(dbA, {
+        transferId: id,
+        lineId: whiteLine,
+        quantity: 1,
+      });
+
+      expect(
+        await shipTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true });
+
+      // Two of the four red units that left go back; one white unit leaves.
+      expect(await statusOf(id)).toBe("IN_TRANSIT");
+      expect(stock()).toEqual({ ...UNTOUCHED, redSource: 8, whiteSource: 19 });
+    }, 60_000);
+
+    it("a lost answer and a refused put-back neither lose stock nor return it twice", async () => {
+      const { id } = await draft();
+      accept();
+      shopify.loseNextResponse();
+      expect(
+        await shipTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: false });
+      // Shopify moved both lines; the app knows about one.
+      expect(await statusOf(id)).toBe("DRAFT");
+      expect(stock()).toEqual({ ...UNTOUCHED, redSource: 6, whiteSource: 14 });
+
+      // The cancel first learns the white line did land, then Shopify
+      // refuses to take red back.
+      accept();
+      refuse();
+      expect(
+        await cancelTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: false });
+      expect(await statusOf(id)).toBe("DRAFT");
+      expect(stock()).toEqual({ ...UNTOUCHED, redSource: 6 });
+
+      expect(
+        await cancelTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true, alreadyDone: false });
+      expect(await statusOf(id)).toBe("CANCELLED");
+      expect(stock()).toEqual(UNTOUCHED);
+    }, 60_000);
+
+    it("a half-accepted receipt stays in transit and closed to changes, and receiving again adds only the rest", async () => {
+      const { id, redLine } = await draft();
+      await shipTransfer(dbA, null, STAFF, id, lineByLine());
+      const shipped = { ...UNTOUCHED, redSource: 6, whiteSource: 14 };
+      accept();
+      refuse();
+
+      expect(
+        await receiveTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: false });
+      expect(await statusOf(id)).toBe("IN_TRANSIT");
+      expect(stock()).toEqual({ ...shipped, redDestination: 4 });
+
+      expect(
+        await cancelTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: false });
+      expect(
+        await setTransferLineQuantity(dbA, {
+          transferId: id,
+          lineId: redLine,
+          quantity: 1,
+        }),
+      ).toMatchObject({ ok: false });
+      expect(stock()).toEqual({ ...shipped, redDestination: 4 });
+
+      expect(
+        await receiveTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true, alreadyDone: false, completed: true });
+      expect(
+        await receiveTransfer(dbA, null, STAFF, id, lineByLine()),
+      ).toMatchObject({ ok: true, alreadyDone: true });
+
+      expect(await statusOf(id)).toBe("RECEIVED");
+      expect(stock()).toEqual({
+        ...shipped,
+        redDestination: 4,
+        whiteDestination: 6,
+      });
+    }, 60_000);
+  });
 });
