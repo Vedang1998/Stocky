@@ -129,6 +129,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/db-isolation/purchasing-screens.test.ts",
   "app/tenant/__tests__/db-isolation/purchasing-supplier-screens.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts",
+  "app/tenant/__tests__/db-isolation/daily-stock-snapshots.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [
@@ -327,7 +328,7 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
     category: "tenant_bound_access",
     reason: "Tenant-bound DB contract wraps raw client; never returns it to callers",
     permittedModelsOrOperations: [
-      "All 45 merchant-owned models via scoped delegates",
+      "All 47 merchant-owned models via scoped delegates",
     ],
     productionRuntime: "yes",
     owner: "phase-1-pr2-tenant-access",
