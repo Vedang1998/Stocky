@@ -161,6 +161,29 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   };
 };
 
+const LOOKBACK_TARGET_MISSING =
+  "Choose a product and a location before changing its lookback window.";
+const MAX_ID_LENGTH = 256;
+
+/**
+ * The product and location a lookback change applies to. The page sends both
+ * as hidden fields; a request built by hand can leave them out, and a missing
+ * one must be refused here instead of reaching the database as null.
+ */
+function lookbackTarget(
+  form: FormData,
+): { variantId: string; locationId: string } | null {
+  const variantId = form.get("variantId");
+  const locationId = form.get("locationId");
+  const usable = (value: FormDataEntryValue | null): value is string =>
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_ID_LENGTH;
+  return usable(variantId) && usable(locationId)
+    ? { variantId, locationId }
+    : null;
+}
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
@@ -189,8 +212,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   await requireActivePlanSnapshot(db);
 
   if (intent === "setLookback") {
-    const variantId = form.get("variantId") as string;
-    const locationId = form.get("locationId") as string;
+    const target = lookbackTarget(form);
+    if (!target) return { error: LOOKBACK_TARGET_MISSING };
+    const { variantId, locationId } = target;
     const start = new Date(form.get("lookbackStart") as string);
     const end = new Date(form.get("lookbackEnd") as string);
 
@@ -211,8 +235,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "clearLookback") {
-    const variantId = form.get("variantId") as string;
-    const locationId = form.get("locationId") as string;
+    const target = lookbackTarget(form);
+    if (!target) return { error: LOOKBACK_TARGET_MISSING };
+    const { variantId, locationId } = target;
     await db.forecastOverride.deleteMany({
       where: { variantId, locationId },
     });

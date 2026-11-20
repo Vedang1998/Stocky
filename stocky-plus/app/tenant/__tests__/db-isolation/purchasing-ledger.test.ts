@@ -50,6 +50,7 @@ import {
 import {
   requireRuntimeUrl,
   resetAndEnforce,
+  seedActivePlans,
   seedTwoShops,
   SHOP_A_DOMAIN,
   SHOP_B_DOMAIN,
@@ -163,6 +164,7 @@ describe("purchasing ledger", () => {
     migrationPrisma = ctx.migrationPrisma;
     await ctx.runtimePrisma.$disconnect();
     const shops = await seedTwoShops(migrationPrisma);
+    await seedActivePlans(migrationPrisma, [shops.shopA, shops.shopB]);
     shopAId = shops.shopA.id;
     shopBId = shops.shopB.id;
 
