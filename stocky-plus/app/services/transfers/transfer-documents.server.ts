@@ -129,10 +129,7 @@ export async function readTransferPaper(
   };
 }
 
-/**
- * A moment as the shop's clock shows it. Without a known time zone it is
- * given in UTC and says so, rather than guessing a zone.
- */
+/** The parts that have text, on one line. */
 function joined(...parts: Array<string | false | null | undefined>): string {
   return parts
     .filter(
