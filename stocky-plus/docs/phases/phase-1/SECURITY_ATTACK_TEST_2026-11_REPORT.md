@@ -1,6 +1,6 @@
-# Security attack test — findings report (2026-11-10 to 19)
+# Security attack test — findings report (2026-11-10 to 20)
 
-**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95 (merged as `052ee00`). Round 3 on 2026-11-13 retested the code merged since then; it is recorded in its own section and in the open items. Round 4 on 2026-11-14 tested the mobile and POS code merged as #96 and is recorded in its own section. Round 5 on 2026-11-19 tested the purchasing, stocktake, adjustment, label and report code merged since then, and is recorded in its own section. Round 6 started on 2026-11-19 on `main` at `a4c62f8`; its findings, SEC-18 and SEC-19, are recorded below and fixed in #138.
+**Status:** COMPLETE for the scope below. Fixes are in pull requests #81 (merged as `0b66a2b`), #90 (merged as `9b02276`) and #95 (merged as `052ee00`). Round 3 on 2026-11-13 retested the code merged since then; it is recorded in its own section and in the open items. Round 4 on 2026-11-14 tested the mobile and POS code merged as #96 and is recorded in its own section. Round 5 on 2026-11-19 tested the purchasing, stocktake, adjustment, label and report code merged since then, and is recorded in its own section. Round 6 started on 2026-11-19 on `main` at `a4c62f8`; its findings, SEC-18 and SEC-19, are recorded below and fixed in #138 (merged as `00ce78c`). Round 7 on 2026-11-20 tested `main` at `00ce78c`; its finding, SEC-20, is recorded below and fixed in #147.
 **Author:** Claude Code (security lane), on the owner's 2026-11-10 order.
 **Kind of record:** attack test and fixes by the same session. This is **not** an independent review: the session that found each issue also wrote its fix, and the fix pull requests were merged on the owner's order without independent review. Treat the "held" results as evidence for the tested cases only.
 
@@ -8,11 +8,11 @@
 
 | Item | Value |
 |---|---|
-| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0`. Round 4: `main` at `f7548ba`. Round 5: `main` at `8ede0e5`, with a follow-up at `29b7e41`. Round 6: `main` at `a4c62f8` |
+| Code tested | Rounds 1 and 2: `main` from `2685081` through `8da50a8`, plus the fix branches. Round 3: `main` at `494b3d0`. Round 4: `main` at `f7548ba`. Round 5: `main` at `8ede0e5`, with a follow-up at `29b7e41`. Round 6: `main` at `a4c62f8`. Round 7: `main` at `00ce78c` |
 | Target | One instance of this app in the author's own cloud container: production build (`react-router-serve`), PostgreSQL 16 provisioned with the CI role and RLS recipe, Redis, a real worker process, a localhost stand-in for the Shopify Admin API, synthetic shops and data |
 | Not targeted | Shopify's platform, the Partner Dashboard, any third-party service, any real store, any deployed instance. No load or denial-of-service traffic left the container |
 | Store confirmation | The store tester (separate session) re-ran the #79 and #83 cases, the SEC-08 case and a real uninstall for SEC-12 on `stocky-test-store.myshopify.com`; results are recorded on #81, #95 and #90 |
-| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13), #118 (round 3 race test, SEC-14 to SEC-17) |
+| Fix pull requests | #81 (round 1 and #83), #90 (dependencies, SEC-12), #95 (round 2, dev-server fix, inventory tooling, SEC-13), #118 (round 3 race test, SEC-14 to SEC-17), #138 (round 6, SEC-18 and SEC-19), #147 (round 7, SEC-20) |
 
 One scope note. Before the synthetic shop names were pinned to localhost, two unknown-shop authentication tests caused the library to attempt a token exchange for a made-up `*.myshopify.com` name that does not exist. No store, credential or real token was involved, and the names were pinned to `127.0.0.1` for every later run.
 
@@ -43,6 +43,7 @@ Severity follows `CLAUDE.md` (P0 to P3).
 | SEC-17 | P3 | Input handling (all tenant routes) | Found in round 5. PostgreSQL text cannot hold a NUL character and rejects the whole statement. Search boxes, filters, route ids and form fields on the admin pages passed text to queries without refusing one. SEC-15 fixed one page; the same input failed on the others. A purchase-order line file that held a NUL (a spreadsheet or UTF-16 export saved as `.csv`) failed the same way | The request answered with an error page instead of a refusal or "not found". No data was exposed or changed | Production build of `main` at `8ede0e5`: the affected requests answered 500 and the server logged PostgreSQL error 22021 | Fixed in #118: `rejectNulInput` (`app/lib/http/nul-input.server.ts`) answers 400 for a NUL in the path, the query, or a form field name, value or file name. `requireAdminTenant` and `requirePosTenant` call it, so every tenant route is covered before route code runs. The line import refuses such a file with a message that says how to save it. After the change: 18 request cases answered 400, the import answered its message and wrote nothing, and the server logged no 22021. JSON bodies are checked by each JSON endpoint (the POS endpoints do, from #128 and #129) | `app/lib/http/nul-input.test.ts`, `app/tenant/__tests__/client-hints.test.ts` ("NUL characters (SEC-17)"), `app/tenant/__tests__/pos-tenant.test.ts`, `app/tenant/__tests__/admin-inventory-lookup.test.ts`, `app/tenant/__tests__/db-isolation/purchasing-screens.test.ts` |
 | SEC-18 | P2 | Billing and entitlements (suppliers, purchase orders, receiving, bundles) | Found in round 6; the remainder of OPEN-4. The billing ruling of 2026-11-19 is that every action that creates or changes a record refuses a shop whose stored plan is inactive. Six route actions never asked: add a supplier, change a supplier, create a purchase order, change a purchase order, receive a delivery, and add or remove a bundle component | A shop that never chose a plan, or whose plan lapsed, kept the full purchasing workflow. No data was exposed and nothing reached Shopify | Production build of `main` at `a4c62f8`, shop alpha's stored plan set inactive: a transfer create answered 403 (already gated), while supplier create, save, archive and restore, purchase order create, save and duplicate, and a bundle component add all succeeded and wrote rows | Fixed in #138: each of the six actions calls `requireActivePlanSnapshot` right after it resolves the tenant and before it reads the form. The five purchasing pages show the plan notice the inventory pages show. After the change the same nine requests answered 403 and wrote nothing; with the plan active they succeeded; the pages, the purchase-order CSV and the export still answered 200 without a plan. Left open: the dashboard's `syncCatalog` and `ackAlert` actions, and the POS receive and count endpoints in #128 and #129 (passed to their lanes) | `app/services/purchasing-plan-gate.test.ts`, `app/tenant/__tests__/db-isolation/purchasing-screens.test.ts` and `purchasing-supplier-screens.test.ts` ("tells a shop with no plan that changes are unavailable, and refuses them") |
 | SEC-19 | P2 | Tenant enforcement in the database (preflight before row-level policies and runtime grants are applied) | Found in round 6 while setting up the local instance. The preflight checks that every child row has its parent before the composite foreign keys are created. It looked every parent up by row id, but the eleven catalog and order fact keys point at a Shopify GID inside the shop, so each fact row with a valid parent was counted as an orphan | Once a shop has synced its catalog or orders, `tenant:enforcement:apply` refuses to run again. A table added by a later migration then gets no row-level policies and no grants for the runtime role, and the feature that uses it answers 500 (permission denied). It fails closed: nothing is exposed and no other table loses its protection | Fresh database, enforcement applied, then one product, variant, inventory item, location and level for one shop: the preflight reported 2, 2 and 1 orphans and a second apply was refused with `orphan_parent_refs`. The same refusal on the local test database, where the worksheet tables from #127 had no grants. The daily stock snapshots lane reproduced it independently on #142 with a key made of shop and date | Fixed in #138: a parent whose key is not the row id is matched on shop and key together, and a NULL reference is not checked, as for the foreign key itself. The row-id lookup is unchanged. After the fix the second apply succeeds on both databases, and a reference with no parent in its own shop is still reported | `scripts/tenant-enforcement/tests/preflight-parent-refs.test.ts` (three cases, on PostgreSQL 16) |
+| SEC-20 | P3 | Billing and entitlements (stored plan snapshot) | Found in round 7 by the query sweep. Every page that resolves entitlements (Billing and the replenishment pages) stores the plan snapshot. When the stored snapshot is out of date, each request of the shop updates the same `ShopSettings` row. The tenant client retries a lost write three times; with four or more requests at once some still lost and the conflict surfaced as an error | Right after an upgrade, a downgrade or a cancellation, a page that loads several things at once can show an error for that shop. A reload clears it. No data exposure, and no other shop is affected | Production build of `main` at `00ce78c`, stored snapshot made stale before each round: 3 requests at once, 18 of 18 answered 200; 4 at once, 8 of 32 answered 500; 8 at once, 30 of 48 answered 500 | Fixed in #147: a request whose update lost reads the row again and is done when the stored snapshot is the one it was writing; any other stored value still passes the conflict on. After the fix 48 of 48 (8 at once) and 64 of 64 (16 at once) answered 200 | `app/billing/entitlements.server.test.ts` (four cases), `app/tenant/__tests__/db-isolation/entitlement-snapshot-race.test.ts` (twelve writers on PostgreSQL 16) |
 
 ## What held up (no change needed)
 
@@ -148,7 +149,7 @@ Pull requests read before merge during this round. These are security passes req
 | #135, order-history notice on sales reports | `a63a171` | No blocker. The new control-plane read asserts the tenant authority, filters on its shop, and returns one of three words. Record: comment 7001463497 on #135 |
 | #130, supplier performance report | `00c4ab0` | No blocker, by reading only; the head was not run locally. The report is a pure builder over the purchase-order loader that the #126 reports use, on the tenant-scoped client. It adds no route, request parameter or query, so the shared date-range bounds and the CSV formula guard apply unchanged. Record: comment 7001581632 on #130 |
 
-## Round 6 (2026-11-19, in progress)
+## Round 6 (2026-11-19)
 
 Round 6 runs on `main` at `a4c62f8`, which now holds the transfer workflow (#124), the replenishment worksheet (#127) and the round 3 to 5 fixes (#118). The target is the same local instance.
 
@@ -197,6 +198,29 @@ Security passes in this round (REVIEW role, no files changed on the subject bran
 | #141, first install with a concurrent settings row | `d59f6ea` | No blocker. Only a unique violation takes the read-back path, the read is bound to the shop, and the new log line carries the error's name, code and message, never the session. Two P3 notes on the pull request. Record: comment 7022729286 on #141 |
 | #143, named staff member on every inventory change | `a9fdf5b` | No blocker. The change only refuses: a token with no staff id is turned away on every transfer and count action on a local build, with nothing written. The staff member still comes only from the signed session token. Closes note N2 from the pass on #124. Record: comment 7022958393 on #143 |
 
+## Round 7 (2026-11-20)
+
+Round 7 runs on `main` at `00ce78c`, which holds the round 6 fixes (#138) and the receipt write conflict fix (#131). The target is the same local instance.
+
+Found:
+
+- SEC-20 (P3), in the findings table: pages failed for some requests that arrived together right after a plan change. Fixed in #147.
+
+Held:
+
+- A sweep of every admin page, export and lookup with hostile values in every query parameter the app reads anywhere (36 parameter names; empty, 9,000 characters, a NUL byte, quotes, `LIKE` wildcards, negative, out-of-range and non-numeric numbers, `__proto__`, another shop's ids, impossible dates, bidirectional and zero-width characters, and a parameter given three times). 37,505 requests as shop alpha with no plan and 4,616 more over the plan-gated pages with a plan: every answer was 200, 400 or 403, none took three seconds, and nothing of shop beta appeared in any body. The only two errors were SEC-20.
+- A request body over the size limit on a signed-in route is still refused before route code runs (SEC-16).
+
+Found during a pass, not on `main` (OPEN-13): printed papers are laid out on the request thread. On a build of #146, six parts of a 620-line transfer asked for at once took 8.7 seconds, and a plain page of the other shop waited 2.9 seconds meanwhile. On `main` the purchase-order PDF has the same property with no row limit; #145 bounds one request at 250 rows.
+
+Security passes in this round (REVIEW role, no files changed on the subject branches):
+
+| Pull request | Head | Result |
+|---|---|---|
+| #142, daily stock snapshots | `bfa77ef`, then `1c8b279` | No blocker. The capture is one parameterised statement in the shop's own transaction, nothing in a request reaches it, every `UPDATE` of history is refused, and shop erasure covers both tables. Notes: merge after #138 and run the enforcement apply right after the migration on every deploy; shops without a plan are captured too (plan policy, for the owner). Records: comments 7023492785 and 7028208215 on #142 |
+| #145, purchase-order papers in parts (with #140's transfer papers beneath it) | `36fc09f` | No blocker. Another shop's transfer or purchase order answers 404 on all four paper routes, `?part=` accepts only a whole number within range, download headers are right, nothing is written. P2 note: OPEN-13. Record: comment 7028332784 on #145 |
+| #146, times on the shop's clock | `edb37c7` | No blocker. The time zone comes from the shop's own row, never from the request; hostile filter days are dropped without an error; 6,924 swept requests over the changed pages and exports returned no error and nothing of the other shop. Record: comment 7028333085 on #146 |
+
 ## Open items
 
 | ID | Sev | Item | Owner | Risk register |
@@ -213,12 +237,13 @@ Security passes in this round (REVIEW role, no files changed on the subject bran
 | OPEN-10 | P3 | A webhook for a shop with no `Shop` row, or a signed delivery with malformed JSON, answers 500. Only Shopify can produce either; the 500 makes Shopify retry, which is the safer side | Accepted | None |
 | OPEN-11 | P3 | Labels for an unknown variant ID return an empty file with 200, and the ZPL lacks `^CI28`, so non-ASCII characters in titles will not print correctly on Zebra printers (from the store test) | Transfers and stocktakes lane | None (functional) |
 | OPEN-12 | P3 | A signed webhook body can be replayed under a new webhook ID, and for topics whose body does not name the shop, under another shop's name. `app/scopes_update` can have its stored scope string overwritten this way. Product, inventory and order topics store IDs and timestamps only and re-fetch from Shopify in that shop's own context, so a replay costs a re-fetch and writes nothing foreign | Security lane | R-193 |
+| OPEN-13 | P2 | Printed papers (purchase-order PDF and receiving sheet on `main`; transfer document and pick list in #140) are laid out on the request thread, which answers nothing else meanwhile, and nothing limits how often one shop asks. A shop with one long document and a loop can slow the app for every shop. On `main` one purchase order of 1,000 lines holds the server for many seconds (measured by the transfers lane in #145); #145 bounds a request at 250 rows, about 1 to 2.5 seconds. Closing it needs PDF layout in a worker thread, or a per-shop limit on the paper routes with the existing `consumeRateLimit` | Transfers and stocktakes lane (#145 reduces it) | R-198 |
 
 ## Not covered
 
 - Anything that needs a real store or Shopify itself: OAuth install and token exchange end to end, real webhook delivery timing, App Bridge behaviour in the admin, POS devices. The POS extension itself (`extensions/propo-pos`) was read but not run: round 4 tested the endpoints it calls, not the extension on a device. The store tester covers the first three on the test store.
 - The inventory-write paths with their flags ON against Shopify. They are OFF everywhere and were not turned on. Round 3 exercised them only in tests, against a stand-in.
-- Features merged after `a4c62f8`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling. The Smart Forecast engine from #121 is now called by the replenishment worksheet's Smart Forecast panel, which was covered in the #127 pass.
+- Features merged after `00ce78c`. Each later feature pull request needs its own pass over tenant scoping, input bounds and download or export handling. The Smart Forecast engine from #121 is now called by the replenishment worksheet's Smart Forecast panel, which was covered in the #127 pass.
 - Infrastructure: TLS, network exposure of PostgreSQL and Redis, backups, and the hosting platform's own limits. Nothing is deployed yet.
 
 ## Category verdicts
@@ -232,6 +257,7 @@ Security passes in this round (REVIEW role, no files changed on the subject bran
 - Inventory-write safety: the repeat and concurrent request defect is fixed (OPEN-1) and held in tests against a stand-in. Flags remain OFF; nothing here was proven against Shopify.
 - Billing and entitlements: the development switch held. After #138 every admin page action that creates or changes a merchant record checks the plan; the dashboard's two actions and the POS endpoints in #128 and #129 do not yet (OPEN-4, SEC-18).
 - Dependencies: improved, not clean (OPEN-5).
+- Availability under one shop's own requests: every swept page held, but printed papers can hold the server for seconds per request and are not limited per shop (OPEN-13).
 
 ## Decision this record supports
 
