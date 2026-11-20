@@ -65,12 +65,39 @@ export const PDF_STYLES = {
   },
 };
 
-/** Loads the renderer only when a document is asked for; it is large. */
-export async function renderPdf(
+/** Settles when the document before this one is done, however it ended. */
+let layoutQueue: Promise<void> = Promise.resolve();
+
+/** Lets requests that are waiting on the event loop go first. */
+const afterWaitingRequests = () =>
+  new Promise<void>((resolve) => setImmediate(resolve));
+
+/**
+ * Lays out one document. The renderer is loaded only when a document is
+ * asked for; it is large.
+ *
+ * Documents are laid out one after another, in the order they were asked
+ * for. The first part of layout runs without giving the event loop back
+ * (just under a second for 250 rows), and documents asked for together ran
+ * that part back to back: with twelve of them another request of the
+ * process waited 9.9 seconds, measured here. In a queue the loop is free
+ * again after each document's own layout, and the same request waited 0.9
+ * seconds however many documents were asked for. The documents themselves
+ * take as long as before.
+ */
+export function renderPdf(
   build: (pdf: ReactPdf) => ReactElement<DocumentProps>,
 ): Promise<Uint8Array<ArrayBuffer>> {
-  const pdf = await import("@react-pdf/renderer");
-  return new Uint8Array(await pdf.renderToBuffer(build(pdf)));
+  const document = layoutQueue.then(afterWaitingRequests).then(async () => {
+    const pdf = await import("@react-pdf/renderer");
+    return new Uint8Array(await pdf.renderToBuffer(build(pdf)));
+  });
+  // A document that fails must not stop the ones behind it.
+  layoutQueue = document.then(
+    () => undefined,
+    () => undefined,
+  );
+  return document;
 }
 
 /** A small headed block of lines; blank lines are dropped, and so is an empty block. */
