@@ -2,6 +2,7 @@ import type { ActionFunctionArgs, HeadersFunction, LoaderFunctionArgs } from "re
 import { Form, useActionData, useLoaderData } from "react-router";
 import type { Prisma } from "@prisma/client";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import {
   parseBundleComponentForm,
   type BundleComponentErrors,
@@ -40,6 +41,7 @@ type ActionResult = { ok: true } | { ok: false; errors: BundleComponentErrors };
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<ActionResult> => {
   const { tenant, db } = await requireAdminTenant({ request });
+  await requireActivePlanSnapshot(db);
   const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent");

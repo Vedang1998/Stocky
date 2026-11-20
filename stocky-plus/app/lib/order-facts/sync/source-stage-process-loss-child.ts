@@ -2,7 +2,7 @@
  * Child process for D scratch process-loss evidence.
  * Invoked only by source-stage.test.ts. Not a vitest file.
  */
-import { writeFileSync, readdirSync } from "node:fs";
+import { existsSync, writeFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { stageOrderFactsJsonl } from "./source-stage";
 
@@ -20,6 +20,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+/**
+ * The stager opens its files through write streams, and a stream's file is
+ * created off the main thread. Nothing up to here has let that finish, so the
+ * parent, which reads the file as soon as it sees "parked", could look before
+ * the file exists. Wait until it does.
+ */
+async function stagedFileExists(file: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!existsSync(file)) {
+    if (Date.now() > deadline) {
+      throw new Error(`staged file was never created: ${file}`);
+    }
+    await sleep(5);
+  }
 }
 
 async function main(): Promise<void> {
@@ -40,6 +56,8 @@ async function main(): Promise<void> {
           const attempts = readdirSync(scratchRoot).filter((name) =>
             name.startsWith("att-"),
           );
+          const dir = attempts[0] ? path.join(scratchRoot, attempts[0]) : null;
+          if (dir) await stagedFileExists(path.join(dir, "source.jsonl"));
           writeStatus({
             stage: "parked",
             pid: process.pid,
@@ -47,7 +65,7 @@ async function main(): Promise<void> {
             scratchRoot,
             shopId,
             syncRunId,
-            dir: attempts[0] ? path.join(scratchRoot, attempts[0]) : null,
+            dir,
           });
           await sleep(120_000);
         }
