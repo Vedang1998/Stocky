@@ -346,6 +346,30 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       },
     ],
   },
+  DailyStockSnapshot: {
+    model: "DailyStockSnapshot",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_localDate",
+        fields: ["shopId", "localDate"],
+      },
+    ],
+  },
+  DailyStockLevel: {
+    model: "DailyStockLevel",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_localDate_variantGid_locationGid",
+        fields: ["shopId", "localDate", "variantGid", "locationGid"],
+      },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [
