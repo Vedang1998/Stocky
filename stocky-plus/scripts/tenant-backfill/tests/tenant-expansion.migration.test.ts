@@ -61,6 +61,8 @@ const ALL_MIGRATION_NAMES = [
   "20261114000000_replenishment_worksheet_columns",
   "20261114010000_transfer_workflow",
   "20261119210000_daily_stock_snapshots",
+  "20261120030000_stocktake_difference_value",
+  "20261120040000_stocktake_recount",
 ] as const;
 
 const AFTER_INIT_MIGRATION_NAMES = ALL_MIGRATION_NAMES.slice(1);

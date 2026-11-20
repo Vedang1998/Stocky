@@ -15,6 +15,12 @@ import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import {
+  PDF_LINES_PER_PART,
+  partLabel,
+  partQuery,
+  pdfPartCount,
+} from "../lib/pdf/parts";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -27,6 +33,8 @@ import {
 } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
 import {
   getStocktake,
   getStocktakeLedgerSummary,
@@ -44,8 +52,10 @@ import {
   clearZeroFill,
   completeStocktake,
   recordStocktakeScan,
+  requestStocktakeRecount,
   resolveStocktakeMovement,
   saveStocktakeCount,
+  withdrawStocktakeRecount,
   zeroFillUncounted,
 } from "../services/stocktakes/stocktake.server";
 import {
@@ -53,9 +63,10 @@ import {
   MAX_COUNTED_QUANTITY,
   MAX_ITEM_LIST_LENGTH,
 } from "../services/stocktakes/stocktake-limits";
+import { differenceValueLine } from "../services/stocktakes/stocktake-value";
+import { getStocktakeDifferenceValue } from "../services/stocktakes/stocktake-value.server";
 import {
   COUNT_SOURCE_LABEL,
-  formatUtc,
   itemCount,
   signed,
   staffText,
@@ -93,7 +104,7 @@ function withheld(line: StocktakeLineView): PageLine {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
+  const { db, tenant } = await requireAdminTenant({ request, params });
   const stocktakeId = readFormId(params.id);
   const stocktake = stocktakeId ? await getStocktake(db, stocktakeId) : null;
   if (!stocktake) throw new Response(NOT_FOUND, { status: 404 });
@@ -102,21 +113,26 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const filter = readLineFilter(query.get("filter"));
   const search = readLineSearch(query.get("q"));
 
-  const [progress, lines, ledger, locations, planActive] = await Promise.all([
-    getStocktakeProgress(db, stocktake.id),
-    getStocktakeLines(db, {
-      stocktakeId: stocktake.id,
-      filter,
-      search,
-      page: readPageNumber(query.get("page")),
-    }),
-    getStocktakeLedgerSummary(db, stocktake.id),
-    listSyncedLocations(db),
-    planAllowsChanges(db),
-  ]);
-
   const open = stocktake.status === "IN_PROGRESS";
   const expectedHidden = stocktake.blind && open && !REVIEW_FILTERS.has(filter);
+  const [progress, lines, ledger, locations, planActive, timeZone, value] =
+    await Promise.all([
+      getStocktakeProgress(db, stocktake.id),
+      getStocktakeLines(db, {
+        stocktakeId: stocktake.id,
+        filter,
+        search,
+        page: readPageNumber(query.get("page")),
+      }),
+      getStocktakeLedgerSummary(db, stocktake.id),
+      listSyncedLocations(db),
+      planAllowsChanges(db),
+      readShopTimeZone(tenant),
+      // What the differences are worth says what the differences are, so it
+      // is withheld with them while a blind count is being counted.
+      expectedHidden ? null : getStocktakeDifferenceValue(db, stocktake),
+    ]);
+
   return {
     stocktake,
     locationName:
@@ -138,7 +154,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     filter,
     search,
     expectedHidden,
+    value,
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
   };
 };
@@ -181,7 +199,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return {
       ok: true,
       scannedAt: Date.now(),
-      notice: `${result.title}: ${result.countedQty.toLocaleString("en-US")} counted${result.added ? " (added to this count)" : ""}`,
+      notice: `${result.title}: ${result.countedQty.toLocaleString("en-US")} counted${result.added ? " (added to this count)" : ""}${result.recounted ? " (recount started from zero)" : ""}`,
     };
   }
 
@@ -202,6 +220,23 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     });
     if (!result.ok) return { error: result.error };
     return { ok: true, notice: cleared ? "Count cleared." : "Count saved." };
+  }
+
+  if (intent === "recount" || intent === "keepCount") {
+    const lineId = readFormId(form.get("lineId"));
+    if (!lineId) return { error: "Stocktake line not found" };
+    const result =
+      intent === "recount"
+        ? await requestStocktakeRecount(db, { stocktakeId, lineId, actor })
+        : await withdrawStocktakeRecount(db, { stocktakeId, lineId });
+    if (!result.ok) return { error: result.error };
+    return {
+      ok: true,
+      notice:
+        intent === "recount"
+          ? "Recount asked for. The count cannot be completed until the item is counted again."
+          : "Count kept. The item no longer waits for a recount.",
+    };
   }
 
   if (intent === "addItems") {
@@ -312,6 +347,7 @@ const FILTER_LABEL: Record<StocktakeLineFilter, string> = {
   uncounted: "Not counted",
   counted: "Counted",
   differences: "Differences",
+  recount: "To recount",
   movement: "Stock moved",
 };
 
@@ -380,6 +416,11 @@ function MovementReview({ line, locked }: { line: PageLine; locked: boolean }) {
 function lineNote(line: PageLine): string {
   const notes: string[] = [];
   if (line.countSource) notes.push(COUNT_SOURCE_LABEL[line.countSource]);
+  if (line.recountRequestedAt === null && line.recountFromQty !== null) {
+    notes.push(
+      `recounted, first counted as ${line.recountFromQty.toLocaleString("en-US")}`,
+    );
+  }
   if (line.movementReviewedAt) {
     notes.push(
       line.movementBaselineQty === null
@@ -389,6 +430,46 @@ function lineNote(line: PageLine): string {
   }
   return notes.join(", ");
 }
+
+/**
+ * Under a line's count field: ask for the line to be counted again, or, while
+ * it waits for that, say so and offer to keep the count it has.
+ */
+function RecountControl({ line, locked }: { line: PageLine; locked: boolean }) {
+  if (line.recountRequestedAt) {
+    return (
+      <Form method="post">
+        <input type="hidden" name="intent" value="keepCount" />
+        <input type="hidden" name="lineId" value={line.id} />
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <s-badge tone="warning">Recount asked</s-badge>
+          {line.countedQty !== null && (
+            <s-button
+              type="submit"
+              variant="tertiary"
+              {...disabledWhen(locked)}
+            >
+              Keep the count of {line.countedQty.toLocaleString("en-US")}
+            </s-button>
+          )}
+        </s-stack>
+      </Form>
+    );
+  }
+  if (line.countedQty === null) return null;
+  return (
+    <Form method="post">
+      <input type="hidden" name="intent" value="recount" />
+      <input type="hidden" name="lineId" value={line.id} />
+      <s-button type="submit" variant="tertiary" {...disabledWhen(locked)}>
+        Ask for a recount
+      </s-button>
+    </Form>
+  );
+}
+
+/** Up to this many parts are offered as buttons; a longer count lists its parts under one heading. */
+const MAX_SHEET_PART_BUTTONS = 4;
 
 export default function StocktakeCount() {
   const {
@@ -400,7 +481,9 @@ export default function StocktakeCount() {
     filter,
     search,
     expectedHidden,
+    value,
     planActive,
+    timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -412,6 +495,22 @@ export default function StocktakeCount() {
 
   const open = stocktake.status === "IN_PROGRESS";
   const badge = STOCKTAKE_STATUS_BADGE[stocktake.status];
+  const valueLine = value && differenceValueLine(value);
+  // The paper is a sheet to count from until the count is closed, then a
+  // record of it. A count with no items has nothing to print.
+  const sheetName =
+    stocktake.status === "COMPLETED" || stocktake.status === "CANCELLED"
+      ? "count record"
+      : "count sheet";
+  const sheetParts =
+    progress.lineCount === 0
+      ? []
+      : Array.from(
+          { length: pdfPartCount(progress.lineCount) },
+          (_, index) => index + 1,
+        );
+  const sheetHref = (part: number) =>
+    `/app/stocktakes/${stocktake.id}/count-sheet${partQuery(part, sheetParts.length)}`;
   const scannedAt =
     actionData && "scannedAt" in actionData ? actionData.scannedAt : undefined;
   const pastedCodes =
@@ -436,6 +535,7 @@ export default function StocktakeCount() {
     uncounted: progress.uncountedCount,
     counted: progress.countedCount,
     differences: progress.differenceCount,
+    recount: progress.recountCount,
     movement: progress.movementReviewCount,
   };
   const showExpected = !expectedHidden;
@@ -468,6 +568,18 @@ export default function StocktakeCount() {
               : `Shopify confirmed ${ledger.appliedChangeCount.toLocaleString("en-US")} of this count's changes and refused ${ledger.refusedChangeCount.toLocaleString("en-US")} in the last attempt.`}{" "}
             Complete the count again to send what is left. Changes Shopify has
             confirmed are not sent twice.
+          </s-paragraph>
+        </s-banner>
+      )}
+      {open && progress.recountCount > 0 && filter !== "recount" && (
+        <s-banner tone="info" heading="A recount was asked for">
+          <s-paragraph>
+            {itemCount(progress.recountCount)}{" "}
+            {progress.recountCount === 1 ? "waits" : "wait"} to be counted
+            again. The count cannot be completed until then.{" "}
+            <s-link href={view({ filter: "recount", search: "" })}>
+              Show {progress.recountCount === 1 ? "it" : "them"}
+            </s-link>
           </s-paragraph>
         </s-banner>
       )}
@@ -507,19 +619,22 @@ export default function StocktakeCount() {
           </s-stack>
           <s-text>
             {locationName} · started{" "}
-            {formatUtc(stocktake.startedAt ?? stocktake.createdAt)} by{" "}
-            {staffText(stocktake.startedByUserId)}
+            {formatShopTime(
+              stocktake.startedAt ?? stocktake.createdAt,
+              timeZone,
+            )}{" "}
+            by {staffText(stocktake.startedByUserId)}
           </s-text>
           {stocktake.status === "COMPLETED" && (
             <s-text>
-              Completed {formatUtc(stocktake.completedAt)} by{" "}
+              Completed {formatShopTime(stocktake.completedAt, timeZone)} by{" "}
               {staffText(stocktake.completedByUserId)}. Its differences are
               applied in Shopify.
             </s-text>
           )}
           {stocktake.status === "CANCELLED" && (
             <s-text>
-              Cancelled {formatUtc(stocktake.cancelledAt)} by{" "}
+              Cancelled {formatShopTime(stocktake.cancelledAt, timeZone)} by{" "}
               {staffText(stocktake.cancelledByUserId)}. Nothing was changed in
               Shopify.
             </s-text>
@@ -530,7 +645,8 @@ export default function StocktakeCount() {
             {progress.differenceCount !== null &&
               ` · ${itemCount(progress.differenceCount)} with a difference (${(progress.unitsOver ?? 0).toLocaleString("en-US")} units over, ${(progress.unitsShort ?? 0).toLocaleString("en-US")} units short)`}
           </s-text>
-          <s-stack direction="inline">
+          {valueLine && <s-text>{valueLine}</s-text>}
+          <s-stack direction="inline" gap="small">
             <s-button
               href={`/app/stocktakes/${stocktake.id}/export`}
               target="_blank"
@@ -538,7 +654,42 @@ export default function StocktakeCount() {
             >
               Download count sheet (CSV)
             </s-button>
+            {sheetParts.length <= MAX_SHEET_PART_BUTTONS &&
+              sheetParts.map((part) => (
+                <s-button
+                  key={part}
+                  href={sheetHref(part)}
+                  target="_blank"
+                  variant="secondary"
+                >
+                  Print {sheetName}
+                  {partLabel(part, sheetParts.length)} (PDF)
+                </s-button>
+              ))}
           </s-stack>
+          {sheetParts.length > MAX_SHEET_PART_BUTTONS && (
+            <details>
+              <summary>
+                Print {sheetName} (PDF), in {sheetParts.length} parts of up to{" "}
+                {PDF_LINES_PER_PART} items
+              </summary>
+              <s-stack direction="inline" gap="small">
+                {sheetParts.map((part) => (
+                  <s-link key={part} href={sheetHref(part)} target="_blank">
+                    Part {part}: items{" "}
+                    {((part - 1) * PDF_LINES_PER_PART + 1).toLocaleString(
+                      "en-US",
+                    )}{" "}
+                    to{" "}
+                    {Math.min(
+                      part * PDF_LINES_PER_PART,
+                      progress.lineCount,
+                    ).toLocaleString("en-US")}
+                  </s-link>
+                ))}
+              </s-stack>
+            </details>
+          )}
         </s-stack>
       </s-section>
 
@@ -733,7 +884,7 @@ export default function StocktakeCount() {
                           <Form
                             method="post"
                             onKeyDown={onEnter}
-                            key={`${line.id}:${line.countedQty}`}
+                            key={`${line.id}:${line.countedQty}:${line.recountRequestedAt ? "recount" : ""}`}
                           >
                             <input type="hidden" name="intent" value="count" />
                             <input
@@ -746,8 +897,11 @@ export default function StocktakeCount() {
                                 label={`Counted quantity of ${line.title}`}
                                 labelAccessibilityVisibility="exclusive"
                                 name="countedQty"
+                                // A recount starts from an empty field, so the
+                                // first count is not simply saved again.
                                 value={
-                                  line.countedQty !== null
+                                  line.countedQty !== null &&
+                                  !line.recountRequestedAt
                                     ? String(line.countedQty)
                                     : ""
                                 }
@@ -764,6 +918,9 @@ export default function StocktakeCount() {
                             </s-stack>
                           </Form>
                         ) : null}
+                        {open && !reviewingMovement && (
+                          <RecountControl line={line} locked={locked} />
+                        )}
                         {lineNote(line) && (
                           <s-text color="subdued">{lineNote(line)}</s-text>
                         )}
