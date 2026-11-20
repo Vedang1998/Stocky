@@ -172,6 +172,8 @@ table, sorting, filtering, the totals and the export.
 | Gross profit | Variant | Date range | Unit events, net revenue, current unit cost (§7) |
 | ABC analysis | Catalog variant | Last 56 complete days | ABC/U (§6) |
 | Stock on hand | Variant and location | Now | Inventory level facts, catalog (§7) |
+| Stock history | Shop-local day | Date range | `DailyStockSnapshot`, `DailyStockLevel` (`DAILY_STOCK_SNAPSHOTS.md`) |
+| Stock on a past date | Variant and location | One past day: the last day of the range | `DailyStockSnapshot`, `DailyStockLevel`, catalog names |
 | Dead stock | Variant | Now, against a chosen number of days | Inventory level facts, order line facts |
 | Transfers | Transfer line | Date range, by creation day | `TransferOrder`, `TransferLineItem` |
 | Stocktake variances | Stocktake line | Date range, by completion day | `Stocktake`, `StocktakeLineItem`, current unit cost |
@@ -235,6 +237,33 @@ variant are not listed.
 Totals leave out rows whose value is blank, and the page says how many variants
 with stock have no cost. "Variants with stock" lists rows whose on-hand
 quantity is not zero, so negative quantities stay visible.
+
+### 9.3.1 Stock history and stock on a past date
+
+Shopify serves no inventory level for a past date, so these two reports read
+the app's own end-of-day copies (`docs/reports/DAILY_STOCK_SNAPSHOTS.md`). The
+day is a calendar day in the shop's time zone as it was when the day was saved.
+
+- **Stock history** has one row for every day in the range. A day with a saved
+  snapshot shows its units on hand (the sum of the saved on-hand quantities),
+  how many variant-and-location rows were saved, and how many of them had no
+  quantity from Shopify (left out of the sum, not counted as zero). A day
+  saved with no tracked stock shows 0 units. A day with no snapshot shows
+  "Not captured" and blank figures. The page counts the days not captured and
+  names the first saved day when the range starts before it.
+- **Stock on a past date** shows the last day of the range. Each row is a
+  saved variant and location with that day's available and on-hand quantity,
+  cost per item and price. Cost value and retail value are on hand × the
+  cost or price saved that day, only when it is in the shop currency; a
+  negative on-hand quantity is valued at zero. Rows with exactly zero on hand
+  are not listed; rows with no quantity stay, blank. Names come from today's
+  catalog; a deleted variant shows as "Deleted variant" with its ID.
+- A day without a snapshot, a day before the first saved one and a day that
+  has not ended yet show no rows and a notice that says which it is. No other
+  day is shown in its place, and nothing is shown as zero.
+- History starts the day the daily capture first ran for the shop. Earlier days
+  cannot be rebuilt. Capture is not tied to a plan, and these reports follow
+  the other stock reports: they are open on every plan.
 
 ### 9.4 Dead stock
 
@@ -386,8 +415,9 @@ spreadsheet formulas.
 - A report is computed on request and held in memory for that request. Shops
   with very large catalogs or order volumes will need persisted daily
   aggregates before the 366-day range is comfortable.
-- Stock on hand is current only. A report of stock on a past date needs daily
-  snapshots, which are not stored yet.
+- Stock on hand is current only. Stock on a past date comes from daily
+  snapshots (§9.3.1), which exist from the day capture first ran; no earlier
+  day can be shown.
 - Every cost-based figure (stock value, gross profit, variance value, value of
   an inventory change) uses the current Shopify cost per item, not the cost on
   the day of the sale, count or change.
