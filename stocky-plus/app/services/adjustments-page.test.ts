@@ -6,7 +6,7 @@
  */
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import type {
   AdjustmentHistoryEntry,
@@ -67,8 +67,13 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant: context.db.authority,
   })),
 }));
+
+/** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
+const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
+vi.mock("./inventory-writes/shop-clock.server", () => shopClock);
 
 vi.mock("./shopify-gql.server", () => ({ fetchLocations }));
 
@@ -170,6 +175,7 @@ const LOADER_DATA = {
   history: [] as AdjustmentHistoryEntry[],
   olderCursor: null as string | null,
   filter: { from: "", to: "" },
+  timeZone: null as string | null,
 };
 
 function render(
@@ -190,6 +196,7 @@ async function submitAndRender(fields: Record<string, string>) {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  shopClock.readShopTimeZone.mockResolvedValue(null);
   context.db.shopSettings.findUnique.mockResolvedValue({
     subscriptionActive: true,
   });
@@ -902,5 +909,115 @@ describe("Adjustments without an active plan", () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain("RED-75");
     expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("Adjustment times on the shop's clock", () => {
+  const TORONTO = "America/Toronto";
+
+  beforeEach(() => {
+    shopClock.readShopTimeZone.mockResolvedValue(TORONTO);
+  });
+
+  it("reads the zone of the shop the request is signed in to", async () => {
+    const data = await route.loader(get("/app/adjustments"));
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledTimes(1);
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(data.timeZone).toBe(TORONTO);
+  });
+
+  it("takes the chosen period as whole days on the shop's clock", async () => {
+    const data = await route.loader(
+      get("/app/adjustments?from=2026-11-01&to=2026-11-30"),
+    );
+
+    // The clocks go back on 1 November, so the first day starts on summer time.
+    expect(service.listAdjustments).toHaveBeenCalledWith(context.db, {
+      from: new Date("2026-11-01T04:00:00.000Z"),
+      to: new Date("2026-12-01T04:59:59.999Z"),
+      after: null,
+      take: 26,
+    });
+    expect(data.filter).toEqual({ from: "2026-11-01", to: "2026-11-30" });
+  });
+
+  it("shows when an adjustment was recorded on the shop's clock, and no longer marks the dates as UTC", () => {
+    const html = render({ history: [entry()], timeZone: TORONTO });
+
+    expect(html).toContain("Nov 11, 2026, 4:40 PM EST");
+    expect(html).toMatch(/<s-date-field label="From" name="from"/);
+    expect(html).toMatch(/<s-date-field label="To" name="to"/);
+    expect(html).not.toContain("UTC");
+  });
+
+  it("marks the dates as UTC while the shop's zone is not known", () => {
+    const html = render({ history: [entry()] });
+
+    expect(html).toMatch(/<s-date-field label="From \(UTC\)" name="from"/);
+    expect(html).toMatch(/<s-date-field label="To \(UTC\)" name="to"/);
+  });
+
+  it("writes the report for the same shop days, with times on the shop's clock under a heading that names it", async () => {
+    service.listAdjustmentsForExport.mockResolvedValue({
+      truncated: false,
+      entries: [entry({ createdAt: new Date("2026-11-12T02:30:00.000Z") })],
+    });
+
+    const response = (await exportLoader(
+      get("/app/adjustments/export?from=2026-11-01&to=2026-11-30"),
+    )) as Response;
+    const [head, row] = (await response.text()).split("\r\n");
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(service.listAdjustmentsForExport).toHaveBeenCalledWith(context.db, {
+      from: new Date("2026-11-01T04:00:00.000Z"),
+      to: new Date("2026-12-01T04:59:59.999Z"),
+    });
+    expect(response.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="adjustments-2026-11-01-to-2026-11-30.csv"',
+    );
+    expect(head).toMatch(/^Recorded at \(America\/Toronto\),Type,/);
+    expect(row).toBe(
+      "2026-11-11 21:30,Adjustment,Applied,Damaged,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
+    );
+  });
+
+  describe("with no period chosen", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-11-12T02:30:00.000Z"));
+      service.listAdjustmentsForExport.mockResolvedValue({
+        truncated: false,
+        entries: [entry()],
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const fileName = async () =>
+      (
+        (await exportLoader(get("/app/adjustments/export"))) as Response
+      ).headers.get("Content-Disposition");
+
+    it("names the report's file by today on the shop's clock", async () => {
+      expect(await fileName()).toBe(
+        'attachment; filename="adjustments-2026-11-11.csv"',
+      );
+    });
+
+    it("names it by today in UTC while the shop's zone is not known", async () => {
+      shopClock.readShopTimeZone.mockResolvedValue(null);
+
+      expect(await fileName()).toBe(
+        'attachment; filename="adjustments-2026-11-12.csv"',
+      );
+    });
   });
 });
