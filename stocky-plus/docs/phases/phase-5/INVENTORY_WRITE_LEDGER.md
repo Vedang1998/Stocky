@@ -325,8 +325,9 @@ source type `InventoryAdjustment`, and the ledger is its history.
 - **Quantity after a change.** Each applied line stores the quantity Shopify
   reports after the change. Shopify does not always report one. A "set" line
   was applied on exactly the quantity it named, so its result is stored either
-  way; an add or remove line that Shopify reports nothing for shows no
-  quantity rather than a guess.
+  way; an add or remove line that Shopify reports nothing for shows "Not
+  reported by Shopify" on the page and an empty cell in the report, rather
+  than a guess.
 - **Two requests at once.** The request that finds the other one still
   sending says so and asks for a reload, because there may be nothing left to
   finish.

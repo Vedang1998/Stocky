@@ -15,8 +15,7 @@ const SHOP_ID = "shop-a-canonical-id";
 const {
   prismaMock,
   authenticateAdmin,
-  completeShopifyTransfer,
-  createShopifyTransfer,
+  adminGraphql,
   resolveCanonicalShopByDomain,
 } = vi.hoisted(() => {
   const prismaMock = {
@@ -45,8 +44,7 @@ const {
   return {
     prismaMock,
     authenticateAdmin: vi.fn(),
-    completeShopifyTransfer: vi.fn(),
-    createShopifyTransfer: vi.fn(),
+    adminGraphql: vi.fn(),
     resolveCanonicalShopByDomain: vi.fn(),
   };
 });
@@ -77,18 +75,6 @@ vi.mock("./shopify-gql.server", () => ({
   fetchLocations: vi.fn(async () => []),
 }));
 
-vi.mock("./shopify-sync.server", async () => {
-  const actual = await vi.importActual<typeof import("./shopify-sync.server")>(
-    "./shopify-sync.server",
-  );
-  return {
-    ...actual,
-    createShopifyTransfer,
-    markShopifyTransferReadyToShip: vi.fn(),
-    completeShopifyTransfer,
-  };
-});
-
 function formRequest(fields: Record<string, string>): Request {
   const body = new URLSearchParams(fields);
   return new Request("https://example.com/app/transfers", {
@@ -110,7 +96,7 @@ describe("transfer receive guard", () => {
     authenticateAdmin.mockResolvedValue({
       session: { shop: SHOP },
       ...(sessionToken ? { sessionToken } : {}),
-      admin: { graphql: vi.fn() },
+      admin: { graphql: adminGraphql },
       redirect: vi.fn(),
     });
   }
@@ -119,8 +105,7 @@ describe("transfer receive guard", () => {
     expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
     expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
     expect(prismaMock.transferOrder.updateMany).not.toHaveBeenCalled();
-    expect(createShopifyTransfer).not.toHaveBeenCalled();
-    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+    expect(adminGraphql).not.toHaveBeenCalled();
   }
 
   beforeEach(() => {

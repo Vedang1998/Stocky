@@ -293,7 +293,14 @@ function HistoryEntry({
                 <s-table-cell>{line.title}</s-table-cell>
                 <s-table-cell>{line.sku ?? ""}</s-table-cell>
                 <s-table-cell>{signed(line.delta)}</s-table-cell>
-                <s-table-cell>{line.quantityAfterChange ?? ""}</s-table-cell>
+                <s-table-cell>
+                  {line.quantityAfterChange ??
+                    (line.status === "APPLIED" ? (
+                      <s-text color="subdued">Not reported by Shopify</s-text>
+                    ) : (
+                      ""
+                    ))}
+                </s-table-cell>
                 <s-table-cell>
                   {LINE_RESULT[line.status]}
                   {line.status === "FAILED" && line.errorMessage
