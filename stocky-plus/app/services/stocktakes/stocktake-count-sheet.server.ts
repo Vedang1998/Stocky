@@ -219,9 +219,13 @@ function writeOnSheet(pdf: ReactPdf, sheet: CountSheet): ReactNode[] {
           pdf,
           ITEM_COLUMN,
           line.title,
-          line.countedQty === null
-            ? null
-            : `Already entered: ${number(line.countedQty)}`,
+          // The count that is questioned is not printed: whoever counts the
+          // item again should not be led by it.
+          line.recountRequestedAt
+            ? "To be counted again"
+            : line.countedQty === null
+              ? null
+              : `Already entered: ${number(line.countedQty)}`,
         ),
         codeCell(pdf, CODE_COLUMN, line),
         blind
@@ -256,6 +260,20 @@ function movementNote(line: StocktakeLineView): string | null {
     : null;
 }
 
+/** What the record says under an item whose count was questioned. */
+function recountNote(line: StocktakeLineView): string | null {
+  if (line.recountRequestedAt) {
+    // Only a cancelled count can close with a recount still open.
+    return "A recount was asked for and not done.";
+  }
+  return line.recountFromQty === null
+    ? null
+    : `Counted again. First counted as ${number(line.recountFromQty)}.`;
+}
+
+const notes = (...parts: Array<string | null>): string | null =>
+  parts.filter((part) => part !== null).join(" ") || null;
+
 /** The record of a closed count: what was expected, what was found, and the difference. */
 function record(pdf: ReactPdf, sheet: CountSheet): ReactNode[] {
   const { Text, View } = pdf;
@@ -283,7 +301,12 @@ function record(pdf: ReactPdf, sheet: CountSheet): ReactNode[] {
       h(
         View,
         { style: PDF_STYLES.row, key: line.id, wrap: false },
-        textCell(pdf, ITEM_COLUMN, line.title, movementNote(line)),
+        textCell(
+          pdf,
+          ITEM_COLUMN,
+          line.title,
+          notes(movementNote(line), recountNote(line)),
+        ),
         codeCell(pdf, CODE_COLUMN, line),
         h(Text, { style: QUANTITY_COLUMN }, number(line.expectedQty)),
         h(

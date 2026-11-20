@@ -198,6 +198,28 @@ each difference to Shopify through `settleInventoryDocument`.
   screen, until the count is closed or the reviewer opens the differences.
   Until roles exist this is a working aid, not an access control: any staff
   member of the shop can open the differences view.
+- **Recounts.** Anyone reviewing an open count can ask for one counted line
+  to be counted again (`requestStocktakeRecount`). The line records when it
+  was asked, by which staff ID, and the count that is questioned
+  (`recountRequestedAt`, `recountRequestedByUserId`, `recountFromQty`). That
+  count stays on the line and in the differences until the line is counted
+  again, so nothing about the count is lost if the recount never happens.
+  While a line waits, the count cannot be completed, also not with uncounted
+  lines left unchanged, and nothing is sent to Shopify (blocker `RECOUNT`).
+  The page lists the waiting lines under "To recount" and shows their count
+  field empty, so the first count is not simply saved again; the printed
+  count sheet says "To be counted again" in place of what was entered; and
+  marking uncounted lines as zero skips the line. Typing a count answers the
+  request, also when it confirms the first count. The first scan of the item
+  starts its count again from zero and later scans add to it. Clearing the
+  count does not answer the request. The request can be taken back ("Keep the
+  count"), after which the line is as if it was never asked about. A line
+  that was counted again says what it was first counted as on the page, in
+  the CSV report and on the count record. A request made while a completion
+  is under way keeps the count open, like a count saved at that moment: the
+  counts already sent stay in Shopify and the recount goes out as a further
+  change. Until roles exist any staff member of the shop can ask for a recount
+  or take one back; there is no separate reviewer.
 - **Completing.** The difference for a line is counted − expected, sent as a
   relative change to `available` with reason `cycle_count_available`, which
   moves on-hand by the same amount. Completion is refused while lines are
@@ -242,9 +264,10 @@ each difference to Shopify through `settleInventoryDocument`.
   everyone who can open the count until roles exist.
 - **Report.** The count sheet exports as CSV: item, SKU, barcode, expected,
   counted, difference, how and when each line was counted, the staff ID, any
-  stock movement found, and for a line with a difference the unit cost, the
-  value of the difference (exact, not rounded) and the currency. Completed and
-  cancelled counts stay readable under closed counts.
+  stock movement found, for a line with a difference the unit cost, the value
+  of the difference (exact, not rounded) and the currency, and whether a
+  recount was asked for or done. Completed and cancelled counts stay readable
+  under closed counts.
 - **Count sheet on paper.** The count page prints the count as a PDF
   (`stocktake-count-sheet.server.ts`, route `…/count-sheet`). While the count
   is open it is the sheet to take to the shelves: the items in the order of
@@ -253,11 +276,11 @@ each difference to Shopify through `settleInventoryDocument`.
   checker to sign. A blind count prints no expected quantities. Once the
   count is completed or cancelled the same address prints the record:
   expected, counted and the difference for every item, a note on a line whose
-  difference was measured from the quantity after stock moved, and the totals
-  of the count. A count of more than 250 items prints in parts of 250, one
-  request per part (`?part=2`), and each request reads only the lines of its
-  part; the page offers a button per part, or a list of the parts when there
-  are more than four. Times are on the shop's clock. Printing reads only; it
+  difference was measured from the quantity after stock moved or that was
+  counted again, and the totals of the count. A count of more than 250 items
+  prints in parts of 250, one request per part (`?part=2`), and each request
+  reads only the lines of its part; the page offers a button per part, or a
+  list of the parts when there are more than four. Times are on the shop's clock. Printing reads only; it
   needs no active plan and no write switch. Requests count against the shop's
   allowance for printed documents (see Papers under Transfers).
 - Gated by `FEATURE_STOCKTAKE_INVENTORY_WRITES`. While it is off a count can
@@ -267,8 +290,8 @@ each difference to Shopify through `settleInventoryDocument`.
   they did.
 
 Not built yet: counting from Shopify POS (the POS scan endpoint follows the POS
-extension work), assigning sections of a count to staff, recount requests for
-individual lines, and approval of a count by a second person.
+extension work), assigning sections of a count to staff, and approval of a
+count by a second person.
 
 ## Adjustments
 

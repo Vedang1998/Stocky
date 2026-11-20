@@ -106,6 +106,9 @@ const line = (extra: Partial<StocktakeLineView> = {}): StocktakeLineView => ({
   movementDetectedQty: null,
   movementBaselineQty: null,
   movementReviewedAt: null,
+  recountRequestedAt: null,
+  recountRequestedByUserId: null,
+  recountFromQty: null,
   ...extra,
 });
 
@@ -140,6 +143,7 @@ const progress = (
   unitsOver: 0,
   unitsShort: 0,
   movementReviewCount: 0,
+  recountCount: 0,
   ...extra,
 });
 
@@ -299,6 +303,30 @@ describe("Count sheet of an open count", () => {
       "Already entered: 12",
       "Already entered: 0",
     ]);
+  });
+
+  it("marks an item that waits for a recount, without the count that is questioned", () => {
+    const text = sheetText(
+      sheet(header(), [
+        line(
+          counted(12, {
+            recountRequestedAt: new Date("2026-11-12T11:00:00.000Z"),
+            recountRequestedByUserId: "42",
+            recountFromQty: 12,
+          }),
+        ),
+        // Counted again already: its new count is what is entered.
+        line({ ...WHITE, ...counted(9, { recountFromQty: 12 }) }),
+      ]),
+    );
+
+    expect(text.filter((each) => each === "To be counted again")).toHaveLength(
+      1,
+    );
+    expect(text.filter((each) => each.startsWith("Already entered"))).toEqual([
+      "Already entered: 9",
+    ]);
+    expect(text.join(" ")).not.toContain("First counted as");
   });
 
   it("leaves expected quantities, and everything that gives them away, off a blind count", () => {
@@ -587,6 +615,46 @@ describe("Count record of a closed count", () => {
     ).toEqual(["Stock moved during the count. Difference measured from 6."]);
     expect(text).toContain("+2");
     expect(text).toContain("-2");
+  });
+
+  it("says which items were counted again, what they were first counted as, and which recount was never done", () => {
+    const text = sheetText(
+      sheet(
+        header({
+          status: "CANCELLED",
+          cancelledAt: new Date("2026-11-12T11:15:00.000Z"),
+          cancelledByUserId: null,
+        }),
+        [
+          line(counted(9, { recountFromQty: 1200 })),
+          line({
+            ...WHITE,
+            ...counted(8, {
+              recountRequestedAt: new Date("2026-11-12T11:00:00.000Z"),
+              recountRequestedByUserId: "42",
+              recountFromQty: 8,
+            }),
+          }),
+          // Stock moved and the item was counted again: both are said.
+          line({
+            id: "line-rose",
+            title: "Rosé",
+            ...counted(8, {
+              movementDetectedQty: 6,
+              movementBaselineQty: 6,
+              movementReviewedAt: new Date("2026-11-12T11:00:00.000Z"),
+              recountFromQty: 7,
+            }),
+          }),
+        ],
+      ),
+    );
+
+    expect(text).toContain("Counted again. First counted as 1,200.");
+    expect(text).toContain("A recount was asked for and not done.");
+    expect(text).toContain(
+      "Stock moved during the count. Difference measured from 6. Counted again. First counted as 7.",
+    );
   });
 
   it("says that a cancelled count changed nothing", () => {

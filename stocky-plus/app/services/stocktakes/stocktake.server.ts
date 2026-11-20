@@ -121,6 +121,8 @@ export type StocktakeScanResult =
       countedQty: number;
       /** True when the scan put the item on the count sheet. */
       added: boolean;
+      /** True when the scan began the item's recount, replacing the count that was questioned. */
+      recounted: boolean;
     }
   | { ok: false; error: string };
 
@@ -131,7 +133,7 @@ export type AddStocktakeItemsResult =
 export type StocktakeLineProblem = DocumentLineProblem;
 
 /** What stands between a count and its completion, when it is the merchant's call. */
-export type CompletionBlocker = "UNCOUNTED" | "MOVEMENT";
+export type CompletionBlocker = "UNCOUNTED" | "RECOUNT" | "MOVEMENT";
 
 export type CompleteStocktakeResult =
   | { ok: true; alreadyCompleted: boolean }
@@ -163,6 +165,8 @@ interface CountLine {
   movementDetectedQty: number | null;
   movementBaselineQty: number | null;
   movementReviewedAt: Date | null;
+  /** Set while someone has asked for the line to be counted again. */
+  recountRequestedAt: Date | null;
 }
 
 const STOCKTAKE_SELECT = {
@@ -182,12 +186,22 @@ const COUNT_LINE_SELECT = {
   movementDetectedQty: true,
   movementBaselineQty: true,
   movementReviewedAt: true,
+  recountRequestedAt: true,
 } as const;
 
 const NO_MOVEMENT = {
   movementDetectedQty: null,
   movementBaselineQty: null,
   movementReviewedAt: null,
+} as const;
+
+/**
+ * A line that has been counted again no longer waits for its recount. The
+ * count the recount was asked about stays on the line.
+ */
+const RECOUNT_DONE = {
+  recountRequestedAt: null,
+  recountRequestedByUserId: null,
 } as const;
 
 const CLOSED_MESSAGE =
@@ -208,6 +222,9 @@ function chunked<T>(values: readonly T[], size: number): T[][] {
 
 const clock = (options: { now?: () => Date }) =>
   options.now ?? (() => new Date());
+
+const awaitsRecount = (line: { recountRequestedAt: Date | null }) =>
+  line.recountRequestedAt !== null;
 
 const awaitsMovementReview = (line: CountLine) =>
   line.countedQty !== null &&
@@ -666,8 +683,16 @@ export async function saveStocktakeCount(
     }
     const current = (await tx.stocktakeLineItem.findFirst({
       where: { id: line.id },
-      select: { countedQty: true, expectedReadAt: true },
-    })) as { countedQty: number | null; expectedReadAt: Date | null } | null;
+      select: {
+        countedQty: true,
+        expectedReadAt: true,
+        recountRequestedAt: true,
+      },
+    })) as {
+      countedQty: number | null;
+      expectedReadAt: Date | null;
+      recountRequestedAt: Date | null;
+    } | null;
     if (!current) {
       return { ok: false as const, error: "Stocktake line not found" };
     }
@@ -680,6 +705,9 @@ export async function saveStocktakeCount(
         countedAt: counted ? now : null,
         countedByUserId: counted ? (input.actor?.shopifyUserId ?? null) : null,
         ...(current.countedQty === input.countedQty ? {} : NO_MOVEMENT),
+        // Entering a count answers a recount request, also when the second
+        // count confirms the first. Clearing the count does not.
+        ...(counted && awaitsRecount(current) ? RECOUNT_DONE : {}),
         ...(liveExpected !== null && current.expectedReadAt === null
           ? expectedReadNow(liveExpected, now)
           : {}),
@@ -781,11 +809,13 @@ export async function recordStocktakeScan(
       id: string;
       countedQty: number | null;
       expectedReadAt: Date | null;
+      recountRequestedAt: Date | null;
     };
     const scannedLine = {
       id: true,
       countedQty: true,
       expectedReadAt: true,
+      recountRequestedAt: true,
     } as const;
     const now = clock(options)();
     let line = (await tx.stocktakeLineItem.findFirst({
@@ -806,7 +836,10 @@ export async function recordStocktakeScan(
       })) as ScannedLine;
     }
 
-    const countedQty = (line.countedQty ?? 0) + quantity;
+    // A recount starts again from nothing: the first scan after the request
+    // replaces the count that was questioned, and later scans add to it.
+    const recounting = awaitsRecount(line);
+    const countedQty = (recounting ? 0 : (line.countedQty ?? 0)) + quantity;
     if (countedQty > MAX_COUNTED_QUANTITY) {
       return fail(
         `${variant.title} would be counted above ${MAX_COUNTED_QUANTITY.toLocaleString("en-US")}. Check its count.`,
@@ -820,6 +853,7 @@ export async function recordStocktakeScan(
         countedAt: now,
         countedByUserId: input.actor?.shopifyUserId ?? null,
         ...NO_MOVEMENT,
+        ...(recounting ? RECOUNT_DONE : {}),
         ...(liveExpected !== null && line.expectedReadAt === null
           ? expectedReadNow(liveExpected, now)
           : {}),
@@ -831,6 +865,7 @@ export async function recordStocktakeScan(
       title: variant.title,
       countedQty,
       added,
+      recounted: recounting,
     };
   });
 }
@@ -1009,7 +1044,12 @@ export async function zeroFillUncounted(
       };
     }
     const filled = await tx.stocktakeLineItem.updateMany({
-      where: { stocktakeId: input.stocktakeId, countedQty: null },
+      // A line that waits for a recount has to be counted by someone.
+      where: {
+        stocktakeId: input.stocktakeId,
+        countedQty: null,
+        recountRequestedAt: null,
+      },
       data: {
         countedQty: 0,
         countSource: "ZERO_FILL",
@@ -1045,6 +1085,86 @@ export async function clearZeroFill(
       },
     });
     return { ok: true as const, lines: cleared.count };
+  });
+}
+
+/**
+ * Ask for one line of an open count to be counted again. The count that is
+ * questioned stays on the line, and in the differences, until someone counts
+ * the line again; meanwhile the count cannot be completed. Asking twice
+ * changes nothing.
+ */
+export async function requestStocktakeRecount(
+  db: TenantDb,
+  input: {
+    stocktakeId: string;
+    lineId: string;
+    actor?: InventoryActor | null;
+  },
+  options: { now?: () => Date } = {},
+): Promise<StocktakeActionResult> {
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, input.stocktakeId))) {
+      return {
+        ok: false as const,
+        error: await closedOrMissing(tx, input.stocktakeId),
+      };
+    }
+    const line = (await tx.stocktakeLineItem.findFirst({
+      where: { id: input.lineId, stocktakeId: input.stocktakeId },
+      select: { countedQty: true, recountRequestedAt: true },
+    })) as {
+      countedQty: number | null;
+      recountRequestedAt: Date | null;
+    } | null;
+    if (!line) return { ok: false as const, error: "Stocktake line not found" };
+    if (awaitsRecount(line)) return { ok: true as const };
+    if (line.countedQty === null) {
+      return {
+        ok: false as const,
+        error:
+          "This item has no count yet, so there is nothing to count again.",
+      };
+    }
+    await tx.stocktakeLineItem.update({
+      where: { id: input.lineId },
+      data: {
+        recountRequestedAt: clock(options)(),
+        recountRequestedByUserId: input.actor?.shopifyUserId ?? null,
+        recountFromQty: line.countedQty,
+      },
+    });
+    return { ok: true as const };
+  });
+}
+
+/**
+ * Take a recount request back: the count on the line stands as it is. A line
+ * that does not wait for a recount is left alone.
+ */
+export async function withdrawStocktakeRecount(
+  db: TenantDb,
+  input: { stocktakeId: string; lineId: string },
+): Promise<StocktakeActionResult> {
+  return db.$transaction(async (tx: TenantDb) => {
+    if (!(await lockOpenStocktake(tx, input.stocktakeId))) {
+      return {
+        ok: false as const,
+        error: await closedOrMissing(tx, input.stocktakeId),
+      };
+    }
+    const line = (await tx.stocktakeLineItem.findFirst({
+      where: { id: input.lineId, stocktakeId: input.stocktakeId },
+      select: { recountRequestedAt: true },
+    })) as { recountRequestedAt: Date | null } | null;
+    if (!line) return { ok: false as const, error: "Stocktake line not found" };
+    if (!awaitsRecount(line)) return { ok: true as const };
+    await tx.stocktakeLineItem.update({
+      where: { id: input.lineId },
+      // The line was not counted again, so it has no earlier count to show.
+      data: { ...RECOUNT_DONE, recountFromQty: null },
+    });
+    return { ok: true as const };
   });
 }
 
@@ -1501,6 +1621,16 @@ export async function completeStocktake(
   let built = await buildStocktakeDocument(db, stocktake, lines);
   if (!built.ok) return fail(built.error);
 
+  const recounts = lines.filter(awaitsRecount).length;
+  if (recounts > 0) {
+    return fail(
+      recounts === 1
+        ? "1 item on this count waits for a recount. Count it again, or keep its count, then complete the count. Nothing was sent to Shopify."
+        : `${itemsText(recounts)} on this count wait for a recount. Count them again, or keep their counts, then complete the count. Nothing was sent to Shopify.`,
+      { blocker: "RECOUNT" },
+    );
+  }
+
   const uncounted = lines.filter((line) => line.countedQty === null).length;
   if (uncounted > 0 && !options.acceptUncounted) {
     return fail(
@@ -1581,6 +1711,7 @@ export async function completeStocktake(
   const outcome = await db.$transaction(async (tx: TenantDb) => {
     if (!(await lockOpenStocktake(tx, stocktake.id))) return "not_open";
     const current = await loadCountLines(tx, stocktake.id);
+    if (current.some(awaitsRecount)) return "recount";
     if (
       current.some(awaitsMovementReview) ||
       (!options.acceptUncounted &&
@@ -1607,6 +1738,14 @@ export async function completeStocktake(
 
   if (outcome === "closed") return { ok: true, alreadyCompleted: false };
   if (outcome === "not_open") return notOpen();
+  if (outcome === "recount") {
+    // The counts that were sent stay in Shopify; the recount goes out as a
+    // further change when the count is completed again.
+    return fail(
+      "A recount was asked for while this stocktake was being completed, so it stays open. Count the item again, or keep its count, then complete it again.",
+      { blocker: "RECOUNT" },
+    );
+  }
   return fail(
     "A count was saved while this stocktake was being completed. Complete it again to apply the latest counts.",
   );

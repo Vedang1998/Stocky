@@ -29,6 +29,7 @@ export const STOCKTAKE_LINE_FILTERS = [
   "uncounted",
   "counted",
   "differences",
+  "recount",
   "movement",
 ] as const;
 export type StocktakeLineFilter = (typeof STOCKTAKE_LINE_FILTERS)[number];
@@ -68,6 +69,8 @@ export interface StocktakeProgress {
   unitsShort: number;
   /** Counted lines whose stock moved in Shopify and that nobody has reviewed. */
   movementReviewCount: number;
+  /** Lines someone has asked to be counted again. */
+  recountCount: number;
 }
 
 export interface StocktakeLineView {
@@ -86,6 +89,11 @@ export interface StocktakeLineView {
   movementDetectedQty: number | null;
   movementBaselineQty: number | null;
   movementReviewedAt: Date | null;
+  /** Set while the line waits to be counted again. */
+  recountRequestedAt: Date | null;
+  recountRequestedByUserId: string | null;
+  /** The count a recount was asked about; it stays once the line is counted again. */
+  recountFromQty: number | null;
 }
 
 const HEADER_SELECT = {
@@ -117,6 +125,9 @@ const LINE_SELECT = {
   movementDetectedQty: true,
   movementBaselineQty: true,
   movementReviewedAt: true,
+  recountRequestedAt: true,
+  recountRequestedByUserId: true,
+  recountFromQty: true,
 } as const;
 
 type LineRow = Omit<StocktakeLineView, "title" | "sku" | "barcode" | "delta">;
@@ -210,6 +221,7 @@ export async function getStocktakeProgress(
       movementDetectedQty: true,
       movementBaselineQty: true,
       movementReviewedAt: true,
+      recountRequestedAt: true,
     },
   })) as Array<
     Pick<
@@ -220,6 +232,7 @@ export async function getStocktakeProgress(
       | "movementDetectedQty"
       | "movementBaselineQty"
       | "movementReviewedAt"
+      | "recountRequestedAt"
     >
   >;
 
@@ -232,8 +245,11 @@ export async function getStocktakeProgress(
     unitsOver: 0,
     unitsShort: 0,
     movementReviewCount: 0,
+    recountCount: 0,
   };
   for (const line of lines) {
+    // A line can wait for a recount with or without a count on it.
+    if (line.recountRequestedAt !== null) progress.recountCount += 1;
     const delta = stocktakeLineDelta(line);
     if (delta === null) {
       progress.uncountedCount += 1;
@@ -306,6 +322,7 @@ const FILTER_WHERE: Record<
   all: {},
   uncounted: { countedQty: null },
   counted: { countedQty: { not: null } },
+  recount: { recountRequestedAt: { not: null } },
   movement: {
     countedQty: { not: null },
     movementDetectedQty: { not: null },

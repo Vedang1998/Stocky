@@ -52,8 +52,10 @@ import {
   clearZeroFill,
   completeStocktake,
   recordStocktakeScan,
+  requestStocktakeRecount,
   resolveStocktakeMovement,
   saveStocktakeCount,
+  withdrawStocktakeRecount,
   zeroFillUncounted,
 } from "../services/stocktakes/stocktake.server";
 import {
@@ -194,7 +196,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     return {
       ok: true,
       scannedAt: Date.now(),
-      notice: `${result.title}: ${result.countedQty.toLocaleString("en-US")} counted${result.added ? " (added to this count)" : ""}`,
+      notice: `${result.title}: ${result.countedQty.toLocaleString("en-US")} counted${result.added ? " (added to this count)" : ""}${result.recounted ? " (recount started from zero)" : ""}`,
     };
   }
 
@@ -215,6 +217,23 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     });
     if (!result.ok) return { error: result.error };
     return { ok: true, notice: cleared ? "Count cleared." : "Count saved." };
+  }
+
+  if (intent === "recount" || intent === "keepCount") {
+    const lineId = readFormId(form.get("lineId"));
+    if (!lineId) return { error: "Stocktake line not found" };
+    const result =
+      intent === "recount"
+        ? await requestStocktakeRecount(db, { stocktakeId, lineId, actor })
+        : await withdrawStocktakeRecount(db, { stocktakeId, lineId });
+    if (!result.ok) return { error: result.error };
+    return {
+      ok: true,
+      notice:
+        intent === "recount"
+          ? "Recount asked for. The count cannot be completed until the item is counted again."
+          : "Count kept. The item no longer waits for a recount.",
+    };
   }
 
   if (intent === "addItems") {
@@ -326,6 +345,7 @@ const FILTER_LABEL: Record<StocktakeLineFilter, string> = {
   uncounted: "Not counted",
   counted: "Counted",
   differences: "Differences",
+  recount: "To recount",
   movement: "Stock moved",
 };
 
@@ -394,6 +414,11 @@ function MovementReview({ line, locked }: { line: PageLine; locked: boolean }) {
 function lineNote(line: PageLine): string {
   const notes: string[] = [];
   if (line.countSource) notes.push(COUNT_SOURCE_LABEL[line.countSource]);
+  if (line.recountRequestedAt === null && line.recountFromQty !== null) {
+    notes.push(
+      `recounted, first counted as ${line.recountFromQty.toLocaleString("en-US")}`,
+    );
+  }
   if (line.movementReviewedAt) {
     notes.push(
       line.movementBaselineQty === null
@@ -402,6 +427,43 @@ function lineNote(line: PageLine): string {
     );
   }
   return notes.join(", ");
+}
+
+/**
+ * Under a line's count field: ask for the line to be counted again, or, while
+ * it waits for that, say so and offer to keep the count it has.
+ */
+function RecountControl({ line, locked }: { line: PageLine; locked: boolean }) {
+  if (line.recountRequestedAt) {
+    return (
+      <Form method="post">
+        <input type="hidden" name="intent" value="keepCount" />
+        <input type="hidden" name="lineId" value={line.id} />
+        <s-stack direction="inline" gap="small-200" alignItems="center">
+          <s-badge tone="warning">Recount asked</s-badge>
+          {line.countedQty !== null && (
+            <s-button
+              type="submit"
+              variant="tertiary"
+              {...disabledWhen(locked)}
+            >
+              Keep the count of {line.countedQty.toLocaleString("en-US")}
+            </s-button>
+          )}
+        </s-stack>
+      </Form>
+    );
+  }
+  if (line.countedQty === null) return null;
+  return (
+    <Form method="post">
+      <input type="hidden" name="intent" value="recount" />
+      <input type="hidden" name="lineId" value={line.id} />
+      <s-button type="submit" variant="tertiary" {...disabledWhen(locked)}>
+        Ask for a recount
+      </s-button>
+    </Form>
+  );
 }
 
 /** Up to this many parts are offered as buttons; a longer count lists its parts under one heading. */
@@ -471,6 +533,7 @@ export default function StocktakeCount() {
     uncounted: progress.uncountedCount,
     counted: progress.countedCount,
     differences: progress.differenceCount,
+    recount: progress.recountCount,
     movement: progress.movementReviewCount,
   };
   const showExpected = !expectedHidden;
@@ -503,6 +566,18 @@ export default function StocktakeCount() {
               : `Shopify confirmed ${ledger.appliedChangeCount.toLocaleString("en-US")} of this count's changes and refused ${ledger.refusedChangeCount.toLocaleString("en-US")} in the last attempt.`}{" "}
             Complete the count again to send what is left. Changes Shopify has
             confirmed are not sent twice.
+          </s-paragraph>
+        </s-banner>
+      )}
+      {open && progress.recountCount > 0 && filter !== "recount" && (
+        <s-banner tone="info" heading="A recount was asked for">
+          <s-paragraph>
+            {itemCount(progress.recountCount)}{" "}
+            {progress.recountCount === 1 ? "waits" : "wait"} to be counted
+            again. The count cannot be completed until then.{" "}
+            <s-link href={view({ filter: "recount", search: "" })}>
+              Show {progress.recountCount === 1 ? "it" : "them"}
+            </s-link>
           </s-paragraph>
         </s-banner>
       )}
@@ -807,7 +882,7 @@ export default function StocktakeCount() {
                           <Form
                             method="post"
                             onKeyDown={onEnter}
-                            key={`${line.id}:${line.countedQty}`}
+                            key={`${line.id}:${line.countedQty}:${line.recountRequestedAt ? "recount" : ""}`}
                           >
                             <input type="hidden" name="intent" value="count" />
                             <input
@@ -820,8 +895,11 @@ export default function StocktakeCount() {
                                 label={`Counted quantity of ${line.title}`}
                                 labelAccessibilityVisibility="exclusive"
                                 name="countedQty"
+                                // A recount starts from an empty field, so the
+                                // first count is not simply saved again.
                                 value={
-                                  line.countedQty !== null
+                                  line.countedQty !== null &&
+                                  !line.recountRequestedAt
                                     ? String(line.countedQty)
                                     : ""
                                 }
@@ -838,6 +916,9 @@ export default function StocktakeCount() {
                             </s-stack>
                           </Form>
                         ) : null}
+                        {open && !reviewingMovement && (
+                          <RecountControl line={line} locked={locked} />
+                        )}
                         {lineNote(line) && (
                           <s-text color="subdued">{lineNote(line)}</s-text>
                         )}

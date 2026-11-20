@@ -30,8 +30,10 @@ import {
   MAX_ADDED_ITEMS,
   MAX_COUNTED_QUANTITY,
   recordStocktakeScan,
+  requestStocktakeRecount,
   resolveStocktakeMovement,
   saveStocktakeCount,
+  withdrawStocktakeRecount,
   zeroFillUncounted,
   type CompleteStocktakeOptions,
 } from "../../../app/services/stocktakes/stocktake.server";
@@ -853,6 +855,7 @@ describe("stocktake workflow", () => {
         title: "Red wine",
         countedQty: 1,
         added: false,
+        recounted: false,
       });
       await scan(dbA, {
         stocktakeId: id,
@@ -1643,9 +1646,26 @@ describe("stocktake workflow", () => {
           resolution: "COUNTED_AFTER",
         }),
       ).toEqual({ ok: false, error: CLOSED_MESSAGE });
+      expect(
+        await requestStocktakeRecount(dbA, {
+          stocktakeId: id,
+          lineId: lineFor(RED),
+          actor: STAFF,
+        }),
+      ).toEqual({ ok: false, error: CLOSED_MESSAGE });
+      expect(
+        await withdrawStocktakeRecount(dbA, {
+          stocktakeId: id,
+          lineId: lineFor(RED),
+        }),
+      ).toEqual({ ok: false, error: CLOSED_MESSAGE });
       expect(await cancelStocktake(dbA, { stocktakeId: id })).toEqual({
         ok: false,
         error: "Only a count that is in progress can be cancelled.",
+      });
+      expect(await lineOf(id, RED)).toMatchObject({
+        recountRequestedAt: null,
+        recountFromQty: null,
       });
       expect((await lineOf(id, RED)).countedQty).toBe(7);
       expect(await status(id)).toBe("COMPLETED");
@@ -2228,6 +2248,405 @@ describe("stocktake workflow", () => {
     });
   });
 
+  describe("recounts", () => {
+    const LATER = new Date("2026-11-12T11:00:00.000Z");
+    const later = { now: () => LATER };
+
+    const askRecount = (
+      stocktakeId: string,
+      lineId: string,
+      actor: InventoryActor | null = STAFF,
+    ) => requestStocktakeRecount(dbA, { stocktakeId, lineId, actor }, later);
+    const keepCount = (stocktakeId: string, lineId: string) =>
+      withdrawStocktakeRecount(dbA, { stocktakeId, lineId });
+    const recountOf = async (stocktakeId: string, variantId: string) => {
+      const line = await lineOf(stocktakeId, variantId);
+      return {
+        at: line.recountRequestedAt,
+        by: line.recountRequestedByUserId,
+        from: line.recountFromQty,
+      };
+    };
+    const NO_RECOUNT = { at: null, by: null, from: null };
+
+    it("asks for a counted line to be counted again, and keeps the count that is questioned", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+
+      expect(await askRecount(id, lineFor(RED))).toEqual({ ok: true });
+
+      expect(await recountOf(id, RED)).toEqual({
+        at: LATER,
+        by: "42",
+        from: 7,
+      });
+      // The first count still stands, and still shows as a difference.
+      expect(await lineOf(id, RED)).toMatchObject({
+        countedQty: 7,
+        countSource: "MANUAL",
+      });
+      expect(await getStocktakeProgress(dbA, id)).toMatchObject({
+        countedCount: 1,
+        differenceCount: 1,
+        unitsShort: 3,
+        recountCount: 1,
+      });
+      expect(shopify.requests).toHaveLength(0);
+    });
+
+    it("changes nothing when a recount is asked for twice", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+
+      expect(
+        await requestStocktakeRecount(dbA, {
+          stocktakeId: id,
+          lineId: lineFor(RED),
+          actor: COUNTER,
+        }),
+      ).toEqual({ ok: true });
+
+      expect(await recountOf(id, RED)).toEqual({
+        at: LATER,
+        by: "42",
+        from: 7,
+      });
+    });
+
+    it("records a request made without a staff identity", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+
+      expect(await askRecount(id, lineFor(RED), null)).toEqual({ ok: true });
+
+      expect(await recountOf(id, RED)).toEqual({
+        at: LATER,
+        by: null,
+        from: 7,
+      });
+    });
+
+    it("does not ask for a recount of a line nobody has counted", async () => {
+      const { id, lineFor } = await startCount();
+
+      expect(await askRecount(id, lineFor(RED))).toEqual({
+        ok: false,
+        error:
+          "This item has no count yet, so there is nothing to count again.",
+      });
+      expect(await recountOf(id, RED)).toEqual(NO_RECOUNT);
+    });
+
+    it("does not reach a line through another stocktake's page", async () => {
+      const first = await startCount();
+      const second = await startCount();
+      await count(first.lineFor(RED), 7);
+      const notFound = { ok: false, error: "Stocktake line not found" };
+
+      expect(await askRecount(second.id, first.lineFor(RED))).toEqual(notFound);
+      expect(await recountOf(first.id, RED)).toEqual(NO_RECOUNT);
+
+      await askRecount(first.id, first.lineFor(RED));
+      expect(await keepCount(second.id, first.lineFor(RED))).toEqual(notFound);
+      expect((await recountOf(first.id, RED)).at).toEqual(LATER);
+
+      expect(await askRecount("no-such-count", first.lineFor(RED))).toEqual({
+        ok: false,
+        error: "Stocktake not found",
+      });
+    });
+
+    it("answers the request when the line is counted again, and remembers the first count", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+
+      await saveCount(
+        dbA,
+        { lineId: lineFor(RED), countedQty: 9, actor: COUNTER },
+        fixedClock,
+      );
+
+      expect(await recountOf(id, RED)).toEqual({ at: null, by: null, from: 7 });
+      expect(await lineOf(id, RED)).toMatchObject({
+        countedQty: 9,
+        countedByUserId: "77",
+      });
+      expect(await getStocktakeProgress(dbA, id)).toMatchObject({
+        recountCount: 0,
+        unitsShort: 1,
+      });
+    });
+
+    it("takes a second count that confirms the first as the recount", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+
+      await count(lineFor(RED), 7);
+
+      expect(await recountOf(id, RED)).toEqual({ at: null, by: null, from: 7 });
+    });
+
+    it("keeps waiting when the count is only cleared", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+
+      await count(lineFor(RED), null);
+
+      expect(await recountOf(id, RED)).toEqual({
+        at: LATER,
+        by: "42",
+        from: 7,
+      });
+      expect(await getStocktakeProgress(dbA, id)).toMatchObject({
+        countedCount: 0,
+        recountCount: 1,
+      });
+    });
+
+    it("starts a scanned recount from zero, then adds each further scan", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+
+      expect(
+        await scan(dbA, { stocktakeId: id, code: "1111", quantity: 4 }),
+      ).toEqual({
+        ok: true,
+        lineId: lineFor(RED),
+        title: "Red wine",
+        countedQty: 4,
+        added: false,
+        recounted: true,
+      });
+      expect(await scan(dbA, { stocktakeId: id, code: "1111" })).toMatchObject({
+        countedQty: 5,
+        recounted: false,
+      });
+
+      expect(await recountOf(id, RED)).toEqual({ at: null, by: null, from: 7 });
+      expect(await lineOf(id, RED)).toMatchObject({
+        countedQty: 5,
+        countSource: "SCAN",
+      });
+    });
+
+    it("leaves the request in place when the scan is refused", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+
+      expect(
+        await scan(dbA, {
+          stocktakeId: id,
+          code: "1111",
+          quantity: MAX_COUNTED_QUANTITY + 1,
+        }),
+      ).toMatchObject({ ok: false });
+
+      expect(await lineOf(id, RED)).toMatchObject({
+        countedQty: 7,
+        recountRequestedAt: LATER,
+      });
+    });
+
+    it("takes the request back and lets the count stand", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      await askRecount(id, lineFor(RED));
+
+      expect(await keepCount(id, lineFor(RED))).toEqual({ ok: true });
+
+      expect(await recountOf(id, RED)).toEqual(NO_RECOUNT);
+      expect((await lineOf(id, RED)).countedQty).toBe(7);
+      // Keeping a count that was never questioned changes nothing.
+      expect(await keepCount(id, lineFor(WHITE))).toEqual({ ok: true });
+      expect(await recountOf(id, WHITE)).toEqual(NO_RECOUNT);
+
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+      expect(shopify.level(101)).toBe(7);
+    });
+
+    it("keeps the first count of an earlier recount when the request for a second one is taken back", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+      await count(lineFor(RED), 9);
+      await askRecount(id, lineFor(RED));
+      expect((await recountOf(id, RED)).from).toBe(9);
+
+      await keepCount(id, lineFor(RED));
+
+      // The line was not counted a third time, so it shows no earlier count.
+      expect(await recountOf(id, RED)).toEqual(NO_RECOUNT);
+      expect((await lineOf(id, RED)).countedQty).toBe(9);
+    });
+
+    it("does not complete while a line waits for its recount, whatever is accepted, and sends nothing", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      await askRecount(id, lineFor(RED));
+
+      const refused = {
+        ok: false,
+        error:
+          "1 item on this count waits for a recount. Count it again, or keep its count, then complete the count. Nothing was sent to Shopify.",
+        problems: [],
+        blocker: "RECOUNT",
+      };
+      expect(await complete(id)).toEqual(refused);
+      expect(await complete(id, { acceptUncounted: true })).toEqual(refused);
+
+      expect(shopify.requests).toHaveLength(0);
+      expect(await prisma.inventoryOperation.count()).toBe(0);
+      expect(await status(id)).toBe("IN_PROGRESS");
+      expect({ red: shopify.level(101), white: shopify.level(102) }).toEqual({
+        red: 10,
+        white: 20,
+      });
+
+      await askRecount(id, lineFor(WHITE));
+      expect(await complete(id)).toMatchObject({
+        error:
+          "2 items on this count wait for a recount. Count them again, or keep their counts, then complete the count. Nothing was sent to Shopify.",
+        blocker: "RECOUNT",
+      });
+    });
+
+    it("completes with the recounted quantity once the line is counted again", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      await askRecount(id, lineFor(RED));
+      await count(lineFor(RED), 9);
+
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+
+      expect(shopify.level(101)).toBe(9);
+      const [operation] = await operations(id);
+      expect(operation.lines.map((l) => [l.variantGid, l.delta])).toEqual([
+        [RED, -1],
+      ]);
+      // The record keeps what the line was first counted as.
+      expect(await recountOf(id, RED)).toEqual({ at: null, by: null, from: 7 });
+    });
+
+    it("does not complete a count whose only missing count is a recount that was cleared", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      await askRecount(id, lineFor(RED));
+      await count(lineFor(RED), null);
+
+      expect(await complete(id, { acceptUncounted: true })).toMatchObject({
+        blocker: "RECOUNT",
+      });
+      expect(shopify.requests).toHaveLength(0);
+    });
+
+    it("does not mark a line that waits for its recount as zero", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await askRecount(id, lineFor(RED));
+      await count(lineFor(RED), null);
+
+      expect(await zeroFillUncounted(dbA, { stocktakeId: id })).toEqual({
+        ok: true,
+        lines: 1,
+      });
+
+      expect((await lineOf(id, RED)).countedQty).toBeNull();
+      expect((await lineOf(id, WHITE)).countSource).toBe("ZERO_FILL");
+      expect(await complete(id)).toMatchObject({ blocker: "RECOUNT" });
+    });
+
+    it("stays open when a recount is asked for mid-completion, then applies the recount on the next attempt", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+      let interfered = false;
+
+      const first = await complete(id, {
+        sendBatch: async (request) => {
+          if (!interfered) {
+            interfered = true;
+            await askRecount(id, lineFor(RED));
+          }
+          return shopify.send(request);
+        },
+      });
+
+      expect(first).toEqual({
+        ok: false,
+        error:
+          "A recount was asked for while this stocktake was being completed, so it stays open. Count the item again, or keep its count, then complete it again.",
+        problems: [],
+        blocker: "RECOUNT",
+      });
+      expect(await status(id)).toBe("IN_PROGRESS");
+      // The questioned count had already gone to Shopify.
+      expect(shopify.level(101)).toBe(7);
+      expect(await complete(id)).toMatchObject({ blocker: "RECOUNT" });
+
+      await count(lineFor(RED), 9);
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+      expect(shopify.level(101)).toBe(9);
+    });
+
+    it("lists the lines that wait for a recount, and exports what each was first counted as", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 18);
+      await askRecount(id, lineFor(RED));
+      await askRecount(id, lineFor(WHITE));
+      await count(lineFor(WHITE), 20);
+
+      const waiting = await getStocktakeLines(dbA, {
+        stocktakeId: id,
+        filter: "recount",
+        search: "",
+        page: 1,
+      });
+      expect(waiting.total).toBe(1);
+      expect(waiting.lines[0]).toMatchObject({
+        title: "Red wine",
+        countedQty: 7,
+        recountRequestedAt: LATER,
+        recountRequestedByUserId: "42",
+        recountFromQty: 7,
+      });
+
+      const exported = await listStocktakeLinesForExport(dbA, id);
+      expect(
+        exported.map((l) => [l.title, l.recountRequestedAt, l.recountFromQty]),
+      ).toEqual([
+        ["Red wine", LATER, 7],
+        ["White wine", null, 18],
+      ]);
+    });
+
+    it("refuses a requester without a request, and a negative first count, in the database", async () => {
+      const { lineFor } = await startCount();
+      await expect(
+        prisma.stocktakeLineItem.update({
+          where: { id: lineFor(RED) },
+          data: { recountRequestedByUserId: "42" },
+        }),
+      ).rejects.toThrow(/StocktakeLineItem_recount_requester_with_request/);
+      await expect(
+        prisma.stocktakeLineItem.update({
+          where: { id: lineFor(RED) },
+          data: { recountFromQty: -1 },
+        }),
+      ).rejects.toThrow(/StocktakeLineItem_recountFromQty_nonnegative/);
+    });
+  });
+
   describe("cancelling a count", () => {
     it("cancels an open count without touching Shopify and records who did it", async () => {
       const { id, lineFor } = await startCount();
@@ -2349,6 +2768,13 @@ describe("stocktake workflow", () => {
         notFound,
       );
       expect(await clearZeroFill(dbB, { stocktakeId: id })).toEqual(notFound);
+      expect(
+        await requestStocktakeRecount(dbB, {
+          stocktakeId: id,
+          lineId: lineFor(RED),
+          actor: STAFF,
+        }),
+      ).toEqual(notFound);
       expect(await cancelStocktake(dbB, { stocktakeId: id })).toEqual(notFound);
       expect(await completeStocktake(dbB, null, STAFF, id, enabled())).toEqual({
         ...notFound,
@@ -2382,7 +2808,24 @@ describe("stocktake workflow", () => {
 
       expect(shopify.requests).toHaveLength(0);
       expect(await status(id)).toBe("IN_PROGRESS");
-      expect((await lineOf(id, RED)).countedQty).toBe(7);
+      expect(await lineOf(id, RED)).toMatchObject({
+        countedQty: 7,
+        recountRequestedAt: null,
+      });
+
+      // Nor can it call off a recount this shop asked for.
+      await requestStocktakeRecount(dbA, {
+        stocktakeId: id,
+        lineId: lineFor(RED),
+        actor: STAFF,
+      });
+      expect(
+        await withdrawStocktakeRecount(dbB, {
+          stocktakeId: id,
+          lineId: lineFor(RED),
+        }),
+      ).toEqual(notFound);
+      expect((await lineOf(id, RED)).recountRequestedAt).not.toBeNull();
     });
 
     it("counts its own item when both shops use the same barcode", async () => {
@@ -2483,6 +2926,7 @@ describe("stocktake workflow", () => {
         unitsOver: 2,
         unitsShort: 0,
         movementReviewCount: 1,
+        recountCount: 0,
       });
 
       const titles = async (

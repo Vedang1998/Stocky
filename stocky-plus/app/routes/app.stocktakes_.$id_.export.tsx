@@ -38,6 +38,7 @@ const headers = (timeZone: string | null) => [
   "Unit cost",
   "Difference value",
   "Currency",
+  "Recount",
 ];
 
 /**
@@ -49,6 +50,9 @@ const headers = (timeZone: string | null) => [
  * that cost: the cost as last synced while the count is open, the cost kept
  * at completion once it is completed. The value is exact, not rounded to the
  * currency, so the column adds up to the figure on the page.
+ *
+ * The last column says when a line waits to be counted again, or was counted
+ * again and what it was first counted as.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { db, tenant } = await requireAdminTenant({ request, params });
@@ -104,6 +108,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       valued?.unitCost.amount.toFixed(),
       valued?.value,
       valued?.unitCost.currencyCode,
+      line.recountRequestedAt
+        ? "Asked for"
+        : line.recountFromQty === null
+          ? null
+          : `Counted again, first counted as ${line.recountFromQty}`,
     ];
   });
 
