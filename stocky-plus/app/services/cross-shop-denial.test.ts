@@ -274,6 +274,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B mutating Shop A purchase order / line", async () => {
     const { action } = await import("../routes/app.purchase-orders_.$id");
+    activePlanSnapshot();
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
@@ -419,6 +420,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B cancelling Shop A purchase order", async () => {
     const { action } = await import("../routes/app.purchase-orders_.$id");
+    activePlanSnapshot();
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 

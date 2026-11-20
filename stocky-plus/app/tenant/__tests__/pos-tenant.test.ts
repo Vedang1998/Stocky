@@ -260,6 +260,24 @@ describe("POS tenant authority", () => {
     ).rejects.toMatchObject({ code: "client_shop_conflict" });
   });
 
+  it("answers 400 for a NUL in the path or query (SEC-17)", async () => {
+    for (const url of [
+      "https://example.com/api/pos/scan?code=01%0023",
+      "https://example.com/api/pos/receiving/po_1%00?location=1",
+    ]) {
+      const thrown: unknown = await requirePosTenant({
+        request: posRequest(url),
+        authenticatePos: posAuth(),
+        apiKey: API_KEY,
+      }).then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      expect(thrown).toBeInstanceOf(Response);
+      expect((thrown as Response).status).toBe(400);
+    }
+  });
+
   it("scan lookup and stock never cross into another shop", async () => {
     const a = await seedCatalogVariant(prisma, shopAId, "1001", "036000291452", {
       available: 3,
