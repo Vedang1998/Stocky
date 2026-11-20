@@ -17,6 +17,10 @@ import {
 import { applySupplierRules } from "../lib/replenishment";
 import { computeForecast } from "../services/forecasting.server";
 import { resolveTieredUnitCost } from "../services/landed-cost.server";
+import {
+  MAX_LINES_PER_ORDER,
+  MAX_ORDER_QUANTITY,
+} from "../services/purchasing/purchase-orders.server";
 
 /**
  * Value of the "Select a vendor" option. An `s-select` submits the option's
@@ -162,7 +166,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 const LOOKBACK_TARGET_MISSING =
   "Choose a product and a location before changing its lookback window.";
+const ORDER_TARGET_MISSING =
+  "Choose a supplier and a location before creating a purchase order.";
+const ORDER_LOCATION_UNKNOWN =
+  "That location is not one of this shop's locations. Choose a location and try again.";
+const ORDER_TOO_MANY_LINES = `A purchase order can have at most ${MAX_LINES_PER_ORDER} lines.`;
+const ORDER_QUANTITY_TOO_LARGE = `A quantity can be at most ${MAX_ORDER_QUANTITY.toLocaleString("en-US")}.`;
 const MAX_ID_LENGTH = 256;
+
+/** An id the page sent as a hidden field: present, and no longer than an id is. */
+function usableId(value: FormDataEntryValue | null): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= MAX_ID_LENGTH
+  );
+}
 
 /**
  * The product and location a lookback change applies to. The page sends both
@@ -174,17 +193,13 @@ function lookbackTarget(
 ): { variantId: string; locationId: string } | null {
   const variantId = form.get("variantId");
   const locationId = form.get("locationId");
-  const usable = (value: FormDataEntryValue | null): value is string =>
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= MAX_ID_LENGTH;
-  return usable(variantId) && usable(locationId)
+  return usableId(variantId) && usableId(locationId)
     ? { variantId, locationId }
     : null;
 }
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { tenant, db } = await requireAdminTenant({ request });
+  const { admin, tenant, db } = await requireAdminTenant({ request });
   const shop = tenant.myshopifyDomain;
   const form = await request.formData();
   const intent = form.get("intent") as string;
@@ -245,8 +260,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (intent === "createPO") {
-    const supplierId = form.get("supplierId") as string;
-    const locationId = form.get("locationId") as string;
+    // This action writes the order itself, so it checks what the purchasing
+    // service checks for every other order: both ids are there, the order is
+    // no longer than an order may be, quantities are in range, and the
+    // location is one of the shop's own.
+    const supplierId = form.get("supplierId");
+    const locationId = form.get("locationId");
+    if (!usableId(supplierId) || !usableId(locationId)) {
+      return { error: ORDER_TARGET_MISSING };
+    }
+    const entries = [...form.entries()].filter(([key]) =>
+      key.startsWith("qty-"),
+    );
+    if (entries.length > MAX_LINES_PER_ORDER) {
+      return { error: ORDER_TOO_MANY_LINES };
+    }
 
     const supplier = await db.supplier.findFirst({
       where: { id: supplierId },
@@ -266,8 +294,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       unitCost: number;
     }> = [];
 
-    for (const [key, value] of form.entries()) {
-      if (!key.startsWith("qty-")) continue;
+    for (const [key, value] of entries) {
       const mappingId = key.slice(4);
       const entered = parseInt(value as string, 10);
       if (!entered || entered <= 0) continue;
@@ -282,6 +309,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { minimumOrderQuantity: mapping.moq, packSize: mapping.packSize },
         supplierRules,
       );
+      if (qty > MAX_ORDER_QUANTITY) return { error: ORDER_QUANTITY_TOO_LARGE };
 
       const tierCost = await resolveTieredUnitCost(
         db,
@@ -299,6 +327,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     if (lines.length > 0) {
+      // The same list the page offers: the shop's locations in Shopify.
+      const locations = await fetchLocations(admin);
+      if (!locations.some((location) => location.id === locationId)) {
+        return { error: ORDER_LOCATION_UNKNOWN };
+      }
       await db.purchaseOrder.create({
         data: {
           shop,
