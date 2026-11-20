@@ -41,6 +41,17 @@ captured when all of these hold:
 A day is written in one statement: whole or not at all, and once. A second
 worker, a retry or a restart writes nothing for a day that is already there.
 
+## Deploying
+
+Run `npm run tenant:enforcement:apply -- --apply` right after
+`prisma migrate deploy`, on every deploy. The migration creates the two tables;
+the apply step gives the runtime role its grants and row-level policies on
+them. Until it has run, the worker cannot read or write the tables: each
+capture fails with a permission error (nothing is exposed), and a day whose
+six-hour window passes in that state is lost. The apply step must be the
+version that matches a parent on its real key (SEC-19); an older one refuses
+to run again once a day has been captured.
+
 ## Reading it
 
 - A day **with** a `DailyStockSnapshot` row was captured. `levelCount` 0 means
