@@ -15,6 +15,7 @@ import {
   ORDER_OBSERVATION_LIFECYCLE_GUARD_FN,
   ORDER_OBSERVATION_SET_LEASE_FN,
   INVENTORY_OPERATION_GUARD_FN,
+  DAILY_STOCK_HISTORY_GUARD_FN,
   CONTROL_TABLES,
   IMMUTABILITY_TRIGGER_FN,
   MERCHANT_SQL_TABLES,
@@ -81,6 +82,7 @@ const APPROVED_APPLICATION_FUNCTIONS = new Set([
   ORDER_OBSERVATION_LIFECYCLE_GUARD_FN,
   ORDER_OBSERVATION_SET_LEASE_FN,
   INVENTORY_OPERATION_GUARD_FN,
+  DAILY_STOCK_HISTORY_GUARD_FN,
   // Shop data erasure; owned by a NOLOGIN role, EXECUTE for control plane only.
   "stocky_privacy_erase_shop_batch",
 ]);
@@ -622,6 +624,50 @@ export async function grantMerchantDml(
     grants.push(`${table}:DML`);
   }
   return grants;
+}
+
+/**
+ * The merchant tables whose rows are already filtered for the runtime role:
+ * row-level security enabled and forced.
+ */
+export async function merchantTablesWithForcedRls(
+  client: Client,
+): Promise<Set<string>> {
+  const res = await client.query<{ relname: string }>(
+    `SELECT c.relname
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = ANY($1::text[])
+       AND c.relforcerowsecurity
+       AND c.relrowsecurity`,
+    [MERCHANT_SQL_TABLES],
+  );
+  return new Set(res.rows.map((row) => row.relname));
+}
+
+/**
+ * The merchant tables the runtime role can read or write today. None before
+ * the role exists; a table that is not there yet is left out.
+ */
+export async function merchantTablesWithRuntimeDml(
+  client: Client,
+): Promise<Set<string>> {
+  const runtimeRole = assertSafeRoleName(defaultRuntimeRoleName());
+  const role = await client.query(`SELECT 1 FROM pg_roles WHERE rolname = $1`, [
+    runtimeRole,
+  ]);
+  if ((role.rowCount ?? 0) === 0) return new Set();
+  const res = await client.query<{ relname: string }>(
+    `SELECT c.relname
+     FROM pg_class c
+     JOIN pg_namespace n ON n.oid = c.relnamespace
+     WHERE n.nspname = 'public'
+       AND c.relname = ANY($2::text[])
+       AND has_table_privilege($1, c.oid, 'SELECT, INSERT, UPDATE, DELETE')`,
+    [runtimeRole, MERCHANT_SQL_TABLES],
+  );
+  return new Set(res.rows.map((row) => row.relname));
 }
 
 /**
@@ -1489,7 +1535,12 @@ export async function verifyRoles(
     }
   }
 
-  // Exact allowlist for runtime merchant privileges
+  // Exact allowlist for runtime merchant privileges. A privilege is "before
+  // RLS" on the table it is on: one whose rows are not yet filtered. While
+  // enforcement is incomplete only because a later migration added a table,
+  // the grants on the tables that are already under forced RLS are the ones
+  // the last apply gave, not drift (SEC-22).
+  const forcedRls = await merchantTablesWithForcedRls(client);
   for (const table of MERCHANT_SQL_TABLES) {
     for (const priv of ["SELECT", "INSERT", "UPDATE", "DELETE"] as const) {
       const res = await client.query<{ has: boolean }>(
@@ -1502,7 +1553,8 @@ export async function verifyRoles(
       if (
         !requireMerchantDml &&
         !allowUnrestricted &&
-        res.rows[0]?.has
+        res.rows[0]?.has &&
+        !forcedRls.has(table)
       ) {
         failures.push(`unexpected_merchant_priv_before_rls:${table}:${priv}`);
       }
