@@ -127,22 +127,22 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     value,
     recounts,
   ] = await Promise.all([
-      getStocktakeProgress(db, stocktake.id),
-      getStocktakeLines(db, {
-        stocktakeId: stocktake.id,
-        filter,
-        search,
-        page: readPageNumber(query.get("page")),
-      }),
-      getStocktakeLedgerSummary(db, stocktake.id),
-      listSyncedLocations(db),
-      planAllowsChanges(db),
-      readShopTimeZone(tenant),
-      // What the differences are worth says what the differences are, so it
-      // is withheld with them while a blind count is being counted.
-      expectedHidden ? null : getStocktakeDifferenceValue(db, stocktake),
-      getStocktakeRecountHistory(db, stocktake.id),
-    ]);
+    getStocktakeProgress(db, stocktake.id),
+    getStocktakeLines(db, {
+      stocktakeId: stocktake.id,
+      filter,
+      search,
+      page: readPageNumber(query.get("page")),
+    }),
+    getStocktakeLedgerSummary(db, stocktake.id),
+    listSyncedLocations(db),
+    planAllowsChanges(db),
+    readShopTimeZone(tenant),
+    // What the differences are worth says what the differences are, so it
+    // is withheld with them while a blind count is being counted.
+    expectedHidden ? null : getStocktakeDifferenceValue(db, stocktake),
+    getStocktakeRecountHistory(db, stocktake.id),
+  ]);
 
   return {
     stocktake,

@@ -548,13 +548,20 @@ export async function getStocktakeRecountHistory(
     rows.map((row) => row.shopifyVariantId),
   );
   return {
-    events: rows.map(({ createdAt, shopifyVariantId, ...row }) => {
-      const variant = catalog.get(shopifyVariantId);
+    // Field by field: the tenant layer adds the shop to every row it reads,
+    // and none of that belongs on the page.
+    events: rows.map((row) => {
+      const variant = catalog.get(row.shopifyVariantId);
       return {
-        ...row,
-        at: createdAt,
-        title: variant?.title ?? shopifyVariantId,
+        id: row.id,
+        at: row.createdAt,
+        kind: row.kind,
+        title: variant?.title ?? row.shopifyVariantId,
         sku: variant?.sku ?? null,
+        questionedQty: row.questionedQty,
+        countedQty: row.countedQty,
+        countSource: row.countSource,
+        byUserId: row.byUserId,
       };
     }),
     total,
