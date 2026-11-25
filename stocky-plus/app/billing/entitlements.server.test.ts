@@ -7,6 +7,7 @@ import type { ShopEntitlements, SubscriptionRecord } from "./entitlements";
 import {
   getShopEntitlements,
   persistEntitlementSnapshot,
+  refreshPlanSnapshotAfterAuth,
   requireActivePlanSnapshot,
   requireCapability,
 } from "./entitlements.server";
@@ -451,5 +452,107 @@ describe("getShopEntitlements", () => {
     expect(shopSettings.findUnique).not.toHaveBeenCalled();
     expect(shopSettings.create).not.toHaveBeenCalled();
     expect(shopSettings.update).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshPlanSnapshotAfterAuth", () => {
+  const STALE = { subscriptionActive: true, subscriptionPlan: "growth" };
+  const failingAdmin = () => ({
+    graphql: vi.fn(async () => {
+      throw new Error("Shopify unavailable");
+    }),
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("replaces a plan kept from before the uninstall with what Shopify reports now", async () => {
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi.fn(async () => STALE),
+    });
+    await refreshPlanSnapshotAfterAuth({
+      admin: fakeAdmin([]),
+      db,
+      reactivated: true,
+    });
+
+    expect(shopSettings.update).toHaveBeenCalledWith({
+      where: { shop: SHOP_DOMAIN },
+      data: { subscriptionActive: false, subscriptionPlan: null },
+    });
+  });
+
+  it("keeps an active plan Shopify still reports", async () => {
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi.fn(async () => STALE),
+    });
+    await refreshPlanSnapshotAfterAuth({
+      admin: fakeAdmin([adminSubscription()]),
+      db,
+      reactivated: true,
+    });
+
+    expect(shopSettings.update).not.toHaveBeenCalled();
+    expect(shopSettings.create).not.toHaveBeenCalled();
+  });
+
+  it("clears the stale plan when Shopify cannot be read after a reinstall, and does not throw", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi.fn(async () => STALE),
+    });
+    await expect(
+      refreshPlanSnapshotAfterAuth({
+        admin: failingAdmin(),
+        db,
+        reactivated: true,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(shopSettings.update).toHaveBeenCalledWith({
+      where: { shop: SHOP_DOMAIN },
+      data: { subscriptionActive: false, subscriptionPlan: null },
+    });
+    const logged = JSON.stringify(error.mock.calls);
+    expect(logged).toContain("Shopify unavailable");
+    expect(logged).toContain(SHOP_ID);
+    expect(logged).not.toContain(SHOP_DOMAIN);
+  });
+
+  it("leaves the row alone when Shopify cannot be read and the shop was not reinstalled", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { db, shopSettings } = fakeDb({
+      findUnique: vi.fn(async () => STALE),
+    });
+    await expect(
+      refreshPlanSnapshotAfterAuth({
+        admin: failingAdmin(),
+        db,
+        reactivated: false,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(shopSettings.update).not.toHaveBeenCalled();
+    expect(shopSettings.create).not.toHaveBeenCalled();
+  });
+
+  it("does not throw when clearing the stale plan fails as well", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { db } = fakeDb({
+      findUnique: vi.fn(async () => STALE),
+      update: vi.fn(async () => {
+        throw new Error("database unavailable");
+      }),
+    });
+    await expect(
+      refreshPlanSnapshotAfterAuth({
+        admin: failingAdmin(),
+        db,
+        reactivated: true,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(JSON.stringify(error.mock.calls)).toContain("database unavailable");
   });
 });

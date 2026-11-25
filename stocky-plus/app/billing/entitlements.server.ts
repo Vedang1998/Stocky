@@ -49,6 +49,60 @@ export async function getShopEntitlements({
   return entitlements;
 }
 
+/**
+ * Called from the afterAuth hook. Shopify cancels the app's subscription at
+ * uninstall, but the snapshot on ShopSettings is only rewritten when a page
+ * reads the plan (Billing, Replenishment), so after a reinstall the
+ * snapshot-gated routes would still see the old plan. Reading it again here
+ * fixes that at the moment the shop comes back.
+ *
+ * Never throws: a failed read must not turn the install into an error page.
+ * When the read fails for a shop that was just reactivated, the stored plan is
+ * from before the uninstall and is known to be stale, so it is cleared (fail
+ * closed); the next Billing or Replenishment visit restores a real plan.
+ * Otherwise the row is left as it is and the failure is logged.
+ */
+export async function refreshPlanSnapshotAfterAuth({
+  admin,
+  db,
+  reactivated,
+}: {
+  admin: AdminGraphQLClient;
+  db: TenantDb;
+  reactivated: boolean;
+}): Promise<void> {
+  try {
+    await getShopEntitlements({ admin, db });
+    return;
+  } catch (error) {
+    console.error(
+      "[billing] afterAuth plan refresh failed:",
+      describeFailure(error),
+      { shopId: db.authority.shopId, reactivated },
+    );
+  }
+  if (!reactivated) return;
+  try {
+    await persistEntitlementSnapshot(db, {
+      subscriptionActive: false,
+      subscriptionPlan: null,
+    });
+  } catch (error) {
+    console.error(
+      "[billing] afterAuth could not clear the stale plan after a reinstall:",
+      describeFailure(error),
+      { shopId: db.authority.shopId },
+    );
+  }
+}
+
+/** Name and message only; never the whole error, which may carry a request. */
+function describeFailure(error: unknown): string {
+  return error instanceof Error
+    ? `${error.name}: ${error.message}`
+    : "unknown error";
+}
+
 function isUniqueViolation(error: unknown): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError &&

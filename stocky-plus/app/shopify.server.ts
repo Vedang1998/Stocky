@@ -7,6 +7,8 @@ import {
 import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import { shopifySessionStorage } from "./tenant/bootstrap.server";
 import { runAfterAuthTenantBootstrap } from "./tenant/after-auth.server";
+import { createTenantDb } from "./tenant/tenant-db.server";
+import { refreshPlanSnapshotAfterAuth } from "./billing/entitlements.server";
 import {
   enqueueAfterAuthCatalogSync,
   enqueueOrderFactsSync,
@@ -36,8 +38,16 @@ const shopify = shopifyApp({
   ...appConfig,
   sessionStorage: shopifySessionStorage,
   hooks: {
-    afterAuth: async ({ session }) => {
-      const { tenant } = await runAfterAuthTenantBootstrap(session);
+    afterAuth: async ({ session, admin }) => {
+      const { tenant, reactivated } =
+        await runAfterAuthTenantBootstrap(session);
+      // Shopify cancels the subscription at uninstall; read the plan again so
+      // a reinstalled shop's stored snapshot is not the one from before.
+      await refreshPlanSnapshotAfterAuth({
+        admin,
+        db: createTenantDb(tenant),
+        reactivated,
+      });
       try {
         await enqueueAfterAuthCatalogSync(tenant);
       } catch (err) {

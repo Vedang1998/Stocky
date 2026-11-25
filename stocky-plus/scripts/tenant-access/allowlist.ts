@@ -438,6 +438,21 @@ export const ACCESS_EXCEPTIONS: AccessException[] = [
       "Retain while the sync-integration suite requires disposable fixtures",
   },
   {
+    id: "EX-SYNC-TEST-REINSTALL-PLAN-SNAPSHOT-001",
+    path: "app/sync/__tests__/reinstall-plan-snapshot.test.ts",
+    category: "migration_tests",
+    reason:
+      "Security round 8 regression test: a stored plan snapshot must not survive uninstall and reinstall, on the disposable PostgreSQL harness with row-level security",
+    permittedModelsOrOperations: [
+      "PrismaClient construction for test DB lifecycle",
+      "Shop, ShopSettings, Session and WebhookDelivery fixtures for one test shop",
+    ],
+    productionRuntime: "no",
+    owner: "phase-1-pr4-sync-control-plane",
+    expirationPhaseOrRemovalCondition:
+      "Retain while the sync-integration suite requires disposable fixtures",
+  },
+  {
     id: "EX-SYNC-TEST-DISPATCH-ACK-RACE-001",
     path: "app/sync/__tests__/dispatch-ack-race.test.ts",
     category: "migration_tests",
