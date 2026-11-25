@@ -57,8 +57,13 @@ async function bootstrapTenant(session: Session): Promise<AfterAuthResult> {
       verifiedDomain: session.shop,
     });
     reactivated = result.reactivated;
-  } catch {
-    // REDACTED/MANUAL denial is fail-closed for reactivation; continue bootstrap.
+  } catch (error) {
+    // REDACTED/MANUAL denial is fail-closed for reactivation; continue
+    // bootstrap. Any failure leaves the shop disabled, so say why.
+    console.error(
+      "afterAuth reactivation refused or failed:",
+      describeError(error),
+    );
   }
 
   const db = createTenantDb(tenant);

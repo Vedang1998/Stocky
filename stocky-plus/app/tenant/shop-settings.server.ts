@@ -24,6 +24,9 @@ function isUniqueViolation(error: unknown): boolean {
  * tenant-scoped client, so a row that is not this tenant's is never used.
  *
  * C-01: an existing row's ownership is never repaired here (empty update).
+ *
+ * Pass a root tenant client, not one inside an open transaction: a unique
+ * violation aborts the transaction and the read-back would then fail.
  */
 export async function ensureShopSettings(db: TenantDb): Promise<void> {
   const { shopId, myshopifyDomain } = db.authority;
