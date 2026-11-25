@@ -91,18 +91,13 @@ export async function smartForecastsForRows(
 }
 
 /** One row's Smart Forecast, as the worksheet table shows it. */
-export type SmartForecastCell = {
-  outcome: SmartForecast["outcome"];
-  label: string;
-  forecastUnits: string | null;
-  suggestedQuantity: number | null;
-};
+export type SmartForecastCell = Pick<SmartForecast, "outcome" | "label" | "forecastUnits">;
 
 /** The Smart Forecast column's data for the rows on the page. */
 export type SmartForecastColumn =
   | { status: "OFF" }
-  | { status: "PLAN" | "METHOD"; message: string }
-  | { status: "OK"; horizonDays: number; byRow: Record<string, SmartForecastCell> };
+  | { status: "PLAN" | "METHOD" }
+  | { status: "OK"; byRow: Record<string, SmartForecastCell> };
 
 /**
  * The Smart Forecast column for the rows on one worksheet page. Nothing is
@@ -122,10 +117,10 @@ export async function smartForecastColumn(
 ): Promise<SmartForecastColumn> {
   if (!input.shown) return { status: "OFF" };
   if (!hasCapability(input.entitlements, "forecast.smart")) {
-    return { status: "PLAN", message: SMART_FORECAST_PLAN_MESSAGE };
+    return { status: "PLAN" };
   }
   const basis = smartForecastBasis(input.worksheet);
-  if (!basis) return { status: "METHOD", message: SMART_FORECAST_METHOD_MESSAGE };
+  if (!basis) return { status: "METHOD" };
 
   const { byRow } = await smartForecastsForRows(db, {
     basis,
@@ -134,13 +129,8 @@ export async function smartForecastColumn(
     installedAt: input.installedAt,
   });
   const cells: Record<string, SmartForecastCell> = {};
-  for (const [rowId, forecast] of byRow) {
-    cells[rowId] = {
-      outcome: forecast.outcome,
-      label: forecast.label,
-      forecastUnits: forecast.forecastUnits,
-      suggestedQuantity: forecast.suggestedQuantity,
-    };
+  for (const [rowId, { outcome, label, forecastUnits }] of byRow) {
+    cells[rowId] = { outcome, label, forecastUnits };
   }
-  return { status: "OK", horizonDays: basis.horizonDays, byRow: cells };
+  return { status: "OK", byRow: cells };
 }

@@ -17,7 +17,7 @@ import {
   type WorksheetView,
 } from "../../lib/replenishment/worksheet/view";
 import type { SmartForecastColumn, WorksheetActionResult } from "./types";
-import { money, percent, quantity } from "./format";
+import { money, percent, quantity, units } from "./format";
 import type { LineDetailContext } from "./LineDetailModal";
 
 const STATUS_TONES = {
@@ -161,7 +161,7 @@ function SmartForecastCellView({
   if (!cell || cell.forecastUnits == null) return MISSING_VALUE;
   return (
     <s-stack direction="block" gap="none">
-      <s-text>{formatDecimal(cell.forecastUnits)}</s-text>
+      <s-text>{units(cell.forecastUnits)}</s-text>
       <s-text color="subdued">
         {cell.outcome === "SELECTED" ? cell.label : "Recent average kept"}
       </s-text>

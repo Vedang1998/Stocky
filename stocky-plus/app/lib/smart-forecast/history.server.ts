@@ -3,6 +3,7 @@
  * the reports and the parity worksheet read.
  */
 import { loadSalesHistory } from "../analytics/sales-history.server";
+import { enumerateLocalDates } from "../analytics/shop-calendar";
 import { addDays, compareLocalDates, type LocalDate } from "../replenishment/local-date";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { MAX_ORIGINS, ORIGIN_STEP_DAYS } from "./backtest";
@@ -62,12 +63,14 @@ export async function loadDemandHistories(
   });
 
   const historyStart = history.coverage.historyStartLocalDate;
-  if (historyStart == null || compareLocalDates(historyStart, input.endLocalDate) > 0) {
-    for (const gid of variantGids) byVariant.set(gid, []);
-    return { startLocalDate: null, byVariant };
-  }
-  const start =
-    compareLocalDates(historyStart, requestedStart) > 0 ? historyStart : requestedStart;
+  const hasHistory =
+    historyStart != null && compareLocalDates(historyStart, input.endLocalDate) <= 0;
+  const start = !hasHistory
+    ? null
+    : compareLocalDates(historyStart, requestedStart) > 0
+      ? historyStart
+      : requestedStart;
+  const dates = start == null ? [] : enumerateLocalDates(start, input.endLocalDate);
 
   const units = new Map<string, Map<LocalDate, number>>();
   for (const day of history.daily) {
@@ -77,15 +80,10 @@ export async function loadDemandHistories(
   }
   for (const gid of variantGids) {
     const sold = units.get(gid);
-    const days: DemandDay[] = [];
-    for (
-      let date = start;
-      compareLocalDates(date, input.endLocalDate) <= 0;
-      date = addDays(date, 1)
-    ) {
-      days.push({ date, units: sold?.get(date) ?? 0, inStock: null });
-    }
-    byVariant.set(gid, days);
+    byVariant.set(
+      gid,
+      dates.map((date) => ({ date, units: sold?.get(date) ?? 0, inStock: null })),
+    );
   }
   return { startLocalDate: start, byVariant };
 }

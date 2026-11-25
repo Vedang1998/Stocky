@@ -103,7 +103,7 @@ describe("smartForecastColumn", () => {
   });
 
   it("reads nothing for a shop without the Pro plan", async () => {
-    expect(await smartForecastColumn(db, input({ entitlements: ESSENTIALS }))).toMatchObject({
+    expect(await smartForecastColumn(db, input({ entitlements: ESSENTIALS }))).toEqual({
       status: "PLAN",
     });
     expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
@@ -111,7 +111,7 @@ describe("smartForecastColumn", () => {
 
   it("reads nothing for a worksheet made with another method", async () => {
     const worksheet = { ...WORKSHEET, settings: { params: { method: "TARGET_STOCK_LEVEL" } } };
-    expect(await smartForecastColumn(db, input({ worksheet: worksheet as never }))).toMatchObject({
+    expect(await smartForecastColumn(db, input({ worksheet: worksheet as never }))).toEqual({
       status: "METHOD",
     });
     expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
@@ -132,19 +132,16 @@ describe("smartForecastColumn", () => {
     // Steady demand: nothing beats the recent average, so it is kept.
     expect(column).toEqual({
       status: "OK",
-      horizonDays: 14,
       byRow: {
         "row-a": {
           outcome: "KEPT_NO_IMPROVEMENT",
           label: "Recent average (the Stocky method)",
           forecastUnits: "28.00",
-          suggestedQuantity: 23,
         },
         "row-b": {
           outcome: "KEPT_NO_IMPROVEMENT",
           label: "Recent average (the Stocky method)",
           forecastUnits: "14.00",
-          suggestedQuantity: 14,
         },
       },
     });

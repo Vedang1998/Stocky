@@ -5,17 +5,13 @@
  * the merchant presses the button that says so.
  */
 import { useFetcher } from "react-router";
-import { formatDecimal, MISSING_VALUE } from "../../lib/decimal-format";
+import { MISSING_VALUE } from "../../lib/decimal-format";
 import type { WorksheetLine } from "../../lib/replenishment/worksheet/store.server";
 import type { SmartForecast } from "../../lib/smart-forecast";
 import type { SmartForecastLoaderResult, WorksheetActionResult } from "./types";
-import { quantity } from "./format";
+import { quantity, units } from "./format";
 
 export const SMART_FORECAST_PATH = "/app/replenishment/smart-forecast";
-
-function units(value: string | null): string {
-  return value == null ? MISSING_VALUE : formatDecimal(value);
-}
 
 function Scores({ forecast }: { forecast: SmartForecast }) {
   return (
