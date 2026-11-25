@@ -21,6 +21,8 @@ import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
 import {
   listStocktakes,
   readListView,
@@ -30,22 +32,24 @@ import {
 import { createStocktake } from "../services/stocktakes/stocktake.server";
 import { MAX_STOCKTAKE_NAME_LENGTH } from "../services/stocktakes/stocktake-limits";
 import {
-  formatUtc,
   STOCKTAKE_SCOPE_LABEL,
   STOCKTAKE_STATUS_BADGE,
 } from "../services/stocktakes/stocktake-display";
+import { SYNC_CATALOG_HINT } from "../lib/sync-copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request });
+  const { db, tenant } = await requireAdminTenant({ request });
   const params = new URL(request.url).searchParams;
   const view = readListView(params.get("view"));
   const page = readPageNumber(params.get("page"));
 
-  const [{ stocktakes, hasMore }, locations, planActive] = await Promise.all([
-    listStocktakes(db, { view, page }),
-    listSyncedLocations(db),
-    planAllowsChanges(db),
-  ]);
+  const [{ stocktakes, hasMore }, locations, planActive, timeZone] =
+    await Promise.all([
+      listStocktakes(db, { view, page }),
+      listSyncedLocations(db),
+      planAllowsChanges(db),
+      readShopTimeZone(tenant),
+    ]);
   return {
     stocktakes,
     hasMore,
@@ -53,6 +57,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     page,
     locations,
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
   };
 };
@@ -114,6 +119,7 @@ export default function Stocktakes() {
     page,
     locations,
     planActive,
+    timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -149,8 +155,8 @@ export default function Stocktakes() {
       <s-section heading="Start a count">
         {activeLocations.length === 0 ? (
           <s-paragraph>
-            No active locations are synced yet. Choose Sync catalog on the
-            Home page, then start a count.
+            No active locations are synced yet. {SYNC_CATALOG_HINT}, then
+            start a count.
           </s-paragraph>
         ) : (
           <Form method="post" onKeyDown={onEnter}>
@@ -274,7 +280,10 @@ export default function Stocktakes() {
                         {stocktake.lineCount.toLocaleString("en-US")}
                       </s-table-cell>
                       <s-table-cell>
-                        {formatUtc(stocktake.startedAt ?? stocktake.createdAt)}
+                        {formatShopTime(
+                          stocktake.startedAt ?? stocktake.createdAt,
+                          timeZone,
+                        )}
                       </s-table-cell>
                     </s-table-row>
                   );

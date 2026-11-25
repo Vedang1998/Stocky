@@ -17,7 +17,9 @@ import {
   type AdjustmentResult,
   type SubmitAdjustmentInput,
 } from "../../../app/services/adjustments/adjustment.server";
+import { readAdjustmentHistoryQuery } from "../../../app/services/adjustments/adjustment-history-query";
 import { recordInventoryOperation } from "../../../app/services/inventory-writes/ledger.server";
+import { readShopTimeZone } from "../../../app/services/inventory-writes/shop-clock.server";
 import type { ReadAvailableQuantities } from "../../../app/services/inventory-writes/shopify-levels.server";
 import type { InventoryActor } from "../../../app/services/inventory-writes/types";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
@@ -1025,6 +1027,49 @@ describe("inventory adjustments on the inventory ledger", () => {
       ).toHaveLength(1);
       expect(await listAdjustments(dbA, { to: before })).toEqual([]);
       expect(await listAdjustments(dbA, { from: later })).toEqual([]);
+    });
+
+    it("files an adjustment under the day it was recorded on the shop's clock", async () => {
+      applied(await submit("RED-75, 1"));
+      // 9:30 in the evening of 10 November in Toronto, already the 11th in UTC.
+      await prisma.$transaction([
+        prisma.$executeRawUnsafe(
+          `SET LOCAL session_replication_role = replica`,
+        ),
+        prisma.$executeRawUnsafe(
+          `UPDATE "InventoryOperation" SET "createdAt" = '2026-11-11 02:30:00.000'`,
+        ),
+      ]);
+      const onDay = async (day: string, timeZone: string | null) => {
+        const { from, to } = readAdjustmentHistoryQuery(
+          new URLSearchParams({ from: day, to: day }),
+          timeZone,
+        );
+        return (await listAdjustments(dbA, { from, to })).length;
+      };
+      const setZone = (domain: string, ianaTimezone: string | null) =>
+        prisma.shop.update({
+          where: { myshopifyDomain: domain },
+          data: { ianaTimezone },
+        });
+
+      expect(await readShopTimeZone(dbA.authority)).toBeNull();
+      expect(await onDay("2026-11-11", null)).toBe(1);
+      expect(await onDay("2026-11-10", null)).toBe(0);
+
+      await setZone(SHOP_A, "America/Toronto");
+      await setZone(SHOP_B, "Asia/Tokyo");
+      try {
+        const zone = await readShopTimeZone(dbA.authority);
+
+        expect(zone).toBe("America/Toronto");
+        expect(await readShopTimeZone(dbB.authority)).toBe("Asia/Tokyo");
+        expect(await onDay("2026-11-10", zone)).toBe(1);
+        expect(await onDay("2026-11-11", zone)).toBe(0);
+      } finally {
+        await setZone(SHOP_A, null);
+        await setZone(SHOP_B, null);
+      }
     });
 
     it("leaves stocktake and transfer operations out of the history and out of reach of its controls", async () => {

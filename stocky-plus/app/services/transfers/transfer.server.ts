@@ -53,6 +53,7 @@ export type {
   TransferActionResult,
   TransferMovementResult,
 } from "./transfer-core.server";
+import { SYNC_CATALOG_HINT, inactiveLocationMessage } from "../../lib/sync-copy";
 
 const LINE_LIMIT_TEXT = MAX_TRANSFER_LINE_QUANTITY.toLocaleString("en-US");
 const TOO_MANY_UNITS_MESSAGE = (title: string) =>
@@ -94,7 +95,7 @@ export async function createTransfer(
     return {
       ok: false,
       error:
-        "One of those locations is not an active, synced location of this shop. Choose Sync catalog on the Home page, then try again.",
+        inactiveLocationMessage("One of those locations"),
     };
   }
 
@@ -307,7 +308,7 @@ export async function addTransferItems(
       );
     } else if (!matches[0].inventoryItemId) {
       details.push(
-        `Line ${item.lineNumber}: Shopify inventory is not linked yet for ${matches[0].title}. Choose Sync catalog on the Home page.`,
+        `Line ${item.lineNumber}: Shopify inventory is not linked yet for ${matches[0].title}. ${SYNC_CATALOG_HINT}.`,
       );
     } else {
       named.push({
