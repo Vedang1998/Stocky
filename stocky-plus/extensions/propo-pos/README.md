@@ -4,8 +4,8 @@ Shopify POS UI extension (API `2026-07`, Preact) with four targets:
 
 | Target | Module | What staff see |
 |---|---|---|
-| `pos.home.tile.render` | `src/Tile.tsx` | Smart-grid tile that opens the lookup |
-| `pos.home.modal.render` | `src/Modal.tsx` | Scan or type a barcode or SKU, see stock |
+| `pos.home.tile.render` | `src/Tile.tsx` | Smart-grid tile that opens ProPo |
+| `pos.home.modal.render` | `src/Modal.tsx` | Menu: look up stock (`src/StockLookup.tsx`) or receive a delivery (`src/Receive.tsx`) |
 | `pos.product-details.block.render` | `src/ProductStockBlock.tsx` | Stock at this location and the shop total, on the product screen |
 | `pos.product-details.action.render` | `src/ProductStockModal.tsx` | Every location for that product, opened from the block |
 
@@ -20,7 +20,18 @@ every other active location, with how old each quantity is.
 quantity for the device's location and the total across locations. "View by
 location" opens the same per-location view as the lookup.
 
-It is read-only. Nothing in this extension writes inventory.
+**Receive a delivery.** Staff open a purchase order on its way to the POS
+location (sent, ordered or partly received), scan items to count them or type
+a quantity, and press Receive. The app records the receipt and adds the units
+to Shopify through the same receiving service as the admin screen: it needs a
+signed-in staff member, the order must deliver to the POS location, and
+nothing is received while the receiving switch (`FEATURE_RECEIPT_WRITES`) is
+off. More units than an order expects are refused unless staff turn on
+"Accept more than ordered". Each submission carries a key, so retrying after a
+dropped connection records the delivery once.
+
+Looking up stock and browsing orders change nothing. Receiving is the only
+write in this extension.
 
 ## How it talks to the app
 
@@ -32,6 +43,9 @@ later):
 |---|---|
 | `GET /api/pos/scan?code=&location=` | Resolve a scanned code; includes stock when exactly one product matches |
 | `GET /api/pos/stock?variant=&location=` | Stock for a product picked from several matches |
+| `GET /api/pos/receiving?location=&search=` | Purchase orders on their way to the POS location |
+| `GET /api/pos/receiving/:id?location=` | The lines of one order and how many units each still expects |
+| `POST /api/pos/receiving/:id?location=` | Receive a delivery (JSON body: `idempotencyKey`, `lines`, `allowOverReceipt`) |
 
 Server side, `app/tenant/require-pos-tenant.server.ts` verifies the token
 (signature, expiry, audience), resolves the shop from the token's `dest`,
@@ -47,7 +61,7 @@ minute); over the limit the app answers `429` and the extension asks the
 operator to wait. See `app/lib/pos/pos-rate-limit.server.ts`.
 
 `src/api-types.ts` mirrors the server response types.
-`app/lib/pos/pos-api.test.ts` fails typecheck if the two drift.
+`app/lib/pos/pos-api.test.ts` and `app/lib/pos/receiving-contract.test.ts` fail typecheck if the two drift.
 
 ## Testing on the dev store
 
