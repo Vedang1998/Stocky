@@ -19,7 +19,10 @@ import { buildSyncStatusView } from "../lib/sync-status";
 import { useRevalidateWhile } from "../lib/use-revalidate-while";
 import { readCatalogSyncStatus } from "../sync/sync-status.server";
 import { planSummary } from "../billing/plan-display";
-import { requireActivePlanSnapshot } from "../billing/entitlements.server";
+import {
+  requireActivePlanSnapshot,
+  snapshotAllowsChanges,
+} from "../billing/entitlements.server";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -52,8 +55,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   return {
     plan: planSummary(settings),
-    // The same test requireActivePlanSnapshot applies to the actions below.
-    planActive: settings?.subscriptionActive === true,
+    planActive: snapshotAllowsChanges(settings),
     alerts: alerts.slice(0, 10),
     openPOs,
     supplierCount,

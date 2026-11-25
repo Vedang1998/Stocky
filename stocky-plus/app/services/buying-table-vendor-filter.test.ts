@@ -8,7 +8,7 @@ import type { LoaderFunctionArgs } from "react-router";
 
 const { db } = vi.hoisted(() => ({
   db: {
-    shopSettings: { findUnique: vi.fn(), upsert: vi.fn() },
+    shopSettings: { findUnique: vi.fn() },
     supplier: { findMany: vi.fn() },
     supplierSkuMapping: { findMany: vi.fn() },
   },
@@ -56,8 +56,9 @@ describe("Buying Table vendor filter", () => {
   });
 
   it("only reads the shop's settings (TEN-02)", async () => {
+    // The mock has no upsert, so a write would throw here.
     await load("?supplierId=supplier-1");
-    expect(db.shopSettings.upsert).not.toHaveBeenCalled();
+    expect(db.shopSettings.findUnique).toHaveBeenCalledTimes(1);
   });
 
   it("shows the plan gate when the settings row is missing", async () => {

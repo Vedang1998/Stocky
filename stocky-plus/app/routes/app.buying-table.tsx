@@ -9,7 +9,10 @@ import { Form, redirect, useLoaderData, useNavigation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import type { AbcMetric } from "@prisma/client";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { requireActivePlanSnapshot } from "../billing/entitlements.server";
+import {
+  requireActivePlanSnapshot,
+  snapshotAllowsChanges,
+} from "../billing/entitlements.server";
 import {
   fetchInventoryLevels,
   fetchLocations,
@@ -54,17 +57,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const metric: AbcMetric =
     url.searchParams.get("metric") === "VOLUME" ? "VOLUME" : "REVENUE";
 
-  // Read only: the afterAuth hook creates the row (TEN-02).
-  const settings = await db.shopSettings.findUnique({
-    where: { shop },
-    select: { subscriptionActive: true },
-  });
-  const subscriptionActive = settings?.subscriptionActive ?? false;
-
-  const [suppliers, locations] = await Promise.all([
+  const [settings, suppliers, locations] = await Promise.all([
+    // Read only: the afterAuth hook creates the row (TEN-02).
+    db.shopSettings.findUnique({
+      where: { shop },
+      select: { subscriptionActive: true },
+    }),
     db.supplier.findMany({ where: {}, orderBy: { name: "asc" } }),
     fetchLocations(admin),
   ]);
+  const subscriptionActive = snapshotAllowsChanges(settings);
   const locationId =
     url.searchParams.get("locationId") || locations[0]?.id || "all";
 
