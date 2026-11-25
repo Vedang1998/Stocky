@@ -195,6 +195,27 @@ function get(
 const act = (fields: Record<string, string>) =>
   countRoute.action(post(`/app/stocktakes/${ID}`, fields, { id: ID }));
 
+/** Every change the count page can make, with the fields its form sends. */
+const CHANGES: Array<Record<string, string>> = [
+  { intent: "scan", code: "1111" },
+  { intent: "count", lineId: "line-1", countedQty: "7" },
+  { intent: "addItems", codes: "RED-750" },
+  { intent: "zeroFill" },
+  { intent: "clearZeroFill" },
+  { intent: "recount", lineId: "line-1" },
+  { intent: "keepCount", lineId: "line-1" },
+  { intent: "resolveMovement", lineId: "line-1", resolution: "COUNTED_AFTER" },
+  { intent: "complete" },
+  { intent: "complete", acceptUncounted: "1" },
+  { intent: "cancel" },
+];
+
+function expectNothingSaved() {
+  for (const [name, write] of Object.entries(service)) {
+    expect(write, name).not.toHaveBeenCalled();
+  }
+}
+
 const header = (extra: Partial<StocktakeHeader> = {}): StocktakeHeader => ({
   id: ID,
   name: "Cellar count",
@@ -672,35 +693,13 @@ describe("Count page action", () => {
     expect(await act({})).toEqual({ error: "That action is not available." });
   });
 
-  it.each([
-    "scan",
-    "count",
-    "addItems",
-    "zeroFill",
-    "clearZeroFill",
-    "recount",
-    "keepCount",
-    "resolveMovement",
-    "complete",
-    "cancel",
-  ])(
-    "saves nothing for %s without a signed-in staff member",
-    async (intent) => {
+  it.each(CHANGES)(
+    "saves nothing for $intent without a signed-in staff member",
+    async (fields) => {
       context.actor = null;
 
-      expect(
-        await act({
-          intent,
-          code: "1111",
-          codes: "1111",
-          lineId: "line-1",
-          countedQty: "3",
-          resolution: "COUNTED_BEFORE",
-        }),
-      ).toEqual({ error: STAFF_REQUIRED_MESSAGE });
-      for (const [name, write] of Object.entries(service)) {
-        expect(write, name).not.toHaveBeenCalled();
-      }
+      expect(await act(fields)).toEqual({ error: STAFF_REQUIRED_MESSAGE });
+      expectNothingSaved();
     },
   );
 
@@ -1777,24 +1776,6 @@ describe("Stocktakes without an active plan", () => {
     }
   };
 
-  const CHANGES: Array<Record<string, string>> = [
-    { intent: "scan", code: "1111" },
-    { intent: "count", lineId: "line-1", countedQty: "7" },
-    { intent: "addItems", codes: "RED-750" },
-    { intent: "zeroFill" },
-    { intent: "clearZeroFill" },
-    { intent: "recount", lineId: "line-1" },
-    { intent: "keepCount", lineId: "line-1" },
-    {
-      intent: "resolveMovement",
-      lineId: "line-1",
-      resolution: "COUNTED_AFTER",
-    },
-    { intent: "complete" },
-    { intent: "complete", acceptUncounted: "1" },
-    { intent: "cancel" },
-  ];
-
   /** Every submit button with its label; "Find" only searches the count. */
   function submitButtons(html: string) {
     const buttons = html.match(/<s-button[^>]*type="submit"[^>]*>[^<]*/g) ?? [];
@@ -1823,9 +1804,7 @@ describe("Stocktakes without an active plan", () => {
         expect(refusal, String(index)).toBeInstanceOf(Response);
         expect((refusal as Response).status, String(index)).toBe(403);
       }
-      for (const [name, call] of Object.entries(service)) {
-        expect(call, name).not.toHaveBeenCalled();
-      }
+      expectNothingSaved();
       expect(reads.getStocktake).not.toHaveBeenCalled();
     });
   }

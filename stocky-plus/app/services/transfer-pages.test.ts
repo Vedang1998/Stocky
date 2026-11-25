@@ -194,6 +194,32 @@ function get(
 const act = (fields: Record<string, string>) =>
   detailRoute.action(post(`/app/transfers/${ID}`, fields, { id: ID }));
 
+/** Every change the transfer page can make, with the fields its form sends. */
+const CHANGES: Array<Record<string, string>> = [
+  { intent: "addItem", code: "RED-750", quantity: "2" },
+  { intent: "addItems", items: "RED-750,2" },
+  { intent: "setQuantity", lineId: "line-1", quantity: "4" },
+  { intent: "pick", lineId: "line-1", pickedQty: "4" },
+  { intent: "remove", lineId: "line-1" },
+  { intent: "ship" },
+  { intent: "ship", allowShortSource: "1" },
+  { intent: "cancel" },
+  { intent: "scan", code: "RED-750" },
+  { intent: "countIn", lineId: "line-1", quantity: "3" },
+  { intent: "reject", lineId: "line-1", quantity: "1", note: "Broken" },
+  { intent: "countInAll" },
+  { intent: "postReceipt" },
+  { intent: "receiveAll" },
+  { intent: "close", resolution: "RETURNED" },
+  { intent: "close", resolution: "WRITTEN_OFF" },
+];
+
+function expectNothingSaved() {
+  for (const [name, write] of Object.entries({ ...drafts, ...receiving })) {
+    expect(write, name).not.toHaveBeenCalled();
+  }
+}
+
 const header = (extra: Partial<TransferHeader> = {}): TransferHeader => ({
   id: ID,
   sourceLocationId: WAREHOUSE,
@@ -781,43 +807,13 @@ describe("Transfer page action", () => {
     expect(drafts.createTransfer).not.toHaveBeenCalled();
   });
 
-  it.each([
-    "addItem",
-    "addItems",
-    "setQuantity",
-    "pick",
-    "remove",
-    "ship",
-    "cancel",
-    "scan",
-    "countIn",
-    "reject",
-    "countInAll",
-    "postReceipt",
-    "receiveAll",
-    "close",
-  ])(
-    "saves nothing for %s without a signed-in staff member",
-    async (intent) => {
+  it.each(CHANGES)(
+    "saves nothing for $intent without a signed-in staff member",
+    async (fields) => {
       context.actor = null;
 
-      expect(
-        await act({
-          intent,
-          code: "RED-750",
-          items: "RED-750",
-          lineId: "line-1",
-          quantity: "2",
-          pickedQty: "1",
-          rejectedQty: "1",
-        }),
-      ).toEqual({ error: STAFF_REQUIRED_MESSAGE });
-      for (const [name, service] of Object.entries({
-        ...drafts,
-        ...receiving,
-      })) {
-        expect(service, name).not.toHaveBeenCalled();
-      }
+      expect(await act(fields)).toEqual({ error: STAFF_REQUIRED_MESSAGE });
+      expectNothingSaved();
     },
   );
 
@@ -2162,25 +2158,6 @@ describe("Transfers without an active plan", () => {
     }
   };
 
-  const CHANGES: Array<Record<string, string>> = [
-    { intent: "addItem", code: "RED-750", quantity: "2" },
-    { intent: "addItems", items: "RED-750,2" },
-    { intent: "setQuantity", lineId: "line-1", quantity: "4" },
-    { intent: "pick", lineId: "line-1", pickedQty: "4" },
-    { intent: "remove", lineId: "line-1" },
-    { intent: "ship" },
-    { intent: "ship", allowShortSource: "1" },
-    { intent: "cancel" },
-    { intent: "scan", code: "RED-750" },
-    { intent: "countIn", lineId: "line-1", quantity: "3" },
-    { intent: "reject", lineId: "line-1", quantity: "1", note: "Broken" },
-    { intent: "countInAll" },
-    { intent: "postReceipt" },
-    { intent: "receiveAll" },
-    { intent: "close", resolution: "RETURNED" },
-    { intent: "close", resolution: "WRITTEN_OFF" },
-  ];
-
   const submitButtons = (html: string) =>
     html.match(/<s-button[^>]*type="submit"[^>]*>/g) ?? [];
 
@@ -2210,12 +2187,7 @@ describe("Transfers without an active plan", () => {
       expect(await (refusals[0] as Response).text()).toBe(
         "An active ProPo plan is required for this feature. You can choose a plan from Billing.",
       );
-      for (const [name, service] of Object.entries({
-        ...drafts,
-        ...receiving,
-      })) {
-        expect(service, name).not.toHaveBeenCalled();
-      }
+      expectNothingSaved();
       expect(reads.getTransfer).not.toHaveBeenCalled();
     });
   }

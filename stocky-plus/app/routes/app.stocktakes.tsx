@@ -90,8 +90,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     scope: text(form.get("scope")),
     blind: text(form.get("blind")),
   };
-  // The draft records who made it, so none is made for a request that names
-  // no staff member. What was entered goes back to the form.
+  // Refused with what was entered, so the form is not emptied.
   if (!actor) return { error: STAFF_REQUIRED_MESSAGE, values };
   const result = await createStocktake(db, admin, {
     shop: tenant.myshopifyDomain,

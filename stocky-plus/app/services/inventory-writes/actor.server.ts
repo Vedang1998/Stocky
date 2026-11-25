@@ -38,9 +38,9 @@ export function adminActorFromSessionToken(token: unknown): InventoryActor {
 }
 
 /**
- * requireAdminTenant that also reports who is acting, for actions that answer
- * a missing staff member with a message on the page rather than an error
- * response. Every action that saves something refuses a null actor.
+ * requireAdminTenant plus the acting staff member, or null when the request
+ * names none. For actions that answer a missing staff member with a message
+ * on the page; `requireInventoryActorContext` refuses the request instead.
  */
 export async function requireAdminTenantWithActor(
   input: RequireAdminTenantInput,
