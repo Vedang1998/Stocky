@@ -115,16 +115,13 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   ]);
 
   // Smart Forecast is read only for the rows on this page, and only when the
-  // merchant chose its column.
-  const showSmartForecast = columns.includes("smartForecast");
-  const profile = showSmartForecast ? await readShopReportingProfile(tenant) : null;
+  // merchant chose its column; a failure shows in the column, not the page.
   const smartForecast = await smartForecastColumn(db, {
-    shown: showSmartForecast,
+    shown: columns.includes("smartForecast"),
     entitlements,
     worksheet,
     rows: page.lines,
-    shopCurrencyCode: profile?.currencyCode ?? null,
-    installedAt: profile?.installedAt ?? null,
+    readProfile: () => readShopReportingProfile(tenant),
   });
 
   const { summary, settings } = worksheet;

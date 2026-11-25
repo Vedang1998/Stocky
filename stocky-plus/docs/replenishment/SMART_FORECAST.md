@@ -30,7 +30,7 @@ capability, entitlement key `forecast.smart`).
 
 | Model | What it does | History needed |
 |---|---|---|
-| Recent average (`PARITY_AVERAGE`) | Units over the sales period ÷ its days, as Stocky does. The baseline every other model must beat. | the sales period |
+| Recent average (`PARITY_AVERAGE`) | Units over the sales period ÷ its days, as the worksheet's suggestion does. The baseline every other model must beat. | the sales period |
 | Same weekday, recent weeks (`SEASONAL_NAIVE_WEEKLY`) | Each future day is the average of the same weekday over the last four weeks. | 28 days |
 | Recent average with trend (`TREND_BLEND`) | Half the recent level, half a least-squares line over the last eight weeks, never below zero. | 56 days |
 | Occasional sales (`CROSTON_SBA`) | Croston's method with the Syntetos–Boylan correction: smooths sale size and the gap between sales separately (α = 0.1). | 56 days |
@@ -70,7 +70,7 @@ as zero demand.
 - **Which worksheets:** only those made with "Last X days", because the
   recent average every method must beat is that method's own number. Other
   methods read different days, so the comparison would not be like for like.
-- **History:** `loadDemandHistory` (`history.server.ts`) reads the variant's
+- **History:** `loadDemandHistories` (`history.server.ts`) reads the variant's
   daily net units from the shared sales history, ending the day before the
   worksheet's date and starting no earlier than the shop's stored order
   history, so days before it are never read as zero sales. Stock-out days are
@@ -80,26 +80,43 @@ as zero demand.
 - **Using it:** when a method was chosen, an "Order N" button sets the row's
   order quantity through the worksheet's normal quantity change. The parity
   suggestion stays as it was. When the average was kept, the panel says to
-  keep the Stocky Parity suggestion and offers no button.
+  keep the worksheet's suggestion (shown to merchants without the Stocky
+  name) and offers no button.
 
 ## The worksheet column
 
-"Smart Forecast (Pro plan)" is one of the optional columns under
+"Smart Forecast (Pro plan)" (the plan name comes from the plan catalog,
+`lowestPlanWith("forecast.smart")`) is one of the optional columns under
 **Columns**. It is off by default, and nothing is read unless the merchant
 turned it on, the shop's plan includes `forecast.smart` and the worksheet was
 made with "Last X days". Otherwise the column shows "Pro plan" or "Last X
-days only" and no history is read.
+days only" and nothing is read, not even the shop profile.
 
 When it runs, `smartForecastColumn` (`worksheet.server.ts`) forecasts only the
 rows on the current page (at most 100), from one read of the
 sales history for all their variants (`loadDemandHistories`). Each cell shows
-the forecast units over the worksheet's days to cover and the model chosen,
-or "Recent average kept". The column is not sortable and is not in the CSV
+the forecast units over the worksheet's days to cover and the model chosen.
+When the recent average is kept it shows only "Recent average kept", with no
+figure, so that it never sits beside a different, recalculated number next
+to the worksheet's own Forecast demand.
+
+**Limits and failures.** The sales history read scans every order in the
+window, not only the page's variants, so its cost grows with the shop's
+order volume. One count runs first: when the window holds more than
+`SMART_FORECAST_COLUMN_MAX_ORDERS` (20,000) orders, the read is skipped. Any
+failure, including that one, shows "Not available now" in the column and is
+logged; the worksheet itself still opens, so the merchant can always turn
+the column off. Each row's own "Run Smart Forecast" button is not capped.
+Making the read proportional to the rows shown (a per-variant daily rollup,
+or a per-worksheet cache) is listed below. The column is not sortable and is not in the CSV
 export, because it is worked out when the page is shown and is never stored.
 Ordering from a forecast stays in the row detail panel, which shows why the
 model was chosen.
 
 ## Not done yet
+
+- The worksheet column's history read is proportional to the shop's orders
+  in the window, not to the rows shown; see "Limits and failures".
 
 - Out-of-stock days from inventory history (the adapter marks every day as
   unknown until the app keeps daily stock levels per variant).

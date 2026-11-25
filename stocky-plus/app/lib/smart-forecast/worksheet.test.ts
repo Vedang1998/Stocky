@@ -7,7 +7,7 @@ import { resolveEntitlements } from "../../billing/entitlements";
 import { addDays, type LocalDate } from "../replenishment/local-date";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 
-const mocks = vi.hoisted(() => ({ loadDemandHistories: vi.fn() }));
+const mocks = vi.hoisted(() => ({ loadDemandHistories: vi.fn(), readProfile: vi.fn() }));
 vi.mock("./history.server", () => ({ loadDemandHistories: mocks.loadDemandHistories }));
 
 import { smartForecastBasis, smartForecastColumn } from "./worksheet.server";
@@ -61,14 +61,15 @@ function input(overrides: Partial<Parameters<typeof smartForecastColumn>[1]> = {
     entitlements: PRO,
     worksheet: WORKSHEET,
     rows: ROWS,
-    shopCurrencyCode: "USD",
-    installedAt: null,
+    readProfile: mocks.readProfile,
     ...overrides,
   };
 }
 
 beforeEach(() => {
   mocks.loadDemandHistories.mockReset();
+  mocks.readProfile.mockReset();
+  mocks.readProfile.mockResolvedValue({ currencyCode: "USD", installedAt: null });
   mocks.loadDemandHistories.mockResolvedValue({
     startLocalDate: "2026-07-07",
     byVariant: new Map([
@@ -100,6 +101,7 @@ describe("smartForecastColumn", () => {
   it("reads nothing when the column is not shown", async () => {
     expect(await smartForecastColumn(db, input({ shown: false }))).toEqual({ status: "OFF" });
     expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
+    expect(mocks.readProfile).not.toHaveBeenCalled();
   });
 
   it("reads nothing for a shop without the Pro plan", async () => {
@@ -107,6 +109,7 @@ describe("smartForecastColumn", () => {
       status: "PLAN",
     });
     expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
+    expect(mocks.readProfile).not.toHaveBeenCalled();
   });
 
   it("reads nothing for a worksheet made with another method", async () => {
@@ -115,6 +118,7 @@ describe("smartForecastColumn", () => {
       status: "METHOD",
     });
     expect(mocks.loadDemandHistories).not.toHaveBeenCalled();
+    expect(mocks.readProfile).not.toHaveBeenCalled();
   });
 
   it("forecasts every row on the page from one history read", async () => {
@@ -128,6 +132,7 @@ describe("smartForecastColumn", () => {
       timeZone: "America/New_York",
       currencyCode: "USD",
       installedAt: null,
+      maxOrders: 20_000,
     });
     // Steady demand: nothing beats the recent average, so it is kept.
     expect(column).toEqual({
@@ -145,5 +150,15 @@ describe("smartForecastColumn", () => {
         },
       },
     });
+  });
+
+  it("still opens the worksheet when the forecasts cannot be read, and says so in the column", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mocks.loadDemandHistories.mockRejectedValue(new Error("query timeout"));
+    expect(await smartForecastColumn(db, input())).toEqual({ status: "UNAVAILABLE" });
+    mocks.loadDemandHistories.mockReset();
+    mocks.readProfile.mockRejectedValue(new Error("no shop calendar"));
+    expect(await smartForecastColumn(db, input())).toEqual({ status: "UNAVAILABLE" });
+    warn.mockRestore();
   });
 });

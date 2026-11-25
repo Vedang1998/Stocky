@@ -192,3 +192,8 @@ export function findSelfServePlan(
 export function annualSavingsCents(plan: SelfServePlan): number {
   return plan.monthlyPriceCents * 12 - plan.annualPriceCents;
 }
+
+/** The least expensive self-serve plan that includes a capability. */
+export function lowestPlanWith(capability: CapabilityKey): SelfServePlan | null {
+  return SELF_SERVE_PLANS.find((plan) => plan.capabilities.includes(capability)) ?? null;
+}

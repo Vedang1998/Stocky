@@ -17,6 +17,7 @@ import {
   type WorksheetView,
 } from "../../lib/replenishment/worksheet/view";
 import type { SmartForecastColumn, WorksheetActionResult } from "./types";
+import { lowestPlanWith } from "../../billing/plans";
 import { money, percent, quantity, units } from "./format";
 import type { LineDetailContext } from "./LineDetailModal";
 
@@ -142,6 +143,12 @@ type CellContext = Pick<LineDetailContext, "currencyCode" | "salesDays"> & {
   smartForecast: SmartForecastColumn;
 };
 
+const SMART_FORECAST_STATUS_TEXT = {
+  PLAN: `${lowestPlanWith("forecast.smart")?.displayName ?? "Higher"} plan`,
+  METHOD: "Last X days only",
+  UNAVAILABLE: "Not available now",
+} as const;
+
 /**
  * A row's Smart Forecast: the units expected over the days to cover and the
  * method used. Advice beside the parity suggestion, which it never changes.
@@ -155,16 +162,19 @@ function SmartForecastCellView({
 }) {
   if (column.status === "OFF") return MISSING_VALUE;
   if (column.status !== "OK") {
-    return <s-text color="subdued">{column.status === "PLAN" ? "Pro plan" : "Last X days only"}</s-text>;
+    return <s-text color="subdued">{SMART_FORECAST_STATUS_TEXT[column.status]}</s-text>;
   }
   const cell = column.byRow[line.id];
   if (!cell || cell.forecastUnits == null) return MISSING_VALUE;
+  // When the recent average is kept, the worksheet's own Forecast demand is
+  // the figure to read; a recalculated one beside it would only differ.
+  if (cell.outcome !== "SELECTED") {
+    return <s-text color="subdued">Recent average kept</s-text>;
+  }
   return (
     <s-stack direction="block" gap="none">
       <s-text>{units(cell.forecastUnits)}</s-text>
-      <s-text color="subdued">
-        {cell.outcome === "SELECTED" ? cell.label : "Recent average kept"}
-      </s-text>
+      <s-text color="subdued">{cell.label}</s-text>
     </s-stack>
   );
 }
