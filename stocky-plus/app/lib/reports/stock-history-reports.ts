@@ -4,8 +4,8 @@
  * capture is shown as not captured: its figures are blank, never zero, and no
  * other day stands in for it.
  */
-import { Decimal, ZERO } from "../analytics/money";
-import { formatShopInstant, countOf, formatCell } from "./present";
+import type { Decimal } from "../analytics/money";
+import { formatShopInstant, countOf } from "./present";
 import {
   enumerateLocalDates,
   type LocalDate,
@@ -16,6 +16,7 @@ import type {
   StockSnapshotDay,
 } from "../analytics/stock-history.server";
 import type { StockLocation } from "../analytics/stock-levels.server";
+import { count, money, sumValues, valueOf } from "./stock-reports";
 import type { VariantDirectory } from "./variant-directory";
 import type { ReportData, ReportNotice, ReportTile } from "./types";
 
@@ -25,14 +26,6 @@ export const STOCK_HISTORY_METHOD_NOTES = [
   "A day the app did not save is shown as not captured and left blank. It is not zero, and no other day is used in its place.",
   "Only variants with inventory tracking turned on are saved.",
 ];
-
-function count(value: number): string {
-  return formatCell("integer", value, "");
-}
-
-function money(value: Decimal, currencyCode: string): string {
-  return formatCell("money", value, currencyCode);
-}
 
 function historyStartNotice(first: LocalDate | null): ReportNotice | null {
   return first === null
@@ -250,17 +243,6 @@ export type StockOnDateInput = {
   currencyCode: string;
   timeZone: string;
 };
-
-function valueOf(onHand: number | null, unit: Decimal | null): Decimal | null {
-  if (onHand === null || unit === null) return null;
-  return unit.times(Math.max(onHand, 0));
-}
-
-function sumValues(values: Iterable<Decimal | null>): Decimal {
-  let total = ZERO;
-  for (const value of values) if (value) total = total.plus(value);
-  return total;
-}
 
 function notCapturedNotice(input: StockOnDateInput): ReportNotice {
   if (input.date >= input.today) {
