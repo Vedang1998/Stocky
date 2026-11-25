@@ -65,7 +65,8 @@ export class ReplenishmentRuleError extends Error {
       | "invalid_variant"
       | "invalid_scope"
       | "variant_not_found"
-      | "location_not_found",
+      | "location_not_found"
+      | "too_many_variants",
     message: string,
   ) {
     super(message);
@@ -237,6 +238,14 @@ export async function saveVariantRule(
   return "saved";
 }
 
+const RULE_FIELD_LIMITS: Record<RuleField, { label: string; max: number }> = {
+  minimumQuantity: { label: "Minimum", max: MAX_QUANTITY },
+  shelfLimitQuantity: { label: "Shelf limit", max: MAX_QUANTITY },
+  reorderPointQuantity: { label: "Reorder point", max: MAX_QUANTITY },
+  safetyStockQuantity: { label: "Safety stock", max: MAX_QUANTITY },
+  leadTimeDays: { label: "Lead time", max: MAX_LEAD_TIME_DAYS },
+};
+
 export function parseVariantRuleForm(form: FormData):
   | {
       ok: true;
@@ -251,50 +260,17 @@ export function parseVariantRuleForm(form: FormData):
   if (!isVariantGid(variantGid)) errors.variantGid = "Unknown variant.";
   if (!isScopeKey(scopeKey)) errors.scopeKey = "Unknown stock scope.";
 
-  const quantity = { min: 0, max: MAX_QUANTITY };
-  const optional = { optional: true };
-  const values: VariantRuleValues = {
-    minimumQuantity: parseWholeNumber(
-      form.get("minimumQuantity"),
-      "minimumQuantity",
-      "Minimum",
-      quantity,
-      errors,
-      optional,
-    ),
-    shelfLimitQuantity: parseWholeNumber(
-      form.get("shelfLimitQuantity"),
-      "shelfLimitQuantity",
-      "Shelf limit",
-      quantity,
-      errors,
-      optional,
-    ),
-    reorderPointQuantity: parseWholeNumber(
-      form.get("reorderPointQuantity"),
-      "reorderPointQuantity",
-      "Reorder point",
-      quantity,
-      errors,
-      optional,
-    ),
-    safetyStockQuantity: parseWholeNumber(
-      form.get("safetyStockQuantity"),
-      "safetyStockQuantity",
-      "Safety stock",
-      quantity,
-      errors,
-      optional,
-    ),
-    leadTimeDays: parseWholeNumber(
-      form.get("leadTimeDays"),
-      "leadTimeDays",
-      "Lead time",
-      { min: 0, max: MAX_LEAD_TIME_DAYS },
-      errors,
-      optional,
-    ),
-  };
+  const values = Object.fromEntries(
+    RULE_FIELDS.map((field) => {
+      const { label, max } = RULE_FIELD_LIMITS[field];
+      return [
+        field,
+        parseWholeNumber(form.get(field), field, label, { min: 0, max }, errors, {
+          optional: true,
+        }),
+      ];
+    }),
+  ) as VariantRuleValues;
 
   if (
     Object.keys(errors).length > 0 ||
@@ -345,7 +321,13 @@ export async function applyRuleChanges(
     throw new ReplenishmentRuleError("invalid_scope", "Unknown stock scope");
   }
   const variantGids = [...new Set(input.variantGids)];
-  if (variantGids.length > MAX_BULK_RULE_VARIANTS || !variantGids.every(isVariantGid)) {
+  if (variantGids.length > MAX_BULK_RULE_VARIANTS) {
+    throw new ReplenishmentRuleError(
+      "too_many_variants",
+      `Levels can be set for at most ${MAX_BULK_RULE_VARIANTS.toLocaleString("en-US")} products at once. Filter or search the worksheet first.`,
+    );
+  }
+  if (!variantGids.every(isVariantGid)) {
     throw new ReplenishmentRuleError("invalid_variant", "Unknown variant");
   }
   const changes: RuleChanges = {};
@@ -422,14 +404,6 @@ export async function applyRuleChanges(
 
 export type RuleChangeMode = "keep" | "set" | "clear";
 export const RULE_CHANGE_MODES: readonly RuleChangeMode[] = ["keep", "set", "clear"];
-
-const RULE_FIELD_LIMITS: Record<RuleField, { label: string; max: number }> = {
-  minimumQuantity: { label: "Minimum", max: MAX_QUANTITY },
-  shelfLimitQuantity: { label: "Shelf limit", max: MAX_QUANTITY },
-  reorderPointQuantity: { label: "Reorder point", max: MAX_QUANTITY },
-  safetyStockQuantity: { label: "Safety stock", max: MAX_QUANTITY },
-  leadTimeDays: { label: "Lead time", max: MAX_LEAD_TIME_DAYS },
-};
 
 /**
  * Reads the bulk levels form: for each field, `<field>Mode` is keep, set or

@@ -398,6 +398,20 @@ describe("replenishment planning inputs", () => {
       }
     }
 
+    it("refuses more variants than one change may cover, with a message saying so", async () => {
+      const tooMany = Array.from(
+        { length: 5001 },
+        (_unused, index) => `gid://shopify/ProductVariant/${900000 + index}`,
+      );
+      await expect(
+        applyRuleChanges(dbA(), {
+          variantGids: tooMany,
+          scopeKey: SHOP_SCOPE,
+          changes: { safetyStockQuantity: 6 },
+        }),
+      ).rejects.toMatchObject({ code: "too_many_variants" });
+    });
+
     it("changes only the chosen levels and adds levels for variants without any", async () => {
       await startFrom([
         {
