@@ -68,7 +68,7 @@ CSV export always has every column.
 
 Net sales per day is the row's net sales divided by the days in the
 worksheet's sales period. It is worked out when shown, from the stored net
-sales, and is in the row's detail and the CSV export.
+sales, and is in the table (as a column), the row's detail and the CSV export.
 
 ## What can be changed
 

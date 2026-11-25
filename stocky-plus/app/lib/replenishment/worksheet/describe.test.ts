@@ -110,7 +110,7 @@ describe("lineMargin", () => {
     expect(lineMargin(usd)).toEqual({ margin: "40.0", markup: "66.7", currenciesDiffer: false });
   });
 
-  it("prefers the supplier cost, which is what an order would pay", () => {
+  it("prefers the supplier's listed cost over the Shopify cost", () => {
     expect(
       lineMargin({ ...usd, supplierCostAmount: "15.00", supplierCostCurrencyCode: "USD" }),
     ).toEqual({ margin: "25.0", markup: "33.3", currenciesDiffer: false });

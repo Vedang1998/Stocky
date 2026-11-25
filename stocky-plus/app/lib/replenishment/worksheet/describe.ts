@@ -129,8 +129,7 @@ export function marginAndMarkup(
 }
 
 /**
- * A row's margin and markup on the cost an order would use: the supplier's
- * cost when there is one, otherwise the Shopify unit cost. Both are null when
+ * A row's margin and markup on the supplier's listed cost when there is one, otherwise the Shopify unit cost. Both are null when
  * the price and that cost are in different currencies, because comparing
  * them would mean nothing.
  */

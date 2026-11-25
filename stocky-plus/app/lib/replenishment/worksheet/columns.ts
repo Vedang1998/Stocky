@@ -49,7 +49,7 @@ export const WORKSHEET_COLUMN_LABELS: Record<WorksheetColumn, string> = {
   committed: "Committed",
   incoming: "Incoming",
   netUnits: "Net units sold",
-  orders: "Orders",
+  orders: "Sales orders",
   revenue: "Net sales",
   unitsPerDay: "Units per day",
   revenuePerDay: "Net sales per day",

@@ -2,7 +2,7 @@
  * A worksheet as a spreadsheet: one row per variant with the figures the
  * screen shows and the ones in each row's detail.
  */
-import { revenuePerDay, STOCK_STATUS_LABELS, WARNING_LABELS } from "./describe";
+import { lineMargin, revenuePerDay, STOCK_STATUS_LABELS, WARNING_LABELS } from "./describe";
 import type { WorksheetLine } from "./store.server";
 
 export const WORKSHEET_CSV_HEADERS = [
@@ -19,10 +19,11 @@ export const WORKSHEET_CSV_HEADERS = [
   "Committed",
   "Incoming",
   "Net units sold",
-  "Orders",
+  "Sales orders",
   "Net sales",
   "Net sales per day",
   "Units per day",
+  "Forecast demand",
   "ABC class",
   "Days of stock",
   "Runs out around",
@@ -43,6 +44,8 @@ export const WORKSHEET_CSV_HEADERS = [
   "Shopify unit cost currency",
   "Supplier cost",
   "Supplier cost currency",
+  "Margin %",
+  "Markup %",
   "Warnings",
   "Purchase order",
 ] as const;
@@ -51,6 +54,8 @@ type Cell = string | number | null;
 
 /** `salesDays` is the length of the worksheet's sales period, when known. */
 export function worksheetCsvRow(line: WorksheetLine, salesDays: number | null): Cell[] {
+  // The same figures as the table's Margin and Markup columns.
+  const { margin, markup } = lineMargin(line);
   return [
     line.productTitle,
     line.variantTitle === "Default Title" ? "" : line.variantTitle,
@@ -69,6 +74,7 @@ export function worksheetCsvRow(line: WorksheetLine, salesDays: number | null): 
     line.revenueAmount,
     revenuePerDay(line.revenueAmount, salesDays),
     line.unitsPerDay,
+    line.forecastDemand,
     line.abcClass,
     line.daysOfStock,
     line.depletionDate,
@@ -89,6 +95,8 @@ export function worksheetCsvRow(line: WorksheetLine, salesDays: number | null): 
     line.unitCostCurrencyCode,
     line.supplierCostAmount,
     line.supplierCostCurrencyCode,
+    margin,
+    markup,
     line.warningCodes.map((code) => WARNING_LABELS[code] ?? code).join("; "),
     line.purchaseOrderNumber,
   ];

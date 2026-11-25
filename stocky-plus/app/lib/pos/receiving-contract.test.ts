@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import type * as Contract from "../../../extensions/propo-pos/src/api-types";
+import { MAX_COUNT, matchLine } from "../../../extensions/propo-pos/src/receiving";
+import { MAX_RECEIPT_QUANTITY } from "../../services/purchasing/receiving.server";
+import { findScannedLine } from "../purchasing/receiving-scan";
+import type {
+  PosReceiptResponse,
+  PosReceivableOrder,
+  PosReceivingLine,
+  PosReceivingList,
+  PosReceivingSheet,
+} from "./receiving-api.server";
+
+describe("POS receiving response contract", () => {
+  it("matches the server types", () => {
+    type Same<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
+    const contract: [
+      Same<PosReceivableOrder, Contract.ReceivableOrder>,
+      Same<PosReceivingList, Contract.ReceivingListResponse>,
+      Same<PosReceivingLine, Contract.ReceivingLine>,
+      Same<PosReceivingSheet, Contract.ReceivingSheet>,
+      Same<PosReceiptResponse, Contract.ReceiptResponse>,
+    ] = [true, true, true, true, true];
+    expect(contract).toEqual([true, true, true, true, true]);
+  });
+});
+
+describe("quantity limit", () => {
+  it("clamps counts on the device at the limit the server enforces", () => {
+    expect(MAX_COUNT).toBe(MAX_RECEIPT_QUANTITY);
+  });
+});
+
+describe("scanning on POS and in the admin", () => {
+  const lines = [
+    { lineItemId: "a", name: "A", sku: "SKU-A", barcode: "111", openQty: 1, variantGid: "v", orderedQty: 1, receivedQty: 0, pendingQty: 0, rejectedQty: 0 },
+    { lineItemId: "b", name: "B", sku: "111", barcode: null, openQty: 1, variantGid: "w", orderedQty: 1, receivedQty: 0, pendingQty: 0, rejectedQty: 0 },
+    { lineItemId: "c", name: "C", sku: " Mixed-Case ", barcode: " 222 ", openQty: 1, variantGid: "x", orderedQty: 1, receivedQty: 0, pendingQty: 0, rejectedQty: 0 },
+  ];
+
+  it.each(["111", "sku-a", " 222 ", "mixed-case", "missing", "", "  "])(
+    "matches %j the same way",
+    (code) => {
+      expect(matchLine(lines, code)?.lineItemId ?? null).toBe(
+        findScannedLine(lines, code)?.lineItemId ?? null,
+      );
+    },
+  );
+});
