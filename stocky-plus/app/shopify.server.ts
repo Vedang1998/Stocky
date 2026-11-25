@@ -7,6 +7,8 @@ import {
 import type { SessionStorage } from "@shopify/shopify-app-session-storage";
 import { shopifySessionStorage } from "./tenant/bootstrap.server";
 import { runAfterAuthTenantBootstrap } from "./tenant/after-auth.server";
+import { createTenantDb } from "./tenant/tenant-db.server";
+import { refreshPlanSnapshotAfterAuth } from "./billing/entitlements.server";
 import {
   enqueueAfterAuthCatalogSync,
   enqueueOrderFactsSync,
@@ -36,8 +38,18 @@ const shopify = shopifyApp({
   ...appConfig,
   sessionStorage: shopifySessionStorage,
   hooks: {
-    afterAuth: async ({ session }) => {
-      const { tenant } = await runAfterAuthTenantBootstrap(session);
+    afterAuth: async ({ session, admin }) => {
+      const { tenant, reactivated } =
+        await runAfterAuthTenantBootstrap(session);
+      // Runs alongside the enqueues below and is awaited at the end. The
+      // empty catch only stops a rejection being reported as unhandled while
+      // the enqueues run; the await below still throws it.
+      const planRefresh = refreshPlanSnapshotAfterAuth({
+        admin,
+        db: createTenantDb(tenant),
+        reactivated,
+      });
+      planRefresh.catch(() => {});
       try {
         await enqueueAfterAuthCatalogSync(tenant);
       } catch (err) {
@@ -51,6 +63,7 @@ const shopify = shopifyApp({
       } catch (err) {
         console.warn("Order history import enqueue skipped:", err);
       }
+      await planRefresh;
     },
   },
 });
