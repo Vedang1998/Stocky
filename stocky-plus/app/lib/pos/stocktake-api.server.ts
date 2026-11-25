@@ -65,6 +65,8 @@ export type PosCountResponse =
         title: string;
         countedQty: number | null;
         added: boolean;
+        /** The scan began a recount: the count restarted from this scan. */
+        recounted: boolean;
       };
       progress: PosCountProgress;
     }
@@ -216,6 +218,7 @@ export async function countAtPos(
             title: result.title,
             countedQty: result.countedQty,
             added: result.added,
+            recounted: result.recounted,
           },
           progress,
         }
@@ -242,6 +245,7 @@ export async function countAtPos(
           title: "",
           countedQty: request.countedQty,
           added: false,
+          recounted: false,
         },
         progress,
       }

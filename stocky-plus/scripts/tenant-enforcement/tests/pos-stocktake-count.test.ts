@@ -19,6 +19,7 @@ import type { InventoryActor } from "../../../app/services/inventory-writes/type
 import {
   cancelStocktake,
   createStocktake,
+  requestStocktakeRecount,
 } from "../../../app/services/stocktakes/stocktake.server";
 import { resolveAuthorityAfterVerifiedAuth } from "../../../app/tenant/bootstrap.server";
 import type { PosTenantContext } from "../../../app/tenant/require-pos-tenant.server";
@@ -199,6 +200,19 @@ describe("counting a stocktake from POS", () => {
       expect(second).toMatchObject({ ok: true, line: { countedQty: 4 } });
       const line = await prisma.stocktakeLineItem.findFirstOrThrow({ where: { stocktakeId: id, shopifyVariantId: RED } });
       expect(line).toMatchObject({ countedQty: 4, countedByUserId: "77", countSource: "SCAN" });
+    });
+
+    it("restarts a line that waits for a recount from the next scan and says so", async () => {
+      const id = await startCount(dbA, SHOP_A, CELLAR);
+      const first = (await scan(dbA, id, "1111", CELLAR, 5)) as { line: { lineId: string; recounted: boolean } };
+      await requestStocktakeRecount(dbA, { stocktakeId: id, lineId: first.line.lineId });
+
+      const again = await scan(dbA, id, "1111", CELLAR, 2);
+
+      expect(first.line.recounted).toBe(false);
+      expect(again).toMatchObject({ ok: true, line: { countedQty: 2, recounted: true } });
+      const next = await scan(dbA, id, "1111", CELLAR, 1);
+      expect(next).toMatchObject({ ok: true, line: { countedQty: 3, recounted: false } });
     });
 
     it("answers a code that matches nothing with the reason, not an error", async () => {

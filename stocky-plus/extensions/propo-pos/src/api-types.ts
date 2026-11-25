@@ -160,7 +160,13 @@ export type CountSheet = {
 export type CountResponse =
   | {
       ok: true;
-      line: { lineId: string; title: string; countedQty: number | null; added: boolean };
+      line: {
+        lineId: string;
+        title: string;
+        countedQty: number | null;
+        added: boolean;
+        recounted: boolean;
+      };
       progress: CountProgress;
     }
   | { ok: false; message: string; progress: CountProgress };

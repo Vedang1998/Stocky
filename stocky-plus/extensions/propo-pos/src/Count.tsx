@@ -198,7 +198,11 @@ function CountSheetScreen({
       setNotice({
         tone: "success",
         heading: `${line.title}: ${formatQuantity(line.countedQty ?? 0)} counted`,
-        detail: line.added ? "Added to this count." : undefined,
+        detail: line.recounted
+          ? "Recount started: the count began again from this scan."
+          : line.added
+            ? "Added to this count."
+            : undefined,
       });
     },
     [locationId, stocktakeId],
