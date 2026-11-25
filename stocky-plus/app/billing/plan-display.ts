@@ -9,6 +9,7 @@ import {
 } from "./entitlements";
 import {
   annualSavingsCents,
+  findSelfServePlan,
   type SelfServePlan,
   type SelfServeSupportLevel,
 } from "./plans";
@@ -22,6 +23,21 @@ export function formatUsd(cents: number): string {
     currency: "USD",
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100);
+}
+
+/**
+ * One line for the home page's Plan card, from the cached entitlement
+ * snapshot. A stored plan key is shown by its plan name, never as the raw key.
+ */
+export function planSummary(settings: {
+  subscriptionActive: boolean;
+  subscriptionPlan: string | null;
+}): string {
+  if (!settings.subscriptionActive) {
+    return "No active plan. An active plan is needed to make changes.";
+  }
+  const plan = findSelfServePlan(settings.subscriptionPlan);
+  return plan ? `${plan.displayName} plan` : "Your plan is active.";
 }
 
 export function monthlyPriceLabel(plan: SelfServePlan): string {

@@ -1,3 +1,5 @@
+import { SYNC_CATALOG_LABEL } from "./sync-copy";
+
 export type SetupFacts = {
   catalogSynced: boolean;
   /** Names of active locations, in display order. */
@@ -57,7 +59,7 @@ export function buildSetupGuide(facts: SetupFacts): SetupGuide {
       done: facts.catalogSynced,
       action: facts.catalogSynced
         ? null
-        : { kind: "sync_catalog", label: "Sync catalog" },
+        : { kind: "sync_catalog", label: SYNC_CATALOG_LABEL },
     },
     {
       id: "locations",
