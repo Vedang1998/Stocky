@@ -698,10 +698,31 @@ describe("Count page action", () => {
     async (fields) => {
       context.actor = null;
 
-      expect(await act(fields)).toEqual({ error: STAFF_REQUIRED_MESSAGE });
+      expect(await act(fields)).toMatchObject({
+        error: STAFF_REQUIRED_MESSAGE,
+      });
       expectNothingSaved();
     },
   );
+
+  it("hands a pasted list back, and keeps the scan field ready, when no staff member is signed in", async () => {
+    context.actor = null;
+    const codes = "RED-750\nWHITE-750\nROSE-750";
+
+    expect(await act({ intent: "addItems", codes })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      codes,
+    });
+    expect(await act({ intent: "scan", code: "1111" })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      scannedAt: expect.any(Number),
+    });
+    // The other steps have nothing to hand back.
+    expect(await act({ intent: "zeroFill" })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+    });
+    expectNothingSaved();
+  });
 
   describe("scan", () => {
     it("counts one unit unless a quantity is given, and says what the count is now", async () => {
