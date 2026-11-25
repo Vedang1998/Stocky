@@ -13,6 +13,9 @@ export type PosApiErrorCode =
   | "bad_request"
   | "not_found"
   | "forbidden"
+  | "conflict"
+  /** The same delivery key was already used for different quantities. */
+  | "different_counts"
   | "rate_limited"
   | "internal_error";
 
@@ -21,6 +24,8 @@ export class PosApiError extends Error {
     readonly status: number,
     readonly code: PosApiErrorCode,
     message: string,
+    /** Problems with individual request fields, keyed by field. */
+    readonly fieldErrors?: Readonly<Record<string, string>>,
   ) {
     super(message);
     this.name = "PosApiError";
@@ -55,8 +60,16 @@ export function posJson(body: unknown, init: { status?: number } = {}): Response
   });
 }
 
-function errorResponse(status: number, code: PosApiErrorCode, message: string) {
-  return posJson({ error: { code, message } }, { status });
+function errorResponse(
+  status: number,
+  code: PosApiErrorCode,
+  message: string,
+  fieldErrors?: Readonly<Record<string, string>>,
+) {
+  return posJson(
+    { error: { code, message, ...(fieldErrors ? { fieldErrors } : {}) } },
+    { status },
+  );
 }
 
 /**
@@ -116,7 +129,9 @@ export async function handlePosApiRequest(
     return context.cors(await handler(context));
   } catch (error) {
     if (error instanceof PosApiError) {
-      return context.cors(errorResponse(error.status, error.code, error.message));
+      return context.cors(
+        errorResponse(error.status, error.code, error.message, error.fieldErrors),
+      );
     }
     console.error("POS API request failed", {
       path: new URL(request.url).pathname,

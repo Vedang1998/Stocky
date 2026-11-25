@@ -7,8 +7,8 @@ export default async () => {
 function InventoryTile() {
   return (
     <s-tile
-      heading="Inventory lookup"
-      subheading="Stock by location"
+      heading="ProPo"
+      subheading="Stock and receiving"
       onClick={() => shopify.action.presentModal()}
     />
   );
