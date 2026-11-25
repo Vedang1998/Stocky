@@ -7,11 +7,10 @@ export const PRIVACY_REQUEST_DUE_DAYS = 30;
  * of that so the erasure, and its retries after a failure, finish in time.
  */
 const MAX_RETENTION_DAYS = 28;
-export const DEFAULT_UNINSTALLED_RETENTION_DAYS = MAX_RETENTION_DAYS;
 const MIN_RETENTION_DAYS = 1;
 
 /**
- * Days an uninstalled shop's data is kept before it is erased even if
+ * Days (28 unless shortened) an uninstalled shop's data is kept before it is erased even if
  * Shopify's shop/redact webhook never arrives. Set with
  * PRIVACY_UNINSTALLED_RETENTION_DAYS to shorten it; a value outside 1 to 28
  * is a startup error, never a silent fallback.
@@ -20,7 +19,7 @@ export function resolveUninstalledRetentionDays(
   env: NodeJS.ProcessEnv = process.env,
 ): number {
   const raw = env.PRIVACY_UNINSTALLED_RETENTION_DAYS?.trim();
-  if (!raw) return DEFAULT_UNINSTALLED_RETENTION_DAYS;
+  if (!raw) return MAX_RETENTION_DAYS;
   const days = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
   if (
     !Number.isSafeInteger(days) ||
