@@ -119,7 +119,10 @@ export type ReceiptResponse = {
   complete: boolean;
   message: string;
   receiptNumber: number | null;
-  sheet: ReceivingSheet;
+  /** posted: finished; pending: saved, retry the same request; settled: ended unfinished, start fresh; not_recorded: nothing saved. */
+  outcome: "posted" | "pending" | "settled" | "not_recorded";
+  /** Null when the order could not be read back after the receipt was recorded. */
+  sheet: ReceivingSheet | null;
 };
 
 export type ApiErrorWithFields = {

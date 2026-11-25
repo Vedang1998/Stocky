@@ -35,8 +35,10 @@ export type Failure = {
   ok: false;
   message: string;
   fieldErrors: Record<string, string>;
-  /** HTTP status of the refusal; absent when the server was never reached. */
+  /** HTTP status of the refusal; absent when the answer is unknown (offline, server error). */
   status?: number;
+  /** The app's error code, when the server sent one. */
+  code?: string;
 };
 
 export type Result<T> = { ok: true; value: T } | Failure;
@@ -67,8 +69,11 @@ async function errorResult(
     case 429:
       return failure(RECEIVING_MESSAGES.busy, {}, 429);
     case 400:
-    case 409:
-      return failure(message || RECEIVING_MESSAGES.failed, fieldErrors, response.status);
+    case 409: {
+      const refusal = failure(message || RECEIVING_MESSAGES.failed, fieldErrors, response.status);
+      const code = body?.error?.code;
+      return code ? { ...refusal, code } : refusal;
+    }
     default:
       return failure(RECEIVING_MESSAGES.failed, {}, response.status);
   }
@@ -163,6 +168,11 @@ export async function submitReceipt(
   if (!result.ok && result.message === RECEIVING_MESSAGES.offline) {
     return failure(RECEIVING_MESSAGES.submitUnsure);
   }
+  // A server error can come after part of the receipt was recorded, so the
+  // outcome is unknown: the same request must be retried, not a fresh count.
+  if (!result.ok && result.status !== undefined && result.status >= 500) {
+    return failure(RECEIVING_MESSAGES.submitUnsure);
+  }
   return result;
 }
 
@@ -205,6 +215,109 @@ export function setCount(counts: Counts, lineItemId: string, value: number): Cou
 export function readCount(value: string | null | undefined): number {
   const text = (value ?? "").trim();
   return /^\d{1,7}$/.test(text) ? Math.min(Number(text), MAX_COUNT) : 0;
+}
+
+/**
+ * What is left to count after a receipt took the units it was sent with.
+ * Units scanned while the receipt was in flight are not in the request and
+ * stay counted for the next one.
+ */
+export function withoutSubmitted(counts: Counts, request: ReceiptRequest): Counts {
+  const rest = { ...counts };
+  for (const { lineItemId, acceptedQty } of request.lines) {
+    const left = (rest[lineItemId] ?? 0) - acceptedQty;
+    if (left > 0) rest[lineItemId] = left;
+    else delete rest[lineItemId];
+  }
+  return rest;
+}
+
+export type SubmitStep = {
+  /** The exact request must be repeated next time (the outcome is not settled). */
+  freeze: boolean;
+  /** Take a fresh key and drop the submitted units from the counts. */
+  startOver: boolean;
+  /** Load the order again (it changed, or could not be read back). */
+  reload: boolean;
+  notice: { tone: "success" | "warning" | "critical"; heading: string; detail?: string };
+  /** Line-level messages to show next to the counts. */
+  lineErrors: Record<string, string>;
+};
+
+/**
+ * What the screen does with the answer to a receipt. Kept apart from the
+ * screen so each case can be tested: only a settled receipt (or a delivery
+ * that was recorded with other counts) starts over; an unconfirmed or pending
+ * one is repeated unchanged; a refusal that recorded nothing keeps the counts.
+ */
+export function afterSubmit(result: Result<ReceiptResponse>): SubmitStep {
+  if (!result.ok) {
+    if (result.code === "different_counts") {
+      return {
+        freeze: false,
+        startOver: true,
+        reload: true,
+        lineErrors: {},
+        notice: {
+          tone: "warning",
+          heading: "Check what was received",
+          detail: `${result.message} The order has been reloaded; count again if anything is missing.`,
+        },
+      };
+    }
+    if (result.status === undefined) {
+      return {
+        freeze: true,
+        startOver: false,
+        reload: false,
+        lineErrors: {},
+        notice: { tone: "critical", heading: "Receipt not confirmed", detail: result.message },
+      };
+    }
+    const lineErrors: Record<string, string> = {};
+    for (const [key, message] of Object.entries(result.fieldErrors)) {
+      lineErrors[key.startsWith("line:") ? key.slice("line:".length) : key] = message;
+    }
+    return {
+      freeze: false,
+      startOver: false,
+      reload: result.status === 409,
+      lineErrors,
+      notice: { tone: "critical", heading: "Nothing was received", detail: result.message },
+    };
+  }
+
+  const { message, outcome, receiptNumber, sheet } = result.value;
+  const reload = sheet === null;
+  const named = receiptNumber === null ? "Receipt" : `Receipt ${receiptNumber}`;
+  switch (outcome) {
+    case "posted":
+      return { freeze: false, startOver: true, reload, lineErrors: {}, notice: { tone: "success", heading: message } };
+    case "pending":
+      return {
+        freeze: true,
+        startOver: false,
+        reload,
+        lineErrors: {},
+        notice: { tone: "warning", heading: `${named} is not finished`, detail: message },
+      };
+    case "settled":
+      return {
+        freeze: false,
+        startOver: true,
+        reload,
+        lineErrors: {},
+        notice: { tone: "warning", heading: `${named} is not complete`, detail: message },
+      };
+    case "not_recorded":
+      return {
+        freeze: false,
+        startOver: false,
+        reload,
+        lineErrors: {},
+        notice: { tone: "warning", heading: "Nothing was received", detail: message },
+      };
+  }
 }
 
 export function totalUnits(counts: Counts): number {

@@ -265,11 +265,11 @@ describe("receiving at POS", () => {
         deps(enabled()),
       );
 
-      expect(result).toMatchObject({ complete: true, receiptNumber: 1 });
+      expect(result).toMatchObject({ complete: true, receiptNumber: 1, outcome: "posted" });
       expect(stock(BLUE_ITEM)).toBe(8);
       const [receipt] = await prisma.purchaseOrderReceipt.findMany();
       expect(receipt).toMatchObject({ actorChannel: "POS", actorUserId: "77", locationGid: WAREHOUSE });
-      expect(result.sheet.lines.find((line) => line.variantGid === BLUE)).toMatchObject({
+      expect(result.sheet?.lines.find((line) => line.variantGid === BLUE)).toMatchObject({
         orderedQty: 10,
         receivedQty: 4,
         openQty: 6,
@@ -347,10 +347,91 @@ describe("receiving at POS", () => {
         complete: false,
         message: RECEIVING_OFF_MESSAGE,
         receiptNumber: null,
+        outcome: "not_recorded",
       });
-      expect(result.sheet.receivingEnabled).toBe(false);
+      expect(result.sheet?.receivingEnabled).toBe(false);
       expect(await prisma.purchaseOrderReceipt.count()).toBe(0);
       expect(stock(BLUE_ITEM)).toBe(4);
+    });
+
+    it("keeps an unconfirmed receipt pending, and repeating the same request finishes it once", async () => {
+      const po = await orderedPo();
+      const request = body([{ lineItemId: po.lineId(BLUE), acceptedQty: 4 }]);
+      shopify.loseNextResponse();
+
+      const first = await receiveAtPos(contextFor(dbA), po.id, WAREHOUSE, request, deps(enabled()));
+      const again = await receiveAtPos(contextFor(dbA), po.id, WAREHOUSE, request, deps(enabled()));
+
+      expect(first).toMatchObject({ complete: false, outcome: "pending", receiptNumber: 1 });
+      expect(again).toMatchObject({ complete: true, outcome: "posted", receiptNumber: 1 });
+      expect(await prisma.purchaseOrderReceipt.count()).toBe(1);
+      expect(stock(BLUE_ITEM)).toBe(8);
+    });
+
+    it("answers a reused key with other quantities as different_counts and records nothing more", async () => {
+      const po = await orderedPo();
+      const key = nextKey();
+      await receiveAtPos(
+        contextFor(dbA),
+        po.id,
+        WAREHOUSE,
+        body([{ lineItemId: po.lineId(BLUE), acceptedQty: 4 }], key),
+        deps(enabled()),
+      );
+
+      const error = await apiError(
+        receiveAtPos(
+          contextFor(dbA),
+          po.id,
+          WAREHOUSE,
+          body([{ lineItemId: po.lineId(BLUE), acceptedQty: 5 }], key),
+          deps(enabled()),
+        ),
+      );
+
+      expect(error).toMatchObject({ status: 409, code: "different_counts" });
+      expect(await prisma.purchaseOrderReceipt.count()).toBe(1);
+      expect(stock(BLUE_ITEM)).toBe(8);
+    });
+
+    it("answers an order that is closed as a plain conflict, not as different counts", async () => {
+      const po = await orderedPo();
+      await prisma.purchaseOrder.update({ where: { id: po.id }, data: { status: "CANCELLED" } });
+
+      const error = await apiError(
+        receiveAtPos(
+          contextFor(dbA),
+          po.id,
+          WAREHOUSE,
+          body([{ lineItemId: po.lineId(BLUE), acceptedQty: 1 }]),
+          deps(enabled()),
+        ),
+      );
+
+      expect(error).toMatchObject({ status: 409, code: "conflict" });
+      expect(await prisma.purchaseOrderReceipt.count()).toBe(0);
+    });
+
+    it("still reports a recorded receipt when the order cannot be read back afterwards", async () => {
+      const po = await orderedPo();
+      // Only the read-back after the receipt consults this switch.
+      const flaky: ReceivingDeps = {
+        ...deps(enabled()),
+        receivingEnabled: () => {
+          throw new Error("read-back failed");
+        },
+      };
+
+      const result = await receiveAtPos(
+        contextFor(dbA),
+        po.id,
+        WAREHOUSE,
+        body([{ lineItemId: po.lineId(BLUE), acceptedQty: 4 }]),
+        flaky,
+      );
+
+      expect(result).toMatchObject({ complete: true, outcome: "posted", receiptNumber: 1, sheet: null });
+      expect(stock(BLUE_ITEM)).toBe(8);
     });
 
     it("refuses more units than the line expects unless the over-receipt is confirmed", async () => {

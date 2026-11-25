@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { ReceivableOrder, ReceivingLine, ReceivingSheet } from "./api-types";
+import type {
+  ReceivableOrder,
+  ReceiptRequest,
+  ReceivingLine,
+  ReceivingSheet,
+} from "./api-types";
 import {
+  afterSubmit,
   bumpCount,
   createSubmissionKey,
   describeOrder,
@@ -14,6 +20,7 @@ import {
   setCount,
   submitReceipt,
   totalUnits,
+  withoutSubmitted,
   type Counts,
 } from "./receiving";
 import { formatQuantity } from "./format";
@@ -184,6 +191,9 @@ function ReceiveOrder({
   const [attempt, setAttempt] = useState(0);
   const [counts, setCounts] = useState<Counts>({});
   const [allowOver, setAllowOver] = useState(false);
+  // The exact request of a receipt whose outcome is not settled yet. While it
+  // is set the counts are frozen and Receive repeats this request unchanged.
+  const [unfinished, setUnfinished] = useState<ReceiptRequest | null>(null);
   const [sending, setSending] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
@@ -192,6 +202,7 @@ function ReceiveOrder({
   );
   const submissionKey = useMemo(() => createSubmissionKey(newSubmissionKey), []);
   const linesRef = useRef<readonly ReceivingLine[]>([]);
+  const scanOpenRef = useRef(false);
   const sendingRef = useRef(false);
 
   useEffect(() => {
@@ -209,13 +220,18 @@ function ReceiveOrder({
   }, [locationId, orderId, attempt]);
 
   const readyLines = state.kind === "ready" ? state.sheet.lines : null;
+  const receivable =
+    state.kind === "ready" && state.sheet.receivingEnabled && state.sheet.denial === null;
   useEffect(() => {
     linesRef.current = readyLines ?? [];
-  }, [readyLines]);
+    // Scans only count while there is a sheet to count against and the
+    // counts are not frozen behind an unfinished receipt.
+    scanOpenRef.current = receivable && unfinished === null;
+  }, [readyLines, receivable, unfinished]);
 
   const scan = useCallback((raw: string) => {
     const code = raw.trim();
-    if (!code) return;
+    if (!code || !scanOpenRef.current) return;
     const line = matchLine(linesRef.current, code);
     if (!line) {
       setNotice({
@@ -254,54 +270,26 @@ function ReceiveOrder({
     setSending(true);
     setNotice(null);
     setLineErrors({});
-    const request = receiptRequest(submissionKey.get(), counts, allowOver);
+    const request = unfinished ?? receiptRequest(submissionKey.get(), counts, allowOver);
     const result = await submitReceipt(fetch, locationId, orderId, request);
     sendingRef.current = false;
     setSending(false);
 
-    if (!result.ok) {
-      if (result.status === 409) {
-        // The order changed or this delivery was already recorded with other
-        // counts: show what is on the order now and start over.
-        submissionKey.reset();
-        setCounts({});
-        setAllowOver(false);
-        setAttempt((n) => n + 1);
-        setNotice({
-          tone: "warning",
-          heading: "Check what was received",
-          detail: `${result.message} The order has been reloaded; count again if anything is missing.`,
-        });
-        return;
-      }
-      const errors: Record<string, string> = {};
-      for (const [key, message] of Object.entries(result.fieldErrors)) {
-        errors[key.startsWith("line:") ? key.slice("line:".length) : key] = message;
-      }
-      setLineErrors(errors);
-      setNotice({
-        tone: "critical",
-        heading: result.status === undefined ? "Receipt not confirmed" : "Nothing was received",
-        detail: result.message,
-      });
-      return;
-    }
-
-    const { complete, message, receiptNumber, sheet } = result.value;
-    setState({ kind: "ready", sheet });
-    if (complete) {
+    const step = afterSubmit(result);
+    if (step.startOver) {
+      // Start the next delivery fresh: a new key, and only the units that were
+      // not part of this request (scanned while it was in flight) stay counted.
       submissionKey.reset();
-      setCounts({});
       setAllowOver(false);
-      setNotice({ tone: "success", heading: message });
-    } else {
-      // Keep the counts and the key so receiving again finishes the same receipt.
-      setNotice({
-        tone: "warning",
-        heading: receiptNumber === null ? "Nothing was received" : `Receipt ${receiptNumber} is not finished`,
-        detail: message,
-      });
+      setCounts((current) => withoutSubmitted(current, request));
     }
+    setUnfinished(step.freeze ? request : null);
+    setLineErrors(step.lineErrors);
+    setNotice(step.notice);
+    if (result.ok && result.value.sheet !== null) {
+      setState({ kind: "ready", sheet: result.value.sheet });
+    }
+    if (step.reload) setAttempt((n) => n + 1);
   };
 
   const heading =
@@ -340,6 +328,7 @@ function ReceiveOrder({
                 counts={counts}
                 lineErrors={lineErrors}
                 allowOver={allowOver}
+                frozen={unfinished !== null}
                 sending={sending}
                 cameraAvailable={cameraAvailable}
                 onScan={scan}
@@ -367,6 +356,7 @@ function SheetBody({
   counts,
   lineErrors,
   allowOver,
+  frozen,
   sending,
   cameraAvailable,
   onScan,
@@ -379,6 +369,8 @@ function SheetBody({
   counts: Counts;
   lineErrors: Record<string, string>;
   allowOver: boolean;
+  /** An earlier receipt is unfinished: the counts are fixed and Receive repeats it. */
+  frozen: boolean;
   sending: boolean;
   cameraAvailable: boolean;
   onScan: (code: string) => void;
@@ -390,7 +382,10 @@ function SheetBody({
   const units = totalUnits(counts);
   const over = overReceived(sheet.lines, counts);
   const blocked = !sheet.receivingEnabled || sheet.denial !== null;
-  const canReceive = !blocked && !sending && units > 0 && (over.length === 0 || allowOver);
+  const canReceive = frozen
+    ? !sending
+    : !blocked && !sending && units > 0 && (over.length === 0 || allowOver);
+  const [fieldKey, setFieldKey] = useState(0);
 
   return (
     <s-stack direction="block" gap="base">
@@ -405,11 +400,24 @@ function SheetBody({
           <s-text>{sheet.denial}</s-text>
         </s-banner>
       )}
-      {!blocked && (
+      {frozen && (
+        <s-banner heading="Finish the last receipt first" tone="info">
+          <s-text>
+            The counts are locked until it is finished. Press Receive to repeat it; it is never
+            counted twice.
+          </s-text>
+        </s-banner>
+      )}
+      {!blocked && !frozen && (
         <s-stack direction="block" gap="small">
           <s-search-field
+            key={fieldKey}
             placeholder="Scan or enter a barcode or SKU"
-            onChange={(event) => onScan(event.currentTarget.value ?? "")}
+            onChange={(event) => {
+              onScan(event.currentTarget.value ?? "");
+              // Empty the field so the same code can be entered again.
+              setFieldKey((key) => key + 1);
+            }}
           />
           {cameraAvailable && (
             <s-button onClick={() => shopify.scanner.showCameraScanner()}>
@@ -425,13 +433,13 @@ function SheetBody({
           line={line}
           count={counts[line.lineItemId] ?? 0}
           error={lineErrors[line.lineItemId] ?? null}
-          disabled={blocked || sending}
+          disabled={blocked || sending || frozen}
           onCount={(value) => onCount(line.lineItemId, value)}
           onBump={(delta) => onBump(line.lineItemId, delta)}
         />
       ))}
 
-      {over.length > 0 && (
+      {!frozen && over.length > 0 && (
         <s-banner heading="More than the order expects" tone="warning">
           <s-stack direction="block" gap="small">
             <s-text>
@@ -448,7 +456,11 @@ function SheetBody({
       )}
 
       <s-button variant="primary" disabled={!canReceive} loading={sending} onClick={onReceive}>
-        {units > 0 ? `Receive ${formatQuantity(units)} ${units === 1 ? "unit" : "units"}` : "Receive"}
+        {frozen
+          ? "Finish the last receipt"
+          : units > 0
+            ? `Receive ${formatQuantity(units)} ${units === 1 ? "unit" : "units"}`
+            : "Receive"}
       </s-button>
     </s-stack>
   );
