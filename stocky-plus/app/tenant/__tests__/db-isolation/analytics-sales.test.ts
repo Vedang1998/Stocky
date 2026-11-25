@@ -11,6 +11,7 @@ import { aggregateVariantWindow } from "../../../lib/analytics/net-units";
 import { loadPurchaseOrders } from "../../../lib/analytics/purchase-orders.server";
 import { loadSalesHistory } from "../../../lib/analytics/sales-history.server";
 import {
+  DemandHistoryTooLargeError,
   loadDemandHistories,
   loadDemandHistory,
 } from "../../../lib/smart-forecast/history.server";
@@ -1049,6 +1050,24 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
       days: [],
       startLocalDate: null,
     });
+  });
+
+  it("refuses to scan a history window with more orders than the caller allows", async () => {
+    const input = {
+      endLocalDate: "2026-10-05" as const,
+      horizonDays: 14,
+      averageDays: 28,
+      timeZone: TZ,
+      currencyCode: "USD",
+      installedAt: null,
+      variantGids: [VARIANT_OLD],
+    };
+    // Shop A has orders in the window: a cap of 1 is exceeded, a large one is not.
+    await expect(loadDemandHistories(dbA, { ...input, maxOrders: 1 })).rejects.toBeInstanceOf(
+      DemandHistoryTooLargeError,
+    );
+    const allowed = await loadDemandHistories(dbA, { ...input, maxOrders: 20_000 });
+    expect(allowed.byVariant.get(VARIANT_OLD)?.length).toBeGreaterThan(0);
   });
 
   it("gives Smart Forecast every row's daily demand from one read", async () => {

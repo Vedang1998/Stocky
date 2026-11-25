@@ -3,13 +3,23 @@
  * never changes the worksheet, its rows or their parity suggestions.
  */
 import { hasCapability, type ShopEntitlements } from "../../billing/entitlements";
+import { lowestPlanWith } from "../../billing/plans";
 import { addDays, type LocalDate } from "../replenishment/local-date";
 import type { WorksheetHeader } from "../replenishment/worksheet/store.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { smartForecast, type SmartForecast } from "./forecast";
 import { loadDemandHistories } from "./history.server";
 
-export const SMART_FORECAST_PLAN_MESSAGE = "Smart Forecast is included in the Pro plan.";
+/** The plan that includes Smart Forecast, from the plan catalog. */
+export const SMART_FORECAST_PLAN_NAME = lowestPlanWith("forecast.smart")?.displayName ?? "a higher";
+export const SMART_FORECAST_PLAN_MESSAGE = `Smart Forecast is included in the ${SMART_FORECAST_PLAN_NAME} plan.`;
+/**
+ * The most orders the worksheet column reads in its history window. The
+ * sales history read scans every order in the window, so above this a page
+ * view would be slow; the column then says it is unavailable and each row's
+ * own Smart Forecast button still works.
+ */
+export const SMART_FORECAST_COLUMN_MAX_ORDERS = 20_000;
 export const SMART_FORECAST_METHOD_MESSAGE =
   "Smart Forecast is compared with the Last X days method, so it is available on worksheets made with that method.";
 
@@ -59,6 +69,7 @@ export async function smartForecastsForRows(
     rows: readonly SmartForecastRow[];
     currencyCode: string | null;
     installedAt: Date | null;
+    maxOrders?: number;
   },
 ): Promise<{ historyDays: number; byRow: Map<string, SmartForecast> }> {
   const { basis, rows } = input;
@@ -70,6 +81,7 @@ export async function smartForecastsForRows(
     timeZone: basis.timeZone,
     currencyCode: input.currencyCode,
     installedAt: input.installedAt,
+    maxOrders: input.maxOrders,
   });
   const byRow = new Map<string, SmartForecast>();
   let historyDays = 0;
@@ -97,6 +109,8 @@ export type SmartForecastCell = Pick<SmartForecast, "outcome" | "label" | "forec
 export type SmartForecastColumn =
   | { status: "OFF" }
   | { status: "PLAN" | "METHOD" }
+  /** The forecasts could not be read; the rest of the worksheet still shows. */
+  | { status: "UNAVAILABLE" }
   | { status: "OK"; byRow: Record<string, SmartForecastCell> };
 
 /**
@@ -111,26 +125,33 @@ export async function smartForecastColumn(
     entitlements: ShopEntitlements;
     worksheet: Pick<WorksheetHeader, "settings" | "asOfLocalDate" | "timeZone" | "summary">;
     rows: readonly SmartForecastRow[];
-    shopCurrencyCode: string | null;
-    installedAt: Date | null;
+    /** The shop's currency and install date; read only once both gates pass. */
+    readProfile: () => Promise<{ currencyCode: string | null; installedAt: Date | null }>;
   },
 ): Promise<SmartForecastColumn> {
   if (!input.shown) return { status: "OFF" };
-  if (!hasCapability(input.entitlements, "forecast.smart")) {
-    return { status: "PLAN" };
-  }
+  if (!hasCapability(input.entitlements, "forecast.smart")) return { status: "PLAN" };
   const basis = smartForecastBasis(input.worksheet);
   if (!basis) return { status: "METHOD" };
 
-  const { byRow } = await smartForecastsForRows(db, {
-    basis,
-    rows: input.rows,
-    currencyCode: input.worksheet.summary?.currencyCode ?? input.shopCurrencyCode,
-    installedAt: input.installedAt,
-  });
-  const cells: Record<string, SmartForecastCell> = {};
-  for (const [rowId, { outcome, label, forecastUnits }] of byRow) {
-    cells[rowId] = { outcome, label, forecastUnits };
+  try {
+    const profile = await input.readProfile();
+    const { byRow } = await smartForecastsForRows(db, {
+      basis,
+      rows: input.rows,
+      currencyCode: input.worksheet.summary?.currencyCode ?? profile.currencyCode,
+      installedAt: profile.installedAt,
+      maxOrders: SMART_FORECAST_COLUMN_MAX_ORDERS,
+    });
+    const cells: Record<string, SmartForecastCell> = {};
+    for (const [rowId, { outcome, label, forecastUnits }] of byRow) {
+      cells[rowId] = { outcome, label, forecastUnits };
+    }
+    return { status: "OK", byRow: cells };
+  } catch (error) {
+    // The column is optional and saved for every worksheet: a failure here
+    // must never stop the worksheet, where the column can be turned off.
+    console.warn("smart forecast column unavailable:", error);
+    return { status: "UNAVAILABLE" };
   }
-  return { status: "OK", byRow: cells };
 }

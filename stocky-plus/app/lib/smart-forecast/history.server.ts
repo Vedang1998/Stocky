@@ -3,7 +3,7 @@
  * the reports and the parity worksheet read.
  */
 import { loadSalesHistory } from "../analytics/sales-history.server";
-import { enumerateLocalDates } from "../analytics/shop-calendar";
+import { enumerateLocalDates, localRangeToUtc } from "../analytics/shop-calendar";
 import { addDays, compareLocalDates, type LocalDate } from "../replenishment/local-date";
 import type { TenantDb } from "../../tenant/tenant-db.server";
 import { MAX_ORIGINS, ORIGIN_STEP_DAYS } from "./backtest";
@@ -27,6 +27,14 @@ export type DemandHistoryResult = {
   startLocalDate: LocalDate | null;
 };
 
+/** The history window holds more orders than the caller allowed reading. */
+export class DemandHistoryTooLargeError extends Error {
+  constructor(readonly orders: number, readonly maxOrders: number) {
+    super(`The sales history holds ${orders} orders; at most ${maxOrders} are read here.`);
+    this.name = "DemandHistoryTooLargeError";
+  }
+}
+
 type HistoryWindow = {
   endLocalDate: LocalDate;
   horizonDays: number;
@@ -45,7 +53,15 @@ type HistoryWindow = {
  */
 export async function loadDemandHistories(
   db: TenantDb,
-  input: HistoryWindow & { variantGids: readonly string[] },
+  input: HistoryWindow & {
+    variantGids: readonly string[];
+    /**
+     * The sales history read scans every order in the window, not only the
+     * requested variants. When set, a window with more orders than this is
+     * refused with `DemandHistoryTooLargeError` after one count.
+     */
+    maxOrders?: number;
+  },
 ): Promise<{ startLocalDate: LocalDate | null; byVariant: Map<string, DemandDay[]> }> {
   const byVariant = new Map<string, DemandDay[]>();
   const variantGids = [...new Set(input.variantGids)];
@@ -53,6 +69,17 @@ export async function loadDemandHistories(
 
   const wanted = demandHistoryDays(input.horizonDays, input.averageDays);
   const requestedStart = addDays(input.endLocalDate, -(wanted - 1));
+  if (input.maxOrders != null) {
+    const { startUtc, endUtcExclusive } = localRangeToUtc(
+      requestedStart,
+      input.endLocalDate,
+      input.timeZone,
+    );
+    const orders: number = await db.shopifyOrderFact.count({
+      where: { existenceState: "LIVE", processedAt: { gte: startUtc, lt: endUtcExclusive } },
+    });
+    if (orders > input.maxOrders) throw new DemandHistoryTooLargeError(orders, input.maxOrders);
+  }
   const history = await loadSalesHistory(db, {
     startLocalDate: requestedStart,
     endLocalDate: input.endLocalDate,
