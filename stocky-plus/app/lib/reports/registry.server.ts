@@ -291,6 +291,18 @@ export function ignoredFilterNotices(
   ];
 }
 
+/** A failed status lookup only costs the warning; the report itself still renders. */
+async function orderHistoryNoticesOrNone(
+  context: ReportContext,
+): Promise<ReportNotice[]> {
+  try {
+    return orderHistoryNotices(await context.orderHistory());
+  } catch (err) {
+    console.warn("Order history status unavailable for report notice:", err);
+    return [];
+  }
+}
+
 function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
   const { load, ...report } = definition;
 
@@ -339,7 +351,7 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
           .map((column) => column.label),
         notices: [
           ...(report.usesOrderHistory
-            ? orderHistoryNotices(await context.orderHistory())
+            ? await orderHistoryNoticesOrNone(context)
             : []),
           ...ignoredFilterNotices(ignored),
           ...data.notices,

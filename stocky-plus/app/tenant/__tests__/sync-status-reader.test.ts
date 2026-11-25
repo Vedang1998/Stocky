@@ -350,6 +350,16 @@ describe("catalog sync status reader", () => {
       });
     }
 
+    // Both shops were installed before the jobs below were made.
+    beforeEach(async () => {
+      await prisma.shop.updateMany({
+        data: {
+          createdAt: new Date("2026-11-01T00:00:00Z"),
+          reinstalledAt: null,
+        },
+      });
+    });
+
     it("is not started for a shop with no order sync", async () => {
       expect(
         await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
@@ -373,6 +383,27 @@ describe("catalog sync status reader", () => {
     it("stays ready while a later sync runs", async () => {
       await seedOrderJob(shopAId, "SUCCEEDED", "2026-11-10T09:00:00Z");
       await seedOrderJob(shopAId, "RUNNING", "2026-11-11T09:00:00Z");
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("ready");
+    });
+
+    it("does not count a sync that finished before a reinstall", async () => {
+      await seedOrderJob(shopAId, "SUCCEEDED", "2026-11-10T09:00:00Z");
+      await prisma.shop.update({
+        where: { id: shopAId },
+        data: { reinstalledAt: new Date("2026-11-12T00:00:00Z") },
+      });
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("not_started");
+
+      await seedOrderJob(shopAId, "RUNNING", "2026-11-12T09:00:00Z");
+      expect(
+        await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
+      ).toBe("importing");
+
+      await seedOrderJob(shopAId, "SUCCEEDED", "2026-11-12T10:00:00Z");
       expect(
         await readOrderHistoryStatus(authority(shopAId, SHOP_A_DOMAIN)),
       ).toBe("ready");

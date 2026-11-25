@@ -228,8 +228,13 @@ they show their normal figures with a warning that the figures are incomplete:
 - *Not imported*: no order sync is queued and none has ever finished (never
   requested, or every attempt failed). The merchant is pointed to the home page
   sync.
-- Once any order sync has finished the warning is gone. A later sync only adds
-  recent orders, so it does not bring the warning back.
+- Once an order sync has finished since the shop was installed or last
+  reinstalled, the warning is gone, and a later re-sync does not bring it back.
+  A reinstall erases the imported orders, so a sync that finished before it does
+  not count: after a reinstall the warning shows again until a new import
+  finishes.
+- If the status cannot be read, the report is shown without the warning rather
+  than failing.
 
 Stock on hand, the stock document reports and the purchasing reports do not read
 order history and never show it. The CSV download carries no warning; the page

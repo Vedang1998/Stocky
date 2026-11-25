@@ -2,7 +2,7 @@
  * Reports analytics over canonical facts, through TenantDb on the restricted
  * runtime role with FORCE RLS enforced. Facts are seeded by the migration owner.
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { loadAbcParityRun } from "../../../lib/analytics/abc-parity.server";
 import { loadCatalogVariants } from "../../../lib/analytics/catalog.server";
@@ -658,6 +658,28 @@ describe("reports analytics over canonical facts (RLS enforced)", () => {
         await seedOrderSync("SUCCEEDED");
       }
       expect(heading(await page("best-sellers", RANGE))).toEqual([]);
+    });
+
+    it("still shows a sales report when the order history status cannot be read", async () => {
+      const report = findReport("best-sellers");
+      const context = await contextFor(shopAId, SHOP_A_DOMAIN, dbA);
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+      try {
+        const result = await report?.page(
+          {
+            ...context,
+            orderHistory: async () => {
+              throw new Error("control plane unavailable");
+            },
+          },
+          new URLSearchParams(RANGE),
+        );
+        expect(result?.table.rows.length).toBeGreaterThan(0);
+        expect(result?.notices.map((notice) => notice.heading)).toEqual([]);
+        expect(warn).toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it("resolves the shop's calendar and currency, and refuses to guess them", async () => {
