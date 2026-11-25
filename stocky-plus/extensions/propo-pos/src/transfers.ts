@@ -7,7 +7,6 @@ import type {
 import {
   call,
   failure,
-  RECEIVING_MESSAGES,
   withLocation,
   type FetchLike,
   type Result,
@@ -47,14 +46,13 @@ export async function loadTransferSheet(
   );
 }
 
-/** A dropped connection or a server error may come after the work was saved. */
+/**
+ * Whether the app may have saved the change without the device hearing. Every
+ * refusal the app explains carries a status below 500; a failure with none is
+ * a dropped connection or an answer that could not be read.
+ */
 function isUnsure(result: Result<unknown> | null): boolean {
-  return (
-    result === null ||
-    (!result.ok &&
-      (result.message === RECEIVING_MESSAGES.offline ||
-        (result.status !== undefined && result.status >= 500)))
-  );
+  return result === null || (!result.ok && (result.status === undefined || result.status >= 500));
 }
 
 async function send(
@@ -134,11 +132,30 @@ export function describeTransfer(transfer: ReceivableTransfer, now: number): str
   return `${sent} · ${units}${counted}`;
 }
 
-export function createScanQueue(options: {
-  run: (code: string) => Promise<boolean>;
-  onIdle: (dropped: number) => void;
-}) {
-  const pending: string[] = [];
+/** How an action ended, which decides whether the ones queued behind it still go. */
+export type ActionOutcome =
+  /** Done. */
+  | "ok"
+  /** The app refused it and said why; the rest still go. */
+  | "refused"
+  /** The answer was lost; what came after may rest on a wrong picture, so stop. */
+  | "unsure"
+  /** The device may not go on (sign-in, plan, too many requests); stop. */
+  | "halt";
+
+/** Pick the outcome of a failed answer: stop on anything that is not a plain refusal. */
+export function failureOutcome(failure: { status?: number; message: string }): ActionOutcome {
+  if (failure.status === 400 || failure.status === 404 || failure.status === 409) return "refused";
+  return failure.status === undefined || failure.status >= 500 ? "unsure" : "halt";
+}
+
+/**
+ * Runs scans, count edits and the receipt one at a time, in the order they
+ * were asked for, so a receipt is never built from a partly counted transfer.
+ * When one ends "unsure" or "halt" the ones behind it are dropped and counted.
+ */
+export function createActionQueue(options: { onIdle: (dropped: number) => void }) {
+  const pending: Array<() => Promise<ActionOutcome>> = [];
   let draining = false;
 
   async function drain() {
@@ -146,8 +163,9 @@ export function createScanQueue(options: {
     let dropped = 0;
     try {
       while (pending.length > 0) {
-        const code = pending.shift() as string;
-        if (!(await options.run(code))) {
+        const action = pending.shift() as () => Promise<ActionOutcome>;
+        const outcome = await action();
+        if (outcome === "unsure" || outcome === "halt") {
           dropped += pending.length;
           pending.length = 0;
         }
@@ -159,8 +177,8 @@ export function createScanQueue(options: {
   }
 
   return {
-    push(code: string) {
-      pending.push(code);
+    push(action: () => Promise<ActionOutcome>) {
+      pending.push(action);
       if (!draining) void drain();
     },
   };

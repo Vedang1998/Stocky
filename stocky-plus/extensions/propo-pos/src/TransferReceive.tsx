@@ -3,14 +3,16 @@ import type { ReceivableTransfer, TransferLine, TransferSheet } from "./api-type
 import { formatQuantity } from "./format";
 import { parseCount } from "./receiving";
 import {
-  createScanQueue,
+  createActionQueue,
   describeTransfer,
+  failureOutcome,
   loadTransferSheet,
   loadTransfers,
   mostCountedIn,
   postTransferReceipt,
   sendTransferCount,
   sendTransferScan,
+  type ActionOutcome,
 } from "./transfers";
 
 export function TransferReceive({ onBack }: { onBack: () => void }) {
@@ -94,11 +96,11 @@ function TransferList({
                 </s-section>
               ) : (
                 <s-stack direction="block" gap="small">
-                  {state.transfers.map((transfer, index) => (
+                  {state.transfers.map((transfer) => (
                     <s-clickable key={transfer.id} onClick={() => onPick(transfer.id)}>
                       <s-box padding="small">
                         <s-stack direction="block">
-                          <s-text type="strong">Transfer {index + 1}</s-text>
+                          <s-text type="strong">Transfer …{transfer.id.slice(-6)}</s-text>
                           <s-text color="subdued">{describeTransfer(transfer, now)}</s-text>
                         </s-stack>
                       </s-box>
@@ -142,13 +144,13 @@ function TransferSheetScreen({
   const [cameraAvailable, setCameraAvailable] = useState(() =>
     shopify.scanner.sources.current.value.includes("camera"),
   );
-  const busyRef = useRef(false);
   const scanOpenRef = useRef(false);
   // A finished transfer has nothing left to receive; its sheet is gone.
   const [finished, setFinished] = useState<string | null>(null);
 
   useEffect(() => {
-    scanOpenRef.current = state.kind === "ready" && state.sheet.receivingEnabled && finished === null;
+    scanOpenRef.current =
+      state.kind === "ready" && state.sheet.receivingEnabled && !state.sheet.completed && finished === null;
   }, [state, finished]);
 
   useEffect(() => {
@@ -156,11 +158,12 @@ function TransferSheetScreen({
     setState({ kind: "loading" });
     void loadTransferSheet(fetch, locationId, transferId, controller?.signal).then((result) => {
       if (result === null) return;
-      setState(
-        result.ok
-          ? { kind: "ready", sheet: result.value }
-          : { kind: "error", message: result.message },
-      );
+      if (!result.ok) {
+        setState({ kind: "error", message: result.message });
+        return;
+      }
+      if (result.value.completed) setFinished("This transfer is fully received.");
+      setState({ kind: "ready", sheet: result.value });
     });
     return () => controller?.abort();
   }, [locationId, transferId, attempt]);
@@ -171,20 +174,45 @@ function TransferSheetScreen({
     else setAttempt((n) => n + 1);
   }, []);
 
-  const runScan = useCallback(
-    async (code: string): Promise<boolean> => {
-      busyRef.current = true;
+  // One queue for scans, count edits and the receipt, so none overlaps.
+  const [queue] = useState(() =>
+    createActionQueue({
+      onIdle: (dropped) => {
+        setBusy(false);
+        if (dropped > 0) {
+          const more = `${dropped} later ${dropped === 1 ? "action was" : "actions were"} not sent. Check the counts shown, then try again.`;
+          setNotice((current) =>
+            current
+              ? { ...current, detail: current.detail ? `${current.detail} ${more}` : more }
+              : { tone: "critical", heading: "Not confirmed", detail: more },
+          );
+        }
+      },
+    }),
+  );
+  const enqueue = useCallback(
+    (action: () => Promise<ActionOutcome>) => {
       setBusy(true);
+      queue.push(action);
+    },
+    [queue],
+  );
+
+  /** Turn a failed answer into the notice and the outcome the queue acts on. */
+  const failed = useCallback((heading: string, failure: { status?: number; message: string }): ActionOutcome => {
+    setNotice({ tone: "critical", heading, detail: failure.message });
+    return failureOutcome(failure);
+  }, []);
+
+  const runScan = useCallback(
+    async (code: string): Promise<ActionOutcome> => {
       setNotice(null);
       const result = await sendTransferScan(fetch, locationId, transferId, code);
-      if (!result.ok) {
-        setNotice({ tone: "critical", heading: "Scan not confirmed", detail: result.message });
-        return false;
-      }
+      if (!result.ok) return failed("Scan not confirmed", result);
       if (!result.value.ok) {
         if (result.value.sheet) adopt(result.value.sheet);
         setNotice({ tone: "warning", heading: `“${code}” wasn’t counted`, detail: result.value.message });
-        return true;
+        return "refused";
       }
       adopt(result.value.sheet);
       const { scanned } = result.value;
@@ -198,40 +226,24 @@ function TransferSheetScreen({
               : `${scanned.outstanding} still to come.`,
         });
       }
-      return true;
+      return "ok";
     },
-    [locationId, transferId, adopt],
-  );
-
-  const runScanRef = useRef(runScan);
-  useEffect(() => {
-    runScanRef.current = runScan;
-  }, [runScan]);
-  const [queue] = useState(() =>
-    createScanQueue({
-      run: (code) => runScanRef.current(code),
-      onIdle: (dropped) => {
-        busyRef.current = false;
-        setBusy(false);
-        if (dropped > 0) {
-          setNotice({
-            tone: "critical",
-            heading: "Scan not confirmed",
-            detail: `${dropped} later ${dropped === 1 ? "scan was" : "scans were"} not sent. Check the counts shown, then scan again.`,
-          });
-        }
-      },
-    }),
+    [locationId, transferId, adopt, failed],
   );
 
   const scan = useCallback(
     (raw: string) => {
       const code = raw.trim();
       if (!code || !scanOpenRef.current) return;
-      queue.push(code);
+      enqueue(() => runScan(code));
     },
-    [queue],
+    [enqueue, runScan],
   );
+  // The scanner callback below is set up once per screen; it calls the latest scan.
+  const scanRef = useRef(scan);
+  useEffect(() => {
+    scanRef.current = scan;
+  }, [scan]);
 
   useEffect(() => {
     // Subscribing replays the last scan, which may predate this screen.
@@ -239,7 +251,7 @@ function TransferSheetScreen({
     const stopScans = shopify.scanner.scannerData.current.subscribe((result) => {
       if (!listening || !result.data) return;
       if (result.source === "camera") shopify.scanner.hideCameraScanner();
-      scan(result.data);
+      scanRef.current(result.data);
     });
     listening = true;
     const stopSources = shopify.scanner.sources.current.subscribe((sources) =>
@@ -249,59 +261,53 @@ function TransferSheetScreen({
       stopScans();
       stopSources();
     };
-  }, [scan]);
+  }, []);
 
-  const setLine = async (line: TransferLine, quantity: number) => {
-    if (busyRef.current || !scanOpenRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setNotice(null);
-    const result = await sendTransferCount(fetch, locationId, transferId, line.lineId, quantity);
-    busyRef.current = false;
-    setBusy(false);
-    if (!result.ok) {
-      setNotice({ tone: "critical", heading: "Count not saved", detail: result.message });
-      return;
-    }
-    if (!result.value.ok) {
-      if (result.value.sheet) adopt(result.value.sheet);
-      setNotice({ tone: "warning", heading: "Count not saved", detail: result.value.message });
-      return;
-    }
-    adopt(result.value.sheet);
+  const setLine = (line: TransferLine, quantity: number) => {
+    if (!scanOpenRef.current) return;
+    enqueue(async () => {
+      setNotice(null);
+      const result = await sendTransferCount(fetch, locationId, transferId, line.lineId, quantity);
+      if (!result.ok) return failed("Count not saved", result);
+      if (!result.value.ok) {
+        if (result.value.sheet) adopt(result.value.sheet);
+        setNotice({ tone: "warning", heading: "Count not saved", detail: result.value.message });
+        return "refused";
+      }
+      adopt(result.value.sheet);
+      return "ok";
+    });
   };
 
-  const post = async () => {
-    if (busyRef.current || !scanOpenRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setNotice(null);
-    const result = await postTransferReceipt(fetch, locationId, transferId);
-    busyRef.current = false;
-    setBusy(false);
-    if (!result.ok) {
-      setNotice({ tone: "critical", heading: "Receipt not confirmed", detail: result.message });
-      return;
-    }
-    if (!result.value.ok) {
-      if (result.value.sheet) adopt(result.value.sheet);
-      setNotice({ tone: "critical", heading: "Receipt not posted", detail: result.value.message });
-      return;
-    }
-    const { posted } = result.value;
-    if (posted?.completed) {
-      setFinished(
-        posted.receivedUnits > 0
-          ? `${posted.receivedUnits} units added to stock. This transfer is fully received.`
-          : "This transfer is fully received.",
-      );
-      return;
-    }
-    adopt(result.value.sheet);
-    setNotice({
-      tone: "success",
-      heading: `${posted?.receivedUnits ?? 0} units added to stock`,
-      detail: "Scan the rest when it arrives.",
+  const post = () => {
+    if (!scanOpenRef.current) return;
+    enqueue(async () => {
+      setNotice(null);
+      const result = await postTransferReceipt(fetch, locationId, transferId);
+      if (!result.ok) return failed("Receipt not confirmed", result);
+      if (!result.value.ok) {
+        if (result.value.sheet) adopt(result.value.sheet);
+        setNotice({ tone: "critical", heading: "Receipt not posted", detail: result.value.message });
+        return "refused";
+      }
+      const { posted } = result.value;
+      if (posted?.completed) {
+        setFinished(
+          posted.alreadyDone
+            ? "This transfer was already fully received. Nothing more was added."
+            : `${posted.receivedUnits} units added to stock. This transfer is fully received.`,
+        );
+        return "ok";
+      }
+      adopt(result.value.sheet);
+      setNotice({
+        tone: "success",
+        heading: posted?.alreadyDone
+          ? "Already recorded"
+          : `${posted?.receivedUnits ?? 0} units added to stock`,
+        detail: "Scan the rest when it arrives.",
+      });
+      return "ok";
     });
   };
 
@@ -371,7 +377,7 @@ function TransferSheetScreen({
                     key={line.lineId}
                     line={line}
                     disabled={busy || !sheet.receivingEnabled}
-                    onSet={(quantity) => void setLine(line, quantity)}
+                    onSet={(quantity) => setLine(line, quantity)}
                   />
                 ))}
                 {sheet.hasMoreLines && (
@@ -382,7 +388,7 @@ function TransferSheetScreen({
                 <s-button
                   variant="primary"
                   disabled={busy || !sheet.receivingEnabled || sheet.transfer.countedInUnits === 0}
-                  onClick={() => void post()}
+                  onClick={post}
                 >
                   Post receipt ({sheet.transfer.countedInUnits} units)
                 </s-button>

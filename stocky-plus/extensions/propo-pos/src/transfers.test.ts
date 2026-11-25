@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseCount } from "./receiving";
 import {
-  createScanQueue,
+  createActionQueue,
+  failureOutcome,
+  type ActionOutcome,
   describeTransfer,
   loadTransferSheet,
   loadTransfers,
@@ -133,45 +135,104 @@ describe("describeTransfer", () => {
   });
 });
 
-describe("scan queue", () => {
-  it("counts quick scans one at a time, in order, and the same code twice", async () => {
-    const seen: string[] = [];
-    let inFlight = 0;
-    let maxInFlight = 0;
-    const idle = vi.fn();
-    const queue = createScanQueue({
-      run: async (code) => {
-        inFlight += 1;
-        maxInFlight = Math.max(maxInFlight, inFlight);
-        await Promise.resolve();
-        seen.push(code);
-        inFlight -= 1;
-        return true;
+describe("failureOutcome", () => {
+  it("keeps going after a plain refusal, stops on anything else", () => {
+    for (const status of [400, 404, 409]) {
+      expect(failureOutcome({ status, message: "x" })).toBe("refused");
+    }
+    for (const status of [401, 403, 429]) {
+      expect(failureOutcome({ status, message: "x" })).toBe("halt");
+    }
+    expect(failureOutcome({ message: "lost" })).toBe("unsure");
+    expect(failureOutcome({ status: 503, message: "x" })).toBe("unsure");
+  });
+});
+
+describe("unreadable answers", () => {
+  it("treats a 2xx the device cannot read as unsure, not as a failure to retry", async () => {
+    const unreadable = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        throw new SyntaxError("bad json");
       },
-      onIdle: idle,
+    })) as unknown as Parameters<typeof sendTransferScan>[0];
+    expect(await sendTransferScan(unreadable, 12, "t", "1")).toMatchObject({
+      ok: false,
+      message: TRANSFER_MESSAGES.scanUnsure,
     });
-    queue.push("A");
-    queue.push("A");
-    queue.push("B");
+    expect(await postTransferReceipt(unreadable, 12, "t")).toMatchObject({
+      ok: false,
+      message: TRANSFER_MESSAGES.postUnsure,
+    });
+  });
+
+  it("still shows what the app said for a refusal", async () => {
+    const result = await sendTransferScan(respond(429), 12, "t", "1");
+    expect(result).toMatchObject({ ok: false, status: 429 });
+  });
+});
+
+describe("action queue", () => {
+  const actions = (log: string[], outcomes: Record<string, ActionOutcome> = {}) => {
+    let inFlight = 0;
+    let max = 0;
+    const make = (name: string) => async (): Promise<ActionOutcome> => {
+      inFlight += 1;
+      max = Math.max(max, inFlight);
+      await Promise.resolve();
+      log.push(name);
+      inFlight -= 1;
+      return outcomes[name] ?? "ok";
+    };
+    return { make, maxInFlight: () => max };
+  };
+
+  it("runs scans, a count edit and the receipt one at a time, in the order asked", async () => {
+    const log: string[] = [];
+    const idle = vi.fn();
+    const { make, maxInFlight } = actions(log);
+    const queue = createActionQueue({ onIdle: idle });
+    for (const name of ["scan A", "scan A", "set", "post", "scan B"]) queue.push(make(name));
     await vi.waitFor(() => expect(idle).toHaveBeenCalled());
-    expect(seen).toEqual(["A", "A", "B"]);
-    expect(maxInFlight).toBe(1);
+    expect(log).toEqual(["scan A", "scan A", "set", "post", "scan B"]);
+    expect(maxInFlight()).toBe(1);
     expect(idle).toHaveBeenCalledWith(0);
   });
 
-  it("drops the scans behind one that could not be confirmed and says how many", async () => {
-    const seen: string[] = [];
+  it("goes on after a refusal", async () => {
+    const log: string[] = [];
     const idle = vi.fn();
-    const queue = createScanQueue({
-      run: async (code) => {
-        seen.push(code);
-        return code !== "B";
-      },
-      onIdle: idle,
-    });
-    for (const code of ["A", "B", "C", "D"]) queue.push(code);
+    const { make } = actions(log, { B: "refused" });
+    const queue = createActionQueue({ onIdle: idle });
+    for (const name of ["A", "B", "C"]) queue.push(make(name));
     await vi.waitFor(() => expect(idle).toHaveBeenCalled());
-    expect(seen).toEqual(["A", "B"]);
-    expect(idle).toHaveBeenCalledWith(2);
+    expect(log).toEqual(["A", "B", "C"]);
+    expect(idle).toHaveBeenCalledWith(0);
+  });
+
+  it("drops what is behind an unsure or halting action and says how many", async () => {
+    for (const outcome of ["unsure", "halt"] as const) {
+      const log: string[] = [];
+      const idle = vi.fn();
+      const { make } = actions(log, { B: outcome });
+      const queue = createActionQueue({ onIdle: idle });
+      for (const name of ["A", "B", "C", "D"]) queue.push(make(name));
+      await vi.waitFor(() => expect(idle).toHaveBeenCalled());
+      expect(log).toEqual(["A", "B"]);
+      expect(idle).toHaveBeenCalledWith(2);
+    }
+  });
+
+  it("accepts new actions after going idle", async () => {
+    const log: string[] = [];
+    const idle = vi.fn();
+    const { make } = actions(log);
+    const queue = createActionQueue({ onIdle: idle });
+    queue.push(make("A"));
+    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(1));
+    queue.push(make("B"));
+    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(2));
+    expect(log).toEqual(["A", "B"]);
   });
 });

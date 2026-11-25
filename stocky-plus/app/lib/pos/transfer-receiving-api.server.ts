@@ -87,6 +87,8 @@ export type PosTransferSheet = {
   /** Lines with units still to account for or counted in, one page. */
   lines: PosTransferLine[];
   hasMoreLines: boolean;
+  /** Every shipped unit is received or rejected; nothing is left to do. */
+  completed: boolean;
 };
 
 export type PosTransferReceiveResponse =
@@ -114,6 +116,8 @@ async function openTransfer(
   db: TenantDb,
   transferId: string,
   locationGid: string,
+  /** A finished transfer is let through to read, or to confirm a post that already went through. */
+  allowReceived = false,
 ): Promise<TransferHeader> {
   const transfer = (await db.transferOrder.findFirst({
     where: { id: transferId },
@@ -138,7 +142,10 @@ async function openTransfer(
       "This transfer is going to a different location. Receive it there.",
     );
   }
-  if (transfer.status !== "IN_TRANSIT") {
+  if (
+    transfer.status !== "IN_TRANSIT" &&
+    !(allowReceived && transfer.status === "RECEIVED")
+  ) {
     throw new PosApiError(409, "conflict", NOT_IN_TRANSIT_MESSAGE);
   }
   if (transfer.shopifyTransferId) {
@@ -228,6 +235,7 @@ async function buildSheet(
       outstandingQty: line.outstandingQty,
     })),
     hasMoreLines: page.total > TRANSFER_LINE_PAGE_SIZE,
+    completed: transfer.status === "RECEIVED",
   };
 }
 
@@ -238,7 +246,7 @@ export async function getTransferReceiveSheet(
   deps: Pick<TransferReceivingDeps, "stock"> = {},
 ): Promise<PosTransferSheet> {
   await requirePosPlan(db);
-  const transfer = await openTransfer(db, transferId, locationGid);
+  const transfer = await openTransfer(db, transferId, locationGid, true);
   return buildSheet(db, transfer, deps);
 }
 
@@ -283,14 +291,17 @@ export async function receiveTransferAtPos(
     throw new PosApiError(403, "forbidden", STAFF_REQUIRED_MESSAGE);
   }
   const request = parseTransferReceiveBody(body);
-  await openTransfer(db, transferId, locationGid);
+  // A post may come after one whose answer was lost: let a finished transfer
+  // through so the retry hears that it is already recorded.
+  const open = await openTransfer(db, transferId, locationGid, request.intent === "post");
 
   const refuse = async (message: string): Promise<PosTransferReceiveResponse> => ({
     ok: false,
     message,
     sheet: await sheetAfter(db, transferId, deps),
   });
-  if (!switchedOn(deps)) return refuse(SWITCHED_OFF_MESSAGE);
+  // Confirming a finished transfer sends nothing, so the switch does not matter.
+  if (open.status !== "RECEIVED" && !switchedOn(deps)) return refuse(SWITCHED_OFF_MESSAGE);
 
   if (request.intent === "scan") {
     const result = await recordTransferReceiptScan(db, {

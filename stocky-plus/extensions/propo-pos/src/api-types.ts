@@ -169,6 +169,8 @@ export type TransferSheet = {
   };
   lines: TransferLine[];
   hasMoreLines: boolean;
+  /** Every shipped unit is received or rejected. */
+  completed: boolean;
 };
 
 export type TransferReceiveResponse =

@@ -418,9 +418,16 @@ describe("receiving a transfer at POS", () => {
       expect(done.status).toBe("RECEIVED");
       expect(done.receivedByUserId).toBe("77");
 
-      const again = await receive(id, { intent: "post" }).catch((error: unknown) => error);
-      expect(again).toBeInstanceOf(PosApiError);
+      // A retry of a post whose answer was lost hears it is already recorded.
+      const again = await receive(id, { intent: "post" });
+      expect(again).toMatchObject({ ok: true, posted: { receivedUnits: 0, completed: true, alreadyDone: true } });
       expect(stockAt(102, 12)).toBe(6);
+      // The finished transfer can still be read, and nothing more can be counted in.
+      const sheet = await getTransferReceiveSheet(dbA, id, DESTINATION, { stock: enabled() });
+      expect(sheet).toMatchObject({ completed: true });
+      expect((await apiError(scan(id, "5010001"))).status).toBe(409);
+      // A finished transfer is only let through for another location's staff if bound for it.
+      expect((await apiError(receive(id, { intent: "post" }, { at: ELSEWHERE }))).status).toBe(409);
     });
 
     it("says so when nothing is counted in, and sends nothing", async () => {
