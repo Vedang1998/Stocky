@@ -219,7 +219,7 @@ export function smartForecast(input: SmartForecastInput): SmartForecast {
   }
   if (history.some((value) => value == null)) {
     explanation.push(
-      "Days the variant was out of stock are left out of the methods and the test, because sales on those days understate demand. The recent average still counts them, as Stocky does.",
+      "Days the variant was out of stock are left out of the methods and the test, because sales on those days understate demand. The recent average still counts them, as the worksheet's suggestion does.",
     );
   }
 

@@ -135,12 +135,12 @@ describe("smartForecastColumn", () => {
       byRow: {
         "row-a": {
           outcome: "KEPT_NO_IMPROVEMENT",
-          label: "Recent average (the Stocky method)",
+          label: "Recent average (the worksheet's method)",
           forecastUnits: "28.00",
         },
         "row-b": {
           outcome: "KEPT_NO_IMPROVEMENT",
-          label: "Recent average (the Stocky method)",
+          label: "Recent average (the worksheet's method)",
           forecastUnits: "14.00",
         },
       },
