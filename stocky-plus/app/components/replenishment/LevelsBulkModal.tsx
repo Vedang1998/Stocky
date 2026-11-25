@@ -112,6 +112,7 @@ export function LevelsBulkModal({
         <input type="hidden" name="intent" value="setLevels" />
         <input type="hidden" name="show" value={show} />
         <input type="hidden" name="q" value={query} />
+        <input type="hidden" name="expectedCount" value={matching} />
         <s-stack direction="block" gap="base">
           <s-paragraph>
             For the {count(matching, "variant", "variants")} the current filter

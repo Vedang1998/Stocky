@@ -22,6 +22,7 @@ import {
   parseRuleChangesForm,
   ReplenishmentRuleError,
 } from "../lib/replenishment/rules.server";
+import { isTransactionAbandoned } from "../lib/replenishment/db-errors.server";
 import { SHOP_SCOPE } from "../lib/replenishment/scope";
 import {
   getReplenishmentDefaults,
@@ -228,11 +229,19 @@ export const action = async ({
   if (intent === "setLevels") {
     const parsed = parseRuleChangesForm(form);
     if (!parsed.ok) return { intent, ok: false, errors: parsed.errors };
-    // The rows the merchant is looking at: the same filter and search as the page.
-    const view = parseWorksheetView(
-      new URLSearchParams({ show: field(form, "show"), q: field(form, "q") }),
-    );
+    // The rows the merchant is looking at: the same filter and search as the
+    // page. A bulk overwrite never falls back to "all rows": an unknown
+    // filter, or a count that no longer matches what the dialog said, is
+    // refused with nothing written.
+    const show = field(form, "show");
+    if (!(WORKSHEET_SHOW as readonly string[]).includes(show)) {
+      return { intent, ok: false, errors: {}, message: LEVELS_VIEW_CHANGED };
+    }
+    const view = parseWorksheetView(new URLSearchParams({ show, q: field(form, "q") }));
     const variantGids = await listViewVariantGids(db, worksheet.id, view);
+    if (field(form, "expectedCount") !== String(variantGids.length)) {
+      return { intent, ok: false, errors: {}, message: LEVELS_VIEW_CHANGED };
+    }
     try {
       const outcome = await applyRuleChanges(db, {
         variantGids,
@@ -243,6 +252,9 @@ export const action = async ({
     } catch (error) {
       if (error instanceof ReplenishmentRuleError) {
         return { intent, ok: false, errors: {}, message: error.message };
+      }
+      if (isTransactionAbandoned(error)) {
+        return { intent, ok: false, errors: {}, message: LEVELS_NOT_SAVED };
       }
       throw error;
     }
@@ -364,6 +376,9 @@ export const action = async ({
 const DETAIL_MODAL_ID = "worksheet-line-detail";
 const COLUMNS_MODAL_ID = "worksheet-columns";
 const LEVELS_MODAL_ID = "worksheet-levels";
+const LEVELS_NOT_SAVED = "Levels were not saved. Try again.";
+const LEVELS_VIEW_CHANGED =
+  "The rows this would change are not the ones the dialog showed. Reload the page and try again.";
 
 function Metric({ label, value }: { label: string; value: number }) {
   return (
@@ -637,6 +652,9 @@ export default function Worksheet() {
       <ColumnsModal key={columns.join(",")} id={COLUMNS_MODAL_ID} columns={columns} />
 
       <LevelsBulkModal
+        // A new filter, search or count starts the dialog afresh, so an
+        // earlier result never sits above a button for different rows.
+        key={`${view.show}|${view.query}|${matching}`}
         id={LEVELS_MODAL_ID}
         matching={matching}
         scopeName={worksheet.scope}

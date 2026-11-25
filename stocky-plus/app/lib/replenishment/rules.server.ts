@@ -19,6 +19,11 @@ export { isScopeKey, isVariantGid, SHOP_SCOPE };
 
 /** Largest IN list sent in one query. */
 const QUERY_CHUNK = 1000;
+/**
+ * Up to 5,000 variants in one transaction: more time than Prisma's 5-second
+ * default, as the worksheet's own bulk writes have.
+ */
+const BULK_RULE_TRANSACTION = { timeout: 60_000, maxWait: 10_000 };
 
 export type VariantRuleValues = {
   minimumQuantity: number | null;
@@ -309,8 +314,10 @@ export type RuleChangeOutcome = {
  * Applies the same field changes to the planning levels of many variants in
  * one stock scope, in one transaction. Each variant keeps the fields that
  * are not changed. Levels are added only for variants still in the synced
- * catalog; existing levels can be changed or cleared either way, as with
- * one variant.
+ * catalog. Existing levels are changed or cleared for every variant that has
+ * them, in the catalog or not (unlike the one-variant save, which refuses a
+ * variant that left the catalog): the merchant chose these rows, and
+ * leaving some untouched would be a silent partial change.
  */
 export async function applyRuleChanges(
   db: TenantDb,
@@ -332,7 +339,9 @@ export async function applyRuleChanges(
   }
   const changes: RuleChanges = {};
   for (const field of RULE_FIELDS) {
-    if (field in input.changes) changes[field] = input.changes[field] ?? null;
+    // Undefined is "not changed", like an absent field; only null clears.
+    const value = input.changes[field];
+    if (value !== undefined) changes[field] = value;
   }
   const outcome: RuleChangeOutcome = { updated: 0, created: 0, cleared: 0, skipped: 0 };
   if (variantGids.length === 0 || Object.keys(changes).length === 0) return outcome;
@@ -373,8 +382,17 @@ export async function applyRuleChanges(
           });
           outcome.cleared += cleared.count;
         }
+        // Guarded so that an update never leaves a rule with no level, even
+        // if another clear ran since the delete above.
+        const keepsALevel = setsAValue
+          ? {}
+          : {
+              OR: RULE_FIELDS.filter((field) => !(field in changes)).map((field) => ({
+                [field]: { not: null },
+              })),
+            };
         const updated: { count: number } = await tx.replenishmentVariantRule.updateMany({
-          where: { variantGid: { in: ruled }, scopeKey },
+          where: { variantGid: { in: ruled }, scopeKey, ...keepsALevel },
           data: changes,
         });
         outcome.updated += updated.count;
@@ -391,14 +409,23 @@ export async function applyRuleChanges(
         if (liveGids.length > 0) {
           const created: { count: number } = await tx.replenishmentVariantRule.createMany({
             data: liveGids.map((variantGid) => ({ variantGid, scopeKey, ...changes })),
-            // A rule saved for one of them meanwhile keeps its own values.
             skipDuplicates: true,
           });
           outcome.created += created.count;
+          // A rule saved for some of them since the read above was skipped by
+          // the insert. Apply the change to those too, so none is lost; the
+          // update rewrites the new rules with the same values.
+          if (created.count < liveGids.length) {
+            const raced: { count: number } = await tx.replenishmentVariantRule.updateMany({
+              where: { variantGid: { in: liveGids }, scopeKey },
+              data: changes,
+            });
+            outcome.updated += raced.count - created.count;
+          }
         }
       }
     }
-  });
+  }, BULK_RULE_TRANSACTION);
   return outcome;
 }
 
