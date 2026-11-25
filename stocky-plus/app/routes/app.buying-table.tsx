@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
+import { createHash } from "node:crypto";
 import { useState } from "react";
 import type {
   ActionFunctionArgs,
@@ -13,7 +14,8 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import type { AbcMetric } from "@prisma/client";
+import type { AbcMetric, SupplierSkuMapping } from "@prisma/client";
+import { ActionFeedback } from "../components/ActionFeedback";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import {
@@ -167,7 +169,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     metric,
     rows,
     gated: !settings.subscriptionActive,
-    // One key per rendered page, so a second press of Create opens the same draft.
+    // The page's part of the key that lets a second press of Create open the same draft.
     creationKey: crypto.randomUUID(),
     allowDevActivate:
       process.env.NODE_ENV !== "production" &&
@@ -179,8 +181,6 @@ const LOOKBACK_TARGET_MISSING =
   "Choose a product and a location before changing its lookback window.";
 const ORDER_TARGET_MISSING =
   "Choose a supplier and a location before creating a purchase order.";
-const ORDER_LOCATION_UNKNOWN =
-  "That location is not one of this shop's locations. Choose a location and try again.";
 const ORDER_TOO_MANY_LINES = `A purchase order can have at most ${MAX_LINES_PER_ORDER} lines.`;
 const ORDER_QUANTITY_TOO_LARGE = `A quantity can be at most ${MAX_ORDER_QUANTITY.toLocaleString("en-US")}.`;
 const MAX_ID_LENGTH = 256;
@@ -192,6 +192,27 @@ function usableId(value: FormDataEntryValue | null): value is string {
     value.length > 0 &&
     value.length <= MAX_ID_LENGTH
   );
+}
+
+const PAGE_KEY_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+
+/**
+ * The key that makes a second press of Create open the same draft: the
+ * rendered page's key plus exactly what is on the order. Pressing Create
+ * again on the same page with the same lines finds the draft already made;
+ * changed quantities, or a fresh page, make a new one. Without the page's
+ * key there is no key, and every press creates an order.
+ */
+function orderCreationKey(
+  pageKey: FormDataEntryValue | null,
+  supplierId: string,
+  locationGid: string,
+  lines: ReadonlyArray<{ variantGid: string; quantity: number }>,
+): string | null {
+  if (typeof pageKey !== "string" || !PAGE_KEY_PATTERN.test(pageKey)) return null;
+  const digest = createHash("sha256").update(`${supplierId};${locationGid};`);
+  for (const line of lines) digest.update(`${line.variantGid}=${line.quantity};`);
+  return `buying-table:${pageKey}:${digest.digest("hex").slice(0, 32)}`;
 }
 
 /**
@@ -277,7 +298,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // The order is created by the purchasing service, as every other order
     // is: it numbers the order, prices each line from the supplier's terms,
     // records who created it and checks the supplier, location and products.
-    // The checks here refuse a bad request before anything is read.
+    // The checks here only bound the request before anything is read.
     const supplierId = form.get("supplierId");
     const locationId = form.get("locationId");
     if (!usableId(supplierId) || !usableId(locationId)) {
@@ -289,12 +310,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (entries.length > MAX_LINES_PER_ORDER) {
       return { error: ORDER_TOO_MANY_LINES };
     }
-    const creationKey = form.get("creationKey");
-
-    const supplier = await db.supplier.findFirst({
-      where: { id: supplierId },
-    });
-    if (!supplier) return { error: "Supplier not found" };
 
     // Supplier minimums and pack sizes apply only when the merchant ticks them.
     const supplierRules = {
@@ -302,20 +317,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       roundUpToPackSize: form.get("roundUpToPackSize") === "on",
     };
 
+    const entered = entries
+      .map(([key, value]) => ({
+        mappingId: key.slice(4),
+        quantity: parseInt(String(value), 10),
+      }))
+      .filter(({ quantity }) => quantity > 0);
+    if (entered.length === 0) return { ok: false };
+
+    const found: SupplierSkuMapping[] = await db.supplierSkuMapping.findMany({
+      where: {
+        id: { in: entered.map(({ mappingId }) => mappingId) },
+        supplierId,
+      },
+    });
+    const mappings = new Map(found.map((mapping) => [mapping.id, mapping]));
+
     const lines: Array<{ variantGid: string; quantity: number }> = [];
-
-    for (const [key, value] of entries) {
-      const mappingId = key.slice(4);
-      const entered = parseInt(value as string, 10);
-      if (!entered || entered <= 0) continue;
-
-      const mapping = await db.supplierSkuMapping.findFirst({
-        where: { id: mappingId, supplierId: supplier.id },
-      });
+    for (const { mappingId, quantity: requested } of entered) {
+      const mapping = mappings.get(mappingId);
       if (!mapping) continue;
-
       const { quantity } = applySupplierRules(
-        entered,
+        requested,
         { minimumOrderQuantity: mapping.moq, packSize: mapping.packSize },
         supplierRules,
       );
@@ -324,35 +347,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       }
       lines.push({ variantGid: mapping.shopifyVariantId, quantity });
     }
+    if (lines.length === 0) return { ok: false };
 
-    if (lines.length > 0) {
-      // The same list the page offers: the shop's locations in Shopify.
-      const locations = await fetchLocations(admin);
-      if (!locations.some((location) => location.id === locationId)) {
-        return { error: ORDER_LOCATION_UNKNOWN };
-      }
-      try {
-        const profile = await readShopProfile(admin);
-        const draft = await createPurchaseOrderDraft(
-          db,
-          actor,
-          {
-            supplierId: supplier.id,
-            locationGid: locationId,
+    try {
+      const profile = await readShopProfile(admin);
+      const draft = await createPurchaseOrderDraft(
+        db,
+        actor,
+        {
+          supplierId,
+          locationGid: locationId,
+          lines,
+          creationKey: orderCreationKey(
+            form.get("creationKey"),
+            supplierId,
+            locationId,
             lines,
-            // One key per rendered page: pressing Create twice opens the same draft.
-            creationKey: usableId(creationKey) ? creationKey : null,
-            source: "replenishment",
-          },
-          { admin, today: profile.today },
-        );
-        return redirect(`/app/purchase-orders/${draft.id}`);
-      } catch (error) {
-        if (error instanceof PurchasingError) return { error: error.message };
-        throw error;
-      }
+          ),
+          source: "replenishment",
+        },
+        { admin, today: profile.today },
+      );
+      return redirect(`/app/purchase-orders/${draft.id}`);
+    } catch (error) {
+      if (error instanceof PurchasingError) return { error: error.message };
+      throw error;
     }
-    return { ok: false };
   }
 
   return { ok: false };
@@ -378,10 +398,6 @@ export default function BuyingTable() {
     allowDevActivate,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const actionError =
-    actionData && "error" in actionData && typeof actionData.error === "string"
-      ? actionData.error
-      : null;
   const navigation = useNavigation();
   const [lookbackFor, setLookbackFor] = useState<BuyingRow | null>(null);
 
@@ -415,11 +431,7 @@ export default function BuyingTable() {
 
   return (
     <s-page heading="Buying Table">
-      {actionError && (
-        <s-banner tone="critical">
-          <s-paragraph>{actionError}</s-paragraph>
-        </s-banner>
-      )}
+      <ActionFeedback data={actionData} errorHeading="Purchase order not created" />
       <s-section heading="Filters">
         <Form method="get">
           <s-stack direction="inline" gap="base">

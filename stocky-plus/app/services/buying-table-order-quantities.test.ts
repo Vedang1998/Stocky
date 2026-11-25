@@ -13,9 +13,7 @@ const { db, createPurchaseOrderDraft } = vi.hoisted(() => ({
       myshopifyDomain: "buying-table.myshopify.com",
     },
     shopSettings: { findUnique: vi.fn() },
-    supplier: { findFirst: vi.fn() },
-    supplierSkuMapping: { findFirst: vi.fn() },
-    purchaseOrder: { create: vi.fn() },
+    supplierSkuMapping: { findMany: vi.fn() },
   },
   createPurchaseOrderDraft: vi.fn(),
 }));
@@ -35,10 +33,7 @@ vi.mock("./purchasing/shop-profile.server", () => ({
 }));
 vi.mock("./shopify-gql.server", () => ({
   fetchInventoryLevels: vi.fn(),
-  // The order action only writes to a location Shopify lists for the shop.
-  fetchLocations: vi.fn(async () => [
-    { id: "gid://shopify/Location/1", name: "Warehouse" },
-  ]),
+  fetchLocations: vi.fn(),
 }));
 vi.mock("./forecasting.server", () => ({ computeForecast: vi.fn() }));
 
@@ -71,19 +66,16 @@ describe("Buying Table draft purchase order quantities", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db.shopSettings.findUnique.mockResolvedValue({ subscriptionActive: true });
-    db.supplier.findFirst.mockResolvedValue({ id: "supplier-1" });
-    db.supplierSkuMapping.findFirst.mockImplementation(
-      async ({ where }: { where: { id: string } }) => {
-        const mapping = MAPPINGS[where.id];
-        return mapping
-          ? {
-              id: where.id,
-              shopifyVariantId: `variant-${where.id}`,
-              vendorSku: `sku-${where.id}`,
-              ...mapping,
-            }
-          : null;
-      },
+    db.supplierSkuMapping.findMany.mockImplementation(
+      async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in
+          .filter((id) => id in MAPPINGS)
+          .map((id) => ({
+            id,
+            shopifyVariantId: `variant-${id}`,
+            vendorSku: `sku-${id}`,
+            ...MAPPINGS[id],
+          })),
     );
     createPurchaseOrderDraft.mockResolvedValue({ id: "po-1", poNumber: "PO-1", created: true });
   });
@@ -94,8 +86,6 @@ describe("Buying Table draft purchase order quantities", () => {
       { variantGid: "variant-map-a", quantity: 5 },
       { variantGid: "variant-map-b", quantity: 7 },
     ]);
-    // Never written directly: the purchasing service creates the order.
-    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
   });
 
   it("raises to the supplier minimum only when that rule is ticked", async () => {

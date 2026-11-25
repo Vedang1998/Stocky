@@ -61,6 +61,7 @@ const {
     },
     supplierSkuMapping: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       findUnique: vi.fn(),
       deleteMany: vi.fn(),
       upsert: vi.fn(),
@@ -396,7 +397,8 @@ describe("cross-shop denial", () => {
   it("denies Shop B Buying Table createPO against Shop A supplier/mapping", async () => {
     const { action } = await import("../routes/app.buying-table");
     activePlanSnapshot();
-    prismaMock.supplier.findFirst.mockResolvedValue(null);
+    // Shop A's supplier and mapping are outside Shop B's scope: nothing matches.
+    prismaMock.supplierSkuMapping.findMany.mockResolvedValue([]);
 
     const result = await action(
       actionArgs(
@@ -409,13 +411,17 @@ describe("cross-shop denial", () => {
       ),
     );
 
-    expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
-      where: directScoped({ id: "supplier-shop-a" }),
+    expect(prismaMock.supplierSkuMapping.findMany).toHaveBeenCalledWith({
+      where: childScoped({
+        id: { in: ["map-shop-a"] },
+        supplierId: "supplier-shop-a",
+      }),
     });
-    expect(result).toEqual({ error: "Supplier not found" });
-    expect(prismaMock.supplierSkuMapping.findFirst).not.toHaveBeenCalled();
+    expect(result).toEqual({ ok: false });
+    expect(prismaMock.supplier.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();
     expect(resolveTieredUnitCost).not.toHaveBeenCalled();
+    expect(adminGraphql).not.toHaveBeenCalled();
   });
 
   it("denies Shop B cancelling Shop A purchase order", async () => {
@@ -563,7 +569,7 @@ describe("cross-shop denial", () => {
       name: "Shared-looking supplier name",
     });
     // Mapping id belongs to Shop A (or otherwise not under Shop B's supplier).
-    prismaMock.supplierSkuMapping.findFirst.mockResolvedValue(null);
+    prismaMock.supplierSkuMapping.findMany.mockResolvedValue([]);
 
     const result = await action(
       actionArgs(
@@ -577,12 +583,9 @@ describe("cross-shop denial", () => {
     );
 
     expect(authenticateAdmin).toHaveBeenCalled();
-    expect(prismaMock.supplier.findFirst).toHaveBeenCalledWith({
-      where: directScoped({ id: "supplier-shop-b" }),
-    });
-    expect(prismaMock.supplierSkuMapping.findFirst).toHaveBeenCalledWith({
+    expect(prismaMock.supplierSkuMapping.findMany).toHaveBeenCalledWith({
       where: childScoped({
-        id: "map-shop-a",
+        id: { in: ["map-shop-a"] },
         supplierId: "supplier-shop-b",
       }),
     });
