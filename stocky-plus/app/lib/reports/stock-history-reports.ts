@@ -42,6 +42,8 @@ function historyStartNotice(first: LocalDate | null): ReportNotice | null {
 export type StockHistoryDayRow = {
   localDate: LocalDate;
   captured: boolean;
+  /** Today and later days: the day has not ended, so nothing was due yet. */
+  notEnded: boolean;
   /** Null when the day was not captured or Shopify reported no quantity. */
   onHand: number | null;
   /** Variant-and-location rows saved for the day; null when not captured. */
@@ -57,8 +59,15 @@ export type StockHistoryInput = {
   snapshots: readonly StockSnapshotDay[];
   totals: readonly StockDayTotals[];
   firstCapturedDate: LocalDate | null;
+  /** Today in the shop's time zone. */
+  today: LocalDate;
   timeZone: string;
 };
+
+function statusOf(row: StockHistoryDayRow): string {
+  if (row.captured) return "Captured";
+  return row.notEnded ? "Not ended yet" : "Not captured";
+}
 
 /** One row per calendar day in the range, captured or not. */
 export function buildStockHistoryReport(
@@ -76,6 +85,7 @@ export function buildStockHistoryReport(
       return {
         localDate,
         captured: false,
+        notEnded: localDate >= input.today,
         onHand: null,
         levelCount: null,
         unreportedLevels: null,
@@ -86,6 +96,7 @@ export function buildStockHistoryReport(
     return {
       localDate,
       captured: true,
+      notEnded: false,
       // A captured day with no tracked stock really holds zero units.
       onHand: snapshot.levelCount === 0 ? 0 : (total?.onHand ?? null),
       levelCount: snapshot.levelCount,
@@ -97,7 +108,7 @@ export function buildStockHistoryReport(
   const notices: ReportNotice[] = [];
   const first = historyStartNotice(input.firstCapturedDate);
   if (first) notices.push(first);
-  const missing = rows.filter((row) => !row.captured).length;
+  const missing = rows.filter((row) => !row.captured && !row.notEnded).length;
   if (first === null && missing > 0) {
     notices.push({
       tone: "warning",
@@ -105,19 +116,29 @@ export function buildStockHistoryReport(
       body:
         input.firstCapturedDate !== null &&
         input.start < input.firstCapturedDate
-          ? `The first saved day is ${input.firstCapturedDate}. Days before it, and any day the app did not run, are blank, not zero.`
+          ? `The first saved day is ${input.firstCapturedDate}. Days before it were never saved or were removed after the 400 days the app keeps, and any day the app did not run is blank, not zero.`
           : "The app did not save stock on these days, so they are blank, not zero.",
     });
   }
-  const unreported = rows.reduce(
-    (n, row) => n + (row.unreportedLevels ?? 0),
+  const unreported = Math.max(
     0,
+    ...rows.map((row) => row.unreportedLevels ?? 0),
   );
   if (unreported > 0) {
     notices.push({
       tone: "info",
-      heading: `${countOf(unreported, "saved stock level has", "saved stock levels have")} no quantity`,
-      body: "Where Shopify had not reported an on-hand quantity, it is left out of the day's total, not counted as zero.",
+      heading: `Up to ${countOf(unreported, "stock level a day has", "stock levels a day have")} no quantity`,
+      body: "Where Shopify had not reported an on-hand quantity, it is left out of that day's total, not counted as zero.",
+    });
+  }
+  const otherZone = input.snapshots.find(
+    (snapshot) => snapshot.timeZone !== input.timeZone,
+  );
+  if (otherZone) {
+    notices.push({
+      tone: "info",
+      heading: "Time zone changed since some days were saved",
+      body: `Each day is the one the app saved, not a recalculation. Some days were saved when the store's time zone was ${otherZone.timeZone}.`,
     });
   }
 
@@ -141,7 +162,7 @@ export function buildStockHistoryReport(
         key: "status",
         label: "Status",
         kind: "text",
-        value: (r) => (r.captured ? "Captured" : "Not captured"),
+        value: statusOf,
       },
       {
         key: "onHand",
@@ -178,13 +199,7 @@ export function buildStockHistoryReport(
     rows,
     rowKey: (row) => row.localDate,
     defaultSort: { key: "date", direction: "desc" },
-    facets: [
-      {
-        key: "status",
-        label: "Status",
-        value: (r) => (r.captured ? "Captured" : "Not captured"),
-      },
-    ],
+    facets: [{ key: "status", label: "Status", value: statusOf }],
     searchKeys: ["date"],
     summarize: (shown): ReportTile[] => {
       const captured = shown.filter((r) => r.captured);
@@ -197,7 +212,7 @@ export function buildStockHistoryReport(
         { label: "Days captured", value: count(captured.length) },
         {
           label: "Days not captured",
-          value: count(shown.length - captured.length),
+          value: count(shown.filter((r) => !r.captured && !r.notEnded).length),
         },
         {
           label: "Units on hand, latest day",

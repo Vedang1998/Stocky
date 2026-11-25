@@ -251,7 +251,8 @@ day is a calendar day in the shop's time zone as it was when the day was saved.
   quantity from Shopify (left out of the sum, not counted as zero). A day
   saved with no tracked stock shows 0 units. A day with no snapshot shows
   "Not captured" and blank figures. The page counts the days not captured and
-  names the first saved day when the range starts before it.
+  names the first saved day when the range starts before it. Today and later
+  days show "Not ended yet" and are not counted as missed.
 - **Stock on a past date** shows the last day of the range. Each row is a
   saved variant and location with that day's available and on-hand quantity,
   cost per item and price. Cost value and retail value are on hand × the

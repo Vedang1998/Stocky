@@ -499,6 +499,7 @@ const REPORTS: readonly RegisteredReport[] = [
         snapshots,
         totals,
         firstCapturedDate,
+        today: context.today,
         timeZone: context.timeZone,
       });
     },

@@ -53,6 +53,7 @@ describe("buildStockHistoryReport", () => {
       { localDate: "2026-11-04", onHand: 10, unreportedLevels: 1 },
     ] as StockDayTotals[],
     firstCapturedDate: "2026-11-04",
+    today: "2026-11-10",
     timeZone: TIME_ZONE,
   } as const;
 
@@ -112,7 +113,7 @@ describe("buildStockHistoryReport", () => {
       unreported: 1,
     });
     expect(report.notices.map((n) => n.heading)).toContain(
-      "1 saved stock level has no quantity",
+      "Up to 1 stock level a day has no quantity",
     );
   });
 
@@ -142,6 +143,57 @@ describe("buildStockHistoryReport", () => {
     ]);
     expect(report.rows.every((row) => !row.captured)).toBe(true);
     expect(report.dataAsOf).toBeNull();
+  });
+
+  it("does not count today or a future day as a day the app missed", () => {
+    const report = buildStockHistoryReport({
+      ...input,
+      start: "2026-11-06",
+      end: "2026-11-12",
+      today: "2026-11-10",
+    });
+    const rows = report.rows.map((row) => cellsByColumn(report, row));
+
+    expect(rows.map((row) => row.status)).toEqual([
+      "Captured",
+      "Not captured",
+      "Not captured",
+      "Not captured",
+      "Not ended yet",
+      "Not ended yet",
+      "Not ended yet",
+    ]);
+    expect(report.notices.map((n) => n.heading)).toContain(
+      "3 days were not captured",
+    );
+    const tiles = Object.fromEntries(
+      tablePage(report, VIEW, "USD").tiles.map((t) => [t.label, t.value]),
+    );
+    expect(tiles["Days not captured"]).toBe("3");
+  });
+
+  it("raises no missed-day warning when the range holds only today", () => {
+    const report = buildStockHistoryReport({
+      ...input,
+      start: "2026-11-10",
+      end: "2026-11-10",
+    });
+
+    expect(report.notices.map((n) => n.heading)).toEqual([]);
+  });
+
+  it("notes that some days were saved under another time zone", () => {
+    const report = buildStockHistoryReport({
+      ...input,
+      snapshots: [
+        snapshot("2026-11-04", 2, { timeZone: "Europe/London" }),
+        snapshot("2026-11-06", 0),
+      ],
+    });
+
+    expect(report.notices.map((n) => n.heading)).toContain(
+      "Time zone changed since some days were saved",
+    );
   });
 
   it("summarizes the days on screen and ends with the latest captured day", () => {
