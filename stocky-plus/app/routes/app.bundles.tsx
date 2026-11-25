@@ -106,8 +106,7 @@ export default function Bundles() {
       <s-section heading="Map a component">
         <s-paragraph>
           When a bundle sells, each of its components is counted as sold too,
-          in the quantity set here, so forecasts stay accurate for the parts
-          you buy.
+          in the quantity set here.
         </s-paragraph>
         <Form method="post">
           <input type="hidden" name="intent" value="add" />

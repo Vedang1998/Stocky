@@ -92,7 +92,11 @@ const REFUSED: Array<[RegExp, string]> = [
   [/\bfree tier\b/i, "ProPo has no free tier"],
   [/\bhypothes[ie]s\b/i, "internal planning wording"],
   [/\bmarketing must\b/i, "an internal rule"],
-  [/\b(STOCKY|ALLOW_DEV|SHOPIFY|FEATURE)_[A-Z_]+/, "an environment variable"],
+  // Only prose: a bare code value such as "SHOPIFY_INCOMING" is not shown.
+  [
+    /^(?=[\s\S]*\s)[\s\S]*\b(STOCKY|ALLOW_DEV|SHOPIFY|FEATURE)_[A-Z_]+/,
+    "an environment variable",
+  ],
   [/\bincremented\b/i, "developer wording"],
   [/\bcapability "/i, "an internal capability key"],
 ];

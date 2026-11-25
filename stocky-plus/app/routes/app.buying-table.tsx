@@ -165,7 +165,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 const LOOKBACK_TARGET_MISSING =
-  "Choose a product and a location before changing its lookback window.";
+  "Choose a product and a location before changing its sales period.";
 const ORDER_TARGET_MISSING =
   "Choose a supplier and a location before creating a purchase order.";
 const ORDER_LOCATION_UNKNOWN =
@@ -449,9 +449,9 @@ export default function BuyingTable() {
 
       {supplierId && rows.length === 0 && (
         <s-section>
-          <s-banner tone="warning" heading="No SKU mappings for this vendor">
+          <s-banner tone="warning" heading="No products linked to this supplier">
             <s-paragraph>
-              Map Shopify variants to vendor SKUs on the{" "}
+              Link products to this supplier&apos;s SKUs on the{" "}
               <s-link href={`/app/suppliers/${supplierId}`}>
                 supplier detail page
               </s-link>{" "}
@@ -474,10 +474,10 @@ export default function BuyingTable() {
                   <s-table-header>ABC</s-table-header>
                   <s-table-header format="numeric">Current</s-table-header>
                   <s-table-header format="numeric">Incoming</s-table-header>
-                  <s-table-header format="numeric">Velocity/day</s-table-header>
+                  <s-table-header format="numeric">Sales per day</s-table-header>
                   <s-table-header format="numeric">Reorder pt</s-table-header>
                   <s-table-header>To buy</s-table-header>
-                  <s-table-header>Lookback</s-table-header>
+                  <s-table-header>Sales period</s-table-header>
                 </s-table-header-row>
                 <s-table-body>
                   {rows.map((row) => (
@@ -569,7 +569,7 @@ export default function BuyingTable() {
       )}
 
       {lookbackFor && (
-        <s-section heading={`Custom lookback — ${lookbackFor.title}`}>
+        <s-section heading={`Sales period — ${lookbackFor.title}`}>
           <s-paragraph>
             Use a different sales period for this product only. Its sales
             rate is worked out over these dates, leaving out days it was out
@@ -593,7 +593,7 @@ export default function BuyingTable() {
               <input type="hidden" name="variantId" value={lookbackFor.variantId} />
               <input type="hidden" name="locationId" value={locationId} />
               <s-button type="submit" variant="tertiary">
-                Reset to global default
+                Use the shop&apos;s default period
               </s-button>
             </Form>
             <s-button variant="tertiary" onClick={() => setLookbackFor(null)}>
