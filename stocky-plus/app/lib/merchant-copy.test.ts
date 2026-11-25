@@ -1,37 +1,36 @@
 /**
  * Issue #80: merchant screens must not show developer or internal wording.
  * Reads every text node and string literal in the embedded app's routes,
- * components and services, and
- * refuses wording that only makes sense to the people building ProPo.
+ * components and services, plus the lib and billing modules that hold
+ * merchant wording, and refuses wording that only makes sense to the people
+ * building ProPo.
  * Server log lines are skipped.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
+import {
+  listProductionTypeScriptModulesRecursive as sourceFiles,
+  toPosixRelative,
+} from "./order-facts/admin-read/safety/production-modules";
 
 const ROOT = join(__dirname, "..", "..");
-
-function walk(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    return statSync(path).isDirectory() ? walk(path) : [path];
-  });
-}
-
-const isSource = (path: string) =>
-  /\.tsx?$/.test(path) &&
-  !/\.test\.tsx?$/.test(path) &&
-  !path.includes("__tests__");
+const app = (dir: string) => sourceFiles(join(ROOT, "app", dir));
 
 const FILES = [
-  ...walk(join(ROOT, "app/routes")).filter((path) =>
-    /[/\\]app[._][^/\\]*\.tsx$/.test(path),
-  ),
-  ...walk(join(ROOT, "app/components")).filter(isSource),
-  ...walk(join(ROOT, "app/services")).filter(isSource),
+  ...app("routes").filter((path) => /[/\\]app[._][^/\\]*\.tsx$/.test(path)),
+  ...app("components"),
+  ...app("services"),
+  // Lib and billing also hold server and developer code (environment
+  // variable names, status keys), so only their merchant-facing modules.
   ...[
     "app/lib/po-display.ts",
+    "app/lib/route-error.ts",
+    "app/lib/setup-guide.ts",
+    "app/lib/sync-copy.ts",
+    "app/lib/sync-status.ts",
+    "app/billing/plan-display.ts",
   ].map((path) => join(ROOT, path)),
 ];
 
@@ -45,7 +44,7 @@ function textsOf(path: string): Text[] {
     path,
     readFileSync(path, "utf8"),
     ts.ScriptTarget.Latest,
-    true,
+    false,
     path.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
   const found: Text[] = [];
@@ -74,9 +73,9 @@ function textsOf(path: string): Text[] {
     }
     if (text && text.trim()) {
       const line =
-        source.getLineAndCharacterOfPosition(node.getStart()).line + 1;
+        source.getLineAndCharacterOfPosition(node.getStart(source)).line + 1;
       found.push({
-        where: `${relative(ROOT, path)}:${line}`,
+        where: `${toPosixRelative(ROOT, path)}:${line}`,
         text: text.replace(/\s+/g, " ").trim(),
       });
     }
@@ -93,10 +92,7 @@ const REFUSED: Array<[RegExp, string]> = [
   [/\bfree tier\b/i, "ProPo has no free tier"],
   [/\bhypothes[ie]s\b/i, "internal planning wording"],
   [/\bmarketing must\b/i, "an internal rule"],
-  [
-    /\b(STOCKY|ALLOW_DEV|SHOPIFY|FEATURE)_[A-Z_]+/,
-    "an environment variable",
-  ],
+  [/\b(STOCKY|ALLOW_DEV|SHOPIFY|FEATURE)_[A-Z_]+/, "an environment variable"],
   [/\bincremented\b/i, "developer wording"],
   [/\bcapability "/i, "an internal capability key"],
 ];

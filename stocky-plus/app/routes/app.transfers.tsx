@@ -36,6 +36,7 @@ import {
   unitCount,
 } from "../services/transfers/transfer-display";
 import { MAX_TRANSFER_NOTES_LENGTH } from "../services/transfers/transfer-quantities";
+import { SYNC_CATALOG_HINT } from "../lib/sync-copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { db, tenant } = await requireAdminTenant({ request });
@@ -179,8 +180,8 @@ export default function Transfers() {
         {activeLocations.length < 2 ? (
           <s-paragraph>
             A transfer moves stock between two locations, and fewer than two
-            active locations are synced. Choose Sync catalog on the Home
-            page, then create a transfer.
+            active locations are synced. {SYNC_CATALOG_HINT}, then create a
+            transfer.
           </s-paragraph>
         ) : (
           <Form method="post">
