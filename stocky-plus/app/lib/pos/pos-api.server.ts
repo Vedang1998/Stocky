@@ -14,6 +14,8 @@ export type PosApiErrorCode =
   | "not_found"
   | "forbidden"
   | "conflict"
+  /** The same delivery key was already used for different quantities. */
+  | "different_counts"
   | "rate_limited"
   | "internal_error";
 

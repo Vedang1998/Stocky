@@ -3,7 +3,9 @@ import type { ReceivingLine } from "./api-types";
 import {
   RECEIVING_MESSAGES,
   bumpCount,
+  afterSubmit,
   createSubmissionKey,
+  withoutSubmitted,
   loadOrders,
   loadSheet,
   matchLine,
@@ -128,6 +130,75 @@ describe("receiptRequest and submission keys", () => {
   });
 });
 
+describe("afterSubmit", () => {
+  const sheet = { receivingEnabled: true, order: { id: "po", poNumber: "PO-1", supplierName: "Acme" }, denial: null, lines: [] };
+  const answered = (outcome: "posted" | "pending" | "settled" | "not_recorded", extra: Record<string, unknown> = {}) =>
+    afterSubmit({
+      ok: true,
+      value: { complete: outcome === "posted", message: "Receipt 3: done.", receiptNumber: 3, outcome, sheet, ...extra },
+    } as Parameters<typeof afterSubmit>[0]);
+  const refused = (status: number | undefined, code?: string, fieldErrors: Record<string, string> = {}) =>
+    afterSubmit({ ok: false, message: "No.", fieldErrors, ...(status === undefined ? {} : { status }), ...(code ? { code } : {}) });
+
+  it("finishes a posted receipt and starts the next one fresh", () => {
+    expect(answered("posted")).toMatchObject({ freeze: false, startOver: true, reload: false, notice: { tone: "success" } });
+  });
+
+  it("repeats a pending receipt unchanged, keeping the counts and key", () => {
+    expect(answered("pending")).toMatchObject({
+      freeze: true,
+      startOver: false,
+      notice: { tone: "warning", heading: "Receipt 3 is not finished" },
+    });
+  });
+
+  it("starts over after a settled failure instead of replaying its key", () => {
+    expect(answered("settled")).toMatchObject({ freeze: false, startOver: true });
+  });
+
+  it("keeps the counts when nothing was recorded", () => {
+    expect(answered("not_recorded")).toMatchObject({ freeze: false, startOver: false });
+  });
+
+  it("reloads the order when it could not be read back, without losing the receipt", () => {
+    expect(answered("posted", { sheet: null })).toMatchObject({ startOver: true, reload: true });
+  });
+
+  it("calls an unknown outcome unconfirmed and freezes the request", () => {
+    expect(refused(undefined)).toMatchObject({
+      freeze: true,
+      startOver: false,
+      notice: { tone: "critical", heading: "Receipt not confirmed" },
+    });
+  });
+
+  it("clears the counts only for a delivery recorded with other counts", () => {
+    expect(refused(409, "different_counts")).toMatchObject({ startOver: true, reload: true, freeze: false });
+    expect(refused(409, "conflict")).toMatchObject({ startOver: false, reload: true, freeze: false });
+  });
+
+  it("keeps the counts and shows line errors for a refusal", () => {
+    expect(refused(400, "bad_request", { "line:l1": "Only 4 left." })).toMatchObject({
+      startOver: false,
+      freeze: false,
+      lineErrors: { l1: "Only 4 left." },
+      notice: { heading: "Nothing was received" },
+    });
+  });
+});
+
+describe("withoutSubmitted", () => {
+  const request = { idempotencyKey: "k", lines: [{ lineItemId: "a", acceptedQty: 3 }, { lineItemId: "b", acceptedQty: 1 }] };
+
+  it("keeps units scanned while the receipt was in flight", () => {
+    expect(withoutSubmitted({ a: 5, b: 1, c: 2 }, request)).toEqual({ a: 2, c: 2 });
+  });
+
+  it("never goes below zero", () => {
+    expect(withoutSubmitted({ a: 1 }, request)).toEqual({});
+  });
+});
+
 describe("requests", () => {
   it("lists orders for the POS location with a search", async () => {
     const fetchImpl = respond(200, { orders: [] });
@@ -182,6 +253,16 @@ describe("requests", () => {
     expect((result as { status?: number }).status).toBeUndefined();
   });
 
+  it("passes on the app's error code for a reused key with other counts", async () => {
+    const result = await submitReceipt(
+      respond(409, { error: { code: "different_counts", message: "Already submitted." } }),
+      401,
+      "po",
+      { idempotencyKey: "k", lines: [] },
+    );
+    expect(result).toMatchObject({ ok: false, status: 409, code: "different_counts" });
+  });
+
   it("shows the app's own message for a refusal and keeps the field errors", async () => {
     const fetchImpl = respond(400, {
       error: { code: "bad_request", message: "Fix the highlighted field.", fieldErrors: { "line:l1": "Only 4 left." } },
@@ -193,6 +274,7 @@ describe("requests", () => {
       ok: false,
       message: "Fix the highlighted field.",
       status: 400,
+      code: "bad_request",
       fieldErrors: { "line:l1": "Only 4 left." },
     });
   });

@@ -70,7 +70,20 @@ export type PosReceiptResponse = {
   /** What to tell the person who pressed the button. */
   message: string;
   receiptNumber: number | null;
-  sheet: PosReceivingSheet;
+  /**
+   * Where the receipt stands, so the screen knows what to do next:
+   * `posted` is finished; `pending` was saved but Shopify has not confirmed
+   * it, so the same request is retried; `settled` ended without all of it
+   * received (refused or partly refused), so the next delivery starts fresh;
+   * `not_recorded` means nothing was saved (receiving is switched off).
+   */
+  outcome: "posted" | "pending" | "settled" | "not_recorded";
+  /**
+   * The order as it stands now. Null when it could not be read after the
+   * receipt was recorded: the receipt is still reported, and the screen
+   * reloads the order itself.
+   */
+  sheet: PosReceivingSheet | null;
 };
 
 export type ReceivingDeps = {
@@ -83,6 +96,23 @@ const receivingSwitchedOn = () => isInventoryWriteEnabled("receiptWrites");
 
 function receivingIsOn(deps: Pick<ReceivingDeps, "receivingEnabled">): boolean {
   return (deps.receivingEnabled ?? receivingSwitchedOn)();
+}
+
+function receiptOutcome(
+  receipt: { status: string } | null,
+): PosReceiptResponse["outcome"] {
+  if (receipt === null) return "not_recorded";
+  if (receipt.status === "POSTED") return "posted";
+  if (receipt.status === "PENDING") return "pending";
+  return "settled";
+}
+
+/** Like `toApiError`, but a reused key with other quantities gets its own code. */
+function toReceiptError(error: unknown): never {
+  if (error instanceof PurchasingError && error.code === "conflict") {
+    throw new PosApiError(409, "different_counts", error.message);
+  }
+  return toApiError(error);
 }
 
 function toApiError(error: unknown): never {
@@ -230,12 +260,21 @@ export async function receiveAtPos(
     actor,
     input,
     deps.stock ?? {},
-  ).catch(toApiError);
+  ).catch(toReceiptError);
 
   return {
     complete: result.complete,
     message: result.receipt === null ? RECEIVING_OFF_MESSAGE : result.message,
     receiptNumber: result.receipt?.receiptNumber ?? null,
-    sheet: await buildSheet(db, po, deps),
+    outcome: receiptOutcome(result.receipt),
+    // The receipt is recorded by now: a failure reading the order back must
+    // not turn it into an error answer.
+    sheet: await buildSheet(db, po, deps).catch((error: unknown) => {
+      console.error("POS receiving could not reload the order after a receipt", {
+        purchaseOrderId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
+    }),
   };
 }
