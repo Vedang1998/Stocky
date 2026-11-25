@@ -181,6 +181,8 @@ const LOOKBACK_TARGET_MISSING =
   "Choose a product and a location before changing its lookback window.";
 const ORDER_TARGET_MISSING =
   "Choose a supplier and a location before creating a purchase order.";
+const ORDER_NOTHING_TO_ORDER =
+  "None of these products are set up for this supplier any more. Refresh the page and try again.";
 const ORDER_TOO_MANY_LINES = `A purchase order can have at most ${MAX_LINES_PER_ORDER} lines.`;
 const ORDER_QUANTITY_TOO_LARGE = `A quantity can be at most ${MAX_ORDER_QUANTITY.toLocaleString("en-US")}.`;
 const MAX_ID_LENGTH = 256;
@@ -210,8 +212,14 @@ function orderCreationKey(
   lines: ReadonlyArray<{ variantGid: string; quantity: number }>,
 ): string | null {
   if (typeof pageKey !== "string" || !PAGE_KEY_PATTERN.test(pageKey)) return null;
+  // Merged by variant and sorted, as the service merges them, so the same
+  // order sent with its fields in another order or split finds the same draft.
+  const totals = new Map<string, number>();
+  for (const line of lines) {
+    totals.set(line.variantGid, (totals.get(line.variantGid) ?? 0) + line.quantity);
+  }
   const digest = createHash("sha256").update(`${supplierId};${locationGid};`);
-  for (const line of lines) digest.update(`${line.variantGid}=${line.quantity};`);
+  for (const gid of [...totals.keys()].sort()) digest.update(`${gid}=${totals.get(gid)};`);
   return `buying-table:${pageKey}:${digest.digest("hex").slice(0, 32)}`;
 }
 
@@ -302,13 +310,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const supplierId = form.get("supplierId");
     const locationId = form.get("locationId");
     if (!usableId(supplierId) || !usableId(locationId)) {
-      return { error: ORDER_TARGET_MISSING };
+      return { intent, error: ORDER_TARGET_MISSING };
     }
     const entries = [...form.entries()].filter(([key]) =>
       key.startsWith("qty-"),
     );
     if (entries.length > MAX_LINES_PER_ORDER) {
-      return { error: ORDER_TOO_MANY_LINES };
+      return { intent, error: ORDER_TOO_MANY_LINES };
     }
 
     // Supplier minimums and pack sizes apply only when the merchant ticks them.
@@ -343,14 +351,19 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         supplierRules,
       );
       if (quantity > MAX_ORDER_QUANTITY) {
-        return { error: ORDER_QUANTITY_TOO_LARGE };
+        return { intent, error: ORDER_QUANTITY_TOO_LARGE };
       }
       lines.push({ variantGid: mapping.shopifyVariantId, quantity });
     }
-    if (lines.length === 0) return { ok: false };
+    if (lines.length === 0) return { intent, error: ORDER_NOTHING_TO_ORDER };
 
     try {
-      const profile = await readShopProfile(admin);
+      // The shop's date only sets the expected date from the supplier's lead
+      // time; if Shopify cannot be reached the date is left for the merchant.
+      const today = await readShopProfile(admin).then(
+        (profile) => profile.today,
+        () => null,
+      );
       const draft = await createPurchaseOrderDraft(
         db,
         actor,
@@ -366,11 +379,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           ),
           source: "replenishment",
         },
-        { admin, today: profile.today },
+        { admin, today },
       );
       return redirect(`/app/purchase-orders/${draft.id}`);
     } catch (error) {
-      if (error instanceof PurchasingError) return { error: error.message };
+      if (error instanceof PurchasingError) return { intent, error: error.message };
       throw error;
     }
   }
@@ -431,7 +444,14 @@ export default function BuyingTable() {
 
   return (
     <s-page heading="Buying Table">
-      <ActionFeedback data={actionData} errorHeading="Purchase order not created" />
+      <ActionFeedback
+        data={actionData}
+        errorHeading={
+          actionData && "intent" in actionData && actionData.intent === "createPO"
+            ? "Purchase order not created"
+            : "Not saved"
+        }
+      />
       <s-section heading="Filters">
         <Form method="get">
           <s-stack direction="inline" gap="base">

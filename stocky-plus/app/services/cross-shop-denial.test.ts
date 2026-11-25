@@ -253,6 +253,9 @@ function activePlanSnapshot() {
   settings.findFirst = vi.fn(async () => ({ subscriptionActive: true }));
 }
 
+const NOTHING_TO_ORDER =
+  "None of these products are set up for this supplier any more. Refresh the page and try again.";
+
 describe("cross-shop denial", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -417,7 +420,7 @@ describe("cross-shop denial", () => {
         supplierId: "supplier-shop-a",
       }),
     });
-    expect(result).toEqual({ ok: false });
+    expect(result).toEqual({ intent: "createPO", error: NOTHING_TO_ORDER });
     expect(prismaMock.supplier.findFirst).not.toHaveBeenCalled();
     expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();
     expect(resolveTieredUnitCost).not.toHaveBeenCalled();
@@ -589,7 +592,7 @@ describe("cross-shop denial", () => {
         supplierId: "supplier-shop-b",
       }),
     });
-    expect(result).toEqual({ ok: false });
+    expect(result).toEqual({ intent: "createPO", error: NOTHING_TO_ORDER });
     expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
     expect(resolveTieredUnitCost).not.toHaveBeenCalled();

@@ -9,7 +9,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs } from "react-router";
 
-const { db, fetchLocations, createPurchaseOrderDraft } = vi.hoisted(() => ({
+const { db, fetchLocations, createPurchaseOrderDraft, readShopProfile } = vi.hoisted(() => ({
   db: {
     authority: {
       shopId: "shop-order-input",
@@ -17,9 +17,15 @@ const { db, fetchLocations, createPurchaseOrderDraft } = vi.hoisted(() => ({
     },
     shopSettings: { findUnique: vi.fn() },
     supplierSkuMapping: { findMany: vi.fn() },
+    // Read only by the real purchasing service, in the location test below.
+    supplier: { findFirst: vi.fn() },
+    shopifyLocationFact: { findMany: vi.fn() },
+    purchaseOrder: { findFirst: vi.fn(), create: vi.fn() },
+    $transaction: vi.fn(),
   },
   fetchLocations: vi.fn(),
   createPurchaseOrderDraft: vi.fn(),
+  readShopProfile: vi.fn(),
 }));
 
 vi.mock("../tenant/require-admin-tenant.server", () => ({
@@ -34,7 +40,7 @@ vi.mock("./purchasing/purchase-orders.server", async (original) => ({
   createPurchaseOrderDraft,
 }));
 vi.mock("./purchasing/shop-profile.server", () => ({
-  readShopProfile: vi.fn(async () => ({ today: "2026-11-20" })),
+  readShopProfile,
 }));
 vi.mock("./shopify-gql.server", () => ({
   fetchInventoryLevels: vi.fn(),
@@ -85,6 +91,7 @@ function resetMocks() {
   );
   createPurchaseOrderDraft.mockResolvedValue({ id: "po-1", poNumber: "PO-1", created: true });
   fetchLocations.mockResolvedValue([{ id: LOCATION, name: "Warehouse" }]);
+  readShopProfile.mockResolvedValue({ today: "2026-11-20" });
 }
 
 describe("Buying Table order input", () => {
@@ -95,7 +102,7 @@ describe("Buying Table order input", () => {
     async (_label, target) => {
       const result = await createOrder({ ...target, "qty-map-a": "2" });
 
-      expect(result).toEqual({ error: TARGET_MISSING });
+      expect(result).toEqual({ intent: "createPO", error: TARGET_MISSING });
       expect(db.supplierSkuMapping.findMany).not.toHaveBeenCalled();
       expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
     },
@@ -113,7 +120,7 @@ describe("Buying Table order input", () => {
       "qty-map-a": "2",
     });
 
-    expect(result).toEqual({ error: "That location is not part of this store." });
+    expect(result).toEqual({ intent: "createPO", error: "That location is not part of this store." });
     expect(createPurchaseOrderDraft.mock.calls[0][2]).toMatchObject({
       locationGid: "anywhere",
     });
@@ -159,7 +166,7 @@ describe("Buying Table order input", () => {
       "qty-map-a": quantity,
     });
 
-    expect(result).toEqual({ error: "A quantity can be at most 1,000,000." });
+    expect(result).toEqual({ intent: "createPO", error: "A quantity can be at most 1,000,000." });
     expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
   });
 
@@ -191,7 +198,7 @@ describe("Buying Table order input", () => {
       roundUpToPackSize: "on",
     });
 
-    expect(result).toEqual({ error: "A quantity can be at most 1,000,000." });
+    expect(result).toEqual({ intent: "createPO", error: "A quantity can be at most 1,000,000." });
     expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
   });
 
@@ -210,6 +217,7 @@ describe("Buying Table order input", () => {
     });
 
     expect(result).toEqual({
+      intent: "createPO",
       error: "A purchase order can have at most 1000 lines.",
     });
     expect(db.supplierSkuMapping.findMany).not.toHaveBeenCalled();
@@ -273,6 +281,95 @@ describe("Buying Table order through the purchasing service", () => {
       locationId: LOCATION,
       "qty-map-a": "3",
     });
-    expect(result).toEqual({ error: "This supplier is archived." });
+    expect(result).toEqual({ intent: "createPO", error: "This supplier is archived." });
+  });
+  it("says so when none of the entered products belong to the supplier", async () => {
+    // A supplier deleted in another tab, or another shop's ids: nothing matches.
+    db.supplierSkuMapping.findMany.mockResolvedValue([]);
+    const result = await createOrder({
+      supplierId: "supplier-gone",
+      locationId: LOCATION,
+      "qty-map-a": "3",
+    });
+    expect(result).toEqual({
+      intent: "createPO",
+      error:
+        "None of these products are set up for this supplier any more. Refresh the page and try again.",
+    });
+    expect(createPurchaseOrderDraft).not.toHaveBeenCalled();
+  });
+
+  it("keys the same order the same way whatever order or split its fields come in", async () => {
+    const keyFor = async (fields: Record<string, string>) => {
+      createPurchaseOrderDraft.mockClear();
+      await createOrder({ supplierId: SUPPLIER, locationId: LOCATION, creationKey: "key-1", ...fields });
+      return createPurchaseOrderDraft.mock.calls[0][2].creationKey as string;
+    };
+    db.supplierSkuMapping.findMany.mockImplementation(
+      async ({ where }: { where: { id: { in: string[] } } }) =>
+        where.id.in.map((id) => ({
+          id,
+          // map-a and map-a2 are two mappings of the same variant.
+          shopifyVariantId: id === "map-b" ? "variant-b" : "variant-a",
+          vendorSku: null,
+          moq: 1,
+          packSize: 1,
+        })),
+    );
+    const first = await keyFor({ "qty-map-a": "3", "qty-map-b": "2" });
+    expect(await keyFor({ "qty-map-b": "2", "qty-map-a": "3" })).toBe(first);
+    expect(await keyFor({ "qty-map-a": "1", "qty-map-a2": "2", "qty-map-b": "2" })).toBe(first);
+  });
+
+  it("still creates the order, without a date, when Shopify cannot give the shop's date", async () => {
+    readShopProfile.mockRejectedValue(new Error("Shopify unavailable"));
+    const response = await createOrder({ supplierId: SUPPLIER, locationId: LOCATION, "qty-map-a": "3" });
+    expect((response as Response).headers.get("Location")).toBe("/app/purchase-orders/po-1");
+    expect(createPurchaseOrderDraft.mock.calls[0][3]).toMatchObject({ today: null });
+  });
+
+  it("refuses a location that is not the shop's through the real purchasing service, writing nothing", async () => {
+    const actual = await vi.importActual<typeof import("./purchasing/purchase-orders.server")>(
+      "./purchasing/purchase-orders.server",
+    );
+    createPurchaseOrderDraft.mockImplementation(actual.createPurchaseOrderDraft);
+    db.supplierSkuMapping.findMany.mockResolvedValue([
+      {
+        id: "map-a",
+        shopifyVariantId: "gid://shopify/ProductVariant/11",
+        vendorSku: null,
+        moq: 1,
+        packSize: 1,
+      },
+    ]);
+    db.supplier.findFirst.mockResolvedValue({
+      id: SUPPLIER,
+      status: "ACTIVE",
+      currency: "USD",
+      defaultLeadTimeDays: null,
+      leadTimeDays: null,
+    });
+    db.shopifyLocationFact.findMany.mockResolvedValue([
+      {
+        shopifyGid: LOCATION,
+        name: "Warehouse",
+        isActive: true,
+        address1: null,
+        city: null,
+        provinceCode: null,
+        zip: null,
+        countryCode: null,
+      },
+    ]);
+
+    const result = await createOrder({
+      supplierId: SUPPLIER,
+      locationId: "gid://shopify/Location/2",
+      "qty-map-a": "3",
+    });
+
+    expect(result).toEqual({ intent: "createPO", error: "That location is not part of this store." });
+    expect(db.purchaseOrder.create).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 });
