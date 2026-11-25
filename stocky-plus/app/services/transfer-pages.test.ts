@@ -194,6 +194,32 @@ function get(
 const act = (fields: Record<string, string>) =>
   detailRoute.action(post(`/app/transfers/${ID}`, fields, { id: ID }));
 
+/** Every change the transfer page can make, with the fields its form sends. */
+const CHANGES: Array<Record<string, string>> = [
+  { intent: "addItem", code: "RED-750", quantity: "2" },
+  { intent: "addItems", items: "RED-750,2" },
+  { intent: "setQuantity", lineId: "line-1", quantity: "4" },
+  { intent: "pick", lineId: "line-1", pickedQty: "4" },
+  { intent: "remove", lineId: "line-1" },
+  { intent: "ship" },
+  { intent: "ship", allowShortSource: "1" },
+  { intent: "cancel" },
+  { intent: "scan", code: "RED-750" },
+  { intent: "countIn", lineId: "line-1", quantity: "3" },
+  { intent: "reject", lineId: "line-1", quantity: "1", note: "Broken" },
+  { intent: "countInAll" },
+  { intent: "postReceipt" },
+  { intent: "receiveAll" },
+  { intent: "close", resolution: "RETURNED" },
+  { intent: "close", resolution: "WRITTEN_OFF" },
+];
+
+function expectNothingSaved() {
+  for (const [name, write] of Object.entries({ ...drafts, ...receiving })) {
+    expect(write, name).not.toHaveBeenCalled();
+  }
+}
+
 const header = (extra: Partial<TransferHeader> = {}): TransferHeader => ({
   id: ID,
   sourceLocationId: WAREHOUSE,
@@ -463,6 +489,32 @@ describe("Transfers list", () => {
       ),
     ).toHaveLength(2);
     expect(html).toMatch(/<s-text-field[^>]*name="notes"[^>]*value="Top up"/);
+  });
+
+  it("creates no draft without a signed-in staff member, and keeps what was entered", async () => {
+    context.actor = null;
+
+    const result = await listRoute.action(
+      post("/app/transfers", {
+        intent: "create",
+        sourceLocationId: WAREHOUSE,
+        destinationLocationId: SHOP_FLOOR,
+        notes: "Friday restock",
+      }),
+    );
+
+    expect(result).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      values: {
+        sourceLocationId: WAREHOUSE,
+        destinationLocationId: SHOP_FLOOR,
+        notes: "Friday restock",
+      },
+    });
+    expect(drafts.createTransfer).not.toHaveBeenCalled();
+    expect(renderList({}, result)).toMatch(
+      /<s-text-field[^>]*name="notes"[^>]*value="Friday restock"/,
+    );
   });
 
   it("refuses an intent it does not know", async () => {
@@ -755,6 +807,39 @@ describe("Transfer page action", () => {
     expect(drafts.createTransfer).not.toHaveBeenCalled();
   });
 
+  it.each(CHANGES)(
+    "saves nothing for $intent without a signed-in staff member",
+    async (fields) => {
+      context.actor = null;
+
+      expect(await act(fields)).toMatchObject({
+        error: STAFF_REQUIRED_MESSAGE,
+      });
+      expectNothingSaved();
+    },
+  );
+
+  it("hands a pasted list back, and keeps the scan fields ready, when no staff member is signed in", async () => {
+    context.actor = null;
+    const items = "RED-750,6\nWHITE-750,12";
+
+    expect(await act({ intent: "addItems", items })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      items,
+    });
+    for (const intent of ["addItem", "scan"]) {
+      expect(await act({ intent, code: "RED-750" }), intent).toEqual({
+        error: STAFF_REQUIRED_MESSAGE,
+        scannedAt: expect.any(Number),
+      });
+    }
+    // The other steps have nothing to hand back.
+    expect(await act({ intent: "ship" })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+    });
+    expectNothingSaved();
+  });
+
   describe("adding one item", () => {
     it("adds the scanned code with its units and says where the line stands", async () => {
       drafts.addTransferItems.mockResolvedValue({
@@ -1019,15 +1104,6 @@ describe("Transfer page action", () => {
   });
 
   describe("ship", () => {
-    it("needs a signed-in staff member, before anything is read", async () => {
-      context.actor = null;
-
-      expect(await act({ intent: "ship" })).toEqual({
-        error: STAFF_REQUIRED_MESSAGE,
-      });
-      expect(drafts.shipTransfer).not.toHaveBeenCalled();
-    });
-
     it("confirms a shipped transfer", async () => {
       drafts.shipTransfer.mockResolvedValue({ ok: true, alreadyDone: false });
 
@@ -1095,8 +1171,7 @@ describe("Transfer page action", () => {
   });
 
   describe("cancel", () => {
-    it("cancels a draft even when nobody is signed in", async () => {
-      context.actor = null;
+    it("cancels a draft as the signed-in staff member", async () => {
       drafts.cancelTransfer.mockResolvedValue({ ok: true, alreadyDone: false });
 
       const result = await act({ intent: "cancel" });
@@ -1104,7 +1179,7 @@ describe("Transfer page action", () => {
       expect(drafts.cancelTransfer).toHaveBeenCalledWith(
         context.db,
         context.admin,
-        null,
+        STAFF,
         ID,
       );
       expect(result).toEqual({ ok: true, notice: "Transfer cancelled." });
@@ -1298,20 +1373,6 @@ describe("Transfer page action", () => {
   });
 
   describe("posting a receipt", () => {
-    it.each(["postReceipt", "receiveAll", "close"])(
-      "%s needs a signed-in staff member, before anything is read",
-      async (intent) => {
-        context.actor = null;
-
-        expect(await act({ intent })).toEqual({
-          error: STAFF_REQUIRED_MESSAGE,
-        });
-        expect(receiving.postTransferReceipt).not.toHaveBeenCalled();
-        expect(receiving.receiveTransfer).not.toHaveBeenCalled();
-        expect(receiving.closeTransfer).not.toHaveBeenCalled();
-      },
-    );
-
     it("posts what is counted in and says the transfer stays open for the rest", async () => {
       receiving.postTransferReceipt.mockResolvedValue({
         ok: true,
@@ -2120,25 +2181,6 @@ describe("Transfers without an active plan", () => {
     }
   };
 
-  const CHANGES: Array<Record<string, string>> = [
-    { intent: "addItem", code: "RED-750", quantity: "2" },
-    { intent: "addItems", items: "RED-750,2" },
-    { intent: "setQuantity", lineId: "line-1", quantity: "4" },
-    { intent: "pick", lineId: "line-1", pickedQty: "4" },
-    { intent: "remove", lineId: "line-1" },
-    { intent: "ship" },
-    { intent: "ship", allowShortSource: "1" },
-    { intent: "cancel" },
-    { intent: "scan", code: "RED-750" },
-    { intent: "countIn", lineId: "line-1", quantity: "3" },
-    { intent: "reject", lineId: "line-1", quantity: "1", note: "Broken" },
-    { intent: "countInAll" },
-    { intent: "postReceipt" },
-    { intent: "receiveAll" },
-    { intent: "close", resolution: "RETURNED" },
-    { intent: "close", resolution: "WRITTEN_OFF" },
-  ];
-
   const submitButtons = (html: string) =>
     html.match(/<s-button[^>]*type="submit"[^>]*>/g) ?? [];
 
@@ -2168,12 +2210,7 @@ describe("Transfers without an active plan", () => {
       expect(await (refusals[0] as Response).text()).toBe(
         "An active ProPo plan is required for this feature. You can choose a plan from Billing.",
       );
-      for (const [name, service] of Object.entries({
-        ...drafts,
-        ...receiving,
-      })) {
-        expect(service, name).not.toHaveBeenCalled();
-      }
+      expectNothingSaved();
       expect(reads.getTransfer).not.toHaveBeenCalled();
     });
   }
