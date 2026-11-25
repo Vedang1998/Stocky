@@ -178,6 +178,7 @@ table, sorting, filtering, the totals and the export.
 | Inventory adjustments | Applied ledger line | Date range, by the day the change was made | `InventoryOperation`, `InventoryOperationLine`, current unit cost |
 | Purchase orders | Purchase order | Date range, by creation day | `PurchaseOrder`, totals from `app/lib/purchasing/totals.ts` |
 | Purchase order items | Purchase order line | Date range, by creation day | `POLineItem`, the same totals |
+| Supplier performance | Supplier | Date range, by order creation day (default last 90 days) | The purchase order facts of 9.9 |
 
 ### 9.1 Date ranges
 
@@ -384,7 +385,30 @@ saved on the line when it was added.
   **Line amount** is net of the line discount and before tax.
 - Currency conversion and blanks follow 9.9.
 
-### 9.11 Totals, filters and export
+### 9.11 Supplier performance
+
+One row per supplier that has at least one purchase order created in the range
+that is not a draft or cancelled. Every figure is derived from the purchase
+order facts of 9.9, so a supplier's numbers always agree with the rows of the
+purchase order reports. Read live from this app's records.
+
+- **Fill rate** is units received ÷ units ordered (less cancelled), on the
+  orders created in the range. It counts receipts made after the range too, so
+  it is the share of those orders that has arrived so far, not a measure of the
+  period. Blank when nothing was ordered.
+- **Spend** is the sum of order totals (9.9) in the shop currency. It is blank
+  for a supplier with any order in another currency and no exchange rate, and
+  such suppliers are named in a notice and left out of the Spend tile.
+- **Days to receive** is the average of whole shop-local calendar days from the
+  creation day to the day the order was fully received, over fully received
+  orders, rounded half up to a whole number.
+- **On time** is the share of fully received orders that have an expected date
+  and were fully received on or before it (shop-local day). Orders without an
+  expected date are not counted in it. Blank when none qualifies.
+- **Overdue now** counts orders that are sent, ordered or partly received, not
+  archived, with an expected date before today, as in 9.9.
+
+### 9.12 Totals, filters and export
 
 Totals are computed from the rows left after filters and search, across every
 page, never from the page on screen. Sorting puts blank values last in both
@@ -397,7 +421,7 @@ with "(%)" in the header, and a missing value as an empty cell. All cells go
 through the shared encoder in `app/lib/csv.server.ts`, which neutralizes
 spreadsheet formulas.
 
-### 9.12 Known limits
+### 9.13 Known limits
 
 - A report is computed on request and held in memory for that request. Shops
   with very large catalogs or order volumes will need persisted daily
@@ -407,8 +431,9 @@ spreadsheet formulas.
 - Every cost-based figure (stock value, gross profit, variance value, value of
   an inventory change) uses the current Shopify cost per item, not the cost on
   the day of the sale, count or change.
-- Purchase order reports list orders by creation day only; there is no
-  report by receipt date or by supplier performance yet (filter by supplier
-  works). Supplier-specific reports are not built.
+- Purchase order reports list orders by creation day only; there is no report
+  by receipt date yet. Supplier performance is measured on orders created in
+  the range, not on receipts made in it, and does not use receipt-level
+  (partial delivery) dates.
 - Amounts on a foreign-currency order use the order's frozen rate, so they do
   not move with later exchange-rate changes.

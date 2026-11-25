@@ -156,4 +156,50 @@ describe("client shop-hint conflict detection (C-06)", () => {
     expect(ctx.tenant.shopId).toBe(shopAId);
     expect(ctx.tenant.source).toBe("verified_admin_request");
   });
+
+  describe("NUL characters (SEC-17)", () => {
+    async function refusedStatus(request: Request): Promise<number | null> {
+      const thrown: unknown = await requireAdminTenant({
+        request,
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+      }).then(
+        () => null,
+        (reason: unknown) => reason,
+      );
+      return thrown instanceof Response ? thrown.status : null;
+    }
+
+    it("answers 400 for a NUL in the query or in a route id", async () => {
+      expect(
+        await refusedStatus(new Request("https://example.com/app/suppliers?q=a%00b")),
+      ).toBe(400);
+      expect(
+        await refusedStatus(new Request("https://example.com/app/suppliers/sup_1%00")),
+      ).toBe(400);
+    });
+
+    it("answers 400 for a NUL in a form field", async () => {
+      expect(
+        await refusedStatus(
+          new Request("https://example.com/app/suppliers/new", {
+            method: "POST",
+            headers: { "content-type": "application/x-www-form-urlencoded" },
+            body: "name=Acme%00&currency=USD",
+          }),
+        ),
+      ).toBe(400);
+    });
+
+    it("still issues authority for ordinary text", async () => {
+      const ctx = await requireAdminTenant({
+        request: new Request("https://example.com/app/suppliers/new", {
+          method: "POST",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+          body: "name=Caf%C3%A9+100%2500&currency=USD",
+        }),
+        authenticateAdmin: adminAuth(SHOP_A_DOMAIN),
+      });
+      expect(ctx.tenant.shopId).toBe(shopAId);
+    });
+  });
 });

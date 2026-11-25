@@ -114,6 +114,30 @@ describe("privacy compliance", () => {
         delta: 2,
       },
     });
+    // Stock history refuses every UPDATE, so the erasure has to remove it
+    // with deletes alone.
+    await prisma.dailyStockSnapshot.create({
+      data: {
+        shopId: shop.id,
+        localDate: "2026-11-01",
+        timeZone: "UTC",
+        dayEndedAt: new Date("2026-11-02T00:00:00Z"),
+        capturedAt: new Date("2026-11-02T00:05:00Z"),
+        levelCount: 1,
+      },
+    });
+    await prisma.dailyStockLevel.create({
+      data: {
+        shopId: shop.id,
+        localDate: "2026-11-01",
+        variantGid: "gid://shopify/ProductVariant/1",
+        locationGid: "gid://shopify/Location/1",
+        availableQuantity: 4,
+        onHandQuantity: 4,
+        priceAmount: "1.00",
+        priceCurrencyCode: "USD",
+      },
+    });
     await prisma.session.create({
       data: {
         id: `offline_${domain}`,
@@ -187,7 +211,8 @@ describe("privacy compliance", () => {
         "DataIssue", "ReconciliationRun", "SyncHealth", "SyncCursor", "SyncRun",
         "JobReplay", "DeadLetter", "JobAttempt", "JobDispatch", "WebhookDelivery",
         "DurableJob", "DispatchReadyShop", "SyncApplicationReceipt", "Session",
-        "PrivacyRequest", "InventoryOperationLine", "InventoryOperation"
+        "PrivacyRequest", "InventoryOperationLine", "InventoryOperation",
+        "DailyStockLevel", "DailyStockSnapshot"
       CASCADE
     `);
     for (const domain of SHOPS) {
@@ -376,9 +401,11 @@ describe("privacy compliance", () => {
   it("does not erase an installed shop: the request waits, then closes at the deadline", async () => {
     const shopA = await seedShop(SHOP_A);
     const before = await rowsByTable(shopA);
-    const now = new Date();
 
     const recorded = await shopRedact(SHOP_A, "shop-redact-installed");
+    // Read the clock after intake: a request is due from the moment it was
+    // recorded, and a reading taken before that would find nothing to do.
+    const now = new Date();
     const first = await runPrivacyMaintenance({
       retentionDays: 30,
       deps: realDeps,

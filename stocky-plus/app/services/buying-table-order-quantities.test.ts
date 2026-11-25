@@ -28,7 +28,10 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
 vi.mock("./landed-cost.server", () => ({ resolveTieredUnitCost }));
 vi.mock("./shopify-gql.server", () => ({
   fetchInventoryLevels: vi.fn(),
-  fetchLocations: vi.fn(),
+  // The order action only writes to a location Shopify lists for the shop.
+  fetchLocations: vi.fn(async () => [
+    { id: "gid://shopify/Location/1", name: "Warehouse" },
+  ]),
 }));
 vi.mock("./forecasting.server", () => ({ computeForecast: vi.fn() }));
 

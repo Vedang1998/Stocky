@@ -6,7 +6,7 @@
  */
 import { createElement, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import type {
   AdjustmentHistoryEntry,
@@ -30,7 +30,11 @@ const { service, context, fetchLocations, isInventoryWriteEnabled, page } =
     },
     context: {
       actor: null as unknown,
-      db: { tenant: "shop-a" },
+      db: {
+        tenant: "shop-a",
+        authority: { myshopifyDomain: "shop-a.myshopify.com" },
+        shopSettings: { findUnique: vi.fn() },
+      },
       admin: { graphql: () => undefined },
     },
     fetchLocations: vi.fn(),
@@ -63,8 +67,13 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant: context.db.authority,
   })),
 }));
+
+/** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
+const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
+vi.mock("./inventory-writes/shop-clock.server", () => shopClock);
 
 vi.mock("./shopify-gql.server", () => ({ fetchLocations }));
 
@@ -160,11 +169,13 @@ const entry = (
 
 const LOADER_DATA = {
   submissionId: SUBMISSION,
+  planActive: true,
   writesEnabled: true,
   locations: [{ id: LOCATION, name: "Shop floor" }],
   history: [] as AdjustmentHistoryEntry[],
   olderCursor: null as string | null,
   filter: { from: "", to: "" },
+  timeZone: null as string | null,
 };
 
 function render(
@@ -185,6 +196,10 @@ async function submitAndRender(fields: Record<string, string>) {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  shopClock.readShopTimeZone.mockResolvedValue(null);
+  context.db.shopSettings.findUnique.mockResolvedValue({
+    subscriptionActive: true,
+  });
   fetchLocations.mockResolvedValue(LOADER_DATA.locations);
   isInventoryWriteEnabled.mockReturnValue(false);
   service.listAdjustments.mockResolvedValue([]);
@@ -576,6 +591,34 @@ describe("Adjustments page", () => {
     expect(html).not.toContain("Reverse this adjustment");
   });
 
+  it("says so when Shopify did not report the quantity after an applied change", () => {
+    const applied = render({
+      history: [
+        entry({
+          lines: [{ ...entry().lines[0], quantityAfterChange: null }],
+        }),
+      ],
+    });
+    expect(applied).toContain("Not reported by Shopify");
+
+    const reported = render({ history: [entry()] });
+    expect(reported).not.toContain("Not reported by Shopify");
+    expect(reported).toContain("<s-table-cell>7</s-table-cell>");
+
+    // A change that was not applied has no quantity after it.
+    for (const status of ["FAILED", "IN_FLIGHT", "PENDING"] as const) {
+      const html = render({
+        history: [
+          entry({
+            status: "PARTIALLY_APPLIED",
+            lines: [{ ...entry().lines[0], status, quantityAfterChange: null }],
+          }),
+        ],
+      });
+      expect(html, status).not.toContain("Not reported by Shopify");
+    }
+  });
+
   it("shows Shopify's reason on a refused line and marks a reversed adjustment", () => {
     const html = render({
       history: [
@@ -753,5 +796,228 @@ describe("adjustment report export", () => {
     expect(await response.text()).toContain(
       "more than 2,000 adjustments. Choose a shorter period",
     );
+  });
+});
+
+describe("Adjustments without an active plan", () => {
+  const PLAN_BANNER =
+    'heading="An active ProPo plan is needed to make changes"';
+
+  const attempt = async (fields: Record<string, string>): Promise<unknown> => {
+    try {
+      return await route.action(post(fields));
+    } catch (thrown) {
+      return thrown;
+    }
+  };
+
+  /** The buttons that change stock, and the one that only filters the history. */
+  function submitButtons(html: string) {
+    const buttons = html.match(/<s-button[^>]*type="submit"[^>]*>/g) ?? [];
+    return {
+      changes: buttons.filter((button) => button.includes('variant="primary"')),
+      periodFilter: buttons.filter((button) =>
+        button.includes('variant="secondary"'),
+      ),
+    };
+  }
+
+  for (const snapshot of [{ subscriptionActive: false }, null]) {
+    it(`refuses every change with 403 when the plan snapshot is ${JSON.stringify(snapshot)}`, async () => {
+      context.db.shopSettings.findUnique.mockResolvedValue(snapshot);
+
+      for (const intent of ["submit", "resume", "reverse"]) {
+        const refusal = await attempt({ ...FORM, intent, operationId: "op-1" });
+        expect(refusal, intent).toBeInstanceOf(Response);
+        expect((refusal as Response).status, intent).toBe(403);
+      }
+
+      expect(service.submitAdjustment).not.toHaveBeenCalled();
+      expect(service.resumeAdjustment).not.toHaveBeenCalled();
+      expect(service.reverseAdjustment).not.toHaveBeenCalled();
+    });
+  }
+
+  it("still shows the history, says why nothing can be changed and locks every form", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    isInventoryWriteEnabled.mockReturnValue(true);
+    service.listAdjustments.mockResolvedValue([
+      entry({ status: "RETRY_PENDING", canResume: true, canReverse: false }),
+    ]);
+
+    const data = await route.loader(get("/app/adjustments"));
+    expect(data).toMatchObject({ planActive: false, writesEnabled: true });
+    expect(service.listAdjustments).toHaveBeenCalledTimes(1);
+
+    page.loaderData = data;
+    page.actionData = undefined;
+    const html = renderToStaticMarkup(createElement(route.default));
+
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain('href="/app/billing"');
+    expect(html).toContain("Red wine");
+    const { changes, periodFilter } = submitButtons(html);
+    expect(changes).toHaveLength(2);
+    for (const button of changes) {
+      expect(button).toContain('disabled="true"');
+    }
+    expect(periodFilter).toHaveLength(1);
+    expect(periodFilter[0]).not.toContain("disabled");
+  });
+
+  it("shows no plan banner and leaves the forms open while the plan is active", async () => {
+    service.listAdjustments.mockResolvedValue([
+      entry({ status: "RETRY_PENDING", canResume: true, canReverse: false }),
+    ]);
+
+    const data = await route.loader(get("/app/adjustments"));
+    expect(data).toMatchObject({ planActive: true });
+
+    page.loaderData = data;
+    page.actionData = undefined;
+    const html = renderToStaticMarkup(createElement(route.default));
+
+    expect(html).not.toContain(PLAN_BANNER);
+    const { changes } = submitButtons(html);
+    expect(changes).toHaveLength(2);
+    for (const button of changes) {
+      expect(button).not.toContain("disabled");
+    }
+  });
+
+  it("does not hide a database failure behind the plan banner", async () => {
+    context.db.shopSettings.findUnique.mockRejectedValue(
+      new Error("connection lost"),
+    );
+
+    await expect(route.loader(get("/app/adjustments"))).rejects.toThrow(
+      "connection lost",
+    );
+  });
+
+  it("still downloads the adjustment report", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    service.listAdjustmentsForExport.mockResolvedValue({
+      entries: [entry()],
+      truncated: false,
+    });
+
+    const response = (await exportLoader(
+      get("/app/adjustments/export"),
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("RED-75");
+    expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("Adjustment times on the shop's clock", () => {
+  const TORONTO = "America/Toronto";
+
+  beforeEach(() => {
+    shopClock.readShopTimeZone.mockResolvedValue(TORONTO);
+  });
+
+  it("reads the zone of the shop the request is signed in to", async () => {
+    const data = await route.loader(get("/app/adjustments"));
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledTimes(1);
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(data.timeZone).toBe(TORONTO);
+  });
+
+  it("takes the chosen period as whole days on the shop's clock", async () => {
+    const data = await route.loader(
+      get("/app/adjustments?from=2026-11-01&to=2026-11-30"),
+    );
+
+    // The clocks go back on 1 November, so the first day starts on summer time.
+    expect(service.listAdjustments).toHaveBeenCalledWith(context.db, {
+      from: new Date("2026-11-01T04:00:00.000Z"),
+      to: new Date("2026-12-01T04:59:59.999Z"),
+      after: null,
+      take: 26,
+    });
+    expect(data.filter).toEqual({ from: "2026-11-01", to: "2026-11-30" });
+  });
+
+  it("shows when an adjustment was recorded on the shop's clock, and no longer marks the dates as UTC", () => {
+    const html = render({ history: [entry()], timeZone: TORONTO });
+
+    expect(html).toContain("Nov 11, 2026, 4:40 PM EST");
+    expect(html).toMatch(/<s-date-field label="From" name="from"/);
+    expect(html).toMatch(/<s-date-field label="To" name="to"/);
+    expect(html).not.toContain("UTC");
+  });
+
+  it("marks the dates as UTC while the shop's zone is not known", () => {
+    const html = render({ history: [entry()] });
+
+    expect(html).toMatch(/<s-date-field label="From \(UTC\)" name="from"/);
+    expect(html).toMatch(/<s-date-field label="To \(UTC\)" name="to"/);
+  });
+
+  it("writes the report for the same shop days, with times on the shop's clock under a heading that names it", async () => {
+    service.listAdjustmentsForExport.mockResolvedValue({
+      truncated: false,
+      entries: [entry({ createdAt: new Date("2026-11-12T02:30:00.000Z") })],
+    });
+
+    const response = (await exportLoader(
+      get("/app/adjustments/export?from=2026-11-01&to=2026-11-30"),
+    )) as Response;
+    const [head, row] = (await response.text()).split("\r\n");
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(service.listAdjustmentsForExport).toHaveBeenCalledWith(context.db, {
+      from: new Date("2026-11-01T04:00:00.000Z"),
+      to: new Date("2026-12-01T04:59:59.999Z"),
+    });
+    expect(response.headers.get("Content-Disposition")).toBe(
+      'attachment; filename="adjustments-2026-11-01-to-2026-11-30.csv"',
+    );
+    expect(head).toMatch(/^Recorded at \(America\/Toronto\),Type,/);
+    expect(row).toBe(
+      "2026-11-11 21:30,Adjustment,Applied,Damaged,Shop floor,42,Red wine,RED-75,-3,7,Applied,,Dropped a case,op-1,",
+    );
+  });
+
+  describe("with no period chosen", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-11-12T02:30:00.000Z"));
+      service.listAdjustmentsForExport.mockResolvedValue({
+        truncated: false,
+        entries: [entry()],
+      });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const fileName = async () =>
+      (
+        (await exportLoader(get("/app/adjustments/export"))) as Response
+      ).headers.get("Content-Disposition");
+
+    it("names the report's file by today on the shop's clock", async () => {
+      expect(await fileName()).toBe(
+        'attachment; filename="adjustments-2026-11-11.csv"',
+      );
+    });
+
+    it("names it by today in UTC while the shop's zone is not known", async () => {
+      shopClock.readShopTimeZone.mockResolvedValue(null);
+
+      expect(await fileName()).toBe(
+        'attachment; filename="adjustments-2026-11-12.csv"',
+      );
+    });
   });
 });

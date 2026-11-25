@@ -55,6 +55,7 @@ import {
   buildPurchaseOrderItemsReport,
   buildPurchaseOrdersReport,
 } from "./purchase-order-reports";
+import { buildSuppliersReport } from "./supplier-reports";
 import {
   SELLER_VIEWS,
   buildOrdersReport,
@@ -272,7 +273,9 @@ export function dropUnknownFacetValues<Row>(
   return { view: { ...view, facets }, ignored };
 }
 
-export function ignoredFilterNotices(ignored: readonly string[]): ReportNotice[] {
+export function ignoredFilterNotices(
+  ignored: readonly string[],
+): ReportNotice[] {
   if (ignored.length === 0) return [];
   return [
     {
@@ -655,6 +658,27 @@ const REPORTS: readonly RegisteredReport[] = [
         today: context.today,
       });
     },
+  }),
+  register({
+    id: "suppliers",
+    title: "Supplier performance",
+    description:
+      "For each supplier: spend, fill rate, days to receive, on-time deliveries and orders overdue now.",
+    group: "Inventory",
+    usesDateRange: true,
+    // Delivery performance needs more than a month of orders to mean much.
+    defaultRangePreset: "last_90_days",
+    options: [],
+    load: async (context, request) =>
+      buildSuppliersReport({
+        orders: await loadPurchaseOrders(
+          context.db,
+          requestedUtcRange(context, request),
+        ),
+        timeZone: context.timeZone,
+        currencyCode: context.currencyCode,
+        today: context.today,
+      }),
   }),
 ];
 

@@ -17,9 +17,7 @@ const SHOP_B_ID = "shop-b-canonical-id";
 const {
   prismaMock,
   authenticateAdmin,
-  adjustShopifyInventory,
-  createShopifyTransfer,
-  completeShopifyTransfer,
+  adminGraphql,
   resolveTieredUnitCost,
   featureFlags,
   resolveCanonicalShopByDomain,
@@ -95,9 +93,7 @@ const {
   return {
     prismaMock,
     authenticateAdmin: vi.fn(),
-    adjustShopifyInventory: vi.fn(),
-    createShopifyTransfer: vi.fn(),
-    completeShopifyTransfer: vi.fn(),
+    adminGraphql: vi.fn(),
     resolveTieredUnitCost: vi.fn(),
     resolveCanonicalShopByDomain: vi.fn(),
     featureFlags: {
@@ -136,13 +132,6 @@ vi.mock("../services/shopify-gql.server", () => ({
   fetchLocations: vi.fn(async () => []),
   fetchInventoryLevels: vi.fn(async () => 0),
   shopifyGraphQL: vi.fn(),
-}));
-
-vi.mock("../services/shopify-sync.server", () => ({
-  adjustShopifyInventory,
-  createShopifyTransfer,
-  markShopifyTransferReadyToShip: vi.fn(),
-  completeShopifyTransfer,
 }));
 
 vi.mock("../services/landed-cost.server", () => ({
@@ -185,7 +174,7 @@ function authAsShopB() {
   authenticateAdmin.mockResolvedValue({
     session: { shop: SHOP_B },
     sessionToken: { sub: "9001" },
-    admin: { graphql: vi.fn() },
+    admin: { graphql: adminGraphql },
     redirect: vi.fn(),
   });
   resolveCanonicalShopByDomain.mockResolvedValue({
@@ -285,6 +274,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B mutating Shop A purchase order / line", async () => {
     const { action } = await import("../routes/app.purchase-orders_.$id");
+    activePlanSnapshot();
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
@@ -321,6 +311,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B updating Shop A stocktake line and never adjusts inventory", async () => {
     const { action } = await import("../routes/app.stocktakes_.$id");
+    activePlanSnapshot();
     prismaMock.stocktakeLineItem.findFirst.mockResolvedValue(null);
 
     const result = await action(
@@ -344,31 +335,33 @@ describe("cross-shop denial", () => {
     });
     expect(result).toEqual({ error: "Stocktake line not found" });
     expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
-    expect(adjustShopifyInventory).not.toHaveBeenCalled();
+    expect(adminGraphql).not.toHaveBeenCalled();
   });
 
-  it("denies Shop B adding a line to Shop A transfer", async () => {
-    const { action } = await import("../routes/app.transfers");
+  it("denies Shop B adding items to Shop A transfer", async () => {
+    const { action } = await import("../routes/app.transfers_.$id");
+    activePlanSnapshot();
     prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
     const result = await action(
-      actionArgs(
-        formRequest({
-          intent: "addLine",
-          transferId: "tr-shop-a",
-          variantId: "gid://shopify/ProductVariant/1",
-          quantity: "3",
-        }),
-      ),
+      actionArgs(formRequest({ intent: "addItems", items: "SKU-1,3" }), {
+        id: "tr-shop-a",
+      }),
     );
 
     expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
       where: directScoped({ id: "tr-shop-a" }),
+      // TenantDb adds its own ownership-proof columns to the selection.
+      select: { id: true, status: true, shop: true, shopId: true },
     });
-    expect(result).toEqual({ error: "Transfer not found" });
+    expect(prismaMock.shopifyVariantCache.findMany).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      error: "Transfer not found",
+      details: [],
+      items: "SKU-1,3",
+    });
     expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
-    expect(createShopifyTransfer).not.toHaveBeenCalled();
-    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+    expect(adminGraphql).not.toHaveBeenCalled();
   });
 
   it("denies Shop B deleting Shop A supplier mapping via foreign supplier id", async () => {
@@ -427,6 +420,7 @@ describe("cross-shop denial", () => {
 
   it("denies Shop B cancelling Shop A purchase order", async () => {
     const { action } = await import("../routes/app.purchase-orders_.$id");
+    activePlanSnapshot();
     prismaMock.purchaseOrder.updateMany.mockResolvedValue({ count: 0 });
     prismaMock.purchaseOrder.findFirst.mockResolvedValue(null);
 
@@ -451,9 +445,7 @@ describe("cross-shop denial", () => {
     expect(prismaMock.purchaseOrder.update).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.update).not.toHaveBeenCalled();
-    expect(adjustShopifyInventory).not.toHaveBeenCalled();
-    expect(createShopifyTransfer).not.toHaveBeenCalled();
-    expect(completeShopifyTransfer).not.toHaveBeenCalled();
+    expect(adminGraphql).not.toHaveBeenCalled();
   });
 
   it("rejects client-supplied Shop A as authority on PO cancel (session shop wins)", async () => {
@@ -492,6 +484,7 @@ describe("cross-shop denial", () => {
     featureFlags.stocktakeInventoryWrites.mockReturnValue(true);
     try {
       const { action } = await import("../routes/app.stocktakes_.$id");
+      activePlanSnapshot();
       prismaMock.stocktake.findFirst.mockResolvedValue(null);
 
       const result = await action(
@@ -510,7 +503,7 @@ describe("cross-shop denial", () => {
       });
       expect(prismaMock.stocktake.update).not.toHaveBeenCalled();
       expect(prismaMock.stocktakeLineItem.update).not.toHaveBeenCalled();
-      expect(adjustShopifyInventory).not.toHaveBeenCalled();
+      expect(adminGraphql).not.toHaveBeenCalled();
     } finally {
       if (previous === undefined) {
         delete process.env.FEATURE_STOCKTAKE_INVENTORY_WRITES;
@@ -526,29 +519,31 @@ describe("cross-shop denial", () => {
     process.env.FEATURE_TRANSFER_WRITES = "true";
     featureFlags.transferWrites.mockReturnValue(true);
     try {
-      const { action } = await import("../routes/app.transfers");
+      const { action } = await import("../routes/app.transfers_.$id");
+      activePlanSnapshot();
       prismaMock.transferOrder.findFirst.mockResolvedValue(null);
 
       const result = await action(
-        actionArgs(
-          formRequest({
-            intent: "ship",
-            transferId: "tr-shop-a",
-          }),
-        ),
+        actionArgs(formRequest({ intent: "ship" }), { id: "tr-shop-a" }),
       );
 
       expect(authenticateAdmin).toHaveBeenCalled();
+      const scopedLines = scopedLineItemsInclude("transferOrder");
       expect(prismaMock.transferOrder.findFirst).toHaveBeenCalledWith({
         where: directScoped({ id: "tr-shop-a" }),
-        include: scopedLineItemsInclude("transferOrder"),
+        include: {
+          lineItems: { ...scopedLines.lineItems, orderBy: { id: "asc" } },
+        },
       });
-      expect(result).toEqual({ error: "Transfer not found", problems: [] });
+      expect(result).toEqual({
+        error: "Transfer not found",
+        problems: [],
+        blocker: null,
+      });
       expect(prismaMock.transferOrder.update).not.toHaveBeenCalled();
       expect(prismaMock.transferLineItem.update).not.toHaveBeenCalled();
       expect(prismaMock.transferLineItem.create).not.toHaveBeenCalled();
-      expect(createShopifyTransfer).not.toHaveBeenCalled();
-      expect(completeShopifyTransfer).not.toHaveBeenCalled();
+      expect(adminGraphql).not.toHaveBeenCalled();
     } finally {
       if (previous === undefined) {
         delete process.env.FEATURE_TRANSFER_WRITES;
@@ -595,8 +590,6 @@ describe("cross-shop denial", () => {
     expect(prismaMock.purchaseOrder.create).not.toHaveBeenCalled();
     expect(prismaMock.pOLineItem.create).not.toHaveBeenCalled();
     expect(resolveTieredUnitCost).not.toHaveBeenCalled();
-    expect(createShopifyTransfer).not.toHaveBeenCalled();
-    expect(completeShopifyTransfer).not.toHaveBeenCalled();
-    expect(adjustShopifyInventory).not.toHaveBeenCalled();
+    expect(adminGraphql).not.toHaveBeenCalled();
   });
 });
