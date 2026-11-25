@@ -27,11 +27,11 @@ Last updated: 2026-11-25.
 
 | Item | State |
 |---|---|
-| First install can hang on "Handling response" and skip the first sync (issue #73) | Fix in #141 (replaces #82), waiting on its second-reader review; merges after #134. |
-| A reinstall whose setup step is slow shows an empty store or an error (TEN-02); Home and Bundles do not show the plan notice (SEC-18) | Fix in #134, waiting on its second-reader review. |
-| Plan-gated features cannot be tested on a development store, because no App Pricing plans exist yet | Development-only plan override in #133, waiting on the re-read of its review fixes. |
-| An uninstalled shop's data could be kept up to 365 days, while Shopify's API Terms (section 6.2.3) require deletion within 30 days of uninstall | Fix in #154: the window is 28 days at most and the erasure is due 30 days after uninstall. Waiting on its second-reader review. |
-| Plan limits are not enforced on feature routes | Changes are refused without an active plan on every write route (SEC-18), but the routes read the plan stored on `ShopSettings`, which only Billing and Replenishment refresh, so a cancellation is noticed only when one of them is opened (security pass BIL-02). Of the limits the Billing page shows, only purchase orders per billing month is enforced, and only when orders are created from a replenishment worksheet: not from New purchase order, not on annual plans, and not while Shopify reports no billing period (for example during a trial). Locations, active variants, users and reporting history are shown but not enforced. Wiring waits for the plan decision below. |
+| First install can hang on "Handling response" and skip the first sync (issue #73) | Fix open in #141 (replaces #82); merges after #134. |
+| A reinstall whose setup step is slow shows an empty store or an error (TEN-02); Home and Bundles do not show the plan notice (SEC-18) | Fix open in #134. |
+| Plan-gated features cannot be tested on a development store, because no App Pricing plans exist yet | Development-only plan override open in #133. |
+| An uninstalled shop's data could be kept up to 365 days, while Shopify's API Terms (section 6.2.3) require deletion within 30 days of uninstall | Fix in #154: the window is 28 days at most and the erasure is due 30 days after uninstall. Open in #154. |
+| Plan limits are not enforced on feature routes | Once #134 is merged, changes are refused without an active plan on every write route (SEC-18). Either way the routes read the plan stored on `ShopSettings`, which only Billing and Replenishment refresh, so a cancellation is noticed only when one of them is opened (security pass BIL-02). Of the limits the Billing page shows, only purchase orders per billing month is enforced, and only when orders are created from a replenishment worksheet: not from New purchase order, not on annual plans, and not while Shopify reports no billing period (for example during a trial). Locations, active variants, users and reporting history are shown but not enforced. Wiring waits for the plan decision below. |
 | Database and Redis connections not required to use TLS (R-191) | Depends on the host; set `sslmode=require` in the database URLs and a `rediss://` Redis URL once it is chosen. |
 | Subscription status has not been observed against a real subscription, from either source | Needs the plans below and a dev-store test with the $0 private test plan. |
 | In-app links to the privacy policy and terms | Not started; needs the published URLs. |
@@ -47,7 +47,8 @@ Decisions:
 | Which inventory write switches are on in the build sent for review | All are off. With them off a reviewer cannot receive a purchase order, complete a stocktake or ship a transfer into Shopify inventory. |
 | Plans and prices: what each plan includes, and which limits are enforced | Several Growth and Pro extras in the pricing document are not built. The Billing page shows location, variant, user and reporting-history limits that nothing enforces (see In progress). Either enforce them or stop showing them; the listing has to match what the app does. |
 | What a shop with no plan may see after install | Nothing sends an unsubscribed merchant to plan selection yet (App Store requirement 1.2.2). The redirect is small once the rule is known. |
-| Whether order rows named in `customers/redact` are deleted | `DATA_DELETION.md`. Must match the privacy policy. The retention window itself is no longer a choice above 28 days (#154). |
+| Days an uninstalled shop's data is kept: confirm 28 days or shorter, with counsel | Shopify's API Terms (section 6.2.3) cap it below 30 days, and #154 makes 28 the default and the maximum. The value inside the cap and the privacy policy wording are the owner's and counsel's (`OPEN_QUESTIONS.md` Q-008). |
+| Whether order rows named in `customers/redact` are deleted | `DATA_DELETION.md`. Must match the privacy policy. |
 | How long backups are kept | Shopify's API Terms (section 6.2.3) cover all copies of merchant data, so backups should expire within 30 days of an uninstall unless the law requires otherwise. Depends on the host; the privacy policy draft leaves it `OWNER TO FILL`. |
 | Listing copy, screenshots, icon, support contact | `LISTING_DRAFT.md` is a draft. |
 
