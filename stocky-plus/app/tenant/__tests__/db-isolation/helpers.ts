@@ -153,6 +153,51 @@ export async function seedTwoShops(prisma: PrismaClient) {
   return { shopA, shopB };
 }
 
+/**
+ * Record an active plan for each shop. Route actions that create or change
+ * records refuse a shop without one, so page tests that post forms need it.
+ */
+export async function seedActivePlans(
+  prisma: PrismaClient,
+  shops: Array<{ id: string; myshopifyDomain: string }>,
+) {
+  await prisma.shopSettings.createMany({
+    data: shops.map((shop) => ({
+      shop: shop.myshopifyDomain,
+      shopId: shop.id,
+      subscriptionActive: true,
+      subscriptionPlan: "growth",
+    })),
+  });
+}
+
+/**
+ * Runs `fn` while the shop's stored plan is inactive, then restores it.
+ */
+export async function withoutPlan<T>(
+  prisma: PrismaClient,
+  shop: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const set = (subscriptionActive: boolean) =>
+    prisma.shopSettings.updateMany({
+      where: { shop },
+      data: {
+        subscriptionActive,
+        subscriptionPlan: subscriptionActive ? "growth" : null,
+      },
+    });
+  await set(false);
+  try {
+    return await fn();
+  } finally {
+    await set(true);
+  }
+}
+
+export const PLAN_REQUIRED_HEADING =
+  'heading="An active ProPo plan is needed to make changes"';
+
 export async function withRuntimePg<T>(
   fn: (client: Client) => Promise<T>,
 ): Promise<T> {

@@ -42,6 +42,7 @@ describe("report registry", () => {
       "purchase-orders",
       "purchase-order-items",
       "low-stock",
+      "suppliers",
     ]);
   });
 

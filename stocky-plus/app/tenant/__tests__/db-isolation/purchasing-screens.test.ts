@@ -61,11 +61,14 @@ import {
 import { issueTenantAuthority } from "../../authority.server";
 import { createTenantDb, type TenantDb } from "../../tenant-db.server";
 import {
+  PLAN_REQUIRED_HEADING,
   requireRuntimeUrl,
   resetAndEnforce,
+  seedActivePlans,
   seedTwoShops,
   SHOP_A_DOMAIN,
   SHOP_B_DOMAIN,
+  withoutPlan,
 } from "./helpers";
 
 const { requireAdminTenant, requirePurchasingContext } = vi.hoisted(() => ({
@@ -74,6 +77,11 @@ const { requireAdminTenant, requirePurchasingContext } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../require-admin-tenant.server", () => ({ requireAdminTenant }));
+// The allowance for printed documents is counted in Redis and has its own
+// tests (app/lib/pdf/paper-rate-limit.test.ts); here every request is allowed.
+vi.mock("../../../lib/pdf/paper-rate-limit.server", () => ({
+  refusePaperOverLimit: vi.fn(async () => null),
+}));
 vi.mock("../../../services/purchasing/actor.server", async (original) => ({
   ...(await original<
     typeof import("../../../services/purchasing/actor.server")
@@ -196,6 +204,7 @@ describe("purchase-order pages", () => {
     prisma = ctx.migrationPrisma;
     await ctx.runtimePrisma.$disconnect();
     const shops = await seedTwoShops(prisma);
+    await seedActivePlans(prisma, [shops.shopA, shops.shopB]);
 
     await prisma.shopifyProductFact.createMany({
       data: [
@@ -1448,7 +1457,79 @@ describe("purchase-order pages", () => {
       expect((again as Response).headers.get("Location")).toBe(
         (created as Response).headers.get("Location"),
       );
+      expect(page).not.toContain(PLAN_REQUIRED_HEADING);
       expect(await prisma.purchaseOrder.count()).toBe(1);
+    });
+
+    it("tells a shop with no plan that changes are unavailable, and refuses them", async () => {
+      const po = await purchaseOrder({ ordered: true });
+      const { supplierId, poNumber } =
+        await prisma.purchaseOrder.findUniqueOrThrow({ where: { id: po.id } });
+      const newRoute = await import("../../../routes/app.purchase-orders_.new");
+      const detailRoute =
+        await import("../../../routes/app.purchase-orders_.$id");
+      const receiveRoute =
+        await import("../../../routes/app.purchase-orders_.$id_.receive");
+      const params = { id: po.id };
+      const newPath = "/app/purchase-orders/new";
+      const detailPath = `/app/purchase-orders/${po.id}`;
+      const receivePath = `${detailPath}/receive`;
+
+      await withoutPlan(prisma, SHOP_A_DOMAIN, async () => {
+        const pages = [
+          await renderRoute(
+            newRoute.default,
+            await newRoute.loader(loaderArgs(newPath)),
+          ),
+          await renderRoute(
+            detailRoute.default,
+            await detailRoute.loader(loaderArgs(detailPath, params)),
+          ),
+          await renderRoute(
+            receiveRoute.default,
+            await receiveRoute.loader(loaderArgs(receivePath, params)),
+          ),
+        ];
+        const writes = [
+          () =>
+            newRoute.action(
+              actionArgs(
+                newPath,
+                {},
+                {
+                  supplierId,
+                  locationGid: WAREHOUSE,
+                  creationKey: "screens-no-plan",
+                },
+              ),
+            ),
+          () =>
+            detailRoute.action(
+              actionArgs(detailPath, params, {
+                intent: "saveDetails",
+                version: po.version,
+                notes: "changed without a plan",
+              }),
+            ),
+          () =>
+            receiveRoute.action(
+              actionArgs(receivePath, params, {
+                idempotencyKey: "screens-no-plan-receipt",
+                [`accepted-${po.blueLineId}`]: "1",
+              }),
+            ),
+        ];
+
+        for (const page of pages) expect(page).toContain(PLAN_REQUIRED_HEADING);
+        expect(pages[1]).toContain(`Purchase order ${poNumber}`);
+        for (const write of writes) {
+          await expect(write()).rejects.toMatchObject({ status: 403 });
+        }
+      });
+
+      expect(await prisma.purchaseOrder.count()).toBe(1);
+      expect(await current(po.id)).toMatchObject({ version: po.version });
+      expect(await prisma.purchaseOrderReceipt.count()).toBe(0);
     });
   });
 
@@ -1616,19 +1697,21 @@ describe("purchase-order pages", () => {
       const detail = await import("../../../routes/app.purchase-orders_.$id");
       const list = await import("../../../routes/app.purchase-orders");
 
-      const page = await renderRoute(
-        detail.default,
-        await detail.loader(
-          loaderArgs(`/app/purchase-orders/${po.id}`, { id: po.id }),
-        ),
+      const data = await detail.loader(
+        loaderArgs(`/app/purchase-orders/${po.id}`, { id: po.id }),
       );
+      const page = await renderRoute(detail.default, data);
       const listPage = await renderRoute(
         list.default,
         await list.loader(loaderArgs("/app/purchase-orders?view=open&q=acme")),
       );
 
+      expect(data).toMatchObject({ pdfParts: 1 });
       expect(page).toContain(`href="/app/purchase-orders/${po.id}/pdf"`);
       expect(page).toContain(`href="/app/purchase-orders/${po.id}/receiver"`);
+      expect(page).toContain("Purchase order (PDF)");
+      expect(page).toContain("Receiving sheet (PDF, no costs)");
+      expect(page).toContain("Attach the PDF");
       expect(page).toContain(`href="/app/purchase-orders/${po.id}/csv"`);
       expect(page).toContain('href="mailto:orders@acme.example?subject=');
       expect(page).toContain("Email to Acme Supply");
@@ -1636,6 +1719,29 @@ describe("purchase-order pages", () => {
         'href="/app/purchase-orders/export?view=open&amp;q=acme"',
       );
       expect(listPage).toContain("Export matching purchase orders (CSV)");
+
+      // An order too long for one PDF gets a link for each part.
+      const longPage = await renderRoute(detail.default, {
+        ...data,
+        pdfParts: 3,
+      });
+      for (const part of [1, 2, 3]) {
+        expect(longPage).toContain(
+          `href="/app/purchase-orders/${po.id}/pdf?part=${part}"`,
+        );
+        expect(longPage).toContain(
+          `href="/app/purchase-orders/${po.id}/receiver?part=${part}"`,
+        );
+        expect(longPage).toContain(`Purchase order, part ${part} of 3 (PDF)`);
+        expect(longPage).toContain(
+          `Receiving sheet, part ${part} of 3 (PDF, no costs)`,
+        );
+      }
+      expect(longPage).not.toContain("part=4");
+      expect(longPage).not.toContain(
+        `href="/app/purchase-orders/${po.id}/pdf"`,
+      );
+      expect(longPage).toContain("Attach all 3 parts of the PDF");
     });
 
     it("exports a list view newest first, in batches, and only this shop's orders", async () => {
