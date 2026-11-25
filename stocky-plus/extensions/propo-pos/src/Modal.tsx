@@ -2,12 +2,13 @@ import { render } from "preact";
 import { useState } from "preact/hooks";
 import { Receive } from "./Receive";
 import { StockLookup } from "./StockLookup";
+import { TransferReceive } from "./TransferReceive";
 
 export default async () => {
   render(<ProPo />, document.body);
 };
 
-type Screen = "menu" | "lookup" | "receive";
+type Screen = "menu" | "lookup" | "receive" | "transfer";
 
 function ProPo() {
   const [screen, setScreen] = useState<Screen>("menu");
@@ -15,6 +16,7 @@ function ProPo() {
 
   if (screen === "lookup") return <StockLookup onBack={back} />;
   if (screen === "receive") return <Receive onBack={back} />;
+  if (screen === "transfer") return <TransferReceive onBack={back} />;
 
   return (
     <s-page heading="ProPo">
@@ -26,6 +28,9 @@ function ProPo() {
             </s-button>
             <s-button onClick={() => setScreen("receive")}>
               Receive a delivery
+            </s-button>
+            <s-button onClick={() => setScreen("transfer")}>
+              Receive a transfer
             </s-button>
           </s-stack>
         </s-box>
