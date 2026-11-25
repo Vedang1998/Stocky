@@ -45,6 +45,7 @@ import {
   type AdjustmentMode,
   type AdjustmentReasonCode,
 } from "./adjustment-input";
+import { SYNC_CATALOG_HINT, inactiveLocationMessage } from "../../lib/sync-copy";
 
 export const ADJUSTMENT_SOURCE_TYPE = "InventoryAdjustment";
 
@@ -236,7 +237,7 @@ export async function submitAdjustment(
   const active = await findActiveLocationIds(db, [input.locationId]);
   if (!active.has(input.locationId)) {
     return fail(
-      "That location is not an active, synced location of this shop. Run a sync from the dashboard, then try again.",
+      inactiveLocationMessage(),
     );
   }
 
@@ -277,7 +278,7 @@ export async function submitAdjustment(
     lineOfVariant.set(variant.shopifyVariantId, line.lineNumber);
     if (!variant.inventoryItemId) {
       details.push(
-        `Line ${line.lineNumber}: Shopify inventory is not linked yet for ${variant.title}. Run a catalog sync from the dashboard.`,
+        `Line ${line.lineNumber}: Shopify inventory is not linked yet for ${variant.title}. ${SYNC_CATALOG_HINT}.`,
       );
       continue;
     }

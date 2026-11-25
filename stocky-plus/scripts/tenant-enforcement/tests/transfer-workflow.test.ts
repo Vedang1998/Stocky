@@ -396,7 +396,7 @@ describe("transfer workflow", () => {
         details: [
           "Line 2: no item has the barcode or SKU NOPE.",
           expect.stringMatching(/^Line 3: 5019999 matches 2 items \(/),
-          "Line 4: Shopify inventory is not linked yet for Unlinked gin. Run a catalog sync from the dashboard.",
+          "Line 4: Shopify inventory is not linked yet for Unlinked gin. Choose Sync catalog on the Home page.",
           "Line 5: Gift card is not tracked for inventory in Shopify, so it cannot be transferred.",
         ],
       });
