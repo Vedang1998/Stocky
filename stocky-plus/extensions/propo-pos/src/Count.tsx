@@ -190,9 +190,10 @@ function CountSheetScreen({
         return;
       }
       const { line } = result.value;
-      if (line.countedQty !== null) {
+      const counted = line.countedQty;
+      if (counted !== null) {
         setItems((current) =>
-          noteCounted(current, { lineId: line.lineId, title: line.title, countedQty: line.countedQty! }),
+          noteCounted(current, { lineId: line.lineId, title: line.title, countedQty: counted }),
         );
       }
       setNotice({

@@ -209,20 +209,19 @@ export async function countAtPos(
       },
       deps.stocktake,
     );
-    const progress = await progressOf(db, stocktakeId);
-    return result.ok
-      ? {
-          ok: true,
-          line: {
+    return respond(
+      db,
+      stocktakeId,
+      result.ok
+        ? {
             lineId: result.lineId,
             title: result.title,
             countedQty: result.countedQty,
             added: result.added,
             recounted: result.recounted,
-          },
-          progress,
-        }
-      : { ok: false, message: result.error, progress };
+          }
+        : result.error,
+    );
   }
 
   const result = await saveStocktakeCount(
@@ -236,18 +235,29 @@ export async function countAtPos(
     },
     deps.stocktake,
   );
-  const progress = await progressOf(db, stocktakeId);
-  return result.ok
-    ? {
-        ok: true,
-        line: {
+  return respond(
+    db,
+    stocktakeId,
+    result.ok
+      ? {
           lineId: request.lineId,
           title: "",
           countedQty: request.countedQty,
           added: false,
           recounted: false,
-        },
-        progress,
-      }
-    : { ok: false, message: result.error, progress };
+        }
+      : result.error,
+  );
+}
+
+/** The answer to a count action: the line it touched, or the refusal, with the progress as it now stands. */
+async function respond(
+  db: TenantDb,
+  stocktakeId: string,
+  outcome: Extract<PosCountResponse, { ok: true }>["line"] | string,
+): Promise<PosCountResponse> {
+  const progress = await progressOf(db, stocktakeId);
+  return typeof outcome === "string"
+    ? { ok: false, message: outcome, progress }
+    : { ok: true, line: outcome, progress };
 }
