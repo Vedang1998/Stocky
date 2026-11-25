@@ -909,6 +909,21 @@ model StocktakeLineItem {
   /// after the movement: the variance is then counted minus this quantity.
   movementBaselineQty Int?
   movementReviewedAt  DateTime?
+  /// Shopify's unit cost of the item when the count was completed, kept on the
+  /// lines whose count changed stock so the value of the differences does not
+  /// move with later cost changes. Null on every other line, for an item with
+  /// no cost in Shopify, and on counts completed before costs were kept.
+  unitCostAmount       Decimal? @db.Decimal(20, 6)
+  unitCostCurrencyCode String?  @db.VarChar(8)
+  /// Set while someone has asked for the line to be counted again. The count
+  /// cannot be completed until the line is counted again or the request is
+  /// taken back.
+  recountRequestedAt       DateTime?
+  recountRequestedByUserId String?   @db.VarChar(64)
+  /// The count the recount was asked about. It stays after the line has been
+  /// counted again, as the record of what was first found; taking the request
+  /// back clears it.
+  recountFromQty           Int?
 
   stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
 
