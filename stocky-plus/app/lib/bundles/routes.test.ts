@@ -66,11 +66,7 @@ describe("bundles loader", () => {
     db.shopifyVariantCache.findMany.mockResolvedValue([
       { shopifyVariantId: "v-box", title: "Gift box" },
     ]);
-    const data = await loader({
-      request: new Request("https://app.example/app/bundles"),
-      params: {},
-      context: {},
-    } as unknown as LoaderFunctionArgs);
+    const data = await load();
     expect(data.components).toEqual([
       { id: "c1", bundleVariantId: "v-box", componentVariantId: "v-part", quantity: "2" },
     ]);
