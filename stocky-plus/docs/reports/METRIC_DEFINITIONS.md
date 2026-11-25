@@ -253,8 +253,10 @@ quantity are defined.
   type or supplier, covers only that; the page says so in a warning and does not
   hide the gap.
 - **Lost revenue per day** is, for an out-of-stock variant only, the worksheet's
-  units sold per day × the variant's current price, when the price is in the
-  shop currency. It is blank without a selling rate or a price. Low variants are
+  units sold per day × the price saved on the worksheet line when it was
+  generated, when the price is in the shop currency. It is blank without a
+  positive selling rate (a rate of zero or below, from returns, counts as none)
+  or a price. Low variants are
   not losing sales yet and carry no figure. In the product and vendor views it is
   the sum of the known figures of their variants.
 - **Runs out on** in the product and vendor views is the earliest day any of the

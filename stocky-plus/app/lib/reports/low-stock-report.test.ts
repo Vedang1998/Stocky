@@ -141,6 +141,24 @@ describe("buildLowStockReport: variants", () => {
     }
   });
 
+  it("leaves lost revenue blank when returns make the selling rate zero or negative", () => {
+    const base = { status: "OUT_OF_STOCK" as const };
+    const data = build([
+      line("zero", { ...base, unitsPerDay: new Decimal("0") }),
+      line("negative", { ...base, unitsPerDay: new Decimal("-0.5") }),
+    ]);
+    const rows = rowsByKey(data);
+    expect(rows.get("zero")?.lostRevenue).toBeNull();
+    expect(rows.get("negative")?.lostRevenue).toBeNull();
+    expect(tiles(data)["Lost revenue per day"]?.value).toBe("—");
+  });
+
+  it("dates the figures by the worksheet, not as live records", () => {
+    const data = build([line("v1")]);
+    expect(data.dataAsOf).toEqual(WORKSHEET.generatedAt);
+    expect(build([], "variants", null).dataAsOf).toBeNull();
+  });
+
   it("treats an unknown view as variants", () => {
     expect(build([line("v1")], "nonsense").columns.map((c) => c.key)).toContain(
       "status",
@@ -274,7 +292,11 @@ describe("buildLowStockReport: export", () => {
   });
 
   it("downloads only the rows of the chosen view", () => {
-    const file = exportTable(build([line("v1"), OUT_OF_STOCK], "vendors"), VIEW, "USD");
+    const file = exportTable(
+      build([line("v1"), OUT_OF_STOCK], "vendors"),
+      VIEW,
+      "USD",
+    );
     expect(file.headers).toEqual(
       expect.arrayContaining(["Vendor", "Products", "Variants low or out"]),
     );

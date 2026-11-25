@@ -78,7 +78,7 @@ function sumKnown(
 function lostRevenue(line: LowStockLine, shopCurrency: string): Decimal | null {
   if (
     line.status !== "OUT_OF_STOCK" ||
-    !line.unitsPerDay ||
+    !line.unitsPerDay?.greaterThan(0) ||
     !line.price ||
     line.priceCurrencyCode !== shopCurrency
   ) {
@@ -226,7 +226,7 @@ const LOST = {
   label: "Lost revenue per day",
   kind: "money",
   definition:
-    "For a variant that is out of stock: units sold per day over the worksheet's sales period × the current price. Blank when it has no selling rate or no price in your store currency. Low variants are not losing sales yet.",
+    "For a variant that is out of stock: units sold per day over the worksheet's sales period × the price saved when the worksheet was generated. Blank when it has no positive selling rate or no price in your store currency. Low variants are not losing sales yet.",
   value: (r: LowStockRow) => r.lostRevenuePerDay,
 } satisfies ReportColumn<LowStockRow>;
 const DEPLETES: ReportColumn<LowStockRow> = {
@@ -257,7 +257,7 @@ function columnsFor(view: LowStockView): ReportColumn<LowStockRow>[] {
           "status",
           "Status",
           (r) => r.status,
-          "Out of stock: nothing available. Low: available plus incoming is at or below the reorder point or the minimum, as the worksheet works it out.",
+          "Out of stock: nothing available. Low: available plus incoming is at or below the reorder point, or below the minimum, as the worksheet works it out.",
         ),
         AVAILABLE,
         integer("onHand", "On hand", (r) => r.onHand),
@@ -358,7 +358,7 @@ function noticesFor(input: LowStockInput): ReportNotice[] {
   ];
   if (!worksheet.allLocations) {
     notices.push({
-      tone: "info",
+      tone: "warning",
       heading: "Counted at one location",
       body: `That worksheet counted stock at ${worksheet.locationName ?? "a single location"} only.`,
     });
@@ -428,9 +428,10 @@ export function buildLowStockReport(
       const variants = shown.reduce((t, r) => t + r.variants, 0);
       const out = shown.reduce((t, r) => t + r.outOfStock, 0);
       const suggested = shown.reduce((t, r) => t + (r.suggested ?? 0), 0);
-      const lost = shown.reduce(
-        (t, r) => (r.lostRevenuePerDay ? t.plus(r.lostRevenuePerDay) : t),
-        ZERO,
+      const lost = shown.reduce<Decimal | null>(
+        (t, r) =>
+          r.lostRevenuePerDay ? (t ?? ZERO).plus(r.lostRevenuePerDay) : t,
+        null,
       );
       return [
         {
@@ -441,10 +442,11 @@ export function buildLowStockReport(
         {
           label: "Suggested order units",
           value: formatCell("integer", suggested, ""),
+          detail: "Includes variants already on a purchase order",
         },
         {
           label: "Lost revenue per day",
-          value: formatCell("money", lost, currencyCode),
+          value: lost ? formatCell("money", lost, currencyCode) : "—",
           detail:
             out === 0
               ? undefined
@@ -453,10 +455,11 @@ export function buildLowStockReport(
       ];
     },
     notices: noticesFor(input),
-    dataAsOf: "live",
+    // A snapshot: the worksheet's own time, not "as they are now".
+    dataAsOf: input.lowStock.worksheet?.generatedAt ?? null,
     methodNotes: [
       "Low stock is read from your latest replenishment worksheet, not worked out again here, so it always matches what you order from.",
-      "A variant is low when available plus incoming stock is at or below its reorder point or minimum; the worksheet explains the calculation for each one.",
+      "A variant is low when available plus incoming stock is at or below its reorder point or below its minimum; the worksheet explains the calculation for each one.",
       "Products and vendors group the variants listed; a product or vendor with no low variant is not shown.",
     ],
   };

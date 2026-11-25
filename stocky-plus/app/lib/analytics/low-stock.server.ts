@@ -73,9 +73,7 @@ export async function loadLowStock(db: TenantDb): Promise<LowStock> {
   if (!sheet) return { worksheet: null, lines: [] };
 
   const settings = readWorksheetSettings(sheet.settings);
-  const allLocations = settings
-    ? settings.scopeKey === SHOP_SCOPE
-    : sheet.scopeName === null;
+  const allLocations = sheet.scopeKey === SHOP_SCOPE;
   const worksheet: LowStockWorksheet = {
     id: sheet.id,
     generatedAt: sheet.generatedAt,
