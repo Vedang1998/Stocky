@@ -3,6 +3,12 @@ import { csvDownloadResponse, toCsv, type CsvCell } from "../lib/csv.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import {
+  shopDay,
+  shopTimeCell,
+  timeColumn,
+} from "../services/inventory-writes/shop-time";
 import {
   getTransfer,
   listTransferLinesForExport,
@@ -13,14 +19,15 @@ import {
 } from "../services/transfers/transfer-display";
 import { transferTotals } from "../services/transfers/transfer-quantities";
 
-const HEADERS = [
+/** The times are on the shop's clock when its time zone is known; the headings say which clock. */
+const headers = (timeZone: string | null) => [
   "Transfer",
   "From",
   "To",
   "Status",
-  "Created at (UTC)",
-  "Shipped at (UTC)",
-  "Received or closed at (UTC)",
+  timeColumn("Created at", timeZone),
+  timeColumn("Shipped at", timeZone),
+  timeColumn("Received or closed at", timeZone),
   "Item",
   "SKU",
   "Barcode",
@@ -33,14 +40,14 @@ const HEADERS = [
   "Returned to source",
   "Written off",
   "Still to account for",
-] as const;
+];
 
 /**
  * The transfer report: one row per item on the transfer, with where each of
  * its units stands.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
+  const { db, tenant } = await requireAdminTenant({ request, params });
   const transferId = readFormId(params.id);
   const transfer = transferId ? await getTransfer(db, transferId) : null;
   if (!transfer) {
@@ -54,9 +61,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     });
   }
 
-  const [lines, locations] = await Promise.all([
+  const [lines, locations, timeZone] = await Promise.all([
     listTransferLinesForExport(db, transfer),
     listSyncedLocations(db),
+    readShopTimeZone(tenant),
   ]);
   const locationName = (id: string) =>
     locations.find((location) => location.id === id)?.name ?? id;
@@ -73,9 +81,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     source,
     destination,
     status,
-    transfer.createdAt,
-    transfer.shippedAt,
-    transfer.receivedAt,
+    shopTimeCell(transfer.createdAt, timeZone),
+    shopTimeCell(transfer.shippedAt, timeZone),
+    shopTimeCell(transfer.receivedAt, timeZone),
     line.title,
     line.sku,
     line.barcode,
@@ -90,9 +98,9 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     line.outstandingQty,
   ]);
 
-  const day = transfer.createdAt.toISOString().slice(0, 10);
+  const day = shopDay(transfer.createdAt, timeZone);
   return csvDownloadResponse(
-    toCsv(HEADERS, rows),
+    toCsv(headers(timeZone), rows),
     `transfer-${reference}-${day}.csv`,
   );
 };
