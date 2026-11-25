@@ -71,7 +71,7 @@ For whoever sets up the production host. Nothing here has been deployed.
 - The worker stops at start-up without `DATABASE_CONTROL_PLANE_URL` (a connection as the `stocky_control_plane` role) and `STOCKY_DISPATCHER_PROCESS_COUNT` (the number of worker processes, 1 for one). Web and worker also need `DATABASE_URL` for the runtime role, `REDIS_URL` and `TENANT_JOB_ENVELOPE_SECRET`.
 - `SESSION_TOKEN_ENCRYPTION_KEY` must be set on web, worker and the release step; in production the app does not start without it. Generate it with `openssl rand -base64 32`. On the first deploy that sets it, and after adding a new key in front of the old one, run `npm run session-tokens:reencrypt` once from the release step; remove the old key only after a run reports nothing rewritten and nothing unreadable (it exits 1 while any row is unreadable and lists those session ids).
 - The three Partner API settings above are needed in production for billing to work.
-- Leave `STOCKY_DEV_PLAN_OVERRIDE` unset. It gives every shop a plan without a subscription and works only when `NODE_ENV` is `development` or `test`; anywhere else the app ignores it and logs an error.
+- Leave `STOCKY_DEV_PLAN_OVERRIDE` unset. It gives every shop a plan without a subscription and works only when `NODE_ENV` is `development`; anywhere else the app ignores it and logs an error (risk R-205).
 - `PRIVACY_UNINSTALLED_RETENTION_DAYS` and the other variables are listed in `.env.example`.
 - Pin the base image by digest in the `Dockerfile` when the host is chosen.
 - Rate limiting is left to the hosting edge (R-190).

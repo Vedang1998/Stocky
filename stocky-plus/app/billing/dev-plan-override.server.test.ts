@@ -5,7 +5,12 @@ import {
   devPlanOverrideSource,
   resetDevPlanOverrideWarningsForTests,
 } from "./dev-plan-override.server";
-import { entitlementSnapshot, resolveEntitlements } from "./entitlements";
+import {
+  checkLimit,
+  currentMonthlyBillingPeriod,
+  entitlementSnapshot,
+  resolveEntitlements,
+} from "./entitlements";
 import { subscriptionSourceFor } from "./subscription-source.server";
 
 const admin = {
@@ -41,6 +46,7 @@ describe("development plan override", () => {
     ["production", "production"],
     ["unset", undefined],
     ["staging", "staging"],
+    ["test", "test"],
   ])("is ignored, and says so, when NODE_ENV is %s", (_label, nodeEnv) => {
     const env = { NODE_ENV: nodeEnv, STOCKY_DEV_PLAN_OVERRIDE: "growth" };
 
@@ -62,30 +68,34 @@ describe("development plan override", () => {
     }
   });
 
-  it.each(["development", "test"])(
-    "replaces the subscription source when NODE_ENV is %s",
-    async (nodeEnv) => {
-      const source = subscriptionSourceFor(admin, {
-        NODE_ENV: nodeEnv,
-        STOCKY_DEV_PLAN_OVERRIDE: "Growth",
-      });
+  it("replaces the subscription source when NODE_ENV is development", async () => {
+    const source = subscriptionSourceFor(admin, {
+      NODE_ENV: "development",
+      STOCKY_DEV_PLAN_OVERRIDE: "Growth",
+    });
 
-      expect(source.kind).toBe("dev_override");
-      const entitlements = resolveEntitlements(
-        await source.listSubscriptions(),
-      );
-      expect(entitlements.state).toBe("active");
-      expect(entitlementSnapshot(entitlements)).toEqual({
-        subscriptionActive: true,
-        subscriptionPlan: "growth",
-      });
-      expect(admin.graphql).not.toHaveBeenCalled();
-    },
-  );
+    expect(source.kind).toBe("dev_override");
+    const entitlements = resolveEntitlements(await source.listSubscriptions());
+    expect(entitlements.state).toBe("active");
+    expect(entitlementSnapshot(entitlements)).toEqual({
+      subscriptionActive: true,
+      subscriptionPlan: "growth",
+    });
+    expect(admin.graphql).not.toHaveBeenCalled();
+  });
 
-  it("states no price, period or trial for the plan it reports", async () => {
+  it("names every self-serve plan when it refuses a value", () => {
+    expect(() =>
+      devPlanOverride({
+        NODE_ENV: "development",
+        STOCKY_DEV_PLAN_OVERRIDE: "enterprise",
+      }),
+    ).toThrow("(essentials, growth, pro)");
+  });
+
+  it("states no price or trial for the plan it reports", async () => {
     const plan = devPlanOverride({
-      NODE_ENV: "test",
+      NODE_ENV: "development",
       STOCKY_DEV_PLAN_OVERRIDE: "essentials",
     });
     const [subscription] = await devPlanOverrideSource(
@@ -96,9 +106,38 @@ describe("development plan override", () => {
       status: "ACTIVE",
       planHandle: "essentials",
       price: null,
-      currentPeriodEnd: null,
       trialEndsAt: null,
       endsAtPeriodEnd: false,
     });
+  });
+
+  it("enforces the plan's monthly purchase order limit", async () => {
+    const now = new Date("2026-11-25T17:00:00Z");
+    const plan = devPlanOverride({
+      NODE_ENV: "development",
+      STOCKY_DEV_PLAN_OVERRIDE: "essentials",
+    });
+    const source = devPlanOverrideSource(plan!, () => now);
+    const [subscription] = await source.listSubscriptions();
+    const entitlements = resolveEntitlements([subscription]);
+
+    const period = currentMonthlyBillingPeriod(subscription, now);
+    expect(period).not.toBeNull();
+    expect(period!.end.getTime() - period!.start.getTime()).toBe(
+      30 * 24 * 60 * 60 * 1000,
+    );
+    // A later read in the same period reports the same period.
+    const [again] = await devPlanOverrideSource(
+      plan!,
+      () => new Date(now.getTime() + 60_000),
+    ).listSubscriptions();
+    expect(again.currentPeriodEnd).toBe(subscription.currentPeriodEnd);
+
+    expect(checkLimit(entitlements, "monthlyPurchaseOrders", 49).allowed).toBe(
+      true,
+    );
+    expect(checkLimit(entitlements, "monthlyPurchaseOrders", 50)).toMatchObject(
+      { allowed: false, reason: "limit_reached" },
+    );
   });
 });
