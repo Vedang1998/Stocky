@@ -57,13 +57,20 @@ CREATE UNIQUE INDEX "StocktakeRecountEvent_shopId_id_key" ON "StocktakeRecountEv
 ALTER TABLE "StocktakeRecountEvent" ADD CONSTRAINT "StocktakeRecountEvent_shopId_fkey" FOREIGN KEY ("shopId") REFERENCES "Shop"("id") ON DELETE RESTRICT ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "StocktakeRecountEvent" ADD CONSTRAINT "StocktakeRecountEvent_stocktakeId_fkey" FOREIGN KEY ("stocktakeId") REFERENCES "Stocktake"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "StocktakeRecountEvent" ADD CONSTRAINT "StocktakeRecountEvent_stocktakeId_fkey" FOREIGN KEY ("stocktakeId") REFERENCES "Stocktake"("id") ON DELETE CASCADE ON UPDATE NO ACTION;
 
--- The record is written once: every UPDATE is refused, whoever issues it.
--- Rows go only with their count (cascade) or with the shop (erasure).
--- An INSERT is refused unless the count belongs to the same shop as the row.
--- "Stocktake" predates the (shopId, id) key that a composite foreign key
--- would need at migration time, so the trigger holds that rule instead.
+-- A row cannot be changed: every UPDATE is refused, whoever issues it. The
+-- foreign key above is ON UPDATE NO ACTION for the same reason: nothing may
+-- reach a row by way of its count either. DELETE is not refused here, because
+-- rows have to go with their count (cascade) and with the shop (erasure); the
+-- app has no code that deletes one.
+-- An INSERT is refused unless the count belongs to the same shop as the row
+-- and the line is a line of that count. "Stocktake" predates the (shopId, id)
+-- key that a composite foreign key would need at migration time, so the
+-- trigger holds the shop rule; a row is never updated afterwards, so what
+-- held at insert holds for as long as the row exists. The line is checked
+-- when the row is written and not held by a foreign key: a line that is later
+-- taken off the sheet must not take the history with it.
 CREATE OR REPLACE FUNCTION stocky_stocktake_recount_event_guard()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -81,6 +88,15 @@ BEGIN
        AND s."shopId" = NEW."shopId"
   ) THEN
     RAISE EXCEPTION 'stocktake_recount_event_wrong_shop'
+      USING ERRCODE = '23514';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1
+      FROM public."StocktakeLineItem" l
+     WHERE l."id" = NEW."lineItemId"
+       AND l."stocktakeId" = NEW."stocktakeId"
+  ) THEN
+    RAISE EXCEPTION 'stocktake_recount_event_wrong_line'
       USING ERRCODE = '23514';
   END IF;
   RETURN NEW;

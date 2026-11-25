@@ -227,9 +227,17 @@ each difference to Shopify through `settleInventoryDocument`.
   scanning records the first scan only, because later scans add to it) and
   `KEPT` (the request was taken back), each with the staff ID and the time.
   The rows can be added but not changed (`stocktake_recount_event_immutable`),
-  a row for another shop's count is refused
-  (`stocktake_recount_event_wrong_shop`), and they go when the count or the
-  shop's data is deleted. The count page lists the latest 100 steps under
+  a row for another shop's count or for a line that is not on the count is
+  refused (`stocktake_recount_event_wrong_shop`,
+  `stocktake_recount_event_wrong_line`), and they go when the count or the
+  shop's data is deleted. Deleting a row is not refused by the database,
+  because the count's cascade and the erasure of a shop need it; the app has
+  no code that deletes one, and the runtime role still holds DELETE on this
+  table like on every merchant table (narrowing that is a change to the
+  enforcement manifest, not made here). Times are the app's clock, the same
+  value the line gets, so the history and the line agree; two steps on one
+  line within the clock difference of two app servers could list in the
+  wrong order. The count page lists the latest 100 steps under
   "Recount history", newest first, and says so when there are more. The PDF
   count sheet and the CSV report do not show the history.
 - **Completing.** The difference for a line is counted − expected, sent as a

@@ -2458,7 +2458,7 @@ describe("Recount history on the count page", () => {
       [
         "Nov 12, 2026, 9:30 PM EST",
         "White wine",
-        "Request taken back; the count of 1,500 was not counted again",
+        "Request taken back; the count asked about was 1,500",
         "staff not recorded",
       ],
       [

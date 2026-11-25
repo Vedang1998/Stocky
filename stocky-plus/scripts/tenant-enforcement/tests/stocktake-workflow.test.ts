@@ -2911,6 +2911,50 @@ describe("stocktake workflow", () => {
         expect(await history(id)).toEqual([]);
       });
 
+      it("refuses a step for a line that is not on the count, in the database", async () => {
+        const { id, lineFor } = await startCount();
+        const other = await startCount();
+        const step = {
+          shopId: shopAId,
+          stocktakeId: id,
+          shopifyVariantId: RED,
+          kind: "REQUESTED" as const,
+          questionedQty: 7,
+        };
+
+        await expect(
+          prisma.stocktakeRecountEvent.create({
+            data: { ...step, lineItemId: other.lineFor(RED) },
+          }),
+        ).rejects.toThrow(/stocktake_recount_event_wrong_line/);
+        await expect(
+          dbA.stocktakeRecountEvent.create({
+            data: { ...step, lineItemId: "no-such-line" },
+          }),
+        ).rejects.toThrow(/stocktake_recount_event_wrong_line/);
+
+        expect(await history(id)).toEqual([]);
+        // The same step for a line of this count is taken.
+        await prisma.stocktakeRecountEvent.create({
+          data: { ...step, lineItemId: lineFor(RED) },
+        });
+        expect(await history(id)).toHaveLength(1);
+      });
+
+      it("keeps the history of a count whose ID the database is asked to change", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await askRecount(id, lineFor(RED));
+
+        // The foreign key does not carry a new ID into the history: the
+        // change is refused, so no step can be moved to another count.
+        await expect(
+          prisma.$executeRaw`UPDATE "Stocktake" SET "id" = ${`${id}-moved`} WHERE "id" = ${id}`,
+        ).rejects.toThrow();
+
+        expect(await history(id)).toHaveLength(1);
+      });
+
       it("goes with its count when the count is removed", async () => {
         const { id, lineFor } = await startCount();
         await count(lineFor(RED), 7);

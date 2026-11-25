@@ -58,7 +58,9 @@ export function recountEventText(event: {
     case "REQUESTED":
       return `Recount asked for; the count was ${questioned}`;
     case "KEPT":
-      return `Request taken back; the count of ${questioned} was not counted again`;
+      // The count may have been cleared since, so this says what was asked
+      // about and nothing about what the line holds now.
+      return `Request taken back; the count asked about was ${questioned}`;
     case "COUNTED":
       return event.countedQty === null
         ? `Counted again by scanning; first counted as ${questioned}`
