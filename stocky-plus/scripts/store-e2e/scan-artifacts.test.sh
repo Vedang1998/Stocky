@@ -43,6 +43,13 @@ expect fail "session token is found" "${scan}" "${work}/logs"
 case_dir "offline token shpua_0123456789abcdef"
 expect fail "Shopify token prefix is found" "${scan}" "${work}/logs"
 
+case_dir "GET /app 200"
+chmod 000 "${work}/logs/app.log"
+if [ "$(id -u)" -ne 0 ]; then
+  expect fail "unreadable file fails the scan" "${scan}" "${work}/logs"
+fi
+chmod 644 "${work}/logs/app.log"
+
 expect pass "missing paths pass" "${scan}" "${work}/does-not-exist"
 
 if output="$(env SHOPIFY_API_SECRET=fixture-secret-value bash -c "printf 'x fixture-secret-value' >'${work}/logs/app.log'; '${scan}' '${work}/logs'" 2>&1)"; then :; fi

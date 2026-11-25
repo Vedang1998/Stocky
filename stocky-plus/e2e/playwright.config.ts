@@ -10,7 +10,9 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 240_000,
-  reporter: [["list"], ["html", { open: "never", outputFolder: "../e2e-report" }]],
+  // JSON rather than the HTML report: the HTML report packs its data into a
+  // zip inside index.html, which the pre-upload credential scan cannot read.
+  reporter: [["list"], ["json", { outputFile: "../e2e-report/results.json" }]],
   use: {
     ...devices["Desktop Chrome"],
     // The Shopify app library answers 410 to user agents it reads as bots,

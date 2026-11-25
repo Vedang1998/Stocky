@@ -47,7 +47,7 @@ with the runner.
 The `store-e2e` environment allows deployments only from `main` and
 `store-e2e/*` (one path segment), so no other branch can read its secret.
 
-The report, failure screenshots and logs are uploaded only after
+The JSON report, failure screenshots and logs are uploaded only after
 `scripts/store-e2e/scan-artifacts.sh` finds no credential in them (the
 client secret, the generated keys, a bearer or session token, or a Shopify
 token prefix). Artifacts on this public repository can be downloaded by any
@@ -73,8 +73,11 @@ gh workflow run store-e2e.yml --ref store-e2e/<name>
 ```
 
 Runs on the same branch queue one at a time; a newer queued run replaces an
-older pending one. Runs on different branches may overlap, which is safe
-while every write switch is off.
+older pending one. Runs on different branches may overlap. That cannot
+change store stock while every write switch is off, but both runs import
+the catalog through a Shopify bulk operation and Shopify allows only one
+per app and shop at a time, so an overlapping run can fail its sync check.
+Re-run it once the other has finished.
 
 The run report, screenshots of failures, and app and worker logs are
 attached to the run as the `store-e2e-report` artifact for 7 days.
