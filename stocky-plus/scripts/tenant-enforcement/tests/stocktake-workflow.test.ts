@@ -2258,7 +2258,8 @@ describe("stocktake workflow", () => {
       stocktakeId: string,
       lineId: string,
       actor: InventoryActor | null = STAFF,
-    ) => requestStocktakeRecount(dbA, { stocktakeId, lineId, actor }, later);
+      clock = later,
+    ) => requestStocktakeRecount(dbA, { stocktakeId, lineId, actor }, clock);
     const keepCount = (
       stocktakeId: string,
       lineId: string,
@@ -2659,21 +2660,13 @@ describe("stocktake workflow", () => {
         const { id, lineFor } = await startCount();
         await count(lineFor(RED), 7);
 
-        await requestStocktakeRecount(
-          dbA,
-          { stocktakeId: id, lineId: lineFor(RED), actor: STAFF },
-          clockAt(11),
-        );
+        await askRecount(id, lineFor(RED), STAFF, clockAt(11));
         await saveCount(
           dbA,
           { lineId: lineFor(RED), countedQty: 9, actor: COUNTER },
           clockAt(12),
         );
-        await requestStocktakeRecount(
-          dbA,
-          { stocktakeId: id, lineId: lineFor(RED), actor: COUNTER },
-          clockAt(13),
-        );
+        await askRecount(id, lineFor(RED), COUNTER, clockAt(13));
         await keepCount(id, lineFor(RED), STAFF, clockAt(14));
 
         const red = { variant: RED, source: null, counted: null };
@@ -2699,11 +2692,7 @@ describe("stocktake workflow", () => {
       it("reads the history newest first with the item's name", async () => {
         const { id, lineFor } = await startCount();
         await count(lineFor(RED), 7);
-        await requestStocktakeRecount(
-          dbA,
-          { stocktakeId: id, lineId: lineFor(RED), actor: STAFF },
-          clockAt(11),
-        );
+        await askRecount(id, lineFor(RED), STAFF, clockAt(11));
         await saveCount(
           dbA,
           { lineId: lineFor(RED), countedQty: 7, actor: COUNTER },

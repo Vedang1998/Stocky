@@ -511,36 +511,35 @@ export async function getStocktakeRecountHistory(
   stocktakeId: string,
 ): Promise<{ events: StocktakeRecountEventView[]; total: number }> {
   const where = { stocktakeId };
-  const [rows, total] = (await Promise.all([
-    db.stocktakeRecountEvent.findMany({
-      where,
-      select: {
-        id: true,
-        createdAt: true,
-        kind: true,
-        shopifyVariantId: true,
-        questionedQty: true,
-        countedQty: true,
-        countSource: true,
-        byUserId: true,
-      },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: RECOUNT_HISTORY_LIMIT,
-    }),
-    db.stocktakeRecountEvent.count({ where }),
-  ])) as [
-    Array<{
-      id: string;
-      createdAt: Date;
-      kind: StocktakeRecountEventKind;
-      shopifyVariantId: string;
-      questionedQty: number;
-      countedQty: number | null;
-      countSource: StocktakeCountSource | null;
-      byUserId: string | null;
-    }>,
-    number,
-  ];
+  const rows = (await db.stocktakeRecountEvent.findMany({
+    where,
+    select: {
+      id: true,
+      createdAt: true,
+      kind: true,
+      shopifyVariantId: true,
+      questionedQty: true,
+      countedQty: true,
+      countSource: true,
+      byUserId: true,
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: RECOUNT_HISTORY_LIMIT,
+  })) as Array<{
+    id: string;
+    createdAt: Date;
+    kind: StocktakeRecountEventKind;
+    shopifyVariantId: string;
+    questionedQty: number;
+    countedQty: number | null;
+    countSource: StocktakeCountSource | null;
+    byUserId: string | null;
+  }>;
+  // Fewer rows than the limit are all of them; only a full page is counted.
+  const total =
+    rows.length < RECOUNT_HISTORY_LIMIT
+      ? rows.length
+      : ((await db.stocktakeRecountEvent.count({ where })) as number);
   if (rows.length === 0) return { events: [], total };
 
   const catalog = await findVariantsById(
