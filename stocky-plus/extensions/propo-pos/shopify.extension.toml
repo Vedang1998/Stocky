@@ -4,7 +4,7 @@ api_version = "2026-07"
 type = "ui_extension"
 name = "ProPo inventory"
 handle = "propo-pos-inventory"
-description = "Scan or enter a barcode or SKU to see stock at every location."
+description = "Scan or enter a barcode or SKU to see stock at every location, and receive purchase order deliveries."
 
 [[extensions.targeting]]
 module = "./src/Tile.tsx"
