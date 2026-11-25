@@ -844,6 +844,12 @@ function stripInjectedProofFields(
     injected: string[],
   ): void {
     if (node == null) return;
+    // A list is stripped row by row at every depth, including the top level:
+    // findMany returns an array, and its own plan has an empty path.
+    if (Array.isArray(node)) {
+      for (const item of node) stripAt(item, pathParts, injected);
+      return;
+    }
     if (pathParts.length === 0) {
       if (isPlainObject(node)) {
         for (const f of injected) delete node[f];
@@ -852,17 +858,8 @@ function stripInjectedProofFields(
     }
     const [head, ...rest] = pathParts;
     if (!head) return;
-    if (Array.isArray(node)) {
-      for (const item of node) stripAt(item, pathParts, injected);
-      return;
-    }
     if (!isPlainObject(node)) return;
-    const child = node[head];
-    if (Array.isArray(child)) {
-      for (const item of child) stripAt(item, rest, injected);
-    } else {
-      stripAt(child, rest, injected);
-    }
+    stripAt(node[head], rest, injected);
   }
 
   for (const plan of plans) {
