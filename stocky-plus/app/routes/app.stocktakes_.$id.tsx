@@ -40,6 +40,7 @@ import {
   getStocktakeLedgerSummary,
   getStocktakeLines,
   getStocktakeProgress,
+  getStocktakeRecountHistory,
   readLineFilter,
   readLineSearch,
   readPageNumber,
@@ -68,6 +69,7 @@ import { getStocktakeDifferenceValue } from "../services/stocktakes/stocktake-va
 import {
   COUNT_SOURCE_LABEL,
   itemCount,
+  recountEventText,
   signed,
   staffText,
   STOCKTAKE_SCOPE_LABEL,
@@ -115,8 +117,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   const open = stocktake.status === "IN_PROGRESS";
   const expectedHidden = stocktake.blind && open && !REVIEW_FILTERS.has(filter);
-  const [progress, lines, ledger, locations, planActive, timeZone, value] =
-    await Promise.all([
+  const [
+    progress,
+    lines,
+    ledger,
+    locations,
+    planActive,
+    timeZone,
+    value,
+    recounts,
+  ] = await Promise.all([
       getStocktakeProgress(db, stocktake.id),
       getStocktakeLines(db, {
         stocktakeId: stocktake.id,
@@ -131,6 +141,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       // What the differences are worth says what the differences are, so it
       // is withheld with them while a blind count is being counted.
       expectedHidden ? null : getStocktakeDifferenceValue(db, stocktake),
+      getStocktakeRecountHistory(db, stocktake.id),
     ]);
 
   return {
@@ -155,6 +166,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     search,
     expectedHidden,
     value,
+    recounts,
     planActive,
     timeZone,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
@@ -226,7 +238,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const result =
       intent === "recount"
         ? await requestStocktakeRecount(db, { stocktakeId, lineId, actor })
-        : await withdrawStocktakeRecount(db, { stocktakeId, lineId });
+        : await withdrawStocktakeRecount(db, { stocktakeId, lineId, actor });
     if (!result.ok) return { error: result.error };
     return {
       ok: true,
@@ -481,6 +493,7 @@ export default function StocktakeCount() {
     expectedHidden,
     value,
     planActive,
+    recounts,
     timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
@@ -1064,6 +1077,44 @@ export default function StocktakeCount() {
                 </s-button>
               </s-stack>
             )}
+          </s-stack>
+        </s-section>
+      )}
+
+      {recounts.total > 0 && (
+        <s-section heading="Recount history">
+          <s-stack direction="block" gap="small">
+            {recounts.total > recounts.events.length && (
+              <s-text>
+                The latest {recounts.events.length.toLocaleString("en-US")} of{" "}
+                {recounts.total.toLocaleString("en-US")} steps.
+              </s-text>
+            )}
+            <s-table>
+              <s-table-header-row>
+                <s-table-header>When</s-table-header>
+                <s-table-header listSlot="primary">Item</s-table-header>
+                <s-table-header listSlot="secondary">
+                  What happened
+                </s-table-header>
+                <s-table-header>By</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {recounts.events.map((event) => (
+                  <s-table-row key={event.id}>
+                    <s-table-cell>
+                      {formatShopTime(event.at, timeZone)}
+                    </s-table-cell>
+                    <s-table-cell>
+                      {event.title}
+                      {event.sku ? ` (${event.sku})` : ""}
+                    </s-table-cell>
+                    <s-table-cell>{recountEventText(event)}</s-table-cell>
+                    <s-table-cell>{staffText(event.byUserId)}</s-table-cell>
+                  </s-table-row>
+                ))}
+              </s-table-body>
+            </s-table>
           </s-stack>
         </s-section>
       )}

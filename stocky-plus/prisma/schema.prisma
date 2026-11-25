@@ -102,6 +102,7 @@ model Shop {
   replenishmentWorksheetLines ReplenishmentWorksheetLine[]
   dailyStockSnapshots DailyStockSnapshot[]
   dailyStockLevels DailyStockLevel[]
+  stocktakeRecountEvents StocktakeRecountEvent[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -882,7 +883,8 @@ model Stocktake {
   cancelledByUserId String?                 @db.VarChar(64)
   createdAt         DateTime                @default(now())
 
-  lineItems StocktakeLineItem[]
+  lineItems     StocktakeLineItem[]
+  recountEvents StocktakeRecountEvent[]
 
   @@index([shopId])
   @@unique([shopId, id])
@@ -931,6 +933,48 @@ model StocktakeLineItem {
   @@index([shopId, stocktakeId])
   @@index([shopId, stocktakeId, shopifyVariantId])
   @@unique([shopId, id])
+}
+
+enum StocktakeRecountEventKind {
+  /// Someone asked for the line to be counted again.
+  REQUESTED
+  /// The line was counted again, which answered the request.
+  COUNTED
+  /// The request was taken back and the count on the line kept.
+  KEPT
+}
+
+/// One step of a recount on a line of a count: asked for, counted again, or
+/// taken back. The line itself holds only the request that is open and the
+/// count it questioned; these rows are the record of every request and of who
+/// answered it. A row is written once, in the transaction that changes the
+/// line, and never changed afterwards.
+model StocktakeRecountEvent {
+  id               String                    @id @default(cuid())
+  shopId           String
+  stocktakeId      String
+  /// The line of the count. Lines are never removed from a count; the variant
+  /// is kept here as well so the record reads without the line.
+  lineItemId       String
+  shopifyVariantId String
+  kind             StocktakeRecountEventKind
+  /// The count that was questioned.
+  questionedQty    Int
+  /// COUNTED by typing: the count that was entered. Null for a recount by
+  /// scanning, which starts again from nothing and grows with later scans,
+  /// and for the other kinds.
+  countedQty       Int?
+  /// COUNTED: how the line was counted again.
+  countSource      StocktakeCountSource?
+  byUserId         String?                   @db.VarChar(64)
+  createdAt        DateTime                  @default(now())
+
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+  stocktake Stocktake @relation(fields: [stocktakeId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, id])
+  @@index([shopId, stocktakeId, createdAt])
+  @@index([stocktakeId])
 }
 
 // ─── Inventory control: operation ledger ─────────────────────────────────────

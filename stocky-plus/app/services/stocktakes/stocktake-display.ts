@@ -6,6 +6,7 @@
 type StocktakeStatus = "DRAFT" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 type StocktakeScope = "FULL" | "PARTIAL";
 type StocktakeCountSource = "MANUAL" | "SCAN" | "ZERO_FILL";
+type StocktakeRecountEventKind = "REQUESTED" | "COUNTED" | "KEPT";
 
 export const STOCKTAKE_STATUS_BADGE: Record<
   StocktakeStatus,
@@ -44,6 +45,25 @@ export function signed(value: number): string {
 
 export function staffText(userId: string | null | undefined): string {
   return userId ? `staff ID ${userId}` : "staff not recorded";
+}
+
+/** One step of a recount in words, for the history of a count. */
+export function recountEventText(event: {
+  kind: StocktakeRecountEventKind;
+  questionedQty: number;
+  countedQty: number | null;
+}): string {
+  const questioned = event.questionedQty.toLocaleString("en-US");
+  switch (event.kind) {
+    case "REQUESTED":
+      return `Recount asked for; the count was ${questioned}`;
+    case "KEPT":
+      return `Request taken back; the count of ${questioned} was not counted again`;
+    case "COUNTED":
+      return event.countedQty === null
+        ? `Counted again by scanning; first counted as ${questioned}`
+        : `Counted again as ${event.countedQty.toLocaleString("en-US")}; first counted as ${questioned}`;
+  }
 }
 
 export function itemCount(count: number): string {

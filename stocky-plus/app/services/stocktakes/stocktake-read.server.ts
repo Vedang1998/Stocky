@@ -10,6 +10,7 @@ import {
   type StocktakeCountSource,
   type StocktakeExpectedSource,
   type StocktakeQuantityBasis,
+  type StocktakeRecountEventKind,
   type StocktakeScope,
   type StocktakeStatus,
 } from "./stocktake.server";
@@ -20,6 +21,8 @@ export const STOCKTAKE_LINE_PAGE_SIZE = 50;
 const SEARCH_MATCH_LIMIT = 500;
 const MAX_SEARCH_LENGTH = 100;
 const LOOKUP_CHUNK = 2_000;
+/** Steps of a count's recount history shown on its page, newest first. */
+export const RECOUNT_HISTORY_LIMIT = 100;
 
 export const STOCKTAKE_LIST_VIEWS = ["open", "closed"] as const;
 export type StocktakeListView = (typeof STOCKTAKE_LIST_VIEWS)[number];
@@ -482,6 +485,80 @@ export interface StocktakeLedgerSummary {
   appliedChangeCount: number;
   /** Changes Shopify refused in the last attempt. */
   refusedChangeCount: number;
+}
+
+export interface StocktakeRecountEventView {
+  id: string;
+  at: Date;
+  kind: StocktakeRecountEventKind;
+  title: string;
+  sku: string | null;
+  /** The count that was questioned. */
+  questionedQty: number;
+  /** The count typed in its place; null when the recount was scanned. */
+  countedQty: number | null;
+  countSource: StocktakeCountSource | null;
+  byUserId: string | null;
+}
+
+/**
+ * The recounts of a count, newest first: each one asked for, each one done
+ * and each request taken back. `total` says how many steps there are when the
+ * page shows only the latest.
+ */
+export async function getStocktakeRecountHistory(
+  db: TenantDb,
+  stocktakeId: string,
+): Promise<{ events: StocktakeRecountEventView[]; total: number }> {
+  const where = { stocktakeId };
+  const [rows, total] = (await Promise.all([
+    db.stocktakeRecountEvent.findMany({
+      where,
+      select: {
+        id: true,
+        createdAt: true,
+        kind: true,
+        shopifyVariantId: true,
+        questionedQty: true,
+        countedQty: true,
+        countSource: true,
+        byUserId: true,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: RECOUNT_HISTORY_LIMIT,
+    }),
+    db.stocktakeRecountEvent.count({ where }),
+  ])) as [
+    Array<{
+      id: string;
+      createdAt: Date;
+      kind: StocktakeRecountEventKind;
+      shopifyVariantId: string;
+      questionedQty: number;
+      countedQty: number | null;
+      countSource: StocktakeCountSource | null;
+      byUserId: string | null;
+    }>,
+    number,
+  ];
+  if (rows.length === 0) return { events: [], total };
+
+  const catalog = await findVariantsById(
+    db,
+    rows.map((row) => row.shopifyVariantId),
+  );
+  return {
+    events: rows.map(({ createdAt, shopifyVariantId, ...row }) => {
+      const variant = catalog.get(shopifyVariantId);
+      return {
+        ...row,
+        at: createdAt,
+        title: variant?.title ?? shopifyVariantId,
+        sku: variant?.sku ?? null,
+      };
+    }),
+    total,
+  };
 }
 
 /** What the inventory ledger holds for a count: whether applying it has started, and how far it got. */
