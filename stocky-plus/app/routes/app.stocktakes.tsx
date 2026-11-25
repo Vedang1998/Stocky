@@ -35,6 +35,7 @@ import {
   STOCKTAKE_SCOPE_LABEL,
   STOCKTAKE_STATUS_BADGE,
 } from "../services/stocktakes/stocktake-display";
+import { SYNC_CATALOG_HINT } from "../lib/sync-copy";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { db, tenant } = await requireAdminTenant({ request });
@@ -154,8 +155,8 @@ export default function Stocktakes() {
       <s-section heading="Start a count">
         {activeLocations.length === 0 ? (
           <s-paragraph>
-            No active locations are synced yet. Run a sync from the dashboard,
-            then start a count.
+            No active locations are synced yet. {SYNC_CATALOG_HINT}, then
+            start a count.
           </s-paragraph>
         ) : (
           <Form method="post" onKeyDown={onEnter}>

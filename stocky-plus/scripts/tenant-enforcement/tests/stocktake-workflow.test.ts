@@ -516,7 +516,7 @@ describe("stocktake workflow", () => {
       ).toEqual({
         ok: false,
         error:
-          "Shopify has no on-hand quantity for the items synced at this location. Run a sync from the dashboard, then start the count again.",
+          "Shopify has no on-hand quantity for the items synced at this location. Choose Sync catalog on the Home page, then start the count again.",
       });
       expect(await prisma.stocktake.count()).toBe(0);
     });
@@ -926,7 +926,7 @@ describe("stocktake workflow", () => {
       ],
       [
         "GIN-700",
-        "Shopify inventory is not linked yet for Unlinked gin. Run a catalog sync from the dashboard.",
+        "Shopify inventory is not linked yet for Unlinked gin. Choose Sync catalog on the Home page.",
       ],
       [
         "CID-330",
@@ -1032,7 +1032,7 @@ describe("stocktake workflow", () => {
           "Line 2: no item has the barcode or SKU 0000.",
           "Line 3: 8888 matches 2 items (Twin A, Twin B). Use a barcode or SKU that only one item has.",
           "Line 4: Port is not stocked at this location in Shopify. Stock it at the location in Shopify first.",
-          "Line 5: Shopify inventory is not linked yet for Unlinked gin. Run a catalog sync from the dashboard.",
+          "Line 5: Shopify inventory is not linked yet for Unlinked gin. Choose Sync catalog on the Home page.",
         ],
       });
       expect(await prisma.stocktakeLineItem.count()).toBe(0);

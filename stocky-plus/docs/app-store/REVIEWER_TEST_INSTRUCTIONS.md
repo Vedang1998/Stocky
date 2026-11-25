@@ -16,7 +16,7 @@ These instructions only work if all of the following are true on the build Shopi
 2. **Billing uses Shopify App Pricing** [1.2.1–1.2.3]. The billing page now sends plan changes to Shopify's hosted plan page and no longer calls the Billing API. Still needed: the plans themselves in the Partner Dashboard, with handles `essentials`, `growth` and `pro`, and `SHOPIFY_APP_HANDLE` set on the server.
 3. **Plans can be tested by the reviewer at no charge.** The review store belongs to Shopify, not to our Partner organization, so only free plans and paid plans marked "free for partners and developers" are available to it at no charge. Mark Essentials, Growth and Pro that way in the plan settings.
 4. **Every feature named in the listing works without an error** [2.1.1, 2.1.2]. On `main`, these actions stop with an error unless their switch is on: PO "Receive" and Warehouse scanning (`FEATURE_RECEIPT_WRITES`), stocktake "Complete — push deltas to Shopify" (`FEATURE_STOCKTAKE_INVENTORY_WRITES`), transfer "Ship" and "Receive at destination" (`FEATURE_TRANSFER_WRITES`). The merchant sees "… is not turned on for this store yet." Transfer "Ship" also needs the `write_inventory_transfers` scope, which is not requested. For each feature, either switch it on after its release gate passes, or remove it from the listing and from Part B below.
-5. **No developer text in the UI.** Still on `main`: "The background worker must be running (`npm run worker`)" on the dashboard, "Marketing must not claim unlimited or AI-driven forecasting…" and "Activate (dev only)" on the buying table, and the working-title heading "Inventory platform". Tracked in issue #80.
+5. **No developer text in the UI.** Done in PR #125 (issue #80); a unit test refuses developer commands, environment variable names and internal phrases on the app's screens.
 6. **The background worker and Redis run in production**, so catalog sync and order webhooks are processed.
 7. **The protected customer data request is approved** (see `PROTECTED_CUSTOMER_DATA_ANSWERS.md`). Without it, order data will not reach the app on the review store.
 8. **Emergency developer contact is set** in the Partner Dashboard (email and phone) [4.5.6].
@@ -46,7 +46,7 @@ Create test orders **after** installing ProPo (step 2), because ProPo picks up n
 ### 2. Install
 
 1. Install ProPo from the link provided. Shopify shows the permission screen.
-2. Approve. You land on the ProPo dashboard.
+2. Approve. You land on ProPo's **Home** page.
 
 Expected: no screen asks for a store address, and the app opens inside Shopify admin.
 
@@ -60,10 +60,10 @@ Upgrading or downgrading works from the same page without contacting support.
 
 ### 4. Sync the catalog
 
-1. Open **Dashboard** and click **Sync catalog (bulk operation)**.
+1. On **Home**, click **Sync catalog**.
 2. Refresh after one to two minutes.
 
-Expected: **Cached variants** shows the number of variants in your store.
+Expected: **Variants synced** shows the number of variants in your store.
 
 ### 5. Add a supplier
 
