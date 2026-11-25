@@ -128,3 +128,57 @@ export type ReceiptResponse = {
 export type ApiErrorWithFields = {
   error: { code: string; message: string; fieldErrors?: Record<string, string> };
 };
+
+export type ReceivableTransfer = {
+  id: string;
+  shippedAt: string | null;
+  shippedUnits: number;
+  outstandingUnits: number;
+  countedInUnits: number;
+};
+
+export type TransferListResponse = {
+  receivingEnabled: boolean;
+  transfers: ReceivableTransfer[];
+  hasMore: boolean;
+};
+
+export type TransferLine = {
+  lineId: string;
+  variantGid: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  shippedQty: number;
+  receivedQty: number;
+  rejectedQty: number;
+  /** Units counted in for the next receipt. */
+  countedInQty: number;
+  /** Shipped units nobody has accounted for yet. */
+  outstandingQty: number;
+};
+
+export type TransferSheet = {
+  receivingEnabled: boolean;
+  transfer: {
+    id: string;
+    shippedUnits: number;
+    receivedUnits: number;
+    countedInUnits: number;
+    outstandingUnits: number;
+  };
+  lines: TransferLine[];
+  hasMoreLines: boolean;
+  /** Every shipped unit is received or rejected. */
+  completed: boolean;
+};
+
+export type TransferReceiveResponse =
+  | {
+      ok: true;
+      scanned: { title: string; countedIn: number; outstanding: number } | null;
+      posted: { receivedUnits: number; completed: boolean; alreadyDone: boolean } | null;
+      /** Null when the transfer could not be read back; reload it. */
+      sheet: TransferSheet | null;
+    }
+  | { ok: false; message: string; sheet: TransferSheet | null };

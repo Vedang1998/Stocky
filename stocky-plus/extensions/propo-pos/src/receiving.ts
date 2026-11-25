@@ -8,7 +8,7 @@ import type {
   ReceivingSheet,
 } from "./api-types";
 
-type FetchLike = (
+export type FetchLike = (
   input: string,
   init?: {
     method?: string;
@@ -43,7 +43,7 @@ export type Failure = {
 
 export type Result<T> = { ok: true; value: T } | Failure;
 
-function failure(
+export function failure(
   message: string,
   fieldErrors: Record<string, string> = {},
   status?: number,
@@ -87,7 +87,7 @@ function isAbort(error: unknown): boolean {
   );
 }
 
-async function call<T>(
+export async function call<T>(
   fetchImpl: FetchLike,
   url: string,
   init: Parameters<FetchLike>[1],
@@ -108,7 +108,7 @@ async function call<T>(
   }
 }
 
-function withLocation(path: string, locationId: number | null, extra: Record<string, string> = {}) {
+export function withLocation(path: string, locationId: number | null, extra: Record<string, string> = {}) {
   const params = new URLSearchParams(extra);
   if (locationId !== null) params.set("location", String(locationId));
   const query = params.toString();
@@ -212,9 +212,13 @@ export function setCount(counts: Counts, lineItemId: string, value: number): Cou
 }
 
 /** Read what a person typed in a count field as a whole number of units. */
-export function readCount(value: string | null | undefined): number {
+export function parseCount(value: string | null | undefined): number | null {
   const text = (value ?? "").trim();
-  return /^\d{1,7}$/.test(text) ? Math.min(Number(text), MAX_COUNT) : 0;
+  return /^\d{1,7}$/.test(text) ? Math.min(Number(text), MAX_COUNT) : null;
+}
+
+export function readCount(value: string | null | undefined): number {
+  return parseCount(value) ?? 0;
 }
 
 /**
