@@ -81,6 +81,10 @@ export type ReceivingDeps = {
 
 const receivingSwitchedOn = () => isInventoryWriteEnabled("receiptWrites");
 
+function receivingIsOn(deps: Pick<ReceivingDeps, "receivingEnabled">): boolean {
+  return (deps.receivingEnabled ?? receivingSwitchedOn)();
+}
+
 function toApiError(error: unknown): never {
   if (error instanceof PosApiError) throw error;
   if (error instanceof PurchasingError) {
@@ -159,7 +163,7 @@ export async function listReceivableOrders(
     search,
   });
   return {
-    receivingEnabled: (deps.receivingEnabled ?? receivingSwitchedOn)(),
+    receivingEnabled: receivingIsOn(deps),
     hasMore: list.hasNextPage,
     orders: list.items.map((item) => ({
       id: item.id,
@@ -182,9 +186,18 @@ export async function getReceivingSheet(
 ): Promise<PosReceivingSheet> {
   await requirePosPlan(db);
   const po = await loadOrderAtLocation(db, purchaseOrderId, locationGid);
+  return buildSheet(db, po, deps);
+}
+
+/** The sheet for an order already loaded and checked against the POS location. */
+async function buildSheet(
+  db: TenantDb,
+  po: Awaited<ReturnType<typeof loadOrderAtLocation>>,
+  deps: Pick<ReceivingDeps, "receivingEnabled">,
+): Promise<PosReceivingSheet> {
   const worksheet = await getReceivingWorksheet(db, po.id).catch(toApiError);
   return {
-    receivingEnabled: (deps.receivingEnabled ?? receivingSwitchedOn)(),
+    receivingEnabled: receivingIsOn(deps),
     order: {
       id: po.id,
       poNumber: po.poNumber ?? po.id,
@@ -208,7 +221,7 @@ export async function receiveAtPos(
     throw new PosApiError(403, "forbidden", STAFF_REQUIRED_MESSAGE);
   }
   const input = parseReceiptBody(body, purchaseOrderId);
-  await loadOrderAtLocation(db, purchaseOrderId, locationGid);
+  const po = await loadOrderAtLocation(db, purchaseOrderId, locationGid);
 
   const admin = await deps.adminFor(context.shop.myshopifyDomain);
   const result = await postPurchaseOrderReceipt(
@@ -223,6 +236,6 @@ export async function receiveAtPos(
     complete: result.complete,
     message: result.receipt === null ? RECEIVING_OFF_MESSAGE : result.message,
     receiptNumber: result.receipt?.receiptNumber ?? null,
-    sheet: await getReceivingSheet(db, purchaseOrderId, locationGid, deps),
+    sheet: await buildSheet(db, po, deps),
   };
 }

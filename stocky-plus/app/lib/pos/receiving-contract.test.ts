@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type * as Contract from "../../../extensions/propo-pos/src/api-types";
-import { matchLine } from "../../../extensions/propo-pos/src/receiving";
+import { MAX_COUNT, matchLine } from "../../../extensions/propo-pos/src/receiving";
+import { MAX_RECEIPT_QUANTITY } from "../../services/purchasing/receiving.server";
 import { findScannedLine } from "../purchasing/receiving-scan";
 import type {
   PosReceiptResponse,
@@ -21,6 +22,12 @@ describe("POS receiving response contract", () => {
       Same<PosReceiptResponse, Contract.ReceiptResponse>,
     ] = [true, true, true, true, true];
     expect(contract).toEqual([true, true, true, true, true]);
+  });
+});
+
+describe("quantity limit", () => {
+  it("clamps counts on the device at the limit the server enforces", () => {
+    expect(MAX_COUNT).toBe(MAX_RECEIPT_QUANTITY);
   });
 });
 
