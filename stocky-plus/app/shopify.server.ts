@@ -41,9 +41,8 @@ const shopify = shopifyApp({
     afterAuth: async ({ session, admin }) => {
       const { tenant, reactivated } =
         await runAfterAuthTenantBootstrap(session);
-      // Shopify cancels the subscription at uninstall; read the plan again so
-      // a reinstalled shop's stored snapshot is not the one from before.
-      await refreshPlanSnapshotAfterAuth({
+      // Never throws, so it runs alongside the enqueues below.
+      const planRefresh = refreshPlanSnapshotAfterAuth({
         admin,
         db: createTenantDb(tenant),
         reactivated,
@@ -61,6 +60,7 @@ const shopify = shopifyApp({
       } catch (err) {
         console.warn("Order history import enqueue skipped:", err);
       }
+      await planRefresh;
     },
   },
 });

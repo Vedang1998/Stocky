@@ -457,6 +457,10 @@ describe("getShopEntitlements", () => {
 
 describe("refreshPlanSnapshotAfterAuth", () => {
   const STALE = { subscriptionActive: true, subscriptionPlan: "growth" };
+  const CLEARED = {
+    where: { shop: SHOP_DOMAIN },
+    data: { subscriptionActive: false, subscriptionPlan: null },
+  };
   const failingAdmin = () => ({
     graphql: vi.fn(async () => {
       throw new Error("Shopify unavailable");
@@ -477,10 +481,7 @@ describe("refreshPlanSnapshotAfterAuth", () => {
       reactivated: true,
     });
 
-    expect(shopSettings.update).toHaveBeenCalledWith({
-      where: { shop: SHOP_DOMAIN },
-      data: { subscriptionActive: false, subscriptionPlan: null },
-    });
+    expect(shopSettings.update).toHaveBeenCalledWith(CLEARED);
   });
 
   it("keeps an active plan Shopify still reports", async () => {
@@ -510,10 +511,7 @@ describe("refreshPlanSnapshotAfterAuth", () => {
       }),
     ).resolves.toBeUndefined();
 
-    expect(shopSettings.update).toHaveBeenCalledWith({
-      where: { shop: SHOP_DOMAIN },
-      data: { subscriptionActive: false, subscriptionPlan: null },
-    });
+    expect(shopSettings.update).toHaveBeenCalledWith(CLEARED);
     const logged = JSON.stringify(error.mock.calls);
     expect(logged).toContain("Shopify unavailable");
     expect(logged).toContain(SHOP_ID);

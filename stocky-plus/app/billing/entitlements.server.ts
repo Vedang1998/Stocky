@@ -50,17 +50,11 @@ export async function getShopEntitlements({
 }
 
 /**
- * Called from the afterAuth hook. Shopify cancels the app's subscription at
- * uninstall, but the snapshot on ShopSettings is only rewritten when a page
- * reads the plan (Billing, Replenishment), so after a reinstall the
- * snapshot-gated routes would still see the old plan. Reading it again here
- * fixes that at the moment the shop comes back.
- *
- * Never throws: a failed read must not turn the install into an error page.
- * When the read fails for a shop that was just reactivated, the stored plan is
- * from before the uninstall and is known to be stale, so it is cleared (fail
- * closed); the next Billing or Replenishment visit restores a real plan.
- * Otherwise the row is left as it is and the failure is logged.
+ * Re-reads the plan once afterAuth has bootstrapped the shop: Shopify cancels
+ * the subscription at uninstall, and otherwise only Billing and Replenishment
+ * rewrite the snapshot. Never throws, so a failed read cannot break the
+ * install. If the read fails for a shop that was just reactivated, the stored
+ * plan dates from before the uninstall, so it is cleared (fail closed).
  */
 export async function refreshPlanSnapshotAfterAuth({
   admin,
@@ -71,30 +65,28 @@ export async function refreshPlanSnapshotAfterAuth({
   db: TenantDb;
   reactivated: boolean;
 }): Promise<void> {
+  const logFailure = (what: string) => (error: unknown) =>
+    console.error(`[billing] afterAuth ${what}:`, describeFailure(error), {
+      shopId: db.authority.shopId,
+      reactivated,
+    });
+
   try {
     await getShopEntitlements({ admin, db });
-    return;
   } catch (error) {
-    console.error(
-      "[billing] afterAuth plan refresh failed:",
-      describeFailure(error),
-      { shopId: db.authority.shopId, reactivated },
-    );
-  }
-  if (!reactivated) return;
-  try {
-    await persistEntitlementSnapshot(db, {
-      subscriptionActive: false,
-      subscriptionPlan: null,
-    });
-  } catch (error) {
-    console.error(
-      "[billing] afterAuth could not clear the stale plan after a reinstall:",
-      describeFailure(error),
-      { shopId: db.authority.shopId },
-    );
+    logFailure("plan refresh failed")(error);
+    if (reactivated) {
+      await persistEntitlementSnapshot(db, NO_PLAN_SNAPSHOT).catch(
+        logFailure("could not clear the stale plan after a reinstall"),
+      );
+    }
   }
 }
+
+const NO_PLAN_SNAPSHOT: EntitlementSnapshot = {
+  subscriptionActive: false,
+  subscriptionPlan: null,
+};
 
 /** Name and message only; never the whole error, which may carry a request. */
 function describeFailure(error: unknown): string {
