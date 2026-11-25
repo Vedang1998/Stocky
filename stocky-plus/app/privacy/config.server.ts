@@ -1,15 +1,20 @@
 /** Shopify requires a compliance request to be completed within 30 days. */
 export const PRIVACY_REQUEST_DUE_DAYS = 30;
 
-export const DEFAULT_UNINSTALLED_RETENTION_DAYS = 30;
+/**
+ * Shopify's API Terms (section 6.2.3) require all copies of a merchant's data
+ * to be deleted within 30 days of uninstall. The window stops two days short
+ * of that so the erasure, and its retries after a failure, finish in time.
+ */
+const MAX_RETENTION_DAYS = 28;
+export const DEFAULT_UNINSTALLED_RETENTION_DAYS = MAX_RETENTION_DAYS;
 const MIN_RETENTION_DAYS = 1;
-const MAX_RETENTION_DAYS = 365;
 
 /**
  * Days an uninstalled shop's data is kept before it is erased even if
  * Shopify's shop/redact webhook never arrives. Set with
- * PRIVACY_UNINSTALLED_RETENTION_DAYS; an invalid value is a startup error,
- * never a silent fallback.
+ * PRIVACY_UNINSTALLED_RETENTION_DAYS to shorten it; a value outside 1 to 28
+ * is a startup error, never a silent fallback.
  */
 export function resolveUninstalledRetentionDays(
   env: NodeJS.ProcessEnv = process.env,

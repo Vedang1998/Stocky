@@ -9,7 +9,7 @@ Several statements in the policy are true only once code that is not on `main` t
 
 | # | Statement in the policy | State on `main` (2685081) | What has to happen |
 |---|---|---|---|
-| 1 | Store data is deleted after Shopify's `shop/redact` request | Done. An uninstalled store's data is erased when the request arrives, or 30 days after uninstall if it never does (`docs/app-store/DATA_DELETION.md`). | Confirm the 30-day window and any record the law requires us to keep with counsel. |
+| 1 | Store data is deleted after Shopify's `shop/redact` request | Done. An uninstalled store's data is erased when the request arrives, or 28 days after uninstall if it never does, inside Shopify's 30-day limit (`docs/app-store/DATA_DELETION.md`). | Confirm with counsel any record the law requires us to keep. |
 | 2 | Customer data requests and deletion requests are handled | Done. Each request is recorded and closed as "no customer data held". Order records named in a deletion request are kept; they carry no shopper details. | Decide with counsel whether the named order records should be deleted instead. Section 6 describes what the code does today. |
 | 3 | Backup retention period | Not set in the repository. | `OWNER TO FILL` from the hosting/database provider. |
 | 4 | Encryption at rest | The app encrypts the Shopify access tokens it stores. Encryption of the rest of the database is not provable from the repository, so the policy does not claim it. | If the database provider encrypts at rest, add it with the provider's wording. |
@@ -135,7 +135,7 @@ We use information only for these purposes. We do not use one store's informatio
 
 **When the app is uninstalled**, ProPo stops processing the store straight away, cancels queued work and deletes the store's Shopify access tokens.
 
-**48 hours after uninstall**, Shopify asks us to erase the store's data. We then delete the store's information from our live systems within 30 days of that request, keeping only a record that the deletion took place and anything the law requires us to keep. If that request does not reach us, we delete the store's information ourselves `OWNER TO CONFIRM: 30` days after uninstall. Deleted data may remain in backups until they expire after `OWNER TO FILL: backup retention period`.
+**48 hours after uninstall**, Shopify asks us to erase the store's data. We then delete the store's information from our live systems, and in every case within 30 days of the uninstall, keeping only a record that the deletion took place and anything the law requires us to keep. If that request does not reach us, we delete the store's information ourselves 28 days after uninstall. Deleted data may remain in backups until they expire after `OWNER TO FILL: backup retention period`.
 
 **Shopper requests.** When a shopper asks a merchant for their data or for deletion, Shopify tells ProPo which orders are involved. ProPo holds nothing that identifies a shopper, so there is no personal information to hand over or delete; we record each request and that it was answered. The order records themselves (order number, amounts and line items) stay in the merchant's sales history. `OWNER TO DECIDE with counsel: keep these records, or delete the orders named in a deletion request.`
 

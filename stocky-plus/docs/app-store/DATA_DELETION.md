@@ -9,7 +9,7 @@ How ProPo answers Shopify's three mandatory compliance webhooks and when it dele
 | `customers/data_request` | Records the request (Shopify's request id and the number of orders listed). Closes it as "no customer data held". | On receipt |
 | `customers/redact` | Records the request (number of orders listed). Closes it as "no customer data held". | On receipt |
 | `shop/redact` (Shopify sends it 48 hours after uninstall) | Records the request. If the shop is recorded as uninstalled, the worker marks it as being erased, deletes its sessions and queued jobs, deletes every database row that belongs to the shop in batches, then deletes the shop record. If the shop is not recorded as uninstalled, the request waits (see Safety rules). | Within about a minute for a typical uninstalled shop; Shopify allows 30 days |
-| Shop uninstalled for `PRIVACY_UNINSTALLED_RETENTION_DAYS` (default 30) with no `shop/redact` received | Same erasure, opened by the worker itself. | Next worker run after the window ends |
+| Shop uninstalled for `PRIVACY_UNINSTALLED_RETENTION_DAYS` (default and maximum 28) with no `shop/redact` received | Same erasure, opened by the worker itself. | Next worker run after the window ends |
 
 Every request is one row in the `PrivacyRequest` table and is written before Shopify gets its 200, so an acknowledged request cannot be lost. A redelivery of the same webhook is recognised by its webhook id and recorded once.
 
@@ -55,5 +55,5 @@ Not covered:
 
 ## Owner decisions
 
-1. **Retention window.** `PRIVACY_UNINSTALLED_RETENTION_DAYS` defaults to 30. The value is a legal and commercial choice (shorter is safer for privacy, longer lets a returning merchant keep their purchase orders and suppliers) and must match the privacy policy.
+1. **Retention window.** `PRIVACY_UNINSTALLED_RETENTION_DAYS` defaults to 28 and cannot be set higher: Shopify's API Terms (section 6.2.3) require a merchant's data to be deleted within 30 days of uninstall, and the two days left over let the erasure and its retries finish. It can be shortened (safer for privacy, but a returning merchant loses purchase orders and suppliers sooner); the privacy policy must say the same.
 2. **Order facts on `customers/redact`.** Kept, for the reason above. If counsel wants them deleted instead, the listed orders' rows would have to be removed and blocked from re-syncing.
