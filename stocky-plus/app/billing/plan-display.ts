@@ -36,7 +36,7 @@ export function planSummary(
   } | null,
 ): string {
   if (!settings?.subscriptionActive) {
-    return "No plan selected. Choose a plan to use the Buying Table.";
+    return "No active plan. An active plan is needed to make changes.";
   }
   const plan = findSelfServePlan(settings.subscriptionPlan);
   return plan ? `${plan.displayName} plan` : "Your plan is active.";

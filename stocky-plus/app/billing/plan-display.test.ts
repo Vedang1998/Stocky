@@ -235,14 +235,14 @@ describe("planSummary", () => {
       subscriptionPlan: "growth",
     });
     expect(text).toBe(
-      "No plan selected. Choose a plan to use the Buying Table.",
+      "No active plan. An active plan is needed to make changes.",
     );
     expect(text).not.toMatch(/free/i);
   });
 
   it("treats a missing settings row as no plan", () => {
     expect(planSummary(null)).toBe(
-      "No plan selected. Choose a plan to use the Buying Table.",
+      "No active plan. An active plan is needed to make changes.",
     );
   });
 });

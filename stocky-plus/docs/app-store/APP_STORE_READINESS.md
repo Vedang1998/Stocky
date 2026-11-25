@@ -18,7 +18,7 @@ Last updated: 2026-11-19.
 | Products created after install get their inventory facts; a dead-lettered webhook job is no longer delivered again | #103 (issue #94) |
 | A webhook or background job delivered a moment before the dispatcher recorded it runs once instead of being lost; a job whose queue delivery is gone is retried or dead-lettered within about six minutes | #111 (issue #122) |
 | The first page load after a reinstall renders: requests wait up to five seconds for the afterAuth hook to re-enable the shop, instead of answering 500 | #111 (issue #123) |
-| Merchant screens carry no developer or planning wording; a unit test refuses developer commands, environment variable names and internal phrases in the app's screens and stock-change messages (issue #80) | this PR |
+| Merchant screens carry no developer or planning wording (issue #80). A unit test refuses developer commands, environment variable names and internal phrases in the `app.*` route screens, shared components, services and the lib and billing modules that hold merchant wording; it does not read the POS extension, `.ts` routes or text split across joined strings | #125 |
 | Container image builds on the pinned Node and npm, runs as a non-root user, does not run migrations at start and does not carry the migration files | `Dockerfile`, R-189 |
 | Drafts for the listing, privacy policy, reviewer instructions and the protected customer data form | `LISTING_DRAFT.md`, `PRIVACY_POLICY_DRAFT.md`, `REVIEWER_TEST_INSTRUCTIONS.md`, `PROTECTED_CUSTOMER_DATA_ANSWERS.md` |
 | `read_all_orders` approved by Shopify for the public app | Checked in the Partner Dashboard on 2026-11-10 |
