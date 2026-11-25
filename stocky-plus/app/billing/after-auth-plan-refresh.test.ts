@@ -6,12 +6,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { appConfigs, bootstrap, refresh, createTenantDb } = vi.hoisted(() => ({
-  appConfigs: [] as Array<Record<string, unknown>>,
-  bootstrap: vi.fn(),
-  refresh: vi.fn(),
-  createTenantDb: vi.fn(),
-}));
+const { appConfigs, bootstrap, refresh, createTenantDb, enqueueCatalog } =
+  vi.hoisted(() => ({
+    appConfigs: [] as Array<Record<string, unknown>>,
+    bootstrap: vi.fn(),
+    refresh: vi.fn(),
+    createTenantDb: vi.fn(),
+    enqueueCatalog: vi.fn(),
+  }));
 
 vi.mock("@shopify/shopify-app-react-router/adapters/node", () => ({}));
 vi.mock("@shopify/shopify-app-react-router/server", () => ({
@@ -38,7 +40,7 @@ vi.mock("./entitlements.server", () => ({
   refreshPlanSnapshotAfterAuth: refresh,
 }));
 vi.mock("../jobs/queue.server", () => ({
-  enqueueAfterAuthCatalogSync: vi.fn(),
+  enqueueAfterAuthCatalogSync: enqueueCatalog,
   enqueueOrderFactsSync: vi.fn(),
 }));
 
@@ -59,6 +61,8 @@ describe("afterAuth hook", () => {
   beforeEach(() => {
     bootstrap.mockReset();
     refresh.mockReset();
+    refresh.mockResolvedValue(undefined);
+    enqueueCatalog.mockReset();
     createTenantDb.mockReset();
     createTenantDb.mockReturnValue(tenantDb);
   });
@@ -89,5 +93,40 @@ describe("afterAuth hook", () => {
       afterAuthHook()({ session: { shop: tenant.myshopifyDomain }, admin }),
     ).rejects.toThrow("bootstrap failed");
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("does not finish until the plan has been read", async () => {
+    bootstrap.mockResolvedValue({ tenant, reactivated: true });
+    let finishRead!: () => void;
+    refresh.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finishRead = resolve;
+      }),
+    );
+
+    let finished = false;
+    const hook = afterAuthHook()({
+      session: { shop: tenant.myshopifyDomain },
+      admin,
+    }).then(() => {
+      finished = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(enqueueCatalog).toHaveBeenCalled();
+    expect(finished).toBe(false);
+    finishRead();
+    await hook;
+    expect(finished).toBe(true);
+  });
+
+  it("fails the install when the stale plan cannot be cleared, after queueing the sync", async () => {
+    bootstrap.mockResolvedValue({ tenant, reactivated: true });
+    refresh.mockRejectedValue(new Error("database unavailable"));
+
+    await expect(
+      afterAuthHook()({ session: { shop: tenant.myshopifyDomain }, admin }),
+    ).rejects.toThrow("database unavailable");
+    expect(enqueueCatalog).toHaveBeenCalled();
   });
 });

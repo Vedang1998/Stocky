@@ -49,35 +49,47 @@ export async function getShopEntitlements({
   return entitlements;
 }
 
+/** Each read of the plan in afterAuth; a slow Shopify must not stall the install. */
+export const AFTER_AUTH_PLAN_READ_TIMEOUT_MS = 5_000;
+const AFTER_AUTH_PLAN_READ_ATTEMPTS = 2;
+
 /**
  * Re-reads the plan once afterAuth has bootstrapped the shop: Shopify cancels
  * the subscription at uninstall, and otherwise only Billing and Replenishment
- * rewrite the snapshot. Never throws, so a failed read cannot break the
- * install. If the read fails for a shop that was just reactivated, the stored
- * plan dates from before the uninstall, so it is cleared (fail closed).
+ * rewrite the snapshot.
+ *
+ * For a shop that was just reactivated, the stored plan dates from before the
+ * uninstall, so it is cleared first (fail closed) and the read then restores
+ * the real one. That write must succeed: it throws, like any other failure to
+ * write the shop's own settings during the install. A failed or slow read is
+ * logged and tried once more; it never throws.
  */
 export async function refreshPlanSnapshotAfterAuth({
   admin,
   db,
   reactivated,
+  timeoutMs = AFTER_AUTH_PLAN_READ_TIMEOUT_MS,
 }: {
   admin: AdminGraphQLClient;
   db: TenantDb;
   reactivated: boolean;
+  timeoutMs?: number;
 }): Promise<void> {
-  const logFailure = (what: string) => (error: unknown) =>
-    console.error(`[billing] afterAuth ${what}:`, describeFailure(error), {
-      shopId: db.authority.shopId,
-      reactivated,
-    });
+  if (reactivated) await persistEntitlementSnapshot(db, NO_PLAN_SNAPSHOT);
 
-  try {
-    await getShopEntitlements({ admin, db });
-  } catch (error) {
-    logFailure("plan refresh failed")(error);
-    if (reactivated) {
-      await persistEntitlementSnapshot(db, NO_PLAN_SNAPSHOT).catch(
-        logFailure("could not clear the stale plan after a reinstall"),
+  for (
+    let attempt = 1;
+    attempt <= AFTER_AUTH_PLAN_READ_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      await withTimeout(getShopEntitlements({ admin, db }), timeoutMs);
+      return;
+    } catch (error) {
+      console.error(
+        "[billing] afterAuth plan refresh failed:",
+        describeFailure(error),
+        { shopId: db.authority.shopId, reactivated, attempt },
       );
     }
   }
@@ -88,8 +100,25 @@ const NO_PLAN_SNAPSHOT: EntitlementSnapshot = {
   subscriptionPlan: null,
 };
 
-/** Name and message only; never the whole error, which may carry a request. */
+/**
+ * Rejects after `ms`; the read itself is not cancelled, and if it finishes
+ * later it still stores what Shopify reported.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms} ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Name and message, or the HTTP status for the Response the Shopify library
+ * throws on an HTTP error (for a 401 it has already dropped the stored token,
+ * and the next request exchanges again). Never the whole error.
+ */
 function describeFailure(error: unknown): string {
+  if (error instanceof Response) return `HTTP ${error.status}`;
   return error instanceof Error
     ? `${error.name}: ${error.message}`
     : "unknown error";

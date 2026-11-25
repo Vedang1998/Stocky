@@ -41,12 +41,15 @@ const shopify = shopifyApp({
     afterAuth: async ({ session, admin }) => {
       const { tenant, reactivated } =
         await runAfterAuthTenantBootstrap(session);
-      // Never throws, so it runs alongside the enqueues below.
+      // Runs alongside the enqueues below and is awaited at the end. The
+      // empty catch only stops a rejection being reported as unhandled while
+      // the enqueues run; the await below still throws it.
       const planRefresh = refreshPlanSnapshotAfterAuth({
         admin,
         db: createTenantDb(tenant),
         reactivated,
       });
+      planRefresh.catch(() => {});
       try {
         await enqueueAfterAuthCatalogSync(tenant);
       } catch (err) {
