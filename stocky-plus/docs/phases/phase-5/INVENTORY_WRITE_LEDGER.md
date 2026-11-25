@@ -526,9 +526,9 @@ who counted a line, who asked for a recount, who completed or cancelled the
 document, and every request that changes stock in Shopify (the ledger always
 requires an actor), and who took a recount request back (in the recount
 history). Edits to a draft's items, zero fill and the review of moved stock
-are refused without a staff member but are not yet stored with one. The check is made in the routes, after the
-plan gate; the draft and counting services still take an optional actor in
-their signatures.
+are refused without a staff member but are not yet stored with one. The
+check is made in the routes, after the plan gate; the draft and counting
+services still take an optional actor in their signatures.
 
 ## Limits and known gaps
 
