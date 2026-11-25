@@ -16,6 +16,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) =>
   handlePosApiRequest(request, async ({ db }) => {
     const locationGid = requireReceivingLocation(
       parsePosLocation(new URL(request.url).searchParams.get("location")),
+      "counting",
     );
     return posJson(await listCountableStocktakes(db, locationGid));
   });

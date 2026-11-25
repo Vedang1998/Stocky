@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { CountableStocktake, CountSheet } from "./api-types";
 import {
+  createScanQueue,
   loadCountSheet,
   loadStocktakes,
   noteCounted,
+  parseCount,
   progressText,
   removeCounted,
   sendCount,
@@ -11,7 +13,6 @@ import {
   type CountedItem,
 } from "./counting";
 import { formatQuantity } from "./format";
-import { readCount } from "./receiving";
 
 export function Count({ onBack }: { onBack: () => void }) {
   const locationId = shopify.session.currentSession.locationId ?? null;
@@ -145,6 +146,7 @@ function CountSheetScreen({
     shopify.scanner.sources.current.value.includes("camera"),
   );
   const busyRef = useRef(false);
+  const [fieldKey, setFieldKey] = useState(0);
 
   useEffect(() => {
     const controller = typeof AbortController === "function" ? new AbortController() : null;
@@ -169,25 +171,27 @@ function CountSheetScreen({
     return () => controller?.abort();
   }, [locationId, stocktakeId, attempt]);
 
-  const scan = useCallback(
-    async (raw: string) => {
-      const code = raw.trim();
-      if (!code || busyRef.current) return;
+  // Scans are counted one at a time, in order, and only while the count is
+  // on screen: nothing is recorded that staff cannot see confirmed.
+  const scanOpenRef = useRef(false);
+  useEffect(() => {
+    scanOpenRef.current = state.kind === "ready";
+  }, [state.kind]);
+
+  const runScan = useCallback(
+    async (code: string): Promise<boolean> => {
       busyRef.current = true;
       setBusy(true);
       setNotice(null);
       const result = await sendScan(fetch, locationId, stocktakeId, code);
-      busyRef.current = false;
-      setBusy(false);
-
       if (!result.ok) {
         setNotice({ tone: "critical", heading: "Scan not confirmed", detail: result.message });
-        return;
+        return false;
       }
       setProgress(result.value.progress);
       if (!result.value.ok) {
         setNotice({ tone: "warning", heading: `“${code}” wasn’t counted`, detail: result.value.message });
-        return;
+        return true;
       }
       const { line } = result.value;
       const counted = line.countedQty;
@@ -205,8 +209,39 @@ function CountSheetScreen({
             ? "Added to this count."
             : undefined,
       });
+      return true;
     },
     [locationId, stocktakeId],
+  );
+
+  const runScanRef = useRef(runScan);
+  useEffect(() => {
+    runScanRef.current = runScan;
+  }, [runScan]);
+  const [queue] = useState(() =>
+    createScanQueue({
+      run: (code) => runScanRef.current(code),
+      onIdle: (dropped) => {
+        busyRef.current = false;
+        setBusy(false);
+        if (dropped > 0) {
+          setNotice({
+            tone: "critical",
+            heading: "Scan not confirmed",
+            detail: `${dropped} later ${dropped === 1 ? "scan was" : "scans were"} not sent. Check the counts shown, then scan again.`,
+          });
+        }
+      },
+    }),
+  );
+
+  const scan = useCallback(
+    (raw: string) => {
+      const code = raw.trim();
+      if (!code || !scanOpenRef.current) return;
+      queue.push(code);
+    },
+    [queue],
   );
 
   useEffect(() => {
@@ -215,7 +250,7 @@ function CountSheetScreen({
     const stopScans = shopify.scanner.scannerData.current.subscribe((result) => {
       if (!listening || !result.data) return;
       if (result.source === "camera") shopify.scanner.hideCameraScanner();
-      void scan(result.data);
+      scan(result.data);
     });
     listening = true;
     const stopSources = shopify.scanner.sources.current.subscribe((sources) =>
@@ -228,7 +263,7 @@ function CountSheetScreen({
   }, [scan]);
 
   const setLine = async (item: CountedItem, value: number | null) => {
-    if (busyRef.current) return;
+    if (busyRef.current || !scanOpenRef.current) return;
     busyRef.current = true;
     setBusy(true);
     setNotice(null);
@@ -280,9 +315,13 @@ function CountSheetScreen({
                   {state.sheet.stocktake.blind ? " · Blind count: expected quantities stay hidden" : ""}
                 </s-text>
                 <s-search-field
+                  key={fieldKey}
                   placeholder="Scan or enter a barcode or SKU"
-                  disabled={busy}
-                  onChange={(event) => void scan(event.currentTarget.value ?? "")}
+                  onChange={(event) => {
+                    scan(event.currentTarget.value ?? "");
+                    // Empty the field so the same code can be scanned again.
+                    setFieldKey((n) => n + 1);
+                  }}
                 />
                 {cameraAvailable && (
                   <s-button onClick={() => shopify.scanner.showCameraScanner()}>
@@ -331,6 +370,8 @@ function CountedRow({
   disabled: boolean;
   onSet: (value: number | null) => void;
 }) {
+  // Bumped when typed text is not saved, so the field shows the saved count again.
+  const [fieldKey, setFieldKey] = useState(0);
   return (
     <s-section heading={item.title}>
       <s-stack direction="inline" gap="small">
@@ -338,11 +379,21 @@ function CountedRow({
           −
         </s-button>
         <s-number-field
+          key={`${item.countedQty}-${fieldKey}`}
           label="Counted"
           value={String(item.countedQty)}
           inputMode="numeric"
           disabled={disabled}
-          onChange={(event) => onSet(readCount(event.currentTarget.value))}
+          onChange={(event) => {
+            // Empty or invalid text never becomes a count of 0: completing the
+            // stocktake would zero the item in Shopify.
+            const typed = parseCount(event.currentTarget.value);
+            if (typed === null || typed === item.countedQty) {
+              setFieldKey((n) => n + 1);
+              return;
+            }
+            onSet(typed);
+          }}
         />
         <s-button disabled={disabled} onClick={() => onSet(item.countedQty + 1)}>
           +

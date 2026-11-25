@@ -21,6 +21,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) =>
   handlePosApiRequest(request, async ({ db }) => {
     const locationGid = requireReceivingLocation(
       parsePosLocation(new URL(request.url).searchParams.get("location")),
+      "counting",
     );
     return posJson(await getCountSheet(db, params.id ?? "", locationGid));
   });
@@ -39,6 +40,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) =>
     }
     const locationGid = requireReceivingLocation(
       parsePosLocation(new URL(request.url).searchParams.get("location")),
+      "counting",
     );
     const body = await readPosJson(request, MAX_BODY_BYTES);
     const { unauthenticated } = await import("../shopify.server");

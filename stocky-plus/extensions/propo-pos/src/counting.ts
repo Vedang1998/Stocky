@@ -5,6 +5,7 @@ import type {
 } from "./api-types";
 import {
   call,
+  MAX_COUNT,
   RECEIVING_MESSAGES,
   failure,
   withLocation,
@@ -61,8 +62,14 @@ async function send(
       body: JSON.stringify(body),
     },
   );
-  // A dropped connection leaves unknown whether the scan was added.
-  if (result === null || (!result.ok && result.message === RECEIVING_MESSAGES.offline)) {
+  // A dropped connection, or a server error after the work may have been
+  // saved, leaves unknown whether the scan was added.
+  if (
+    result === null ||
+    (!result.ok &&
+      (result.message === RECEIVING_MESSAGES.offline ||
+        (result.status !== undefined && result.status >= 500)))
+  ) {
     return failure(COUNT_MESSAGES.scanUnsure);
   }
   return result;
@@ -113,4 +120,51 @@ export function removeCounted(
 
 export function progressText(counted: number, total: number): string {
   return `${counted} of ${total} ${total === 1 ? "item" : "items"} counted`;
+}
+
+/**
+ * Read what staff typed into a count field. Empty or invalid text is `null`
+ * (leave the saved count alone); a number saves, capped at MAX_COUNT.
+ */
+export function parseCount(value: string | null | undefined): number | null {
+  const text = (value ?? "").trim();
+  if (!/^\d{1,7}$/.test(text)) return null;
+  return Math.min(Number(text), MAX_COUNT);
+}
+
+/**
+ * Sends scans one at a time, in the order they arrive, so quick scans are
+ * all counted. If one cannot be confirmed (`run` returns false) the scans
+ * behind it are dropped and reported through the return of `push`'s drain.
+ */
+export function createScanQueue(options: {
+  run: (code: string) => Promise<boolean>;
+  onIdle: (dropped: number) => void;
+}) {
+  const pending: string[] = [];
+  let draining = false;
+
+  async function drain() {
+    draining = true;
+    let dropped = 0;
+    try {
+      while (pending.length > 0) {
+        const code = pending.shift() as string;
+        if (!(await options.run(code))) {
+          dropped += pending.length;
+          pending.length = 0;
+        }
+      }
+    } finally {
+      draining = false;
+      options.onIdle(dropped);
+    }
+  }
+
+  return {
+    push(code: string) {
+      pending.push(code);
+      if (!draining) void drain();
+    },
+  };
 }

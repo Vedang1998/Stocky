@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   COUNT_MESSAGES,
+  createScanQueue,
   loadCountSheet,
   loadStocktakes,
   noteCounted,
+  parseCount,
   progressText,
   removeCounted,
   sendCount,
@@ -93,6 +95,100 @@ describe("requests", () => {
     const result = await sendScan(fetchImpl, 11, "st-1", "1");
 
     expect(result).toMatchObject({ ok: false, message: COUNT_MESSAGES.scanUnsure });
+  });
+
+  it("does not tell staff to just retry a scan when the server errored after it may have saved", async () => {
+    for (const status of [500, 502, 503]) {
+      const result = await sendScan(respond(status), 11, "st-1", "1");
+      expect(result).toMatchObject({ ok: false, message: COUNT_MESSAGES.scanUnsure });
+    }
+  });
+
+  it("still passes a refusal the server explained through", async () => {
+    const fetchImpl = respond(409, { error: { code: "conflict", message: "This count is closed." } });
+    expect(await sendScan(fetchImpl, 11, "st-1", "1")).toMatchObject({ ok: false, message: "This count is closed." });
+  });
+});
+
+describe("typed counts", () => {
+  it("ignores empty and invalid text instead of counting 0", () => {
+    for (const text of ["", "  ", "abc", "-1", "1.5", "12345678", null, undefined]) {
+      expect(parseCount(text)).toBeNull();
+    }
+  });
+
+  it("reads real numbers, including a typed 0", () => {
+    expect(parseCount("12")).toBe(12);
+    expect(parseCount(" 0 ")).toBe(0);
+    expect(parseCount("9999999")).toBe(1_000_000);
+  });
+});
+
+describe("scan queue", () => {
+  it("counts quick scans one at a time, in order, and the same code twice", async () => {
+    const seen: string[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const idle = vi.fn();
+    const queue = createScanQueue({
+      run: async (code) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await Promise.resolve();
+        seen.push(code);
+        inFlight -= 1;
+        return true;
+      },
+      onIdle: idle,
+    });
+
+    queue.push("A");
+    queue.push("A");
+    queue.push("B");
+    await vi.waitFor(() => expect(idle).toHaveBeenCalled());
+
+    expect(seen).toEqual(["A", "A", "B"]);
+    expect(maxInFlight).toBe(1);
+    expect(idle).toHaveBeenCalledTimes(1);
+    expect(idle).toHaveBeenCalledWith(0);
+  });
+
+  it("drops the scans behind one that could not be confirmed and says how many", async () => {
+    const seen: string[] = [];
+    const idle = vi.fn();
+    const queue = createScanQueue({
+      run: async (code) => {
+        seen.push(code);
+        return code !== "B";
+      },
+      onIdle: idle,
+    });
+
+    queue.push("A");
+    queue.push("B");
+    queue.push("C");
+    queue.push("D");
+    await vi.waitFor(() => expect(idle).toHaveBeenCalled());
+
+    expect(seen).toEqual(["A", "B"]);
+    expect(idle).toHaveBeenCalledWith(2);
+  });
+
+  it("accepts new scans after going idle", async () => {
+    const seen: string[] = [];
+    const idle = vi.fn();
+    const queue = createScanQueue({
+      run: async (code) => {
+        seen.push(code);
+        return true;
+      },
+      onIdle: idle,
+    });
+    queue.push("A");
+    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(1));
+    queue.push("B");
+    await vi.waitFor(() => expect(idle).toHaveBeenCalledTimes(2));
+    expect(seen).toEqual(["A", "B"]);
   });
 });
 
