@@ -69,7 +69,7 @@ describe("first install race (issue #73)", () => {
       const results = await Promise.allSettled([
         runAfterAuthTenantBootstrap({ shop: domain } as never),
         ...Array.from({ length: CONCURRENCY }, () =>
-          ensureShopSettings(createTenantDb(tenant), tenant),
+          ensureShopSettings(createTenantDb(tenant)),
         ),
         // The Billing and Home loaders store an entitlement snapshot.
         persistEntitlementSnapshot(createTenantDb(tenant), {

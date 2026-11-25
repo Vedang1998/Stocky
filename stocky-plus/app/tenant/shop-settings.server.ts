@@ -3,7 +3,6 @@
  * Ported from #82.
  */
 import { Prisma } from "@prisma/client";
-import type { TenantAuthority } from "./authority.server";
 import type { TenantDb } from "./tenant-db.server";
 
 function isUniqueViolation(error: unknown): boolean {
@@ -26,15 +25,13 @@ function isUniqueViolation(error: unknown): boolean {
  *
  * C-01: an existing row's ownership is never repaired here (empty update).
  */
-export async function ensureShopSettings(
-  db: TenantDb,
-  tenant: TenantAuthority,
-): Promise<void> {
-  const where = { shop: tenant.myshopifyDomain };
+export async function ensureShopSettings(db: TenantDb): Promise<void> {
+  const { shopId, myshopifyDomain } = db.authority;
+  const where = { shop: myshopifyDomain };
   try {
     await db.shopSettings.upsert({
       where,
-      create: { shop: tenant.myshopifyDomain, shopId: tenant.shopId },
+      create: { shop: myshopifyDomain, shopId },
       update: {},
     });
   } catch (error) {

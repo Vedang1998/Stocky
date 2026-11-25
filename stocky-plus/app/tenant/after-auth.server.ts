@@ -63,7 +63,7 @@ async function bootstrapTenant(session: Session): Promise<AfterAuthResult> {
 
   const db = createTenantDb(tenant);
 
-  await ensureShopSettings(db, tenant);
+  await ensureShopSettings(db);
 
   return {
     shopId: shop.id,
