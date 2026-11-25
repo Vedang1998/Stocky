@@ -1,6 +1,6 @@
 import { useFetcher } from "react-router";
 import type { ReactNode } from "react";
-import { formatDecimal, formatMoney, MISSING_VALUE } from "../../lib/decimal-format";
+import { formatDecimal, MISSING_VALUE } from "../../lib/decimal-format";
 import { variantLabel } from "../../lib/replenishment/worksheet/labels";
 import { MAX_QUANTITY, type WarningCode } from "../../lib/replenishment/types";
 import {
@@ -17,6 +17,8 @@ import {
   type WorksheetView,
 } from "../../lib/replenishment/worksheet/view";
 import type { SmartForecastColumn, WorksheetActionResult } from "./types";
+import { money, percent, quantity } from "./format";
+import type { LineDetailContext } from "./LineDetailModal";
 
 const STATUS_TONES = {
   OUT_OF_STOCK: "critical",
@@ -26,10 +28,6 @@ const STATUS_TONES = {
 } as const;
 
 const WARNINGS_SHOWN = 2;
-
-function quantity(value: number | null): string {
-  return value == null ? MISSING_VALUE : value.toLocaleString("en-US");
-}
 
 function SortableHeader({
   label,
@@ -140,23 +138,9 @@ function Warnings({ codes }: { codes: WarningCode[] }) {
 }
 
 /** What a cell needs to know about the worksheet beyond its own row. */
-type CellContext = {
-  currencyCode: string | null;
+type CellContext = Pick<LineDetailContext, "currencyCode" | "salesDays"> & {
   smartForecast: SmartForecastColumn;
-  /** Days in the sales period; null when the worksheet does not record it. */
-  salesDays: number | null;
 };
-
-function money(amount: string | null, currencyCode: string | null, digits?: number): string {
-  if (amount == null) return MISSING_VALUE;
-  return currencyCode
-    ? formatMoney(amount, currencyCode, { maximumFractionDigits: digits })
-    : formatDecimal(amount);
-}
-
-function percent(value: string | null): string {
-  return value == null ? MISSING_VALUE : `${formatDecimal(value)}%`;
-}
 
 /**
  * A row's Smart Forecast: the units expected over the days to cover and the
@@ -377,6 +361,7 @@ export function WorksheetTable({
   onOpenDetail: (line: WorksheetLine) => void;
 }) {
   const header = { view, path };
+  const cellContext: CellContext = { currencyCode, salesDays, smartForecast };
   return (
     <s-table>
       <s-table-header-row>
@@ -417,7 +402,7 @@ export function WorksheetTable({
               </s-grid>
             </s-table-cell>
             {columns.map((column) => (
-              <s-table-cell key={column}>{COLUMNS[column].cell(line, { currencyCode, salesDays, smartForecast })}</s-table-cell>
+              <s-table-cell key={column}>{COLUMNS[column].cell(line, cellContext)}</s-table-cell>
             ))}
             <s-table-cell>
               <Suggested line={line} />
