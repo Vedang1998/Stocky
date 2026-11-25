@@ -161,6 +161,12 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   };
 };
 
+/** A pasted list of codes to put back in its field, unless it is too long to be one. */
+const keptCodes = (codes: FormDataEntryValue | null) =>
+  typeof codes === "string" && codes.length <= MAX_ITEM_LIST_LENGTH
+    ? codes
+    : undefined;
+
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { admin, db, actor } = await requireAdminTenantWithActor({
     request,
@@ -171,6 +177,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (!stocktakeId) return { error: NOT_FOUND };
   const form = await request.formData();
   const intent = form.get("intent");
+  if (!actor) {
+    // Refused like any other failed step of the page: the scan field takes
+    // the next code and a pasted list is not lost.
+    return {
+      error: STAFF_REQUIRED_MESSAGE,
+      ...(intent === "scan" ? { scannedAt: Date.now() } : {}),
+      ...(intent === "addItems" ? { codes: keptCodes(form.get("codes")) } : {}),
+    };
+  }
 
   if (intent === "scan") {
     const quantityField = form.get("quantity");
@@ -247,10 +262,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         error: result.error,
         details: result.details,
         // What was pasted is handed back so the lines named can be fixed.
-        codes:
-          typeof codes === "string" && codes.length <= MAX_ITEM_LIST_LENGTH
-            ? codes
-            : undefined,
+        codes: keptCodes(codes),
       };
     }
     const already =
@@ -307,7 +319,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   }
 
   if (intent === "complete") {
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE };
     const result = await completeStocktake(db, admin, actor, stocktakeId, {
       acceptUncounted: form.get("acceptUncounted") === "1",
     });
