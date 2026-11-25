@@ -73,8 +73,8 @@ export type ReportContext = {
   timeZone: string;
   currencyCode: string;
   installedAt: Date;
-  /** Whether the order history that sales reports read has been imported. */
-  orderHistory: OrderHistoryStatus;
+  /** Whether the order history that sales reports read has been imported; read once, on first call. */
+  orderHistory: () => Promise<OrderHistoryStatus>;
   /** Shop-local date of the request. */
   today: LocalDate;
   now: Date;

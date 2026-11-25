@@ -3,7 +3,10 @@
  * report builder directly: they resolve a report here, so the page and its CSV
  * export always come from the same computation.
  */
-import { readOrderHistoryStatus } from "../../sync/sync-status.server";
+import {
+  readOrderHistoryStatus,
+  type OrderHistoryStatus,
+} from "../../sync/sync-status.server";
 import { readShopReportingProfile } from "../../tenant/bootstrap.server";
 import type { TenantAuthority } from "../../tenant/authority.server";
 import type { TenantDb } from "../../tenant/tenant-db.server";
@@ -106,13 +109,15 @@ export async function loadReportContext(input: {
   const timeZone = requireShopTimeZone(profile.ianaTimezone);
   const currencyCode = requireShopCurrency(profile.currencyCode);
   const now = input.now ?? new Date();
-  const orderHistory = await readOrderHistoryStatus(input.tenant);
+  // Read on first use: CSV exports and reports that do not read order history
+  // never pay for the query.
+  let orderHistory: Promise<OrderHistoryStatus> | undefined;
   return {
     db: input.db,
     timeZone,
     currencyCode,
     installedAt: profile.installedAt,
-    orderHistory,
+    orderHistory: () => (orderHistory ??= readOrderHistoryStatus(input.tenant)),
     today: localDateOf(now, timeZone),
     now,
   };
@@ -334,7 +339,7 @@ function register<Row>(definition: ReportDefinition<Row>): RegisteredReport {
           .map((column) => column.label),
         notices: [
           ...(report.usesOrderHistory
-            ? orderHistoryNotices(context.orderHistory)
+            ? orderHistoryNotices(await context.orderHistory())
             : []),
           ...ignoredFilterNotices(ignored),
           ...data.notices,
