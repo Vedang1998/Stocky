@@ -1,6 +1,7 @@
 import { Form } from "react-router";
 import { formatAge } from "../lib/stock-format";
 import type { SyncAttention, SyncStatusView } from "../lib/sync-status";
+import { SYNC_CATALOG_LABEL } from "../lib/sync-copy";
 
 /** Shown at the top of Home when the last sync failed or is incomplete. */
 export function SyncAttentionBanner({ attention }: { attention: SyncAttention }) {
@@ -55,7 +56,7 @@ export function SyncStatus({
             {...(submitting ? { loading: true } : {})}
             {...(status.inProgress ? { disabled: true } : {})}
           >
-            {status.inProgress ? "Sync in progress" : "Sync catalog"}
+            {status.inProgress ? "Sync in progress" : SYNC_CATALOG_LABEL}
           </s-button>
         </Form>
       </s-stack>
