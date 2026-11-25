@@ -15,6 +15,7 @@ import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { partLabel, partQuery, pdfPartCount } from "../lib/pdf/parts";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -27,11 +28,9 @@ import {
 } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
 import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
-import {
-  formatUtc,
-  itemCount,
-  staffText,
-} from "../services/stocktakes/stocktake-display";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
+import { itemCount, staffText } from "../services/stocktakes/stocktake-display";
 import { readPageNumber } from "../services/stocktakes/stocktake-read.server";
 import {
   addTransferItems,
@@ -82,14 +81,14 @@ const LINE_NOT_FOUND = "Transfer line not found";
 const QUANTITY_LIMIT = MAX_TRANSFER_LINE_QUANTITY.toLocaleString("en-US");
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request, params });
+  const { db, tenant } = await requireAdminTenant({ request, params });
   const transferId = readFormId(params.id);
   const transfer = transferId ? await getTransfer(db, transferId) : null;
   if (!transfer) throw new Response(NOT_FOUND, { status: 404 });
 
   const query = new URL(request.url).searchParams;
   const filter = readTransferLineFilter(query.get("filter"));
-  const [lines, history, locations, planActive] = await Promise.all([
+  const [lines, history, locations, planActive, timeZone] = await Promise.all([
     getTransferLines(db, {
       transfer,
       filter,
@@ -98,6 +97,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     getTransferHistory(db, transfer.id),
     listSyncedLocations(db),
     planAllowsChanges(db),
+    readShopTimeZone(tenant),
   ]);
   const locationName = (id: string) =>
     locations.find((location) => location.id === id)?.name ??
@@ -119,6 +119,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           transferLedgerStanding(history),
         ),
     planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("transferWrites"),
   };
 };
@@ -515,6 +516,7 @@ export default function TransferDetail() {
     history,
     attention,
     planActive,
+    timeZone,
     writesEnabled,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -559,6 +561,9 @@ export default function TransferDetail() {
     change: Partial<{ filter: TransferLineFilter; page: number }>,
   ) => pageHref(transfer.id, { filter, page: 1, ...change });
   const closedShortUnits = totals.returnedUnits + totals.writtenOffUnits;
+  // A long transfer prints as several documents; one button for each.
+  const partCount = pdfPartCount(totals.lineCount);
+  const paperParts = Array.from({ length: partCount }, (_, index) => index + 1);
 
   return (
     <s-page heading={`Transfer ${transferReference(transfer.id)}`}>
@@ -608,19 +613,19 @@ export default function TransferDetail() {
             </s-text>
           </s-stack>
           <s-text>
-            Created {formatUtc(transfer.createdAt)} by{" "}
+            Created {formatShopTime(transfer.createdAt, timeZone)} by{" "}
             {staffText(transfer.createdByUserId)}
           </s-text>
           {transfer.shippedAt && (
             <s-text>
-              Shipped {formatUtc(transfer.shippedAt)} by{" "}
+              Shipped {formatShopTime(transfer.shippedAt, timeZone)} by{" "}
               {staffText(transfer.shippedByUserId)}
             </s-text>
           )}
           {transfer.status === "RECEIVED" && (
             <s-text>
               {closedShortUnits > 0 ? "Closed" : "Received"}{" "}
-              {formatUtc(transfer.receivedAt)} by{" "}
+              {formatShopTime(transfer.receivedAt, timeZone)} by{" "}
               {staffText(transfer.receivedByUserId)}
               {closedShortUnits > 0 &&
                 `. ${unitCount(closedShortUnits)} that did not arrive ${closedShortUnits === 1 ? "was" : "were"} ${
@@ -634,7 +639,7 @@ export default function TransferDetail() {
             <s-text>
               Cancelled
               {transfer.cancelledAt
-                ? ` ${formatUtc(transfer.cancelledAt)} by ${staffText(transfer.cancelledByUserId)}`
+                ? ` ${formatShopTime(transfer.cancelledAt, timeZone)} by ${staffText(transfer.cancelledByUserId)}`
                 : ""}
               . Its stock stays at the source location.
             </s-text>
@@ -676,7 +681,28 @@ export default function TransferDetail() {
                   ].join(" · ")}
           </s-text>
           {totals.lineCount > 0 && (
-            <s-stack direction="inline">
+            <s-stack direction="inline" gap="small">
+              {draft &&
+                paperParts.map((part) => (
+                  <s-button
+                    key={`pick-list-${part}`}
+                    href={`/app/transfers/${transfer.id}/pick-list${partQuery(part, partCount)}`}
+                    target="_blank"
+                    variant="secondary"
+                  >
+                    Print pick list{partLabel(part, partCount)} (PDF)
+                  </s-button>
+                ))}
+              {paperParts.map((part) => (
+                <s-button
+                  key={`document-${part}`}
+                  href={`/app/transfers/${transfer.id}/document${partQuery(part, partCount)}`}
+                  target="_blank"
+                  variant="secondary"
+                >
+                  Print transfer document{partLabel(part, partCount)} (PDF)
+                </s-button>
+              ))}
               <s-button
                 href={`/app/transfers/${transfer.id}/export`}
                 target="_blank"
@@ -1297,7 +1323,9 @@ export default function TransferDetail() {
             <s-table-body>
               {history.map((event) => (
                 <s-table-row key={event.operationId}>
-                  <s-table-cell>{formatUtc(event.at)}</s-table-cell>
+                  <s-table-cell>
+                    {formatShopTime(event.at, timeZone)}
+                  </s-table-cell>
                   <s-table-cell>
                     {transferEventLabel(event.leg, event.netUnits)}
                   </s-table-cell>
