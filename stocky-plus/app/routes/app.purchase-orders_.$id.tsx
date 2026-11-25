@@ -5,7 +5,9 @@ import type {
 } from "react-router";
 import { Form, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { AddProducts } from "../components/purchasing/AddProducts";
 import { ChargesEditor } from "../components/purchasing/ChargesEditor";
 import { PurchaseOrderDetailsForm } from "../components/purchasing/PurchaseOrderDetailsForm";
@@ -16,6 +18,7 @@ import {
 import { ReceiptsSection } from "../components/purchasing/ReceiptsSection";
 import { formatMoney } from "../lib/decimal-format";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
+import { partLabel, partQuery } from "../lib/pdf/parts";
 import { formatMoment } from "../lib/purchasing/display";
 import { describePurchasingEvent } from "../lib/purchasing/history";
 import {
@@ -29,9 +32,13 @@ import {
   CHARGE_KIND_LABELS,
   CHARGE_KINDS,
 } from "../lib/purchasing/totals";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
 import { actionFailure } from "../services/purchasing/action-result.server";
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
-import { supplierEmailHref } from "../services/purchasing/documents.server";
+import {
+  purchaseOrderPdfParts,
+  supplierEmailHref,
+} from "../services/purchasing/documents.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { listPurchasingEvents } from "../services/purchasing/events.server";
 import { runPurchaseOrderIntent } from "../services/purchasing/purchase-order-actions.server";
@@ -64,7 +71,8 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   });
 
   const find = (url.searchParams.get("find") ?? "").trim().slice(0, 100);
-  const [receipts, events, matches] = await Promise.all([
+  const [planActive, receipts, events, matches] = await Promise.all([
+    planAllowsChanges(db),
     listPurchaseOrderReceipts(db, order.id),
     listPurchasingEvents(
       db,
@@ -79,6 +87,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 
   return {
     order,
+    planActive,
     receipts,
     history: events.map((event) => ({
       id: event.id,
@@ -104,6 +113,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       order.status === "CANCELLED"
         ? null
         : supplierEmailHref(order, profile.name),
+    pdfParts: purchaseOrderPdfParts(order),
     receivingEnabled: isInventoryWriteEnabled("receiptWrites"),
     chargeKinds: CHARGE_KINDS.map((value) => ({
       value,
@@ -121,6 +131,7 @@ const MAX_FORM_BYTES = 2_000_000;
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const context = await requirePurchasingContext({ request, params });
+  await requireActivePlanSnapshot(context.db);
   if (Number(request.headers.get("Content-Length") ?? 0) > MAX_FORM_BYTES) {
     return actionFailure("importLines", "The file is larger than 1 MB.");
   }
@@ -161,6 +172,7 @@ const CONFIRMATIONS: Partial<
 export default function PurchaseOrderDetail() {
   const {
     order,
+    planActive,
     receipts,
     history,
     productSearch,
@@ -169,6 +181,7 @@ export default function PurchaseOrderDetail() {
     timeZone,
     shopCurrency,
     emailHref,
+    pdfParts,
     receivingEnabled,
     chargeKinds,
     allocationMethods,
@@ -198,6 +211,8 @@ export default function PurchaseOrderDetail() {
   );
   const confirmation = pendingAction ? CONFIRMATIONS[pendingAction] : undefined;
   const orderHref = `/app/purchase-orders/${order.id}`;
+  // A long order prints as several PDFs; one link for each.
+  const paperParts = Array.from({ length: pdfParts }, (_, index) => index + 1);
   const { totals } = order;
 
   return (
@@ -205,6 +220,7 @@ export default function PurchaseOrderDetail() {
       <s-link slot="breadcrumb-actions" href="/app/purchase-orders">
         Purchase orders
       </s-link>
+      {!planActive && <PlanRequiredBanner records="Purchase orders" />}
 
       <ActionFeedback
         data={actionData}
@@ -436,7 +452,8 @@ export default function PurchaseOrderDetail() {
                 Email to {order.supplier.name}
               </s-link>
               <s-text color="subdued">
-                Opens your mail app with the order filled in. Attach the PDF
+                Opens your mail app with the order filled in. Attach{" "}
+                {pdfParts > 1 ? `all ${pdfParts} parts of the PDF` : "the PDF"}
                 {actions.includes("markSent")
                   ? ", send it, then mark the order as sent."
                   : " and send it."}
@@ -450,12 +467,24 @@ export default function PurchaseOrderDetail() {
               </s-text>
             )
           )}
-          <s-link href={`${orderHref}/pdf`} target="_blank">
-            Purchase order (PDF)
-          </s-link>
-          <s-link href={`${orderHref}/receiver`} target="_blank">
-            Receiving sheet (PDF, no costs)
-          </s-link>
+          {paperParts.map((part) => (
+            <s-link
+              key={`pdf-${part}`}
+              href={`${orderHref}/pdf${partQuery(part, pdfParts)}`}
+              target="_blank"
+            >
+              Purchase order{partLabel(part, pdfParts)} (PDF)
+            </s-link>
+          ))}
+          {paperParts.map((part) => (
+            <s-link
+              key={`receiver-${part}`}
+              href={`${orderHref}/receiver${partQuery(part, pdfParts)}`}
+              target="_blank"
+            >
+              Receiving sheet{partLabel(part, pdfParts)} (PDF, no costs)
+            </s-link>
+          ))}
           <s-link href={`${orderHref}/csv`} target="_blank">
             Lines (CSV)
           </s-link>

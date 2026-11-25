@@ -56,29 +56,68 @@ function isUniqueViolation(error: unknown): boolean {
   );
 }
 
+/** The write lost to another transaction on the same row, after its retries. */
+function isWriteConflict(error: unknown): boolean {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === "P2034"
+  );
+}
+
+function sameSnapshot(a: EntitlementSnapshot, b: EntitlementSnapshot): boolean {
+  return (
+    a.subscriptionActive === b.subscriptionActive &&
+    a.subscriptionPlan === b.subscriptionPlan
+  );
+}
+
+async function readSnapshot(
+  db: TenantDb,
+  shop: string,
+): Promise<EntitlementSnapshot | null> {
+  return db.shopSettings.findUnique({
+    where: { shop },
+    select: { subscriptionActive: true, subscriptionPlan: true },
+  });
+}
+
 /**
- * Write-if-changed. Creating the row is conflict-safe: when a concurrent
- * request creates ShopSettings first, the unique violation on `shop` falls
- * back to an update instead of surfacing as a 500.
+ * Requests that arrive together after a plan change all store the same
+ * snapshot, and the database lets only some of them write the row. One that
+ * lost has nothing left to do once the stored snapshot is the one it was
+ * writing. If the row holds anything else the conflict is passed on, so a
+ * request never reports a plan as stored that is not.
+ */
+async function updateSnapshot(
+  db: TenantDb,
+  shop: string,
+  snapshot: EntitlementSnapshot,
+): Promise<void> {
+  try {
+    await db.shopSettings.update({ where: { shop }, data: snapshot });
+  } catch (error) {
+    if (!isWriteConflict(error)) throw error;
+    const current = await readSnapshot(db, shop);
+    if (!current || !sameSnapshot(current, snapshot)) throw error;
+  }
+}
+
+/**
+ * Write-if-changed, safe for requests that arrive together. Creating the row:
+ * when a concurrent request creates ShopSettings first, the unique violation
+ * on `shop` falls back to an update instead of surfacing as a 500. Updating
+ * it: see `updateSnapshot`.
  */
 export async function persistEntitlementSnapshot(
   db: TenantDb,
   snapshot: EntitlementSnapshot,
 ): Promise<void> {
   const shop = db.authority.myshopifyDomain;
-  const current: EntitlementSnapshot | null = await db.shopSettings.findUnique({
-    where: { shop },
-    select: { subscriptionActive: true, subscriptionPlan: true },
-  });
+  const current = await readSnapshot(db, shop);
 
   if (current) {
-    if (
-      current.subscriptionActive === snapshot.subscriptionActive &&
-      current.subscriptionPlan === snapshot.subscriptionPlan
-    ) {
-      return;
-    }
-    await db.shopSettings.update({ where: { shop }, data: snapshot });
+    if (sameSnapshot(current, snapshot)) return;
+    await updateSnapshot(db, shop, snapshot);
     return;
   }
 
@@ -86,7 +125,7 @@ export async function persistEntitlementSnapshot(
     await db.shopSettings.create({ data: { shop, ...snapshot } });
   } catch (error) {
     if (!isUniqueViolation(error)) throw error;
-    await db.shopSettings.update({ where: { shop }, data: snapshot });
+    await updateSnapshot(db, shop, snapshot);
   }
 }
 

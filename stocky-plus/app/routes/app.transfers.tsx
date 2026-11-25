@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any -- TenantDb opaque delegates */
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -6,348 +5,323 @@ import type {
 } from "react-router";
 import {
   Form,
+  redirect,
   useActionData,
   useLoaderData,
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
-import { submitOnEnter } from "../lib/submit-on-enter";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
+import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
-import { fetchLocations } from "../services/shopify-gql.server";
+import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.server";
+import { readFormId } from "../services/inventory-writes/form-values";
+import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
+import { readPageNumber } from "../services/stocktakes/stocktake-read.server";
+import { createTransfer } from "../services/transfers/transfer.server";
 import {
-  requireAdminTenantWithActor,
-  STAFF_REQUIRED_MESSAGE,
-} from "../services/inventory-writes/actor.server";
+  listTransfers,
+  readTransferListView,
+  type TransferListEntry,
+  type TransferListView,
+} from "../services/transfers/transfer-read.server";
 import {
-  parseWholeNumber,
-  readFormId,
-} from "../services/inventory-writes/form-values";
-import {
-  addTransferLine,
-  cancelTransfer,
-  createTransfer,
-  receiveTransfer,
-  setTransferPickedQuantity,
-  shipTransfer,
-} from "../services/transfers/transfer.server";
-import {
-  MAX_TRANSFER_LINE_QUANTITY,
-  transferShipQuantity,
-} from "../services/transfers/transfer-quantities";
+  transferReference,
+  transferStatusBadge,
+  unitCount,
+} from "../services/transfers/transfer-display";
+import { MAX_TRANSFER_NOTES_LENGTH } from "../services/transfers/transfer-quantities";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant({ request });
-  const [transfers, locations, variants] = await Promise.all([
-    db.transferOrder.findMany({
-      where: {},
-      include: { lineItems: true },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    fetchLocations(admin),
-    db.shopifyVariantCache.findMany({
-      where: {},
-      orderBy: { title: "asc" },
-      take: 250,
-    }),
-  ]);
-  return { transfers, locations, variants };
+  const { db, tenant } = await requireAdminTenant({ request });
+  const params = new URL(request.url).searchParams;
+  const view = readTransferListView(params.get("view"));
+  const page = readPageNumber(params.get("page"));
+
+  const [{ transfers, hasMore }, locations, planActive, timeZone] =
+    await Promise.all([
+      listTransfers(db, { view, page }),
+      listSyncedLocations(db),
+      planAllowsChanges(db),
+      readShopTimeZone(tenant),
+    ]);
+  return {
+    transfers,
+    hasMore,
+    view,
+    page,
+    locations,
+    planActive,
+    timeZone,
+    writesEnabled: isInventoryWriteEnabled("transferWrites"),
+  };
 };
 
-const QUANTITY_LIMIT = MAX_TRANSFER_LINE_QUANTITY.toLocaleString("en-US");
+interface CreateValues {
+  sourceLocationId: string;
+  destinationLocationId: string;
+  notes: string;
+}
+
+const text = (value: FormDataEntryValue | null): string =>
+  typeof value === "string" ? value : "";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, tenant, db, actor } = await requireAdminTenantWithActor({
-    request,
-  });
+  const { tenant, db, actor } = await requireAdminTenantWithActor({ request });
+  await requireActivePlanSnapshot(db);
   const form = await request.formData();
-  const intent = form.get("intent");
-
-  if (intent === "create") {
-    const notes = form.get("notes");
-    const result = await createTransfer(db, {
-      shop: tenant.myshopifyDomain,
-      sourceLocationId: readFormId(form.get("sourceLocationId")) ?? "",
-      destinationLocationId:
-        readFormId(form.get("destinationLocationId")) ?? "",
-      notes: typeof notes === "string" ? notes : null,
-    });
-    return result.ok
-      ? { ok: true, notice: "Draft transfer created." }
-      : { error: result.error };
+  if (form.get("intent") !== "create") {
+    return { error: "That action is not available." };
   }
 
-  if (intent === "addLine") {
-    const transferId = readFormId(form.get("transferId"));
-    if (!transferId) return { error: "Transfer not found" };
-    const shopifyVariantId = readFormId(form.get("variantId"));
-    if (!shopifyVariantId) return { error: "Choose a variant to add." };
-    const quantity = parseWholeNumber(form.get("quantity"), {
-      min: 1,
-      max: MAX_TRANSFER_LINE_QUANTITY,
-    });
-    if (quantity === null) {
-      return {
-        error: `Enter the quantity as a whole number from 1 to ${QUANTITY_LIMIT}.`,
-      };
-    }
-    const result = await addTransferLine(db, {
-      transferId,
-      shopifyVariantId,
-      quantity,
-    });
-    return result.ok ? { ok: true } : { error: result.error };
-  }
-
-  if (intent === "pick") {
-    const lineId = readFormId(form.get("lineId"));
-    if (!lineId) return { error: "Transfer line not found" };
-    const pickedQty = parseWholeNumber(form.get("pickedQty"), {
-      min: 0,
-      max: MAX_TRANSFER_LINE_QUANTITY,
-    });
-    if (pickedQty === null) {
-      return {
-        error: "Enter the picked quantity as a whole number of 0 or more.",
-      };
-    }
-    const result = await setTransferPickedQuantity(db, { lineId, pickedQty });
-    return result.ok ? { ok: true } : { error: result.error };
-  }
-
-  if (intent === "ship" || intent === "receive" || intent === "cancel") {
-    const transferId = readFormId(form.get("transferId"));
-    if (!transferId) return { error: "Transfer not found", problems: [] };
-
-    if (intent === "cancel") {
-      const result = await cancelTransfer(db, admin, actor, transferId);
-      return result.ok
-        ? { ok: true, notice: "Transfer cancelled." }
-        : { error: result.error, problems: result.problems };
-    }
-
-    if (!actor) return { error: STAFF_REQUIRED_MESSAGE, problems: [] };
-    if (intent === "ship") {
-      const result = await shipTransfer(db, admin, actor, transferId);
-      if (!result.ok) return { error: result.error, problems: result.problems };
-      return {
-        ok: true,
-        notice: result.alreadyDone
-          ? "This transfer was already shipped. Nothing more was sent to Shopify."
-          : "Transfer shipped. Its stock has left the source location in Shopify.",
-      };
-    }
-    const result = await receiveTransfer(db, admin, actor, transferId);
-    if (!result.ok) return { error: result.error, problems: result.problems };
-    return {
-      ok: true,
-      notice: result.alreadyDone
-        ? "This transfer was already received. Nothing more was sent to Shopify."
-        : "Transfer received. Its stock is now at the destination in Shopify.",
-    };
-  }
-
-  return { error: "That action is not available." };
+  const values: CreateValues = {
+    sourceLocationId: text(form.get("sourceLocationId")),
+    destinationLocationId: text(form.get("destinationLocationId")),
+    notes: text(form.get("notes")).slice(0, MAX_TRANSFER_NOTES_LENGTH + 1),
+  };
+  const result = await createTransfer(db, {
+    shop: tenant.myshopifyDomain,
+    sourceLocationId: readFormId(values.sourceLocationId) ?? "",
+    destinationLocationId: readFormId(values.destinationLocationId) ?? "",
+    notes: values.notes,
+    actor,
+  });
+  if (!result.ok) return { error: result.error, values };
+  return redirect(`/app/transfers/${result.transferId}`);
 };
 
-const STATUS_TONE: Record<string, "info" | "warning" | "success" | "critical"> =
-  {
-    DRAFT: "info",
-    IN_TRANSIT: "warning",
-    RECEIVED: "success",
-    CANCELLED: "critical",
-  };
+/** Marks the option a select should start on; Polaris ignores a `value` attribute in server-rendered markup. */
+const chosen = (isChosen: boolean) => (isChosen ? { selected: true } : {});
+
+function listHref(view: TransferListView, page: number): string {
+  const params = new URLSearchParams();
+  if (view !== "open") params.set("view", view);
+  if (page > 1) params.set("page", String(page));
+  const query = params.toString();
+  return `/app/transfers${query ? `?${query}` : ""}`;
+}
+
+/** Where a transfer's units stand, in one line for the list. */
+function unitsSummary({ status, totals }: TransferListEntry): string {
+  if (totals.lineCount === 0) return "No items yet";
+  switch (status) {
+    case "DRAFT":
+      return `${unitCount(totals.shipUnits)} to ship`;
+    case "CANCELLED":
+      return `${unitCount(totals.requestedUnits)} requested`;
+    case "IN_TRANSIT":
+      return `${totals.receivedUnits.toLocaleString("en-US")} of ${unitCount(totals.shipUnits)} received`;
+    case "RECEIVED": {
+      const parts = [
+        `${totals.receivedUnits.toLocaleString("en-US")} of ${unitCount(totals.shipUnits)} received`,
+      ];
+      if (totals.rejectedUnits > 0) {
+        parts.push(`${totals.rejectedUnits.toLocaleString("en-US")} rejected`);
+      }
+      if (totals.returnedUnits > 0) {
+        parts.push(`${totals.returnedUnits.toLocaleString("en-US")} returned`);
+      }
+      if (totals.writtenOffUnits > 0) {
+        parts.push(
+          `${totals.writtenOffUnits.toLocaleString("en-US")} written off`,
+        );
+      }
+      return parts.join(", ");
+    }
+  }
+}
 
 export default function Transfers() {
-  const { transfers, locations, variants } = useLoaderData<typeof loader>();
+  const {
+    transfers,
+    hasMore,
+    view,
+    page,
+    locations,
+    planActive,
+    timeZone,
+    writesEnabled,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
+  // Nothing is submitted twice, and nothing at all without an active plan.
+  const locked = useNavigation().state !== "idle" || !planActive;
 
+  const values: Partial<CreateValues> =
+    actionData && "values" in actionData ? (actionData.values ?? {}) : {};
+  const activeLocations = locations.filter((location) => location.isActive);
   const locationName = (id: string) =>
-    locations.find((l) => l.id === id)?.name ?? id;
-  const variantTitle = (id: string) =>
-    variants.find((v: any) => v.shopifyVariantId === id)?.title ?? id;
+    locations.find((location) => location.id === id)?.name ??
+    "Location no longer in Shopify";
 
   return (
-    <s-page heading="Transfer Orders">
+    <s-page heading="Transfers">
+      {!planActive && <PlanRequiredBanner records="Transfers" />}
+      {!writesEnabled && (
+        <s-banner
+          tone="warning"
+          heading="Stock changes from transfers are switched off"
+        >
+          <s-paragraph>
+            Transfers can be drafted and their items edited. Shipping and
+            receiving, which change stock in Shopify, stay unavailable until
+            they are switched on for this app.
+          </s-paragraph>
+        </s-banner>
+      )}
       <ActionFeedback data={actionData} errorHeading="Transfer issue" />
 
       <s-section heading="New transfer">
-        <Form method="post">
-          <input type="hidden" name="intent" value="create" />
-          <s-stack direction="inline" gap="base">
-            <s-select label="Source location" name="sourceLocationId" required>
-              {locations.map((l) => (
-                <s-option key={l.id} value={l.id}>
-                  {l.name}
-                </s-option>
-              ))}
-            </s-select>
-            <s-select
-              label="Destination location"
-              name="destinationLocationId"
-              required
-            >
-              {locations.map((l) => (
-                <s-option key={l.id} value={l.id}>
-                  {l.name}
-                </s-option>
-              ))}
-            </s-select>
-            <s-text-field label="Notes" name="notes" />
-            <s-button
-              type="submit"
-              variant="primary"
-              {...(navigation.state === "submitting" ? { loading: true } : {})}
-            >
-              Create draft
-            </s-button>
-          </s-stack>
-        </Form>
+        {activeLocations.length < 2 ? (
+          <s-paragraph>
+            A transfer moves stock between two locations, and fewer than two
+            active locations are synced. Run a sync from the dashboard, then
+            create a transfer.
+          </s-paragraph>
+        ) : (
+          <Form method="post">
+            <input type="hidden" name="intent" value="create" />
+            <s-stack direction="block" gap="base">
+              <s-grid
+                gridTemplateColumns="repeat(auto-fit, minmax(220px, 1fr))"
+                gap="base"
+              >
+                <s-select label="From" name="sourceLocationId" required>
+                  {activeLocations.map((location, index) => (
+                    <s-option
+                      key={location.id}
+                      value={location.id}
+                      {...chosen(
+                        values.sourceLocationId
+                          ? values.sourceLocationId === location.id
+                          : index === 0,
+                      )}
+                    >
+                      {location.name}
+                    </s-option>
+                  ))}
+                </s-select>
+                <s-select label="To" name="destinationLocationId" required>
+                  {activeLocations.map((location, index) => (
+                    <s-option
+                      key={location.id}
+                      value={location.id}
+                      {...chosen(
+                        values.destinationLocationId
+                          ? values.destinationLocationId === location.id
+                          : index === 1,
+                      )}
+                    >
+                      {location.name}
+                    </s-option>
+                  ))}
+                </s-select>
+                <s-text-field
+                  label="Notes"
+                  name="notes"
+                  maxLength={MAX_TRANSFER_NOTES_LENGTH}
+                  value={values.notes ?? ""}
+                />
+              </s-grid>
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  {...(locked ? { disabled: true } : {})}
+                >
+                  Create draft
+                </s-button>
+                <s-text color="subdued">
+                  Items are added on the next page. Nothing changes in Shopify
+                  until the transfer is shipped.
+                </s-text>
+              </s-stack>
+            </s-stack>
+          </Form>
+        )}
       </s-section>
 
-      {transfers.map((transfer: any) => (
-        <s-section
-          key={transfer.id}
-          heading={`${locationName(transfer.sourceLocationId)} → ${locationName(transfer.destinationLocationId)}`}
-        >
-          <s-stack direction="block" gap="base">
-            <s-stack direction="inline" gap="base">
-              <s-badge tone={STATUS_TONE[transfer.status] ?? "neutral"}>
-                {transfer.status.replace("_", " ")}
-              </s-badge>
-              {transfer.notes && (
-                <s-text color="subdued">{transfer.notes}</s-text>
-              )}
-            </s-stack>
+      <s-section
+        heading={view === "open" ? "Open transfers" : "Closed transfers"}
+      >
+        <s-stack direction="block" gap="base">
+          <s-stack direction="inline" gap="base">
+            {view === "open" ? (
+              <s-link href={listHref("closed", 1)}>
+                Show received and cancelled transfers
+              </s-link>
+            ) : (
+              <s-link href={listHref("open", 1)}>Show open transfers</s-link>
+            )}
+          </s-stack>
 
-            {transfer.lineItems.length > 0 && (
-              <s-table>
-                <s-table-header-row>
-                  <s-table-header>Variant</s-table-header>
-                  <s-table-header format="numeric">Requested</s-table-header>
-                  <s-table-header format="numeric">
-                    {transfer.status === "DRAFT" ? "To ship" : "Shipped"}
-                  </s-table-header>
-                  <s-table-header format="numeric">Received</s-table-header>
-                  <s-table-header>Picking</s-table-header>
-                </s-table-header-row>
-                <s-table-body>
-                  {transfer.lineItems.map((line: any) => (
-                    <s-table-row key={line.id}>
+          {transfers.length === 0 ? (
+            <s-paragraph>
+              {page > 1
+                ? "No more transfers."
+                : view === "open"
+                  ? "No transfer is being drafted or is in transit."
+                  : "No transfer has been received or cancelled yet."}
+            </s-paragraph>
+          ) : (
+            <s-table>
+              <s-table-header-row>
+                <s-table-header listSlot="primary">Transfer</s-table-header>
+                <s-table-header>From</s-table-header>
+                <s-table-header>To</s-table-header>
+                <s-table-header listSlot="secondary">Status</s-table-header>
+                <s-table-header>Units</s-table-header>
+                <s-table-header>Created</s-table-header>
+              </s-table-header-row>
+              <s-table-body>
+                {transfers.map((transfer) => {
+                  const badge = transferStatusBadge(
+                    transfer.status,
+                    transfer.totals,
+                  );
+                  return (
+                    <s-table-row key={transfer.id}>
                       <s-table-cell>
-                        {variantTitle(line.shopifyVariantId)}
+                        <s-link href={`/app/transfers/${transfer.id}`}>
+                          {transferReference(transfer.id)}
+                        </s-link>
                       </s-table-cell>
-                      <s-table-cell>{line.quantity}</s-table-cell>
                       <s-table-cell>
-                        {/* A cancelled transfer never left the source. */}
-                        {transfer.status === "CANCELLED"
-                          ? 0
-                          : transferShipQuantity(line)}
+                        {locationName(transfer.sourceLocationId)}
                       </s-table-cell>
-                      <s-table-cell>{line.receivedQty}</s-table-cell>
                       <s-table-cell>
-                        {transfer.status === "DRAFT" && (
-                          <Form method="post" onKeyDown={submitOnEnter}>
-                            <input type="hidden" name="intent" value="pick" />
-                            <input
-                              type="hidden"
-                              name="lineId"
-                              value={line.id}
-                            />
-                            <s-stack direction="inline" gap="small-200">
-                              <s-number-field
-                                label="Picked qty"
-                                labelAccessibilityVisibility="exclusive"
-                                name="pickedQty"
-                                value={String(transferShipQuantity(line))}
-                                min={0}
-                                max={line.quantity}
-                              />
-                              <s-button type="submit" variant="secondary">
-                                Pick
-                              </s-button>
-                            </s-stack>
-                          </Form>
-                        )}
+                        {locationName(transfer.destinationLocationId)}
+                      </s-table-cell>
+                      <s-table-cell>
+                        <s-badge tone={badge.tone}>{badge.label}</s-badge>
+                      </s-table-cell>
+                      <s-table-cell>{unitsSummary(transfer)}</s-table-cell>
+                      <s-table-cell>
+                        {formatShopTime(transfer.createdAt, timeZone)}
                       </s-table-cell>
                     </s-table-row>
-                  ))}
-                </s-table-body>
-              </s-table>
-            )}
+                  );
+                })}
+              </s-table-body>
+            </s-table>
+          )}
 
-            {transfer.status === "DRAFT" && transfer.lineItems.length > 0 && (
-              <s-paragraph>
-                <s-text color="subdued">
-                  A line ships its requested quantity unless you save a smaller
-                  picked quantity for it.
-                </s-text>
-              </s-paragraph>
-            )}
-
-            {transfer.status === "DRAFT" && (
-              <Form method="post" onKeyDown={submitOnEnter}>
-                <input type="hidden" name="intent" value="addLine" />
-                <input type="hidden" name="transferId" value={transfer.id} />
-                <s-stack direction="inline" gap="base">
-                  <s-select label="Variant" name="variantId" required>
-                    {variants.map((v: any) => (
-                      <s-option
-                        key={v.shopifyVariantId}
-                        value={v.shopifyVariantId}
-                      >
-                        {v.title}
-                      </s-option>
-                    ))}
-                  </s-select>
-                  <s-number-field
-                    label="Quantity"
-                    name="quantity"
-                    value="1"
-                    min={1}
-                    required
-                  />
-                  <s-button type="submit" variant="secondary">
-                    Add line
-                  </s-button>
-                </s-stack>
-              </Form>
-            )}
-
+          {(page > 1 || hasMore) && (
             <s-stack direction="inline" gap="base">
-              {transfer.status === "DRAFT" && transfer.lineItems.length > 0 && (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="ship" />
-                  <input type="hidden" name="transferId" value={transfer.id} />
-                  <s-button type="submit" variant="primary">
-                    Ship from source
-                  </s-button>
-                </Form>
+              {page > 1 && (
+                <s-link href={listHref(view, page - 1)}>Newer transfers</s-link>
               )}
-              {transfer.status === "IN_TRANSIT" && (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="receive" />
-                  <input type="hidden" name="transferId" value={transfer.id} />
-                  <s-button type="submit" variant="primary">
-                    Receive at destination
-                  </s-button>
-                </Form>
-              )}
-              {transfer.status === "DRAFT" && (
-                <Form method="post">
-                  <input type="hidden" name="intent" value="cancel" />
-                  <input type="hidden" name="transferId" value={transfer.id} />
-                  <s-button type="submit" tone="critical" variant="tertiary">
-                    Cancel
-                  </s-button>
-                </Form>
+              {hasMore && (
+                <s-link href={listHref(view, page + 1)}>Older transfers</s-link>
               )}
             </s-stack>
-          </s-stack>
-        </s-section>
-      ))}
+          )}
+        </s-stack>
+      </s-section>
     </s-page>
   );
 }

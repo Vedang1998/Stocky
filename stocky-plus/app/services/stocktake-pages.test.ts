@@ -16,6 +16,8 @@ import type {
   StocktakeListEntry,
   StocktakeProgress,
 } from "./stocktakes/stocktake-read.server";
+import type { DifferenceValue } from "./stocktakes/stocktake-value";
+import { Prisma } from "@prisma/client";
 
 const SHOP = "shop-a.myshopify.com";
 const CELLAR = "gid://shopify/Location/11";
@@ -40,6 +42,8 @@ const {
     resolveStocktakeMovement: vi.fn(),
     completeStocktake: vi.fn(),
     cancelStocktake: vi.fn(),
+    requestStocktakeRecount: vi.fn(),
+    withdrawStocktakeRecount: vi.fn(),
   },
   reads: {
     listStocktakes: vi.fn(),
@@ -51,7 +55,11 @@ const {
   },
   context: {
     actor: null as unknown,
-    db: { tenant: "shop-a" },
+    db: {
+      tenant: "shop-a",
+      authority: { myshopifyDomain: "shop-a.myshopify.com" },
+      shopSettings: { findUnique: vi.fn() },
+    },
     admin: { graphql: () => undefined },
   },
   listSyncedLocations: vi.fn(),
@@ -99,8 +107,25 @@ vi.mock("../tenant/require-admin-tenant.server", () => ({
   requireAdminTenant: vi.fn(async () => ({
     admin: context.admin,
     db: context.db,
+    tenant: context.db.authority,
   })),
 }));
+
+/** What the count's differences are worth; a count with no differences unless a test says otherwise. */
+const values = vi.hoisted(() => ({
+  getStocktakeDifferenceValue: vi.fn(),
+  listStocktakeLineValues: vi.fn(),
+}));
+vi.mock("./stocktakes/stocktake-value.server", async () => {
+  const actual = await vi.importActual<
+    typeof import("./stocktakes/stocktake-value.server")
+  >("./stocktakes/stocktake-value.server");
+  return { ...actual, ...values };
+});
+
+/** The shop's stored time zone; null, as before its first sync, unless a test sets one. */
+const shopClock = vi.hoisted(() => ({ readShopTimeZone: vi.fn() }));
+vi.mock("./inventory-writes/shop-clock.server", () => shopClock);
 
 vi.mock("../lib/feature-flags.server", () => ({ isInventoryWriteEnabled }));
 
@@ -204,6 +229,9 @@ const line = (extra: Partial<StocktakeLineView> = {}): StocktakeLineView => ({
   movementDetectedQty: null,
   movementBaselineQty: null,
   movementReviewedAt: null,
+  recountRequestedAt: null,
+  recountRequestedByUserId: null,
+  recountFromQty: null,
   ...extra,
 });
 
@@ -216,6 +244,7 @@ const PROGRESS: StocktakeProgress = {
   unitsOver: 2,
   unitsShort: 0,
   movementReviewCount: 0,
+  recountCount: 0,
 };
 
 const linesPage = (lines: StocktakeLineView[], extra = {}) => ({
@@ -239,6 +268,13 @@ async function loadCount(path = `/app/stocktakes/${ID}`) {
 }
 
 /** Loads the count page and renders it the way it reaches the merchant. */
+const NO_DIFFERENCES: DifferenceValue = {
+  basis: "CURRENT",
+  totals: [],
+  costedCount: 0,
+  uncostedCount: 0,
+};
+
 async function renderCount(
   path = `/app/stocktakes/${ID}`,
   actionData: unknown = undefined,
@@ -256,6 +292,7 @@ function renderList(loaderData: Record<string, unknown>, actionData?: unknown) {
     view: "open",
     page: 1,
     locations: LOCATIONS,
+    planActive: true,
     writesEnabled: true,
     ...loaderData,
   };
@@ -267,6 +304,12 @@ function renderList(loaderData: Record<string, unknown>, actionData?: unknown) {
 beforeEach(() => {
   vi.clearAllMocks();
   context.actor = STAFF;
+  shopClock.readShopTimeZone.mockResolvedValue(null);
+  values.getStocktakeDifferenceValue.mockResolvedValue(NO_DIFFERENCES);
+  values.listStocktakeLineValues.mockResolvedValue(new Map());
+  context.db.shopSettings.findUnique.mockResolvedValue({
+    subscriptionActive: true,
+  });
   isInventoryWriteEnabled.mockReturnValue(true);
   listSyncedLocations.mockResolvedValue(LOCATIONS);
   reads.listStocktakes.mockResolvedValue({ stocktakes: [], hasMore: false });
@@ -652,6 +695,21 @@ describe("Count page action", () => {
       });
     });
 
+    it("says when the scan began a recount", async () => {
+      service.recordStocktakeScan.mockResolvedValue({
+        ok: true,
+        lineId: "line-1",
+        title: "Red wine",
+        countedQty: 1,
+        added: false,
+        recounted: true,
+      });
+
+      expect(await act({ intent: "scan", code: "1111" })).toMatchObject({
+        notice: "Red wine: 1 counted (recount started from zero)",
+      });
+    });
+
     it.each(["0", "-1", "1.5", "abc", "1000001"])(
       "does not count a quantity of %s",
       async (quantity) => {
@@ -760,6 +818,61 @@ describe("Count page action", () => {
         error: "This count is closed. Its lines can no longer be changed.",
       });
     });
+  });
+
+  describe("recount", () => {
+    it("asks for a line of this count to be counted again, in the name of whoever asked", async () => {
+      service.requestStocktakeRecount.mockResolvedValue({ ok: true });
+
+      expect(
+        await act({ intent: "recount", lineId: "line-1", stocktakeId: "x" }),
+      ).toEqual({
+        ok: true,
+        notice:
+          "Recount asked for. The count cannot be completed until the item is counted again.",
+      });
+      expect(service.requestStocktakeRecount).toHaveBeenCalledWith(context.db, {
+        stocktakeId: ID,
+        lineId: "line-1",
+        actor: STAFF,
+      });
+      expect(service.withdrawStocktakeRecount).not.toHaveBeenCalled();
+    });
+
+    it("keeps the count a line has when the recount is called off", async () => {
+      service.withdrawStocktakeRecount.mockResolvedValue({ ok: true });
+
+      expect(await act({ intent: "keepCount", lineId: "line-1" })).toEqual({
+        ok: true,
+        notice: "Count kept. The item no longer waits for a recount.",
+      });
+      expect(service.withdrawStocktakeRecount).toHaveBeenCalledWith(
+        context.db,
+        { stocktakeId: ID, lineId: "line-1" },
+      );
+      expect(service.requestStocktakeRecount).not.toHaveBeenCalled();
+    });
+
+    it.each(["recount", "keepCount"])(
+      "needs a line for %s, and passes on why it was refused",
+      async (intent) => {
+        expect(await act({ intent })).toEqual({
+          error: "Stocktake line not found",
+        });
+        expect(service.requestStocktakeRecount).not.toHaveBeenCalled();
+        expect(service.withdrawStocktakeRecount).not.toHaveBeenCalled();
+
+        const refusal = {
+          ok: false,
+          error: "This count is closed. Its lines can no longer be changed.",
+        };
+        service.requestStocktakeRecount.mockResolvedValue(refusal);
+        service.withdrawStocktakeRecount.mockResolvedValue(refusal);
+        expect(await act({ intent, lineId: "line-1" })).toEqual({
+          error: "This count is closed. Its lines can no longer be changed.",
+        });
+      },
+    );
   });
 
   describe("adding items", () => {
@@ -1460,6 +1573,20 @@ describe("Count sheet export", () => {
       }),
       line({ id: "line-3", title: "Rosé", movementDetectedQty: 4 }),
     ]);
+    values.listStocktakeLineValues.mockResolvedValue(
+      new Map([
+        [
+          "line-1",
+          {
+            unitCost: {
+              amount: new Prisma.Decimal("4.250000"),
+              currencyCode: "USD",
+            },
+            value: "25.5",
+          },
+        ],
+      ]),
+    );
 
     const response = await exportCount();
     const [head, ...rows] = (await response.text()).trimEnd().split("\r\n");
@@ -1473,16 +1600,58 @@ describe("Count sheet export", () => {
     );
     expect(response.headers.get("Cache-Control")).toContain("no-store");
     expect(head).toBe(
-      "Count,Location,Status,Item,SKU,Barcode,Expected,Counted,Difference,How counted,Counted at (UTC),Counted by staff ID,Stock moved during count,Measured from",
+      "Count,Location,Status,Item,SKU,Barcode,Expected,Counted,Difference,How counted,Counted at (UTC),Counted by staff ID,Stock moved during count,Measured from,Unit cost,Difference value,Currency,Recount",
     );
     expect(rows).toEqual([
-      'Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,6,Typed,2026-11-12T09:30:00.000Z,77,"Yes, reviewed",6',
-      "Cellar count,Cellar,In progress,White wine,,,10,,,,,,,",
-      'Cellar count,Cellar,In progress,Rosé,RED-750,1111,10,12,2,Typed,2026-11-12T09:30:00.000Z,77,"Yes, not reviewed",',
+      'Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,6,Typed,2026-11-12T09:30:00.000Z,77,"Yes, reviewed",6,4.25,25.5,USD,',
+      "Cellar count,Cellar,In progress,White wine,,,10,,,,,,,,,,,",
+      // A difference with no unit cost has no value to give.
+      'Cellar count,Cellar,In progress,Rosé,RED-750,1111,10,12,2,Typed,2026-11-12T09:30:00.000Z,77,"Yes, not reviewed",,,,,',
     ]);
     expect(reads.listStocktakeLinesForExport).toHaveBeenCalledWith(
       context.db,
       ID,
+    );
+    // The costs are read for this shop's count, in the state it is in.
+    expect(values.listStocktakeLineValues).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "IN_PROGRESS" }),
+    );
+  });
+
+  it("writes a shortage as a negative value that stays a number in a spreadsheet", async () => {
+    reads.getStocktake.mockResolvedValue(header({ status: "COMPLETED" }));
+    reads.listStocktakeLinesForExport.mockResolvedValue([
+      line({ countedQty: 7, delta: -3 }),
+    ]);
+    values.listStocktakeLineValues.mockResolvedValue(
+      new Map([
+        [
+          "line-1",
+          {
+            unitCost: {
+              amount: new Prisma.Decimal("4.125000"),
+              currencyCode: "USD",
+            },
+            value: "-12.375",
+          },
+        ],
+      ]),
+    );
+
+    const [, row] = (await (await exportCount()).text())
+      .trimEnd()
+      .split("\r\n");
+
+    // Exact, not rounded to cents, and with no apostrophe in front.
+    expect(
+      row.endsWith(
+        ",-3,Typed,2026-11-12T09:30:00.000Z,77,,,4.125,-12.375,USD,",
+      ),
+    ).toBe(true);
+    expect(values.listStocktakeLineValues).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "COMPLETED" }),
     );
   });
 
@@ -1497,8 +1666,34 @@ describe("Count sheet export", () => {
       .split("\r\n");
 
     expect(row).toBe(
-      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,,12,,Typed,2026-11-12T09:30:00.000Z,77,,",
+      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,,12,,Typed,2026-11-12T09:30:00.000Z,77,,,,,,",
     );
+    // A value would give the difference away, so the costs are not even read.
+    expect(values.listStocktakeLineValues).not.toHaveBeenCalled();
+  });
+
+  it("says which items wait for a recount and which were counted again", async () => {
+    reads.listStocktakeLinesForExport.mockResolvedValue([
+      line({
+        recountRequestedAt: new Date("2026-11-12T11:00:00Z"),
+        recountRequestedByUserId: "42",
+        recountFromQty: 12,
+      }),
+      line({ id: "line-2", countedQty: 9, delta: -1, recountFromQty: 12 }),
+      line({ id: "line-3" }),
+    ]);
+
+    const rows = (await (await exportCount()).text())
+      .trimEnd()
+      .split("\r\n")
+      .slice(1);
+
+    // After the staff ID come five empty columns: no movement, no cost.
+    expect(rows.map((row) => row.split(",77,,,,,,")[1])).toEqual([
+      "Asked for",
+      '"Counted again, first counted as 12"',
+      "",
+    ]);
   });
 
   it("includes expected quantities of a blind count once it is completed", async () => {
@@ -1536,5 +1731,624 @@ describe("Count sheet export", () => {
       .split("\r\n");
 
     expect(row.startsWith(`Cellar count,${CELLAR},`)).toBe(true);
+  });
+});
+
+describe("Stocktakes without an active plan", () => {
+  const PLAN_BANNER =
+    'heading="An active ProPo plan is needed to make changes"';
+
+  const attempt = async (run: () => Promise<unknown>): Promise<unknown> => {
+    try {
+      return await run();
+    } catch (thrown) {
+      return thrown;
+    }
+  };
+
+  const CHANGES: Array<Record<string, string>> = [
+    { intent: "scan", code: "1111" },
+    { intent: "count", lineId: "line-1", countedQty: "7" },
+    { intent: "addItems", codes: "RED-750" },
+    { intent: "zeroFill" },
+    { intent: "clearZeroFill" },
+    { intent: "recount", lineId: "line-1" },
+    { intent: "keepCount", lineId: "line-1" },
+    {
+      intent: "resolveMovement",
+      lineId: "line-1",
+      resolution: "COUNTED_AFTER",
+    },
+    { intent: "complete" },
+    { intent: "complete", acceptUncounted: "1" },
+    { intent: "cancel" },
+  ];
+
+  /** Every submit button with its label; "Find" only searches the count. */
+  function submitButtons(html: string) {
+    const buttons = html.match(/<s-button[^>]*type="submit"[^>]*>[^<]*/g) ?? [];
+    return {
+      changes: buttons.filter((button) => !button.endsWith(">Find")),
+      find: buttons.filter((button) => button.endsWith(">Find")),
+    };
+  }
+
+  for (const snapshot of [{ subscriptionActive: false }, null]) {
+    it(`refuses every change with 403 when the plan snapshot is ${JSON.stringify(snapshot)}`, async () => {
+      context.db.shopSettings.findUnique.mockResolvedValue(snapshot);
+
+      const refusals = [
+        await attempt(() =>
+          listRoute.action(
+            post("/app/stocktakes", { intent: "create", locationId: CELLAR }),
+          ),
+        ),
+      ];
+      for (const fields of CHANGES) {
+        refusals.push(await attempt(() => act(fields)));
+      }
+
+      for (const [index, refusal] of refusals.entries()) {
+        expect(refusal, String(index)).toBeInstanceOf(Response);
+        expect((refusal as Response).status, String(index)).toBe(403);
+      }
+      for (const [name, call] of Object.entries(service)) {
+        expect(call, name).not.toHaveBeenCalled();
+      }
+      expect(reads.getStocktake).not.toHaveBeenCalled();
+    });
+  }
+
+  it("still lists counts, says why none can be started and locks the form", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+
+    const data = await listRoute.loader(get("/app/stocktakes"));
+    expect(data).toMatchObject({ planActive: false, locations: LOCATIONS });
+    expect(reads.listStocktakes).toHaveBeenCalledTimes(1);
+
+    const html = renderList({ planActive: false });
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain('href="/app/billing"');
+    const { changes } = submitButtons(html);
+    expect(changes).toHaveLength(1);
+    expect(changes[0]).toContain('disabled="true"');
+    expect(page.formKeyHandlers.get("create")).toBeUndefined();
+  });
+
+  it("shows no plan banner on the list while the plan is active", async () => {
+    const data = await listRoute.loader(get("/app/stocktakes"));
+    expect(data).toMatchObject({ planActive: true });
+
+    const html = renderList({});
+    expect(html).not.toContain(PLAN_BANNER);
+    expect(submitButtons(html).changes[0]).not.toContain("disabled");
+  });
+
+  it("still shows an open count and lets it be searched, with every change locked", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue({
+      subscriptionActive: false,
+    });
+
+    const html = await renderCount();
+
+    expect(html).toContain(PLAN_BANNER);
+    expect(html).toContain("Red wine");
+    const { changes, find } = submitButtons(html);
+    expect(changes.length).toBeGreaterThan(3);
+    for (const button of changes) {
+      expect(button).toContain('disabled="true"');
+    }
+    expect(find).toHaveLength(1);
+    expect(find[0]).not.toContain("disabled");
+    expect(page.formKeyHandlers.get("get")).toBe(submitOnEnter);
+    for (const [intent, handler] of page.formKeyHandlers) {
+      if (intent !== "get") expect(handler, intent).toBeUndefined();
+    }
+  });
+
+  it("locks the review of stock that moved during the count", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      movementReviewCount: 1,
+    });
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([line({ movementDetectedQty: 6, movementBaselineQty: 6 })]),
+    );
+
+    const html = await renderCount(`/app/stocktakes/${ID}?filter=movement`);
+
+    const { changes } = submitButtons(html);
+    expect(changes.length).toBeGreaterThan(1);
+    for (const button of changes) {
+      expect(button).toContain('disabled="true"');
+    }
+  });
+
+  it("shows no plan banner on a count while the plan is active", async () => {
+    const html = await renderCount();
+
+    expect(html).not.toContain(PLAN_BANNER);
+    expect(
+      submitButtons(html).changes.some(
+        (button) => !button.includes("disabled"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not hide a database failure behind the plan banner", async () => {
+    context.db.shopSettings.findUnique.mockRejectedValue(
+      new Error("connection lost"),
+    );
+
+    await expect(loadCount()).rejects.toThrow("connection lost");
+    await expect(listRoute.loader(get("/app/stocktakes"))).rejects.toThrow(
+      "connection lost",
+    );
+  });
+
+  it("still downloads the count sheet", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+
+    const response = (await exportLoader(
+      get(`/app/stocktakes/${ID}/export`, { id: ID }),
+    )) as Response;
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("Red wine");
+    expect(context.db.shopSettings.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe("Stocktake times on the shop's clock", () => {
+  const TORONTO = "America/Toronto";
+
+  beforeEach(() => {
+    shopClock.readShopTimeZone.mockResolvedValue(TORONTO);
+  });
+
+  it("reads the zone of the shop the request is signed in to, for the list and for a count", async () => {
+    const list = await listRoute.loader(get("/app/stocktakes"));
+    const count = await loadCount();
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledTimes(2);
+    expect(shopClock.readShopTimeZone).toHaveBeenNthCalledWith(
+      1,
+      context.db.authority,
+    );
+    expect(shopClock.readShopTimeZone).toHaveBeenNthCalledWith(
+      2,
+      context.db.authority,
+    );
+    expect(list).toMatchObject({ timeZone: TORONTO });
+    expect(count).toMatchObject({ timeZone: TORONTO });
+  });
+
+  it("lists each count with the time it started on the shop's clock", () => {
+    const html = renderList({
+      timeZone: TORONTO,
+      stocktakes: [
+        {
+          ...header({ startedAt: new Date("2026-11-13T02:30:00.000Z") }),
+          lineCount: 3,
+          countedCount: 2,
+        },
+      ],
+    });
+
+    expect(html).toContain("Nov 12, 2026, 9:30 PM EST");
+    expect(html).not.toContain("UTC");
+  });
+
+  it("shows when a count started and was completed on the shop's clock", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "COMPLETED",
+        completedAt: new Date("2026-11-12T11:15:00.000Z"),
+        completedByUserId: "42",
+      }),
+    );
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "Cellar · started Nov 12, 2026, 4:00 AM EST by staff ID 42",
+    );
+    expect(html).toContain(
+      "Completed Nov 12, 2026, 6:15 AM EST by staff ID 42.",
+    );
+    expect(html).not.toContain("UTC");
+  });
+
+  it("shows when a count was cancelled on the shop's clock", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "CANCELLED",
+        cancelledAt: new Date("2026-11-12T11:15:00.000Z"),
+        cancelledByUserId: "42",
+      }),
+    );
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "Cancelled Nov 12, 2026, 6:15 AM EST by staff ID 42.",
+    );
+    expect(html).not.toContain("UTC");
+  });
+
+  it("writes the count sheet's times on the shop's clock, names the clock in the heading and dates the file by the shop's day", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({ startedAt: new Date("2026-11-13T02:30:00.000Z") }),
+    );
+    reads.listStocktakeLinesForExport.mockResolvedValue([
+      line({ countedAt: new Date("2026-11-13T03:10:00.000Z") }),
+    ]);
+
+    const response = (await exportLoader(
+      get(`/app/stocktakes/${ID}/export`, { id: ID }),
+    )) as Response;
+    const [head, row] = (await response.text()).trimEnd().split("\r\n");
+
+    expect(shopClock.readShopTimeZone).toHaveBeenCalledWith(
+      context.db.authority,
+    );
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "stocktake-2026-11-12.csv",
+    );
+    expect(head).toContain(",Counted at (America/Toronto),");
+    expect(head).not.toContain("UTC");
+    expect(row).toBe(
+      "Cellar count,Cellar,In progress,Red wine,RED-750,1111,10,12,2,Typed,2026-11-12 22:10,77,,,,,,",
+    );
+  });
+
+  it("dates the count sheet's file by the UTC day while the shop's zone is not known", async () => {
+    shopClock.readShopTimeZone.mockResolvedValue(null);
+    reads.getStocktake.mockResolvedValue(
+      header({ startedAt: new Date("2026-11-13T02:30:00.000Z") }),
+    );
+
+    const response = (await exportLoader(
+      get(`/app/stocktakes/${ID}/export`, { id: ID }),
+    )) as Response;
+
+    expect(response.headers.get("Content-Disposition")).toContain(
+      "stocktake-2026-11-13.csv",
+    );
+  });
+});
+
+describe("Value of the differences on the count page", () => {
+  const worth = (extra: Partial<DifferenceValue> = {}): DifferenceValue => ({
+    basis: "CURRENT",
+    totals: [{ currencyCode: "USD", amount: "-214.5" }],
+    costedCount: 3,
+    uncostedCount: 0,
+    ...extra,
+  });
+
+  it("says what the differences of an open count are worth, and at which cost", async () => {
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth());
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "<s-text>Value of differences: -$214.50. At Shopify&#x27;s unit cost as last synced.</s-text>",
+    );
+    expect(values.getStocktakeDifferenceValue).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "IN_PROGRESS" }),
+    );
+  });
+
+  it("says how many differences have no unit cost and are left out", async () => {
+    values.getStocktakeDifferenceValue.mockResolvedValue(
+      worth({ uncostedCount: 2 }),
+    );
+
+    expect(await renderCount()).toContain(
+      "Value of differences: -$214.50. At Shopify&#x27;s unit cost as last synced. 2 items with a difference have no unit cost in Shopify and are not in this figure.",
+    );
+  });
+
+  it("does not invent a figure when no difference has a unit cost", async () => {
+    values.getStocktakeDifferenceValue.mockResolvedValue(
+      worth({ totals: [], costedCount: 0, uncostedCount: 1 }),
+    );
+
+    expect(await renderCount()).toContain(
+      "Value of differences: not known. 1 item with a difference has no unit cost in Shopify.",
+    );
+  });
+
+  it("gives a completed count's value at the cost kept when it was completed", async () => {
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "COMPLETED",
+        completedAt: new Date("2026-11-12T11:00:00.000Z"),
+        completedByUserId: "42",
+      }),
+    );
+    values.getStocktakeDifferenceValue.mockResolvedValue(
+      worth({
+        basis: "COMPLETION",
+        totals: [{ currencyCode: "USD", amount: "37" }],
+      }),
+    );
+
+    expect(await renderCount()).toContain(
+      "Value of differences: +$37.00. At Shopify&#x27;s unit cost when the count was completed.",
+    );
+    expect(values.getStocktakeDifferenceValue).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ id: ID, status: "COMPLETED" }),
+    );
+  });
+
+  it("says nothing about value when the count has no differences, or was cancelled", async () => {
+    expect(await renderCount()).not.toContain("Value of differences");
+
+    reads.getStocktake.mockResolvedValue(
+      header({
+        status: "CANCELLED",
+        cancelledAt: new Date("2026-11-12T11:00:00.000Z"),
+      }),
+    );
+    values.getStocktakeDifferenceValue.mockResolvedValue(null);
+    expect(await renderCount()).not.toContain("Value of differences");
+  });
+
+  it("keeps the value of a blind count off the page while it is being counted", async () => {
+    reads.getStocktake.mockResolvedValue(header({ blind: true }));
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth());
+
+    const html = await renderCount();
+
+    expect(html).not.toContain("Value of differences");
+    expect(html).not.toContain("214.50");
+    // Not read at all: it cannot reach the browser in the page's data either.
+    expect(values.getStocktakeDifferenceValue).not.toHaveBeenCalled();
+    expect(page.loaderData).toMatchObject({ value: null });
+  });
+
+  it("shows the value of a blind count in its review of differences", async () => {
+    reads.getStocktake.mockResolvedValue(header({ blind: true }));
+    values.getStocktakeDifferenceValue.mockResolvedValue(worth());
+
+    expect(
+      await renderCount(`/app/stocktakes/${ID}?filter=differences`),
+    ).toContain("Value of differences: -$214.50.");
+  });
+});
+
+describe("Recounts on the count page", () => {
+  const ASKED = {
+    recountRequestedAt: new Date("2026-11-12T11:00:00Z"),
+    recountRequestedByUserId: "42",
+    recountFromQty: 12,
+  };
+  const askButton = />\s*Ask for a recount\s*</;
+
+  it("offers a recount on a counted line of an open count, and on no other line", async () => {
+    expect(await renderCount()).toMatch(askButton);
+    expect(page.formKeyHandlers.has("recount")).toBe(true);
+    expect(page.formKeyHandlers.has("keepCount")).toBe(false);
+
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([line({ countedQty: null, delta: null, countSource: null })]),
+    );
+    expect(await renderCount()).not.toMatch(askButton);
+
+    reads.getStocktakeLines.mockResolvedValue(linesPage([line()]));
+    reads.getStocktake.mockResolvedValue(header({ status: "COMPLETED" }));
+    expect(await renderCount()).not.toMatch(askButton);
+  });
+
+  it("leaves recounts out of the review of stock that moved", async () => {
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      movementReviewCount: 1,
+    });
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([line({ movementDetectedQty: 6 })]),
+    );
+
+    const html = await renderCount(`/app/stocktakes/${ID}?filter=movement`);
+
+    expect(html).not.toMatch(askButton);
+    expect(page.formKeyHandlers.has("recount")).toBe(false);
+  });
+
+  it("marks a line that waits for a recount, empties its count field and offers to keep the count", async () => {
+    reads.getStocktakeLines.mockResolvedValue(linesPage([line(ASKED)]));
+
+    const html = await renderCount();
+
+    expect(html).toMatch(/<s-badge tone="warning">Recount asked<\/s-badge>/);
+    expect(html).toMatch(/>\s*Keep the count of\s*(<!-- -->)?12\s*</);
+    expect(html).toMatch(/<s-number-field[^>]*name="countedQty"[^>]*value=""/);
+    expect(html).not.toMatch(askButton);
+    expect(page.formKeyHandlers.has("keepCount")).toBe(true);
+    // The count asked about is not a finished recount yet.
+    expect(html).not.toContain("first counted as");
+  });
+
+  it("has no count to keep on a line whose count was cleared while it waits", async () => {
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([
+        line({ ...ASKED, countedQty: null, delta: null, countSource: null }),
+      ]),
+    );
+
+    const html = await renderCount();
+
+    expect(html).toContain("Recount asked");
+    expect(html).not.toContain("Keep the count of");
+  });
+
+  it("says what a recounted line was first counted as", async () => {
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([line({ countedQty: 9, delta: -1, recountFromQty: 12 })]),
+    );
+
+    const html = await renderCount();
+
+    expect(html).toContain("Typed, recounted, first counted as 12");
+    expect(html).toMatch(askButton);
+  });
+
+  it("points to the items that wait for a recount", async () => {
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      recountCount: 2,
+    });
+
+    const html = await renderCount();
+
+    expect(html).toMatch(
+      /<s-banner[^>]*tone="info"[^>]*heading="A recount was asked for"/,
+    );
+    expect(html).toMatch(
+      /2 items\s*(<!-- -->)?\s*(<!-- -->)?wait(<!-- -->)? to be counted/,
+    );
+    expect(html).toContain(`href="/app/stocktakes/${ID}?filter=recount"`);
+    expect(html).toContain("To recount (2)");
+
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      recountCount: 1,
+    });
+    expect(await renderCount()).toMatch(
+      /1 item\s*(<!-- -->)?\s*(<!-- -->)?waits(<!-- -->)? to be counted/,
+    );
+  });
+
+  it("lists only those items in the recount view, without the banner that points there", async () => {
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      recountCount: 2,
+    });
+
+    const html = await renderCount(`/app/stocktakes/${ID}?filter=recount`);
+
+    expect(reads.getStocktakeLines).toHaveBeenCalledWith(
+      context.db,
+      expect.objectContaining({ filter: "recount" }),
+    );
+    expect(html).not.toContain('heading="A recount was asked for"');
+  });
+
+  it("says nothing about recounts on a closed count", async () => {
+    reads.getStocktake.mockResolvedValue(header({ status: "CANCELLED" }));
+    reads.getStocktakeProgress.mockResolvedValue({
+      ...PROGRESS,
+      recountCount: 2,
+    });
+    reads.getStocktakeLines.mockResolvedValue(linesPage([line(ASKED)]));
+
+    const html = await renderCount();
+
+    expect(html).not.toContain('heading="A recount was asked for"');
+    expect(html).not.toContain("Recount asked");
+    expect(html).not.toContain("Keep the count of");
+  });
+
+  it("keeps expected quantities hidden in the recount view of a blind count", async () => {
+    reads.getStocktake.mockResolvedValue(header({ blind: true }));
+    reads.getStocktakeLines.mockResolvedValue(linesPage([line(ASKED)]));
+
+    const data = await loadCount(`/app/stocktakes/${ID}?filter=recount`);
+
+    expect(data.expectedHidden).toBe(true);
+    expect(data.lines.lines[0]).toMatchObject({
+      expectedQty: null,
+      delta: null,
+    });
+  });
+
+  it("locks both recount buttons without an active plan", async () => {
+    context.db.shopSettings.findUnique.mockResolvedValue(null);
+    reads.getStocktakeLines.mockResolvedValue(
+      linesPage([line(ASKED), line({ id: "line-2" })]),
+    );
+
+    const html = await renderCount();
+
+    for (const label of ["Keep the count of", "Ask for a recount"]) {
+      const button = html.match(
+        new RegExp(`<s-button[^>]*type="submit"[^>]*>\\s*${label}`),
+      )?.[0];
+      expect(button, label).toContain('disabled="true"');
+    }
+  });
+});
+
+describe("Printing the count sheet from the count page", () => {
+  const withLines = (lineCount: number) =>
+    reads.getStocktakeProgress.mockResolvedValue({ ...PROGRESS, lineCount });
+
+  it("offers the count sheet of an open count as one PDF", async () => {
+    const html = await renderCount();
+
+    expect(html).toContain(
+      '<s-button href="/app/stocktakes/st-1/count-sheet" target="_blank" variant="secondary">Print count sheet (PDF)</s-button>',
+    );
+    expect(html).not.toContain("<details>");
+  });
+
+  it.each(["COMPLETED", "CANCELLED"] as const)(
+    "calls it the count record once the count is %s",
+    async (status) => {
+      reads.getStocktake.mockResolvedValue(header({ status }));
+
+      const html = await renderCount();
+
+      expect(html).toContain("Print count record");
+      expect(html).not.toContain("Print count sheet");
+    },
+  );
+
+  it("offers nothing to print for a count with no items", async () => {
+    withLines(0);
+
+    const html = await renderCount();
+
+    expect(html).not.toContain("/count-sheet");
+    expect(html).toContain("Download count sheet (CSV)");
+  });
+
+  it("offers one button per part for a count of up to four parts", async () => {
+    withLines(1_000);
+
+    const html = await renderCount();
+
+    for (const part of [1, 2, 3, 4]) {
+      expect(html).toContain(
+        `href="/app/stocktakes/st-1/count-sheet?part=${part}"`,
+      );
+      expect(html).toContain(`, part ${part} of 4`);
+    }
+    expect(html).not.toContain("part=5");
+    expect(html).not.toContain("<details>");
+  });
+
+  it("lists the parts of a longer count under one heading, each with the items it holds", async () => {
+    withLines(1_260);
+
+    const html = await renderCount();
+
+    expect(html).toContain(
+      "<summary>Print count sheet (PDF), in 6 parts of up to 250 items</summary>",
+    );
+    expect(html).toContain(
+      '<s-link href="/app/stocktakes/st-1/count-sheet?part=1" target="_blank">Part 1: items 1 to 250</s-link>',
+    );
+    expect(html).toContain(
+      '<s-link href="/app/stocktakes/st-1/count-sheet?part=6" target="_blank">Part 6: items 1,251 to 1,260</s-link>',
+    );
+    expect(html).not.toContain("part=7");
+    // The buttons give way to the list.
+    expect(html).not.toMatch(/<s-button href="[^"]*count-sheet/);
   });
 });

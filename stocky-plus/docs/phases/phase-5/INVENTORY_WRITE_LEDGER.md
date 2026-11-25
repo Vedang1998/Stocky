@@ -144,14 +144,16 @@ if (result.settled) {
 | Stocktake        | `Stocktake`        | counted − expected at the counted location | `cycle_count_available` |
 | Transfer ship    | `TransferShipment` | −shipped units at the source               | `movement_created`      |
 | Transfer cancel  | `TransferShipment` | puts back whatever a partial ship took out | `movement_canceled`     |
-| Transfer receive | `TransferReceipt`  | +shipped units at the destination          | `movement_received`     |
+| Transfer close   | `TransferShipment` | +missing units back at the source          | `movement_canceled`     |
+| Transfer receive | `TransferReceipt`  | +received units at the destination         | `movement_received`     |
 
 Transfers are app-managed: stock moves with `inventoryAdjustQuantities` under
 `write_inventory`, and no Shopify transfer object is created. Units in transit
 are therefore in neither location's `available` until the transfer is received.
 A transfer that carries a `shopifyTransferId` from the earlier native path is
 not received by the app. Using Shopify's native transfer objects needs
-transfer scopes the app does not request and is an owner decision.
+transfer scopes the app does not request and is an owner decision. The
+workflow is described under [Transfers](#transfers).
 
 ## Stocktakes
 
@@ -196,6 +198,28 @@ each difference to Shopify through `settleInventoryDocument`.
   screen, until the count is closed or the reviewer opens the differences.
   Until roles exist this is a working aid, not an access control: any staff
   member of the shop can open the differences view.
+- **Recounts.** Anyone reviewing an open count can ask for one counted line
+  to be counted again (`requestStocktakeRecount`). The line records when it
+  was asked, by which staff ID, and the count that is questioned
+  (`recountRequestedAt`, `recountRequestedByUserId`, `recountFromQty`). That
+  count stays on the line and in the differences until the line is counted
+  again, so nothing about the count is lost if the recount never happens.
+  While a line waits, the count cannot be completed, also not with uncounted
+  lines left unchanged, and nothing is sent to Shopify (blocker `RECOUNT`).
+  The page lists the waiting lines under "To recount" and shows their count
+  field empty, so the first count is not simply saved again; the printed
+  count sheet says "To be counted again" in place of what was entered; and
+  marking uncounted lines as zero skips the line. Typing a count answers the
+  request, also when it confirms the first count. The first scan of the item
+  starts its count again from zero and later scans add to it. Clearing the
+  count does not answer the request. The request can be taken back ("Keep the
+  count"), after which the line is as if it was never asked about. A line
+  that was counted again says what it was first counted as on the page, in
+  the CSV report and on the count record. A request made while a completion
+  is under way keeps the count open, like a count saved at that moment: the
+  counts already sent stay in Shopify and the recount goes out as a further
+  change. Until roles exist any staff member of the shop can ask for a recount
+  or take one back; there is no separate reviewer.
 - **Completing.** The difference for a line is counted − expected, sent as a
   relative change to `available` with reason `cycle_count_available`, which
   moves on-hand by the same amount. Completion is refused while lines are
@@ -218,10 +242,47 @@ each difference to Shopify through `settleInventoryDocument`.
   sends only what is still outstanding.
 - **Cancelling** is allowed only while the ledger shows nothing applied and
   nothing unfinished for the count.
+- **Value of the differences.** The count page, the count record and the
+  report say what the differences are worth: units over less units short,
+  each at Shopify's unit cost (`InventoryItem.unitCost`, from the synced
+  catalog facts; `stocktake-value.server.ts`). While the count is open the
+  cost is the one last synced, so the figure follows cost changes. When the
+  count is completed, after Shopify has confirmed the changes and before the
+  count closes, the cost of every line that changed stock is kept on the
+  line (`unitCostAmount`, `unitCostCurrencyCode`), and a completed count is
+  valued at those: its record does not move when costs change later. An item
+  counts as having no cost when Shopify has none, when the app could not read
+  it, or when the item has left the catalog; such differences are counted and
+  named ("2 items with a difference have no unit cost in Shopify and are not
+  in this figure"), never valued at zero. A count completed before costs were
+  kept says its differences had no cost recorded. A cancelled count has no
+  value: it changed no stock. The sums are decimals from the database to the
+  text and exact to the last digit; only the text on the page is rounded, to
+  the currency's own decimals. A blind count shows no value while it is being
+  counted, and the costs are not read for it, because the value would give the
+  differences away; its review of differences shows it. Costs are visible to
+  everyone who can open the count until roles exist.
 - **Report.** The count sheet exports as CSV: item, SKU, barcode, expected,
-  counted, difference, how and when each line was counted, the staff ID, and
-  any stock movement found. Completed and cancelled counts stay readable under
-  closed counts.
+  counted, difference, how and when each line was counted, the staff ID, any
+  stock movement found, for a line with a difference the unit cost, the value
+  of the difference (exact, not rounded) and the currency, and whether a
+  recount was asked for or done. Completed and cancelled counts stay readable
+  under closed counts.
+- **Count sheet on paper.** The count page prints the count as a PDF
+  (`stocktake-count-sheet.server.ts`, route `…/count-sheet`). While the count
+  is open it is the sheet to take to the shelves: the items in the order of
+  the count page, the expected quantity, a box to write the units found in,
+  what is already entered for an item, and lines for the counter and the
+  checker to sign. A blind count prints no expected quantities. Once the
+  count is completed or cancelled the same address prints the record:
+  expected, counted and the difference for every item, a note on a line whose
+  difference was measured from the quantity after stock moved or that was
+  counted again, and the totals of the count. A count of more than 250 items
+  prints in parts of 250, one request per part (`?part=2`), and each request
+  reads only the lines of its part; the page offers a button per part, or a
+  list of the parts when there are more than four. Times are on the shop's clock. Printing reads only; it
+  needs no active plan and no write switch. Requests count against the shop's
+  allowance for printed documents (see Papers under Transfers).
 - Gated by `FEATURE_STOCKTAKE_INVENTORY_WRITES`. While it is off a count can
   be started and counted but not completed.
 - Counts started before this workflow keep the basis they were created with
@@ -229,8 +290,8 @@ each difference to Shopify through `settleInventoryDocument`.
   they did.
 
 Not built yet: counting from Shopify POS (the POS scan endpoint follows the POS
-extension work), assigning sections of a count to staff, recount requests for
-individual lines, cost value of the differences, and shop-timezone dates.
+extension work), assigning sections of a count to staff, and approval of a
+count by a second person.
 
 ## Adjustments
 
@@ -264,8 +325,9 @@ source type `InventoryAdjustment`, and the ledger is its history.
 - **Quantity after a change.** Each applied line stores the quantity Shopify
   reports after the change. Shopify does not always report one. A "set" line
   was applied on exactly the quantity it named, so its result is stored either
-  way; an add or remove line that Shopify reports nothing for shows no
-  quantity rather than a guess.
+  way; an add or remove line that Shopify reports nothing for shows "Not
+  reported by Shopify" on the page and an empty cell in the report, rather
+  than a guess.
 - **Two requests at once.** The request that finds the other one still
   sending says so and asks for a reload, because there may be nothing left to
   finish.
@@ -275,9 +337,166 @@ source type `InventoryAdjustment`, and the ledger is its history.
   period of more than 2,000 adjustments rather than returning part of it.
 - Gated by `FEATURE_ADJUSTMENT_WRITES`. While it is off nothing is recorded.
 
-Not built yet: merchant-defined reasons, attachments, approval before an
-adjustment is applied, and shop-timezone dates (the history and the export use
-UTC).
+Not built yet: merchant-defined reasons, attachments, and approval before an
+adjustment is applied.
+
+## Transfers
+
+A transfer (`app/services/transfers/`, pages `/app/transfers` and
+`/app/transfers/<id>`) moves stock from one active, synced location to another.
+It has no tables beyond `TransferOrder` and `TransferLineItem`; the two ledger
+documents above are the record of what moved.
+
+- **Two documents, each a net change.** `TransferShipment:<id>` is what the
+  transfer has taken out of the source: the shipped units, less the units put
+  back when it is closed short. `TransferReceipt:<id>` is what it has added at
+  the destination: every unit received so far, plus the units counted in for
+  the receipt being posted. Each step rebuilds its document from the current
+  lines and settles it, so a second press, two presses at once and a retry
+  after a partial failure send only what Shopify has not confirmed.
+- **Draft.** Items are added by scanning or typing a SKU, barcode or variant
+  ID, or by pasting a list with an optional quantity per row (comma, tab or
+  semicolon separated, up to 250 items, all or none, each refused row named).
+  An item must be tracked in Shopify and have a linked inventory item. A
+  variant has one line; adding it again adds to that line. A line's quantity
+  can be changed or the line removed. A line ships its quantity unless a
+  smaller picked quantity is saved for it. Up to 1,000 lines of up to
+  1,000,000 units.
+- **Shipping** needs a named staff member. Shopify's live `available` is read
+  first at both locations. An item Shopify does not stock at the source or at
+  the destination stops the shipment. A source with fewer units than the
+  transfer takes stops it until the staff member confirms that the source may
+  go below zero. If the quantities cannot be read, nothing is sent. After a
+  partial failure only the units that have not left yet are checked again.
+  When every change is confirmed the transfer goes in transit and each line's
+  shipped quantity is frozen in `pickedQty`.
+- **Cancelling** is for drafts. If an interrupted shipment already took stock
+  out, cancelling puts it back first; the transfer is cancelled only when the
+  ledger shows the source whole again.
+- **Receiving.** Units are counted in at the destination by scanning (one unit
+  per scan, or a typed number) or by typing a number per line, which changes
+  nothing in Shopify. A barcode shared by two catalog items is taken as the
+  one on the transfer. Posting the receipt adds the counted-in units at the
+  destination and needs a named staff member; a transfer takes as many
+  receipts as it needs. Units counted in while a receipt is being posted are
+  kept for the next one. The transfer finishes when every shipped unit is
+  received or rejected. Nothing is added at the destination unless the ledger
+  shows the whole shipment out of the source.
+- **Rejects.** Units that arrived and are not fit for sale are recorded on
+  their line with a reason. They enter stock at neither location and no change
+  is sent to Shopify for them.
+- **Closing short.** When shipped units will not arrive, the transfer is closed
+  and the staff member chooses: put the missing units back into stock at the
+  source (the shipment document shrinks by them, so the ledger sends the
+  difference back) or write them off (nothing is sent; they stay out of stock
+  at both locations). Units counted in and not posted must be posted or
+  cleared first. While a return is partly applied the transfer stays in
+  transit and takes no receipt; closing again finishes it.
+- **Status.** The stored status stays `DRAFT`, `IN_TRANSIT`, `RECEIVED` or
+  `CANCELLED`. "Partly received", "Received with rejects" and "Closed short"
+  are derived from the line quantities (`transfer-display.ts`).
+- **Unfinished steps.** The transfer page compares the lines with the ledger
+  (`transferAttention`) and says which step did not finish: a shipment partly
+  sent, a cancelled transfer whose stock is not all back, a receipt partly
+  posted, a return partly applied, or a transfer in transit that the ledger
+  never saw leave the source. For the last one the app moves no stock at all.
+- **History and report.** The page lists the transfer's ledger operations:
+  what left, arrived and went back, who did it, and whether Shopify confirmed
+  or refused it. The transfer report exports one row per item as CSV with
+  requested, shipped, received, counted-in, rejected, returned, written-off
+  and outstanding units.
+- **Papers.** Two PDFs print from the transfer page
+  (`transfer-documents.server.ts`, routes `…/document` and `…/pick-list`).
+  The pick list exists while the transfer is a draft: the items in SKU order
+  with the units to pick, a box to write the units picked in, and how many
+  are already entered as picked. The transfer document goes with the stock: while the transfer is a
+  draft or in transit it lists what is sent with blank boxes for the units
+  received and damaged and lines for the packer and receiver to sign; once the
+  transfer is received or cancelled it is the record, with asked, sent,
+  received, rejected, returned and written-off units and their totals. Both
+  name the two locations with their addresses as Shopify gave them, and show
+  times on the shop's clock, or in UTC and marked as such when Shopify does
+  not answer with the shop's time zone. A transfer of more than 250 items
+  prints in parts of 250, one request per part (`?part=2`): the PDF library
+  needs about 11 ms of processor time per row and holds the server's event
+  loop while it works, so one part costs about 3 seconds and a whole
+  1,000-item transfer in one request cost over 20. Printing reads only; it
+  needs no active plan and no write switch.
+- **How often papers can be asked for.** A shop may ask for 12 printed
+  documents a minute (`app/lib/pdf/paper-rate-limit.server.ts`). The transfer
+  document, the pick list, the count sheet and both purchase-order PDFs count
+  against the same allowance, one for each request, so one for each part. The
+  request over the limit is answered with 429, a `Retry-After` header and a
+  sentence saying in how many seconds to try again, before anything is read
+  or laid out. The reason is the event loop above: six parts asked for at
+  once held the server for 8.7 seconds, and another shop's page waited 2.9
+  seconds behind them. With the limit one shop can take about half of one
+  server process's time at the worst. Documents are also laid out one at a
+  time (`renderPdf` in `app/lib/pdf/document.server.ts`): the first part of
+  layout does not give the event loop back, and twelve documents asked for
+  together ran that part back to back, so another request waited 9.9 seconds
+  in a local measurement; queued, it waited about a second, the layout of
+  one document. The count is kept in Redis per shop,
+  keyed by the shop of the verified session. If Redis cannot be reached the
+  request is allowed and the outage is logged at most once a minute: the
+  routes are signed-in admin routes, and a Redis outage should not stop a
+  shop printing. A count of more than 3,000 items has more than 12 parts and
+  cannot be printed whole within one minute; the refusal says when to go on.
+- Gated by `FEATURE_TRANSFER_WRITES`. While it is off a transfer can be
+  drafted and edited, units counted in and rejects recorded, and a transfer
+  with nothing left to move can be finished or written off; nothing that
+  changes stock in Shopify is sent.
+
+Not built yet: approval before a transfer ships, several shipments for one
+transfer, receiving from Shopify POS, labels, transfers suggested from
+replenishment or balancing, cost value in transit, and a paper size other
+than US Letter. In-transit units are not shown as incoming at the destination
+in Shopify, because no Shopify transfer object exists.
+
+## Times on the shop's clock
+
+The stocktake, adjustment and transfer pages, their CSV reports and the
+transfer papers give every time on the shop's clock (`shop-time.ts`).
+
+- **Which zone.** The pages and reports read the IANA time zone stored for
+  the shop at its last sync (`readShopTimeZone` in `shop-clock.server.ts`),
+  which costs no Shopify call. The transfer papers ask Shopify for it together
+  with the shop's name and addresses. Until a zone is known (a shop whose
+  first sync has not finished), or when the server does not know the zone
+  Shopify named, times are given in UTC and marked "UTC". No zone is guessed.
+- **Pages** read "Nov 10, 2026, 3:45 PM EST": the zone's short name follows
+  the time, so a time read from a screenshot is not ambiguous.
+- **CSV reports** write `2026-11-10 15:45` and name the zone in the column
+  heading, "Shipped at (America/Toronto)". Without a zone the heading says
+  "(UTC)" and the cell is the full ISO time, as it was before. A report's file
+  name carries the shop's day.
+- **Adjustment history dates.** "From" and "To" are whole days on the shop's
+  clock, including the 23-hour and 25-hour days when the clocks change; the
+  report downloaded from the page covers the same days. Without a zone they
+  are UTC days and the fields say so.
+
+Times are stored in UTC and nothing stored changes. A shop that changes its
+time zone in Shopify sees earlier documents on the new clock after the next
+sync.
+
+## Plan gate
+
+Every action of the Stocktakes, Adjustments and Transfers pages calls
+`requireActivePlanSnapshot` (`app/billing/entitlements.server.ts`) before it
+reads the form, so a shop without an active plan gets a 403 and nothing is
+recorded or sent. That covers creating, editing, counting, shipping,
+receiving, completing, reversing, cancelling and finishing an unfinished
+step. The pages and their CSV reports stay readable: the loaders ask
+`planAllowsChanges` (`plan-access.server.ts`), show a banner that links to
+Billing, disable every button that changes something and stop Enter from
+submitting. The ledger itself does not check the plan; the routes do.
+
+A lapsed plan therefore also stops work that is already under way, such as
+receiving a transfer that is in transit or putting cancelled stock back. Stock
+in Shopify stays as it was at the last confirmed step, and the page keeps
+saying what is unfinished until a plan is active again. Whether documents in
+flight should stay finishable after a plan lapses is a plan-policy decision
+that has not been made.
 
 ## Limits and known gaps
 

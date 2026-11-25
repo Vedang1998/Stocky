@@ -643,16 +643,34 @@ function refusedOutcome(error: InventoryOperationValidationError): StockOutcome 
 
 const clip = (message: string | null) => message?.slice(0, 1000) ?? null;
 
+/**
+ * Bookkeeping on a receipt row, outside the transaction that settles it. It
+ * takes a transaction of its own so that it waits its turn on the row. As a
+ * bare statement the tenant client runs it serializable, and copies of one
+ * submission that arrive together then fail each other with a write conflict
+ * instead of queueing.
+ */
+async function updateReceiptRow(
+  db: TenantDb,
+  where: Prisma.PurchaseOrderReceiptWhereInput,
+  data: Prisma.PurchaseOrderReceiptUncheckedUpdateManyInput,
+): Promise<void> {
+  await db.$transaction((tx) =>
+    tx.purchaseOrderReceipt.updateMany({ where, data }),
+  );
+}
+
 async function noteUnfinished(
   db: TenantDb,
   receipt: ReceiptRecord,
   code: string,
   message: string | null,
 ): Promise<void> {
-  await db.purchaseOrderReceipt.updateMany({
-    where: { id: receipt.id, status: receipt.status },
-    data: { failureCode: code, failureMessage: clip(message) },
-  });
+  await updateReceiptRow(
+    db,
+    { id: receipt.id, status: receipt.status },
+    { failureCode: code, failureMessage: clip(message) },
+  );
 }
 
 /**
@@ -1000,12 +1018,13 @@ async function advanceReceipt(
       await settle(db, receipt, refusedOutcome(error));
       return loadReceipt(db, receiptId);
     }
-    await db.purchaseOrderReceipt.updateMany({
-      where: { id: receipt.id },
-      data: reversing
+    await updateReceiptRow(
+      db,
+      { id: receipt.id },
+      reversing
         ? { reversalOperationId: operationId }
         : { inventoryOperationId: operationId },
-    });
+    );
   }
 
   const result = await executeInventoryOperation(

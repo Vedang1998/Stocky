@@ -70,10 +70,14 @@ export function parseReceiptBody(
   for (const entry of lines) {
     if (!isRecord(entry)) return bad("Every line must be an object.");
     const { lineItemId } = entry;
-    if (typeof lineItemId !== "string" || lineItemId === "" || lineItemId.length > 64) {
+    if (
+      typeof lineItemId !== "string" ||
+      lineItemId === "" ||
+      lineItemId.length > 64 ||
+      lineItemId.includes("\u0000")
+    ) {
       return bad("Every line needs a lineItemId.");
     }
-    if (lineItemId.includes("\u0000")) return bad("Every line needs a lineItemId.");
     if (seen.has(lineItemId)) return bad("A line appears twice.");
     seen.add(lineItemId);
 

@@ -11,13 +11,18 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
+import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { submitOnEnter } from "../lib/submit-on-enter";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import { requireAdminTenantWithActor } from "../services/inventory-writes/actor.server";
 import { readFormId } from "../services/inventory-writes/form-values";
 import { listSyncedLocations } from "../services/inventory-writes/locations.server";
+import { planAllowsChanges } from "../services/inventory-writes/plan-access.server";
+import { readShopTimeZone } from "../services/inventory-writes/shop-clock.server";
+import { formatShopTime } from "../services/inventory-writes/shop-time";
 import {
   listStocktakes,
   readListView,
@@ -27,27 +32,31 @@ import {
 import { createStocktake } from "../services/stocktakes/stocktake.server";
 import { MAX_STOCKTAKE_NAME_LENGTH } from "../services/stocktakes/stocktake-limits";
 import {
-  formatUtc,
   STOCKTAKE_SCOPE_LABEL,
   STOCKTAKE_STATUS_BADGE,
 } from "../services/stocktakes/stocktake-display";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { db } = await requireAdminTenant({ request });
+  const { db, tenant } = await requireAdminTenant({ request });
   const params = new URL(request.url).searchParams;
   const view = readListView(params.get("view"));
   const page = readPageNumber(params.get("page"));
 
-  const [{ stocktakes, hasMore }, locations] = await Promise.all([
-    listStocktakes(db, { view, page }),
-    listSyncedLocations(db),
-  ]);
+  const [{ stocktakes, hasMore }, locations, planActive, timeZone] =
+    await Promise.all([
+      listStocktakes(db, { view, page }),
+      listSyncedLocations(db),
+      planAllowsChanges(db),
+      readShopTimeZone(tenant),
+    ]);
   return {
     stocktakes,
     hasMore,
     view,
     page,
     locations,
+    planActive,
+    timeZone,
     writesEnabled: isInventoryWriteEnabled("stocktakeInventoryWrites"),
   };
 };
@@ -66,6 +75,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, tenant, db, actor } = await requireAdminTenantWithActor({
     request,
   });
+  await requireActivePlanSnapshot(db);
   const form = await request.formData();
   if (form.get("intent") !== "create") {
     return { error: "That action is not available." };
@@ -101,10 +111,21 @@ function listHref(view: StocktakeListView, page: number): string {
 }
 
 export default function Stocktakes() {
-  const { stocktakes, hasMore, view, page, locations, writesEnabled } =
-    useLoaderData<typeof loader>();
+  const {
+    stocktakes,
+    hasMore,
+    view,
+    page,
+    locations,
+    planActive,
+    timeZone,
+    writesEnabled,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const busy = useNavigation().state !== "idle";
+  // Nothing is submitted twice, and nothing at all without an active plan.
+  const locked = useNavigation().state !== "idle" || !planActive;
+  // Enter in a field submits too, so it is taken away with the buttons.
+  const onEnter = planActive ? submitOnEnter : undefined;
 
   const values: Partial<CreateValues> =
     actionData && "values" in actionData ? (actionData.values ?? {}) : {};
@@ -115,6 +136,7 @@ export default function Stocktakes() {
 
   return (
     <s-page heading="Stocktakes">
+      {!planActive && <PlanRequiredBanner records="Stocktakes" />}
       {!writesEnabled && (
         <s-banner
           tone="warning"
@@ -136,7 +158,7 @@ export default function Stocktakes() {
             then start a count.
           </s-paragraph>
         ) : (
-          <Form method="post" onKeyDown={submitOnEnter}>
+          <Form method="post" onKeyDown={onEnter}>
             <input type="hidden" name="intent" value="create" />
             <s-stack direction="block" gap="base">
               <s-grid
@@ -188,7 +210,7 @@ export default function Stocktakes() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  {...(busy ? { disabled: true } : {})}
+                  {...(locked ? { disabled: true } : {})}
                 >
                   Start count
                 </s-button>
@@ -257,7 +279,10 @@ export default function Stocktakes() {
                         {stocktake.lineCount.toLocaleString("en-US")}
                       </s-table-cell>
                       <s-table-cell>
-                        {formatUtc(stocktake.startedAt ?? stocktake.createdAt)}
+                        {formatShopTime(
+                          stocktake.startedAt ?? stocktake.createdAt,
+                          timeZone,
+                        )}
                       </s-table-cell>
                     </s-table-row>
                   );
