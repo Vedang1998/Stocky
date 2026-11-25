@@ -10,7 +10,7 @@ export function quantity(value: number | null): string {
   return value == null ? MISSING_VALUE : value.toLocaleString("en-US");
 }
 
-/** An amount in the shop's currency; a plain number when the currency is unknown. */
+/** An amount in the given currency; a plain number when the currency is unknown. */
 export function money(
   amount: string | null,
   currencyCode: string | null,

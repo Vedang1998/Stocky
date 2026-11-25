@@ -215,7 +215,7 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     cell: (line) => money(line.priceAmount, line.priceCurrencyCode),
   },
   shopifyCost: {
-    label: "Shopify cost",
+    label: "Shopify unit cost",
     sortKey: null,
     numeric: true,
     cell: (line) => money(line.unitCostAmount, line.unitCostCurrencyCode, 4),
@@ -269,7 +269,7 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     cell: (line) => quantity(line.netUnits),
   },
   orders: {
-    label: "Orders",
+    label: "Sales orders",
     sortKey: null,
     numeric: true,
     cell: (line) => quantity(line.distinctOrders),
@@ -287,7 +287,7 @@ const COLUMNS: Record<WorksheetColumn, ColumnSpec> = {
     cell: (line) => formatDecimal(line.unitsPerDay),
   },
   revenuePerDay: {
-    label: "Sales per day",
+    label: "Net sales per day",
     sortKey: null,
     numeric: true,
     cell: (line, { currencyCode, salesDays }) =>
