@@ -16,14 +16,18 @@ trap 'kill "${app_pid}" "${worker_pid}" 2>/dev/null || true' EXIT
 
 ready=false
 for _ in $(seq 1 60); do
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' "http://localhost:${port}/")" != "000" ]; then
+  if [ "$(curl -s --max-time 2 -o /dev/null -w '%{http_code}' "http://localhost:${port}/")" != "000" ]; then
     ready=true
     break
   fi
   sleep 1
 done
-if [ "${ready}" != true ]; then
+if [ "${ready}" != true ] || ! kill -0 "${app_pid}" 2>/dev/null; then
   echo "app did not start on port ${port}; see ${logs}/app.log" >&2
+  exit 1
+fi
+if ! kill -0 "${worker_pid}" 2>/dev/null; then
+  echo "job worker exited at start-up; see ${logs}/worker.log" >&2
   exit 1
 fi
 

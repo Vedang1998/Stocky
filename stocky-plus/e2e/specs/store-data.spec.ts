@@ -1,12 +1,13 @@
 import { APP_BASE_URL, authHeaders, expect, openAppPage, test } from "../support/fixtures";
 
-// A product that ships with the dev test store (see issue #74 checkpoints).
-const TEST_STORE_PRODUCT = "The Multi-location Snowboard";
+// The worker imports the catalog after the first sign-in; until then the
+// Inventory lookup page shows this banner.
+const NOT_SYNCED = 's-banner[heading="Your catalog has not synced yet"]';
 
-test("the test store's products reach the Inventory page after install", async ({ page }) => {
+test("the test store's catalog syncs into ProPo after install", async ({ page }) => {
   await expect(async () => {
-    await openAppPage(page, "/app/inventory");
-    await expect(page.getByText(TEST_STORE_PRODUCT).first()).toBeVisible({ timeout: 1_000 });
+    expect(await openAppPage(page, "/app/inventory")).toBe("Inventory");
+    await expect(page.locator(NOT_SYNCED)).toHaveCount(0);
   }).toPass({ timeout: 180_000, intervals: [5_000] });
 });
 

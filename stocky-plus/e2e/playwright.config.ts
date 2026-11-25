@@ -17,6 +17,8 @@ export default defineConfig({
     // including HeadlessChrome.
     userAgent:
       "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36",
+    // Keep traces off: a trace records every Authorization header, and the
+    // run's artifact is downloadable from this public repository.
     trace: "off",
     screenshot: "only-on-failure",
   },

@@ -85,3 +85,14 @@ export function authHeaders(): Record<string, string> {
   });
   return { authorization: `Bearer ${token}` };
 }
+
+/**
+ * Opens a page that needs a ProPo plan on a shop without one, and checks it
+ * answers with the plan-required page rather than a crash.
+ */
+export async function expectPlanRequiredPage(page: Page, path: string): Promise<void> {
+  const response = await page.goto(appUrl(path));
+  expect(response?.status(), `HTTP status for ${path}`).toBe(403);
+  await expect(page.getByRole("heading", { name: "Access not available" })).toBeVisible();
+  await expect(page.getByText("An active ProPo plan is required")).toBeVisible();
+}

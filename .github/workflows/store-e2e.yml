@@ -10,7 +10,7 @@ name: Dev-store E2E
 on:
   workflow_dispatch:
   push:
-    branches: ["store-e2e/**"]
+    branches: ["store-e2e/*"]
   schedule:
     # Nightly on main, 07:30 UTC.
     - cron: "30 7 * * *"
@@ -18,9 +18,10 @@ on:
 permissions:
   contents: read
 
-# One run at a time against the shared test store.
+# One run at a time per branch. Runs on different branches may overlap;
+# they only read the test store, since every write switch is off.
 concurrency:
-  group: store-e2e
+  group: store-e2e-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -70,10 +71,10 @@ jobs:
       STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
       STOCKY_DISPATCHER_PROCESS_COUNT: "1"
       REDIS_URL: redis://localhost:6379
-      # The dev-only "ProPo E2E (test store only)" app, installed on the
-      # test store alone. Never the public ProPo app's credentials.
+      # Client ID of the dev-only "ProPo E2E (test store only)" app,
+      # installed on the test store alone. Its client secret is passed only
+      # to the steps that need it, never to dependency installs or the build.
       SHOPIFY_API_KEY: ${{ vars.SHOPIFY_API_KEY }}
-      SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
       SHOPIFY_APP_URL: http://localhost:3000
       SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
       # Every inventory-write switch stays off outside local dev.
@@ -86,11 +87,16 @@ jobs:
       ALLOW_DEV_SUBSCRIPTION_ACTIVATE: "false"
 
     steps:
+      # Actions pinned by commit for the one job that holds a store secret.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Require the store-e2e credentials
         working-directory: .
+        env:
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
         run: |
           if [ -z "${SHOPIFY_API_KEY}" ] || [ -z "${SHOPIFY_API_SECRET}" ]; then
             echo "The store-e2e environment needs variable SHOPIFY_API_KEY and secret SHOPIFY_API_SECRET." >&2
@@ -108,7 +114,7 @@ jobs:
           echo "TENANT_JOB_ENVELOPE_SECRET=${envelope}" >> "${GITHUB_ENV}"
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22.19.0"
           cache: npm
@@ -132,12 +138,26 @@ jobs:
 
       - name: Run dev-store E2E
         env:
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
           STORE_E2E_LOG_DIR: e2e-logs
         run: ./scripts/store-e2e/run.sh
 
-      - name: Upload report and logs
+      # The artifact is downloadable by any signed-in GitHub user, and masking
+      # does not apply to files, so nothing is uploaded unless this passes.
+      - name: Credential scan self-test
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        run: bash scripts/store-e2e/scan-artifacts.test.sh
+
+      - name: Check report and logs for credentials
+        id: artifact_scan
+        if: ${{ !cancelled() }}
+        env:
+          SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+        run: ./scripts/store-e2e/scan-artifacts.sh e2e-report e2e-results e2e-logs
+
+      - name: Upload report and logs
+        if: ${{ !cancelled() && steps.artifact_scan.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: store-e2e-report
           path: |
