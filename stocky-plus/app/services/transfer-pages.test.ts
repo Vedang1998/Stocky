@@ -812,10 +812,33 @@ describe("Transfer page action", () => {
     async (fields) => {
       context.actor = null;
 
-      expect(await act(fields)).toEqual({ error: STAFF_REQUIRED_MESSAGE });
+      expect(await act(fields)).toMatchObject({
+        error: STAFF_REQUIRED_MESSAGE,
+      });
       expectNothingSaved();
     },
   );
+
+  it("hands a pasted list back, and keeps the scan fields ready, when no staff member is signed in", async () => {
+    context.actor = null;
+    const items = "RED-750,6\nWHITE-750,12";
+
+    expect(await act({ intent: "addItems", items })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+      items,
+    });
+    for (const intent of ["addItem", "scan"]) {
+      expect(await act({ intent, code: "RED-750" }), intent).toEqual({
+        error: STAFF_REQUIRED_MESSAGE,
+        scannedAt: expect.any(Number),
+      });
+    }
+    // The other steps have nothing to hand back.
+    expect(await act({ intent: "ship" })).toEqual({
+      error: STAFF_REQUIRED_MESSAGE,
+    });
+    expectNothingSaved();
+  });
 
   describe("adding one item", () => {
     it("adds the scanned code with its units and says where the line stands", async () => {

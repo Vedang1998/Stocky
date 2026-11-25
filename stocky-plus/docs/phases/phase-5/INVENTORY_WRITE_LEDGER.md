@@ -503,13 +503,20 @@ that has not been made.
 Every action of the Stocktakes, Adjustments and Transfers pages needs a named
 staff member: the user ID in the session token Shopify signed for the request
 (`readAdminActor`, `actor.server.ts`). A request without one is answered with
-"Inventory changes need a signed-in Shopify staff member…" before the form is
-read, and nothing is saved. That holds for steps that move no stock as well,
-such as starting a draft, editing its items, counting, counting units in and
-cancelling, so every document says who made it and who cancelled it. The
-check is made in the routes, after the plan gate. The draft and counting
-services still take an optional actor in their signatures; the ledger itself
-always requires one.
+"Inventory changes need a signed-in Shopify staff member…" before anything is
+saved. That holds for steps that move no stock as well, such as starting a
+draft, editing its items, counting, counting units in and cancelling. A
+refusal hands back what was entered: the fields of a new transfer or count,
+and a pasted list of items.
+
+What is recorded with the staff member: who started a transfer or a count,
+who counted a line, who asked for a recount, who completed or cancelled the
+document, and every request that changes stock in Shopify (the ledger always
+requires an actor). Edits to a draft's items, zero fill, the review of moved
+stock and taking a recount request back are refused without a staff member
+but are not yet stored with one. The check is made in the routes, after the
+plan gate; the draft and counting services still take an optional actor in
+their signatures.
 
 ## Limits and known gaps
 
