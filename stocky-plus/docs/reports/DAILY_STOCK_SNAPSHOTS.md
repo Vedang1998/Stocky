@@ -49,8 +49,12 @@ the apply step gives the runtime role its grants and row-level policies on
 them. Until it has run, the worker cannot read or write the tables: each
 capture fails with a permission error (nothing is exposed), and a day whose
 six-hour window passes in that state is lost. The apply step must be the
-version that matches a parent on its real key (SEC-19); an older one refuses
-to run again once a day has been captured.
+version that matches a parent on its real key (SEC-19) and that checks grants
+per table (SEC-22); an older one refuses to run again once a day has been
+captured, or once the database is in use. While the apply step runs, the
+worker and the app have no access to any merchant table for a second or more;
+the procedure is "A later migration that adds a merchant table" in
+`docs/phases/phase-1/PR3_DATABASE_ENFORCEMENT_RUNBOOK.md`.
 
 ## Reading it
 
