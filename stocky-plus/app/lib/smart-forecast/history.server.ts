@@ -75,6 +75,9 @@ export async function loadDemandHistories(
       input.endLocalDate,
       input.timeZone,
     );
+    // Must count the same orders the scan below reads: live orders by
+    // processedAt over the same local-date window (see loadSalesHistory).
+    // If the scan's filter or timestamp changes, change this count with it.
     const orders: number = await db.shopifyOrderFact.count({
       where: { existenceState: "LIVE", processedAt: { gte: startUtc, lt: endUtcExclusive } },
     });

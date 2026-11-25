@@ -31,7 +31,7 @@ function plan(handle: string, name: string) {
 
 const PRO = plan("pro", "Pro");
 const ESSENTIALS = plan("essentials", "Essentials");
-const db = {} as TenantDb;
+const db = { authority: { correlationId: "corr-1" } } as unknown as TenantDb;
 
 const WORKSHEET = {
   asOfLocalDate: "2026-11-14",
@@ -156,6 +156,10 @@ describe("smartForecastColumn", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     mocks.loadDemandHistories.mockRejectedValue(new Error("query timeout"));
     expect(await smartForecastColumn(db, input())).toEqual({ status: "UNAVAILABLE" });
+    expect(warn).toHaveBeenCalledWith(
+      "smart forecast column unavailable:",
+      expect.objectContaining({ correlationId: "corr-1" }),
+    );
     mocks.loadDemandHistories.mockReset();
     mocks.readProfile.mockRejectedValue(new Error("no shop calendar"));
     expect(await smartForecastColumn(db, input())).toEqual({ status: "UNAVAILABLE" });

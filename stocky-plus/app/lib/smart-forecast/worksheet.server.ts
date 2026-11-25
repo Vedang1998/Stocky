@@ -151,7 +151,12 @@ export async function smartForecastColumn(
   } catch (error) {
     // The column is optional and saved for every worksheet: a failure here
     // must never stop the worksheet, where the column can be turned off.
-    console.warn("smart forecast column unavailable:", error);
+    // The request's correlation ID lets a report of "always unavailable"
+    // be found in the logs; a programming error lands here too.
+    console.warn("smart forecast column unavailable:", {
+      correlationId: db.authority.correlationId,
+      error,
+    });
     return { status: "UNAVAILABLE" };
   }
 }
