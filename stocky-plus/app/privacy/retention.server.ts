@@ -27,12 +27,20 @@ export async function openRetentionErasureRequests(
   // An operator hold (MANUAL) stops a reinstall from switching the shop on.
   // It does not keep an uninstalled shop's data past the retention period:
   // an uninstall leaves the hold in place and records the uninstall time, and
-  // that time is what makes the shop due here. A shop on hold that is still
-  // installed has no uninstall time and is left alone.
+  // that time is what makes the shop due here.
+  //
+  // A shop on hold can also be installed. It is uninstalled only if its
+  // uninstall is later than its last reinstall. A reinstall clears the
+  // uninstall time; the comparison is here as well because this decides an
+  // erasure, and it is part of the conditional update below.
   const expired = {
     processingEnabled: false,
     processingDisabledReason: { in: ["UNINSTALLED", "MANUAL"] },
     uninstalledAt: { lte: cutoff },
+    OR: [
+      { reinstalledAt: null },
+      { uninstalledAt: { gt: prisma.shop.fields.reinstalledAt } },
+    ],
   } satisfies Prisma.ShopWhereInput;
 
   const shops = await prisma.shop.findMany({

@@ -548,6 +548,59 @@ describe("privacy compliance", () => {
     expect(shop.processingDisabledReason).toBe("MANUAL");
   });
 
+  // The uninstall time of an earlier install must never make an installed
+  // shop due: uninstall, reinstall, then an operator hold while installed.
+  it("does not erase an installed shop on operator hold that was uninstalled once before", async () => {
+    const shopA = await seedShop(SHOP_A);
+    await uninstall(SHOP_A);
+    await reactivateShopAfterVerifiedReinstall({ verifiedDomain: SHOP_A });
+    await prisma.shop.update({
+      where: { id: shopA },
+      data: { processingEnabled: false, processingDisabledReason: "MANUAL" },
+    });
+    const before = await rowsByTable(shopA);
+    const farFuture = new Date(Date.now() + 400 * 24 * 60 * 60_000);
+
+    await runPrivacyMaintenance({
+      retentionDays: 30,
+      deps: realDeps,
+      now: farFuture,
+    });
+
+    expect(await rowsByTable(shopA)).toEqual(before);
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopA } });
+    expect(shop.processingDisabledReason).toBe("MANUAL");
+    expect(shop.uninstalledAt).toBeNull();
+    expect(
+      await prisma.privacyRequest.count({ where: { shopRecordId: shopA } }),
+    ).toBe(0);
+  });
+
+  it("does not erase a shop whose recorded uninstall is older than its last reinstall", async () => {
+    // A row as it could exist from before reinstalls cleared the uninstall
+    // time: the sweep's own comparison has to hold without that.
+    const shopA = await seedShop(SHOP_A);
+    const day = 24 * 60 * 60_000;
+    for (const reason of ["MANUAL", "UNINSTALLED"] as const) {
+      await prisma.shop.update({
+        where: { id: shopA },
+        data: {
+          processingEnabled: false,
+          processingDisabledReason: reason,
+          uninstalledAt: new Date(Date.now() - 90 * day),
+          reinstalledAt: new Date(Date.now() - 60 * day),
+        },
+      });
+      const before = await rowsByTable(shopA);
+
+      await runPrivacyMaintenance({ retentionDays: 30, deps: realDeps });
+
+      expect(await rowsByTable(shopA)).toEqual(before);
+      const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopA } });
+      expect(shop.processingDisabledReason).toBe(reason);
+    }
+  });
+
   it("keeps the session of a merchant who installs again just as the erasure finishes", async () => {
     const shopA = await seedShop(SHOP_A);
     await uninstall(SHOP_A);

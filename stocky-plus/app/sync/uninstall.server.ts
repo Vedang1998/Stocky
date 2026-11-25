@@ -78,6 +78,15 @@ type LockedShop = {
   reinstalledAt: Date | null;
 };
 
+/**
+ * Whether the row already records the uninstall of the current install. A
+ * time from before the last reinstall belongs to an earlier install.
+ */
+function uninstallOnRecord(shop: LockedShop): boolean {
+  if (!shop.uninstalledAt) return false;
+  return !shop.reinstalledAt || shop.uninstalledAt > shop.reinstalledAt;
+}
+
 function parseTriggeredAt(value: string | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
@@ -221,7 +230,7 @@ export async function processUninstall(
           uninstalledAt: now,
         },
       });
-    } else if (!current.uninstalledAt) {
+    } else if (!uninstallOnRecord(current)) {
       // Already switched off by an operator or by an erasure. That reason and
       // its time stay; only the fact of the uninstall is added. The retention
       // sweep reads this time, so a shop on operator hold is still erased

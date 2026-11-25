@@ -308,6 +308,59 @@ describe("test:sync-uninstall", () => {
       },
     );
 
+    it("a reinstall clears the uninstall time, and a later uninstall on a held shop records its own", async () => {
+      await processUninstall({
+        verifiedShop: SHOP,
+        webhookId: "uninstall-first",
+        apiVersion: "2026-07",
+      });
+      await reactivateShopAfterVerifiedReinstall({ verifiedDomain: SHOP });
+      expect((await shopRow()).uninstalledAt).toBeNull();
+
+      // An operator hold while installed, then the merchant uninstalls.
+      await prisma.shop.update({
+        where: { myshopifyDomain: SHOP },
+        data: { processingEnabled: false, processingDisabledReason: "MANUAL" },
+      });
+      const before = Date.now();
+      await processUninstall({
+        verifiedShop: SHOP,
+        webhookId: "uninstall-while-held",
+        apiVersion: "2026-07",
+      });
+
+      const shop = await shopRow();
+      expect(shop.processingDisabledReason).toBe("MANUAL");
+      expect(shop.uninstalledAt!.getTime()).toBeGreaterThanOrEqual(before);
+      expect(shop.uninstalledAt!.getTime()).toBeGreaterThan(
+        shop.reinstalledAt!.getTime(),
+      );
+    });
+
+    it("an uninstall time from an earlier install is replaced on a shop that is off", async () => {
+      const day = 24 * 60 * 60_000;
+      await prisma.shop.update({
+        where: { myshopifyDomain: SHOP },
+        data: {
+          processingEnabled: false,
+          processingDisabledReason: "MANUAL",
+          uninstalledAt: new Date(Date.now() - 90 * day),
+          reinstalledAt: new Date(Date.now() - 60 * day),
+        },
+      });
+      const before = Date.now();
+
+      await processUninstall({
+        verifiedShop: SHOP,
+        webhookId: "uninstall-stale-time",
+        apiVersion: "2026-07",
+      });
+
+      expect((await shopRow()).uninstalledAt!.getTime()).toBeGreaterThanOrEqual(
+        before,
+      );
+    });
+
     it("does not move the uninstall time of a shop already uninstalled", async () => {
       await processUninstall({
         verifiedShop: SHOP,
