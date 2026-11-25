@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import { parseCount } from "./receiving";
 import {
   createScanQueue,
   describeTransfer,
   loadTransferSheet,
   loadTransfers,
   mostCountedIn,
-  parseCountedIn,
   postTransferReceipt,
   sendTransferCount,
   sendTransferScan,
@@ -97,14 +97,14 @@ describe("requests", () => {
 describe("typed counts", () => {
   it("ignores empty and invalid text instead of counting 0", () => {
     for (const text of ["", "  ", "abc", "-1", "1.5", "12345678", null, undefined]) {
-      expect(parseCountedIn(text)).toBeNull();
+      expect(parseCount(text)).toBeNull();
     }
   });
 
   it("reads real numbers, including a typed 0", () => {
-    expect(parseCountedIn("12")).toBe(12);
-    expect(parseCountedIn(" 0 ")).toBe(0);
-    expect(parseCountedIn("9999999")).toBe(1_000_000);
+    expect(parseCount("12")).toBe(12);
+    expect(parseCount(" 0 ")).toBe(0);
+    expect(parseCount("9999999")).toBe(1_000_000);
   });
 
   it("bounds a line's count by what is counted in plus what is still unaccounted for", () => {

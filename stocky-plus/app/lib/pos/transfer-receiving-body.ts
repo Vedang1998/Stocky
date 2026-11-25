@@ -17,7 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function wholeNumber(value: unknown, min: number, label: string): number {
+function wholeNumber(value: unknown, min: number): number {
   if (
     typeof value !== "number" ||
     !Number.isInteger(value) ||
@@ -25,7 +25,7 @@ function wholeNumber(value: unknown, min: number, label: string): number {
     value > MAX_TRANSFER_LINE_QUANTITY
   ) {
     return bad(
-      `${label} must be a whole number from ${min} to ${MAX_TRANSFER_LINE_QUANTITY}.`,
+      `Quantity must be a whole number from ${min} to ${MAX_TRANSFER_LINE_QUANTITY}.`,
     );
   }
   return value;
@@ -37,16 +37,14 @@ export function parseTransferReceiveBody(body: unknown): PosTransferReceiveReque
 
   if (body.intent === "scan") {
     const { code } = body;
-    if (typeof code !== "string" || code.trim() === "") {
-      return bad("Scan or type a barcode or SKU.");
-    }
-    if (code.includes("\u0000")) return bad("That code is not valid.");
-    if (code.trim().length > MAX_CODE_LENGTH) return bad("That code is too long.");
+    const trimmed = typeof code === "string" ? code.trim() : "";
+    if (trimmed === "") return bad("Scan or type a barcode or SKU.");
+    if (trimmed.includes("\u0000")) return bad("That code is not valid.");
+    if (trimmed.length > MAX_CODE_LENGTH) return bad("That code is too long.");
     return {
       intent: "scan",
-      code: code.trim(),
-      quantity:
-        body.quantity === undefined ? 1 : wholeNumber(body.quantity, 1, "Quantity"),
+      code: trimmed,
+      quantity: body.quantity === undefined ? 1 : wholeNumber(body.quantity, 1),
     };
   }
 
@@ -63,7 +61,7 @@ export function parseTransferReceiveBody(body: unknown): PosTransferReceiveReque
     return {
       intent: "set",
       lineId,
-      quantity: wholeNumber(body.quantity, 0, "Quantity"),
+      quantity: wholeNumber(body.quantity, 0),
     };
   }
 

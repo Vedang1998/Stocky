@@ -7,7 +7,6 @@ import type {
 import {
   call,
   failure,
-  MAX_COUNT,
   RECEIVING_MESSAGES,
   withLocation,
   type FetchLike,
@@ -18,6 +17,7 @@ export const TRANSFER_MESSAGES = {
   noLocation: "Choose a location in POS before receiving a transfer.",
   scanUnsure:
     "ProPo couldn't confirm that scan. Check the count shown for the item before scanning again.",
+  countUnsure: "ProPo couldn't confirm that count. Check the count shown, then try again.",
   postUnsure:
     "ProPo couldn't confirm the receipt. Tap Post receipt again; units Shopify already has are not added twice.",
 } as const;
@@ -107,7 +107,7 @@ export function sendTransferCount(
     locationId,
     transferId,
     { intent: "set", lineId, quantity },
-    "ProPo couldn't confirm that count. Check the count shown, then try again.",
+    TRANSFER_MESSAGES.countUnsure,
   );
 }
 
@@ -118,13 +118,6 @@ export function postTransferReceipt(
   transferId: string,
 ) {
   return send(fetchImpl, locationId, transferId, { intent: "post" }, TRANSFER_MESSAGES.postUnsure);
-}
-
-/** Read typed text: empty or invalid is `null` (leave the count alone), a number is a count. */
-export function parseCountedIn(value: string | null | undefined): number | null {
-  const text = (value ?? "").trim();
-  if (!/^\d{1,7}$/.test(text)) return null;
-  return Math.min(Number(text), MAX_COUNT);
 }
 
 /** The most a line's count can be: what is counted in plus what is still unaccounted for. */

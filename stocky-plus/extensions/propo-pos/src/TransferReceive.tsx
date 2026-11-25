@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "preact/hooks";
 import type { ReceivableTransfer, TransferLine, TransferSheet } from "./api-types";
 import { formatQuantity } from "./format";
+import { parseCount } from "./receiving";
 import {
   createScanQueue,
   describeTransfer,
   loadTransferSheet,
   loadTransfers,
   mostCountedIn,
-  parseCountedIn,
   postTransferReceipt,
   sendTransferCount,
   sendTransferScan,
@@ -430,7 +430,7 @@ function TransferLineRow({
             disabled={disabled}
             onChange={(event) => {
               // Empty or invalid text never becomes a count of 0.
-              const typed = parseCountedIn(event.currentTarget.value);
+              const typed = parseCount(event.currentTarget.value);
               if (typed === null || typed === line.countedInQty) {
                 setFieldKey((n) => n + 1);
                 return;

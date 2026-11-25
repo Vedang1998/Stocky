@@ -212,9 +212,13 @@ export function setCount(counts: Counts, lineItemId: string, value: number): Cou
 }
 
 /** Read what a person typed in a count field as a whole number of units. */
-export function readCount(value: string | null | undefined): number {
+export function parseCount(value: string | null | undefined): number | null {
   const text = (value ?? "").trim();
-  return /^\d{1,7}$/.test(text) ? Math.min(Number(text), MAX_COUNT) : 0;
+  return /^\d{1,7}$/.test(text) ? Math.min(Number(text), MAX_COUNT) : null;
+}
+
+export function readCount(value: string | null | undefined): number {
+  return parseCount(value) ?? 0;
 }
 
 /**
