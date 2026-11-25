@@ -99,7 +99,7 @@ function Result({
           <s-text type="strong">Order on this forecast: {quantity(suggested)}</s-text>
         )}
         {forecast.outcome !== "SELECTED" && (
-          <s-text type="strong">Keep the Stocky Parity suggestion for this row.</s-text>
+          <s-text type="strong">Keep the worksheet&apos;s suggestion for this row.</s-text>
         )}
         {suggested != null && !locked && forecast.outcome === "SELECTED" && (
           <s-stack direction="inline" gap="base" alignItems="center">
@@ -116,7 +116,7 @@ function Result({
             </s-button>
             {applied?.ok && (
               <s-text color="subdued">
-                Order quantity set to {quantity(applied.orderQuantity)}. The Stocky Parity
+                Order quantity set to {quantity(applied.orderQuantity)}. The worksheet&apos;s
                 suggestion is unchanged.
               </s-text>
             )}
@@ -150,8 +150,8 @@ export function SmartForecastPanel({
       </s-stack>
       <s-text color="subdued">
         Smart Forecast tests a few forecasting methods on this variant&apos;s own sales and uses
-        one only when it beat the recent average in the past. It is advice beside the Stocky
-        Parity suggestion above, which it never changes.
+        one only when it beat the recent average in the past. It is advice beside the
+        worksheet&apos;s suggestion above, which it never changes.
       </s-text>
       <s-button
         {...(run.state !== "idle" ? { loading: true } : {})}
