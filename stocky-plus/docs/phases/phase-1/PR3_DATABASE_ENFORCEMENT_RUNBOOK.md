@@ -92,6 +92,32 @@ Ordered stages (disposable / future staging only — no production rollout autho
 6. Do not grant runtime merchant DML before exact verified RLS.
 7. Staging/production verification must set `STOCKY_REQUIRE_NONSUPERUSER_OWNER=1`.
 
+## A later migration that adds a merchant table
+
+After the first rollout, a migration that creates a merchant table leaves it with no row-level policies and no runtime grants. The runtime role cannot read or write the table (nothing is exposed), and enforcement is incomplete again for that table only. Apply installs policies and grants only for the tables listed in `scripts/tenant-enforcement/manifest.ts`, so the pull request that adds the migration adds the table there too.
+
+```bash
+# 1. Migrate
+npx prisma migrate deploy
+
+# 2. Apply enforcement, with no acknowledgement flag
+npm run tenant:enforcement:apply -- --apply
+
+# 3. Verify
+npm run tenant:enforcement:verify
+```
+
+In step 2 the resume preflight reports `known_safe_partial_state`. Apply installs the new table's constraints, policies and triggers, verifies every definition, and only then grants the runtime role.
+
+Two things are still refused as dangerous drift, and should be investigated before anyone passes `--acknowledge-dangerous-drift-repair`:
+
+- a runtime grant on a table that is not under forced row-level security;
+- a policy, trigger, key or constraint that is missing or changed on a table the runtime role can already use.
+
+Tooling from before SEC-22 refuses step 2 with `repair_authorization_required` and lists every existing grant as `unexpected_merchant_priv_before_rls`. That is the fault, not drift: use tooling that has the fix instead of the flag.
+
+**Every apply interrupts runtime access.** Apply revokes the runtime role's merchant privileges at `roles_prepared` and grants them again at `runtime_grants_applied`, also when there is nothing to install. In between, every query of the app and its workers fails with a permission error; nothing is exposed. Measured on an empty, already enforced disposable database: about 1.1 seconds of a 5.4 second run. On a populated database the window also holds the index builds and constraint validation for whatever the run installs. Plan the apply as a release step with the app drained, or accept failed requests and retried jobs for that long (open item OPEN-16 in the security attack test report).
+
 ## Rollback boundaries
 
 - **After RLS activation, the pre-PR-3 / pre-Phase-1 application is not a valid rollback target.**
