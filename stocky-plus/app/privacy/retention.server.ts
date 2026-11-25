@@ -1,8 +1,11 @@
 /**
  * Retention backstop. Shopify sends shop/redact 48 hours after an uninstall;
  * if that webhook never arrives, an uninstalled shop's data is still erased
- * once it has been uninstalled for the configured number of days.
+ * once it has been uninstalled for the configured number of days. The same
+ * holds for an uninstalled shop on operator hold, which shop/redact itself
+ * leaves alone.
  */
+import type { Prisma } from "@prisma/client";
 import { getControlPlanePrisma } from "../sync/control-plane-db.server";
 import { PRIVACY_REQUEST_DUE_DAYS } from "./config.server";
 
@@ -21,11 +24,16 @@ export async function openRetentionErasureRequests(
 ): Promise<number> {
   const prisma = getControlPlanePrisma();
   const cutoff = new Date(now.getTime() - retentionDays * DAY_MS);
+  // An operator hold (MANUAL) stops a reinstall from switching the shop on.
+  // It does not keep an uninstalled shop's data past the retention period:
+  // an uninstall leaves the hold in place and records the uninstall time, and
+  // that time is what makes the shop due here. A shop on hold that is still
+  // installed has no uninstall time and is left alone.
   const expired = {
     processingEnabled: false,
-    processingDisabledReason: "UNINSTALLED",
+    processingDisabledReason: { in: ["UNINSTALLED", "MANUAL"] },
     uninstalledAt: { lte: cutoff },
-  } as const;
+  } satisfies Prisma.ShopWhereInput;
 
   const shops = await prisma.shop.findMany({
     where: expired,

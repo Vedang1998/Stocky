@@ -62,8 +62,11 @@ export type ProcessUninstallResult = {
 };
 
 /**
- * Shopify's clock and ours may differ a little. An uninstall counts as older
- * than a reinstall only when it is older by more than this.
+ * The trigger time is Shopify's clock and `reinstalledAt` is ours; the two may
+ * differ a little. An uninstall counts as older than a reinstall only when it
+ * is older by more than this. The allowance works in one direction only: an
+ * uninstall triggered within it before the reinstall still switches the shop
+ * off, which heals when the merchant next opens the app.
  */
 const TRIGGER_TIME_ALLOWANCE_MS = 5_000;
 
@@ -220,7 +223,9 @@ export async function processUninstall(
       });
     } else if (!current.uninstalledAt) {
       // Already switched off by an operator or by an erasure. That reason and
-      // its time stay; only the fact of the uninstall is added.
+      // its time stay; only the fact of the uninstall is added. The retention
+      // sweep reads this time, so a shop on operator hold is still erased
+      // once it has been uninstalled for the retention period.
       await tx.shop.update({
         where: { id: shop.id },
         data: { uninstalledAt: now },
