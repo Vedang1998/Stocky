@@ -9,12 +9,9 @@ import { formatDecimal, MISSING_VALUE } from "../../lib/decimal-format";
 import type { WorksheetLine } from "../../lib/replenishment/worksheet/store.server";
 import type { SmartForecast } from "../../lib/smart-forecast";
 import type { SmartForecastLoaderResult, WorksheetActionResult } from "./types";
+import { quantity } from "./format";
 
 export const SMART_FORECAST_PATH = "/app/replenishment/smart-forecast";
-
-function quantity(value: number | null): string {
-  return value == null ? MISSING_VALUE : value.toLocaleString("en-US");
-}
 
 function units(value: string | null): string {
   return value == null ? MISSING_VALUE : formatDecimal(value);
