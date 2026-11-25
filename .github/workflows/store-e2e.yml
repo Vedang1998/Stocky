@@ -1,0 +1,147 @@
+name: Dev-store E2E
+
+# Runs the ProPo app inside the runner against the dev test store
+# (stocky-test-store.myshopify.com) and drives it with Playwright, so store
+# tests no longer need the owner's Mac. See stocky-plus/docs/STORE_E2E.md.
+#
+# Not triggered by pull_request: the run needs the store-e2e environment
+# secret and changes shared test-store state, so it is started on purpose:
+# by hand, nightly, or by pushing a branch named store-e2e/<name>.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["store-e2e/**"]
+  schedule:
+    # Nightly on main, 07:30 UTC.
+    - cron: "30 7 * * *"
+
+permissions:
+  contents: read
+
+# One run at a time against the shared test store.
+concurrency:
+  group: store-e2e
+  cancel-in-progress: false
+
+jobs:
+  store-e2e:
+    name: Dev-store E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: store-e2e
+    defaults:
+      run:
+        working-directory: stocky-plus
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: stocky
+          POSTGRES_PASSWORD: stocky
+          POSTGRES_DB: stocky_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stocky -d stocky_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_e2e
+      STOCKY_BOOTSTRAP_DATABASE_URL: postgresql://stocky:stocky@localhost:5432/stocky_e2e  # pragma: allowlist secret
+      # Run-only role passwords for the throwaway database in this runner.
+      DATABASE_RUNTIME_URL: postgresql://stocky_runtime:stocky_runtime_e2e_only@localhost:5432/stocky_e2e  # pragma: allowlist secret
+      STOCKY_RUNTIME_ROLE: stocky_runtime
+      STOCKY_RUNTIME_ROLE_PASSWORD: stocky_runtime_e2e_only  # pragma: allowlist secret
+      STOCKY_CONTROL_PLANE_ROLE_PASSWORD: stocky_control_plane_e2e_only  # pragma: allowlist secret
+      DATABASE_CONTROL_PLANE_URL: postgresql://stocky_control_plane:stocky_control_plane_e2e_only@localhost:5432/stocky_e2e  # pragma: allowlist secret
+      STOCKY_ALLOW_CONTROL_PLANE_URL_FALLBACK: "1"
+      STOCKY_REQUIRE_RUNTIME_DB_URL: "0"
+      STOCKY_DISPATCHER_PROCESS_COUNT: "1"
+      REDIS_URL: redis://localhost:6379
+      # The dev-only "ProPo E2E (test store only)" app, installed on the
+      # test store alone. Never the public ProPo app's credentials.
+      SHOPIFY_API_KEY: ${{ vars.SHOPIFY_API_KEY }}
+      SHOPIFY_API_SECRET: ${{ secrets.SHOPIFY_API_SECRET }}
+      SHOPIFY_APP_URL: http://localhost:3000
+      SCOPES: read_products,write_products,read_inventory,write_inventory,read_orders,read_locations
+      # Every inventory-write switch stays off outside local dev.
+      FEATURE_STOCKTAKE_INVENTORY_WRITES: "false"
+      FEATURE_ADJUSTMENT_WRITES: "false"
+      FEATURE_RECEIPT_WRITES: "false"
+      FEATURE_COST_SYNC: "false"
+      FEATURE_TRANSFER_WRITES: "false"
+      FEATURE_PR5_ABSENCE_TOMBSTONE: "false"
+      ALLOW_DEV_SUBSCRIPTION_ACTIVATE: "false"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Require the store-e2e credentials
+        working-directory: .
+        run: |
+          if [ -z "${SHOPIFY_API_KEY}" ] || [ -z "${SHOPIFY_API_SECRET}" ]; then
+            echo "The store-e2e environment needs variable SHOPIFY_API_KEY and secret SHOPIFY_API_SECRET." >&2
+            exit 1
+          fi
+
+      - name: Generate run-only secrets
+        working-directory: .
+        run: |
+          key="$(openssl rand -base64 32)"
+          envelope="$(openssl rand -base64 48)"
+          echo "::add-mask::${key}"
+          echo "::add-mask::${envelope}"
+          echo "SESSION_TOKEN_ENCRYPTION_KEY=${key}" >> "${GITHUB_ENV}"
+          echo "TENANT_JOB_ENVELOPE_SECRET=${envelope}" >> "${GITHUB_ENV}"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22.19.0"
+          cache: npm
+          cache-dependency-path: stocky-plus/package-lock.json
+
+      - name: Pin npm
+        working-directory: .
+        run: npm install -g npm@11.5.2
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Prepare database
+        run: ./scripts/store-e2e/prepare-db.sh
+
+      - name: Build app
+        run: npm run build
+
+      - name: Run dev-store E2E
+        env:
+          STORE_E2E_LOG_DIR: e2e-logs
+        run: ./scripts/store-e2e/run.sh
+
+      - name: Upload report and logs
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: store-e2e-report
+          path: |
+            stocky-plus/e2e-report
+            stocky-plus/e2e-results
+            stocky-plus/e2e-logs
+          retention-days: 7

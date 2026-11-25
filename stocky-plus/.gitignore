@@ -43,3 +43,8 @@ pnpm-lock.yaml
 /app/types/admin.types.d.ts
 /app/types/admin.generated.d.ts
 
+
+# Dev-store E2E outputs (scripts/store-e2e/run.sh)
+/e2e-report/
+/e2e-results/
+/e2e-logs/
