@@ -5,7 +5,8 @@
  * 3. Upsert/resolve canonical Shop through bootstrap
  * 4. Reactivate processing when previously UNINSTALLED (PR 4)
  * 5. Create branded tenant authority
- * 6. Upsert ShopSettings through tenant-bound access
+ * 6. Create ShopSettings through tenant-bound access, tolerating a
+ *    concurrent creator (issue #73)
  * 7. Enqueue catalog sync via durable job (caller)
  */
 
@@ -13,6 +14,7 @@ import type { Session } from "@shopify/shopify-api";
 import type { TenantAuthority } from "./authority.server";
 import { resolveAuthorityAfterVerifiedAuth } from "./bootstrap.server";
 import { createTenantDb } from "./tenant-db.server";
+import { ensureShopSettings } from "./shop-settings.server";
 import { reactivateShopAfterVerifiedReinstall } from "../sync/reinstall.server";
 
 export type AfterAuthResult = {
@@ -22,9 +24,27 @@ export type AfterAuthResult = {
   reactivated: boolean;
 };
 
+function describeError(error: unknown): string {
+  if (!(error instanceof Error)) return typeof error;
+  const code = (error as { code?: unknown }).code;
+  return `${error.name}${typeof code === "string" ? ` [${code}]` : ""}: ${error.message}`;
+}
+
 export async function runAfterAuthTenantBootstrap(
   session: Session,
 ): Promise<AfterAuthResult> {
+  try {
+    return await bootstrapTenant(session);
+  } catch (error) {
+    // The Shopify library turns any afterAuth error into an empty 500 and logs
+    // nothing (issue #73). Log the error only, never the session: it holds the
+    // access token.
+    console.error("afterAuth tenant bootstrap failed:", describeError(error));
+    throw error;
+  }
+}
+
+async function bootstrapTenant(session: Session): Promise<AfterAuthResult> {
   const { shop, tenant } = await resolveAuthorityAfterVerifiedAuth({
     verifiedDomain: session.shop,
     source: "verified_scheduler",
@@ -37,21 +57,18 @@ export async function runAfterAuthTenantBootstrap(
       verifiedDomain: session.shop,
     });
     reactivated = result.reactivated;
-  } catch {
-    // REDACTED/MANUAL denial is fail-closed for reactivation; continue bootstrap.
+  } catch (error) {
+    // REDACTED/MANUAL denial is fail-closed for reactivation; continue
+    // bootstrap. Any failure leaves the shop disabled, so say why.
+    console.error(
+      "afterAuth reactivation refused or failed:",
+      describeError(error),
+    );
   }
 
   const db = createTenantDb(tenant);
 
-  await db.shopSettings.upsert({
-    where: { shop: tenant.myshopifyDomain },
-    create: {
-      shop: tenant.myshopifyDomain,
-      shopId: tenant.shopId,
-    },
-    // C-01: do not silently repair nullable ownership on update.
-    update: {},
-  });
+  await ensureShopSettings(db);
 
   return {
     shopId: shop.id,

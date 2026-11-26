@@ -131,6 +131,7 @@ const TEST_FILES = [
   "app/tenant/__tests__/db-isolation/purchasing-supplier-screens.test.ts",
   "app/tenant/__tests__/db-isolation/replenishment-worksheet.test.ts",
   "app/tenant/__tests__/db-isolation/daily-stock-snapshots.test.ts",
+  "app/tenant/__tests__/db-isolation/first-install-race.test.ts",
 ] as const;
 
 const ENFORCEMENT_FILES = [
