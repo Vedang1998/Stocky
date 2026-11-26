@@ -87,7 +87,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!id) return { error: "Reason not found" };
 
   if (intent === "update") {
-    const result = await updateOwnAdjustmentReason(db, id, {
+    const result = await updateOwnAdjustmentReason(db, actor, id, {
       name: readName(form.get("name")),
       shopifyReason: text(form.get("shopifyReason")),
     });
@@ -132,7 +132,7 @@ function EditReason({
 }) {
   return (
     <s-section heading={`Edit "${reason.name}"`}>
-      <Form method="post" onKeyDown={submitOnEnter} onSubmit={onDone}>
+      <Form method="post" onKeyDown={submitOnEnter}>
         <input type="hidden" name="intent" value="update" />
         <input type="hidden" name="id" value={reason.id} />
         <s-stack direction="inline" gap="base" alignItems="end">
@@ -167,8 +167,15 @@ export default function AdjustmentReasons() {
   // Nothing is submitted twice, and nothing at all without an active plan.
   const locked = navigation.state !== "idle" || !planActive;
   const full = reasons.length >= MAX_OWN_ADJUSTMENT_REASONS;
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const editing = reasons.find((reason) => reason.id === editingId);
+  // The reason being edited, and the last action result when Edit was pressed.
+  const [edit, setEdit] = useState<{ id: string; since: unknown } | null>(null);
+  // The edit form closes once something is saved after it was opened. When a
+  // save is refused it stays open, with what was typed.
+  const saved =
+    Boolean(actionData && "ok" in actionData) && actionData !== edit?.since;
+  const editing = saved
+    ? undefined
+    : reasons.find((reason) => reason.id === edit?.id);
   const disabled = locked ? { disabled: true } : {};
 
   const values: Partial<AddValues> =
@@ -219,7 +226,9 @@ export default function AdjustmentReasons() {
                         <s-stack direction="inline" gap="small">
                           <s-button
                             variant="secondary"
-                            onClick={() => setEditingId(reason.id)}
+                            onClick={() =>
+                              setEdit({ id: reason.id, since: actionData })
+                            }
                             {...disabled}
                           >
                             Edit
@@ -254,7 +263,7 @@ export default function AdjustmentReasons() {
           key={editing.id}
           reason={editing}
           locked={locked}
-          onDone={() => setEditingId(null)}
+          onDone={() => setEdit(null)}
         />
       )}
 

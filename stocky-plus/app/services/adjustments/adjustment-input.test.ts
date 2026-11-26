@@ -8,6 +8,7 @@ import {
   isAdjustmentMode,
   isAdjustmentReason,
   isBuiltInReasonName,
+  isReversalName,
   normalizeReasonName,
   ownReasonValue,
   parseAdjustmentLines,
@@ -189,6 +190,12 @@ describe("the shop's own reasons", () => {
     expect(isBuiltInReasonName("Damaged")).toBe(true);
     expect(isBuiltInReasonName("THEFT OR LOSS")).toBe(true);
     expect(isBuiltInReasonName("Damaged in transit")).toBe(false);
+  });
+
+  it("knows the name the history gives an undone adjustment, whatever its capitals", () => {
+    expect(isReversalName("Reversal")).toBe(true);
+    expect(isReversalName("REVERSAL")).toBe(true);
+    expect(isReversalName("Reversal of a count")).toBe(false);
   });
 
   it("never mistakes a built-in reason code for one of the shop's own reasons, or the other way round", () => {

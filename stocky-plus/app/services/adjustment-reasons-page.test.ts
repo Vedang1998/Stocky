@@ -216,6 +216,7 @@ describe("Adjustment reasons page action", () => {
     });
     expect(service.updateOwnAdjustmentReason).toHaveBeenCalledWith(
       context.db,
+      STAFF,
       "r2",
       { name: "Staff purchase", shopifyReason: "promotion" },
     );

@@ -64,6 +64,13 @@ export function isBuiltInReasonName(name: string): boolean {
   );
 }
 
+/** The heading the history gives a reversal; a reason of that name would read as one. */
+export const REVERSAL_LABEL = "Reversal";
+
+export function isReversalName(name: string): boolean {
+  return reasonNameKey(name) === reasonNameKey(REVERSAL_LABEL);
+}
+
 const OWN_REASON_PREFIX = "own:";
 
 /** The form value of one of the shop's own reasons; a built-in reason's value is its code. */

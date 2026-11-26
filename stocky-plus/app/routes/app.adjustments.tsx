@@ -24,6 +24,7 @@ import {
   MAX_ADJUSTMENT_LINES,
   MAX_ADJUSTMENT_NOTE_LENGTH,
   MAX_ADJUSTMENT_TEXT_LENGTH,
+  REVERSAL_LABEL,
   adjustmentReasonLabel,
   ownReasonValue,
   type AdjustmentMode,
@@ -267,7 +268,7 @@ function HistoryEntry({
         <s-stack direction="inline" gap="small" alignItems="center">
           <s-text type="strong">
             {isReversal
-              ? "Reversal"
+              ? REVERSAL_LABEL
               : (entry.reasonLabel ?? adjustmentReasonLabel(entry.reason))}
           </s-text>
           <s-badge tone={badge.tone}>{badge.label}</s-badge>

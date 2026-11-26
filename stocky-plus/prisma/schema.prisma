@@ -991,6 +991,9 @@ model AdjustmentReason {
   /// The Shopify reason code sent with the quantity change, e.g. damaged.
   shopifyReason   String   @db.VarChar(64)
   createdByUserId String?  @db.VarChar(64)
+  /// The staff member who last saved the reason: whoever added it, then
+  /// whoever last renamed it or changed the Shopify reason it counts as.
+  updatedByUserId String?  @db.VarChar(64)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

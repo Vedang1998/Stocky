@@ -24,6 +24,7 @@ CREATE TABLE "AdjustmentReason" (
     "nameKey" VARCHAR(191) NOT NULL,
     "shopifyReason" VARCHAR(64) NOT NULL,
     "createdByUserId" VARCHAR(64),
+    "updatedByUserId" VARCHAR(64),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 

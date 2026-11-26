@@ -343,8 +343,11 @@ source type `InventoryAdjustment`, and the ledger is its history.
 - **The shop's own reasons** (feature F-072, page `/app/adjustments/reasons`,
   table `AdjustmentReason`). A shop can add up to 50 reasons of its own. Each
   has a name, unique in the shop whatever its capitals and never the name of a
-  built-in reason, and the built-in code it counts as, because Shopify takes
-  no reason outside its list. An adjustment made with one records that code
+  built-in reason or "Reversal" (the heading the history gives an undone
+  adjustment), and the built-in code it counts as, because Shopify takes
+  no reason outside its list. The row keeps who added the reason and who
+  changed it last (`createdByUserId`, `updatedByUserId`); a removed reason
+  leaves no row, and its name stays on the adjustments recorded with it. An adjustment made with one records that code
   in `InventoryOperation.reason` and the name in
   `InventoryOperation.reasonLabel`, both as they read at that moment.
   `reasonLabel` is a request column: the ledger guard refuses any later
@@ -355,7 +358,8 @@ source type `InventoryAdjustment`, and the ledger is its history.
   list needs an active plan and a named staff member; it does not depend on
   the adjustment kill switch, since it sends nothing to Shopify. The report
   shows the name under "Reason" and the built-in reason under "Shopify
-  reason".
+  reason", a column added right after "Reason": every later column of the
+  report sits one place further right than before F-072.
 - **Reversal** applies the opposite of the applied lines, once per
   adjustment, by a named staff member; a reversal cannot be reversed.
 - **Quantity after a change.** Each applied line stores the quantity Shopify

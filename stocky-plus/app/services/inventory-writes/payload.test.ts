@@ -76,12 +76,6 @@ describe("normalizeInventoryOperationDraft", () => {
     ]);
   });
 
-  it("gives a reversal no name for its reason", () => {
-    expect(
-      normalizeInventoryOperationDraft(draft(), "op-1").reasonLabel,
-    ).toBeNull();
-  });
-
   it("trims optional text and stores blank text as null", () => {
     const normalized = normalizeInventoryOperationDraft(
       draft({

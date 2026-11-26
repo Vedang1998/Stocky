@@ -6,6 +6,7 @@ import {
   MAX_OWN_ADJUSTMENT_REASONS,
   isAdjustmentReason,
   isBuiltInReasonName,
+  isReversalName,
   normalizeReasonName,
   reasonNameKey,
 } from "./adjustment-input";
@@ -59,6 +60,12 @@ function checkInput(input: OwnAdjustmentReasonInput): CheckedInput {
     return {
       ok: false,
       error: `"${name}" is already one of the built-in reasons. Choose another name.`,
+    };
+  }
+  if (isReversalName(name)) {
+    return {
+      ok: false,
+      error: `"${name}" is what the history calls an adjustment that was undone. Choose another name.`,
     };
   }
   if (!isAdjustmentReason(input.shopifyReason)) {
@@ -127,6 +134,7 @@ export async function addOwnAdjustmentReason(
           nameKey: checked.nameKey,
           shopifyReason: checked.shopifyReason,
           createdByUserId: actor.shopifyUserId,
+          updatedByUserId: actor.shopifyUserId,
         },
         select: REASON_SELECT,
       })) as OwnAdjustmentReason;
@@ -139,12 +147,13 @@ export async function addOwnAdjustmentReason(
 }
 
 /**
- * Rename a reason or change the Shopify reason it counts as. Adjustments
- * already recorded keep the name and the Shopify reason they were recorded
- * with.
+ * Rename a reason or change the Shopify reason it counts as, and keep who did
+ * it. Adjustments already recorded keep the name and the Shopify reason they
+ * were recorded with.
  */
 export async function updateOwnAdjustmentReason(
   db: TenantDb,
+  actor: InventoryActor,
   id: string,
   input: OwnAdjustmentReasonInput,
 ): Promise<OwnAdjustmentReasonResult> {
@@ -160,6 +169,7 @@ export async function updateOwnAdjustmentReason(
           name: checked.name,
           nameKey: checked.nameKey,
           shopifyReason: checked.shopifyReason,
+          updatedByUserId: actor.shopifyUserId,
         },
       })) as { count: number };
       const updated =

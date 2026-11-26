@@ -1250,6 +1250,7 @@ describe("inventory adjustments on the inventory ledger", () => {
             name: "Staff purchase",
             nameKey: "staff purchase",
             createdByUserId: "42",
+            updatedByUserId: "42",
           }),
         ]),
       );
@@ -1266,6 +1267,10 @@ describe("inventory adjustments on the inventory ledger", () => {
       [
         "theft OR loss",
         '"theft OR loss" is already one of the built-in reasons. Choose another name.',
+      ],
+      [
+        " reversal ",
+        '"reversal" is what the history calls an adjustment that was undone. Choose another name.',
       ],
     ])("refuses the name %j and saves nothing", async (name, message) => {
       expect(refusal(await add(name))).toBe(message);
@@ -1320,7 +1325,7 @@ describe("inventory adjustments on the inventory ledger", () => {
     it("renames a reason and changes the Shopify reason it counts as", async () => {
       const reason = added(await add("Staff purchase"));
 
-      const renamed = await updateOwnAdjustmentReason(dbA, reason.id, {
+      const renamed = await updateOwnAdjustmentReason(dbA, MANAGER, reason.id, {
         name: "Staff sale",
         shopifyReason: "promotion",
       });
@@ -1334,6 +1339,10 @@ describe("inventory adjustments on the inventory ledger", () => {
         },
       });
       expect(await listOwnAdjustmentReasons(dbA)).toEqual([added(renamed)]);
+      // The row keeps who added the reason and who changed it last.
+      expect(await prisma.adjustmentReason.findMany()).toMatchObject([
+        { name: "Staff sale", createdByUserId: "42", updatedByUserId: "77" },
+      ]);
     });
 
     it("lets a reason keep its own name with other capitals, and refuses another reason's name", async () => {
@@ -1341,14 +1350,14 @@ describe("inventory adjustments on the inventory ledger", () => {
       added(await add("Samples"));
 
       expect(
-        await updateOwnAdjustmentReason(dbA, purchase.id, {
+        await updateOwnAdjustmentReason(dbA, STAFF, purchase.id, {
           name: "Staff Purchase",
           shopifyReason: "other",
         }),
       ).toMatchObject({ ok: true, reason: { name: "Staff Purchase" } });
       expect(
         refusal(
-          await updateOwnAdjustmentReason(dbA, purchase.id, {
+          await updateOwnAdjustmentReason(dbA, STAFF, purchase.id, {
             name: "samples",
             shopifyReason: "other",
           }),
@@ -1360,13 +1369,16 @@ describe("inventory adjustments on the inventory ledger", () => {
     it("refuses an edit that names no reason, a blank name or an unknown Shopify reason", async () => {
       const reason = added(await add("Staff purchase"));
       const edit = (id: string, name: string, shopifyReason: unknown) =>
-        updateOwnAdjustmentReason(dbA, id, { name, shopifyReason });
+        updateOwnAdjustmentReason(dbA, STAFF, id, { name, shopifyReason });
 
       expect(refusal(await edit("missing", "Samples", "other"))).toBe(
         "That reason is no longer in your list. Reload the page to see the current list.",
       );
       expect(refusal(await edit(reason.id, " ", "other"))).toBe(
         "Enter a name for the reason.",
+      );
+      expect(refusal(await edit(reason.id, "Reversal", "other"))).toBe(
+        '"Reversal" is what the history calls an adjustment that was undone. Choose another name.',
       );
       expect(refusal(await edit(reason.id, "Samples", "nope"))).toBe(
         "Choose the Shopify reason this reason counts as.",
@@ -1437,7 +1449,7 @@ describe("inventory adjustments on the inventory ledger", () => {
       const reason = added(await add("Sent to photo studio", "promotion"));
       await submit("RED-75, -2", { reason: ownReasonValue(reason.id) });
 
-      await updateOwnAdjustmentReason(dbA, reason.id, {
+      await updateOwnAdjustmentReason(dbA, STAFF, reason.id, {
         name: "Photo shoot",
         shopifyReason: "other",
       });
@@ -1456,7 +1468,7 @@ describe("inventory adjustments on the inventory ledger", () => {
 
     it("uses the reason as it reads when the adjustment is recorded", async () => {
       const reason = added(await add("Sent to photo studio", "promotion"));
-      await updateOwnAdjustmentReason(dbA, reason.id, {
+      await updateOwnAdjustmentReason(dbA, STAFF, reason.id, {
         name: "Photo shoot",
         shopifyReason: "other",
       });
@@ -1618,7 +1630,7 @@ describe("inventory adjustments on the inventory ledger", () => {
 
         expect(
           refusal(
-            await updateOwnAdjustmentReason(dbB, reason.id, {
+            await updateOwnAdjustmentReason(dbB, STAFF, reason.id, {
               name: "Taken over",
               shopifyReason: "other",
             }),
