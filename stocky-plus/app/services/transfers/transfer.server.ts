@@ -518,6 +518,9 @@ async function pickForNextShipment(
     select: { id: true, quantity: true, shippedQty: true },
   })) as { id: string; quantity: number; shippedQty: number | null } | null;
   if (!line) return { ok: false, error: LINE_NOT_FOUND_MESSAGE };
+  // A line that does not say what it shipped was shipped whole by earlier
+  // code and keeps its shipped units in `pickedQty`; it takes no picks.
+  if (line.shippedQty == null) return { ok: false, error: NOT_DRAFT_MESSAGE };
   const unshipped = transferUnshippedQuantity(line);
   if (input.pickedQty > unshipped) {
     return {

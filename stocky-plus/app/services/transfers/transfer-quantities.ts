@@ -42,6 +42,28 @@ export interface TransferLineQuantities {
 }
 
 /**
+ * Whether a transfer is open for more shipments.
+ *
+ * A transfer in transit is only when every line says what it shipped. Code
+ * from before shipments in parts ships a draft whole, keeps the shipped units
+ * in `pickedQty` and leaves `shipsInParts` as it found it. Read as shipping in
+ * parts, those units would count as picked for a next shipment and leave the
+ * source a second time; such a transfer is read as shipped in one go.
+ */
+export function transferShipsInParts(
+  transfer: { status: string; shipsInParts: boolean },
+  lines: ReadonlyArray<{ shippedQty?: number | null }>,
+): boolean {
+  return (
+    transfer.shipsInParts &&
+    !(
+      transfer.status === "IN_TRANSIT" &&
+      lines.some((line) => line.shippedQty == null)
+    )
+  );
+}
+
+/**
  * Units of a line that have not left the source yet, on a transfer that is
  * in transit and ships in parts. They ship later, or stay at the source when
  * the transfer is closed.

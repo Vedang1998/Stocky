@@ -412,6 +412,17 @@ documents above are the record of what moved.
   shipment table: the shipments are the ledger operations of the shipment
   document, listed in the transfer's history. A transfer that ships in one go
   behaves exactly as before.
+  **Rolling back** to code from before this feature, with or without
+  dropping the two columns, needs one check first: no transfer in transit
+  may still be open for shipments
+  (`SELECT "id" FROM "TransferOrder" WHERE "shipsInParts" AND "status" = 'IN_TRANSIT'`
+  returns no row). The earlier code reads a line between two shipments as
+  shipped whole and would receive, return or write off units that never left
+  the source. In the other direction the code protects itself: a transfer in
+  transit whose lines do not say what they shipped (`shippedQty` null) was
+  shipped whole by earlier code and is read as shipped in one go, whatever
+  its flag says (`transferShipsInParts`), so its shipped units are never
+  taken for units picked for a next shipment.
 - **Cancelling** is for drafts. If an interrupted shipment already took stock
   out, cancelling puts it back first; the transfer is cancelled only when the
   ledger shows the source whole again.

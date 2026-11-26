@@ -21,6 +21,7 @@ import {
 } from "../inventory-writes/variant-items.server";
 import {
   transferShipQuantity,
+  transferShipsInParts,
   type TransferLineQuantities,
 } from "./transfer-quantities";
 import { SYNC_CATALOG_HINT } from "../../lib/sync-copy";
@@ -128,10 +129,18 @@ export async function loadTransfer(
   db: TenantDb,
   transferId: string,
 ): Promise<TransferWithLines | null> {
-  return (await db.transferOrder.findFirst({
+  const transfer = (await db.transferOrder.findFirst({
     where: { id: transferId },
     include: { lineItems: { orderBy: { id: "asc" } } },
   })) as TransferWithLines | null;
+  // Every step reads the transfer through here, so none of them takes a
+  // transfer shipped whole by earlier code for one that ships in parts.
+  return (
+    transfer && {
+      ...transfer,
+      shipsInParts: transferShipsInParts(transfer, transfer.lineItems),
+    }
+  );
 }
 
 export type TransferLeg = "shipment" | "receipt";

@@ -25,6 +25,18 @@
 -- ("shippedQty" = 0 on a transfer with status RECEIVED) and keep the list:
 -- the earlier code would show their units as shipped and written off. No
 -- stock moves either way; the ledger is the record of what left.
+--
+-- The same precondition holds for rolling back the code alone while these
+-- columns stay: the earlier code reads a line between two shipments
+-- ("pickedQty" 0) as shipped whole, and would receive, return or write off
+-- units that never left the source. Check before either rollback that this
+-- returns no row:
+--   SELECT "id" FROM "TransferOrder"
+--   WHERE "shipsInParts" AND "status" = 'IN_TRANSIT';
+-- A draft with "shipsInParts" true is shipped in one go by the earlier code
+-- (its picked units, or every unit where none is picked). The code of this
+-- migration then reads it as shipped in one go, because its lines have no
+-- "shippedQty", and offers no further shipment for it.
 
 -- AlterTable
 ALTER TABLE "TransferOrder"

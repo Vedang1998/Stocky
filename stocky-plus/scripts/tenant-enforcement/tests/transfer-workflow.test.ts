@@ -2356,6 +2356,52 @@ describe("transfer workflow", () => {
       });
     });
 
+    it("never ships again a transfer that earlier code shipped whole while it was marked for several shipments", async () => {
+      // Code from before this feature ships a draft whole, keeps the shipped
+      // units in `pickedQty`, and leaves the flag and `shippedQty` alone.
+      const id = await shippedTransfer();
+      await prisma.transferLineItem.updateMany({
+        where: { transferOrderId: id },
+        data: { shippedQty: null },
+      });
+      await prisma.transferOrder.update({
+        where: { id },
+        data: { shipsInParts: true },
+      });
+      const red = await lineOf(id, RED);
+      expect([red.pickedQty, red.shippedQty]).toEqual([4, null]);
+      const sent = shopify.requests.length;
+
+      // Its shipped units are not units picked for a next shipment.
+      expect(await shipNext(id)).toMatchObject({
+        ok: false,
+        error: "Nothing on this transfer is waiting to ship.",
+      });
+      expect(await pick(red.id, 1)).toEqual({ ok: false, error: NOT_DRAFT });
+      expect(await pick(red.id, 0)).toEqual({ ok: false, error: NOT_DRAFT });
+      expect(shopify.requests).toHaveLength(sent);
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+      expect((await lineOf(id, RED)).pickedQty).toBe(4);
+
+      // The pages read it as shipped in one go.
+      expect((await getTransfer(dbA, id))!.shipsInParts).toBe(false);
+      const listed = (
+        await listTransfers(dbA, { view: "open", page: 1 })
+      ).transfers.find((transfer) => transfer.id === id)!;
+      expect(listed.shipsInParts).toBe(false);
+      expect(listed.totals).toMatchObject({
+        shipUnits: 10,
+        toShipUnits: 0,
+        nextShipmentUnits: 0,
+      });
+
+      // Receiving every shipped unit finishes it, like any other transfer.
+      expect(
+        await receiveTransfer(dbA, null, RECEIVER, id, enabled()),
+      ).toMatchObject({ ok: true, completed: true });
+      expect(await load(id)).toMatchObject({ status: "RECEIVED" });
+    });
+
     it("refuses shipped units above the quantity a line asks for in the database", async () => {
       const { id, red } = await firstShipmentSent();
 

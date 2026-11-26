@@ -8,6 +8,7 @@ import {
   transferAttention,
   transferOutstandingQuantity,
   transferShipQuantity,
+  transferShipsInParts,
   transferTotals,
   transferUnshippedQuantity,
   transferWrittenOffQuantity,
@@ -48,6 +49,34 @@ describe("transfer quantities", () => {
     expect(transferShipQuantity(line({ shippedQty: null, pickedQty: 7 }))).toBe(
       7,
     );
+  });
+
+  it("takes a transfer in transit for one that ships in parts only when every line says what it shipped", () => {
+    const flagged = (status: string) => ({ status, shipsInParts: true });
+
+    expect(
+      transferShipsInParts(flagged("IN_TRANSIT"), [
+        { shippedQty: 3 },
+        { shippedQty: 0 },
+      ]),
+    ).toBe(true);
+    // Shipped whole by earlier code: the shipped units are in `pickedQty`.
+    expect(
+      transferShipsInParts(flagged("IN_TRANSIT"), [
+        { shippedQty: 3 },
+        { shippedQty: null },
+      ]),
+    ).toBe(false);
+    expect(transferShipsInParts(flagged("IN_TRANSIT"), [{}])).toBe(false);
+    // A draft has shipped nothing yet, so its lines say nothing.
+    expect(transferShipsInParts(flagged("DRAFT"), [{ shippedQty: null }])).toBe(
+      true,
+    );
+    expect(
+      transferShipsInParts({ status: "IN_TRANSIT", shipsInParts: false }, [
+        { shippedQty: 3 },
+      ]),
+    ).toBe(false);
   });
 
   it("knows the units of a shipped line that have not left the source yet", () => {

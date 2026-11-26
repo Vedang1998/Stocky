@@ -14,6 +14,7 @@ import {
 import {
   transferOutstandingQuantity,
   transferShipQuantity,
+  transferShipsInParts,
   transferTotals,
   transferUnshippedQuantity,
   transferWrittenOffQuantity,
@@ -170,14 +171,15 @@ export async function listTransfers(
   }
 
   return {
-    transfers: page.map((transfer) => ({
-      ...transfer,
-      totals: transferTotals(
-        transfer.status,
-        linesOf.get(transfer.id) ?? [],
-        transfer.shipsInParts,
-      ),
-    })),
+    transfers: page.map((transfer) => {
+      const own = linesOf.get(transfer.id) ?? [];
+      const shipsInParts = transferShipsInParts(transfer, own);
+      return {
+        ...transfer,
+        shipsInParts,
+        totals: transferTotals(transfer.status, own, shipsInParts),
+      };
+    }),
     hasMore: rows.length > TRANSFER_LIST_PAGE_SIZE,
   };
 }
@@ -186,10 +188,18 @@ export async function getTransfer(
   db: TenantDb,
   transferId: string,
 ): Promise<TransferHeader | null> {
-  return (await db.transferOrder.findFirst({
+  const header = (await db.transferOrder.findFirst({
     where: { id: transferId },
     select: HEADER_SELECT,
   })) as TransferHeader | null;
+  if (header?.status !== "IN_TRANSIT" || !header.shipsInParts) return header;
+  // Read by the same rule as the services (`transferShipsInParts`): one line
+  // that does not say what it shipped, and the transfer shipped in one go.
+  const unsaid = (await db.transferLineItem.findFirst({
+    where: { transferOrderId: transferId, shippedQty: null },
+    select: { id: true },
+  })) as { id: string } | null;
+  return unsaid ? { ...header, shipsInParts: false } : header;
 }
 
 /** The part of a transfer its lines are read against. */
