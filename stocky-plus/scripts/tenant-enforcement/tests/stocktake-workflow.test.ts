@@ -266,6 +266,24 @@ describe("stocktake workflow", () => {
   const complete = (id: string, extra: Parameters<typeof enabled>[0] = {}) =>
     completeStocktake(dbA, null, STAFF, id, enabled(extra));
 
+  /**
+   * Complete a count while someone else does `meanwhile`: after the request
+   * has read the count's lines, while it reads Shopify, and so before it has
+   * recorded anything to send.
+   */
+  const completeWhile = (id: string, meanwhile: () => Promise<unknown>) => {
+    let interfered = false;
+    return complete(id, {
+      readQuantities: async (...read) => {
+        if (!interfered) {
+          interfered = true;
+          await meanwhile();
+        }
+        return readQuantities(...read);
+      },
+    });
+  };
+
   beforeAll(async () => {
     ({ prisma } = await resetSchemaAndApplyEnforcement());
     const [shopA, shopB] = await Promise.all([
@@ -1617,6 +1635,79 @@ describe("stocktake workflow", () => {
       expect(await complete(id)).toMatchObject({ blocker: "UNCOUNTED" });
     });
 
+    describe("someone else changes the count while it is being completed, before anything is sent", () => {
+      const COUNT_SAVED =
+        "A count was saved while this stocktake was being completed. Complete it again to apply the latest counts.";
+
+      it("sends nothing for a count that was changed after it was read, then applies the latest count once", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await count(lineFor(WHITE), 20);
+
+        const first = await completeWhile(id, () => count(lineFor(RED), 9));
+
+        expect(first).toEqual({
+          ok: false,
+          error: COUNT_SAVED,
+          problems: [],
+          blocker: null,
+        });
+        // The older count of 7 never reached Shopify.
+        expect(shopify.requests).toHaveLength(0);
+        expect(await operations(id)).toHaveLength(0);
+        expect(shopify.level(101)).toBe(10);
+        expect(await status(id)).toBe("IN_PROGRESS");
+
+        expect(await complete(id)).toEqual({
+          ok: true,
+          alreadyCompleted: false,
+        });
+        expect(shopify.requests).toHaveLength(1);
+        expect(shopify.level(101)).toBe(9);
+      });
+
+      it("sends nothing when a count is cleared after it was read", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await count(lineFor(WHITE), 20);
+
+        const first = await completeWhile(id, () => count(lineFor(RED), null));
+
+        expect(first).toMatchObject({ ok: false, error: COUNT_SAVED });
+        expect(shopify.requests).toHaveLength(0);
+        expect(shopify.level(101)).toBe(10);
+        expect(await complete(id)).toMatchObject({ blocker: "UNCOUNTED" });
+      });
+
+      it("sends nothing when an item is added after the count was read and uncounted items were not accepted", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await count(lineFor(WHITE), 20);
+        stockedInShopify.add(103);
+
+        const first = await completeWhile(id, () =>
+          addItems(dbA, { stocktakeId: id, codesText: "ROS-750" }),
+        );
+
+        expect(first).toMatchObject({ ok: false, error: COUNT_SAVED });
+        expect(shopify.requests).toHaveLength(0);
+        expect(shopify.level(101)).toBe(10);
+        expect(await complete(id)).toMatchObject({ blocker: "UNCOUNTED" });
+      });
+
+      it("completes when the same count is saved again, because nothing it sends has changed", async () => {
+        const { id, lineFor } = await startCount();
+        await count(lineFor(RED), 7);
+        await count(lineFor(WHITE), 20);
+
+        const result = await completeWhile(id, () => count(lineFor(RED), 7));
+
+        expect(result).toEqual({ ok: true, alreadyCompleted: false });
+        expect(shopify.requests).toHaveLength(1);
+        expect(shopify.level(101)).toBe(7);
+      });
+    });
+
     it("rejects every change once the count is closed", async () => {
       const { id, lineFor } = await startCount();
       await count(lineFor(RED), 7);
@@ -2620,6 +2711,31 @@ describe("stocktake workflow", () => {
 
       await count(lineFor(RED), 9);
       expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+      expect(shopify.level(101)).toBe(9);
+    });
+
+    it("sends nothing for a count whose recount was asked for after it was read", async () => {
+      const { id, lineFor } = await startCount();
+      await count(lineFor(RED), 7);
+      await count(lineFor(WHITE), 20);
+
+      const first = await completeWhile(id, () => askRecount(id, lineFor(RED)));
+
+      expect(first).toEqual({
+        ok: false,
+        error:
+          "A recount was asked for while this stocktake was being completed, so it stays open. Count the item again, or keep its count, then complete it again.",
+        problems: [],
+        blocker: "RECOUNT",
+      });
+      // The questioned count of 7 never reached Shopify.
+      expect(shopify.requests).toHaveLength(0);
+      expect(shopify.level(101)).toBe(10);
+      expect(await status(id)).toBe("IN_PROGRESS");
+
+      await count(lineFor(RED), 9);
+      expect(await complete(id)).toEqual({ ok: true, alreadyCompleted: false });
+      expect(shopify.requests).toHaveLength(1);
       expect(shopify.level(101)).toBe(9);
     });
 
