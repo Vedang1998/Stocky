@@ -38,8 +38,8 @@ function isAllowedRetentionDays(days: number): boolean {
 }
 
 /**
- * The same limit for callers that pass the window directly, so no path can
- * keep an uninstalled shop's data past Shopify's 30 days.
+ * The same limit for callers that pass the window directly, so no caller can
+ * open the retention sweep with a window longer than 28 days.
  */
 export function assertRetentionDays(days: number): void {
   if (!isAllowedRetentionDays(days)) {
