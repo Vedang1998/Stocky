@@ -23,6 +23,7 @@ import {
   type CatalogVariant,
 } from "../inventory-writes/variant-items.server";
 import {
+  asRead,
   buildShipmentDocument,
   emptyShipmentDocument,
   fail,
@@ -36,6 +37,7 @@ import {
   NOT_DRAFT_MESSAGE,
   RETURN_UNFINISHED_MESSAGE,
   settleTransferDocument,
+  SHIPMENT_NUMBERS,
   SHOPIFY_MANAGED_MESSAGE,
   SWITCHED_OFF_MESSAGE,
   TRANSFER_NOT_FOUND_MESSAGE,
@@ -760,6 +762,8 @@ export async function shipTransfer(
     built.document,
     "DRAFT",
     options,
+    // A draft stays a draft while its lines are edited; see `asRead`.
+    asRead(transfer, SHIPMENT_NUMBERS),
   );
   if (!settled.ok) return fail(settled.error);
   if (!settled.settle.settled) {
@@ -825,30 +829,6 @@ export async function shipTransfer(
     );
   }
   return fail(TRANSFER_NOT_FOUND_MESSAGE);
-}
-
-/**
- * Whether a transfer still stands as a next shipment read it: open for
- * shipments, with the same shipped, picked and returned units on every line.
- * Those are the numbers its shipment document is built from.
- */
-function sameShipment(
-  read: TransferWithLines,
-  now: TransferWithLines | null,
-): boolean {
-  if (!now?.shipsInParts || now.lineItems.length !== read.lineItems.length) {
-    return false;
-  }
-  return read.lineItems.every((line, index) => {
-    const other = now.lineItems[index];
-    return (
-      other.id === line.id &&
-      other.quantity === line.quantity &&
-      other.shippedQty === line.shippedQty &&
-      other.pickedQty === line.pickedQty &&
-      other.returnedQty === line.returnedQty
-    );
-  });
 }
 
 const NOTHING_LEFT_TO_SHIP_MESSAGE =
@@ -936,9 +916,7 @@ export async function shipNextTransferShipment(
 
   // The transfer stays in transit from one shipment to the next, so its
   // status does not stop a request that read it before another one changed
-  // the picks or sent a shipment. Such a request would move stock towards a
-  // document the transfer no longer stands for, so it records nothing unless
-  // the lines are still as it read them.
+  // the picks or sent a shipment; see `asRead`.
   const settled = await settleTransferDocument(
     db,
     admin,
@@ -946,7 +924,7 @@ export async function shipNextTransferShipment(
     built.document,
     "IN_TRANSIT",
     options,
-    async (tx) => sameShipment(transfer, await loadTransfer(tx, transfer.id)),
+    asRead(transfer, SHIPMENT_NUMBERS),
   );
   if (!settled.ok) return fail(settled.error);
   if (!settled.settle.settled) {

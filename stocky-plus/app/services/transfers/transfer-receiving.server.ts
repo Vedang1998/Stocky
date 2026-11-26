@@ -13,6 +13,8 @@ import {
   variantsMatchingCode,
 } from "../inventory-writes/variant-items.server";
 import {
+  ALL_LINE_NUMBERS,
+  asRead,
   buildReceiptDocument,
   buildShipmentDocument,
   fail,
@@ -24,6 +26,7 @@ import {
   NEXT_SHIPMENT_UNFINISHED_MESSAGE,
   NO_SHIPMENT_RECORD_MESSAGE,
   NOT_IN_TRANSIT_MESSAGE,
+  RECEIPT_NUMBERS,
   RETURN_UNFINISHED_MESSAGE,
   settleTransferDocument,
   SHOPIFY_MANAGED_MESSAGE,
@@ -480,6 +483,10 @@ export async function postTransferReceipt(
     built.document,
     "IN_TRANSIT",
     options,
+    // Nothing is added at the destination for a count that changed after
+    // this request read it. A close cannot have started meanwhile: it
+    // records only while no unit is counted in, which would be such a change.
+    asRead(transfer, RECEIPT_NUMBERS),
   );
   if (!settled.ok) return fail(settled.error);
   if (!settled.settle.settled) {
@@ -664,6 +671,10 @@ export async function closeTransfer(
       shipment.document,
       "IN_TRANSIT",
       options,
+      // What is missing, and so what goes back, is worked out from every
+      // number of every line; a receipt, a reject or a shipment since this
+      // request read them changes it.
+      asRead(transfer, ALL_LINE_NUMBERS),
     );
     if (!settled.ok) return fail(settled.error);
     if (!settled.settle.settled) {

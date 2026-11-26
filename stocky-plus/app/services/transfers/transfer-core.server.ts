@@ -341,12 +341,75 @@ export async function isSettled(
   return !state.unfinishedOperationId && state.outstanding.length === 0;
 }
 
+/** The numbers of a line that a transfer's shipment document is built from. */
+export const SHIPMENT_NUMBERS = [
+  "quantity",
+  "pickedQty",
+  "shippedQty",
+  "returnedQty",
+] as const;
+/** The numbers of a line that a transfer's receipt document is built from. */
+export const RECEIPT_NUMBERS = ["receivedQty", "pendingReceiveQty"] as const;
+/** Every number of a line: closing reads all of them to know what is missing. */
+export const ALL_LINE_NUMBERS = [
+  ...SHIPMENT_NUMBERS,
+  ...RECEIPT_NUMBERS,
+  "rejectedQty",
+] as const;
+
+type LineNumber = (typeof ALL_LINE_NUMBERS)[number];
+
+/**
+ * Whether a transfer still stands as a request read it: the same lines, the
+ * same way of shipping, and the same `numbers` on every line.
+ */
+export function standsAsRead(
+  read: TransferWithLines,
+  now: TransferWithLines | null,
+  numbers: readonly LineNumber[],
+): boolean {
+  if (
+    !now ||
+    now.shipsInParts !== read.shipsInParts ||
+    now.lineItems.length !== read.lineItems.length
+  ) {
+    return false;
+  }
+  return read.lineItems.every((line, index) => {
+    const other = now.lineItems[index];
+    return (
+      other.id === line.id &&
+      numbers.every(
+        (number) => (other[number] ?? null) === (line[number] ?? null),
+      )
+    );
+  });
+}
+
+/**
+ * The `asRead` check of `settleTransferDocument` for a document built from
+ * `numbers` of the transfer as `read`.
+ *
+ * A request reads the transfer, builds its document and only then records an
+ * operation. A transfer's status alone does not stop a request whose read is
+ * out of date: a draft stays a draft while its lines are edited, and a
+ * transfer stays in transit across receipts and shipments. Settling an older
+ * document moves stock towards numbers the transfer no longer has, in either
+ * direction. Every step that changes these numbers takes the transfer's lock,
+ * so comparing them under that lock, in the recording transaction, means a
+ * request with an out-of-date read records and sends nothing.
+ */
+export const asRead =
+  (read: TransferWithLines, numbers: readonly LineNumber[]) =>
+  async (tx: TenantDb): Promise<boolean> =>
+    standsAsRead(read, await loadTransfer(tx, read.id), numbers);
+
 export type SettleOutcome =
   { ok: true; settle: SettleResult } | { ok: false; error: string };
 
 /**
  * Settle a leg's document, recording new operations only while the transfer
- * is still in `whileIn`. `asRead`, when given, is asked under the transfer's
+ * is still in `whileIn`. `stillAsRead`, when given, is asked under the transfer's
  * lock, in the transaction that records an operation, whether the transfer
  * still stands as the document was built from; if not, nothing is recorded.
  */
@@ -357,7 +420,7 @@ export async function settleTransferDocument(
   document: InventoryDocument,
   whileIn: TransferStatus,
   options: ExecuteInventoryOperationOptions,
-  asRead?: (tx: TenantDb) => Promise<boolean>,
+  stillAsRead?: (tx: TenantDb) => Promise<boolean>,
 ): Promise<SettleOutcome> {
   try {
     return {
@@ -371,7 +434,7 @@ export async function settleTransferDocument(
           note: null,
           holdOpen: async (tx) =>
             (await lockTransferIn(tx, document.source.id, whileIn)) &&
-            (!asRead || (await asRead(tx))),
+            (!stillAsRead || (await stillAsRead(tx))),
         },
         options,
       ),

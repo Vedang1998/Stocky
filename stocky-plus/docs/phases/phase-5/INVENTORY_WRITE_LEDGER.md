@@ -375,6 +375,24 @@ documents above are the record of what moved.
   the receipt being posted. Each step rebuilds its document from the current
   lines and settles it, so a second press, two presses at once and a retry
   after a partial failure send only what Shopify has not confirmed.
+- **A request with an out-of-date read moves nothing.** A request reads the
+  transfer, builds its document and only then records an operation. The
+  transfer's status alone does not stop a request whose read is out of date:
+  a draft stays a draft while its lines are edited, and a transfer stays in
+  transit across receipts and shipments. Settling an older document would
+  move stock towards numbers the transfer no longer has, in either direction
+  (a close returning units that were received meanwhile, a shipment sending
+  a quantity that was lowered). So every step that settles a document built
+  from line quantities (ship, next shipment, post receipt, close) passes
+  `asRead` to `settleTransferDocument`: in the transaction that records an
+  operation, under the transfer's lock, the lines must still have the
+  numbers the document was built from (`SHIPMENT_NUMBERS`, `RECEIPT_NUMBERS`,
+  or all of them for a close) and the transfer the same way of shipping.
+  Otherwise nothing is recorded or sent and the request answers "This
+  transfer was changed while its stock was being moved". Every step that
+  changes those numbers takes the same lock. An operation that is already
+  recorded is resumed without the check; it passed it when it was recorded.
+  Cancelling settles the empty document, which no line number enters.
 - **Draft.** Items are added by scanning or typing a SKU, barcode or variant
   ID, or by pasting a list with an optional quantity per row (comma, tab or
   semicolon separated, up to 250 items, all or none, each refused row named).
@@ -402,12 +420,7 @@ documents above are the record of what moved.
   the same `TransferShipment:<id>` document, now built from the shipped units
   plus the units picked for the shipment being sent, so a second press, two
   presses at once and a retry send only what Shopify has not confirmed, and
-  the source is checked only for the units of that shipment. A transfer stays
-  in transit from one shipment to the next, so its status cannot stop a
-  request that read it before another one changed the picks or sent a
-  shipment; a next shipment therefore records an operation only if, under the
-  transfer's lock, every line still has the shipped, picked and returned
-  units the request read. A late request records and sends nothing. The lines move
+  the source is checked only for the units of that shipment. The lines move
   on (`shippedQty` grows, `pickedQty` returns to 0) only when the ledger
   shows the whole shipment out. When the last unit has shipped, or the
   transfer is closed, `shipsInParts` is cleared and `pickedQty` holds the

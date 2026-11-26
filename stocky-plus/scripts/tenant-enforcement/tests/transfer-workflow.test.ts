@@ -2942,6 +2942,151 @@ describe("transfer workflow", () => {
       expect(levels()).toMatchObject({ redSource: 5, whiteSource: 14 });
     });
 
+    const CHANGED_MEANWHILE = {
+      ok: false,
+      error:
+        "This transfer was changed while its stock was being moved. Reload the page to see where it stands, then try again.",
+      problems: [],
+      blocker: null,
+    };
+
+    it("sends nothing for a shipment whose quantity was changed after it read the draft", async () => {
+      const id = await draftTransfer();
+      const red = await lineOf(id, RED);
+
+      const shipped = await shipTransfer(
+        beforeFirstTransaction(async () => {
+          await setTransferLineQuantity(dbA, { lineId: red.id, quantity: 2 });
+        }),
+        null,
+        STAFF,
+        id,
+        enabled(),
+      );
+
+      // Read with 4 red: sending them would have left 2 too many out.
+      expect(shipped).toEqual(CHANGED_MEANWHILE);
+      expect(shopify.requests).toHaveLength(0);
+      expect(await operations("TransferShipment", id)).toEqual([]);
+      expect(levels()).toMatchObject({ redSource: 10, whiteSource: 20 });
+      expect((await load(id)).status).toBe("DRAFT");
+
+      expect(await shipTransfer(dbA, null, STAFF, id, enabled())).toEqual({
+        ok: true,
+        alreadyDone: false,
+      });
+      expect(levels()).toMatchObject({ redSource: 8, whiteSource: 14 });
+    });
+
+    it("sends nothing for a shipment of a draft that was switched to several shipments after it was read", async () => {
+      const id = await draftTransfer();
+
+      const shipped = await shipTransfer(
+        beforeFirstTransaction(async () => {
+          expect(
+            await setTransferShipsInParts(dbA, {
+              transferId: id,
+              shipsInParts: true,
+            }),
+          ).toEqual({ ok: true });
+        }),
+        null,
+        STAFF,
+        id,
+        enabled(),
+      );
+
+      // Read as one shipment of everything; in parts, nothing is picked yet.
+      expect(shipped).toEqual(CHANGED_MEANWHILE);
+      expect(shopify.requests).toHaveLength(0);
+      expect(levels()).toMatchObject({ redSource: 10, whiteSource: 20 });
+      expect(await load(id)).toMatchObject({
+        status: "DRAFT",
+        shipsInParts: true,
+      });
+    });
+
+    it("adds nothing at the destination for a receipt whose count was changed after it was read", async () => {
+      const id = await shippedTransfer();
+      const red = await lineOf(id, RED);
+      await scan(id, "RED-750", 3);
+      const sent = shopify.requests.length;
+
+      const posted = await postTransferReceipt(
+        beforeFirstTransaction(async () => {
+          await setTransferReceiveQuantity(dbA, {
+            lineId: red.id,
+            quantity: 1,
+          });
+        }),
+        null,
+        RECEIVER,
+        id,
+        enabled(),
+      );
+
+      // Read with 3 counted in: posting them would have added 2 too many.
+      expect(posted).toEqual(CHANGED_MEANWHILE);
+      expect(shopify.requests).toHaveLength(sent);
+      expect(await operations("TransferReceipt", id)).toEqual([]);
+      expect(levels().redDestination).toBe(0);
+
+      expect(
+        await postTransferReceipt(dbA, null, RECEIVER, id, enabled()),
+      ).toMatchObject({ ok: true, receivedUnits: 1 });
+      expect(levels().redDestination).toBe(1);
+    });
+
+    it("puts nothing back at the source for a close that read the transfer before the missing units were received", async () => {
+      const id = await shippedTransfer();
+      await scan(id, "RED-750", 3);
+      await postTransferReceipt(dbA, null, RECEIVER, id, enabled());
+      const sent = shopify.requests.length;
+      const shipments = (await operations("TransferShipment", id)).length;
+
+      // Read with 1 red and 6 white missing. Before the return is recorded,
+      // the white units arrive and are received.
+      const closed = await closeTransfer(
+        beforeFirstTransaction(async () => {
+          await scan(id, "WHT-750", 6);
+          expect(
+            await postTransferReceipt(dbA, null, RECEIVER, id, enabled()),
+          ).toMatchObject({ ok: true, receivedUnits: 6 });
+        }),
+        null,
+        RECEIVER,
+        id,
+        { resolution: "RETURNED" },
+        enabled(),
+      );
+
+      // Returning what it read as missing would have put 6 white units into
+      // stock at the source that are in stock at the destination.
+      expect(closed).toEqual(CHANGED_MEANWHILE);
+      expect(shopify.requests).toHaveLength(sent + 1);
+      expect(await operations("TransferShipment", id)).toHaveLength(shipments);
+      expect(levels()).toMatchObject({
+        redSource: 6,
+        whiteSource: 14,
+        whiteDestination: 6,
+      });
+      expect((await load(id)).status).toBe("IN_TRANSIT");
+
+      // Closing again returns the one unit that is still missing.
+      expect(
+        await closeTransfer(
+          dbA,
+          null,
+          RECEIVER,
+          id,
+          { resolution: "RETURNED" },
+          enabled(),
+        ),
+      ).toMatchObject({ ok: true, missingUnits: 1, resolution: "RETURNED" });
+      expect(levels()).toMatchObject({ redSource: 7, whiteSource: 14 });
+      expect((await load(id)).status).toBe("RECEIVED");
+    });
+
     it("does not cancel a draft whose shipment is on its way to Shopify", async () => {
       const id = await draftTransfer();
       let letShopifyAnswer = () => {};
