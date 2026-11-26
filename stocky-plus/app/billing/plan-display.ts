@@ -29,11 +29,13 @@ export function formatUsd(cents: number): string {
  * One line for the home page's Plan card, from the cached entitlement
  * snapshot. A stored plan key is shown by its plan name, never as the raw key.
  */
-export function planSummary(settings: {
-  subscriptionActive: boolean;
-  subscriptionPlan: string | null;
-}): string {
-  if (!settings.subscriptionActive) {
+export function planSummary(
+  settings: {
+    subscriptionActive: boolean;
+    subscriptionPlan: string | null;
+  } | null,
+): string {
+  if (!settings?.subscriptionActive) {
     return "No active plan. An active plan is needed to make changes.";
   }
   const plan = findSelfServePlan(settings.subscriptionPlan);

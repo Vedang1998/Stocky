@@ -370,6 +370,13 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       },
     ],
   },
+  StocktakeRecountEvent: {
+    model: "StocktakeRecountEvent",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [

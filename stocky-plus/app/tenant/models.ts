@@ -54,6 +54,11 @@ export const STOCK_HISTORY_DIRECT_MERCHANT_MODELS = [
   "DailyStockLevel",
 ] as const;
 
+/** Count history: every recount asked for, done or taken back. */
+export const STOCKTAKE_HISTORY_DIRECT_MERCHANT_MODELS = [
+  "StocktakeRecountEvent",
+] as const;
+
 export const DIRECT_MERCHANT_MODELS = [
   "Supplier",
   "PurchaseOrder",
@@ -80,6 +85,7 @@ export const DIRECT_MERCHANT_MODELS = [
   ...PURCHASING_DIRECT_MERCHANT_MODELS,
   ...REPLENISHMENT_DIRECT_MERCHANT_MODELS,
   ...STOCK_HISTORY_DIRECT_MERCHANT_MODELS,
+  ...STOCKTAKE_HISTORY_DIRECT_MERCHANT_MODELS,
 ] as const;
 
 export const CHILD_MERCHANT_MODELS = [
@@ -145,6 +151,7 @@ export const MERCHANT_DELEGATE_NAMES = {
   ReplenishmentWorksheetLine: "replenishmentWorksheetLine",
   DailyStockSnapshot: "dailyStockSnapshot",
   DailyStockLevel: "dailyStockLevel",
+  StocktakeRecountEvent: "stocktakeRecountEvent",
   SupplierSkuMapping: "supplierSkuMapping",
   ShopifyOrderRefundLineFact: "shopifyOrderRefundLineFact",
   ShopifyOrderAdjustmentFact: "shopifyOrderAdjustmentFact",
