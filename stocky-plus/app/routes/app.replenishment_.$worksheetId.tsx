@@ -68,6 +68,7 @@ import {
 import { requirePurchasingContext } from "../services/purchasing/actor.server";
 import { PurchasingError } from "../services/purchasing/errors";
 import { readShopReportingProfile } from "../tenant/bootstrap.server";
+import { smartForecastColumn } from "../lib/smart-forecast/worksheet.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import type { TenantDb } from "../tenant/tenant-db.server";
 
@@ -96,8 +97,9 @@ function describeRounding(worksheet: WorksheetHeader): string {
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
-  const { admin, db } = await requireAdminTenant({ request, params });
-  requireCapability(await getShopEntitlements({ admin, db }), "core.replenishment");
+  const { admin, tenant, db } = await requireAdminTenant({ request, params });
+  const entitlements = await getShopEntitlements({ admin, db });
+  requireCapability(entitlements, "core.replenishment");
   const worksheet = await requireWorksheet(db, params.worksheetId);
   const view = parseWorksheetView(new URL(request.url).searchParams);
   const selection = worksheet.settings?.selection ?? null;
@@ -111,6 +113,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     selection?.supplierId ? purchasingSources.listSuppliers(db) : [],
     getWorksheetColumns(db),
   ]);
+
+  // Smart Forecast is read only for the rows on this page, and only when the
+  // merchant chose its column; a failure shows in the column, not the page.
+  const smartForecast = await smartForecastColumn(db, {
+    shown: columns.includes("smartForecast"),
+    entitlements,
+    worksheet,
+    rows: page.lines,
+    readProfile: () => readShopReportingProfile(tenant),
+  });
 
   const { summary, settings } = worksheet;
   const scopeLocation = options.locations.find((location) => location.gid === worksheet.scopeKey);
@@ -162,6 +174,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     },
     view: { ...view, page: page.page },
     lines: page.lines,
+    smartForecast,
     matching: page.matching,
     pageCount: page.pageCount,
     totals,
@@ -336,7 +349,8 @@ function plural(count: number, one: string, many: string): string {
 
 export default function Worksheet() {
   const data = useLoaderData<typeof loader>();
-  const { worksheet, summary, view, lines, matching, pageCount, totals, columns } = data;
+  const { worksheet, summary, view, lines, matching, pageCount, totals, columns, smartForecast } =
+    data;
   const navigate = useNavigate();
   const [selected, setSelected] = useState<WorksheetLine | null>(null);
 
@@ -548,6 +562,7 @@ export default function Worksheet() {
                 columns={columns}
                 currencyCode={summary?.currencyCode ?? null}
                 salesDays={summary?.salesDays ?? null}
+                smartForecast={smartForecast}
                 view={view}
                 path={path}
                 detailModalId={DETAIL_MODAL_ID}

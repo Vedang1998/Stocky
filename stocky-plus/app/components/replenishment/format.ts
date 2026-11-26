@@ -24,3 +24,8 @@ export function money(
 export function percent(value: string | null): string {
   return value == null ? MISSING_VALUE : `${formatDecimal(value)}%`;
 }
+
+/** A decimal count of units, such as a forecast. */
+export function units(value: string | null): string {
+  return value == null ? MISSING_VALUE : formatDecimal(value);
+}

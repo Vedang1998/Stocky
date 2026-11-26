@@ -22,7 +22,7 @@ export const SMART_MODELS = [
 export type SmartModel = (typeof SMART_MODELS)[number];
 
 export const SMART_MODEL_LABELS: Record<SmartModel, string> = {
-  PARITY_AVERAGE: "Recent average (the Stocky method)",
+  PARITY_AVERAGE: "Recent average (the worksheet's method)",
   SEASONAL_NAIVE_WEEKLY: "Same weekday, recent weeks",
   TREND_BLEND: "Recent average with trend",
   CROSTON_SBA: "Occasional sales (Croston–SBA)",

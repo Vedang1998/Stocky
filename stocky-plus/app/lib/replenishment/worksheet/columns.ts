@@ -3,6 +3,11 @@
  * and order quantities, status and the detail button are always shown: the
  * table is no use without them. The choice is saved for the shop.
  */
+import { lowestPlanWith } from "../../../billing/plans";
+
+/** The plan that includes Smart Forecast, from the plan catalog. */
+const SMART_FORECAST_PLAN_LABEL = `${lowestPlanWith("forecast.smart")?.displayName ?? "higher"} plan`;
+
 export const WORKSHEET_COLUMNS = [
   "sku",
   "barcode",
@@ -27,6 +32,7 @@ export const WORKSHEET_COLUMNS = [
   "leadTime",
   "reorderPoint",
   "forecastDemand",
+  "smartForecast",
   "packSize",
 ] as const;
 
@@ -56,6 +62,7 @@ export const WORKSHEET_COLUMN_LABELS: Record<WorksheetColumn, string> = {
   leadTime: "Lead time",
   reorderPoint: "Reorder point",
   forecastDemand: "Forecast demand",
+  smartForecast: `Smart Forecast (${SMART_FORECAST_PLAN_LABEL})`,
   packSize: "Pack size",
 };
 

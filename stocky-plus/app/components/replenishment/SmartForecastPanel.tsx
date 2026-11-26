@@ -5,17 +5,13 @@
  * the merchant presses the button that says so.
  */
 import { useFetcher } from "react-router";
-import { formatDecimal, MISSING_VALUE } from "../../lib/decimal-format";
+import { MISSING_VALUE } from "../../lib/decimal-format";
 import type { WorksheetLine } from "../../lib/replenishment/worksheet/store.server";
 import type { SmartForecast } from "../../lib/smart-forecast";
 import type { SmartForecastLoaderResult, WorksheetActionResult } from "./types";
-import { quantity } from "./format";
+import { quantity, units } from "./format";
 
 export const SMART_FORECAST_PATH = "/app/replenishment/smart-forecast";
-
-function units(value: string | null): string {
-  return value == null ? MISSING_VALUE : formatDecimal(value);
-}
 
 function Scores({ forecast }: { forecast: SmartForecast }) {
   return (
@@ -103,7 +99,7 @@ function Result({
           <s-text type="strong">Order on this forecast: {quantity(suggested)}</s-text>
         )}
         {forecast.outcome !== "SELECTED" && (
-          <s-text type="strong">Keep the Stocky Parity suggestion for this row.</s-text>
+          <s-text type="strong">Keep the worksheet&apos;s suggestion for this row.</s-text>
         )}
         {suggested != null && !locked && forecast.outcome === "SELECTED" && (
           <s-stack direction="inline" gap="base" alignItems="center">
@@ -120,7 +116,7 @@ function Result({
             </s-button>
             {applied?.ok && (
               <s-text color="subdued">
-                Order quantity set to {quantity(applied.orderQuantity)}. The Stocky Parity
+                Order quantity set to {quantity(applied.orderQuantity)}. The worksheet&apos;s
                 suggestion is unchanged.
               </s-text>
             )}
@@ -154,8 +150,8 @@ export function SmartForecastPanel({
       </s-stack>
       <s-text color="subdued">
         Smart Forecast tests a few forecasting methods on this variant&apos;s own sales and uses
-        one only when it beat the recent average in the past. It is advice beside the Stocky
-        Parity suggestion above, which it never changes.
+        one only when it beat the recent average in the past. It is advice beside the
+        worksheet&apos;s suggestion above, which it never changes.
       </s-text>
       <s-button
         {...(run.state !== "idle" ? { loading: true } : {})}

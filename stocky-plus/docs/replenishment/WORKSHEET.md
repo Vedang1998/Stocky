@@ -58,7 +58,8 @@ The **Columns** button beside the search chooses which optional columns the
 table shows: SKU, barcode, supplier, supplier SKU, ABC class, price,
 Shopify cost, supplier cost, margin and markup, stock figures, net units,
 orders, net sales, units and sales per day, days of stock, lead time,
-reorder point, forecast demand and pack size. Margin and markup use the
+reorder point, forecast demand, pack size and, on the Pro plan, Smart
+Forecast (see [SMART_FORECAST.md](SMART_FORECAST.md#the-worksheet-column)). Margin and markup use the
 supplier cost when there is one, otherwise the Shopify cost, and are blank
 when the price and the cost are in different currencies. Product, the suggested and order quantities, status and
 the detail button are always shown. The choice is saved for the shop in
