@@ -81,6 +81,8 @@ export const RETURN_UNFINISHED_MESSAGE =
   "Closing this transfer was started and part of its stock is already back at the source, so nothing more can be received. Close the transfer again to finish.";
 export const NEXT_SHIPMENT_UNFINISHED_MESSAGE =
   "The last shipment of this transfer did not finish: stock left the source that the transfer does not show as shipped yet. Ship the picked units again, or close the transfer to put that stock back.";
+export const NO_UNITS_TO_SHIP_MESSAGE =
+  "No units are entered to ship now. Enter the units of at least one item that leave with this shipment.";
 export const NOT_IN_TRANSIT_MESSAGE =
   "Only a transfer that is in transit can be received.";
 export const SWITCHED_OFF_MESSAGE =
@@ -295,7 +297,7 @@ export async function buildShipmentDocument(
       ok: false,
       error:
         transfer.lineItems.length > 0 && transfer.shipsInParts
-          ? "No units are entered to ship now. Enter the units of at least one item that leave with this shipment."
+          ? NO_UNITS_TO_SHIP_MESSAGE
           : "Transfer has no line items",
     };
   }

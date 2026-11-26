@@ -1267,6 +1267,21 @@ describe("Transfer page action", () => {
       });
     });
 
+    it("says when the shipment had already been sent by another press", async () => {
+      drafts.shipNextTransferShipment.mockResolvedValue({
+        ok: true,
+        alreadyDone: true,
+        shippedUnits: 0,
+        stillToShipUnits: 6,
+      });
+
+      expect(await act({ intent: "shipNext" })).toEqual({
+        ok: true,
+        notice:
+          "This shipment had already been sent. Nothing was sent twice. 6 units still to ship.",
+      });
+    });
+
     it("says when an unfinished shipment was put back because no units were entered", async () => {
       drafts.shipNextTransferShipment.mockResolvedValue({
         ok: true,
@@ -2058,6 +2073,20 @@ describe("Transfer page", () => {
       expect(submitDisabled(html, "shipsInParts")).toBe(false);
     });
 
+    it("does not offer to change how a draft ships while its shipment is part-way", async () => {
+      given(
+        {},
+        [line()],
+        [event({ status: "PARTIALLY_APPLIED", netUnits: -4 })],
+      );
+
+      const html = await renderDetail();
+
+      expect((await loadDetail()).attention).toBe("SHIPMENT_UNFINISHED");
+      expect(html).not.toContain("Ship in several shipments");
+      expect(html).not.toContain('name="intent" value="shipsInParts"');
+    });
+
     it("shows a draft that ships in parts with only its picked units leaving now", async () => {
       given({ shipsInParts: true }, [
         line({ pickedQty: 4 }),
@@ -2203,6 +2232,31 @@ describe("Transfer page", () => {
       expect(html).toContain(
         "Every shipped unit is received or rejected. 6 units that did not ship stay in stock at Warehouse and can no longer ship on this transfer.",
       );
+    });
+
+    it("tells a close that Shopify has not answered from a later shipment that Shopify has not answered", async () => {
+      const lines = [partShippedLine({ shippedQty: 4 })];
+      const waiting = (extra: Partial<TransferEvent>) =>
+        inTransit(
+          lines,
+          [
+            event({ netUnits: -4 }),
+            event({
+              operationId: "op-2",
+              netUnits: 0,
+              status: "APPLYING",
+              unfinished: true,
+              ...extra,
+            }),
+          ],
+          { shipsInParts: true },
+        );
+
+      waiting({});
+      expect((await loadDetail()).attention).toBe("NEXT_SHIPMENT_UNFINISHED");
+
+      waiting({ putsBack: true });
+      expect((await loadDetail()).attention).toBe("RETURN_UNFINISHED");
     });
 
     it("says when a later shipment did not finish, and offers to finish it or to close", async () => {

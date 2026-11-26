@@ -325,6 +325,8 @@ export interface TransferEvent {
   status: InventoryOperationStatus;
   /** Shopify has not finished answering this request. */
   unfinished: boolean;
+  /** The request puts stock back where it came from: a cancelled shipment or a close that returns units. */
+  putsBack?: boolean;
   /** Net units Shopify confirmed: negative when stock left the location, positive when it arrived. */
   netUnits: number;
   /** Changes Shopify refused. */
@@ -348,6 +350,7 @@ export async function getTransferHistory(
       id: true,
       sourceType: true,
       status: true,
+      reason: true,
       actorShopifyUserId: true,
       actorDisplayName: true,
       failedLineCount: true,
@@ -359,6 +362,7 @@ export async function getTransferHistory(
     id: string;
     sourceType: string;
     status: InventoryOperationStatus;
+    reason: string;
     actorShopifyUserId: string | null;
     actorDisplayName: string | null;
     failedLineCount: number;
@@ -393,6 +397,7 @@ export async function getTransferHistory(
         staffName: operation.actorDisplayName,
         status: operation.status,
         unfinished: !TERMINAL_OPERATION_STATUSES.has(operation.status),
+        putsBack: operation.reason === "movement_canceled",
         netUnits: netUnits.get(operation.id) ?? 0,
         refusedChangeCount:
           operation.failedLineCount + operation.conflictLineCount,
@@ -417,6 +422,7 @@ export function transferLedgerStanding(
       standing.shipmentRequests += 1;
       standing.unitsOutOfSource -= event.netUnits;
       standing.shipmentUnfinished ||= event.unfinished;
+      if (event.unfinished && event.putsBack) standing.returnUnfinished = true;
     } else {
       standing.unitsIntoDestination += event.netUnits;
       standing.receiptUnfinished ||= event.unfinished;

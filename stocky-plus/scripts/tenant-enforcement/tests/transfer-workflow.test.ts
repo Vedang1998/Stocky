@@ -1762,6 +1762,7 @@ describe("transfer workflow", () => {
 
       expect(await shipNext(id)).toEqual({
         ok: true,
+        alreadyDone: false,
         shippedUnits: 8,
         stillToShipUnits: 1,
       });
@@ -1778,6 +1779,7 @@ describe("transfer workflow", () => {
       await pick(red.id, 1);
       expect(await shipNext(id)).toEqual({
         ok: true,
+        alreadyDone: false,
         shippedUnits: 1,
         stillToShipUnits: 0,
       });
@@ -1869,7 +1871,12 @@ describe("transfer workflow", () => {
           readQuantities: reader({ [`${item(101)}|${SOURCE}`]: 2 }),
           allowShortSource: true,
         }),
-      ).toEqual({ ok: true, shippedUnits: 3, stillToShipUnits: 6 });
+      ).toEqual({
+        ok: true,
+        alreadyDone: false,
+        shippedUnits: 3,
+        stillToShipUnits: 6,
+      });
     });
 
     it("finishes a next shipment that Shopify applied only in part, without sending a confirmed change twice", async () => {
@@ -1900,6 +1907,7 @@ describe("transfer workflow", () => {
 
       expect(await shipNext(id)).toEqual({
         ok: true,
+        alreadyDone: false,
         shippedUnits: 8,
         stillToShipUnits: 1,
       });
@@ -1927,6 +1935,7 @@ describe("transfer workflow", () => {
       await pick(white.id, 0);
       expect(await shipNext(id)).toEqual({
         ok: true,
+        alreadyDone: false,
         shippedUnits: 0,
         stillToShipUnits: 9,
       });
@@ -2175,8 +2184,25 @@ describe("transfer workflow", () => {
 
       const results = await Promise.all([shipNext(id), shipNext(id)]);
 
-      // Whatever each request was told, two units left once.
-      expect(results.some((result) => result.ok)).toBe(true);
+      // Two units left once, and one request is told so. The other is told
+      // the shipment had already been sent, or is refused; it is never told
+      // that units were shipped or put back.
+      const done = results.flatMap((result) => (result.ok ? [result] : []));
+      expect(done.filter((result) => result.shippedUnits === 2)).toEqual([
+        { ok: true, alreadyDone: false, shippedUnits: 2, stillToShipUnits: 7 },
+      ]);
+      expect(done.filter((result) => result.shippedUnits !== 2)).toEqual(
+        done.length === 2
+          ? [
+              {
+                ok: true,
+                alreadyDone: true,
+                shippedUnits: 0,
+                stillToShipUnits: 7,
+              },
+            ]
+          : [],
+      );
       expect(levels()).toMatchObject({ redSource: 7 });
       expect(await quantities(id)).toEqual([
         [RED, 3, 0],
@@ -2187,6 +2213,147 @@ describe("transfer workflow", () => {
         [item(101), SOURCE, -1],
         [item(101), SOURCE, -2],
       ]);
+    });
+
+    it("does not call the transfer closed when its last shipment is pressed twice at the same moment", async () => {
+      const { id, red, white } = await firstShipmentSent();
+      await pick(red.id, 3);
+      await pick(white.id, 6);
+
+      const results = await Promise.all([shipNext(id), shipNext(id)]);
+
+      const done = results.flatMap((result) => (result.ok ? [result] : []));
+      expect(done.filter((result) => result.shippedUnits === 9)).toHaveLength(
+        1,
+      );
+      for (const result of results) {
+        if (result.ok) {
+          expect(result.stillToShipUnits).toBe(0);
+          expect(result.alreadyDone).toBe(result.shippedUnits === 0);
+        } else {
+          expect(result.error).not.toContain("was closed");
+        }
+      }
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+      expect(await load(id)).toMatchObject({
+        status: "IN_TRANSIT",
+        shipsInParts: false,
+      });
+      expect(await quantities(id)).toEqual([
+        [RED, 4, 4],
+        [WHITE, 6, 6],
+      ]);
+    });
+
+    it("does not let a draft be switched to several shipments while its shipment is part-way", async () => {
+      const id = await draftTransfer();
+      rejectNextChangeAt(1);
+      await shipTransfer(dbA, null, STAFF, id, enabled());
+      // The red units are out of the source and the transfer is still a draft.
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 20 });
+      expect((await load(id)).status).toBe("DRAFT");
+
+      expect(
+        await setTransferShipsInParts(dbA, {
+          transferId: id,
+          shipsInParts: true,
+        }),
+      ).toEqual({
+        ok: false,
+        error: expect.stringContaining(
+          "Shipping this transfer was started and did not finish",
+        ),
+      });
+      expect((await load(id)).shipsInParts).toBe(false);
+
+      // Shipping again finishes it as it was started.
+      expect(await shipTransfer(dbA, null, STAFF, id, enabled())).toEqual({
+        ok: true,
+        alreadyDone: false,
+      });
+      expect(levels()).toMatchObject({ redSource: 6, whiteSource: 14 });
+      expect(await load(id)).toMatchObject({
+        status: "IN_TRANSIT",
+        shipsInParts: false,
+      });
+    });
+
+    it("does not switch a draft back to one shipment while its first shipment is part-way, and says that stock is out when its units are set to none", async () => {
+      const { id, red, white } = await partsDraft({ red: 1, white: 2 });
+      rejectNextChangeAt(1);
+      await shipTransfer(dbA, null, STAFF, id, enabled());
+      expect(levels()).toMatchObject({ redSource: 9, whiteSource: 20 });
+
+      expect(
+        await setTransferShipsInParts(dbA, {
+          transferId: id,
+          shipsInParts: false,
+        }),
+      ).toMatchObject({ ok: false });
+      expect((await load(id)).shipsInParts).toBe(true);
+
+      // With every unit set back to none there is nothing to ship; the
+      // refusal says that stock is still out and how to get it back.
+      await pick(red.id, 0);
+      await pick(white.id, 0);
+      const sent = shopify.requests.length;
+      expect(await shipTransfer(dbA, null, STAFF, id, enabled())).toMatchObject(
+        {
+          ok: false,
+          error: expect.stringContaining(
+            "stock that the last try took out of the source is still out",
+          ),
+        },
+      );
+      expect(shopify.requests).toHaveLength(sent);
+
+      expect(await cancelTransfer(dbA, null, STAFF, id, enabled())).toEqual({
+        ok: true,
+        alreadyDone: false,
+      });
+      expect(levels()).toMatchObject({ redSource: 10, whiteSource: 20 });
+      expect((await load(id)).status).toBe("CANCELLED");
+    });
+
+    it("still calls a close that Shopify has not answered a close, on a transfer that ships in parts", async () => {
+      const { id } = await firstShipmentSent();
+      const attention = async () => {
+        const header = (await getTransfer(dbA, id))!;
+        const lines = await getTransferLines(dbA, {
+          transfer: header,
+          filter: "all",
+          page: 1,
+        });
+        return transferAttention(
+          header.status,
+          lines.totals,
+          transferLedgerStanding(await getTransferHistory(dbA, id)),
+          header.shipsInParts,
+        );
+      };
+      const close = () =>
+        closeTransfer(
+          dbA,
+          null,
+          RECEIVER,
+          id,
+          { resolution: "RETURNED" },
+          enabled(),
+        );
+
+      // The return reaches Shopify, and its answer does not reach the app.
+      shopify.loseNextResponse();
+      expect(await close()).toMatchObject({ ok: false });
+
+      expect((await load(id)).status).toBe("IN_TRANSIT");
+      expect(await attention()).toBe("RETURN_UNFINISHED");
+
+      expect(await close()).toMatchObject({ ok: true, resolution: "RETURNED" });
+      expect(levels()).toMatchObject({ redSource: 10 });
+      expect(await load(id)).toMatchObject({
+        status: "RECEIVED",
+        shipsInParts: false,
+      });
     });
 
     it("refuses shipped units above the quantity a line asks for in the database", async () => {

@@ -32,6 +32,7 @@ import {
   loadTransfer,
   lockTransferIn,
   NO_SHIPMENT_RECORD_MESSAGE,
+  NO_UNITS_TO_SHIP_MESSAGE,
   NOT_DRAFT_MESSAGE,
   RETURN_UNFINISHED_MESSAGE,
   settleTransferDocument,
@@ -442,6 +443,9 @@ export async function removeTransferLine(
   });
 }
 
+const SHIPMENT_UNDER_WAY_MESSAGE =
+  "Shipping this transfer was started and did not finish, so it cannot be changed between one shipment and several now. Ship it again to finish, or cancel it to put the stock back.";
+
 /**
  * Say whether a draft ships in one go or in parts. In parts, only the units
  * entered as picked leave with each shipment and the rest stays on the
@@ -463,6 +467,14 @@ export async function setTransferShipsInParts(
           ? "Only a draft can be changed between one shipment and several."
           : TRANSFER_NOT_FOUND_MESSAGE,
       };
+    }
+    // A shipment that stopped part-way has to finish as it was started. In
+    // parts, nothing picked ships nothing, so a draft switched now could
+    // have no units to send while stock is already out of the source.
+    if (
+      !(await isSettled(tx, emptyShipmentDocument({ id: input.transferId })))
+    ) {
+      return { ok: false as const, error: SHIPMENT_UNDER_WAY_MESSAGE };
     }
     await tx.transferOrder.update({
       where: { id: input.transferId },
@@ -708,7 +720,16 @@ export async function shipTransfer(
   if (!isSwitchedOn(options)) return fail(SWITCHED_OFF_MESSAGE);
 
   const built = await buildShipmentDocument(db, transfer);
-  if (!built.ok) return fail(built.error);
+  if (!built.ok) {
+    // With every unit set back to none after a shipment stopped part-way,
+    // say that stock is still out and how to get it back.
+    return fail(
+      built.error === NO_UNITS_TO_SHIP_MESSAGE &&
+        !(await isSettled(db, emptyShipmentDocument(transfer)))
+        ? "No units are entered to ship now, and stock that the last try took out of the source is still out. Enter the units that leave with this shipment and ship again, or cancel the transfer to put that stock back."
+        : built.error,
+    );
+  }
 
   // Only units that have not left yet are checked: after a partial failure
   // the rest is already out of the source's quantity.
@@ -809,6 +830,8 @@ const NOTHING_LEFT_TO_SHIP_MESSAGE =
 export type ShipNextResult =
   | {
       ok: true;
+      /** The units picked for this shipment had already been shown as shipped: the same press, sent twice. */
+      alreadyDone: boolean;
       /** Units this shipment took out of stock at the source. */
       shippedUnits: number;
       /** Units of the transfer that have still not shipped. */
@@ -865,9 +888,7 @@ export async function shipNextTransferShipment(
     !state.unfinishedOperationId &&
     state.outstanding.length === 0
   ) {
-    return fail(
-      "No units are entered to ship now. Enter the units of at least one item that leave with this shipment.",
-    );
+    return fail(NO_UNITS_TO_SHIP_MESSAGE);
   }
   if (!state.unfinishedOperationId) {
     const blocked = await checkStockBeforeShipping(
@@ -910,7 +931,10 @@ export async function shipNextTransferShipment(
       return "not_in_transit" as const;
     }
     const current = await loadTransfer(tx, transfer.id);
-    if (!current?.shipsInParts) return "not_in_transit" as const;
+    if (!current) return "not_in_transit" as const;
+    // Still in transit and no longer open for shipments: another press sent
+    // these last units a moment ago.
+    if (!current.shipsInParts) return { shippedUnits: 0, stillToShipUnits: 0 };
     const rebuilt = await buildShipmentDocument(tx, current, undefined, true);
     if (!rebuilt.ok || !(await isSettled(tx, rebuilt.document))) {
       return "changed" as const;
@@ -954,7 +978,13 @@ export async function shipNextTransferShipment(
       "This transfer was closed while the shipment was being sent. Reload the page to see where it stands.",
     );
   }
-  return { ok: true, ...outcome };
+  // Units were picked when this request read the transfer and none are now,
+  // with the ledger settled: another press moved the lines on meanwhile.
+  return {
+    ok: true,
+    alreadyDone: picked > 0 && outcome.shippedUnits === 0,
+    ...outcome,
+  };
 }
 
 /**

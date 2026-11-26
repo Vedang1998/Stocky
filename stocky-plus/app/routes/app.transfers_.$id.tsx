@@ -325,7 +325,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       notice:
         result.shippedUnits > 0
           ? `Shipment sent: ${unitCount(result.shippedUnits)} left the source location in Shopify. ${rest}`
-          : `No units were entered to ship, so stock that had left the source without being shown as shipped was put back. ${rest}`,
+          : result.alreadyDone
+            ? `This shipment had already been sent. Nothing was sent twice. ${rest}`
+            : `No units were entered to ship, so stock that had left the source without being shown as shipped was put back. ${rest}`,
     };
   }
 
@@ -1219,28 +1221,35 @@ export default function TransferDetail() {
                 </s-text>
               </s-stack>
             </Form>
-            {!sourceShort && totals.lineCount > 0 && (
-              <Form method="post">
-                <input type="hidden" name="intent" value="shipsInParts" />
-                <input type="hidden" name="value" value={inParts ? "0" : "1"} />
-                <s-stack direction="inline" gap="small" alignItems="center">
-                  <s-button
-                    type="submit"
-                    variant="secondary"
-                    {...disabledWhen(locked)}
-                  >
-                    {inParts
-                      ? "Ship everything in one shipment instead"
-                      : "Ship in several shipments"}
-                  </s-button>
-                  <s-text color="subdued">
-                    {inParts
-                      ? "One shipment takes the full quantity of every item, or the picked quantity where one is saved."
-                      : "For a transfer that leaves in more than one box or on more than one day: ship part now and the rest later."}
-                  </s-text>
-                </s-stack>
-              </Form>
-            )}
+            {/* Not while a shipment stopped part-way: it finishes as it was started. */}
+            {!sourceShort &&
+              totals.lineCount > 0 &&
+              attention !== "SHIPMENT_UNFINISHED" && (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="shipsInParts" />
+                  <input
+                    type="hidden"
+                    name="value"
+                    value={inParts ? "0" : "1"}
+                  />
+                  <s-stack direction="inline" gap="small" alignItems="center">
+                    <s-button
+                      type="submit"
+                      variant="secondary"
+                      {...disabledWhen(locked)}
+                    >
+                      {inParts
+                        ? "Ship everything in one shipment instead"
+                        : "Ship in several shipments"}
+                    </s-button>
+                    <s-text color="subdued">
+                      {inParts
+                        ? "One shipment takes the full quantity of every item, or the picked quantity where one is saved."
+                        : "For a transfer that leaves in more than one box or on more than one day: ship part now and the rest later."}
+                    </s-text>
+                  </s-stack>
+                </Form>
+              )}
             {sourceShort && (
               <Form method="post">
                 <input type="hidden" name="intent" value="ship" />

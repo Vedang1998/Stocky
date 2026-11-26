@@ -266,6 +266,19 @@ describe("unfinished steps of a transfer", () => {
         true,
       ),
     ).toBe("NEXT_SHIPMENT_UNFINISHED");
+    // A request that puts units back is a close Shopify is still answering.
+    expect(
+      transferAttention(
+        "IN_TRANSIT",
+        totals,
+        ledger({
+          ...shipped,
+          shipmentUnfinished: true,
+          returnUnfinished: true,
+        }),
+        true,
+      ),
+    ).toBe("RETURN_UNFINISHED");
     // Less out of the source than was shipped is still a close that stopped.
     expect(
       transferAttention(

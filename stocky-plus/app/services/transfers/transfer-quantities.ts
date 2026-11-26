@@ -162,6 +162,8 @@ export interface TransferLedgerStanding {
   unitsIntoDestination: number;
   /** Shopify has not finished answering a request at the source. */
   shipmentUnfinished: boolean;
+  /** The unfinished request at the source puts stock back: a close that returns units. */
+  returnUnfinished?: boolean;
   /** Shopify has not finished answering a request at the destination. */
   receiptUnfinished: boolean;
 }
@@ -206,11 +208,13 @@ export function transferAttention(
       if (ledger.shipmentRequests === 0) return "NO_SHIPMENT_RECORD";
       // On a transfer that ships in parts, more out of the source than its
       // lines show as shipped is a later shipment that stopped part-way, and
-      // so, most likely, is a request Shopify is still answering.
+      // so is a request Shopify is still answering, unless that request is a
+      // close putting units back.
       if (
         shipsInParts &&
         (ledger.unitsOutOfSource > totals.shipUnits ||
           (ledger.shipmentUnfinished &&
+            !ledger.returnUnfinished &&
             ledger.unitsOutOfSource === totals.shipUnits))
       ) {
         return "NEXT_SHIPMENT_UNFINISHED";
