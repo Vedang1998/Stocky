@@ -40,11 +40,7 @@ export async function openRetentionErasureRequests(
     opened += await prisma.$transaction(async (tx) => {
       // Shopify's own shop/redact is already waiting for this shop.
       const pending = await tx.privacyRequest.findFirst({
-        where: {
-          topic: "SHOP_REDACT",
-          resolution: null,
-          shopRecordId: shop.id,
-        },
+        where: { topic: "SHOP_REDACT", resolution: null, shopRecordId: shop.id },
         select: { id: true },
       });
       if (pending) return 0;

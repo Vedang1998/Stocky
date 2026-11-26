@@ -234,11 +234,7 @@ describe("privacy compliance", () => {
       payload: {
         shop_id: 954889,
         shop_domain: SHOP_A,
-        customer: {
-          id: 191167,
-          email: "john@example.com",
-          phone: "555-625-1199",
-        },
+        customer: { id: 191167, email: "john@example.com", phone: "555-625-1199" },
         orders_to_redact: [299938, 280263, 220458],
       },
     });
@@ -250,11 +246,7 @@ describe("privacy compliance", () => {
         shop_id: 954889,
         shop_domain: SHOP_A,
         orders_requested: [299938, 280263],
-        customer: {
-          id: 191167,
-          email: "john@example.com",
-          phone: "555-625-1199",
-        },
+        customer: { id: 191167, email: "john@example.com", phone: "555-625-1199" },
         data_request: { id: 9999 },
       },
     });
@@ -287,12 +279,7 @@ describe("privacy compliance", () => {
     const stored = JSON.stringify(rows, (_key, value) =>
       typeof value === "bigint" ? value.toString() : value,
     );
-    for (const detail of [
-      "john@example.com",
-      "555-625-1199",
-      "191167",
-      "299938",
-    ]) {
+    for (const detail of ["john@example.com", "555-625-1199", "191167", "299938"]) {
       expect(stored).not.toContain(detail);
     }
   });
@@ -431,9 +418,7 @@ describe("privacy compliance", () => {
     });
     expect(waiting.resolution).toBeNull();
     expect(waiting.lastErrorCode).toBe("shop_not_uninstalled");
-    expect(waiting.nextAttemptAt.getTime()).toBe(
-      now.getTime() + 6 * 60 * 60_000,
-    );
+    expect(waiting.nextAttemptAt.getTime()).toBe(now.getTime() + 6 * 60 * 60_000);
     expect(await rowsByTable(shopA)).toEqual(before);
 
     const atDeadline = await runPrivacyMaintenance({
