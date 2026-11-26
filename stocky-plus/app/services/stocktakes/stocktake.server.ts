@@ -1673,6 +1673,38 @@ const itemsText = (count: number) =>
   `${count.toLocaleString("en-US")} ${count === 1 ? "item" : "items"}`;
 
 /**
+ * The document a count stands for now, or why it may not be completed as it
+ * stands: a line waits for its recount ("recount"), or a line waits for a
+ * movement review, has no count that was not accepted, or cannot be sent
+ * ("changed"). Call it under the count's lock, so no line changes after it.
+ */
+async function documentToComplete(
+  tx: TenantDb,
+  stocktake: StocktakeRow,
+  acceptUncounted: boolean | undefined,
+): Promise<InventoryDocument | "recount" | "changed"> {
+  const lines = await loadCountLines(tx, stocktake.id);
+  if (lines.some(awaitsRecount)) return "recount";
+  if (
+    lines.some(awaitsMovementReview) ||
+    (!acceptUncounted && lines.some((line) => line.countedQty === null))
+  ) {
+    return "changed";
+  }
+  const built = await buildStocktakeDocument(tx, stocktake, lines);
+  return built.ok ? built.document : "changed";
+}
+
+/** Whether two documents of one count ask for the same stock changes. */
+const sameChanges = (a: InventoryDocument, b: InventoryDocument) =>
+  a.desired.length === b.desired.length &&
+  a.desired.every(
+    (change, index) =>
+      change.inventoryItemId === b.desired[index].inventoryItemId &&
+      change.delta === b.desired[index].delta,
+  );
+
+/**
  * Apply a count's variances to Shopify and close the count.
  *
  * Before anything is sent the count must be whole: items without a count are
@@ -1683,6 +1715,11 @@ const itemsText = (count: number) =>
  * The count is closed only when the ledger shows every variance applied.
  * Pressing complete again, twice at once, or after a partial failure sends
  * only what Shopify has not confirmed yet; a completed count sends nothing.
+ *
+ * A count stays in progress while its lines are counted, so its status does
+ * not stop a request that read the lines before someone else changed them.
+ * Nothing is recorded to send unless, under the count's lock, the count
+ * still stands for the changes this request worked out.
  */
 export async function completeStocktake(
   db: TenantDb,
@@ -1709,6 +1746,16 @@ export async function completeStocktake(
       ? { ok: true, alreadyCompleted: true }
       : fail("Only a count that is in progress can be completed.");
   };
+  /** The count was changed by someone else while this request completed it. */
+  const stayedOpen = (why: "recount" | "changed"): CompleteStocktakeResult =>
+    why === "recount"
+      ? fail(
+          "A recount was asked for while this stocktake was being completed, so it stays open. Count the item again, or keep its count, then complete it again.",
+          { blocker: "RECOUNT" },
+        )
+      : fail(
+          "A count was saved while this stocktake was being completed. Complete it again to apply the latest counts.",
+        );
 
   const stocktake = await findStocktake(db, stocktakeId);
   if (!stocktake) return fail(NOT_FOUND_MESSAGE);
@@ -1774,21 +1821,35 @@ export async function completeStocktake(
     if (!built.ok) return fail(built.error);
   }
 
+  const document = built.document;
+  let outOfDate: "recount" | "changed" | null = null;
   let settle;
   try {
     settle = await settleInventoryDocument(
       db,
       admin,
       {
-        ...built.document,
+        ...document,
         actor,
         note: null,
-        holdOpen: (tx) => lockOpenStocktake(tx, stocktake.id),
+        holdOpen: async (tx) => {
+          if (!(await lockOpenStocktake(tx, stocktake.id))) return false;
+          const now = await documentToComplete(
+            tx,
+            stocktake,
+            options.acceptUncounted,
+          );
+          if (typeof now === "string") outOfDate = now;
+          else if (!sameChanges(now, document)) outOfDate = "changed";
+          return outOfDate === null;
+        },
       },
       options,
     );
   } catch (err) {
-    if (err instanceof InventoryDocumentClosedError) return notOpen();
+    if (err instanceof InventoryDocumentClosedError) {
+      return outOfDate ? stayedOpen(outOfDate) : notOpen();
+    }
     if (err instanceof InventoryOperationConflictError) {
       return fail(
         "This count changed while it was being completed. Reload the page and complete it again.",
@@ -1814,18 +1875,13 @@ export async function completeStocktake(
 
   const outcome = await db.$transaction(async (tx: TenantDb) => {
     if (!(await lockOpenStocktake(tx, stocktake.id))) return "not_open";
-    const current = await loadCountLines(tx, stocktake.id);
-    if (current.some(awaitsRecount)) return "recount";
-    if (
-      current.some(awaitsMovementReview) ||
-      (!options.acceptUncounted &&
-        current.some((line) => line.countedQty === null))
-    ) {
-      return "changed";
-    }
-    const rebuilt = await buildStocktakeDocument(tx, stocktake, current);
-    if (!rebuilt.ok) return "changed";
-    const state = await readDocumentLedgerState(tx, rebuilt.document);
+    const now = await documentToComplete(
+      tx,
+      stocktake,
+      options.acceptUncounted,
+    );
+    if (typeof now === "string") return now;
+    const state = await readDocumentLedgerState(tx, now);
     if (state.unfinishedOperationId || state.outstanding.length > 0) {
       return "changed";
     }
@@ -1842,17 +1898,9 @@ export async function completeStocktake(
 
   if (outcome === "closed") return { ok: true, alreadyCompleted: false };
   if (outcome === "not_open") return notOpen();
-  if (outcome === "recount") {
-    // The counts that were sent stay in Shopify; the recount goes out as a
-    // further change when the count is completed again.
-    return fail(
-      "A recount was asked for while this stocktake was being completed, so it stays open. Count the item again, or keep its count, then complete it again.",
-      { blocker: "RECOUNT" },
-    );
-  }
-  return fail(
-    "A count was saved while this stocktake was being completed. Complete it again to apply the latest counts.",
-  );
+  // Counts that were sent before the change stay in Shopify; the latest
+  // counts go out as a further change when the count is completed again.
+  return stayedOpen(outcome);
 }
 
 /**

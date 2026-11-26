@@ -257,6 +257,20 @@ each difference to Shopify through `settleInventoryDocument`.
   send are separate requests: the change goes to `available` while the count
   is measured in on-hand, so Shopify's compare-and-swap cannot guard it, and a
   movement in the seconds between the two is not detected.
+- **A count changed while it is being completed.** A request reads the
+  lines, compares them with Shopify over the network and only then records
+  what to send. The count stays in progress all that time, so its status
+  does not stop a request whose read is out of date. Under the count's lock,
+  in the transaction that records an operation, the lines are therefore read
+  again (`documentToComplete`): if a line waits for a recount or a movement
+  review, a line has no count that was not accepted, or the changes the
+  count stands for differ from the ones this request worked out, nothing is
+  recorded or sent and the count stays open with "A count was saved while
+  this stocktake was being completed" (or the recount message). Every step
+  that changes a line takes the same lock. A change that lands after the
+  operation is recorded is caught by the closing step instead: what was sent
+  stays in Shopify, the count stays open, and completing again sends only
+  the difference to the latest counts.
 - **Partial failure.** Lines Shopify accepted stay accepted. The count stays
   in progress, shows which lines were refused and why, and a second press
   sends only what is still outstanding.
