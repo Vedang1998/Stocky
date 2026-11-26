@@ -656,6 +656,24 @@ export const MERCHANT_TABLES: readonly MerchantTableSpec[] = [
     enforcementStepGroup: "merchant_direct",
   },
   {
+    prismaModel: "AdjustmentReason",
+    sqlTable: "AdjustmentReason",
+    classification: "merchant_domain",
+    kind: "direct",
+    shopIdNullableInPrisma: false,
+    legacyShopField: false,
+    parentRelationships: [],
+    childRelationships: [],
+    crossDomainRelationships: [],
+    existingShopIdIdUnique: true,
+    requiredCompositeKey: true,
+    rlsRequired: true,
+    immutabilityTriggerRequired: true,
+    bootstrapExemption: false,
+    expectedRuntimePrivileges: DML,
+    enforcementStepGroup: "merchant_direct",
+  },
+  {
     prismaModel: "SupplierSkuMapping",
     sqlTable: "SupplierSkuMapping",
     classification: "merchant_domain",
@@ -1559,6 +1577,8 @@ export const REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT = 4;
 export const STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT = 2;
 /** StocktakeRecountEvent (history of recounts on a count). */
 export const STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT = 1;
+/** AdjustmentReason (the reasons a shop adds to the built-in list). */
+export const ADJUSTMENT_REASON_ADDED_MERCHANT_TABLE_COUNT = 1;
 export const EXPECTED_MERCHANT_TABLE_COUNT =
   PRE_PR6_A_MERCHANT_TABLE_COUNT +
   PR6_A_ADDED_MERCHANT_TABLE_COUNT +
@@ -1566,12 +1586,13 @@ export const EXPECTED_MERCHANT_TABLE_COUNT =
   PURCHASING_ADDED_MERCHANT_TABLE_COUNT +
   REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT +
   STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT +
-  STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT;
+  STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT +
+  ADJUSTMENT_REASON_ADDED_MERCHANT_TABLE_COUNT;
 
 export function assertMerchantTableCount(): void {
   if (MERCHANT_TABLES.length !== EXPECTED_MERCHANT_TABLE_COUNT) {
     throw new Error(
-      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}+${STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT}+${STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
+      `Expected ${EXPECTED_MERCHANT_TABLE_COUNT} merchant tables (${PRE_PR6_A_MERCHANT_TABLE_COUNT}+${PR6_A_ADDED_MERCHANT_TABLE_COUNT}+${INVENTORY_OPERATION_ADDED_MERCHANT_TABLE_COUNT}+${PURCHASING_ADDED_MERCHANT_TABLE_COUNT}+${REPLENISHMENT_ADDED_MERCHANT_TABLE_COUNT}+${STOCK_HISTORY_ADDED_MERCHANT_TABLE_COUNT}+${STOCKTAKE_HISTORY_ADDED_MERCHANT_TABLE_COUNT}+${ADJUSTMENT_REASON_ADDED_MERCHANT_TABLE_COUNT}), found ${MERCHANT_TABLES.length}`,
     );
   }
 }

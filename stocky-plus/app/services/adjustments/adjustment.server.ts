@@ -42,9 +42,11 @@ import {
   isAdjustmentMode,
   isAdjustmentReason,
   parseAdjustmentLines,
+  readOwnReasonId,
   type AdjustmentMode,
   type AdjustmentReasonCode,
 } from "./adjustment-input";
+import { findOwnAdjustmentReason } from "./adjustment-reasons.server";
 import { SYNC_CATALOG_HINT, inactiveLocationMessage } from "../../lib/sync-copy";
 
 export const ADJUSTMENT_SOURCE_TYPE = "InventoryAdjustment";
@@ -64,6 +66,7 @@ export interface SubmitAdjustmentInput {
   /** Generated when the form was rendered; one per intended adjustment. */
   submissionId: string | null;
   locationId: string | null;
+  /** A built-in reason code, or the form value of one of the shop's own reasons. */
   reason: unknown;
   mode: unknown;
   note: string | null;
@@ -165,6 +168,23 @@ async function describeOutcome(
   );
 }
 
+/**
+ * The Shopify reason code a submitted reason stands for and, for one of the
+ * shop's own reasons, its name. Null when the value is neither a built-in
+ * reason nor a reason on the shop's list.
+ */
+async function resolveReason(
+  db: TenantDb,
+  value: unknown,
+): Promise<{ code: AdjustmentReasonCode; label: string | null } | null> {
+  if (isAdjustmentReason(value)) return { code: value, label: null };
+  const ownId = readOwnReasonId(value);
+  const own = ownId ? await findOwnAdjustmentReason(db, ownId) : null;
+  return own && isAdjustmentReason(own.shopifyReason)
+    ? { code: own.shopifyReason, label: own.name }
+    : null;
+}
+
 async function findAdjustmentOperation(
   db: TenantDb,
   where: Record<string, unknown>,
@@ -214,11 +234,17 @@ export async function submitAdjustment(
   if (!isSwitchedOn(options)) return fail(SWITCHED_OFF_MESSAGE);
 
   if (!input.locationId) return fail("Choose a location.");
-  if (!isAdjustmentReason(input.reason)) return fail("Choose a reason.");
+  const reason = await resolveReason(db, input.reason);
+  if (!reason) {
+    return fail(
+      readOwnReasonId(input.reason)
+        ? "That reason is no longer in your list. Choose another reason. Nothing was changed."
+        : "Choose a reason.",
+    );
+  }
   if (!isAdjustmentMode(input.mode)) {
     return fail("Choose whether to change the quantity or set it.");
   }
-  const reason: AdjustmentReasonCode = input.reason;
   const mode: AdjustmentMode = input.mode;
   const note = input.note?.trim() ?? "";
   if (note.length > MAX_ADJUSTMENT_NOTE_LENGTH) {
@@ -359,7 +385,8 @@ export async function submitAdjustment(
       kind: "ADJUSTMENT",
       idempotencyKey: `adjustment:${submissionId}`,
       source: { type: ADJUSTMENT_SOURCE_TYPE, id: submissionId },
-      reason,
+      reason: reason.code,
+      reasonLabel: reason.label,
       quantityName: "available",
       referenceDocumentUri: `gid://propo/InventoryAdjustment/${submissionId}`,
       actor,
@@ -463,6 +490,8 @@ export interface AdjustmentHistoryEntry {
   kind: "ADJUSTMENT" | "REVERSAL";
   status: InventoryOperationStatus;
   reason: string;
+  /** The merchant's own name for the reason, when one of their reasons was used. */
+  reasonLabel: string | null;
   note: string | null;
   staffId: string | null;
   locationId: string | null;
@@ -482,6 +511,7 @@ interface HistoryOperationRow {
   kind: "ADJUSTMENT" | "REVERSAL";
   status: InventoryOperationStatus;
   reason: string;
+  reasonLabel: string | null;
   note: string | null;
   actorShopifyUserId: string | null;
   reversesOperationId: string | null;
@@ -542,6 +572,7 @@ export async function listAdjustments(
       kind: true,
       status: true,
       reason: true,
+      reasonLabel: true,
       note: true,
       actorShopifyUserId: true,
       reversesOperationId: true,
@@ -595,6 +626,7 @@ export async function listAdjustments(
       kind: operation.kind,
       status: operation.status,
       reason: operation.reason,
+      reasonLabel: operation.reasonLabel,
       note: operation.note,
       staffId: operation.actorShopifyUserId,
       locationId: own[0]?.locationGid ?? null,

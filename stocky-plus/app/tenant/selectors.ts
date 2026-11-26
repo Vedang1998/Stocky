@@ -377,6 +377,18 @@ export const MODEL_UNIQUE_SELECTORS: Record<
       { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
     ],
   },
+  AdjustmentReason: {
+    model: "AdjustmentReason",
+    selectors: [
+      { kind: "scalar", name: "id" },
+      { kind: "compound", name: "shopId_id", fields: ["shopId", "id"] },
+      {
+        kind: "compound",
+        name: "shopId_nameKey",
+        fields: ["shopId", "nameKey"],
+      },
+    ],
+  },
   SupplierSkuMapping: {
     model: "SupplierSkuMapping",
     selectors: [

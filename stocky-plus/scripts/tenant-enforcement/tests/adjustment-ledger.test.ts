@@ -18,6 +18,18 @@ import {
   type SubmitAdjustmentInput,
 } from "../../../app/services/adjustments/adjustment.server";
 import { readAdjustmentHistoryQuery } from "../../../app/services/adjustments/adjustment-history-query";
+import {
+  MAX_OWN_ADJUSTMENT_REASONS,
+  ownReasonValue,
+} from "../../../app/services/adjustments/adjustment-input";
+import {
+  addOwnAdjustmentReason,
+  listOwnAdjustmentReasons,
+  removeOwnAdjustmentReason,
+  updateOwnAdjustmentReason,
+  type OwnAdjustmentReason,
+  type OwnAdjustmentReasonResult,
+} from "../../../app/services/adjustments/adjustment-reasons.server";
 import { recordInventoryOperation } from "../../../app/services/inventory-writes/ledger.server";
 import { readShopTimeZone } from "../../../app/services/inventory-writes/shop-clock.server";
 import type { ReadAvailableQuantities } from "../../../app/services/inventory-writes/shopify-levels.server";
@@ -260,7 +272,7 @@ describe("inventory adjustments on the inventory ledger", () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe(
-      `TRUNCATE TABLE "InventoryOperationLine", "InventoryOperation" CASCADE`,
+      `TRUNCATE TABLE "InventoryOperationLine", "InventoryOperation", "AdjustmentReason" CASCADE`,
     );
     shopify = new FakeShopify();
     shopify.setLevel(101, 10, 11);
@@ -1197,6 +1209,482 @@ describe("inventory adjustments on the inventory ledger", () => {
       expect(theirs).toMatchObject({ ok: true, alreadySubmitted: false });
       expect(shopify.level(101)).toBe(7);
       expect(shopify.level(201, 21)).toBe(5);
+    });
+  });
+
+  describe("the shop's own reasons", () => {
+    function added(result: OwnAdjustmentReasonResult): OwnAdjustmentReason {
+      if (!result.ok)
+        throw new Error(`expected a reason, got: ${result.error}`);
+      return result.reason;
+    }
+    function refusal(result: OwnAdjustmentReasonResult): string {
+      if (result.ok) throw new Error("expected the reason to be refused");
+      return result.error;
+    }
+    const add = (name: string, shopifyReason: unknown = "other", db = dbA) =>
+      addOwnAdjustmentReason(db, STAFF, { name, shopifyReason });
+    const names = async (db = dbA) =>
+      (await listOwnAdjustmentReasons(db)).map((reason) => reason.name);
+
+    it("adds a reason with the Shopify reason it counts as and who added it, and lists reasons by name", async () => {
+      added(await add("  Staff   purchase ", "promotion"));
+      const studio = added(await add("Sent to photo studio"));
+
+      expect(studio).toEqual({
+        id: expect.any(String),
+        name: "Sent to photo studio",
+        shopifyReason: "other",
+      });
+      expect(await listOwnAdjustmentReasons(dbA)).toEqual([
+        studio,
+        {
+          id: expect.any(String),
+          name: "Staff purchase",
+          shopifyReason: "promotion",
+        },
+      ]);
+      expect(await prisma.adjustmentReason.findMany()).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: "Staff purchase",
+            nameKey: "staff purchase",
+            createdByUserId: "42",
+            updatedByUserId: "42",
+          }),
+        ]),
+      );
+    });
+
+    it("starts with no reasons", async () => {
+      expect(await listOwnAdjustmentReasons(dbA)).toEqual([]);
+    });
+
+    it.each([
+      ["", "Enter a name for the reason."],
+      ["   ", "Enter a name for the reason."],
+      ["x".repeat(61), "A reason name can be at most 60 characters."],
+      [
+        "theft OR loss",
+        '"theft OR loss" is already one of the built-in reasons. Choose another name.',
+      ],
+      [
+        " reversal ",
+        '"reversal" is what the history calls an adjustment that was undone. Choose another name.',
+      ],
+    ])("refuses the name %j and saves nothing", async (name, message) => {
+      expect(refusal(await add(name))).toBe(message);
+      expect(await prisma.adjustmentReason.count()).toBe(0);
+    });
+
+    it.each(["", "reservation_created", "movement_created", 7, null])(
+      "refuses %j as the Shopify reason and saves nothing",
+      async (shopifyReason) => {
+        expect(refusal(await add("Staff purchase", shopifyReason))).toBe(
+          "Choose the Shopify reason this reason counts as.",
+        );
+        expect(await prisma.adjustmentReason.count()).toBe(0);
+      },
+    );
+
+    it("refuses a name the shop already uses, whatever its capitals or spacing", async () => {
+      added(await add("Staff purchase"));
+
+      expect(refusal(await add("STAFF  Purchase", "damaged"))).toBe(
+        'You already have a reason called "STAFF Purchase".',
+      );
+      expect(await names()).toEqual(["Staff purchase"]);
+    });
+
+    it("saves one reason when the same name is added twice at once", async () => {
+      const results = await Promise.all([
+        add("Staff purchase"),
+        add("Staff purchase"),
+      ]);
+
+      expect(results.filter((result) => result.ok)).toHaveLength(1);
+      expect(refusal(results.find((result) => !result.ok)!)).toBe(
+        'You already have a reason called "Staff purchase".',
+      );
+      expect(await names()).toEqual(["Staff purchase"]);
+    });
+
+    it(`refuses one more reason than ${MAX_OWN_ADJUSTMENT_REASONS}`, async () => {
+      for (let n = 0; n < MAX_OWN_ADJUSTMENT_REASONS; n += 1) {
+        added(await add(`Reason ${n}`));
+      }
+
+      expect(refusal(await add("One too many"))).toBe(
+        "A shop can have at most 50 reasons of its own. Remove one you no longer use first.",
+      );
+      expect(await prisma.adjustmentReason.count()).toBe(
+        MAX_OWN_ADJUSTMENT_REASONS,
+      );
+    });
+
+    it("renames a reason and changes the Shopify reason it counts as", async () => {
+      const reason = added(await add("Staff purchase"));
+
+      const renamed = await updateOwnAdjustmentReason(dbA, MANAGER, reason.id, {
+        name: "Staff sale",
+        shopifyReason: "promotion",
+      });
+
+      expect(renamed).toEqual({
+        ok: true,
+        reason: {
+          id: reason.id,
+          name: "Staff sale",
+          shopifyReason: "promotion",
+        },
+      });
+      expect(await listOwnAdjustmentReasons(dbA)).toEqual([added(renamed)]);
+      // The row keeps who added the reason and who changed it last.
+      expect(await prisma.adjustmentReason.findMany()).toMatchObject([
+        { name: "Staff sale", createdByUserId: "42", updatedByUserId: "77" },
+      ]);
+    });
+
+    it("lets a reason keep its own name with other capitals, and refuses another reason's name", async () => {
+      const purchase = added(await add("Staff purchase"));
+      added(await add("Samples"));
+
+      expect(
+        await updateOwnAdjustmentReason(dbA, STAFF, purchase.id, {
+          name: "Staff Purchase",
+          shopifyReason: "other",
+        }),
+      ).toMatchObject({ ok: true, reason: { name: "Staff Purchase" } });
+      expect(
+        refusal(
+          await updateOwnAdjustmentReason(dbA, STAFF, purchase.id, {
+            name: "samples",
+            shopifyReason: "other",
+          }),
+        ),
+      ).toBe('You already have a reason called "samples".');
+      expect(await names()).toEqual(["Samples", "Staff Purchase"]);
+    });
+
+    it("refuses an edit that names no reason, a blank name or an unknown Shopify reason", async () => {
+      const reason = added(await add("Staff purchase"));
+      const edit = (id: string, name: string, shopifyReason: unknown) =>
+        updateOwnAdjustmentReason(dbA, STAFF, id, { name, shopifyReason });
+
+      expect(refusal(await edit("missing", "Samples", "other"))).toBe(
+        "That reason is no longer in your list. Reload the page to see the current list.",
+      );
+      expect(refusal(await edit(reason.id, " ", "other"))).toBe(
+        "Enter a name for the reason.",
+      );
+      expect(refusal(await edit(reason.id, "Reversal", "other"))).toBe(
+        '"Reversal" is what the history calls an adjustment that was undone. Choose another name.',
+      );
+      expect(refusal(await edit(reason.id, "Samples", "nope"))).toBe(
+        "Choose the Shopify reason this reason counts as.",
+      );
+      expect(await listOwnAdjustmentReasons(dbA)).toEqual([reason]);
+    });
+
+    it("removes a reason once, and says so when it is already gone", async () => {
+      const reason = added(await add("Staff purchase"));
+
+      expect(await removeOwnAdjustmentReason(dbA, reason.id)).toEqual({
+        ok: true,
+        reason,
+      });
+      expect(refusal(await removeOwnAdjustmentReason(dbA, reason.id))).toBe(
+        "That reason is no longer in your list. Reload the page to see the current list.",
+      );
+      expect(await names()).toEqual([]);
+    });
+
+    it("records an adjustment under the reason's name and sends Shopify the reason it counts as", async () => {
+      const reason = added(await add("Sent to photo studio", "promotion"));
+
+      const result = await submit("RED-75, -2", {
+        reason: ownReasonValue(reason.id),
+      });
+
+      expect(result).toMatchObject({ ok: true, changedLineCount: 1 });
+      expect(shopify.requests.map((request) => request.reason)).toEqual([
+        "promotion",
+      ]);
+      expect(await operations()).toMatchObject([
+        { reason: "promotion", reasonLabel: "Sent to photo studio" },
+      ]);
+      expect(await listAdjustments(dbA)).toMatchObject([
+        { reason: "promotion", reasonLabel: "Sent to photo studio" },
+      ]);
+    });
+
+    it("leaves the name empty for a built-in reason and for a reversal", async () => {
+      const reason = added(await add("Sent to photo studio"));
+      await submit("RED-75, -1");
+      const own = applied(
+        await submit("RED-75, -2", { reason: ownReasonValue(reason.id) }),
+      );
+      await reverseAdjustment(
+        dbA,
+        null,
+        MANAGER,
+        { operationId: own, note: null },
+        enabled(),
+      );
+
+      expect(
+        (await operations()).map((operation) => [
+          operation.kind,
+          operation.reason,
+          operation.reasonLabel,
+        ]),
+      ).toEqual([
+        ["ADJUSTMENT", "damaged", null],
+        ["ADJUSTMENT", "other", "Sent to photo studio"],
+        ["REVERSAL", "correction", null],
+      ]);
+    });
+
+    it("keeps the name and the Shopify reason on a recorded adjustment after the reason is renamed and removed", async () => {
+      const reason = added(await add("Sent to photo studio", "promotion"));
+      await submit("RED-75, -2", { reason: ownReasonValue(reason.id) });
+
+      await updateOwnAdjustmentReason(dbA, STAFF, reason.id, {
+        name: "Photo shoot",
+        shopifyReason: "other",
+      });
+      expect(await listAdjustments(dbA)).toMatchObject([
+        { reason: "promotion", reasonLabel: "Sent to photo studio" },
+      ]);
+
+      await removeOwnAdjustmentReason(dbA, reason.id);
+      expect(await listAdjustments(dbA)).toMatchObject([
+        { reason: "promotion", reasonLabel: "Sent to photo studio" },
+      ]);
+      expect((await listAdjustmentsForExport(dbA, {})).entries).toMatchObject([
+        { reasonLabel: "Sent to photo studio" },
+      ]);
+    });
+
+    it("uses the reason as it reads when the adjustment is recorded", async () => {
+      const reason = added(await add("Sent to photo studio", "promotion"));
+      await updateOwnAdjustmentReason(dbA, STAFF, reason.id, {
+        name: "Photo shoot",
+        shopifyReason: "other",
+      });
+
+      await submit("RED-75, -2", { reason: ownReasonValue(reason.id) });
+
+      expect(await operations()).toMatchObject([
+        { reason: "other", reasonLabel: "Photo shoot" },
+      ]);
+    });
+
+    it("refuses an adjustment whose reason was removed while the form was open, and records and sends nothing", async () => {
+      const reason = added(await add("Sent to photo studio"));
+      await removeOwnAdjustmentReason(dbA, reason.id);
+
+      const result = failed(
+        await submit("RED-75, -2", { reason: ownReasonValue(reason.id) }),
+      );
+
+      expect(result.error).toBe(
+        "That reason is no longer in your list. Choose another reason. Nothing was changed.",
+      );
+      expect(result.recorded).toBe(false);
+      expect(shopify.requests).toEqual([]);
+      expect(await operations()).toEqual([]);
+      expect(levels()).toEqual({ red: 10, white: 20 });
+    });
+
+    it.each([
+      "own:",
+      "own:../x",
+      "own:does-not-exist",
+      "own:" + "a".repeat(65),
+      "studio",
+    ])("refuses %j as a reason and records nothing", async (reason) => {
+      failed(await submit("RED-75, -2", { reason }));
+
+      expect(shopify.requests).toEqual([]);
+      expect(await operations()).toEqual([]);
+    });
+
+    it("answers a resubmitted form from the ledger even after its reason was removed", async () => {
+      const reason = added(await add("Sent to photo studio"));
+      const submissionId = randomUUID();
+      const form = { submissionId, reason: ownReasonValue(reason.id) };
+      await submit("RED-75, -2", form);
+      await removeOwnAdjustmentReason(dbA, reason.id);
+
+      const again = await submit("RED-75, -2", form);
+
+      expect(again).toMatchObject({ ok: true, alreadySubmitted: true });
+      expect(shopify.requests).toHaveLength(1);
+      expect(await operations()).toMatchObject([
+        { reasonLabel: "Sent to photo studio" },
+      ]);
+    });
+
+    it("records nothing with one of the shop's own reasons while adjustments are switched off", async () => {
+      const reason = added(await add("Sent to photo studio"));
+
+      failed(
+        await submit(
+          "RED-75, -2",
+          { reason: ownReasonValue(reason.id) },
+          switchedOff(),
+        ),
+      );
+
+      expect(shopify.requests).toEqual([]);
+      expect(await operations()).toEqual([]);
+    });
+
+    it("does not let the name on a recorded adjustment be changed or cleared", async () => {
+      const reason = added(await add("Sent to photo studio"));
+      const id = applied(
+        await submit("RED-75, -2", { reason: ownReasonValue(reason.id) }),
+      );
+
+      for (const reasonLabel of ["Something else", null]) {
+        await expect(
+          prisma.inventoryOperation.update({
+            where: { id },
+            data: { reasonLabel },
+          }),
+        ).rejects.toThrow(/inventory_operation_request_immutable/);
+        await expect(
+          dbA.inventoryOperation.updateMany({
+            where: { id },
+            data: { reasonLabel },
+          }),
+        ).rejects.toThrow(/inventory_operation_request_immutable/);
+      }
+      expect(await operations()).toMatchObject([
+        { reasonLabel: "Sent to photo studio" },
+      ]);
+    });
+
+    it("holds the rules in the database as well: a name, a Shopify reason and one reason per name", async () => {
+      const shop = await prisma.shop.findFirstOrThrow({
+        where: { myshopifyDomain: SHOP_A },
+      });
+      const row = {
+        shopId: shop.id,
+        name: "Samples",
+        nameKey: "samples",
+        shopifyReason: "other",
+      };
+      await prisma.adjustmentReason.create({ data: row });
+
+      await expect(
+        prisma.adjustmentReason.create({ data: { ...row, name: "SAMPLES" } }),
+      ).rejects.toThrow(/Unique constraint/);
+      await expect(
+        prisma.adjustmentReason.create({
+          data: { ...row, name: " ", nameKey: "blank" },
+        }),
+      ).rejects.toThrow(/AdjustmentReason_name_not_blank/);
+      await expect(
+        prisma.adjustmentReason.create({
+          data: { ...row, nameKey: "no reason", shopifyReason: "" },
+        }),
+      ).rejects.toThrow(/AdjustmentReason_shopifyReason_not_blank/);
+      await expect(
+        prisma.inventoryOperation.create({
+          data: {
+            shopId: shop.id,
+            idempotencyKey: "adjustment:blank-label",
+            payloadDigest: "0".repeat(64),
+            kind: "ADJUSTMENT",
+            writeCapability: "adjustmentWrites",
+            sourceType: ADJUSTMENT_SOURCE_TYPE,
+            sourceId: randomUUID(),
+            reason: "other",
+            reasonLabel: " ",
+            quantityName: "available",
+            actorChannel: "ADMIN",
+            lineCount: 1,
+          },
+        }),
+      ).rejects.toThrow(/InventoryOperation_reasonLabel_not_blank/);
+    });
+
+    describe("another shop", () => {
+      it("does not see this shop's reasons and may use the same name for its own", async () => {
+        added(await add("Staff purchase"));
+
+        expect(await names(dbB)).toEqual([]);
+        added(await add("Staff purchase", "damaged", dbB));
+        expect(await listOwnAdjustmentReasons(dbB)).toMatchObject([
+          { name: "Staff purchase", shopifyReason: "damaged" },
+        ]);
+        expect(await listOwnAdjustmentReasons(dbA)).toMatchObject([
+          { name: "Staff purchase", shopifyReason: "other" },
+        ]);
+      });
+
+      it("cannot rename or remove this shop's reason", async () => {
+        const reason = added(await add("Staff purchase"));
+
+        expect(
+          refusal(
+            await updateOwnAdjustmentReason(dbB, STAFF, reason.id, {
+              name: "Taken over",
+              shopifyReason: "other",
+            }),
+          ),
+        ).toMatch(/no longer in your list/);
+        expect(
+          refusal(await removeOwnAdjustmentReason(dbB, reason.id)),
+        ).toMatch(/no longer in your list/);
+        expect(await listOwnAdjustmentReasons(dbA)).toEqual([reason]);
+      });
+
+      it("cannot record an adjustment under this shop's reason", async () => {
+        const reason = added(await add("Staff purchase"));
+
+        const theirs = await submitAdjustment(
+          dbB,
+          null,
+          STAFF,
+          input("RED-75, 5", {
+            locationId: OTHER_SHOPS_LOCATION,
+            reason: ownReasonValue(reason.id),
+          }),
+          enabled(),
+        );
+
+        expect(failed(theirs).error).toMatch(/no longer in your list/);
+        expect(shopify.requests).toEqual([]);
+        expect(await operations()).toEqual([]);
+      });
+
+      it("cannot write a reason into this shop, or move one of its own there", async () => {
+        const shopA = await prisma.shop.findFirstOrThrow({
+          where: { myshopifyDomain: SHOP_A },
+        });
+        const theirs = added(await add("Staff purchase", "other", dbB));
+
+        await expect(
+          dbB.adjustmentReason.create({
+            data: {
+              shopId: shopA.id,
+              name: "Planted",
+              nameKey: "planted",
+              shopifyReason: "other",
+            },
+          }),
+        ).rejects.toThrow();
+        await expect(
+          dbB.adjustmentReason.updateMany({
+            where: { id: theirs.id },
+            data: { shopId: shopA.id },
+          }),
+        ).rejects.toThrow();
+        expect(await names()).toEqual([]);
+      });
     });
   });
 });

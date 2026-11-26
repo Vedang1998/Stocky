@@ -14,6 +14,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { requireActivePlanSnapshot } from "../billing/entitlements.server";
 import { ActionFeedback } from "../components/ActionFeedback";
 import { PlanRequiredBanner } from "../components/PlanRequiredBanner";
+import { chosen } from "../lib/chosen-option";
 import { isInventoryWriteEnabled } from "../lib/feature-flags.server";
 import { requireAdminTenant } from "../tenant/require-admin-tenant.server";
 import {
@@ -100,9 +101,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   if (!result.ok) return { error: result.error, values };
   return redirect(`/app/transfers/${result.transferId}`);
 };
-
-/** Marks the option a select should start on; Polaris ignores a `value` attribute in server-rendered markup. */
-const chosen = (isChosen: boolean) => (isChosen ? { selected: true } : {});
 
 function listHref(view: TransferListView, page: number): string {
   const params = new URLSearchParams();

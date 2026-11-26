@@ -62,6 +62,20 @@ describe("normalizeInventoryOperationDraft", () => {
     ]);
   });
 
+  it("keeps the merchant's name for the reason, and stores a missing or blank one as null", () => {
+    const label = (reasonLabel?: string | null) =>
+      normalizeInventoryOperationDraft(draft({ reasonLabel })).reasonLabel;
+
+    expect(label("  Sent to photo studio ")).toBe("Sent to photo studio");
+    expect(label()).toBeNull();
+    expect(label(null)).toBeNull();
+    expect(label("   ")).toBeNull();
+    expect(issuesOf(draft({ reasonLabel: "x".repeat(60) }))).toEqual([]);
+    expect(issuesOf(draft({ reasonLabel: "x".repeat(61) }))).toEqual([
+      "reasonLabel must be at most 60 characters",
+    ]);
+  });
+
   it("trims optional text and stores blank text as null", () => {
     const normalized = normalizeInventoryOperationDraft(
       draft({
@@ -227,11 +241,12 @@ describe("inventoryOperationPayloadDigest", () => {
     expect(inventoryOperationPayloadDigest(base())).toMatch(/^[0-9a-f]{64}$/);
   });
 
-  it("ignores who submitted it and the free-text note", () => {
+  it("ignores who submitted it, the free-text note and the merchant's name for the reason", () => {
     const resubmitted = normalizeInventoryOperationDraft(
       draft({
         actor: { shopifyUserId: "77", displayName: "Other", channel: "POS" },
         note: "second try",
+        reasonLabel: "Sent to photo studio",
       }),
     );
     expect(inventoryOperationPayloadDigest(resubmitted)).toBe(

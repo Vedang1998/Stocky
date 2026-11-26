@@ -103,6 +103,7 @@ model Shop {
   dailyStockSnapshots DailyStockSnapshot[]
   dailyStockLevels DailyStockLevel[]
   stocktakeRecountEvents StocktakeRecountEvent[]
+  adjustmentReasons AdjustmentReason[]
 }
 
 /// Per-shop dispatch readiness / fairness cursor (D-048 / D-049 / D-050).
@@ -977,6 +978,31 @@ model StocktakeRecountEvent {
   @@index([stocktakeId])
 }
 
+/// A reason of the merchant's own for an inventory adjustment, added to the
+/// built-in list. An adjustment recorded with one keeps the Shopify reason
+/// code and the name on its InventoryOperation, so a reason can be renamed or
+/// removed without changing what past adjustments show.
+model AdjustmentReason {
+  id              String   @id @default(cuid())
+  shopId          String
+  name            String   @db.VarChar(60)
+  /// `name` in lower case: a shop has one reason per name, whatever its capitals.
+  nameKey         String   @db.VarChar(191)
+  /// The Shopify reason code sent with the quantity change, e.g. damaged.
+  shopifyReason   String   @db.VarChar(64)
+  createdByUserId String?  @db.VarChar(64)
+  /// The staff member who last saved the reason: whoever added it, then
+  /// whoever last renamed it or changed the Shopify reason it counts as.
+  updatedByUserId String?  @db.VarChar(64)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Restrict, onUpdate: NoAction)
+
+  @@unique([shopId, id])
+  @@unique([shopId, nameKey])
+}
+
 // ─── Inventory control: operation ledger ─────────────────────────────────────
 // Every app-initiated Shopify inventory quantity write (adjustment, stocktake
 // result, receipt, reversal) is recorded here before it is sent. One operation
@@ -1040,6 +1066,9 @@ model InventoryOperation {
   sourceId             String                   @db.VarChar(191)
   /// Shopify inventory adjustment reason code, e.g. correction, cycle_count_available.
   reason               String                   @db.VarChar(64)
+  /// The merchant's own name for the reason, when one of the shop's reasons
+  /// (AdjustmentReason) was chosen, as it read when the operation was recorded.
+  reasonLabel          String?                  @db.VarChar(60)
   /// Shopify quantity name adjusted, e.g. available, damaged.
   quantityName         String                   @db.VarChar(32)
   referenceDocumentUri String?                  @db.VarChar(512)

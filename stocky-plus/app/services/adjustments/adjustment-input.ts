@@ -40,6 +40,53 @@ export function adjustmentReasonLabel(code: string): string {
   );
 }
 
+export const MAX_ADJUSTMENT_REASON_NAME_LENGTH = 60;
+/** Bounds the list every adjustment form renders. */
+export const MAX_OWN_ADJUSTMENT_REASONS = 50;
+
+/**
+ * A reason name as it is stored: surrounding space removed and runs of space
+ * inside it collapsed, so two names that look the same are the same.
+ */
+export function normalizeReasonName(value: string): string {
+  return value.normalize("NFKC").trim().replace(/\s+/g, " ");
+}
+
+/** What makes two reason names the same name: their letters, not their capitals. */
+export function reasonNameKey(name: string): string {
+  return name.toLowerCase();
+}
+
+export function isBuiltInReasonName(name: string): boolean {
+  const key = reasonNameKey(name);
+  return ADJUSTMENT_REASONS.some(
+    (reason) => reasonNameKey(reason.label) === key,
+  );
+}
+
+/** The heading the history gives a reversal; a reason of that name would read as one. */
+export const REVERSAL_LABEL = "Reversal";
+
+export function isReversalName(name: string): boolean {
+  return reasonNameKey(name) === reasonNameKey(REVERSAL_LABEL);
+}
+
+const OWN_REASON_PREFIX = "own:";
+
+/** The form value of one of the shop's own reasons; a built-in reason's value is its code. */
+export function ownReasonValue(id: string): string {
+  return `${OWN_REASON_PREFIX}${id}`;
+}
+
+/** The ID in a form value made by `ownReasonValue`, or null for any other value. */
+export function readOwnReasonId(value: unknown): string | null {
+  if (typeof value !== "string" || !value.startsWith(OWN_REASON_PREFIX)) {
+    return null;
+  }
+  const id = value.slice(OWN_REASON_PREFIX.length);
+  return /^[a-z0-9]{1,64}$/i.test(id) ? id : null;
+}
+
 /**
  * ADJUST changes the quantity by a signed amount. SET moves it to a target,
  * guarded by the quantity Shopify held when the adjustment was prepared.

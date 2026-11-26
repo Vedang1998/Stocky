@@ -1897,6 +1897,7 @@ export type TenantDb = {
   dailyStockSnapshot: TenantModelDelegate;
   dailyStockLevel: TenantModelDelegate;
   stocktakeRecountEvent: TenantModelDelegate;
+  adjustmentReason: TenantModelDelegate;
   supplierSkuMapping: TenantModelDelegate;
   shopifyOrderRefundLineFact: TenantModelDelegate;
   shopifyOrderAdjustmentFact: TenantModelDelegate;

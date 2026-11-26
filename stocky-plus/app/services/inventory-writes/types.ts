@@ -101,6 +101,12 @@ export interface InventoryOperationDraft {
   idempotencyKey: string;
   source: { type: string; id: string };
   reason: ShopifyInventoryReason;
+  /**
+   * The merchant's own name for the reason, when one of the shop's reasons was
+   * chosen. Kept with the operation as written here; like the note, it does
+   * not change what is sent to Shopify.
+   */
+  reasonLabel?: string | null;
   quantityName: AdjustableQuantityName;
   referenceDocumentUri: string | null;
   actor: InventoryActor;
@@ -111,9 +117,10 @@ export interface InventoryOperationDraft {
 /** Draft as persisted, including reversal linkage. */
 export interface NormalizedInventoryOperationDraft extends Omit<
   InventoryOperationDraft,
-  "kind"
+  "kind" | "reasonLabel"
 > {
   kind: InventoryOperationKind;
+  reasonLabel: string | null;
   capability: InventoryWriteCapability;
   reversesOperationId: string | null;
 }
